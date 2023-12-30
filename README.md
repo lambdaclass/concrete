@@ -22,12 +22,13 @@ Concrete is a simple programming language specifically crafted for creating high
 - Implemented in Rust
 
 ### Anti-features
+- No hidden memory allocation
 - No garbage collection or destructors
-- No implicit function calls
+- No hidden control flow or implicit function call
 - No global state
 - No exceptions
 - No default runtime
-- No macros
+- No preprocessor, no macros
 - No type inference, type information flows in one direction
 - No function overloading (except through typeclasses, where it is bounded)
 - No implicit type conversions
@@ -37,6 +38,7 @@ Concrete is a simple programming language specifically crafted for creating high
 - No pre/post increment/decrement (x++ in C)
 - No variable shadowing
 - No Java-style @Annotations
+- No undefined behavior
 
 ## Inspiration
 The design will be heavily influenced by Erlang, Rust, Austral and Zig. We also want to incorporate some ideas from Elm, Pony, Lua, Clojure, Nim, Go.
