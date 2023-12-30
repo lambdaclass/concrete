@@ -14,7 +14,7 @@ Concrete is a simple programming language specifically crafted for creating high
     - Type inference only within blocks, not in function signatures
     - Algebraic Data Types
 - Pluggable concurrency runtime with a preemptive scheduler, green threads and copy only message passing, a REPL and excellent observability
-- Profiling and tracing as first class citizens
+- Profiling and tracing are integral, first-class features. While code is read more often than it's written, it is executed even more frequently than it's read
 - Capabilities
 - Explicit over implicit
 - Easily embeddable
@@ -30,15 +30,19 @@ Concrete is a simple programming language specifically crafted for creating high
 - No default runtime
 - No preprocessor, no macros
 - No type inference, type information flows in one direction
-- No function overloading (except through typeclasses, where it is bounded)
 - No implicit type conversions
 - No subtyping
 - No reflection
+- No function overloading (except through typeclasses, where it is bounded)
 - No uninitialized variables
 - No pre/post increment/decrement (x++ in C)
 - No variable shadowing
 - No Java-style @Annotations
 - No undefined behavior
+
+### Features being debated
+- Integer type that overflows to bignum
+- Missing decimal FP. Needed for financial math
 
 ## Inspiration
 The design will be heavily influenced by Erlang, Rust, Austral and Zig. We also want to incorporate some ideas from Elm, Pony, Lua, Clojure, Nim, Go.
