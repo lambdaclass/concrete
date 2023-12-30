@@ -10,7 +10,7 @@ Concrete is a user-friendly programming language specifically crafted for creati
 - Linear type system
     - Type inference only within blocks, not in function signatures
     - Algebraic Data Types
-  luggable concurrency runtime with a preemptive scheduler, green threads and copy only message passing, a REPL and excellent observability
+- Pluggable concurrency runtime with a preemptive scheduler, green threads and copy only message passing, a REPL and excellent observability
 - Profiling and tracing as first class citizens
 - Capabilities
 - Explicit over implicit
