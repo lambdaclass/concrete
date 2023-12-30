@@ -11,18 +11,18 @@ Concrete is a programming language designed to integrate Rust's safety and speed
 ## Design
 
 ### Core features
-- Safe. Linear type system heavily inspired by Austral spec and design
-- Simplicity and readability. C/Go-inspired, context-free small grammar, syntax: if, for, function calls, modules, pattern matching
-- Small core like Lua and Zig
-- There ought to be one way to write something. Striving for orthogonality
-- Explicit over implicit
+- C/Go-inspired, context-free small grammar, syntax: if, for, function calls, modules, pattern matching
+- Safe. Linear types that allow memory and other resources to be managed safely and without runtime overhead
 - Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system
+- Small core
 - Performant as C/C++ or Rust
 - Pluggable concurrency runtime with a preemptive scheduler, green threads and copy only message passing
 - Profiling and tracing are integral, first-class features. While code is read more often than it's written, it is executed even more frequently than it's read
+- There ought to be one way to write something. Striving for orthogonality
+- Explicit over implicit
 - Cross compilation as first class citizen
 - Easy C, C++ and Rust FFI
-- Easily embeddable like Lua. Adding Concrete to an application does not bloat it.
+- Easily embeddable
 - Capability based security to defend against supply chain attacks
 
 #### Second level features
