@@ -4,16 +4,16 @@
 [tg-badge]: https://img.shields.io/endpoint?url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fconcrete_proglang%2F&logo=telegram&label=chat&color=neon
 [tg-url]: https://t.me/concrete_proglang
 
-Concrete is a simple programming language specifically crafted for creating highly scalable systems that are reliable, efficient, and easy to maintain. Concrete is a programming language designed to integrate Rust's safety and speed with the concurrency model of Erlang/Elixir and Go. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
+Concrete is a simple programming language specifically crafted for creating highly scalable systems that are reliable, efficient, and easy to maintain. Concrete is a programming language designed to integrate Rust's safety and speed with the concurrency model of Erlang/Elixir and Go while being a small, simple language like Zig. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
 
 ## Design
 
 ### Features
+- Small, simple language. The grammar should be less than 500 lines of code
 - Very simple C/Go-inspired, context-free grammar, syntax: if, for, function calls, modules, pattern matching
+- Performant
+- Safe. Linear type system (heavily inspired by Austral spec and design). Type inference only within blocks, not in function signatures. Algebraic Data Types
 - Explicit over implicit
-- Linear type system (heavily inspired by Austral spec and design)
-    - Type inference only within blocks, not in function signatures
-    - Algebraic Data Types
 - Pluggable concurrency runtime with a preemptive scheduler, green threads and copy only message passing
 - Profiling and tracing are integral, first-class features. While code is read more often than it's written, it is executed even more frequently than it's read
 - Capabilities
