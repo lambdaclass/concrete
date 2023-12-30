@@ -9,10 +9,12 @@ Concrete is a simple programming language specifically crafted for creating high
 ## Design
 
 ### Features
-- Small, simple language. The grammar should be context free and approximately 500 lines of code
-- Very simple C/Go-inspired, context-free grammar, syntax: if, for, function calls, modules, pattern matching
-- Performant as C/C++ or Rust
 - Safe. Linear type system (heavily inspired by Austral spec and design)
+- Simplicity and readability. The grammar should be context free and small
+- Minimal. There ought to be one way to write something
+- Performant as C/C++ or Rust
+- Striving for orthogonality
+- C/Go-inspired, context-free grammar, syntax: if, for, function calls, modules, pattern matching
 - Algebraic Data Types
 - Typeclasses
 - Type inference only within blocks, not in function signatures
