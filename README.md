@@ -1,20 +1,21 @@
 # Concrete
+Concrete is programming language designed to write reliable and eficient maintainable massively scalable systems.
+
 [Telegram](https://t.me/concrete_proglang)
 
-Concrete is programming language designed to write safe maintainable massively scalable systems. It's design will be heavily influenced by Erlang, SML/OCaml, Rust and Austral. We also want to incorporate some ideas from Elm, Pony, Lua, Clojure and Go.
 
-Concrete is a language that provides Rust's protections/speed, ERlang/Go's concurrency model, but isn't anywhere nearly as verbose as Rust nor as sparse syntax/feature-wise as Go.
+Concrete is a programming language designed to integrate Rust's safety and speed with the concurrency model seen in Erlang/Elixir and Go. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
 
 ## Design
 
 ### Features
 - Very simple C/Go-inspired, context-free grammar, syntax: if, for, function calls, modules, pattern matching
 - Linear type system
-    - Type inference only within blocks, not in function signatures.
+    - Type inference only within blocks, not in function signatures
     - Algebraic Data Types
-- Capabilities
-- Pluggable concurrency runtime with a preemptive scheduler, green threads and copy only message passing, a REPL and excellent observability
+  luggable concurrency runtime with a preemptive scheduler, green threads and copy only message passing, a REPL and excellent observability
 - Profiling and tracing as first class citizens
+- Capabilities
 - Explicit over implicit
 - Easily embeddable
 - Compile to MLIR, WASM and generate C code
@@ -27,6 +28,8 @@ Concrete is a language that provides Rust's protections/speed, ERlang/Go's concu
 - No exceptions
 
 ## Inspiration
+The design will be heavily influenced by Erlang, Rust, Austral and Zig. We also want to incorporate some ideas from Elm, Pony, Lua, Clojure, Nim, Go.
+
 - Standard ML
 - Rust
 - Erlang & Elixir
