@@ -21,7 +21,7 @@ Concrete is a programming language designed to integrate Rust's safety and speed
 - Pluggable concurrency runtime with a preemptive scheduler, green threads and copy only message passing
 - Profiling and tracing are integral, first-class features. While code is read more often than it's written, it is executed even more frequently than it's read
 - Cross compilation as first class citizen
-- Easy C, C++ and Rust wrapping
+- Easy C, C++ and Rust FFI
 - Easily embeddable like Lua. Adding Concrete to an application does not bloat it.
 - Capability based security to defend against supply chain attacks
 
