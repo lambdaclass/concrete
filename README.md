@@ -1,7 +1,9 @@
 # Concrete
+[Telegram](https://t.me/concrete_proglang)
+
 Concrete is programming language designed to write safe maintainable massively scalable systems. It's design will be heavily influenced by Erlang, SML/OCaml, Rust and Austral. We also want to incorporate some ideas from Elm, Pony, Lua, Clojure and Go.
 
-[Telegram](https://t.me/concrete_proglang)
+Concrete is a language that provides Rust's protections/speed, ERlang/Go's concurrency model, but isn't anywhere nearly as verbose as Rust nor as sparse syntax/feature-wise as Go.
 
 ## Design
 
