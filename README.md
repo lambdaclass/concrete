@@ -1,4 +1,4 @@
-# Concrete
+# The Concrete Programming Language
 [![Telegram Chat][tg-badge]][tg-url]
 
 [tg-badge]: https://img.shields.io/endpoint?url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fconcrete_proglang%2F&logo=telegram&label=chat&color=neon
