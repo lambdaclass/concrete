@@ -49,6 +49,7 @@ Concrete is a simple programming language specifically crafted for creating high
 - Integer type that overflows to bignum
 - Missing decimal FP. Needed for financial math
 - Zig's comptime
+- Check [Fearless FFI](https://verdagon.dev/blog/fearless-ffi)
 
 ## Inspiration
 The design will be heavily influenced by Erlang, Rust, Austral and Zig. We also want to incorporate some ideas from Elm, Pony, Lua, Clojure, Nim, Go.
