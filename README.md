@@ -6,12 +6,11 @@
 
 Concrete is a simple programming language specifically crafted for creating highly scalable systems that are reliable, efficient, and easy to maintain. Concrete is a programming language designed to integrate Rust's safety and speed with the concurrency model of Erlang/Elixir and Go. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
 
-
 ## Design
 
 ### Features
 - Very simple C/Go-inspired, context-free grammar, syntax: if, for, function calls, modules, pattern matching
-- Linear type system
+- Linear type system (heavily inspired by Austral spec and design)
     - Type inference only within blocks, not in function signatures
     - Algebraic Data Types
 - Pluggable concurrency runtime with a preemptive scheduler, green threads and copy only message passing, a REPL and excellent observability
@@ -23,19 +22,30 @@ Concrete is a simple programming language specifically crafted for creating high
 - Implemented in Rust
 
 ### Anti-features
-- No garbage collection
+- No garbage collection or destructors
+- No implicit function calls
+- No global state
+- No exceptions
 - No default runtime
 - No macros
-- No exceptions
+- No type inference, type information flows in one direction
+- No function overloading (except through typeclasses, where it is bounded)
+- No implicit type conversions
+- No subtyping
+- No reflection
+- No uninitialized variables
+- No pre/post increment/decrement (x++ in C)
+- No variable shadowing
+- No Java-style @Annotations
 
 ## Inspiration
 The design will be heavily influenced by Erlang, Rust, Austral and Zig. We also want to incorporate some ideas from Elm, Pony, Lua, Clojure, Nim, Go.
 
+- Austral https://austral-lang.org/spec/spec.html
 - Standard ML
 - Rust
 - Erlang & Elixir
 - Go
 - Roc https://www.roc-lang.org/
-- Austral https://austral-lang.org/spec/spec.html
 - Odin https://odin-lang.org/
 - Vale https://vale.dev/
