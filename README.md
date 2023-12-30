@@ -45,9 +45,10 @@ Concrete is a simple programming language specifically crafted for creating high
 - No Java-style @Annotations
 - No undefined behavior
 
-### Features being debated
+### Features to debate
 - Integer type that overflows to bignum
 - Missing decimal FP. Needed for financial math
+- Zig's comptime
 
 ## Inspiration
 The design will be heavily influenced by Erlang, Rust, Austral and Zig. We also want to incorporate some ideas from Elm, Pony, Lua, Clojure, Nim, Go.
