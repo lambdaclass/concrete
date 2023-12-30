@@ -10,15 +10,16 @@ Concrete is a simple programming language specifically crafted for creating high
 
 ### Features
 - Very simple C/Go-inspired, context-free grammar, syntax: if, for, function calls, modules, pattern matching
+- Explicit over implicit
 - Linear type system (heavily inspired by Austral spec and design)
     - Type inference only within blocks, not in function signatures
     - Algebraic Data Types
-- Pluggable concurrency runtime with a preemptive scheduler, green threads and copy only message passing, a REPL and excellent observability
+- Pluggable concurrency runtime with a preemptive scheduler, green threads and copy only message passing
 - Profiling and tracing are integral, first-class features. While code is read more often than it's written, it is executed even more frequently than it's read
 - Capabilities
-- Explicit over implicit
-- Easily embeddable
 - Compile to MLIR, WASM and generate C code
+- Easily embeddable
+- REPL
 - Implemented in Rust
 
 ### Anti-features
