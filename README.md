@@ -1,7 +1,11 @@
 # Concrete
+[![Telegram Chat][tg-badge]][tg-url]
+
+[tg-badge]: https://img.shields.io/endpoint?url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fconcrete_proglang%2F&logo=telegram&label=chat&color=neon
+[tg-url]: https://t.me/concrete_proglang
+
 Concrete is a user-friendly programming language specifically crafted for creating highly scalable systems that are reliable, efficient, and easy to maintain. Concrete is a programming language designed to integrate Rust's safety and speed with the concurrency model seen in Erlang/Elixir and Go. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
 
-[Telegram](https://t.me/concrete_proglang)
 
 ## Design
 
