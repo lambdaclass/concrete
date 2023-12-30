@@ -11,6 +11,7 @@ Concrete is a simple programming language specifically crafted for creating high
 ### Features
 - Safe. Linear type system (heavily inspired by Austral spec and design)
 - Simplicity and readability. The grammar should be context free and small
+- Programs are about transforming data into other forms of data. Code is about expressing algorithms—not the type system
 - Minimal. There ought to be one way to write something
 - Performant as C/C++ or Rust
 - Striving for orthogonality
@@ -54,8 +55,9 @@ Concrete is a simple programming language specifically crafted for creating high
 - Check [Fearless FFI](https://verdagon.dev/blog/fearless-ffi)
 
 ## Inspiration
-The design will be heavily influenced by Erlang, Rust, Austral and Zig. We also want to incorporate some ideas from Elm, Pony, Lua, Clojure, Nim, Go.
+The design will be heavily influenced by all this programming langauges. We want to thanks everyone of them. We took core ideas, specs and features from each of them.
 
+- Zig 
 - Austral https://austral-lang.org/spec/spec.html
 - Standard ML
 - Rust
@@ -64,3 +66,9 @@ The design will be heavily influenced by Erlang, Rust, Austral and Zig. We also 
 - Roc https://www.roc-lang.org/
 - Odin https://odin-lang.org/
 - Vale https://vale.dev/
+- Elm
+- Pony
+- Lua
+- Clojure
+- Nim
+- Go
