@@ -1,10 +1,7 @@
 # Concrete
-Concrete is programming language designed to write reliable and eficient maintainable massively scalable systems.
+Concrete is a user-friendly programming language specifically crafted for creating highly scalable systems that are reliable, efficient, and easy to maintain. Concrete is a programming language designed to integrate Rust's safety and speed with the concurrency model seen in Erlang/Elixir and Go. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
 
 [Telegram](https://t.me/concrete_proglang)
-
-
-Concrete is a programming language designed to integrate Rust's safety and speed with the concurrency model seen in Erlang/Elixir and Go. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
 
 ## Design
 
