@@ -15,7 +15,7 @@ Writing good code should be easy. The language must be simple enough to fit in a
 
 Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. 
 ### Core features
-- C/Go-inspired, context-free small grammar, syntax: if, for, function calls, modules, pattern matching
+- C/Go/Rust-inspired, context-free small grammar, syntax: if, for, function calls, modules, pattern matching
 - Safe. Linear types that allow memory and other resources to be managed safely and without runtime overhead
 - Small core. The entire language specification should be possible to be memorized
 - Performant as C/C++ or Rust
