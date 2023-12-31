@@ -36,10 +36,10 @@ Concrete is a programming language designed to integrate Rust's safety and speed
 ### Anti-features
 - No hidden memory allocation
 - No garbage collection or destructors
+- No runtime running by default
 - No hidden control flow or implicit function call
 - No global state
 - No exceptions
-- No default runtime
 - No preprocessor, no macros
 - No type inference, type information flows in one direction
 - No implicit type conversions
