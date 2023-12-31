@@ -6,12 +6,11 @@
 
 Concrete is a simple programming language specifically crafted for creating highly scalable systems that are reliable, efficient, and easy to maintain.
 
-Concrete is a programming language designed to integrate Rust's safety and speed with the concurrency model of Erlang/Elixir and Go while being a small, simple language like Zig. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
+Concrete is a programming language designed to integrate Rust's safety and speed with the concurrency model of Erlang and Go while being a small, simple language like Zig. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
 
 Writing good code should be easy. The language must be simple enough to fit in a single person’s head. Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. We aim to develop a simpler version of Rust that includes an optional default runtime featuring green threads and a preemptive scheduler, similar to those found in Go and Erlang.
 
-## Desig
-
+## Design
 
 Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. 
 ### Core features
