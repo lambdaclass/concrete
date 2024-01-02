@@ -63,15 +63,16 @@ Programs are about transforming data into other forms of data. Code is about exp
 ## Inspiration
 The design will be heavily influenced by all this programming langauges. We want to thanks everyone of them. We took core ideas, specs and features from each of them.
 
+- [Odin](https://odin-lang.org/)
+- [Vale](https://vale.dev/)
+- [Austral](https://austral-lang.org/spec/spec.html)
+- [Inko](https://inko-lang.org/)
 - Zig 
-- Austral https://austral-lang.org/spec/spec.html
 - Standard ML
 - Rust
 - Erlang & Elixir
 - Go
 - Roc https://www.roc-lang.org/
-- Odin https://odin-lang.org/
-- Vale https://vale.dev/
 - Elm
 - Pony
 - Lua
