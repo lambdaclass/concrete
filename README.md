@@ -60,6 +60,133 @@ Programs are about transforming data into other forms of data. Code is about exp
 - Zig's comptime
 - Check [Fearless FFI](https://verdagon.dev/blog/fearless-ffi)
 
+
+## Syntax
+
+```
+// this is a single line comment
+
+/* 
+this is a 
+multi line comment
+*/
+
+/// this is a doc comment
+mod ModuleName {
+
+    import Module.type;
+    import Module.function;
+    import {
+        Module1.function1,
+        Module2.function2,
+    }
+
+    struct MyStruct{
+        field1: u8
+        field2: bool
+    }
+    
+    enum MyEnum{
+        Variant0,
+        TupleVariant(bool),
+        StructVariant{
+            field1: u16,
+        },
+    }
+    
+    pub fn main() {
+        const 
+        let v1: u8; // variable declaration
+        v1 = 42;
+        let v2 = my_function();
+    }
+    
+    fn my_function() {
+    }
+    
+    fn my_function2() -> u8 {
+        42
+    }
+
+    fn my_function3() -> u8 {
+        return 42
+    }
+
+}
+```
+
+### Fibonacci
+```
+mod FibonacciModule { 
+ 
+ pub fib(x: u64) -> u64 {
+     match x {
+       // we can match literal values
+       0 | 1 -> x,
+       n -> fib(n-1) + fib(n-2)
+     }
+ }
+}
+```
+
+### Factorial
+```
+// a closure that adds 1.
+let add1: (i8 -> i8) = (x: i8) -> x + 1;
+
+mod FactorialModule {
+    // unsigned integer types: u8, u16,...
+    // signed integer types: i8, i16, ...
+    pub fn factorial(x: u64) -> u64  { 
+        // match is an expression, so it returns
+        // the value of its evaluation
+        match x {
+            0 -> 1,
+            n -> n * factorial(n-1),
+        }
+    }
+
+}
+```
+
+### Sum
+```
+mod Sum {
+    /// Returns the sum of a vector of numbers.
+    fn sum(x: [i8]) -> i8 {
+        x.reduce(0, (x: i8, y: i8) -> x + y)
+    } 
+}
+```
+
+### Option
+```
+mod Option {
+
+    pub enum Option<T> {
+        None,
+        Some(T),
+    }
+    
+    pub fn map<A, B>(opt: Option<A>, f: A -> B) -> Option<B> {
+        match opt {
+            None -> None,
+            Some(x) -> Some(f(x)),
+        }
+    }
+}
+
+mod UsesOption {
+    import MyOption.{Option, map};
+    
+    pub fn headOfVectorPlus1(x: [u8]) -> Option<u8> {
+        // head returns an option
+        x.head().map((x: u8) -> x + 1)
+    }
+
+}
+```
+
 ## Inspiration
 The design will be heavily influenced by all this programming langauges. We want to thanks everyone of them. We took core ideas, specs and features from each of them.
 
