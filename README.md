@@ -11,7 +11,7 @@
 
 </div>
 
-When it comes to low-level programming in particular, language safety but also simplicity are a very important feature. We believe it's the two are achieavable in a system programming languages without significantly compromising on expressivity. Concrete is a simple and safe programming language without a GC. It also has a default pluggable runtime for creating highly scalable systems that are reliable, efficient, and easy to maintain.
+In the realm of low-level programming, both language safety and simplicity are paramount features. We are confident that these attributes can be achieved in system programming languages without substantially sacrificing expressiveness. Concrete achieves this balance, offering a programming language that is both simple and safe without having a garbage collector. Additionally, it features a default pluggable runtime, enabling the development of highly scalable systems that are not only reliable and efficient but also straightforward to maintain.
 
 Designed to integrate Rust's safety and speed with the concurrency model of Erlang and Go while being a small, simple language like Zig. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
 
