@@ -18,8 +18,6 @@ jobs:
         steps:
         - uses: actions/checkout@v3
         - uses: dtolnay/rust-toolchain@1.75.0
-          with:
-            components: clippy
         - uses: Swatinem/rust-cache@v2
         - name: add llvm deb repository
           uses: myci-actions/add-deb-repo@10
@@ -97,8 +95,6 @@ jobs:
             keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
         - name: Install LLVM
           run: sudo apt-get install llvm-17 llvm-17-dev llvm-17-runtime clang-17 clang-tools-17 lld-17 libpolly-17-dev libmlir-17-dev mlir-17-tools
-        - name: Install deps
-          run: make deps
         - name: test
           run: make test
 
