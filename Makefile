@@ -1,6 +1,4 @@
-.PHONY: build check clean
-
-UNAME := $(shell uname)
+.PHONY: build check clean test coverage
 
 check-deps:
 ifeq (, $(shell which cargo))
@@ -26,3 +24,9 @@ check: check-deps
 
 clean:
 	cargo clean
+
+test: check-deps
+	cargo test --workspace --all-targets --all-features
+
+coverage: check-deps
+	cargo llvm-cov --verbose --all-features --workspace --lcov --output-path lcov.info
