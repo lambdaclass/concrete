@@ -11,7 +11,7 @@
 
 </div>
 
-Concrete is a simple programming language specifically crafted for creating highly scalable systems that are reliable, efficient, and easy to maintain.
+When it comes to low-level programming in particular, language safety but also simplicity are a very important feature. We believe it's the two are achieavable in a system programming languages without significantly compromising on expressivity. Concrete is a simple and safe programming language without a GC. It also has a default pluggable runtime for creating highly scalable systems that are reliable, efficient, and easy to maintain.
 
 Designed to integrate Rust's safety and speed with the concurrency model of Erlang and Go while being a small, simple language like Zig. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
 
