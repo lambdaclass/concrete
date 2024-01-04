@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+
+members = ["ast"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+# Set the settings for build scripts and proc-macros.
+[profile.dev.build-override]
+opt-level = 3
+
+# On dev optimize dependencies a bit so it's not as slow.
+[profile.dev.package."*"]
+opt-level = 1
