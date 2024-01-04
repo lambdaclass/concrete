@@ -4,8 +4,8 @@ use crate::{common::Ident, types::TypeSpec};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathSegment {
-    SlotAccess(Ident),
-    PtrSlotAccess(Ident),
+    FieldAccess(Ident),
+    PtrFieldAccess(Ident),
     ArrayIndex(Box<Expression>),
 }
 
