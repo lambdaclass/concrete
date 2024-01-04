@@ -188,20 +188,21 @@ mod UsesOption {
 ```
 
 ## Inspiration
-The design will be heavily influenced by all this programming langauges. We want to thanks everyone of them. We took core ideas, specs and features from each of them.
-
-- [Odin](https://odin-lang.org/)
-- [Vale](https://vale.dev/)
+The design was very heavily influenced by all these programming languages:
 - [Austral](https://austral-lang.org/spec/spec.html)
+- [Zig](https://ziglang.org/)
+- [Rust](https://www.rust-lang.org/)
+- [Erlang](https://www.erlang.org/)
+- [Elixir](https://elixir-lang.org/)
+
+ We want to thanks everyone of them. We also took core ideas, specs and features from these languages:
+- [Roc](https://www.roc-lang.org/)
+- [Vale](https://vale.dev/)
 - [Inko](https://inko-lang.org/)
-- Zig 
-- Standard ML
-- Rust
-- Erlang & Elixir
-- Go
-- Roc https://www.roc-lang.org/
-- Elm
-- Pony
-- Lua
-- Clojure
-- Nim
+- [Odin](https://odin-lang.org/)
+- [Go](https://go.dev/)
+- [Elm](https://elm-lang.org/)
+- [Pony](https://www.ponylang.io/)
+- [Lua](https://www.lua.org/)
+- [Clojure](https://clojure.org/)
+- [Nim](https://nim-lang.org/)
