@@ -13,8 +13,6 @@
 
 In the realm of low-level programming, both language safety, performance and simplicity are paramount features. We are confident that these attributes can be achieved in system programming languages without substantially sacrificing expressiveness. Concrete achieves this balance, offering a programming language that is both fast, simple and safe without having a garbage collector, lifetimes and a complex borrow checker. Additionally, it features a default pluggable runtime, enabling the development of highly scalable systems that are not only reliable and efficient but also straightforward to maintain.
 
-Designed to integrate Rust's safety and speed with the concurrency model of Erlang and Go while being a small, simple language like Zig. It achieves this while avoiding Rust's complexity and Go's limited syntax and feature set.
-
 Writing good code should be easy. The language must be simple enough to fit in a single person’s head. Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. We aim to develop a simpler version of Rust that includes an optional default runtime featuring green threads and a preemptive scheduler, similar to those found in Go and Erlang.
 
 
