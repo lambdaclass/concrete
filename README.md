@@ -1,18 +1,54 @@
+<div align="center">
+<img src="./logo.jpg" height="150" style="border-radius:20%">
+
+
 # The Concrete Programming Language
 [![Telegram Chat][tg-badge]][tg-url]
+[![license](https://img.shields.io/github/license/lambdaclass/concrete)](/LICENSE)
 
 [tg-badge]: https://img.shields.io/endpoint?url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fconcrete_proglang%2F&logo=telegram&label=chat&color=neon
 [tg-url]: https://t.me/concrete_proglang
 
+</div>
+
 Concrete is a simple programming language specifically crafted for creating highly scalable systems that are reliable, efficient, and easy to maintain.
 
-Concrete is a programming language designed to integrate Rust's safety and speed with the concurrency model of Erlang and Go while being a small, simple language like Zig. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
+Designed to integrate Rust's safety and speed with the concurrency model of Erlang and Go while being a small, simple language like Zig. It achieves this while avoiding Rust's verbosity and Go's limited syntax and feature set.
 
 Writing good code should be easy. The language must be simple enough to fit in a single person’s head. Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. We aim to develop a simpler version of Rust that includes an optional default runtime featuring green threads and a preemptive scheduler, similar to those found in Go and Erlang.
 
+
+## Table of Contents
+
+- [Design](#design)
+- - [Core Features](#core-features)
+- - - [Second Level Features](#second-level-features)
+- - [Anti Features](#anti-features)
+- - [Features that are being debated](#features-that-are-being-debated)
+- [Syntax](#syntax)
+- [Inspirations](#inspiration)
+
+## Installing from Source
+
+Building is as simple as cloning this repository and running the `make build` command, provided you have all the needed dependencies.
+
+### Dependencies
+
+Make sure you have installed the dependencies:
+
+- git
+- Rust
+- LLVM 17 with MLIR enabled
+
+If building LLVM from source, you'll need additional tools:
+- g++, clang++, or MSVC with versions listed on [LLVM's documentation](https://llvm.org/docs/GettingStarted.html#host-c-toolchain-both-compiler-and-standard-library)
+- ninja, or GNU make 3.81 or later (Ninja is recommended, especially on Windows)
+- cmake 3.13.4 or later
+- libstdc++-static may be required on some Linux distributions such as Fedora and Ubuntu
+
 ## Design
 
-Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. 
+Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system.
 ### Core features
 - C/Go/Rust-inspired, context-free small grammar, syntax: if, for, function calls, modules, pattern matching
 - Safe. Linear types that allow memory and other resources to be managed safely and without runtime overhead
@@ -66,8 +102,8 @@ Programs are about transforming data into other forms of data. Code is about exp
 ```
 // this is a single line comment
 
-/* 
-this is a 
+/*
+this is a
 multi line comment
 */
 
@@ -85,7 +121,7 @@ mod ModuleName {
         field1: u8
         field2: bool
     }
-    
+
     enum MyEnum{
         Variant0,
         TupleVariant(bool),
@@ -93,17 +129,17 @@ mod ModuleName {
             field1: u16,
         },
     }
-    
+
     pub fn main() {
-        const 
+        const
         let v1: u8; // variable declaration
         v1 = 42;
         let v2 = my_function();
     }
-    
+
     fn my_function() {
     }
-    
+
     fn my_function2() -> u8 {
         42
     }
@@ -117,8 +153,8 @@ mod ModuleName {
 
 ### Fibonacci
 ```
-mod FibonacciModule { 
- 
+mod FibonacciModule {
+
  pub fib(x: u64) -> u64 {
      match x {
        // we can match literal values
@@ -137,7 +173,7 @@ let add1: (i8 -> i8) = (x: i8) -> x + 1;
 mod FactorialModule {
     // unsigned integer types: u8, u16,...
     // signed integer types: i8, i16, ...
-    pub fn factorial(x: u64) -> u64  { 
+    pub fn factorial(x: u64) -> u64  {
         // match is an expression, so it returns
         // the value of its evaluation
         match x {
@@ -155,7 +191,7 @@ mod Sum {
     /// Returns the sum of a vector of numbers.
     fn sum(x: [i8]) -> i8 {
         x.reduce(0, (x: i8, y: i8) -> x + y)
-    } 
+    }
 }
 ```
 
@@ -167,7 +203,7 @@ mod Option {
         None,
         Some(T),
     }
-    
+
     pub fn map<A, B>(opt: Option<A>, f: A -> B) -> Option<B> {
         match opt {
             None -> None,
@@ -178,7 +214,7 @@ mod Option {
 
 mod UsesOption {
     import MyOption.{Option, map};
-    
+
     pub fn headOfVectorPlus1(x: [u8]) -> Option<u8> {
         // head returns an option
         x.head().map((x: u8) -> x + 1)

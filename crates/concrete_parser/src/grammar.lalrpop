@@ -1,0 +1,16 @@
+use crate::tokens::Token;
+
+grammar;
+
+extern {
+  type Location = usize;
+  type Error = LexicalError;
+
+  enum Token {
+    "ident" => Token::Identifier(<String>),
+  }
+}
+
+pub Term: () = {
+    "ident" => (),
+}

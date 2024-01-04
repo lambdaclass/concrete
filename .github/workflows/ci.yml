@@ -1,0 +1,112 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+    merge_group:
+        types: [checks_requested]
+
+jobs:
+    check:
+        name: clippy
+        runs-on: ubuntu-latest
+        env:
+            MLIR_SYS_170_PREFIX: /usr/lib/llvm-17/
+            LLVM_SYS_170_PREFIX: /usr/lib/llvm-17/
+            TABLEGEN_170_PREFIX: /usr/lib/llvm-17/
+        steps:
+        - uses: actions/checkout@v3
+        - uses: dtolnay/rust-toolchain@1.75.0
+          with:
+            components: rustfmt, clippy
+        - uses: Swatinem/rust-cache@v2
+        - name: add llvm deb repository
+          uses: myci-actions/add-deb-repo@10
+          with:
+                repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main
+                repo-name: llvm-repo
+                keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
+        - name: Install LLVM
+          run: sudo apt-get install llvm-17 llvm-17-dev llvm-17-runtime clang-17 clang-tools-17 lld-17 libpolly-17-dev libmlir-17-dev mlir-17-tools
+        - name: Clippy
+          run: make check
+
+    fmt:
+        name: rustfmt
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v3
+        - uses: dtolnay/rust-toolchain@1.75.0
+          with:
+            components: rustfmt
+        - run: cargo fmt --all -- --check
+
+    test:
+        name: test (linux, amd64)
+        runs-on: ubuntu-latest
+        env:
+            MLIR_SYS_170_PREFIX: /usr/lib/llvm-17/
+            LLVM_SYS_170_PREFIX: /usr/lib/llvm-17/
+            TABLEGEN_170_PREFIX: /usr/lib/llvm-17/
+            RUST_LOG: debug
+        steps:
+        - uses: actions/checkout@v3
+        - name: free HDD space
+          run: |
+            # deleting space
+            sudo rm -rf /usr/share/dotnet/
+            sudo rm -rf /usr/local/lib/android
+        - name: Setup rust env
+          uses: dtolnay/rust-toolchain@1.75.0
+        - name: Retreive cached dependecies
+          uses: Swatinem/rust-cache@v2
+        - name: add llvm deb repository
+          uses: myci-actions/add-deb-repo@10
+          with:
+            repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main
+            repo-name: llvm-repo
+            keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
+        - name: Install LLVM
+          run: sudo apt-get install llvm-17 llvm-17-dev llvm-17-runtime clang-17 clang-tools-17 lld-17 libpolly-17-dev libmlir-17-dev mlir-17-tools
+        - name: test
+          run: make test
+
+    coverage:
+        name: coverage
+        runs-on: ubuntu-latest
+        env:
+            CARGO_TERM_COLOR: always
+            MLIR_SYS_170_PREFIX: /usr/lib/llvm-17/
+            LLVM_SYS_170_PREFIX: /usr/lib/llvm-17/
+            TABLEGEN_170_PREFIX: /usr/lib/llvm-17/
+            RUST_LOG: debug
+        steps:
+            - uses: actions/checkout@v3
+            - name: free HDD space
+              run: |
+                    # deleting space
+                    sudo rm -rf /usr/share/dotnet/
+                    sudo rm -rf /usr/local/lib/android
+            - name: Setup rust env
+              uses: dtolnay/rust-toolchain@1.75.0
+            - name: Retreive cached dependecies
+              uses: Swatinem/rust-cache@v2
+            - name: add llvm deb repository
+              uses: myci-actions/add-deb-repo@10
+              with:
+                    repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main
+                    repo-name: llvm-repo
+                    keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
+            - name: Install LLVM
+              run: sudo apt-get install llvm-17 llvm-17-dev llvm-17-runtime clang-17 clang-tools-17 lld-17 libpolly-17-dev libmlir-17-dev mlir-17-tools
+            - name: Install cargo-llvm-cov
+              uses: taiki-e/install-action@cargo-llvm-cov
+            - name: test and generate coverage
+              run: make coverage
+            - name: Upload coverage to Codecov
+              uses: codecov/codecov-action@v3
+              with:
+                #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+                files: lcov.info
+                fail_ci_if_error: true
