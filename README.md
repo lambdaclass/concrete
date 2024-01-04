@@ -205,4 +205,3 @@ The design will be heavily influenced by all this programming langauges. We want
 - Lua
 - Clojure
 - Nim
-- Go
