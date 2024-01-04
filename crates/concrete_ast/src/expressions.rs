@@ -33,7 +33,7 @@ pub enum CompoundExpr {
 pub enum AtomicExpr {
     ConstBool(bool),
     ConstChar(char),
-    ConstIint(u64),
+    ConstInt(u64),
     ConstFloat(f64),
     ConstStr(String),
     FnCall(FnCallExpr),
