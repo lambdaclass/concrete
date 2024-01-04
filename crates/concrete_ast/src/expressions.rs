@@ -5,7 +5,6 @@ use crate::{common::Ident, types::TypeSpec};
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathSegment {
     FieldAccess(Ident),
-    PtrFieldAccess(Ident),
     ArrayIndex(Box<Expression>),
 }
 
