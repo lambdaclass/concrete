@@ -110,11 +110,6 @@ If building LLVM from source, you'll need additional tools:
 - No undefined behavior
 - No marker traits like Send, Sync for concurrency. The runtime will take care of that.
 
-### Features that are being debated
-- Integer type that overflows to bignum
-- Missing decimal FP. Needed for financial math
-- Check [Fearless FFI](https://verdagon.dev/blog/fearless-ffi)
-
 ## Syntax
 ```
 mod FibonacciModule {
