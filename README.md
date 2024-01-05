@@ -24,6 +24,7 @@ Concrete take many features from Rust like:
 - Built-in dependency manager
 - Built-in linter and formatter
 - Good compilation error messages
+- Inmutability by default, optional mutability
 
 But we want to take a different path with respect to:
 - Linear type system rather than affine type system
@@ -247,10 +248,10 @@ The design was very heavily influenced by all these programming languages:
 - [Elixir](https://elixir-lang.org/)
 
  We want to thanks everyone of them. We also took core ideas, specs and features from these languages:
-- [Roc](https://www.roc-lang.org/)
 - [Vale](https://vale.dev/)
 - [Inko](https://inko-lang.org/)
 - [Odin](https://odin-lang.org/)
+- [Roc](https://www.roc-lang.org/)
 - [Go](https://go.dev/)
 - [Elm](https://elm-lang.org/)
 - [Pony](https://www.ponylang.io/)
