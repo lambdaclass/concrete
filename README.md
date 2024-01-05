@@ -36,7 +36,7 @@ But we want to take a different path with respect to:
 - No circular dependencies in modules
 - No macros
 - At the beginning we won't support local type inference at function level. We might add it in the future.
-- Integer type that overflows to bignum
+- Financials decimal type and bigint type as part of the standard library
 
 ## Table of Contents
 
@@ -88,6 +88,7 @@ If building LLVM from source, you'll need additional tools:
 - Traits and Generics
 - REPL for connecting to running services and for quick iteration
 - Compile to MLIR, WASM and generate C code
+- Financials decimal type and bigint type as part of the standard library
 - Implemented in Rust
 
 ### Anti-features
