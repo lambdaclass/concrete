@@ -1,4 +1,7 @@
 use crate::tokens::Token;
+use crate::lexer::LexicalError;
+use concrete_ast as ast;
+use std::str::FromStr;
 
 grammar;
 
@@ -7,10 +10,317 @@ extern {
   type Error = LexicalError;
 
   enum Token {
-    "ident" => Token::Identifier(<String>),
+    // keywords
+    "let" => Token::KeywordLet,
+    "const" => Token::KeywordConst,
+    "fn" => Token::KeywordFn,
+    "return" => Token::KeywordReturn,
+    "struct" => Token::KeywordStruct,
+    "if" => Token::KeywordIf,
+    "else" => Token::KeywordElse,
+    "while" => Token::KeywordWhile,
+    "for" => Token::KeywordFor,
+    "match" => Token::KeywordMatch,
+    "mod" => Token::KeywordMod,
+    "pub" => Token::KeywordPub,
+
+    // literals
+    "identifier" => Token::Identifier(<String>),
+    "integer" => Token::Integer(<u64>),
+    "string" => Token::String(<String>),
+    "boolean" => Token::Boolean(<bool>),
+
+    // Other
+
+    "(" => Token::LeftParen,
+    ")" => Token::RightParen,
+    "{" => Token::LeftBracket,
+    "}" => Token::RightBracket,
+    "[" => Token::LeftSquareBracket,
+    "]" => Token::RightSquareBracket,
+    "=" => Token::Assign,
+    ";" => Token::Semicolon,
+    ":" => Token::Colon,
+    "->" => Token::Arrow,
+    "," => Token::Coma,
+    "<" => Token::LessThanSign,
+    ">" => Token::MoreThanSign,
+    "." => Token::Dot,
+
+    // operators
+    "+" => Token::OperatorAdd,
+    "-" => Token::OperatorSub,
+    "*" => Token::OperatorMul,
+    "/" => Token::OperatorDiv,
+    "%" => Token::OperatorRem,
+    "&&" => Token::OperatorAnd,
+    "||" => Token::OperatorOr,
+    "==" => Token::OperatorEq,
+    "!=" => Token::OperatorNe,
+    "!" => Token::OperatorNot,
   }
 }
 
-pub Term: () = {
-    "ident" => (),
+// lalrpop macros
+
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+SemiColon<T>: Vec<T> = {
+    <mut v:(<T> ";")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+PlusSeparated<T>: Vec<T> = {
+    <mut v:(<T> "+")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+// Requires the semicolon at end
+SemiColonSeparated<T>: Vec<T> = {
+  <T> ";" => vec![<>],
+  <mut s:SemiColonSeparated<T>> <n:T> ";" => {
+    s.push(n);
+    s
+  }
+};
+
+// -- Common
+
+pub(crate) Ident: ast::common::Ident = {
+  <lo:@L> <name:"identifier"> <hi:@R> => ast::common::Ident {
+    name,
+    span: ast::common::Span::new(lo, hi),
+  }
+}
+
+pub(crate) TypeSpec: ast::types::TypeSpec = {
+  <name:Ident> => ast::types::TypeSpec::Simple {
+    name
+  },
+  <name:Ident> "<" <type_params:Comma<TypeSpec>> ">" => ast::types::TypeSpec::Generic {
+    name,
+    type_params
+  }
+}
+
+pub(crate) GenericParam: ast::common::GenericParam = {
+  <name:Ident> => ast::common::GenericParam {
+    name,
+    params: vec![],
+  },
+  <name:Ident> ":" <params: PlusSeparated<Ident>> => ast::common::GenericParam {
+    name,
+    params,
+  },
+}
+
+pub(crate) GenericParams: Vec<ast::common::GenericParam> = {
+  "<" <Comma<GenericParam>> ">" => <>
+}
+
+// Module list
+
+pub Program: Vec<ast::modules::ModuleBase> = {
+  <ModuleBase> => vec![<>],
+  <mut s:Program> <n:ModuleBase> => {
+      s.push(n);
+      s
+  },
+}
+
+// Modules
+
+pub(crate) ModuleBase: ast::modules::ModuleBase = {
+  "mod" <name:Ident> "{" <contents:ModuleItems> "}" => {
+    ast::modules::ModuleBase {
+      doc_string: None,
+      imports: vec![], // todo: add imports
+      name,
+      contents
+    }
+  }
+}
+
+pub(crate) ModuleItems: Vec<ast::modules::ModuleDefItem> = {
+  <ModuleDefItem> => vec![<>],
+  <mut s:ModuleItems> <n:ModuleDefItem> => {
+      s.push(n);
+      s
+  },
+}
+
+pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
+  <ConstantDef> ";" => {
+    ast::modules::ModuleDefItem::Constant(<>)
+  },
+  <FunctionDef> => {
+    ast::modules::ModuleDefItem::Function(<>)
+  }
+}
+
+// Constants
+
+pub(crate) ConstantDef: ast::constants::ConstantDef = {
+  "const" <name:Ident> ":" <type_spec:TypeSpec> "=" <exp:Expression> => {
+    ast::constants::ConstantDef {
+      decl: ast::constants::ConstantDecl {
+        doc_string: None,
+        name,
+        r#type: type_spec
+      },
+      value: exp,
+    }
+  },
+}
+
+// -- Functions
+
+pub(crate) FunctionRetType: ast::types::TypeSpec = {
+  "->" <TypeSpec> => <>
+}
+
+pub(crate) Param: ast::functions::Param = {
+  <name:Ident> ":" <param_type:TypeSpec> => ast::functions::Param {
+    name,
+    r#type: param_type
+  }
+}
+
+pub(crate) FunctionDef: ast::functions::FunctionDef = {
+  <is_pub:"pub"?> "fn" <name:Ident> <generic_params:GenericParams?> "(" <params:Comma<Param>> ")" <ret_type:FunctionRetType?> "{"
+    <statements:SemiColonSeparated<Statement>>
+  "}" => {
+    ast::functions::FunctionDef {
+      decl: ast::functions::FunctionDecl {
+        doc_string: None,
+        generic_params: generic_params.unwrap_or(vec![]),
+        name,
+        params,
+        ret_type,
+      },
+      body: statements
+    }
+  }
+}
+
+// Expressions
+
+pub(crate) Expression: ast::expressions::Expression = {
+  <MatchExpr> => ast::expressions::Expression::Match(<>),
+  <Operation> => ast::expressions::Expression::Operation(<>),
+}
+
+pub(crate) MatchExpr: ast::expressions::MatchExpr = {
+  "match" <value:Operation> "{" <variants:Comma<MatchVariant>> "}" => {
+    ast::expressions::MatchExpr {
+      value,
+      variants
+    }
+  }
+}
+
+pub(crate) MatchVariant: ast::expressions::MatchVariant = {
+  // 0 -> 1
+  <case:Operation> "->" <stmt:Statement> => {
+    ast::expressions::MatchVariant {
+      case,
+      block: vec![stmt]
+    }
+  },
+  // x -> { ... }
+  <case:Operation> "->" "{" <stmts:SemiColonSeparated<Statement>> "}" => {
+    ast::expressions::MatchVariant {
+      case,
+      block: stmts
+    }
+  }
+}
+
+// -- Operations
+
+pub(crate) Operation: ast::operations::Operation = {
+  <AtomicOp> => ast::operations::Operation::Atomic(<>),
+  <CompoundOp> => ast::operations::Operation::Compound(<>),
+}
+
+pub(crate) AtomicOp: ast::operations::AtomicOp = {
+  <"integer"> => ast::operations::AtomicOp::ConstInt(<>),
+  <"boolean"> => ast::operations::AtomicOp::ConstBool(<>),
+  <"string"> => ast::operations::AtomicOp::ConstStr(<>),
+  <PathOp> =>ast::operations::AtomicOp::Path(<>),
+  <FnCallOp> =>ast::operations::AtomicOp::FnCall(<>),
+}
+
+pub(crate) CompoundOp: ast::operations::CompoundOp = {
+  <ArithOp> => ast::operations::CompoundOp::Arith(<>),
+}
+
+pub(crate) ArithOp: ast::operations::ArithOp = {
+  #[precedence(level="1")]
+  <lhs:AtomicOp> "*" <rhs:AtomicOp> => ast::operations::ArithOp::Mul(lhs, rhs),
+  <lhs:AtomicOp> "/" <rhs:AtomicOp> => ast::operations::ArithOp::Div(lhs, rhs),
+  <lhs:AtomicOp> "%" <rhs:AtomicOp> => ast::operations::ArithOp::Mod(lhs, rhs),
+  #[precedence(level="2")] #[assoc(side="left")]
+  <lhs:AtomicOp> "+" <rhs:AtomicOp> => ast::operations::ArithOp::Add(lhs, rhs),
+  <lhs:AtomicOp> "-" <rhs:AtomicOp> => ast::operations::ArithOp::Sub(lhs, rhs),
+  #[precedence(level="3")] #[assoc(side="left")]
+  "-" <value:AtomicOp> => ast::operations::ArithOp::Neg(value),
+}
+
+pub(crate) PathOp: ast::operations::PathOp = {
+  <first:Ident> <extra:PathSegments?> => ast::operations::PathOp {
+    first,
+    extra: extra.unwrap_or(vec![]),
+  }
+}
+
+pub(crate) PathSegment: ast::operations::PathSegment = {
+  "." <Ident> => ast::operations::PathSegment::FieldAccess(<>),
+  "[" <e:Operation> "]" => ast::operations::PathSegment::ArrayIndex(Box::new(e)),
+}
+
+pub PathSegments: Vec<ast::operations::PathSegment> = {
+  <PathSegment> => vec![<>],
+  <mut s:PathSegments> <n:PathSegment> => {
+      s.push(n);
+      s
+  },
+}
+
+pub(crate) FnCallOp: ast::operations::FnCallOp = {
+  <target:Ident> "(" <args:Comma<Operation>> ")" => ast::operations::FnCallOp {
+    target,
+    args
+  }
+}
+
+// -- Statements
+
+pub(crate) Statement: ast::statements::Statement = {
+  <MatchExpr> ";" => ast::statements::Statement::Match(<>),
+  <ReturnStmt> => ast::statements::Statement::Return(<>),
+}
+
+pub(crate) ReturnStmt: ast::statements::ReturnStmt = {
+  "return" <value:Expression> => ast::statements::ReturnStmt {
+    value,
+  },
 }
