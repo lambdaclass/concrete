@@ -13,6 +13,6 @@ pub struct ConstantDecl {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConstantDef {
-    decl: ConstantDecl,
+    pub decl: ConstantDecl,
     pub value: Expression,
 }

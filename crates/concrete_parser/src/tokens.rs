@@ -1,4 +1,5 @@
 use logos::Logos;
+use std::str::FromStr;
 use std::{convert::Infallible, fmt}; // to implement the Display trait
 
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -53,8 +54,8 @@ pub enum Token {
     Identifier(String),
 
     // Literals
-    #[regex(r"\d+", |lex| lex.slice().to_string())]
-    Integer(String),
+    #[regex(r"\d+", |lex| lex.slice().parse::<u64>().unwrap())]
+    Integer(u64),
     #[regex(r#""(?:[^"]|\\")*""#, |lex| lex.slice().to_string())]
     String(String),
     #[regex(r"(true|false)", |lex| lex.slice().parse::<bool>().unwrap())]

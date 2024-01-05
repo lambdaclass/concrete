@@ -1,5 +1,7 @@
 use crate::tokens::Token;
+use crate::lexer::LexicalError;
 use concrete_ast as ast;
+use std::str::FromStr;
 
 grammar;
 
@@ -24,7 +26,8 @@ extern {
 
     // literals
     "identifier" => Token::Identifier(<String>),
-    "integer" => Token::String(<String>),
+    "integer" => Token::Integer(<u64>),
+    "string" => Token::String(<String>),
     "boolean" => Token::Boolean(<bool>),
 
     // Other
@@ -57,6 +60,79 @@ extern {
   }
 }
 
-pub Term: () = {
-    "identifier" => (),
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+SemiColonSeparated<T>: Vec<T> = {
+  <T> ";" => vec![<>],
+  <mut s:SemiColonSeparated<T>> ";" <n:T> ";" => {
+    s.push(n);
+    s
+  }
+};
+
+pub(crate) Ident: ast::common::Ident = {
+  <lo:@L> <name:"identifier"> <hi:@R> => ast::common::Ident {
+    name,
+    span: ast::common::Span::new(lo, hi),
+  }
+}
+
+pub Program: Vec<ast::modules::ModuleBase> = {
+  <ModuleBase> => vec![<>],
+  <mut s:Program> <n:ModuleBase> => {
+      s.push(n);
+      s
+  },
+}
+
+pub(crate) ModuleBase: ast::modules::ModuleBase = {
+  "mod" <name:Ident> "{" <contents:SemiColonSeparated<ModuleDefItem>> "}" => {
+    ast::modules::ModuleBase {
+      doc_string: None,
+      imports: vec![], // todo: add imports
+      name,
+      contents
+    }
+  }
+}
+
+pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
+  "const" <name:Ident> ":" <type_spec:TypeSpec> "=" <exp:Expression> => {
+    ast::modules::ModuleDefItem::Constant(ast::constants::ConstantDef {
+      decl: ast::constants::ConstantDecl {
+        doc_string: None,
+        name,
+        r#type: type_spec
+      },
+      value: exp,
+    })
+  }
+}
+
+pub(crate) TypeSpec: ast::types::TypeSpec = {
+  <name:Ident> => ast::types::TypeSpec::Simple {
+    name
+  },
+  <name:Ident> "<" <type_params:Comma<TypeSpec>> ">" => ast::types::TypeSpec::Generic {
+    name,
+    type_params
+  }
+}
+
+pub(crate) Expression: ast::expressions::Expression = {
+  <AtomicExpr> => ast::expressions::Expression::Atomic(<>),
+}
+
+pub(crate) AtomicExpr: ast::expressions::AtomicExpr = {
+  <"integer"> => ast::expressions::AtomicExpr::ConstInt(<>),
+  <"boolean"> => ast::expressions::AtomicExpr::ConstBool(<>),
+  <"string"> => ast::expressions::AtomicExpr::ConstStr(<>),
 }
