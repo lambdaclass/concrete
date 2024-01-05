@@ -16,6 +16,8 @@ mod tests {
         let source = r##"
 mod ModuleName {
     const MY_CONSTANT: u8 = 2;
+    const MY_CONSTANT2: bool = true;
+    const MY_CONSTANT3: string = "hello world!";
 }
         "##;
         let lexer = Lexer::new(source);

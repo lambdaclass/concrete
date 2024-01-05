@@ -72,7 +72,7 @@ Comma<T>: Vec<T> = {
 
 SemiColonSeparated<T>: Vec<T> = {
   <T> ";" => vec![<>],
-  <mut s:SemiColonSeparated<T>> ";" <n:T> ";" => {
+  <mut s:SemiColonSeparated<T>> <n:T> ";" => {
     s.push(n);
     s
   }
