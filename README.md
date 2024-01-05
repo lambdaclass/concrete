@@ -64,7 +64,7 @@ Programs are about transforming data into other forms of data. Code is about exp
 #### Second level features
 - Type inference only within blocks, not in function signatures
 - Algebraic Data Types
-- Typeclasses
+- Traits and Generics
 - REPL for connecting to running services and for quick iteration
 - Compile to MLIR, WASM and generate C code
 - Implemented in Rust
@@ -72,7 +72,6 @@ Programs are about transforming data into other forms of data. Code is about exp
 ### Anti-features
 - No hidden memory allocation
 - No garbage collection or destructors
-- No runtime running by default
 - No hidden control flow or implicit function call
 - No global state
 - No exceptions
@@ -87,13 +86,24 @@ Programs are about transforming data into other forms of data. Code is about exp
 - No variable shadowing
 - No Java-style @Annotations
 - No undefined behavior
+- No marker traits like Send, Sync for concurrency. The runtime will take care of that.
 
 ### Features that are being debated
 - Integer type that overflows to bignum
 - Missing decimal FP. Needed for financial math
-- Zig's comptime
 - Check [Fearless FFI](https://verdagon.dev/blog/fearless-ffi)
 
+### Differences with Rust
+
+Concrete take many features from Rust like:
+- Traits and generics
+- Similar language but we aim to make it simpler
+
+But we want to take a different path with respect to:
+- Concurrency. We provide a default runtime with green threads. There is no support for low-level primitives like atomics, mutex and OS threads.
+- There is no Sync and Send traits
+- Simpler borrow checker
+- No lifetimes
 
 ## Syntax
 
