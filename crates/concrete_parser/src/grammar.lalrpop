@@ -315,12 +315,12 @@ pub(crate) FnCallOp: ast::operations::FnCallOp = {
 // -- Statements
 
 pub(crate) Statement: ast::statements::Statement = {
-  //<MatchExpr> => ast::statements::Statement::Match(<>),
+  <MatchExpr> ";" => ast::statements::Statement::Match(<>),
   <ReturnStmt> => ast::statements::Statement::Return(<>),
 }
 
 pub(crate) ReturnStmt: ast::statements::ReturnStmt = {
-  "return"? <value:Expression> => ast::statements::ReturnStmt {
+  "return" <value:Expression> => ast::statements::ReturnStmt {
     value,
   },
 }

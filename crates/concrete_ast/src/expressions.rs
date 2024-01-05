@@ -8,7 +8,7 @@ pub enum Expression {
 }
 
 pub struct BlockExpr {
-    pub statements: Vec<Statement>
+    pub statements: Vec<Statement>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

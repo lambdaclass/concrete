@@ -38,8 +38,8 @@ mod ModuleName {
         let source = r##"mod FactorialModule {
     pub fn factorial(x: u64) -> u64  {
         return match x {
-            0 -> 1,
-            n -> n * factorial(n-1),
+            0 -> return 1,
+            n -> return n * factorial(n-1),
         };
     }
 }"##;

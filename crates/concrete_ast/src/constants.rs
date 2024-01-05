@@ -1,6 +1,7 @@
 use crate::{
     common::{DocString, Ident},
-    types::TypeSpec, expressions::Expression,
+    expressions::Expression,
+    types::TypeSpec,
 };
 
 #[derive(Clone, Debug, PartialEq)]

@@ -1,7 +1,8 @@
 use crate::{
     common::Ident,
+    expressions::{Expression, MatchExpr},
     operations::{Operation, PathOp},
-    types::TypeSpec, expressions::{Expression, MatchExpr},
+    types::TypeSpec,
 };
 
 #[derive(Clone, Debug, PartialEq)]
