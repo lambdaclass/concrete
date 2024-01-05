@@ -1,13 +1,13 @@
 use crate::{
     common::Ident,
-    expressions::{Expression, PathExpr},
-    types::TypeSpec,
+    operations::{Operation, PathOp},
+    types::TypeSpec, expressions::{Expression, MatchExpr},
 };
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Statement {
     Assign(AssignStmt),
-    Match(MatchStmt),
+    Match(MatchExpr),
     For(ForStmt),
     If(IfStmt),
     Let(LetStmt),
@@ -25,6 +25,7 @@ pub enum LetStmtTarget {
 pub struct LetStmt {
     pub is_mutable: bool,
     pub target: LetStmtTarget,
+    pub value: Expression,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -34,7 +35,7 @@ pub struct ReturnStmt {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AssignStmt {
-    pub target: PathExpr,
+    pub target: PathOp,
     pub value: Expression,
 }
 
@@ -46,34 +47,22 @@ pub struct Binding {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct MatchStmt {
-    pub value: Expression,
-    pub variants: Vec<MatchVariant>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct MatchVariant {
-    pub case: Expression,
-    pub block: Vec<Statement>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub struct ForStmt {
     pub name: Ident,
-    pub from: Expression,
-    pub to: Expression,
+    pub from: Operation,
+    pub to: Operation,
     pub contents: Vec<Statement>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfStmt {
-    pub value: Expression,
+    pub value: Operation,
     pub contents: Vec<Statement>,
     pub r#else: Option<Vec<Statement>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct WhileStmt {
-    pub value: Expression,
+    pub value: Operation,
     pub contents: Vec<Statement>,
 }

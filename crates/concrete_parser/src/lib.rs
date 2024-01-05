@@ -37,10 +37,10 @@ mod ModuleName {
     fn parse_factorial() {
         let source = r##"mod FactorialModule {
     pub fn factorial(x: u64) -> u64  {
-        match x {
+        return match x {
             0 -> 1,
             n -> n * factorial(n-1),
-        }
+        };
     }
 }"##;
         let lexer = Lexer::new(source);
@@ -55,11 +55,11 @@ mod ModuleName {
     }
 
     fn print_parser_error(source: &str, err: ParseError<usize, Token, LexicalError>) {
-        match err {
+        match &err {
             ParseError::InvalidToken { location } => todo!(),
             ParseError::UnrecognizedEof { location, expected } => todo!(),
             ParseError::UnrecognizedToken { token, expected } => {
-                let (l, tok, r) = token;
+                let (l, ref tok, r) = *token;
                 let before = &source[0..l];
                 let after = &source[r..];
 
@@ -74,6 +74,6 @@ mod ModuleName {
             ParseError::ExtraToken { token } => todo!(),
             ParseError::User { error } => todo!(),
         }
-        panic!("error parsing");
+        panic!("error parsing: {:#?}", err);
     }
 }

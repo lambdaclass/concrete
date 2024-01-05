@@ -73,6 +73,16 @@ Comma<T>: Vec<T> = {
     }
 };
 
+SemiColon<T>: Vec<T> = {
+    <mut v:(<T> ";")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
 PlusSeparated<T>: Vec<T> = {
     <mut v:(<T> "+")*> <e:T?> => match e {
         None => v,
@@ -139,7 +149,7 @@ pub Program: Vec<ast::modules::ModuleBase> = {
 // Modules
 
 pub(crate) ModuleBase: ast::modules::ModuleBase = {
-  "mod" <name:Ident> "{" <contents:SemiColonSeparated<ModuleDefItem>> "}" => {
+  "mod" <name:Ident> "{" <contents:ModuleItems> "}" => {
     ast::modules::ModuleBase {
       doc_string: None,
       imports: vec![], // todo: add imports
@@ -149,8 +159,16 @@ pub(crate) ModuleBase: ast::modules::ModuleBase = {
   }
 }
 
+pub(crate) ModuleItems: Vec<ast::modules::ModuleDefItem> = {
+  <ModuleDefItem> => vec![<>],
+  <mut s:ModuleItems> <n:ModuleDefItem> => {
+      s.push(n);
+      s
+  },
+}
+
 pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
-  <ConstantDef> => {
+  <ConstantDef> ";" => {
     ast::modules::ModuleDefItem::Constant(<>)
   },
   <FunctionDef> => {
@@ -203,55 +221,83 @@ pub(crate) FunctionDef: ast::functions::FunctionDef = {
   }
 }
 
-// -- Expressions
+// Expressions
 
 pub(crate) Expression: ast::expressions::Expression = {
-  <AtomicExpr> => ast::expressions::Expression::Atomic(<>),
-  <CompoundExpr> => ast::expressions::Expression::Compound(<>),
+  <MatchExpr> => ast::expressions::Expression::Match(<>),
+  <Operation> => ast::expressions::Expression::Operation(<>),
 }
 
-pub(crate) AtomicExpr: ast::expressions::AtomicExpr = {
-  <"integer"> => ast::expressions::AtomicExpr::ConstInt(<>),
-  <"boolean"> => ast::expressions::AtomicExpr::ConstBool(<>),
-  <"string"> => ast::expressions::AtomicExpr::ConstStr(<>),
-  <PathExpr> =>ast::expressions::AtomicExpr::Path(<>),
-  <FnCallExpr> =>ast::expressions::AtomicExpr::FnCall(<>),
+pub(crate) MatchExpr: ast::expressions::MatchExpr = {
+  "match" <value:Operation> "{" <variants:Comma<MatchVariant>> "}" => {
+    ast::expressions::MatchExpr {
+      value,
+      variants
+    }
+  }
 }
 
-pub(crate) CompoundExpr: ast::expressions::CompoundExpr = {
-  <ArithExpr> => ast::expressions::CompoundExpr::Arith(<>),
+pub(crate) MatchVariant: ast::expressions::MatchVariant = {
+  // 0 -> 1
+  <case:Operation> "->" <stmt:Statement> => {
+    ast::expressions::MatchVariant {
+      case,
+      block: vec![stmt]
+    }
+  },
+  // x -> { ... }
+  <case:Operation> "->" "{" <stmts:SemiColonSeparated<Statement>> "}" => {
+    ast::expressions::MatchVariant {
+      case,
+      block: stmts
+    }
+  }
 }
 
-pub(crate) StatementExpr: ast::expressions::StatementExpr = {
-  <MatchStmt> => ast::expressions::StatementExpr::Match(<>),
-  <ReturnStmt> => ast::expressions::StatementExpr::Return(<>),
+// -- Operations
+
+pub(crate) Operation: ast::operations::Operation = {
+  <AtomicOp> => ast::operations::Operation::Atomic(<>),
+  <CompoundOp> => ast::operations::Operation::Compound(<>),
 }
 
-pub(crate) ArithExpr: ast::expressions::ArithExpr = {
+pub(crate) AtomicOp: ast::operations::AtomicOp = {
+  <"integer"> => ast::operations::AtomicOp::ConstInt(<>),
+  <"boolean"> => ast::operations::AtomicOp::ConstBool(<>),
+  <"string"> => ast::operations::AtomicOp::ConstStr(<>),
+  <PathOp> =>ast::operations::AtomicOp::Path(<>),
+  <FnCallOp> =>ast::operations::AtomicOp::FnCall(<>),
+}
+
+pub(crate) CompoundOp: ast::operations::CompoundOp = {
+  <ArithOp> => ast::operations::CompoundOp::Arith(<>),
+}
+
+pub(crate) ArithOp: ast::operations::ArithOp = {
   #[precedence(level="1")]
-  <lhs:AtomicExpr> "*" <rhs:AtomicExpr> => ast::expressions::ArithExpr::Mul(lhs, rhs),
-  <lhs:AtomicExpr> "/" <rhs:AtomicExpr> => ast::expressions::ArithExpr::Div(lhs, rhs),
-  <lhs:AtomicExpr> "%" <rhs:AtomicExpr> => ast::expressions::ArithExpr::Mod(lhs, rhs),
+  <lhs:AtomicOp> "*" <rhs:AtomicOp> => ast::operations::ArithOp::Mul(lhs, rhs),
+  <lhs:AtomicOp> "/" <rhs:AtomicOp> => ast::operations::ArithOp::Div(lhs, rhs),
+  <lhs:AtomicOp> "%" <rhs:AtomicOp> => ast::operations::ArithOp::Mod(lhs, rhs),
   #[precedence(level="2")] #[assoc(side="left")]
-  <lhs:AtomicExpr> "+" <rhs:AtomicExpr> => ast::expressions::ArithExpr::Add(lhs, rhs),
-  <lhs:AtomicExpr> "-" <rhs:AtomicExpr> => ast::expressions::ArithExpr::Sub(lhs, rhs),
+  <lhs:AtomicOp> "+" <rhs:AtomicOp> => ast::operations::ArithOp::Add(lhs, rhs),
+  <lhs:AtomicOp> "-" <rhs:AtomicOp> => ast::operations::ArithOp::Sub(lhs, rhs),
   #[precedence(level="3")] #[assoc(side="left")]
-  "-" <value:AtomicExpr> => ast::expressions::ArithExpr::Neg(value),
+  "-" <value:AtomicOp> => ast::operations::ArithOp::Neg(value),
 }
 
-pub(crate) PathExpr: ast::expressions::PathExpr = {
-  <first:Ident> <extra:PathSegments?> => ast::expressions::PathExpr {
+pub(crate) PathOp: ast::operations::PathOp = {
+  <first:Ident> <extra:PathSegments?> => ast::operations::PathOp {
     first,
     extra: extra.unwrap_or(vec![]),
   }
 }
 
-pub(crate) PathSegment: ast::expressions::PathSegment = {
-  "." <Ident> => ast::expressions::PathSegment::FieldAccess(<>),
-  "[" <e:Expression> "]" => ast::expressions::PathSegment::ArrayIndex(Box::new(e)),
+pub(crate) PathSegment: ast::operations::PathSegment = {
+  "." <Ident> => ast::operations::PathSegment::FieldAccess(<>),
+  "[" <e:Operation> "]" => ast::operations::PathSegment::ArrayIndex(Box::new(e)),
 }
 
-pub PathSegments: Vec<ast::expressions::PathSegment> = {
+pub PathSegments: Vec<ast::operations::PathSegment> = {
   <PathSegment> => vec![<>],
   <mut s:PathSegments> <n:PathSegment> => {
       s.push(n);
@@ -259,8 +305,8 @@ pub PathSegments: Vec<ast::expressions::PathSegment> = {
   },
 }
 
-pub(crate) FnCallExpr: ast::expressions::FnCallExpr = {
-  <target:Ident> "(" <args:Comma<Expression>> ")" => ast::expressions::FnCallExpr {
+pub(crate) FnCallOp: ast::operations::FnCallOp = {
+  <target:Ident> "(" <args:Comma<Operation>> ")" => ast::operations::FnCallOp {
     target,
     args
   }
@@ -269,34 +315,8 @@ pub(crate) FnCallExpr: ast::expressions::FnCallExpr = {
 // -- Statements
 
 pub(crate) Statement: ast::statements::Statement = {
-  <MatchStmt> => ast::statements::Statement::Match(<>),
+  //<MatchExpr> => ast::statements::Statement::Match(<>),
   <ReturnStmt> => ast::statements::Statement::Return(<>),
-}
-
-pub(crate) MatchStmt: ast::statements::MatchStmt = {
-  "match" <value:Expression> "{" <variants:Comma<MatchVariant>> "}" => {
-    ast::statements::MatchStmt {
-      value,
-      variants
-    }
-  }
-}
-
-pub(crate) MatchVariant: ast::statements::MatchVariant = {
-  // 0 -> 1
-  <case:Expression> "->" <stmt:Statement> => {
-    ast::statements::MatchVariant {
-      case,
-      block: vec![stmt]
-    }
-  },
-  // x -> { ... }
-  <case:Expression> "->" "{" <stmts:SemiColonSeparated<Statement>> "}" => {
-    ast::statements::MatchVariant {
-      case,
-      block: stmts
-    }
-  }
 }
 
 pub(crate) ReturnStmt: ast::statements::ReturnStmt = {
