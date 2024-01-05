@@ -36,7 +36,7 @@ But we want to take a different path with respect to:
 - No circular dependencies in modules
 - No macros
 - At the beginning we won't support local type inference at function level. We might add it in the future.
-  
+- Integer type that overflows to bignum
 
 ## Table of Contents
 
