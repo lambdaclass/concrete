@@ -1,5 +1,5 @@
 use crate::{
-    common::{DocString, Ident, TypeParam},
+    common::{DocString, GenericParam, Ident},
     statements::Statement,
     types::TypeSpec,
 };
@@ -7,30 +7,15 @@ use crate::{
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionDecl {
     pub doc_string: Option<DocString>,
-    pub type_params: Vec<TypeParam>,
+    pub generic_params: Vec<GenericParam>,
     pub name: Ident,
     pub params: Vec<Param>,
-    pub ret_type: TypeSpec,
+    pub ret_type: Option<TypeSpec>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionDef {
     pub decl: FunctionDecl,
-    pub body: Vec<Statement>,
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct MethodDecl {
-    pub doc_string: Option<DocString>,
-    pub type_params: Vec<TypeParam>,
-    pub name: Ident,
-    pub params: Vec<Param>,
-    pub ret_ty: TypeSpec,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct MethodDef {
-    pub decl: MethodDecl,
     pub body: Vec<Statement>,
 }
 

@@ -1,5 +1,5 @@
 use crate::{
-    common::{DocString, Ident, TypeParam},
+    common::{DocString, GenericParam, Ident},
     types::TypeSpec,
 };
 
@@ -7,7 +7,7 @@ use crate::{
 pub struct StructDecl {
     doc_string: Option<DocString>,
     name: Ident,
-    type_params: Vec<TypeParam>,
+    type_params: Vec<GenericParam>,
     fields: Vec<Field>,
 }
 

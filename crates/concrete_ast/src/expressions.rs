@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
-use crate::{common::Ident, types::TypeSpec};
+use crate::{
+    common::Ident,
+    statements::{IfStmt, MatchStmt, ReturnStmt},
+    types::TypeSpec,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathSegment {
@@ -42,6 +46,13 @@ pub enum AtomicExpr {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum StatementExpr {
+    Match(MatchStmt),
+    If(IfStmt),
+    Return(ReturnStmt),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum CmpExpr {
     Eq(AtomicExpr, AtomicExpr),
     NotEq(AtomicExpr, AtomicExpr),
@@ -64,6 +75,7 @@ pub enum ArithExpr {
     Sub(AtomicExpr, AtomicExpr),
     Mul(AtomicExpr, AtomicExpr),
     Div(AtomicExpr, AtomicExpr),
+    Mod(AtomicExpr, AtomicExpr),
     Neg(AtomicExpr),
 }
 
@@ -76,13 +88,5 @@ pub struct CastExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FnCallExpr {
     pub target: Ident,
-    pub args: FnCallArgs,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub enum FnCallArgs {
-    #[default]
-    Empty,
-    Positional(Vec<Expression>),
-    Named(HashMap<Ident, Expression>),
+    pub args: Vec<Expression>,
 }

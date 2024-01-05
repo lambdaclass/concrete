@@ -22,7 +22,7 @@ impl From<Infallible> for LexingError {
 }
 
 #[derive(Logos, Debug, PartialEq, Clone)]
-#[logos(error = LexingError, skip r"[ \t\n\f]+", skip r"//.*\n?", skip r"/\*(?:[^*]|\*[^/])*\*/")]
+#[logos(error = LexingError, skip r"[ \t\n\f]+", skip r"//[^\n]*", skip r"/\*(?:[^*]|\*[^/])*\*/")]
 pub enum Token {
     #[token("let")]
     KeywordLet,
@@ -50,7 +50,7 @@ pub enum Token {
     KeywordPub,
 
     // Modern way of allowing identifiers, read: https://unicode.org/reports/tr31/
-    #[regex(r"_?\p{XID_Start}\p{XID_Continue}*", |lex| lex.slice().to_string())]
+    #[regex(r"[\p{XID_Start}_]\p{XID_Continue}*", |lex| lex.slice().to_string())]
     Identifier(String),
 
     // Literals
@@ -83,6 +83,8 @@ pub enum Token {
     Arrow,
     #[token(",")]
     Coma,
+    #[token(".")]
+    Dot,
     #[token("<")]
     LessThanSign,
     #[token(">")]

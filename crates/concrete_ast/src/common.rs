@@ -22,7 +22,7 @@ pub struct Ident {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct TypeParam {
+pub struct GenericParam {
     pub name: Ident,
     pub params: Vec<Ident>,
 }

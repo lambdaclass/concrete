@@ -11,7 +11,7 @@ pub enum Statement {
     For(ForStmt),
     If(IfStmt),
     Let(LetStmt),
-    Return(Expression),
+    Return(ReturnStmt),
     While(WhileStmt),
 }
 
@@ -25,6 +25,11 @@ pub enum LetStmtTarget {
 pub struct LetStmt {
     pub is_mutable: bool,
     pub target: LetStmtTarget,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReturnStmt {
+    pub value: Expression,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -43,13 +48,12 @@ pub struct Binding {
 #[derive(Clone, Debug, PartialEq)]
 pub struct MatchStmt {
     pub value: Expression,
-    pub variants: Vec<MatchWhen>,
+    pub variants: Vec<MatchVariant>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct MatchWhen {
-    pub ident: Ident,
-    pub bindings: Vec<Binding>,
+pub struct MatchVariant {
+    pub case: Expression,
     pub block: Vec<Statement>,
 }
 

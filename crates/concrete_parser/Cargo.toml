@@ -13,3 +13,6 @@ concrete_ast = { path = "../concrete_ast"}
 
 [build-dependencies]
 lalrpop = "0.20.0"
+
+[dev-dependencies]
+owo-colors = "4.0.0"
