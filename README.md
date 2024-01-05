@@ -15,6 +15,26 @@ In the realm of low-level programming, language safety, performance and simplici
 
 Writing good code should be easy. The language must be simple enough to fit in a single person’s head. Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. We aim to develop a simpler version of Rust that includes an optional default runtime featuring green threads and a preemptive scheduler, similar to those found in Go and Erlang.
 
+## Rust similarities and differences
+Concrete take many features from Rust like:
+- Enum, structs instead of classes
+- Ad-hoc polymorphism via traits
+- Parametric polymorphism via generics
+- Expressions and statements rather than only expressions as in many functional languages
+- Built-in dependency manager
+- Built-in linter and formatter
+- Good compilation error messages
+
+But we want to take a different path with respect to:
+- Linear type system rather than affine type system
+- No lifetimes
+- Simpler borrow checker
+- Concurrency model. We provide a default runtime with green threads. There is no support for low-level primitives like atomics, mutex and OS threads.
+- There is no Sync and Send traits
+- No relationsihp between modules and files
+- No circular dependencies in modules
+- No macros
+- At the beginning we won't support local type inference at function level. We might add it in the future.
 
 ## Table of Contents
 
@@ -46,7 +66,6 @@ If building LLVM from source, you'll need additional tools:
 
 ## Design
 
-Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system.
 ### Core features
 - C/Go/Rust-inspired, context-free small grammar, syntax: if, for, function calls, modules, pattern matching
 - Safe. Linear types that allow memory and other resources to be managed safely and without runtime overhead
@@ -92,18 +111,6 @@ Programs are about transforming data into other forms of data. Code is about exp
 - Integer type that overflows to bignum
 - Missing decimal FP. Needed for financial math
 - Check [Fearless FFI](https://verdagon.dev/blog/fearless-ffi)
-
-### Differences with Rust
-
-Concrete take many features from Rust like:
-- Traits and generics
-- Similar language but we aim to make it simpler
-
-But we want to take a different path with respect to:
-- Concurrency. We provide a default runtime with green threads. There is no support for low-level primitives like atomics, mutex and OS threads.
-- There is no Sync and Send traits
-- Simpler borrow checker
-- No lifetimes
 
 ## Syntax
 
