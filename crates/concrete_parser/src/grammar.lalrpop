@@ -1,4 +1,5 @@
 use crate::tokens::Token;
+use concrete_ast as ast;
 
 grammar;
 
@@ -7,10 +8,55 @@ extern {
   type Error = LexicalError;
 
   enum Token {
-    "ident" => Token::Identifier(<String>),
+    // keywords
+    "let" => Token::KeywordLet,
+    "const" => Token::KeywordConst,
+    "fn" => Token::KeywordFn,
+    "return" => Token::KeywordReturn,
+    "struct" => Token::KeywordStruct,
+    "if" => Token::KeywordIf,
+    "else" => Token::KeywordElse,
+    "while" => Token::KeywordWhile,
+    "for" => Token::KeywordFor,
+    "match" => Token::KeywordMatch,
+    "mod" => Token::KeywordMod,
+    "pub" => Token::KeywordPub,
+
+    // literals
+    "identifier" => Token::Identifier(<String>),
+    "integer" => Token::String(<String>),
+    "boolean" => Token::Boolean(<bool>),
+
+    // Other
+
+    "(" => Token::LeftParen,
+    ")" => Token::RightParen,
+    "{" => Token::LeftBracket,
+    "}" => Token::RightBracket,
+    "[" => Token::LeftSquareBracket,
+    "]" => Token::RightSquareBracket,
+    "=" => Token::Assign,
+    ";" => Token::Semicolon,
+    ":" => Token::Colon,
+    "->" => Token::Arrow,
+    "," => Token::Coma,
+    "<" => Token::LessThanSign,
+    ">" => Token::MoreThanSign,
+
+    // operators
+    "+" => Token::OperatorAdd,
+    "-" => Token::OperatorSub,
+    "*" => Token::OperatorMul,
+    "/" => Token::OperatorDiv,
+    "%" => Token::OperatorRem,
+    "&&" => Token::OperatorAnd,
+    "||" => Token::OperatorOr,
+    "==" => Token::OperatorEq,
+    "!=" => Token::OperatorNe,
+    "!" => Token::OperatorNot,
   }
 }
 
 pub Term: () = {
-    "ident" => (),
+    "identifier" => (),
 }

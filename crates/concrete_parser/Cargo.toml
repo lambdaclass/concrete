@@ -9,6 +9,7 @@ edition = "2021"
 lalrpop-util = { version = "0.20.0", features = ["unicode"] }
 logos = "0.13.0"
 tracing.workspace = true
+concrete_ast = { path = "../concrete_ast"}
 
 [build-dependencies]
 lalrpop = "0.20.0"
