@@ -159,14 +159,14 @@ mod UsesOption {
 
 ## Inspiration
 The design was very heavily influenced by all these programming languages:
-- [Austral](https://austral-lang.org/spec/spec.html)
-- [Zig](https://ziglang.org/)
 - [Rust](https://www.rust-lang.org/)
 - [Erlang](https://www.erlang.org/)
-- [Elixir](https://elixir-lang.org/)
+- [Austral](https://austral-lang.org/spec/spec.html)
+- [Zig](https://ziglang.org/)
 - [Vale](https://vale.dev/)
 
  We want to thanks everyone of them. We also took core ideas, specs and features from these languages:
+- [Elixir](https://elixir-lang.org/)
 - [Inko](https://inko-lang.org/)
 - [Odin](https://odin-lang.org/)
 - [Roc](https://www.roc-lang.org/)
