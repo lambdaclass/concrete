@@ -105,7 +105,6 @@ But we want to take a different path with respect to:
 - No preprocessor, no macros
 - No type inference, type information flows in one direction
 - No implicit type conversions
-- No subtyping
 - No reflection
 - No function overloading (except through typeclasses, where it is bounded)
 - No uninitialized variables
