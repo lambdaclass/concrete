@@ -37,6 +37,9 @@ But we want to take a different path with respect to:
 - No macros
 - At the beginning we won't support local type inference at function level. We might add it in the future.
 - Financials decimal type and bigint type as part of the standard library
+- Bit-for-bit deterministic/reproducible builds from the beginning
+- Fearless FFI
+- Perfect replayability to be able to easily reproduce Heisenbugs
 
 ## Table of Contents
 
@@ -158,9 +161,9 @@ The design was very heavily influenced by all these programming languages:
 - [Rust](https://www.rust-lang.org/)
 - [Erlang](https://www.erlang.org/)
 - [Elixir](https://elixir-lang.org/)
+- [Vale](https://vale.dev/)
 
  We want to thanks everyone of them. We also took core ideas, specs and features from these languages:
-- [Vale](https://vale.dev/)
 - [Inko](https://inko-lang.org/)
 - [Odin](https://odin-lang.org/)
 - [Roc](https://www.roc-lang.org/)
