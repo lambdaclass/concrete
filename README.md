@@ -15,36 +15,10 @@ In the realm of low-level programming, language safety, performance and simplici
 
 Writing good code should be easy. The language must be simple enough to fit in a single person’s head. Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. We aim to develop a simpler version of Rust that includes an optional default runtime featuring green threads and a preemptive scheduler, similar to those found in Go and Erlang.
 
-## Rust similarities and differences
-Concrete take many features from Rust like:
-- Enum, structs instead of classes
-- Ad-hoc polymorphism via traits
-- Parametric polymorphism via generics
-- Expressions and statements rather than only expressions as in many functional languages
-- Built-in dependency manager
-- Built-in linter and formatter
-- Built-in testing tooling 
-- Good compilation error messages
-- Inmutability by default, optional mutability
-
-But we want to take a different path with respect to:
-- Linear type system rather than affine type system
-- No lifetimes
-- Simpler borrow checker
-- Concurrency model. We provide a default runtime with green threads. There is no support for low-level primitives like atomics, mutex and OS threads.
-- There is no Sync and Send traits. This implies that mutability can only happen inside the same process.
-- No relationsihp between modules and files
-- No circular dependencies in modules
-- No macros
-- At the beginning we won't support local type inference at function level. We might add it in the future.
-- Financials decimal type and bigint type as part of the standard library
-- Bit-for-bit deterministic/reproducible builds from the beginning
-- Fearless FFI
-- Perfect replayability to be able to easily reproduce Heisenbugs
-
 ## Table of Contents
 
 - [Design](#design)
+- - [Rust similarities and differences](#rust-similarities-and-differences)
 - - [Core Features](#core-features)
 - - - [Second Level Features](#second-level-features)
 - - [Anti Features](#anti-features)
@@ -71,6 +45,33 @@ If building LLVM from source, you'll need additional tools:
 - libstdc++-static may be required on some Linux distributions such as Fedora and Ubuntu
 
 ## Design
+
+### Rust similarities and differences
+Concrete take many features from Rust like:
+- Enum, structs instead of classes
+- Ad-hoc polymorphism via traits
+- Parametric polymorphism via generics
+- Expressions and statements rather than only expressions as in many functional languages
+- Built-in dependency manager
+- Built-in linter and formatter
+- Built-in testing tooling 
+- Good compilation error messages
+- Inmutability by default, optional mutability
+
+But we want to take a different path with respect to:
+- Linear type system rather than affine type system
+- No lifetimes
+- Simpler borrow checker
+- Concurrency model. We provide a default runtime with green threads. There is no support for low-level primitives like atomics, mutex and OS threads.
+- There is no Sync and Send traits. This implies that mutability can only happen inside the same process.
+- No relationsihp between modules and files
+- No circular dependencies in modules
+- No macros
+- At the beginning we won't support local type inference at function level. We might add it in the future.
+- Financials decimal type and bigint type as part of the standard library
+- Bit-for-bit deterministic/reproducible builds from the beginning
+- Fearless FFI
+- Perfect replayability to be able to easily reproduce Heisenbugs
 
 ### Core features
 - C/Go/Rust-inspired, context-free small grammar, syntax: if, for, function calls, modules, pattern matching
