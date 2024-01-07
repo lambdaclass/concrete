@@ -23,6 +23,7 @@ Concrete take many features from Rust like:
 - Expressions and statements rather than only expressions as in many functional languages
 - Built-in dependency manager
 - Built-in linter and formatter
+- Built-in testing tooling 
 - Good compilation error messages
 - Inmutability by default, optional mutability
 
