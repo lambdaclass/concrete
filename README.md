@@ -15,17 +15,6 @@ In the realm of low-level programming, language safety, performance and simplici
 
 Writing good code should be easy. The language must be simple enough to fit in a single person’s head. Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. We aim to develop a simpler version of Rust that includes an optional default runtime featuring green threads and a preemptive scheduler, similar to those found in Go and Erlang.
 
-## Table of Contents
-
-- [Design](#design)
-- - [Rust similarities and differences](#rust-similarities-and-differences)
-- - [Core Features](#core-features)
-- - - [Second Level Features](#second-level-features)
-- - [Anti Features](#anti-features)
-- - [Features that are being debated](#features-that-are-being-debated)
-- [Syntax](#syntax)
-- [Inspirations](#inspiration)
-
 ## Installing from Source
 
 Building is as simple as cloning this repository and running the `make build` command, provided you have all the needed dependencies.
@@ -43,6 +32,17 @@ If building LLVM from source, you'll need additional tools:
 - ninja, or GNU make 3.81 or later (Ninja is recommended, especially on Windows)
 - cmake 3.13.4 or later
 - libstdc++-static may be required on some Linux distributions such as Fedora and Ubuntu
+
+## Table of Contents
+
+- [Design](#design)
+- - [Rust similarities and differences](#rust-similarities-and-differences)
+- - [Core Features](#core-features)
+- - - [Second Level Features](#second-level-features)
+- - [Anti Features](#anti-features)
+- - [Features that are being debated](#features-that-are-being-debated)
+- [Syntax](#syntax)
+- [Inspirations](#inspiration)
 
 ## Design
 
