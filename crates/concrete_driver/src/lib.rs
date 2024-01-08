@@ -37,7 +37,11 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     // todo: find a better name, "target" would clash with rust if running in the source tree.
     let target_dir = cwd.join("build_artifacts/");
     let output_file = target_dir.join(PathBuf::from(args.input.file_name().unwrap()));
-    tracing::debug!("Output file: {:?}", output_file);
+    let output_file = if args.library {
+        output_file.with_extension("so")
+    } else {
+        output_file.with_extension("")
+    };
 
     let session = Session {
         file_path: args.input,
