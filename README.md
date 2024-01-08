@@ -1,7 +1,6 @@
 <div align="center">
 <img src="./logo.jpg" height="150" style="border-radius:20%">
 
-
 # The Concrete Programming Language
 [![Telegram Chat][tg-badge]][tg-url]
 [![license](https://img.shields.io/github/license/lambdaclass/concrete)](/LICENSE)
@@ -102,9 +101,9 @@ But we want to take a different path with respect to:
 - No hidden memory allocation
 - No garbage collection or destructors
 - No hidden control flow or implicit function call
+- No preprocessor, no macros
 - No global state
 - No exceptions
-- No preprocessor, no macros
 - No type inference, type information flows in one direction
 - No implicit type conversions
 - No reflection
