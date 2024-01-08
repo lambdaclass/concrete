@@ -1,7 +1,7 @@
 use crate::{
     common::Ident,
-    expressions::{Expression, MatchExpr, IfExpr},
-    operations::{Operation, PathOp},
+    expressions::{Expression, IfExpr, MatchExpr},
+    operations::{FnCallOp, Operation, PathOp},
     types::TypeSpec,
 };
 
@@ -14,6 +14,7 @@ pub enum Statement {
     Let(LetStmt),
     Return(ReturnStmt),
     While(WhileStmt),
+    FnCall(FnCallOp),
 }
 
 #[derive(Clone, Debug, PartialEq)]

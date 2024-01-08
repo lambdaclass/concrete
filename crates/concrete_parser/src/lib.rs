@@ -75,6 +75,8 @@ mod tests {
     fn parse_simple_program() {
         let source = r##"
 mod ModuleName {
+    import Std.io.{print};
+
     const MY_CONSTANT: u8 = 2;
     const MY_CONSTANT2: bool = true;
     const MY_CONSTANT3: string = "hello world!";
@@ -91,10 +93,23 @@ mod ModuleName {
                 let y: u64 = x * 2;
                 return y * 10;
             },
-        };
+        }
 
         if x == 2 {
             return 0;
+        }
+
+        let lol: u64 = if x == 3 {
+            return 4;
+        } else {
+            return 5;
+        };
+
+        print("hello world\nwith newlines and \" escapes ");
+        my_func((4 * 2) / 5);
+
+        while x > 0 {
+            x = x - 1;
         }
 
         return x;
