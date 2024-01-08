@@ -2,13 +2,23 @@
 <img src="./logo.jpg" height="150" style="border-radius:20%">
 
 # The Concrete Programming Language
+
 [![Telegram Chat][tg-badge]][tg-url]
 [![license](https://img.shields.io/github/license/lambdaclass/concrete)](/LICENSE)
 
 [tg-badge]: https://img.shields.io/endpoint?url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fconcrete_proglang%2F&logo=telegram&label=chat&color=neon
 [tg-url]: https://t.me/concrete_proglang
 
+<p align="center">
+  <a href="#why">Why?</a> |
+  <a href="#language-goals">Goals</a> |
+  <a href="#project-status">Status</a> |
+  <a href="#getting-started">Getting started</a> |
+</p>
+
 </div>
+
+⚠️ Note that Concrete is [not ready for use](#project-status). ⚠️
 
 >Most ideas come from previous ideas - Alan C. Kay, The Early History Of Smalltalk
 
@@ -16,36 +26,49 @@ In the realm of low-level programming, language safety, performance and simplici
 
 Writing good code should be easy. The language must be simple enough to fit in a single person’s head. Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. We aim to develop a simpler version of Rust that includes an optional default runtime featuring green threads and a preemptive scheduler, similar to those found in Go and Erlang.
 
-## Installing from Source
+```
+mod FibonacciModule {
 
-Building is as simple as cloning this repository and running the `make build` command, provided you have all the needed dependencies.
+ pub fib(x: u64) -> u64 {
+     match x {
+       // we can match literal values
+       0 | 1 -> x,
+       n -> fib(n-1) + fib(n-2)
+     }
+ }
+}
+```
 
-### Dependencies
+```
+mod Option {
 
-Make sure you have installed the dependencies:
+    pub enum Option<T> {
+        None,
+        Some(T),
+    }
 
-- git
-- Rust
-- LLVM 17 with MLIR enabled
+    pub fn map<A, B>(opt: Option<A>, f: A -> B) -> Option<B> {
+        match opt {
+            None -> None,
+            Some(x) -> Some(f(x)),
+        }
+    }
+}
 
-If building LLVM from source, you'll need additional tools:
-- g++, clang++, or MSVC with versions listed on [LLVM's documentation](https://llvm.org/docs/GettingStarted.html#host-c-toolchain-both-compiler-and-standard-library)
-- ninja, or GNU make 3.81 or later (Ninja is recommended, especially on Windows)
-- cmake 3.13.4 or later
-- libstdc++-static may be required on some Linux distributions such as Fedora and Ubuntu
+mod UsesOption {
+    import MyOption.{Option, map};
 
-## Table of Contents
+    pub fn headOfVectorPlus1(x: [u8]) -> Option<u8> {
+        // head returns an option
+        x.head().map((x: u8) -> x + 1)
+    }
 
-- [Design](#design)
-- - [Rust similarities and differences](#rust-similarities-and-differences)
-- - [Core Features](#core-features)
-- - - [Second Level Features](#second-level-features)
-- - [Anti Features](#anti-features)
-- - [Features that are being debated](#features-that-are-being-debated)
-- [Syntax](#syntax)
-- [Inspirations](#inspiration)
+}
+```
 
-## Design
+## Why?
+
+## Language goals, features, and anti-features
 
 ### Rust similarities and differences
 Concrete take many features from Rust like:
@@ -115,48 +138,7 @@ But we want to take a different path with respect to:
 - No undefined behavior
 - No marker traits like Send, Sync for concurrency. The runtime will take care of that.
 
-## Syntax
-```
-mod FibonacciModule {
-
- pub fib(x: u64) -> u64 {
-     match x {
-       // we can match literal values
-       0 | 1 -> x,
-       n -> fib(n-1) + fib(n-2)
-     }
- }
-}
-```
-
-```
-mod Option {
-
-    pub enum Option<T> {
-        None,
-        Some(T),
-    }
-
-    pub fn map<A, B>(opt: Option<A>, f: A -> B) -> Option<B> {
-        match opt {
-            None -> None,
-            Some(x) -> Some(f(x)),
-        }
-    }
-}
-
-mod UsesOption {
-    import MyOption.{Option, map};
-
-    pub fn headOfVectorPlus1(x: [u8]) -> Option<u8> {
-        // head returns an option
-        x.head().map((x: u8) -> x + 1)
-    }
-
-}
-```
-
-## Inspiration
+### Inspiration
 The design was very heavily influenced by all these programming languages:
 - [Rust](https://www.rust-lang.org/)
 - [Erlang](https://www.erlang.org/)
@@ -175,3 +157,24 @@ The design was very heavily influenced by all these programming languages:
 - [Lua](https://www.lua.org/)
 - [Clojure](https://clojure.org/)
 - [Nim](https://nim-lang.org/)
+
+## Project status
+
+## Getting started
+
+### Installing from Source
+
+Building is as simple as cloning this repository and running the `make build` command, provided you have all the needed dependencies.
+
+### Dependencies
+
+Make sure you have installed the dependencies:
+- git
+- Rust
+- LLVM 17 with MLIR enabled
+
+If building LLVM from source, you'll need additional tools:
+- g++, clang++, or MSVC with versions listed on [LLVM's documentation](https://llvm.org/docs/GettingStarted.html#host-c-toolchain-both-compiler-and-standard-library)
+- ninja, or GNU make 3.81 or later (Ninja is recommended, especially on Windows)
+- cmake 3.13.4 or later
+- libstdc++-static may be required on some Linux distributions such as Fedora and Ubuntu
