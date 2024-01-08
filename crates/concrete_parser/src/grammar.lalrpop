@@ -170,7 +170,7 @@ pub(crate) Module: ast::modules::Module = {
   "mod" <name:Ident> "{" <imports:ImportList?> <contents:ModuleItems> "}" => {
     ast::modules::Module {
       doc_string: None,
-      imports: imports.unwrap_or_else(|| vec![]),
+      imports: imports.unwrap_or_else(Vec::new),
       name,
       contents
     }
