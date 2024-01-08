@@ -6,3 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+clap = { version = "4.4.13", features = ["derive"] }
+tracing.workspace = true
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+concrete_ast = { path = "../concrete_ast"}
+concrete_parser = { path = "../concrete_parser"}
+concrete_session = { path = "../concrete_session"}
+concrete_codegen_mlir = { path = "../concrete_codegen_mlir"}

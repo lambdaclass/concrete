@@ -138,19 +138,23 @@ pub(crate) GenericParams: Vec<ast::common::GenericParam> = {
 
 // Module list
 
-pub Program: Vec<ast::modules::ModuleBase> = {
-  <ModuleBase> => vec![<>],
-  <mut s:Program> <n:ModuleBase> => {
-      s.push(n);
+pub Program: ast::Program = {
+  <Module> => {
+    ast::Program {
+      modules: vec![<>],
+    }
+  },
+  <mut s:Program> <n:Module> => {
+      s.modules.push(n);
       s
   },
 }
 
 // Modules
 
-pub(crate) ModuleBase: ast::modules::ModuleBase = {
+pub(crate) Module: ast::modules::Module = {
   "mod" <name:Ident> "{" <contents:ModuleItems> "}" => {
-    ast::modules::ModuleBase {
+    ast::modules::Module {
       doc_string: None,
       imports: vec![], // todo: add imports
       name,

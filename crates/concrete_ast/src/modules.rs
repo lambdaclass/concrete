@@ -8,7 +8,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ModuleBase {
+pub struct Module {
     pub doc_string: Option<DocString>,
     pub imports: Vec<ImportStmt>,
     pub name: Ident,
