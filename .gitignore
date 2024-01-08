@@ -18,3 +18,5 @@ target/
 .env
 .vscode/
 lcov.info
+
+build_artifacts/

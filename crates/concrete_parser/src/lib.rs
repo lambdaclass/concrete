@@ -1,11 +1,63 @@
 #![allow(unused)]
 
+use std::error::Error;
+
+use concrete_ast::Program;
 use lalrpop_util::lalrpop_mod;
+use lalrpop_util::ParseError;
+use lexer::{Lexer, LexicalError};
+use owo_colors::OwoColorize;
+use tokens::Token;
 
 mod lexer;
 pub mod tokens;
 
 lalrpop_mod!(pub grammar);
+
+// Todo: better error handling
+pub fn parse_ast(source: &str) -> Program {
+    let lexer = Lexer::new(source);
+    let parser = grammar::ProgramParser::new();
+
+    match parser.parse(lexer) {
+        Ok(ast) => ast,
+        Err(e) => {
+            print_parser_error(source, e);
+            panic!()
+        }
+    }
+}
+
+/// TODO: replace with something better
+pub fn print_parser_error(source: &str, err: ParseError<usize, Token, LexicalError>) {
+    match &err {
+        ParseError::InvalidToken { location } => todo!(),
+        ParseError::UnrecognizedEof { location, expected } => {
+            let location = *location;
+            let before = &source[0..location];
+            let after = &source[location..];
+
+            print!("{}", before);
+            print!("$Got EOF, expected {:?}$", expected.green().bold());
+            print!("{}", after);
+        }
+        ParseError::UnrecognizedToken { token, expected } => {
+            let (l, ref tok, r) = *token;
+            let before = &source[0..l];
+            let after = &source[r..];
+
+            print!("{}", before);
+            print!(
+                "$Got {:?}, expected {:?}$",
+                tok.bold().red(),
+                expected.green().bold()
+            );
+            print!("{}", after);
+        }
+        ParseError::ExtraToken { token } => todo!(),
+        ParseError::User { error } => todo!(),
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -15,6 +67,7 @@ mod tests {
     use crate::{
         grammar,
         lexer::{Lexer, LexicalError},
+        print_parser_error,
         tokens::Token,
     };
 
@@ -50,30 +103,10 @@ mod ModuleName {
             Ok(ast) => {
                 dbg!(ast);
             }
-            Err(e) => print_parser_error(source, e),
-        }
-    }
-
-    fn print_parser_error(source: &str, err: ParseError<usize, Token, LexicalError>) {
-        match &err {
-            ParseError::InvalidToken { location } => todo!(),
-            ParseError::UnrecognizedEof { location, expected } => todo!(),
-            ParseError::UnrecognizedToken { token, expected } => {
-                let (l, ref tok, r) = *token;
-                let before = &source[0..l];
-                let after = &source[r..];
-
-                print!("{}", before);
-                print!(
-                    "$Got {:?}, expected {:?}$",
-                    tok.bold().red(),
-                    expected.green().bold()
-                );
-                print!("{}", after);
+            Err(e) => {
+                print_parser_error(source, e);
+                panic!()
             }
-            ParseError::ExtraToken { token } => todo!(),
-            ParseError::User { error } => todo!(),
         }
-        panic!("error parsing: {:#?}", err);
     }
 }

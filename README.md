@@ -34,6 +34,14 @@ If building LLVM from source, you'll need additional tools:
 - cmake 3.13.4 or later
 - libstdc++-static may be required on some Linux distributions such as Fedora and Ubuntu
 
+Setup the following env vars:
+```bash
+# For Debian/Ubuntu using the repository, the path will be /usr/lib/llvm-17
+export MLIR_SYS_170_PREFIX=/usr/lib/llvm-17
+export LLVM_SYS_170_PREFIX=/usr/lib/llvm-17
+export TABLEGEN_170_PREFIX=/usr/lib/llvm-17
+```
+
 ## Table of Contents
 
 - [Design](#design)
@@ -55,7 +63,7 @@ Concrete take many features from Rust like:
 - Expressions and statements rather than only expressions as in many functional languages
 - Built-in dependency manager
 - Built-in linter and formatter
-- Built-in testing tooling 
+- Built-in testing tooling
 - Good compilation error messages
 - Inmutability by default, optional mutability
 
