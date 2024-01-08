@@ -29,8 +29,6 @@ impl Context {
         Self { melior_context }
     }
 
-    /// Compiles an Austral program into MLIR and then lowers to LLVM.
-    /// Returns the corresponding Module struct.
     pub fn compile(
         &self,
         session: &Session,
@@ -40,10 +38,6 @@ impl Context {
         let location = Location::new(&self.melior_context, &file_path, 0, 0);
 
         let mut melior_module = MeliorModule::new(location);
-
-        if !session.library {
-            super::codegen::compile_start(&self.melior_context, &melior_module, "main");
-        }
 
         super::codegen::compile_program(&self.melior_context, &melior_module, program)?;
 

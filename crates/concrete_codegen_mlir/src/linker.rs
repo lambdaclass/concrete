@@ -63,12 +63,15 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), std:
         #[cfg(target_os = "linux")]
         {
             &[
-                "--hash-style=gnu",
+                "-pie",
                 "--eh-frame-hdr",
+                "--dynamic-linker",
+                "/lib64/ld-linux-x86-64.so.2",
+                "-melf_x86_64",
                 "-o",
                 &output_filename.display().to_string(),
-                "-L/lib/../lib64",
-                "-L/usr/lib/../lib64",
+                "-L/lib64",
+                "-L/usr/lib64",
                 "-lc",
                 &input_path.display().to_string(),
             ]
