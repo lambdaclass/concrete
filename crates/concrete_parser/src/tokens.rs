@@ -91,6 +91,10 @@ pub enum Token {
     LessThanSign,
     #[token(">")]
     MoreThanSign,
+    #[token(">=")]
+    MoreThanEqSign,
+    #[token("<=")]
+    LessThanEqSign,
 
     #[token("+")]
     OperatorAdd,

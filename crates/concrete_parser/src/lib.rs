@@ -84,6 +84,7 @@ mod ModuleName {
         x = x + 4;
         x = x - 2;
         x = x % 2;
+
         match x {
             0 -> return 2,
             1 -> {
@@ -91,6 +92,11 @@ mod ModuleName {
                 return y * 10;
             },
         };
+
+        if x == 2 {
+            return 0;
+        }
+
         return x;
     }
 }

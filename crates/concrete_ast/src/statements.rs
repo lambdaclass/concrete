@@ -1,6 +1,6 @@
 use crate::{
     common::Ident,
-    expressions::{Expression, MatchExpr},
+    expressions::{Expression, MatchExpr, IfExpr},
     operations::{Operation, PathOp},
     types::TypeSpec,
 };
@@ -10,7 +10,7 @@ pub enum Statement {
     Assign(AssignStmt),
     Match(MatchExpr),
     For(ForStmt),
-    If(IfStmt),
+    If(IfExpr),
     Let(LetStmt),
     Return(ReturnStmt),
     While(WhileStmt),
@@ -53,13 +53,6 @@ pub struct ForStmt {
     pub from: Operation,
     pub to: Operation,
     pub contents: Vec<Statement>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct IfStmt {
-    pub value: Operation,
-    pub contents: Vec<Statement>,
-    pub r#else: Option<Vec<Statement>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
