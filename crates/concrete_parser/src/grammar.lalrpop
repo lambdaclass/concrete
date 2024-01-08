@@ -23,6 +23,7 @@ extern {
     "match" => Token::KeywordMatch,
     "mod" => Token::KeywordMod,
     "pub" => Token::KeywordPub,
+    "mut" => Token::KeywordMut,
 
     // literals
     "identifier" => Token::Identifier(<String>),
@@ -319,8 +320,20 @@ pub(crate) FnCallOp: ast::operations::FnCallOp = {
 // -- Statements
 
 pub(crate) Statement: ast::statements::Statement = {
-  <MatchExpr> ";" => ast::statements::Statement::Match(<>),
+  <MatchExpr> => ast::statements::Statement::Match(<>),
+  <LetStmt> => ast::statements::Statement::Let(<>),
   <ReturnStmt> => ast::statements::Statement::Return(<>),
+}
+
+pub(crate) LetStmt: ast::statements::LetStmt = {
+  "let" <is_mutable:"mut"?> <name:Ident> ":" <target_type:TypeSpec> "=" <value:Expression> => ast::statements::LetStmt {
+    is_mutable: is_mutable.is_some(),
+    target: ast::statements::LetStmtTarget::Simple {
+      name,
+      r#type: target_type
+    },
+    value
+  },
 }
 
 pub(crate) ReturnStmt: ast::statements::ReturnStmt = {

@@ -78,12 +78,27 @@ mod ModuleName {
     const MY_CONSTANT: u8 = 2;
     const MY_CONSTANT2: bool = true;
     const MY_CONSTANT3: string = "hello world!";
+
+    pub fn my_func(hello: u64) -> u64 {
+        let x: u64 = hello;
+        match x {
+            0 -> return 2,
+        };
+        return x;
+    }
 }
         "##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-        let mut ast = parser.parse(lexer).unwrap();
-        // dbg!(ast);
+        match parser.parse(lexer) {
+            Ok(ast) => {
+                dbg!(ast);
+            }
+            Err(e) => {
+                print_parser_error(source, e);
+                panic!()
+            }
+        }
     }
 
     #[test]
