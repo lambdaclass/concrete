@@ -75,15 +75,58 @@ mod tests {
     fn parse_simple_program() {
         let source = r##"
 mod ModuleName {
+    import Std.io.{print};
+
     const MY_CONSTANT: u8 = 2;
     const MY_CONSTANT2: bool = true;
     const MY_CONSTANT3: string = "hello world!";
+
+    pub fn my_func(hello: u64) -> u64 {
+        let mut x: u64 = hello / 2;
+        x = x + 4;
+        x = x - 2;
+        x = x % 2;
+
+        match x {
+            0 -> return 2,
+            1 -> {
+                let y: u64 = x * 2;
+                return y * 10;
+            },
+        }
+
+        if x == 2 {
+            return 0;
+        }
+
+        let lol: u64 = if x == 3 {
+            return 4;
+        } else {
+            return 5;
+        };
+
+        print("hello world\nwith newlines and \" escapes ");
+        my_func((4 * 2) / 5);
+
+        while x > 0 {
+            x = x - 1;
+        }
+
+        return x;
+    }
 }
         "##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-        let mut ast = parser.parse(lexer).unwrap();
-        // dbg!(ast);
+        match parser.parse(lexer) {
+            Ok(ast) => {
+                dbg!(ast);
+            }
+            Err(e) => {
+                print_parser_error(source, e);
+                panic!()
+            }
+        }
     }
 
     #[test]

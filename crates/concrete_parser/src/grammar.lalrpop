@@ -23,6 +23,8 @@ extern {
     "match" => Token::KeywordMatch,
     "mod" => Token::KeywordMod,
     "pub" => Token::KeywordPub,
+    "mut" => Token::KeywordMut,
+    "import" => Token::KeywordImport,
 
     // literals
     "identifier" => Token::Identifier(<String>),
@@ -45,6 +47,8 @@ extern {
     "," => Token::Coma,
     "<" => Token::LessThanSign,
     ">" => Token::MoreThanSign,
+    ">=" => Token::MoreThanEqSign,
+    "<=" => Token::LessThanEqSign,
     "." => Token::Dot,
 
     // operators
@@ -62,6 +66,16 @@ extern {
 }
 
 // lalrpop macros
+
+Dot<T>: Vec<T> = {
+    <mut v:(<T> ".")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
 
 Comma<T>: Vec<T> = {
     <mut v:(<T> ",")*> <e:T?> => match e {
@@ -153,15 +167,34 @@ pub Program: ast::Program = {
 // Modules
 
 pub(crate) Module: ast::modules::Module = {
-  "mod" <name:Ident> "{" <contents:ModuleItems> "}" => {
+  "mod" <name:Ident> "{" <imports:ImportList?> <contents:ModuleItems> "}" => {
     ast::modules::Module {
       doc_string: None,
-      imports: vec![], // todo: add imports
+      imports: imports.unwrap_or_else(Vec::new),
       name,
       contents
     }
   }
 }
+
+pub(crate) ImportList: Vec<ast::imports::ImportStmt> = {
+  <ImportStmt> => vec![<>],
+  <mut s:ImportList> <n:ImportStmt> => {
+      s.push(n);
+      s
+  },
+}
+
+
+pub(crate) ImportStmt: ast::imports::ImportStmt = {
+  "import" <module:Dot<Ident>> "{" <symbols:Comma<Ident>> "}" ";"  => {
+    ast::imports::ImportStmt {
+      module,
+      symbols,
+    }
+  }
+}
+
 
 pub(crate) ModuleItems: Vec<ast::modules::ModuleDefItem> = {
   <ModuleDefItem> => vec![<>],
@@ -210,7 +243,7 @@ pub(crate) Param: ast::functions::Param = {
 
 pub(crate) FunctionDef: ast::functions::FunctionDef = {
   <is_pub:"pub"?> "fn" <name:Ident> <generic_params:GenericParams?> "(" <params:Comma<Param>> ")" <ret_type:FunctionRetType?> "{"
-    <statements:SemiColonSeparated<Statement>>
+    <statements:StatementList>
   "}" => {
     ast::functions::FunctionDef {
       decl: ast::functions::FunctionDecl {
@@ -229,7 +262,19 @@ pub(crate) FunctionDef: ast::functions::FunctionDef = {
 
 pub(crate) Expression: ast::expressions::Expression = {
   <MatchExpr> => ast::expressions::Expression::Match(<>),
+  <IfExpr> => ast::expressions::Expression::If(<>),
   <Operation> => ast::expressions::Expression::Operation(<>),
+}
+
+pub(crate) IfExpr: ast::expressions::IfExpr = {
+  "if" <value:Operation> "{" <contents:StatementList> "}"
+    <else_stmts:("else" "{" <StatementList> "}")?> => {
+    ast::expressions::IfExpr {
+      value,
+      contents,
+      r#else: else_stmts,
+    }
+  }
 }
 
 pub(crate) MatchExpr: ast::expressions::MatchExpr = {
@@ -250,7 +295,7 @@ pub(crate) MatchVariant: ast::expressions::MatchVariant = {
     }
   },
   // x -> { ... }
-  <case:Operation> "->" "{" <stmts:SemiColonSeparated<Statement>> "}" => {
+  <case:Operation> "->" "{" <stmts:StatementList> "}" => {
     ast::expressions::MatchVariant {
       case,
       block: stmts
@@ -269,12 +314,15 @@ pub(crate) AtomicOp: ast::operations::AtomicOp = {
   <"integer"> => ast::operations::AtomicOp::ConstInt(<>),
   <"boolean"> => ast::operations::AtomicOp::ConstBool(<>),
   <"string"> => ast::operations::AtomicOp::ConstStr(<>),
-  <PathOp> =>ast::operations::AtomicOp::Path(<>),
-  <FnCallOp> =>ast::operations::AtomicOp::FnCall(<>),
+  <PathOp> => ast::operations::AtomicOp::Path(<>),
+  <FnCallOp> => ast::operations::AtomicOp::FnCall(<>),
+  "(" <op:Operation> ")" => ast::operations::AtomicOp::Paren(Box::new(op)),
 }
 
 pub(crate) CompoundOp: ast::operations::CompoundOp = {
   <ArithOp> => ast::operations::CompoundOp::Arith(<>),
+  <CmpOp> => ast::operations::CompoundOp::Compare(<>),
+  <LogicOp> => ast::operations::CompoundOp::Logic(<>),
 }
 
 pub(crate) ArithOp: ast::operations::ArithOp = {
@@ -287,6 +335,21 @@ pub(crate) ArithOp: ast::operations::ArithOp = {
   <lhs:AtomicOp> "-" <rhs:AtomicOp> => ast::operations::ArithOp::Sub(lhs, rhs),
   #[precedence(level="3")] #[assoc(side="left")]
   "-" <value:AtomicOp> => ast::operations::ArithOp::Neg(value),
+}
+
+pub(crate) CmpOp: ast::operations::CmpOp = {
+  <lhs:AtomicOp> "==" <rhs:AtomicOp> => ast::operations::CmpOp::Eq(lhs, rhs),
+  <lhs:AtomicOp> "!=" <rhs:AtomicOp> => ast::operations::CmpOp::NotEq(lhs, rhs),
+  <lhs:AtomicOp> "<=" <rhs:AtomicOp> => ast::operations::CmpOp::LtEq(lhs, rhs),
+  <lhs:AtomicOp> ">=" <rhs:AtomicOp> => ast::operations::CmpOp::GtEq(lhs, rhs),
+  <lhs:AtomicOp> ">" <rhs:AtomicOp> => ast::operations::CmpOp::Lt(lhs, rhs),
+  <lhs:AtomicOp> "<" <rhs:AtomicOp> => ast::operations::CmpOp::Gt(lhs, rhs),
+}
+
+pub(crate) LogicOp: ast::operations::LogicOp = {
+  <lhs:AtomicOp> "&&" <rhs:AtomicOp> => ast::operations::LogicOp::And(lhs, rhs),
+  <lhs:AtomicOp> "||" <rhs:AtomicOp> => ast::operations::LogicOp::Or(lhs, rhs),
+  "!" <rhs:AtomicOp> => ast::operations::LogicOp::Not(rhs),
 }
 
 pub(crate) PathOp: ast::operations::PathOp = {
@@ -318,13 +381,53 @@ pub(crate) FnCallOp: ast::operations::FnCallOp = {
 
 // -- Statements
 
+pub StatementList: Vec<ast::statements::Statement> = {
+  <Statement> => vec![<>],
+  <mut s:StatementList> <n:Statement> => {
+      s.push(n);
+      s
+  },
+}
+
 pub(crate) Statement: ast::statements::Statement = {
-  <MatchExpr> ";" => ast::statements::Statement::Match(<>),
-  <ReturnStmt> => ast::statements::Statement::Return(<>),
+  <MatchExpr> ";"? => ast::statements::Statement::Match(<>),
+  <IfExpr> ";"? => ast::statements::Statement::If(<>),
+  <WhileStmt> ";"? => ast::statements::Statement::While(<>),
+  <LetStmt> ";" => ast::statements::Statement::Let(<>),
+  <AssignStmt> ";" => ast::statements::Statement::Assign(<>),
+  <FnCallOp> ";" => ast::statements::Statement::FnCall(<>),
+  <ReturnStmt> ";"? => ast::statements::Statement::Return(<>),
+}
+
+pub(crate) LetStmt: ast::statements::LetStmt = {
+  "let" <is_mutable:"mut"?> <name:Ident> ":" <target_type:TypeSpec> "=" <value:Expression> => ast::statements::LetStmt {
+    is_mutable: is_mutable.is_some(),
+    target: ast::statements::LetStmtTarget::Simple {
+      name,
+      r#type: target_type
+    },
+    value
+  },
+}
+
+pub(crate) AssignStmt: ast::statements::AssignStmt = {
+  <target:PathOp> "=" <value:Expression> => ast::statements::AssignStmt {
+    target,
+    value
+  },
 }
 
 pub(crate) ReturnStmt: ast::statements::ReturnStmt = {
   "return" <value:Expression> => ast::statements::ReturnStmt {
     value,
   },
+}
+
+pub(crate) WhileStmt: ast::statements::WhileStmt = {
+  "while" <value:Operation> "{" <contents:StatementList> "}" => {
+    ast::statements::WhileStmt {
+      value,
+      contents,
+    }
+  }
 }
