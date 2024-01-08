@@ -80,9 +80,16 @@ mod ModuleName {
     const MY_CONSTANT3: string = "hello world!";
 
     pub fn my_func(hello: u64) -> u64 {
-        let x: u64 = hello;
+        let mut x: u64 = hello / 2;
+        x = x + 4;
+        x = x - 2;
+        x = x % 2;
         match x {
             0 -> return 2,
+            1 -> {
+                let y: u64 = x * 2;
+                return y * 10;
+            },
         };
         return x;
     }

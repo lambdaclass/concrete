@@ -322,6 +322,7 @@ pub(crate) FnCallOp: ast::operations::FnCallOp = {
 pub(crate) Statement: ast::statements::Statement = {
   <MatchExpr> => ast::statements::Statement::Match(<>),
   <LetStmt> => ast::statements::Statement::Let(<>),
+  <AssignStmt> => ast::statements::Statement::Assign(<>),
   <ReturnStmt> => ast::statements::Statement::Return(<>),
 }
 
@@ -332,6 +333,13 @@ pub(crate) LetStmt: ast::statements::LetStmt = {
       name,
       r#type: target_type
     },
+    value
+  },
+}
+
+pub(crate) AssignStmt: ast::statements::AssignStmt = {
+  <target:PathOp> "=" <value:Expression> => ast::statements::AssignStmt {
+    target,
     value
   },
 }
