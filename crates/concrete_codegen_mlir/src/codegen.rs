@@ -16,7 +16,7 @@ use melior::{
         func,
     },
     ir::{
-        attribute::{IntegerAttribute, StringAttribute, TypeAttribute, FlatSymbolRefAttribute},
+        attribute::{FlatSymbolRefAttribute, IntegerAttribute, StringAttribute, TypeAttribute},
         r#type::{FunctionType, IntegerType},
         Block, Location, Module as MeliorModule, Region, Type, Value,
     },
@@ -94,8 +94,10 @@ fn compile_module(
     for statement in &module.contents {
         match statement {
             ModuleDefItem::Function(info) => {
-                compiler_ctx.functions.insert(info.decl.name.name.clone(), info.clone());
-            },
+                compiler_ctx
+                    .functions
+                    .insert(info.decl.name.name.clone(), info.clone());
+            }
             _ => {}
         }
     }
@@ -163,7 +165,8 @@ fn compile_function_def<'c, 'op>(
         vec![]
     };
 
-    let func_type = TypeAttribute::new(FunctionType::new(context, &fn_args_types, &return_type).into());
+    let func_type =
+        TypeAttribute::new(FunctionType::new(context, &fn_args_types, &return_type).into());
 
     for stmt in &info.body {
         match stmt {
@@ -322,17 +325,47 @@ fn compile_expression<'c, 'op>(
             let mut args = Vec::with_capacity(value.args.len());
             let location = get_location(context, session, &value.target.span);
 
-            let target_fn = compiler_ctx.functions.get(&value.target.name).expect("function not found");
+            let target_fn = compiler_ctx
+                .functions
+                .get(&value.target.name)
+                .expect("function not found")
+                .clone();
 
-            assert_eq!(value.args.len(), target_fn.decl.params.len(), "parameter length doesnt match");
+            assert_eq!(
+                value.args.len(),
+                target_fn.decl.params.len(),
+                "parameter length doesnt match"
+            );
 
             for (arg, arg_info) in value.args.iter().zip(&target_fn.decl.params) {
-                let value = compile_expression(session, context, compiler_ctx, block, arg, Some(&arg_info.r#type))?;
+                let value = compile_expression(
+                    session,
+                    context,
+                    compiler_ctx,
+                    block,
+                    arg,
+                    Some(&arg_info.r#type),
+                )?;
                 args.push(value);
             }
 
-            func::call(context, FlatSymbolRefAttribute::new(context, &value.target.name), arguments, result_types, location)
-        },
+            let return_type = if let Some(ret_type) = &target_fn.decl.ret_type {
+                vec![compiler_ctx.resolve_type_spec(context, ret_type)?]
+            } else {
+                vec![]
+            };
+
+            Ok(block
+                .append_operation(func::call(
+                    context,
+                    FlatSymbolRefAttribute::new(context, &value.target.name),
+                    &args,
+                    &return_type,
+                    location,
+                ))
+                .result(0)?
+                .into())
+        }
         Expression::Match(_) => todo!(),
         Expression::If(_) => todo!(),
         Expression::UnaryOp(_, _) => todo!(),
