@@ -117,4 +117,12 @@ pub enum Token {
     OperatorNe,
     #[token("!")]
     OperatorNot,
+    #[token("~")]
+    OperatorBitwiseNot,
+    #[token("^")]
+    OperatorBitwiseXor,
+    #[token("&")]
+    OperatorBitwiseAnd,
+    #[token("|")]
+    OperatorBitwiseOr,
 }

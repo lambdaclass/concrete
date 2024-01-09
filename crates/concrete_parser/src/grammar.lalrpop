@@ -62,6 +62,10 @@ extern {
     "==" => Token::OperatorEq,
     "!=" => Token::OperatorNe,
     "!" => Token::OperatorNot,
+    "~" => Token::OperatorBitwiseNot,
+    "^" => Token::OperatorBitwiseXor,
+    "&" => Token::OperatorBitwiseAnd,
+    "|" => Token::OperatorBitwiseOr,
   }
 }
 
@@ -260,17 +264,87 @@ pub(crate) FunctionDef: ast::functions::FunctionDef = {
 
 // Expressions
 
-pub(crate) Expression: ast::expressions::Expression = {
+pub(crate) Term: ast::expressions::Expression = {
+  <SimpleExpr> => ast::expressions::Expression::Simple(<>),
+  <FnCallOp> => ast::expressions::Expression::FnCall(<>),
   <MatchExpr> => ast::expressions::Expression::Match(<>),
   <IfExpr> => ast::expressions::Expression::If(<>),
-  <Operation> => ast::expressions::Expression::Operation(<>),
+  "(" <Expression> ")",
 }
 
+pub(crate) Expression: ast::expressions::Expression = {
+  #[precedence(level="0")]
+  <Term>,
+  <op:UnaryOp> <rhs:Expression> => ast::expressions::Expression::UnaryOp(
+    op,
+    Box::new(rhs)
+  ),
+  // <op:UnaryOp> <e:Expression> => ast::expressions::Expression::UnaryOp(op, Box::new(e)),
+  #[precedence(level="1")] #[assoc(side="left")]
+  <lhs:Expression> <op:BinaryFirstLvlOp> <rhs:Expression> => ast::expressions::Expression::BinaryOp(
+    Box::new(lhs),
+    op,
+    Box::new(rhs)
+  ),
+  #[precedence(level="2")] #[assoc(side="left")]
+  <lhs:Expression> <op:BinarySecondLvlOp> <rhs:Expression> => ast::expressions::Expression::BinaryOp(
+    Box::new(lhs),
+    op,
+    Box::new(rhs)
+  ),
+  #[precedence(level="3")] #[assoc(side="left")]
+  <lhs:Expression> <op:BinaryThirdLvlOp> <rhs:Expression> => ast::expressions::Expression::BinaryOp(
+    Box::new(lhs),
+    op,
+    Box::new(rhs)
+  ),
+
+}
+
+pub BinaryFirstLvlOp: ast::expressions::BinaryOp = {
+  "==" => ast::expressions::BinaryOp::Compare(ast::expressions::CmpOp::Eq),
+  "!=" => ast::expressions::BinaryOp::Compare(ast::expressions::CmpOp::NotEq),
+  "<" => ast::expressions::BinaryOp::Compare(ast::expressions::CmpOp::Lt),
+  ">" => ast::expressions::BinaryOp::Compare(ast::expressions::CmpOp::Gt),
+  "<=" => ast::expressions::BinaryOp::Compare(ast::expressions::CmpOp::LtEq),
+  ">=" => ast::expressions::BinaryOp::Compare(ast::expressions::CmpOp::GtEq),
+  "&&" => ast::expressions::BinaryOp::Logic(ast::expressions::LogicOp::And),
+  "||" => ast::expressions::BinaryOp::Logic(ast::expressions::LogicOp::Or),
+}
+
+pub BinarySecondLvlOp: ast::expressions::BinaryOp = {
+  "/" => ast::expressions::BinaryOp::Arith(ast::expressions::ArithOp::Div),
+  "*" => ast::expressions::BinaryOp::Arith(ast::expressions::ArithOp::Mul),
+  "%" => ast::expressions::BinaryOp::Arith(ast::expressions::ArithOp::Mod),
+}
+
+pub BinaryThirdLvlOp: ast::expressions::BinaryOp = {
+  "+" => ast::expressions::BinaryOp::Arith(ast::expressions::ArithOp::Add),
+  "-" => ast::expressions::BinaryOp::Arith(ast::expressions::ArithOp::Sub),
+  "&" => ast::expressions::BinaryOp::Bitwise(ast::expressions::BitwiseOp::And),
+  "|" => ast::expressions::BinaryOp::Bitwise(ast::expressions::BitwiseOp::Or),
+  "^" => ast::expressions::BinaryOp::Bitwise(ast::expressions::BitwiseOp::Xor),
+}
+
+pub UnaryOp: ast::expressions::UnaryOp = {
+  "-" => ast::expressions::UnaryOp::ArithNeg,
+  "!" => ast::expressions::UnaryOp::LogicalNot,
+  "~" => ast::expressions::UnaryOp::BitwiseNot,
+}
+
+pub(crate) SimpleExpr: ast::expressions::SimpleExpr = {
+  <"integer"> => ast::expressions::SimpleExpr::ConstInt(<>),
+  <"boolean"> => ast::expressions::SimpleExpr::ConstBool(<>),
+  <"string"> => ast::expressions::SimpleExpr::ConstStr(<>),
+  <PathOp> => ast::expressions::SimpleExpr::Path(<>),
+}
+
+
 pub(crate) IfExpr: ast::expressions::IfExpr = {
-  "if" <value:Operation> "{" <contents:StatementList> "}"
+  "if" <value:Expression> "{" <contents:StatementList> "}"
     <else_stmts:("else" "{" <StatementList> "}")?> => {
     ast::expressions::IfExpr {
-      value,
+      value: Box::new(value),
       contents,
       r#else: else_stmts,
     }
@@ -278,9 +352,9 @@ pub(crate) IfExpr: ast::expressions::IfExpr = {
 }
 
 pub(crate) MatchExpr: ast::expressions::MatchExpr = {
-  "match" <value:Operation> "{" <variants:Comma<MatchVariant>> "}" => {
+  "match" <value:Expression> "{" <variants:Comma<MatchVariant>> "}" => {
     ast::expressions::MatchExpr {
-      value,
+      value: Box::new(value),
       variants
     }
   }
@@ -288,14 +362,14 @@ pub(crate) MatchExpr: ast::expressions::MatchExpr = {
 
 pub(crate) MatchVariant: ast::expressions::MatchVariant = {
   // 0 -> 1
-  <case:Operation> "->" <stmt:Statement> => {
+  <case:SimpleExpr> "->" <stmt:Statement> => {
     ast::expressions::MatchVariant {
       case,
       block: vec![stmt]
     }
   },
   // x -> { ... }
-  <case:Operation> "->" "{" <stmts:StatementList> "}" => {
+  <case:SimpleExpr> "->" "{" <stmts:StatementList> "}" => {
     ast::expressions::MatchVariant {
       case,
       block: stmts
@@ -303,68 +377,19 @@ pub(crate) MatchVariant: ast::expressions::MatchVariant = {
   }
 }
 
-// -- Operations
-
-pub(crate) Operation: ast::operations::Operation = {
-  <AtomicOp> => ast::operations::Operation::Atomic(<>),
-  <CompoundOp> => ast::operations::Operation::Compound(<>),
-}
-
-pub(crate) AtomicOp: ast::operations::AtomicOp = {
-  <"integer"> => ast::operations::AtomicOp::ConstInt(<>),
-  <"boolean"> => ast::operations::AtomicOp::ConstBool(<>),
-  <"string"> => ast::operations::AtomicOp::ConstStr(<>),
-  <PathOp> => ast::operations::AtomicOp::Path(<>),
-  <FnCallOp> => ast::operations::AtomicOp::FnCall(<>),
-  "(" <op:Operation> ")" => ast::operations::AtomicOp::Paren(Box::new(op)),
-}
-
-pub(crate) CompoundOp: ast::operations::CompoundOp = {
-  <ArithOp> => ast::operations::CompoundOp::Arith(<>),
-  <CmpOp> => ast::operations::CompoundOp::Compare(<>),
-  <LogicOp> => ast::operations::CompoundOp::Logic(<>),
-}
-
-pub(crate) ArithOp: ast::operations::ArithOp = {
-  #[precedence(level="1")]
-  <lhs:AtomicOp> "*" <rhs:AtomicOp> => ast::operations::ArithOp::Mul(lhs, rhs),
-  <lhs:AtomicOp> "/" <rhs:AtomicOp> => ast::operations::ArithOp::Div(lhs, rhs),
-  <lhs:AtomicOp> "%" <rhs:AtomicOp> => ast::operations::ArithOp::Mod(lhs, rhs),
-  #[precedence(level="2")] #[assoc(side="left")]
-  <lhs:AtomicOp> "+" <rhs:AtomicOp> => ast::operations::ArithOp::Add(lhs, rhs),
-  <lhs:AtomicOp> "-" <rhs:AtomicOp> => ast::operations::ArithOp::Sub(lhs, rhs),
-  #[precedence(level="3")] #[assoc(side="left")]
-  "-" <value:AtomicOp> => ast::operations::ArithOp::Neg(value),
-}
-
-pub(crate) CmpOp: ast::operations::CmpOp = {
-  <lhs:AtomicOp> "==" <rhs:AtomicOp> => ast::operations::CmpOp::Eq(lhs, rhs),
-  <lhs:AtomicOp> "!=" <rhs:AtomicOp> => ast::operations::CmpOp::NotEq(lhs, rhs),
-  <lhs:AtomicOp> "<=" <rhs:AtomicOp> => ast::operations::CmpOp::LtEq(lhs, rhs),
-  <lhs:AtomicOp> ">=" <rhs:AtomicOp> => ast::operations::CmpOp::GtEq(lhs, rhs),
-  <lhs:AtomicOp> ">" <rhs:AtomicOp> => ast::operations::CmpOp::Lt(lhs, rhs),
-  <lhs:AtomicOp> "<" <rhs:AtomicOp> => ast::operations::CmpOp::Gt(lhs, rhs),
-}
-
-pub(crate) LogicOp: ast::operations::LogicOp = {
-  <lhs:AtomicOp> "&&" <rhs:AtomicOp> => ast::operations::LogicOp::And(lhs, rhs),
-  <lhs:AtomicOp> "||" <rhs:AtomicOp> => ast::operations::LogicOp::Or(lhs, rhs),
-  "!" <rhs:AtomicOp> => ast::operations::LogicOp::Not(rhs),
-}
-
-pub(crate) PathOp: ast::operations::PathOp = {
-  <first:Ident> <extra:PathSegments?> => ast::operations::PathOp {
+pub(crate) PathOp: ast::expressions::PathOp = {
+  <first:Ident> <extra:PathSegments?> => ast::expressions::PathOp {
     first,
     extra: extra.unwrap_or(vec![]),
   }
 }
 
-pub(crate) PathSegment: ast::operations::PathSegment = {
-  "." <Ident> => ast::operations::PathSegment::FieldAccess(<>),
-  "[" <e:Operation> "]" => ast::operations::PathSegment::ArrayIndex(Box::new(e)),
+pub(crate) PathSegment: ast::expressions::PathSegment = {
+  "." <Ident> => ast::expressions::PathSegment::FieldAccess(<>),
+  "[" <e:SimpleExpr> "]" => ast::expressions::PathSegment::ArrayIndex(e),
 }
 
-pub PathSegments: Vec<ast::operations::PathSegment> = {
+pub PathSegments: Vec<ast::expressions::PathSegment> = {
   <PathSegment> => vec![<>],
   <mut s:PathSegments> <n:PathSegment> => {
       s.push(n);
@@ -372,8 +397,8 @@ pub PathSegments: Vec<ast::operations::PathSegment> = {
   },
 }
 
-pub(crate) FnCallOp: ast::operations::FnCallOp = {
-  <target:Ident> "(" <args:Comma<Operation>> ")" => ast::operations::FnCallOp {
+pub(crate) FnCallOp: ast::expressions::FnCallOp = {
+  <target:Ident> "(" <args:Comma<Expression>> ")" => ast::expressions::FnCallOp {
     target,
     args
   }
@@ -424,7 +449,7 @@ pub(crate) ReturnStmt: ast::statements::ReturnStmt = {
 }
 
 pub(crate) WhileStmt: ast::statements::WhileStmt = {
-  "while" <value:Operation> "{" <contents:StatementList> "}" => {
+  "while" <value:Expression> "{" <contents:StatementList> "}" => {
     ast::statements::WhileStmt {
       value,
       contents,
