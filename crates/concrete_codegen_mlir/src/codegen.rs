@@ -92,13 +92,10 @@ fn compile_module(
 
     // save all function signatures
     for statement in &module.contents {
-        match statement {
-            ModuleDefItem::Function(info) => {
-                compiler_ctx
-                    .functions
-                    .insert(info.decl.name.name.clone(), info.clone());
-            }
-            _ => {}
+        if let ModuleDefItem::Function(info) = statement {
+            compiler_ctx
+                .functions
+                .insert(info.decl.name.name.clone(), info.clone());
         }
     }
 
