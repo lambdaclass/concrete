@@ -1,7 +1,6 @@
 use crate::{
     common::Ident,
-    expressions::{Expression, IfExpr, MatchExpr},
-    operations::{FnCallOp, Operation, PathOp},
+    expressions::{Expression, FnCallOp, IfExpr, MatchExpr, PathOp},
     types::TypeSpec,
 };
 
@@ -51,13 +50,13 @@ pub struct Binding {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ForStmt {
     pub name: Ident,
-    pub from: Operation,
-    pub to: Operation,
+    pub from: Expression,
+    pub to: Expression,
     pub contents: Vec<Statement>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct WhileStmt {
-    pub value: Operation,
+    pub value: Expression,
     pub contents: Vec<Statement>,
 }

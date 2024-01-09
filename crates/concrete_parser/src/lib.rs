@@ -106,7 +106,7 @@ mod ModuleName {
         };
 
         print("hello world\nwith newlines and \" escapes ");
-        my_func((4 * 2) / 5);
+        my_func((4 * 2) / 5 + 2 + 4 - (-5 - -6));
 
         while x > 0 {
             x = x - 1;
@@ -137,6 +137,48 @@ mod ModuleName {
             0 -> return 1,
             n -> return n * factorial(n-1),
         };
+    }
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+
+        match parser.parse(lexer) {
+            Ok(ast) => {
+                dbg!(ast);
+            }
+            Err(e) => {
+                print_parser_error(source, e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_sum() {
+        let source = r##"mod FactorialModule {
+    pub fn add(x: u64, y: u64, z: u64) -> u64  {
+        return x + y + z;
+    }
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+
+        match parser.parse(lexer) {
+            Ok(ast) => {
+                dbg!(ast);
+            }
+            Err(e) => {
+                print_parser_error(source, e);
+                panic!()
+            }
+        }
+    }
+
+    #[test]
+    fn parse_unary() {
+        let source = r##"mod MyMod {
+    pub fn myfunc() -> u64  {
+        return 2 - -2;
     }
 }"##;
         let lexer = Lexer::new(source);
