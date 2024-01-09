@@ -1,6 +1,5 @@
 use logos::Logos;
-use std::str::FromStr;
-use std::{convert::Infallible, fmt}; // to implement the Display trait
+use std::convert::Infallible;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub enum LexingError {

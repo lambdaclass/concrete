@@ -1,6 +1,6 @@
 use crate::{common::Ident, statements::Statement, types::TypeSpec};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Expression {
     Simple(SimpleExpr),
     FnCall(FnCallOp),
@@ -11,24 +11,24 @@ pub enum Expression {
 }
 
 // needed for match variants and array accesses
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SimpleExpr {
     ConstBool(bool),
     ConstChar(char),
     ConstInt(u64),
-    ConstFloat(f64),
+    ConstFloat(()),
     ConstStr(String),
     Path(PathOp),
 }
 
-#[derive(Clone, Debug, PartialEq, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UnaryOp {
     ArithNeg,
     LogicalNot,
     BitwiseNot,
 }
 
-#[derive(Clone, Debug, PartialEq, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BinaryOp {
     Arith(ArithOp),
     Logic(LogicOp),
@@ -36,7 +36,7 @@ pub enum BinaryOp {
     Bitwise(BitwiseOp),
 }
 
-#[derive(Clone, Debug, PartialEq, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ArithOp {
     Add,
     Sub,
@@ -45,13 +45,13 @@ pub enum ArithOp {
     Mod,
 }
 
-#[derive(Clone, Debug, PartialEq, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LogicOp {
     And,
     Or,
 }
 
-#[derive(Clone, Debug, PartialEq, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CmpOp {
     Eq,
     NotEq,
@@ -61,51 +61,51 @@ pub enum CmpOp {
     GtEq,
 }
 
-#[derive(Clone, Debug, PartialEq, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BitwiseOp {
     And,
     Or,
     Xor,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MatchExpr {
     pub value: Box<Expression>,
     pub variants: Vec<MatchVariant>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IfExpr {
     pub value: Box<Expression>,
     pub contents: Vec<Statement>,
     pub r#else: Option<Vec<Statement>>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MatchVariant {
     pub case: SimpleExpr,
     pub block: Vec<Statement>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PathSegment {
     FieldAccess(Ident),
     ArrayIndex(SimpleExpr),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PathOp {
     pub first: Ident,
     pub extra: Vec<PathSegment>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CastOp {
     pub value: Expression,
     pub r#type: TypeSpec,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FnCallOp {
     pub target: Ident,
     pub args: Vec<Expression>,

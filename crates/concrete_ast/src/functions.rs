@@ -4,7 +4,7 @@ use crate::{
     types::TypeSpec,
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FunctionDecl {
     pub doc_string: Option<DocString>,
     pub generic_params: Vec<GenericParam>,
@@ -13,7 +13,7 @@ pub struct FunctionDecl {
     pub ret_type: Option<TypeSpec>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FunctionDef {
     pub decl: FunctionDecl,
     pub body: Vec<Statement>,

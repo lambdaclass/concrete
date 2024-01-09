@@ -7,7 +7,7 @@ use crate::{
     types::TypeDecl,
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Module {
     pub doc_string: Option<DocString>,
     pub imports: Vec<ImportStmt>,
@@ -15,7 +15,7 @@ pub struct Module {
     pub contents: Vec<ModuleDefItem>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ModuleDefItem {
     Constant(ConstantDef),
     Function(FunctionDef),

@@ -3,7 +3,7 @@ use crate::{
     types::TypeSpec,
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StructDecl {
     doc_string: Option<DocString>,
     name: Ident,
