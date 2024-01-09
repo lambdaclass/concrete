@@ -1,6 +1,6 @@
 use clap::Parser;
 use concrete_codegen_mlir::linker::{link_binary, link_shared_lib};
-use concrete_parser::ProgramSource;
+use concrete_parser::{error::Diagnostics, ProgramSource};
 use concrete_session::{
     config::{DebugInfo, OptLevel},
     Session,
@@ -34,7 +34,19 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     let db = crate::db::Database::default();
     let source = ProgramSource::new(&db, std::fs::read_to_string(args.input.clone())?);
     tracing::debug!("source code:\n{}", source.input(&db));
-    let program = concrete_parser::parse_ast(&db, source);
+    let program = match concrete_parser::parse_ast(&db, source) {
+        Some(x) => x,
+        None => {
+            Diagnostics::dump(
+                &db,
+                source,
+                &concrete_parser::parse_ast::accumulated::<concrete_parser::error::Diagnostics>(
+                    &db, source,
+                ),
+            );
+            panic!();
+        }
+    };
 
     let cwd = std::env::current_dir()?;
     // todo: find a better name, "target" would clash with rust if running in the source tree.

@@ -1,5 +1,9 @@
 #[salsa::jar(db = Db)]
-pub struct Jar(crate::parse_ast, crate::ProgramSource);
+pub struct Jar(
+    crate::error::Diagnostics,
+    crate::parse_ast,
+    crate::ProgramSource,
+);
 
 pub trait Db
 where

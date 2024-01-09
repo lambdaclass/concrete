@@ -1,10 +1,8 @@
 use concrete_ast::Program;
-use lalrpop_util::ParseError;
-use lexer::{Lexer, LexicalError};
-use owo_colors::OwoColorize;
-use tokens::Token;
+use lexer::Lexer;
 
 pub mod db;
+pub mod error;
 mod lexer;
 pub mod tokens;
 
@@ -25,53 +23,22 @@ pub struct ProgramSource {
 
 // Todo: better error handling
 #[salsa::tracked(jar = crate::db::Jar)]
-pub fn parse_ast(db: &dyn crate::db::Db, source: ProgramSource) -> Program {
+pub fn parse_ast(db: &dyn crate::db::Db, source: ProgramSource) -> Option<Program> {
     let lexer = Lexer::new(source.input(db));
     let parser = grammar::ProgramParser::new();
 
     match parser.parse(lexer) {
-        Ok(ast) => ast,
+        Ok(ast) => Some(ast),
         Err(e) => {
-            print_parser_error(source.input(db), e);
-            panic!()
+            crate::error::Diagnostics::push(db, e);
+            None
         }
-    }
-}
-
-/// TODO: replace with something better
-pub fn print_parser_error(source: &str, err: ParseError<usize, Token, LexicalError>) {
-    match &err {
-        ParseError::InvalidToken { .. } => todo!(),
-        ParseError::UnrecognizedEof { location, expected } => {
-            let location = *location;
-            let before = &source[0..location];
-            let after = &source[location..];
-
-            print!("{}", before);
-            print!("$Got EOF, expected {:?}$", expected.green().bold());
-            print!("{}", after);
-        }
-        ParseError::UnrecognizedToken { token, expected } => {
-            let (l, ref tok, r) = *token;
-            let before = &source[0..l];
-            let after = &source[r..];
-
-            print!("{}", before);
-            print!(
-                "$Got {:?}, expected {:?}$",
-                tok.bold().red(),
-                expected.green().bold()
-            );
-            print!("{}", after);
-        }
-        ParseError::ExtraToken { .. } => todo!(),
-        ParseError::User { .. } => todo!(),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{grammar, lexer::Lexer, print_parser_error};
+    use crate::{grammar, lexer::Lexer};
 
     #[test]
     fn parse_simple_program() {
@@ -120,15 +87,7 @@ mod ModuleName {
         "##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-        match parser.parse(lexer) {
-            Ok(ast) => {
-                dbg!(ast);
-            }
-            Err(e) => {
-                print_parser_error(source, e);
-                panic!()
-            }
-        }
+        dbg!(parser.parse(lexer).unwrap());
     }
 
     #[test]
@@ -143,16 +102,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-
-        match parser.parse(lexer) {
-            Ok(ast) => {
-                dbg!(ast);
-            }
-            Err(e) => {
-                print_parser_error(source, e);
-                panic!()
-            }
-        }
+        dbg!(parser.parse(lexer).unwrap());
     }
 
     #[test]
@@ -164,16 +114,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-
-        match parser.parse(lexer) {
-            Ok(ast) => {
-                dbg!(ast);
-            }
-            Err(e) => {
-                print_parser_error(source, e);
-                panic!()
-            }
-        }
+        dbg!(parser.parse(lexer).unwrap());
     }
 
     #[test]
@@ -185,15 +126,6 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-
-        match parser.parse(lexer) {
-            Ok(ast) => {
-                dbg!(ast);
-            }
-            Err(e) => {
-                print_parser_error(source, e);
-                panic!()
-            }
-        }
+        dbg!(parser.parse(lexer).unwrap());
     }
 }
