@@ -1,0 +1,13 @@
+mod Simple {
+    fn main() -> i32 {
+        let x: i32 = 2;
+        let y: i32 = 4;
+        return add_plus_two(x, y);
+    }
+
+    fn add_plus_two(x: i32, y: i32) -> i32 {
+        let mut z: i32 = 1;
+        z = z + 1;
+        return x + y + z;
+    }
+}

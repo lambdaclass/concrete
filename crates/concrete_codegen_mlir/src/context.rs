@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use concrete_ast::Program;
 use concrete_session::Session;
 use melior::{
@@ -7,7 +9,7 @@ use melior::{
     Context as MeliorContext,
 };
 
-use super::{error::CompilerError, module::MLIRModule, pass_manager::run_pass_manager};
+use super::{module::MLIRModule, pass_manager::run_pass_manager};
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Context {
@@ -33,16 +35,26 @@ impl Context {
         &self,
         session: &Session,
         program: &Program,
-    ) -> Result<MLIRModule, CompilerError> {
+    ) -> Result<MLIRModule, Box<dyn Error>> {
         let file_path = session.file_path.display().to_string();
         let location = Location::new(&self.melior_context, &file_path, 0, 0);
 
         let mut melior_module = MeliorModule::new(location);
 
-        super::codegen::compile_program(&self.melior_context, &melior_module, program)?;
+        super::codegen::compile_program(session, &self.melior_context, &melior_module, program)?;
+
+        tracing::debug!(
+            "MLIR Code before passes:\n{:#?}",
+            melior_module.as_operation()
+        );
 
         // TODO: Add proper error handling.
         run_pass_manager(&self.melior_context, &mut melior_module).unwrap();
+
+        tracing::debug!(
+            "MLIR Code after passes:\n{:#?}",
+            melior_module.as_operation()
+        );
 
         Ok(MLIRModule::new(melior_module))
     }
