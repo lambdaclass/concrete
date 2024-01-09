@@ -5,7 +5,7 @@ use crate::{
     types::TypeSpec,
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Statement {
     Assign(AssignStmt),
     Match(MatchExpr),
@@ -17,25 +17,25 @@ pub enum Statement {
     FnCall(FnCallOp),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LetStmtTarget {
     Simple { name: Ident, r#type: TypeSpec },
     Destructure(Vec<Binding>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LetStmt {
     pub is_mutable: bool,
     pub target: LetStmtTarget,
     pub value: Expression,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReturnStmt {
     pub value: Expression,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AssignStmt {
     pub target: PathOp,
     pub value: Expression,
@@ -48,7 +48,7 @@ pub struct Binding {
     pub r#type: TypeSpec,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ForStmt {
     pub name: Ident,
     pub from: Operation,
@@ -56,7 +56,7 @@ pub struct ForStmt {
     pub contents: Vec<Statement>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WhileStmt {
     pub value: Operation,
     pub contents: Vec<Statement>,

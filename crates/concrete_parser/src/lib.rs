@@ -1,28 +1,38 @@
-#![allow(unused)]
-
-use std::error::Error;
-
 use concrete_ast::Program;
-use lalrpop_util::lalrpop_mod;
 use lalrpop_util::ParseError;
 use lexer::{Lexer, LexicalError};
 use owo_colors::OwoColorize;
 use tokens::Token;
 
+pub mod db;
 mod lexer;
 pub mod tokens;
 
-lalrpop_mod!(pub grammar);
+pub mod grammar {
+    #![allow(dead_code, unused_imports, unused_variables)]
+
+    pub use self::grammar::*;
+    use lalrpop_util::lalrpop_mod;
+
+    lalrpop_mod!(pub grammar);
+}
+
+#[salsa::interned(jar = crate::db::Jar)]
+pub struct ProgramSource {
+    #[return_ref]
+    pub input: String,
+}
 
 // Todo: better error handling
-pub fn parse_ast(source: &str) -> Program {
-    let lexer = Lexer::new(source);
+#[salsa::tracked(jar = crate::db::Jar)]
+pub fn parse_ast(db: &dyn crate::db::Db, source: ProgramSource) -> Program {
+    let lexer = Lexer::new(source.input(db));
     let parser = grammar::ProgramParser::new();
 
     match parser.parse(lexer) {
         Ok(ast) => ast,
         Err(e) => {
-            print_parser_error(source, e);
+            print_parser_error(source.input(db), e);
             panic!()
         }
     }
@@ -31,7 +41,7 @@ pub fn parse_ast(source: &str) -> Program {
 /// TODO: replace with something better
 pub fn print_parser_error(source: &str, err: ParseError<usize, Token, LexicalError>) {
     match &err {
-        ParseError::InvalidToken { location } => todo!(),
+        ParseError::InvalidToken { .. } => todo!(),
         ParseError::UnrecognizedEof { location, expected } => {
             let location = *location;
             let before = &source[0..location];
@@ -54,22 +64,14 @@ pub fn print_parser_error(source: &str, err: ParseError<usize, Token, LexicalErr
             );
             print!("{}", after);
         }
-        ParseError::ExtraToken { token } => todo!(),
-        ParseError::User { error } => todo!(),
+        ParseError::ExtraToken { .. } => todo!(),
+        ParseError::User { .. } => todo!(),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use lalrpop_util::ParseError;
-    use owo_colors::OwoColorize;
-
-    use crate::{
-        grammar,
-        lexer::{Lexer, LexicalError},
-        print_parser_error,
-        tokens::Token,
-    };
+    use crate::{grammar, lexer::Lexer, print_parser_error};
 
     #[test]
     fn parse_simple_program() {

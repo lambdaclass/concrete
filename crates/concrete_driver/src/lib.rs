@@ -1,11 +1,13 @@
-use std::{error::Error, path::PathBuf, time::Instant};
-
 use clap::Parser;
 use concrete_codegen_mlir::linker::{link_binary, link_shared_lib};
+use concrete_parser::ProgramSource;
 use concrete_session::{
     config::{DebugInfo, OptLevel},
     Session,
 };
+use std::{error::Error, path::PathBuf, time::Instant};
+
+pub mod db;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -29,9 +31,10 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
     let args = CompilerArgs::parse();
 
-    let source = std::fs::read_to_string(args.input.clone())?;
-    tracing::debug!("source code:\n{}", source);
-    let program = concrete_parser::parse_ast(&source);
+    let db = crate::db::Database::default();
+    let source = ProgramSource::new(&db, std::fs::read_to_string(args.input.clone())?);
+    tracing::debug!("source code:\n{}", source.input(&db));
+    let program = concrete_parser::parse_ast(&db, source);
 
     let cwd = std::env::current_dir()?;
     // todo: find a better name, "target" would clash with rust if running in the source tree.
@@ -55,7 +58,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         } else {
             OptLevel::None
         },
-        source,
+        source: source.input(&db).to_string(),
         library: args.library,
         target_dir,
         output_file,
