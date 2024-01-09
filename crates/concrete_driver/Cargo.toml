@@ -7,9 +7,10 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.4.13", features = ["derive"] }
-tracing.workspace = true
+tracing = { workspace = true }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 concrete_ast = { path = "../concrete_ast"}
 concrete_parser = { path = "../concrete_parser"}
 concrete_session = { path = "../concrete_session"}
 concrete_codegen_mlir = { path = "../concrete_codegen_mlir"}
+salsa = { git = "https://github.com/salsa-rs/salsa.git", package = "salsa-2022" }
