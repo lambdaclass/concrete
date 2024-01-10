@@ -91,7 +91,7 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), std:
         }
     };
 
-    let mut linker = std::process::Command::new("ld.bfd");
+    let mut linker = std::process::Command::new("ld");
     let proc = linker.args(args.iter()).spawn()?;
     proc.wait_with_output()?;
     Ok(())
