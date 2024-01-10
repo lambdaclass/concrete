@@ -8,9 +8,10 @@ edition = "2021"
 [dependencies]
 lalrpop-util = { version = "0.20.0", features = ["unicode"] }
 logos = "0.13.0"
-tracing.workspace = true
+tracing = { workspace = true }
 concrete_ast = { path = "../concrete_ast"}
 owo-colors = "4.0.0"
+salsa = { git = "https://github.com/salsa-rs/salsa.git", package = "salsa-2022" }
 
 [build-dependencies]
 lalrpop = "0.20.0"

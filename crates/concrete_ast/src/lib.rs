@@ -10,7 +10,7 @@ pub mod statements;
 pub mod structs;
 pub mod types;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Program {
     pub modules: Vec<Module>,
 }
