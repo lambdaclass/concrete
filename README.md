@@ -1,5 +1,5 @@
 <div align="center">
-<img src="./logo.jpg" height="150" style="border-radius:20%">
+<img src="./logo.png" height="150" style="border-radius:20%">
 
 # The Concrete Programming Language
 [![Telegram Chat][tg-badge]][tg-url]
