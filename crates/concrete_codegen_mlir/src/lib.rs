@@ -116,14 +116,20 @@ pub fn compile_to_object(
         let mut error_buffer = addr_of_mut!(null);
 
         let target_triple = LLVMGetDefaultTargetTriple();
+        tracing::debug!("Target triple: {:?}", CStr::from_ptr(target_triple));
+
         let target_cpu = LLVMGetHostCPUName();
+        tracing::debug!("Target CPU: {:?}", CStr::from_ptr(target_cpu));
+
         let target_cpu_features = LLVMGetHostCPUFeatures();
+        tracing::debug!("Target CPU Features: {:?}", CStr::from_ptr(target_cpu_features));
 
         let mut target: MaybeUninit<LLVMTargetRef> = MaybeUninit::uninit();
 
         if LLVMGetTargetFromTriple(target_triple, target.as_mut_ptr(), error_buffer) != 0 {
             let error = CStr::from_ptr(*error_buffer);
             let err = error.to_string_lossy().to_string();
+            tracing::error!("error getting target triple: {}", err);
             LLVMDisposeMessage(*error_buffer);
             Err(LLVMCompileError(err))?;
         } else if !(*error_buffer).is_null() {
@@ -152,7 +158,7 @@ pub fn compile_to_object(
             LLVMCodeModel::LLVMCodeModelDefault,
         );
 
-        let filename = CString::new(target_path.as_os_str().as_encoded_bytes()).unwrap();
+        let filename = CString::new(target_path.as_os_str().to_string_lossy().as_bytes()).unwrap();
         tracing::debug!("filename to llvm: {:?}", filename);
         let ok = LLVMTargetMachineEmitToFile(
             machine,

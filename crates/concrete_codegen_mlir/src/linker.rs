@@ -2,6 +2,8 @@ use std::path::Path;
 
 use tracing::instrument;
 
+// TODO: Implement a proper linker driver, passing only the arguments needed dynamically based on the requirements.
+
 #[instrument(level = "debug")]
 pub fn link_shared_lib(input_path: &Path, output_filename: &Path) -> Result<(), std::io::Error> {
     let args: &[&str] = {
@@ -64,15 +66,22 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), std:
         {
             &[
                 "-pie",
+                "--hash-style=gnu",
                 "--eh-frame-hdr",
                 "--dynamic-linker",
                 "/lib64/ld-linux-x86-64.so.2",
-                "-melf_x86_64",
+                "-m",
+                "elf_x86_64",
+                "/usr/lib64/Scrt1.o",
+                "/usr/lib64/crti.o",
                 "-o",
                 &output_filename.display().to_string(),
                 "-L/lib64",
                 "-L/usr/lib64",
+                "-zrelro",
+                "--no-as-needed",
                 "-lc",
+                "/usr/lib64/crtn.o",
                 &input_path.display().to_string(),
             ]
         }
@@ -82,7 +91,7 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), std:
         }
     };
 
-    let mut linker = std::process::Command::new("ld");
+    let mut linker = std::process::Command::new("ld.bfd");
     let proc = linker.args(args.iter()).spawn()?;
     proc.wait_with_output()?;
     Ok(())
