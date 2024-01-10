@@ -122,7 +122,10 @@ pub fn compile_to_object(
         tracing::debug!("Target CPU: {:?}", CStr::from_ptr(target_cpu));
 
         let target_cpu_features = LLVMGetHostCPUFeatures();
-        tracing::debug!("Target CPU Features: {:?}", CStr::from_ptr(target_cpu_features));
+        tracing::debug!(
+            "Target CPU Features: {:?}",
+            CStr::from_ptr(target_cpu_features)
+        );
 
         let mut target: MaybeUninit<LLVMTargetRef> = MaybeUninit::uninit();
 
