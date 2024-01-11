@@ -1,0 +1,13 @@
+mod Simple {
+    fn main() -> bool {
+        let y: bool = check(4);
+        return y;
+    }
+
+    fn check(x: i64) -> bool {
+        if x == 0 {
+            return true;
+        }
+        return false;
+    }
+}

@@ -330,6 +330,7 @@ dependencies = [
 name = "concrete_codegen_mlir"
 version = "0.1.0"
 dependencies = [
+ "bumpalo",
  "cc",
  "concrete_ast",
  "concrete_session",

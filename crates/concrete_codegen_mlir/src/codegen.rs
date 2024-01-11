@@ -1,8 +1,9 @@
-use std::{collections::HashMap, error::Error};
+use std::{cell::Cell, collections::HashMap, error::Error};
 
+use bumpalo::Bump;
 use concrete_ast::{
-    common::Span,
-    expressions::{ArithOp, BinaryOp, CmpOp, Expression, LogicOp, PathOp, SimpleExpr},
+    common::{Ident, Span},
+    expressions::{ArithOp, BinaryOp, CmpOp, Expression, IfExpr, LogicOp, PathOp, SimpleExpr},
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
     statements::{AssignStmt, LetStmt, LetStmtTarget, ReturnStmt, Statement},
@@ -13,12 +14,13 @@ use concrete_session::Session;
 use melior::{
     dialect::{
         arith::{self, CmpiPredicate},
-        func, memref,
+        cf, func, memref,
     },
     ir::{
         attribute::{FlatSymbolRefAttribute, IntegerAttribute, StringAttribute, TypeAttribute},
         r#type::{FunctionType, IntegerType, MemRefType},
-        Block, Location, Module as MeliorModule, Region, Type, Value, ValueLike,
+        Block, BlockRef, Location, Module as MeliorModule, Operation, Region, Type, Value,
+        ValueLike,
     },
     Context as MeliorContext,
 };
@@ -43,13 +45,32 @@ pub struct LocalVar<'c, 'op> {
     pub value: Value<'c, 'op>,
 }
 
-#[derive(Debug, Clone, Default)]
-struct CompilerContext<'c, 'op> {
-    pub locals: HashMap<String, LocalVar<'c, 'op>>,
+#[derive(Debug, Clone)]
+struct CompilerContext<'c, 'this: 'c> {
+    pub locals: HashMap<String, LocalVar<'c, 'this>>,
     pub functions: HashMap<String, FunctionDef>,
 }
 
-impl<'c, 'op> CompilerContext<'c, 'op> {
+struct BlockHelper<'ctx, 'this: 'ctx> {
+    region: &'this Region<'ctx>,
+    blocks_arena: &'this Bump,
+    last_block: Cell<&'this BlockRef<'ctx, 'this>>,
+}
+
+impl<'ctx, 'this> BlockHelper<'ctx, 'this> {
+    pub fn append_block(&self, block: Block<'ctx>) -> &'this Block<'ctx> {
+        let block = self
+            .region
+            .insert_block_after(*self.last_block.get(), block);
+
+        let block_ref: &'this mut BlockRef<'ctx, 'this> = self.blocks_arena.alloc(block);
+        self.last_block.set(block_ref);
+
+        block_ref
+    }
+}
+
+impl<'c, 'this> CompilerContext<'c, 'this> {
     fn resolve_type(
         &self,
         context: &'c MeliorContext,
@@ -88,9 +109,12 @@ fn compile_module(
 ) -> Result<(), Box<dyn Error>> {
     // todo: handle imports
 
-    let mut compiler_ctx: CompilerContext = Default::default();
-
     let body = mlir_module.body();
+
+    let mut compiler_ctx: CompilerContext = CompilerContext {
+        functions: Default::default(),
+        locals: Default::default(),
+    };
 
     // save all function signatures
     for statement in &module.contents {
@@ -105,7 +129,8 @@ fn compile_module(
         match statement {
             ModuleDefItem::Constant(_) => todo!(),
             ModuleDefItem::Function(info) => {
-                compile_function_def(session, context, &mut compiler_ctx, &body, info)?;
+                let op = compile_function_def(session, context, &mut compiler_ctx, info)?;
+                body.append_operation(op);
             }
             ModuleDefItem::Record(_) => todo!(),
             ModuleDefItem::Type(_) => todo!(),
@@ -120,15 +145,12 @@ fn get_location<'c>(context: &'c MeliorContext, session: &Session, span: &Span) 
     Location::new(context, &session.file_path.display().to_string(), line, col)
 }
 
-fn compile_function_def<'c, 'op>(
+fn compile_function_def<'c, 'this: 'c>(
     session: &Session,
     context: &'c MeliorContext,
-    compiler_ctx: &mut CompilerContext<'c, 'op>,
-    block: &'op Block<'c>,
+    compiler_ctx: &mut CompilerContext<'c, 'this>,
     info: &FunctionDef,
-) -> Result<(), Box<dyn Error>> {
-    let region = Region::new();
-
+) -> Result<Operation<'c>, Box<dyn Error>> {
     let location = get_location(context, session, &info.decl.name.span);
 
     // Setup function arguments
@@ -142,25 +164,11 @@ fn compile_function_def<'c, 'op>(
         fn_args_types.push(param_type);
     }
 
-    let fn_block = Block::new(&args);
-
     // Create the function context
-    let mut fn_compiler_ctx = compiler_ctx.clone();
-
-    // Push arguments into locals
-    for (i, param) in info.decl.params.iter().enumerate() {
-        fn_compiler_ctx.locals.insert(
-            param.name.name.clone(),
-            LocalVar {
-                type_spec: param.r#type.clone(),
-                value: fn_block.argument(i)?.into(),
-                memref_type: None,
-            },
-        );
-    }
+    let region = Region::new();
 
     let return_type = if let Some(ret_type) = &info.decl.ret_type {
-        vec![fn_compiler_ctx.resolve_type_spec(context, ret_type)?]
+        vec![compiler_ctx.resolve_type_spec(context, ret_type)?]
     } else {
         vec![]
     };
@@ -168,44 +176,132 @@ fn compile_function_def<'c, 'op>(
     let func_type =
         TypeAttribute::new(FunctionType::new(context, &fn_args_types, &return_type).into());
 
-    for stmt in &info.body {
-        match stmt {
-            Statement::Assign(info) => {
-                compile_assign_stmt(session, context, &mut fn_compiler_ctx, &fn_block, info)?
+    {
+        let mut fn_compiler_ctx = compiler_ctx.clone();
+        let fn_block = region.append_block(Block::new(&args));
+
+        let blocks_arena = Bump::new();
+        let helper = BlockHelper {
+            region: &region,
+            blocks_arena: &blocks_arena,
+            last_block: Cell::new(&fn_block),
+        };
+
+        // Push arguments into locals
+        for (i, param) in info.decl.params.iter().enumerate() {
+            fn_compiler_ctx.locals.insert(
+                param.name.name.clone(),
+                LocalVar {
+                    type_spec: param.r#type.clone(),
+                    value: fn_block.argument(i)?.into(),
+                    memref_type: None,
+                },
+            );
+        }
+
+        for stmt in &info.body {
+            match stmt {
+                Statement::Assign(info) => compile_assign_stmt(
+                    session,
+                    context,
+                    &mut fn_compiler_ctx,
+                    &helper,
+                    &fn_block,
+                    info,
+                )?,
+                Statement::Match(_) => todo!(),
+                Statement::For(_) => todo!(),
+                Statement::If(info) => {
+                    compile_if_expr(
+                        session,
+                        context,
+                        &mut fn_compiler_ctx,
+                        &helper,
+                        &fn_block,
+                        info,
+                    )?;
+                }
+                Statement::Let(info) => compile_let_stmt(
+                    session,
+                    context,
+                    &mut fn_compiler_ctx,
+                    &helper,
+                    &fn_block,
+                    info,
+                )?,
+                Statement::Return(info) => compile_return_stmt(
+                    session,
+                    context,
+                    &mut fn_compiler_ctx,
+                    &helper,
+                    &fn_block,
+                    info,
+                )?,
+                Statement::While(_) => todo!(),
+                Statement::FnCall(_) => todo!(),
             }
-            Statement::Match(_) => todo!(),
-            Statement::For(_) => todo!(),
-            Statement::If(_) => todo!(),
-            Statement::Let(info) => {
-                compile_let_stmt(session, context, &mut fn_compiler_ctx, &fn_block, info)?
-            }
-            Statement::Return(info) => {
-                compile_return_stmt(session, context, &mut fn_compiler_ctx, &fn_block, info)?
-            }
-            Statement::While(_) => todo!(),
-            Statement::FnCall(_) => todo!(),
         }
     }
 
-    region.append_block(fn_block);
-
-    block.append_operation(func::func(
+    Ok(func::func(
         context,
         StringAttribute::new(context, &info.decl.name.name),
         func_type,
         region,
         &[],
         location,
+    ))
+}
+
+fn compile_if_expr<'c, 'this: 'c>(
+    session: &Session,
+    context: &'c MeliorContext,
+    compiler_ctx: &mut CompilerContext<'c, 'this>,
+    helper: &BlockHelper<'c, 'this>,
+    block: &'this Block<'c>,
+    info: &IfExpr,
+) -> Result<(), Box<dyn Error>> {
+    let condition = compile_expression(
+        session,
+        context,
+        compiler_ctx,
+        helper,
+        block,
+        &info.value,
+        Some(&TypeSpec::Simple {
+            name: Ident {
+                name: "bool".to_string(),
+                span: Span::new(0, 0),
+            },
+        }),
+    )?;
+
+    let true_successor = helper.append_block(Block::new(&[]));
+    let false_successor = helper.append_block(Block::new(&[]));
+
+    let final_block = helper.append_block(Block::new(&[]));
+    true_successor.append_operation(cf::br(final_block, &[], Location::unknown(context)));
+    false_successor.append_operation(cf::br(final_block, &[], Location::unknown(context)));
+
+    block.append_operation(cf::cond_br(
+        context,
+        condition,
+        true_successor,
+        false_successor,
+        &[],
+        &[],
+        Location::unknown(context),
     ));
 
     Ok(())
 }
 
-fn compile_let_stmt<'c, 'op>(
+fn compile_let_stmt<'c, 'this: 'c>(
     session: &Session,
     context: &'c MeliorContext,
-    compiler_ctx: &mut CompilerContext<'c, 'op>,
-    block: &'op Block<'c>,
+    compiler_ctx: &mut CompilerContext<'c, 'this>,
+    helper: &BlockHelper<'c, 'this>,
+    block: &'this Block<'c>,
     info: &LetStmt,
 ) -> Result<(), Box<dyn Error>> {
     match &info.target {
@@ -214,6 +310,7 @@ fn compile_let_stmt<'c, 'op>(
                 session,
                 context,
                 compiler_ctx,
+                helper,
                 block,
                 &info.value,
                 Some(r#type),
@@ -259,11 +356,12 @@ fn compile_let_stmt<'c, 'op>(
     }
 }
 
-fn compile_assign_stmt<'c, 'op>(
+fn compile_assign_stmt<'c, 'this: 'c>(
     session: &Session,
     context: &'c MeliorContext,
-    compiler_ctx: &mut CompilerContext<'c, 'op>,
-    block: &'op Block<'c>,
+    compiler_ctx: &mut CompilerContext<'c, 'this>,
+    helper: &BlockHelper<'c, 'this>,
+    block: &'this Block<'c>,
     info: &AssignStmt,
 ) -> Result<(), Box<dyn Error>> {
     // todo: implement properly for structs, right now only really works for simple variables.
@@ -285,6 +383,7 @@ fn compile_assign_stmt<'c, 'op>(
         session,
         context,
         compiler_ctx,
+        helper,
         block,
         &info.value,
         Some(&local.type_spec),
@@ -303,26 +402,36 @@ fn compile_assign_stmt<'c, 'op>(
     Ok(())
 }
 
-fn compile_return_stmt<'c, 'op>(
+fn compile_return_stmt<'c, 'this: 'c>(
     session: &Session,
     context: &'c MeliorContext,
-    compiler_ctx: &mut CompilerContext<'c, 'op>,
-    block: &'op Block<'c>,
+    compiler_ctx: &mut CompilerContext<'c, 'this>,
+    helper: &BlockHelper<'c, 'this>,
+    block: &'this Block<'c>,
     info: &ReturnStmt,
 ) -> Result<(), Box<dyn Error>> {
-    let value = compile_expression(session, context, compiler_ctx, block, &info.value, None)?;
+    let value = compile_expression(
+        session,
+        context,
+        compiler_ctx,
+        helper,
+        block,
+        &info.value,
+        None,
+    )?;
     block.append_operation(func::r#return(&[value], Location::unknown(context)));
     Ok(())
 }
 
-fn compile_expression<'c, 'op>(
+fn compile_expression<'c, 'this: 'c>(
     session: &Session,
     context: &'c MeliorContext,
-    compiler_ctx: &mut CompilerContext<'c, 'op>,
-    block: &'op Block<'c>,
+    compiler_ctx: &mut CompilerContext<'c, 'this>,
+    helper: &BlockHelper<'c, 'this>,
+    block: &'this Block<'c>,
     info: &Expression,
     type_info: Option<&TypeSpec>,
-) -> Result<Value<'c, 'op>, Box<dyn Error>> {
+) -> Result<Value<'c, 'this>, Box<dyn Error>> {
     let location = Location::unknown(context);
     match info {
         Expression::Simple(simple) => match simple {
@@ -357,7 +466,7 @@ fn compile_expression<'c, 'op>(
             SimpleExpr::ConstFloat(_) => todo!(),
             SimpleExpr::ConstStr(_) => todo!(),
             SimpleExpr::Path(value) => {
-                compile_path_op(session, context, compiler_ctx, block, value)
+                compile_path_op(session, context, compiler_ctx, helper, block, value)
             }
         },
         Expression::FnCall(value) => {
@@ -381,6 +490,7 @@ fn compile_expression<'c, 'op>(
                     session,
                     context,
                     compiler_ctx,
+                    helper,
                     block,
                     arg,
                     Some(&arg_info.r#type),
@@ -409,8 +519,24 @@ fn compile_expression<'c, 'op>(
         Expression::If(_) => todo!(),
         Expression::UnaryOp(_, _) => todo!(),
         Expression::BinaryOp(lhs, op, rhs) => {
-            let lhs = compile_expression(session, context, compiler_ctx, block, lhs, type_info)?;
-            let rhs = compile_expression(session, context, compiler_ctx, block, rhs, type_info)?;
+            let lhs = compile_expression(
+                session,
+                context,
+                compiler_ctx,
+                helper,
+                block,
+                lhs,
+                type_info,
+            )?;
+            let rhs = compile_expression(
+                session,
+                context,
+                compiler_ctx,
+                helper,
+                block,
+                rhs,
+                type_info,
+            )?;
 
             let op = match op {
                 // todo: check signedness
@@ -505,13 +631,14 @@ fn compile_expression<'c, 'op>(
     }
 }
 
-fn compile_path_op<'c, 'op>(
+fn compile_path_op<'c, 'this: 'c>(
     session: &Session,
     context: &'c MeliorContext,
-    compiler_ctx: &mut CompilerContext<'c, 'op>,
-    block: &'op Block<'c>,
+    compiler_ctx: &mut CompilerContext<'c, 'this>,
+    helper: &BlockHelper<'c, 'this>,
+    block: &'this Block<'c>,
     path: &PathOp,
-) -> Result<Value<'c, 'op>, Box<dyn Error>> {
+) -> Result<Value<'c, 'this>, Box<dyn Error>> {
     // For now only simple variables work.
     // TODO: implement properly, this requires having structs implemented.
 
