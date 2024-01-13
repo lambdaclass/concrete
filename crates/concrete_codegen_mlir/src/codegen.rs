@@ -58,7 +58,7 @@ struct BlockHelper<'ctx, 'this: 'ctx> {
 }
 
 impl<'ctx, 'this> BlockHelper<'ctx, 'this> {
-    pub fn append_block(&self, block: Block<'ctx>) -> &'this Block<'ctx> {
+    pub fn append_block(&self, block: Block<'ctx>) -> &'this BlockRef<'ctx, 'this> {
         let block = self
             .region
             .insert_block_after(*self.last_block.get(), block);
@@ -145,6 +145,10 @@ fn get_location<'c>(context: &'c MeliorContext, session: &Session, span: &Span) 
     Location::new(context, &session.file_path.display().to_string(), line, col)
 }
 
+fn get_named_location<'c>(context: &'c MeliorContext, name: &str) -> Location<'c> {
+    Location::name(context, name, Location::unknown(context))
+}
+
 fn compile_function_def<'c, 'this: 'c>(
     session: &Session,
     context: &'c MeliorContext,
@@ -178,13 +182,13 @@ fn compile_function_def<'c, 'this: 'c>(
 
     {
         let mut fn_compiler_ctx = compiler_ctx.clone();
-        let fn_block = region.append_block(Block::new(&args));
+        let mut fn_block = &region.append_block(Block::new(&args));
 
         let blocks_arena = Bump::new();
         let helper = BlockHelper {
             region: &region,
             blocks_arena: &blocks_arena,
-            last_block: Cell::new(&fn_block),
+            last_block: Cell::new(fn_block),
         };
 
         // Push arguments into locals
@@ -206,18 +210,18 @@ fn compile_function_def<'c, 'this: 'c>(
                     context,
                     &mut fn_compiler_ctx,
                     &helper,
-                    &fn_block,
+                    fn_block,
                     info,
                 )?,
                 Statement::Match(_) => todo!(),
                 Statement::For(_) => todo!(),
                 Statement::If(info) => {
-                    compile_if_expr(
+                    fn_block = compile_if_expr(
                         session,
                         context,
                         &mut fn_compiler_ctx,
                         &helper,
-                        &fn_block,
+                        fn_block,
                         info,
                     )?;
                 }
@@ -226,7 +230,7 @@ fn compile_function_def<'c, 'this: 'c>(
                     context,
                     &mut fn_compiler_ctx,
                     &helper,
-                    &fn_block,
+                    fn_block,
                     info,
                 )?,
                 Statement::Return(info) => compile_return_stmt(
@@ -234,7 +238,7 @@ fn compile_function_def<'c, 'this: 'c>(
                     context,
                     &mut fn_compiler_ctx,
                     &helper,
-                    &fn_block,
+                    fn_block,
                     info,
                 )?,
                 Statement::While(_) => todo!(),
@@ -260,7 +264,7 @@ fn compile_if_expr<'c, 'this: 'c>(
     helper: &BlockHelper<'c, 'this>,
     block: &'this Block<'c>,
     info: &IfExpr,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<&'this BlockRef<'c, 'this>, Box<dyn Error>> {
     let condition = compile_expression(
         session,
         context,
@@ -276,24 +280,122 @@ fn compile_if_expr<'c, 'this: 'c>(
         }),
     )?;
 
-    let true_successor = helper.append_block(Block::new(&[]));
-    let false_successor = helper.append_block(Block::new(&[]));
-
-    let final_block = helper.append_block(Block::new(&[]));
-    true_successor.append_operation(cf::br(final_block, &[], Location::unknown(context)));
-    false_successor.append_operation(cf::br(final_block, &[], Location::unknown(context)));
+    let mut then_successor = helper.append_block(Block::new(&[]));
+    let mut else_successor = helper.append_block(Block::new(&[]));
 
     block.append_operation(cf::cond_br(
         context,
         condition,
-        true_successor,
-        false_successor,
+        then_successor,
+        else_successor,
         &[],
         &[],
-        Location::unknown(context),
+        get_named_location(context, "if"),
     ));
 
-    Ok(())
+    {
+        let mut true_compiler_ctx = compiler_ctx.clone();
+        for stmt in &info.contents {
+            match stmt {
+                Statement::Assign(info) => compile_assign_stmt(
+                    session,
+                    context,
+                    &mut true_compiler_ctx,
+                    helper,
+                    then_successor,
+                    info,
+                )?,
+                Statement::Match(_) => todo!(),
+                Statement::For(_) => todo!(),
+                Statement::If(info) => {
+                    then_successor = compile_if_expr(
+                        session,
+                        context,
+                        &mut true_compiler_ctx,
+                        helper,
+                        then_successor,
+                        info,
+                    )?;
+                }
+                Statement::Let(info) => compile_let_stmt(
+                    session,
+                    context,
+                    &mut true_compiler_ctx,
+                    helper,
+                    then_successor,
+                    info,
+                )?,
+                Statement::Return(info) => compile_return_stmt(
+                    session,
+                    context,
+                    &mut true_compiler_ctx,
+                    helper,
+                    then_successor,
+                    info,
+                )?,
+                Statement::While(_) => todo!(),
+                Statement::FnCall(_) => todo!(),
+            }
+        }
+    }
+
+    if let Some(else_contents) = info.r#else.as_ref() {
+        let mut else_compiler_ctx = compiler_ctx.clone();
+        for stmt in else_contents {
+            match stmt {
+                Statement::Assign(info) => compile_assign_stmt(
+                    session,
+                    context,
+                    &mut else_compiler_ctx,
+                    helper,
+                    else_successor,
+                    info,
+                )?,
+                Statement::Match(_) => todo!(),
+                Statement::For(_) => todo!(),
+                Statement::If(info) => {
+                    else_successor = compile_if_expr(
+                        session,
+                        context,
+                        &mut else_compiler_ctx,
+                        helper,
+                        else_successor,
+                        info,
+                    )?;
+                }
+                Statement::Let(info) => compile_let_stmt(
+                    session,
+                    context,
+                    &mut else_compiler_ctx,
+                    helper,
+                    else_successor,
+                    info,
+                )?,
+                Statement::Return(info) => compile_return_stmt(
+                    session,
+                    context,
+                    &mut else_compiler_ctx,
+                    helper,
+                    else_successor,
+                    info,
+                )?,
+                Statement::While(_) => todo!(),
+                Statement::FnCall(_) => todo!(),
+            }
+        }
+    }
+
+    let final_block = helper.append_block(Block::new(&[]));
+
+    if then_successor.terminator().is_none() {
+        then_successor.append_operation(cf::br(final_block, &[], Location::unknown(context)));
+    }
+
+    if else_successor.terminator().is_none() {
+        else_successor.append_operation(cf::br(final_block, &[], Location::unknown(context)));
+    }
+
+    Ok(final_block)
 }
 
 fn compile_let_stmt<'c, 'this: 'c>(

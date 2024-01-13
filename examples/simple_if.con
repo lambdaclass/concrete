@@ -1,11 +1,12 @@
 mod Simple {
     fn main() -> bool {
-        let y: bool = check(4);
+        let y: bool = check(0);
         return y;
     }
 
     fn check(x: i64) -> bool {
-        if x == 0 {
+        let y: i64 = 0;
+        if x == y {
             return true;
         }
         return false;

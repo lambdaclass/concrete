@@ -40,6 +40,7 @@ mod pass_manager;
 pub fn compile(session: &Session, program: &Program) -> Result<PathBuf, Box<dyn Error>> {
     let context = Context::new();
     let mlir_module = context.compile(session, program)?;
+    assert!(mlir_module.melior_module.as_operation().verify());
 
     let object_path = compile_to_object(session, &mlir_module)?;
 
