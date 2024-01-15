@@ -1,0 +1,17 @@
+mod Simple {
+    fn main() -> i64 {
+        return my_func(4);
+    }
+
+    fn my_func(times: i64) -> i64 {
+        let mut n: i64 = times;
+        let mut result: i64 = 1;
+
+        while n > 0 {
+            result = result + result;
+            n = n - 1;
+        }
+
+        return result;
+    }
+}
