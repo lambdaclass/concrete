@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use concrete_ast::Program;
-use concrete_session::{config::DebugInfo, Session};
+use concrete_session::Session;
 use melior::{
     dialect::DialectRegistry,
     ir::{operation::OperationPrintingFlags, Location, Module as MeliorModule},
