@@ -124,22 +124,24 @@ But we want to take a different path with respect to:
 - No marker traits like Send, Sync for concurrency. The runtime will take care of that.
 
 ## Syntax
-```
-mod FibonacciModule {
+```rust
+mod Fibonacci {
+    fn main() -> i64 {
+        return fib(10);
+    }
 
- pub fib(x: u64) -> u64 {
-     match x {
-       // we can match literal values
-       0 | 1 -> x,
-       n -> fib(n-1) + fib(n-2)
-     }
- }
+    pub fn fib(n: u64) -> u64 {
+        if n < 2 {
+            return n;
+        }
+
+        return fib(n - 1) + fib(n - 2);
+    }
 }
 ```
 
-```
+```rust
 mod Option {
-
     pub enum Option<T> {
         None,
         Some(T),

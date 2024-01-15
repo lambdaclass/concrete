@@ -57,6 +57,31 @@ fn test_factorial_with_if() {
 }
 
 #[test]
+fn test_fib_with_if() {
+    let source = r#"
+        mod Fibonacci {
+            fn main() -> i64 {
+                return fib(10);
+            }
+
+            pub fn fib(n: u64) -> u64 {
+                if n < 2 {
+                    return n;
+                }
+
+                return fib(n - 1) + fib(n - 2);
+            }
+        }
+    "#;
+
+    let result = compile_program(source, "fib", false).expect("failed to compile");
+
+    let output = run_program(&result.binary_file).expect("failed to run");
+    let code = output.status.code().unwrap();
+    assert_eq!(code, 55);
+}
+
+#[test]
 fn test_simple_add() {
     let source = r#"
         mod Simple {
