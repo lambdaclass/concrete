@@ -64,8 +64,8 @@ impl<'ctx, 'parent: 'ctx> LocalVar<'ctx, 'parent> {
 }
 
 #[derive(Debug, Clone)]
-struct ScopeContext<'c, 'parent: 'c> {
-    pub locals: HashMap<String, LocalVar<'c, 'parent>>,
+struct ScopeContext<'ctx, 'parent: 'ctx> {
+    pub locals: HashMap<String, LocalVar<'ctx, 'parent>>,
     pub functions: HashMap<String, FunctionDef>,
 }
 
