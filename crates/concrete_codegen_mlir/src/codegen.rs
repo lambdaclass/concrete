@@ -267,6 +267,19 @@ fn compile_function_def<'ctx, 'parent: 'ctx>(
     ))
 }
 
+/// Compile a if expression / statement
+///
+/// This returns a block if any branch doesn't have a function return terminator.
+/// For example, if the if branch has a return and the else branch has a return,
+/// it wouldn't make sense to add a merging block and MLIR would give a error saying there is a operation after a terminator.
+///
+/// The returned block is the merger block, the one we jump after processing the if branches.
+///
+/// ```text
+///                       - then block -
+/// - if (prev block) - <                > merge block --
+///                       - else block -
+/// ```
 fn compile_if_expr<'c, 'this: 'c>(
     session: &Session,
     context: &'c MeliorContext,
