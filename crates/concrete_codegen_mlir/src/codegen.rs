@@ -68,6 +68,7 @@ impl<'ctx, 'parent: 'ctx> LocalVar<'ctx, 'parent> {
 struct ScopeContext<'ctx, 'parent: 'ctx> {
     pub locals: HashMap<String, LocalVar<'ctx, 'parent>>,
     pub functions: HashMap<String, FunctionDef>,
+    pub function: Option<FunctionDef>,
 }
 
 struct BlockHelper<'ctx, 'region: 'ctx> {
@@ -116,6 +117,22 @@ impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
             } => self.resolve_type(context, &name.name)?,
         })
     }
+
+    fn is_type_signed(&self, type_info: &TypeSpec) -> bool {
+        let signed = ["i8", "i16", "i32", "i64", "i128"];
+        match type_info {
+            TypeSpec::Simple { name } => signed.contains(&name.name.as_str()),
+            TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
+        }
+    }
+
+    fn is_float(&self, type_info: &TypeSpec) -> bool {
+        let signed = ["f32", "f64"];
+        match type_info {
+            TypeSpec::Simple { name } => signed.contains(&name.name.as_str()),
+            TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
+        }
+    }
 }
 
 fn compile_module(
@@ -131,6 +148,7 @@ fn compile_module(
     let mut scope_ctx: ScopeContext = ScopeContext {
         functions: Default::default(),
         locals: Default::default(),
+        function: None,
     };
 
     // save all function signatures
@@ -146,6 +164,8 @@ fn compile_module(
         match statement {
             ModuleDefItem::Constant(_) => todo!(),
             ModuleDefItem::Function(info) => {
+                let mut scope_ctx = scope_ctx.clone();
+                scope_ctx.function = Some(info.clone());
                 let op = compile_function_def(session, context, &scope_ctx, info)?;
                 body.append_operation(op);
             }
@@ -588,7 +608,14 @@ fn compile_return_stmt<'ctx, 'parent: 'ctx>(
         helper,
         block,
         &info.value,
-        None,
+        scope_ctx
+            .function
+            .as_ref()
+            .unwrap()
+            .decl
+            .ret_type
+            .clone()
+            .as_ref(),
     )?;
     block.append_operation(func::r#return(&[value], Location::unknown(context)));
     Ok(())
@@ -651,14 +678,39 @@ fn compile_expression<'ctx, 'parent: 'ctx>(
                 compile_expression(session, context, scope_ctx, _helper, block, rhs, type_info)?;
 
             let op = match op {
-                // todo: check signedness
-                BinaryOp::Arith(arith_op) => match arith_op {
-                    ArithOp::Add => arith::addi(lhs, rhs, location),
-                    ArithOp::Sub => arith::subi(lhs, rhs, location),
-                    ArithOp::Mul => arith::muli(lhs, rhs, location),
-                    ArithOp::Div => arith::divsi(lhs, rhs, location),
-                    ArithOp::Mod => arith::remsi(lhs, rhs, location),
-                },
+                BinaryOp::Arith(arith_op) => {
+                    let type_info = type_info.expect("type info missing");
+
+                    if scope_ctx.is_float(type_info) {
+                        match arith_op {
+                            ArithOp::Add => arith::addf(lhs, rhs, location),
+                            ArithOp::Sub => arith::subf(lhs, rhs, location),
+                            ArithOp::Mul => arith::mulf(lhs, rhs, location),
+                            ArithOp::Div => arith::divf(lhs, rhs, location),
+                            ArithOp::Mod => arith::remf(lhs, rhs, location),
+                        }
+                    } else {
+                        match arith_op {
+                            ArithOp::Add => arith::addi(lhs, rhs, location),
+                            ArithOp::Sub => arith::subi(lhs, rhs, location),
+                            ArithOp::Mul => arith::muli(lhs, rhs, location),
+                            ArithOp::Div => {
+                                if scope_ctx.is_type_signed(type_info) {
+                                    arith::divsi(lhs, rhs, location)
+                                } else {
+                                    arith::divui(lhs, rhs, location)
+                                }
+                            }
+                            ArithOp::Mod => {
+                                if scope_ctx.is_type_signed(type_info) {
+                                    arith::remsi(lhs, rhs, location)
+                                } else {
+                                    arith::remui(lhs, rhs, location)
+                                }
+                            }
+                        }
+                    }
+                }
                 BinaryOp::Logic(logic_op) => match logic_op {
                     LogicOp::And => {
                         let const_true = block
