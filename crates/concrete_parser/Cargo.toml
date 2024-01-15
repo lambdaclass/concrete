@@ -10,8 +10,9 @@ lalrpop-util = { version = "0.20.0", features = ["unicode"] }
 logos = "0.13.0"
 tracing = { workspace = true }
 concrete_ast = { path = "../concrete_ast"}
-owo-colors = "4.0.0"
 salsa = { git = "https://github.com/salsa-rs/salsa.git", package = "salsa-2022" }
+ariadne = { version = "0.4.0", features = ["auto-color"] }
+itertools = "0.12.0"
 
 [build-dependencies]
 lalrpop = "0.20.0"

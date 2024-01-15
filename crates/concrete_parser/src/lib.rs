@@ -19,6 +19,8 @@ pub mod grammar {
 pub struct ProgramSource {
     #[return_ref]
     pub input: String,
+    #[return_ref]
+    pub path: String,
 }
 
 // Todo: better error handling

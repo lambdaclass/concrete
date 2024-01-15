@@ -1,3 +1,4 @@
+use ariadne::Source;
 use clap::Parser;
 use concrete_codegen_mlir::linker::{link_binary, link_shared_lib};
 use concrete_parser::{error::Diagnostics, ProgramSource};
@@ -32,7 +33,11 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     let args = CompilerArgs::parse();
 
     let db = crate::db::Database::default();
-    let source = ProgramSource::new(&db, std::fs::read_to_string(args.input.clone())?);
+    let source = ProgramSource::new(
+        &db,
+        std::fs::read_to_string(&args.input)?,
+        args.input.display().to_string(),
+    );
     tracing::debug!("source code:\n{}", source.input(&db));
     let program = match concrete_parser::parse_ast(&db, source) {
         Some(x) => x,
@@ -44,7 +49,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
                     &db, source,
                 ),
             );
-            panic!();
+            std::process::exit(1);
         }
     };
 
@@ -70,7 +75,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         } else {
             OptLevel::None
         },
-        source: source.input(&db).to_string(),
+        source: Source::from(source.input(&db).to_string()),
         library: args.library,
         target_dir,
         output_file,
