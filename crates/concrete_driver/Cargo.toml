@@ -15,3 +15,6 @@ concrete_session = { path = "../concrete_session"}
 concrete_codegen_mlir = { path = "../concrete_codegen_mlir"}
 salsa = { git = "https://github.com/salsa-rs/salsa.git", package = "salsa-2022" }
 ariadne = { version = "0.4.0", features = ["auto-color"] }
+
+[dev-dependencies]
+tempfile = "3.9.0"

@@ -18,3 +18,15 @@ pub struct Session {
     pub output_file: PathBuf,
     // todo: include target, host, etc
 }
+
+impl Session {
+    pub fn get_platform_library_ext() -> &'static str {
+        if cfg!(target_os = "macos") {
+            "dylib"
+        } else if cfg!(target_os = "windows") {
+            "dll"
+        } else {
+            "so"
+        }
+    }
+}

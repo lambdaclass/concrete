@@ -14,7 +14,7 @@ impl<T> Db for T where T: ?Sized + salsa::DbWithJar<Jar> + salsa::DbWithJar<conc
 
 #[derive(Default)]
 #[salsa::db(Jar, concrete_parser::db::Jar)]
-pub(crate) struct Database {
+pub struct Database {
     storage: salsa::Storage<Self>,
 }
 

@@ -2,7 +2,6 @@ use std::{collections::HashMap, error::Error};
 
 use bumpalo::Bump;
 use concrete_ast::{
-    common::{Ident, Span},
     expressions::{
         ArithOp, BinaryOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp, SimpleExpr,
     },

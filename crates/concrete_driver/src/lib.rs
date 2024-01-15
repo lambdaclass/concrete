@@ -85,7 +85,12 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     let object_path = concrete_codegen_mlir::compile(&session, &program)?;
 
     if session.library {
-        link_shared_lib(&object_path, &session.output_file.with_extension("so"))?;
+        link_shared_lib(
+            &object_path,
+            &session
+                .output_file
+                .with_extension(Session::get_platform_library_ext()),
+        )?;
     } else {
         link_binary(&object_path, &session.output_file.with_extension(""))?;
     }
