@@ -40,8 +40,7 @@ fn test_factorial_with_if() {
             }
 
             fn factorial(n: i64) -> i64 {
-                let zero: i64 = 0;
-                if n == zero {
+                if n == 0 {
                     return 1;
                 } else {
                     return n * factorial(n - 1);
