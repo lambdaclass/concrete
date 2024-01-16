@@ -114,6 +114,7 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), std:
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 fn file_exists(path: &str) -> bool {
     Path::new(path).exists()
 }
