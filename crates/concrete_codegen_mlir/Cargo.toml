@@ -9,6 +9,7 @@ edition = "2021"
 bumpalo = { version = "3.14.0", features = ["std"] }
 concrete_ast = { path = "../concrete_ast"}
 concrete_session = { path = "../concrete_session"}
+itertools = "0.12.0"
 llvm-sys = "170.0.1"
 melior = { version = "0.15.0", features = ["ods-dialects"] }
 mlir-sys = "0.2.1"

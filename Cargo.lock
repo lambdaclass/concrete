@@ -365,6 +365,7 @@ dependencies = [
  "cc",
  "concrete_ast",
  "concrete_session",
+ "itertools 0.12.0",
  "llvm-sys",
  "melior",
  "mlir-sys",

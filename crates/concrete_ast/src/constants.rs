@@ -8,6 +8,7 @@ use crate::{
 pub struct ConstantDecl {
     pub doc_string: Option<DocString>,
     pub name: Ident,
+    pub is_pub: bool,
     pub r#type: TypeSpec,
 }
 

@@ -26,14 +26,21 @@ use melior::{
     Context as MeliorContext,
 };
 
+use crate::ast_helper::{AstHelper, ModuleInfo};
+
 pub fn compile_program(
     session: &Session,
     ctx: &MeliorContext,
     mlir_module: &MeliorModule,
     program: &Program,
 ) -> Result<(), Box<dyn Error>> {
+    let ast_helper = AstHelper::new(program);
     for module in &program.modules {
-        compile_module(session, ctx, mlir_module, module)?;
+        let module_info = ast_helper
+            .modules
+            .get(&module.name.name)
+            .expect("module not found");
+        compile_module(session, ctx, mlir_module, &ast_helper, module_info, module)?;
     }
     Ok(())
 }
@@ -67,8 +74,9 @@ impl<'ctx, 'parent: 'ctx> LocalVar<'ctx, 'parent> {
 #[derive(Debug, Clone)]
 struct ScopeContext<'ctx, 'parent: 'ctx> {
     pub locals: HashMap<String, LocalVar<'ctx, 'parent>>,
-    pub functions: HashMap<String, FunctionDef>,
     pub function: Option<FunctionDef>,
+    pub imports: HashMap<String, &'parent ModuleInfo<'parent>>,
+    pub module_info: &'parent ModuleInfo<'parent>,
 }
 
 struct BlockHelper<'ctx, 'region: 'ctx> {
@@ -87,6 +95,34 @@ impl<'ctx, 'region> BlockHelper<'ctx, 'region> {
 }
 
 impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
+    /// Returns the symbol name from a local name.
+    pub fn get_symbol_name(&self, local_name: &str) -> String {
+        if local_name == "main" {
+            return local_name.to_string();
+        }
+
+        if let Some(module) = self.imports.get(local_name) {
+            // a import
+            module.get_symbol_name(local_name)
+        } else {
+            let mut result = self.module_info.name.clone();
+
+            result.push_str("::");
+            result.push_str(local_name);
+
+            result
+        }
+    }
+
+    pub fn get_function(&self, local_name: &str) -> Option<&FunctionDef> {
+        if let Some(module) = self.imports.get(local_name) {
+            // a import
+            module.functions.get(local_name).copied()
+        } else {
+            self.module_info.functions.get(local_name).copied()
+        }
+    }
+
     fn resolve_type(
         &self,
         context: &'ctx MeliorContext,
@@ -111,10 +147,7 @@ impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
     ) -> Result<Type<'ctx>, Box<dyn Error>> {
         Ok(match spec {
             TypeSpec::Simple { name } => self.resolve_type(context, &name.name)?,
-            TypeSpec::Generic {
-                name,
-                type_params: _,
-            } => self.resolve_type(context, &name.name)?,
+            TypeSpec::Generic { name, .. } => self.resolve_type(context, &name.name)?,
         })
     }
 
@@ -139,26 +172,32 @@ fn compile_module(
     session: &Session,
     context: &MeliorContext,
     mlir_module: &MeliorModule,
+    ast_helper: &AstHelper<'_>,
+    module_info: &ModuleInfo<'_>,
     module: &Module,
 ) -> Result<(), Box<dyn Error>> {
     // todo: handle imports
 
     let body = mlir_module.body();
 
-    let mut scope_ctx: ScopeContext = ScopeContext {
-        functions: Default::default(),
-        locals: Default::default(),
-        function: None,
-    };
+    let mut imports = HashMap::new();
 
-    // save all function signatures
-    for statement in &module.contents {
-        if let ModuleDefItem::Function(info) = statement {
-            scope_ctx
-                .functions
-                .insert(info.decl.name.name.clone(), info.clone());
+    for import in &module.imports {
+        let target_module = ast_helper
+            .get_module_from_import(&import.module)
+            .expect("failed to find import");
+
+        for symbol in &import.symbols {
+            imports.insert(symbol.name.clone(), target_module);
         }
     }
+
+    let scope_ctx: ScopeContext = ScopeContext {
+        locals: Default::default(),
+        function: None,
+        module_info,
+        imports,
+    };
 
     for statement in &module.contents {
         match statement {
@@ -169,8 +208,15 @@ fn compile_module(
                 let op = compile_function_def(session, context, &scope_ctx, info)?;
                 body.append_operation(op);
             }
-            ModuleDefItem::Record(_) => todo!(),
+            ModuleDefItem::Struct(_) => todo!(),
             ModuleDefItem::Type(_) => todo!(),
+            ModuleDefItem::Module(info) => {
+                let module_info = module_info
+                    .modules
+                    .get(&info.name.name)
+                    .expect("submodule not found");
+                compile_module(session, context, mlir_module, ast_helper, module_info, info)?;
+            }
         }
     }
 
@@ -251,9 +297,11 @@ fn compile_function_def<'ctx, 'parent: 'ctx>(
         }
     }
 
+    let fn_name = scope_ctx.get_symbol_name(&info.decl.name.name);
+
     Ok(func::func(
         context,
-        StringAttribute::new(context, &info.decl.name.name),
+        StringAttribute::new(context, &fn_name),
         func_type,
         region,
         &[],
@@ -755,8 +803,7 @@ fn compile_fn_call<'ctx, 'parent: 'ctx>(
     let location = get_location(context, session, info.target.span.from);
 
     let target_fn = scope_ctx
-        .functions
-        .get(&info.target.name)
+        .get_function(&info.target.name)
         .expect("function not found")
         .clone();
 
@@ -785,10 +832,12 @@ fn compile_fn_call<'ctx, 'parent: 'ctx>(
         vec![]
     };
 
+    let fn_name = scope_ctx.get_symbol_name(&info.target.name);
+
     Ok(block
         .append_operation(func::call(
             context,
-            FlatSymbolRefAttribute::new(context, &info.target.name),
+            FlatSymbolRefAttribute::new(context, &fn_name),
             &args,
             &return_type,
             location,
