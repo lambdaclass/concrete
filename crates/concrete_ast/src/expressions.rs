@@ -1,4 +1,8 @@
-use crate::{common::Ident, statements::Statement, types::TypeSpec};
+use crate::{
+    common::Ident,
+    statements::Statement,
+    types::{RefType, TypeSpec},
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Expression {
@@ -19,6 +23,7 @@ pub enum ValueExpr {
     ConstStr(String),
     Path(PathOp),
     Deref(PathOp),
+    AsRef { path: PathOp, ref_type: RefType },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -130,3 +130,31 @@ fn test_import() {
     let code = output.status.code().unwrap();
     assert_eq!(code, 8);
 }
+
+#[test]
+fn test_reference() {
+    let source = r#"
+        mod Simple {
+            fn main(argc: i64) -> i64 {
+                let x: i64 = argc;
+                return references(x) + dereference(&x);
+            }
+
+            fn dereference(a: &i64) -> i64 {
+                return *a;
+            }
+
+            fn references(a: i64) -> i64 {
+                let x: i64 = a;
+                let y: &i64 = &x;
+                return *y;
+            }
+        }
+    "#;
+
+    let result = compile_program(source, "references", false).expect("failed to compile");
+
+    let output = run_program(&result.binary_file).expect("failed to run");
+    let code = output.status.code().unwrap();
+    assert_eq!(code, 2);
+}

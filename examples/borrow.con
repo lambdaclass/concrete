@@ -1,9 +1,16 @@
 mod Simple {
     fn main(argc: i64) -> i64 {
-        return argc;
+        let x: i64 = argc;
+        return references(x) + dereference(&x);
     }
 
     fn dereference(a: &i64) -> i64 {
         return *a;
+    }
+
+    fn references(a: i64) -> i64 {
+        let x: i64 = a;
+        let y: &i64 = &x;
+        return *y;
     }
 }

@@ -359,6 +359,10 @@ pub(crate) ValueExpr: ast::expressions::ValueExpr = {
   <"string"> => ast::expressions::ValueExpr::ConstStr(<>),
   <PathOp> => ast::expressions::ValueExpr::Path(<>),
   "*" <PathOp> => ast::expressions::ValueExpr::Deref(<>),
+  <ref_type:RefType> <path:PathOp> => ast::expressions::ValueExpr::AsRef {
+    path,
+    ref_type
+  },
 }
 
 pub(crate) IfExpr: ast::expressions::IfExpr = {
