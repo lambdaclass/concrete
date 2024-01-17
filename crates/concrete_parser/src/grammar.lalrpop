@@ -66,7 +66,7 @@ extern {
     "!" => Token::OperatorNot,
     "~" => Token::OperatorBitwiseNot,
     "^" => Token::OperatorBitwiseXor,
-    "&" => Token::OperatorBitwiseAnd,
+    "&" => Token::Ampersand,
     "|" => Token::OperatorBitwiseOr,
   }
 }
@@ -131,13 +131,27 @@ pub(crate) Ident: ast::common::Ident = {
   }
 }
 
+pub(crate) RefType: ast::types::RefType = {
+  "&" => ast::types::RefType::Borrow,
+  "&" "mut" => ast::types::RefType::MutBorrow,
+}
+
 pub(crate) TypeSpec: ast::types::TypeSpec = {
-  <name:Ident> => ast::types::TypeSpec::Simple {
-    name
+  <lo:@L> <is_ref:RefType?> <name:Ident> <hi:@R> => ast::types::TypeSpec::Simple {
+    name,
+    is_ref,
+    span: Span::new(lo, hi),
   },
-  <lo:@L> <name:Ident> "<" <type_params:Comma<TypeSpec>> ">" <hi:@R> => ast::types::TypeSpec::Generic {
+  <lo:@L> <is_ref:RefType?> <name:Ident> "<" <type_params:Comma<TypeSpec>> ">" <hi:@R> => ast::types::TypeSpec::Generic {
     name,
     type_params,
+    is_ref,
+    span: Span::new(lo, hi),
+  },
+  <lo:@L> <is_ref:RefType?> "[" <of_type:TypeSpec> <size:(";" <"integer">)?> "]"<hi:@R> => ast::types::TypeSpec::Array {
+    of_type: Box::new(of_type),
+    size,
+    is_ref,
     span: Span::new(lo, hi),
   }
 }
@@ -272,7 +286,7 @@ pub(crate) FunctionDef: ast::functions::FunctionDef = {
 // Expressions
 
 pub(crate) Term: ast::expressions::Expression = {
-  <SimpleExpr> => ast::expressions::Expression::Simple(<>),
+  <ValueExpr> => ast::expressions::Expression::Value(<>),
   <FnCallOp> => ast::expressions::Expression::FnCall(<>),
   <MatchExpr> => ast::expressions::Expression::Match(<>),
   <IfExpr> => ast::expressions::Expression::If(<>),
@@ -339,13 +353,13 @@ pub UnaryOp: ast::expressions::UnaryOp = {
   "~" => ast::expressions::UnaryOp::BitwiseNot,
 }
 
-pub(crate) SimpleExpr: ast::expressions::SimpleExpr = {
-  <"integer"> => ast::expressions::SimpleExpr::ConstInt(<>),
-  <"boolean"> => ast::expressions::SimpleExpr::ConstBool(<>),
-  <"string"> => ast::expressions::SimpleExpr::ConstStr(<>),
-  <PathOp> => ast::expressions::SimpleExpr::Path(<>),
+pub(crate) ValueExpr: ast::expressions::ValueExpr = {
+  <"integer"> => ast::expressions::ValueExpr::ConstInt(<>),
+  <"boolean"> => ast::expressions::ValueExpr::ConstBool(<>),
+  <"string"> => ast::expressions::ValueExpr::ConstStr(<>),
+  <PathOp> => ast::expressions::ValueExpr::Path(<>),
+  "*" <PathOp> => ast::expressions::ValueExpr::Deref(<>),
 }
-
 
 pub(crate) IfExpr: ast::expressions::IfExpr = {
   "if" <value:Expression> "{" <contents:StatementList> "}"
@@ -369,14 +383,14 @@ pub(crate) MatchExpr: ast::expressions::MatchExpr = {
 
 pub(crate) MatchVariant: ast::expressions::MatchVariant = {
   // 0 -> 1
-  <case:SimpleExpr> "->" <stmt:Statement> => {
+  <case:ValueExpr> "->" <stmt:Statement> => {
     ast::expressions::MatchVariant {
       case,
       block: vec![stmt]
     }
   },
   // x -> { ... }
-  <case:SimpleExpr> "->" "{" <stmts:StatementList> "}" => {
+  <case:ValueExpr> "->" "{" <stmts:StatementList> "}" => {
     ast::expressions::MatchVariant {
       case,
       block: stmts
@@ -393,7 +407,7 @@ pub(crate) PathOp: ast::expressions::PathOp = {
 
 pub(crate) PathSegment: ast::expressions::PathSegment = {
   "." <Ident> => ast::expressions::PathSegment::FieldAccess(<>),
-  "[" <e:SimpleExpr> "]" => ast::expressions::PathSegment::ArrayIndex(e),
+  "[" <e:ValueExpr> "]" => ast::expressions::PathSegment::ArrayIndex(e),
 }
 
 pub PathSegments: Vec<ast::expressions::PathSegment> = {

@@ -2,7 +2,7 @@ use crate::{common::Ident, statements::Statement, types::TypeSpec};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Expression {
-    Simple(SimpleExpr),
+    Value(ValueExpr),
     FnCall(FnCallOp),
     Match(MatchExpr),
     If(IfExpr),
@@ -10,15 +10,15 @@ pub enum Expression {
     BinaryOp(Box<Self>, BinaryOp, Box<Self>),
 }
 
-// needed for match variants and array accesses
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SimpleExpr {
+pub enum ValueExpr {
     ConstBool(bool),
     ConstChar(char),
     ConstInt(u64),
     ConstFloat(()),
     ConstStr(String),
     Path(PathOp),
+    Deref(PathOp),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -83,14 +83,14 @@ pub struct IfExpr {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MatchVariant {
-    pub case: SimpleExpr,
+    pub case: ValueExpr,
     pub block: Vec<Statement>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PathSegment {
     FieldAccess(Ident),
-    ArrayIndex(SimpleExpr),
+    ArrayIndex(ValueExpr),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

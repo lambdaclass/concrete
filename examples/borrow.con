@@ -1,0 +1,17 @@
+mod Simple {
+    fn main(argc: i64) -> i64 {
+        return argc;
+    }
+
+    fn hello(a: &i64) -> i64 {
+        return *a;
+    }
+
+    fn hello2(a: [i64]) -> i64 {
+        return a[0];
+    }
+
+     fn hello3(a: [i64; 4]) -> i64 {
+        return a[0];
+    }
+}

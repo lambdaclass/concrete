@@ -23,6 +23,10 @@ pub struct CompilerArgs {
     /// Build as a library.
     #[arg(short, long, default_value_t = false)]
     library: bool,
+
+    /// Prints the ast.
+    #[arg(long, default_value_t = false)]
+    print_ast: bool,
 }
 
 pub fn main() -> Result<(), Box<dyn Error>> {
@@ -52,6 +56,10 @@ pub fn main() -> Result<(), Box<dyn Error>> {
             std::process::exit(1);
         }
     };
+
+    if args.print_ast {
+        println!("{:#?}", program);
+    }
 
     let cwd = std::env::current_dir()?;
     // todo: find a better name, "target" would clash with rust if running in the source tree.

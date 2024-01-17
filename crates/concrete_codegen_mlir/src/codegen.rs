@@ -1,9 +1,10 @@
-use std::{collections::HashMap, error::Error};
+use std::{char::MAX, collections::HashMap, error::Error};
 
 use bumpalo::Bump;
 use concrete_ast::{
     expressions::{
-        ArithOp, BinaryOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp, SimpleExpr,
+        ArithOp, BinaryOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp, PathSegment,
+        ValueExpr,
     },
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
@@ -15,10 +16,15 @@ use concrete_session::Session;
 use melior::{
     dialect::{
         arith::{self, CmpiPredicate},
-        cf, func, memref,
+        cf, func,
+        llvm::{self, r#type::opaque_pointer, LoadStoreOptions},
+        memref,
     },
     ir::{
-        attribute::{FlatSymbolRefAttribute, IntegerAttribute, StringAttribute, TypeAttribute},
+        attribute::{
+            DenseI64ArrayAttribute, FlatSymbolRefAttribute, IntegerAttribute, StringAttribute,
+            TypeAttribute,
+        },
         r#type::{FunctionType, IntegerType, MemRefType},
         Block, BlockRef, Location, Module as MeliorModule, Operation, Region, Type, Value,
         ValueLike,
@@ -145,25 +151,83 @@ impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
         context: &'ctx MeliorContext,
         spec: &TypeSpec,
     ) -> Result<Type<'ctx>, Box<dyn Error>> {
+        match spec.is_ref() {
+            Some(_) => Ok(llvm::r#type::opaque_pointer(context)),
+            None => self.resolve_type_spec_ref(context, spec),
+        }
+    }
+
+    /// Resolves the type this ref points to.
+    fn resolve_type_spec_ref(
+        &self,
+        context: &'ctx MeliorContext,
+        spec: &TypeSpec,
+    ) -> Result<Type<'ctx>, Box<dyn Error>> {
         Ok(match spec {
-            TypeSpec::Simple { name } => self.resolve_type(context, &name.name)?,
+            TypeSpec::Simple { name, .. } => self.resolve_type(context, &name.name)?,
             TypeSpec::Generic { name, .. } => self.resolve_type(context, &name.name)?,
+            TypeSpec::Array {
+                of_type,
+                span,
+                is_ref,
+                size,
+            } => match size {
+                Some(size) => {
+                    let inner_type = self.resolve_type_spec(context, of_type)?;
+                    MemRefType::new(inner_type, &[*size], None, None).into()
+                    /*
+                    llvm::r#type::array(
+                        self.resolve_type_spec(context, &of_type)?,
+                        (*size).try_into().expect("size was above u32"),
+                    )
+                    */
+                }
+                None => {
+                    //
+                    let inner_type = self.resolve_type_spec(context, of_type)?;
+                    Type::parse(context, &format!("memref<?x{inner_type}>")).unwrap()
+                    // MemRefType::new(inner_type, &[(u32::MAX) as u64], None, None).into()
+                    /*
+                    llvm::r#type::r#struct(
+                        context,
+                        &[
+                            llvm::r#type::opaque_pointer(context),
+                            IntegerType::new(context, 64).into(),
+                            IntegerType::new(context, 64).into(),
+                        ],
+                        false,
+                    )
+                    */
+                }
+            },
         })
     }
 
     fn is_type_signed(&self, type_info: &TypeSpec) -> bool {
         let signed = ["i8", "i16", "i32", "i64", "i128"];
         match type_info {
-            TypeSpec::Simple { name } => signed.contains(&name.name.as_str()),
-            TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
+            TypeSpec::Simple { name, is_ref, .. } => signed.contains(&name.name.as_str()),
+            TypeSpec::Generic { name, is_ref, .. } => signed.contains(&name.name.as_str()),
+            TypeSpec::Array {
+                of_type,
+                span,
+                is_ref,
+                size,
+            } => unreachable!(),
         }
     }
 
     fn is_float(&self, type_info: &TypeSpec) -> bool {
         let signed = ["f32", "f64"];
         match type_info {
-            TypeSpec::Simple { name } => signed.contains(&name.name.as_str()),
-            TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
+            TypeSpec::Simple { name, is_ref, .. } => signed.contains(&name.name.as_str()),
+            TypeSpec::Generic { name, is_ref, .. } => signed.contains(&name.name.as_str()),
+            TypeSpec::Array {
+                of_type,
+                span,
+                is_ref,
+                size,
+            } => unreachable!(),
         }
     }
 }
@@ -635,39 +699,9 @@ fn compile_expression<'ctx, 'parent: 'ctx>(
 ) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
     let location = Location::unknown(context);
     match info {
-        Expression::Simple(simple) => match simple {
-            SimpleExpr::ConstBool(value) => {
-                let value =
-                    IntegerAttribute::new((*value).into(), IntegerType::new(context, 1).into());
-                Ok(block
-                    .append_operation(arith::constant(context, value.into(), location))
-                    .result(0)?
-                    .into())
-            }
-            SimpleExpr::ConstChar(value) => {
-                let value =
-                    IntegerAttribute::new((*value) as i64, IntegerType::new(context, 32).into());
-                Ok(block
-                    .append_operation(arith::constant(context, value.into(), location))
-                    .result(0)?
-                    .into())
-            }
-            SimpleExpr::ConstInt(value) => {
-                let int_type = if let Some(type_info) = type_info {
-                    scope_ctx.resolve_type_spec(context, type_info)?
-                } else {
-                    IntegerType::new(context, 64).into()
-                };
-                let value = IntegerAttribute::new((*value) as i64, int_type);
-                Ok(block
-                    .append_operation(arith::constant(context, value.into(), location))
-                    .result(0)?
-                    .into())
-            }
-            SimpleExpr::ConstFloat(_) => todo!(),
-            SimpleExpr::ConstStr(_) => todo!(),
-            SimpleExpr::Path(value) => compile_path_op(session, context, scope_ctx, block, value),
-        },
+        Expression::Value(value) => compile_value_expr(
+            session, context, scope_ctx, _helper, block, value, type_info,
+        ),
         Expression::FnCall(value) => {
             compile_fn_call(session, context, scope_ctx, _helper, block, value)
         }
@@ -798,6 +832,55 @@ fn compile_expression<'ctx, 'parent: 'ctx>(
     }
 }
 
+fn compile_value_expr<'ctx, 'parent: 'ctx>(
+    session: &Session,
+    context: &'ctx MeliorContext,
+    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    _helper: &BlockHelper<'ctx, 'parent>,
+    block: &'parent Block<'ctx>,
+    value: &ValueExpr,
+    type_info: Option<&TypeSpec>,
+) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
+    let location = Location::unknown(context);
+    match value {
+        ValueExpr::ConstBool(value) => {
+            let value = IntegerAttribute::new((*value).into(), IntegerType::new(context, 1).into());
+            Ok(block
+                .append_operation(arith::constant(context, value.into(), location))
+                .result(0)?
+                .into())
+        }
+        ValueExpr::ConstChar(value) => {
+            let value =
+                IntegerAttribute::new((*value) as i64, IntegerType::new(context, 32).into());
+            Ok(block
+                .append_operation(arith::constant(context, value.into(), location))
+                .result(0)?
+                .into())
+        }
+        ValueExpr::ConstInt(value) => {
+            let int_type = if let Some(type_info) = type_info {
+                scope_ctx.resolve_type_spec(context, type_info)?
+            } else {
+                IntegerType::new(context, 64).into()
+            };
+            let value = IntegerAttribute::new((*value) as i64, int_type);
+            Ok(block
+                .append_operation(arith::constant(context, value.into(), location))
+                .result(0)?
+                .into())
+        }
+        ValueExpr::ConstFloat(_) => todo!(),
+        ValueExpr::ConstStr(_) => todo!(),
+        ValueExpr::Path(value) => {
+            compile_path_op(session, context, scope_ctx, _helper, block, value)
+        }
+        ValueExpr::Deref(value) => {
+            compile_deref(session, context, scope_ctx, _helper, block, value)
+        }
+    }
+}
+
 fn compile_fn_call<'ctx, 'parent: 'ctx>(
     session: &Session,
     context: &'ctx MeliorContext,
@@ -857,20 +940,22 @@ fn compile_path_op<'ctx, 'parent: 'ctx>(
     session: &Session,
     context: &'ctx MeliorContext,
     scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    helper: &BlockHelper<'ctx, 'parent>,
     block: &'parent Block<'ctx>,
     path: &PathOp,
 ) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
-    // For now only simple variables work.
+    // For now only simple and array variables work.
     // TODO: implement properly, this requires having structs implemented.
 
     let local = scope_ctx
         .locals
         .get(&path.first.name)
-        .expect("local not found");
+        .expect("local not found")
+        .clone();
 
     let location = get_location(context, session, path.first.span.from);
 
-    if local.alloca {
+    let mut value = if local.alloca {
         let k0 = block
             .append_operation(arith::constant(
                 context,
@@ -879,12 +964,228 @@ fn compile_path_op<'ctx, 'parent: 'ctx>(
             ))
             .result(0)?
             .into();
-        let value = block
+        block
             .append_operation(memref::load(local.value, &[k0], location))
             .result(0)?
-            .into();
-        Ok(value)
+            .into()
     } else {
-        Ok(local.value)
+        local.value
+    };
+
+    for segment in &path.extra {
+        match segment {
+            PathSegment::FieldAccess(_) => todo!(),
+            PathSegment::ArrayIndex(index) => {
+                let index =
+                    compile_value_expr(session, context, scope_ctx, helper, block, index, None)?;
+                let index_ty = Type::index(context);
+                let index = block
+                    .append_operation(melior::dialect::index::castu(index, index_ty, location))
+                    .result(0)?
+                    .into();
+
+                if let TypeSpec::Array {
+                    of_type,
+                    size,
+                    is_ref: _,
+                    span,
+                } = &local.type_spec
+                {
+                    let location = get_location(context, session, span.from);
+                    let inner_type = scope_ctx.resolve_type_spec(context, of_type)?;
+                    #[allow(clippy::if_same_then_else)]
+                    if size.is_some() {
+                        value = block
+                            .append_operation(memref::load(value, &[index], location))
+                            .result(0)?
+                            .into();
+                        /*
+                        // its a llvm.array
+                        let ptr = block
+                            .append_operation(llvm::get_element_ptr_dynamic(
+                                context,
+                                value,
+                                &[index],
+                                inner_type,
+                                opaque_pointer(context),
+                                location,
+                            ))
+                            .result(0)?
+                            .into();
+
+                        value = block
+                            .append_operation(llvm::load(
+                                context,
+                                ptr,
+                                inner_type,
+                                location,
+                                LoadStoreOptions::new(),
+                            ))
+                            .result(0)?
+                            .into();
+                        */
+                    } else {
+                        value = block
+                            .append_operation(memref::load(value, &[index], location))
+                            .result(0)?
+                            .into();
+                        // its a struct {ptr,u64,u64}
+                        /*
+                        let ptr = block
+                            .append_operation(llvm::extract_value(
+                                context,
+                                value,
+                                DenseI64ArrayAttribute::new(context, &[0]),
+                                opaque_pointer(context),
+                                location,
+                            ))
+                            .result(0)?
+                            .into();
+
+                        let elem_ptr = block
+                            .append_operation(llvm::get_element_ptr_dynamic(
+                                context,
+                                ptr,
+                                &[index],
+                                inner_type,
+                                opaque_pointer(context),
+                                location,
+                            ))
+                            .result(0)?
+                            .into();
+
+                        value = block
+                            .append_operation(llvm::load(
+                                context,
+                                elem_ptr,
+                                inner_type,
+                                location,
+                                LoadStoreOptions::new(),
+                            ))
+                            .result(0)?
+                            .into();
+                        */
+                    }
+                } else {
+                    panic!("type should be a array when indexing a value");
+                }
+            }
+        }
     }
+
+    Ok(value)
+}
+
+fn compile_deref<'ctx, 'parent: 'ctx>(
+    session: &Session,
+    context: &'ctx MeliorContext,
+    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    helper: &BlockHelper<'ctx, 'parent>,
+    block: &'parent Block<'ctx>,
+    path: &PathOp,
+) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
+    let local = scope_ctx
+        .locals
+        .get(&path.first.name)
+        .expect("local not found")
+        .clone();
+
+    let location = get_location(context, session, path.first.span.from);
+    let inner_type = scope_ctx.resolve_type_spec_ref(context, &local.type_spec)?;
+
+    let mut value = block
+        .append_operation(llvm::load(
+            context,
+            local.value,
+            inner_type,
+            location,
+            LoadStoreOptions::new(),
+        ))
+        .result(0)?
+        .into();
+
+    for segment in &path.extra {
+        match segment {
+            PathSegment::FieldAccess(_) => todo!(),
+            PathSegment::ArrayIndex(index) => {
+                let index =
+                    compile_value_expr(session, context, scope_ctx, helper, block, index, None)?;
+
+                if let TypeSpec::Array {
+                    of_type,
+                    size,
+                    is_ref: _,
+                    span,
+                } = &local.type_spec
+                {
+                    let location = get_location(context, session, span.from);
+                    let inner_type = scope_ctx.resolve_type_spec(context, of_type)?;
+                    if size.is_some() {
+                        // its a llvm.array
+                        let ptr = block
+                            .append_operation(llvm::get_element_ptr_dynamic(
+                                context,
+                                value,
+                                &[index],
+                                inner_type,
+                                opaque_pointer(context),
+                                location,
+                            ))
+                            .result(0)?
+                            .into();
+
+                        value = block
+                            .append_operation(llvm::load(
+                                context,
+                                ptr,
+                                inner_type,
+                                location,
+                                LoadStoreOptions::new(),
+                            ))
+                            .result(0)?
+                            .into();
+                    } else {
+                        // its a struct {ptr,u64,u64}
+                        let ptr = block
+                            .append_operation(llvm::extract_value(
+                                context,
+                                value,
+                                DenseI64ArrayAttribute::new(context, &[0]),
+                                opaque_pointer(context),
+                                location,
+                            ))
+                            .result(0)?
+                            .into();
+
+                        let elem_ptr = block
+                            .append_operation(llvm::get_element_ptr_dynamic(
+                                context,
+                                ptr,
+                                &[index],
+                                inner_type,
+                                opaque_pointer(context),
+                                location,
+                            ))
+                            .result(0)?
+                            .into();
+
+                        value = block
+                            .append_operation(llvm::load(
+                                context,
+                                elem_ptr,
+                                inner_type,
+                                location,
+                                LoadStoreOptions::new(),
+                            ))
+                            .result(0)?
+                            .into();
+                    }
+                } else {
+                    panic!("type should be a array when indexing a value");
+                }
+            }
+        }
+    }
+
+    Ok(value)
 }
