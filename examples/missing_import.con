@@ -1,0 +1,8 @@
+mod Simple {
+    import Other.{hello1};
+    import Other.Deep.{hello2};
+
+    fn main() -> i64 {
+        return hello1(2) + hello2(2);
+    }
+}

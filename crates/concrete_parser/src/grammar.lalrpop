@@ -188,12 +188,13 @@ pub Program: ast::Program = {
 // Modules
 
 pub(crate) Module: ast::modules::Module = {
-  "mod" <name:Ident> "{" <imports:ImportList?> <contents:ModuleItems> "}" => {
+  <lo:@L> "mod" <name:Ident> "{" <imports:ImportList?> <contents:ModuleItems> "}" <hi:@R> => {
     ast::modules::Module {
       doc_string: None,
       imports: imports.unwrap_or_else(Vec::new),
       name,
-      contents
+      contents,
+      span: Span::new(lo, hi),
     }
   }
 }
@@ -208,10 +209,11 @@ pub(crate) ImportList: Vec<ast::imports::ImportStmt> = {
 
 
 pub(crate) ImportStmt: ast::imports::ImportStmt = {
-  "import" <module:Dot<Ident>> "{" <symbols:Comma<Ident>> "}" ";"  => {
+  <lo:@L> "import" <module:Dot<Ident>> "{" <symbols:Comma<Ident>> "}" ";" <hi:@R>  => {
     ast::imports::ImportStmt {
       module,
       symbols,
+      span: Span::new(lo, hi),
     }
   }
 }
