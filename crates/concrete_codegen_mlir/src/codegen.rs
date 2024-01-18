@@ -898,7 +898,7 @@ fn compile_path_op<'ctx, 'parent: 'ctx>(
     let local = scope_ctx
         .locals
         .get(&path.first.name)
-        .expect("local not found")
+        .unwrap_or_else(|| panic!("local {} not found", path.first.name))
         .clone();
 
     let location = get_location(context, session, path.first.span.from);
