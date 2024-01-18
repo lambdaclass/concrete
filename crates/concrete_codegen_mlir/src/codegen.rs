@@ -39,7 +39,7 @@ pub fn compile_program(
         let module_info = ast_helper
             .modules
             .get(&module.name.name)
-            .expect("module not found");
+            .unwrap_or_else(|| panic!("module info not found for {}", module.name.name));
         compile_module(session, ctx, mlir_module, &ast_helper, module_info, module)?;
     }
     Ok(())
@@ -185,7 +185,12 @@ fn compile_module(
     for import in &module.imports {
         let target_module = ast_helper
             .get_module_from_import(&import.module)
-            .expect("failed to find import");
+            .unwrap_or_else(|| {
+                panic!(
+                    "failed to find import {:?} in module {}",
+                    import, module.name.name
+                )
+            });
 
         for symbol in &import.symbols {
             imports.insert(symbol.name.clone(), target_module);
@@ -211,10 +216,12 @@ fn compile_module(
             ModuleDefItem::Struct(_) => todo!(),
             ModuleDefItem::Type(_) => todo!(),
             ModuleDefItem::Module(info) => {
-                let module_info = module_info
-                    .modules
-                    .get(&info.name.name)
-                    .expect("submodule not found");
+                let module_info = module_info.modules.get(&info.name.name).unwrap_or_else(|| {
+                    panic!(
+                        "submodule {} not found while compiling module {}",
+                        info.name.name, module.name.name
+                    )
+                });
                 compile_module(session, context, mlir_module, ast_helper, module_info, info)?;
             }
         }
