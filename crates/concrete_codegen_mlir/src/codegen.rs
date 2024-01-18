@@ -3,8 +3,7 @@ use std::{collections::HashMap, error::Error};
 use bumpalo::Bump;
 use concrete_ast::{
     expressions::{
-        ArithOp, BinaryOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp, PathSegment,
-        ValueExpr,
+        ArithOp, BinaryOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp, ValueExpr,
     },
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
@@ -598,67 +597,7 @@ fn compile_assign_stmt<'ctx, 'parent: 'ctx>(
         Some(&local.type_spec),
     )?;
 
-    if info.target.extra.is_empty() {
-        block.append_operation(memref::store(value, local.value, &[], location));
-    } else {
-        let mut store_target = block
-            .append_operation(memref::load(local.value, &[], location))
-            .result(0)?
-            .into();
-
-        let mut segment_iter = info.target.extra.iter().peekable();
-
-        while let Some(segment) = segment_iter.next() {
-            match segment {
-                PathSegment::FieldAccess(_) => todo!(),
-                PathSegment::ArrayIndex(index) => {
-                    let index = compile_value_expr(
-                        session, context, scope_ctx, helper, block, index, None,
-                    )?;
-                    let index_ty = Type::index(context);
-                    let index = block
-                        .append_operation(melior::dialect::index::castu(index, index_ty, location))
-                        .result(0)?
-                        .into();
-
-                    if let TypeSpec::Array {
-                        of_type: _,
-                        size,
-                        is_ref: _,
-                        span,
-                    } = &local.type_spec
-                    {
-                        let location = get_location(context, session, span.from);
-
-                        #[allow(clippy::if_same_then_else)]
-                        if size.is_some() {
-                            // todo: check inbounds?
-                            store_target = block
-                                .append_operation(memref::load(store_target, &[index], location))
-                                .result(0)?
-                                .into();
-                        } else {
-                            store_target = block
-                                .append_operation(memref::load(store_target, &[index], location))
-                                .result(0)?
-                                .into();
-                        }
-
-                        if segment_iter.peek().is_none() {
-                            block.append_operation(memref::store(
-                                value,
-                                store_target,
-                                &[index],
-                                location,
-                            ));
-                        }
-                    } else {
-                        panic!("type should be a array when indexing a value");
-                    }
-                }
-            }
-        }
-    }
+    block.append_operation(memref::store(value, local.value, &[], location));
 
     Ok(())
 }

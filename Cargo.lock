@@ -978,9 +978,9 @@ dependencies = [
 
 [[package]]
 name = "melior"
-version = "0.15.1"
+version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "758bbd4448db9e994578ab48a6da5210512378f70ac1632cc8c2ae0fbd6c21b5"
+checksum = "878012ddccd6fdd099a4d98cebdecbaed9bc5eb325d0778ab9d4f4a52c67c18e"
 dependencies = [
  "dashmap",
  "melior-macro",
