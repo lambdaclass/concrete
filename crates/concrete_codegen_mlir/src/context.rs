@@ -4,7 +4,7 @@ use concrete_ast::Program;
 use concrete_session::Session;
 use melior::{
     dialect::DialectRegistry,
-    ir::{Location, Module as MeliorModule},
+    ir::{operation::OperationPrintingFlags, Location, Module as MeliorModule},
     utility::{register_all_dialects, register_all_llvm_translations, register_all_passes},
     Context as MeliorContext,
 };
@@ -43,10 +43,15 @@ impl Context {
 
         super::codegen::compile_program(session, &self.melior_context, &melior_module, program)?;
 
+        let print_flags = OperationPrintingFlags::new().enable_debug_info(true, true);
         tracing::debug!(
-            "MLIR Code before passes:\n{:#?}",
-            melior_module.as_operation()
+            "MLIR Code before passes:\n{}",
+            melior_module
+                .as_operation()
+                .to_string_with_flags(print_flags)?
         );
+
+        assert!(melior_module.as_operation().verify());
 
         // TODO: Add proper error handling.
         run_pass_manager(&self.melior_context, &mut melior_module).unwrap();

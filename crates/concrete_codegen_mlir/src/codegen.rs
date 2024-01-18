@@ -1,11 +1,13 @@
 use std::{collections::HashMap, error::Error};
 
+use bumpalo::Bump;
 use concrete_ast::{
-    common::Span,
-    expressions::{ArithOp, BinaryOp, CmpOp, Expression, LogicOp, PathOp, SimpleExpr},
+    expressions::{
+        ArithOp, BinaryOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp, SimpleExpr,
+    },
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
-    statements::{AssignStmt, LetStmt, LetStmtTarget, ReturnStmt, Statement},
+    statements::{AssignStmt, LetStmt, LetStmtTarget, ReturnStmt, Statement, WhileStmt},
     types::TypeSpec,
     Program,
 };
@@ -13,12 +15,13 @@ use concrete_session::Session;
 use melior::{
     dialect::{
         arith::{self, CmpiPredicate},
-        func, memref,
+        cf, func, memref,
     },
     ir::{
         attribute::{FlatSymbolRefAttribute, IntegerAttribute, StringAttribute, TypeAttribute},
         r#type::{FunctionType, IntegerType, MemRefType},
-        Block, Location, Module as MeliorModule, Region, Type, Value, ValueLike,
+        Block, BlockRef, Location, Module as MeliorModule, Operation, Region, Type, Value,
+        ValueLike,
     },
     Context as MeliorContext,
 };
@@ -36,30 +39,66 @@ pub fn compile_program(
 }
 
 #[derive(Debug, Clone)]
-pub struct LocalVar<'c, 'op> {
+pub struct LocalVar<'ctx, 'parent: 'ctx> {
     pub type_spec: TypeSpec,
     // If it's none its on a register, otherwise allocated on the stack.
-    pub memref_type: Option<MemRefType<'c>>,
-    pub value: Value<'c, 'op>,
+    pub alloca: bool,
+    pub value: Value<'ctx, 'parent>,
 }
 
-#[derive(Debug, Clone, Default)]
-struct CompilerContext<'c, 'op> {
-    pub locals: HashMap<String, LocalVar<'c, 'op>>,
+impl<'ctx, 'parent: 'ctx> LocalVar<'ctx, 'parent> {
+    pub fn param(value: Value<'ctx, 'parent>, type_spec: TypeSpec) -> Self {
+        Self {
+            value,
+            type_spec,
+            alloca: false,
+        }
+    }
+
+    pub fn alloca(value: Value<'ctx, 'parent>, type_spec: TypeSpec) -> Self {
+        Self {
+            value,
+            type_spec,
+            alloca: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ScopeContext<'ctx, 'parent: 'ctx> {
+    pub locals: HashMap<String, LocalVar<'ctx, 'parent>>,
     pub functions: HashMap<String, FunctionDef>,
+    pub function: Option<FunctionDef>,
 }
 
-impl<'c, 'op> CompilerContext<'c, 'op> {
+struct BlockHelper<'ctx, 'region: 'ctx> {
+    region: &'region Region<'ctx>,
+    blocks_arena: &'region Bump,
+}
+
+impl<'ctx, 'region> BlockHelper<'ctx, 'region> {
+    pub fn append_block(&self, block: Block<'ctx>) -> &'region BlockRef<'ctx, 'region> {
+        let block = self.region.append_block(block);
+
+        let block_ref: &'region mut BlockRef<'ctx, 'region> = self.blocks_arena.alloc(block);
+
+        block_ref
+    }
+}
+
+impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
     fn resolve_type(
         &self,
-        context: &'c MeliorContext,
+        context: &'ctx MeliorContext,
         name: &str,
-    ) -> Result<Type<'c>, Box<dyn Error>> {
+    ) -> Result<Type<'ctx>, Box<dyn Error>> {
         Ok(match name {
             "u64" | "i64" => IntegerType::new(context, 64).into(),
             "u32" | "i32" => IntegerType::new(context, 32).into(),
             "u16" | "i16" => IntegerType::new(context, 16).into(),
             "u8" | "i8" => IntegerType::new(context, 8).into(),
+            "f32" => Type::float32(context),
+            "f64" => Type::float64(context),
             "bool" => IntegerType::new(context, 1).into(),
             _ => todo!("custom type lookup"),
         })
@@ -67,9 +106,9 @@ impl<'c, 'op> CompilerContext<'c, 'op> {
 
     fn resolve_type_spec(
         &self,
-        context: &'c MeliorContext,
+        context: &'ctx MeliorContext,
         spec: &TypeSpec,
-    ) -> Result<Type<'c>, Box<dyn Error>> {
+    ) -> Result<Type<'ctx>, Box<dyn Error>> {
         Ok(match spec {
             TypeSpec::Simple { name } => self.resolve_type(context, &name.name)?,
             TypeSpec::Generic {
@@ -77,6 +116,22 @@ impl<'c, 'op> CompilerContext<'c, 'op> {
                 type_params: _,
             } => self.resolve_type(context, &name.name)?,
         })
+    }
+
+    fn is_type_signed(&self, type_info: &TypeSpec) -> bool {
+        let signed = ["i8", "i16", "i32", "i64", "i128"];
+        match type_info {
+            TypeSpec::Simple { name } => signed.contains(&name.name.as_str()),
+            TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
+        }
+    }
+
+    fn is_float(&self, type_info: &TypeSpec) -> bool {
+        let signed = ["f32", "f64"];
+        match type_info {
+            TypeSpec::Simple { name } => signed.contains(&name.name.as_str()),
+            TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
+        }
     }
 }
 
@@ -88,14 +143,18 @@ fn compile_module(
 ) -> Result<(), Box<dyn Error>> {
     // todo: handle imports
 
-    let mut compiler_ctx: CompilerContext = Default::default();
-
     let body = mlir_module.body();
+
+    let mut scope_ctx: ScopeContext = ScopeContext {
+        functions: Default::default(),
+        locals: Default::default(),
+        function: None,
+    };
 
     // save all function signatures
     for statement in &module.contents {
         if let ModuleDefItem::Function(info) = statement {
-            compiler_ctx
+            scope_ctx
                 .functions
                 .insert(info.decl.name.name.clone(), info.clone());
         }
@@ -105,7 +164,10 @@ fn compile_module(
         match statement {
             ModuleDefItem::Constant(_) => todo!(),
             ModuleDefItem::Function(info) => {
-                compile_function_def(session, context, &mut compiler_ctx, &body, info)?;
+                let mut scope_ctx = scope_ctx.clone();
+                scope_ctx.function = Some(info.clone());
+                let op = compile_function_def(session, context, &scope_ctx, info)?;
+                body.append_operation(op);
             }
             ModuleDefItem::Record(_) => todo!(),
             ModuleDefItem::Type(_) => todo!(),
@@ -115,52 +177,49 @@ fn compile_module(
     Ok(())
 }
 
-fn get_location<'c>(context: &'c MeliorContext, session: &Session, span: &Span) -> Location<'c> {
-    let (line, col) = session.get_line_and_column(span.from);
-    Location::new(context, &session.file_path.display().to_string(), line, col)
+fn get_location<'ctx>(
+    context: &'ctx MeliorContext,
+    session: &Session,
+    offset: usize,
+) -> Location<'ctx> {
+    let (_, line, col) = session.source.get_offset_line(offset).unwrap();
+    Location::new(
+        context,
+        &session.file_path.display().to_string(),
+        line + 1,
+        col + 1,
+    )
 }
 
-fn compile_function_def<'c, 'op>(
-    session: &Session,
-    context: &'c MeliorContext,
-    compiler_ctx: &mut CompilerContext<'c, 'op>,
-    block: &'op Block<'c>,
-    info: &FunctionDef,
-) -> Result<(), Box<dyn Error>> {
-    let region = Region::new();
+fn get_named_location<'ctx>(context: &'ctx MeliorContext, name: &str) -> Location<'ctx> {
+    Location::name(context, name, Location::unknown(context))
+}
 
-    let location = get_location(context, session, &info.decl.name.span);
+fn compile_function_def<'ctx, 'parent: 'ctx>(
+    session: &Session,
+    context: &'ctx MeliorContext,
+    scope_ctx: &ScopeContext<'ctx, 'parent>,
+    info: &FunctionDef,
+) -> Result<Operation<'ctx>, Box<dyn Error>> {
+    tracing::debug!("compiling function {:?}", info.decl.name.name);
+    let location = get_location(context, session, info.decl.name.span.from);
 
     // Setup function arguments
     let mut args = Vec::with_capacity(info.decl.params.len());
     let mut fn_args_types = Vec::with_capacity(info.decl.params.len());
 
     for param in &info.decl.params {
-        let param_type = compiler_ctx.resolve_type_spec(context, &param.r#type)?;
-        let loc = get_location(context, session, &param.name.span);
+        let param_type = scope_ctx.resolve_type_spec(context, &param.r#type)?;
+        let loc = get_location(context, session, param.name.span.from);
         args.push((param_type, loc));
         fn_args_types.push(param_type);
     }
 
-    let fn_block = Block::new(&args);
-
     // Create the function context
-    let mut fn_compiler_ctx = compiler_ctx.clone();
-
-    // Push arguments into locals
-    for (i, param) in info.decl.params.iter().enumerate() {
-        fn_compiler_ctx.locals.insert(
-            param.name.name.clone(),
-            LocalVar {
-                type_spec: param.r#type.clone(),
-                value: fn_block.argument(i)?.into(),
-                memref_type: None,
-            },
-        );
-    }
+    let region = Region::new();
 
     let return_type = if let Some(ret_type) = &info.decl.ret_type {
-        vec![fn_compiler_ctx.resolve_type_spec(context, ret_type)?]
+        vec![scope_ctx.resolve_type_spec(context, ret_type)?]
     } else {
         vec![]
     };
@@ -168,44 +227,228 @@ fn compile_function_def<'c, 'op>(
     let func_type =
         TypeAttribute::new(FunctionType::new(context, &fn_args_types, &return_type).into());
 
-    for stmt in &info.body {
-        match stmt {
-            Statement::Assign(info) => {
-                compile_assign_stmt(session, context, &mut fn_compiler_ctx, &fn_block, info)?
-            }
-            Statement::Match(_) => todo!(),
-            Statement::For(_) => todo!(),
-            Statement::If(_) => todo!(),
-            Statement::Let(info) => {
-                compile_let_stmt(session, context, &mut fn_compiler_ctx, &fn_block, info)?
-            }
-            Statement::Return(info) => {
-                compile_return_stmt(session, context, &mut fn_compiler_ctx, &fn_block, info)?
-            }
-            Statement::While(_) => todo!(),
-            Statement::FnCall(_) => todo!(),
+    {
+        let mut scope_ctx = scope_ctx.clone();
+        let mut fn_block = &region.append_block(Block::new(&args));
+
+        let blocks_arena = Bump::new();
+        let helper = BlockHelper {
+            region: &region,
+            blocks_arena: &blocks_arena,
+        };
+
+        // Push arguments into locals
+        for (i, param) in info.decl.params.iter().enumerate() {
+            scope_ctx.locals.insert(
+                param.name.name.clone(),
+                LocalVar::param(fn_block.argument(i)?.into(), param.r#type.clone()),
+            );
+        }
+
+        for stmt in &info.body {
+            fn_block =
+                compile_statement(session, context, &mut scope_ctx, &helper, fn_block, stmt)?;
         }
     }
 
-    region.append_block(fn_block);
-
-    block.append_operation(func::func(
+    Ok(func::func(
         context,
         StringAttribute::new(context, &info.decl.name.name),
         func_type,
         region,
         &[],
         location,
-    ));
-
-    Ok(())
+    ))
 }
 
-fn compile_let_stmt<'c, 'op>(
+fn compile_statement<'c, 'this: 'c>(
     session: &Session,
     context: &'c MeliorContext,
-    compiler_ctx: &mut CompilerContext<'c, 'op>,
-    block: &'op Block<'c>,
+    scope_ctx: &mut ScopeContext<'c, 'this>,
+    helper: &BlockHelper<'c, 'this>,
+    mut block: &'this BlockRef<'c, 'this>,
+    info: &Statement,
+) -> Result<&'this BlockRef<'c, 'this>, Box<dyn Error>> {
+    match info {
+        Statement::Assign(info) => {
+            compile_assign_stmt(session, context, scope_ctx, helper, block, info)?
+        }
+        Statement::Match(_) => todo!(),
+        Statement::For(_) => todo!(),
+        Statement::If(info) => {
+            block = compile_if_expr(session, context, scope_ctx, helper, block, info)?;
+        }
+        Statement::Let(info) => compile_let_stmt(session, context, scope_ctx, helper, block, info)?,
+        Statement::Return(info) => {
+            compile_return_stmt(session, context, scope_ctx, helper, block, info)?
+        }
+        Statement::While(info) => {
+            block = compile_while(session, context, scope_ctx, helper, block, info)?;
+        }
+        Statement::FnCall(info) => {
+            compile_fn_call(session, context, scope_ctx, helper, block, info)?;
+        }
+    }
+
+    Ok(block)
+}
+
+/// Compile a if expression / statement
+///
+/// This returns a block if any branch doesn't have a function return terminator.
+/// For example, if the if branch has a return and the else branch has a return,
+/// it wouldn't make sense to add a merging block and MLIR would give a error saying there is a operation after a terminator.
+///
+/// The returned block is the merger block, the one we jump after processing the if branches.
+///
+/// ```text
+///                       - then block -
+/// - if (prev block) - <                > merge block --
+///                       - else block -
+/// ```
+fn compile_if_expr<'c, 'this: 'c>(
+    session: &Session,
+    context: &'c MeliorContext,
+    scope_ctx: &mut ScopeContext<'c, 'this>,
+    helper: &BlockHelper<'c, 'this>,
+    block: &'this BlockRef<'c, 'this>,
+    info: &IfExpr,
+) -> Result<&'this BlockRef<'c, 'this>, Box<dyn Error>> {
+    let condition = compile_expression(
+        session,
+        context,
+        scope_ctx,
+        helper,
+        block,
+        &info.value,
+        None,
+    )?;
+
+    let mut then_successor = helper.append_block(Block::new(&[]));
+    let mut else_successor = helper.append_block(Block::new(&[]));
+
+    block.append_operation(cf::cond_br(
+        context,
+        condition,
+        then_successor,
+        else_successor,
+        &[],
+        &[],
+        get_named_location(context, "if"),
+    ));
+
+    {
+        let mut then_scope_ctx = scope_ctx.clone();
+        for stmt in &info.contents {
+            then_successor = compile_statement(
+                session,
+                context,
+                &mut then_scope_ctx,
+                helper,
+                then_successor,
+                stmt,
+            )?;
+        }
+    }
+
+    if let Some(else_contents) = info.r#else.as_ref() {
+        let mut else_scope_ctx = scope_ctx.clone();
+        for stmt in else_contents {
+            else_successor = compile_statement(
+                session,
+                context,
+                &mut else_scope_ctx,
+                helper,
+                else_successor,
+                stmt,
+            )?;
+        }
+    }
+
+    // both branches return
+    if then_successor.terminator().is_some() && else_successor.terminator().is_some() {
+        return Ok(then_successor);
+    }
+
+    let merge_block = helper.append_block(Block::new(&[]));
+
+    if then_successor.terminator().is_none() {
+        then_successor.append_operation(cf::br(merge_block, &[], Location::unknown(context)));
+    }
+
+    if else_successor.terminator().is_none() {
+        else_successor.append_operation(cf::br(merge_block, &[], Location::unknown(context)));
+    }
+
+    Ok(merge_block)
+}
+
+fn compile_while<'c, 'this: 'c>(
+    session: &Session,
+    context: &'c MeliorContext,
+    scope_ctx: &mut ScopeContext<'c, 'this>,
+    helper: &BlockHelper<'c, 'this>,
+    block: &'this BlockRef<'c, 'this>,
+    info: &WhileStmt,
+) -> Result<&'this BlockRef<'c, 'this>, Box<dyn Error>> {
+    let location = Location::unknown(context);
+
+    let check_block = helper.append_block(Block::new(&[]));
+
+    block.append_operation(cf::br(check_block, &[], location));
+
+    let body_block = helper.append_block(Block::new(&[]));
+    let merge_block = helper.append_block(Block::new(&[]));
+
+    let condition = compile_expression(
+        session,
+        context,
+        scope_ctx,
+        helper,
+        check_block,
+        &info.value,
+        None,
+    )?;
+
+    check_block.append_operation(cf::cond_br(
+        context,
+        condition,
+        body_block,
+        merge_block,
+        &[],
+        &[],
+        location,
+    ));
+
+    let mut body_block = body_block;
+
+    {
+        let mut body_scope_ctx = scope_ctx.clone();
+        for stmt in &info.contents {
+            body_block = compile_statement(
+                session,
+                context,
+                &mut body_scope_ctx,
+                helper,
+                body_block,
+                stmt,
+            )?;
+        }
+    }
+
+    if body_block.terminator().is_none() {
+        body_block.append_operation(cf::br(check_block, &[], location));
+    }
+
+    Ok(merge_block)
+}
+
+fn compile_let_stmt<'ctx, 'parent: 'ctx>(
+    session: &Session,
+    context: &'ctx MeliorContext,
+    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    helper: &BlockHelper<'ctx, 'parent>,
+    block: &'parent Block<'ctx>,
     info: &LetStmt,
 ) -> Result<(), Box<dyn Error>> {
     match &info.target {
@@ -213,13 +456,14 @@ fn compile_let_stmt<'c, 'op>(
             let value = compile_expression(
                 session,
                 context,
-                compiler_ctx,
+                scope_ctx,
+                helper,
                 block,
                 &info.value,
                 Some(r#type),
             )?;
 
-            let location = get_location(context, session, &name.span);
+            let location = get_location(context, session, name.span.from);
 
             let memref_type = MemRefType::new(value.r#type(), &[1], None, None);
 
@@ -244,14 +488,9 @@ fn compile_let_stmt<'c, 'op>(
                 .into();
             block.append_operation(memref::store(value, alloca, &[k0], location));
 
-            compiler_ctx.locals.insert(
-                name.name.clone(),
-                LocalVar {
-                    type_spec: r#type.clone(),
-                    memref_type: Some(memref_type),
-                    value: alloca,
-                },
-            );
+            scope_ctx
+                .locals
+                .insert(name.name.clone(), LocalVar::alloca(alloca, r#type.clone()));
 
             Ok(())
         }
@@ -259,32 +498,31 @@ fn compile_let_stmt<'c, 'op>(
     }
 }
 
-fn compile_assign_stmt<'c, 'op>(
+fn compile_assign_stmt<'ctx, 'parent: 'ctx>(
     session: &Session,
-    context: &'c MeliorContext,
-    compiler_ctx: &mut CompilerContext<'c, 'op>,
-    block: &'op Block<'c>,
+    context: &'ctx MeliorContext,
+    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    helper: &BlockHelper<'ctx, 'parent>,
+    block: &'parent Block<'ctx>,
     info: &AssignStmt,
 ) -> Result<(), Box<dyn Error>> {
     // todo: implement properly for structs, right now only really works for simple variables.
 
-    let local = compiler_ctx
+    let local = scope_ctx
         .locals
         .get(&info.target.first.name)
         .expect("local should exist")
         .clone();
 
-    assert!(
-        local.memref_type.is_some(),
-        "can only mutate local stack variables"
-    );
+    assert!(local.alloca, "can only mutate local stack variables");
 
-    let location = get_location(context, session, &info.target.first.span);
+    let location = get_location(context, session, info.target.first.span.from);
 
     let value = compile_expression(
         session,
         context,
-        compiler_ctx,
+        scope_ctx,
+        helper,
         block,
         &info.value,
         Some(&local.type_spec),
@@ -303,26 +541,43 @@ fn compile_assign_stmt<'c, 'op>(
     Ok(())
 }
 
-fn compile_return_stmt<'c, 'op>(
+fn compile_return_stmt<'ctx, 'parent: 'ctx>(
     session: &Session,
-    context: &'c MeliorContext,
-    compiler_ctx: &mut CompilerContext<'c, 'op>,
-    block: &'op Block<'c>,
+    context: &'ctx MeliorContext,
+    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    helper: &BlockHelper<'ctx, 'parent>,
+    block: &'parent Block<'ctx>,
     info: &ReturnStmt,
 ) -> Result<(), Box<dyn Error>> {
-    let value = compile_expression(session, context, compiler_ctx, block, &info.value, None)?;
+    let value = compile_expression(
+        session,
+        context,
+        scope_ctx,
+        helper,
+        block,
+        &info.value,
+        scope_ctx
+            .function
+            .as_ref()
+            .unwrap()
+            .decl
+            .ret_type
+            .clone()
+            .as_ref(),
+    )?;
     block.append_operation(func::r#return(&[value], Location::unknown(context)));
     Ok(())
 }
 
-fn compile_expression<'c, 'op>(
+fn compile_expression<'ctx, 'parent: 'ctx>(
     session: &Session,
-    context: &'c MeliorContext,
-    compiler_ctx: &mut CompilerContext<'c, 'op>,
-    block: &'op Block<'c>,
+    context: &'ctx MeliorContext,
+    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    _helper: &BlockHelper<'ctx, 'parent>,
+    block: &'parent Block<'ctx>,
     info: &Expression,
     type_info: Option<&TypeSpec>,
-) -> Result<Value<'c, 'op>, Box<dyn Error>> {
+) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
     let location = Location::unknown(context);
     match info {
         Expression::Simple(simple) => match simple {
@@ -344,7 +599,7 @@ fn compile_expression<'c, 'op>(
             }
             SimpleExpr::ConstInt(value) => {
                 let int_type = if let Some(type_info) = type_info {
-                    compiler_ctx.resolve_type_spec(context, type_info)?
+                    scope_ctx.resolve_type_spec(context, type_info)?
                 } else {
                     IntegerType::new(context, 64).into()
                 };
@@ -356,71 +611,54 @@ fn compile_expression<'c, 'op>(
             }
             SimpleExpr::ConstFloat(_) => todo!(),
             SimpleExpr::ConstStr(_) => todo!(),
-            SimpleExpr::Path(value) => {
-                compile_path_op(session, context, compiler_ctx, block, value)
-            }
+            SimpleExpr::Path(value) => compile_path_op(session, context, scope_ctx, block, value),
         },
         Expression::FnCall(value) => {
-            let mut args = Vec::with_capacity(value.args.len());
-            let location = get_location(context, session, &value.target.span);
-
-            let target_fn = compiler_ctx
-                .functions
-                .get(&value.target.name)
-                .expect("function not found")
-                .clone();
-
-            assert_eq!(
-                value.args.len(),
-                target_fn.decl.params.len(),
-                "parameter length doesnt match"
-            );
-
-            for (arg, arg_info) in value.args.iter().zip(&target_fn.decl.params) {
-                let value = compile_expression(
-                    session,
-                    context,
-                    compiler_ctx,
-                    block,
-                    arg,
-                    Some(&arg_info.r#type),
-                )?;
-                args.push(value);
-            }
-
-            let return_type = if let Some(ret_type) = &target_fn.decl.ret_type {
-                vec![compiler_ctx.resolve_type_spec(context, ret_type)?]
-            } else {
-                vec![]
-            };
-
-            Ok(block
-                .append_operation(func::call(
-                    context,
-                    FlatSymbolRefAttribute::new(context, &value.target.name),
-                    &args,
-                    &return_type,
-                    location,
-                ))
-                .result(0)?
-                .into())
+            compile_fn_call(session, context, scope_ctx, _helper, block, value)
         }
         Expression::Match(_) => todo!(),
         Expression::If(_) => todo!(),
         Expression::UnaryOp(_, _) => todo!(),
         Expression::BinaryOp(lhs, op, rhs) => {
-            let lhs = compile_expression(session, context, compiler_ctx, block, lhs, type_info)?;
-            let rhs = compile_expression(session, context, compiler_ctx, block, rhs, type_info)?;
+            let lhs =
+                compile_expression(session, context, scope_ctx, _helper, block, lhs, type_info)?;
+            let rhs =
+                compile_expression(session, context, scope_ctx, _helper, block, rhs, type_info)?;
 
             let op = match op {
-                // todo: check signedness
-                BinaryOp::Arith(arith_op) => match arith_op {
-                    ArithOp::Add => arith::addi(lhs, rhs, location),
-                    ArithOp::Sub => arith::subi(lhs, rhs, location),
-                    ArithOp::Mul => arith::muli(lhs, rhs, location),
-                    ArithOp::Div => arith::divsi(lhs, rhs, location),
-                    ArithOp::Mod => arith::remsi(lhs, rhs, location),
-                },
+                BinaryOp::Arith(arith_op) => {
+                    let type_info = type_info.expect("type info missing");
+
+                    if scope_ctx.is_float(type_info) {
+                        match arith_op {
+                            ArithOp::Add => arith::addf(lhs, rhs, location),
+                            ArithOp::Sub => arith::subf(lhs, rhs, location),
+                            ArithOp::Mul => arith::mulf(lhs, rhs, location),
+                            ArithOp::Div => arith::divf(lhs, rhs, location),
+                            ArithOp::Mod => arith::remf(lhs, rhs, location),
+                        }
+                    } else {
+                        match arith_op {
+                            ArithOp::Add => arith::addi(lhs, rhs, location),
+                            ArithOp::Sub => arith::subi(lhs, rhs, location),
+                            ArithOp::Mul => arith::muli(lhs, rhs, location),
+                            ArithOp::Div => {
+                                if scope_ctx.is_type_signed(type_info) {
+                                    arith::divsi(lhs, rhs, location)
+                                } else {
+                                    arith::divui(lhs, rhs, location)
+                                }
+                            }
+                            ArithOp::Mod => {
+                                if scope_ctx.is_type_signed(type_info) {
+                                    arith::remsi(lhs, rhs, location)
+                                } else {
+                                    arith::remui(lhs, rhs, location)
+                                }
+                            }
+                        }
+                    }
+                }
                 BinaryOp::Logic(logic_op) => match logic_op {
                     LogicOp::And => {
                         let const_true = block
@@ -505,24 +743,78 @@ fn compile_expression<'c, 'op>(
     }
 }
 
-fn compile_path_op<'c, 'op>(
+fn compile_fn_call<'ctx, 'parent: 'ctx>(
     session: &Session,
-    context: &'c MeliorContext,
-    compiler_ctx: &mut CompilerContext<'c, 'op>,
-    block: &'op Block<'c>,
+    context: &'ctx MeliorContext,
+    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    _helper: &BlockHelper<'ctx, 'parent>,
+    block: &'parent Block<'ctx>,
+    info: &FnCallOp,
+) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
+    let mut args = Vec::with_capacity(info.args.len());
+    let location = get_location(context, session, info.target.span.from);
+
+    let target_fn = scope_ctx
+        .functions
+        .get(&info.target.name)
+        .expect("function not found")
+        .clone();
+
+    assert_eq!(
+        info.args.len(),
+        target_fn.decl.params.len(),
+        "parameter length doesnt match"
+    );
+
+    for (arg, arg_info) in info.args.iter().zip(&target_fn.decl.params) {
+        let value = compile_expression(
+            session,
+            context,
+            scope_ctx,
+            _helper,
+            block,
+            arg,
+            Some(&arg_info.r#type),
+        )?;
+        args.push(value);
+    }
+
+    let return_type = if let Some(ret_type) = &target_fn.decl.ret_type {
+        vec![scope_ctx.resolve_type_spec(context, ret_type)?]
+    } else {
+        vec![]
+    };
+
+    Ok(block
+        .append_operation(func::call(
+            context,
+            FlatSymbolRefAttribute::new(context, &info.target.name),
+            &args,
+            &return_type,
+            location,
+        ))
+        .result(0)?
+        .into())
+}
+
+fn compile_path_op<'ctx, 'parent: 'ctx>(
+    session: &Session,
+    context: &'ctx MeliorContext,
+    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    block: &'parent Block<'ctx>,
     path: &PathOp,
-) -> Result<Value<'c, 'op>, Box<dyn Error>> {
+) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
     // For now only simple variables work.
     // TODO: implement properly, this requires having structs implemented.
 
-    let local = compiler_ctx
+    let local = scope_ctx
         .locals
         .get(&path.first.name)
         .expect("local not found");
 
-    let location = get_location(context, session, &path.first.span);
+    let location = get_location(context, session, path.first.span.from);
 
-    if let Some(_memref_type) = local.memref_type {
+    if local.alloca {
         let k0 = block
             .append_operation(arith::constant(
                 context,

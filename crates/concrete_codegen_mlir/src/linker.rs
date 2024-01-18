@@ -64,6 +64,22 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), std:
         }
         #[cfg(target_os = "linux")]
         {
+            let (scrt1, crti, crtn) = {
+                if file_exists("/usr/lib64/Scrt1.o") {
+                    (
+                        "/usr/lib64/Scrt1.o",
+                        "/usr/lib64/crti.o",
+                        "/usr/lib64/crtn.o",
+                    )
+                } else {
+                    (
+                        "/lib/x86_64-linux-gnu/Scrt1.o",
+                        "/lib/x86_64-linux-gnu/crti.o",
+                        "/lib/x86_64-linux-gnu/crtn.o",
+                    )
+                }
+            };
+
             &[
                 "-pie",
                 "--hash-style=gnu",
@@ -72,16 +88,17 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), std:
                 "/lib64/ld-linux-x86-64.so.2",
                 "-m",
                 "elf_x86_64",
-                "/usr/lib64/Scrt1.o",
-                "/usr/lib64/crti.o",
+                scrt1,
+                crti,
                 "-o",
                 &output_filename.display().to_string(),
                 "-L/lib64",
                 "-L/usr/lib64",
+                "-L/lib/x86_64-linux-gnu",
                 "-zrelro",
                 "--no-as-needed",
                 "-lc",
-                "/usr/lib64/crtn.o",
+                crtn,
                 &input_path.display().to_string(),
             ]
         }
@@ -95,4 +112,9 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), std:
     let proc = linker.args(args.iter()).spawn()?;
     proc.wait_with_output()?;
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn file_exists(path: &str) -> bool {
+    Path::new(path).exists()
 }
