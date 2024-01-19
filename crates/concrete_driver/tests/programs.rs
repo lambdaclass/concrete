@@ -130,3 +130,36 @@ fn test_import() {
     let code = output.status.code().unwrap();
     assert_eq!(code, 8);
 }
+
+#[test]
+fn test_floats() {
+    let source = r#"
+        mod Simple {
+            fn main() -> i64 {
+                let a: f32 = my_f32(2.0, 4.0);
+                let b: f64 = my_f64(2.0, 4.0);
+                return 1;
+            }
+
+            fn my_f32(x: f32, y: f32) -> f32 {
+                let literal: f32 = 2.0;
+                let literal2: f32 = 2.;
+                let literal3: f32 = .1;
+                return x + y + literal2 + literal3;
+            }
+
+            fn my_f64(x: f64, y: f64) -> f64 {
+                let literal: f64 = 2.0;
+                let literal2: f64 = 2.;
+                let literal3: f64 = .1;
+                return x + y + literal2 + literal3;
+            }
+        }
+    "#;
+
+    let result = compile_program(source, "floats", false).expect("failed to compile");
+
+    let output = run_program(&result.binary_file).expect("failed to run");
+    let code = output.status.code().unwrap();
+    assert_eq!(code, 1);
+}

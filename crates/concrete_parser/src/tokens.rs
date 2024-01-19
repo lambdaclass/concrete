@@ -57,12 +57,25 @@ pub enum Token {
     Identifier(String),
 
     // Literals
-    #[regex(r"\d+", |lex| lex.slice().parse::<u64>().unwrap())]
-    Integer(u64),
-    #[regex(r#""(?:[^"]|\\")*""#, |lex| lex.slice().to_string())]
+    #[regex(r"\d+", |lex| lex.slice().parse::<u128>().unwrap(), priority = 2)]
+    Integer(u128),
+    #[regex(r"([0-9]+([.][0-9]*)?|[.][0-9]+)", |lex| lex.slice().to_string(), priority = 1)]
+    Float(String),
+    #[regex(r#""(?:[^"]|\\")*""#, |lex| {
+        let slice = lex.slice();
+        let len = slice.len();
+        unescaper::unescape(&slice[1..(len-1)]).expect("failed to unescape string")
+    })]
     String(String),
     #[regex(r"(true|false)", |lex| lex.slice().parse::<bool>().unwrap())]
     Boolean(bool),
+    #[regex(r#"'(?:[^']|\\')*'"#, |lex| {
+        let slice = lex.slice();
+        let len = slice.len();
+        let real_char = unescaper::unescape(&slice[1..(len-1)]).expect("failed to unescape char").to_string();
+        real_char.chars().next().unwrap()
+    })]
+    Char(char),
 
     #[token("(")]
     LeftParen,

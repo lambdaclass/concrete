@@ -15,8 +15,8 @@ pub enum Expression {
 pub enum SimpleExpr {
     ConstBool(bool),
     ConstChar(char),
-    ConstInt(u64),
-    ConstFloat(()),
+    ConstInt(u128),
+    ConstFloat(String),
     ConstStr(String),
     Path(PathOp),
 }

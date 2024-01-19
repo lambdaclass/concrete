@@ -30,8 +30,10 @@ extern {
 
     // literals
     "identifier" => Token::Identifier(<String>),
-    "integer" => Token::Integer(<u64>),
+    "integer" => Token::Integer(<u128>),
+    "float" => Token::Float(<String>),
     "string" => Token::String(<String>),
+    "char" => Token::Char(<char>),
     "boolean" => Token::Boolean(<bool>),
 
     // Other
@@ -341,8 +343,10 @@ pub UnaryOp: ast::expressions::UnaryOp = {
 
 pub(crate) SimpleExpr: ast::expressions::SimpleExpr = {
   <"integer"> => ast::expressions::SimpleExpr::ConstInt(<>),
+  <"float"> => ast::expressions::SimpleExpr::ConstFloat(<>),
   <"boolean"> => ast::expressions::SimpleExpr::ConstBool(<>),
   <"string"> => ast::expressions::SimpleExpr::ConstStr(<>),
+  <"char"> => ast::expressions::SimpleExpr::ConstChar(<>),
   <PathOp> => ast::expressions::SimpleExpr::Path(<>),
 }
 

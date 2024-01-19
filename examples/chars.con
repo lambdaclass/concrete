@@ -1,0 +1,13 @@
+ mod Simple {
+    fn main() -> i64 {
+        let a: char = hello_chars('\t');
+        return 1;
+    }
+
+    fn hello_chars(a: char) -> char {
+        let x: char = 'b';
+        let newline: char = '\n';
+
+        return x + newline + a;
+    }
+}
