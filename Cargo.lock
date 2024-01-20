@@ -375,6 +375,7 @@ dependencies = [
  "bumpalo",
  "cc",
  "concrete_ast",
+ "concrete_check",
  "concrete_session",
  "itertools 0.12.0",
  "llvm-sys",

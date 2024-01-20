@@ -11,6 +11,7 @@ use concrete_ast::{
     types::TypeSpec,
     Program,
 };
+use concrete_check::ast_helper::{AstHelper, ModuleInfo};
 use concrete_session::Session;
 use melior::{
     dialect::{
@@ -25,8 +26,6 @@ use melior::{
     },
     Context as MeliorContext,
 };
-
-use crate::ast_helper::{AstHelper, ModuleInfo};
 
 pub fn compile_program(
     session: &Session,

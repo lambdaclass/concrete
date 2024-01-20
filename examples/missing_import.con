@@ -1,8 +1,19 @@
 mod Simple {
     import Other.{hello1};
     import Other.Deep.{hello2};
+    import Hello.{world};
 
     fn main() -> i64 {
         return hello1(2) + hello2(2);
     }
+}
+
+mod Hello {
+    fn a() {
+        return 1;
+    }
+}
+
+mod A {
+
 }

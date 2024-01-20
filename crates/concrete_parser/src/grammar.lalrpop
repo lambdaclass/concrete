@@ -188,12 +188,12 @@ pub Program: ast::Program = {
 // Modules
 
 pub(crate) Module: ast::modules::Module = {
-  <lo:@L> "mod" <name:Ident> "{" <imports:ImportList?> <contents:ModuleItems> "}" <hi:@R> => {
+  <lo:@L> "mod" <name:Ident> "{" <imports:ImportList?> <contents:ModuleItems?> "}" <hi:@R> => {
     ast::modules::Module {
       doc_string: None,
       imports: imports.unwrap_or_else(Vec::new),
       name,
-      contents,
+      contents: contents.unwrap_or_else(Vec::new),
       span: Span::new(lo, hi),
     }
   }
@@ -270,7 +270,7 @@ pub(crate) Param: ast::functions::Param = {
 
 pub(crate) FunctionDef: ast::functions::FunctionDef = {
   <is_pub:"pub"?> "fn" <name:Ident> <generic_params:GenericParams?> "(" <params:Comma<Param>> ")" <ret_type:FunctionRetType?> "{"
-    <statements:StatementList>
+    <statements:StatementList?>
   "}" => {
     ast::functions::FunctionDef {
       decl: ast::functions::FunctionDecl {
@@ -280,7 +280,7 @@ pub(crate) FunctionDef: ast::functions::FunctionDef = {
         params,
         ret_type,
       },
-      body: statements
+      body: statements.unwrap_or_else(Vec::new)
     }
   }
 }
