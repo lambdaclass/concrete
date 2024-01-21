@@ -135,7 +135,25 @@ impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
             "f32" => Type::float32(context),
             "f64" => Type::float64(context),
             "bool" => IntegerType::new(context, 1).into(),
-            _ => todo!("custom type lookup"),
+            name => {
+                if let Some(module) = self.imports.get(name) {
+                    // a import
+                    self.resolve_type_spec(
+                        context,
+                        &module.types.get(name).expect("failed to find type").value,
+                    )?
+                } else {
+                    self.resolve_type_spec(
+                        context,
+                        &self
+                            .module_info
+                            .types
+                            .get(name)
+                            .expect("failed to find type")
+                            .value,
+                    )?
+                }
+            }
         })
     }
 
@@ -197,8 +215,6 @@ fn compile_module(
     module_info: &ModuleInfo<'_>,
     module: &Module,
 ) -> Result<(), Box<dyn Error>> {
-    // todo: handle imports
-
     let body = mlir_module.body();
 
     let mut imports = HashMap::new();

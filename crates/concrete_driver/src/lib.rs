@@ -91,7 +91,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
     tracing::debug!("Compiling with session: {:#?}", session);
 
-    if let Err(errors) = concrete_check::check_program(&program, &session) {
+    if let Err(errors) = concrete_check::check_program(&program) {
         for error in &errors {
             let path = session.file_path.display().to_string();
             error

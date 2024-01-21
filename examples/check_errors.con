@@ -6,6 +6,10 @@ mod Simple {
     fn main() -> i64 {
         return hello1(2) + hello2(2);
     }
+
+    fn lol(a: x) -> b {
+
+    }
 }
 
 mod Hello {
