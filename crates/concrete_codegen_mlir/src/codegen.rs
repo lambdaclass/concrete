@@ -23,7 +23,7 @@ use melior::{
             DenseI64ArrayAttribute, FlatSymbolRefAttribute, IntegerAttribute, StringAttribute,
             TypeAttribute,
         },
-        r#type::{id, FunctionType, IntegerType, MemRefType},
+        r#type::{FunctionType, IntegerType, MemRefType},
         Block, BlockRef, Location, Module as MeliorModule, Operation, Region, Value, ValueLike,
     },
     Context as MeliorContext,
