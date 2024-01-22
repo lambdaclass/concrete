@@ -20,13 +20,15 @@ use melior::{
     ir::{
         attribute::{FlatSymbolRefAttribute, IntegerAttribute, StringAttribute, TypeAttribute},
         r#type::{FunctionType, IntegerType, MemRefType},
-        Block, BlockRef, Location, Module as MeliorModule, Operation, Region, Type, Value,
-        ValueLike,
+        Block, BlockRef, Location, Module as MeliorModule, Operation, Region, Value, ValueLike,
     },
     Context as MeliorContext,
 };
 
-use crate::ast_helper::{AstHelper, ModuleInfo};
+use crate::{
+    ast_helper::{AstHelper, ModuleInfo},
+    scope_context::ScopeContext,
+};
 
 pub fn compile_program(
     session: &Session,
@@ -71,14 +73,6 @@ impl<'ctx, 'parent: 'ctx> LocalVar<'ctx, 'parent> {
     }
 }
 
-#[derive(Debug, Clone)]
-struct ScopeContext<'ctx, 'parent: 'ctx> {
-    pub locals: HashMap<String, LocalVar<'ctx, 'parent>>,
-    pub function: Option<FunctionDef>,
-    pub imports: HashMap<String, &'parent ModuleInfo<'parent>>,
-    pub module_info: &'parent ModuleInfo<'parent>,
-}
-
 struct BlockHelper<'ctx, 'region: 'ctx> {
     region: &'region Region<'ctx>,
     blocks_arena: &'region Bump,
@@ -91,102 +85,6 @@ impl<'ctx, 'region> BlockHelper<'ctx, 'region> {
         let block_ref: &'region mut BlockRef<'ctx, 'region> = self.blocks_arena.alloc(block);
 
         block_ref
-    }
-}
-
-impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
-    /// Returns the symbol name from a local name.
-    pub fn get_symbol_name(&self, local_name: &str) -> String {
-        if local_name == "main" {
-            return local_name.to_string();
-        }
-
-        if let Some(module) = self.imports.get(local_name) {
-            // a import
-            module.get_symbol_name(local_name)
-        } else {
-            let mut result = self.module_info.name.clone();
-
-            result.push_str("::");
-            result.push_str(local_name);
-
-            result
-        }
-    }
-
-    pub fn get_function(&self, local_name: &str) -> Option<&FunctionDef> {
-        if let Some(module) = self.imports.get(local_name) {
-            // a import
-            module.functions.get(local_name).copied()
-        } else {
-            self.module_info.functions.get(local_name).copied()
-        }
-    }
-
-    fn resolve_type(
-        &self,
-        context: &'ctx MeliorContext,
-        name: &str,
-    ) -> Result<Type<'ctx>, Box<dyn Error>> {
-        Ok(match name {
-            "u64" | "i64" => IntegerType::new(context, 64).into(),
-            "u32" | "i32" => IntegerType::new(context, 32).into(),
-            "u16" | "i16" => IntegerType::new(context, 16).into(),
-            "u8" | "i8" => IntegerType::new(context, 8).into(),
-            "f32" => Type::float32(context),
-            "f64" => Type::float64(context),
-            "bool" => IntegerType::new(context, 1).into(),
-            _ => todo!("custom type lookup"),
-        })
-    }
-
-    fn resolve_type_spec(
-        &self,
-        context: &'ctx MeliorContext,
-        spec: &TypeSpec,
-    ) -> Result<Type<'ctx>, Box<dyn Error>> {
-        match spec.is_ref() {
-            Some(_) => {
-                Ok(
-                    MemRefType::new(self.resolve_type_spec_ref(context, spec)?, &[], None, None)
-                        .into(),
-                )
-            }
-            None => self.resolve_type_spec_ref(context, spec),
-        }
-    }
-
-    /// Resolves the type this ref points to.
-    fn resolve_type_spec_ref(
-        &self,
-        context: &'ctx MeliorContext,
-        spec: &TypeSpec,
-    ) -> Result<Type<'ctx>, Box<dyn Error>> {
-        Ok(match spec {
-            TypeSpec::Simple { name, .. } => self.resolve_type(context, &name.name)?,
-            TypeSpec::Generic { name, .. } => self.resolve_type(context, &name.name)?,
-            TypeSpec::Array { .. } => {
-                todo!("implement arrays")
-            }
-        })
-    }
-
-    fn is_type_signed(&self, type_info: &TypeSpec) -> bool {
-        let signed = ["i8", "i16", "i32", "i64", "i128"];
-        match type_info {
-            TypeSpec::Simple { name, .. } => signed.contains(&name.name.as_str()),
-            TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
-            TypeSpec::Array { .. } => unreachable!(),
-        }
-    }
-
-    fn is_float(&self, type_info: &TypeSpec) -> bool {
-        let signed = ["f32", "f64"];
-        match type_info {
-            TypeSpec::Simple { name, .. } => signed.contains(&name.name.as_str()),
-            TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
-            TypeSpec::Array { .. } => unreachable!(),
-        }
     }
 }
 
@@ -235,7 +133,7 @@ fn compile_module(
                 let op = compile_function_def(session, context, &scope_ctx, info)?;
                 body.append_operation(op);
             }
-            ModuleDefItem::Struct(_) => todo!(),
+            ModuleDefItem::Struct(_) => {}
             ModuleDefItem::Type(_) => todo!(),
             ModuleDefItem::Module(info) => {
                 let module_info = module_info.modules.get(&info.name.name).unwrap_or_else(|| {

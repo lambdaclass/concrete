@@ -36,6 +36,7 @@ mod error;
 pub mod linker;
 mod module;
 mod pass_manager;
+mod scope_context;
 
 /// Returns the object file path.
 pub fn compile(session: &Session, program: &Program) -> Result<PathBuf, Box<dyn Error>> {

@@ -5,6 +5,7 @@ use crate::{
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StructDecl {
+    pub is_pub: bool,
     pub doc_string: Option<DocString>,
     pub name: Ident,
     pub type_params: Vec<GenericParam>,

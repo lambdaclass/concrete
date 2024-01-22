@@ -1,0 +1,26 @@
+mod Fibonacci {
+
+    struct Node {
+        a: i32,
+        b: i32,
+    }
+
+    struct Node2 {
+        a: i32,
+        b: i64,
+    }
+
+    struct Nod3 {
+        a: i64,
+        b: i32,
+    }
+
+    struct Node5 {
+        a: i8,
+        b: i32,
+    }
+
+    fn main() -> i64 {
+        return 1;
+    }
+}

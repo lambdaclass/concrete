@@ -235,6 +235,9 @@ pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
   <Module> => {
     ast::modules::ModuleDefItem::Module(<>)
   },
+  <Struct> => {
+    ast::modules::ModuleDefItem::Struct(<>)
+  },
 }
 
 // Constants
@@ -251,6 +254,27 @@ pub(crate) ConstantDef: ast::constants::ConstantDef = {
       value: exp,
     }
   },
+}
+
+// - Structs
+
+pub(crate) Field: ast::structs::Field = {
+  <name:Ident> ":" <type_spec:TypeSpec> => ast::structs::Field {
+    name,
+    r#type: type_spec,
+    doc_string: None,
+  }
+}
+
+pub(crate) Struct: ast::structs::StructDecl = {
+  <is_pub:"pub"?> "struct" <name:Ident>  <type_params:GenericParams?>
+      "{" <fields:Comma<Field>> "}" => ast::structs::StructDecl {
+    doc_string: None,
+    is_pub: is_pub.is_some(),
+    name,
+    fields: fields,
+    type_params: type_params.unwrap_or_else(Vec::new),
+  }
 }
 
 // -- Functions
