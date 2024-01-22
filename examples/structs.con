@@ -5,7 +5,8 @@ mod Structs {
     }
 
     fn main() -> i32 {
-        let x: Node = create_node(2, 4);
+        let mut x: Node = create_node(2, 4);
+        x.a = 5;
         return x.a + x.b;
     }
 
