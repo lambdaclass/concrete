@@ -1,6 +1,7 @@
 use crate::{
     common::Ident,
     expressions::{Expression, FnCallOp, IfExpr, MatchExpr, PathOp},
+    structs::Field,
     types::TypeSpec,
 };
 
@@ -26,6 +27,24 @@ pub enum LetStmtTarget {
 pub struct LetStmt {
     pub is_mutable: bool,
     pub target: LetStmtTarget,
+    pub value: LetValue,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum LetValue {
+    Expr(Expression),
+    StructConstruct(StructConstruct),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StructConstruct {
+    pub name: Ident,
+    pub fields: Vec<FieldConstruct>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FieldConstruct {
+    pub name: Ident,
     pub value: Expression,
 }
 

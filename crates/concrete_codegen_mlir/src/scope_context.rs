@@ -120,13 +120,15 @@ impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
         }
     }
 
+    /// Returns the struct type along with the field indexes.
     fn get_struct_type(
         &self,
         context: &'ctx MeliorContext,
         strct: &StructDecl,
-    ) -> Result<Type<'ctx>, Box<dyn Error>> {
+    ) -> Result<(Type<'ctx>, HashMap<String, usize>), Box<dyn Error>> {
         let mut fields = Vec::with_capacity(strct.fields.len());
 
+        let mut field_indexes = HashMap::new();
         let mut size: u32 = 0;
 
         for field in &strct.fields {
@@ -148,6 +150,7 @@ impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
 
             size += pad;
             size += ty_size;
+            field_indexes.insert(field.name.name.clone(), fields.len());
             fields.push(ty);
         }
 
@@ -165,7 +168,10 @@ impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
             ));
         }
 
-        Ok(llvm::r#type::r#struct(context, &fields, false))
+        Ok((
+            llvm::r#type::r#struct(context, &fields, false),
+            field_indexes,
+        ))
     }
 
     pub fn resolve_type(
@@ -183,7 +189,7 @@ impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
             "bool" => IntegerType::new(context, 1).into(),
             name => {
                 if let Some(strct) = self.module_info.structs.get(name) {
-                    self.get_struct_type(context, strct)?
+                    self.get_struct_type(context, strct)?.0
                 } else if let Some(module) = self.imports.get(name) {
                     // a import
                     self.resolve_type_spec(

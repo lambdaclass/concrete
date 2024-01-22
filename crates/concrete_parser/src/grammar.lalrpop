@@ -150,7 +150,7 @@ pub(crate) TypeSpec: ast::types::TypeSpec = {
   },
   <lo:@L> <is_ref:RefType?> "[" <of_type:TypeSpec> <size:(";" <"integer">)?> "]"<hi:@R> => ast::types::TypeSpec::Array {
     of_type: Box::new(of_type),
-    size,
+    size: size.map(|x| x.try_into().expect("size is bigger than u32::MAX")),
     is_ref,
     span: Span::new(lo, hi),
   }
@@ -480,8 +480,31 @@ pub(crate) LetStmt: ast::statements::LetStmt = {
       name,
       r#type: target_type
     },
-    value
+     value: ast::statements::LetValue::Expr(value)
   },
+  "let" <is_mutable:"mut"?> <name:Ident> ":" <target_type:TypeSpec> "=" <value:StructConstruct> => ast::statements::LetStmt {
+    is_mutable: is_mutable.is_some(),
+    target: ast::statements::LetStmtTarget::Simple {
+      name,
+      r#type: target_type
+    },
+    value: ast::statements::LetValue::StructConstruct(value)
+  },
+}
+
+pub(crate) StructConstruct: ast::statements::StructConstruct = {
+  <name:Ident> "{" <fields:Comma<FieldConstruct>> "}" => ast::statements::StructConstruct {
+    name,
+    fields,
+  }
+}
+
+
+pub(crate) FieldConstruct: ast::statements::FieldConstruct = {
+  <name:Ident> ":" <value:Expression> => ast::statements::FieldConstruct {
+    name,
+    value
+  }
 }
 
 pub(crate) AssignStmt: ast::statements::AssignStmt = {

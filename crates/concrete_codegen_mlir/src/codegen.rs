@@ -7,7 +7,7 @@ use concrete_ast::{
     },
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
-    statements::{AssignStmt, LetStmt, LetStmtTarget, ReturnStmt, Statement, WhileStmt},
+    statements::{AssignStmt, LetStmt, LetStmtTarget, LetValue, ReturnStmt, Statement, WhileStmt},
     types::TypeSpec,
     Program,
 };
@@ -430,15 +430,20 @@ fn compile_let_stmt<'ctx, 'parent: 'ctx>(
         LetStmtTarget::Simple { name, r#type } => {
             let location = get_location(context, session, name.span.from);
 
-            let value = compile_expression(
-                session,
-                context,
-                scope_ctx,
-                helper,
-                block,
-                &info.value,
-                Some(r#type),
-            )?;
+            let value = match &info.value {
+                LetValue::Expr(value) => compile_expression(
+                    session,
+                    context,
+                    scope_ctx,
+                    helper,
+                    block,
+                    value,
+                    Some(r#type),
+                )?,
+                LetValue::StructConstruct(_) => {
+                    todo!()
+                }
+            };
             let memref_type = MemRefType::new(value.r#type(), &[], None, None);
 
             let alloca: Value = block

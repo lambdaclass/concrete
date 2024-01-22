@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use crate::{
     common::Ident,
     statements::Statement,
+    structs::Field,
     types::{RefType, TypeSpec},
 };
 

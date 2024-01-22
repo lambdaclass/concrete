@@ -21,6 +21,12 @@ mod Fibonacci {
     }
 
     fn main() -> i64 {
+
+        let x: Node = Node {
+            a: 2,
+            b: 2,
+        };
+
         return 1;
     }
 }
