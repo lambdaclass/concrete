@@ -1,32 +1,19 @@
-mod Fibonacci {
-
+mod Structs {
     struct Node {
         a: i32,
         b: i32,
     }
 
-    struct Node2 {
-        a: i32,
-        b: i64,
+    fn main() -> i32 {
+        let x: Node = create_node(2, 4);
+        return x.a + x.b;
     }
 
-    struct Nod3 {
-        a: i64,
-        b: i32,
-    }
-
-    struct Node5 {
-        a: i8,
-        b: i32,
-    }
-
-    fn main() -> i64 {
-
+    fn create_node(a: i32, b: i32) -> Node {
         let x: Node = Node {
-            a: 2,
-            b: 2,
+            a: a,
+            b: b,
         };
-
-        return 1;
+        return x;
     }
 }

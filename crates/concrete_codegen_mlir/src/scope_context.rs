@@ -121,7 +121,7 @@ impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
     }
 
     /// Returns the struct type along with the field indexes.
-    fn get_struct_type(
+    pub fn get_struct_type(
         &self,
         context: &'ctx MeliorContext,
         strct: &StructDecl,

@@ -1,7 +1,6 @@
 use crate::{
     common::Ident,
     expressions::{Expression, FnCallOp, IfExpr, MatchExpr, PathOp},
-    structs::Field,
     types::TypeSpec,
 };
 

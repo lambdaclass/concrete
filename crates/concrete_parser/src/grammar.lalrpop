@@ -272,7 +272,7 @@ pub(crate) Struct: ast::structs::StructDecl = {
     doc_string: None,
     is_pub: is_pub.is_some(),
     name,
-    fields: fields,
+    fields,
     type_params: type_params.unwrap_or_else(Vec::new),
   }
 }

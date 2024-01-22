@@ -3,7 +3,8 @@ use std::{collections::HashMap, error::Error};
 use bumpalo::Bump;
 use concrete_ast::{
     expressions::{
-        ArithOp, BinaryOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp, ValueExpr,
+        ArithOp, BinaryOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp, PathSegment,
+        ValueExpr,
     },
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
@@ -15,11 +16,14 @@ use concrete_session::Session;
 use melior::{
     dialect::{
         arith::{self, CmpiPredicate},
-        cf, func, memref,
+        cf, func, llvm, memref,
     },
     ir::{
-        attribute::{FlatSymbolRefAttribute, IntegerAttribute, StringAttribute, TypeAttribute},
-        r#type::{FunctionType, IntegerType, MemRefType},
+        attribute::{
+            DenseI64ArrayAttribute, FlatSymbolRefAttribute, IntegerAttribute, StringAttribute,
+            TypeAttribute,
+        },
+        r#type::{id, FunctionType, IntegerType, MemRefType},
         Block, BlockRef, Location, Module as MeliorModule, Operation, Region, Value, ValueLike,
     },
     Context as MeliorContext,
@@ -440,8 +444,62 @@ fn compile_let_stmt<'ctx, 'parent: 'ctx>(
                     value,
                     Some(r#type),
                 )?,
-                LetValue::StructConstruct(_) => {
-                    todo!()
+                LetValue::StructConstruct(struct_construct) => {
+                    let struct_decl = scope_ctx
+                        .module_info
+                        .structs
+                        .get(&struct_construct.name.name)
+                        .unwrap_or_else(|| {
+                            panic!("failed to find struct {:?}", struct_construct.name.name)
+                        });
+                    assert_eq!(
+                        struct_construct.fields.len(),
+                        struct_decl.fields.len(),
+                        "struct field len mismatch"
+                    );
+                    let (ty, field_indexes) = scope_ctx.get_struct_type(context, struct_decl)?;
+                    let mut struct_value = block
+                        .append_operation(llvm::undef(ty, location))
+                        .result(0)?
+                        .into();
+                    let field_types: HashMap<String, &TypeSpec> = struct_decl
+                        .fields
+                        .iter()
+                        .map(|x| (x.name.name.clone(), &x.r#type))
+                        .collect();
+
+                    for field in &struct_construct.fields {
+                        let field_idx = field_indexes.get(&field.name.name).unwrap_or_else(|| {
+                            panic!(
+                                "failed to find field {:?} for struct {:?}",
+                                field.name.name, struct_construct.name.name
+                            )
+                        });
+
+                        let field_ty = field_types.get(&field.name.name).expect("field not found");
+                        let value = compile_expression(
+                            session,
+                            context,
+                            scope_ctx,
+                            helper,
+                            block,
+                            &field.value,
+                            Some(field_ty),
+                        )?;
+
+                        struct_value = block
+                            .append_operation(llvm::insert_value(
+                                context,
+                                struct_value,
+                                DenseI64ArrayAttribute::new(context, &[(*field_idx) as i64]),
+                                value,
+                                location,
+                            ))
+                            .result(0)?
+                            .into();
+                    }
+
+                    struct_value
                 }
             };
             let memref_type = MemRefType::new(value.r#type(), &[], None, None);
@@ -806,7 +864,7 @@ fn compile_path_op<'ctx, 'parent: 'ctx>(
 
     let location = get_location(context, session, path.first.span.from);
 
-    let value = if local.alloca {
+    let mut value = if local.alloca {
         block
             .append_operation(memref::load(local.value, &[], location))
             .result(0)?
@@ -815,7 +873,52 @@ fn compile_path_op<'ctx, 'parent: 'ctx>(
         local.value
     };
 
-    Ok(value)
+    if path.extra.is_empty() {
+        Ok(value)
+    } else {
+        let mut current_type_spec = &local.type_spec;
+
+        for extra in &path.extra {
+            match extra {
+                PathSegment::FieldAccess(ident) => {
+                    let (struct_decl, (_, field_indexes)) = match current_type_spec {
+                        TypeSpec::Simple { name, .. } => {
+                            let struct_decl =
+                                scope_ctx.module_info.structs.get(&name.name).unwrap();
+                            (
+                                struct_decl,
+                                scope_ctx.get_struct_type(context, struct_decl)?,
+                            )
+                        }
+                        _ => unreachable!(),
+                    };
+
+                    let field = struct_decl
+                        .fields
+                        .iter()
+                        .find(|x| x.name.name == ident.name)
+                        .unwrap();
+                    let field_idx = *field_indexes.get(&ident.name).unwrap();
+                    let field_ty = scope_ctx.resolve_type_spec(context, &field.r#type)?;
+
+                    current_type_spec = &field.r#type;
+                    value = block
+                        .append_operation(llvm::extract_value(
+                            context,
+                            value,
+                            DenseI64ArrayAttribute::new(context, &[field_idx as i64]),
+                            field_ty,
+                            location,
+                        ))
+                        .result(0)?
+                        .into();
+                }
+                PathSegment::ArrayIndex(_) => todo!(),
+            }
+        }
+
+        Ok(value)
+    }
 }
 
 fn compile_deref<'ctx, 'parent: 'ctx>(

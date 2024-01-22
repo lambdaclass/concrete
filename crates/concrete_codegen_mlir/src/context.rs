@@ -43,7 +43,7 @@ impl Context {
 
         super::codegen::compile_program(session, &self.melior_context, &melior_module, program)?;
 
-        let print_flags = OperationPrintingFlags::new().enable_debug_info(true, true);
+        let print_flags = OperationPrintingFlags::new().enable_debug_info(false, true);
         tracing::debug!(
             "MLIR Code before passes:\n{}",
             melior_module
