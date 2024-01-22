@@ -1,0 +1,20 @@
+mod Simple {
+    import Other.{hello1};
+    import Other.Deep.{hello2};
+
+    fn main() -> i64 {
+        return hello1(2) + hello2(2);
+    }
+}
+
+mod Other {
+    pub fn hello1(x: i64) -> i64 {
+        return x * 2;
+    }
+
+    mod Deep {
+        pub fn hello2(x: i64) -> i64 {
+            return x * 4;
+        }
+    }
+}

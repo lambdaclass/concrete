@@ -105,3 +105,28 @@ fn test_simple_add() {
     let code = output.status.code().unwrap();
     assert_eq!(code, 8);
 }
+
+#[test]
+fn test_import() {
+    let source = r#"
+        mod Simple {
+            import Other.{hello};
+
+            fn main() -> i64 {
+                return hello(4);
+            }
+        }
+
+        mod Other {
+            pub fn hello(x: i64) -> i64 {
+                return x * 2;
+            }
+        }
+    "#;
+
+    let result = compile_program(source, "import", false).expect("failed to compile");
+
+    let output = run_program(&result.binary_file).expect("failed to run");
+    let code = output.status.code().unwrap();
+    assert_eq!(code, 8);
+}

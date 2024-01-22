@@ -19,6 +19,7 @@ pub struct Module {
 pub enum ModuleDefItem {
     Constant(ConstantDef),
     Function(FunctionDef),
-    Record(StructDecl),
+    Struct(StructDecl),
     Type(TypeDecl),
+    Module(Module),
 }

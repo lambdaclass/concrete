@@ -1,4 +1,4 @@
-use crate::common::{DocString, Ident};
+use crate::common::{DocString, Ident, Span};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum TypeSpec {
@@ -8,6 +8,7 @@ pub enum TypeSpec {
     Generic {
         name: Ident,
         type_params: Vec<TypeSpec>,
+        span: Span,
     },
 }
 
@@ -15,4 +16,5 @@ pub enum TypeSpec {
 pub struct TypeDecl {
     pub doc_string: Option<DocString>,
     pub name: Ident,
+    pub value: TypeSpec,
 }

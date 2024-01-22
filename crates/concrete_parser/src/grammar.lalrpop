@@ -1,7 +1,9 @@
 use crate::tokens::Token;
 use crate::lexer::LexicalError;
 use concrete_ast as ast;
+use ast::common::Span;
 use std::str::FromStr;
+
 
 grammar;
 
@@ -133,9 +135,10 @@ pub(crate) TypeSpec: ast::types::TypeSpec = {
   <name:Ident> => ast::types::TypeSpec::Simple {
     name
   },
-  <name:Ident> "<" <type_params:Comma<TypeSpec>> ">" => ast::types::TypeSpec::Generic {
+  <lo:@L> <name:Ident> "<" <type_params:Comma<TypeSpec>> ">" <hi:@R> => ast::types::TypeSpec::Generic {
     name,
-    type_params
+    type_params,
+    span: Span::new(lo, hi),
   }
 }
 
@@ -214,17 +217,21 @@ pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
   },
   <FunctionDef> => {
     ast::modules::ModuleDefItem::Function(<>)
-  }
+  },
+  <Module> => {
+    ast::modules::ModuleDefItem::Module(<>)
+  },
 }
 
 // Constants
 
 pub(crate) ConstantDef: ast::constants::ConstantDef = {
-  "const" <name:Ident> ":" <type_spec:TypeSpec> "=" <exp:Expression> => {
+  <is_pub:"pub"?> "const" <name:Ident> ":" <type_spec:TypeSpec> "=" <exp:Expression> => {
     ast::constants::ConstantDef {
       decl: ast::constants::ConstantDecl {
         doc_string: None,
         name,
+        is_pub: is_pub.is_some(),
         r#type: type_spec
       },
       value: exp,

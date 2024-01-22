@@ -29,6 +29,7 @@ use llvm_sys::{
 };
 use module::MLIRModule;
 
+mod ast_helper;
 mod codegen;
 mod context;
 mod error;

@@ -5,15 +5,15 @@ use crate::{
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StructDecl {
-    doc_string: Option<DocString>,
-    name: Ident,
-    type_params: Vec<GenericParam>,
-    fields: Vec<Field>,
+    pub doc_string: Option<DocString>,
+    pub name: Ident,
+    pub type_params: Vec<GenericParam>,
+    pub fields: Vec<Field>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Field {
-    doc_string: Option<DocString>,
-    name: Ident,
-    r#type: TypeSpec,
+    pub doc_string: Option<DocString>,
+    pub name: Ident,
+    pub r#type: TypeSpec,
 }
