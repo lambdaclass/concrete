@@ -3,9 +3,9 @@ use std::{collections::HashMap, ops::Range};
 use ariadne::{ColorGenerator, Label, Report, ReportKind};
 use ast_helper::{AstHelper, ModuleInfo};
 use concrete_ast::{
-    common::{Ident, Span},
-    constants::{ConstantDecl, ConstantDef},
-    functions::{FunctionDecl, FunctionDef},
+    common::Ident,
+    constants::ConstantDef,
+    functions::FunctionDef,
     imports::ImportStmt,
     modules::{Module, ModuleDefItem},
     statements::Statement,
@@ -119,6 +119,7 @@ impl CheckError {
     }
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 struct ScopeContext<'parent> {
     pub locals: HashMap<String, LocalVar>,
@@ -127,31 +128,14 @@ struct ScopeContext<'parent> {
     pub module_info: &'parent ModuleInfo<'parent>,
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 struct LocalVar {
     pub type_spec: TypeSpec,
 }
 
+#[allow(unused)]
 impl<'parent> ScopeContext<'parent> {
-    /// Returns the symbol name from a local name.
-    pub fn get_symbol_name(&self, local_name: &str) -> String {
-        if local_name == "main" {
-            return local_name.to_string();
-        }
-
-        if let Some(module) = self.imports.get(local_name) {
-            // a import
-            module.get_symbol_name(local_name)
-        } else {
-            let mut result = self.module_info.name.clone();
-
-            result.push_str("::");
-            result.push_str(local_name);
-
-            result
-        }
-    }
-
     pub fn get_function(&self, local_name: &str) -> Option<&FunctionDef> {
         if let Some(module) = self.imports.get(local_name) {
             // a import
@@ -196,24 +180,6 @@ impl<'parent> ScopeContext<'parent> {
             TypeSpec::Array { .. } => {
                 todo!("implement arrays")
             }
-        }
-    }
-
-    fn is_type_signed(&self, type_info: &TypeSpec) -> bool {
-        let signed = ["i8", "i16", "i32", "i64", "i128"];
-        match type_info {
-            TypeSpec::Simple { name, .. } => signed.contains(&name.name.as_str()),
-            TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
-            TypeSpec::Array { .. } => unreachable!(),
-        }
-    }
-
-    fn is_float(&self, type_info: &TypeSpec) -> bool {
-        let signed = ["f32", "f64"];
-        match type_info {
-            TypeSpec::Simple { name, .. } => signed.contains(&name.name.as_str()),
-            TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
-            TypeSpec::Array { .. } => unreachable!(),
         }
     }
 }
@@ -320,8 +286,8 @@ pub fn check_module<'p, 'x: 'p>(
 fn check_function<'p>(
     info: &FunctionDef,
     scope_ctx: &ScopeContext<'p>,
-    helper: &AstHelper<'p>,
-    module_info: &ModuleInfo<'p>,
+    _helper: &AstHelper<'p>,
+    _module_info: &ModuleInfo<'p>,
 ) -> Result<(), Vec<CheckError>> {
     let mut errors = Vec::new();
 
@@ -349,12 +315,12 @@ fn check_function<'p>(
 }
 
 fn check_constant<'p>(
-    info: &ConstantDef,
-    scope_ctx: &ScopeContext<'p>,
-    helper: &AstHelper<'p>,
-    module_info: &ModuleInfo<'p>,
+    _info: &ConstantDef,
+    _scope_ctx: &ScopeContext<'p>,
+    _helper: &AstHelper<'p>,
+    _module_info: &ModuleInfo<'p>,
 ) -> Result<(), Vec<CheckError>> {
-    let mut errors = Vec::new();
+    let errors = Vec::new();
 
     if errors.is_empty() {
         Ok(())
@@ -363,28 +329,13 @@ fn check_constant<'p>(
     }
 }
 
-fn check_statement<'p>(
-    info: &Statement,
-    scope_ctx: &mut ScopeContext<'p>,
-    helper: &AstHelper<'p>,
-    module_info: &ModuleInfo<'p>,
+fn _check_statement<'p>(
+    _info: &Statement,
+    _scope_ctx: &mut ScopeContext<'p>,
+    _helper: &AstHelper<'p>,
+    _module_info: &ModuleInfo<'p>,
 ) -> Result<(), Vec<CheckError>> {
-    let mut errors = Vec::new();
-
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors)
-    }
-}
-
-fn check_template<'p>(
-    function: &FunctionDecl,
-    scope_ctx: &mut ScopeContext<'p>,
-    helper: &AstHelper<'_>,
-    module_info: &ModuleInfo<'_>,
-) -> Result<(), Vec<CheckError>> {
-    let mut errors = Vec::new();
+    let errors = Vec::new();
 
     if errors.is_empty() {
         Ok(())
