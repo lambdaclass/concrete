@@ -205,5 +205,5 @@ For a full roadmap check the [project](https://github.com/orgs/lambdaclass/proje
 - unsafe :x:
 - box :x:
 - rc (for cyclical data structures like graphs) :x:
-- ffi
+- ffi :x:
 
