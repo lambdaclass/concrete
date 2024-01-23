@@ -135,7 +135,7 @@ pub enum Token {
     #[token("^")]
     OperatorBitwiseXor,
     #[token("&")]
-    OperatorBitwiseAnd,
+    Ampersand,
     #[token("|")]
     OperatorBitwiseOr,
 }

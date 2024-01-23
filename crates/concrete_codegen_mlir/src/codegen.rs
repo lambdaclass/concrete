@@ -3,7 +3,7 @@ use std::{collections::HashMap, error::Error};
 use bumpalo::Bump;
 use concrete_ast::{
     expressions::{
-        ArithOp, BinaryOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp, SimpleExpr,
+        ArithOp, BinaryOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp, ValueExpr,
     },
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
@@ -149,25 +149,47 @@ impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
         context: &'ctx MeliorContext,
         spec: &TypeSpec,
     ) -> Result<Type<'ctx>, Box<dyn Error>> {
+        match spec.is_ref() {
+            Some(_) => {
+                Ok(
+                    MemRefType::new(self.resolve_type_spec_ref(context, spec)?, &[], None, None)
+                        .into(),
+                )
+            }
+            None => self.resolve_type_spec_ref(context, spec),
+        }
+    }
+
+    /// Resolves the type this ref points to.
+    fn resolve_type_spec_ref(
+        &self,
+        context: &'ctx MeliorContext,
+        spec: &TypeSpec,
+    ) -> Result<Type<'ctx>, Box<dyn Error>> {
         Ok(match spec {
-            TypeSpec::Simple { name } => self.resolve_type(context, &name.name)?,
+            TypeSpec::Simple { name, .. } => self.resolve_type(context, &name.name)?,
             TypeSpec::Generic { name, .. } => self.resolve_type(context, &name.name)?,
+            TypeSpec::Array { .. } => {
+                todo!("implement arrays")
+            }
         })
     }
 
     fn is_type_signed(&self, type_info: &TypeSpec) -> bool {
         let signed = ["i8", "i16", "i32", "i64", "i128"];
         match type_info {
-            TypeSpec::Simple { name } => signed.contains(&name.name.as_str()),
+            TypeSpec::Simple { name, .. } => signed.contains(&name.name.as_str()),
             TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
+            TypeSpec::Array { .. } => unreachable!(),
         }
     }
 
     fn is_float(&self, type_info: &TypeSpec) -> bool {
         let signed = ["f32", "f64"];
         match type_info {
-            TypeSpec::Simple { name } => signed.contains(&name.name.as_str()),
+            TypeSpec::Simple { name, .. } => signed.contains(&name.name.as_str()),
             TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
+            TypeSpec::Array { .. } => unreachable!(),
         }
     }
 }
@@ -512,6 +534,8 @@ fn compile_let_stmt<'ctx, 'parent: 'ctx>(
 ) -> Result<(), Box<dyn Error>> {
     match &info.target {
         LetStmtTarget::Simple { name, r#type } => {
+            let location = get_location(context, session, name.span.from);
+
             let value = compile_expression(
                 session,
                 context,
@@ -521,10 +545,7 @@ fn compile_let_stmt<'ctx, 'parent: 'ctx>(
                 &info.value,
                 Some(r#type),
             )?;
-
-            let location = get_location(context, session, name.span.from);
-
-            let memref_type = MemRefType::new(value.r#type(), &[1], None, None);
+            let memref_type = MemRefType::new(value.r#type(), &[], None, None);
 
             let alloca: Value = block
                 .append_operation(memref::alloca(
@@ -537,15 +558,8 @@ fn compile_let_stmt<'ctx, 'parent: 'ctx>(
                 ))
                 .result(0)?
                 .into();
-            let k0 = block
-                .append_operation(arith::constant(
-                    context,
-                    IntegerAttribute::new(0, Type::index(context)).into(),
-                    location,
-                ))
-                .result(0)?
-                .into();
-            block.append_operation(memref::store(value, alloca, &[k0], location));
+
+            block.append_operation(memref::store(value, alloca, &[], location));
 
             scope_ctx
                 .locals
@@ -587,15 +601,7 @@ fn compile_assign_stmt<'ctx, 'parent: 'ctx>(
         Some(&local.type_spec),
     )?;
 
-    let k0 = block
-        .append_operation(arith::constant(
-            context,
-            IntegerAttribute::new(0, Type::index(context)).into(),
-            location,
-        ))
-        .result(0)?
-        .into();
-    block.append_operation(memref::store(value, local.value, &[k0], location));
+    block.append_operation(memref::store(value, local.value, &[], location));
 
     Ok(())
 }
@@ -639,57 +645,9 @@ fn compile_expression<'ctx, 'parent: 'ctx>(
 ) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
     let location = Location::unknown(context);
     match info {
-        Expression::Simple(simple) => match simple {
-            SimpleExpr::ConstBool(value) => {
-                let value =
-                    IntegerAttribute::new((*value).into(), IntegerType::new(context, 1).into());
-                Ok(block
-                    .append_operation(arith::constant(context, value.into(), location))
-                    .result(0)?
-                    .into())
-            }
-            SimpleExpr::ConstChar(value) => {
-                let value =
-                    IntegerAttribute::new((*value) as i64, IntegerType::new(context, 32).into());
-                Ok(block
-                    .append_operation(arith::constant(context, value.into(), location))
-                    .result(0)?
-                    .into())
-            }
-            SimpleExpr::ConstInt(value) => {
-                let int_type = if let Some(type_info) = type_info {
-                    scope_ctx.resolve_type_spec(context, type_info)?
-                } else {
-                    IntegerType::new(context, 64).into()
-                };
-                let value = IntegerAttribute::new(
-                    (*value).try_into().expect("integer is too big"),
-                    int_type,
-                );
-                Ok(block
-                    .append_operation(arith::constant(context, value.into(), location))
-                    .result(0)?
-                    .into())
-            }
-            SimpleExpr::ConstFloat(value) => {
-                let float_type = if let Some(type_info) = type_info {
-                    scope_ctx.resolve_type_spec(context, type_info)?
-                } else {
-                    Type::float64(context)
-                };
-                let value = FloatAttribute::new(
-                    context,
-                    value.parse().expect("failed to parse float"),
-                    float_type,
-                );
-                Ok(block
-                    .append_operation(arith::constant(context, value.into(), location))
-                    .result(0)?
-                    .into())
-            }
-            SimpleExpr::ConstStr(_) => todo!(),
-            SimpleExpr::Path(value) => compile_path_op(session, context, scope_ctx, block, value),
-        },
+        Expression::Value(value) => compile_value_expr(
+            session, context, scope_ctx, _helper, block, value, type_info,
+        ),
         Expression::FnCall(value) => {
             compile_fn_call(session, context, scope_ctx, _helper, block, value)
         }
@@ -820,6 +778,74 @@ fn compile_expression<'ctx, 'parent: 'ctx>(
     }
 }
 
+fn compile_value_expr<'ctx, 'parent: 'ctx>(
+    session: &Session,
+    context: &'ctx MeliorContext,
+    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    _helper: &BlockHelper<'ctx, 'parent>,
+    block: &'parent Block<'ctx>,
+    value: &ValueExpr,
+    type_info: Option<&TypeSpec>,
+) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
+    tracing::debug!("compiling value_expr for {:?}", value);
+    let location = Location::unknown(context);
+    match value {
+        ValueExpr::ConstBool(value) => {
+            let value = IntegerAttribute::new((*value).into(), IntegerType::new(context, 1).into());
+            Ok(block
+                .append_operation(arith::constant(context, value.into(), location))
+                .result(0)?
+                .into())
+        }
+        ValueExpr::ConstChar(value) => {
+            let value =
+                IntegerAttribute::new((*value) as i64, IntegerType::new(context, 32).into());
+            Ok(block
+                .append_operation(arith::constant(context, value.into(), location))
+                .result(0)?
+                .into())
+        }
+        ValueExpr::ConstInt(value) => {
+            let int_type = if let Some(type_info) = type_info {
+                scope_ctx.resolve_type_spec(context, type_info)?
+            } else {
+                IntegerType::new(context, 64).into()
+            };
+            let value = IntegerAttribute::new((*value) as i64, int_type);
+            Ok(block
+                .append_operation(arith::constant(context, value.into(), location))
+                .result(0)?
+                .into())
+        }
+        ValueExpr::ConstFloat(value) => {
+            let float_type = if let Some(type_info) = type_info {
+                scope_ctx.resolve_type_spec(context, type_info)?
+            } else {
+                Type::float64(context)
+            };
+            let value = FloatAttribute::new(
+                context,
+                value.parse().expect("failed to parse float"),
+                float_type,
+            );
+            Ok(block
+                .append_operation(arith::constant(context, value.into(), location))
+                .result(0)?
+                .into())
+        }
+        ValueExpr::ConstStr(_) => todo!(),
+        ValueExpr::Path(value) => {
+            compile_path_op(session, context, scope_ctx, _helper, block, value)
+        }
+        ValueExpr::Deref(value) => {
+            compile_deref(session, context, scope_ctx, _helper, block, value)
+        }
+        ValueExpr::AsRef { path, ref_type: _ } => {
+            compile_asref(session, context, scope_ctx, _helper, block, path)
+        }
+    }
+}
+
 fn compile_fn_call<'ctx, 'parent: 'ctx>(
     session: &Session,
     context: &'ctx MeliorContext,
@@ -828,6 +854,7 @@ fn compile_fn_call<'ctx, 'parent: 'ctx>(
     block: &'parent Block<'ctx>,
     info: &FnCallOp,
 ) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
+    tracing::debug!("compiling fncall: {:?}", info);
     let mut args = Vec::with_capacity(info.args.len());
     let location = get_location(context, session, info.target.span.from);
 
@@ -879,34 +906,84 @@ fn compile_path_op<'ctx, 'parent: 'ctx>(
     session: &Session,
     context: &'ctx MeliorContext,
     scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    _helper: &BlockHelper<'ctx, 'parent>,
     block: &'parent Block<'ctx>,
     path: &PathOp,
 ) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
-    // For now only simple variables work.
+    tracing::debug!("compiling pathop {:?}", path);
+    // For now only simple and array variables work.
     // TODO: implement properly, this requires having structs implemented.
 
     let local = scope_ctx
         .locals
         .get(&path.first.name)
-        .expect("local not found");
+        .unwrap_or_else(|| panic!("local {} not found", path.first.name))
+        .clone();
 
     let location = get_location(context, session, path.first.span.from);
 
-    if local.alloca {
-        let k0 = block
-            .append_operation(arith::constant(
-                context,
-                IntegerAttribute::new(0, Type::index(context)).into(),
-                location,
-            ))
+    let value = if local.alloca {
+        block
+            .append_operation(memref::load(local.value, &[], location))
             .result(0)?
-            .into();
-        let value = block
-            .append_operation(memref::load(local.value, &[k0], location))
-            .result(0)?
-            .into();
-        Ok(value)
+            .into()
     } else {
-        Ok(local.value)
+        local.value
+    };
+
+    Ok(value)
+}
+
+fn compile_deref<'ctx, 'parent: 'ctx>(
+    session: &Session,
+    context: &'ctx MeliorContext,
+    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    _helper: &BlockHelper<'ctx, 'parent>,
+    block: &'parent Block<'ctx>,
+    path: &PathOp,
+) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
+    tracing::debug!("compiling deref for {:?}", path);
+    let local = scope_ctx
+        .locals
+        .get(&path.first.name)
+        .expect("local not found")
+        .clone();
+
+    let location = get_location(context, session, path.first.span.from);
+
+    let mut value = block
+        .append_operation(memref::load(local.value, &[], location))
+        .result(0)?
+        .into();
+
+    if local.alloca {
+        value = block
+            .append_operation(memref::load(value, &[], location))
+            .result(0)?
+            .into();
     }
+
+    Ok(value)
+}
+
+fn compile_asref<'ctx, 'parent: 'ctx>(
+    _session: &Session,
+    _context: &'ctx MeliorContext,
+    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    _helper: &BlockHelper<'ctx, 'parent>,
+    _block: &'parent Block<'ctx>,
+    path: &PathOp,
+) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
+    tracing::debug!("compiling asref for {:?}", path);
+    let local = scope_ctx
+        .locals
+        .get(&path.first.name)
+        .expect("local not found")
+        .clone();
+
+    if !local.alloca {
+        panic!("can only take refs to non register values");
+    }
+
+    Ok(local.value)
 }
