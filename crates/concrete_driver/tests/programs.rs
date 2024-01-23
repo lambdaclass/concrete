@@ -215,8 +215,8 @@ fn test_structs() {
         }
 
         fn modify(node: &mut Node) {
-            node.a.x = 1;
-            node.b.x = 1;
+            node.a.x = 3;
+            node.b.x = 3;
         }
     }
 
@@ -226,5 +226,5 @@ fn test_structs() {
 
     let output = run_program(&result.binary_file).expect("failed to run");
     let code = output.status.code().unwrap();
-    assert_eq!(code, 2);
+    assert_eq!(code, 6);
 }

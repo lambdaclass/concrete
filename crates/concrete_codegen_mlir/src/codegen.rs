@@ -1154,5 +1154,5 @@ fn compile_asref<'ctx, 'parent: 'ctx>(
 
     // todo: handle asref for struct fields
 
-    Ok(dbg!(local.value))
+    Ok(local.value)
 }
