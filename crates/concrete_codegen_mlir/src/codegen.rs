@@ -9,7 +9,7 @@ use concrete_ast::{
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
     statements::{AssignStmt, LetStmt, LetStmtTarget, LetValue, ReturnStmt, Statement, WhileStmt},
-    types::TypeSpec,
+    types::{RefType, TypeSpec},
     Program,
 };
 use concrete_session::Session;
@@ -60,22 +60,25 @@ pub struct LocalVar<'ctx, 'parent: 'ctx> {
     // If it's none its on a register, otherwise allocated on the stack.
     pub alloca: bool,
     pub value: Value<'ctx, 'parent>,
+    pub is_mut: bool,
 }
 
 impl<'ctx, 'parent: 'ctx> LocalVar<'ctx, 'parent> {
-    pub fn param(value: Value<'ctx, 'parent>, type_spec: TypeSpec) -> Self {
+    pub fn param(value: Value<'ctx, 'parent>, type_spec: TypeSpec, is_mut: bool) -> Self {
         Self {
             value,
             type_spec,
             alloca: false,
+            is_mut,
         }
     }
 
-    pub fn alloca(value: Value<'ctx, 'parent>, type_spec: TypeSpec) -> Self {
+    pub fn alloca(value: Value<'ctx, 'parent>, type_spec: TypeSpec, is_mut: bool) -> Self {
         Self {
             value,
             type_spec,
             alloca: true,
+            is_mut,
         }
     }
 }
@@ -221,7 +224,7 @@ fn compile_function_def<'ctx, 'parent: 'ctx>(
         for (i, param) in info.decl.params.iter().enumerate() {
             scope_ctx.locals.insert(
                 param.name.name.clone(),
-                LocalVar::param(fn_block.argument(i)?.into(), param.r#type.clone()),
+                LocalVar::param(fn_block.argument(i)?.into(), param.r#type.clone(), false),
             );
         }
 
@@ -521,9 +524,10 @@ fn compile_let_stmt<'ctx, 'parent: 'ctx>(
 
             block.append_operation(memref::store(value, alloca, &[], location));
 
-            scope_ctx
-                .locals
-                .insert(name.name.clone(), LocalVar::alloca(alloca, r#type.clone()));
+            scope_ctx.locals.insert(
+                name.name.clone(),
+                LocalVar::alloca(alloca, r#type.clone(), info.is_mutable),
+            );
 
             Ok(())
         }
@@ -547,6 +551,7 @@ fn compile_assign_stmt<'ctx, 'parent: 'ctx>(
         .expect("local should exist")
         .clone();
 
+    assert!(local.is_mut, "can only mutate mutable variables");
     assert!(local.alloca, "can only mutate local stack variables");
 
     let location = get_location(context, session, info.target.first.span.from);
@@ -562,12 +567,17 @@ fn compile_assign_stmt<'ctx, 'parent: 'ctx>(
             Some(&local.type_spec),
         )?;
 
-        block.append_operation(memref::store(value, local.value, &[], location));
+        match local.type_spec.is_ref() {
+            Some(RefType::MutBorrow) => {}
+            Some(RefType::Borrow) => {}
+            None => {
+                block.append_operation(memref::store(value, local.value, &[], location));
+            }
+        }
     } else {
         let mut current_type_spec = &local.type_spec;
 
-        // todo: instead of loading, use memref.extract_aligned_pointer_as_index
-
+        // get a ptr to the field
         let target_ptr = block
             .append_operation(
                 melior::dialect::ods::memref::extract_aligned_pointer_as_index(

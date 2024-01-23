@@ -56,6 +56,7 @@ pub struct ReturnStmt {
 pub struct AssignStmt {
     pub target: PathOp,
     pub value: Expression,
+    pub is_deref: bool,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
