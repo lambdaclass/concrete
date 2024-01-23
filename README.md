@@ -192,10 +192,11 @@ The design was very heavily influenced by all these programming languages:
 For a full roadmap check the [project](https://github.com/orgs/lambdaclass/projects/23).
 
 
- ✔️ = implemented
- 🏗️ = work in progress
- :x: = work not started yet
- 🤔 = to be defined
+Meaning:
+-  ✔️ = implemented
+- 🏗️ = work in progress
+- :x: = work not started yet
+- 🤔 = to be defined
 
 Features:
 - if/else ✔️
