@@ -1,0 +1,11 @@
+mod Simple {
+    fn main(argc: i64) -> i64 {
+        let mut x: i64 = 2;
+        change(&mut x);
+        return x;
+    }
+
+    fn change(a: &mut i64) {
+        *a = 4;
+    }
+}

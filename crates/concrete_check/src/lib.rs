@@ -155,7 +155,9 @@ impl<'parent> ScopeContext<'parent> {
             "f64" => name.to_string(),
             "bool" => name.to_string(),
             name => {
-                if let Some(module) = self.imports.get(name) {
+                if let Some(x) = self.module_info.structs.get(name) {
+                    name.to_string()
+                } else if let Some(module) = self.imports.get(name) {
                     // a import
                     self.resolve_type_spec(&module.types.get(name)?.value)?
                 } else {

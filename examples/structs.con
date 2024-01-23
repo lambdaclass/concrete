@@ -6,7 +6,8 @@ mod Structs {
 
     fn main() -> i32 {
         let mut x: Node = create_node(2, 4);
-        x.a = 5;
+        x.a = 100;
+        modify_node(&mut x);
         return x.a + x.b;
     }
 
@@ -16,5 +17,9 @@ mod Structs {
             b: b,
         };
         return x;
+    }
+
+    fn modify_node(x: &mut Node) {
+        x.a = 1;
     }
 }

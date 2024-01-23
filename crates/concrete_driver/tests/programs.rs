@@ -158,3 +158,73 @@ fn test_reference() {
     let code = output.status.code().unwrap();
     assert_eq!(code, 2);
 }
+
+#[test]
+fn test_mut_reference() {
+    let source = r#"
+    mod Simple {
+        fn main(argc: i64) -> i64 {
+            let mut x: i64 = 2;
+            change(&mut x);
+            return x;
+        }
+
+        fn change(a: &mut i64) {
+            *a = 4;
+        }
+    }
+    "#;
+
+    let result = compile_program(source, "mut_ref", false).expect("failed to compile");
+
+    let output = run_program(&result.binary_file).expect("failed to run");
+    let code = output.status.code().unwrap();
+    assert_eq!(code, 4);
+}
+
+#[test]
+fn test_structs() {
+    let source = r#"
+    mod Structs {
+
+        struct Leaf {
+            x: i32,
+            y: i64,
+        }
+        struct Node {
+            a: Leaf,
+            b: Leaf,
+        }
+
+        fn main() -> i32 {
+            let a: Leaf = Leaf {
+                x: 1,
+                y: 2,
+            };
+            let b: Leaf = Leaf {
+                x: 1,
+                y: 2,
+            };
+            let mut x: Node = Node {
+                a: a,
+                b: b,
+            };
+            x.a.x = 2;
+            modify(&mut x);
+            return x.a.x + x.b.x;
+        }
+
+        fn modify(node: &mut Node) {
+            node.a.x = 1;
+            node.b.x = 1;
+        }
+    }
+
+    "#;
+
+    let result = compile_program(source, "structs", false).expect("failed to compile");
+
+    let output = run_program(&result.binary_file).expect("failed to run");
+    let code = output.status.code().unwrap();
+    assert_eq!(code, 2);
+}

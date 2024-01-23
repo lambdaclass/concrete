@@ -9,7 +9,7 @@ use concrete_ast::{
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
     statements::{AssignStmt, LetStmt, LetStmtTarget, LetValue, ReturnStmt, Statement, WhileStmt},
-    types::{RefType, TypeSpec},
+    types::TypeSpec,
     Program,
 };
 use concrete_check::ast_helper::{AstHelper, ModuleInfo};
@@ -227,6 +227,10 @@ fn compile_function_def<'ctx, 'parent: 'ctx>(
         for stmt in &info.body {
             fn_block =
                 compile_statement(session, context, &mut scope_ctx, &helper, fn_block, stmt)?;
+        }
+
+        if fn_block.terminator().is_none() {
+            fn_block.append_operation(func::r#return(&[], location));
         }
     }
 
@@ -539,6 +543,7 @@ fn compile_assign_stmt<'ctx, 'parent: 'ctx>(
     block: &'parent Block<'ctx>,
     info: &AssignStmt,
 ) -> Result<(), Box<dyn Error>> {
+    tracing::debug!("compiling assign for {:?}", info.target);
     // todo: implement properly for structs, right now only really works for simple variables.
 
     let local = scope_ctx
@@ -547,12 +552,31 @@ fn compile_assign_stmt<'ctx, 'parent: 'ctx>(
         .expect("local should exist")
         .clone();
 
-    assert!(local.is_mut, "can only mutate mutable variables");
-    assert!(local.alloca, "can only mutate local stack variables");
+    assert!(
+        local.is_mut || local.type_spec.is_mut_ref(),
+        "can only mutate mutable or ref mut variables"
+    );
+    assert!(
+        local.type_spec.is_mut_ref() || local.alloca,
+        "can only mutate local stack variables"
+    );
 
     let location = get_location(context, session, info.target.first.span.from);
 
     if info.target.extra.is_empty() {
+        let mut target_value = local.value;
+        let mut type_spec = local.type_spec.clone();
+
+        if info.is_deref {
+            assert!(local.type_spec.is_mut_ref(), "can only mutate mutable refs");
+            if local.alloca {
+                target_value = block
+                    .append_operation(memref::load(local.value, &[], location))
+                    .result(0)?
+                    .into()
+            }
+            type_spec = type_spec.to_nonref_type();
+        }
         let value = compile_expression(
             session,
             context,
@@ -560,16 +584,10 @@ fn compile_assign_stmt<'ctx, 'parent: 'ctx>(
             helper,
             block,
             &info.value,
-            Some(&local.type_spec),
+            Some(&type_spec),
         )?;
 
-        match local.type_spec.is_ref() {
-            Some(RefType::MutBorrow) => {}
-            Some(RefType::Borrow) => {}
-            None => {
-                block.append_operation(memref::store(value, local.value, &[], location));
-            }
-        }
+        block.append_operation(memref::store(value, target_value, &[], location));
     } else {
         let mut current_type_spec = &local.type_spec;
 
@@ -614,7 +632,7 @@ fn compile_assign_stmt<'ctx, 'parent: 'ctx>(
         while let Some(extra) = extra_it.next() {
             match extra {
                 PathSegment::FieldAccess(ident) => {
-                    let (struct_decl, (struct_ty, field_indexes)) = match current_type_spec {
+                    let (struct_decl, (_, field_indexes)) = match current_type_spec {
                         TypeSpec::Simple { name, .. } => {
                             let struct_decl =
                                 scope_ctx.module_info.structs.get(&name.name).unwrap();
@@ -630,8 +648,9 @@ fn compile_assign_stmt<'ctx, 'parent: 'ctx>(
                         .fields
                         .iter()
                         .find(|x| x.name.name == ident.name)
-                        .unwrap();
+                        .unwrap_or_else(|| panic!("failed to find field {:?}", ident.name));
                     let field_idx = *field_indexes.get(&ident.name).unwrap();
+                    let field_ty = scope_ctx.resolve_type_spec(context, &field.r#type)?;
 
                     current_type_spec = &field.r#type;
                     target_ptr = block
@@ -639,7 +658,7 @@ fn compile_assign_stmt<'ctx, 'parent: 'ctx>(
                             context,
                             target_ptr,
                             DenseI32ArrayAttribute::new(context, &[field_idx as i32]),
-                            struct_ty,
+                            field_ty,
                             opaque_pointer(context),
                             location,
                         ))
@@ -717,7 +736,7 @@ fn compile_expression<'ctx, 'parent: 'ctx>(
             session, context, scope_ctx, _helper, block, value, type_info,
         ),
         Expression::FnCall(value) => {
-            compile_fn_call(session, context, scope_ctx, _helper, block, value)
+            compile_fn_call_with_return(session, context, scope_ctx, _helper, block, value)
         }
         Expression::Match(_) => todo!(),
         Expression::If(_) => todo!(),
@@ -906,6 +925,54 @@ fn compile_fn_call<'ctx, 'parent: 'ctx>(
     _helper: &BlockHelper<'ctx, 'parent>,
     block: &'parent Block<'ctx>,
     info: &FnCallOp,
+) -> Result<(), Box<dyn Error>> {
+    tracing::debug!("compiling fncall: {:?}", info);
+    let mut args = Vec::with_capacity(info.args.len());
+    let location = get_location(context, session, info.target.span.from);
+
+    let target_fn = scope_ctx
+        .get_function(&info.target.name)
+        .expect("function not found")
+        .clone();
+
+    assert_eq!(
+        info.args.len(),
+        target_fn.decl.params.len(),
+        "parameter length doesnt match"
+    );
+
+    for (arg, arg_info) in info.args.iter().zip(&target_fn.decl.params) {
+        let value = compile_expression(
+            session,
+            context,
+            scope_ctx,
+            _helper,
+            block,
+            arg,
+            Some(&arg_info.r#type),
+        )?;
+        args.push(value);
+    }
+
+    let fn_name = scope_ctx.get_symbol_name(&info.target.name);
+
+    block.append_operation(func::call(
+        context,
+        FlatSymbolRefAttribute::new(context, &fn_name),
+        &args,
+        &[],
+        location,
+    ));
+    Ok(())
+}
+
+fn compile_fn_call_with_return<'ctx, 'parent: 'ctx>(
+    session: &Session,
+    context: &'ctx MeliorContext,
+    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
+    _helper: &BlockHelper<'ctx, 'parent>,
+    block: &'parent Block<'ctx>,
+    info: &FnCallOp,
 ) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
     tracing::debug!("compiling fncall: {:?}", info);
     let mut args = Vec::with_capacity(info.args.len());
@@ -1061,6 +1128,8 @@ fn compile_deref<'ctx, 'parent: 'ctx>(
             .into();
     }
 
+    // todo: handle deref for struct fields
+
     Ok(value)
 }
 
@@ -1083,5 +1152,7 @@ fn compile_asref<'ctx, 'parent: 'ctx>(
         panic!("can only take refs to non register values");
     }
 
-    Ok(local.value)
+    // todo: handle asref for struct fields
+
+    Ok(dbg!(local.value))
 }
