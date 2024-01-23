@@ -202,9 +202,22 @@ For a full roadmap check the [project](https://github.com/orgs/lambdaclass/proje
 - enums :x:
 - linear type checker :x:
 - borrow checker :x:
+- generics :x:
+- traits :x:
 - unsafe :x:
 - box :x:
 - rc (for cyclical data structures like graphs) :x:
 - ffi :x:
+- runtime with preemptive green threads :x:
+- erlang like profiling :x:
+- erlang like tracing :x:
+- erlang like observer :x:
+- standard library :x:
+- http server :x:
+- json :x:
+- sql server :x:
+- serde replacement :x:
+- rustler like binding generator to call rust code :x:
+- embeddable concrete (no allocator, first-class support for no standard library, etc) :x:
+- operating system threads :x:
 - capabilities 🤔
-
