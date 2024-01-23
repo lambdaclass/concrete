@@ -213,6 +213,7 @@ For a full roadmap check the [project](https://github.com/orgs/lambdaclass/proje
 - erlang like tracing :x:
 - erlang like observer :x:
 - standard library :x:
+- gleam otp like library patterns :x:
 - http server :x:
 - json :x:
 - sql server :x:
