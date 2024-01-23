@@ -91,7 +91,7 @@ mod ModuleName {
         "##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-        dbg!(parser.parse(lexer).unwrap());
+        parser.parse(lexer).unwrap();
     }
 
     #[test]
@@ -110,7 +110,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-        dbg!(parser.parse(lexer).unwrap());
+        parser.parse(lexer).unwrap();
     }
 
     #[test]
@@ -122,7 +122,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-        dbg!(parser.parse(lexer).unwrap());
+        parser.parse(lexer).unwrap();
     }
 
     #[test]
@@ -134,6 +134,25 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-        dbg!(parser.parse(lexer).unwrap());
+        parser.parse(lexer).unwrap();
+    }
+
+    #[test]
+    fn parse_empty_mod() {
+        let source = r##"mod MyMod {
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
+    }
+
+    #[test]
+    fn parse_empty_fn() {
+        let source = r##"mod MyMod {
+            fn hello() {}
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
     }
 }

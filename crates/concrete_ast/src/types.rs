@@ -35,6 +35,14 @@ impl TypeSpec {
             TypeSpec::Array { is_ref, .. } => *is_ref,
         }
     }
+
+    pub fn get_name(&self) -> String {
+        match self {
+            TypeSpec::Simple { name, .. } => name.name.clone(),
+            TypeSpec::Generic { name, .. } => name.name.clone(),
+            TypeSpec::Array { of_type, .. } => format!("[{}]", of_type.get_name()),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

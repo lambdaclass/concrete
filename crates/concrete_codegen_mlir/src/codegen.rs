@@ -12,6 +12,7 @@ use concrete_ast::{
     types::{RefType, TypeSpec},
     Program,
 };
+use concrete_check::ast_helper::{AstHelper, ModuleInfo};
 use concrete_session::Session;
 use melior::{
     dialect::{
@@ -32,10 +33,7 @@ use melior::{
     Context as MeliorContext,
 };
 
-use crate::{
-    ast_helper::{AstHelper, ModuleInfo},
-    scope_context::ScopeContext,
-};
+use crate::scope_context::ScopeContext;
 
 pub fn compile_program(
     session: &Session,
@@ -106,8 +104,6 @@ fn compile_module(
     module_info: &ModuleInfo<'_>,
     module: &Module,
 ) -> Result<(), Box<dyn Error>> {
-    // todo: handle imports
-
     let body = mlir_module.body();
 
     let mut imports = HashMap::new();

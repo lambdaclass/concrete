@@ -1,6 +1,7 @@
 use std::{collections::HashMap, error::Error};
 
 use concrete_ast::{functions::FunctionDef, structs::StructDecl, types::TypeSpec};
+use concrete_check::ast_helper::ModuleInfo;
 use melior::{
     dialect::llvm,
     ir::{
@@ -10,7 +11,7 @@ use melior::{
     Context as MeliorContext,
 };
 
-use crate::{ast_helper::ModuleInfo, codegen::LocalVar};
+use crate::codegen::LocalVar;
 
 #[derive(Debug, Clone)]
 pub struct ScopeContext<'ctx, 'parent: 'ctx> {
