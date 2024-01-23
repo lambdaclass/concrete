@@ -191,6 +191,13 @@ The design was very heavily influenced by all these programming languages:
 
 For a full roadmap check the [project](https://github.com/orgs/lambdaclass/projects/23).
 
+
+ ✔️ = implemented
+ 🏗️ = work in progress
+ :x: = work not started yet
+ 🤔 = to be defined
+
+Features:
 - if/else ✔️
 - while ✔️
 - option ✔️
@@ -220,5 +227,5 @@ For a full roadmap check the [project](https://github.com/orgs/lambdaclass/proje
 - serde replacement :x:
 - rustler like binding generator to call rust code :x:
 - embeddable concrete (no allocator, first-class support for no standard library, etc) :x:
-- operating system threads :x:
+- operating system threads with move only semantics :x:
 - capabilities 🤔
