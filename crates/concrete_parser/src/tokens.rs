@@ -59,7 +59,7 @@ pub enum Token {
     // Literals
     #[regex(r"\d+", |lex| lex.slice().parse::<u128>().unwrap(), priority = 2)]
     Integer(u128),
-    #[regex(r"([0-9]+([.][0-9]*)?|[.][0-9]+)", |lex| lex.slice().to_string(), priority = 1)]
+    #[regex(r"\d+\.\d+", |lex| lex.slice().to_string(), priority = 1)]
     Float(String),
     #[regex(r#""(?:[^"]|\\")*""#, |lex| {
         let slice = lex.slice();
