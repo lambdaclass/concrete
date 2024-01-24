@@ -1,6 +1,11 @@
 use std::{collections::HashMap, error::Error};
 
-use concrete_ast::{functions::FunctionDef, structs::StructDecl, types::TypeSpec};
+use concrete_ast::{
+    expressions::{Expression, PathSegment, ValueExpr},
+    functions::FunctionDef,
+    structs::StructDecl,
+    types::TypeSpec,
+};
 use concrete_check::ast_helper::ModuleInfo;
 use melior::{
     dialect::llvm,
@@ -258,6 +263,37 @@ impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
             TypeSpec::Simple { name, .. } => signed.contains(&name.name.as_str()),
             TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
             TypeSpec::Array { .. } => unreachable!(),
+        }
+    }
+
+    pub fn get_expr_type(&self, exp: &Expression) -> Option<TypeSpec> {
+        match exp {
+            Expression::Value(value) => match value {
+                ValueExpr::Path(path) => {
+                    let first = self.locals.get(&path.first.name)?;
+
+                    if path.extra.is_empty() {
+                        Some(first.type_spec.clone())
+                    } else {
+                        let mut current = &first.type_spec;
+                        for extra in &path.extra {
+                            match extra {
+                                PathSegment::FieldAccess(ident) => {
+                                    let st = self.module_info.structs.get(&ident.name)?;
+                                    let field = st.fields.get(ident.name);
+                                }
+                                PathSegment::ArrayIndex(_) => todo!(),
+                            }
+                        }
+                    }
+                }
+                _ => None,
+            },
+            Expression::FnCall(_) => todo!(),
+            Expression::Match(_) => todo!(),
+            Expression::If(_) => todo!(),
+            Expression::UnaryOp(_, _) => todo!(),
+            Expression::BinaryOp(_, _, _) => todo!(),
         }
     }
 }

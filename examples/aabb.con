@@ -1,0 +1,20 @@
+mod RectCheck {
+    struct Point2D {
+        x: i64,
+        y: i64,
+    }
+
+    struct Rect2D {
+        pos: Point2D,
+        size: Point2D,
+    }
+
+    pub fn is_point_inbounds(rect: &Rect2D, point: &Point2D) -> bool {
+        if point.x >= rect.pos.x && point.x <= (rect.pos.x + rect.size.x)
+            && point.y >= rect.pos.y && point.y <= (rect.pos.y + rect.size.y) {
+                return true;
+        } else {
+            return false;
+        }
+    }
+}
