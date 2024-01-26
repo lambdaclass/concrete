@@ -1,46 +1,54 @@
-use std::num::NonZeroU8;
+use std::{collections::HashMap, num::NonZeroU8};
 
 use concrete_ast::{
     common::{Ident, Span},
-    functions::{FunctionDef},
-    statements::{self, LetStmtTarget},
+    expressions::{Expression, ValueExpr},
+    functions::FunctionDef,
+    statements::{self, LetStmt, LetStmtTarget, ReturnStmt},
     types::{RefType, TypeSpec},
 };
-use generational_arena::{Arena, Index};
 
 mod common;
 
-pub type BlockIndex = Index;
-pub type TypeIndex = Index;
-pub type LocalIndex = Index;
-pub type SymbolIndex = Index;
+type LocalIndex = usize;
+type BlockIndex = usize;
+type TypeIndex = usize;
 
-pub struct MirCtx {
-    pub blocks: Arena<BasicBlock>,
-    pub locals: Arena<LocalKind>,
-    pub types: Arena<TyKind>,
-    pub symbols: Arena<Ident>,
+struct MirBuilder {
+    pub body: Body,
+    pub ret_local: Option<LocalIndex>,
+    pub local_map: HashMap<String, LocalIndex>,
+    pub current_block: BlockIndex,
 }
 
-
-
-pub fn build_mir(ctx: &mut MirCtx, func: &FunctionDef) {
-
-    let mut body = Body {
-        basic_blocks: Vec::new(),
-        locals: Vec::new(),
+pub fn build_mir(func: &FunctionDef) {
+    let mut builder = MirBuilder {
+        body: Body {
+            basic_blocks: Vec::new(),
+            locals: Vec::new(),
+        },
+        ret_local: None,
+        local_map: HashMap::new(),
+        current_block: 0,
     };
 
-    /*
     if let Some(ret_type) = func.decl.ret_type.as_ref() {
         let ty = type_spec_to_tykind(ret_type);
-        body.locals
+        builder.ret_local = Some(builder.body.locals.len());
+        builder
+            .body
+            .locals
             .push((Local::new(None, LocalKind::ReturnPointer), ty));
     }
 
     for arg in &func.decl.params {
         let ty = type_spec_to_tykind(&arg.r#type);
-        body.locals
+        builder
+            .local_map
+            .insert(arg.name.name.clone(), builder.body.locals.len());
+        builder
+            .body
+            .locals
             .push((Local::new(Some(arg.name.span), LocalKind::Arg), ty));
     }
 
@@ -50,7 +58,12 @@ pub fn build_mir(ctx: &mut MirCtx, func: &FunctionDef) {
             match &info.target {
                 LetStmtTarget::Simple { name, r#type } => {
                     let ty = type_spec_to_tykind(r#type);
-                    body.locals
+                    builder
+                        .local_map
+                        .insert(name.name.clone(), builder.body.locals.len());
+                    builder
+                        .body
+                        .locals
                         .push((Local::new(Some(name.span), LocalKind::Temp), ty));
                 }
                 LetStmtTarget::Destructure(_) => todo!(),
@@ -58,7 +71,11 @@ pub fn build_mir(ctx: &mut MirCtx, func: &FunctionDef) {
         }
     }
 
-    let mut cur_stmts = Vec::new();
+    builder.current_block = builder.body.basic_blocks.len();
+    builder.body.basic_blocks.push(BasicBlock {
+        statements: Vec::new(),
+        terminator: None,
+    });
 
     for stmt in &func.body {
         match stmt {
@@ -66,15 +83,116 @@ pub fn build_mir(ctx: &mut MirCtx, func: &FunctionDef) {
             statements::Statement::Match(_) => todo!(),
             statements::Statement::For(_) => todo!(),
             statements::Statement::If(_) => todo!(),
-            statements::Statement::Let(info) => {
-
-            },
-            statements::Statement::Return(_) => todo!(),
+            statements::Statement::Let(info) => build_let(&mut builder, info),
+            statements::Statement::Return(info) => {
+                build_return(
+                    &mut builder,
+                    info,
+                    func.decl
+                        .ret_type
+                        .as_ref()
+                        .map(|x| type_spec_to_tykind(x).kind),
+                );
+            }
             statements::Statement::While(_) => todo!(),
             statements::Statement::FnCall(_) => todo!(),
         }
     }
-    */
+
+    dbg!(&builder.body);
+}
+
+pub fn build_let(builder: &mut MirBuilder, info: &LetStmt) {
+    match &info.target {
+        LetStmtTarget::Simple { name, r#type } => {
+            let ty = type_spec_to_tykind(r#type);
+            let rvalue = build_expr(builder, &info.value, Some(ty.kind));
+            let cur_block = &mut builder.body.basic_blocks[builder.current_block];
+            let local_idx = builder.local_map.get(&name.name).copied().unwrap();
+            cur_block.statements.push(Statement {
+                span: name.span,
+                kind: StatementKind::StorageLive(local_idx),
+            });
+            cur_block.statements.push(Statement {
+                span: name.span,
+                kind: StatementKind::Assign(
+                    Place {
+                        local: local_idx,
+                        projection: vec![],
+                    },
+                    rvalue,
+                ),
+            });
+        }
+        LetStmtTarget::Destructure(_) => todo!(),
+    }
+}
+
+pub fn build_return(builder: &mut MirBuilder, info: &ReturnStmt, type_hint: Option<TyKind>) {
+    let value = build_expr(builder, &info.value, type_hint);
+    builder.body.basic_blocks[builder.current_block]
+        .statements
+        .push(Statement {
+            span: Span::new(0, 0), // todo: good span
+            kind: StatementKind::Assign(
+                Place {
+                    local: builder.ret_local.unwrap(),
+                    projection: vec![],
+                },
+                value,
+            ),
+        });
+    builder.body.basic_blocks[builder.current_block].terminator = Some(Box::new(Terminator {
+        span: Span::new(0, 0), // todo: good span
+        kind: TerminatorKind::Return,
+    }))
+}
+
+pub fn build_expr(
+    builder: &mut MirBuilder,
+    info: &Expression,
+    type_hint: Option<TyKind>,
+) -> Rvalue {
+    match info {
+        Expression::Value(info) => build_value(builder, info, type_hint),
+        Expression::FnCall(_) => todo!(),
+        Expression::Match(_) => todo!(),
+        Expression::If(_) => todo!(),
+        Expression::UnaryOp(_, _) => todo!(),
+        Expression::BinaryOp(_, _, _) => todo!(),
+    }
+}
+
+pub fn build_value(
+    builder: &mut MirBuilder,
+    info: &ValueExpr,
+    type_hint: Option<TyKind>,
+) -> Rvalue {
+    match info {
+        ValueExpr::ConstBool(value) => Rvalue::Use(Operand::Const(ConstData {
+            ty: TyKind::Bool,
+            data: ConstKind::Value(ValueTree::Leaf((*value).into())),
+        })),
+        ValueExpr::ConstChar(value) => Rvalue::Use(Operand::Const(ConstData {
+            ty: TyKind::Char,
+            data: ConstKind::Value(ValueTree::Leaf((*value).into())),
+        })),
+        ValueExpr::ConstInt(value) => Rvalue::Use(Operand::Const(match type_hint {
+            Some(ty) => ConstData {
+                ty,
+                data: ConstKind::Value(ValueTree::Leaf((*value).into())),
+            },
+            None => ConstData {
+                ty: TyKind::Int(IntTy::I64),
+                data: ConstKind::Value(ValueTree::Leaf((*value).into())),
+            },
+        })),
+        ValueExpr::ConstFloat(_) => todo!(),
+        ValueExpr::ConstStr(_) => todo!(),
+        ValueExpr::Path(_) => todo!(),
+        ValueExpr::Deref(_) => todo!(),
+        ValueExpr::AsRef { path, ref_type } => todo!(),
+    }
 }
 
 pub fn type_spec_to_tykind(spec: &TypeSpec) -> Ty {
@@ -145,14 +263,14 @@ pub fn name_to_tykind(name: &str) -> TyKind {
 /// Function body
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Body {
-    pub basic_blocks: Vec<BlockIndex>,
-    pub locals: Vec<(LocalIndex, TypeIndex)>,
+    pub basic_blocks: Vec<BasicBlock>,
+    pub locals: Vec<(Local, Ty)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BasicBlock {
     pub statements: Vec<Statement>,
-    pub terminator: Box<Terminator>,
+    pub terminator: Option<Box<Terminator>>, // should be some once mir is built
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -185,7 +303,7 @@ pub enum TerminatorKind {
         func: Operand,
         args: Vec<Operand>,
         destination: Place,         // where return value is stored
-        target: Option<BasicBlock>, // where to jump after call, if none diverges
+        target: Option<BlockIndex>, // where to jump after call, if none diverges
     },
     SwitchInt {
         discriminator: Operand,
@@ -196,13 +314,15 @@ pub enum TerminatorKind {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SwitchTargets {
     pub values: Vec<u128>,
-    pub targets: Vec<BasicBlock>, // last target is the otherwise block
+    pub targets: Vec<BlockIndex>, // last target is the otherwise block
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Rvalue {
+    Use(Operand),
     BinaryOp(BinOp, Box<(Operand, Operand)>),
     UnaryOp(UnOp, Operand),
+    Ref(Mutability, Place),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -333,21 +453,6 @@ pub enum ValueTree {
     Branch(Vec<Self>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ScalarInt {
-    pub data: u128,
-    pub size: NonZeroU8,
-}
-
-impl From<u64> for ScalarInt {
-    fn from(value: u64) -> Self {
-        Self {
-            data: value.into(),
-            size: NonZeroU8::new(8).unwrap(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Expr {
     Binop(BinOp, ConstData, ConstData),
@@ -379,4 +484,37 @@ pub enum BinOp {
 pub enum UnOp {
     Not,
     Neg,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ScalarInt {
+    pub data: u128,
+    pub size: NonZeroU8,
+}
+
+impl From<u64> for ScalarInt {
+    fn from(value: u64) -> Self {
+        Self {
+            data: value.into(),
+            size: NonZeroU8::new(std::mem::size_of_val(&value) as u8).unwrap(),
+        }
+    }
+}
+
+impl From<bool> for ScalarInt {
+    fn from(value: bool) -> Self {
+        Self {
+            data: value.into(),
+            size: NonZeroU8::new(std::mem::size_of_val(&value) as u8).unwrap(),
+        }
+    }
+}
+
+impl From<char> for ScalarInt {
+    fn from(value: char) -> Self {
+        Self {
+            data: value.into(),
+            size: NonZeroU8::new(std::mem::size_of_val(&value) as u8).unwrap(),
+        }
+    }
 }
