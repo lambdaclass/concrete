@@ -1,11 +1,17 @@
-use std::{collections::HashMap, num::NonZeroU8};
+use std::{
+    collections::{BTreeMap, HashMap},
+    num::NonZeroU8,
+};
 
+use common::FnBodyBuilder;
 use concrete_ast::{
     common::{Ident, Span},
     expressions::{Expression, ValueExpr},
     functions::FunctionDef,
+    modules::{Module, ModuleDefItem},
     statements::{self, LetStmt, LetStmtTarget, ReturnStmt},
     types::{RefType, TypeSpec},
+    Program,
 };
 
 mod common;
@@ -14,16 +20,45 @@ type LocalIndex = usize;
 type BlockIndex = usize;
 type TypeIndex = usize;
 
-struct MirBuilder {
-    pub body: Body,
-    pub ret_local: Option<LocalIndex>,
-    pub local_map: HashMap<String, LocalIndex>,
-    pub current_block: BlockIndex,
+pub fn build_mir(program: &Program) -> ProgramBody {
+    let mut modules = BTreeMap::default();
+
+    for mod_def in &program.modules {
+        modules.insert(mod_def.name.name.clone(), build_mir_module(mod_def));
+    }
+
+    ProgramBody { modules }
 }
 
-pub fn build_mir(func: &FunctionDef) {
-    let mut builder = MirBuilder {
-        body: Body {
+fn build_mir_module(module: &Module) -> ModuleBody {
+    let mut modules = BTreeMap::new();
+    let mut functions = BTreeMap::new();
+
+    for content in &module.contents {
+        match content {
+            ModuleDefItem::Constant(_) => todo!(),
+            ModuleDefItem::Function(fn_def) => {
+                functions.insert(fn_def.decl.name.name.clone(), build_fn(fn_def));
+            }
+            ModuleDefItem::Struct(_) => todo!(),
+            ModuleDefItem::Type(_) => todo!(),
+            ModuleDefItem::Module(mod_def) => {
+                modules.insert(mod_def.name.name.clone(), build_mir_module(mod_def));
+            }
+        }
+    }
+
+    ModuleBody {
+        name: module.name.name.clone(),
+        functions,
+        modules,
+    }
+}
+
+fn build_fn(func: &FunctionDef) -> FnBody {
+    let mut builder = FnBodyBuilder {
+        body: FnBody {
+            name: func.decl.name.name.clone(),
             basic_blocks: Vec::new(),
             locals: Vec::new(),
         },
@@ -99,10 +134,10 @@ pub fn build_mir(func: &FunctionDef) {
         }
     }
 
-    dbg!(&builder.body);
+    builder.body
 }
 
-pub fn build_let(builder: &mut MirBuilder, info: &LetStmt) {
+fn build_let(builder: &mut FnBodyBuilder, info: &LetStmt) {
     match &info.target {
         LetStmtTarget::Simple { name, r#type } => {
             let ty = type_spec_to_tykind(r#type);
@@ -128,7 +163,7 @@ pub fn build_let(builder: &mut MirBuilder, info: &LetStmt) {
     }
 }
 
-pub fn build_return(builder: &mut MirBuilder, info: &ReturnStmt, type_hint: Option<TyKind>) {
+fn build_return(builder: &mut FnBodyBuilder, info: &ReturnStmt, type_hint: Option<TyKind>) {
     let value = build_expr(builder, &info.value, type_hint);
     builder.body.basic_blocks[builder.current_block]
         .statements
@@ -148,11 +183,7 @@ pub fn build_return(builder: &mut MirBuilder, info: &ReturnStmt, type_hint: Opti
     }))
 }
 
-pub fn build_expr(
-    builder: &mut MirBuilder,
-    info: &Expression,
-    type_hint: Option<TyKind>,
-) -> Rvalue {
+fn build_expr(builder: &mut FnBodyBuilder, info: &Expression, type_hint: Option<TyKind>) -> Rvalue {
     match info {
         Expression::Value(info) => build_value(builder, info, type_hint),
         Expression::FnCall(_) => todo!(),
@@ -163,11 +194,7 @@ pub fn build_expr(
     }
 }
 
-pub fn build_value(
-    builder: &mut MirBuilder,
-    info: &ValueExpr,
-    type_hint: Option<TyKind>,
-) -> Rvalue {
+fn build_value(builder: &mut FnBodyBuilder, info: &ValueExpr, type_hint: Option<TyKind>) -> Rvalue {
     match info {
         ValueExpr::ConstBool(value) => Rvalue::Use(Operand::Const(ConstData {
             ty: TyKind::Bool,
@@ -260,9 +287,22 @@ pub fn name_to_tykind(name: &str) -> TyKind {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ProgramBody {
+    pub modules: BTreeMap<String, ModuleBody>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ModuleBody {
+    pub name: String,
+    pub functions: BTreeMap<String, FnBody>,
+    pub modules: BTreeMap<String, ModuleBody>,
+}
+
 /// Function body
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Body {
+pub struct FnBody {
+    pub name: String,
     pub basic_blocks: Vec<BasicBlock>,
     pub locals: Vec<(Local, Ty)>,
 }

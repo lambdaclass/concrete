@@ -230,7 +230,6 @@ fn compile_module(
         match statement {
             ModuleDefItem::Constant(_) => todo!(),
             ModuleDefItem::Function(info) => {
-                concrete_mir::build_mir(info);
                 let mut scope_ctx = scope_ctx.clone();
                 scope_ctx.function = Some(info.clone());
                 let op = compile_function_def(session, context, &scope_ctx, info)?;
