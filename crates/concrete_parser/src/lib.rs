@@ -89,7 +89,7 @@ mod ModuleName {
         "##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-        dbg!(parser.parse(lexer).unwrap());
+        parser.parse(lexer).unwrap();
     }
 
     #[test]
@@ -104,7 +104,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-        dbg!(parser.parse(lexer).unwrap());
+        parser.parse(lexer).unwrap();
     }
 
     #[test]
@@ -116,7 +116,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-        dbg!(parser.parse(lexer).unwrap());
+        parser.parse(lexer).unwrap();
     }
 
     #[test]
@@ -128,6 +128,6 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
-        dbg!(parser.parse(lexer).unwrap());
+        parser.parse(lexer).unwrap();
     }
 }

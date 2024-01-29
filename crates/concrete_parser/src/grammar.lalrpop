@@ -30,8 +30,10 @@ extern {
 
     // literals
     "identifier" => Token::Identifier(<String>),
-    "integer" => Token::Integer(<u64>),
+    "integer" => Token::Integer(<u128>),
+    "float" => Token::Float(<String>),
     "string" => Token::String(<String>),
+    "char" => Token::Char(<char>),
     "boolean" => Token::Boolean(<bool>),
 
     // Other
@@ -150,7 +152,7 @@ pub(crate) TypeSpec: ast::types::TypeSpec = {
   },
   <lo:@L> <is_ref:RefType?> "[" <of_type:TypeSpec> <size:(";" <"integer">)> "]"<hi:@R> => ast::types::TypeSpec::Array {
     of_type: Box::new(of_type),
-    size,
+    size: size.map(|x| x.try_into().expect("size is too big")),
     is_ref,
     span: Span::new(lo, hi),
   }
@@ -355,8 +357,10 @@ pub UnaryOp: ast::expressions::UnaryOp = {
 
 pub(crate) ValueExpr: ast::expressions::ValueExpr = {
   <"integer"> => ast::expressions::ValueExpr::ConstInt(<>),
+  <"float"> => ast::expressions::ValueExpr::ConstFloat(<>),
   <"boolean"> => ast::expressions::ValueExpr::ConstBool(<>),
   <"string"> => ast::expressions::ValueExpr::ConstStr(<>),
+  <"char"> => ast::expressions::ValueExpr::ConstChar(<>),
   <PathOp> => ast::expressions::ValueExpr::Path(<>),
   "*" <PathOp> => ast::expressions::ValueExpr::Deref(<>),
   <ref_type:RefType> <path:PathOp> => ast::expressions::ValueExpr::AsRef {

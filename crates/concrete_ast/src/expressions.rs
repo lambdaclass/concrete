@@ -18,8 +18,8 @@ pub enum Expression {
 pub enum ValueExpr {
     ConstBool(bool),
     ConstChar(char),
-    ConstInt(u64),
-    ConstFloat(()),
+    ConstInt(u128),
+    ConstFloat(String),
     ConstStr(String),
     Path(PathOp),
     Deref(PathOp),
