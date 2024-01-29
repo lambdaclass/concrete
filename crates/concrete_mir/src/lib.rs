@@ -214,7 +214,16 @@ fn build_value(builder: &mut FnBodyBuilder, info: &ValueExpr, type_hint: Option<
                 data: ConstKind::Value(ValueTree::Leaf((*value).into())),
             },
         })),
-        ValueExpr::ConstFloat(_) => todo!(),
+        ValueExpr::ConstFloat(value) => Rvalue::Use(Operand::Const(match type_hint {
+            Some(ty) => ConstData {
+                ty,
+                data: ConstKind::Value(ValueTree::Leaf((*value).into())),
+            },
+            None => ConstData {
+                ty: TyKind::Int(IntTy::I64),
+                data: ConstKind::Value(ValueTree::Leaf((*value).into())),
+            },
+        })),
         ValueExpr::ConstStr(_) => todo!(),
         ValueExpr::Path(_) => todo!(),
         ValueExpr::Deref(_) => todo!(),
