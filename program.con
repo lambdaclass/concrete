@@ -2,6 +2,6 @@ mod Simple {
     fn main() -> i32 {
         let x: i32 = 2;
         let y: i32 = 4;
-        return 2 + 4;
+        return x;
     }
 }

@@ -364,7 +364,7 @@ dependencies = [
  "bumpalo",
  "cc",
  "concrete_ast",
- "concrete_mir",
+ "concrete_ir",
  "concrete_session",
  "itertools 0.12.0",
  "llvm-sys",
@@ -381,7 +381,7 @@ dependencies = [
  "clap",
  "concrete_ast",
  "concrete_codegen_mlir",
- "concrete_mir",
+ "concrete_ir",
  "concrete_parser",
  "concrete_session",
  "salsa-2022",
@@ -391,7 +391,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "concrete_mir"
+name = "concrete_ir"
 version = "0.1.0"
 dependencies = [
  "concrete_ast",

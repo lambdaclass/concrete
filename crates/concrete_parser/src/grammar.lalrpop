@@ -152,7 +152,7 @@ pub(crate) TypeSpec: ast::types::TypeSpec = {
   },
   <lo:@L> <is_ref:RefType?> "[" <of_type:TypeSpec> <size:(";" <"integer">)> "]"<hi:@R> => ast::types::TypeSpec::Array {
     of_type: Box::new(of_type),
-    size: size.map(|x| x.try_into().expect("size is too big")),
+    size,
     is_ref,
     span: Span::new(lo, hi),
   }

@@ -1,7 +1,7 @@
 use ariadne::Source;
 use clap::Parser;
 use concrete_codegen_mlir::linker::{link_binary, link_shared_lib};
-use concrete_mir::build_mir;
+use concrete_ir::lower_program;
 use concrete_parser::{error::Diagnostics, ProgramSource};
 use concrete_session::{
     config::{DebugInfo, OptLevel},
@@ -31,7 +31,7 @@ pub struct CompilerArgs {
 
     /// Prints the middle ir.
     #[arg(long, default_value_t = false)]
-    print_mir: bool,
+    print_ir: bool,
 }
 
 pub fn main() -> Result<(), Box<dyn Error>> {
@@ -66,10 +66,10 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         println!("{:#?}", program);
     }
 
-    let program_mir = build_mir(&program);
+    let program_ir = lower_program(&program);
 
-    if args.print_mir {
-        println!("{:#?}", program_mir);
+    if args.print_ir {
+        println!("{:#?}", program_ir);
     }
 
     let cwd = std::env::current_dir()?;
