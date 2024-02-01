@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, HashMap};
 use common::{BuildCtx, FnBodyBuilder, IdGenerator, ModuleCtx};
 use concrete_ast::{
     common::{Ident, Span},
-    expressions::{Expression, PathOp, ValueExpr},
+    expressions::{
+        ArithOp, BinaryOp, BitwiseOp, CmpOp, Expression, FnCallOp, LogicOp, PathOp, ValueExpr,
+    },
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
     statements::{self, LetStmt, LetStmtTarget, ReturnStmt},
@@ -31,6 +33,7 @@ pub fn lower_program(program: &Program) -> ProgramBody {
             ModuleCtx {
                 id: ctx.module_id_counter,
                 func_name_to_id: Default::default(),
+                functions: Default::default(),
                 gen: IdGenerator::new(ctx.module_id_counter),
             },
         );
@@ -66,6 +69,17 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: usize) -> (BuildCtx, Mod
                 let next_id = m.gen.next_defid();
                 m.func_name_to_id
                     .insert(fn_def.decl.name.name.clone(), next_id);
+                let mut arg_types = Vec::new();
+                for arg in &fn_def.decl.params {
+                    arg_types.push(lower_type(&arg.r#type));
+                }
+                m.functions.insert(
+                    next_id,
+                    (
+                        arg_types,
+                        fn_def.decl.ret_type.as_ref().map(|x| lower_type(x)),
+                    ),
+                );
             }
             ModuleDefItem::Struct(_) => todo!(),
             ModuleDefItem::Type(_) => todo!(),
@@ -245,11 +259,125 @@ fn lower_expression(
 ) -> Rvalue {
     match info {
         Expression::Value(info) => lower_value_expr(builder, info, type_hint),
-        Expression::FnCall(_) => todo!(),
+        Expression::FnCall(info) => todo!(),
         Expression::Match(_) => todo!(),
         Expression::If(_) => todo!(),
         Expression::UnaryOp(_, _) => todo!(),
-        Expression::BinaryOp(_, _, _) => todo!(),
+        Expression::BinaryOp(lhs, op, rhs) => lower_binary_op(builder, lhs, *op, rhs, type_hint),
+    }
+}
+
+fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) {
+    let fn_id = *builder
+        .get_current_module()
+        .func_name_to_id
+        .get(&info.target.name)
+        .expect("function name not found");
+
+    let (arg_types, ret_type) = {
+        let m = builder
+            .ctx
+            .modules
+            .get(&fn_id.module_id)
+            .expect("failed to find fn module");
+        m.functions.get(&fn_id).cloned().unwrap()
+    };
+
+    let mut args = Vec::new();
+
+    for (arg, arg_ty) in info.args.iter().zip(arg_types) {
+        let rvalue = lower_expression(builder, arg, Some(arg_ty.kind.clone()));
+        args.push(rvalue);
+    }
+
+    let target_block = builder.body.basic_blocks.len();
+
+    let temp_local = if let Some(ret_type) = ret_type {
+        builder.body.locals.push((
+            Local {
+                span: None,
+                kind: LocalKind::Temp,
+            },
+            ret_type,
+        ));
+        Some(Place {
+            local: builder.body.locals.len() - 1,
+            projection: Vec::new(),
+        })
+    } else {
+        None
+    };
+
+    // todo: check if function is diverging such as exit().
+    let kind = TerminatorKind::Call {
+        func: fn_id,
+        args,
+        destination: temp_local,
+        target: Some(target_block),
+    };
+
+    builder.body.basic_blocks[builder.current_block].terminator = Some(Box::new(Terminator {
+        span: info.target.span, // todo: good span
+        kind,
+    }));
+
+    builder.body.basic_blocks.push(BasicBlock::default());
+}
+
+fn lower_binary_op(
+    builder: &mut FnBodyBuilder,
+    lhs: &Expression,
+    op: BinaryOp,
+    rhs: &Expression,
+    type_hint: Option<TyKind>,
+) -> Rvalue {
+    let expr_type = type_hint.clone().expect("type hint needed");
+    let lhs = lower_expression(builder, lhs, type_hint.clone());
+    let rhs = lower_expression(builder, rhs, type_hint.clone());
+
+    match op {
+        BinaryOp::Arith(op) => match op {
+            ArithOp::Add => Rvalue::BinaryOp(BinOp::Add, Box::new((lhs, rhs))),
+            ArithOp::Sub => Rvalue::BinaryOp(BinOp::Sub, Box::new((lhs, rhs))),
+            ArithOp::Mul => Rvalue::BinaryOp(BinOp::Mul, Box::new((lhs, rhs))),
+            ArithOp::Div => Rvalue::BinaryOp(BinOp::Div, Box::new((lhs, rhs))),
+            ArithOp::Mod => Rvalue::BinaryOp(BinOp::Mod, Box::new((lhs, rhs))),
+        },
+        BinaryOp::Logic(op) => match op {
+            LogicOp::And => Rvalue::BinaryOp(
+                BinOp::Ne,
+                Box::new((
+                    Rvalue::BinaryOp(BinOp::BitAnd, Box::new((lhs, rhs))),
+                    Rvalue::Use(Operand::Const(ConstData {
+                        ty: expr_type.clone(),
+                        data: ConstKind::Value(expr_type.get_falsy_value()),
+                    })),
+                )),
+            ),
+            LogicOp::Or => Rvalue::BinaryOp(
+                BinOp::Ne,
+                Box::new((
+                    Rvalue::BinaryOp(BinOp::BitOr, Box::new((lhs, rhs))),
+                    Rvalue::Use(Operand::Const(ConstData {
+                        ty: expr_type.clone(),
+                        data: ConstKind::Value(expr_type.get_falsy_value()),
+                    })),
+                )),
+            ),
+        },
+        BinaryOp::Compare(op) => match op {
+            CmpOp::Eq => Rvalue::BinaryOp(BinOp::Eq, Box::new((lhs, rhs))),
+            CmpOp::NotEq => Rvalue::BinaryOp(BinOp::Ne, Box::new((lhs, rhs))),
+            CmpOp::Lt => Rvalue::BinaryOp(BinOp::Lt, Box::new((lhs, rhs))),
+            CmpOp::LtEq => Rvalue::BinaryOp(BinOp::Le, Box::new((lhs, rhs))),
+            CmpOp::Gt => Rvalue::BinaryOp(BinOp::Gt, Box::new((lhs, rhs))),
+            CmpOp::GtEq => Rvalue::BinaryOp(BinOp::Ge, Box::new((lhs, rhs))),
+        },
+        BinaryOp::Bitwise(op) => match op {
+            BitwiseOp::And => Rvalue::BinaryOp(BinOp::BitAnd, Box::new((lhs, rhs))),
+            BitwiseOp::Or => Rvalue::BinaryOp(BinOp::BitXor, Box::new((lhs, rhs))),
+            BitwiseOp::Xor => Rvalue::BinaryOp(BinOp::BitXor, Box::new((lhs, rhs))),
+        },
     }
 }
 
@@ -415,6 +543,7 @@ pub fn name_to_tykind(name: &str) -> TyKind {
         "u8" => TyKind::Uint(UintTy::U8),
         "f32" => TyKind::Float(FloatTy::F32),
         "f64" => TyKind::Float(FloatTy::F64),
+        "string" => TyKind::String,
         _ => todo!(),
     }
 }
@@ -442,7 +571,7 @@ pub struct FnBody {
     pub locals: Vec<(Local, Ty)>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BasicBlock {
     pub statements: Vec<Statement>,
     pub terminator: Option<Box<Terminator>>, // should be some once mir is built
@@ -475,9 +604,9 @@ pub enum TerminatorKind {
     Return,
     Unreachable,
     Call {
-        func: Operand,
-        args: Vec<Operand>,
-        destination: Place,         // where return value is stored
+        func: DefId,
+        args: Vec<Rvalue>,
+        destination: Option<Place>, // where return value is stored
         target: Option<BlockIndex>, // where to jump after call, if none diverges
     },
     SwitchInt {
@@ -495,8 +624,8 @@ pub struct SwitchTargets {
 #[derive(Debug, Clone)]
 pub enum Rvalue {
     Use(Operand),
-    BinaryOp(BinOp, Box<(Operand, Operand)>),
-    UnaryOp(UnOp, Operand),
+    BinaryOp(BinOp, Box<(Rvalue, Rvalue)>),
+    UnaryOp(UnOp, Box<Rvalue>),
     Ref(Mutability, Place),
 }
 
@@ -594,6 +723,34 @@ pub enum TyKind {
     },
 }
 
+impl TyKind {
+    pub fn get_falsy_value(&self) -> ValueTree {
+        match self {
+            TyKind::Bool => ValueTree::Leaf(ConstValue::Bool(false)),
+            TyKind::Char => todo!(),
+            TyKind::Int(ty) => match ty {
+                IntTy::I8 => ValueTree::Leaf(ConstValue::I8(0)),
+                IntTy::I16 => ValueTree::Leaf(ConstValue::I16(0)),
+                IntTy::I32 => ValueTree::Leaf(ConstValue::I32(0)),
+                IntTy::I64 => ValueTree::Leaf(ConstValue::I64(0)),
+                IntTy::I128 => ValueTree::Leaf(ConstValue::I128(0)),
+            },
+            TyKind::Uint(ty) => match ty {
+                UintTy::U8 => ValueTree::Leaf(ConstValue::U8(0)),
+                UintTy::U16 => ValueTree::Leaf(ConstValue::U16(0)),
+                UintTy::U32 => ValueTree::Leaf(ConstValue::U32(0)),
+                UintTy::U64 => ValueTree::Leaf(ConstValue::U64(0)),
+                UintTy::U128 => ValueTree::Leaf(ConstValue::U128(0)),
+            },
+            TyKind::Float(_) => todo!(),
+            TyKind::String => todo!(),
+            TyKind::Array(_, _) => todo!(),
+            TyKind::Ref(_, _) => todo!(),
+            TyKind::Param { index, name } => todo!(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Mutability {
     Not,
@@ -634,7 +791,7 @@ pub struct ConstData {
 pub enum ConstKind {
     Param(ParamConst),
     Value(ValueTree),
-    Expr(Box<Expr>),
+    Expr(Box<ConstExpr>),
 }
 
 #[derive(Debug, Clone)]
@@ -650,8 +807,9 @@ pub enum ValueTree {
     Branch(Vec<Self>),
 }
 
+/// Constant expression
 #[derive(Debug, Clone)]
-pub enum Expr {
+pub enum ConstExpr {
     Binop(BinOp, ConstData, ConstData),
     UnOp(UnOp, ConstData),
     FunctionCall(ConstData, Vec<ConstData>),
@@ -663,7 +821,7 @@ pub enum BinOp {
     Sub,
     Mul,
     Div,
-    Rem,
+    Mod,
     BitXor,
     BitAnd,
     BitOr,

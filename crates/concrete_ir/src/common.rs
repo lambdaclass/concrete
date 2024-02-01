@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{BlockIndex, DefId, FnBody, Local, LocalIndex, Ty};
+use crate::{BlockIndex, DefId, FnBody, Local, LocalIndex, Ty, TyKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct IdGenerator {
@@ -43,6 +43,7 @@ pub struct BuildCtx {
 pub struct ModuleCtx {
     pub id: usize,
     pub func_name_to_id: HashMap<String, DefId>,
+    pub functions: HashMap<DefId, (Vec<Ty>, Option<Ty>)>,
     pub gen: IdGenerator,
 }
 
