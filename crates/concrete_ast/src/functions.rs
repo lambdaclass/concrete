@@ -1,5 +1,5 @@
 use crate::{
-    common::{DocString, GenericParam, Ident},
+    common::{DocString, GenericParam, Ident, Span},
     statements::Statement,
     types::TypeSpec,
 };
@@ -17,6 +17,7 @@ pub struct FunctionDecl {
 pub struct FunctionDef {
     pub decl: FunctionDecl,
     pub body: Vec<Statement>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

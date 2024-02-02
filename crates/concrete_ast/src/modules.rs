@@ -1,5 +1,5 @@
 use crate::{
-    common::{DocString, Ident},
+    common::{DocString, Ident, Span},
     constants::ConstantDef,
     functions::FunctionDef,
     imports::ImportStmt,
@@ -13,6 +13,7 @@ pub struct Module {
     pub imports: Vec<ImportStmt>,
     pub name: Ident,
     pub contents: Vec<ModuleDefItem>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
