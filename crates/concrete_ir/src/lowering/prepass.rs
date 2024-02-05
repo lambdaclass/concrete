@@ -22,69 +22,65 @@ pub fn prepass_module(mut ctx: BuildCtx, mod_def: &ast::modules::Module) -> Buil
         },
     );
 
+    {
+        let mut gen = ctx.gen;
+        let current_module = ctx
+            .body
+            .modules
+            .get_mut(&module_id)
+            .expect("module should exist");
+
+        for ct in &mod_def.contents {
+            match ct {
+                ast::modules::ModuleDefItem::Constant(info) => {
+                    let next_id = gen.next_defid();
+                    current_module
+                        .symbols
+                        .constants
+                        .insert(info.decl.name.name.clone(), next_id);
+                }
+                ast::modules::ModuleDefItem::Function(info) => {
+                    let next_id = gen.next_defid();
+                    current_module
+                        .symbols
+                        .functions
+                        .insert(info.decl.name.name.clone(), next_id);
+                }
+                ast::modules::ModuleDefItem::Struct(info) => {
+                    let next_id = gen.next_defid();
+                    current_module
+                        .symbols
+                        .structs
+                        .insert(info.name.name.clone(), next_id);
+                }
+                ast::modules::ModuleDefItem::Type(info) => {
+                    let next_id = gen.next_defid();
+                    current_module
+                        .symbols
+                        .types
+                        .insert(info.name.name.clone(), next_id);
+                }
+                ast::modules::ModuleDefItem::Module(_) => {}
+            }
+        }
+
+        ctx.gen = gen;
+    }
+
     for ct in &mod_def.contents {
-        match ct {
-            ast::modules::ModuleDefItem::Constant(info) => {
-                let m = ctx
-                    .body
-                    .modules
-                    .get_mut(&module_id)
-                    .expect("module should exist");
-                let next_id = ctx.gen.next_defid();
-                m.symbols
-                    .constants
-                    .insert(info.decl.name.name.clone(), next_id);
-            }
-            ast::modules::ModuleDefItem::Function(info) => {
-                let m = ctx
-                    .body
-                    .modules
-                    .get_mut(&module_id)
-                    .expect("module should exist");
-                let next_id = ctx.gen.next_defid();
-                m.symbols
-                    .functions
-                    .insert(info.decl.name.name.clone(), next_id);
-            }
-            ast::modules::ModuleDefItem::Struct(info) => {
-                let m = ctx
-                    .body
-                    .modules
-                    .get_mut(&module_id)
-                    .expect("module should exist");
-                let next_id = ctx.gen.next_defid();
-                m.symbols.structs.insert(info.name.name.clone(), next_id);
-            }
-            ast::modules::ModuleDefItem::Type(info) => {
-                let m = ctx
-                    .body
-                    .modules
-                    .get_mut(&module_id)
-                    .expect("module should exist");
-                let next_id = ctx.gen.next_defid();
-                m.symbols.types.insert(info.name.name.clone(), next_id);
-            }
-            ast::modules::ModuleDefItem::Module(info) => {
-                let m = ctx
-                    .body
-                    .modules
-                    .get_mut(&module_id)
-                    .expect("module should exist");
-                let next_id = ctx.gen.next_defid();
-                m.symbols.modules.insert(info.name.name.clone(), next_id);
-                m.modules.insert(
-                    next_id,
-                    ModuleBody {
-                        id: next_id,
-                        parent_id: Some(module_id),
-                        symbols: Default::default(),
-                        functions: Default::default(),
-                        modules: Default::default(),
-                        function_signatures: Default::default(),
-                    },
-                );
-                ctx = prepass_sub_module(ctx, &[module_id], next_id, info);
-            }
+        if let ast::modules::ModuleDefItem::Module(info) = ct {
+            let next_id = ctx.gen.next_defid();
+            let current_module = ctx
+                .body
+                .modules
+                .get_mut(&module_id)
+                .expect("module should exist");
+
+            current_module
+                .symbols
+                .modules
+                .insert(info.name.name.clone(), next_id);
+            ctx = prepass_sub_module(ctx, &[module_id], next_id, mod_def);
         }
     }
 
