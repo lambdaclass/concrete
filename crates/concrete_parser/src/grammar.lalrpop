@@ -190,12 +190,13 @@ pub Program: ast::Program = {
 // Modules
 
 pub(crate) Module: ast::modules::Module = {
-  "mod" <name:Ident> "{" <imports:ImportList?> <contents:ModuleItems> "}" => {
+  <lo:@L> "mod" <name:Ident> "{" <imports:ImportList?> <contents:ModuleItems?> "}" <hi:@R> => {
     ast::modules::Module {
       doc_string: None,
       imports: imports.unwrap_or_else(Vec::new),
       name,
-      contents
+      contents: contents.unwrap_or_else(Vec::new),
+      span: Span::new(lo, hi),
     }
   }
 }
@@ -210,10 +211,11 @@ pub(crate) ImportList: Vec<ast::imports::ImportStmt> = {
 
 
 pub(crate) ImportStmt: ast::imports::ImportStmt = {
-  "import" <module:Dot<Ident>> "{" <symbols:Comma<Ident>> "}" ";"  => {
+  <lo:@L> "import" <module:Dot<Ident>> "{" <symbols:Comma<Ident>> "}" ";" <hi:@R>  => {
     ast::imports::ImportStmt {
       module,
       symbols,
+      span: Span::new(lo, hi),
     }
   }
 }
@@ -269,9 +271,9 @@ pub(crate) Param: ast::functions::Param = {
 }
 
 pub(crate) FunctionDef: ast::functions::FunctionDef = {
-  <is_pub:"pub"?> "fn" <name:Ident> <generic_params:GenericParams?> "(" <params:Comma<Param>> ")" <ret_type:FunctionRetType?> "{"
-    <statements:StatementList>
-  "}" => {
+  <lo:@L> <is_pub:"pub"?> "fn" <name:Ident> <generic_params:GenericParams?> "(" <params:Comma<Param>> ")" <ret_type:FunctionRetType?> "{"
+    <statements:StatementList?>
+  "}" <hi:@R> => {
     ast::functions::FunctionDef {
       decl: ast::functions::FunctionDecl {
         doc_string: None,
@@ -280,7 +282,8 @@ pub(crate) FunctionDef: ast::functions::FunctionDef = {
         params,
         ret_type,
       },
-      body: statements
+      body: statements.unwrap_or_else(Vec::new),
+      span: Span::new(lo, hi),
     }
   }
 }

@@ -52,6 +52,7 @@ export TABLEGEN_170_PREFIX=/usr/lib/llvm-17
 - - [Features that are being debated](#features-that-are-being-debated)
 - [Syntax](#syntax)
 - [Inspirations](#inspiration)
+- [Roadmap](#roadmap)
 
 ## Design
 
@@ -185,3 +186,55 @@ The design was very heavily influenced by all these programming languages:
 - [Lua](https://www.lua.org/)
 - [Clojure](https://clojure.org/)
 - [Nim](https://nim-lang.org/)
+
+## Roadmap
+
+For a full roadmap check the [project](https://github.com/orgs/lambdaclass/projects/23).
+
+
+Meaning:
+-  ✔️ = implemented
+- 🏗️ = work in progress
+- :x: = work not started yet
+- 🤔 = to be defined
+
+Features:
+- if/else ✔️
+- while ✔️
+- modules ✔️
+- imports ✔️
+- floats 🏗️
+- structs 🏗️
+- arrays :x:
+- iterators :x:
+- for :x:
+- borrowing 🏗️
+- match :x:
+- option :x:
+- enums :x:
+- impl :x:
+- linear type checker :x:
+- borrow checker :x:
+- generics :x:
+- traits :x:
+- unsafe :x:
+- box :x:
+- rc (for cyclical data structures like graphs) :x:
+- ffi :x:
+- operating system threads with move only semantics :x:
+- rayon-like :x:
+
+Post-runtime features:
+- runtime with preemptive green threads :x:
+- erlang like profiling :x:
+- erlang like tracing :x:
+- erlang like observer :x:
+- standard library :x:
+    - gleam otp like library patterns :x:
+- http server :x:
+- json :x:
+- sql server :x:
+- serde replacement :x:
+- rustler like binding generator to call rust code :x:
+- embeddable concrete (no allocator, first-class support for no standard library, etc) :x:
+- capabilities 🤔
