@@ -1,7 +1,7 @@
  mod Simple {
-    fn main() -> i64 {
+    fn main() -> char {
         let a: char = hello_chars('\t');
-        return 1;
+        return a;
     }
 
     fn hello_chars(a: char) -> char {

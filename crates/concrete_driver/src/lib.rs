@@ -99,7 +99,19 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         target_dir,
         output_file,
     };
+
     tracing::debug!("Compiling with session: {:#?}", session);
+
+    if let Err(errors) = concrete_check::check_program(&program) {
+        for error in &errors {
+            let path = session.file_path.display().to_string();
+            error
+                .to_report(&session)
+                .eprint((path, session.source.clone()))?;
+        }
+
+        std::process::exit(1);
+    }
 
     let object_path = concrete_codegen_mlir::compile(&session, &program)?;
 
