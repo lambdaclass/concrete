@@ -36,7 +36,6 @@ impl IdGenerator {
 #[derive(Debug, Clone)]
 pub struct BuildCtx {
     pub body: ProgramBody,
-    pub module_ctxs: HashMap<DefId, ModuleCtx>,
     pub gen: IdGenerator,
 }
 
@@ -71,8 +70,8 @@ pub struct FnBodyBuilder {
     pub body: FnBody,
     pub name_to_local: HashMap<String, LocalIndex>,
     pub statements: Vec<Statement>,
-    pub ret_local: Option<LocalIndex>,
-    pub ctx: BuildCtx,
+    pub ret_local: LocalIndex,
+    pub ctx: ModuleBody,
 }
 
 impl FnBodyBuilder {
@@ -84,25 +83,5 @@ impl FnBodyBuilder {
 
     pub fn get_local(&self, name: &str) -> Option<&Local> {
         self.body.locals.get(*(self.name_to_local.get(name)?))
-    }
-
-    pub fn get_current_module(&self) -> &ModuleCtx {
-        self.ctx
-            .module_ctxs
-            .get(&self.local_module)
-            .expect("current module should exist")
-    }
-
-    pub fn get_current_module_mut(&mut self) -> &mut ModuleCtx {
-        self.ctx
-            .module_ctxs
-            .get_mut(&self.local_module)
-            .expect("current module should exist")
-    }
-
-    pub fn get_fn_sig_by_name(&self, name: &str) -> Option<&(Vec<Ty>, Option<Ty>)> {
-        let id = self.get_current_module().body.symbols.functions.get(name)?;
-        let f = self.get_current_module().functions.get(id)?;
-        Some(f)
     }
 }

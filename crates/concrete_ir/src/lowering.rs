@@ -8,7 +8,7 @@ use concrete_ast::{
     },
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
-    statements::{self, LetStmt, LetStmtTarget, ReturnStmt},
+    statements::{self, AssignStmt, LetStmt, LetStmtTarget, ReturnStmt},
     types::{RefType, TypeSpec},
     Program,
 };
@@ -29,9 +29,7 @@ pub fn lower_program(program: &Program) -> ProgramBody {
             modules: Default::default(),
         },
         gen: IdGenerator::default(),
-        module_ctxs: Default::default(),
     };
-
 
     // resolve symbols
     for module in &program.modules {
@@ -52,76 +50,83 @@ pub fn lower_program(program: &Program) -> ProgramBody {
 }
 
 fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId, parent_ids: &[DefId]) -> BuildCtx {
-    let mut gen = ctx.gen;
-
-    let mut body = if parent_ids.is_empty() {
+    let body = if parent_ids.is_empty() {
         ctx.body.modules.get_mut(&id).unwrap()
     } else {
         ctx.get_module_mut(parent_ids).unwrap()
     };
 
+    // fill fn sigs
+    for content in &module.contents {
+        if let ModuleDefItem::Function(fn_def) = content {
+            let fn_id = *body.symbols.functions.get(&fn_def.decl.name.name).unwrap();
+
+            let mut args = Vec::new();
+            let ret_type;
+
+            for arg in &fn_def.decl.params {
+                let ty = lower_type(&arg.r#type);
+                args.push(ty);
+            }
+
+            if let Some(ty) = &fn_def.decl.ret_type {
+                ret_type = lower_type(ty);
+            } else {
+                ret_type = Ty {
+                    span: None,
+                    kind: TyKind::Unit,
+                };
+            }
+
+            body.function_signatures.insert(fn_id, (args, ret_type));
+        }
+    }
+
     for content in &module.contents {
         match content {
             ModuleDefItem::Constant(_) => todo!(),
             ModuleDefItem::Function(fn_def) => {
-                let (new_ctx, func) = lower_func(ctx, fn_def, id);
-                body.functions.insert(fn_def.decl.name.name.clone(), func);
-                ctx = new_ctx;
+                // todo: avoid clone
+                *body = lower_func(body.clone(), fn_def, id);
             }
             ModuleDefItem::Struct(_) => todo!(),
             ModuleDefItem::Type(_) => todo!(),
-            ModuleDefItem::Module(mod_def) => {
-                let submodule_id = ctx.gen.next_module_defid();
-                ctx.module_ctxs.insert(submodule_id, ModuleCtx { id: submodule_id, func_name_to_id: , functions: (), gen: () })
-                let (new_ctx, module) = lower_module(ctx, mod_def, submodule_id);
-                body.modules.insert(mod_def.name.name.clone(), module);
-                ctx = new_ctx;
-            }
+            ModuleDefItem::Module(_mod_def) => {}
         }
     }
 
-    ctx.gen = gen;
     ctx
 }
 
-fn lower_func(mut ctx: Mod, func: &FunctionDef, module_id: DefId) -> BuildCtx {
-    todo!()
-}
-
-/*
-
-fn lower_func(mut ctx: BuildCtx, func: &FunctionDef, module_id: DefId) -> (BuildCtx, FnBody) {
+fn lower_func(mut ctx: ModuleBody, func: &FunctionDef, module_id: DefId) -> ModuleBody {
     let mut builder = FnBodyBuilder {
         body: FnBody {
-            name: func.decl.name.name.clone(),
             basic_blocks: Vec::new(),
             locals: Vec::new(),
-            id: {
-                let cur_mod = ctx.module_ctxs.get(&module_id).expect("module should exist");
-                *cur_mod
-                    .func_name_to_id
-                    .get(&func.decl.name.name)
-                    .expect("function not found")
-            },
+            id: *ctx.symbols.functions.get(&func.decl.name.name).unwrap(),
         },
         local_module: module_id,
-        ret_local: None,
+        ret_local: 0,
         name_to_local: HashMap::new(),
         statements: Vec::new(),
         ctx,
     };
 
-    if let Some(ret_type) = func.decl.ret_type.as_ref() {
-        let ty = lower_type(ret_type);
-        builder.ret_local = Some(builder.body.locals.len());
-        builder
-            .body
-            .locals
-            .push(Local::new(None, LocalKind::ReturnPointer, ty));
-    }
+    let fn_id = *builder
+        .ctx
+        .symbols
+        .functions
+        .get(&func.decl.name.name)
+        .unwrap();
+    let (args_ty, ret_ty) = builder.ctx.function_signatures.get(&fn_id).unwrap().clone();
 
-    for arg in &func.decl.params {
-        let ty = lower_type(&arg.r#type);
+    builder.ret_local = builder.body.locals.len();
+    builder
+        .body
+        .locals
+        .push(Local::new(None, LocalKind::ReturnPointer, ret_ty));
+
+    for (arg, ty) in func.decl.params.iter().zip(args_ty) {
         builder
             .name_to_local
             .insert(arg.name.name.clone(), builder.body.locals.len());
@@ -143,22 +148,16 @@ fn lower_func(mut ctx: BuildCtx, func: &FunctionDef, module_id: DefId) -> (Build
                     builder
                         .body
                         .locals
-                        .push((Local::new(Some(name.span), LocalKind::Temp), ty));
+                        .push(Local::new(Some(name.span), LocalKind::Temp, ty));
                 }
                 LetStmtTarget::Destructure(_) => todo!(),
             }
         }
     }
 
-    builder.current_block = builder.body.basic_blocks.len();
-    builder.body.basic_blocks.push(BasicBlock {
-        statements: Vec::new(),
-        terminator: None,
-    });
-
     for stmt in &func.body {
         match stmt {
-            statements::Statement::Assign(_) => todo!(),
+            statements::Statement::Assign(info) => lower_assign(&mut builder, info),
             statements::Statement::Match(_) => todo!(),
             statements::Statement::For(_) => todo!(),
             statements::Statement::If(_) => todo!(),
@@ -171,11 +170,16 @@ fn lower_func(mut ctx: BuildCtx, func: &FunctionDef, module_id: DefId) -> (Build
                 );
             }
             statements::Statement::While(_) => todo!(),
-            statements::Statement::FnCall(_) => todo!(),
+            statements::Statement::FnCall(info) => {
+                lower_fn_call(&mut builder, info);
+            }
         }
     }
 
-    (builder.ctx, builder.body)
+    let (mut ctx, body) = (builder.ctx, builder.body);
+    ctx.functions.insert(body.id, body);
+
+    ctx
 }
 
 fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) {
@@ -183,14 +187,13 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) {
         LetStmtTarget::Simple { name, r#type } => {
             let ty = lower_type(r#type);
             let rvalue = lower_expression(builder, &info.value, Some(ty.kind));
-            let cur_block = &mut builder.body.basic_blocks[builder.current_block];
             let local_idx = builder.name_to_local.get(&name.name).copied().unwrap();
-            cur_block.statements.push(Statement {
-                span: name.span,
+            builder.statements.push(Statement {
+                span: Some(name.span),
                 kind: StatementKind::StorageLive(local_idx),
             });
-            cur_block.statements.push(Statement {
-                span: name.span,
+            builder.statements.push(Statement {
+                span: Some(name.span),
                 kind: StatementKind::Assign(
                     Place {
                         local: local_idx,
@@ -204,24 +207,39 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) {
     }
 }
 
+fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) {
+    let local = *builder.name_to_local.get(&info.target.first.name).unwrap();
+    let ty = builder.body.locals[local].ty.clone();
+    let rvalue = lower_expression(builder, &info.value, Some(ty.kind.clone()));
+    let place = lower_path(builder, &info.target);
+
+    builder.statements.push(Statement {
+        span: Some(info.target.first.span),
+        kind: StatementKind::Assign(place, rvalue),
+    })
+}
+
 fn lower_return(builder: &mut FnBodyBuilder, info: &ReturnStmt, type_hint: Option<TyKind>) {
     let value = lower_expression(builder, &info.value, type_hint);
-    builder.body.basic_blocks[builder.current_block]
-        .statements
-        .push(Statement {
-            span: Span::new(0, 0), // todo: good span
-            kind: StatementKind::Assign(
-                Place {
-                    local: builder.ret_local.unwrap(),
-                    projection: vec![],
-                },
-                value,
-            ),
-        });
-    builder.body.basic_blocks[builder.current_block].terminator = Some(Box::new(Terminator {
-        span: Span::new(0, 0), // todo: good span
-        kind: TerminatorKind::Return,
-    }))
+    builder.statements.push(Statement {
+        span: None,
+        kind: StatementKind::Assign(
+            Place {
+                local: builder.ret_local,
+                projection: vec![],
+            },
+            value,
+        ),
+    });
+
+    let statements = std::mem::take(&mut builder.statements);
+    builder.body.basic_blocks.push(BasicBlock {
+        statements,
+        terminator: Box::new(Terminator {
+            span: None,
+            kind: TerminatorKind::Return,
+        }),
+    });
 }
 
 fn lower_expression(
@@ -231,7 +249,7 @@ fn lower_expression(
 ) -> Rvalue {
     match info {
         Expression::Value(info) => lower_value_expr(builder, info, type_hint),
-        Expression::FnCall(info) => todo!(),
+        Expression::FnCall(info) => lower_fn_call(builder, info),
         Expression::Match(_) => todo!(),
         Expression::If(_) => todo!(),
         Expression::UnaryOp(_, _) => todo!(),
@@ -239,61 +257,53 @@ fn lower_expression(
     }
 }
 
-fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) {
+fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) -> Rvalue {
     let fn_id = *builder
-        .get_current_module()
-        .func_name_to_id
+        .ctx
+        .symbols
+        .functions
         .get(&info.target.name)
-        .expect("function name not found");
-
-    let (arg_types, ret_type) = {
-        let m = builder
-            .ctx
-            .module_ctxs
-            .get(&fn_id.module_id)
-            .expect("failed to find fn module");
-        m.functions.get(&fn_id).cloned().unwrap()
-    };
+        .unwrap();
+    let (args_ty, ret_ty) = builder.ctx.function_signatures.get(&fn_id).unwrap().clone();
 
     let mut args = Vec::new();
 
-    for (arg, arg_ty) in info.args.iter().zip(arg_types) {
+    for (arg, arg_ty) in info.args.iter().zip(args_ty) {
         let rvalue = lower_expression(builder, arg, Some(arg_ty.kind.clone()));
         args.push(rvalue);
     }
 
-    let target_block = builder.body.basic_blocks.len();
+    let dest_local = builder.add_local(Local {
+        span: None,
+        kind: LocalKind::Temp,
+        ty: ret_ty,
+    });
 
-    let temp_local = if let Some(ret_type) = ret_type {
-        builder.body.locals.push((
-            Local {
-                span: None,
-                kind: LocalKind::Temp,
-            },
-            ret_type,
-        ));
-        Some(Place {
-            local: builder.body.locals.len() - 1,
-            projection: Vec::new(),
-        })
-    } else {
-        None
+    let dest_place = Place {
+        local: dest_local,
+        projection: Vec::new(),
     };
+
+    let target_block = builder.body.basic_blocks.len() + 1;
 
     // todo: check if function is diverging such as exit().
     let kind = TerminatorKind::Call {
         func: fn_id,
         args,
-        destination: temp_local,
+        destination: dest_place.clone(),
         target: Some(target_block),
     };
 
-    builder.body.basic_blocks[builder.current_block].terminator = Some(Box::new(Terminator {
-        span: info.target.span, // todo: good span
-        kind,
-    }));
+    let statements = std::mem::take(&mut builder.statements);
+    builder.body.basic_blocks.push(BasicBlock {
+        statements,
+        terminator: Box::new(Terminator {
+            span: Some(info.target.span),
+            kind,
+        }),
+    });
 
-    builder.body.basic_blocks.push(BasicBlock::default());
+    Rvalue::Use(Operand::Place(dest_place))
 }
 
 fn lower_binary_op(
@@ -307,48 +317,98 @@ fn lower_binary_op(
     let lhs = lower_expression(builder, lhs, type_hint.clone());
     let rhs = lower_expression(builder, rhs, type_hint.clone());
 
+    let local_ty = Ty {
+        span: None,
+        kind: expr_type.clone(),
+    };
+    let lhs_local = builder.add_local(Local {
+        span: None,
+        ty: local_ty.clone(),
+        kind: LocalKind::Temp,
+    });
+    let rhs_local = builder.add_local(Local {
+        span: None,
+        ty: local_ty.clone(),
+        kind: LocalKind::Temp,
+    });
+    let lhs_place = Place {
+        local: lhs_local,
+        projection: vec![],
+    };
+    let rhs_place = Place {
+        local: lhs_local,
+        projection: vec![],
+    };
+
+    builder.statements.push(Statement {
+        span: None,
+        kind: StatementKind::StorageLive(lhs_local),
+    });
+
+    builder.statements.push(Statement {
+        span: None,
+        kind: StatementKind::Assign(lhs_place.clone(), lhs),
+    });
+
+    builder.statements.push(Statement {
+        span: None,
+        kind: StatementKind::StorageLive(rhs_local),
+    });
+
+    builder.statements.push(Statement {
+        span: None,
+        kind: StatementKind::Assign(rhs_place.clone(), rhs),
+    });
+
+    let lhs = Operand::Place(lhs_place);
+    let rhs = Operand::Place(rhs_place);
+
     match op {
         BinaryOp::Arith(op) => match op {
-            ArithOp::Add => Rvalue::BinaryOp(BinOp::Add, Box::new((lhs, rhs))),
-            ArithOp::Sub => Rvalue::BinaryOp(BinOp::Sub, Box::new((lhs, rhs))),
-            ArithOp::Mul => Rvalue::BinaryOp(BinOp::Mul, Box::new((lhs, rhs))),
-            ArithOp::Div => Rvalue::BinaryOp(BinOp::Div, Box::new((lhs, rhs))),
-            ArithOp::Mod => Rvalue::BinaryOp(BinOp::Mod, Box::new((lhs, rhs))),
+            ArithOp::Add => Rvalue::BinaryOp(BinOp::Add, (lhs, rhs)),
+            ArithOp::Sub => Rvalue::BinaryOp(BinOp::Sub, (lhs, rhs)),
+            ArithOp::Mul => Rvalue::BinaryOp(BinOp::Mul, (lhs, rhs)),
+            ArithOp::Div => Rvalue::BinaryOp(BinOp::Div, (lhs, rhs)),
+            ArithOp::Mod => Rvalue::BinaryOp(BinOp::Mod, (lhs, rhs)),
         },
-        BinaryOp::Logic(op) => match op {
+        BinaryOp::Logic(op) => {
+            /* move logic out of binop, due to short circuit needssmatch op {
+
             LogicOp::And => Rvalue::BinaryOp(
                 BinOp::Ne,
-                Box::new((
-                    Rvalue::BinaryOp(BinOp::BitAnd, Box::new((lhs, rhs))),
+                (
+                    Rvalue::BinaryOp(BinOp::BitAnd, (lhs, rhs)),
                     Rvalue::Use(Operand::Const(ConstData {
                         ty: expr_type.clone(),
                         data: ConstKind::Value(expr_type.get_falsy_value()),
                     })),
-                )),
+                ),
             ),
             LogicOp::Or => Rvalue::BinaryOp(
                 BinOp::Ne,
-                Box::new((
-                    Rvalue::BinaryOp(BinOp::BitOr, Box::new((lhs, rhs))),
+                (
+                    Rvalue::BinaryOp(BinOp::BitOr, (lhs, rhs)),
                     Rvalue::Use(Operand::Const(ConstData {
                         ty: expr_type.clone(),
                         data: ConstKind::Value(expr_type.get_falsy_value()),
                     })),
-                )),
+                ),
             ),
-        },
+            */
+            todo!()
+        }
         BinaryOp::Compare(op) => match op {
-            CmpOp::Eq => Rvalue::BinaryOp(BinOp::Eq, Box::new((lhs, rhs))),
-            CmpOp::NotEq => Rvalue::BinaryOp(BinOp::Ne, Box::new((lhs, rhs))),
-            CmpOp::Lt => Rvalue::BinaryOp(BinOp::Lt, Box::new((lhs, rhs))),
-            CmpOp::LtEq => Rvalue::BinaryOp(BinOp::Le, Box::new((lhs, rhs))),
-            CmpOp::Gt => Rvalue::BinaryOp(BinOp::Gt, Box::new((lhs, rhs))),
-            CmpOp::GtEq => Rvalue::BinaryOp(BinOp::Ge, Box::new((lhs, rhs))),
+            CmpOp::Eq => Rvalue::BinaryOp(BinOp::Eq, (lhs, rhs)),
+            CmpOp::NotEq => Rvalue::BinaryOp(BinOp::Ne, (lhs, rhs)),
+            CmpOp::Lt => Rvalue::BinaryOp(BinOp::Lt, (lhs, rhs)),
+            CmpOp::LtEq => Rvalue::BinaryOp(BinOp::Le, (lhs, rhs)),
+            CmpOp::Gt => Rvalue::BinaryOp(BinOp::Gt, (lhs, rhs)),
+            CmpOp::GtEq => Rvalue::BinaryOp(BinOp::Ge, (lhs, rhs)),
         },
         BinaryOp::Bitwise(op) => match op {
-            BitwiseOp::And => Rvalue::BinaryOp(BinOp::BitAnd, Box::new((lhs, rhs))),
-            BitwiseOp::Or => Rvalue::BinaryOp(BinOp::BitXor, Box::new((lhs, rhs))),
-            BitwiseOp::Xor => Rvalue::BinaryOp(BinOp::BitXor, Box::new((lhs, rhs))),
+            BitwiseOp::And => Rvalue::BinaryOp(BinOp::BitAnd, (lhs, rhs)),
+            BitwiseOp::Or => Rvalue::BinaryOp(BinOp::BitXor, (lhs, rhs)),
+            BitwiseOp::Xor => Rvalue::BinaryOp(BinOp::BitXor, (lhs, rhs)),
         },
     }
 }
@@ -453,8 +513,6 @@ pub fn lower_path(builder: &mut FnBodyBuilder, info: &PathOp) -> Place {
         projection: Default::default(), // todo, field array deref
     }
 }
-
-*/
 
 pub fn lower_type(spec: &TypeSpec) -> Ty {
     match spec {

@@ -31,6 +31,7 @@ pub struct ModuleBody {
     pub parent_id: Option<DefId>,
     pub symbols: SymbolTable,
     pub functions: BTreeMap<DefId, FnBody>,
+    pub function_signatures: HashMap<DefId, (Vec<Ty>, Ty)>,
     pub modules: BTreeMap<DefId, ModuleBody>,
 }
 
@@ -42,15 +43,15 @@ pub struct FnBody {
     pub locals: Vec<Local>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct BasicBlock {
     pub statements: Vec<Statement>,
-    pub terminator: Option<Box<Terminator>>, // should be some once mir is built
+    pub terminator: Box<Terminator>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Statement {
-    pub span: Span,
+    pub span: Option<Span>,
     pub kind: StatementKind,
 }
 
@@ -63,7 +64,7 @@ pub enum StatementKind {
 
 #[derive(Debug, Clone)]
 pub struct Terminator {
-    pub span: Span,
+    pub span: Option<Span>,
     pub kind: TerminatorKind,
 }
 
@@ -77,7 +78,7 @@ pub enum TerminatorKind {
     Call {
         func: DefId,
         args: Vec<Rvalue>,
-        destination: Option<Place>, // where return value is stored
+        destination: Place,         // where return value is stored
         target: Option<BlockIndex>, // where to jump after call, if none diverges
     },
     SwitchInt {
@@ -95,8 +96,8 @@ pub struct SwitchTargets {
 #[derive(Debug, Clone)]
 pub enum Rvalue {
     Use(Operand),
-    BinaryOp(BinOp, Box<(Rvalue, Rvalue)>),
-    UnaryOp(UnOp, Box<Rvalue>),
+    BinaryOp(BinOp, (Operand, Operand)),
+    UnaryOp(UnOp, Box<Operand>),
     Ref(Mutability, Place),
 }
 
@@ -169,18 +170,22 @@ pub struct DefId {
 
 #[derive(Debug, Clone)]
 pub struct Ty {
-    pub span: Span,
+    pub span: Option<Span>,
     pub kind: TyKind,
 }
 
 impl Ty {
     pub fn new(span: &Span, kind: TyKind) -> Self {
-        Self { span: *span, kind }
+        Self {
+            span: Some(*span),
+            kind,
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum TyKind {
+    Unit, // ()
     Bool,
     Char,
     Int(IntTy),
@@ -199,6 +204,7 @@ pub enum TyKind {
 impl TyKind {
     pub fn get_falsy_value(&self) -> ValueTree {
         match self {
+            TyKind::Unit => unreachable!(),
             TyKind::Bool => ValueTree::Leaf(ConstValue::Bool(false)),
             TyKind::Char => todo!(),
             TyKind::Int(ty) => match ty {

@@ -1,7 +1,7 @@
 use ariadne::Source;
 use clap::Parser;
 use concrete_codegen_mlir::linker::{link_binary, link_shared_lib};
-use concrete_ir::lower_program;
+use concrete_ir::lowering::lower_program;
 use concrete_parser::{error::Diagnostics, ProgramSource};
 use concrete_session::{
     config::{DebugInfo, OptLevel},
