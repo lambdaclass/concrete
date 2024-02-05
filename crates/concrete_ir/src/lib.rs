@@ -168,6 +168,7 @@ pub struct DefId {
     pub id: usize,
 }
 
+/// A type
 #[derive(Debug, Clone)]
 pub struct Ty {
     pub span: Option<Span>,
@@ -225,7 +226,7 @@ impl TyKind {
             TyKind::String => todo!(),
             TyKind::Array(_, _) => todo!(),
             TyKind::Ref(_, _) => todo!(),
-            TyKind::Param { index, name } => todo!(),
+            TyKind::Param { .. } => todo!(),
         }
     }
 }

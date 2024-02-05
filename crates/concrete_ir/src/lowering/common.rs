@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{
-    BlockIndex, DefId, FnBody, Local, LocalIndex, ModuleBody, ProgramBody, Statement, Ty, TyKind,
-};
+use crate::{DefId, FnBody, Local, LocalIndex, ModuleBody, ProgramBody, Statement, Ty};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct IdGenerator {
@@ -14,7 +12,7 @@ impl IdGenerator {
     pub const fn new(program_id: usize) -> Self {
         Self {
             current_id: 0,
-            program_id: 0,
+            program_id,
         }
     }
 
@@ -41,7 +39,7 @@ pub struct BuildCtx {
 
 impl BuildCtx {
     pub fn get_module(&self, path: &[DefId]) -> Option<&ModuleBody> {
-        let mut parent = self.body.modules.get(path.get(0)?)?;
+        let mut parent = self.body.modules.get(path.first()?)?;
         for id in path.iter().skip(1) {
             parent = parent.modules.get(id)?;
         }
@@ -49,7 +47,7 @@ impl BuildCtx {
     }
 
     pub fn get_module_mut(&mut self, path: &[DefId]) -> Option<&mut ModuleBody> {
-        let mut parent = self.body.modules.get_mut(path.get(0)?)?;
+        let mut parent = self.body.modules.get_mut(path.first()?)?;
         for id in path.iter().skip(1) {
             parent = parent.modules.get_mut(id)?;
         }

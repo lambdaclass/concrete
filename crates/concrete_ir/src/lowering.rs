@@ -1,11 +1,8 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
-use common::{BuildCtx, FnBodyBuilder, IdGenerator, ModuleCtx};
+use common::{BuildCtx, FnBodyBuilder, IdGenerator};
 use concrete_ast::{
-    common::Span,
-    expressions::{
-        ArithOp, BinaryOp, BitwiseOp, CmpOp, Expression, FnCallOp, LogicOp, PathOp, ValueExpr,
-    },
+    expressions::{ArithOp, BinaryOp, BitwiseOp, CmpOp, Expression, FnCallOp, PathOp, ValueExpr},
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
     statements::{self, AssignStmt, LetStmt, LetStmtTarget, ReturnStmt},
@@ -98,7 +95,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId, parent_ids: &[Def
     ctx
 }
 
-fn lower_func(mut ctx: ModuleBody, func: &FunctionDef, module_id: DefId) -> ModuleBody {
+fn lower_func(ctx: ModuleBody, func: &FunctionDef, module_id: DefId) -> ModuleBody {
     let mut builder = FnBodyBuilder {
         body: FnBody {
             basic_blocks: Vec::new(),
@@ -371,7 +368,7 @@ fn lower_binary_op(
             ArithOp::Div => Rvalue::BinaryOp(BinOp::Div, (lhs, rhs)),
             ArithOp::Mod => Rvalue::BinaryOp(BinOp::Mod, (lhs, rhs)),
         },
-        BinaryOp::Logic(op) => {
+        BinaryOp::Logic(_op) => {
             /* move logic out of binop, due to short circuit needssmatch op {
 
             LogicOp::And => Rvalue::BinaryOp(
@@ -498,7 +495,10 @@ fn lower_value_expr(
 
             Rvalue::Use(Operand::Place(place))
         }
-        ValueExpr::AsRef { path, ref_type } => todo!(),
+        ValueExpr::AsRef {
+            path: _,
+            ref_type: _,
+        } => todo!(),
     }
 }
 
@@ -527,12 +527,7 @@ pub fn lower_type(spec: &TypeSpec) -> Ty {
             ),
             None => Ty::new(span, name_to_tykind(&name.name)),
         },
-        TypeSpec::Generic {
-            name,
-            is_ref,
-            type_params,
-            span,
-        } => {
+        TypeSpec::Generic { .. } => {
             todo!()
         }
         TypeSpec::Array {
