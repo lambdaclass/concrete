@@ -19,3 +19,4 @@ concrete_check = { version = "0.1.0", path = "../concrete_check" }
 
 [dev-dependencies]
 tempfile = "3.9.0"
+test-case = "3.3.1"
