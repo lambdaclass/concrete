@@ -71,7 +71,7 @@ pub struct Terminator {
 #[derive(Debug, Clone)]
 pub enum TerminatorKind {
     Goto {
-        target: BasicBlock,
+        target: BlockIndex,
     },
     Return,
     Unreachable,
@@ -87,10 +87,11 @@ pub enum TerminatorKind {
     },
 }
 
+/// Used for ifs, match
 #[derive(Debug, Clone)]
 pub struct SwitchTargets {
-    pub values: Vec<u128>,
-    pub targets: Vec<BlockIndex>, // last target is the otherwise block
+    pub values: Vec<ValueTree>,
+    pub targets: Vec<BlockIndex>, // last target is the otherwise block (no value matched)
 }
 
 #[derive(Debug, Clone)]
