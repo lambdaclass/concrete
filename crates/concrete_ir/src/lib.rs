@@ -68,21 +68,31 @@ pub struct Terminator {
     pub kind: TerminatorKind,
 }
 
+/// The kind of terminator for a basic block.
 #[derive(Debug, Clone)]
 pub enum TerminatorKind {
-    Goto {
-        target: BlockIndex,
-    },
+    /// Unconditional branch to the given target block.
+    Goto { target: BlockIndex },
+    /// Function return
     Return,
+    /// Unreachable terminator.
     Unreachable,
+    /// Function call
     Call {
+        /// The function to call.
         func: DefId,
+        /// The arguments.
         args: Vec<Rvalue>,
-        destination: Place,         // where return value is stored
-        target: Option<BlockIndex>, // where to jump after call, if none diverges
+        /// The place in memory to store the return value of the function call.
+        destination: Place,
+        /// What basic block to jump to after the function call, if the function is non-diverging (i.e it returns control back).
+        target: Option<BlockIndex>,
     },
+    /// Conditional branching, used in ifs, while
     SwitchInt {
+        /// The value to check.
         discriminator: Operand,
+        /// The targets that match against the value.
         targets: SwitchTargets,
     },
 }
@@ -90,32 +100,47 @@ pub enum TerminatorKind {
 /// Used for ifs, match
 #[derive(Debug, Clone)]
 pub struct SwitchTargets {
+    /// The values to match the discriminator against.
+    /// Each value has a target with the same index.
     pub values: Vec<ValueTree>,
-    pub targets: Vec<BlockIndex>, // last target is the otherwise block (no value matched)
+    /// The targets where to jump into if the value with the same index matches.
+    /// There is always 1 more extra target, the "otherwise" block for the case where no value matched.
+    pub targets: Vec<BlockIndex>,
 }
 
+/// A right-side value. The computed value of a right hand side statement such an assignment.
+///
+/// Binary operations can't be nested, so complex expressions
+/// are made by storing temporaries in newly created temp locals (with their given place).
 #[derive(Debug, Clone)]
 pub enum Rvalue {
+    /// Use the operand as-is.
     Use(Operand),
+    /// The result of the logical operation.
     LogicOp(LogOp, (Operand, Operand)), // separate due to short-circuit
+    /// The result of a binary operation.
     BinaryOp(BinOp, (Operand, Operand)),
+    /// The result of a unary operation.
     UnaryOp(UnOp, Operand),
+    /// A reference to a place.
     Ref(Mutability, Place),
 }
 
+/// A operand is a value, either from a place in memory or constant data.
 #[derive(Debug, Clone)]
 pub enum Operand {
     Place(Place),
     Const(ConstData),
 }
 
-/// A place in memory
+/// A place in memory, defined by the given local and it's projection (deref, field, index, etc).
 #[derive(Debug, Clone)]
 pub struct Place {
     pub local: LocalIndex,
     pub projection: Vec<PlaceElem>,
 }
 
+/// A element of the place projection.
 #[derive(Debug, Clone)]
 pub enum PlaceElem {
     /// Dereference
@@ -126,11 +151,16 @@ pub enum PlaceElem {
     Index(LocalIndex),
 }
 
+/// A local, akin to a variable, it can be user defined or compiler-introduced.
 #[derive(Debug, Clone)]
 pub struct Local {
+    /// A span exists for user-defined variables.
     pub span: Option<Span>,
+    /// A name exists for user-defined variables.
     pub debug_name: Option<String>,
+    /// The type of the local.
     pub ty: Ty,
+    /// The type of local.
     pub kind: LocalKind,
 }
 
@@ -154,6 +184,7 @@ impl Local {
     }
 }
 
+/// The type of local.
 #[derive(Debug, Clone, Copy)]
 pub enum LocalKind {
     /// User-declared variable binding or compiler-introduced temporary.
@@ -186,7 +217,7 @@ pub struct DefId {
 }
 
 /// A type
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Ty {
     pub span: Option<Span>,
     pub kind: TyKind,
@@ -201,7 +232,7 @@ impl Ty {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum TyKind {
     Unit, // ()
     Bool,
@@ -248,13 +279,13 @@ impl TyKind {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Mutability {
     Not,
     Mut,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum IntTy {
     I8,
     I16,
@@ -263,7 +294,7 @@ pub enum IntTy {
     I128,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum UintTy {
     U8,
     U16,
@@ -272,32 +303,38 @@ pub enum UintTy {
     U128,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FloatTy {
     F32,
     F64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct ConstData {
     pub ty: TyKind,
     pub data: ConstKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ConstKind {
+    /// A generic parameter constant.
     Param(ParamConst),
+    /// The value of the constant.
     Value(ValueTree),
+    /// A constant expression: todo.
     Expr(Box<ConstExpr>),
 }
 
-#[derive(Debug, Clone)]
+/// A generic constant
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ParamConst {
     pub index: usize,
+    // todo: change me
     pub ident: Ident,
 }
 
-#[derive(Debug, Clone)]
+/// Constant data, in case the data is complex such as an array it will be a branch with leaf values.
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/consts/valtree/enum.ValTree.html
 pub enum ValueTree {
     Leaf(ConstValue),
@@ -305,20 +342,20 @@ pub enum ValueTree {
 }
 
 /// Constant expression
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ConstExpr {
     Binop(BinOp, ConstData, ConstData),
     UnOp(UnOp, ConstData),
     FunctionCall(ConstData, Vec<ConstData>),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum LogOp {
     And,
     Or,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BinOp {
     Add,
     Sub,
@@ -338,13 +375,13 @@ pub enum BinOp {
     Gt,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum UnOp {
     Not,
     Neg,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum ConstValue {
     Bool(bool),
     I8(i8),
