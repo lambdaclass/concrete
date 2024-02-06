@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use common::{BuildCtx, FnBodyBuilder, IdGenerator};
 use concrete_ast::{
     expressions::{
-        ArithOp, BinaryOp, BitwiseOp, CmpOp, Expression, FnCallOp, IfExpr, PathOp, ValueExpr,
+        ArithOp, BinaryOp, BitwiseOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp,
+        ValueExpr,
     },
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
@@ -14,8 +15,9 @@ use concrete_ast::{
 
 use crate::{
     BasicBlock, BinOp, ConstData, ConstKind, ConstValue, DefId, FloatTy, FnBody, IntTy, Local,
-    LocalKind, ModuleBody, Mutability, Operand, Place, PlaceElem, ProgramBody, Rvalue, Statement,
-    StatementKind, SwitchTargets, Terminator, TerminatorKind, Ty, TyKind, UintTy, ValueTree,
+    LocalKind, LogOp, ModuleBody, Mutability, Operand, Place, PlaceElem, ProgramBody, Rvalue,
+    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, Ty, TyKind, UintTy,
+    ValueTree,
 };
 
 pub mod common;
@@ -496,32 +498,10 @@ fn lower_binary_op(
             ArithOp::Div => Rvalue::BinaryOp(BinOp::Div, (lhs, rhs)),
             ArithOp::Mod => Rvalue::BinaryOp(BinOp::Mod, (lhs, rhs)),
         },
-        BinaryOp::Logic(_op) => {
-            /* move logic out of binop, due to short circuit needssmatch op {
-
-            LogicOp::And => Rvalue::BinaryOp(
-                BinOp::Ne,
-                (
-                    Rvalue::BinaryOp(BinOp::BitAnd, (lhs, rhs)),
-                    Rvalue::Use(Operand::Const(ConstData {
-                        ty: expr_type.clone(),
-                        data: ConstKind::Value(expr_type.get_falsy_value()),
-                    })),
-                ),
-            ),
-            LogicOp::Or => Rvalue::BinaryOp(
-                BinOp::Ne,
-                (
-                    Rvalue::BinaryOp(BinOp::BitOr, (lhs, rhs)),
-                    Rvalue::Use(Operand::Const(ConstData {
-                        ty: expr_type.clone(),
-                        data: ConstKind::Value(expr_type.get_falsy_value()),
-                    })),
-                ),
-            ),
-            */
-            todo!()
-        }
+        BinaryOp::Logic(op) => match op {
+            LogicOp::And => Rvalue::LogicOp(LogOp::And, (lhs, rhs)),
+            LogicOp::Or => Rvalue::LogicOp(LogOp::Or, (lhs, rhs)),
+        },
         BinaryOp::Compare(op) => match op {
             CmpOp::Eq => Rvalue::BinaryOp(BinOp::Eq, (lhs, rhs)),
             CmpOp::NotEq => Rvalue::BinaryOp(BinOp::Ne, (lhs, rhs)),

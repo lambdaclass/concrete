@@ -97,8 +97,9 @@ pub struct SwitchTargets {
 #[derive(Debug, Clone)]
 pub enum Rvalue {
     Use(Operand),
+    LogicOp(LogOp, (Operand, Operand)), // separate due to short-circuit
     BinaryOp(BinOp, (Operand, Operand)),
-    UnaryOp(UnOp, Box<Operand>),
+    UnaryOp(UnOp, Operand),
     Ref(Mutability, Place),
 }
 
@@ -294,6 +295,12 @@ pub enum ConstExpr {
     Binop(BinOp, ConstData, ConstData),
     UnOp(UnOp, ConstData),
     FunctionCall(ConstData, Vec<ConstData>),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum LogOp {
+    And,
+    Or,
 }
 
 #[derive(Debug, Clone, Copy)]
