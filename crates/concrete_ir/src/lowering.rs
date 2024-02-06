@@ -699,6 +699,7 @@ pub fn name_to_tykind(name: &str) -> TyKind {
         "u8" => TyKind::Uint(UintTy::U8),
         "f32" => TyKind::Float(FloatTy::F32),
         "f64" => TyKind::Float(FloatTy::F64),
+        "bool" => TyKind::Bool,
         "string" => TyKind::String,
         _ => todo!(),
     }
