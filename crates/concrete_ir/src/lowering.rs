@@ -8,7 +8,7 @@ use concrete_ast::{
     },
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
-    statements::{self, AssignStmt, LetStmt, LetStmtTarget, ReturnStmt},
+    statements::{self, AssignStmt, LetStmt, LetStmtTarget, ReturnStmt, WhileStmt},
     types::{RefType, TypeSpec},
     Program,
 };
@@ -184,11 +184,97 @@ fn lower_statement(
         statements::Statement::Return(info) => {
             lower_return(builder, info, ret_type);
         }
-        statements::Statement::While(_) => todo!(),
+        statements::Statement::While(info) => lower_while(builder, info),
         statements::Statement::FnCall(info) => {
             lower_fn_call(builder, info);
         }
     }
+}
+
+fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) {
+    let statements = std::mem::take(&mut builder.statements);
+    builder.body.basic_blocks.push(BasicBlock {
+        statements,
+        terminator: Box::new(Terminator {
+            span: None,
+            kind: TerminatorKind::Goto {
+                target: builder.body.basic_blocks.len() + 1,
+            },
+        }),
+    });
+
+    let discriminator = lower_expression(builder, &info.value, Some(TyKind::Bool));
+
+    let local = builder.add_local(Local {
+        span: None,
+        ty: Ty {
+            span: None,
+            kind: TyKind::Bool,
+        },
+        kind: LocalKind::Temp,
+    });
+    let place = Place {
+        local,
+        projection: vec![],
+    };
+
+    builder.statements.push(Statement {
+        span: None,
+        kind: StatementKind::Assign(place.clone(), discriminator),
+    });
+
+    // keep idx to change terminator
+    let check_block_idx = builder.body.basic_blocks.len();
+
+    let statements = std::mem::take(&mut builder.statements);
+    builder.body.basic_blocks.push(BasicBlock {
+        statements,
+        terminator: Box::new(Terminator {
+            span: None,
+            kind: TerminatorKind::Unreachable,
+        }),
+    });
+
+    // keep idx for switch targets
+    let first_then_block_idx = builder.body.basic_blocks.len();
+
+    for stmt in &info.contents {
+        lower_statement(
+            builder,
+            stmt,
+            Some(builder.body.locals[builder.ret_local].ty.kind.clone()),
+        );
+    }
+
+    // keet idx to change terminator
+    let last_then_block_idx = builder.body.basic_blocks.len();
+    let statements = std::mem::take(&mut builder.statements);
+    builder.body.basic_blocks.push(BasicBlock {
+        statements,
+        terminator: Box::new(Terminator {
+            span: None,
+            kind: TerminatorKind::Unreachable,
+        }),
+    });
+
+    let otherwise_block_idx = builder.body.basic_blocks.len();
+
+    let targets = SwitchTargets {
+        values: vec![ValueTree::Leaf(ConstValue::Bool(true))],
+        targets: vec![first_then_block_idx, otherwise_block_idx],
+    };
+
+    let kind = TerminatorKind::SwitchInt {
+        discriminator: Operand::Place(place),
+        targets,
+    };
+    builder.body.basic_blocks[check_block_idx].terminator.kind = kind;
+
+    builder.body.basic_blocks[last_then_block_idx]
+        .terminator
+        .kind = TerminatorKind::Goto {
+        target: otherwise_block_idx,
+    };
 }
 
 fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) {
@@ -268,26 +354,9 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) {
         }),
     });
 
-    // Needed to ease codegen
-    let otherwise_block_idx = builder.body.basic_blocks.len();
-    builder.body.basic_blocks.push(BasicBlock {
-        statements: vec![],
-        terminator: Box::new(Terminator {
-            span: None,
-            kind: TerminatorKind::Unreachable,
-        }),
-    });
-
     let targets = SwitchTargets {
-        values: vec![
-            ValueTree::Leaf(ConstValue::Bool(true)),
-            ValueTree::Leaf(ConstValue::Bool(false)),
-        ],
-        targets: vec![
-            first_then_block_idx,
-            first_else_block_idx,
-            otherwise_block_idx,
-        ],
+        values: vec![ValueTree::Leaf(ConstValue::Bool(true))],
+        targets: vec![first_then_block_idx, first_else_block_idx],
     };
 
     let kind = TerminatorKind::SwitchInt {
