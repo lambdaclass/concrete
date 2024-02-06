@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{DefId, FnBody, Local, LocalIndex, ModuleBody, ProgramBody, Statement, Ty};
+use crate::{DefId, FnBody, Local, LocalIndex, ModuleBody, ProgramBody, Statement, Ty, TyKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct IdGenerator {
@@ -76,6 +76,15 @@ impl FnBodyBuilder {
     pub fn add_local(&mut self, local: Local) -> LocalIndex {
         let id = self.body.locals.len();
         self.body.locals.push(local);
+        id
+    }
+
+    pub fn add_temp_local(&mut self, ty_kind: TyKind) -> LocalIndex {
+        let id = self.body.locals.len();
+        self.body.locals.push(Local::temp(Ty {
+            span: None,
+            kind: ty_kind,
+        }));
         id
     }
 

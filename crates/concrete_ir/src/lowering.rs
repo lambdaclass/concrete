@@ -125,16 +125,18 @@ fn lower_func(ctx: ModuleBody, func: &FunctionDef, module_id: DefId) -> ModuleBo
     builder
         .body
         .locals
-        .push(Local::new(None, LocalKind::ReturnPointer, ret_ty));
+        .push(Local::new(None, LocalKind::ReturnPointer, ret_ty, None));
 
     for (arg, ty) in func.decl.params.iter().zip(args_ty) {
         builder
             .name_to_local
             .insert(arg.name.name.clone(), builder.body.locals.len());
-        builder
-            .body
-            .locals
-            .push(Local::new(Some(arg.name.span), LocalKind::Arg, ty));
+        builder.body.locals.push(Local::new(
+            Some(arg.name.span),
+            LocalKind::Arg,
+            ty,
+            Some(arg.name.name.clone()),
+        ));
     }
 
     // Get all locals
@@ -146,10 +148,12 @@ fn lower_func(ctx: ModuleBody, func: &FunctionDef, module_id: DefId) -> ModuleBo
                     builder
                         .name_to_local
                         .insert(name.name.clone(), builder.body.locals.len());
-                    builder
-                        .body
-                        .locals
-                        .push(Local::new(Some(name.span), LocalKind::Temp, ty));
+                    builder.body.locals.push(Local::new(
+                        Some(name.span),
+                        LocalKind::Temp,
+                        ty,
+                        Some(name.name.clone()),
+                    ));
                 }
                 LetStmtTarget::Destructure(_) => todo!(),
             }
@@ -205,14 +209,7 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) {
 
     let discriminator = lower_expression(builder, &info.value, Some(TyKind::Bool));
 
-    let local = builder.add_local(Local {
-        span: None,
-        ty: Ty {
-            span: None,
-            kind: TyKind::Bool,
-        },
-        kind: LocalKind::Temp,
-    });
+    let local = builder.add_temp_local(TyKind::Bool);
     let place = Place {
         local,
         projection: vec![],
@@ -280,14 +277,7 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) {
 fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) {
     let discriminator = lower_expression(builder, &info.value, Some(TyKind::Bool));
 
-    let local = builder.add_local(Local {
-        span: None,
-        ty: Ty {
-            span: None,
-            kind: TyKind::Bool,
-        },
-        kind: LocalKind::Temp,
-    });
+    let local = builder.add_temp_local(TyKind::Bool);
     let place = Place {
         local,
         projection: vec![],
@@ -469,11 +459,7 @@ fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) -> Rvalue {
         args.push(rvalue);
     }
 
-    let dest_local = builder.add_local(Local {
-        span: None,
-        kind: LocalKind::Temp,
-        ty: ret_ty,
-    });
+    let dest_local = builder.add_local(Local::temp(ret_ty));
 
     let dest_place = Place {
         local: dest_local,
@@ -517,16 +503,8 @@ fn lower_binary_op(
         span: None,
         kind: expr_type.clone(),
     };
-    let lhs_local = builder.add_local(Local {
-        span: None,
-        ty: local_ty.clone(),
-        kind: LocalKind::Temp,
-    });
-    let rhs_local = builder.add_local(Local {
-        span: None,
-        ty: local_ty.clone(),
-        kind: LocalKind::Temp,
-    });
+    let lhs_local = builder.add_local(Local::temp(local_ty.clone()));
+    let rhs_local = builder.add_local(Local::temp(local_ty.clone()));
     let lhs_place = Place {
         local: lhs_local,
         projection: vec![],

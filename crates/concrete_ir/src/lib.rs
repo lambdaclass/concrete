@@ -129,13 +129,28 @@ pub enum PlaceElem {
 #[derive(Debug, Clone)]
 pub struct Local {
     pub span: Option<Span>,
+    pub debug_name: Option<String>,
     pub ty: Ty,
     pub kind: LocalKind,
 }
 
 impl Local {
-    pub fn new(span: Option<Span>, kind: LocalKind, ty: Ty) -> Self {
-        Self { span, kind, ty }
+    pub fn new(span: Option<Span>, kind: LocalKind, ty: Ty, debug_name: Option<String>) -> Self {
+        Self {
+            span,
+            kind,
+            ty,
+            debug_name,
+        }
+    }
+
+    pub const fn temp(ty: Ty) -> Self {
+        Self {
+            span: None,
+            ty,
+            kind: LocalKind::Temp,
+            debug_name: None,
+        }
     }
 }
 
