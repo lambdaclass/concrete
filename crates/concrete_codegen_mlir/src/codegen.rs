@@ -19,7 +19,10 @@ use melior::{
         cf, func, memref,
     },
     ir::{
-        attribute::{FlatSymbolRefAttribute, IntegerAttribute, StringAttribute, TypeAttribute},
+        attribute::{
+            FlatSymbolRefAttribute, FloatAttribute, IntegerAttribute, StringAttribute,
+            TypeAttribute,
+        },
         r#type::{FunctionType, IntegerType, MemRefType},
         Block, BlockRef, Location, Module as MeliorModule, Operation, Region, Type, Value,
         ValueLike,
@@ -132,6 +135,7 @@ impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
             "u32" | "i32" => IntegerType::new(context, 32).into(),
             "u16" | "i16" => IntegerType::new(context, 16).into(),
             "u8" | "i8" => IntegerType::new(context, 8).into(),
+            "char" => IntegerType::new(context, 32).into(),
             "f32" => Type::float32(context),
             "f64" => Type::float64(context),
             "bool" => IntegerType::new(context, 1).into(),
@@ -828,7 +832,22 @@ fn compile_value_expr<'ctx, 'parent: 'ctx>(
                 .result(0)?
                 .into())
         }
-        ValueExpr::ConstFloat(_) => todo!(),
+        ValueExpr::ConstFloat(value) => {
+            let float_type = if let Some(type_info) = type_info {
+                scope_ctx.resolve_type_spec(context, type_info)?
+            } else {
+                Type::float64(context)
+            };
+            let value = FloatAttribute::new(
+                context,
+                value.parse().expect("failed to parse float"),
+                float_type,
+            );
+            Ok(block
+                .append_operation(arith::constant(context, value.into(), location))
+                .result(0)?
+                .into())
+        }
         ValueExpr::ConstStr(_) => todo!(),
         ValueExpr::Path(value) => {
             compile_path_op(session, context, scope_ctx, _helper, block, value)
