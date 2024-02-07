@@ -687,10 +687,16 @@ fn lower_value_expr(
 
             Rvalue::Use(Operand::Place(place))
         }
-        ValueExpr::AsRef {
-            path: _,
-            ref_type: _,
-        } => todo!(),
+        ValueExpr::AsRef { path, ref_type } => {
+            let place = lower_path(builder, path);
+            Rvalue::Ref(
+                match ref_type {
+                    RefType::Borrow => Mutability::Not,
+                    RefType::MutBorrow => Mutability::Mut,
+                },
+                place,
+            )
+        }
     }
 }
 
@@ -764,6 +770,7 @@ pub fn name_to_tykind(name: &str) -> TyKind {
         "f64" => TyKind::Float(FloatTy::F64),
         "bool" => TyKind::Bool,
         "string" => TyKind::String,
+        "char" => TyKind::Char,
         _ => todo!(),
     }
 }

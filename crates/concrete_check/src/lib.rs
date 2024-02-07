@@ -154,6 +154,8 @@ impl<'parent> ScopeContext<'parent> {
             "f32" => name.to_string(),
             "f64" => name.to_string(),
             "bool" => name.to_string(),
+            "char" => name.to_string(),
+            "string" => name.to_string(),
             name => {
                 if let Some(module) = self.imports.get(name) {
                     // a import
