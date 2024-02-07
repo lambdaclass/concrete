@@ -410,6 +410,7 @@ version = "0.1.0"
 dependencies = [
  "concrete_ast",
  "generational-arena",
+ "tracing",
 ]
 
 [[package]]

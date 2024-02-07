@@ -5,6 +5,7 @@ use concrete_ast as ast;
 
 pub fn prepass_module(mut ctx: BuildCtx, mod_def: &ast::modules::Module) -> BuildCtx {
     let module_id = ctx.gen.next_defid();
+    tracing::debug!("running ir prepass on module {:?}", module_id);
 
     ctx.body
         .module_names
@@ -14,7 +15,7 @@ pub fn prepass_module(mut ctx: BuildCtx, mod_def: &ast::modules::Module) -> Buil
         module_id,
         ModuleBody {
             id: module_id,
-            parent_id: None,
+            parent_ids: vec![],
             symbols: Default::default(),
             functions: Default::default(),
             modules: Default::default(),
@@ -80,7 +81,7 @@ pub fn prepass_module(mut ctx: BuildCtx, mod_def: &ast::modules::Module) -> Buil
                 .symbols
                 .modules
                 .insert(info.name.name.clone(), next_id);
-            ctx = prepass_sub_module(ctx, &[module_id], next_id, mod_def);
+            ctx = prepass_sub_module(ctx, &[module_id], next_id, info);
         }
     }
 
@@ -93,10 +94,17 @@ pub fn prepass_sub_module(
     id: DefId,
     mod_def: &ast::modules::Module,
 ) -> BuildCtx {
+    tracing::debug!("running ir prepass on submodule {:?}", id);
     {
         let mut gen = ctx.gen;
-        let parent = ctx.get_module_mut(parent_ids).unwrap();
-        let submodule = parent.modules.get_mut(&id).unwrap();
+        let mut submodule = ModuleBody {
+            id,
+            parent_ids: parent_ids.to_vec(),
+            symbols: Default::default(),
+            functions: Default::default(),
+            modules: Default::default(),
+            function_signatures: Default::default(),
+        };
 
         for ct in &mod_def.contents {
             match ct {
@@ -133,6 +141,9 @@ pub fn prepass_sub_module(
         }
 
         ctx.gen = gen;
+
+        let parent = ctx.get_module_mut(parent_ids).unwrap();
+        parent.modules.insert(id, submodule);
     }
 
     for ct in &mod_def.contents {
@@ -148,7 +159,7 @@ pub fn prepass_sub_module(
 
             let mut parent_ids = parent_ids.to_vec();
             parent_ids.push(id);
-            ctx = prepass_sub_module(ctx, &parent_ids, next_id, mod_def);
+            ctx = prepass_sub_module(ctx, &parent_ids, next_id, info);
         }
     }
 

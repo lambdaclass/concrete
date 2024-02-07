@@ -449,7 +449,7 @@ fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) -> Rvalue {
         .symbols
         .functions
         .get(&info.target.name)
-        .unwrap();
+        .expect("function call id not found");
     let (args_ty, ret_ty) = builder.ctx.function_signatures.get(&fn_id).unwrap().clone();
 
     let mut args = Vec::new();

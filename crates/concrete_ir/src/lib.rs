@@ -28,7 +28,7 @@ pub struct ProgramBody {
 #[derive(Debug, Clone)]
 pub struct ModuleBody {
     pub id: DefId,
-    pub parent_id: Option<DefId>,
+    pub parent_ids: Vec<DefId>,
     pub symbols: SymbolTable,
     pub functions: BTreeMap<DefId, FnBody>,
     pub function_signatures: HashMap<DefId, (Vec<Ty>, Ty)>,
