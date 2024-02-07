@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{DefId, ModuleBody};
 
@@ -53,6 +53,18 @@ pub fn prepass_module(mut ctx: BuildCtx, mod_def: &ast::modules::Module) -> Buil
                         .functions
                         .insert(info.decl.name.name.clone(), next_id);
                     current_module.functions.insert(next_id);
+                    ctx.unresolved_function_signatures.insert(
+                        next_id,
+                        (
+                            info.decl
+                                .params
+                                .iter()
+                                .map(|x| &x.r#type)
+                                .cloned()
+                                .collect(),
+                            info.decl.ret_type.clone(),
+                        ),
+                    );
                 }
                 ast::modules::ModuleDefItem::Struct(info) => {
                     let next_id = gen.next_defid();
@@ -141,6 +153,18 @@ pub fn prepass_sub_module(
                         .functions
                         .insert(info.decl.name.name.clone(), next_id);
                     submodule.functions.insert(next_id);
+                    ctx.unresolved_function_signatures.insert(
+                        next_id,
+                        (
+                            info.decl
+                                .params
+                                .iter()
+                                .map(|x| &x.r#type)
+                                .cloned()
+                                .collect(),
+                            info.decl.ret_type.clone(),
+                        ),
+                    );
                 }
                 ast::modules::ModuleDefItem::Struct(info) => {
                     let next_id = gen.next_defid();

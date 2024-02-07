@@ -34,10 +34,15 @@ impl IdGenerator {
 #[derive(Debug, Clone)]
 pub struct BuildCtx {
     pub body: ProgramBody,
+    pub unresolved_function_signatures: HashMap<
+        DefId,
+        (
+            Vec<concrete_ast::types::TypeSpec>,
+            Option<concrete_ast::types::TypeSpec>,
+        ),
+    >,
     pub gen: IdGenerator,
 }
-
-impl BuildCtx {}
 
 #[derive(Debug, Clone)]
 pub struct ModuleCtx {

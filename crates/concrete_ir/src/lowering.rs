@@ -15,9 +15,8 @@ use concrete_ast::{
 
 use crate::{
     BasicBlock, BinOp, ConstData, ConstKind, ConstValue, DefId, FloatTy, FnBody, IntTy, Local,
-    LocalKind, LogOp, ModuleBody, Mutability, Operand, Place, PlaceElem, ProgramBody, Rvalue,
-    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, Ty, TyKind, UintTy,
-    ValueTree,
+    LocalKind, LogOp, Mutability, Operand, Place, PlaceElem, ProgramBody, Rvalue, Statement,
+    StatementKind, SwitchTargets, Terminator, TerminatorKind, Ty, TyKind, UintTy, ValueTree,
 };
 
 pub mod common;
@@ -27,6 +26,7 @@ pub fn lower_program(program: &Program) -> ProgramBody {
     let mut ctx = BuildCtx {
         body: ProgramBody::default(),
         gen: IdGenerator::default(),
+        unresolved_function_signatures: Default::default(),
     };
 
     // resolve symbols
@@ -176,6 +176,7 @@ fn lower_func(ctx: BuildCtx, func: &FunctionDef, module_id: DefId) -> BuildCtx {
     }
 
     let (mut ctx, body) = (builder.ctx, builder.body);
+    ctx.unresolved_function_signatures.remove(&body.id);
     ctx.body.functions.insert(body.id, body);
 
     ctx
@@ -463,13 +464,29 @@ fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) -> Rvalue {
                 .expect("function call not found")
         }
     };
-    let (args_ty, ret_ty) = builder
-        .ctx
-        .body
-        .function_signatures
-        .get(&fn_id)
-        .unwrap()
-        .clone();
+    let (args_ty, ret_ty) = {
+        if let Some(x) = builder.ctx.body.function_signatures.get(&fn_id) {
+            x.clone()
+        } else {
+            let (args, ret) = builder
+                .ctx
+                .unresolved_function_signatures
+                .get(&fn_id)
+                .unwrap();
+
+            let args: Vec<_> = args.iter().map(lower_type).collect();
+            let ret = ret.as_ref().map(lower_type).unwrap_or(Ty {
+                span: None,
+                kind: TyKind::Unit,
+            });
+            builder
+                .ctx
+                .body
+                .function_signatures
+                .insert(fn_id, (args.clone(), ret.clone()));
+            (args, ret)
+        }
+    };
 
     let mut args = Vec::new();
 
