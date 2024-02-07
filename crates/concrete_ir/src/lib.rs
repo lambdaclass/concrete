@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use concrete_ast::common::{Ident, Span};
 
@@ -19,12 +19,17 @@ pub struct SymbolTable {
     pub types: HashMap<String, DefId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ProgramBody {
-    pub module_names: BTreeMap<String, DefId>,
+    pub top_level_module_names: BTreeMap<String, DefId>,
+    /// The top level modules.
+    pub top_level_modules: Vec<DefId>,
+    /// All the modules in a flat map.
     pub modules: BTreeMap<DefId, ModuleBody>,
-    /// Maps the given defid to the full path to the module.
-    pub id_module_tree: BTreeMap<DefId, Vec<DefId>>,
+    /// This stores all the functions from all modules
+    pub functions: BTreeMap<DefId, FnBody>,
+    /// The function signatures.
+    pub function_signatures: HashMap<DefId, (Vec<Ty>, Ty)>,
 }
 
 #[derive(Debug, Clone)]
@@ -32,9 +37,18 @@ pub struct ModuleBody {
     pub id: DefId,
     pub parent_ids: Vec<DefId>,
     pub symbols: SymbolTable,
-    pub functions: BTreeMap<DefId, FnBody>,
-    pub function_signatures: HashMap<DefId, (Vec<Ty>, Ty)>,
-    pub modules: BTreeMap<DefId, ModuleBody>,
+    /// Functions defined in this module.
+    pub functions: HashSet<DefId>,
+    /// Structs defined in this module.
+    pub structs: HashSet<DefId>,
+    /// Types defined in this module.
+    pub types: HashSet<DefId>,
+    /// Constants defined in this module.
+    pub constants: HashSet<DefId>,
+    /// Submodules defined in this module.
+    pub modules: HashSet<DefId>,
+    /// Imported items. symbol -> id
+    pub imports: HashMap<String, DefId>,
 }
 
 /// Function body

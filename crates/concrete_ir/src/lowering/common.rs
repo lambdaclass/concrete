@@ -37,23 +37,7 @@ pub struct BuildCtx {
     pub gen: IdGenerator,
 }
 
-impl BuildCtx {
-    pub fn get_module(&self, path: &[DefId]) -> Option<&ModuleBody> {
-        let mut parent = self.body.modules.get(path.first()?)?;
-        for id in path.iter().skip(1) {
-            parent = parent.modules.get(id)?;
-        }
-        Some(parent)
-    }
-
-    pub fn get_module_mut(&mut self, path: &[DefId]) -> Option<&mut ModuleBody> {
-        let mut parent = self.body.modules.get_mut(path.first()?)?;
-        for id in path.iter().skip(1) {
-            parent = parent.modules.get_mut(id)?;
-        }
-        Some(parent)
-    }
-}
+impl BuildCtx {}
 
 #[derive(Debug, Clone)]
 pub struct ModuleCtx {
@@ -69,7 +53,7 @@ pub struct FnBodyBuilder {
     pub name_to_local: HashMap<String, LocalIndex>,
     pub statements: Vec<Statement>,
     pub ret_local: LocalIndex,
-    pub ctx: ModuleBody,
+    pub ctx: BuildCtx,
 }
 
 impl FnBodyBuilder {
@@ -90,5 +74,9 @@ impl FnBodyBuilder {
 
     pub fn get_local(&self, name: &str) -> Option<&Local> {
         self.body.locals.get(*(self.name_to_local.get(name)?))
+    }
+
+    pub fn get_module_body(&self) -> &ModuleBody {
+        self.ctx.body.modules.get(&self.local_module).unwrap()
     }
 }

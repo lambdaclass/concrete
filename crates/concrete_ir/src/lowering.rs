@@ -25,11 +25,7 @@ pub mod prepass;
 
 pub fn lower_program(program: &Program) -> ProgramBody {
     let mut ctx = BuildCtx {
-        body: ProgramBody {
-            module_names: Default::default(),
-            modules: Default::default(),
-            id_module_tree: Default::default(),
-        },
+        body: ProgramBody::default(),
         gen: IdGenerator::default(),
     };
 
@@ -46,22 +42,18 @@ pub fn lower_program(program: &Program) -> ProgramBody {
     for mod_def in &program.modules {
         let id = *ctx
             .body
-            .module_names
+            .top_level_module_names
             .get(&mod_def.name.name)
             .expect("module should exist");
 
-        ctx = lower_module(ctx, mod_def, id, &[]);
+        ctx = lower_module(ctx, mod_def, id);
     }
 
     ctx.body
 }
 
-fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId, parent_ids: &[DefId]) -> BuildCtx {
-    let body = if parent_ids.is_empty() {
-        ctx.body.modules.get_mut(&id).unwrap()
-    } else {
-        ctx.get_module_mut(parent_ids).unwrap()
-    };
+fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> BuildCtx {
+    let body = ctx.body.modules.get(&id).unwrap();
 
     // fill fn sigs
     for content in &module.contents {
@@ -85,7 +77,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId, parent_ids: &[Def
                 };
             }
 
-            body.function_signatures.insert(fn_id, (args, ret_type));
+            ctx.body.function_signatures.insert(fn_id, (args, ret_type));
         }
     }
 
@@ -94,7 +86,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId, parent_ids: &[Def
             ModuleDefItem::Constant(_) => todo!(),
             ModuleDefItem::Function(fn_def) => {
                 // todo: avoid clone
-                *body = lower_func(body.clone(), fn_def, id);
+                ctx = lower_func(ctx, fn_def, id);
             }
             ModuleDefItem::Struct(_) => todo!(),
             ModuleDefItem::Type(_) => todo!(),
@@ -105,12 +97,15 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId, parent_ids: &[Def
     ctx
 }
 
-fn lower_func(ctx: ModuleBody, func: &FunctionDef, module_id: DefId) -> ModuleBody {
+fn lower_func(ctx: BuildCtx, func: &FunctionDef, module_id: DefId) -> BuildCtx {
     let mut builder = FnBodyBuilder {
         body: FnBody {
             basic_blocks: Vec::new(),
             locals: Vec::new(),
-            id: *ctx.symbols.functions.get(&func.decl.name.name).unwrap(),
+            id: {
+                let body = ctx.body.modules.get(&module_id).unwrap();
+                *body.symbols.functions.get(&func.decl.name.name).unwrap()
+            },
         },
         local_module: module_id,
         ret_local: 0,
@@ -120,12 +115,18 @@ fn lower_func(ctx: ModuleBody, func: &FunctionDef, module_id: DefId) -> ModuleBo
     };
 
     let fn_id = *builder
-        .ctx
+        .get_module_body()
         .symbols
         .functions
         .get(&func.decl.name.name)
         .unwrap();
-    let (args_ty, ret_ty) = builder.ctx.function_signatures.get(&fn_id).unwrap().clone();
+    let (args_ty, ret_ty) = builder
+        .ctx
+        .body
+        .function_signatures
+        .get(&fn_id)
+        .unwrap()
+        .clone();
 
     builder.ret_local = builder.body.locals.len();
     builder
@@ -175,7 +176,7 @@ fn lower_func(ctx: ModuleBody, func: &FunctionDef, module_id: DefId) -> ModuleBo
     }
 
     let (mut ctx, body) = (builder.ctx, builder.body);
-    ctx.functions.insert(body.id, body);
+    ctx.body.functions.insert(body.id, body);
 
     ctx
 }
@@ -450,13 +451,25 @@ fn lower_expression(
 }
 
 fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) -> Rvalue {
-    let fn_id = *builder
+    let fn_id = {
+        let mod_body = builder.get_module_body();
+
+        if let Some(id) = mod_body.symbols.functions.get(&info.target.name) {
+            *id
+        } else {
+            *mod_body
+                .imports
+                .get(&info.target.name)
+                .expect("function call not found")
+        }
+    };
+    let (args_ty, ret_ty) = builder
         .ctx
-        .symbols
-        .functions
-        .get(&info.target.name)
-        .expect("function call id not found");
-    let (args_ty, ret_ty) = builder.ctx.function_signatures.get(&fn_id).unwrap().clone();
+        .body
+        .function_signatures
+        .get(&fn_id)
+        .unwrap()
+        .clone();
 
     let mut args = Vec::new();
 
