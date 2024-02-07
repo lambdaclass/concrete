@@ -23,6 +23,8 @@ pub struct SymbolTable {
 pub struct ProgramBody {
     pub module_names: BTreeMap<String, DefId>,
     pub modules: BTreeMap<DefId, ModuleBody>,
+    /// Maps the given defid to the full path to the module.
+    pub id_module_tree: BTreeMap<DefId, Vec<DefId>>,
 }
 
 #[derive(Debug, Clone)]

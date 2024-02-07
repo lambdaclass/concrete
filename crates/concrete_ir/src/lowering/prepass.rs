@@ -22,6 +22,7 @@ pub fn prepass_module(mut ctx: BuildCtx, mod_def: &ast::modules::Module) -> Buil
             function_signatures: Default::default(),
         },
     );
+    ctx.body.id_module_tree.insert(module_id, vec![]);
 
     {
         let mut gen = ctx.gen;
@@ -39,6 +40,7 @@ pub fn prepass_module(mut ctx: BuildCtx, mod_def: &ast::modules::Module) -> Buil
                         .symbols
                         .constants
                         .insert(info.decl.name.name.clone(), next_id);
+                    ctx.body.id_module_tree.insert(next_id, vec![module_id]);
                 }
                 ast::modules::ModuleDefItem::Function(info) => {
                     let next_id = gen.next_defid();
@@ -46,6 +48,7 @@ pub fn prepass_module(mut ctx: BuildCtx, mod_def: &ast::modules::Module) -> Buil
                         .symbols
                         .functions
                         .insert(info.decl.name.name.clone(), next_id);
+                    ctx.body.id_module_tree.insert(next_id, vec![module_id]);
                 }
                 ast::modules::ModuleDefItem::Struct(info) => {
                     let next_id = gen.next_defid();
@@ -53,6 +56,7 @@ pub fn prepass_module(mut ctx: BuildCtx, mod_def: &ast::modules::Module) -> Buil
                         .symbols
                         .structs
                         .insert(info.name.name.clone(), next_id);
+                    ctx.body.id_module_tree.insert(next_id, vec![module_id]);
                 }
                 ast::modules::ModuleDefItem::Type(info) => {
                     let next_id = gen.next_defid();
@@ -60,6 +64,7 @@ pub fn prepass_module(mut ctx: BuildCtx, mod_def: &ast::modules::Module) -> Buil
                         .symbols
                         .types
                         .insert(info.name.name.clone(), next_id);
+                    ctx.body.id_module_tree.insert(next_id, vec![module_id]);
                 }
                 ast::modules::ModuleDefItem::Module(_) => {}
             }
@@ -76,6 +81,7 @@ pub fn prepass_module(mut ctx: BuildCtx, mod_def: &ast::modules::Module) -> Buil
                 .modules
                 .get_mut(&module_id)
                 .expect("module should exist");
+            ctx.body.id_module_tree.insert(next_id, vec![module_id]);
 
             current_module
                 .symbols
@@ -95,6 +101,8 @@ pub fn prepass_sub_module(
     mod_def: &ast::modules::Module,
 ) -> BuildCtx {
     tracing::debug!("running ir prepass on submodule {:?}", id);
+    let mut submodule_parents_ids = parent_ids.to_vec();
+    submodule_parents_ids.push(id);
     {
         let mut gen = ctx.gen;
         let mut submodule = ModuleBody {
@@ -114,6 +122,9 @@ pub fn prepass_sub_module(
                         .symbols
                         .constants
                         .insert(info.decl.name.name.clone(), next_id);
+                    ctx.body
+                        .id_module_tree
+                        .insert(next_id, submodule_parents_ids.clone());
                 }
                 ast::modules::ModuleDefItem::Function(info) => {
                     let next_id = gen.next_defid();
@@ -121,6 +132,9 @@ pub fn prepass_sub_module(
                         .symbols
                         .functions
                         .insert(info.decl.name.name.clone(), next_id);
+                    ctx.body
+                        .id_module_tree
+                        .insert(next_id, submodule_parents_ids.clone());
                 }
                 ast::modules::ModuleDefItem::Struct(info) => {
                     let next_id = gen.next_defid();
@@ -128,6 +142,9 @@ pub fn prepass_sub_module(
                         .symbols
                         .structs
                         .insert(info.name.name.clone(), next_id);
+                    ctx.body
+                        .id_module_tree
+                        .insert(next_id, submodule_parents_ids.clone());
                 }
                 ast::modules::ModuleDefItem::Type(info) => {
                     let next_id = gen.next_defid();
@@ -135,6 +152,9 @@ pub fn prepass_sub_module(
                         .symbols
                         .types
                         .insert(info.name.name.clone(), next_id);
+                    ctx.body
+                        .id_module_tree
+                        .insert(next_id, submodule_parents_ids.clone());
                 }
                 ast::modules::ModuleDefItem::Module(_) => {}
             }
@@ -157,9 +177,35 @@ pub fn prepass_sub_module(
                 .modules
                 .insert(info.name.name.clone(), next_id);
 
-            let mut parent_ids = parent_ids.to_vec();
-            parent_ids.push(id);
-            ctx = prepass_sub_module(ctx, &parent_ids, next_id, info);
+            ctx.body.id_module_tree.insert(next_id, submodule_parents_ids.clone());
+            ctx = prepass_sub_module(ctx, &submodule_parents_ids, next_id, info);
+        }
+    }
+
+    ctx
+}
+
+pub fn prepass_imports(mut ctx: BuildCtx, mod_def: &ast::modules::Module) -> BuildCtx {
+    let mod_id = *ctx.body.module_names.get(&mod_def.name.name).unwrap();
+    let current_module = ctx.body.modules.get(&mod_id);
+
+    for import in &mod_def.imports {
+        let imported_module_id = ctx
+            .body
+            .module_names
+            .get(&import.module[0].name)
+            .expect("import module not found");
+        let mut imported_module = ctx.body.modules.get(imported_module_id).unwrap();
+
+        for x in import.module.iter().skip(1) {
+            let imported_module_id = imported_module.symbols.modules.get(&x.name).unwrap();
+            imported_module = imported_module.modules.get(imported_module_id).unwrap();
+        }
+
+        for sym in &import.symbols {
+            if let Some(id) = imported_module.symbols.functions.get(&sym.name) {
+
+            }
         }
     }
 

@@ -28,6 +28,7 @@ pub fn lower_program(program: &Program) -> ProgramBody {
         body: ProgramBody {
             module_names: Default::default(),
             modules: Default::default(),
+            id_module_tree: Default::default(),
         },
         gen: IdGenerator::default(),
     };
@@ -35,6 +36,11 @@ pub fn lower_program(program: &Program) -> ProgramBody {
     // resolve symbols
     for module in &program.modules {
         ctx = prepass::prepass_module(ctx, module);
+    }
+
+    // resolve imports
+    for module in &program.modules {
+        ctx = prepass::prepass_imports(ctx, module);
     }
 
     for mod_def in &program.modules {
