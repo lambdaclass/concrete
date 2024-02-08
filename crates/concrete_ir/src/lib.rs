@@ -55,8 +55,18 @@ pub struct ModuleBody {
 #[derive(Debug, Clone)]
 pub struct FnBody {
     pub id: DefId,
+    pub name: String,
     pub basic_blocks: Vec<BasicBlock>,
     pub locals: Vec<Local>,
+}
+
+impl FnBody {
+    pub fn get_params(&self) -> Vec<&Local> {
+        self.locals
+            .iter()
+            .filter(|x| matches!(x.kind, LocalKind::Arg))
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone)]

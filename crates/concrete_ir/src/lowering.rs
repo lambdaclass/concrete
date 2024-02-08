@@ -102,6 +102,7 @@ fn lower_func(ctx: BuildCtx, func: &FunctionDef, module_id: DefId) -> BuildCtx {
         body: FnBody {
             basic_blocks: Vec::new(),
             locals: Vec::new(),
+            name: func.decl.name.name.clone(),
             id: {
                 let body = ctx.body.modules.get(&module_id).unwrap();
                 *body.symbols.functions.get(&func.decl.name.name).unwrap()
@@ -353,8 +354,8 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) {
     });
 
     let targets = SwitchTargets {
-        values: vec![ValueTree::Leaf(ConstValue::Bool(true))],
-        targets: vec![first_then_block_idx, first_else_block_idx],
+        values: vec![ValueTree::Leaf(ConstValue::Bool(false))],
+        targets: vec![first_else_block_idx, first_then_block_idx],
     };
 
     let kind = TerminatorKind::SwitchInt {
