@@ -7,6 +7,7 @@ use std::{
 
 use ariadne::Source;
 use concrete_codegen_mlir::linker::{link_binary, link_shared_lib};
+use concrete_ir::lowering::lower_program;
 use concrete_parser::{error::Diagnostics, ProgramSource};
 use concrete_session::{
     config::{DebugInfo, OptLevel},
@@ -75,7 +76,9 @@ pub fn compile_program(
         output_file,
     };
 
-    let object_path = concrete_codegen_mlir::compile(&session, &program)?;
+    let program_ir = lower_program(&program);
+
+    let object_path = concrete_codegen_mlir::compile(&session, &program_ir)?;
 
     if library {
         link_shared_lib(

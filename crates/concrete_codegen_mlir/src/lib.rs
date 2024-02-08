@@ -10,7 +10,7 @@ use std::{
     sync::OnceLock,
 };
 
-use concrete_ast::Program;
+use concrete_ir::ProgramBody;
 use concrete_session::{config::OptLevel, Session};
 use context::Context;
 use llvm_sys::{
@@ -37,7 +37,7 @@ mod module;
 mod pass_manager;
 
 /// Returns the object file path.
-pub fn compile(session: &Session, program: &Program) -> Result<PathBuf, Box<dyn Error>> {
+pub fn compile(session: &Session, program: &ProgramBody) -> Result<PathBuf, Box<dyn Error>> {
     let context = Context::new();
     let mlir_module = context.compile(session, program)?;
     assert!(mlir_module.melior_module.as_operation().verify());

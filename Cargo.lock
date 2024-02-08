@@ -374,7 +374,6 @@ version = "0.1.0"
 dependencies = [
  "bumpalo",
  "cc",
- "concrete_ast",
  "concrete_check",
  "concrete_ir",
  "concrete_session",

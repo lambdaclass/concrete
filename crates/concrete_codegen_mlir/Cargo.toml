@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 bumpalo = { version = "3.14.0", features = ["std"] }
-concrete_ast = { path = "../concrete_ast"}
 concrete_ir = { version = "0.1.0", path = "../concrete_ir" }
 concrete_check = { version = "0.1.0", path = "../concrete_check" }
 concrete_session = { path = "../concrete_session"}

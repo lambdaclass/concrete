@@ -113,7 +113,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         std::process::exit(1);
     }
 
-    let object_path = concrete_codegen_mlir::compile(&session, &program)?;
+    let object_path = concrete_codegen_mlir::compile(&session, &program_ir)?;
 
     if session.library {
         link_shared_lib(
