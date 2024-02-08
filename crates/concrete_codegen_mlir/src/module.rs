@@ -16,11 +16,6 @@ impl<'m> MLIRModule<'m> {
     pub fn module(&self) -> &MeliorModule {
         &self.melior_module
     }
-
-    // TODO: uncomment this when we have a proper Program (we should get it from the DB).
-    // pub fn program_registry(&self) -> &ProgramRegistry<CoreType, CoreLibfunc> {
-    //     &self.registry
-    // }
 }
 
 impl Debug for MLIRModule<'_> {
