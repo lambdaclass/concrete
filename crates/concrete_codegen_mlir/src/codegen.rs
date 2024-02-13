@@ -771,7 +771,7 @@ fn value_tree_to_int(value: &ValueTree) -> Option<i64> {
             concrete_ir::ConstValue::I8(value) => Some((*value) as i64),
             concrete_ir::ConstValue::I16(value) => Some((*value) as i64),
             concrete_ir::ConstValue::I32(value) => Some((*value) as i64),
-            concrete_ir::ConstValue::I64(value) => Some((*value)),
+            concrete_ir::ConstValue::I64(value) => Some(*value),
             concrete_ir::ConstValue::I128(value) => Some((*value) as i64),
             concrete_ir::ConstValue::U8(value) => Some((*value) as i64),
             concrete_ir::ConstValue::U16(value) => Some((*value) as i64),
