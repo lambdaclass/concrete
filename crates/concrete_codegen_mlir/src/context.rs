@@ -4,7 +4,7 @@ use concrete_ir::ProgramBody;
 use concrete_session::Session;
 use melior::{
     dialect::DialectRegistry,
-    ir::{operation::OperationPrintingFlags, Location, Module as MeliorModule},
+    ir::{Location, Module as MeliorModule},
     utility::{register_all_dialects, register_all_llvm_translations, register_all_passes},
     Context as MeliorContext,
 };

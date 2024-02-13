@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use concrete_ast::common::{Ident, Span};
+use concrete_ast::common::Ident;
 
 pub mod lowering;
 
@@ -8,6 +8,8 @@ pub type LocalIndex = usize;
 pub type BlockIndex = usize;
 pub type TypeIndex = usize;
 pub type FieldIndex = usize;
+
+pub use concrete_ast::common::Span;
 
 #[derive(Debug, Clone, Default)]
 pub struct SymbolTable {

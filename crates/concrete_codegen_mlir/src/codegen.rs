@@ -1,16 +1,16 @@
 use std::{collections::HashMap, error::Error};
 
 use concrete_ir::{
-    BinOp, DefId, FnBody, LocalKind, ModuleBody, Operand, Place, ProgramBody, Rvalue, Ty, TyKind,
-    ValueTree,
+    BinOp, DefId, FnBody, LocalKind, ModuleBody, Operand, Place, ProgramBody, Rvalue, Span, Ty,
+    TyKind, ValueTree,
 };
 use concrete_session::Session;
 use melior::{
     dialect::{arith, cf, func, llvm, memref},
     ir::{
-        attribute::{FlatSymbolRefAttribute, IntegerAttribute, StringAttribute, TypeAttribute},
+        attribute::{FlatSymbolRefAttribute, StringAttribute, TypeAttribute},
         r#type::{FunctionType, IntegerType, MemRefType},
-        Block, Location, Module as MeliorModule, Region, Type, Value, ValueLike,
+        Attribute, Block, Location, Module as MeliorModule, Region, Type, Value,
     },
     Context as MeliorContext,
 };
@@ -36,6 +36,26 @@ impl<'a> ModuleCodegenCtx<'a> {
             .modules
             .get(&self.module_id)
             .expect("module should exist")
+    }
+
+    pub fn get_location(&self, span: Option<Span>) -> Location {
+        if let Some(span) = span {
+            let (_, line, col) = self.ctx.session.source.get_offset_line(span.from).unwrap();
+            Location::new(
+                self.ctx.mlir_context,
+                self.ctx
+                    .session
+                    .file_path
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+                line + 1,
+                col + 1,
+            )
+        } else {
+            Location::unknown(self.ctx.mlir_context)
+        }
     }
 }
 
@@ -95,10 +115,8 @@ impl<'a> FunctionCodegenCtx<'a> {
 }
 
 fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::Error>> {
-    let module = ctx.module_ctx.get_module_body();
     let body = ctx.get_fn_body();
     let body_sig = ctx.get_fn_sig();
-    let (param_types, ret_type) = ctx.get_fn_sig();
 
     let region = Region::new();
 
@@ -109,7 +127,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::E
         .map(|x| {
             (
                 compile_type(ctx.module_ctx, &x.ty),
-                Location::unknown(ctx.context()),
+                ctx.module_ctx.get_location(x.span),
             )
         })
         .collect();
@@ -289,10 +307,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::E
                         ));
                     }
                 }
-                concrete_ir::TerminatorKind::SwitchInt {
-                    discriminator,
-                    targets,
-                } => todo!(),
+                concrete_ir::TerminatorKind::SwitchInt { .. } => todo!(),
             }
         }
     }
@@ -518,11 +533,7 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::Bool(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    IntegerAttribute::new(
-                        (*value) as i64,
-                        IntegerType::new(ctx.context(), 1).into(),
-                    )
-                    .into(),
+                    Attribute::parse(ctx.context(), &format!("{} : i1", (*value) as u8)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
@@ -531,11 +542,7 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::I8(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    IntegerAttribute::new(
-                        (*value) as i64,
-                        IntegerType::new(ctx.context(), 8).into(),
-                    )
-                    .into(),
+                    Attribute::parse(ctx.context(), &format!("{} : i8", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
@@ -544,11 +551,7 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::I16(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    IntegerAttribute::new(
-                        (*value) as i64,
-                        IntegerType::new(ctx.context(), 16).into(),
-                    )
-                    .into(),
+                    Attribute::parse(ctx.context(), &format!("{} : i16", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
@@ -557,11 +560,7 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::I32(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    IntegerAttribute::new(
-                        (*value) as i64,
-                        IntegerType::new(ctx.context(), 32).into(),
-                    )
-                    .into(),
+                    Attribute::parse(ctx.context(), &format!("{} : i32", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
@@ -570,8 +569,7 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::I64(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    IntegerAttribute::new((*value), IntegerType::new(ctx.context(), 64).into())
-                        .into(),
+                    Attribute::parse(ctx.context(), &format!("{} : i64", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
@@ -580,11 +578,7 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::I128(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    IntegerAttribute::new(
-                        (*value) as i64,
-                        IntegerType::new(ctx.context(), 128).into(),
-                    )
-                    .into(),
+                    Attribute::parse(ctx.context(), &format!("{} : i128", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
@@ -593,11 +587,7 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::U8(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    IntegerAttribute::new(
-                        (*value) as i64,
-                        IntegerType::new(ctx.context(), 8).into(),
-                    )
-                    .into(),
+                    Attribute::parse(ctx.context(), &format!("{} : i8", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
@@ -606,11 +596,7 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::U16(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    IntegerAttribute::new(
-                        (*value) as i64,
-                        IntegerType::new(ctx.context(), 16).into(),
-                    )
-                    .into(),
+                    Attribute::parse(ctx.context(), &format!("{} : i16", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
@@ -619,11 +605,7 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::U32(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    IntegerAttribute::new(
-                        (*value) as i64,
-                        IntegerType::new(ctx.context(), 32).into(),
-                    )
-                    .into(),
+                    Attribute::parse(ctx.context(), &format!("{} : i32", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
@@ -632,11 +614,7 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::U64(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    IntegerAttribute::new(
-                        (*value) as i64,
-                        IntegerType::new(ctx.context(), 64).into(),
-                    )
-                    .into(),
+                    Attribute::parse(ctx.context(), &format!("{} : i64", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
@@ -645,18 +623,30 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::U128(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    IntegerAttribute::new(
-                        (*value) as i64,
-                        IntegerType::new(ctx.context(), 128).into(),
-                    )
-                    .into(),
+                    Attribute::parse(ctx.context(), &format!("{} : i128", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
                 .unwrap()
                 .into(),
-            concrete_ir::ConstValue::F32(_) => todo!(),
-            concrete_ir::ConstValue::F64(_) => todo!(),
+            concrete_ir::ConstValue::F32(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : f32", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)
+                .unwrap()
+                .into(),
+            concrete_ir::ConstValue::F64(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : f64", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)
+                .unwrap()
+                .into(),
         },
         ValueTree::Branch(_) => todo!(),
     }
