@@ -46,9 +46,11 @@ Only assign is used currently: it contains a place and a rvalue.
 This defines a place in memory, where you can load or store.
 
 ## RValue
+
 A value found in the right hand side of an assignment, for example the use of an operand or a binary operation with 2 operands, a reference to a place, etc.
 
-## Operand
+## Operand
+
 A operand is a value, either from a place in memory or constant data.
 
 ## Local
