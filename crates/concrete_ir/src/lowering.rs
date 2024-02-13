@@ -547,7 +547,7 @@ fn lower_binary_op(
         projection: vec![],
     };
     let rhs_place = Place {
-        local: lhs_local,
+        local: rhs_local,
         projection: vec![],
     };
 
