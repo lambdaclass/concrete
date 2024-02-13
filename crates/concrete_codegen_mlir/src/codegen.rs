@@ -97,23 +97,24 @@ impl<'a> FunctionCodegenCtx<'a> {
 fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::Error>> {
     let module = ctx.module_ctx.get_module_body();
     let body = ctx.get_fn_body();
+    let body_sig = ctx.get_fn_sig();
     let (param_types, ret_type) = ctx.get_fn_sig();
 
     let region = Region::new();
 
     let params = body.get_params();
 
-    let func_type = {
-        let params_ty: Vec<_> = params
-            .iter()
-            .map(|x| {
-                (
-                    compile_type(ctx.module_ctx, &x.ty),
-                    Location::unknown(ctx.context()),
-                )
-            })
-            .collect();
+    let params_ty: Vec<_> = params
+        .iter()
+        .map(|x| {
+            (
+                compile_type(ctx.module_ctx, &x.ty),
+                Location::unknown(ctx.context()),
+            )
+        })
+        .collect();
 
+    {
         let entry_block = region.append_block(Block::new(&params_ty));
 
         let mut locals = HashMap::new();
@@ -294,15 +295,14 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::E
                 } => todo!(),
             }
         }
-        let param_types: Vec<_> = params_ty.iter().map(|x| x.0).collect();
-        let ret_type = if let Some(ret_local) = ret_local {
-            Some(locals.get(&ret_local).unwrap().r#type())
-        } else {
-            None
-        };
-        let func_type = FunctionType::new(ctx.context(), &param_types, ret_type.as_slice());
-        func_type
+    }
+
+    let param_types: Vec<_> = params_ty.iter().map(|x| x.0).collect();
+    let ret_type = match &body_sig.1.kind {
+        TyKind::Unit => None,
+        _ => Some(compile_type(ctx.module_ctx, &body_sig.1)),
     };
+    let func_type = FunctionType::new(ctx.context(), &param_types, ret_type.as_slice());
 
     let func = func::func(
         ctx.context(),
@@ -312,6 +312,8 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::E
         &[],
         Location::unknown(ctx.context()),
     );
+
+    ctx.module_ctx.ctx.mlir_module.body().append_operation(func);
 
     Ok(())
 }

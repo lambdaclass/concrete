@@ -32,6 +32,22 @@ pub struct CompilerArgs {
     /// Prints the middle ir.
     #[arg(long, default_value_t = false)]
     print_ir: bool,
+
+    /// Also output the llvm ir file.
+    #[arg(long, default_value_t = false)]
+    output_ll: bool,
+
+    /// Also output the mlir file
+    #[arg(long, default_value_t = false)]
+    output_mlir: bool,
+
+    /// Also output the asm file.
+    #[arg(long, default_value_t = false)]
+    output_asm: bool,
+
+    /// Print all file formats.
+    #[arg(long, default_value_t = false)]
+    output_all: bool,
 }
 
 pub fn main() -> Result<(), Box<dyn Error>> {
@@ -79,6 +95,9 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     let cwd = std::env::current_dir()?;
     // todo: find a better name, "target" would clash with rust if running in the source tree.
     let target_dir = cwd.join("build_artifacts/");
+    if !target_dir.exists() {
+        std::fs::create_dir_all(&target_dir)?;
+    }
     let output_file = target_dir.join(PathBuf::from(args.input.file_name().unwrap()));
     let output_file = if args.library {
         output_file.with_extension("so")
@@ -102,6 +121,10 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         library: args.library,
         target_dir,
         output_file,
+        output_mlir: args.output_mlir,
+        output_ll: args.output_ll,
+        output_asm: args.output_asm,
+        output_all: args.output_all,
     };
 
     tracing::debug!("Compiling with session: {:#?}", session);
@@ -140,7 +163,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     tracing::debug!("Parse time {:?}", parse_ast_time);
     tracing::debug!("Check time {:?}", check_time);
     tracing::debug!("Lower time {:?}", lower_time);
-    tracing::debug!("Compile time {:?}", compile_time);
+    tracing::debug!("Combined compile time {:?}", compile_time);
     tracing::debug!("Link time {:?}", link_time);
     tracing::debug!("Done in {:?}", elapsed);
 

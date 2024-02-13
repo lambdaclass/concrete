@@ -74,6 +74,10 @@ pub fn compile_program(
         library,
         target_dir,
         output_file,
+        output_mlir: false,
+        output_ll: false,
+        output_asm: false,
+        output_all: false,
     };
 
     let program_ir = lower_program(&program);

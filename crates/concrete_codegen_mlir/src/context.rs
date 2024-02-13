@@ -52,23 +52,24 @@ impl Context {
 
         super::codegen::compile_program(codegen_ctx)?;
 
-        let print_flags = OperationPrintingFlags::new().enable_debug_info(true, true);
-        tracing::debug!(
-            "MLIR Code before passes:\n{}",
-            melior_module
-                .as_operation()
-                .to_string_with_flags(print_flags)?
-        );
+        if session.output_mlir || session.output_all {
+            std::fs::write(
+                session.output_file.with_extension("before-pass.mlir"),
+                melior_module.as_operation().to_string(),
+            )?;
+        }
 
         assert!(melior_module.as_operation().verify());
 
         // TODO: Add proper error handling.
         run_pass_manager(&self.melior_context, &mut melior_module).unwrap();
 
-        tracing::debug!(
-            "MLIR Code after passes:\n{:#?}",
-            melior_module.as_operation()
-        );
+        if session.output_mlir || session.output_all {
+            std::fs::write(
+                session.output_file.with_extension("after-pass.mlir"),
+                melior_module.as_operation().to_string(),
+            )?;
+        }
 
         Ok(MLIRModule::new(melior_module))
     }

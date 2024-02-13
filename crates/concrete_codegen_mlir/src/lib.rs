@@ -8,13 +8,17 @@ use std::{
     path::PathBuf,
     ptr::{addr_of_mut, null_mut},
     sync::OnceLock,
+    time::Instant,
 };
 
 use concrete_ir::ProgramBody;
 use concrete_session::{config::OptLevel, Session};
 use context::Context;
 use llvm_sys::{
-    core::{LLVMContextCreate, LLVMContextDispose, LLVMDisposeMessage, LLVMDisposeModule},
+    core::{
+        LLVMContextCreate, LLVMContextDispose, LLVMDisposeMessage, LLVMDisposeModule,
+        LLVMPrintModuleToFile,
+    },
     prelude::{LLVMContextRef, LLVMModuleRef},
     target::{
         LLVM_InitializeAllAsmPrinters, LLVM_InitializeAllTargetInfos, LLVM_InitializeAllTargetMCs,
@@ -39,10 +43,16 @@ mod pass_manager;
 /// Returns the object file path.
 pub fn compile(session: &Session, program: &ProgramBody) -> Result<PathBuf, Box<dyn Error>> {
     let context = Context::new();
+    let compile_codegen_time = Instant::now();
     let mlir_module = context.compile(session, program)?;
+    let compile_codegen_time = compile_codegen_time.elapsed();
     assert!(mlir_module.melior_module.as_operation().verify());
 
+    let compile_llvm_time = Instant::now();
     let object_path = compile_to_object(session, &mlir_module)?;
+    let compile_llvm_time = compile_llvm_time.elapsed();
+    tracing::debug!("Codegen time {:?}", compile_codegen_time);
+    tracing::debug!("Compile llvm time {:?}", compile_llvm_time);
 
     Ok(object_path)
 }
@@ -116,6 +126,27 @@ pub fn compile_to_object(
         let mut null = null_mut();
         let mut error_buffer = addr_of_mut!(null);
 
+        if session.output_ll || session.output_all {
+            let filename = CString::new(
+                target_path
+                    .with_extension("ll")
+                    .as_os_str()
+                    .to_string_lossy()
+                    .as_bytes(),
+            )
+            .unwrap();
+            if LLVMPrintModuleToFile(llvm_module, filename.as_ptr(), error_buffer) != 0 {
+                let error = CStr::from_ptr(*error_buffer);
+                let err = error.to_string_lossy().to_string();
+                tracing::error!("error outputing ll file: {}", err);
+                LLVMDisposeMessage(*error_buffer);
+                Err(LLVMCompileError(err))?;
+            } else if !(*error_buffer).is_null() {
+                LLVMDisposeMessage(*error_buffer);
+                error_buffer = addr_of_mut!(null);
+            }
+        }
+
         let target_triple = LLVMGetDefaultTargetTriple();
         tracing::debug!("Target triple: {:?}", CStr::from_ptr(target_triple));
 
@@ -180,6 +211,34 @@ pub fn compile_to_object(
             Err(LLVMCompileError(err))?;
         } else if !(*error_buffer).is_null() {
             LLVMDisposeMessage(*error_buffer);
+        }
+
+        if session.output_asm || session.output_all {
+            let filename = CString::new(
+                target_path
+                    .with_extension("asm")
+                    .as_os_str()
+                    .to_string_lossy()
+                    .as_bytes(),
+            )
+            .unwrap();
+            let ok = LLVMTargetMachineEmitToFile(
+                machine,
+                llvm_module,
+                filename.as_ptr().cast_mut(),
+                LLVMCodeGenFileType::LLVMAssemblyFile, // object (binary) or assembly (textual)
+                error_buffer,
+            );
+
+            if ok != 0 {
+                let error = CStr::from_ptr(*error_buffer);
+                let err = error.to_string_lossy().to_string();
+                tracing::error!("error emitting asm to file: {:?}", err);
+                LLVMDisposeMessage(*error_buffer);
+                Err(LLVMCompileError(err))?;
+            } else if !(*error_buffer).is_null() {
+                LLVMDisposeMessage(*error_buffer);
+            }
         }
 
         LLVMDisposeTargetMachine(machine);
