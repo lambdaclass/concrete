@@ -909,7 +909,7 @@ fn compile_value_tree<'c: 'b, 'b>(
 
 fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
     match &ty.kind {
-        concrete_ir::TyKind::Unit => todo!(),
+        concrete_ir::TyKind::Unit => Type::none(ctx.ctx.mlir_context),
         concrete_ir::TyKind::Bool => IntegerType::new(ctx.ctx.mlir_context, 1).into(),
         concrete_ir::TyKind::Char => IntegerType::new(ctx.ctx.mlir_context, 32).into(),
         concrete_ir::TyKind::Int(int_ty) => match int_ty {
