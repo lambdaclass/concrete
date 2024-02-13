@@ -1,5 +1,3 @@
-# The Concrete IR
-
 Currently in Concrete, the AST is lowered first to a IR to help support multiple targets and ease the generation of code on the end of the compilation process.
 
 This IR is based on the concept of basic blocks, where within each block there is a linear flow (i.e) there is no branching.
