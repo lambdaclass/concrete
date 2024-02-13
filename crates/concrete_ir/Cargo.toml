@@ -7,5 +7,4 @@ edition = "2021"
 
 [dependencies]
 concrete_ast = { version = "0.1.0", path = "../concrete_ast" }
-generational-arena = "0.2.9"
 tracing.workspace = true
