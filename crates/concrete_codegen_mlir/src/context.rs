@@ -1,5 +1,3 @@
-use std::error::Error;
-
 use concrete_ir::ProgramBody;
 use concrete_session::Session;
 use melior::{
