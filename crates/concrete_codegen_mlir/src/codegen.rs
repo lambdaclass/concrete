@@ -221,7 +221,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::E
             for statement in &block.statements {
                 match &statement.kind {
                     concrete_ir::StatementKind::Assign(place, rvalue) => {
-                        let (value, _ty) = compile_rvalue(&ctx, mlir_block, rvalue, &mut locals);
+                        let (value, _ty) = compile_rvalue(&ctx, mlir_block, rvalue, &locals);
                         compile_store_place(&ctx, mlir_block, place, value, &locals);
                     }
                     concrete_ir::StatementKind::StorageLive(_) => {}
@@ -279,7 +279,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::E
                         .unwrap();
                     let args: Vec<Value> = args
                         .iter()
-                        .map(|x| compile_rvalue(&ctx, mlir_block, x, &mut locals).0)
+                        .map(|x| compile_rvalue(&ctx, mlir_block, x, &locals).0)
                         .collect();
                     let fn_symbol =
                         FlatSymbolRefAttribute::new(ctx.context(), &target_fn_body.name); // todo: good name resolution
@@ -373,14 +373,19 @@ fn compile_rvalue<'c: 'b, 'b>(
     ctx: &'c FunctionCodegenCtx,
     block: &'b Block<'c>,
     info: &Rvalue,
-    locals: &mut HashMap<usize, Value<'c, '_>>,
+    locals: &'b HashMap<usize, Value<'c, '_>>,
 ) -> (Value<'c, 'b>, TyKind) {
     match info {
         Rvalue::Use(info) => compile_load_operand(ctx, block, info, locals),
         Rvalue::LogicOp(_, _) => todo!(),
         Rvalue::BinaryOp(op, (lhs, rhs)) => compile_binop(ctx, block, op, lhs, rhs, locals),
         Rvalue::UnaryOp(_, _) => todo!(),
-        Rvalue::Ref(_, _) => todo!(),
+        Rvalue::Ref(mutability, place) => {
+            // handle projection
+            let x = *locals.get(&place.local).unwrap();
+            let inner_ty = ctx.get_fn_body().locals[place.local].ty.kind.clone();
+            (x, TyKind::Ref(Box::new(inner_ty), *mutability))
+        }
     }
 }
 
@@ -390,7 +395,7 @@ fn compile_binop<'c: 'b, 'b>(
     op: &BinOp,
     lhs: &Operand,
     rhs: &Operand,
-    locals: &mut HashMap<usize, Value<'c, '_>>,
+    locals: &HashMap<usize, Value<'c, '_>>,
 ) -> (Value<'c, 'b>, TyKind) {
     let (lhs, lhs_ty) = compile_load_operand(ctx, block, lhs, locals);
     let (rhs, _rhs_ty) = compile_load_operand(ctx, block, rhs, locals);
@@ -757,15 +762,31 @@ fn compile_load_place<'c: 'b, 'b>(
     info: &Place,
     locals: &HashMap<usize, Value<'c, '_>>,
 ) -> (Value<'c, 'b>, TyKind) {
-    // todo: resolve projection too
     let ptr = locals.get(&info.local).unwrap();
     let body = ctx.get_fn_body();
-    let local_ty = body.locals[info.local].ty.kind.clone();
-    let val = block
+    let mut local_ty = body.locals[info.local].ty.kind.clone();
+    let mut val = block
         .append_operation(memref::load(*ptr, &[], Location::unknown(ctx.context())))
         .result(0)
         .unwrap()
         .into();
+    for projection in &info.projection {
+        match projection {
+            concrete_ir::PlaceElem::Deref => {
+                val = block
+                    .append_operation(memref::load(val, &[], Location::unknown(ctx.context())))
+                    .result(0)
+                    .unwrap()
+                    .into();
+                local_ty = match local_ty {
+                    TyKind::Ref(inner, _) => *(inner.clone()),
+                    _ => unreachable!(),
+                }
+            }
+            concrete_ir::PlaceElem::Field(_, _) => todo!(),
+            concrete_ir::PlaceElem::Index(_) => todo!(),
+        }
+    }
     (val, local_ty)
 }
 
@@ -950,7 +971,16 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
         },
         concrete_ir::TyKind::String => todo!(),
         concrete_ir::TyKind::Array(_, _) => todo!(),
-        concrete_ir::TyKind::Ref(_, _) => todo!(),
+        concrete_ir::TyKind::Ref(inner_ty, _) => {
+            let inner = compile_type(
+                ctx,
+                &Ty {
+                    span: None,
+                    kind: *(inner_ty).clone(),
+                },
+            );
+            MemRefType::new(inner, &[], None, None).into()
+        }
         concrete_ir::TyKind::Param { .. } => todo!(),
     }
 }
