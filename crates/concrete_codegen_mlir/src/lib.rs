@@ -40,7 +40,7 @@ pub mod linker;
 mod module;
 mod pass_manager;
 
-/// Returns the object file path.
+/// Compiles the given program and returns the object file path.
 pub fn compile(session: &Session, program: &ProgramBody) -> Result<PathBuf, Box<dyn Error>> {
     let context = Context::new();
     let compile_codegen_time = Instant::now();

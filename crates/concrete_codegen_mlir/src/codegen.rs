@@ -15,6 +15,7 @@ use melior::{
     Context as MeliorContext,
 };
 
+/// Global codegen context
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CodegenCtx<'a> {
     pub mlir_context: &'a MeliorContext,
@@ -23,6 +24,7 @@ pub(crate) struct CodegenCtx<'a> {
     pub program: &'a ProgramBody,
 }
 
+/// Codegen context for a module
 #[derive(Debug, Clone, Copy)]
 struct ModuleCodegenCtx<'a> {
     pub ctx: CodegenCtx<'a>,
@@ -59,7 +61,7 @@ impl<'a> ModuleCodegenCtx<'a> {
     }
 }
 
-pub fn compile_program(ctx: CodegenCtx) -> Result<(), Box<dyn Error>> {
+pub(crate) fn compile_program(ctx: CodegenCtx) -> Result<(), Box<dyn Error>> {
     for module_id in &ctx.program.top_level_modules {
         let ctx = ModuleCodegenCtx {
             ctx,
