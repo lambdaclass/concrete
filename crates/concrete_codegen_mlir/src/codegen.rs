@@ -10,7 +10,7 @@ use melior::{
     ir::{
         attribute::{FlatSymbolRefAttribute, FloatAttribute, StringAttribute, TypeAttribute},
         r#type::{FunctionType, IntegerType, MemRefType},
-        Attribute, Block, Location, Module as MeliorModule, Region, Type, Value,
+        Attribute, Block, Location, Module as MeliorModule, Region, Type, Value, ValueLike,
     },
     Context as MeliorContext,
 };
