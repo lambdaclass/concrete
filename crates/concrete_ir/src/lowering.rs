@@ -90,7 +90,11 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> BuildCtx {
             }
             ModuleDefItem::Struct(_) => todo!(),
             ModuleDefItem::Type(_) => todo!(),
-            ModuleDefItem::Module(_mod_def) => {}
+            ModuleDefItem::Module(mod_def) => {
+                let body = ctx.body.modules.get(&id).unwrap();
+                let id = *body.symbols.modules.get(&mod_def.name.name).unwrap();
+                ctx = lower_module(ctx, mod_def, id)
+            }
         }
     }
 

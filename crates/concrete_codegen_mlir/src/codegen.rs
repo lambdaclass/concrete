@@ -81,6 +81,12 @@ fn compile_module(ctx: ModuleCodegenCtx) -> Result<(), Box<dyn Error>> {
         compile_function(ctx)?;
     }
 
+    for mod_id in body.modules.iter() {
+        let mut sub_ctx = ctx;
+        sub_ctx.module_id = *mod_id;
+        compile_module(sub_ctx)?;
+    }
+
     Ok(())
 }
 
