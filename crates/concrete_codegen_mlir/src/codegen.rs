@@ -307,7 +307,37 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::E
                         ));
                     }
                 }
-                concrete_ir::TerminatorKind::SwitchInt { .. } => todo!(),
+                concrete_ir::TerminatorKind::SwitchInt {
+                    discriminator,
+                    targets,
+                } => {
+                    let (condition, _condition_ty) =
+                        compile_load_operand(&ctx, mlir_block, discriminator, &locals);
+
+                    let mut cases = Vec::new();
+                    let mut cases_operands = Vec::new();
+                    let mut dests: Vec<(&Block, _)> = Vec::new();
+                    cases_operands.push(0);
+
+                    for (value, target) in targets.values.iter().zip(targets.targets.iter()) {
+                        let target = *target;
+                        let block = &blocks[target];
+                        let value = value_tree_to_int(value).unwrap();
+                        cases.push(value);
+                        cases_operands.push(1);
+                        dests.push((block, [].as_slice()));
+                    }
+
+                    mlir_block.append_operation(cf::switch(
+                        ctx.context(),
+                        &cases,
+                        condition,
+                        condition.r#type(),
+                        (&blocks[*targets.targets.last().unwrap()], &[]),
+                        &dests,
+                        Location::unknown(ctx.context()),
+                    )?);
+                }
             }
         }
     }
@@ -461,12 +491,222 @@ fn compile_binop<'c: 'b, 'b>(
         BinOp::BitOr => todo!(),
         BinOp::Shl => todo!(),
         BinOp::Shr => todo!(),
-        BinOp::Eq => todo!(),
-        BinOp::Lt => todo!(),
-        BinOp::Le => todo!(),
-        BinOp::Ne => todo!(),
-        BinOp::Ge => todo!(),
-        BinOp::Gt => todo!(),
+        BinOp::Eq => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::cmpf(
+                        ctx.context(),
+                        arith::CmpfPredicate::Oeq,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Eq,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            };
+            (value, lhs_ty)
+        }
+        BinOp::Lt => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::cmpf(
+                        ctx.context(),
+                        arith::CmpfPredicate::Olt,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            } else if is_signed {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Slt,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Ult,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            };
+            (value, lhs_ty)
+        }
+        BinOp::Le => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::cmpf(
+                        ctx.context(),
+                        arith::CmpfPredicate::Ole,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            } else if is_signed {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Sle,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Ule,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            };
+            (value, lhs_ty)
+        }
+        BinOp::Ne => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::cmpf(
+                        ctx.context(),
+                        arith::CmpfPredicate::One,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Ult,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            };
+            (value, lhs_ty)
+        }
+        BinOp::Ge => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::cmpf(
+                        ctx.context(),
+                        arith::CmpfPredicate::Ole,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            } else if is_signed {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Sge,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Uge,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            };
+            (value, lhs_ty)
+        }
+        BinOp::Gt => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::cmpf(
+                        ctx.context(),
+                        arith::CmpfPredicate::Ogt,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            } else if is_signed {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Sgt,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Ugt,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)
+                    .unwrap()
+                    .into()
+            };
+            (value, lhs_ty)
+        }
     }
 }
 
@@ -521,6 +761,28 @@ fn compile_load_place<'c: 'b, 'b>(
         .unwrap()
         .into();
     (val, local_ty)
+}
+
+/// Used in switch
+fn value_tree_to_int(value: &ValueTree) -> Option<i64> {
+    match value {
+        ValueTree::Leaf(value) => match value {
+            concrete_ir::ConstValue::Bool(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::I8(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::I16(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::I32(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::I64(value) => Some((*value)),
+            concrete_ir::ConstValue::I128(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::U8(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::U16(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::U32(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::U64(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::U128(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::F32(_) => None,
+            concrete_ir::ConstValue::F64(_) => None,
+        },
+        ValueTree::Branch(_) => None,
+    }
 }
 
 fn compile_value_tree<'c: 'b, 'b>(
