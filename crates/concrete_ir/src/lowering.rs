@@ -671,7 +671,7 @@ fn lower_value_expr(
                 ))),
             },
             None => ConstData {
-                ty: TyKind::Int(IntTy::I64),
+                ty: TyKind::Float(FloatTy::F64),
                 data: ConstKind::Value(ValueTree::Leaf(ConstValue::F64(
                     value.parse().expect("error parsing float"),
                 ))),

@@ -8,7 +8,7 @@ use concrete_session::Session;
 use melior::{
     dialect::{arith, cf, func, llvm, memref},
     ir::{
-        attribute::{FlatSymbolRefAttribute, StringAttribute, TypeAttribute},
+        attribute::{FlatSymbolRefAttribute, FloatAttribute, StringAttribute, TypeAttribute},
         r#type::{FunctionType, IntegerType, MemRefType},
         Attribute, Block, Location, Module as MeliorModule, Region, Type, Value,
     },
@@ -632,7 +632,12 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::F32(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    Attribute::parse(ctx.context(), &format!("{} : f32", value)).unwrap(),
+                    FloatAttribute::new(
+                        ctx.context(),
+                        (*value).into(),
+                        Type::float32(ctx.context()),
+                    )
+                    .into(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
@@ -641,7 +646,7 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::F64(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    Attribute::parse(ctx.context(), &format!("{} : f64", value)).unwrap(),
+                    FloatAttribute::new(ctx.context(), *value, Type::float64(ctx.context())).into(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)
