@@ -48,6 +48,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         args.input.display().to_string(),
     );
     tracing::debug!("source code:\n{}", source.input(&db));
+    let parse_ast_time = Instant::now();
     let program = match concrete_parser::parse_ast(&db, source) {
         Some(x) => x,
         None => {
@@ -61,12 +62,15 @@ pub fn main() -> Result<(), Box<dyn Error>> {
             std::process::exit(1);
         }
     };
+    let parse_ast_time = parse_ast_time.elapsed();
 
     if args.print_ast {
         println!("{:#?}", program);
     }
 
+    let lower_time = Instant::now();
     let program_ir = lower_program(&program);
+    let lower_time = lower_time.elapsed();
 
     if args.print_ir {
         println!("{:#?}", program_ir);
@@ -102,6 +106,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
     tracing::debug!("Compiling with session: {:#?}", session);
 
+    let check_time = Instant::now();
     if let Err(errors) = concrete_check::check_program(&program) {
         for error in &errors {
             let path = session.file_path.display().to_string();
@@ -112,9 +117,13 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
         std::process::exit(1);
     }
+    let check_time = check_time.elapsed();
 
+    let compile_time = Instant::now();
     let object_path = concrete_codegen_mlir::compile(&session, &program_ir)?;
+    let compile_time = compile_time.elapsed();
 
+    let link_time = Instant::now();
     if session.library {
         link_shared_lib(
             &object_path,
@@ -125,8 +134,14 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     } else {
         link_binary(&object_path, &session.output_file.with_extension(""))?;
     }
+    let link_time = link_time.elapsed();
 
     let elapsed = start_time.elapsed();
+    tracing::debug!("Parse time {:?}", parse_ast_time);
+    tracing::debug!("Check time {:?}", check_time);
+    tracing::debug!("Lower time {:?}", lower_time);
+    tracing::debug!("Compile time {:?}", compile_time);
+    tracing::debug!("Link time {:?}", link_time);
     tracing::debug!("Done in {:?}", elapsed);
 
     Ok(())
