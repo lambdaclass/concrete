@@ -14,6 +14,7 @@ llvm-sys = "170.0.1"
 melior = { version = "0.15.2", features = ["ods-dialects"] }
 mlir-sys = "0.2.1"
 tracing = { workspace = true }
+thiserror = "1.0.57"
 
 [build-dependencies]
 cc = "1.0.83"

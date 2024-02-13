@@ -1,9 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use std::{
-    error::Error,
     ffi::{CStr, CString},
-    fmt::Display,
     mem::MaybeUninit,
     path::PathBuf,
     ptr::{addr_of_mut, null_mut},
@@ -14,6 +12,7 @@ use std::{
 use concrete_ir::ProgramBody;
 use concrete_session::{config::OptLevel, Session};
 use context::Context;
+use errors::CodegenError;
 use llvm_sys::{
     core::{
         LLVMContextCreate, LLVMContextDispose, LLVMDisposeMessage, LLVMDisposeModule,
@@ -36,12 +35,13 @@ use module::MLIRModule;
 mod codegen;
 mod context;
 mod error;
+pub mod errors;
 pub mod linker;
 mod module;
 mod pass_manager;
 
 /// Compiles the given program and returns the object file path.
-pub fn compile(session: &Session, program: &ProgramBody) -> Result<PathBuf, Box<dyn Error>> {
+pub fn compile(session: &Session, program: &ProgramBody) -> Result<PathBuf, CodegenError> {
     let context = Context::new();
     let compile_codegen_time = Instant::now();
     let mlir_module = context.compile(session, program)?;
@@ -66,18 +66,6 @@ extern "C" {
     ) -> LLVMModuleRef;
 }
 
-#[derive(Debug, Clone)]
-pub struct LLVMCompileError(String);
-
-impl std::error::Error for LLVMCompileError {}
-
-impl Display for LLVMCompileError {
-    #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
 /// Converts a module to an object.
 /// The object will be written to the specified target path.
 /// TODO: error handling
@@ -86,7 +74,7 @@ impl Display for LLVMCompileError {
 pub fn compile_to_object(
     session: &Session,
     module: &MLIRModule<'_>,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
+) -> Result<PathBuf, CodegenError> {
     tracing::debug!("Compiling to object file");
     if !session.target_dir.exists() {
         std::fs::create_dir_all(&session.target_dir)?;
@@ -140,7 +128,7 @@ pub fn compile_to_object(
                 let err = error.to_string_lossy().to_string();
                 tracing::error!("error outputing ll file: {}", err);
                 LLVMDisposeMessage(*error_buffer);
-                Err(LLVMCompileError(err))?;
+                Err(CodegenError::LLVMCompileError(err))?;
             } else if !(*error_buffer).is_null() {
                 LLVMDisposeMessage(*error_buffer);
                 error_buffer = addr_of_mut!(null);
@@ -166,7 +154,7 @@ pub fn compile_to_object(
             let err = error.to_string_lossy().to_string();
             tracing::error!("error getting target triple: {}", err);
             LLVMDisposeMessage(*error_buffer);
-            Err(LLVMCompileError(err))?;
+            Err(CodegenError::LLVMCompileError(err))?;
         } else if !(*error_buffer).is_null() {
             LLVMDisposeMessage(*error_buffer);
             error_buffer = addr_of_mut!(null);
@@ -208,7 +196,7 @@ pub fn compile_to_object(
             let err = error.to_string_lossy().to_string();
             tracing::error!("error emitting to file: {:?}", err);
             LLVMDisposeMessage(*error_buffer);
-            Err(LLVMCompileError(err))?;
+            Err(CodegenError::LLVMCompileError(err))?;
         } else if !(*error_buffer).is_null() {
             LLVMDisposeMessage(*error_buffer);
         }
@@ -235,7 +223,7 @@ pub fn compile_to_object(
                 let err = error.to_string_lossy().to_string();
                 tracing::error!("error emitting asm to file: {:?}", err);
                 LLVMDisposeMessage(*error_buffer);
-                Err(LLVMCompileError(err))?;
+                Err(CodegenError::LLVMCompileError(err))?;
             } else if !(*error_buffer).is_null() {
                 LLVMDisposeMessage(*error_buffer);
             }

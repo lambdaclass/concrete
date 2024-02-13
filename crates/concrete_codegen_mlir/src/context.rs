@@ -9,7 +9,7 @@ use melior::{
     Context as MeliorContext,
 };
 
-use crate::codegen::CodegenCtx;
+use crate::{codegen::CodegenCtx, errors::CodegenError};
 
 use super::{module::MLIRModule, pass_manager::run_pass_manager};
 
@@ -37,7 +37,7 @@ impl Context {
         &self,
         session: &Session,
         program: &ProgramBody,
-    ) -> Result<MLIRModule, Box<dyn Error>> {
+    ) -> Result<MLIRModule, CodegenError> {
         let file_path = session.file_path.display().to_string();
         let location = Location::new(&self.melior_context, &file_path, 0, 0);
 

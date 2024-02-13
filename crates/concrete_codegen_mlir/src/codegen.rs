@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 
 use concrete_ir::{
     BinOp, DefId, FnBody, LocalKind, ModuleBody, Operand, Place, ProgramBody, Rvalue, Span, Ty,
@@ -14,6 +14,8 @@ use melior::{
     },
     Context as MeliorContext,
 };
+
+use crate::errors::CodegenError;
 
 /// Global codegen context
 #[derive(Debug, Clone, Copy)]
@@ -61,7 +63,7 @@ impl<'a> ModuleCodegenCtx<'a> {
     }
 }
 
-pub(crate) fn compile_program(ctx: CodegenCtx) -> Result<(), Box<dyn Error>> {
+pub(crate) fn compile_program(ctx: CodegenCtx) -> Result<(), CodegenError> {
     for module_id in &ctx.program.top_level_modules {
         let ctx = ModuleCodegenCtx {
             ctx,
@@ -72,7 +74,7 @@ pub(crate) fn compile_program(ctx: CodegenCtx) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn compile_module(ctx: ModuleCodegenCtx) -> Result<(), Box<dyn Error>> {
+fn compile_module(ctx: ModuleCodegenCtx) -> Result<(), CodegenError> {
     let body = ctx.get_module_body();
 
     for fn_id in body.functions.iter() {
@@ -122,7 +124,7 @@ impl<'a> FunctionCodegenCtx<'a> {
     }
 }
 
-fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::Error>> {
+fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
     let body = ctx.get_fn_body();
     let body_sig = ctx.get_fn_sig();
 
@@ -223,7 +225,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::E
             for statement in &block.statements {
                 match &statement.kind {
                     concrete_ir::StatementKind::Assign(place, rvalue) => {
-                        let (value, _ty) = compile_rvalue(&ctx, mlir_block, rvalue, &locals);
+                        let (value, _ty) = compile_rvalue(&ctx, mlir_block, rvalue, &locals)?;
                         compile_store_place(&ctx, mlir_block, place, value, &locals);
                     }
                     concrete_ir::StatementKind::StorageLive(_) => {}
@@ -281,8 +283,8 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::E
                         .unwrap();
                     let args: Vec<Value> = args
                         .iter()
-                        .map(|x| compile_rvalue(&ctx, mlir_block, x, &locals).0)
-                        .collect();
+                        .map(|x| compile_rvalue(&ctx, mlir_block, x, &locals).map(|x| x.0))
+                        .collect::<Result<_, _>>()?;
                     let fn_symbol =
                         FlatSymbolRefAttribute::new(ctx.context(), &target_fn_body.name); // todo: good name resolution
                     let ret_type = match &target_fn_body_sig.1.kind {
@@ -320,7 +322,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), Box<dyn std::error::E
                     targets,
                 } => {
                     let (condition, _condition_ty) =
-                        compile_load_operand(&ctx, mlir_block, discriminator, &locals);
+                        compile_load_operand(&ctx, mlir_block, discriminator, &locals)?;
 
                     let mut cases = Vec::new();
                     let mut cases_operands = Vec::new();
@@ -376,19 +378,19 @@ fn compile_rvalue<'c: 'b, 'b>(
     block: &'b Block<'c>,
     info: &Rvalue,
     locals: &'b HashMap<usize, Value<'c, '_>>,
-) -> (Value<'c, 'b>, TyKind) {
-    match info {
-        Rvalue::Use(info) => compile_load_operand(ctx, block, info, locals),
+) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+    Ok(match info {
+        Rvalue::Use(info) => compile_load_operand(ctx, block, info, locals)?,
         Rvalue::LogicOp(_, _) => todo!(),
-        Rvalue::BinaryOp(op, (lhs, rhs)) => compile_binop(ctx, block, op, lhs, rhs, locals),
+        Rvalue::BinaryOp(op, (lhs, rhs)) => compile_binop(ctx, block, op, lhs, rhs, locals)?,
         Rvalue::UnaryOp(_, _) => todo!(),
         Rvalue::Ref(mutability, place) => {
             // handle projection
-            let x = *locals.get(&place.local).unwrap();
+            let x = locals[&place.local];
             let inner_ty = ctx.get_fn_body().locals[place.local].ty.kind.clone();
             (x, TyKind::Ref(Box::new(inner_ty), *mutability))
         }
-    }
+    })
 }
 
 fn compile_binop<'c: 'b, 'b>(
@@ -398,27 +400,25 @@ fn compile_binop<'c: 'b, 'b>(
     lhs: &Operand,
     rhs: &Operand,
     locals: &HashMap<usize, Value<'c, '_>>,
-) -> (Value<'c, 'b>, TyKind) {
-    let (lhs, lhs_ty) = compile_load_operand(ctx, block, lhs, locals);
-    let (rhs, _rhs_ty) = compile_load_operand(ctx, block, rhs, locals);
+) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+    let (lhs, lhs_ty) = compile_load_operand(ctx, block, lhs, locals)?;
+    let (rhs, _rhs_ty) = compile_load_operand(ctx, block, rhs, locals)?;
     let location = Location::unknown(ctx.context());
 
     let is_float = matches!(lhs_ty, TyKind::Float(_));
     let is_signed = matches!(lhs_ty, TyKind::Int(_));
 
-    match op {
+    Ok(match op {
         BinOp::Add => {
             let value = if is_float {
                 block
                     .append_operation(arith::addf(lhs, rhs, location))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else {
                 block
                     .append_operation(arith::addi(lhs, rhs, location))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             };
             (value, lhs_ty)
@@ -427,14 +427,12 @@ fn compile_binop<'c: 'b, 'b>(
             let value = if is_float {
                 block
                     .append_operation(arith::subf(lhs, rhs, location))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else {
                 block
                     .append_operation(arith::subi(lhs, rhs, location))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             };
             (value, lhs_ty)
@@ -443,14 +441,12 @@ fn compile_binop<'c: 'b, 'b>(
             let value = if is_float {
                 block
                     .append_operation(arith::mulf(lhs, rhs, location))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else {
                 block
                     .append_operation(arith::muli(lhs, rhs, location))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             };
             (value, lhs_ty)
@@ -459,20 +455,17 @@ fn compile_binop<'c: 'b, 'b>(
             let value = if is_float {
                 block
                     .append_operation(arith::divf(lhs, rhs, location))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else if is_signed {
                 block
                     .append_operation(arith::divsi(lhs, rhs, location))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else {
                 block
                     .append_operation(arith::divui(lhs, rhs, location))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             };
             (value, lhs_ty)
@@ -481,20 +474,17 @@ fn compile_binop<'c: 'b, 'b>(
             let value = if is_float {
                 block
                     .append_operation(arith::remf(lhs, rhs, location))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else if is_signed {
                 block
                     .append_operation(arith::remsi(lhs, rhs, location))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else {
                 block
                     .append_operation(arith::remui(lhs, rhs, location))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             };
             (value, lhs_ty)
@@ -514,8 +504,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else {
                 block
@@ -526,8 +515,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             };
             (value, TyKind::Bool)
@@ -542,8 +530,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else if is_signed {
                 block
@@ -554,8 +541,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else {
                 block
@@ -566,8 +552,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             };
             (value, TyKind::Bool)
@@ -582,8 +567,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else if is_signed {
                 block
@@ -594,8 +578,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else {
                 block
@@ -606,8 +589,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             };
             (value, TyKind::Bool)
@@ -622,8 +604,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else {
                 block
@@ -634,8 +615,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             };
             (value, TyKind::Bool)
@@ -650,8 +630,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else if is_signed {
                 block
@@ -662,8 +641,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else {
                 block
@@ -674,8 +652,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             };
             (value, TyKind::Bool)
@@ -690,8 +667,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else if is_signed {
                 block
@@ -702,8 +678,7 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             } else {
                 block
@@ -714,13 +689,12 @@ fn compile_binop<'c: 'b, 'b>(
                         rhs,
                         location,
                     ))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into()
             };
             (value, TyKind::Bool)
         }
-    }
+    })
 }
 
 fn compile_load_operand<'c: 'b, 'b>(
@@ -728,17 +702,17 @@ fn compile_load_operand<'c: 'b, 'b>(
     block: &'b Block<'c>,
     info: &Operand,
     locals: &HashMap<usize, Value<'c, '_>>,
-) -> (Value<'c, 'b>, TyKind) {
-    match info {
-        Operand::Place(info) => compile_load_place(ctx, block, info, locals),
+) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+    Ok(match info {
+        Operand::Place(info) => compile_load_place(ctx, block, info, locals)?,
         Operand::Const(data) => match &data.data {
             concrete_ir::ConstKind::Param(_) => todo!(),
             concrete_ir::ConstKind::Value(value) => {
-                (compile_value_tree(ctx, block, value), data.ty.clone())
+                (compile_value_tree(ctx, block, value)?, data.ty.clone())
             }
             concrete_ir::ConstKind::Expr(_) => todo!(),
         },
-    }
+    })
 }
 
 fn compile_store_place<'c: 'b, 'b>(
@@ -749,10 +723,10 @@ fn compile_store_place<'c: 'b, 'b>(
     locals: &HashMap<usize, Value<'c, '_>>,
 ) {
     // todo: resolve projection too
-    let ptr = locals.get(&info.local).unwrap();
+    let ptr = locals[&info.local];
     block.append_operation(memref::store(
         value,
-        *ptr,
+        ptr,
         &[],
         Location::unknown(ctx.context()),
     ));
@@ -763,22 +737,20 @@ fn compile_load_place<'c: 'b, 'b>(
     block: &'b Block<'c>,
     info: &Place,
     locals: &HashMap<usize, Value<'c, '_>>,
-) -> (Value<'c, 'b>, TyKind) {
-    let ptr = locals.get(&info.local).unwrap();
+) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+    let ptr = locals[&info.local];
     let body = ctx.get_fn_body();
     let mut local_ty = body.locals[info.local].ty.kind.clone();
     let mut val = block
-        .append_operation(memref::load(*ptr, &[], Location::unknown(ctx.context())))
-        .result(0)
-        .unwrap()
+        .append_operation(memref::load(ptr, &[], Location::unknown(ctx.context())))
+        .result(0)?
         .into();
     for projection in &info.projection {
         match projection {
             concrete_ir::PlaceElem::Deref => {
                 val = block
                     .append_operation(memref::load(val, &[], Location::unknown(ctx.context())))
-                    .result(0)
-                    .unwrap()
+                    .result(0)?
                     .into();
                 local_ty = match local_ty {
                     TyKind::Ref(inner, _) => *(inner.clone()),
@@ -789,7 +761,7 @@ fn compile_load_place<'c: 'b, 'b>(
             concrete_ir::PlaceElem::Index(_) => todo!(),
         }
     }
-    (val, local_ty)
+    Ok((val, local_ty))
 }
 
 /// Used in switch
@@ -818,8 +790,8 @@ fn compile_value_tree<'c: 'b, 'b>(
     ctx: &'c FunctionCodegenCtx,
     block: &'b Block<'c>,
     value: &ValueTree,
-) -> Value<'c, 'b> {
-    match value {
+) -> Result<Value<'c, 'b>, CodegenError> {
+    Ok(match value {
         ValueTree::Leaf(value) => match value {
             concrete_ir::ConstValue::Bool(value) => block
                 .append_operation(arith::constant(
@@ -827,8 +799,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     Attribute::parse(ctx.context(), &format!("{} : i1", (*value) as u8)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
             concrete_ir::ConstValue::I8(value) => block
                 .append_operation(arith::constant(
@@ -836,8 +807,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     Attribute::parse(ctx.context(), &format!("{} : i8", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
             concrete_ir::ConstValue::I16(value) => block
                 .append_operation(arith::constant(
@@ -845,8 +815,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     Attribute::parse(ctx.context(), &format!("{} : i16", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
             concrete_ir::ConstValue::I32(value) => block
                 .append_operation(arith::constant(
@@ -854,8 +823,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     Attribute::parse(ctx.context(), &format!("{} : i32", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
             concrete_ir::ConstValue::I64(value) => block
                 .append_operation(arith::constant(
@@ -863,8 +831,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     Attribute::parse(ctx.context(), &format!("{} : i64", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
             concrete_ir::ConstValue::I128(value) => block
                 .append_operation(arith::constant(
@@ -872,8 +839,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     Attribute::parse(ctx.context(), &format!("{} : i128", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
             concrete_ir::ConstValue::U8(value) => block
                 .append_operation(arith::constant(
@@ -881,8 +847,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     Attribute::parse(ctx.context(), &format!("{} : i8", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
             concrete_ir::ConstValue::U16(value) => block
                 .append_operation(arith::constant(
@@ -890,8 +855,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     Attribute::parse(ctx.context(), &format!("{} : i16", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
             concrete_ir::ConstValue::U32(value) => block
                 .append_operation(arith::constant(
@@ -899,8 +863,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     Attribute::parse(ctx.context(), &format!("{} : i32", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
             concrete_ir::ConstValue::U64(value) => block
                 .append_operation(arith::constant(
@@ -908,8 +871,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     Attribute::parse(ctx.context(), &format!("{} : i64", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
             concrete_ir::ConstValue::U128(value) => block
                 .append_operation(arith::constant(
@@ -917,8 +879,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     Attribute::parse(ctx.context(), &format!("{} : i128", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
             concrete_ir::ConstValue::F32(value) => block
                 .append_operation(arith::constant(
@@ -931,8 +892,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     .into(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
             concrete_ir::ConstValue::F64(value) => block
                 .append_operation(arith::constant(
@@ -940,12 +900,11 @@ fn compile_value_tree<'c: 'b, 'b>(
                     FloatAttribute::new(ctx.context(), *value, Type::float64(ctx.context())).into(),
                     Location::unknown(ctx.context()),
                 ))
-                .result(0)
-                .unwrap()
+                .result(0)?
                 .into(),
         },
         ValueTree::Branch(_) => todo!(),
-    }
+    })
 }
 
 fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
