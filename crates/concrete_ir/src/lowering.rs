@@ -216,7 +216,7 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) {
         }),
     });
 
-    let discriminator = lower_expression(builder, &info.value, Some(TyKind::Bool));
+    let (discriminator, discriminator_type) = lower_expression(builder, &info.value, None);
 
     let local = builder.add_temp_local(TyKind::Bool);
     let place = Place {
@@ -252,22 +252,31 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) {
         );
     }
 
-    // keet idx to change terminator
-    let last_then_block_idx = builder.body.basic_blocks.len();
-    let statements = std::mem::take(&mut builder.statements);
-    builder.body.basic_blocks.push(BasicBlock {
-        statements,
-        terminator: Box::new(Terminator {
-            span: None,
-            kind: TerminatorKind::Unreachable,
-        }),
-    });
+    // keet idx to change terminator if there is no return
+    let last_then_block_idx = if !matches!(
+        builder.body.basic_blocks.last().unwrap().terminator.kind,
+        TerminatorKind::Return
+    ) {
+        builder.body.basic_blocks.len();
+        let statements = std::mem::take(&mut builder.statements);
+        let idx = builder.body.basic_blocks.len();
+        builder.body.basic_blocks.push(BasicBlock {
+            statements,
+            terminator: Box::new(Terminator {
+                span: None,
+                kind: TerminatorKind::Unreachable,
+            }),
+        });
+        Some(idx)
+    } else {
+        None
+    };
 
     let otherwise_block_idx = builder.body.basic_blocks.len();
 
     let targets = SwitchTargets {
-        values: vec![ValueTree::Leaf(ConstValue::Bool(true))],
-        targets: vec![first_then_block_idx, otherwise_block_idx],
+        values: vec![discriminator_type.get_falsy_value()],
+        targets: vec![otherwise_block_idx, first_then_block_idx],
     };
 
     let kind = TerminatorKind::SwitchInt {
@@ -276,17 +285,17 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) {
     };
     builder.body.basic_blocks[check_block_idx].terminator.kind = kind;
 
-    builder.body.basic_blocks[last_then_block_idx]
-        .terminator
-        .kind = TerminatorKind::Goto {
-        target: otherwise_block_idx,
-    };
+    if let Some(last_then_block_idx) = last_then_block_idx {
+        builder.body.basic_blocks[last_then_block_idx]
+            .terminator
+            .kind = TerminatorKind::Goto {
+            target: check_block_idx,
+        };
+    }
 }
 
 fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) {
-    let disc_type =
-        find_expression_type(builder, &info.value).expect("failed to find discriminator type");
-    let discriminator = lower_expression(builder, &info.value, Some(disc_type.clone()));
+    let (discriminator, discriminator_type) = lower_expression(builder, &info.value, None);
 
     let local = builder.add_temp_local(TyKind::Bool);
     let place = Place {
@@ -323,15 +332,24 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) {
     }
 
     // keet idx to change terminator
-    let last_then_block_idx = builder.body.basic_blocks.len();
-    let statements = std::mem::take(&mut builder.statements);
-    builder.body.basic_blocks.push(BasicBlock {
-        statements,
-        terminator: Box::new(Terminator {
-            span: None,
-            kind: TerminatorKind::Unreachable,
-        }),
-    });
+    let last_then_block_idx = if !matches!(
+        builder.body.basic_blocks.last().unwrap().terminator.kind,
+        TerminatorKind::Return
+    ) {
+        builder.body.basic_blocks.len();
+        let statements = std::mem::take(&mut builder.statements);
+        let idx = builder.body.basic_blocks.len();
+        builder.body.basic_blocks.push(BasicBlock {
+            statements,
+            terminator: Box::new(Terminator {
+                span: None,
+                kind: TerminatorKind::Unreachable,
+            }),
+        });
+        Some(idx)
+    } else {
+        None
+    };
 
     let first_else_block_idx = builder.body.basic_blocks.len();
 
@@ -345,18 +363,27 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) {
         }
     }
 
-    let last_else_block_idx = builder.body.basic_blocks.len();
-    let statements = std::mem::take(&mut builder.statements);
-    builder.body.basic_blocks.push(BasicBlock {
-        statements,
-        terminator: Box::new(Terminator {
-            span: None,
-            kind: TerminatorKind::Unreachable,
-        }),
-    });
+    let last_else_block_idx = if !matches!(
+        builder.body.basic_blocks.last().unwrap().terminator.kind,
+        TerminatorKind::Return
+    ) {
+        builder.body.basic_blocks.len();
+        let statements = std::mem::take(&mut builder.statements);
+        let idx = builder.body.basic_blocks.len();
+        builder.body.basic_blocks.push(BasicBlock {
+            statements,
+            terminator: Box::new(Terminator {
+                span: None,
+                kind: TerminatorKind::Unreachable,
+            }),
+        });
+        Some(idx)
+    } else {
+        None
+    };
 
     let targets = SwitchTargets {
-        values: vec![disc_type.get_falsy_value()],
+        values: vec![discriminator_type.get_falsy_value()],
         targets: vec![first_else_block_idx, first_then_block_idx],
     };
 
@@ -367,23 +394,30 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) {
     builder.body.basic_blocks[current_block_idx].terminator.kind = kind;
 
     let next_block_idx = builder.body.basic_blocks.len();
-    builder.body.basic_blocks[last_then_block_idx]
-        .terminator
-        .kind = TerminatorKind::Goto {
-        target: next_block_idx,
-    };
-    builder.body.basic_blocks[last_else_block_idx]
-        .terminator
-        .kind = TerminatorKind::Goto {
-        target: next_block_idx,
-    };
+
+    // check if the
+    if let Some(last_then_block_idx) = last_then_block_idx {
+        builder.body.basic_blocks[last_then_block_idx]
+            .terminator
+            .kind = TerminatorKind::Goto {
+            target: next_block_idx,
+        };
+    }
+
+    if let Some(last_else_block_idx) = last_else_block_idx {
+        builder.body.basic_blocks[last_else_block_idx]
+            .terminator
+            .kind = TerminatorKind::Goto {
+            target: next_block_idx,
+        };
+    }
 }
 
 fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) {
     match &info.target {
         LetStmtTarget::Simple { name, r#type } => {
             let ty = lower_type(r#type);
-            let rvalue = lower_expression(builder, &info.value, Some(ty.kind));
+            let (rvalue, _rvalue_ty) = lower_expression(builder, &info.value, Some(ty.kind));
             let local_idx = builder.name_to_local.get(&name.name).copied().unwrap();
             builder.statements.push(Statement {
                 span: Some(name.span),
@@ -407,7 +441,7 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) {
 fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) {
     let local = *builder.name_to_local.get(&info.target.first.name).unwrap();
     let ty = builder.body.locals[local].ty.clone();
-    let rvalue = lower_expression(builder, &info.value, Some(ty.kind.clone()));
+    let (rvalue, _rvalue_ty) = lower_expression(builder, &info.value, Some(ty.kind.clone()));
     let place = lower_path(builder, &info.target);
 
     builder.statements.push(Statement {
@@ -417,7 +451,7 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) {
 }
 
 fn lower_return(builder: &mut FnBodyBuilder, info: &ReturnStmt, ret_type_hint: Option<TyKind>) {
-    let value = lower_expression(builder, &info.value, ret_type_hint);
+    let (value, _value_ty) = lower_expression(builder, &info.value, ret_type_hint);
     builder.statements.push(Statement {
         span: None,
         kind: StatementKind::Assign(
@@ -499,7 +533,7 @@ fn lower_expression(
     builder: &mut FnBodyBuilder,
     info: &Expression,
     type_hint: Option<TyKind>,
-) -> Rvalue {
+) -> (Rvalue, TyKind) {
     match info {
         Expression::Value(info) => lower_value_expr(builder, info, type_hint),
         Expression::FnCall(info) => lower_fn_call(builder, info),
@@ -510,7 +544,7 @@ fn lower_expression(
     }
 }
 
-fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) -> Rvalue {
+fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) -> (Rvalue, TyKind) {
     let fn_id = {
         let mod_body = builder.get_module_body();
 
@@ -551,10 +585,10 @@ fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) -> Rvalue {
 
     for (arg, arg_ty) in info.args.iter().zip(args_ty) {
         let rvalue = lower_expression(builder, arg, Some(arg_ty.kind.clone()));
-        args.push(rvalue);
+        args.push(rvalue.0);
     }
 
-    let dest_local = builder.add_local(Local::temp(ret_ty));
+    let dest_local = builder.add_local(Local::temp(ret_ty.clone()));
 
     let dest_place = Place {
         local: dest_local,
@@ -580,7 +614,7 @@ fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) -> Rvalue {
         }),
     });
 
-    Rvalue::Use(Operand::Place(dest_place))
+    (Rvalue::Use(Operand::Place(dest_place)), ret_ty.kind.clone())
 }
 
 fn lower_binary_op(
@@ -589,28 +623,20 @@ fn lower_binary_op(
     op: BinaryOp,
     rhs: &Expression,
     type_hint: Option<TyKind>,
-) -> Rvalue {
+) -> (Rvalue, TyKind) {
     let (lhs, lhs_ty) = if type_hint.is_none() {
         let ty = find_expression_type(builder, lhs);
-        (lower_expression(builder, lhs, ty.clone()), ty)
+        lower_expression(builder, lhs, ty.clone())
     } else {
-        (
-            lower_expression(builder, lhs, type_hint.clone()),
-            type_hint.clone(),
-        )
+        lower_expression(builder, lhs, type_hint.clone())
     };
     let (rhs, rhs_ty) = if type_hint.is_none() {
         let ty = find_expression_type(builder, rhs);
-        (lower_expression(builder, rhs, ty.clone()), ty)
+        lower_expression(builder, rhs, ty.clone())
     } else {
-        (
-            lower_expression(builder, rhs, type_hint.clone()),
-            type_hint.clone(),
-        )
+        lower_expression(builder, rhs, type_hint.clone())
     };
 
-    let lhs_ty = lhs_ty.or(rhs_ty.clone()).expect("type not found");
-    let rhs_ty = rhs_ty.unwrap_or(lhs_ty.clone());
     let lhs_local = builder.add_local(Local::temp(Ty {
         span: None,
         kind: lhs_ty.clone(),
@@ -652,30 +678,42 @@ fn lower_binary_op(
     let rhs = Operand::Place(rhs_place);
 
     match op {
-        BinaryOp::Arith(op) => match op {
-            ArithOp::Add => Rvalue::BinaryOp(BinOp::Add, (lhs, rhs)),
-            ArithOp::Sub => Rvalue::BinaryOp(BinOp::Sub, (lhs, rhs)),
-            ArithOp::Mul => Rvalue::BinaryOp(BinOp::Mul, (lhs, rhs)),
-            ArithOp::Div => Rvalue::BinaryOp(BinOp::Div, (lhs, rhs)),
-            ArithOp::Mod => Rvalue::BinaryOp(BinOp::Mod, (lhs, rhs)),
-        },
-        BinaryOp::Logic(op) => match op {
-            LogicOp::And => Rvalue::LogicOp(LogOp::And, (lhs, rhs)),
-            LogicOp::Or => Rvalue::LogicOp(LogOp::Or, (lhs, rhs)),
-        },
-        BinaryOp::Compare(op) => match op {
-            CmpOp::Eq => Rvalue::BinaryOp(BinOp::Eq, (lhs, rhs)),
-            CmpOp::NotEq => Rvalue::BinaryOp(BinOp::Ne, (lhs, rhs)),
-            CmpOp::Lt => Rvalue::BinaryOp(BinOp::Lt, (lhs, rhs)),
-            CmpOp::LtEq => Rvalue::BinaryOp(BinOp::Le, (lhs, rhs)),
-            CmpOp::Gt => Rvalue::BinaryOp(BinOp::Gt, (lhs, rhs)),
-            CmpOp::GtEq => Rvalue::BinaryOp(BinOp::Ge, (lhs, rhs)),
-        },
-        BinaryOp::Bitwise(op) => match op {
-            BitwiseOp::And => Rvalue::BinaryOp(BinOp::BitAnd, (lhs, rhs)),
-            BitwiseOp::Or => Rvalue::BinaryOp(BinOp::BitXor, (lhs, rhs)),
-            BitwiseOp::Xor => Rvalue::BinaryOp(BinOp::BitXor, (lhs, rhs)),
-        },
+        BinaryOp::Arith(op) => (
+            match op {
+                ArithOp::Add => Rvalue::BinaryOp(BinOp::Add, (lhs, rhs)),
+                ArithOp::Sub => Rvalue::BinaryOp(BinOp::Sub, (lhs, rhs)),
+                ArithOp::Mul => Rvalue::BinaryOp(BinOp::Mul, (lhs, rhs)),
+                ArithOp::Div => Rvalue::BinaryOp(BinOp::Div, (lhs, rhs)),
+                ArithOp::Mod => Rvalue::BinaryOp(BinOp::Mod, (lhs, rhs)),
+            },
+            lhs_ty,
+        ),
+        BinaryOp::Logic(op) => (
+            match op {
+                LogicOp::And => Rvalue::LogicOp(LogOp::And, (lhs, rhs)),
+                LogicOp::Or => Rvalue::LogicOp(LogOp::Or, (lhs, rhs)),
+            },
+            TyKind::Bool,
+        ),
+        BinaryOp::Compare(op) => (
+            match op {
+                CmpOp::Eq => Rvalue::BinaryOp(BinOp::Eq, (lhs, rhs)),
+                CmpOp::NotEq => Rvalue::BinaryOp(BinOp::Ne, (lhs, rhs)),
+                CmpOp::Lt => Rvalue::BinaryOp(BinOp::Lt, (lhs, rhs)),
+                CmpOp::LtEq => Rvalue::BinaryOp(BinOp::Le, (lhs, rhs)),
+                CmpOp::Gt => Rvalue::BinaryOp(BinOp::Gt, (lhs, rhs)),
+                CmpOp::GtEq => Rvalue::BinaryOp(BinOp::Ge, (lhs, rhs)),
+            },
+            TyKind::Bool,
+        ),
+        BinaryOp::Bitwise(op) => (
+            match op {
+                BitwiseOp::And => Rvalue::BinaryOp(BinOp::BitAnd, (lhs, rhs)),
+                BitwiseOp::Or => Rvalue::BinaryOp(BinOp::BitXor, (lhs, rhs)),
+                BitwiseOp::Xor => Rvalue::BinaryOp(BinOp::BitXor, (lhs, rhs)),
+            },
+            lhs_ty,
+        ),
     }
 }
 
@@ -683,104 +721,171 @@ fn lower_value_expr(
     builder: &mut FnBodyBuilder,
     info: &ValueExpr,
     type_hint: Option<TyKind>,
-) -> Rvalue {
+) -> (Rvalue, TyKind) {
     match info {
-        ValueExpr::ConstBool(value) => Rvalue::Use(Operand::Const(ConstData {
-            ty: TyKind::Bool,
-            data: ConstKind::Value(ValueTree::Leaf(ConstValue::Bool(*value))),
-        })),
-        ValueExpr::ConstChar(value) => Rvalue::Use(Operand::Const(ConstData {
-            ty: TyKind::Char,
-            data: ConstKind::Value(ValueTree::Leaf(ConstValue::U32((*value) as u32))),
-        })),
-        ValueExpr::ConstInt(value) => Rvalue::Use(Operand::Const(match type_hint {
-            Some(ty) => ConstData {
-                ty: ty.clone(),
-                data: ConstKind::Value(ValueTree::Leaf(match ty {
-                    TyKind::Int(ty) => match ty {
-                        IntTy::I8 => {
-                            ConstValue::I8((*value).try_into().expect("value out of range"))
-                        }
-                        IntTy::I16 => {
-                            ConstValue::I16((*value).try_into().expect("value out of range"))
-                        }
-                        IntTy::I32 => {
-                            ConstValue::I32((*value).try_into().expect("value out of range"))
-                        }
-                        IntTy::I64 => {
-                            ConstValue::I64((*value).try_into().expect("value out of range"))
-                        }
-                        IntTy::I128 => {
-                            ConstValue::I128((*value).try_into().expect("value out of range"))
-                        }
+        ValueExpr::ConstBool(value) => (
+            Rvalue::Use(Operand::Const(ConstData {
+                ty: TyKind::Bool,
+                data: ConstKind::Value(ValueTree::Leaf(ConstValue::Bool(*value))),
+            })),
+            TyKind::Bool,
+        ),
+        ValueExpr::ConstChar(value) => (
+            Rvalue::Use(Operand::Const(ConstData {
+                ty: TyKind::Char,
+                data: ConstKind::Value(ValueTree::Leaf(ConstValue::U32((*value) as u32))),
+            })),
+            TyKind::Char,
+        ),
+        ValueExpr::ConstInt(value) => {
+            let (data, ty) = match type_hint {
+                Some(ty) => (
+                    ConstData {
+                        ty: ty.clone(),
+                        data: ConstKind::Value(ValueTree::Leaf(match ty {
+                            TyKind::Int(ty) => match ty {
+                                IntTy::I8 => {
+                                    ConstValue::I8((*value).try_into().expect("value out of range"))
+                                }
+                                IntTy::I16 => ConstValue::I16(
+                                    (*value).try_into().expect("value out of range"),
+                                ),
+                                IntTy::I32 => ConstValue::I32(
+                                    (*value).try_into().expect("value out of range"),
+                                ),
+                                IntTy::I64 => ConstValue::I64(
+                                    (*value).try_into().expect("value out of range"),
+                                ),
+                                IntTy::I128 => ConstValue::I128(
+                                    (*value).try_into().expect("value out of range"),
+                                ),
+                            },
+                            TyKind::Uint(ty) => match ty {
+                                UintTy::U8 => {
+                                    ConstValue::U8((*value).try_into().expect("value out of range"))
+                                }
+                                UintTy::U16 => ConstValue::U16(
+                                    (*value).try_into().expect("value out of range"),
+                                ),
+                                UintTy::U32 => ConstValue::U32(
+                                    (*value).try_into().expect("value out of range"),
+                                ),
+                                UintTy::U64 => ConstValue::U64(
+                                    (*value).try_into().expect("value out of range"),
+                                ),
+                                UintTy::U128 => ConstValue::U128(*value),
+                            },
+                            TyKind::Bool => ConstValue::Bool(*value != 0),
+                            _ => unreachable!(),
+                        })),
                     },
-                    TyKind::Uint(ty) => match ty {
-                        UintTy::U8 => {
-                            ConstValue::U8((*value).try_into().expect("value out of range"))
-                        }
-                        UintTy::U16 => {
-                            ConstValue::U16((*value).try_into().expect("value out of range"))
-                        }
-                        UintTy::U32 => {
-                            ConstValue::U32((*value).try_into().expect("value out of range"))
-                        }
-                        UintTy::U64 => {
-                            ConstValue::U64((*value).try_into().expect("value out of range"))
-                        }
-                        UintTy::U128 => ConstValue::U128(*value),
+                    ty,
+                ),
+                None => (
+                    ConstData {
+                        ty: TyKind::Int(IntTy::I64),
+                        data: ConstKind::Value(ValueTree::Leaf(ConstValue::I64(
+                            (*value).try_into().expect("value out of range"),
+                        ))),
                     },
-                    TyKind::Bool => ConstValue::Bool(*value != 0),
-                    _ => unreachable!(),
-                })),
-            },
-            None => ConstData {
-                ty: TyKind::Int(IntTy::I64),
-                data: ConstKind::Value(ValueTree::Leaf(ConstValue::I64(
-                    (*value).try_into().expect("value out of range"),
-                ))),
-            },
-        })),
-        ValueExpr::ConstFloat(value) => Rvalue::Use(Operand::Const(match type_hint {
-            Some(ty) => ConstData {
-                ty: ty.clone(),
-                data: ConstKind::Value(ValueTree::Leaf(match &ty {
-                    TyKind::Float(ty) => match ty {
-                        FloatTy::F32 => {
-                            ConstValue::F32(value.parse().expect("error parsing float"))
-                        }
-                        FloatTy::F64 => {
-                            ConstValue::F64(value.parse().expect("error parsing float"))
-                        }
+                    TyKind::Int(IntTy::I64),
+                ),
+            };
+
+            (Rvalue::Use(Operand::Const(data)), ty)
+        }
+        ValueExpr::ConstFloat(value) => {
+            let (data, ty) = match type_hint {
+                Some(ty) => (
+                    ConstData {
+                        ty: ty.clone(),
+                        data: ConstKind::Value(ValueTree::Leaf(match &ty {
+                            TyKind::Float(ty) => match ty {
+                                FloatTy::F32 => {
+                                    ConstValue::F32(value.parse().expect("error parsing float"))
+                                }
+                                FloatTy::F64 => {
+                                    ConstValue::F64(value.parse().expect("error parsing float"))
+                                }
+                            },
+                            _ => unreachable!(),
+                        })),
                     },
-                    _ => unreachable!(),
-                })),
-            },
-            None => ConstData {
-                ty: TyKind::Float(FloatTy::F64),
-                data: ConstKind::Value(ValueTree::Leaf(ConstValue::F64(
-                    value.parse().expect("error parsing float"),
-                ))),
-            },
-        })),
+                    ty,
+                ),
+                None => (
+                    ConstData {
+                        ty: TyKind::Float(FloatTy::F64),
+                        data: ConstKind::Value(ValueTree::Leaf(ConstValue::F64(
+                            value.parse().expect("error parsing float"),
+                        ))),
+                    },
+                    TyKind::Float(FloatTy::F64),
+                ),
+            };
+
+            (Rvalue::Use(Operand::Const(data)), ty)
+        }
         ValueExpr::ConstStr(_) => todo!(),
         ValueExpr::Path(info) => {
             let place = lower_path(builder, info);
-            Rvalue::Use(Operand::Place(place))
+            (
+                Rvalue::Use(Operand::Place(place.clone())),
+                builder
+                    .body
+                    .locals
+                    .get(place.local)
+                    .as_ref()
+                    .unwrap()
+                    .ty
+                    .kind
+                    .clone(),
+            )
         }
         ValueExpr::Deref(path) => {
             let mut place = lower_path(builder, path);
             place.projection.push(PlaceElem::Deref);
 
-            Rvalue::Use(Operand::Place(place))
+            (
+                Rvalue::Use(Operand::Place(place.clone())),
+                builder
+                    .body
+                    .locals
+                    .get(place.local)
+                    .as_ref()
+                    .unwrap()
+                    .ty
+                    .kind
+                    .clone(),
+            )
         }
         ValueExpr::AsRef { path, ref_type } => {
             let place = lower_path(builder, path);
-            Rvalue::Ref(
-                match ref_type {
-                    RefType::Borrow => Mutability::Not,
-                    RefType::MutBorrow => Mutability::Mut,
-                },
-                place,
+            (
+                Rvalue::Ref(
+                    match ref_type {
+                        RefType::Borrow => Mutability::Not,
+                        RefType::MutBorrow => Mutability::Mut,
+                    },
+                    place.clone(),
+                ),
+                TyKind::Ref(
+                    Box::new(
+                        builder
+                            .body
+                            .locals
+                            .get(place.local)
+                            .as_ref()
+                            .unwrap()
+                            .ty
+                            .kind
+                            .clone(),
+                    ),
+                    match ref_type {
+                        RefType::Borrow => Mutability::Not,
+                        RefType::MutBorrow => Mutability::Mut,
+                    },
+                ),
             )
         }
     }

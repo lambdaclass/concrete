@@ -517,7 +517,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .unwrap()
                     .into()
             };
-            (value, lhs_ty)
+            (value, TyKind::Bool)
         }
         BinOp::Lt => {
             let value = if is_float {
@@ -557,7 +557,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .unwrap()
                     .into()
             };
-            (value, lhs_ty)
+            (value, TyKind::Bool)
         }
         BinOp::Le => {
             let value = if is_float {
@@ -597,7 +597,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .unwrap()
                     .into()
             };
-            (value, lhs_ty)
+            (value, TyKind::Bool)
         }
         BinOp::Ne => {
             let value = if is_float {
@@ -625,7 +625,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .unwrap()
                     .into()
             };
-            (value, lhs_ty)
+            (value, TyKind::Bool)
         }
         BinOp::Ge => {
             let value = if is_float {
@@ -665,7 +665,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .unwrap()
                     .into()
             };
-            (value, lhs_ty)
+            (value, TyKind::Bool)
         }
         BinOp::Gt => {
             let value = if is_float {
@@ -705,7 +705,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .unwrap()
                     .into()
             };
-            (value, lhs_ty)
+            (value, TyKind::Bool)
         }
     }
 }
