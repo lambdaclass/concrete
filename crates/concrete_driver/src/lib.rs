@@ -100,7 +100,9 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     }
     let output_file = target_dir.join(PathBuf::from(args.input.file_name().unwrap()));
     let output_file = if args.library {
-        output_file.with_extension("so")
+        output_file.with_extension(Session::get_platform_library_ext())
+    } else if cfg!(target_os = "windows") {
+        output_file.with_extension("exe")
     } else {
         output_file.with_extension("")
     };
@@ -148,14 +150,9 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
     let link_time = Instant::now();
     if session.library {
-        link_shared_lib(
-            &object_path,
-            &session
-                .output_file
-                .with_extension(Session::get_platform_library_ext()),
-        )?;
+        link_shared_lib(&object_path, &session.output_file)?;
     } else {
-        link_binary(&object_path, &session.output_file.with_extension(""))?;
+        link_binary(&object_path, &session.output_file)?;
     }
     let link_time = link_time.elapsed();
 

@@ -59,9 +59,14 @@ pub fn compile_program(
     let test_dir_path = test_dir.path();
     // todo: find a better name, "target" would clash with rust if running in the source tree.
     let target_dir = test_dir_path.join("build_artifacts/");
+    if !target_dir.exists() {
+        std::fs::create_dir_all(&target_dir)?;
+    }
     let output_file = target_dir.join(PathBuf::from(name));
     let output_file = if library {
         output_file.with_extension(Session::get_platform_library_ext())
+    } else if cfg!(target_os = "windows") {
+        output_file.with_extension("exe")
     } else {
         output_file.with_extension("")
     };
