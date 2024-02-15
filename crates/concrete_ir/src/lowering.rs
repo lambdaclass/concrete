@@ -4,7 +4,7 @@ use common::{BuildCtx, FnBodyBuilder, IdGenerator};
 use concrete_ast::{
     expressions::{
         ArithOp, BinaryOp, BitwiseOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp,
-        ValueExpr,
+        PathSegment, ValueExpr,
     },
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
@@ -178,6 +178,17 @@ fn lower_func(ctx: BuildCtx, func: &FunctionDef, module_id: DefId) -> BuildCtx {
             stmt,
             func.decl.ret_type.as_ref().map(|x| lower_type(x).kind),
         );
+    }
+
+    if !builder.statements.is_empty() {
+        let statements = std::mem::take(&mut builder.statements);
+        builder.body.basic_blocks.push(BasicBlock {
+            statements,
+            terminator: Box::new(Terminator {
+                span: None,
+                kind: TerminatorKind::Return,
+            }),
+        });
     }
 
     let (mut ctx, body) = (builder.ctx, builder.body);
@@ -444,9 +455,24 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) {
 
 fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) {
     let local = *builder.name_to_local.get(&info.target.first.name).unwrap();
-    let ty = builder.body.locals[local].ty.clone();
-    let (rvalue, _rvalue_ty) = lower_expression(builder, &info.value, Some(ty.kind.clone()));
     let place = lower_path(builder, &info.target);
+
+    let mut ty = builder.body.locals[local].ty.clone();
+    dbg!("ty");
+    dbg!(&ty);
+    if let Some(PlaceElem::Deref) = dbg!(&place.projection).last() {
+        if let TyKind::Ref(inner, _) = &ty.kind {
+            ty = Ty {
+                span: ty.span,
+                kind: *inner.clone(),
+            };
+        } else {
+            unreachable!()
+        }
+    }
+
+    dbg!(&ty);
+    let (rvalue, _rvalue_ty) = lower_expression(builder, &info.value, Some(ty.kind.clone()));
 
     builder.statements.push(Statement {
         span: Some(info.target.first.span),
@@ -780,7 +806,7 @@ fn lower_value_expr(
                                 UintTy::U128 => ConstValue::U128(*value),
                             },
                             TyKind::Bool => ConstValue::Bool(*value != 0),
-                            _ => unreachable!(),
+                            x => unreachable!("{:?}", x),
                         })),
                     },
                     ty,
@@ -901,9 +927,21 @@ pub fn lower_path(builder: &mut FnBodyBuilder, info: &PathOp) -> Place {
         .get(&info.first.name)
         .expect("local not found");
 
+    let mut projection = Vec::new();
+
+    for segment in &info.extra {
+        match segment {
+            PathSegment::FieldAccess(_) => todo!(),
+            PathSegment::ArrayIndex(_) => todo!(),
+            PathSegment::Deref => {
+                projection.push(PlaceElem::Deref);
+            }
+        }
+    }
+
     Place {
         local,
-        projection: Default::default(), // todo, field array deref
+        projection, // todo, field array deref
     }
 }
 

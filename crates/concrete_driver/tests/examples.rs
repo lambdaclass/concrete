@@ -11,6 +11,7 @@ mod common;
 #[test_case(include_str!("../../../examples/while.con"), "while", false, 16 ; "while.con")]
 #[test_case(include_str!("../../../examples/chars.con"), "chars", false, 117 ; "chars.con")]
 #[test_case(include_str!("../../../examples/floats.con"), "floats", false, 1 ; "floats.con")]
+#[test_case(include_str!("../../../examples/refs.con"), "refs", false, 2 ; "refs.con")]
 fn example_tests(source: &str, name: &str, is_library: bool, status_code: i32) {
     let program = compile_program(source, name, is_library).unwrap();
 

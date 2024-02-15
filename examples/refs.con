@@ -1,0 +1,11 @@
+mod Simple {
+    fn main() -> i32 {
+        let mut x: i32 = 2;
+        hello(&x);
+        return x;
+    }
+
+    fn hello(a: &mut i32) {
+        *a = 2;
+    }
+}

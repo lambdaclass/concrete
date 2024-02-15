@@ -96,6 +96,7 @@ pub struct MatchVariant {
 pub enum PathSegment {
     FieldAccess(Ident),
     ArrayIndex(ValueExpr),
+    Deref,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

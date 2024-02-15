@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use concrete_ir::{
-    BinOp, DefId, FnBody, LocalKind, ModuleBody, Operand, Place, ProgramBody, Rvalue, Span, Ty,
-    TyKind, ValueTree,
+    BinOp, DefId, FnBody, LocalKind, ModuleBody, Operand, Place, PlaceElem, ProgramBody, Rvalue,
+    Span, Ty, TyKind, ValueTree,
 };
 use concrete_session::Session;
 use melior::{
@@ -192,6 +192,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                     locals.insert(index, ptr);
                 }
                 LocalKind::ReturnPointer => {
+                    dbg!(&local);
                     if let TyKind::Unit = local.ty.kind {
                     } else {
                         ret_local = Some(index);
@@ -226,7 +227,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                 match &statement.kind {
                     concrete_ir::StatementKind::Assign(place, rvalue) => {
                         let (value, _ty) = compile_rvalue(&ctx, mlir_block, rvalue, &locals)?;
-                        compile_store_place(&ctx, mlir_block, place, value, &locals);
+                        compile_store_place(&ctx, mlir_block, place, value, &locals)?;
                     }
                     concrete_ir::StatementKind::StorageLive(_) => {}
                     concrete_ir::StatementKind::StorageDead(_) => {}
@@ -306,7 +307,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                             destination,
                             result.result(0)?.into(),
                             &locals,
-                        );
+                        )?;
                     }
 
                     if let Some(target) = target {
@@ -721,15 +722,30 @@ fn compile_store_place<'c: 'b, 'b>(
     info: &Place,
     value: Value<'c, 'b>,
     locals: &HashMap<usize, Value<'c, '_>>,
-) {
-    // todo: resolve projection too
-    let ptr = locals[&info.local];
+) -> Result<(), CodegenError> {
+    let mut ptr = locals[&info.local];
+
+    for proj in &info.projection {
+        match proj {
+            PlaceElem::Deref => {
+                ptr = block
+                    .append_operation(memref::load(ptr, &[], Location::unknown(ctx.context())))
+                    .result(0)?
+                    .into();
+            }
+            PlaceElem::Field(_, _) => todo!(),
+            PlaceElem::Index(_) => todo!(),
+        }
+    }
+
     block.append_operation(memref::store(
         value,
         ptr,
         &[],
         Location::unknown(ctx.context()),
     ));
+
+    Ok(())
 }
 
 fn compile_load_place<'c: 'b, 'b>(
@@ -747,7 +763,7 @@ fn compile_load_place<'c: 'b, 'b>(
         .into();
     for projection in &info.projection {
         match projection {
-            concrete_ir::PlaceElem::Deref => {
+            PlaceElem::Deref => {
                 val = block
                     .append_operation(memref::load(val, &[], Location::unknown(ctx.context())))
                     .result(0)?
@@ -757,8 +773,8 @@ fn compile_load_place<'c: 'b, 'b>(
                     _ => unreachable!(),
                 }
             }
-            concrete_ir::PlaceElem::Field(_, _) => todo!(),
-            concrete_ir::PlaceElem::Index(_) => todo!(),
+            PlaceElem::Field(_, _) => todo!(),
+            PlaceElem::Index(_) => todo!(),
         }
     }
     Ok((val, local_ty))

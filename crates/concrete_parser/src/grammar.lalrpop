@@ -365,7 +365,6 @@ pub(crate) ValueExpr: ast::expressions::ValueExpr = {
   <"string"> => ast::expressions::ValueExpr::ConstStr(<>),
   <"char"> => ast::expressions::ValueExpr::ConstChar(<>),
   <PathOp> => ast::expressions::ValueExpr::Path(<>),
-  "*" <PathOp> => ast::expressions::ValueExpr::Deref(<>),
   <ref_type:RefType> <path:PathOp> => ast::expressions::ValueExpr::AsRef {
     path,
     ref_type
@@ -413,7 +412,11 @@ pub(crate) PathOp: ast::expressions::PathOp = {
   <first:Ident> <extra:PathSegments?> => ast::expressions::PathOp {
     first,
     extra: extra.unwrap_or(vec![]),
-  }
+  },
+  "*" <mut x:PathOp> => {
+    x.extra.push(ast::expressions::PathSegment::Deref);
+    x
+  },
 }
 
 pub(crate) PathSegment: ast::expressions::PathSegment = {
@@ -453,7 +456,7 @@ pub(crate) Statement: ast::statements::Statement = {
   <LetStmt> ";" => ast::statements::Statement::Let(<>),
   <AssignStmt> ";" => ast::statements::Statement::Assign(<>),
   <FnCallOp> ";" => ast::statements::Statement::FnCall(<>),
-  <ReturnStmt> ";"? => ast::statements::Statement::Return(<>),
+  <ReturnStmt> ";" => ast::statements::Statement::Return(<>),
 }
 
 pub(crate) LetStmt: ast::statements::LetStmt = {
