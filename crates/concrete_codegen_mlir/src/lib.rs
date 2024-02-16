@@ -18,6 +18,7 @@ use llvm_sys::{
         LLVMContextCreate, LLVMContextDispose, LLVMDisposeMessage, LLVMDisposeModule,
         LLVMPrintModuleToFile,
     },
+    error::LLVMGetErrorMessage,
     prelude::{LLVMContextRef, LLVMModuleRef},
     target::{
         LLVM_InitializeAllAsmPrinters, LLVM_InitializeAllTargetInfos, LLVM_InitializeAllTargetMCs,
@@ -28,6 +29,9 @@ use llvm_sys::{
         LLVMDisposeTargetMachine, LLVMGetDefaultTargetTriple, LLVMGetHostCPUFeatures,
         LLVMGetHostCPUName, LLVMGetTargetFromTriple, LLVMRelocMode, LLVMTargetMachineEmitToFile,
         LLVMTargetRef,
+    },
+    transforms::pass_builder::{
+        LLVMCreatePassBuilderOptions, LLVMDisposePassBuilderOptions, LLVMRunPasses,
     },
 };
 use module::MLIRModule;
@@ -114,27 +118,6 @@ pub fn compile_to_object(
         let mut null = null_mut();
         let mut error_buffer = addr_of_mut!(null);
 
-        if session.output_ll || session.output_all {
-            let filename = CString::new(
-                target_path
-                    .with_extension("ll")
-                    .as_os_str()
-                    .to_string_lossy()
-                    .as_bytes(),
-            )
-            .unwrap();
-            if LLVMPrintModuleToFile(llvm_module, filename.as_ptr(), error_buffer) != 0 {
-                let error = CStr::from_ptr(*error_buffer);
-                let err = error.to_string_lossy().to_string();
-                tracing::error!("error outputing ll file: {}", err);
-                LLVMDisposeMessage(*error_buffer);
-                Err(CodegenError::LLVMCompileError(err))?;
-            } else if !(*error_buffer).is_null() {
-                LLVMDisposeMessage(*error_buffer);
-                error_buffer = addr_of_mut!(null);
-            }
-        }
-
         let target_triple = LLVMGetDefaultTargetTriple();
         tracing::debug!("Target triple: {:?}", CStr::from_ptr(target_triple));
 
@@ -180,6 +163,46 @@ pub fn compile_to_object(
             },
             LLVMCodeModel::LLVMCodeModelDefault,
         );
+
+        let opts = LLVMCreatePassBuilderOptions();
+        let opt = match session.optlevel {
+            OptLevel::None => 0,
+            OptLevel::Less => 1,
+            OptLevel::Default => 2,
+            OptLevel::Aggressive => 3,
+        };
+        let passes = CString::new(format!("default<O{opt}>")).unwrap();
+        let error = LLVMRunPasses(llvm_module, passes.as_ptr(), machine, opts);
+        if !error.is_null() {
+            let msg = LLVMGetErrorMessage(error);
+            let msg = CStr::from_ptr(msg);
+            Err(CodegenError::LLVMCompileError(
+                msg.to_string_lossy().into_owned(),
+            ))?;
+        }
+
+        LLVMDisposePassBuilderOptions(opts);
+
+        if session.output_ll || session.output_all {
+            let filename = CString::new(
+                target_path
+                    .with_extension("ll")
+                    .as_os_str()
+                    .to_string_lossy()
+                    .as_bytes(),
+            )
+            .unwrap();
+            if LLVMPrintModuleToFile(llvm_module, filename.as_ptr(), error_buffer) != 0 {
+                let error = CStr::from_ptr(*error_buffer);
+                let err = error.to_string_lossy().to_string();
+                tracing::error!("error outputing ll file: {}", err);
+                LLVMDisposeMessage(*error_buffer);
+                Err(CodegenError::LLVMCompileError(err))?;
+            } else if !(*error_buffer).is_null() {
+                LLVMDisposeMessage(*error_buffer);
+                error_buffer = addr_of_mut!(null);
+            }
+        }
 
         let filename = CString::new(target_path.as_os_str().to_string_lossy().as_bytes()).unwrap();
         tracing::debug!("filename to llvm: {:?}", filename);
