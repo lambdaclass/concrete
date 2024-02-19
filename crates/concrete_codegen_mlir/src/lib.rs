@@ -46,6 +46,15 @@ mod pass_manager;
 
 /// Compiles the given program and returns the object file path.
 pub fn compile(session: &Session, program: &ProgramBody) -> Result<PathBuf, CodegenError> {
+    static INITIALIZED: OnceLock<()> = OnceLock::new();
+    INITIALIZED.get_or_init(|| unsafe {
+        LLVM_InitializeAllTargets();
+        LLVM_InitializeAllTargetInfos();
+        LLVM_InitializeAllTargetMCs();
+        LLVM_InitializeAllAsmPrinters();
+        tracing::debug!("initialized llvm targets");
+    });
+
     let context = Context::new();
     let compile_codegen_time = Instant::now();
     let mlir_module = context.compile(session, program)?;
@@ -68,6 +77,73 @@ extern "C" {
         module_operation_ptr: mlir_sys::MlirOperation,
         llvm_context: LLVMContextRef,
     ) -> LLVMModuleRef;
+}
+
+pub fn get_target_triple(_session: &Session) -> String {
+    // TODO: use session to get the specified target triple
+    let target_triple = unsafe {
+        let value = LLVMGetDefaultTargetTriple();
+        CStr::from_ptr(value).to_string_lossy().into_owned()
+    };
+    target_triple
+}
+
+pub fn get_data_layout_rep(session: &Session) -> Result<String, CodegenError> {
+    unsafe {
+        let mut null = null_mut();
+        let error_buffer = addr_of_mut!(null);
+
+        let target_triple = LLVMGetDefaultTargetTriple();
+        tracing::debug!("Target triple: {:?}", CStr::from_ptr(target_triple));
+
+        let target_cpu = LLVMGetHostCPUName();
+        tracing::debug!("Target CPU: {:?}", CStr::from_ptr(target_cpu));
+
+        let target_cpu_features = LLVMGetHostCPUFeatures();
+        tracing::debug!(
+            "Target CPU Features: {:?}",
+            CStr::from_ptr(target_cpu_features)
+        );
+
+        let mut target: MaybeUninit<LLVMTargetRef> = MaybeUninit::uninit();
+
+        if LLVMGetTargetFromTriple(target_triple, target.as_mut_ptr(), error_buffer) != 0 {
+            let error = CStr::from_ptr(*error_buffer);
+            let err = error.to_string_lossy().to_string();
+            tracing::error!("error getting target triple: {}", err);
+            LLVMDisposeMessage(*error_buffer);
+            Err(CodegenError::LLVMCompileError(err))?;
+        }
+        if !(*error_buffer).is_null() {
+            LLVMDisposeMessage(*error_buffer);
+        }
+
+        let target = target.assume_init();
+
+        let machine = LLVMCreateTargetMachine(
+            target,
+            target_triple.cast(),
+            target_cpu.cast(),
+            target_cpu_features.cast(),
+            match session.optlevel {
+                OptLevel::None => LLVMCodeGenOptLevel::LLVMCodeGenLevelNone,
+                OptLevel::Less => LLVMCodeGenOptLevel::LLVMCodeGenLevelLess,
+                OptLevel::Default => LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
+                OptLevel::Aggressive => LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive,
+            },
+            if session.library {
+                LLVMRelocMode::LLVMRelocDynamicNoPic
+            } else {
+                LLVMRelocMode::LLVMRelocDefault
+            },
+            LLVMCodeModel::LLVMCodeModelDefault,
+        );
+
+        let data_layout = llvm_sys::target_machine::LLVMCreateTargetDataLayout(machine);
+        let data_layout_str =
+            CStr::from_ptr(llvm_sys::target::LLVMCopyStringRepOfTargetData(data_layout));
+        Ok(data_layout_str.to_string_lossy().into_owned())
+    }
 }
 
 /// Converts a module to an object.
@@ -97,16 +173,7 @@ pub fn compile_to_object(
     let target_path = session.target_dir.join(target_file);
 
     // TODO: Rework so you can specify target and host features, etc.
-    // Right now it compiles for the native cpu feature set and arch.
-    static INITIALIZED: OnceLock<()> = OnceLock::new();
-
-    INITIALIZED.get_or_init(|| unsafe {
-        LLVM_InitializeAllTargets();
-        LLVM_InitializeAllTargetInfos();
-        LLVM_InitializeAllTargetMCs();
-        LLVM_InitializeAllAsmPrinters();
-        tracing::debug!("initialized llvm targets");
-    });
+    // Right now it compiles for the native cpu feature set and arch
 
     unsafe {
         let llvm_context = LLVMContextCreate();

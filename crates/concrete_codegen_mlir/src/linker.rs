@@ -35,6 +35,7 @@ pub fn link_shared_lib(input_path: &Path, output_filename: &Path) -> Result<(), 
                 "-L/lib/../lib64",
                 "-L/usr/lib/../lib64",
                 "-lc",
+                "-O1",
                 &input_path.display().to_string(),
             ]
         }
@@ -100,6 +101,7 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), Code
                 "-zrelro",
                 "--no-as-needed",
                 "-lc",
+                "-O1",
                 crtn,
                 &input_path.display().to_string(),
             ]

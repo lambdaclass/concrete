@@ -458,9 +458,7 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) {
     let place = lower_path(builder, &info.target);
 
     let mut ty = builder.body.locals[local].ty.clone();
-    dbg!("ty");
-    dbg!(&ty);
-    if let Some(PlaceElem::Deref) = dbg!(&place.projection).last() {
+    if let Some(PlaceElem::Deref) = place.projection.last() {
         if let TyKind::Ref(inner, _) = &ty.kind {
             ty = Ty {
                 span: ty.span,
@@ -471,7 +469,6 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) {
         }
     }
 
-    dbg!(&ty);
     let (rvalue, _rvalue_ty) = lower_expression(builder, &info.value, Some(ty.kind.clone()));
 
     builder.statements.push(Statement {

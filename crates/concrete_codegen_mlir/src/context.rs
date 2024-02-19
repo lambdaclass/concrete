@@ -2,12 +2,15 @@ use concrete_ir::ProgramBody;
 use concrete_session::Session;
 use melior::{
     dialect::DialectRegistry,
-    ir::{Location, Module as MeliorModule},
+    ir::{
+        attribute::StringAttribute, operation::OperationBuilder, Block, Identifier, Location,
+        Module as MeliorModule, Region,
+    },
     utility::{register_all_dialects, register_all_llvm_translations, register_all_passes},
     Context as MeliorContext,
 };
 
-use crate::{codegen::CodegenCtx, errors::CodegenError};
+use crate::{codegen::CodegenCtx, errors::CodegenError, get_data_layout_rep, get_target_triple};
 
 use super::{module::MLIRModule, pass_manager::run_pass_manager};
 
@@ -38,8 +41,28 @@ impl Context {
     ) -> Result<MLIRModule, CodegenError> {
         let file_path = session.file_path.display().to_string();
         let location = Location::new(&self.melior_context, &file_path, 0, 0);
+        let target_triple = get_target_triple(session);
 
-        let mut melior_module = MeliorModule::new(location);
+        let module_region = Region::new();
+        module_region.append_block(Block::new(&[]));
+
+        let op = OperationBuilder::new("builtin.module", location)
+            .add_attributes(&[
+                (
+                    Identifier::new(&self.melior_context, "llvm.target_triple"),
+                    StringAttribute::new(&self.melior_context, &target_triple).into(),
+                ),
+                (
+                    Identifier::new(&self.melior_context, "llvm.data_layout"),
+                    StringAttribute::new(&self.melior_context, &get_data_layout_rep(session)?)
+                        .into(),
+                ),
+            ])
+            .add_regions(vec![module_region])
+            .build()?;
+        assert!(op.verify(), "module operation is not valid");
+
+        let mut melior_module = MeliorModule::from_operation(op).expect("module failed to create");
 
         let codegen_ctx = CodegenCtx {
             mlir_context: &self.melior_context,

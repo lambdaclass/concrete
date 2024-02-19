@@ -192,7 +192,6 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                     locals.insert(index, ptr);
                 }
                 LocalKind::ReturnPointer => {
-                    dbg!(&local);
                     if let TyKind::Unit = local.ty.kind {
                     } else {
                         ret_local = Some(index);
