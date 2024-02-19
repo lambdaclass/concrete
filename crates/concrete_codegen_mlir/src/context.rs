@@ -4,7 +4,7 @@ use melior::{
     dialect::DialectRegistry,
     ir::{
         attribute::StringAttribute, operation::OperationBuilder, Block, Identifier, Location,
-        Module as MeliorModule, Region,
+        Module as MeliorModule, Operation, Region,
     },
     utility::{register_all_dialects, register_all_llvm_translations, register_all_passes},
     Context as MeliorContext,
@@ -46,6 +46,8 @@ impl Context {
         let module_region = Region::new();
         module_region.append_block(Block::new(&[]));
 
+        let data_layout_ret = &get_data_layout_rep(session)?;
+
         let op = OperationBuilder::new("builtin.module", location)
             .add_attributes(&[
                 (
@@ -54,8 +56,7 @@ impl Context {
                 ),
                 (
                     Identifier::new(&self.melior_context, "llvm.data_layout"),
-                    StringAttribute::new(&self.melior_context, &get_data_layout_rep(session)?)
-                        .into(),
+                    StringAttribute::new(&self.melior_context, data_layout_ret).into(),
                 ),
             ])
             .add_regions(vec![module_region])
@@ -84,6 +85,21 @@ impl Context {
 
         // TODO: Add proper error handling.
         run_pass_manager(&self.melior_context, &mut melior_module).unwrap();
+
+        // The func to llvm pass has a bug where it sets the data layout string to ""
+        // This works around it by setting it again.
+        {
+            // OperationRef doesnt implement to_ref_mut yet so this is a workaround.
+            // waiting on https://github.com/raviqqe/melior/pull/460
+            let op = melior_module.as_operation().to_raw();
+            let mut op = unsafe { Operation::from_raw(op) };
+            op.set_attribute(
+                "llvm.data_layout",
+                &StringAttribute::new(&self.melior_context, data_layout_ret).into(),
+            );
+            // This is a reference in theory so dont run the destructor.
+            std::mem::forget(op);
+        }
 
         if session.output_mlir || session.output_all {
             std::fs::write(
