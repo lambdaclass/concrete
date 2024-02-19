@@ -37,6 +37,7 @@ pub fn compile_program(
     source: &str,
     name: &str,
     library: bool,
+    optlevel: OptLevel,
 ) -> Result<CompileResult, Box<dyn std::error::Error>> {
     let db = concrete_driver::db::Database::default();
     let source = ProgramSource::new(&db, source.to_string(), name.to_string());
@@ -74,7 +75,7 @@ pub fn compile_program(
     let session = Session {
         file_path: PathBuf::from(name),
         debug_info: DebugInfo::Full,
-        optlevel: OptLevel::None,
+        optlevel,
         source: Source::from(source.input(&db).to_string()),
         library,
         target_dir,
@@ -111,4 +112,13 @@ pub fn run_program(program: &Path) -> Result<Output, std::io::Error> {
     std::process::Command::new(program)
         .spawn()?
         .wait_with_output()
+}
+
+#[track_caller]
+pub fn compile_and_run(source: &str, name: &str, library: bool, optlevel: OptLevel) -> i32 {
+    let result = compile_program(source, name, library, optlevel).expect("failed to compile");
+
+    let output = run_program(&result.binary_file).expect("failed to run");
+
+    output.status.code().unwrap()
 }

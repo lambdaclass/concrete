@@ -1,4 +1,5 @@
-use crate::common::{compile_program, run_program};
+use crate::common::compile_and_run;
+use concrete_session::config::OptLevel;
 use test_case::test_case;
 
 mod common;
@@ -13,13 +14,20 @@ mod common;
 #[test_case(include_str!("../../../examples/floats.con"), "floats", false, 1 ; "floats.con")]
 #[test_case(include_str!("../../../examples/refs.con"), "refs", false, 6 ; "refs.con")]
 fn example_tests(source: &str, name: &str, is_library: bool, status_code: i32) {
-    let program = compile_program(source, name, is_library).unwrap();
-
-    let result = run_program(&program.binary_file).unwrap();
     assert_eq!(
-        result.status.code().unwrap(),
         status_code,
-        "Program {} returned a unexpected status code",
-        name
+        compile_and_run(source, name, is_library, OptLevel::None)
+    );
+    assert_eq!(
+        status_code,
+        compile_and_run(source, name, is_library, OptLevel::Less)
+    );
+    assert_eq!(
+        status_code,
+        compile_and_run(source, name, is_library, OptLevel::Default)
+    );
+    assert_eq!(
+        status_code,
+        compile_and_run(source, name, is_library, OptLevel::Aggressive)
     );
 }
