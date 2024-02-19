@@ -203,12 +203,12 @@ Features:
 - while ✔️
 - modules ✔️
 - imports ✔️
-- floats 🏗️
+- floats ✔️
+- borrowing ✔️
 - structs 🏗️
 - arrays :x:
 - iterators :x:
 - for :x:
-- borrowing 🏗️
 - match :x:
 - option :x:
 - enums :x:
