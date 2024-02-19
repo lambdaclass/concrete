@@ -615,55 +615,6 @@ fn lower_expression(
     }
 }
 
-/*
-ValueExpr::Deref(path) => {
-            let mut place = lower_path(builder, path);
-            place.projection.push(PlaceElem::Deref);
-
-            (
-                Rvalue::Use(Operand::Place(place.clone())),
-                builder
-                    .body
-                    .locals
-                    .get(place.local)
-                    .as_ref()
-                    .unwrap()
-                    .ty
-                    .kind
-                    .clone(),
-            )
-        }
-        ValueExpr::AsRef { path, ref_type } => {
-            let place = lower_path(builder, path);
-            (
-                Rvalue::Ref(
-                    match ref_type {
-                        RefType::Borrow => Mutability::Not,
-                        RefType::MutBorrow => Mutability::Mut,
-                    },
-                    place.clone(),
-                ),
-                TyKind::Ref(
-                    Box::new(
-                        builder
-                            .body
-                            .locals
-                            .get(place.local)
-                            .as_ref()
-                            .unwrap()
-                            .ty
-                            .kind
-                            .clone(),
-                    ),
-                    match ref_type {
-                        RefType::Borrow => Mutability::Not,
-                        RefType::MutBorrow => Mutability::Mut,
-                    },
-                ),
-            )
-        }
-         */
-
 fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) -> (Rvalue, TyKind) {
     let fn_id = {
         let mod_body = builder.get_module_body();
