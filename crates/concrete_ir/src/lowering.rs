@@ -454,22 +454,22 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) {
 }
 
 fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) {
-    let local = *builder.name_to_local.get(&info.target.first.name).unwrap();
-    let place = lower_path(builder, &info.target);
+    let (mut place, mut ty) = lower_path(builder, &info.target);
 
-    let mut ty = builder.body.locals[local].ty.clone();
-    if let Some(PlaceElem::Deref) = place.projection.last() {
-        if let TyKind::Ref(inner, _) = &ty.kind {
-            ty = Ty {
-                span: ty.span,
-                kind: *inner.clone(),
-            };
-        } else {
-            unreachable!()
+    for _ in 0..info.derefs {
+        match &ty {
+            TyKind::Ref(inner, is_mut) => {
+                if matches!(is_mut, Mutability::Not) {
+                    panic!("trying to mutate non mut ref");
+                }
+                ty = *inner.clone();
+            }
+            _ => unreachable!(),
         }
+        place.projection.push(PlaceElem::Deref);
     }
 
-    let (rvalue, _rvalue_ty) = lower_expression(builder, &info.value, Some(ty.kind.clone()));
+    let (rvalue, _rvalue_ty) = lower_expression(builder, &info.value, Some(ty.clone()));
 
     builder.statements.push(Statement {
         span: Some(info.target.first.span),
@@ -512,20 +512,6 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
                 let local = builder.get_local(&path.first.name).unwrap(); // todo handle segments
                 Some(local.ty.kind.clone())
             }
-            ValueExpr::Deref(path) => {
-                let local = builder.get_local(&path.first.name).unwrap(); // todo handle segments
-                Some(local.ty.kind.clone())
-            }
-            ValueExpr::AsRef { path, ref_type } => {
-                let local = builder.get_local(&path.first.name).unwrap(); // todo handle segments
-                Some(TyKind::Ref(
-                    Box::new(local.ty.kind.clone()),
-                    match ref_type {
-                        RefType::Borrow => Mutability::Not,
-                        RefType::MutBorrow => Mutability::Mut,
-                    },
-                ))
-            }
         },
         Expression::FnCall(info) => {
             let fn_id = {
@@ -553,6 +539,10 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
                 find_expression_type(builder, lhs).or(find_expression_type(builder, rhs))
             }
         }
+        Expression::Deref(_) => {
+            todo!()
+        }
+        Expression::AsRef(_, _) => todo!(),
     }
 }
 
@@ -568,8 +558,111 @@ fn lower_expression(
         Expression::If(_) => todo!(),
         Expression::UnaryOp(_, _) => todo!(),
         Expression::BinaryOp(lhs, op, rhs) => lower_binary_op(builder, lhs, *op, rhs, type_hint),
+        Expression::Deref(info) => {
+            let (value, ty) = lower_expression(builder, info, type_hint);
+
+            let mut place = match value {
+                Rvalue::Ref(_, place) => place,
+                Rvalue::Use(op) => match op {
+                    Operand::Place(place) => place,
+                    Operand::Const(_) => todo!("deref to constant data not yet implemented"),
+                },
+                value => todo!("deref not implemented for {value:?}"),
+            };
+
+            let ty = match ty {
+                TyKind::Ref(inner, _) => *inner.clone(),
+                _ => todo!(),
+            };
+
+            place.projection.push(PlaceElem::Deref);
+
+            (Rvalue::Use(Operand::Place(place)), ty)
+        }
+        Expression::AsRef(inner, mutable) => {
+            let type_hint = match type_hint {
+                Some(inner) => match inner {
+                    TyKind::Ref(inner, _) => Some(*inner.clone()),
+                    _ => unreachable!(),
+                },
+                None => None,
+            };
+            let (value, ty) = lower_expression(builder, inner, type_hint);
+
+            let place = match value {
+                Rvalue::Use(op) => match op {
+                    Operand::Place(place) => place,
+                    Operand::Const(_) => todo!("reference to literals not implemented yet"),
+                },
+                Rvalue::Ref(_, place) => place,
+                // do these refs make sense?
+                Rvalue::LogicOp(_, _) => todo!(),
+                Rvalue::BinaryOp(_, _) => todo!(),
+                Rvalue::UnaryOp(_, _) => todo!(),
+            };
+
+            let mutability = match mutable {
+                RefType::Borrow => Mutability::Not,
+                RefType::MutBorrow => Mutability::Mut,
+            };
+
+            let rvalue = Rvalue::Ref(mutability, place);
+
+            let ty = TyKind::Ref(Box::new(ty), mutability);
+
+            (rvalue, ty)
+        }
     }
 }
+
+/*
+ValueExpr::Deref(path) => {
+            let mut place = lower_path(builder, path);
+            place.projection.push(PlaceElem::Deref);
+
+            (
+                Rvalue::Use(Operand::Place(place.clone())),
+                builder
+                    .body
+                    .locals
+                    .get(place.local)
+                    .as_ref()
+                    .unwrap()
+                    .ty
+                    .kind
+                    .clone(),
+            )
+        }
+        ValueExpr::AsRef { path, ref_type } => {
+            let place = lower_path(builder, path);
+            (
+                Rvalue::Ref(
+                    match ref_type {
+                        RefType::Borrow => Mutability::Not,
+                        RefType::MutBorrow => Mutability::Mut,
+                    },
+                    place.clone(),
+                ),
+                TyKind::Ref(
+                    Box::new(
+                        builder
+                            .body
+                            .locals
+                            .get(place.local)
+                            .as_ref()
+                            .unwrap()
+                            .ty
+                            .kind
+                            .clone(),
+                    ),
+                    match ref_type {
+                        RefType::Borrow => Mutability::Not,
+                        RefType::MutBorrow => Mutability::Mut,
+                    },
+                ),
+            )
+        }
+         */
 
 fn lower_fn_call(builder: &mut FnBodyBuilder, info: &FnCallOp) -> (Rvalue, TyKind) {
     let fn_id = {
@@ -855,7 +948,7 @@ fn lower_value_expr(
         }
         ValueExpr::ConstStr(_) => todo!(),
         ValueExpr::Path(info) => {
-            let place = lower_path(builder, info);
+            let (place, _place_ty) = lower_path(builder, info);
             (
                 Rvalue::Use(Operand::Place(place.clone())),
                 builder
@@ -867,79 +960,28 @@ fn lower_value_expr(
                     .ty
                     .kind
                     .clone(),
-            )
-        }
-        ValueExpr::Deref(path) => {
-            let mut place = lower_path(builder, path);
-            place.projection.push(PlaceElem::Deref);
-
-            (
-                Rvalue::Use(Operand::Place(place.clone())),
-                builder
-                    .body
-                    .locals
-                    .get(place.local)
-                    .as_ref()
-                    .unwrap()
-                    .ty
-                    .kind
-                    .clone(),
-            )
-        }
-        ValueExpr::AsRef { path, ref_type } => {
-            let place = lower_path(builder, path);
-            (
-                Rvalue::Ref(
-                    match ref_type {
-                        RefType::Borrow => Mutability::Not,
-                        RefType::MutBorrow => Mutability::Mut,
-                    },
-                    place.clone(),
-                ),
-                TyKind::Ref(
-                    Box::new(
-                        builder
-                            .body
-                            .locals
-                            .get(place.local)
-                            .as_ref()
-                            .unwrap()
-                            .ty
-                            .kind
-                            .clone(),
-                    ),
-                    match ref_type {
-                        RefType::Borrow => Mutability::Not,
-                        RefType::MutBorrow => Mutability::Mut,
-                    },
-                ),
             )
         }
     }
 }
 
-pub fn lower_path(builder: &mut FnBodyBuilder, info: &PathOp) -> Place {
+pub fn lower_path(builder: &mut FnBodyBuilder, info: &PathOp) -> (Place, TyKind) {
     let local = *builder
         .name_to_local
         .get(&info.first.name)
         .expect("local not found");
 
-    let mut projection = Vec::new();
+    let ty = builder.body.locals[local].ty.kind.clone();
+    let projection = Vec::new();
 
     for segment in &info.extra {
         match segment {
             PathSegment::FieldAccess(_) => todo!(),
             PathSegment::ArrayIndex(_) => todo!(),
-            PathSegment::Deref => {
-                projection.push(PlaceElem::Deref);
-            }
         }
     }
 
-    Place {
-        local,
-        projection, // todo, field array deref
-    }
+    (Place { local, projection }, ty)
 }
 
 pub fn lower_type(spec: &TypeSpec) -> Ty {

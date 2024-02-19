@@ -291,34 +291,39 @@ pub(crate) FunctionDef: ast::functions::FunctionDef = {
 // Expressions
 
 pub(crate) Term: ast::expressions::Expression = {
+  #[precedence(level="0")]
   <ValueExpr> => ast::expressions::Expression::Value(<>),
   <FnCallOp> => ast::expressions::Expression::FnCall(<>),
   <MatchExpr> => ast::expressions::Expression::Match(<>),
   <IfExpr> => ast::expressions::Expression::If(<>),
+  #[precedence(level="1")] #[assoc(side="left")]
   "(" <Expression> ")",
 }
 
 pub(crate) Expression: ast::expressions::Expression = {
   #[precedence(level="0")]
   <Term>,
+  #[precedence(level="1")] #[assoc(side="left")]
+  "&" "mut" <Expression> => ast::expressions::Expression::AsRef(Box::new(<>), ast::types::RefType::MutBorrow),
+  "&" <Expression> => ast::expressions::Expression::AsRef(Box::new(<>), ast::types::RefType::Borrow),
+  "*" <Expression> => ast::expressions::Expression::Deref(Box::new(<>)),
   <op:UnaryOp> <rhs:Expression> => ast::expressions::Expression::UnaryOp(
     op,
     Box::new(rhs)
   ),
-  // <op:UnaryOp> <e:Expression> => ast::expressions::Expression::UnaryOp(op, Box::new(e)),
-  #[precedence(level="1")] #[assoc(side="left")]
+  #[precedence(level="2")] #[assoc(side="left")]
   <lhs:Expression> <op:BinaryFirstLvlOp> <rhs:Expression> => ast::expressions::Expression::BinaryOp(
     Box::new(lhs),
     op,
     Box::new(rhs)
   ),
-  #[precedence(level="2")] #[assoc(side="left")]
+  #[precedence(level="3")] #[assoc(side="left")]
   <lhs:Expression> <op:BinarySecondLvlOp> <rhs:Expression> => ast::expressions::Expression::BinaryOp(
     Box::new(lhs),
     op,
     Box::new(rhs)
   ),
-  #[precedence(level="3")] #[assoc(side="left")]
+  #[precedence(level="4")] #[assoc(side="left")]
   <lhs:Expression> <op:BinaryThirdLvlOp> <rhs:Expression> => ast::expressions::Expression::BinaryOp(
     Box::new(lhs),
     op,
@@ -365,10 +370,6 @@ pub(crate) ValueExpr: ast::expressions::ValueExpr = {
   <"string"> => ast::expressions::ValueExpr::ConstStr(<>),
   <"char"> => ast::expressions::ValueExpr::ConstChar(<>),
   <PathOp> => ast::expressions::ValueExpr::Path(<>),
-  <ref_type:RefType> <path:PathOp> => ast::expressions::ValueExpr::AsRef {
-    path,
-    ref_type
-  },
 }
 
 pub(crate) IfExpr: ast::expressions::IfExpr = {
@@ -412,10 +413,6 @@ pub(crate) PathOp: ast::expressions::PathOp = {
   <first:Ident> <extra:PathSegments?> => ast::expressions::PathOp {
     first,
     extra: extra.unwrap_or(vec![]),
-  },
-  "*" <mut x:PathOp> => {
-    x.extra.push(ast::expressions::PathSegment::Deref);
-    x
   },
 }
 
@@ -471,9 +468,11 @@ pub(crate) LetStmt: ast::statements::LetStmt = {
 }
 
 pub(crate) AssignStmt: ast::statements::AssignStmt = {
-  <target:PathOp> "=" <value:Expression> => ast::statements::AssignStmt {
+  <lo:@L> <derefs:"*"*> <target:PathOp> "=" <value:Expression> <hi:@R> => ast::statements::AssignStmt {
     target,
-    value
+    value,
+    derefs: derefs.len(),
+    span: Span::new(lo, hi),
   },
 }
 

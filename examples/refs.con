@@ -1,11 +1,13 @@
-mod Simple {
-    fn main() -> i32 {
-        let mut x: i32 = 2;
-        hello(&mut x);
-        return x;
+mod Main {
+    pub fn main() -> i64 {
+        let mut a: i64 = 4;
+
+        hello(&mut a);
+
+        return a;
     }
 
-    fn hello(a: &mut i32) {
-        *a = 2;
+    pub fn hello(a: &mut i64) {
+        *a = (*a + 2);
     }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    common::Ident,
+    common::{Ident, Span},
     expressions::{Expression, FnCallOp, IfExpr, MatchExpr, PathOp},
     types::TypeSpec,
 };
@@ -37,7 +37,9 @@ pub struct ReturnStmt {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AssignStmt {
     pub target: PathOp,
+    pub derefs: usize,
     pub value: Expression,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
