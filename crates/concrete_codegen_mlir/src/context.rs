@@ -4,7 +4,7 @@ use melior::{
     dialect::DialectRegistry,
     ir::{
         attribute::StringAttribute, operation::OperationBuilder, Block, Identifier, Location,
-        Module as MeliorModule, Operation, Region,
+        Module as MeliorModule, Region,
     },
     utility::{register_all_dialects, register_all_llvm_translations, register_all_passes},
     Context as MeliorContext,
@@ -89,16 +89,11 @@ impl Context {
         // The func to llvm pass has a bug where it sets the data layout string to ""
         // This works around it by setting it again.
         {
-            // OperationRef doesnt implement to_ref_mut yet so this is a workaround.
-            // waiting on https://github.com/raviqqe/melior/pull/460
-            let op = melior_module.as_operation().to_raw();
-            let mut op = unsafe { Operation::from_raw(op) };
+            let mut op = melior_module.as_operation_mut();
             op.set_attribute(
                 "llvm.data_layout",
                 StringAttribute::new(&self.melior_context, data_layout_ret).into(),
             );
-            // This is a reference in theory so dont run the destructor.
-            std::mem::forget(op);
         }
 
         if session.output_mlir || session.output_all {
