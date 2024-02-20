@@ -21,7 +21,7 @@ pub enum TypeSpec {
     },
     Array {
         of_type: Box<Self>,
-        size: u128,
+        size: u64,
         is_ref: Option<RefType>,
         span: Span,
     },
