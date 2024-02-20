@@ -20,9 +20,13 @@ use crate::errors::CodegenError;
 /// Global codegen context
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CodegenCtx<'a> {
+    /// The MLIR context.
     pub mlir_context: &'a MeliorContext,
+    /// The MLIR module.
     pub mlir_module: &'a MeliorModule<'a>,
+    /// The compile session info.
     pub session: &'a Session,
+    /// The program IR.
     pub program: &'a ProgramBody,
 }
 
@@ -30,10 +34,12 @@ pub(crate) struct CodegenCtx<'a> {
 #[derive(Debug, Clone, Copy)]
 struct ModuleCodegenCtx<'a> {
     pub ctx: CodegenCtx<'a>,
+    /// The id of the module.
     pub module_id: DefId,
 }
 
 impl<'a> ModuleCodegenCtx<'a> {
+    /// Gets the module IR body.
     pub fn get_module_body(&self) -> &ModuleBody {
         self.ctx
             .program
@@ -42,6 +48,7 @@ impl<'a> ModuleCodegenCtx<'a> {
             .expect("module should exist")
     }
 
+    /// Gets a MLIR location from the given span, or unknown if the span is `None`.
     pub fn get_location(&self, span: Option<Span>) -> Location {
         if let Some(span) = span {
             let (_, line, col) = self.ctx.session.source.get_offset_line(span.from).unwrap();
@@ -63,6 +70,7 @@ impl<'a> ModuleCodegenCtx<'a> {
     }
 }
 
+/// Compiles the program within the context.
 pub(crate) fn compile_program(ctx: CodegenCtx) -> Result<(), CodegenError> {
     for module_id in &ctx.program.top_level_modules {
         let ctx = ModuleCodegenCtx {
@@ -74,6 +82,7 @@ pub(crate) fn compile_program(ctx: CodegenCtx) -> Result<(), CodegenError> {
     Ok(())
 }
 
+/// Compiles the given module within the context.
 fn compile_module(ctx: ModuleCodegenCtx) -> Result<(), CodegenError> {
     let body = ctx.get_module_body();
 
@@ -94,6 +103,7 @@ fn compile_module(ctx: ModuleCodegenCtx) -> Result<(), CodegenError> {
     Ok(())
 }
 
+/// Context used when compiling code within a function body.
 #[derive(Debug, Clone, Copy)]
 struct FunctionCodegenCtx<'a> {
     pub module_ctx: ModuleCodegenCtx<'a>,
@@ -101,6 +111,7 @@ struct FunctionCodegenCtx<'a> {
 }
 
 impl<'a> FunctionCodegenCtx<'a> {
+    /// Gets the function IR body.
     pub fn get_fn_body(&self) -> &FnBody {
         self.module_ctx
             .ctx
@@ -110,7 +121,8 @@ impl<'a> FunctionCodegenCtx<'a> {
             .expect("function body should exist")
     }
 
-    pub fn get_fn_sig(&self) -> &(Vec<Ty>, Ty) {
+    /// Gets the function argument types and return type.
+    pub fn get_fn_signature(&self) -> &(Vec<Ty>, Ty) {
         self.module_ctx
             .ctx
             .program
@@ -124,14 +136,17 @@ impl<'a> FunctionCodegenCtx<'a> {
     }
 }
 
+/// Compiles the given function IR.
 fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
     let body = ctx.get_fn_body();
-    let body_sig = ctx.get_fn_sig();
+    let body_signature = ctx.get_fn_signature();
 
+    // Functions only have 1 region with multiple blocks within.
     let region = Region::new();
 
     let params = body.get_params();
 
+    // Compile the parameter types.
     let params_ty: Vec<_> = params
         .iter()
         .map(|x| {
@@ -143,21 +158,28 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
         .collect();
 
     {
+        // The entry block doesn't exist in the IR, its where we create all the stack allocations for the locals.
         let entry_block = region.append_block(Block::new(&params_ty));
 
         let mut locals = HashMap::new();
-        let mut ret_local = None;
+        // Store the return local index for easier use.
+        let mut return_local = None;
 
-        let mut arg_counter = 0;
+        // Keep track of the parameter index so we can get it from the block argument.
+        // Since all the locals are together in a unspecified order in the IR.
+        let mut param_index = 0;
 
         for (index, local) in body.locals.iter().enumerate() {
-            let ty = compile_type(ctx.module_ctx, &local.ty);
+            // Get the MLIR local type.
+            let local_mlir_type = compile_type(ctx.module_ctx, &local.ty);
+
             match local.kind {
+                // User-declared variable binding or compiler-introduced temporary.
                 LocalKind::Temp => {
                     let ptr: Value = entry_block
                         .append_operation(memref::alloca(
                             ctx.context(),
-                            MemRefType::new(ty, &[], None, None),
+                            MemRefType::new(local_mlir_type, &[], None, None),
                             &[],
                             &[],
                             None,
@@ -167,13 +189,15 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                         .into();
                     locals.insert(index, ptr);
                 }
+                // Argument local.
                 LocalKind::Arg => {
-                    let arg_value: Value = entry_block.argument(arg_counter)?.into();
-                    arg_counter += 1;
+                    let arg_value: Value = entry_block.argument(param_index)?.into();
+                    param_index += 1;
+
                     let ptr: Value = entry_block
                         .append_operation(memref::alloca(
                             ctx.context(),
-                            MemRefType::new(ty, &[], None, None),
+                            MemRefType::new(local_mlir_type, &[], None, None),
                             &[],
                             &[],
                             None,
@@ -191,14 +215,15 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
 
                     locals.insert(index, ptr);
                 }
+                // Return pointer.
                 LocalKind::ReturnPointer => {
                     if let TyKind::Unit = local.ty.kind {
                     } else {
-                        ret_local = Some(index);
+                        return_local = Some(index);
                         let ptr: Value = entry_block
                             .append_operation(memref::alloca(
                                 ctx.context(),
-                                MemRefType::new(ty, &[], None, None),
+                                MemRefType::new(local_mlir_type, &[], None, None),
                                 &[],
                                 &[],
                                 None,
@@ -212,6 +237,11 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
             }
         }
 
+        // Create in advance all the needed blocks, 1 block per IR block.
+        // Since we use stack allocas we don't need to handle block arguments within.
+        // The optimizer takes care of deciding if this allocas are better kept in the stack or in a register
+        // based on register allocation and whether the address of the allocas is used somewhere.
+        // Since register variables can't have their address taken.
         let mut blocks = Vec::with_capacity(body.basic_blocks.len());
 
         for _ in body.basic_blocks.iter() {
@@ -219,9 +249,13 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
             blocks.push(mlir_block);
         }
 
+        // Jump from the entry block to the first IR block.
         entry_block.append_operation(cf::br(&blocks[0], &[], Location::unknown(ctx.context())));
 
+        // Process each block.
         for (block, mlir_block) in body.basic_blocks.iter().zip(blocks.iter()) {
+            // Within blocks there is no control flow, so we simply give the current block to the
+            // codegen functions.
             for statement in &block.statements {
                 match &statement.kind {
                     concrete_ir::StatementKind::Assign(place, rvalue) => {
@@ -233,6 +267,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                 }
             }
 
+            // Jump based on the terminator.
             match &block.terminator.kind {
                 concrete_ir::TerminatorKind::Goto { target } => {
                     mlir_block.append_operation(cf::br(
@@ -242,7 +277,8 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                     ));
                 }
                 concrete_ir::TerminatorKind::Return => {
-                    if let Some(ret_local) = ret_local {
+                    // Load the return value from the return local and return it.
+                    if let Some(ret_local) = return_local {
                         let ptr = locals.get(&ret_local).unwrap();
                         let value = mlir_block
                             .append_operation(memref::load(
@@ -267,6 +303,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                     mlir_block
                         .append_operation(llvm::unreachable(Location::unknown(ctx.context())));
                 }
+                // Function calls are terminators because a function may be diverging (i.e it doesn't return).
                 concrete_ir::TerminatorKind::Call {
                     func,
                     args,
@@ -315,8 +352,12 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                             &[],
                             Location::unknown(ctx.context()),
                         ));
+                    } else {
+                        mlir_block
+                            .append_operation(llvm::unreachable(Location::unknown(ctx.context())));
                     }
                 }
+                // A switch int is used for branching by matching against 1 or multiple values.
                 concrete_ir::TerminatorKind::SwitchInt {
                     discriminator,
                     targets,
@@ -324,26 +365,33 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                     let (condition, _condition_ty) =
                         compile_load_operand(&ctx, mlir_block, discriminator, &locals)?;
 
-                    let mut cases = Vec::new();
-                    let mut cases_operands = Vec::new();
+                    // Case constant values to match against.
+                    let mut case_values = Vec::new();
+                    // MLIR detail to tell how many arguments we pass, since it can take a dynamic amount of arguments.
+                    let mut cases_operands_count = Vec::new();
+                    // The block destinations.
                     let mut dests: Vec<(&Block, _)> = Vec::new();
-                    cases_operands.push(0);
+
+                    cases_operands_count.push(0);
 
                     for (value, target) in targets.values.iter().zip(targets.targets.iter()) {
                         let target = *target;
                         let block = &blocks[target];
-                        let value = value_tree_to_int(value).unwrap();
-                        cases.push(value);
-                        cases_operands.push(1);
+                        let value = value_tree_to_int(value)
+                            .expect("constant value can't be converted to int");
+                        case_values.push(value);
+                        cases_operands_count.push(1);
                         dests.push((block, [].as_slice()));
                     }
 
                     mlir_block.append_operation(cf::switch(
                         ctx.context(),
-                        &cases,
+                        &case_values,
                         condition,
                         condition.r#type(),
+                        // Default dest block
                         (&blocks[*targets.targets.last().unwrap()], &[]),
+                        // Destinations
                         &dests,
                         Location::unknown(ctx.context()),
                     )?);
@@ -353,13 +401,16 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
     }
 
     let param_types: Vec<_> = params_ty.iter().map(|x| x.0).collect();
-    let ret_type = match &body_sig.1.kind {
+    // If the return type is unit, pass a empty slice to mlir.
+    let return_type = match &body_signature.1.kind {
         TyKind::Unit => None,
-        _ => Some(compile_type(ctx.module_ctx, &body_sig.1)),
+        _ => Some(compile_type(ctx.module_ctx, &body_signature.1)),
     };
-    let func_type = FunctionType::new(ctx.context(), &param_types, ret_type.as_slice());
 
-    let func = func::func(
+    // Create the function mlir attribute.
+    let func_type = FunctionType::new(ctx.context(), &param_types, return_type.as_slice());
+
+    let func_op = func::func(
         ctx.context(),
         StringAttribute::new(ctx.context(), &body.name),
         TypeAttribute::new(func_type.into()),
@@ -368,11 +419,16 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
         Location::unknown(ctx.context()),
     );
 
-    ctx.module_ctx.ctx.mlir_module.body().append_operation(func);
+    ctx.module_ctx
+        .ctx
+        .mlir_module
+        .body()
+        .append_operation(func_op);
 
     Ok(())
 }
 
+/// Compiles a rvalue.
 fn compile_rvalue<'c: 'b, 'b>(
     ctx: &'c FunctionCodegenCtx,
     block: &'b Block<'c>,
@@ -385,14 +441,37 @@ fn compile_rvalue<'c: 'b, 'b>(
         Rvalue::BinaryOp(op, (lhs, rhs)) => compile_binop(ctx, block, op, lhs, rhs, locals)?,
         Rvalue::UnaryOp(_, _) => todo!(),
         Rvalue::Ref(mutability, place) => {
-            // handle projection
-            let x = locals[&place.local];
-            let inner_ty = ctx.get_fn_body().locals[place.local].ty.kind.clone();
-            (x, TyKind::Ref(Box::new(inner_ty), *mutability))
+            let mut value = locals[&place.local];
+            let mut local_ty = ctx.get_fn_body().locals[place.local].ty.kind.clone();
+
+            // Handle the projection.
+            for projection in &place.projection {
+                match projection {
+                    PlaceElem::Deref => {
+                        value = block
+                            .append_operation(memref::load(
+                                value,
+                                &[],
+                                Location::unknown(ctx.context()),
+                            ))
+                            .result(0)?
+                            .into();
+                        local_ty = match local_ty {
+                            TyKind::Ref(inner, _) => *(inner.clone()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    PlaceElem::Field(_, _) => todo!(),
+                    PlaceElem::Index(_) => todo!(),
+                }
+            }
+
+            (value, TyKind::Ref(Box::new(local_ty), *mutability))
         }
     })
 }
 
+/// Compiles a binary operation.
 fn compile_binop<'c: 'b, 'b>(
     ctx: &'c FunctionCodegenCtx,
     block: &'b Block<'c>,
@@ -715,6 +794,7 @@ fn compile_load_operand<'c: 'b, 'b>(
     })
 }
 
+/// Compiles a store to a given place in memory.
 fn compile_store_place<'c: 'b, 'b>(
     ctx: &'c FunctionCodegenCtx,
     block: &'b Block<'c>,
@@ -747,6 +827,7 @@ fn compile_store_place<'c: 'b, 'b>(
     Ok(())
 }
 
+/// Compiles a load to a place.
 fn compile_load_place<'c: 'b, 'b>(
     ctx: &'c FunctionCodegenCtx,
     block: &'b Block<'c>,
@@ -755,16 +836,19 @@ fn compile_load_place<'c: 'b, 'b>(
 ) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
     let ptr = locals[&info.local];
     let body = ctx.get_fn_body();
+
     let mut local_ty = body.locals[info.local].ty.kind.clone();
-    let mut val = block
+
+    let mut value = block
         .append_operation(memref::load(ptr, &[], Location::unknown(ctx.context())))
         .result(0)?
         .into();
+
     for projection in &info.projection {
         match projection {
             PlaceElem::Deref => {
-                val = block
-                    .append_operation(memref::load(val, &[], Location::unknown(ctx.context())))
+                value = block
+                    .append_operation(memref::load(value, &[], Location::unknown(ctx.context())))
                     .result(0)?
                     .into();
                 local_ty = match local_ty {
@@ -776,10 +860,11 @@ fn compile_load_place<'c: 'b, 'b>(
             PlaceElem::Index(_) => todo!(),
         }
     }
-    Ok((val, local_ty))
+    Ok((value, local_ty))
 }
 
 /// Used in switch
+/// Converts a constant value to a int.
 fn value_tree_to_int(value: &ValueTree) -> Option<i64> {
     match value {
         ValueTree::Leaf(value) => match value {
@@ -801,6 +886,7 @@ fn value_tree_to_int(value: &ValueTree) -> Option<i64> {
     }
 }
 
+/// compiles constant data
 fn compile_value_tree<'c: 'b, 'b>(
     ctx: &'c FunctionCodegenCtx,
     block: &'b Block<'c>,
