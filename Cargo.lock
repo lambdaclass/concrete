@@ -999,9 +999,9 @@ dependencies = [
 
 [[package]]
 name = "melior"
-version = "0.15.4"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eecfff3838ac49bdc71179c27950f231fc7cdf289ac741ebc5f5ec462a9410cf"
+checksum = "533106578f7234ec19a7fc15930b6652581c8e6821bbf28d064432aef61411c4"
 dependencies = [
  "dashmap",
  "melior-macro",
@@ -1011,9 +1011,9 @@ dependencies = [
 
 [[package]]
 name = "melior-macro"
-version = "0.9.2"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "944e2ba4856e5057e54408196c8e795f835b16a2aff75efd8832c8be96f84339"
+checksum = "6bd4d87a776b5c29ce03decf56ac0bc09118697f1da167b47c956d69edea45e8"
 dependencies = [
  "comrak",
  "convert_case",

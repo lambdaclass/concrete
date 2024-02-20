@@ -59,7 +59,7 @@ impl Context {
                     StringAttribute::new(&self.melior_context, data_layout_ret).into(),
                 ),
             ])
-            .add_regions(vec![module_region])
+            .add_regions([module_region])
             .build()?;
         assert!(op.verify(), "module operation is not valid");
 
@@ -95,7 +95,7 @@ impl Context {
             let mut op = unsafe { Operation::from_raw(op) };
             op.set_attribute(
                 "llvm.data_layout",
-                &StringAttribute::new(&self.melior_context, data_layout_ret).into(),
+                StringAttribute::new(&self.melior_context, data_layout_ret).into(),
             );
             // This is a reference in theory so dont run the destructor.
             std::mem::forget(op);

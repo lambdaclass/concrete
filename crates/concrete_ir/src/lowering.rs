@@ -961,9 +961,7 @@ pub fn lower_type(spec: &TypeSpec) -> Ty {
                 Box::new(lower_type(of_type)),
                 Box::new(ConstData {
                     ty: TyKind::Uint(UintTy::U64),
-                    data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(
-                        (*size).try_into().unwrap(),
-                    ))),
+                    data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(*size))),
                 }),
             );
             match is_ref {
