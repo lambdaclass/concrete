@@ -16,6 +16,10 @@ pub struct Session {
     /// The directory where to store artifacts and intermediate files such as object files.
     pub target_dir: PathBuf,
     pub output_file: PathBuf,
+    pub output_mlir: bool,
+    pub output_ll: bool,
+    pub output_asm: bool,
+    pub output_all: bool,
     // todo: include target, host, etc
 }
 

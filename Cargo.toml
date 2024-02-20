@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 
-members = [ "crates/concrete","crates/concrete_ast", "crates/concrete_codegen_mlir", "crates/concrete_driver", "crates/concrete_parser", "crates/concrete_session", "crates/concrete_check"]
+members = [ "crates/concrete","crates/concrete_ast", "crates/concrete_codegen_mlir", "crates/concrete_driver", "crates/concrete_ir", "crates/concrete_parser", "crates/concrete_session", "crates/concrete_check"]
 
 [profile.release]
 lto = true

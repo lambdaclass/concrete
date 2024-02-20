@@ -1,4 +1,4 @@
-use common::{compile_program, run_program};
+use crate::common::compile_and_run;
 
 mod common;
 
@@ -24,11 +24,42 @@ fn test_while() {
         }
     "#;
 
-    let result = compile_program(source, "while", false).expect("failed to compile");
-
-    let output = run_program(&result.binary_file).expect("failed to run");
-    let code = output.status.code().unwrap();
-    assert_eq!(code, 16);
+    assert_eq!(
+        16,
+        compile_and_run(
+            source,
+            "while",
+            false,
+            concrete_session::config::OptLevel::None
+        )
+    );
+    assert_eq!(
+        16,
+        compile_and_run(
+            source,
+            "while",
+            false,
+            concrete_session::config::OptLevel::Less
+        )
+    );
+    assert_eq!(
+        16,
+        compile_and_run(
+            source,
+            "while",
+            false,
+            concrete_session::config::OptLevel::Default
+        )
+    );
+    assert_eq!(
+        16,
+        compile_and_run(
+            source,
+            "while",
+            false,
+            concrete_session::config::OptLevel::Aggressive
+        )
+    );
 }
 
 #[test]
@@ -49,11 +80,42 @@ fn test_factorial_with_if() {
         }
     "#;
 
-    let result = compile_program(source, "factorial", false).expect("failed to compile");
-
-    let output = run_program(&result.binary_file).expect("failed to run");
-    let code = output.status.code().unwrap();
-    assert_eq!(code, 24);
+    assert_eq!(
+        24,
+        compile_and_run(
+            source,
+            "factorial",
+            false,
+            concrete_session::config::OptLevel::None
+        )
+    );
+    assert_eq!(
+        24,
+        compile_and_run(
+            source,
+            "factorial",
+            false,
+            concrete_session::config::OptLevel::Less
+        )
+    );
+    assert_eq!(
+        24,
+        compile_and_run(
+            source,
+            "factorial",
+            false,
+            concrete_session::config::OptLevel::Default
+        )
+    );
+    assert_eq!(
+        24,
+        compile_and_run(
+            source,
+            "factorial",
+            false,
+            concrete_session::config::OptLevel::Aggressive
+        )
+    );
 }
 
 #[test]
@@ -74,11 +136,42 @@ fn test_fib_with_if() {
         }
     "#;
 
-    let result = compile_program(source, "fib", false).expect("failed to compile");
-
-    let output = run_program(&result.binary_file).expect("failed to run");
-    let code = output.status.code().unwrap();
-    assert_eq!(code, 55);
+    assert_eq!(
+        55,
+        compile_and_run(
+            source,
+            "fib",
+            false,
+            concrete_session::config::OptLevel::None
+        )
+    );
+    assert_eq!(
+        55,
+        compile_and_run(
+            source,
+            "fib",
+            false,
+            concrete_session::config::OptLevel::Less
+        )
+    );
+    assert_eq!(
+        55,
+        compile_and_run(
+            source,
+            "fib",
+            false,
+            concrete_session::config::OptLevel::Default
+        )
+    );
+    assert_eq!(
+        55,
+        compile_and_run(
+            source,
+            "fib",
+            false,
+            concrete_session::config::OptLevel::Aggressive
+        )
+    );
 }
 
 #[test]
@@ -99,11 +192,42 @@ fn test_simple_add() {
         }
     "#;
 
-    let result = compile_program(source, "simple_add", false).expect("failed to compile");
-
-    let output = run_program(&result.binary_file).expect("failed to run");
-    let code = output.status.code().unwrap();
-    assert_eq!(code, 8);
+    assert_eq!(
+        8,
+        compile_and_run(
+            source,
+            "simple_add",
+            false,
+            concrete_session::config::OptLevel::None
+        )
+    );
+    assert_eq!(
+        8,
+        compile_and_run(
+            source,
+            "simple_add",
+            false,
+            concrete_session::config::OptLevel::Less
+        )
+    );
+    assert_eq!(
+        8,
+        compile_and_run(
+            source,
+            "simple_add",
+            false,
+            concrete_session::config::OptLevel::Default
+        )
+    );
+    assert_eq!(
+        8,
+        compile_and_run(
+            source,
+            "simple_add",
+            false,
+            concrete_session::config::OptLevel::Aggressive
+        )
+    );
 }
 
 #[test]
@@ -124,11 +248,42 @@ fn test_import() {
         }
     "#;
 
-    let result = compile_program(source, "import", false).expect("failed to compile");
-
-    let output = run_program(&result.binary_file).expect("failed to run");
-    let code = output.status.code().unwrap();
-    assert_eq!(code, 8);
+    assert_eq!(
+        8,
+        compile_and_run(
+            source,
+            "import",
+            false,
+            concrete_session::config::OptLevel::None
+        )
+    );
+    assert_eq!(
+        8,
+        compile_and_run(
+            source,
+            "import",
+            false,
+            concrete_session::config::OptLevel::Less
+        )
+    );
+    assert_eq!(
+        8,
+        compile_and_run(
+            source,
+            "import",
+            false,
+            concrete_session::config::OptLevel::Default
+        )
+    );
+    assert_eq!(
+        8,
+        compile_and_run(
+            source,
+            "import",
+            false,
+            concrete_session::config::OptLevel::Aggressive
+        )
+    );
 }
 
 #[test]
@@ -157,11 +312,42 @@ fn test_floats() {
     }
     "#;
 
-    let result = compile_program(source, "floats", false).expect("failed to compile");
-
-    let output = run_program(&result.binary_file).expect("failed to run");
-    let code = output.status.code().unwrap();
-    assert_eq!(code, 1);
+    assert_eq!(
+        1,
+        compile_and_run(
+            source,
+            "floats",
+            false,
+            concrete_session::config::OptLevel::None
+        )
+    );
+    assert_eq!(
+        1,
+        compile_and_run(
+            source,
+            "floats",
+            false,
+            concrete_session::config::OptLevel::Less
+        )
+    );
+    assert_eq!(
+        1,
+        compile_and_run(
+            source,
+            "floats",
+            false,
+            concrete_session::config::OptLevel::Default
+        )
+    );
+    assert_eq!(
+        1,
+        compile_and_run(
+            source,
+            "floats",
+            false,
+            concrete_session::config::OptLevel::Aggressive
+        )
+    );
 }
 
 #[test]
@@ -184,9 +370,41 @@ fn test_reference() {
                 }
             }
         "#;
-    let result = compile_program(source, "references", false).expect("failed to compile");
 
-    let output = run_program(&result.binary_file).expect("failed to run");
-    let code = output.status.code().unwrap();
-    assert_eq!(code, 2);
+    assert_eq!(
+        2,
+        compile_and_run(
+            source,
+            "references",
+            false,
+            concrete_session::config::OptLevel::None
+        )
+    );
+    assert_eq!(
+        2,
+        compile_and_run(
+            source,
+            "references",
+            false,
+            concrete_session::config::OptLevel::Less
+        )
+    );
+    assert_eq!(
+        2,
+        compile_and_run(
+            source,
+            "references",
+            false,
+            concrete_session::config::OptLevel::Default
+        )
+    );
+    assert_eq!(
+        2,
+        compile_and_run(
+            source,
+            "references",
+            false,
+            concrete_session::config::OptLevel::Aggressive
+        )
+    );
 }

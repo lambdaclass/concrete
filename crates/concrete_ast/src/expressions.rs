@@ -12,6 +12,8 @@ pub enum Expression {
     If(IfExpr),
     UnaryOp(UnaryOp, Box<Self>),
     BinaryOp(Box<Self>, BinaryOp, Box<Self>),
+    Deref(Box<Self>),
+    AsRef(Box<Self>, RefType),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -22,8 +24,6 @@ pub enum ValueExpr {
     ConstFloat(String),
     ConstStr(String),
     Path(PathOp),
-    Deref(PathOp),
-    AsRef { path: PathOp, ref_type: RefType },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

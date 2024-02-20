@@ -1,1004 +1,1048 @@
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 
-use bumpalo::Bump;
-use concrete_ast::{
-    expressions::{
-        ArithOp, BinaryOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp, ValueExpr,
-    },
-    functions::FunctionDef,
-    modules::{Module, ModuleDefItem},
-    statements::{AssignStmt, LetStmt, LetStmtTarget, ReturnStmt, Statement, WhileStmt},
-    types::TypeSpec,
-    Program,
+use concrete_ir::{
+    BinOp, DefId, FnBody, LocalKind, ModuleBody, Operand, Place, PlaceElem, ProgramBody, Rvalue,
+    Span, Ty, TyKind, ValueTree,
 };
-use concrete_check::ast_helper::{AstHelper, ModuleInfo};
 use concrete_session::Session;
 use melior::{
-    dialect::{
-        arith::{self, CmpiPredicate},
-        cf, func, memref,
-    },
+    dialect::{arith, cf, func, llvm, memref},
     ir::{
-        attribute::{
-            FlatSymbolRefAttribute, FloatAttribute, IntegerAttribute, StringAttribute,
-            TypeAttribute,
-        },
+        attribute::{FlatSymbolRefAttribute, FloatAttribute, StringAttribute, TypeAttribute},
         r#type::{FunctionType, IntegerType, MemRefType},
-        Block, BlockRef, Location, Module as MeliorModule, Operation, Region, Type, Value,
-        ValueLike,
+        Attribute, Block, Location, Module as MeliorModule, Region, Type, Value, ValueLike,
     },
     Context as MeliorContext,
 };
 
-pub fn compile_program(
-    session: &Session,
-    ctx: &MeliorContext,
-    mlir_module: &MeliorModule,
-    program: &Program,
-) -> Result<(), Box<dyn Error>> {
-    let ast_helper = AstHelper::new(program);
-    for module in &program.modules {
-        let module_info = ast_helper
+use crate::errors::CodegenError;
+
+/// Global codegen context
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CodegenCtx<'a> {
+    /// The MLIR context.
+    pub mlir_context: &'a MeliorContext,
+    /// The MLIR module.
+    pub mlir_module: &'a MeliorModule<'a>,
+    /// The compile session info.
+    pub session: &'a Session,
+    /// The program IR.
+    pub program: &'a ProgramBody,
+}
+
+/// Codegen context for a module
+#[derive(Debug, Clone, Copy)]
+struct ModuleCodegenCtx<'a> {
+    pub ctx: CodegenCtx<'a>,
+    /// The id of the module.
+    pub module_id: DefId,
+}
+
+impl<'a> ModuleCodegenCtx<'a> {
+    /// Gets the module IR body.
+    pub fn get_module_body(&self) -> &ModuleBody {
+        self.ctx
+            .program
             .modules
-            .get(&module.name.name)
-            .unwrap_or_else(|| panic!("module info not found for {}", module.name.name));
-        compile_module(session, ctx, mlir_module, &ast_helper, module_info, module)?;
+            .get(&self.module_id)
+            .expect("module should exist")
+    }
+
+    /// Gets a MLIR location from the given span, or unknown if the span is `None`.
+    pub fn get_location(&self, span: Option<Span>) -> Location {
+        if let Some(span) = span {
+            let (_, line, col) = self.ctx.session.source.get_offset_line(span.from).unwrap();
+            Location::new(
+                self.ctx.mlir_context,
+                self.ctx
+                    .session
+                    .file_path
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+                line + 1,
+                col + 1,
+            )
+        } else {
+            Location::unknown(self.ctx.mlir_context)
+        }
+    }
+}
+
+/// Compiles the program within the context.
+pub(crate) fn compile_program(ctx: CodegenCtx) -> Result<(), CodegenError> {
+    for module_id in &ctx.program.top_level_modules {
+        let ctx = ModuleCodegenCtx {
+            ctx,
+            module_id: *module_id,
+        };
+        compile_module(ctx)?;
     }
     Ok(())
 }
 
-#[derive(Debug, Clone)]
-pub struct LocalVar<'ctx, 'parent: 'ctx> {
-    pub type_spec: TypeSpec,
-    // If it's none its on a register, otherwise allocated on the stack.
-    pub alloca: bool,
-    pub value: Value<'ctx, 'parent>,
-}
+/// Compiles the given module within the context.
+fn compile_module(ctx: ModuleCodegenCtx) -> Result<(), CodegenError> {
+    let body = ctx.get_module_body();
 
-impl<'ctx, 'parent: 'ctx> LocalVar<'ctx, 'parent> {
-    pub fn param(value: Value<'ctx, 'parent>, type_spec: TypeSpec) -> Self {
-        Self {
-            value,
-            type_spec,
-            alloca: false,
-        }
+    for fn_id in body.functions.iter() {
+        let ctx = FunctionCodegenCtx {
+            module_ctx: ctx,
+            function_id: *fn_id,
+        };
+        compile_function(ctx)?;
     }
 
-    pub fn alloca(value: Value<'ctx, 'parent>, type_spec: TypeSpec) -> Self {
-        Self {
-            value,
-            type_spec,
-            alloca: true,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct ScopeContext<'ctx, 'parent: 'ctx> {
-    pub locals: HashMap<String, LocalVar<'ctx, 'parent>>,
-    pub function: Option<FunctionDef>,
-    pub imports: HashMap<String, &'parent ModuleInfo<'parent>>,
-    pub module_info: &'parent ModuleInfo<'parent>,
-}
-
-struct BlockHelper<'ctx, 'region: 'ctx> {
-    region: &'region Region<'ctx>,
-    blocks_arena: &'region Bump,
-}
-
-impl<'ctx, 'region> BlockHelper<'ctx, 'region> {
-    pub fn append_block(&self, block: Block<'ctx>) -> &'region BlockRef<'ctx, 'region> {
-        let block = self.region.append_block(block);
-
-        let block_ref: &'region mut BlockRef<'ctx, 'region> = self.blocks_arena.alloc(block);
-
-        block_ref
-    }
-}
-
-impl<'ctx, 'parent> ScopeContext<'ctx, 'parent> {
-    /// Returns the symbol name from a local name.
-    pub fn get_symbol_name(&self, local_name: &str) -> String {
-        if local_name == "main" {
-            return local_name.to_string();
-        }
-
-        if let Some(module) = self.imports.get(local_name) {
-            // a import
-            module.get_symbol_name(local_name)
-        } else {
-            let mut result = self.module_info.name.clone();
-
-            result.push_str("::");
-            result.push_str(local_name);
-
-            result
-        }
-    }
-
-    pub fn get_function(&self, local_name: &str) -> Option<&FunctionDef> {
-        if let Some(module) = self.imports.get(local_name) {
-            // a import
-            module.functions.get(local_name).copied()
-        } else {
-            self.module_info.functions.get(local_name).copied()
-        }
-    }
-
-    fn resolve_type(
-        &self,
-        context: &'ctx MeliorContext,
-        name: &str,
-    ) -> Result<Type<'ctx>, Box<dyn Error>> {
-        Ok(match name {
-            "u64" | "i64" => IntegerType::new(context, 64).into(),
-            "u32" | "i32" => IntegerType::new(context, 32).into(),
-            "u16" | "i16" => IntegerType::new(context, 16).into(),
-            "u8" | "i8" => IntegerType::new(context, 8).into(),
-            "char" => IntegerType::new(context, 32).into(),
-            "f32" => Type::float32(context),
-            "f64" => Type::float64(context),
-            "bool" => IntegerType::new(context, 1).into(),
-            name => {
-                if let Some(module) = self.imports.get(name) {
-                    // a import
-                    self.resolve_type_spec(
-                        context,
-                        &module.types.get(name).expect("failed to find type").value,
-                    )?
-                } else {
-                    self.resolve_type_spec(
-                        context,
-                        &self
-                            .module_info
-                            .types
-                            .get(name)
-                            .expect("failed to find type")
-                            .value,
-                    )?
-                }
-            }
-        })
-    }
-
-    fn resolve_type_spec(
-        &self,
-        context: &'ctx MeliorContext,
-        spec: &TypeSpec,
-    ) -> Result<Type<'ctx>, Box<dyn Error>> {
-        match spec.is_ref() {
-            Some(_) => {
-                Ok(
-                    MemRefType::new(self.resolve_type_spec_ref(context, spec)?, &[], None, None)
-                        .into(),
-                )
-            }
-            None => self.resolve_type_spec_ref(context, spec),
-        }
-    }
-
-    /// Resolves the type this ref points to.
-    fn resolve_type_spec_ref(
-        &self,
-        context: &'ctx MeliorContext,
-        spec: &TypeSpec,
-    ) -> Result<Type<'ctx>, Box<dyn Error>> {
-        Ok(match spec {
-            TypeSpec::Simple { name, .. } => self.resolve_type(context, &name.name)?,
-            TypeSpec::Generic { name, .. } => self.resolve_type(context, &name.name)?,
-            TypeSpec::Array { .. } => {
-                todo!("implement arrays")
-            }
-        })
-    }
-
-    fn is_type_signed(&self, type_info: &TypeSpec) -> bool {
-        let signed = ["i8", "i16", "i32", "i64", "i128"];
-        match type_info {
-            TypeSpec::Simple { name, .. } => signed.contains(&name.name.as_str()),
-            TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
-            TypeSpec::Array { .. } => unreachable!(),
-        }
-    }
-
-    fn is_float(&self, type_info: &TypeSpec) -> bool {
-        let signed = ["f32", "f64"];
-        match type_info {
-            TypeSpec::Simple { name, .. } => signed.contains(&name.name.as_str()),
-            TypeSpec::Generic { name, .. } => signed.contains(&name.name.as_str()),
-            TypeSpec::Array { .. } => unreachable!(),
-        }
-    }
-}
-
-fn compile_module(
-    session: &Session,
-    context: &MeliorContext,
-    mlir_module: &MeliorModule,
-    ast_helper: &AstHelper<'_>,
-    module_info: &ModuleInfo<'_>,
-    module: &Module,
-) -> Result<(), Box<dyn Error>> {
-    let body = mlir_module.body();
-
-    let mut imports = HashMap::new();
-
-    for import in &module.imports {
-        let target_module = ast_helper
-            .get_module_from_import(&import.module)
-            .unwrap_or_else(|| {
-                panic!(
-                    "failed to find import {:?} in module {}",
-                    import, module.name.name
-                )
-            });
-
-        for symbol in &import.symbols {
-            imports.insert(symbol.name.clone(), target_module);
-        }
-    }
-
-    let scope_ctx: ScopeContext = ScopeContext {
-        locals: Default::default(),
-        function: None,
-        module_info,
-        imports,
-    };
-
-    for statement in &module.contents {
-        match statement {
-            ModuleDefItem::Constant(_) => todo!(),
-            ModuleDefItem::Function(info) => {
-                let mut scope_ctx = scope_ctx.clone();
-                scope_ctx.function = Some(info.clone());
-                let op = compile_function_def(session, context, &scope_ctx, info)?;
-                body.append_operation(op);
-            }
-            ModuleDefItem::Struct(_) => todo!(),
-            ModuleDefItem::Type(_) => todo!(),
-            ModuleDefItem::Module(info) => {
-                let module_info = module_info.modules.get(&info.name.name).unwrap_or_else(|| {
-                    panic!(
-                        "submodule {} not found while compiling module {}",
-                        info.name.name, module.name.name
-                    )
-                });
-                compile_module(session, context, mlir_module, ast_helper, module_info, info)?;
-            }
-        }
+    for mod_id in body.modules.iter() {
+        let mut sub_ctx = ctx;
+        sub_ctx.module_id = *mod_id;
+        compile_module(sub_ctx)?;
     }
 
     Ok(())
 }
 
-fn get_location<'ctx>(
-    context: &'ctx MeliorContext,
-    session: &Session,
-    offset: usize,
-) -> Location<'ctx> {
-    let (_, line, col) = session.source.get_offset_line(offset).unwrap();
-    Location::new(
-        context,
-        &session.file_path.display().to_string(),
-        line + 1,
-        col + 1,
-    )
+/// Context used when compiling code within a function body.
+#[derive(Debug, Clone, Copy)]
+struct FunctionCodegenCtx<'a> {
+    pub module_ctx: ModuleCodegenCtx<'a>,
+    pub function_id: DefId,
 }
 
-fn get_named_location<'ctx>(context: &'ctx MeliorContext, name: &str) -> Location<'ctx> {
-    Location::name(context, name, Location::unknown(context))
-}
-
-fn compile_function_def<'ctx, 'parent: 'ctx>(
-    session: &Session,
-    context: &'ctx MeliorContext,
-    scope_ctx: &ScopeContext<'ctx, 'parent>,
-    info: &FunctionDef,
-) -> Result<Operation<'ctx>, Box<dyn Error>> {
-    tracing::debug!("compiling function {:?}", info.decl.name.name);
-    let location = get_location(context, session, info.decl.name.span.from);
-
-    // Setup function arguments
-    let mut args = Vec::with_capacity(info.decl.params.len());
-    let mut fn_args_types = Vec::with_capacity(info.decl.params.len());
-
-    for param in &info.decl.params {
-        let param_type = scope_ctx.resolve_type_spec(context, &param.r#type)?;
-        let loc = get_location(context, session, param.name.span.from);
-        args.push((param_type, loc));
-        fn_args_types.push(param_type);
+impl<'a> FunctionCodegenCtx<'a> {
+    /// Gets the function IR body.
+    pub fn get_fn_body(&self) -> &FnBody {
+        self.module_ctx
+            .ctx
+            .program
+            .functions
+            .get(&self.function_id)
+            .expect("function body should exist")
     }
 
-    // Create the function context
+    /// Gets the function argument types and return type.
+    pub fn get_fn_signature(&self) -> &(Vec<Ty>, Ty) {
+        self.module_ctx
+            .ctx
+            .program
+            .function_signatures
+            .get(&self.function_id)
+            .expect("function body should exist")
+    }
+
+    pub fn context(&self) -> &MeliorContext {
+        self.module_ctx.ctx.mlir_context
+    }
+}
+
+/// Compiles the given function IR.
+fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
+    let body = ctx.get_fn_body();
+    let body_signature = ctx.get_fn_signature();
+
+    // Functions only have 1 region with multiple blocks within.
     let region = Region::new();
 
-    let return_type = if let Some(ret_type) = &info.decl.ret_type {
-        vec![scope_ctx.resolve_type_spec(context, ret_type)?]
-    } else {
-        vec![]
-    };
+    let params = body.get_params();
 
-    let func_type =
-        TypeAttribute::new(FunctionType::new(context, &fn_args_types, &return_type).into());
-
-    {
-        let mut scope_ctx = scope_ctx.clone();
-        let mut fn_block = &region.append_block(Block::new(&args));
-
-        let blocks_arena = Bump::new();
-        let helper = BlockHelper {
-            region: &region,
-            blocks_arena: &blocks_arena,
-        };
-
-        // Push arguments into locals
-        for (i, param) in info.decl.params.iter().enumerate() {
-            scope_ctx.locals.insert(
-                param.name.name.clone(),
-                LocalVar::param(fn_block.argument(i)?.into(), param.r#type.clone()),
-            );
-        }
-
-        for stmt in &info.body {
-            fn_block =
-                compile_statement(session, context, &mut scope_ctx, &helper, fn_block, stmt)?;
-        }
-    }
-
-    let fn_name = scope_ctx.get_symbol_name(&info.decl.name.name);
-
-    Ok(func::func(
-        context,
-        StringAttribute::new(context, &fn_name),
-        func_type,
-        region,
-        &[],
-        location,
-    ))
-}
-
-fn compile_statement<'c, 'this: 'c>(
-    session: &Session,
-    context: &'c MeliorContext,
-    scope_ctx: &mut ScopeContext<'c, 'this>,
-    helper: &BlockHelper<'c, 'this>,
-    mut block: &'this BlockRef<'c, 'this>,
-    info: &Statement,
-) -> Result<&'this BlockRef<'c, 'this>, Box<dyn Error>> {
-    match info {
-        Statement::Assign(info) => {
-            compile_assign_stmt(session, context, scope_ctx, helper, block, info)?
-        }
-        Statement::Match(_) => todo!(),
-        Statement::For(_) => todo!(),
-        Statement::If(info) => {
-            block = compile_if_expr(session, context, scope_ctx, helper, block, info)?;
-        }
-        Statement::Let(info) => compile_let_stmt(session, context, scope_ctx, helper, block, info)?,
-        Statement::Return(info) => {
-            compile_return_stmt(session, context, scope_ctx, helper, block, info)?
-        }
-        Statement::While(info) => {
-            block = compile_while(session, context, scope_ctx, helper, block, info)?;
-        }
-        Statement::FnCall(info) => {
-            compile_fn_call(session, context, scope_ctx, helper, block, info)?;
-        }
-    }
-
-    Ok(block)
-}
-
-/// Compile a if expression / statement
-///
-/// This returns a block if any branch doesn't have a function return terminator.
-/// For example, if the if branch has a return and the else branch has a return,
-/// it wouldn't make sense to add a merging block and MLIR would give a error saying there is a operation after a terminator.
-///
-/// The returned block is the merger block, the one we jump after processing the if branches.
-///
-/// ```text
-///                       - then block -
-/// - if (prev block) - <                > merge block --
-///                       - else block -
-/// ```
-fn compile_if_expr<'c, 'this: 'c>(
-    session: &Session,
-    context: &'c MeliorContext,
-    scope_ctx: &mut ScopeContext<'c, 'this>,
-    helper: &BlockHelper<'c, 'this>,
-    block: &'this BlockRef<'c, 'this>,
-    info: &IfExpr,
-) -> Result<&'this BlockRef<'c, 'this>, Box<dyn Error>> {
-    let condition = compile_expression(
-        session,
-        context,
-        scope_ctx,
-        helper,
-        block,
-        &info.value,
-        None,
-    )?;
-
-    let mut then_successor = helper.append_block(Block::new(&[]));
-    let mut else_successor = helper.append_block(Block::new(&[]));
-
-    block.append_operation(cf::cond_br(
-        context,
-        condition,
-        then_successor,
-        else_successor,
-        &[],
-        &[],
-        get_named_location(context, "if"),
-    ));
+    // Compile the parameter types.
+    let params_ty: Vec<_> = params
+        .iter()
+        .map(|x| {
+            (
+                compile_type(ctx.module_ctx, &x.ty),
+                ctx.module_ctx.get_location(x.span),
+            )
+        })
+        .collect();
 
     {
-        let mut then_scope_ctx = scope_ctx.clone();
-        for stmt in &info.contents {
-            then_successor = compile_statement(
-                session,
-                context,
-                &mut then_scope_ctx,
-                helper,
-                then_successor,
-                stmt,
-            )?;
-        }
-    }
+        // The entry block doesn't exist in the IR, its where we create all the stack allocations for the locals.
+        let entry_block = region.append_block(Block::new(&params_ty));
 
-    if let Some(else_contents) = info.r#else.as_ref() {
-        let mut else_scope_ctx = scope_ctx.clone();
-        for stmt in else_contents {
-            else_successor = compile_statement(
-                session,
-                context,
-                &mut else_scope_ctx,
-                helper,
-                else_successor,
-                stmt,
-            )?;
-        }
-    }
+        let mut locals = HashMap::new();
+        // Store the return local index for easier use.
+        let mut return_local = None;
 
-    // both branches return
-    if then_successor.terminator().is_some() && else_successor.terminator().is_some() {
-        return Ok(then_successor);
-    }
+        // Keep track of the parameter index so we can get it from the block argument.
+        // Since all the locals are together in a unspecified order in the IR.
+        let mut param_index = 0;
 
-    let merge_block = helper.append_block(Block::new(&[]));
+        for (index, local) in body.locals.iter().enumerate() {
+            // Get the MLIR local type.
+            let local_mlir_type = compile_type(ctx.module_ctx, &local.ty);
 
-    if then_successor.terminator().is_none() {
-        then_successor.append_operation(cf::br(merge_block, &[], Location::unknown(context)));
-    }
+            match local.kind {
+                // User-declared variable binding or compiler-introduced temporary.
+                LocalKind::Temp => {
+                    let ptr: Value = entry_block
+                        .append_operation(memref::alloca(
+                            ctx.context(),
+                            MemRefType::new(local_mlir_type, &[], None, None),
+                            &[],
+                            &[],
+                            None,
+                            Location::unknown(ctx.context()),
+                        ))
+                        .result(0)?
+                        .into();
+                    locals.insert(index, ptr);
+                }
+                // Argument local.
+                LocalKind::Arg => {
+                    let arg_value: Value = entry_block.argument(param_index)?.into();
+                    param_index += 1;
 
-    if else_successor.terminator().is_none() {
-        else_successor.append_operation(cf::br(merge_block, &[], Location::unknown(context)));
-    }
+                    let ptr: Value = entry_block
+                        .append_operation(memref::alloca(
+                            ctx.context(),
+                            MemRefType::new(local_mlir_type, &[], None, None),
+                            &[],
+                            &[],
+                            None,
+                            Location::unknown(ctx.context()),
+                        ))
+                        .result(0)?
+                        .into();
 
-    Ok(merge_block)
-}
+                    entry_block.append_operation(memref::store(
+                        arg_value,
+                        ptr,
+                        &[],
+                        Location::unknown(ctx.context()),
+                    ));
 
-fn compile_while<'c, 'this: 'c>(
-    session: &Session,
-    context: &'c MeliorContext,
-    scope_ctx: &mut ScopeContext<'c, 'this>,
-    helper: &BlockHelper<'c, 'this>,
-    block: &'this BlockRef<'c, 'this>,
-    info: &WhileStmt,
-) -> Result<&'this BlockRef<'c, 'this>, Box<dyn Error>> {
-    let location = Location::unknown(context);
-
-    let check_block = helper.append_block(Block::new(&[]));
-
-    block.append_operation(cf::br(check_block, &[], location));
-
-    let body_block = helper.append_block(Block::new(&[]));
-    let merge_block = helper.append_block(Block::new(&[]));
-
-    let condition = compile_expression(
-        session,
-        context,
-        scope_ctx,
-        helper,
-        check_block,
-        &info.value,
-        None,
-    )?;
-
-    check_block.append_operation(cf::cond_br(
-        context,
-        condition,
-        body_block,
-        merge_block,
-        &[],
-        &[],
-        location,
-    ));
-
-    let mut body_block = body_block;
-
-    {
-        let mut body_scope_ctx = scope_ctx.clone();
-        for stmt in &info.contents {
-            body_block = compile_statement(
-                session,
-                context,
-                &mut body_scope_ctx,
-                helper,
-                body_block,
-                stmt,
-            )?;
-        }
-    }
-
-    if body_block.terminator().is_none() {
-        body_block.append_operation(cf::br(check_block, &[], location));
-    }
-
-    Ok(merge_block)
-}
-
-fn compile_let_stmt<'ctx, 'parent: 'ctx>(
-    session: &Session,
-    context: &'ctx MeliorContext,
-    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
-    helper: &BlockHelper<'ctx, 'parent>,
-    block: &'parent Block<'ctx>,
-    info: &LetStmt,
-) -> Result<(), Box<dyn Error>> {
-    match &info.target {
-        LetStmtTarget::Simple { name, r#type } => {
-            let location = get_location(context, session, name.span.from);
-
-            let value = compile_expression(
-                session,
-                context,
-                scope_ctx,
-                helper,
-                block,
-                &info.value,
-                Some(r#type),
-            )?;
-            let memref_type = MemRefType::new(value.r#type(), &[], None, None);
-
-            let alloca: Value = block
-                .append_operation(memref::alloca(
-                    context,
-                    memref_type,
-                    &[],
-                    &[],
-                    None,
-                    location,
-                ))
-                .result(0)?
-                .into();
-
-            block.append_operation(memref::store(value, alloca, &[], location));
-
-            scope_ctx
-                .locals
-                .insert(name.name.clone(), LocalVar::alloca(alloca, r#type.clone()));
-
-            Ok(())
-        }
-        LetStmtTarget::Destructure(_) => todo!(),
-    }
-}
-
-fn compile_assign_stmt<'ctx, 'parent: 'ctx>(
-    session: &Session,
-    context: &'ctx MeliorContext,
-    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
-    helper: &BlockHelper<'ctx, 'parent>,
-    block: &'parent Block<'ctx>,
-    info: &AssignStmt,
-) -> Result<(), Box<dyn Error>> {
-    // todo: implement properly for structs, right now only really works for simple variables.
-
-    let local = scope_ctx
-        .locals
-        .get(&info.target.first.name)
-        .expect("local should exist")
-        .clone();
-
-    assert!(local.alloca, "can only mutate local stack variables");
-
-    let location = get_location(context, session, info.target.first.span.from);
-
-    let value = compile_expression(
-        session,
-        context,
-        scope_ctx,
-        helper,
-        block,
-        &info.value,
-        Some(&local.type_spec),
-    )?;
-
-    block.append_operation(memref::store(value, local.value, &[], location));
-
-    Ok(())
-}
-
-fn compile_return_stmt<'ctx, 'parent: 'ctx>(
-    session: &Session,
-    context: &'ctx MeliorContext,
-    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
-    helper: &BlockHelper<'ctx, 'parent>,
-    block: &'parent Block<'ctx>,
-    info: &ReturnStmt,
-) -> Result<(), Box<dyn Error>> {
-    let value = compile_expression(
-        session,
-        context,
-        scope_ctx,
-        helper,
-        block,
-        &info.value,
-        scope_ctx
-            .function
-            .as_ref()
-            .unwrap()
-            .decl
-            .ret_type
-            .clone()
-            .as_ref(),
-    )?;
-    block.append_operation(func::r#return(&[value], Location::unknown(context)));
-    Ok(())
-}
-
-fn compile_expression<'ctx, 'parent: 'ctx>(
-    session: &Session,
-    context: &'ctx MeliorContext,
-    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
-    _helper: &BlockHelper<'ctx, 'parent>,
-    block: &'parent Block<'ctx>,
-    info: &Expression,
-    type_info: Option<&TypeSpec>,
-) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
-    let location = Location::unknown(context);
-    match info {
-        Expression::Value(value) => compile_value_expr(
-            session, context, scope_ctx, _helper, block, value, type_info,
-        ),
-        Expression::FnCall(value) => {
-            compile_fn_call(session, context, scope_ctx, _helper, block, value)
-        }
-        Expression::Match(_) => todo!(),
-        Expression::If(_) => todo!(),
-        Expression::UnaryOp(_, _) => todo!(),
-        Expression::BinaryOp(lhs, op, rhs) => {
-            let lhs =
-                compile_expression(session, context, scope_ctx, _helper, block, lhs, type_info)?;
-            let rhs =
-                compile_expression(session, context, scope_ctx, _helper, block, rhs, type_info)?;
-
-            let op = match op {
-                BinaryOp::Arith(arith_op) => {
-                    let type_info = type_info.expect("type info missing");
-
-                    if scope_ctx.is_float(type_info) {
-                        match arith_op {
-                            ArithOp::Add => arith::addf(lhs, rhs, location),
-                            ArithOp::Sub => arith::subf(lhs, rhs, location),
-                            ArithOp::Mul => arith::mulf(lhs, rhs, location),
-                            ArithOp::Div => arith::divf(lhs, rhs, location),
-                            ArithOp::Mod => arith::remf(lhs, rhs, location),
-                        }
+                    locals.insert(index, ptr);
+                }
+                // Return pointer.
+                LocalKind::ReturnPointer => {
+                    if let TyKind::Unit = local.ty.kind {
                     } else {
-                        match arith_op {
-                            ArithOp::Add => arith::addi(lhs, rhs, location),
-                            ArithOp::Sub => arith::subi(lhs, rhs, location),
-                            ArithOp::Mul => arith::muli(lhs, rhs, location),
-                            ArithOp::Div => {
-                                if scope_ctx.is_type_signed(type_info) {
-                                    arith::divsi(lhs, rhs, location)
-                                } else {
-                                    arith::divui(lhs, rhs, location)
-                                }
-                            }
-                            ArithOp::Mod => {
-                                if scope_ctx.is_type_signed(type_info) {
-                                    arith::remsi(lhs, rhs, location)
-                                } else {
-                                    arith::remui(lhs, rhs, location)
-                                }
-                            }
-                        }
+                        return_local = Some(index);
+                        let ptr: Value = entry_block
+                            .append_operation(memref::alloca(
+                                ctx.context(),
+                                MemRefType::new(local_mlir_type, &[], None, None),
+                                &[],
+                                &[],
+                                None,
+                                Location::unknown(ctx.context()),
+                            ))
+                            .result(0)?
+                            .into();
+                        locals.insert(index, ptr);
                     }
                 }
-                BinaryOp::Logic(logic_op) => match logic_op {
-                    LogicOp::And => {
-                        let const_true = block
-                            .append_operation(arith::constant(
-                                context,
-                                IntegerAttribute::new(1, IntegerType::new(context, 1).into())
-                                    .into(),
-                                location,
-                            ))
-                            .result(0)?
-                            .into();
-                        let lhs_bool = block
-                            .append_operation(arith::cmpi(
-                                context,
-                                CmpiPredicate::Eq,
-                                lhs,
-                                const_true,
-                                location,
-                            ))
-                            .result(0)?
-                            .into();
-                        let rhs_bool = block
-                            .append_operation(arith::cmpi(
-                                context,
-                                CmpiPredicate::Eq,
-                                rhs,
-                                const_true,
-                                location,
-                            ))
-                            .result(0)?
-                            .into();
-                        arith::andi(lhs_bool, rhs_bool, location)
-                    }
-                    LogicOp::Or => {
-                        let const_true = block
-                            .append_operation(arith::constant(
-                                context,
-                                IntegerAttribute::new(1, IntegerType::new(context, 1).into())
-                                    .into(),
-                                location,
-                            ))
-                            .result(0)?
-                            .into();
-                        let lhs_bool = block
-                            .append_operation(arith::cmpi(
-                                context,
-                                CmpiPredicate::Eq,
-                                lhs,
-                                const_true,
-                                location,
-                            ))
-                            .result(0)?
-                            .into();
-                        let rhs_bool = block
-                            .append_operation(arith::cmpi(
-                                context,
-                                CmpiPredicate::Eq,
-                                rhs,
-                                const_true,
-                                location,
-                            ))
-                            .result(0)?
-                            .into();
-                        arith::ori(lhs_bool, rhs_bool, location)
-                    }
-                },
-                BinaryOp::Compare(cmp_op) => match cmp_op {
-                    CmpOp::Eq => arith::cmpi(context, CmpiPredicate::Eq, lhs, rhs, location),
-                    CmpOp::NotEq => arith::cmpi(context, CmpiPredicate::Ne, lhs, rhs, location),
-                    CmpOp::Lt => arith::cmpi(context, CmpiPredicate::Slt, lhs, rhs, location),
-                    CmpOp::LtEq => arith::cmpi(context, CmpiPredicate::Sle, lhs, rhs, location),
-                    CmpOp::Gt => arith::cmpi(context, CmpiPredicate::Sgt, lhs, rhs, location),
-                    CmpOp::GtEq => arith::cmpi(context, CmpiPredicate::Sge, lhs, rhs, location),
-                },
-                BinaryOp::Bitwise(_) => todo!(),
-            };
+            }
+        }
 
-            let value = block.append_operation(op).result(0)?.into();
+        // Create in advance all the needed blocks, 1 block per IR block.
+        // Since we use stack allocas we don't need to handle block arguments within.
+        // The optimizer takes care of deciding if this allocas are better kept in the stack or in a register
+        // based on register allocation and whether the address of the allocas is used somewhere.
+        // Since register variables can't have their address taken.
+        let mut blocks = Vec::with_capacity(body.basic_blocks.len());
 
-            Ok(value)
+        for _ in body.basic_blocks.iter() {
+            let mlir_block = region.append_block(Block::new(&[]));
+            blocks.push(mlir_block);
+        }
+
+        // Jump from the entry block to the first IR block.
+        entry_block.append_operation(cf::br(&blocks[0], &[], Location::unknown(ctx.context())));
+
+        // Process each block.
+        for (block, mlir_block) in body.basic_blocks.iter().zip(blocks.iter()) {
+            // Within blocks there is no control flow, so we simply give the current block to the
+            // codegen functions.
+            for statement in &block.statements {
+                match &statement.kind {
+                    concrete_ir::StatementKind::Assign(place, rvalue) => {
+                        let (value, _ty) = compile_rvalue(&ctx, mlir_block, rvalue, &locals)?;
+                        compile_store_place(&ctx, mlir_block, place, value, &locals)?;
+                    }
+                    concrete_ir::StatementKind::StorageLive(_) => {}
+                    concrete_ir::StatementKind::StorageDead(_) => {}
+                }
+            }
+
+            // Jump based on the terminator.
+            match &block.terminator.kind {
+                concrete_ir::TerminatorKind::Goto { target } => {
+                    mlir_block.append_operation(cf::br(
+                        &blocks[*target],
+                        &[],
+                        Location::unknown(ctx.context()),
+                    ));
+                }
+                concrete_ir::TerminatorKind::Return => {
+                    // Load the return value from the return local and return it.
+                    if let Some(ret_local) = return_local {
+                        let ptr = locals.get(&ret_local).unwrap();
+                        let value = mlir_block
+                            .append_operation(memref::load(
+                                *ptr,
+                                &[],
+                                Location::unknown(ctx.context()),
+                            ))
+                            .result(0)?
+                            .into();
+                        mlir_block.append_operation(func::r#return(
+                            &[value],
+                            Location::unknown(ctx.context()),
+                        ));
+                    } else {
+                        mlir_block.append_operation(func::r#return(
+                            &[],
+                            Location::unknown(ctx.context()),
+                        ));
+                    }
+                }
+                concrete_ir::TerminatorKind::Unreachable => {
+                    mlir_block
+                        .append_operation(llvm::unreachable(Location::unknown(ctx.context())));
+                }
+                // Function calls are terminators because a function may be diverging (i.e it doesn't return).
+                concrete_ir::TerminatorKind::Call {
+                    func,
+                    args,
+                    destination,
+                    target,
+                } => {
+                    let target_fn_body = ctx.module_ctx.ctx.program.functions.get(func).unwrap();
+                    let target_fn_body_sig = ctx
+                        .module_ctx
+                        .ctx
+                        .program
+                        .function_signatures
+                        .get(func)
+                        .unwrap();
+                    let args: Vec<Value> = args
+                        .iter()
+                        .map(|x| compile_rvalue(&ctx, mlir_block, x, &locals).map(|x| x.0))
+                        .collect::<Result<_, _>>()?;
+                    let fn_symbol =
+                        FlatSymbolRefAttribute::new(ctx.context(), &target_fn_body.name); // todo: good name resolution
+                    let ret_type = match &target_fn_body_sig.1.kind {
+                        TyKind::Unit => None,
+                        _ => Some(compile_type(ctx.module_ctx, &target_fn_body_sig.1)),
+                    };
+                    let result = mlir_block.append_operation(func::call(
+                        ctx.context(),
+                        fn_symbol,
+                        &args,
+                        ret_type.as_slice(),
+                        Location::unknown(ctx.context()),
+                    ));
+
+                    if result.result_count() > 0 {
+                        compile_store_place(
+                            &ctx,
+                            mlir_block,
+                            destination,
+                            result.result(0)?.into(),
+                            &locals,
+                        )?;
+                    }
+
+                    if let Some(target) = target {
+                        mlir_block.append_operation(cf::br(
+                            &blocks[*target],
+                            &[],
+                            Location::unknown(ctx.context()),
+                        ));
+                    } else {
+                        mlir_block
+                            .append_operation(llvm::unreachable(Location::unknown(ctx.context())));
+                    }
+                }
+                // A switch int is used for branching by matching against 1 or multiple values.
+                concrete_ir::TerminatorKind::SwitchInt {
+                    discriminator,
+                    targets,
+                } => {
+                    let (condition, _condition_ty) =
+                        compile_load_operand(&ctx, mlir_block, discriminator, &locals)?;
+
+                    // Case constant values to match against.
+                    let mut case_values = Vec::new();
+                    // MLIR detail to tell how many arguments we pass, since it can take a dynamic amount of arguments.
+                    let mut cases_operands_count = Vec::new();
+                    // The block destinations.
+                    let mut dests: Vec<(&Block, _)> = Vec::new();
+
+                    cases_operands_count.push(0);
+
+                    for (value, target) in targets.values.iter().zip(targets.targets.iter()) {
+                        let target = *target;
+                        let block = &blocks[target];
+                        let value = value_tree_to_int(value)
+                            .expect("constant value can't be converted to int");
+                        case_values.push(value);
+                        cases_operands_count.push(1);
+                        dests.push((block, [].as_slice()));
+                    }
+
+                    mlir_block.append_operation(cf::switch(
+                        ctx.context(),
+                        &case_values,
+                        condition,
+                        condition.r#type(),
+                        // Default dest block
+                        (&blocks[*targets.targets.last().unwrap()], &[]),
+                        // Destinations
+                        &dests,
+                        Location::unknown(ctx.context()),
+                    )?);
+                }
+            }
         }
     }
-}
 
-fn compile_value_expr<'ctx, 'parent: 'ctx>(
-    session: &Session,
-    context: &'ctx MeliorContext,
-    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
-    _helper: &BlockHelper<'ctx, 'parent>,
-    block: &'parent Block<'ctx>,
-    value: &ValueExpr,
-    type_info: Option<&TypeSpec>,
-) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
-    tracing::debug!("compiling value_expr for {:?}", value);
-    let location = Location::unknown(context);
-    match value {
-        ValueExpr::ConstBool(value) => {
-            let value = IntegerAttribute::new((*value).into(), IntegerType::new(context, 1).into());
-            Ok(block
-                .append_operation(arith::constant(context, value.into(), location))
-                .result(0)?
-                .into())
-        }
-        ValueExpr::ConstChar(value) => {
-            let value =
-                IntegerAttribute::new((*value) as i64, IntegerType::new(context, 32).into());
-            Ok(block
-                .append_operation(arith::constant(context, value.into(), location))
-                .result(0)?
-                .into())
-        }
-        ValueExpr::ConstInt(value) => {
-            let int_type = if let Some(type_info) = type_info {
-                scope_ctx.resolve_type_spec(context, type_info)?
-            } else {
-                IntegerType::new(context, 64).into()
-            };
-            let value = IntegerAttribute::new((*value) as i64, int_type);
-            Ok(block
-                .append_operation(arith::constant(context, value.into(), location))
-                .result(0)?
-                .into())
-        }
-        ValueExpr::ConstFloat(value) => {
-            let float_type = if let Some(type_info) = type_info {
-                scope_ctx.resolve_type_spec(context, type_info)?
-            } else {
-                Type::float64(context)
-            };
-            let value = FloatAttribute::new(
-                context,
-                value.parse().expect("failed to parse float"),
-                float_type,
-            );
-            Ok(block
-                .append_operation(arith::constant(context, value.into(), location))
-                .result(0)?
-                .into())
-        }
-        ValueExpr::ConstStr(_) => todo!(),
-        ValueExpr::Path(value) => {
-            compile_path_op(session, context, scope_ctx, _helper, block, value)
-        }
-        ValueExpr::Deref(value) => {
-            compile_deref(session, context, scope_ctx, _helper, block, value)
-        }
-        ValueExpr::AsRef { path, ref_type: _ } => {
-            compile_asref(session, context, scope_ctx, _helper, block, path)
-        }
-    }
-}
+    let param_types: Vec<_> = params_ty.iter().map(|x| x.0).collect();
+    // If the return type is unit, pass a empty slice to mlir.
+    let return_type = match &body_signature.1.kind {
+        TyKind::Unit => None,
+        _ => Some(compile_type(ctx.module_ctx, &body_signature.1)),
+    };
 
-fn compile_fn_call<'ctx, 'parent: 'ctx>(
-    session: &Session,
-    context: &'ctx MeliorContext,
-    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
-    _helper: &BlockHelper<'ctx, 'parent>,
-    block: &'parent Block<'ctx>,
-    info: &FnCallOp,
-) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
-    tracing::debug!("compiling fncall: {:?}", info);
-    let mut args = Vec::with_capacity(info.args.len());
-    let location = get_location(context, session, info.target.span.from);
+    // Create the function mlir attribute.
+    let func_type = FunctionType::new(ctx.context(), &param_types, return_type.as_slice());
 
-    let target_fn = scope_ctx
-        .get_function(&info.target.name)
-        .expect("function not found")
-        .clone();
-
-    assert_eq!(
-        info.args.len(),
-        target_fn.decl.params.len(),
-        "parameter length doesnt match"
+    let func_op = func::func(
+        ctx.context(),
+        StringAttribute::new(ctx.context(), &body.name),
+        TypeAttribute::new(func_type.into()),
+        region,
+        &[],
+        Location::unknown(ctx.context()),
     );
 
-    for (arg, arg_info) in info.args.iter().zip(&target_fn.decl.params) {
-        let value = compile_expression(
-            session,
-            context,
-            scope_ctx,
-            _helper,
-            block,
-            arg,
-            Some(&arg_info.r#type),
-        )?;
-        args.push(value);
+    ctx.module_ctx
+        .ctx
+        .mlir_module
+        .body()
+        .append_operation(func_op);
+
+    Ok(())
+}
+
+/// Compiles a rvalue.
+fn compile_rvalue<'c: 'b, 'b>(
+    ctx: &'c FunctionCodegenCtx,
+    block: &'b Block<'c>,
+    info: &Rvalue,
+    locals: &'b HashMap<usize, Value<'c, '_>>,
+) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+    Ok(match info {
+        Rvalue::Use(info) => compile_load_operand(ctx, block, info, locals)?,
+        Rvalue::LogicOp(_, _) => todo!(),
+        Rvalue::BinaryOp(op, (lhs, rhs)) => compile_binop(ctx, block, op, lhs, rhs, locals)?,
+        Rvalue::UnaryOp(_, _) => todo!(),
+        Rvalue::Ref(mutability, place) => {
+            let mut value = locals[&place.local];
+            let mut local_ty = ctx.get_fn_body().locals[place.local].ty.kind.clone();
+
+            // Handle the projection.
+            for projection in &place.projection {
+                match projection {
+                    PlaceElem::Deref => {
+                        value = block
+                            .append_operation(memref::load(
+                                value,
+                                &[],
+                                Location::unknown(ctx.context()),
+                            ))
+                            .result(0)?
+                            .into();
+                        local_ty = match local_ty {
+                            TyKind::Ref(inner, _) => *(inner.clone()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    PlaceElem::Field(_, _) => todo!(),
+                    PlaceElem::Index(_) => todo!(),
+                }
+            }
+
+            (value, TyKind::Ref(Box::new(local_ty), *mutability))
+        }
+    })
+}
+
+/// Compiles a binary operation.
+fn compile_binop<'c: 'b, 'b>(
+    ctx: &'c FunctionCodegenCtx,
+    block: &'b Block<'c>,
+    op: &BinOp,
+    lhs: &Operand,
+    rhs: &Operand,
+    locals: &HashMap<usize, Value<'c, '_>>,
+) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+    let (lhs, lhs_ty) = compile_load_operand(ctx, block, lhs, locals)?;
+    let (rhs, _rhs_ty) = compile_load_operand(ctx, block, rhs, locals)?;
+    let location = Location::unknown(ctx.context());
+
+    let is_float = matches!(lhs_ty, TyKind::Float(_));
+    let is_signed = matches!(lhs_ty, TyKind::Int(_));
+
+    Ok(match op {
+        BinOp::Add => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::addf(lhs, rhs, location))
+                    .result(0)?
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::addi(lhs, rhs, location))
+                    .result(0)?
+                    .into()
+            };
+            (value, lhs_ty)
+        }
+        BinOp::Sub => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::subf(lhs, rhs, location))
+                    .result(0)?
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::subi(lhs, rhs, location))
+                    .result(0)?
+                    .into()
+            };
+            (value, lhs_ty)
+        }
+        BinOp::Mul => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::mulf(lhs, rhs, location))
+                    .result(0)?
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::muli(lhs, rhs, location))
+                    .result(0)?
+                    .into()
+            };
+            (value, lhs_ty)
+        }
+        BinOp::Div => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::divf(lhs, rhs, location))
+                    .result(0)?
+                    .into()
+            } else if is_signed {
+                block
+                    .append_operation(arith::divsi(lhs, rhs, location))
+                    .result(0)?
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::divui(lhs, rhs, location))
+                    .result(0)?
+                    .into()
+            };
+            (value, lhs_ty)
+        }
+        BinOp::Mod => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::remf(lhs, rhs, location))
+                    .result(0)?
+                    .into()
+            } else if is_signed {
+                block
+                    .append_operation(arith::remsi(lhs, rhs, location))
+                    .result(0)?
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::remui(lhs, rhs, location))
+                    .result(0)?
+                    .into()
+            };
+            (value, lhs_ty)
+        }
+        BinOp::BitXor => todo!(),
+        BinOp::BitAnd => todo!(),
+        BinOp::BitOr => todo!(),
+        BinOp::Shl => todo!(),
+        BinOp::Shr => todo!(),
+        BinOp::Eq => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::cmpf(
+                        ctx.context(),
+                        arith::CmpfPredicate::Oeq,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Eq,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            };
+            (value, TyKind::Bool)
+        }
+        BinOp::Lt => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::cmpf(
+                        ctx.context(),
+                        arith::CmpfPredicate::Olt,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            } else if is_signed {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Slt,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Ult,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            };
+            (value, TyKind::Bool)
+        }
+        BinOp::Le => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::cmpf(
+                        ctx.context(),
+                        arith::CmpfPredicate::Ole,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            } else if is_signed {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Sle,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Ule,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            };
+            (value, TyKind::Bool)
+        }
+        BinOp::Ne => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::cmpf(
+                        ctx.context(),
+                        arith::CmpfPredicate::One,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Ult,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            };
+            (value, TyKind::Bool)
+        }
+        BinOp::Ge => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::cmpf(
+                        ctx.context(),
+                        arith::CmpfPredicate::Ole,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            } else if is_signed {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Sge,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Uge,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            };
+            (value, TyKind::Bool)
+        }
+        BinOp::Gt => {
+            let value = if is_float {
+                block
+                    .append_operation(arith::cmpf(
+                        ctx.context(),
+                        arith::CmpfPredicate::Ogt,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            } else if is_signed {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Sgt,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            } else {
+                block
+                    .append_operation(arith::cmpi(
+                        ctx.context(),
+                        arith::CmpiPredicate::Ugt,
+                        lhs,
+                        rhs,
+                        location,
+                    ))
+                    .result(0)?
+                    .into()
+            };
+            (value, TyKind::Bool)
+        }
+    })
+}
+
+fn compile_load_operand<'c: 'b, 'b>(
+    ctx: &'c FunctionCodegenCtx,
+    block: &'b Block<'c>,
+    info: &Operand,
+    locals: &HashMap<usize, Value<'c, '_>>,
+) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+    Ok(match info {
+        Operand::Place(info) => compile_load_place(ctx, block, info, locals)?,
+        Operand::Const(data) => match &data.data {
+            concrete_ir::ConstKind::Param(_) => todo!(),
+            concrete_ir::ConstKind::Value(value) => {
+                (compile_value_tree(ctx, block, value)?, data.ty.clone())
+            }
+            concrete_ir::ConstKind::Expr(_) => todo!(),
+        },
+    })
+}
+
+/// Compiles a store to a given place in memory.
+fn compile_store_place<'c: 'b, 'b>(
+    ctx: &'c FunctionCodegenCtx,
+    block: &'b Block<'c>,
+    info: &Place,
+    value: Value<'c, 'b>,
+    locals: &HashMap<usize, Value<'c, '_>>,
+) -> Result<(), CodegenError> {
+    let mut ptr = locals[&info.local];
+
+    for proj in &info.projection {
+        match proj {
+            PlaceElem::Deref => {
+                ptr = block
+                    .append_operation(memref::load(ptr, &[], Location::unknown(ctx.context())))
+                    .result(0)?
+                    .into();
+            }
+            PlaceElem::Field(_, _) => todo!(),
+            PlaceElem::Index(_) => todo!(),
+        }
     }
 
-    let return_type = if let Some(ret_type) = &target_fn.decl.ret_type {
-        vec![scope_ctx.resolve_type_spec(context, ret_type)?]
-    } else {
-        vec![]
-    };
+    block.append_operation(memref::store(
+        value,
+        ptr,
+        &[],
+        Location::unknown(ctx.context()),
+    ));
 
-    let fn_name = scope_ctx.get_symbol_name(&info.target.name);
-
-    Ok(block
-        .append_operation(func::call(
-            context,
-            FlatSymbolRefAttribute::new(context, &fn_name),
-            &args,
-            &return_type,
-            location,
-        ))
-        .result(0)?
-        .into())
+    Ok(())
 }
 
-fn compile_path_op<'ctx, 'parent: 'ctx>(
-    session: &Session,
-    context: &'ctx MeliorContext,
-    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
-    _helper: &BlockHelper<'ctx, 'parent>,
-    block: &'parent Block<'ctx>,
-    path: &PathOp,
-) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
-    tracing::debug!("compiling pathop {:?}", path);
-    // For now only simple and array variables work.
-    // TODO: implement properly, this requires having structs implemented.
+/// Compiles a load to a place.
+fn compile_load_place<'c: 'b, 'b>(
+    ctx: &'c FunctionCodegenCtx,
+    block: &'b Block<'c>,
+    info: &Place,
+    locals: &HashMap<usize, Value<'c, '_>>,
+) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+    let ptr = locals[&info.local];
+    let body = ctx.get_fn_body();
 
-    let local = scope_ctx
-        .locals
-        .get(&path.first.name)
-        .unwrap_or_else(|| panic!("local {} not found", path.first.name))
-        .clone();
-
-    let location = get_location(context, session, path.first.span.from);
-
-    let value = if local.alloca {
-        block
-            .append_operation(memref::load(local.value, &[], location))
-            .result(0)?
-            .into()
-    } else {
-        local.value
-    };
-
-    Ok(value)
-}
-
-fn compile_deref<'ctx, 'parent: 'ctx>(
-    session: &Session,
-    context: &'ctx MeliorContext,
-    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
-    _helper: &BlockHelper<'ctx, 'parent>,
-    block: &'parent Block<'ctx>,
-    path: &PathOp,
-) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
-    tracing::debug!("compiling deref for {:?}", path);
-    let local = scope_ctx
-        .locals
-        .get(&path.first.name)
-        .expect("local not found")
-        .clone();
-
-    let location = get_location(context, session, path.first.span.from);
+    let mut local_ty = body.locals[info.local].ty.kind.clone();
 
     let mut value = block
-        .append_operation(memref::load(local.value, &[], location))
+        .append_operation(memref::load(ptr, &[], Location::unknown(ctx.context())))
         .result(0)?
         .into();
 
-    if local.alloca {
-        value = block
-            .append_operation(memref::load(value, &[], location))
-            .result(0)?
-            .into();
+    for projection in &info.projection {
+        match projection {
+            PlaceElem::Deref => {
+                value = block
+                    .append_operation(memref::load(value, &[], Location::unknown(ctx.context())))
+                    .result(0)?
+                    .into();
+                local_ty = match local_ty {
+                    TyKind::Ref(inner, _) => *(inner.clone()),
+                    _ => unreachable!(),
+                }
+            }
+            PlaceElem::Field(_, _) => todo!(),
+            PlaceElem::Index(_) => todo!(),
+        }
     }
-
-    Ok(value)
+    Ok((value, local_ty))
 }
 
-fn compile_asref<'ctx, 'parent: 'ctx>(
-    _session: &Session,
-    _context: &'ctx MeliorContext,
-    scope_ctx: &mut ScopeContext<'ctx, 'parent>,
-    _helper: &BlockHelper<'ctx, 'parent>,
-    _block: &'parent Block<'ctx>,
-    path: &PathOp,
-) -> Result<Value<'ctx, 'parent>, Box<dyn Error>> {
-    tracing::debug!("compiling asref for {:?}", path);
-    let local = scope_ctx
-        .locals
-        .get(&path.first.name)
-        .expect("local not found")
-        .clone();
-
-    if !local.alloca {
-        panic!("can only take refs to non register values");
+/// Used in switch
+/// Converts a constant value to a int.
+fn value_tree_to_int(value: &ValueTree) -> Option<i64> {
+    match value {
+        ValueTree::Leaf(value) => match value {
+            concrete_ir::ConstValue::Bool(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::I8(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::I16(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::I32(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::I64(value) => Some(*value),
+            concrete_ir::ConstValue::I128(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::U8(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::U16(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::U32(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::U64(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::U128(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::F32(_) => None,
+            concrete_ir::ConstValue::F64(_) => None,
+        },
+        ValueTree::Branch(_) => None,
     }
+}
 
-    Ok(local.value)
+/// compiles constant data
+fn compile_value_tree<'c: 'b, 'b>(
+    ctx: &'c FunctionCodegenCtx,
+    block: &'b Block<'c>,
+    value: &ValueTree,
+) -> Result<Value<'c, 'b>, CodegenError> {
+    Ok(match value {
+        ValueTree::Leaf(value) => match value {
+            concrete_ir::ConstValue::Bool(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : i1", (*value) as u8)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::I8(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : i8", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::I16(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : i16", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::I32(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : i32", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::I64(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : i64", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::I128(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : i128", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::U8(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : i8", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::U16(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : i16", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::U32(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : i32", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::U64(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : i64", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::U128(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : i128", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::F32(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    FloatAttribute::new(
+                        ctx.context(),
+                        (*value).into(),
+                        Type::float32(ctx.context()),
+                    )
+                    .into(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::F64(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    FloatAttribute::new(ctx.context(), *value, Type::float64(ctx.context())).into(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+        },
+        ValueTree::Branch(_) => todo!(),
+    })
+}
+
+fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
+    match &ty.kind {
+        concrete_ir::TyKind::Unit => Type::none(ctx.ctx.mlir_context),
+        concrete_ir::TyKind::Bool => IntegerType::new(ctx.ctx.mlir_context, 1).into(),
+        concrete_ir::TyKind::Char => IntegerType::new(ctx.ctx.mlir_context, 32).into(),
+        concrete_ir::TyKind::Int(int_ty) => match int_ty {
+            concrete_ir::IntTy::I8 => IntegerType::new(ctx.ctx.mlir_context, 8).into(),
+            concrete_ir::IntTy::I16 => IntegerType::new(ctx.ctx.mlir_context, 16).into(),
+            concrete_ir::IntTy::I32 => IntegerType::new(ctx.ctx.mlir_context, 32).into(),
+            concrete_ir::IntTy::I64 => IntegerType::new(ctx.ctx.mlir_context, 64).into(),
+            concrete_ir::IntTy::I128 => IntegerType::new(ctx.ctx.mlir_context, 128).into(),
+        },
+        concrete_ir::TyKind::Uint(uint_ty) => match uint_ty {
+            concrete_ir::UintTy::U8 => IntegerType::new(ctx.ctx.mlir_context, 8).into(),
+            concrete_ir::UintTy::U16 => IntegerType::new(ctx.ctx.mlir_context, 16).into(),
+            concrete_ir::UintTy::U32 => IntegerType::new(ctx.ctx.mlir_context, 32).into(),
+            concrete_ir::UintTy::U64 => IntegerType::new(ctx.ctx.mlir_context, 64).into(),
+            concrete_ir::UintTy::U128 => IntegerType::new(ctx.ctx.mlir_context, 128).into(),
+        },
+        concrete_ir::TyKind::Float(float_ty) => match float_ty {
+            concrete_ir::FloatTy::F32 => Type::float32(ctx.ctx.mlir_context),
+            concrete_ir::FloatTy::F64 => Type::float64(ctx.ctx.mlir_context),
+        },
+        concrete_ir::TyKind::String => todo!(),
+        concrete_ir::TyKind::Array(_, _) => todo!(),
+        concrete_ir::TyKind::Ref(inner_ty, _) => {
+            let inner = compile_type(
+                ctx,
+                &Ty {
+                    span: None,
+                    kind: *(inner_ty).clone(),
+                },
+            );
+            MemRefType::new(inner, &[], None, None).into()
+        }
+        concrete_ir::TyKind::Param { .. } => todo!(),
+    }
 }

@@ -2,10 +2,12 @@ use std::path::Path;
 
 use tracing::instrument;
 
+use crate::errors::CodegenError;
+
 // TODO: Implement a proper linker driver, passing only the arguments needed dynamically based on the requirements.
 
 #[instrument(level = "debug")]
-pub fn link_shared_lib(input_path: &Path, output_filename: &Path) -> Result<(), std::io::Error> {
+pub fn link_shared_lib(input_path: &Path, output_filename: &Path) -> Result<(), CodegenError> {
     let args: &[&str] = {
         #[cfg(target_os = "macos")]
         {
@@ -33,6 +35,7 @@ pub fn link_shared_lib(input_path: &Path, output_filename: &Path) -> Result<(), 
                 "-L/lib/../lib64",
                 "-L/usr/lib/../lib64",
                 "-lc",
+                "-O1",
                 &input_path.display().to_string(),
             ]
         }
@@ -49,7 +52,7 @@ pub fn link_shared_lib(input_path: &Path, output_filename: &Path) -> Result<(), 
 }
 
 #[instrument(level = "debug")]
-pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), std::io::Error> {
+pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), CodegenError> {
     let args: &[&str] = {
         #[cfg(target_os = "macos")]
         {
@@ -98,6 +101,7 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), std:
                 "-zrelro",
                 "--no-as-needed",
                 "-lc",
+                "-O1",
                 crtn,
                 &input_path.display().to_string(),
             ]

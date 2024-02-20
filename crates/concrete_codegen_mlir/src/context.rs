@@ -1,13 +1,16 @@
-use std::error::Error;
-
-use concrete_ast::Program;
+use concrete_ir::ProgramBody;
 use concrete_session::Session;
 use melior::{
     dialect::DialectRegistry,
-    ir::{operation::OperationPrintingFlags, Location, Module as MeliorModule},
+    ir::{
+        attribute::StringAttribute, operation::OperationBuilder, Block, Identifier, Location,
+        Module as MeliorModule, Region,
+    },
     utility::{register_all_dialects, register_all_llvm_translations, register_all_passes},
     Context as MeliorContext,
 };
+
+use crate::{codegen::CodegenCtx, errors::CodegenError, get_data_layout_rep, get_target_triple};
 
 use super::{module::MLIRModule, pass_manager::run_pass_manager};
 
@@ -34,32 +37,71 @@ impl Context {
     pub fn compile(
         &self,
         session: &Session,
-        program: &Program,
-    ) -> Result<MLIRModule, Box<dyn Error>> {
+        program: &ProgramBody,
+    ) -> Result<MLIRModule, CodegenError> {
         let file_path = session.file_path.display().to_string();
         let location = Location::new(&self.melior_context, &file_path, 0, 0);
+        let target_triple = get_target_triple(session);
 
-        let mut melior_module = MeliorModule::new(location);
+        let module_region = Region::new();
+        module_region.append_block(Block::new(&[]));
 
-        super::codegen::compile_program(session, &self.melior_context, &melior_module, program)?;
+        let data_layout_ret = &get_data_layout_rep(session)?;
 
-        let print_flags = OperationPrintingFlags::new().enable_debug_info(true, true);
-        tracing::debug!(
-            "MLIR Code before passes:\n{}",
-            melior_module
-                .as_operation()
-                .to_string_with_flags(print_flags)?
-        );
+        let op = OperationBuilder::new("builtin.module", location)
+            .add_attributes(&[
+                (
+                    Identifier::new(&self.melior_context, "llvm.target_triple"),
+                    StringAttribute::new(&self.melior_context, &target_triple).into(),
+                ),
+                (
+                    Identifier::new(&self.melior_context, "llvm.data_layout"),
+                    StringAttribute::new(&self.melior_context, data_layout_ret).into(),
+                ),
+            ])
+            .add_regions([module_region])
+            .build()?;
+        assert!(op.verify(), "module operation is not valid");
+
+        let mut melior_module = MeliorModule::from_operation(op).expect("module failed to create");
+
+        let codegen_ctx = CodegenCtx {
+            mlir_context: &self.melior_context,
+            session,
+            mlir_module: &melior_module,
+            program,
+        };
+
+        super::codegen::compile_program(codegen_ctx)?;
+
+        if session.output_mlir || session.output_all {
+            std::fs::write(
+                session.output_file.with_extension("before-pass.mlir"),
+                melior_module.as_operation().to_string(),
+            )?;
+        }
 
         assert!(melior_module.as_operation().verify());
 
         // TODO: Add proper error handling.
         run_pass_manager(&self.melior_context, &mut melior_module).unwrap();
 
-        tracing::debug!(
-            "MLIR Code after passes:\n{:#?}",
-            melior_module.as_operation()
-        );
+        // The func to llvm pass has a bug where it sets the data layout string to ""
+        // This works around it by setting it again.
+        {
+            let mut op = melior_module.as_operation_mut();
+            op.set_attribute(
+                "llvm.data_layout",
+                StringAttribute::new(&self.melior_context, data_layout_ret).into(),
+            );
+        }
+
+        if session.output_mlir || session.output_all {
+            std::fs::write(
+                session.output_file.with_extension("after-pass.mlir"),
+                melior_module.as_operation().to_string(),
+            )?;
+        }
 
         Ok(MLIRModule::new(melior_module))
     }
