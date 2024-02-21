@@ -84,14 +84,6 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         println!("{:#?}", program);
     }
 
-    let lower_time = Instant::now();
-    let program_ir = lower_program(&program);
-    let lower_time = lower_time.elapsed();
-
-    if args.print_ir {
-        println!("{:#?}", program_ir);
-    }
-
     let cwd = std::env::current_dir()?;
     // todo: find a better name, "target" would clash with rust if running in the source tree.
     let target_dir = cwd.join("build_artifacts/");
@@ -131,18 +123,21 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
     tracing::debug!("Compiling with session: {:#?}", session);
 
-    let check_time = Instant::now();
-    if let Err(errors) = concrete_check::check_program(&program) {
-        for error in &errors {
+    let lower_time = Instant::now();
+    let program_ir = match lower_program(&program) {
+        Ok(ir) => ir,
+        Err(error) => {
+            let report = concrete_check::lowering_error_to_report(error, &session);
             let path = session.file_path.display().to_string();
-            error
-                .to_report(&session)
-                .eprint((path, session.source.clone()))?;
+            report.eprint((path, session.source.clone()))?;
+            std::process::exit(1);
         }
+    };
+    let lower_time = lower_time.elapsed();
 
-        std::process::exit(1);
+    if args.print_ir {
+        println!("{:#?}", program_ir);
     }
-    let check_time = check_time.elapsed();
 
     let compile_time = Instant::now();
     let object_path = concrete_codegen_mlir::compile(&session, &program_ir)?;
@@ -158,7 +153,6 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 
     let elapsed = start_time.elapsed();
     tracing::debug!("Parse time {:?}", parse_ast_time);
-    tracing::debug!("Check time {:?}", check_time);
     tracing::debug!("Lower time {:?}", lower_time);
     tracing::debug!("Combined compile time {:?}", compile_time);
     tracing::debug!("Link time {:?}", link_time);

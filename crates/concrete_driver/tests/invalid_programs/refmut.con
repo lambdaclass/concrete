@@ -1,0 +1,12 @@
+mod Simple {
+
+    fn main() -> i32 {
+        let x: i32 = 1;
+        hello(&x);
+        return x;
+    }
+
+    fn hello(a: &i32) {
+        *a = 2;
+    }
+}
