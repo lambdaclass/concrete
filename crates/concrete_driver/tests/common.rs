@@ -86,7 +86,7 @@ pub fn compile_program(
         output_all: false,
     };
 
-    let program_ir = lower_program(&program);
+    let program_ir = lower_program(&program)?;
 
     let object_path = concrete_codegen_mlir::compile(&session, &program_ir)?;
 

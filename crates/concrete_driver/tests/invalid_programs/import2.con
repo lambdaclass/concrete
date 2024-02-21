@@ -1,0 +1,13 @@
+mod Simple {
+    import Hello.{world};
+
+    fn main() -> i64 {
+        return 0;
+    }
+}
+
+mod Hello {
+    fn not_found() {
+
+    }
+}

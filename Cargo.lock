@@ -363,6 +363,7 @@ version = "0.1.0"
 dependencies = [
  "ariadne",
  "concrete_ast",
+ "concrete_ir",
  "concrete_session",
  "itertools 0.12.1",
  "thiserror",
@@ -408,6 +409,7 @@ name = "concrete_ir"
 version = "0.1.0"
 dependencies = [
  "concrete_ast",
+ "thiserror",
  "tracing",
 ]
 

@@ -38,7 +38,6 @@ use module::MLIRModule;
 
 mod codegen;
 mod context;
-mod error;
 pub mod errors;
 pub mod linker;
 mod module;
