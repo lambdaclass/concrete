@@ -1064,18 +1064,11 @@ fn lower_value_expr(
         }
         ValueExpr::ConstStr(_) => todo!(),
         ValueExpr::Path(info) => {
-            let (place, _place_ty) = lower_path(builder, info);
+            let (place, place_ty) = lower_path(builder, info);
+            dbg!(&place_ty);
             (
                 Rvalue::Use(Operand::Place(place.clone())),
-                builder
-                    .body
-                    .locals
-                    .get(place.local)
-                    .as_ref()
-                    .unwrap()
-                    .ty
-                    .kind
-                    .clone(),
+                place_ty.kind,
             )
         }
     }
@@ -1107,6 +1100,7 @@ pub fn lower_path(builder: &mut FnBodyBuilder, info: &PathOp) -> (Place, Ty) {
                     projection.push(PlaceElem::Field(idx));
                     ty = struct_body.variants[idx].ty.kind.clone();
                 }
+                dbg!(&projection);
             }
             PathSegment::ArrayIndex(_) => todo!(),
         }
