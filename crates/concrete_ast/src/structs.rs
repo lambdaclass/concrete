@@ -1,5 +1,5 @@
 use crate::{
-    common::{DocString, GenericParam, Ident, Span},
+    common::{GenericParam, Ident, Span},
     types::TypeSpec,
 };
 

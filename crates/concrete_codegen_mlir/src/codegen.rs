@@ -8,12 +8,12 @@ use concrete_session::Session;
 use melior::{
     dialect::{
         arith, cf, func,
-        llvm::{self, AllocaOptions, LoadStoreOptions},
+        llvm::{self, r#type::opaque_pointer, AllocaOptions, LoadStoreOptions},
     },
     ir::{
         attribute::{
-            FlatSymbolRefAttribute, FloatAttribute, IntegerAttribute, StringAttribute,
-            TypeAttribute,
+            DenseI32ArrayAttribute, FlatSymbolRefAttribute, FloatAttribute, IntegerAttribute,
+            StringAttribute, TypeAttribute,
         },
         r#type::{FunctionType, IntegerType},
         Attribute, Block, Location, Module as MeliorModule, Region, Type, Value, ValueLike,
@@ -860,8 +860,34 @@ fn compile_store_place<'c: 'b, 'b>(
                     _ => unreachable!(),
                 };
             }
-            PlaceElem::Field(_field_idx) => {
-                todo!()
+            PlaceElem::Field(field_idx) => {
+                ptr = block
+                    .append_operation(llvm::get_element_ptr(
+                        ctx.context(),
+                        ptr,
+                        DenseI32ArrayAttribute::new(
+                            ctx.context(),
+                            &[0, (*field_idx).try_into().unwrap()],
+                        ),
+                        compile_type(
+                            ctx.module_ctx,
+                            &Ty {
+                                span: None,
+                                kind: local_ty.clone(),
+                            },
+                        ),
+                        opaque_pointer(ctx.context()),
+                        Location::unknown(ctx.context()),
+                    ))
+                    .result(0)?
+                    .into();
+                local_ty = match local_ty {
+                    TyKind::Struct { id, generics: _ } => {
+                        let strc = ctx.module_ctx.ctx.program.structs.get(&id).unwrap();
+                        strc.variants[*field_idx].ty.kind.clone()
+                    }
+                    _ => unreachable!(),
+                }
             }
             PlaceElem::Index(_) => todo!(),
         }
@@ -885,33 +911,18 @@ fn compile_load_place<'c: 'b, 'b>(
     info: &Place,
     locals: &HashMap<usize, Value<'c, '_>>,
 ) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
-    let ptr = locals[&info.local];
+    let mut ptr = locals[&info.local];
     let body = ctx.get_fn_body();
 
     let mut local_ty = body.locals[info.local].ty.kind.clone();
 
-    let mut value = block
-        .append_operation(llvm::load(
-            ctx.context(),
-            ptr,
-            compile_type(ctx.module_ctx, &body.locals[info.local].ty),
-            Location::unknown(ctx.context()),
-            LoadStoreOptions::default(),
-        ))
-        .result(0)?
-        .into();
-
     for projection in &info.projection {
         match projection {
             PlaceElem::Deref => {
-                local_ty = match local_ty {
-                    TyKind::Ref(inner, _) => *(inner.clone()),
-                    _ => unreachable!(),
-                };
-                value = block
+                ptr = block
                     .append_operation(llvm::load(
                         ctx.context(),
-                        value,
+                        ptr,
                         compile_type(
                             ctx.module_ctx,
                             &Ty {
@@ -924,11 +935,63 @@ fn compile_load_place<'c: 'b, 'b>(
                     ))
                     .result(0)?
                     .into();
+
+                local_ty = match local_ty {
+                    TyKind::Ref(inner, _) => *(inner.clone()),
+                    _ => unreachable!(),
+                };
             }
-            PlaceElem::Field(_) => todo!(),
+            PlaceElem::Field(field_idx) => {
+                local_ty = match local_ty {
+                    TyKind::Struct { id, generics: _ } => {
+                        let struct_body = ctx.module_ctx.ctx.program.structs.get(&id).unwrap();
+                        let ty = struct_body.variants[*field_idx].ty.clone();
+                        ptr = block
+                            .append_operation(llvm::get_element_ptr(
+                                ctx.context(),
+                                ptr,
+                                DenseI32ArrayAttribute::new(
+                                    ctx.context(),
+                                    &[0, (*field_idx).try_into().unwrap()],
+                                ),
+                                compile_type(
+                                    ctx.module_ctx,
+                                    &Ty {
+                                        span: None,
+                                        kind: local_ty.clone(),
+                                    },
+                                ),
+                                opaque_pointer(ctx.context()),
+                                Location::unknown(ctx.context()),
+                            ))
+                            .result(0)?
+                            .into();
+                        ty.kind.clone()
+                    }
+                    _ => unreachable!(),
+                }
+            }
             PlaceElem::Index(_) => todo!(),
         }
     }
+
+    let value = block
+        .append_operation(llvm::load(
+            ctx.context(),
+            ptr,
+            compile_type(
+                ctx.module_ctx,
+                &Ty {
+                    span: None,
+                    kind: local_ty.clone(),
+                },
+            ),
+            Location::unknown(ctx.context()),
+            LoadStoreOptions::default(),
+        ))
+        .result(0)?
+        .into();
+
     Ok((value, local_ty))
 }
 
