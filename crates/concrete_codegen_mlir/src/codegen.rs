@@ -6,7 +6,7 @@ use concrete_ir::{
 };
 use concrete_session::Session;
 use melior::{
-    dialect::{arith, cf, func, llvm, memref},
+    dialect::{self, arith, cf, func, llvm, memref},
     ir::{
         attribute::{FlatSymbolRefAttribute, FloatAttribute, StringAttribute, TypeAttribute},
         r#type::{FunctionType, IntegerType, MemRefType},
@@ -461,7 +461,7 @@ fn compile_rvalue<'c: 'b, 'b>(
                             _ => unreachable!(),
                         }
                     }
-                    PlaceElem::Field(_, _) => todo!(),
+                    PlaceElem::Field(_) => todo!(),
                     PlaceElem::Index(_) => todo!(),
                 }
             }
@@ -812,7 +812,9 @@ fn compile_store_place<'c: 'b, 'b>(
                     .result(0)?
                     .into();
             }
-            PlaceElem::Field(_, _) => todo!(),
+            PlaceElem::Field(_field_idx) => {
+                todo!()
+            }
             PlaceElem::Index(_) => todo!(),
         }
     }
@@ -856,7 +858,7 @@ fn compile_load_place<'c: 'b, 'b>(
                     _ => unreachable!(),
                 }
             }
-            PlaceElem::Field(_, _) => todo!(),
+            PlaceElem::Field(_) => todo!(),
             PlaceElem::Index(_) => todo!(),
         }
     }
@@ -1044,5 +1046,19 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
             MemRefType::new(inner, &[], None, None).into()
         }
         concrete_ir::TyKind::Param { .. } => todo!(),
+        concrete_ir::TyKind::Struct { id, generics: _ } => {
+            let body = ctx.ctx.program.structs.get(id).unwrap();
+
+            let mut fields = Vec::new();
+
+            for field in &body.variants {
+                let ty = compile_type(ctx, &field.ty);
+                fields.push(ty);
+            }
+
+            let ty = melior::dialect::llvm::r#type::r#struct(ctx.ctx.mlir_context, &fields, false);
+
+            ty
+        }
     }
 }

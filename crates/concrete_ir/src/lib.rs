@@ -30,6 +30,8 @@ pub struct ProgramBody {
     pub modules: BTreeMap<DefId, ModuleBody>,
     /// This stores all the functions from all modules
     pub functions: BTreeMap<DefId, FnBody>,
+    /// This stores all the structs from all modules
+    pub structs: BTreeMap<DefId, AdtBody>,
     /// The function signatures.
     pub function_signatures: HashMap<DefId, (Vec<Ty>, Ty)>,
 }
@@ -174,7 +176,7 @@ pub enum PlaceElem {
     /// Dereference
     Deref,
     /// Get a field
-    Field(FieldIndex, TypeIndex),
+    Field(FieldIndex),
     /// array index
     Index(LocalIndex),
 }
@@ -224,16 +226,25 @@ pub enum LocalKind {
 }
 
 /// Aggregate data type: struct, enum, tuple..
+#[derive(Debug, Clone)]
 pub struct AdtBody {
-    pub name: DefId,
+    pub def_id: DefId,
+    pub is_pub: bool,
+    pub name: String,
     pub variants: Vec<VariantDef>,
+    pub name_to_idx: HashMap<String, usize>,
+    pub span: Span,
 }
 
-// Definition of a variant, a struct field or enum variant.
+
+/// Definition of a variant, a struct field or enum variant.
+#[derive(Debug, Clone)]
 pub struct VariantDef {
-    pub id: DefId,
+    pub def_id: DefId,
     // The relative position in the aggregate structure.
+    pub name: String,
     pub discriminant: usize,
+    pub ty: Ty,
 }
 
 // A definition id.
@@ -276,6 +287,10 @@ pub enum TyKind {
         index: usize,
         name: String, // todo: change me?
     },
+    Struct {
+        id: DefId,
+        generics: Vec<Ty>,
+    },
 }
 
 impl TyKind {
@@ -303,6 +318,7 @@ impl TyKind {
             TyKind::Array(_, _) => todo!(),
             TyKind::Ref(_, _) => todo!(),
             TyKind::Param { .. } => todo!(),
+            TyKind::Struct { .. } => todo!(),
         }
     }
 }

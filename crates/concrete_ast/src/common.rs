@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use crate::types::TypeSpec;
+
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Span {
     pub from: usize,
@@ -29,8 +31,9 @@ pub struct Ident {
     pub span: Span,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct GenericParam {
     pub name: Ident,
-    pub params: Vec<Ident>,
+    pub params: Vec<TypeSpec>,
+    pub span: Span,
 }

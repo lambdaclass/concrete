@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use crate::{
-    common::Ident,
+    common::{Ident, Span},
     statements::Statement,
     types::{RefType, TypeSpec},
 };
@@ -12,6 +14,7 @@ pub enum Expression {
     If(IfExpr),
     UnaryOp(UnaryOp, Box<Self>),
     BinaryOp(Box<Self>, BinaryOp, Box<Self>),
+    StructInit(StructInitExpr),
     Deref(Box<Self>),
     AsRef(Box<Self>, RefType),
 }
@@ -24,6 +27,19 @@ pub enum ValueExpr {
     ConstFloat(String),
     ConstStr(String),
     Path(PathOp),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StructInitExpr {
+    pub name: Ident,
+    pub fields: HashMap<Ident, StructInitField>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StructInitField {
+    pub value: Expression,
+    pub span: Span,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

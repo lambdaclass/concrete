@@ -27,11 +27,12 @@ pub struct LetStmt {
     pub is_mutable: bool,
     pub target: LetStmtTarget,
     pub value: Expression,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReturnStmt {
-    pub value: Expression,
+    pub value: Option<Expression>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
