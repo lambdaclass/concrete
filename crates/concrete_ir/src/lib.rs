@@ -236,7 +236,6 @@ pub struct AdtBody {
     pub span: Span,
 }
 
-
 /// Definition of a variant, a struct field or enum variant.
 #[derive(Debug, Clone)]
 pub struct VariantDef {

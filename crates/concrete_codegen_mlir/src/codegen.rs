@@ -6,10 +6,16 @@ use concrete_ir::{
 };
 use concrete_session::Session;
 use melior::{
-    dialect::{self, arith, cf, func, llvm, memref},
+    dialect::{
+        arith, cf, func,
+        llvm::{self, AllocaOptions, LoadStoreOptions},
+    },
     ir::{
-        attribute::{FlatSymbolRefAttribute, FloatAttribute, StringAttribute, TypeAttribute},
-        r#type::{FunctionType, IntegerType, MemRefType},
+        attribute::{
+            FlatSymbolRefAttribute, FloatAttribute, IntegerAttribute, StringAttribute,
+            TypeAttribute,
+        },
+        r#type::{FunctionType, IntegerType},
         Attribute, Block, Location, Module as MeliorModule, Region, Type, Value, ValueLike,
     },
     Context as MeliorContext,
@@ -169,6 +175,17 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
         // Since all the locals are together in a unspecified order in the IR.
         let mut param_index = 0;
 
+        let location = Location::unknown(ctx.context());
+
+        let const1 = entry_block
+            .append_operation(arith::constant(
+                ctx.context(),
+                IntegerAttribute::new(1, IntegerType::new(ctx.context(), 64).into()).into(),
+                location,
+            ))
+            .result(0)?
+            .into();
+
         for (index, local) in body.locals.iter().enumerate() {
             // Get the MLIR local type.
             let local_mlir_type = compile_type(ctx.module_ctx, &local.ty);
@@ -177,13 +194,13 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                 // User-declared variable binding or compiler-introduced temporary.
                 LocalKind::Temp => {
                     let ptr: Value = entry_block
-                        .append_operation(memref::alloca(
+                        .append_operation(llvm::alloca(
                             ctx.context(),
-                            MemRefType::new(local_mlir_type, &[], None, None),
-                            &[],
-                            &[],
-                            None,
-                            Location::unknown(ctx.context()),
+                            const1,
+                            llvm::r#type::opaque_pointer(ctx.context()),
+                            location,
+                            AllocaOptions::new()
+                                .elem_type(Some(TypeAttribute::new(local_mlir_type))),
                         ))
                         .result(0)?
                         .into();
@@ -195,22 +212,23 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                     param_index += 1;
 
                     let ptr: Value = entry_block
-                        .append_operation(memref::alloca(
+                        .append_operation(llvm::alloca(
                             ctx.context(),
-                            MemRefType::new(local_mlir_type, &[], None, None),
-                            &[],
-                            &[],
-                            None,
-                            Location::unknown(ctx.context()),
+                            const1,
+                            llvm::r#type::opaque_pointer(ctx.context()),
+                            location,
+                            AllocaOptions::new()
+                                .elem_type(Some(TypeAttribute::new(local_mlir_type))),
                         ))
                         .result(0)?
                         .into();
 
-                    entry_block.append_operation(memref::store(
+                    entry_block.append_operation(llvm::store(
+                        ctx.context(),
                         arg_value,
                         ptr,
-                        &[],
-                        Location::unknown(ctx.context()),
+                        location,
+                        LoadStoreOptions::default(),
                     ));
 
                     locals.insert(index, ptr);
@@ -221,13 +239,13 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                     } else {
                         return_local = Some(index);
                         let ptr: Value = entry_block
-                            .append_operation(memref::alloca(
+                            .append_operation(llvm::alloca(
                                 ctx.context(),
-                                MemRefType::new(local_mlir_type, &[], None, None),
-                                &[],
-                                &[],
-                                None,
-                                Location::unknown(ctx.context()),
+                                const1,
+                                llvm::r#type::opaque_pointer(ctx.context()),
+                                location,
+                                AllocaOptions::new()
+                                    .elem_type(Some(TypeAttribute::new(local_mlir_type))),
                             ))
                             .result(0)?
                             .into();
@@ -281,10 +299,12 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                     if let Some(ret_local) = return_local {
                         let ptr = locals.get(&ret_local).unwrap();
                         let value = mlir_block
-                            .append_operation(memref::load(
+                            .append_operation(llvm::load(
+                                ctx.context(),
                                 *ptr,
-                                &[],
+                                compile_type(ctx.module_ctx, &body.locals[ret_local].ty),
                                 Location::unknown(ctx.context()),
+                                LoadStoreOptions::default(),
                             ))
                             .result(0)?
                             .into();
@@ -448,18 +468,27 @@ fn compile_rvalue<'c: 'b, 'b>(
             for projection in &place.projection {
                 match projection {
                     PlaceElem::Deref => {
-                        value = block
-                            .append_operation(memref::load(
-                                value,
-                                &[],
-                                Location::unknown(ctx.context()),
-                            ))
-                            .result(0)?
-                            .into();
                         local_ty = match local_ty {
                             TyKind::Ref(inner, _) => *(inner.clone()),
                             _ => unreachable!(),
-                        }
+                        };
+
+                        value = block
+                            .append_operation(llvm::load(
+                                ctx.context(),
+                                value,
+                                compile_type(
+                                    ctx.module_ctx,
+                                    &Ty {
+                                        span: None,
+                                        kind: local_ty.clone(),
+                                    },
+                                ),
+                                Location::unknown(ctx.context()),
+                                LoadStoreOptions::default(),
+                            ))
+                            .result(0)?
+                            .into();
                     }
                     PlaceElem::Field(_) => todo!(),
                     PlaceElem::Index(_) => todo!(),
@@ -803,14 +832,33 @@ fn compile_store_place<'c: 'b, 'b>(
     locals: &HashMap<usize, Value<'c, '_>>,
 ) -> Result<(), CodegenError> {
     let mut ptr = locals[&info.local];
+    let local = &ctx.get_fn_body().locals[info.local];
+    let mut local_ty = local.ty.kind.clone();
 
     for proj in &info.projection {
         match proj {
             PlaceElem::Deref => {
                 ptr = block
-                    .append_operation(memref::load(ptr, &[], Location::unknown(ctx.context())))
+                    .append_operation(llvm::load(
+                        ctx.context(),
+                        ptr,
+                        compile_type(
+                            ctx.module_ctx,
+                            &Ty {
+                                span: local.span,
+                                kind: local_ty.clone(),
+                            },
+                        ),
+                        Location::unknown(ctx.context()),
+                        LoadStoreOptions::default(),
+                    ))
                     .result(0)?
                     .into();
+
+                local_ty = match local_ty {
+                    TyKind::Ref(inner, _) => *inner,
+                    _ => unreachable!(),
+                };
             }
             PlaceElem::Field(_field_idx) => {
                 todo!()
@@ -819,11 +867,12 @@ fn compile_store_place<'c: 'b, 'b>(
         }
     }
 
-    block.append_operation(memref::store(
+    block.append_operation(llvm::store(
+        ctx.context(),
         value,
         ptr,
-        &[],
         Location::unknown(ctx.context()),
+        LoadStoreOptions::default(),
     ));
 
     Ok(())
@@ -842,21 +891,39 @@ fn compile_load_place<'c: 'b, 'b>(
     let mut local_ty = body.locals[info.local].ty.kind.clone();
 
     let mut value = block
-        .append_operation(memref::load(ptr, &[], Location::unknown(ctx.context())))
+        .append_operation(llvm::load(
+            ctx.context(),
+            ptr,
+            compile_type(ctx.module_ctx, &body.locals[info.local].ty),
+            Location::unknown(ctx.context()),
+            LoadStoreOptions::default(),
+        ))
         .result(0)?
         .into();
 
     for projection in &info.projection {
         match projection {
             PlaceElem::Deref => {
-                value = block
-                    .append_operation(memref::load(value, &[], Location::unknown(ctx.context())))
-                    .result(0)?
-                    .into();
                 local_ty = match local_ty {
                     TyKind::Ref(inner, _) => *(inner.clone()),
                     _ => unreachable!(),
-                }
+                };
+                value = block
+                    .append_operation(llvm::load(
+                        ctx.context(),
+                        value,
+                        compile_type(
+                            ctx.module_ctx,
+                            &Ty {
+                                span: None,
+                                kind: local_ty.clone(),
+                            },
+                        ),
+                        Location::unknown(ctx.context()),
+                        LoadStoreOptions::default(),
+                    ))
+                    .result(0)?
+                    .into();
             }
             PlaceElem::Field(_) => todo!(),
             PlaceElem::Index(_) => todo!(),
@@ -1035,15 +1102,8 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
         },
         concrete_ir::TyKind::String => todo!(),
         concrete_ir::TyKind::Array(_, _) => todo!(),
-        concrete_ir::TyKind::Ref(inner_ty, _) => {
-            let inner = compile_type(
-                ctx,
-                &Ty {
-                    span: None,
-                    kind: *(inner_ty).clone(),
-                },
-            );
-            MemRefType::new(inner, &[], None, None).into()
+        concrete_ir::TyKind::Ref(_inner_ty, _) => {
+            llvm::r#type::opaque_pointer(ctx.ctx.mlir_context)
         }
         concrete_ir::TyKind::Param { .. } => todo!(),
         concrete_ir::TyKind::Struct { id, generics: _ } => {
