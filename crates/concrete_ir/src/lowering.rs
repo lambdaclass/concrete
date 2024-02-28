@@ -1095,7 +1095,7 @@ pub fn lower_path(builder: &mut FnBodyBuilder, info: &PathOp) -> (Place, Ty) {
     for segment in &info.extra {
         match segment {
             PathSegment::FieldAccess(name) => {
-                // is while fine? auto deref
+                // auto deref
                 while let TyKind::Ref(inner, _) = ty {
                     projection.push(PlaceElem::Deref);
                     ty = *inner;

@@ -1,0 +1,18 @@
+mod Simple {
+    struct Hello {
+        a: i32,
+        b: i64,
+    }
+
+    fn main() -> i64 {
+        let x: Hello = Hello {
+            a: 2,
+            b: 3,
+        };
+        return refs(&x);
+    }
+
+    fn refs(a: &Hello) -> i64 {
+        return a.b;
+    }
+}

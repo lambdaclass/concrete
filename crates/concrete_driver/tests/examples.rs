@@ -13,6 +13,7 @@ mod common;
 #[test_case(include_str!("../../../examples/chars.con"), "chars", false, 117 ; "chars.con")]
 #[test_case(include_str!("../../../examples/floats.con"), "floats", false, 1 ; "floats.con")]
 #[test_case(include_str!("../../../examples/refs.con"), "refs", false, 6 ; "refs.con")]
+#[test_case(include_str!("../../../examples/structs.con"), "structs", false, 3 ; "structs.con")]
 fn example_tests(source: &str, name: &str, is_library: bool, status_code: i32) {
     assert_eq!(
         status_code,

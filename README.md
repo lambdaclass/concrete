@@ -142,6 +142,29 @@ mod Fibonacci {
 ```
 
 ```rust
+mod Simple {
+    struct Hello {
+        a: i32,
+        b: i64,
+    }
+
+    fn main() -> i64 {
+        let x: Hello = Hello {
+            a: 2,
+            b: 3,
+        };
+
+        return refs(&x);
+    }
+
+    fn refs(a: &Hello) -> i64 {
+        return a.b;
+    }
+}
+
+```
+
+```rust
 mod Option {
     pub enum Option<T> {
         None,
@@ -205,8 +228,8 @@ Features:
 - imports ✔️
 - floats ✔️
 - borrowing ✔️
-- structs 🏗️
-- arrays :x:
+- structs ✔️
+- arrays 🏗️
 - iterators :x:
 - for :x:
 - match :x:
