@@ -122,7 +122,7 @@ fn test_factorial_with_if() {
 fn test_fib_with_if() {
     let source = r#"
         mod Fibonacci {
-            fn main() -> i64 {
+            fn main() -> u64 {
                 return fib(10);
             }
 
