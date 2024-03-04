@@ -335,7 +335,7 @@ pub(crate) StructInitExpr: ast::expressions::StructInitExpr = {
 
 pub(crate) Term: ast::expressions::Expression = {
   #[precedence(level="0")]
-  <ValueExpr> => ast::expressions::Expression::Value(<>),
+  <lo:@L> <v:ValueExpr> <hi:@R> => ast::expressions::Expression::Value(v, Span::new(lo, hi)),
   <FnCallOp> => ast::expressions::Expression::FnCall(<>),
   <MatchExpr> => ast::expressions::Expression::Match(<>),
   <IfExpr> => ast::expressions::Expression::If(<>),
@@ -417,52 +417,57 @@ pub(crate) ValueExpr: ast::expressions::ValueExpr = {
 }
 
 pub(crate) IfExpr: ast::expressions::IfExpr = {
-  "if" <value:Expression> "{" <contents:StatementList> "}"
-    <else_stmts:("else" "{" <StatementList> "}")?> => {
+  <lo:@L> "if" <value:Expression> "{" <contents:StatementList> "}"
+    <else_stmts:("else" "{" <StatementList> "}")?> <hi:@R> => {
     ast::expressions::IfExpr {
       value: Box::new(value),
       contents,
       r#else: else_stmts,
+      span: Span::new(lo, hi)
     }
   }
 }
 
 pub(crate) MatchExpr: ast::expressions::MatchExpr = {
-  "match" <value:Expression> "{" <variants:Comma<MatchVariant>> "}" => {
+  <lo:@L> "match" <value:Expression> "{" <variants:Comma<MatchVariant>> "}" <hi:@R> => {
     ast::expressions::MatchExpr {
       value: Box::new(value),
-      variants
+      variants,
+      span: Span::new(lo, hi)
     }
   }
 }
 
 pub(crate) MatchVariant: ast::expressions::MatchVariant = {
   // 0 -> 1
-  <case:ValueExpr> "->" <stmt:Statement> => {
+  <lo:@L> <case:ValueExpr> "->" <stmt:Statement> <hi:@R> => {
     ast::expressions::MatchVariant {
       case,
-      block: vec![stmt]
+      block: vec![stmt],
+      span: Span::new(lo, hi)
     }
   },
   // x -> { ... }
-  <case:ValueExpr> "->" "{" <stmts:StatementList> "}" => {
+  <lo:@L> <case:ValueExpr> "->" "{" <stmts:StatementList> "}" <hi:@R> => {
     ast::expressions::MatchVariant {
       case,
-      block: stmts
+      block: stmts,
+      span: Span::new(lo, hi)
     }
   }
 }
 
 pub(crate) PathOp: ast::expressions::PathOp = {
-  <first:Ident> <extra:PathSegments?> => ast::expressions::PathOp {
+  <lo:@L> <first:Ident> <extra:PathSegments?> <hi:@R> => ast::expressions::PathOp {
     first,
     extra: extra.unwrap_or(vec![]),
+    span: Span::new(lo, hi),
   },
 }
 
 pub(crate) PathSegment: ast::expressions::PathSegment = {
-  "." <Ident> => ast::expressions::PathSegment::FieldAccess(<>),
-  "[" <e:ValueExpr> "]" => ast::expressions::PathSegment::ArrayIndex(e),
+  <lo:@L> "." <e:Ident> <hi:@R> => ast::expressions::PathSegment::FieldAccess(e, Span::new(lo, hi)),
+  <lo:@L> "[" <e:ValueExpr> "]" <hi:@R> => ast::expressions::PathSegment::ArrayIndex(e, Span::new(lo, hi)),
 }
 
 pub PathSegments: Vec<ast::expressions::PathSegment> = {
@@ -474,9 +479,10 @@ pub PathSegments: Vec<ast::expressions::PathSegment> = {
 }
 
 pub(crate) FnCallOp: ast::expressions::FnCallOp = {
-  <target:Ident> "(" <args:Comma<Expression>> ")" => ast::expressions::FnCallOp {
+  <lo:@L> <target:Ident> "(" <args:Comma<Expression>> ")" <hi:@R> => ast::expressions::FnCallOp {
     target,
-    args
+    args,
+    span: Span::new(lo, hi),
   }
 }
 

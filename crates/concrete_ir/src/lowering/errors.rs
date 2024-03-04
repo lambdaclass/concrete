@@ -1,7 +1,7 @@
 use concrete_ast::common::{Ident, Span};
 use thiserror::Error;
 
-use crate::DefId;
+use crate::{DefId, Ty, TyKind};
 
 #[derive(Debug, Error, Clone)]
 pub enum LoweringError {
@@ -27,4 +27,10 @@ pub enum LoweringError {
     IdNotFound { span: Span, id: DefId },
     #[error("feature not yet implemented: {message}")]
     NotYetImplemented { span: Span, message: &'static str },
+    #[error("unexpected type")]
+    UnexpectedType {
+        span: Span,
+        found: TyKind,
+        expected: Ty,
+    },
 }

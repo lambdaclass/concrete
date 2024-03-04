@@ -8,7 +8,7 @@ use crate::{
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Expression {
-    Value(ValueExpr),
+    Value(ValueExpr, Span),
     FnCall(FnCallOp),
     Match(MatchExpr),
     If(IfExpr),
@@ -93,6 +93,7 @@ pub enum BitwiseOp {
 pub struct MatchExpr {
     pub value: Box<Expression>,
     pub variants: Vec<MatchVariant>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -100,24 +101,27 @@ pub struct IfExpr {
     pub value: Box<Expression>,
     pub contents: Vec<Statement>,
     pub r#else: Option<Vec<Statement>>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MatchVariant {
     pub case: ValueExpr,
     pub block: Vec<Statement>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PathSegment {
-    FieldAccess(Ident),
-    ArrayIndex(ValueExpr),
+    FieldAccess(Ident, Span),
+    ArrayIndex(ValueExpr, Span),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PathOp {
     pub first: Ident,
     pub extra: Vec<PathSegment>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -130,4 +134,5 @@ pub struct CastOp {
 pub struct FnCallOp {
     pub target: Ident,
     pub args: Vec<Expression>,
+    pub span: Span,
 }
