@@ -15,6 +15,8 @@ pub enum LoweringError {
         import_span: Span,
         symbol: Ident,
     },
+    #[error("use of underclared variable {name:?}")]
+    UseOfUndeclaredVariable { span: Span, name: String },
     #[error("trying to mutate a non-mutable reference")]
     BorrowNotMutable {
         span: Span,

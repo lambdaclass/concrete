@@ -81,3 +81,21 @@ pub fn check_invalid_program(source: &str, name: &str) -> LoweringError {
 
     lower_program(&program).expect_err("expected error")
 }
+
+#[test]
+fn undeclared_var() {
+    let (source, name) = (
+        include_str!("invalid_programs/undeclared_var.con"),
+        "undeclared_var",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(
+            &error,
+            LoweringError::UseOfUndeclaredVariable { name, .. } if name == "b"
+        ),
+        "{:#?}",
+        error
+    );
+}

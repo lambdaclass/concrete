@@ -1,0 +1,6 @@
+mod Simple {
+    fn main() -> i32 {
+        b = 2;
+        return 0;
+    }
+}

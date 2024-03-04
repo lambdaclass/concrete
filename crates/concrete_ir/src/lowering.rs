@@ -539,7 +539,7 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), Lowering
 }
 
 fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), LoweringError> {
-    let (mut place, mut ty, _path_span) = lower_path(builder, &info.target);
+    let (mut place, mut ty, _path_span) = lower_path(builder, &info.target)?;
 
     for _ in 0..info.derefs {
         match &ty.kind {
@@ -681,7 +681,7 @@ fn lower_expression(
 ) -> Result<(Rvalue, TyKind, Span), LoweringError> {
     Ok(match info {
         Expression::Value(info, span) => {
-            let value = lower_value_expr(builder, info, type_hint);
+            let value = lower_value_expr(builder, info, type_hint)?;
             (value.0, value.1, *span)
         }
         Expression::FnCall(info) => lower_fn_call(builder, info)?,
@@ -1008,8 +1008,8 @@ fn lower_value_expr(
     builder: &mut FnBodyBuilder,
     info: &ValueExpr,
     type_hint: Option<TyKind>,
-) -> (Rvalue, TyKind) {
-    match info {
+) -> Result<(Rvalue, TyKind), LoweringError> {
+    Ok(match info {
         ValueExpr::ConstBool(value) => (
             Rvalue::Use(Operand::Const(ConstData {
                 ty: TyKind::Bool,
@@ -1115,17 +1115,22 @@ fn lower_value_expr(
         }
         ValueExpr::ConstStr(_) => todo!(),
         ValueExpr::Path(info) => {
-            let (place, place_ty, _span) = lower_path(builder, info);
+            let (place, place_ty, _span) = lower_path(builder, info)?;
             (Rvalue::Use(Operand::Place(place.clone())), place_ty.kind)
         }
-    }
+    })
 }
 
-pub fn lower_path(builder: &mut FnBodyBuilder, info: &PathOp) -> (Place, Ty, Span) {
-    let local = *builder
-        .name_to_local
-        .get(&info.first.name)
-        .expect("local not found");
+pub fn lower_path(
+    builder: &mut FnBodyBuilder,
+    info: &PathOp,
+) -> Result<(Place, Ty, Span), LoweringError> {
+    let local = *builder.name_to_local.get(&info.first.name).ok_or(
+        LoweringError::UseOfUndeclaredVariable {
+            span: info.span,
+            name: info.first.name.clone(),
+        },
+    )?;
 
     let ty = builder.body.locals[local].ty.clone();
     let ty_span = ty.span;
@@ -1152,14 +1157,14 @@ pub fn lower_path(builder: &mut FnBodyBuilder, info: &PathOp) -> (Place, Ty, Spa
         }
     }
 
-    (
+    Ok((
         Place { local, projection },
         Ty {
             span: ty_span,
             kind: ty,
         },
         info.span,
-    )
+    ))
 }
 
 pub fn lower_type(ctx: &BuildCtx, spec: &TypeSpec, module_id: DefId) -> Result<Ty, LoweringError> {
