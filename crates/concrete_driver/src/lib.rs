@@ -21,6 +21,10 @@ pub struct CompilerArgs {
     #[arg(short, long, default_value_t = false)]
     release: bool,
 
+    /// Set the optimization level, 0,1,2,3
+    #[arg(short = 'O', long)]
+    optlevel: Option<u8>,
+
     /// Build as a library.
     #[arg(short, long, default_value_t = false)]
     library: bool,
@@ -106,7 +110,14 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         } else {
             DebugInfo::Full
         },
-        optlevel: if args.release {
+        optlevel: if let Some(optlevel) = args.optlevel {
+            match optlevel {
+                0 => OptLevel::None,
+                1 => OptLevel::Less,
+                2 => OptLevel::Default,
+                _ => OptLevel::Aggressive,
+            }
+        } else if args.release {
             OptLevel::Aggressive
         } else {
             OptLevel::None

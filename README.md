@@ -148,20 +148,21 @@ mod Simple {
         b: i64,
     }
 
-    fn main() -> i64 {
-        let x: Hello = Hello {
+    fn main() -> i32 {
+        let mut x: Hello = Hello {
             a: 2,
             b: 3,
         };
 
-        return refs(&x);
+        x.a = x.a * 2;
+
+        return get_a_field(&x) + x.a;
     }
 
-    fn refs(a: &Hello) -> i64 {
-        return a.b;
+    fn get_a_field(a: &Hello) -> i32 {
+        return a.a;
     }
 }
-
 ```
 
 ```rust
