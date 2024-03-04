@@ -543,8 +543,9 @@ pub(crate) AssignStmt: ast::statements::AssignStmt = {
 }
 
 pub(crate) ReturnStmt: ast::statements::ReturnStmt = {
-  "return" <value:Expression?> => ast::statements::ReturnStmt {
+  <lo:@L> "return" <value:Expression?> <hi:@R> => ast::statements::ReturnStmt {
     value,
+    span: Span::new(lo, hi),
   },
 }
 

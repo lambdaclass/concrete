@@ -242,7 +242,10 @@ fn lower_func(
         .as_ref()
         .map(|r| lower_type(&builder.ctx, r, builder.local_module))
         .transpose()?
-        .map(|x| x.kind);
+        .unwrap_or(Ty {
+            span: None,
+            kind: TyKind::Unit,
+        });
     for stmt in &func.body {
         lower_statement(&mut builder, stmt, ret_type.clone())?;
     }
@@ -268,7 +271,7 @@ fn lower_func(
 fn lower_statement(
     builder: &mut FnBodyBuilder,
     info: &concrete_ast::statements::Statement,
-    ret_type: Option<TyKind>,
+    ret_type: Ty,
 ) -> Result<(), LoweringError> {
     match info {
         statements::Statement::Assign(info) => lower_assign(builder, info)?,
@@ -332,7 +335,7 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), Lowe
         lower_statement(
             builder,
             stmt,
-            Some(builder.body.locals[builder.ret_local].ty.kind.clone()),
+            builder.body.locals[builder.ret_local].ty.clone(),
         )?;
     }
 
@@ -414,7 +417,7 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
         lower_statement(
             builder,
             stmt,
-            Some(builder.body.locals[builder.ret_local].ty.kind.clone()),
+            builder.body.locals[builder.ret_local].ty.clone(),
         )?;
     }
 
@@ -445,7 +448,7 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
             lower_statement(
                 builder,
                 stmt,
-                Some(builder.body.locals[builder.ret_local].ty.kind.clone()),
+                builder.body.locals[builder.ret_local].ty.clone(),
             )?;
         }
     }
@@ -575,20 +578,19 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
 fn lower_return(
     builder: &mut FnBodyBuilder,
     info: &ReturnStmt,
-    ret_type_hint: Option<TyKind>,
+    ret_type: Ty,
 ) -> Result<(), LoweringError> {
     if let Some(value_exp) = &info.value {
-        let (value, _value_ty, _exp_span) = lower_expression(builder, value_exp, ret_type_hint)?;
+        let (value, value_ty, _exp_span) =
+            lower_expression(builder, value_exp, Some(ret_type.kind.clone()))?;
 
-        /*
-        if return_type.kind != ty {
+        if ret_type.kind != value_ty {
             return Err(LoweringError::UnexpectedType {
-                span,
-                found: ty,
-                expected: return_type.clone(),
+                span: info.span,
+                found: value_ty,
+                expected: ret_type.clone(),
             });
         }
-        */
 
         builder.statements.push(Statement {
             span: None,

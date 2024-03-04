@@ -33,6 +33,7 @@ pub struct LetStmt {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReturnStmt {
     pub value: Option<Expression>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
