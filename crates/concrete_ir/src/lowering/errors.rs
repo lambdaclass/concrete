@@ -9,6 +9,8 @@ pub enum LoweringError {
     ModuleNotFound { span: Span, module: String },
     #[error("function {function:?} not found")]
     FunctionNotFound { span: Span, function: String },
+    #[error("struct field {name:?} not found")]
+    StructFieldNotFound { span: Span, name: String },
     #[error("symbol {:?} not found", symbol.name)]
     ImportNotFound {
         module_span: Span,

@@ -1141,7 +1141,7 @@ pub fn lower_path(
 
     for segment in &info.extra {
         match segment {
-            PathSegment::FieldAccess(name, _field_span) => {
+            PathSegment::FieldAccess(name, field_span) => {
                 // auto deref
                 while let TyKind::Ref(inner, _) = ty {
                     projection.push(PlaceElem::Deref);
@@ -1150,7 +1150,12 @@ pub fn lower_path(
 
                 if let TyKind::Struct { id, generics: _ } = ty {
                     let struct_body = builder.ctx.body.structs.get(&id).unwrap();
-                    let idx = *struct_body.name_to_idx.get(&name.name).unwrap();
+                    let idx = *struct_body.name_to_idx.get(&name.name).ok_or_else(|| {
+                        LoweringError::StructFieldNotFound {
+                            span: *field_span,
+                            name: name.name.clone(),
+                        }
+                    })?;
                     projection.push(PlaceElem::Field(idx));
                     ty = struct_body.variants[idx].ty.kind.clone();
                 }

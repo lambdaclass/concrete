@@ -142,25 +142,25 @@ mod Fibonacci {
 ```
 
 ```rust
-mod Simple {
-    struct Hello {
-        a: i32,
-        b: i64,
+mod StructExample {
+    struct Foo {
+        bar: i32,
+        baz: i64,
     }
 
     fn main() -> i32 {
-        let mut x: Hello = Hello {
-            a: 2,
-            b: 3,
+        let mut foo: Foo = Foo {
+            bar: 2,
+            baz: 3,
         };
 
-        x.a = x.a * 2;
+        foo.bar = foo.bar * 2;
 
-        return get_a_field(&x) + x.a;
+        return get_foo_field_by_borrow(&foo) + foo.bar;
     }
 
-    fn get_a_field(a: &Hello) -> i32 {
-        return a.a;
+    fn get_foo_field_by_borrow(x: &Foo) -> i32 {
+        return x.bar;
     }
 }
 ```

@@ -35,6 +35,16 @@ pub fn lowering_error_to_report(
             )
             .finish()
         },
+        LoweringError::StructFieldNotFound { span, name } => {
+            Report::build(ReportKind::Error, path.clone(), span.from)
+            .with_code("StructFieldNotFound")
+            .with_label(
+                Label::new((path, span.into()))
+                    .with_message(format!("Struct field {name:?} not found."))
+                    .with_color(colors.next()),
+            )
+            .finish()
+        },
         LoweringError::ImportNotFound { import_span, module_span, symbol } => {
                 let offset = symbol.span.from;
                 Report::build(ReportKind::Error, path.clone(), offset)
