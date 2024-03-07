@@ -15,11 +15,11 @@ function bench_program() {
 
     echo -e "### ${RED}Benchmarking $name ${NC}"
 
-    rustc --crate-type=cdylib "$name.rs" -C opt-level=3 -o "${name}_rs.so" > /dev/null 2>&1
+    rustc --crate-type=cdylib "$name.rs" -C target-cpu=native -C opt-level=3 -o "${name}_rs.so" > /dev/null 2>&1
     cargo r -- "$name.con"  --library --release > /dev/null 2>&1
     cp "./build_artifacts/$name.so" "${name}_con.so"
 
-    cc bench.c -L . -l:./"${name}"_rs.so -l:./"${name}"_con.so -Wl,-rpath -o bench_"${name}"
+    cc -march=native -mtune=native bench.c -L . -l:./"${name}"_rs.so -l:./"${name}"_con.so -Wl,-rpath -o bench_"${name}"
 
     ./bench_"${name}" "$num_iters" "$input"
 }
@@ -45,4 +45,4 @@ bench_program "factorial" 5000000 20
 bench_program "fib" 5000 20
 
 # Cleanup
-rm ./*.so
+#rm ./*.so
