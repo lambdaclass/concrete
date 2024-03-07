@@ -1,4 +1,4 @@
-mod Simple {
+mod Example {
     import Other.{hello1};
     import Other.Deep.{hello2};
     import Hello.{world};

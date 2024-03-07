@@ -1,4 +1,4 @@
-mod Simple {
+mod Example {
     fn main() -> i32 {
         let x: i32 = 2;
         let y: i32 = 4;

@@ -1,4 +1,4 @@
-mod Simple {
+mod Factorial {
     fn main() -> i64 {
         return factorial(4);
     }

@@ -142,6 +142,30 @@ mod Fibonacci {
 ```
 
 ```rust
+mod StructExample {
+    struct Foo {
+        bar: i32,
+        baz: i64,
+    }
+
+    fn main() -> i32 {
+        let mut foo: Foo = Foo {
+            bar: 2,
+            baz: 3,
+        };
+
+        foo.bar = foo.bar * 2;
+
+        return get_foo_field_by_borrow(&foo) + foo.bar;
+    }
+
+    fn get_foo_field_by_borrow(x: &Foo) -> i32 {
+        return x.bar;
+    }
+}
+```
+
+```rust
 mod Option {
     pub enum Option<T> {
         None,
@@ -205,8 +229,8 @@ Features:
 - imports ✔️
 - floats ✔️
 - borrowing ✔️
-- structs 🏗️
-- arrays :x:
+- structs ✔️
+- arrays 🏗️
 - iterators :x:
 - for :x:
 - match :x:

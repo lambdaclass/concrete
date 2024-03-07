@@ -29,4 +29,4 @@ test: check-deps
 	cargo test --workspace --all-targets --all-features
 
 coverage: check-deps
-	cargo llvm-cov --verbose --all-features --workspace --lcov --output-path lcov.info
+	cargo llvm-cov --verbose --all-features --all-targets --workspace --lcov --output-path lcov.info
