@@ -7,7 +7,7 @@ use concrete_ast::{
         ArithOp, BinaryOp, BitwiseOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp,
         PathSegment, ValueExpr,
     },
-    functions::FunctionDef,
+    functions::{FunctionDecl, FunctionDef},
     modules::{Module, ModuleDefItem},
     statements::{self, AssignStmt, LetStmt, LetStmtTarget, ReturnStmt, WhileStmt},
     structs::StructDecl,
@@ -78,34 +78,68 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
 
     // fill fn sigs
     for content in &module.contents {
-        if let ModuleDefItem::Function(fn_def) = content {
-            let fn_id = *body
-                .symbols
-                .functions
-                .get(&fn_def.decl.name.name)
-                .ok_or_else(|| LoweringError::FunctionNotFound {
-                    span: fn_def.span,
-                    function: fn_def.decl.name.name.clone(),
-                })?;
+        match content {
+            ModuleDefItem::Function(fn_def) => {
+                let fn_id = *body
+                    .symbols
+                    .functions
+                    .get(&fn_def.decl.name.name)
+                    .ok_or_else(|| LoweringError::FunctionNotFound {
+                        span: fn_def.span,
+                        function: fn_def.decl.name.name.clone(),
+                    })?;
 
-            let mut args = Vec::new();
-            let ret_type;
+                let mut args = Vec::new();
+                let ret_type;
 
-            for arg in &fn_def.decl.params {
-                let ty = lower_type(&ctx, &arg.r#type, id)?;
-                args.push(ty);
+                for arg in &fn_def.decl.params {
+                    let ty = lower_type(&ctx, &arg.r#type, id)?;
+                    args.push(ty);
+                }
+
+                if let Some(ty) = &fn_def.decl.ret_type {
+                    ret_type = lower_type(&ctx, ty, id)?;
+                } else {
+                    ret_type = Ty {
+                        span: None,
+                        kind: TyKind::Unit,
+                    };
+                }
+
+                ctx.body.function_signatures.insert(fn_id, (args, ret_type));
+                ctx.unresolved_function_signatures.remove(&fn_id);
             }
+            ModuleDefItem::FunctionDecl(fn_decl) => {
+                let fn_id = *body
+                    .symbols
+                    .functions
+                    .get(&fn_decl.name.name)
+                    .ok_or_else(|| LoweringError::FunctionNotFound {
+                        span: fn_decl.span,
+                        function: fn_decl.name.name.clone(),
+                    })?;
 
-            if let Some(ty) = &fn_def.decl.ret_type {
-                ret_type = lower_type(&ctx, ty, id)?;
-            } else {
-                ret_type = Ty {
-                    span: None,
-                    kind: TyKind::Unit,
-                };
+                let mut args = Vec::new();
+                let ret_type;
+
+                for arg in &fn_decl.params {
+                    let ty = lower_type(&ctx, &arg.r#type, id)?;
+                    args.push(ty);
+                }
+
+                if let Some(ty) = &fn_decl.ret_type {
+                    ret_type = lower_type(&ctx, ty, id)?;
+                } else {
+                    ret_type = Ty {
+                        span: None,
+                        kind: TyKind::Unit,
+                    };
+                }
+
+                ctx.body.function_signatures.insert(fn_id, (args, ret_type));
+                ctx.unresolved_function_signatures.remove(&fn_id);
             }
-
-            ctx.body.function_signatures.insert(fn_id, (args, ret_type));
+            _ => {}
         }
     }
 
@@ -122,6 +156,9 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                 ctx = lower_module(ctx, mod_def, id)?;
             }
             ModuleDefItem::Struct(_) => { /* already processed */ }
+            ModuleDefItem::FunctionDecl(fn_decl) => {
+                ctx = lower_func_decl(ctx, fn_decl, id)?;
+            }
         }
     }
 
@@ -170,6 +207,7 @@ fn lower_func(
         body: FnBody {
             basic_blocks: Vec::new(),
             locals: Vec::new(),
+            is_extern: func.decl.is_extern,
             name: func.decl.name.name.clone(),
             id: {
                 let body = ctx.body.modules.get(&module_id).unwrap();
@@ -182,6 +220,13 @@ fn lower_func(
         statements: Vec::new(),
         ctx,
     };
+
+    if !func.body.is_empty() && func.decl.is_extern {
+        return Err(LoweringError::ExternFnWithBody {
+            span: func.span,
+            name: func.decl.name.name.clone(),
+        });
+    }
 
     let fn_id = *builder
         .get_module_body()
@@ -246,6 +291,7 @@ fn lower_func(
             span: None,
             kind: TyKind::Unit,
         });
+
     for stmt in &func.body {
         lower_statement(&mut builder, stmt, ret_type.clone())?;
     }
@@ -260,6 +306,36 @@ fn lower_func(
             }),
         });
     }
+
+    let (mut ctx, body) = (builder.ctx, builder.body);
+    ctx.unresolved_function_signatures.remove(&body.id);
+    ctx.body.functions.insert(body.id, body);
+
+    Ok(ctx)
+}
+
+fn lower_func_decl(
+    ctx: BuildCtx,
+    func: &FunctionDecl,
+    module_id: DefId,
+) -> Result<BuildCtx, LoweringError> {
+    let builder = FnBodyBuilder {
+        body: FnBody {
+            basic_blocks: Vec::new(),
+            locals: Vec::new(),
+            is_extern: func.is_extern,
+            name: func.name.name.clone(),
+            id: {
+                let body = ctx.body.modules.get(&module_id).unwrap();
+                *body.symbols.functions.get(&func.name.name).unwrap()
+            },
+        },
+        local_module: module_id,
+        ret_local: 0,
+        name_to_local: HashMap::new(),
+        statements: Vec::new(),
+        ctx,
+    };
 
     let (mut ctx, body) = (builder.ctx, builder.body);
     ctx.unresolved_function_signatures.remove(&body.id);

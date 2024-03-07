@@ -27,6 +27,7 @@ extern {
     "pub" => Token::KeywordPub,
     "mut" => Token::KeywordMut,
     "import" => Token::KeywordImport,
+    "extern" => Token::KeywordExtern,
 
     // literals
     "identifier" => Token::Identifier(<String>),
@@ -241,6 +242,9 @@ pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
   <FunctionDef> => {
     ast::modules::ModuleDefItem::Function(<>)
   },
+  <FunctionDecl> ";" => {
+    ast::modules::ModuleDefItem::FunctionDecl(<>)
+  },
   <Module> => {
     ast::modules::ModuleDefItem::Module(<>)
   },
@@ -275,18 +279,26 @@ pub(crate) Param: ast::functions::Param = {
   }
 }
 
-pub(crate) FunctionDef: ast::functions::FunctionDef = {
-  <lo:@L> <is_pub:"pub"?> "fn" <name:Ident> <generic_params:GenericParams?> "(" <params:Comma<Param>> ")" <ret_type:FunctionRetType?> "{"
-    <statements:StatementList?>
-  "}" <hi:@R> => {
-    ast::functions::FunctionDef {
-      decl: ast::functions::FunctionDecl {
+pub(crate) FunctionDecl: ast::functions::FunctionDecl = {
+  <lo:@L> <is_pub:"pub"?> <is_extern:"extern"?>
+      "fn" <name:Ident> <generic_params:GenericParams?> "(" <params:Comma<Param>> ")"
+        <ret_type:FunctionRetType?> <hi:@R> =>
+    ast::functions::FunctionDecl {
         doc_string: None,
         generic_params: generic_params.unwrap_or(vec![]),
         name,
         params,
         ret_type,
-      },
+        is_extern: is_extern.is_some(),
+        is_pub: is_pub.is_some(),
+        span: Span::new(lo, hi),
+  }
+}
+
+pub(crate) FunctionDef: ast::functions::FunctionDef = {
+  <lo:@L> <decl:FunctionDecl> "{" <statements:StatementList?> "}" <hi:@R> => {
+    ast::functions::FunctionDef {
+      decl,
       body: statements.unwrap_or_else(Vec::new),
       span: Span::new(lo, hi),
     }

@@ -64,6 +64,7 @@ pub struct ModuleBody {
 pub struct FnBody {
     pub id: DefId,
     pub name: String,
+    pub is_extern: bool,
     pub basic_blocks: Vec<BasicBlock>,
     pub locals: Vec<Local>,
 }

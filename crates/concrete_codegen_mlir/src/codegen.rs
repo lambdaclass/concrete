@@ -16,7 +16,8 @@ use melior::{
             StringAttribute, TypeAttribute,
         },
         r#type::{FunctionType, IntegerType},
-        Attribute, Block, Location, Module as MeliorModule, Region, Type, Value, ValueLike,
+        Attribute, Block, Identifier, Location, Module as MeliorModule, Region, Type, Value,
+        ValueLike,
     },
     Context as MeliorContext,
 };
@@ -163,7 +164,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
         })
         .collect();
 
-    {
+    if !body.is_extern {
         // The entry block doesn't exist in the IR, its where we create all the stack allocations for the locals.
         let entry_block = region.append_block(Block::new(&params_ty));
 
@@ -430,12 +431,22 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
     // Create the function mlir attribute.
     let func_type = FunctionType::new(ctx.context(), &param_types, return_type.as_slice());
 
+    let mut fn_attributes = vec![];
+
+    if body.is_extern {
+        // extern declared functions need private visibility
+        fn_attributes.push((
+            Identifier::new(ctx.context(), "sym_visibility"),
+            StringAttribute::new(ctx.context(), "private").into(),
+        ));
+    }
+
     let func_op = func::func(
         ctx.context(),
         StringAttribute::new(ctx.context(), &body.name),
         TypeAttribute::new(func_type.into()),
         region,
-        &[],
+        &fn_attributes,
         Location::unknown(ctx.context()),
     );
 

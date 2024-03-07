@@ -146,5 +146,15 @@ pub fn lowering_error_to_report(
             )
             .finish()
         },
+        LoweringError::ExternFnWithBody { span, name } => {
+            Report::build(ReportKind::Error, path.clone(), span.from)
+            .with_code("ExternFnWithBody")
+            .with_label(
+                Label::new((path, span.into()))
+                    .with_message(format!("extern function {:?} declared with body", name))
+                    .with_color(colors.next()),
+            )
+            .finish()
+        },
     }
 }

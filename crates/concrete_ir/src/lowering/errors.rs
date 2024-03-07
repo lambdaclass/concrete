@@ -37,4 +37,6 @@ pub enum LoweringError {
         found: TyKind,
         expected: Ty,
     },
+    #[error("extern function {name:?} has a body")]
+    ExternFnWithBody { span: Span, name: String },
 }

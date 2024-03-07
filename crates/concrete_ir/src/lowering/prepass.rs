@@ -95,6 +95,21 @@ pub fn prepass_module(
                         .insert(info.name.name.clone(), next_id);
                     current_module.modules.insert(next_id);
                 }
+                ast::modules::ModuleDefItem::FunctionDecl(info) => {
+                    let next_id = gen.next_defid();
+                    current_module
+                        .symbols
+                        .functions
+                        .insert(info.name.name.clone(), next_id);
+                    current_module.functions.insert(next_id);
+                    ctx.unresolved_function_signatures.insert(
+                        next_id,
+                        (
+                            info.params.iter().map(|x| &x.r#type).cloned().collect(),
+                            info.ret_type.clone(),
+                        ),
+                    );
+                }
             }
         }
 
@@ -194,6 +209,21 @@ pub fn prepass_sub_module(
                         .modules
                         .insert(info.name.name.clone(), next_id);
                     submodule.modules.insert(next_id);
+                }
+                ast::modules::ModuleDefItem::FunctionDecl(info) => {
+                    let next_id = gen.next_defid();
+                    submodule
+                        .symbols
+                        .functions
+                        .insert(info.name.name.clone(), next_id);
+                    submodule.functions.insert(next_id);
+                    ctx.unresolved_function_signatures.insert(
+                        next_id,
+                        (
+                            info.params.iter().map(|x| &x.r#type).cloned().collect(),
+                            info.ret_type.clone(),
+                        ),
+                    );
                 }
             }
         }
