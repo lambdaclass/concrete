@@ -45,4 +45,4 @@ bench_program "factorial" 5000000 20
 bench_program "fib" 5000 20
 
 # Cleanup
-#rm ./*.so
+rm ./*.so
