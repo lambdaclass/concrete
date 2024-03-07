@@ -20,3 +20,6 @@ target/
 lcov.info
 
 build_artifacts/
+
+*.so
+*.a
