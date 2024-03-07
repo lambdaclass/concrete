@@ -24,7 +24,25 @@ function bench_program() {
     ./bench_"${name}" "$num_iters" "$input"
 }
 
+: '
+Bench program requirements:
+
+- Rust
+
+Function signature should match the following
+
+#[no_mangle]
+pub extern "C" fn rust_function(n: u64) -> u64
+
+- Concrete
+
+Function signature should match the following (in the future if manglign is added, make sure to add no_mangle)
+
+fn concrete_function(n: u64) -> u64
+'
+
 bench_program "factorial" 5000000 20
 bench_program "fib" 5000 20
 
+# Cleanup
 rm ./*.so
