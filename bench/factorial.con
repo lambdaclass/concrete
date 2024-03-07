@@ -1,9 +1,9 @@
 mod Factorial {
-    fn factorial_concrete(n: u64) -> u64 {
+    fn concrete_function(n: u64) -> u64 {
         if n == 0 {
             return 1;
         } else {
-            return n * factorial_concrete(n - 1);
+            return n * concrete_function(n - 1);
         }
     }
 }

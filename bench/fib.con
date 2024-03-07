@@ -1,0 +1,9 @@
+mod Fibonacci {
+    pub fn concrete_function(n: u64) -> u64 {
+        if n < 2 {
+            return n;
+        }
+
+        return concrete_function(n - 1) + concrete_function(n - 2);
+    }
+}
