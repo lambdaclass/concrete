@@ -1,4 +1,4 @@
- mod Simple {
+ mod Example {
     fn main() -> i64 {
         let a: f32 = my_f32(2.0, 4.0);
         let b: f64 = my_f64(2.0, 4.0);

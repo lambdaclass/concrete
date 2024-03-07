@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    fmt,
+};
 
 use concrete_ast::common::Ident;
 
@@ -10,6 +13,7 @@ pub type TypeIndex = usize;
 pub type FieldIndex = usize;
 
 pub use concrete_ast::common::Span;
+use educe::Educe;
 
 #[derive(Debug, Clone, Default)]
 pub struct SymbolTable {
@@ -30,6 +34,8 @@ pub struct ProgramBody {
     pub modules: BTreeMap<DefId, ModuleBody>,
     /// This stores all the functions from all modules
     pub functions: BTreeMap<DefId, FnBody>,
+    /// This stores all the structs from all modules
+    pub structs: BTreeMap<DefId, AdtBody>,
     /// The function signatures.
     pub function_signatures: HashMap<DefId, (Vec<Ty>, Ty)>,
 }
@@ -174,7 +180,7 @@ pub enum PlaceElem {
     /// Dereference
     Deref,
     /// Get a field
-    Field(FieldIndex, TypeIndex),
+    Field(FieldIndex),
     /// array index
     Index(LocalIndex),
 }
@@ -224,16 +230,24 @@ pub enum LocalKind {
 }
 
 /// Aggregate data type: struct, enum, tuple..
+#[derive(Debug, Clone)]
 pub struct AdtBody {
-    pub name: DefId,
+    pub def_id: DefId,
+    pub is_pub: bool,
+    pub name: String,
     pub variants: Vec<VariantDef>,
+    pub name_to_idx: HashMap<String, usize>,
+    pub span: Span,
 }
 
-// Definition of a variant, a struct field or enum variant.
+/// Definition of a variant, a struct field or enum variant.
+#[derive(Debug, Clone)]
 pub struct VariantDef {
-    pub id: DefId,
+    pub def_id: DefId,
     // The relative position in the aggregate structure.
+    pub name: String,
     pub discriminant: usize,
+    pub ty: Ty,
 }
 
 // A definition id.
@@ -245,8 +259,10 @@ pub struct DefId {
 }
 
 /// A type
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Educe, PartialOrd)]
+#[educe(PartialEq)]
 pub struct Ty {
+    #[educe(PartialEq(ignore))]
     pub span: Option<Span>,
     pub kind: TyKind,
 }
@@ -276,6 +292,51 @@ pub enum TyKind {
         index: usize,
         name: String, // todo: change me?
     },
+    Struct {
+        id: DefId,
+        generics: Vec<Ty>,
+    },
+}
+
+impl fmt::Display for TyKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TyKind::Unit => write!(f, "()"),
+            TyKind::Bool => write!(f, "bool"),
+            TyKind::Char => write!(f, "char"),
+            TyKind::Int(ty) => match ty {
+                IntTy::I128 => write!(f, "i128"),
+                IntTy::I64 => write!(f, "i64"),
+                IntTy::I32 => write!(f, "i32"),
+                IntTy::I16 => write!(f, "i16"),
+                IntTy::I8 => write!(f, "i8"),
+            },
+            TyKind::Uint(ty) => match ty {
+                UintTy::U128 => write!(f, "u128"),
+                UintTy::U64 => write!(f, "u64"),
+                UintTy::U32 => write!(f, "u32"),
+                UintTy::U16 => write!(f, "u16"),
+                UintTy::U8 => write!(f, "u8"),
+            },
+            TyKind::Float(ty) => match ty {
+                FloatTy::F32 => write!(f, "f64"),
+                FloatTy::F64 => write!(f, "f32"),
+            },
+            TyKind::String => write!(f, "string"),
+            TyKind::Array(_, _) => todo!(),
+            TyKind::Ref(inner, is_mut) => {
+                let word = if let Mutability::Mut = is_mut {
+                    "mut"
+                } else {
+                    "const"
+                };
+
+                write!(f, "&{word} {}", inner)
+            }
+            TyKind::Param { .. } => todo!(),
+            TyKind::Struct { .. } => todo!(),
+        }
+    }
 }
 
 impl TyKind {
@@ -303,6 +364,7 @@ impl TyKind {
             TyKind::Array(_, _) => todo!(),
             TyKind::Ref(_, _) => todo!(),
             TyKind::Param { .. } => todo!(),
+            TyKind::Struct { .. } => todo!(),
         }
     }
 }

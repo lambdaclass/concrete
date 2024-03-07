@@ -10,14 +10,16 @@ use concrete_ast::{
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
     statements::{self, AssignStmt, LetStmt, LetStmtTarget, ReturnStmt, WhileStmt},
+    structs::StructDecl,
     types::{RefType, TypeSpec},
     Program,
 };
 
 use crate::{
-    BasicBlock, BinOp, ConstData, ConstKind, ConstValue, DefId, FloatTy, FnBody, IntTy, Local,
-    LocalKind, LogOp, Mutability, Operand, Place, PlaceElem, ProgramBody, Rvalue, Statement,
+    AdtBody, BasicBlock, BinOp, ConstData, ConstKind, ConstValue, DefId, FloatTy, FnBody, IntTy,
+    Local, LocalKind, LogOp, Mutability, Operand, Place, PlaceElem, ProgramBody, Rvalue, Statement,
     StatementKind, SwitchTargets, Terminator, TerminatorKind, Ty, TyKind, UintTy, ValueTree,
+    VariantDef,
 };
 
 use self::errors::LoweringError;
@@ -60,6 +62,18 @@ pub fn lower_program(program: &Program) -> Result<ProgramBody, LoweringError> {
 }
 
 fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCtx, LoweringError> {
+    // lower first structs, constants, types
+    for content in &module.contents {
+        match content {
+            ModuleDefItem::Constant(_) => todo!(),
+            ModuleDefItem::Struct(info) => {
+                ctx = lower_struct(ctx, info, id)?;
+            }
+            ModuleDefItem::Type(_) => todo!(),
+            _ => {}
+        }
+    }
+
     let body = ctx.body.modules.get(&id).unwrap();
 
     // fill fn sigs
@@ -78,12 +92,12 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
             let ret_type;
 
             for arg in &fn_def.decl.params {
-                let ty = lower_type(&arg.r#type)?;
+                let ty = lower_type(&ctx, &arg.r#type, id)?;
                 args.push(ty);
             }
 
             if let Some(ty) = &fn_def.decl.ret_type {
-                ret_type = lower_type(ty)?;
+                ret_type = lower_type(&ctx, ty, id)?;
             } else {
                 ret_type = Ty {
                     span: None,
@@ -101,16 +115,49 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
             ModuleDefItem::Function(fn_def) => {
                 ctx = lower_func(ctx, fn_def, id)?;
             }
-            ModuleDefItem::Struct(_) => todo!(),
             ModuleDefItem::Type(_) => todo!(),
             ModuleDefItem::Module(mod_def) => {
                 let body = ctx.body.modules.get(&id).unwrap();
                 let id = *body.symbols.modules.get(&mod_def.name.name).unwrap();
                 ctx = lower_module(ctx, mod_def, id)?;
             }
+            ModuleDefItem::Struct(_) => { /* already processed */ }
         }
     }
 
+    Ok(ctx)
+}
+
+fn lower_struct(
+    mut ctx: BuildCtx,
+    info: &StructDecl,
+    module_id: DefId,
+) -> Result<BuildCtx, LoweringError> {
+    let mut body = AdtBody {
+        def_id: {
+            let body = ctx.body.modules.get(&module_id).unwrap();
+            *body.symbols.structs.get(&info.name.name).unwrap()
+        },
+        is_pub: true, // todo struct pub
+        name: info.name.name.clone(),
+        variants: Vec::new(),
+        name_to_idx: Default::default(),
+        span: info.span,
+    };
+
+    for (i, field) in info.fields.iter().enumerate() {
+        let variant = VariantDef {
+            def_id: ctx.gen.next_defid(),
+            name: field.name.name.clone(),
+            ty: lower_type(&ctx, &field.r#type, module_id)?,
+            discriminant: i,
+        };
+        body.variants.push(variant);
+        body.name_to_idx
+            .insert(field.name.name.clone(), body.variants.len() - 1);
+    }
+
+    ctx.body.structs.insert(body.def_id, body);
     Ok(ctx)
 }
 
@@ -173,7 +220,7 @@ fn lower_func(
         if let statements::Statement::Let(info) = stmt {
             match &info.target {
                 LetStmtTarget::Simple { name, r#type } => {
-                    let ty = lower_type(r#type)?;
+                    let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
                     builder
                         .name_to_local
                         .insert(name.name.clone(), builder.body.locals.len());
@@ -193,9 +240,12 @@ fn lower_func(
         .decl
         .ret_type
         .as_ref()
-        .map(lower_type)
+        .map(|r| lower_type(&builder.ctx, r, builder.local_module))
         .transpose()?
-        .map(|x| x.kind);
+        .unwrap_or(Ty {
+            span: None,
+            kind: TyKind::Unit,
+        });
     for stmt in &func.body {
         lower_statement(&mut builder, stmt, ret_type.clone())?;
     }
@@ -221,7 +271,7 @@ fn lower_func(
 fn lower_statement(
     builder: &mut FnBodyBuilder,
     info: &concrete_ast::statements::Statement,
-    ret_type: Option<TyKind>,
+    ret_type: Ty,
 ) -> Result<(), LoweringError> {
     match info {
         statements::Statement::Assign(info) => lower_assign(builder, info)?,
@@ -252,7 +302,8 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), Lowe
         }),
     });
 
-    let (discriminator, discriminator_type) = lower_expression(builder, &info.value, None)?;
+    let (discriminator, discriminator_type, _disc_span) =
+        lower_expression(builder, &info.value, None)?;
 
     let local = builder.add_temp_local(TyKind::Bool);
     let place = Place {
@@ -284,7 +335,7 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), Lowe
         lower_statement(
             builder,
             stmt,
-            Some(builder.body.locals[builder.ret_local].ty.kind.clone()),
+            builder.body.locals[builder.ret_local].ty.clone(),
         )?;
     }
 
@@ -333,7 +384,8 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), Lowe
 }
 
 fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), LoweringError> {
-    let (discriminator, discriminator_type) = lower_expression(builder, &info.value, None)?;
+    let (discriminator, discriminator_type, _disc_span) =
+        lower_expression(builder, &info.value, None)?;
 
     let local = builder.add_temp_local(TyKind::Bool);
     let place = Place {
@@ -365,7 +417,7 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
         lower_statement(
             builder,
             stmt,
-            Some(builder.body.locals[builder.ret_local].ty.kind.clone()),
+            builder.body.locals[builder.ret_local].ty.clone(),
         )?;
     }
 
@@ -396,7 +448,7 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
             lower_statement(
                 builder,
                 stmt,
-                Some(builder.body.locals[builder.ret_local].ty.kind.clone()),
+                builder.body.locals[builder.ret_local].ty.clone(),
             )?;
         }
     }
@@ -456,8 +508,18 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
 fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), LoweringError> {
     match &info.target {
         LetStmtTarget::Simple { name, r#type } => {
-            let ty = lower_type(r#type)?;
-            let (rvalue, _rvalue_ty) = lower_expression(builder, &info.value, Some(ty.kind))?;
+            let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
+            let (rvalue, rvalue_ty, _exp_span) =
+                lower_expression(builder, &info.value, Some(ty.kind.clone()))?;
+
+            if ty.kind != rvalue_ty {
+                return Err(LoweringError::UnexpectedType {
+                    span: info.span,
+                    found: rvalue_ty,
+                    expected: ty.clone(),
+                });
+            }
+
             let local_idx = builder.name_to_local.get(&name.name).copied().unwrap();
             builder.statements.push(Statement {
                 span: Some(name.span),
@@ -480,13 +542,12 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), Lowering
 }
 
 fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), LoweringError> {
-    let (mut place, mut ty) = lower_path(builder, &info.target);
+    let (mut place, mut ty, _path_span) = lower_path(builder, &info.target)?;
 
     for _ in 0..info.derefs {
         match &ty.kind {
             TyKind::Ref(inner, is_mut) => {
                 if matches!(is_mut, Mutability::Not) {
-                    dbg!(&ty);
                     Err(LoweringError::BorrowNotMutable {
                         span: info.target.first.span,
                         name: info.target.first.name.clone(),
@@ -503,7 +564,8 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
         place.projection.push(PlaceElem::Deref);
     }
 
-    let (rvalue, _rvalue_ty) = lower_expression(builder, &info.value, Some(ty.kind.clone()))?;
+    let (rvalue, _rvalue_ty, _exp_span) =
+        lower_expression(builder, &info.value, Some(ty.kind.clone()))?;
 
     builder.statements.push(Statement {
         span: Some(info.target.first.span),
@@ -516,19 +578,31 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
 fn lower_return(
     builder: &mut FnBodyBuilder,
     info: &ReturnStmt,
-    ret_type_hint: Option<TyKind>,
+    ret_type: Ty,
 ) -> Result<(), LoweringError> {
-    let (value, _value_ty) = lower_expression(builder, &info.value, ret_type_hint)?;
-    builder.statements.push(Statement {
-        span: None,
-        kind: StatementKind::Assign(
-            Place {
-                local: builder.ret_local,
-                projection: vec![],
-            },
-            value,
-        ),
-    });
+    if let Some(value_exp) = &info.value {
+        let (value, value_ty, _exp_span) =
+            lower_expression(builder, value_exp, Some(ret_type.kind.clone()))?;
+
+        if ret_type.kind != value_ty {
+            return Err(LoweringError::UnexpectedType {
+                span: info.span,
+                found: value_ty,
+                expected: ret_type.clone(),
+            });
+        }
+
+        builder.statements.push(Statement {
+            span: None,
+            kind: StatementKind::Assign(
+                Place {
+                    local: builder.ret_local,
+                    projection: vec![],
+                },
+                value,
+            ),
+        });
+    }
 
     let statements = std::mem::take(&mut builder.statements);
     builder.body.basic_blocks.push(BasicBlock {
@@ -544,7 +618,7 @@ fn lower_return(
 
 fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Option<TyKind> {
     match info {
-        Expression::Value(value) => match value {
+        Expression::Value(value, _) => match value {
             ValueExpr::ConstBool(_) => Some(TyKind::Bool),
             ValueExpr::ConstChar(_) => Some(TyKind::Char),
             ValueExpr::ConstInt(_) => None,
@@ -585,6 +659,20 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
             todo!()
         }
         Expression::AsRef(_, _) => todo!(),
+        Expression::StructInit(info) => {
+            let id = *builder
+                .get_module_body()
+                .symbols
+                .structs
+                .get(&info.name.name)
+                .expect("struct not found");
+
+            // todo: struct generics
+            Some(TyKind::Struct {
+                id,
+                generics: vec![],
+            })
+        }
     }
 }
 
@@ -592,16 +680,19 @@ fn lower_expression(
     builder: &mut FnBodyBuilder,
     info: &Expression,
     type_hint: Option<TyKind>,
-) -> Result<(Rvalue, TyKind), LoweringError> {
+) -> Result<(Rvalue, TyKind, Span), LoweringError> {
     Ok(match info {
-        Expression::Value(info) => lower_value_expr(builder, info, type_hint),
+        Expression::Value(info, span) => {
+            let value = lower_value_expr(builder, info, type_hint)?;
+            (value.0, value.1, *span)
+        }
         Expression::FnCall(info) => lower_fn_call(builder, info)?,
         Expression::Match(_) => todo!(),
         Expression::If(_) => todo!(),
         Expression::UnaryOp(_, _) => todo!(),
         Expression::BinaryOp(lhs, op, rhs) => lower_binary_op(builder, lhs, *op, rhs, type_hint)?,
         Expression::Deref(info) => {
-            let (value, ty) = lower_expression(builder, info, type_hint)?;
+            let (value, ty, span) = lower_expression(builder, info, type_hint)?;
 
             let mut place = match value {
                 Rvalue::Ref(_, place) => place,
@@ -619,7 +710,7 @@ fn lower_expression(
 
             place.projection.push(PlaceElem::Deref);
 
-            (Rvalue::Use(Operand::Place(place)), ty)
+            (Rvalue::Use(Operand::Place(place)), ty, span)
         }
         Expression::AsRef(inner, mutable) => {
             let type_hint = match type_hint {
@@ -629,7 +720,7 @@ fn lower_expression(
                 },
                 None => None,
             };
-            let (value, ty) = lower_expression(builder, inner, type_hint)?;
+            let (value, ty, span) = lower_expression(builder, inner, type_hint)?;
 
             let place = match value {
                 Rvalue::Use(op) => match op {
@@ -652,7 +743,55 @@ fn lower_expression(
 
             let ty = TyKind::Ref(Box::new(ty), mutability);
 
-            (rvalue, ty)
+            (rvalue, ty, span)
+        }
+        Expression::StructInit(info) => {
+            let id = *builder
+                .get_module_body()
+                .symbols
+                .structs
+                .get(&info.name.name)
+                .expect("struct not found");
+            let struct_body = builder.ctx.body.structs.get(&id).unwrap().clone();
+            let ty = TyKind::Struct {
+                id,
+                generics: vec![],
+            };
+            let struct_local = builder.add_local(Local::temp(Ty {
+                span: Some(info.span),
+                kind: ty.clone(),
+            }));
+
+            let place = Place {
+                local: struct_local,
+                projection: Default::default(),
+            };
+
+            builder.statements.push(Statement {
+                span: None,
+                kind: StatementKind::StorageLive(struct_local),
+            });
+
+            for (field, value) in info.fields.iter() {
+                let idx = *struct_body
+                    .name_to_idx
+                    .get(&field.name)
+                    .expect("failed to find field");
+                let mut field_place = place.clone();
+                field_place.projection.push(PlaceElem::Field(idx));
+
+                let variant = &struct_body.variants[idx].ty;
+
+                let (value, _value_ty, _field_span) =
+                    lower_expression(builder, &value.value, Some(variant.kind.clone()))?;
+
+                builder.statements.push(Statement {
+                    span: Some(info.span),
+                    kind: StatementKind::Assign(field_place, value),
+                });
+            }
+
+            (Rvalue::Use(Operand::Place(place)), ty, info.span)
         }
     })
 }
@@ -660,7 +799,7 @@ fn lower_expression(
 fn lower_fn_call(
     builder: &mut FnBodyBuilder,
     info: &FnCallOp,
-) -> Result<(Rvalue, TyKind), LoweringError> {
+) -> Result<(Rvalue, TyKind, Span), LoweringError> {
     let fn_id = {
         let mod_body = builder.get_module_body();
 
@@ -686,11 +825,17 @@ fn lower_fn_call(
                 .get(&fn_id)
                 .unwrap();
 
-            let args: Vec<Ty> = args.iter().map(lower_type).collect::<Result<Vec<_>, _>>()?;
-            let ret = ret.as_ref().map(lower_type).unwrap_or(Ok(Ty {
-                span: None,
-                kind: TyKind::Unit,
-            }))?;
+            let args: Vec<Ty> = args
+                .iter()
+                .map(|arg| lower_type(&builder.ctx, arg, builder.local_module))
+                .collect::<Result<Vec<_>, _>>()?;
+            let ret = ret
+                .as_ref()
+                .map(|arg| lower_type(&builder.ctx, arg, builder.local_module))
+                .unwrap_or(Ok(Ty {
+                    span: None,
+                    kind: TyKind::Unit,
+                }))?;
             builder
                 .ctx
                 .body
@@ -733,7 +878,11 @@ fn lower_fn_call(
         }),
     });
 
-    Ok((Rvalue::Use(Operand::Place(dest_place)), ret_ty.kind.clone()))
+    Ok((
+        Rvalue::Use(Operand::Place(dest_place)),
+        ret_ty.kind.clone(),
+        info.span,
+    ))
 }
 
 fn lower_binary_op(
@@ -742,19 +891,34 @@ fn lower_binary_op(
     op: BinaryOp,
     rhs: &Expression,
     type_hint: Option<TyKind>,
-) -> Result<(Rvalue, TyKind), LoweringError> {
-    let (lhs, lhs_ty) = if type_hint.is_none() {
-        let ty = find_expression_type(builder, lhs);
-        lower_expression(builder, lhs, ty.clone())?
+) -> Result<(Rvalue, TyKind, Span), LoweringError> {
+    let (lhs, lhs_ty, lhs_span) = if type_hint.is_none() {
+        let ty = find_expression_type(builder, lhs).unwrap_or_else(|| {
+            find_expression_type(builder, rhs).expect(
+                "couldn't find the expression type, this shouldnt happen and it's a compiler bug",
+            )
+        });
+        lower_expression(builder, lhs, Some(ty))?
     } else {
         lower_expression(builder, lhs, type_hint.clone())?
     };
-    let (rhs, rhs_ty) = if type_hint.is_none() {
-        let ty = find_expression_type(builder, rhs);
-        lower_expression(builder, rhs, ty.clone())?
+    let (rhs, rhs_ty, rhs_span) = if type_hint.is_none() {
+        let ty = find_expression_type(builder, rhs).unwrap_or(lhs_ty.clone());
+        lower_expression(builder, rhs, Some(ty))?
     } else {
         lower_expression(builder, rhs, type_hint.clone())?
     };
+
+    if lhs_ty != rhs_ty {
+        return Err(LoweringError::UnexpectedType {
+            span: rhs_span,
+            found: rhs_ty,
+            expected: Ty {
+                span: Some(lhs_span),
+                kind: lhs_ty,
+            },
+        });
+    }
 
     let lhs_local = builder.add_local(Local::temp(Ty {
         span: None,
@@ -796,6 +960,8 @@ fn lower_binary_op(
     let lhs = Operand::Place(lhs_place);
     let rhs = Operand::Place(rhs_place);
 
+    let full_span = Span::new(lhs_span.from, rhs_span.to);
+
     Ok(match op {
         BinaryOp::Arith(op) => (
             match op {
@@ -806,6 +972,7 @@ fn lower_binary_op(
                 ArithOp::Mod => Rvalue::BinaryOp(BinOp::Mod, (lhs, rhs)),
             },
             lhs_ty,
+            full_span,
         ),
         BinaryOp::Logic(op) => (
             match op {
@@ -813,6 +980,7 @@ fn lower_binary_op(
                 LogicOp::Or => Rvalue::LogicOp(LogOp::Or, (lhs, rhs)),
             },
             TyKind::Bool,
+            full_span,
         ),
         BinaryOp::Compare(op) => (
             match op {
@@ -824,6 +992,7 @@ fn lower_binary_op(
                 CmpOp::GtEq => Rvalue::BinaryOp(BinOp::Ge, (lhs, rhs)),
             },
             TyKind::Bool,
+            full_span,
         ),
         BinaryOp::Bitwise(op) => (
             match op {
@@ -832,6 +1001,7 @@ fn lower_binary_op(
                 BitwiseOp::Xor => Rvalue::BinaryOp(BinOp::BitXor, (lhs, rhs)),
             },
             lhs_ty,
+            full_span,
         ),
     })
 }
@@ -840,8 +1010,8 @@ fn lower_value_expr(
     builder: &mut FnBodyBuilder,
     info: &ValueExpr,
     type_hint: Option<TyKind>,
-) -> (Rvalue, TyKind) {
-    match info {
+) -> Result<(Rvalue, TyKind), LoweringError> {
+    Ok(match info {
         ValueExpr::ConstBool(value) => (
             Rvalue::Use(Operand::Const(ConstData {
                 ty: TyKind::Bool,
@@ -947,60 +1117,81 @@ fn lower_value_expr(
         }
         ValueExpr::ConstStr(_) => todo!(),
         ValueExpr::Path(info) => {
-            let (place, _place_ty) = lower_path(builder, info);
-            (
-                Rvalue::Use(Operand::Place(place.clone())),
-                builder
-                    .body
-                    .locals
-                    .get(place.local)
-                    .as_ref()
-                    .unwrap()
-                    .ty
-                    .kind
-                    .clone(),
-            )
+            let (place, place_ty, _span) = lower_path(builder, info)?;
+            (Rvalue::Use(Operand::Place(place.clone())), place_ty.kind)
         }
-    }
+    })
 }
 
-pub fn lower_path(builder: &mut FnBodyBuilder, info: &PathOp) -> (Place, Ty) {
-    let local = *builder
-        .name_to_local
-        .get(&info.first.name)
-        .expect("local not found");
+pub fn lower_path(
+    builder: &mut FnBodyBuilder,
+    info: &PathOp,
+) -> Result<(Place, Ty, Span), LoweringError> {
+    let local = *builder.name_to_local.get(&info.first.name).ok_or(
+        LoweringError::UseOfUndeclaredVariable {
+            span: info.span,
+            name: info.first.name.clone(),
+        },
+    )?;
 
     let ty = builder.body.locals[local].ty.clone();
-    let projection = Vec::new();
+    let ty_span = ty.span;
+    let mut ty = ty.kind;
+    let mut projection = Vec::new();
 
     for segment in &info.extra {
         match segment {
-            PathSegment::FieldAccess(_) => todo!(),
-            PathSegment::ArrayIndex(_) => todo!(),
+            PathSegment::FieldAccess(name, field_span) => {
+                // auto deref
+                while let TyKind::Ref(inner, _) = ty {
+                    projection.push(PlaceElem::Deref);
+                    ty = *inner;
+                }
+
+                if let TyKind::Struct { id, generics: _ } = ty {
+                    let struct_body = builder.ctx.body.structs.get(&id).unwrap();
+                    let idx = *struct_body.name_to_idx.get(&name.name).ok_or_else(|| {
+                        LoweringError::StructFieldNotFound {
+                            span: *field_span,
+                            name: name.name.clone(),
+                        }
+                    })?;
+                    projection.push(PlaceElem::Field(idx));
+                    ty = struct_body.variants[idx].ty.kind.clone();
+                }
+            }
+            PathSegment::ArrayIndex(_, _) => todo!(),
         }
     }
 
-    (Place { local, projection }, ty)
+    Ok((
+        Place { local, projection },
+        Ty {
+            span: ty_span,
+            kind: ty,
+        },
+        info.span,
+    ))
 }
 
-pub fn lower_type(spec: &TypeSpec) -> Result<Ty, LoweringError> {
+pub fn lower_type(ctx: &BuildCtx, spec: &TypeSpec, module_id: DefId) -> Result<Ty, LoweringError> {
     Ok(match spec {
         TypeSpec::Simple { name, is_ref, span } => match is_ref {
             Some(RefType::Borrow) => Ty::new(
                 span,
                 TyKind::Ref(
-                    Box::new(name_to_tykind(&name.name, *span)?),
+                    Box::new(name_to_tykind(ctx, &name.name, *span, module_id)?),
                     Mutability::Not,
                 ),
             ),
             Some(RefType::MutBorrow) => Ty::new(
                 span,
                 TyKind::Ref(
-                    Box::new(name_to_tykind(&name.name, *span)?),
+                    Box::new(name_to_tykind(ctx, &name.name, *span, module_id)?),
                     Mutability::Mut,
                 ),
             ),
-            None => Ty::new(span, name_to_tykind(&name.name, *span)?),
+            None => Ty::new(span, name_to_tykind(ctx, &name.name, *span, module_id)?),
         },
         TypeSpec::Generic { span, .. } => Err(LoweringError::NotYetImplemented {
             span: *span,
@@ -1013,7 +1204,7 @@ pub fn lower_type(spec: &TypeSpec) -> Result<Ty, LoweringError> {
             span,
         } => {
             let inner = TyKind::Array(
-                Box::new(lower_type(of_type)?),
+                Box::new(lower_type(ctx, of_type, module_id)?),
                 Box::new(ConstData {
                     ty: TyKind::Uint(UintTy::U64),
                     data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(*size))),
@@ -1032,7 +1223,12 @@ pub fn lower_type(spec: &TypeSpec) -> Result<Ty, LoweringError> {
     })
 }
 
-pub fn name_to_tykind(name: &str, span: Span) -> Result<TyKind, LoweringError> {
+pub fn name_to_tykind(
+    ctx: &BuildCtx,
+    name: &str,
+    span: Span,
+    module_id: DefId,
+) -> Result<TyKind, LoweringError> {
     Ok(match name {
         "i64" => TyKind::Int(IntTy::I64),
         "i32" => TyKind::Int(IntTy::I32),
@@ -1047,9 +1243,19 @@ pub fn name_to_tykind(name: &str, span: Span) -> Result<TyKind, LoweringError> {
         "bool" => TyKind::Bool,
         "string" => TyKind::String,
         "char" => TyKind::Char,
-        name => Err(LoweringError::UnrecognizedType {
-            span,
-            name: name.to_string(),
-        })?,
+        other => {
+            let module = ctx.body.modules.get(&module_id).expect("module not found");
+            if let Some(struct_id) = module.symbols.structs.get(other) {
+                TyKind::Struct {
+                    id: *struct_id,
+                    generics: vec![],
+                }
+            } else {
+                Err(LoweringError::UnrecognizedType {
+                    span,
+                    name: other.to_string(),
+                })?
+            }
+        }
     })
 }

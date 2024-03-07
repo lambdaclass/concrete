@@ -16,7 +16,7 @@ pub fn lowering_error_to_report(
         LoweringError::ModuleNotFound { span, module } => {
             let offset = span.from;
             Report::build(ReportKind::Error, path.clone(), offset)
-                .with_code("E1")
+                .with_code("ModuleNotFound")
                 .with_label(
                     Label::new((path, span.into()))
                         .with_message(format!("Module {module:?} not found."))
@@ -27,7 +27,7 @@ pub fn lowering_error_to_report(
         }
         LoweringError::FunctionNotFound { span, function } => {
             Report::build(ReportKind::Error, path.clone(), span.from)
-            .with_code("EFNNOTFOUND")
+            .with_code("FunctionNotFound")
             .with_label(
                 Label::new((path, span.into()))
                     .with_message(format!("Function {function:?} not found."))
@@ -35,10 +35,20 @@ pub fn lowering_error_to_report(
             )
             .finish()
         },
+        LoweringError::StructFieldNotFound { span, name } => {
+            Report::build(ReportKind::Error, path.clone(), span.from)
+            .with_code("StructFieldNotFound")
+            .with_label(
+                Label::new((path, span.into()))
+                    .with_message(format!("Struct field {name:?} not found."))
+                    .with_color(colors.next()),
+            )
+            .finish()
+        },
         LoweringError::ImportNotFound { import_span, module_span, symbol } => {
                 let offset = symbol.span.from;
                 Report::build(ReportKind::Error, path.clone(), offset)
-                    .with_code("E2")
+                    .with_code("ImportNotFound")
                     .with_label(
                         Label::new((path.clone(), module_span.into()))
                             .with_message("In module this module."),
@@ -69,13 +79,13 @@ pub fn lowering_error_to_report(
             }
 
             Report::build(ReportKind::Error, path.clone(), span.from)
-            .with_code("EREFMUT")
+            .with_code("BorrowNotMutable")
             .with_labels(labels)
             .finish()
         },
         LoweringError::UnrecognizedType { span, name } => {
             Report::build(ReportKind::Error, path.clone(), span.from)
-                .with_code("E3")
+                .with_code("UnrecognizedType")
                 .with_label(
                     Label::new((path, span.into()))
                         .with_message(format!("Failed to find type {:?}", name))
@@ -97,13 +107,44 @@ pub fn lowering_error_to_report(
         },
         LoweringError::NotYetImplemented { span, message } => {
             Report::build(ReportKind::Error, path.clone(), span.from)
-                .with_code("TODO")
+                .with_code("NotYetImplemented")
                 .with_label(
                     Label::new((path, span.into()))
                         .with_message(message)
                         .with_color(colors.next()),
                 )
                 .finish()
+        },
+        LoweringError::UnexpectedType { span, found, expected } => {
+            let mut labels = vec![
+                Label::new((path.clone(), span.into()))
+                        .with_message(format!("Unexpected type '{}', expected '{}'", found, expected.kind))
+                        .with_color(colors.next())
+            ];
+
+            if let Some(span) = expected.span {
+                labels.push(
+                    Label::new((path.clone(), span.into()))
+                        .with_message(format!("expected '{}' due to this type", expected.kind))
+                        .with_color(colors.next())
+                );
+            }
+
+            Report::build(ReportKind::Error, path.clone(), span.from)
+                .with_code("UnexpectedType")
+                .with_labels(labels)
+                .with_message(format!("expected type {}.", expected.kind))
+                .finish()
+        },
+        LoweringError::UseOfUndeclaredVariable { span, name } => {
+            Report::build(ReportKind::Error, path.clone(), span.from)
+            .with_code("UseOfUndeclaredVariable")
+            .with_label(
+                Label::new((path, span.into()))
+                    .with_message(format!("Use of undeclared variable {:?}", name))
+                    .with_color(colors.next()),
+            )
+            .finish()
         },
     }
 }

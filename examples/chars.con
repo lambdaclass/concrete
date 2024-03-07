@@ -1,4 +1,4 @@
- mod Simple {
+ mod Example {
     fn main() -> char {
         let a: char = hello_chars('\t');
         return a;

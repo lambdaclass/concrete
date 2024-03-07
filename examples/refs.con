@@ -1,4 +1,4 @@
-mod Main {
+mod Example {
     pub fn main() -> i64 {
         let mut a: i64 = 4;
 

@@ -1,4 +1,4 @@
-mod Simple {
+mod Example {
     fn main() -> i64 {
         return my_func(4);
     }
