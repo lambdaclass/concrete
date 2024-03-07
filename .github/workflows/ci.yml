@@ -147,7 +147,7 @@ jobs:
         - name: Install Link deps
           run: sudo apt-get install libc-dev build-essential
         - name: Run bench
-          run: ./bench/bench.sh > bench.md
+          run: ./bench/bench.sh | sed 's/\x1B\[[0-9;]\{1,\}[A-Za-z]//g' > bench.md
 
         - name: Find Bench Comment
           continue-on-error: true
