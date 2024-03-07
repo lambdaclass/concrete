@@ -11,7 +11,7 @@ use concrete_ast::{
     modules::{Module, ModuleDefItem},
     statements::{self, AssignStmt, LetStmt, LetStmtTarget, ReturnStmt, WhileStmt},
     structs::StructDecl,
-    types::{RefType, TypeSpec},
+    types::{TypeQualifier, TypeSpec},
     Program,
 };
 
@@ -622,7 +622,7 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
 
     for _ in 0..info.derefs {
         match &ty.kind {
-            TyKind::Ref(inner, is_mut) => {
+            TyKind::Ref(inner, is_mut) | TyKind::Ptr(inner, is_mut) => {
                 if matches!(is_mut, Mutability::Not) {
                     Err(LoweringError::BorrowNotMutable {
                         span: info.target.first.span,
@@ -630,10 +630,7 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
                         type_span: ty.span,
                     })?;
                 }
-                ty = Ty {
-                    span: ty.span,
-                    kind: *inner.clone(),
-                };
+                ty = *inner.clone();
             }
             _ => unreachable!(),
         }
@@ -780,7 +777,7 @@ fn lower_expression(
             };
 
             let ty = match ty {
-                TyKind::Ref(inner, _) => *inner.clone(),
+                TyKind::Ref(inner, _) => inner.kind.clone(),
                 _ => todo!(),
             };
 
@@ -791,7 +788,7 @@ fn lower_expression(
         Expression::AsRef(inner, mutable) => {
             let type_hint = match type_hint {
                 Some(inner) => match inner {
-                    TyKind::Ref(inner, _) => Some(*inner.clone()),
+                    TyKind::Ref(inner, _) => Some(inner.kind.clone()),
                     _ => unreachable!(),
                 },
                 None => None,
@@ -811,13 +808,19 @@ fn lower_expression(
             };
 
             let mutability = match mutable {
-                RefType::Borrow => Mutability::Not,
-                RefType::MutBorrow => Mutability::Mut,
+                false => Mutability::Not,
+                true => Mutability::Mut,
             };
 
             let rvalue = Rvalue::Ref(mutability, place);
 
-            let ty = TyKind::Ref(Box::new(ty), mutability);
+            let ty = TyKind::Ref(
+                Box::new(Ty {
+                    span: None,
+                    kind: ty,
+                }),
+                mutability,
+            );
 
             (rvalue, ty, span)
         }
@@ -1212,19 +1215,19 @@ pub fn lower_path(
 
     let ty = builder.body.locals[local].ty.clone();
     let ty_span = ty.span;
-    let mut ty = ty.kind;
+    let mut ty = ty;
     let mut projection = Vec::new();
 
     for segment in &info.extra {
         match segment {
             PathSegment::FieldAccess(name, field_span) => {
                 // auto deref
-                while let TyKind::Ref(inner, _) = ty {
+                while let TyKind::Ref(inner, _) = ty.kind {
                     projection.push(PlaceElem::Deref);
                     ty = *inner;
                 }
 
-                if let TyKind::Struct { id, generics: _ } = ty {
+                if let TyKind::Struct { id, generics: _ } = ty.kind {
                     let struct_body = builder.ctx.body.structs.get(&id).unwrap();
                     let idx = *struct_body.name_to_idx.get(&name.name).ok_or_else(|| {
                         LoweringError::StructFieldNotFound {
@@ -1233,42 +1236,39 @@ pub fn lower_path(
                         }
                     })?;
                     projection.push(PlaceElem::Field(idx));
-                    ty = struct_body.variants[idx].ty.kind.clone();
+                    ty = struct_body.variants[idx].ty.clone();
                 }
             }
             PathSegment::ArrayIndex(_, _) => todo!(),
         }
     }
 
-    Ok((
-        Place { local, projection },
-        Ty {
-            span: ty_span,
-            kind: ty,
-        },
-        info.span,
-    ))
+    Ok((Place { local, projection }, ty, info.span))
 }
 
 pub fn lower_type(ctx: &BuildCtx, spec: &TypeSpec, module_id: DefId) -> Result<Ty, LoweringError> {
     Ok(match spec {
-        TypeSpec::Simple { name, is_ref, span } => match is_ref {
-            Some(RefType::Borrow) => Ty::new(
-                span,
-                TyKind::Ref(
-                    Box::new(name_to_tykind(ctx, &name.name, *span, module_id)?),
-                    Mutability::Not,
-                ),
-            ),
-            Some(RefType::MutBorrow) => Ty::new(
-                span,
-                TyKind::Ref(
-                    Box::new(name_to_tykind(ctx, &name.name, *span, module_id)?),
-                    Mutability::Mut,
-                ),
-            ),
-            None => Ty::new(span, name_to_tykind(ctx, &name.name, *span, module_id)?),
-        },
+        TypeSpec::Simple {
+            name,
+            qualifiers,
+            span,
+        } => {
+            let mut ty = Ty::new(span, name_to_tykind(ctx, &name.name, *span, module_id)?);
+
+            for qual in qualifiers.iter().rev() {
+                ty = match qual {
+                    TypeQualifier::Ref => Ty::new(span, TyKind::Ref(Box::new(ty), Mutability::Not)),
+                    TypeQualifier::RefMut => {
+                        Ty::new(span, TyKind::Ref(Box::new(ty), Mutability::Mut))
+                    }
+                    TypeQualifier::Ptr => Ty::new(span, TyKind::Ptr(Box::new(ty), Mutability::Not)),
+                    TypeQualifier::PtrMut => {
+                        Ty::new(span, TyKind::Ptr(Box::new(ty), Mutability::Mut))
+                    }
+                }
+            }
+            ty
+        }
         TypeSpec::Generic { span, .. } => Err(LoweringError::NotYetImplemented {
             span: *span,
             message: "Generics not yet implemented",
@@ -1276,25 +1276,33 @@ pub fn lower_type(ctx: &BuildCtx, spec: &TypeSpec, module_id: DefId) -> Result<T
         TypeSpec::Array {
             of_type,
             size,
-            is_ref,
+            qualifiers,
             span,
         } => {
-            let inner = TyKind::Array(
-                Box::new(lower_type(ctx, of_type, module_id)?),
-                Box::new(ConstData {
-                    ty: TyKind::Uint(UintTy::U64),
-                    data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(*size))),
-                }),
-            );
-            match is_ref {
-                Some(RefType::Borrow) => {
-                    Ty::new(span, TyKind::Ref(Box::new(inner), Mutability::Not))
+            let mut ty = Ty {
+                span: Some(*span),
+                kind: TyKind::Array(
+                    Box::new(lower_type(ctx, of_type, module_id)?),
+                    Box::new(ConstData {
+                        ty: TyKind::Uint(UintTy::U64),
+                        data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(*size))),
+                    }),
+                ),
+            };
+
+            for qual in qualifiers.iter().rev() {
+                ty = match qual {
+                    TypeQualifier::Ref => Ty::new(span, TyKind::Ref(Box::new(ty), Mutability::Not)),
+                    TypeQualifier::RefMut => {
+                        Ty::new(span, TyKind::Ref(Box::new(ty), Mutability::Mut))
+                    }
+                    TypeQualifier::Ptr => Ty::new(span, TyKind::Ptr(Box::new(ty), Mutability::Not)),
+                    TypeQualifier::PtrMut => {
+                        Ty::new(span, TyKind::Ptr(Box::new(ty), Mutability::Mut))
+                    }
                 }
-                Some(RefType::MutBorrow) => {
-                    Ty::new(span, TyKind::Ref(Box::new(inner), Mutability::Mut))
-                }
-                None => Ty::new(span, inner),
             }
+            ty
         }
     })
 }

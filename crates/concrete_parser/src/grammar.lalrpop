@@ -134,27 +134,29 @@ pub(crate) Ident: ast::common::Ident = {
   }
 }
 
-pub(crate) RefType: ast::types::RefType = {
-  "&" => ast::types::RefType::Borrow,
-  "&" "mut" => ast::types::RefType::MutBorrow,
+pub(crate) TypeQualifier: ast::types::TypeQualifier = {
+  "&" => ast::types::TypeQualifier::Ref,
+  "&" "mut" => ast::types::TypeQualifier::RefMut,
+  "*" "const" => ast::types::TypeQualifier::Ptr,
+  "*" "mut" => ast::types::TypeQualifier::PtrMut,
 }
 
 pub(crate) TypeSpec: ast::types::TypeSpec = {
-  <lo:@L> <is_ref:RefType?> <name:Ident> <hi:@R> => ast::types::TypeSpec::Simple {
+  <lo:@L> <qualifiers:TypeQualifier*> <name:Ident> <hi:@R> => ast::types::TypeSpec::Simple {
     name,
-    is_ref,
+    qualifiers,
     span: Span::new(lo, hi),
   },
-  <lo:@L> <is_ref:RefType?> <name:Ident> "<" <type_params:Comma<TypeSpec>> ">" <hi:@R> => ast::types::TypeSpec::Generic {
+  <lo:@L> <qualifiers:TypeQualifier*> <name:Ident> "<" <type_params:Comma<TypeSpec>> ">" <hi:@R> => ast::types::TypeSpec::Generic {
     name,
     type_params,
-    is_ref,
+    qualifiers,
     span: Span::new(lo, hi),
   },
-  <lo:@L> <is_ref:RefType?> "[" <of_type:TypeSpec> <size:(";" <"integer">)> "]"<hi:@R> => ast::types::TypeSpec::Array {
+  <lo:@L> <qualifiers:TypeQualifier*> "[" <of_type:TypeSpec> <size:(";" <"integer">)> "]"<hi:@R> => ast::types::TypeSpec::Array {
     of_type: Box::new(of_type),
     size: size.try_into().expect("size is too big"),
-    is_ref,
+    qualifiers,
     span: Span::new(lo, hi),
   }
 }
@@ -360,8 +362,8 @@ pub(crate) Expression: ast::expressions::Expression = {
   #[precedence(level="0")]
   <Term>,
   #[precedence(level="1")] #[assoc(side="left")]
-  "&" "mut" <Expression> => ast::expressions::Expression::AsRef(Box::new(<>), ast::types::RefType::MutBorrow),
-  "&" <Expression> => ast::expressions::Expression::AsRef(Box::new(<>), ast::types::RefType::Borrow),
+  "&" "mut" <Expression> => ast::expressions::Expression::AsRef(Box::new(<>), true),
+  "&" <Expression> => ast::expressions::Expression::AsRef(Box::new(<>), false),
   "*" <Expression> => ast::expressions::Expression::Deref(Box::new(<>)),
   <op:UnaryOp> <rhs:Expression> => ast::expressions::Expression::UnaryOp(
     op,

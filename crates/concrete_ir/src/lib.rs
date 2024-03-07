@@ -287,7 +287,8 @@ pub enum TyKind {
     Float(FloatTy),
     String,
     Array(Box<Ty>, Box<ConstData>),
-    Ref(Box<Self>, Mutability),
+    Ref(Box<Ty>, Mutability),
+    Ptr(Box<Ty>, Mutability),
     // Type param <T>
     Param {
         index: usize,
@@ -332,7 +333,16 @@ impl fmt::Display for TyKind {
                     "const"
                 };
 
-                write!(f, "&{word} {}", inner)
+                write!(f, "&{word} {}", inner.kind)
+            }
+            TyKind::Ptr(inner, is_mut) => {
+                let word = if let Mutability::Mut = is_mut {
+                    "mut"
+                } else {
+                    "const"
+                };
+
+                write!(f, "*{word} {}", inner.kind)
             }
             TyKind::Param { .. } => todo!(),
             TyKind::Struct { .. } => todo!(),
@@ -366,6 +376,7 @@ impl TyKind {
             TyKind::Ref(_, _) => todo!(),
             TyKind::Param { .. } => todo!(),
             TyKind::Struct { .. } => todo!(),
+            TyKind::Ptr(_, _) => todo!(),
         }
     }
 }

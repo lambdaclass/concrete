@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     common::{Ident, Span},
     statements::Statement,
-    types::{RefType, TypeSpec},
+    types::TypeSpec,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -16,7 +16,7 @@ pub enum Expression {
     BinaryOp(Box<Self>, BinaryOp, Box<Self>),
     StructInit(StructInitExpr),
     Deref(Box<Self>),
-    AsRef(Box<Self>, RefType),
+    AsRef(Box<Self>, bool),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
