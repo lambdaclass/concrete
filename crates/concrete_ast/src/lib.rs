@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use modules::Module;
 
 pub mod common;
@@ -12,5 +14,6 @@ pub mod types;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Program {
+    pub file_path: Option<PathBuf>,
     pub modules: Vec<Module>,
 }

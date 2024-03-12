@@ -59,12 +59,12 @@ impl<'a> ModuleCodegenCtx<'a> {
     /// Gets a MLIR location from the given span, or unknown if the span is `None`.
     pub fn get_location(&self, span: Option<Span>) -> Location {
         if let Some(span) = span {
-            let (_, line, col) = self.ctx.session.source.get_offset_line(span.from).unwrap();
+            let (_, line, col) = self.ctx.session.sources[self.module_id.program_id]
+                .get_offset_line(span.from)
+                .unwrap();
             Location::new(
                 self.ctx.mlir_context,
-                self.ctx
-                    .session
-                    .file_path
+                self.ctx.program.file_paths[&self.module_id.program_id]
                     .file_name()
                     .unwrap()
                     .to_str()

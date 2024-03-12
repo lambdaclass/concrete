@@ -1,21 +1,74 @@
-use ariadne::Source;
-use clap::Parser;
-use concrete_codegen_mlir::linker::{link_binary, link_shared_lib};
-use concrete_ir::lowering::lower_program;
+use anyhow::bail;
+use anyhow::Context;
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+use concrete_ir::lowering::lower_programs;
 use concrete_parser::{error::Diagnostics, ProgramSource};
 use concrete_session::{
     config::{DebugInfo, OptLevel},
     Session,
 };
-use std::{error::Error, path::PathBuf, time::Instant};
+use config::{Package, Profile};
+use git2::{IndexAddOption, Repository};
+use owo_colors::OwoColorize;
+use std::io::Read;
+use std::{collections::HashMap, fs::File, path::PathBuf, time::Instant};
+use walkdir::WalkDir;
 
+use crate::{
+    config::Config,
+    linker::{link_binary, link_shared_lib},
+};
+
+pub mod config;
 pub mod db;
+pub mod linker;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about = "concrete", long_about = None, bin_name = "concrete")]
+pub struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Initialize a project
+    New {
+        path: PathBuf,
+
+        /// The name of the project, defaults to the directory name
+        #[arg(long)]
+        name: Option<String>,
+
+        /// Use a binary (application) template [default]
+        #[arg(long, group = "binary", default_value_t = true)]
+        bin: bool,
+
+        /// Use a library template
+        #[arg(long, group = "binary")]
+        lib: bool,
+    },
+    /// Build a project
+    Build {
+        /// Build for release with all optimizations.
+        #[arg(short, long, default_value_t = false)]
+        release: bool,
+
+        /// Override the profile to use.
+        #[arg(short, long)]
+        profile: Option<String>,
+    },
+}
+
+#[derive(Parser, Debug)]
+#[command(author, version, about = "concrete compiler", long_about = None)]
 pub struct CompilerArgs {
     /// The input file.
     input: PathBuf,
+
+    /// The output file.
+    pub output: PathBuf,
 
     /// Build for release with all optimizations.
     #[arg(short, long, default_value_t = false)]
@@ -25,87 +78,339 @@ pub struct CompilerArgs {
     #[arg(short = 'O', long)]
     optlevel: Option<u8>,
 
+    /// Always add debug info
+    #[arg(long)]
+    pub debug_info: Option<bool>,
+
     /// Build as a library.
     #[arg(short, long, default_value_t = false)]
     library: bool,
 
-    /// Prints the ast.
+    /// Also output the ast.
     #[arg(long, default_value_t = false)]
-    print_ast: bool,
+    ast: bool,
 
-    /// Prints the middle ir.
+    /// Also output the ir.
     #[arg(long, default_value_t = false)]
-    print_ir: bool,
+    ir: bool,
 
     /// Also output the llvm ir file.
     #[arg(long, default_value_t = false)]
-    output_ll: bool,
+    llvm: bool,
 
     /// Also output the mlir file
     #[arg(long, default_value_t = false)]
-    output_mlir: bool,
+    mlir: bool,
 
     /// Also output the asm file.
     #[arg(long, default_value_t = false)]
-    output_asm: bool,
+    asm: bool,
 
-    /// Print all file formats.
+    /// Also output the object file.
     #[arg(long, default_value_t = false)]
-    output_all: bool,
+    object: bool,
 }
 
-pub fn main() -> Result<(), Box<dyn Error>> {
-    let start_time = Instant::now();
-
+pub fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let args = CompilerArgs::parse();
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::New {
+            path,
+            name,
+            bin,
+            lib,
+        } => {
+            let name = name.unwrap_or_else(|| {
+                path.file_name()
+                    .context("Failed to get project name")
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            });
+
+            if !path.exists() {
+                std::fs::create_dir_all(&path).context("failed to create the project directory")?;
+                std::fs::create_dir_all(path.join("src")).context("failed to create src/")?;
+            }
+
+            let config_path = path.join("Concrete.toml");
+
+            let mut profiles = HashMap::new();
+
+            profiles.insert(
+                "release".to_string(),
+                Profile {
+                    release: true,
+                    opt_level: 3,
+                    debug_info: false,
+                },
+            );
+
+            profiles.insert(
+                "dev".to_string(),
+                Profile {
+                    release: false,
+                    opt_level: 0,
+                    debug_info: true,
+                },
+            );
+
+            let config = Config {
+                package: Package {
+                    name: name.clone(),
+                    version: "0.1.0".to_string(),
+                    license: "MIT".to_string(),
+                },
+                profile: profiles,
+            };
+
+            std::fs::write(config_path, toml::to_string_pretty(&config)?)
+                .context("failed to write Concrete.toml")?;
+            std::fs::write(path.join(".gitignore"), "/build\n")
+                .context("failed to write .gitignore")?;
+            std::fs::write(
+                path.join(".gitattributes"),
+                "*.con linguist-language=Rust\n",
+            )
+            .context("failed to write .gitattributes")?;
+
+            if bin {
+                std::fs::write(
+                    path.join("src").join("main.con"),
+                    format!(
+                        r#"
+mod {} {{
+    pub fn main() -> i32 {{
+        return 0;
+    }}
+}}"#,
+                        name
+                    ),
+                )?;
+            }
+
+            if lib {
+                std::fs::write(
+                    path.join("src").join("lib.con"),
+                    format!(
+                        r#"
+mod {} {{
+    pub fn hello_world() -> i32 {{
+        return 0;
+    }}
+}}"#,
+                        name
+                    ),
+                )?;
+            }
+
+            {
+                let repo = Repository::init(&path).context("failed to create repository")?;
+                let sig = repo.signature()?;
+                let tree_id = {
+                    let mut index = repo.index()?;
+
+                    index.add_all(["."].iter(), IndexAddOption::DEFAULT, None)?;
+                    index.write()?;
+                    index.write_tree()?
+                };
+
+                let tree = repo.find_tree(tree_id).context("failed to find git tree")?;
+                repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+                    .context("failed to create initial commit")?;
+            }
+
+            if bin {
+                println!(
+                    "  {} binary (application) `{}` package",
+                    "Created".green().bold(),
+                    name
+                );
+            } else {
+                println!("  {} library `{}` package", "Created".green(), name);
+            }
+        }
+        Commands::Build { release, profile } => {
+            let mut current_dir = std::env::current_dir()?;
+            let mut config_path = None;
+
+            // Go up to 3 parent folders to find Concrete.toml
+            for _ in 0..3 {
+                if !current_dir.join("Concrete.toml").exists() {
+                    current_dir = if let Some(parent) = current_dir.parent() {
+                        parent.to_path_buf()
+                    } else {
+                        bail!("Couldn't find Concrete.toml");
+                    };
+                } else {
+                    config_path = Some(current_dir.join("Concrete.toml"));
+                    break;
+                }
+            }
+
+            let config_path = match config_path {
+                Some(x) => x,
+                None => bail!("Couldn't find Concrete.toml"),
+            };
+
+            let base_dir = config_path
+                .parent()
+                .context("couldn't get config parent dir")?;
+            let mut config = File::open(&config_path).context("Failed to open Concrete.toml")?;
+            let mut buf = String::new();
+            config.read_to_string(&mut buf)?;
+
+            let config: Config = toml::from_str(&buf).context("failed to parse Concrete.toml")?;
+
+            println!(
+                "   {} {} v{} ({})",
+                "Compiling".green().bold(),
+                config.package.name,
+                config.package.version,
+                base_dir.display()
+            );
+
+            let src_dir = base_dir.join("src");
+            let target_dir = base_dir.join("build");
+
+            if !target_dir.exists() {
+                std::fs::create_dir_all(&target_dir)?;
+            }
+
+            let has_main = src_dir.join("main.con").exists();
+            let output = target_dir.join(config.package.name);
+
+            let (profile, profile_name) = if let Some(profile) = profile {
+                (
+                    config
+                        .profile
+                        .get(&profile)
+                        .context("Couldn't get requested profile")?,
+                    profile,
+                )
+            } else if release {
+                (
+                    config
+                        .profile
+                        .get("release")
+                        .context("Couldn't get profile: release")?,
+                    "release".to_string(),
+                )
+            } else {
+                (
+                    config
+                        .profile
+                        .get("dev")
+                        .context("Couldn't get profile: dev")?,
+                    "dev".to_string(),
+                )
+            };
+
+            let compile_args = CompilerArgs {
+                input: src_dir,
+                output: output.clone(),
+                release,
+                optlevel: Some(profile.opt_level),
+                debug_info: Some(profile.debug_info),
+                library: !has_main,
+                ast: false,
+                ir: false,
+                llvm: true,
+                asm: false,
+                object: true,
+                mlir: true,
+            };
+
+            let start = Instant::now();
+            let object = compile(&compile_args)?;
+
+            if !has_main {
+                link_shared_lib(&[object], &output)?;
+            } else {
+                link_binary(&[object], &output)?;
+            }
+
+            let elapsed = start.elapsed();
+
+            println!(
+                "   {} {} [{}{}] in {elapsed:?}",
+                "Finished".green().bold(),
+                profile_name,
+                if profile.opt_level > 0 {
+                    "optimized"
+                } else {
+                    "unoptimized"
+                },
+                if profile.debug_info {
+                    " + debuginfo"
+                } else {
+                    ""
+                }
+            );
+        }
+    }
+
+    Ok(())
+}
+
+pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
+    let mut files = Vec::new();
+    for entry in WalkDir::new(&args.input) {
+        let entry = entry?;
+        if let Some(ext) = entry.path().extension() {
+            if ext.eq_ignore_ascii_case("con") {
+                files.push(entry.path().to_path_buf());
+            }
+        }
+    }
+
+    if files.is_empty() {
+        panic!("files is empty");
+    }
+
+    let start_time = Instant::now();
+
+    let mut programs = Vec::new();
 
     let db = crate::db::Database::default();
-    let source = ProgramSource::new(
-        &db,
-        std::fs::read_to_string(&args.input)?,
-        args.input.display().to_string(),
-    );
-    tracing::debug!("source code:\n{}", source.input(&db));
-    let parse_ast_time = Instant::now();
-    let program = match concrete_parser::parse_ast(&db, source) {
-        Some(x) => x,
-        None => {
-            Diagnostics::dump(
-                &db,
-                source,
-                &concrete_parser::parse_ast::accumulated::<concrete_parser::error::Diagnostics>(
-                    &db, source,
-                ),
-            );
-            std::process::exit(1);
-        }
-    };
-    let parse_ast_time = parse_ast_time.elapsed();
 
-    if args.print_ast {
-        println!("{:#?}", program);
-    }
+    let mut sources = Vec::new();
+    let mut sources_str = Vec::new();
 
-    let cwd = std::env::current_dir()?;
-    // todo: find a better name, "target" would clash with rust if running in the source tree.
-    let target_dir = cwd.join("build_artifacts/");
-    if !target_dir.exists() {
-        std::fs::create_dir_all(&target_dir)?;
+    for path in files {
+        let source = std::fs::read_to_string(&path)?;
+        let source = ProgramSource::new(&db, source, args.input.display().to_string());
+
+        let mut program = match concrete_parser::parse_ast(&db, source) {
+            Some(x) => x,
+            None => {
+                Diagnostics::dump(
+                    &db,
+                    source,
+                    &concrete_parser::parse_ast::accumulated::<concrete_parser::error::Diagnostics>(
+                        &db, source,
+                    ),
+                );
+                std::process::exit(1);
+            }
+        };
+        program.file_path = Some(path);
+        sources.push(ariadne::Source::from(source.input(&db).clone()));
+        sources_str.push(source.input(&db).clone());
+        programs.push(program);
     }
-    let output_file = target_dir.join(PathBuf::from(args.input.file_name().unwrap()));
-    let output_file = if args.library {
-        output_file.with_extension(Session::get_platform_library_ext())
-    } else if cfg!(target_os = "windows") {
-        output_file.with_extension("exe")
-    } else {
-        output_file.with_extension("")
-    };
 
     let session = Session {
-        file_path: args.input,
-        debug_info: if args.release {
+        debug_info: if let Some(debug_info) = args.debug_info {
+            if debug_info {
+                DebugInfo::Full
+            } else {
+                DebugInfo::None
+            }
+        } else if args.release {
             DebugInfo::None
         } else {
             DebugInfo::Full
@@ -122,52 +427,65 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         } else {
             OptLevel::None
         },
-        source: Source::from(source.input(&db).to_string()),
+        sources,
         library: args.library,
-        target_dir,
-        output_file,
-        output_mlir: args.output_mlir,
-        output_ll: args.output_ll,
-        output_asm: args.output_asm,
-        output_all: args.output_all,
+        output_file: args.output.with_extension("o"),
+        output_asm: args.asm,
+        output_ll: args.llvm,
+        output_mlir: args.mlir,
     };
+    tracing::debug!("Output file: {:#?}", session.output_file);
+    tracing::debug!("Is library: {:#?}", session.library);
+    tracing::debug!("Optlevel: {:#?}", session.optlevel);
+    tracing::debug!("Debug Info: {:#?}", session.debug_info);
 
-    tracing::debug!("Compiling with session: {:#?}", session);
+    let path_cache: Vec<_> = programs
+        .iter()
+        .zip(&sources_str)
+        .map(|(program, source)| {
+            (
+                program
+                    .file_path
+                    .clone()
+                    .expect("path should always exist here")
+                    .to_string_lossy()
+                    .to_string(),
+                source.clone(),
+            )
+        })
+        .collect();
 
-    let lower_time = Instant::now();
-    let program_ir = match lower_program(&program) {
+    if args.ast {
+        std::fs::write(
+            session.output_file.with_extension("ast"),
+            format!("{:#?}", programs),
+        )?;
+    }
+
+    let program_ir = match lower_programs(&programs) {
         Ok(ir) => ir,
         Err(error) => {
-            let report = concrete_check::lowering_error_to_report(error, &session);
-            let path = session.file_path.display().to_string();
-            report.eprint((path, session.source.clone()))?;
+            let file_paths: Vec<_> = programs
+                .iter()
+                .map(|x| x.file_path.clone().unwrap())
+                .collect();
+            let report = concrete_check::lowering_error_to_report(error, &file_paths);
+            report.eprint(ariadne::sources(path_cache))?;
             std::process::exit(1);
         }
     };
-    let lower_time = lower_time.elapsed();
 
-    if args.print_ir {
-        println!("{:#?}", program_ir);
+    if args.ir {
+        std::fs::write(
+            session.output_file.with_extension("ir"),
+            format!("{:#?}", program_ir),
+        )?;
     }
 
-    let compile_time = Instant::now();
-    let object_path = concrete_codegen_mlir::compile(&session, &program_ir)?;
-    let compile_time = compile_time.elapsed();
-
-    let link_time = Instant::now();
-    if session.library {
-        link_shared_lib(&object_path, &session.output_file)?;
-    } else {
-        link_binary(&object_path, &session.output_file)?;
-    }
-    let link_time = link_time.elapsed();
+    let object_path = concrete_codegen_mlir::compile(&session, &program_ir).unwrap();
 
     let elapsed = start_time.elapsed();
-    tracing::debug!("Parse time {:?}", parse_ast_time);
-    tracing::debug!("Lower time {:?}", lower_time);
-    tracing::debug!("Combined compile time {:?}", compile_time);
-    tracing::debug!("Link time {:?}", link_time);
     tracing::debug!("Done in {:?}", elapsed);
 
-    Ok(())
+    Ok(object_path)
 }
