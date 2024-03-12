@@ -17,7 +17,7 @@ jobs:
             TABLEGEN_170_PREFIX: /usr/lib/llvm-17/
         steps:
         - uses: actions/checkout@v3
-        - uses: dtolnay/rust-toolchain@1.75.0
+        - uses: dtolnay/rust-toolchain@1.76.0
           with:
             components: rustfmt, clippy
         - uses: Swatinem/rust-cache@v2
@@ -37,7 +37,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
         - uses: actions/checkout@v3
-        - uses: dtolnay/rust-toolchain@1.75.0
+        - uses: dtolnay/rust-toolchain@1.76.0
           with:
             components: rustfmt
         - run: cargo fmt --all -- --check
@@ -58,7 +58,7 @@ jobs:
             sudo rm -rf /usr/share/dotnet/
             sudo rm -rf /usr/local/lib/android
         - name: Setup rust env
-          uses: dtolnay/rust-toolchain@1.75.0
+          uses: dtolnay/rust-toolchain@1.76.0
         - name: Retreive cached dependecies
           uses: Swatinem/rust-cache@v2
         - name: add llvm deb repository
@@ -91,7 +91,7 @@ jobs:
                     sudo rm -rf /usr/share/dotnet/
                     sudo rm -rf /usr/local/lib/android
             - name: Setup rust env
-              uses: dtolnay/rust-toolchain@1.75.0
+              uses: dtolnay/rust-toolchain@1.76.0
             - name: Retreive cached dependecies
               uses: Swatinem/rust-cache@v2
             - name: add llvm deb repository
@@ -114,3 +114,54 @@ jobs:
                 #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
                 files: lcov.info
                 fail_ci_if_error: true
+    bench:
+      name: Bench
+      runs-on: ubuntu-latest
+      env:
+        MLIR_SYS_170_PREFIX: /usr/lib/llvm-17/
+        LLVM_SYS_170_PREFIX: /usr/lib/llvm-17/
+        TABLEGEN_170_PREFIX: /usr/lib/llvm-17/
+      steps:
+        - uses: actions/checkout@v4
+        - name: free HDD space
+          run: |
+                # deleting space
+                sudo rm -rf /usr/share/dotnet/
+                sudo rm -rf /usr/local/lib/android
+        - uses: dtolnay/rust-toolchain@1.76.0
+          with:
+            components: clippy
+        - uses: Swatinem/rust-cache@v2
+        - name: Setup rust env
+          uses: dtolnay/rust-toolchain@1.76.0
+        - name: Retreive cached dependecies
+          uses: Swatinem/rust-cache@v2
+        - name: add llvm deb repository
+          uses: myci-actions/add-deb-repo@10
+          with:
+                repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main
+                repo-name: llvm-repo
+                keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
+        - name: Install LLVM
+          run: sudo apt-get install llvm-17 llvm-17-dev llvm-17-runtime clang-17 clang-tools-17 lld-17 libpolly-17-dev libmlir-17-dev mlir-17-tools
+        - name: Install Link deps
+          run: sudo apt-get install libc-dev build-essential
+        - name: Run bench
+          run: ./bench/bench.sh | sed 's/\x1B\[[0-9;]\{1,\}[A-Za-z]//g' > bench.md
+
+        - name: Find Bench Comment
+          continue-on-error: true
+          uses: peter-evans/find-comment@v3
+          id: fc
+          with:
+            issue-number: ${{ github.event.pull_request.number }}
+            comment-author: 'github-actions[bot]'
+            body-includes: Benchmarking
+        - name: Create or update bench comment
+          continue-on-error: true
+          uses: peter-evans/create-or-update-comment@v4
+          with:
+            comment-id: ${{ steps.fc.outputs.comment-id }}
+            issue-number: ${{ github.event.pull_request.number }}
+            body-path: bench.md
+            edit-mode: replace

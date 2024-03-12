@@ -795,6 +795,7 @@ fn lower_expression(
                 span: Some(*deref_span),
                 kind: match ty.kind {
                     TyKind::Ref(inner, _) => inner.kind.clone(),
+                    TyKind::Ptr(inner, _) => inner.kind.clone(),
                     _ => todo!(),
                 },
             };

@@ -79,9 +79,9 @@ But we want to take a different path with respect to:
 - No macros
 - At the beginning we won't support local type inference at function level. We might add it in the future.
 - Financials decimal type and bigint type as part of the standard library
-- Bit-for-bit deterministic/reproducible builds from the beginning
-- Fearless FFI
+- Safe FFI
 - Perfect replayability to be able to easily reproduce Heisenbugs
+- We want to try to have bit-for-bit deterministic/reproducible builds from the beginning. This will be difficult to have but we will do our best.
 
 ### Core features
 - C/Go/Rust-inspired, context-free small grammar, syntax: if, for, function calls, modules, pattern matching
