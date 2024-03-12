@@ -343,8 +343,10 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                         .iter()
                         .map(|x| compile_rvalue(&ctx, mlir_block, x, &locals).map(|x| x.0))
                         .collect::<Result<_, _>>()?;
-                    let fn_symbol =
-                        FlatSymbolRefAttribute::new(ctx.context(), &target_fn_body.name); // todo: good name resolution
+                    let fn_symbol = FlatSymbolRefAttribute::new(
+                        ctx.context(),
+                        &target_fn_body.get_mangled_name(),
+                    );
                     let ret_type = match &target_fn_body_sig.1.kind {
                         TyKind::Unit => None,
                         _ => Some(compile_type(ctx.module_ctx, &target_fn_body_sig.1)),
@@ -443,7 +445,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
 
     let func_op = func::func(
         ctx.context(),
-        StringAttribute::new(ctx.context(), &body.name),
+        StringAttribute::new(ctx.context(), &body.get_mangled_name()),
         TypeAttribute::new(func_type.into()),
         region,
         &fn_attributes,

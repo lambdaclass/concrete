@@ -79,6 +79,18 @@ impl FnBody {
             .filter(|x| matches!(x.kind, LocalKind::Arg))
             .collect()
     }
+
+    pub fn get_mangled_name(&self) -> String {
+        if self.is_extern {
+            return self.name.clone();
+        }
+
+        if self.name == "main" {
+            "main".to_string()
+        } else {
+            format!("{}@{}@{}", self.name, self.id.program_id, self.id.id)
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -25,7 +25,7 @@ pub mod db;
 pub mod linker;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "concrete", long_about = None, bin_name = "concrete")]
+#[command(author, version, about = "The Concrete Programming Language", long_about = None, bin_name = "concrete")]
 pub struct Cli {
     #[command(subcommand)]
     command: Commands,
