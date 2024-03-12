@@ -503,11 +503,11 @@ fn compile_rvalue<'c: 'b, 'b>(
 
             (value, local_ty)
         }
-        Rvalue::Cast(place, target_ty, _span) => {
+        Rvalue::Cast(op, target_ty, _span) => {
             let location = Location::unknown(ctx.context());
             let target_ty = target_ty.clone();
             let target_mlir_ty = compile_type(ctx.module_ctx, &target_ty);
-            let (value, current_ty) = compile_load_place(ctx, block, place, locals)?;
+            let (value, current_ty) = compile_load_operand(ctx, block, op, locals)?;
             let is_signed = target_ty.kind.is_signed();
 
             if target_ty.kind.is_ptr_like() {
@@ -982,7 +982,8 @@ fn compile_store_place<'c: 'b, 'b>(
 
                 local_ty = match local_ty.kind {
                     TyKind::Ref(inner, _) => *inner,
-                    _ => unreachable!(),
+                    TyKind::Ptr(inner, _) => *inner,
+                    ty => unreachable!("tried to deref: {:?}", ty),
                 };
             }
             PlaceElem::Field(field_idx) => {
@@ -1051,6 +1052,7 @@ fn compile_load_place<'c: 'b, 'b>(
 
                 local_ty = match local_ty.kind {
                     TyKind::Ref(inner, _) => *(inner.clone()),
+                    TyKind::Ptr(inner, _) => *(inner.clone()),
                     _ => unreachable!(),
                 };
             }

@@ -17,7 +17,7 @@ pub enum Expression {
     StructInit(StructInitExpr),
     Deref(Box<Self>, Span),
     AsRef(Box<Self>, bool, Span),
-    Cast(PathOp, TypeSpec, Span),
+    Cast(Box<Self>, TypeSpec, Span),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

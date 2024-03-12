@@ -388,7 +388,7 @@ pub(crate) Expression: ast::expressions::Expression = {
     Box::new(rhs)
   ),
   #[precedence(level="5")] #[assoc(side="left")]
-  <lo:@L> <a:PathOp> "as" <b: TypeSpec> <hi:@R> => ast::expressions::Expression::Cast(a, b, Span::new(lo, hi)),
+  <lo:@L> <a:Expression> "as" <b: TypeSpec> <hi:@R> => ast::expressions::Expression::Cast(Box::new(a), b, Span::new(lo, hi)),
   "(" <StructInitExpr> ")" => ast::expressions::Expression::StructInit(<>),
 }
 

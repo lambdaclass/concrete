@@ -160,7 +160,7 @@ pub enum Rvalue {
     /// A reference to a place.
     Ref(Mutability, Place),
     /// A cast.
-    Cast(Place, Ty, Span),
+    Cast(Operand, Ty, Span),
 }
 
 /// A operand is a value, either from a place in memory or constant data.

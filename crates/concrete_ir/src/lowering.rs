@@ -903,13 +903,37 @@ fn lower_expression(
 
             (Rvalue::Use(Operand::Place(place)), ty, info.span)
         }
-        Expression::Cast(path, cast_ty, span) => {
-            let (place, _ty, _path_span) = lower_path(builder, path)?;
+        Expression::Cast(value, cast_ty, span) => {
+            let (value, ty, _span) = lower_expression(builder, value, None)?;
+
             let new_ty = lower_type(&builder.ctx, cast_ty, builder.local_module)?;
 
             // todo: check if the cast is valid
 
-            (Rvalue::Cast(place, new_ty.clone(), *span), new_ty, *span)
+            // check if its a use directly, to avoid a temporary.
+            let rvalue = match value {
+                Rvalue::Use(op) => Rvalue::Cast(op, new_ty.clone(), *span),
+                value => {
+                    let inner_local = builder.add_local(Local::temp(ty.clone()));
+                    let inner_place = Place {
+                        local: inner_local,
+                        projection: Default::default(),
+                    };
+
+                    builder.statements.push(Statement {
+                        span: None,
+                        kind: StatementKind::StorageLive(inner_local),
+                    });
+
+                    builder.statements.push(Statement {
+                        span: None,
+                        kind: StatementKind::Assign(inner_place.clone(), value),
+                    });
+                    Rvalue::Cast(Operand::Place(inner_place), new_ty.clone(), *span)
+                }
+            };
+
+            (rvalue, new_ty, *span)
         }
     })
 }

@@ -15,6 +15,7 @@ mod common;
 #[test_case(include_str!("../../../examples/refs.con"), "refs", false, 6 ; "refs.con")]
 #[test_case(include_str!("../../../examples/structs.con"), "structs", false, 8 ; "structs.con")]
 #[test_case(include_str!("../../../examples/casts.con"), "casts", false, 2 ; "casts.con")]
+#[test_case(include_str!("../../../examples/malloc.con"), "malloc", false, 5 ; "malloc.con")]
 fn example_tests(source: &str, name: &str, is_library: bool, status_code: i32) {
     assert_eq!(
         status_code,
