@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
+    path::PathBuf,
 };
 
 use concrete_ast::common::Ident;
@@ -38,6 +39,8 @@ pub struct ProgramBody {
     pub structs: BTreeMap<DefId, AdtBody>,
     /// The function signatures.
     pub function_signatures: HashMap<DefId, (Vec<Ty>, Ty)>,
+    /// The file paths (program_id from the DefId) -> path.
+    pub file_paths: HashMap<usize, PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +78,18 @@ impl FnBody {
             .iter()
             .filter(|x| matches!(x.kind, LocalKind::Arg))
             .collect()
+    }
+
+    pub fn get_mangled_name(&self) -> String {
+        if self.is_extern {
+            return self.name.clone();
+        }
+
+        if self.name == "main" {
+            "main".to_string()
+        } else {
+            format!("{}@{}@{}", self.name, self.id.program_id, self.id.id)
+        }
     }
 }
 

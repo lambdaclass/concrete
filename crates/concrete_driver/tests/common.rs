@@ -6,8 +6,8 @@ use std::{
 };
 
 use ariadne::Source;
-use concrete_codegen_mlir::linker::{link_binary, link_shared_lib};
-use concrete_ir::lowering::lower_program;
+use concrete_driver::linker::{link_binary, link_shared_lib};
+use concrete_ir::lowering::lower_programs;
 use concrete_parser::{error::Diagnostics, ProgramSource};
 use concrete_session::{
     config::{DebugInfo, OptLevel},
@@ -42,7 +42,7 @@ pub fn compile_program(
     let db = concrete_driver::db::Database::default();
     let source = ProgramSource::new(&db, source.to_string(), name.to_string());
     tracing::debug!("source code:\n{}", source.input(&db));
-    let program = match concrete_parser::parse_ast(&db, source) {
+    let mut program = match concrete_parser::parse_ast(&db, source) {
         Some(x) => x,
         None => {
             Diagnostics::dump(
@@ -58,12 +58,12 @@ pub fn compile_program(
 
     let test_dir = tempfile::tempdir()?;
     let test_dir_path = test_dir.path();
-    // todo: find a better name, "target" would clash with rust if running in the source tree.
-    let target_dir = test_dir_path.join("build_artifacts/");
-    if !target_dir.exists() {
-        std::fs::create_dir_all(&target_dir)?;
-    }
-    let output_file = target_dir.join(PathBuf::from(name));
+
+    let input_file = test_dir_path.join(name).with_extension(".con");
+    std::fs::write(&input_file, source.input(&db))?;
+    program.file_path = Some(input_file);
+
+    let output_file = test_dir_path.join(name);
     let output_file = if library {
         output_file.with_extension(Session::get_platform_library_ext())
     } else if cfg!(target_os = "windows") {
@@ -73,32 +73,32 @@ pub fn compile_program(
     };
 
     let session = Session {
-        file_path: PathBuf::from(name),
         debug_info: DebugInfo::Full,
         optlevel,
-        source: Source::from(source.input(&db).to_string()),
+        sources: vec![Source::from(source.input(&db).to_string())],
         library,
-        target_dir,
         output_file,
         output_mlir: false,
         output_ll: false,
         output_asm: false,
-        output_all: false,
     };
 
-    let program_ir = lower_program(&program)?;
+    let program_ir = lower_programs(&[program])?;
 
     let object_path = concrete_codegen_mlir::compile(&session, &program_ir)?;
 
     if library {
         link_shared_lib(
-            &object_path,
+            &[object_path.clone()],
             &session
                 .output_file
                 .with_extension(Session::get_platform_library_ext()),
         )?;
     } else {
-        link_binary(&object_path, &session.output_file.with_extension(""))?;
+        link_binary(
+            &[object_path.clone()],
+            &session.output_file.with_extension(""),
+        )?;
     }
 
     Ok(CompileResult {

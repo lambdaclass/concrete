@@ -28,34 +28,44 @@ pub mod common;
 pub mod errors;
 pub mod prepass;
 
-pub fn lower_program(program: &Program) -> Result<ProgramBody, LoweringError> {
+pub fn lower_programs(program: &[Program]) -> Result<ProgramBody, LoweringError> {
     let mut ctx = BuildCtx {
         body: ProgramBody::default(),
         gen: IdGenerator::default(),
         unresolved_function_signatures: Default::default(),
     };
 
-    // resolve symbols
-    for module in &program.modules {
-        ctx = prepass::prepass_module(ctx, module)?;
-    }
+    for (program_id, program) in program.iter().enumerate() {
+        ctx.gen.program_id = program_id;
+        ctx.gen.current_id = 0;
+        let file_path = program.file_path.as_ref().ok_or_else(|| {
+            LoweringError::InternalError("Missing program file path".to_string(), program_id)
+        })?;
+        ctx.body.file_paths.insert(program_id, file_path.clone());
 
-    // resolve imports
-    for module in &program.modules {
-        ctx = prepass::prepass_imports(ctx, module)?;
-    }
+        // resolve symbols
+        for module in &program.modules {
+            ctx = prepass::prepass_module(ctx, module)?;
+        }
 
-    for mod_def in &program.modules {
-        let id = *ctx
-            .body
-            .top_level_module_names
-            .get(&mod_def.name.name)
-            .ok_or_else(|| LoweringError::ModuleNotFound {
-                span: mod_def.span,
-                module: mod_def.name.name.clone(),
-            })?;
+        // resolve imports
+        for module in &program.modules {
+            ctx = prepass::prepass_imports(ctx, module)?;
+        }
 
-        ctx = lower_module(ctx, mod_def, id)?;
+        for mod_def in &program.modules {
+            let id = *ctx
+                .body
+                .top_level_module_names
+                .get(&mod_def.name.name)
+                .ok_or_else(|| LoweringError::ModuleNotFound {
+                    span: mod_def.span,
+                    module: mod_def.name.name.clone(),
+                    program_id,
+                })?;
+
+            ctx = lower_module(ctx, mod_def, id)?;
+        }
     }
 
     Ok(ctx.body)
@@ -87,6 +97,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                     .ok_or_else(|| LoweringError::FunctionNotFound {
                         span: fn_def.span,
                         function: fn_def.decl.name.name.clone(),
+                        program_id: body.id.program_id,
                     })?;
 
                 let mut args = Vec::new();
@@ -117,6 +128,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                     .ok_or_else(|| LoweringError::FunctionNotFound {
                         span: fn_decl.span,
                         function: fn_decl.name.name.clone(),
+                        program_id: body.id.program_id,
                     })?;
 
                 let mut args = Vec::new();
@@ -225,6 +237,7 @@ fn lower_func(
         return Err(LoweringError::ExternFnWithBody {
             span: func.span,
             name: func.decl.name.name.clone(),
+            program_id: module_id.program_id,
         });
     }
 
@@ -593,6 +606,7 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), Lowering
                     span: info.span,
                     found: rvalue_ty,
                     expected: ty.clone(),
+                    program_id: builder.local_module.program_id,
                 });
             }
 
@@ -628,6 +642,7 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
                         span: info.target.first.span,
                         name: info.target.first.name.clone(),
                         type_span: ty.span,
+                        program_id: builder.local_module.program_id,
                     })?;
                 }
                 ty = *inner.clone();
@@ -661,6 +676,7 @@ fn lower_return(
                 span: info.span,
                 found: value_ty,
                 expected: ret_type.clone(),
+                program_id: builder.local_module.program_id,
             });
         }
 
@@ -954,6 +970,7 @@ fn lower_fn_call(
                 .ok_or(LoweringError::FunctionNotFound {
                     span: info.target.span,
                     function: info.target.name.clone(),
+                    program_id: builder.local_module.program_id,
                 })?
         }
     };
@@ -1056,6 +1073,7 @@ fn lower_binary_op(
             span: rhs_span,
             found: rhs_ty,
             expected: lhs_ty,
+            program_id: builder.local_module.program_id,
         });
     }
 
@@ -1294,6 +1312,7 @@ pub fn lower_path(
         LoweringError::UseOfUndeclaredVariable {
             span: info.span,
             name: info.first.name.clone(),
+            program_id: builder.local_module.program_id,
         },
     )?;
 
@@ -1316,6 +1335,7 @@ pub fn lower_path(
                         LoweringError::StructFieldNotFound {
                             span: *field_span,
                             name: name.name.clone(),
+                            program_id: builder.local_module.program_id,
                         }
                     })?;
                     projection.push(PlaceElem::Field(idx));
@@ -1355,6 +1375,7 @@ pub fn lower_type(ctx: &BuildCtx, spec: &TypeSpec, module_id: DefId) -> Result<T
         TypeSpec::Generic { span, .. } => Err(LoweringError::NotYetImplemented {
             span: *span,
             message: "Generics not yet implemented",
+            program_id: module_id.program_id,
         })?,
         TypeSpec::Array {
             of_type,
@@ -1424,6 +1445,7 @@ pub fn name_to_tykind(
                 Err(LoweringError::UnrecognizedType {
                     span,
                     name: other.to_string(),
+                    program_id: module_id.program_id,
                 })?
             }
         }
