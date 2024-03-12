@@ -9,6 +9,7 @@ use melior::{
     dialect::{
         arith, cf, func,
         llvm::{self, r#type::opaque_pointer, AllocaOptions, LoadStoreOptions},
+        ods,
     },
     ir::{
         attribute::{
@@ -464,13 +465,13 @@ fn compile_rvalue<'c: 'b, 'b>(
     block: &'b Block<'c>,
     info: &Rvalue,
     locals: &'b HashMap<usize, Value<'c, '_>>,
-) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+) -> Result<(Value<'c, 'b>, Ty), CodegenError> {
     Ok(match info {
         Rvalue::Use(info) => compile_load_operand(ctx, block, info, locals)?,
         Rvalue::LogicOp(_, _) => todo!(),
         Rvalue::BinaryOp(op, (lhs, rhs)) => compile_binop(ctx, block, op, lhs, rhs, locals)?,
         Rvalue::UnaryOp(_, _) => todo!(),
-        Rvalue::Ref(mutability, place) => {
+        Rvalue::Ref(_mutability, place) => {
             let mut value = locals[&place.local];
             let mut local_ty = ctx.get_fn_body().locals[place.local].ty.clone();
 
@@ -480,6 +481,7 @@ fn compile_rvalue<'c: 'b, 'b>(
                     PlaceElem::Deref => {
                         local_ty = match local_ty.kind {
                             TyKind::Ref(inner, _) => *(inner.clone()),
+                            TyKind::Ptr(inner, _) => *(inner.clone()),
                             _ => unreachable!(),
                         };
 
@@ -499,7 +501,96 @@ fn compile_rvalue<'c: 'b, 'b>(
                 }
             }
 
-            (value, TyKind::Ref(Box::new(local_ty), *mutability))
+            (value, local_ty)
+        }
+        Rvalue::Cast(place, target_ty, _span) => {
+            let location = Location::unknown(ctx.context());
+            let target_ty = target_ty.clone();
+            let target_mlir_ty = compile_type(ctx.module_ctx, &target_ty);
+            let (value, current_ty) = compile_load_place(ctx, block, place, locals)?;
+            let is_signed = target_ty.kind.is_signed();
+
+            if target_ty.kind.is_ptr_like() {
+                // int to ptr
+                if current_ty.kind.is_int() {
+                    let value = block
+                        .append_operation(
+                            ods::llvm::inttoptr(ctx.context(), target_mlir_ty, value, location)
+                                .into(),
+                        )
+                        .result(0)?
+                        .into();
+                    (value, target_ty.clone())
+                } else if current_ty.kind.is_ptr_like() {
+                    // ptr to ptr: noop
+                    (value, target_ty.clone())
+                } else {
+                    unreachable!("cast from {:?} to ptr", current_ty.kind)
+                }
+            } else if target_ty.kind.is_int() {
+                if current_ty.kind.is_int() {
+                    // int to int casts
+                    match current_ty
+                        .kind
+                        .get_bit_width()
+                        .unwrap()
+                        .cmp(&target_ty.kind.get_bit_width().unwrap())
+                    {
+                        std::cmp::Ordering::Less => {
+                            if is_signed {
+                                let value = block
+                                    .append_operation(arith::extsi(value, target_mlir_ty, location))
+                                    .result(0)?
+                                    .into();
+                                (value, target_ty.clone())
+                            } else {
+                                let value = block
+                                    .append_operation(arith::extui(value, target_mlir_ty, location))
+                                    .result(0)?
+                                    .into();
+                                (value, target_ty.clone())
+                            }
+                        }
+                        std::cmp::Ordering::Equal => (value, target_ty.clone()),
+                        std::cmp::Ordering::Greater => {
+                            let value = block
+                                .append_operation(arith::trunci(value, target_mlir_ty, location))
+                                .result(0)?
+                                .into();
+                            (value, target_ty.clone())
+                        }
+                    }
+                } else if current_ty.kind.is_float() {
+                    // float to int
+                    if is_signed {
+                        let value = block
+                            .append_operation(arith::fptosi(value, target_mlir_ty, location))
+                            .result(0)?
+                            .into();
+                        (value, target_ty.clone())
+                    } else {
+                        let value = block
+                            .append_operation(arith::fptoui(value, target_mlir_ty, location))
+                            .result(0)?
+                            .into();
+                        (value, target_ty.clone())
+                    }
+                } else if current_ty.kind.is_ptr_like() {
+                    // ptr to int
+                    let value = block
+                        .append_operation(
+                            ods::llvm::ptrtoint(ctx.context(), target_mlir_ty, value, location)
+                                .into(),
+                        )
+                        .result(0)?
+                        .into();
+                    (value, target_ty.clone())
+                } else {
+                    todo!("cast from {:?} to {:?}", current_ty, target_ty)
+                }
+            } else {
+                todo!("cast from {:?} to {:?}", current_ty, target_ty)
+            }
         }
     })
 }
@@ -512,13 +603,13 @@ fn compile_binop<'c: 'b, 'b>(
     lhs: &Operand,
     rhs: &Operand,
     locals: &HashMap<usize, Value<'c, '_>>,
-) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+) -> Result<(Value<'c, 'b>, Ty), CodegenError> {
     let (lhs, lhs_ty) = compile_load_operand(ctx, block, lhs, locals)?;
     let (rhs, _rhs_ty) = compile_load_operand(ctx, block, rhs, locals)?;
     let location = Location::unknown(ctx.context());
 
-    let is_float = matches!(lhs_ty, TyKind::Float(_));
-    let is_signed = matches!(lhs_ty, TyKind::Int(_));
+    let is_float = matches!(lhs_ty.kind, TyKind::Float(_));
+    let is_signed = matches!(lhs_ty.kind, TyKind::Int(_));
 
     Ok(match op {
         BinOp::Add => {
@@ -630,7 +721,13 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, TyKind::Bool)
+            (
+                value,
+                Ty {
+                    span: None,
+                    kind: TyKind::Bool,
+                },
+            )
         }
         BinOp::Lt => {
             let value = if is_float {
@@ -667,7 +764,13 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, TyKind::Bool)
+            (
+                value,
+                Ty {
+                    span: None,
+                    kind: TyKind::Bool,
+                },
+            )
         }
         BinOp::Le => {
             let value = if is_float {
@@ -704,7 +807,13 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, TyKind::Bool)
+            (
+                value,
+                Ty {
+                    span: None,
+                    kind: TyKind::Bool,
+                },
+            )
         }
         BinOp::Ne => {
             let value = if is_float {
@@ -730,7 +839,13 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, TyKind::Bool)
+            (
+                value,
+                Ty {
+                    span: None,
+                    kind: TyKind::Bool,
+                },
+            )
         }
         BinOp::Ge => {
             let value = if is_float {
@@ -767,7 +882,13 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, TyKind::Bool)
+            (
+                value,
+                Ty {
+                    span: None,
+                    kind: TyKind::Bool,
+                },
+            )
         }
         BinOp::Gt => {
             let value = if is_float {
@@ -804,7 +925,13 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, TyKind::Bool)
+            (
+                value,
+                Ty {
+                    span: None,
+                    kind: TyKind::Bool,
+                },
+            )
         }
     })
 }
@@ -814,7 +941,7 @@ fn compile_load_operand<'c: 'b, 'b>(
     block: &'b Block<'c>,
     info: &Operand,
     locals: &HashMap<usize, Value<'c, '_>>,
-) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+) -> Result<(Value<'c, 'b>, Ty), CodegenError> {
     Ok(match info {
         Operand::Place(info) => compile_load_place(ctx, block, info, locals)?,
         Operand::Const(data) => match &data.data {
@@ -902,7 +1029,7 @@ fn compile_load_place<'c: 'b, 'b>(
     block: &'b Block<'c>,
     info: &Place,
     locals: &HashMap<usize, Value<'c, '_>>,
-) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+) -> Result<(Value<'c, 'b>, Ty), CodegenError> {
     let mut ptr = locals[&info.local];
     let body = ctx.get_fn_body();
 
@@ -966,7 +1093,7 @@ fn compile_load_place<'c: 'b, 'b>(
         .result(0)?
         .into();
 
-    Ok((value, local_ty.kind))
+    Ok((value, local_ty))
 }
 
 /// Used in switch

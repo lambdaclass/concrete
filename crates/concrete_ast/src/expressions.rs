@@ -15,17 +15,18 @@ pub enum Expression {
     UnaryOp(UnaryOp, Box<Self>),
     BinaryOp(Box<Self>, BinaryOp, Box<Self>),
     StructInit(StructInitExpr),
-    Deref(Box<Self>),
-    AsRef(Box<Self>, bool),
+    Deref(Box<Self>, Span),
+    AsRef(Box<Self>, bool, Span),
+    Cast(PathOp, TypeSpec, Span),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ValueExpr {
-    ConstBool(bool),
-    ConstChar(char),
-    ConstInt(u128),
-    ConstFloat(String),
-    ConstStr(String),
+    ConstBool(bool, Span),
+    ConstChar(char, Span),
+    ConstInt(u128, Span),
+    ConstFloat(String, Span),
+    ConstStr(String, Span),
     Path(PathOp),
 }
 
@@ -122,12 +123,6 @@ pub struct PathOp {
     pub first: Ident,
     pub extra: Vec<PathSegment>,
     pub span: Span,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CastOp {
-    pub value: Expression,
-    pub r#type: TypeSpec,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

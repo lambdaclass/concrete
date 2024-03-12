@@ -159,6 +159,8 @@ pub enum Rvalue {
     UnaryOp(UnOp, Operand),
     /// A reference to a place.
     Ref(Mutability, Place),
+    /// A cast.
+    Cast(Place, Ty, Span),
 }
 
 /// A operand is a value, either from a place in memory or constant data.
@@ -300,6 +302,59 @@ pub enum TyKind {
     },
 }
 
+impl TyKind {
+    pub fn is_ptr_like(&self) -> bool {
+        matches!(self, TyKind::Ptr(_, _) | TyKind::Ref(_, _))
+    }
+
+    pub fn is_int(&self) -> bool {
+        matches!(self, TyKind::Int(_) | TyKind::Uint(_))
+    }
+
+    pub fn is_signed(&self) -> bool {
+        matches!(self, TyKind::Int(_))
+    }
+
+    pub fn is_float(&self) -> bool {
+        matches!(self, TyKind::Float(_))
+    }
+
+    /// Returns the type bit width, None if unsized.
+    ///
+    /// Meant for use in casts.
+    pub fn get_bit_width(&self) -> Option<usize> {
+        match self {
+            TyKind::Unit => None,
+            TyKind::Bool => Some(1),
+            TyKind::Char => Some(8),
+            TyKind::Int(ty) => match ty {
+                IntTy::I8 => Some(8),
+                IntTy::I16 => Some(16),
+                IntTy::I32 => Some(32),
+                IntTy::I64 => Some(64),
+                IntTy::I128 => Some(128),
+            },
+            TyKind::Uint(ty) => match ty {
+                UintTy::U8 => Some(8),
+                UintTy::U16 => Some(16),
+                UintTy::U32 => Some(32),
+                UintTy::U64 => Some(64),
+                UintTy::U128 => Some(128),
+            },
+            TyKind::Float(ty) => match ty {
+                FloatTy::F32 => Some(32),
+                FloatTy::F64 => Some(64),
+            },
+            TyKind::String => todo!(),
+            TyKind::Array(_, _) => todo!(),
+            TyKind::Ref(_, _) => todo!(),
+            TyKind::Ptr(_, _) => todo!(),
+            TyKind::Param { .. } => todo!(),
+            TyKind::Struct { .. } => todo!(),
+        }
+    }
+}
+
 impl fmt::Display for TyKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -413,7 +468,7 @@ pub enum FloatTy {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct ConstData {
-    pub ty: TyKind,
+    pub ty: Ty,
     pub data: ConstKind,
 }
 

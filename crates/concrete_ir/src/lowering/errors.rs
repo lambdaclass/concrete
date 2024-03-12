@@ -1,7 +1,7 @@
 use concrete_ast::common::{Ident, Span};
 use thiserror::Error;
 
-use crate::{DefId, Ty, TyKind};
+use crate::{DefId, Ty};
 
 #[derive(Debug, Error, Clone)]
 pub enum LoweringError {
@@ -32,11 +32,7 @@ pub enum LoweringError {
     #[error("feature not yet implemented: {message}")]
     NotYetImplemented { span: Span, message: &'static str },
     #[error("unexpected type")]
-    UnexpectedType {
-        span: Span,
-        found: TyKind,
-        expected: Ty,
-    },
+    UnexpectedType { span: Span, found: Ty, expected: Ty },
     #[error("extern function {name:?} has a body")]
     ExternFnWithBody { span: Span, name: String },
 }

@@ -28,6 +28,7 @@ extern {
     "mut" => Token::KeywordMut,
     "import" => Token::KeywordImport,
     "extern" => Token::KeywordExtern,
+    "as" => Token::KeywordAs,
 
     // literals
     "identifier" => Token::Identifier(<String>),
@@ -353,7 +354,6 @@ pub(crate) Term: ast::expressions::Expression = {
   <FnCallOp> => ast::expressions::Expression::FnCall(<>),
   <MatchExpr> => ast::expressions::Expression::Match(<>),
   <IfExpr> => ast::expressions::Expression::If(<>),
-  "(" <StructInitExpr> ")" => ast::expressions::Expression::StructInit(<>),
   #[precedence(level="1")] #[assoc(side="left")]
   "(" <Expression> ")",
 }
@@ -362,9 +362,9 @@ pub(crate) Expression: ast::expressions::Expression = {
   #[precedence(level="0")]
   <Term>,
   #[precedence(level="1")] #[assoc(side="left")]
-  "&" "mut" <Expression> => ast::expressions::Expression::AsRef(Box::new(<>), true),
-  "&" <Expression> => ast::expressions::Expression::AsRef(Box::new(<>), false),
-  "*" <Expression> => ast::expressions::Expression::Deref(Box::new(<>)),
+  <lo:@L> "&" "mut" <e:Expression> <hi:@R> => ast::expressions::Expression::AsRef(Box::new(e), true, Span::new(lo, hi)),
+  <lo:@L> "&" <e:Expression> <hi:@R> => ast::expressions::Expression::AsRef(Box::new(e), false, Span::new(lo, hi)),
+  <lo:@L> "*" <e:Expression> <hi:@R> => ast::expressions::Expression::Deref(Box::new(e), Span::new(lo, hi)),
   <op:UnaryOp> <rhs:Expression> => ast::expressions::Expression::UnaryOp(
     op,
     Box::new(rhs)
@@ -387,7 +387,9 @@ pub(crate) Expression: ast::expressions::Expression = {
     op,
     Box::new(rhs)
   ),
-
+  #[precedence(level="5")] #[assoc(side="left")]
+  <lo:@L> <a:PathOp> "as" <b: TypeSpec> <hi:@R> => ast::expressions::Expression::Cast(a, b, Span::new(lo, hi)),
+  "(" <StructInitExpr> ")" => ast::expressions::Expression::StructInit(<>),
 }
 
 pub BinaryFirstLvlOp: ast::expressions::BinaryOp = {
@@ -422,11 +424,11 @@ pub UnaryOp: ast::expressions::UnaryOp = {
 }
 
 pub(crate) ValueExpr: ast::expressions::ValueExpr = {
-  <"integer"> => ast::expressions::ValueExpr::ConstInt(<>),
-  <"float"> => ast::expressions::ValueExpr::ConstFloat(<>),
-  <"boolean"> => ast::expressions::ValueExpr::ConstBool(<>),
-  <"string"> => ast::expressions::ValueExpr::ConstStr(<>),
-  <"char"> => ast::expressions::ValueExpr::ConstChar(<>),
+  <lo:@L> <v:"integer"> <hi:@R> => ast::expressions::ValueExpr::ConstInt(v, Span::new(lo, hi)),
+  <lo:@L> <v:"float"> <hi:@R> => ast::expressions::ValueExpr::ConstFloat(v, Span::new(lo, hi)),
+  <lo:@L> <v:"boolean"> <hi:@R> => ast::expressions::ValueExpr::ConstBool(v, Span::new(lo, hi)),
+  <lo:@L> <v:"string"> <hi:@R> => ast::expressions::ValueExpr::ConstStr(v, Span::new(lo, hi)),
+  <lo:@L> <v:"char"> <hi:@R> => ast::expressions::ValueExpr::ConstChar(v, Span::new(lo, hi)),
   <PathOp> => ast::expressions::ValueExpr::Path(<>),
 }
 
