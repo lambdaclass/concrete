@@ -1214,7 +1214,6 @@ pub fn lower_path(
     )?;
 
     let ty = builder.body.locals[local].ty.clone();
-    let ty_span = ty.span;
     let mut ty = ty;
     let mut projection = Vec::new();
 
