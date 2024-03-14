@@ -30,3 +30,6 @@ test: check-deps
 
 coverage: check-deps
 	cargo llvm-cov --verbose --all-features --all-targets --workspace --lcov --output-path lcov.info
+
+bench: check-deps
+	./bench/bench.sh

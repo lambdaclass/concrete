@@ -262,3 +262,13 @@ Post-runtime features:
 - rustler like binding generator to call rust code :x:
 - embeddable concrete (no allocator, first-class support for no standard library, etc) :x:
 - capabilities 🤔
+
+## Benchmarking
+
+There are some simple program benchmarks against Rust.
+
+You can run them using the following make target:
+
+```
+make bench
+```
