@@ -230,6 +230,7 @@ Features:
 - floats ✔️
 - borrowing ✔️
 - structs ✔️
+- casts ✔️
 - arrays 🏗️
 - iterators :x:
 - for :x:

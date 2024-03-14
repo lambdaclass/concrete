@@ -118,7 +118,7 @@ pub fn lowering_error_to_report(
         LoweringError::UnexpectedType { span, found, expected } => {
             let mut labels = vec![
                 Label::new((path.clone(), span.into()))
-                        .with_message(format!("Unexpected type '{}', expected '{}'", found, expected.kind))
+                        .with_message(format!("Unexpected type '{}', expected '{}'", found.kind, expected.kind))
                         .with_color(colors.next())
             ];
 
@@ -142,6 +142,16 @@ pub fn lowering_error_to_report(
             .with_label(
                 Label::new((path, span.into()))
                     .with_message(format!("Use of undeclared variable {:?}", name))
+                    .with_color(colors.next()),
+            )
+            .finish()
+        },
+        LoweringError::ExternFnWithBody { span, name } => {
+            Report::build(ReportKind::Error, path.clone(), span.from)
+            .with_code("ExternFnWithBody")
+            .with_label(
+                Label::new((path, span.into()))
+                    .with_message(format!("extern function {:?} declared with body", name))
                     .with_color(colors.next()),
             )
             .finish()
