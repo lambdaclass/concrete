@@ -1,5 +1,5 @@
 .PHONY: usage
-usage:
+usage: check-deps
 	@echo "Usage:"
 	@echo "    build:    builds the project"
 	@echo "    check:    runs 'cargo fmt' and clippy"
