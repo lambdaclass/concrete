@@ -1,5 +1,14 @@
-.PHONY: build check clean test coverage
+.PHONY: usage
+usage:
+	@echo "Usage:"
+	@echo "    build:    builds the project"
+	@echo "    check:    runs 'cargo fmt' and clippy"
+	@echo "    clean:    cleans up all build artifacts"
+	@echo "    test:     runs all tests"
+	@echo "    coverage: runs llvm-cov to generate a test coverage report"
+	@echo "    bench:    runs the benchmarks"
 
+.PHONY: check-deps
 check-deps:
 ifeq (, $(shell which cargo))
 	$(error "The cargo command could not be found in your PATH, please install Rust: https://www.rust-lang.org/tools/install")
@@ -15,21 +24,28 @@ ifndef TABLEGEN_170_PREFIX
 endif
 	@echo "[make] LLVM is correctly set at $(MLIR_SYS_170_PREFIX)."
 
+.PHONY: build
 build: check-deps
 	cargo build --workspace --release --all-features
 
+.PHONY: check
 check: check-deps
 	cargo fmt --all -- --check
 	cargo clippy --workspace --all-targets --all-features -- -D warnings
 
+.PHONY: clean
 clean:
 	cargo clean
 
+.PHONY: test
 test: check-deps
 	cargo test --workspace --all-targets --all-features
 
+.PHONY: coverage
 coverage: check-deps
 	cargo llvm-cov --verbose --all-features --all-targets --workspace --lcov --output-path lcov.info
 
+.PHONY: bench
 bench: check-deps
 	./bench/bench.sh
+
