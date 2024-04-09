@@ -568,5 +568,13 @@ pub(crate) ForStmt: ast::statements::ForStmt = {
       post,
       contents,
     }
+  },
+  "for" "(" <condition:Expression> ")" "{" <contents:StatementList> "}" => {
+    ast::statements::ForStmt {
+      init: None,
+      condition: Some(condition),
+      post: None,
+      contents,
+    }
   }
 }

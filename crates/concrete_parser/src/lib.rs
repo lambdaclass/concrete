@@ -206,6 +206,12 @@ mod ModuleName {
             n = n + 1;
         }
 
+        n = 1;
+        for (n <= limit) {
+            result = result + n;
+            n = n + 1;
+        }
+
         return result;
     }
 }"##;
