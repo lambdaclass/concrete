@@ -155,4 +155,22 @@ mod ModuleName {
         let parser = grammar::ProgramParser::new();
         parser.parse(lexer).unwrap();
     }
+
+    #[test]
+    fn parse_for() {
+        let source = r##"mod MyMod {
+    fn hello() {
+        let mut result: i64 = 0;
+
+        for (let n: usize = 1; n <= limit; n = n + 1) {
+            result = result + n;
+        }
+
+        return result;
+    }
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
+    }
 }
