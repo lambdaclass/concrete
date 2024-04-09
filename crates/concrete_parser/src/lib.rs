@@ -173,4 +173,44 @@ mod ModuleName {
         let parser = grammar::ProgramParser::new();
         parser.parse(lexer).unwrap();
     }
+
+    #[test]
+    fn parse_for_while() {
+        let source = r##"mod MyMod {
+    fn hello() {
+        let mut result: i64 = 0;
+
+        let n: i64 = 1;
+        for (; n <= limit ;) {
+            result = result + n;
+            n = n + 1;
+        }
+
+        return result;
+    }
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
+    }
+
+    #[test]
+    fn parse_for_loop() {
+        let source = r##"mod MyMod {
+    fn hello() {
+        let mut result: i64 = 0;
+
+        let n: i64 = 1;
+        for (;;) {
+            result = result + n;
+            n = n + 1;
+        }
+
+        return result;
+    }
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
+    }
 }
