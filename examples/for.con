@@ -6,7 +6,7 @@ mod Example {
     fn sum_to(limit: i64) -> i64 {
         let mut result: i64 = 0;
 
-        for let n: usize = 1; n <= limit; n = n + 1 {
+        for (let n: usize = 1; n <= limit; n = n + 1) {
             result = result + n;
         }
 
