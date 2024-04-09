@@ -561,7 +561,7 @@ pub(crate) WhileStmt: ast::statements::WhileStmt = {
 
 
 pub(crate) ForStmt: ast::statements::ForStmt = {
-  "for" <init:LetStmt>? ";" <condition:Expression>? ";" <post:AssignStmt>? "{" <contents:StatementList> "}" => {
+  "for" <init:LetStmt?> ";" <condition:Expression?> ";" <post:AssignStmt?> "{" <contents:StatementList> "}" => {
     ast::statements::ForStmt {
       init,
       condition,
