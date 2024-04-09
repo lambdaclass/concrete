@@ -576,5 +576,13 @@ pub(crate) ForStmt: ast::statements::ForStmt = {
       post: None,
       contents,
     }
+  },
+    "for" "{" <contents:StatementList> "}" => {
+    ast::statements::ForStmt {
+      init: None,
+      condition: None,
+      post: None,
+      contents,
+    }
   }
 }
