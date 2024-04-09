@@ -500,6 +500,7 @@ pub(crate) Statement: ast::statements::Statement = {
   <MatchExpr> ";"? => ast::statements::Statement::Match(<>),
   <IfExpr> ";"? => ast::statements::Statement::If(<>),
   <WhileStmt> ";"? => ast::statements::Statement::While(<>),
+  <ForStmt> ":"? => ast::statements::Statement::For(<>),
   <LetStmt> ";" => ast::statements::Statement::Let(<>),
   <AssignStmt> ";" => ast::statements::Statement::Assign(<>),
   <FnCallOp> ";" => ast::statements::Statement::FnCall(<>),
@@ -553,6 +554,18 @@ pub(crate) WhileStmt: ast::statements::WhileStmt = {
   "while" <value:Expression> "{" <contents:StatementList> "}" => {
     ast::statements::WhileStmt {
       value,
+      contents,
+    }
+  }
+}
+
+
+pub(crate) ForStmt: ast::statements::ForStmt = {
+  "for" <init:LetStmt> ";" <condition:Expression> ";" <post:AssignStmt> "{" <contents:StatementList> "}" => {
+    ast::statements::WhileStmt {
+      init,
+      condition,
+      post,
       contents,
     }
   }
