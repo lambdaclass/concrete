@@ -53,9 +53,9 @@ pub struct Binding {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ForStmt {
-    pub init: LetStmt,
-    pub condition: Expression,
-    pub post: AssignStmt,
+    pub init: Option<LetStmt>,
+    pub condition: Option<Expression>,
+    pub post: Option<AssignStmt>,
     pub contents: Vec<Statement>,
 }
 
