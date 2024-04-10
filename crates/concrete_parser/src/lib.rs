@@ -176,6 +176,10 @@ mod ModuleName {
         Bar,
         Baz,
     }
+
+    fn main() -> i32 {
+        let mut foo: Foo = Foo.Bar;
+    }
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
