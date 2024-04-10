@@ -155,4 +155,17 @@ mod ModuleName {
         let parser = grammar::ProgramParser::new();
         parser.parse(lexer).unwrap();
     }
+
+    #[test]
+    fn parse_union_declaration() {
+        let source = r##"mod MyMod {
+    union Foo {
+        bar: i32,
+        baz: i64,
+    }
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
+    }
 }
