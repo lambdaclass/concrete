@@ -18,6 +18,7 @@ extern {
     "fn" => Token::KeywordFn,
     "return" => Token::KeywordReturn,
     "struct" => Token::KeywordStruct,
+    "union" => Token::KeywordUnion,
     "if" => Token::KeywordIf,
     "else" => Token::KeywordElse,
     "while" => Token::KeywordWhile,
@@ -238,6 +239,9 @@ pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
   <StructDef> => {
     ast::modules::ModuleDefItem::Struct(<>)
   },
+  <UnionDef> => {
+    ast::modules::ModuleDefItem::Union(<>)
+  },
   <FunctionDef> => {
     ast::modules::ModuleDefItem::Function(<>)
   },
@@ -307,6 +311,16 @@ pub(crate) StructDef: ast::structs::StructDecl = {
     <lo:@L> "struct" <name:Ident> <generics:GenericParams?> "{" <fields:Comma<StructField>> "}" <hi:@R> => ast::structs::StructDecl {
         name,
         fields,
+        generics: generics.unwrap_or(vec![]),
+        span: Span::new(lo, hi),
+    }
+}
+
+
+pub(crate) UnionDef: ast::enums::UnionDecl = {
+    <lo:@L> "union" <name:Ident> <generics:GenericParams?> "{" <variants:Comma<StructField>> "}" <hi:@R> => ast::enums::UnionDecl {
+        name,
+        variants,
         generics: generics.unwrap_or(vec![]),
         span: Span::new(lo, hi),
     }
