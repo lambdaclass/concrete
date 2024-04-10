@@ -163,6 +163,13 @@ mod ModuleName {
         bar: i32,
         baz: i64,
     }
+
+    fn main() -> i32 {
+        let mut foo: Foo = Foo { bar: 1 };
+
+		// unsafe!
+		let bar: i32 = foo.bar;
+    }
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
