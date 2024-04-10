@@ -10,3 +10,17 @@ pub struct UnionDecl {
     pub variants: Vec<Field>,
     pub span: Span,
 }
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EnumDecl {
+    pub name: Ident,
+    pub generics: Vec<GenericParam>,
+    pub variants: Vec<EnumVariant>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EnumVariant {
+    pub name: Ident,
+    pub span: Span,
+}

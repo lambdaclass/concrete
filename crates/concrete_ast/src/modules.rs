@@ -1,7 +1,7 @@
 use crate::{
     common::{DocString, Ident, Span},
     constants::ConstantDef,
-    enums::UnionDecl,
+    enums::{EnumDecl, UnionDecl},
     functions::FunctionDef,
     imports::ImportStmt,
     structs::StructDecl,
@@ -23,6 +23,7 @@ pub enum ModuleDefItem {
     Function(FunctionDef),
     Struct(StructDecl),
     Union(UnionDecl),
+    Enum(EnumDecl),
     Type(TypeDecl),
     Module(Module),
 }

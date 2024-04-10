@@ -96,6 +96,7 @@ pub fn prepass_module(
                     current_module.modules.insert(next_id);
                 }
                 ast::modules::ModuleDefItem::Union(_) => todo!(),
+                ast::modules::ModuleDefItem::Enum(_) => todo!(),
             }
         }
 
@@ -197,6 +198,7 @@ pub fn prepass_sub_module(
                     submodule.modules.insert(next_id);
                 }
                 ast::modules::ModuleDefItem::Union(_) => todo!(),
+                ast::modules::ModuleDefItem::Enum(_) => todo!(),
             }
         }
 
