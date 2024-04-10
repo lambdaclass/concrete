@@ -341,8 +341,9 @@ pub(crate) EnumDef: ast::enums::EnumDecl = {
 
 
 pub(crate) EnumVariant: ast::enums::EnumVariant = {
-    <lo:@L> <name:Ident> <hi:@R> => ast::enums::EnumVariant {
+    <lo:@L> <name:Ident> <fields:("{" <Comma<StructField>> "}")?> <hi:@R> => ast::enums::EnumVariant {
         name,
+        fields: fields.unwrap_or_default(),
         span: Span::new(lo, hi),
     }
 }

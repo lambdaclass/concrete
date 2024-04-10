@@ -174,7 +174,7 @@ mod ModuleName {
         let source = r##"mod MyMod {
     enum Foo {
         Bar,
-        Baz,
+		Baz { n1: i32, n2: i32 },
     }
 
     fn main() -> i32 {
