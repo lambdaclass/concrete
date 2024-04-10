@@ -175,6 +175,7 @@ mod ModuleName {
     enum Foo {
         Bar,
 		Baz { n1: i32, n2: i32 },
+		Qux = 3,
     }
 
     fn main() -> i32 {

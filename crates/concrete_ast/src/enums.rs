@@ -1,5 +1,6 @@
 use crate::{
     common::{GenericParam, Ident, Span},
+    expressions::Expression,
     structs::Field,
 };
 
@@ -23,5 +24,6 @@ pub struct EnumDecl {
 pub struct EnumVariant {
     pub name: Ident,
     pub fields: Vec<Field>,
+    pub discriminant: Option<Expression>,
     pub span: Span,
 }
