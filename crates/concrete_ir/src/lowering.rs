@@ -122,6 +122,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                 ctx = lower_module(ctx, mod_def, id)?;
             }
             ModuleDefItem::Struct(_) => { /* already processed */ }
+            ModuleDefItem::Union(_) => todo!(),
         }
     }
 
