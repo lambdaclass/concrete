@@ -1,0 +1,6 @@
+mod EnumExample {
+    enum Foo {
+		Bar,
+		Baz,
+    }
+}
