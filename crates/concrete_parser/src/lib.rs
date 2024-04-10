@@ -168,4 +168,17 @@ mod ModuleName {
         let parser = grammar::ProgramParser::new();
         parser.parse(lexer).unwrap();
     }
+
+    #[test]
+    fn parse_enum() {
+        let source = r##"mod MyMod {
+    enum Foo {
+        Bar,
+        Baz,
+    }
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
+    }
 }
