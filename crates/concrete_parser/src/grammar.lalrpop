@@ -561,28 +561,31 @@ pub(crate) WhileStmt: ast::statements::WhileStmt = {
 
 
 pub(crate) ForStmt: ast::statements::ForStmt = {
-  "for" "(" <init:LetStmt?> ";" <condition:Expression?> ";" <post:AssignStmt?> ")" "{" <contents:StatementList> "}" => {
+  <lo:@L> "for" "(" <init:LetStmt?> ";" <condition:Expression?> ";" <post:AssignStmt?> ")" "{" <contents:StatementList> "}" <hi:@R> => {
     ast::statements::ForStmt {
       init,
       condition,
       post,
       contents,
+      span: Span::new(lo, hi)
     }
   },
-  "for" "(" <condition:Expression> ")" "{" <contents:StatementList> "}" => {
+  <lo:@L> "for" "(" <condition:Expression> ")" "{" <contents:StatementList> "}" <hi:@R> => {
     ast::statements::ForStmt {
       init: None,
       condition: Some(condition),
       post: None,
       contents,
+      span: Span::new(lo, hi)
     }
   },
-    "for" "{" <contents:StatementList> "}" => {
+  <lo:@L> "for" "{" <contents:StatementList> "}" <hi:@R> => {
     ast::statements::ForStmt {
       init: None,
       condition: None,
       post: None,
       contents,
+      span: Span::new(lo, hi)
     }
   }
 }

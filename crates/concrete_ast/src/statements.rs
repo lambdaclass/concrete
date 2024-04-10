@@ -57,6 +57,7 @@ pub struct ForStmt {
     pub condition: Option<Expression>,
     pub post: Option<AssignStmt>,
     pub contents: Vec<Statement>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
