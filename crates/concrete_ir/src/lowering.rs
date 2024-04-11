@@ -233,6 +233,24 @@ fn lower_func(
                 }
                 LetStmtTarget::Destructure(_) => todo!(),
             }
+        } else if let statements::Statement::For(info) = stmt {
+            if let Some(info) = &info.init {
+                match &info.target {
+                    LetStmtTarget::Simple { name, r#type } => {
+                        let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
+                        builder
+                            .name_to_local
+                            .insert(name.name.clone(), builder.body.locals.len());
+                        builder.body.locals.push(Local::new(
+                            Some(name.span),
+                            LocalKind::Temp,
+                            ty,
+                            Some(name.name.clone()),
+                        ));
+                    }
+                    LetStmtTarget::Destructure(_) => todo!(),
+                }
+            }
         }
     }
 
