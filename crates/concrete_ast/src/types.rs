@@ -1,41 +1,35 @@
 use crate::common::{DocString, Ident, Span};
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Copy)]
-pub enum RefType {
-    Borrow,
-    MutBorrow,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TypeQualifier {
+    Ref,    // &
+    RefMut, // &mut
+    Ptr,    // *const
+    PtrMut, // *mut
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum TypeSpec {
     Simple {
         name: Ident,
-        is_ref: Option<RefType>,
+        qualifiers: Vec<TypeQualifier>,
         span: Span,
     },
     Generic {
         name: Ident,
-        is_ref: Option<RefType>,
+        qualifiers: Vec<TypeQualifier>,
         type_params: Vec<TypeSpec>,
         span: Span,
     },
     Array {
         of_type: Box<Self>,
         size: u64,
-        is_ref: Option<RefType>,
+        qualifiers: Vec<TypeQualifier>,
         span: Span,
     },
 }
 
 impl TypeSpec {
-    pub fn is_ref(&self) -> Option<RefType> {
-        match self {
-            TypeSpec::Simple { is_ref, .. } => *is_ref,
-            TypeSpec::Generic { is_ref, .. } => *is_ref,
-            TypeSpec::Array { is_ref, .. } => *is_ref,
-        }
-    }
-
     pub fn get_name(&self) -> String {
         match self {
             TypeSpec::Simple { name, .. } => name.name.clone(),
