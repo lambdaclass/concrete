@@ -428,25 +428,17 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), Lowe
         )?;
     }
 
-    // keet idx to change terminator if there is no return
-    let last_then_block_idx = if !matches!(
-        builder.body.basic_blocks.last().unwrap().terminator.kind,
-        TerminatorKind::Return
-    ) {
-        builder.body.basic_blocks.len();
-        let statements = std::mem::take(&mut builder.statements);
-        let idx = builder.body.basic_blocks.len();
-        builder.body.basic_blocks.push(BasicBlock {
-            statements,
-            terminator: Box::new(Terminator {
-                span: None,
-                kind: TerminatorKind::Unreachable,
-            }),
-        });
-        Some(idx)
-    } else {
-        None
-    };
+    builder.body.basic_blocks.len();
+    let statements = std::mem::take(&mut builder.statements);
+    builder.body.basic_blocks.push(BasicBlock {
+        statements,
+        terminator: Box::new(Terminator {
+            span: None,
+            kind: TerminatorKind::Goto {
+                target: check_block_idx,
+            },
+        }),
+    });
 
     let otherwise_block_idx = builder.body.basic_blocks.len();
 
@@ -460,14 +452,6 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), Lowe
         targets,
     };
     builder.body.basic_blocks[check_block_idx].terminator.kind = kind;
-
-    if let Some(last_then_block_idx) = last_then_block_idx {
-        builder.body.basic_blocks[last_then_block_idx]
-            .terminator
-            .kind = TerminatorKind::Goto {
-            target: check_block_idx,
-        };
-    }
 
     Ok(())
 }
