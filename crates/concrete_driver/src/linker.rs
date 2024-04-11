@@ -1,43 +1,41 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use tracing::instrument;
 
-use crate::errors::CodegenError;
-
-// TODO: Implement a proper linker driver, passing only the arguments needed dynamically based on the requirements.
-
 #[instrument(level = "debug")]
-pub fn link_shared_lib(input_path: &Path, output_filename: &Path) -> Result<(), CodegenError> {
-    let args: &[&str] = {
+pub fn link_shared_lib(objects: &[PathBuf], output_filename: &Path) -> std::io::Result<()> {
+    let objects: Vec<_> = objects.iter().map(|x| x.display().to_string()).collect();
+    let output_filename = output_filename.to_string_lossy().to_string();
+
+    let args: Vec<_> = {
         #[cfg(target_os = "macos")]
         {
-            &[
+            let mut args = vec![
                 "-demangle",
                 "-no_deduplicate",
                 "-dynamic",
                 "-dylib",
                 "-L/usr/local/lib",
                 "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
-                &input_path.display().to_string(),
-                "-o",
-                &output_filename.display().to_string(),
-                "-lSystem",
-            ]
+            ];
+
+            args.extend(objects.iter().map(|x| x.as_str()));
+
+            args.extend(&["-o", &output_filename, "-lSystem"]);
+
+            args
         }
         #[cfg(target_os = "linux")]
         {
-            &[
-                "--hash-style=gnu",
-                "--eh-frame-hdr",
-                "-shared",
-                "-o",
-                &output_filename.display().to_string(),
-                "-L/lib/../lib64",
-                "-L/usr/lib/../lib64",
-                "-lc",
-                "-O1",
-                &input_path.display().to_string(),
-            ]
+            let mut args = vec!["--hash-style=gnu", "--eh-frame-hdr", "-shared"];
+
+            args.extend(&["-o", &output_filename]);
+
+            args.extend(&["-L/lib/../lib64", "-L/usr/lib/../lib64", "-lc", "-O1"]);
+
+            args.extend(objects.iter().map(|x| x.as_str()));
+
+            args
         }
         #[cfg(target_os = "windows")]
         {
@@ -52,18 +50,24 @@ pub fn link_shared_lib(input_path: &Path, output_filename: &Path) -> Result<(), 
 }
 
 #[instrument(level = "debug")]
-pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), CodegenError> {
-    let args: &[&str] = {
+pub fn link_binary(objects: &[PathBuf], output_filename: &Path) -> std::io::Result<()> {
+    let objects: Vec<_> = objects.iter().map(|x| x.display().to_string()).collect();
+    let output_filename = output_filename.to_string_lossy().to_string();
+
+    let args: Vec<_> = {
         #[cfg(target_os = "macos")]
         {
-            &[
+            let mut args = vec![
                 "-L/usr/local/lib",
                 "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
                 &input_path.display().to_string(),
-                "-o",
-                &output_filename.display().to_string(),
-                "-lSystem",
-            ]
+            ];
+
+            args.extend(objects.iter().map(|x| x.as_str()));
+
+            args.extend(&["-o", &output_filename, "-lSystem"]);
+
+            args
         }
         #[cfg(target_os = "linux")]
         {
@@ -83,7 +87,7 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), Code
                 }
             };
 
-            &[
+            let mut args = vec![
                 "-pie",
                 "--hash-style=gnu",
                 "--eh-frame-hdr",
@@ -93,8 +97,11 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), Code
                 "elf_x86_64",
                 scrt1,
                 crti,
-                "-o",
-                &output_filename.display().to_string(),
+            ];
+
+            args.extend(&["-o", &output_filename]);
+
+            args.extend(&[
                 "-L/lib64",
                 "-L/usr/lib64",
                 "-L/lib/x86_64-linux-gnu",
@@ -103,8 +110,11 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), Code
                 "-lc",
                 "-O1",
                 crtn,
-                &input_path.display().to_string(),
-            ]
+            ]);
+
+            args.extend(objects.iter().map(|x| x.as_str()));
+
+            args
         }
         #[cfg(target_os = "windows")]
         {
@@ -114,7 +124,8 @@ pub fn link_binary(input_path: &Path, output_filename: &Path) -> Result<(), Code
 
     let mut linker = std::process::Command::new("ld");
     let proc = linker.args(args.iter()).spawn()?;
-    proc.wait_with_output()?;
+    let output = proc.wait_with_output()?;
+    tracing::debug!("Linker result: {:#?}", output);
     Ok(())
 }
 

@@ -184,6 +184,7 @@ pub(crate) GenericParams: Vec<ast::common::GenericParam> = {
 pub Program: ast::Program = {
   <Module> => {
     ast::Program {
+      file_path: None,
       modules: vec![<>],
     }
   },

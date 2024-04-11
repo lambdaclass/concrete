@@ -39,8 +39,7 @@ impl Context {
         session: &Session,
         program: &ProgramBody,
     ) -> Result<MLIRModule, CodegenError> {
-        let file_path = session.file_path.display().to_string();
-        let location = Location::new(&self.melior_context, &file_path, 0, 0);
+        let location = Location::unknown(&self.melior_context);
         let target_triple = get_target_triple(session);
 
         let module_region = Region::new();
@@ -74,7 +73,7 @@ impl Context {
 
         super::codegen::compile_program(codegen_ctx)?;
 
-        if session.output_mlir || session.output_all {
+        if session.output_mlir {
             std::fs::write(
                 session.output_file.with_extension("before-pass.mlir"),
                 melior_module.as_operation().to_string(),
@@ -96,7 +95,7 @@ impl Context {
             );
         }
 
-        if session.output_mlir || session.output_all {
+        if session.output_mlir {
             std::fs::write(
                 session.output_file.with_extension("after-pass.mlir"),
                 melior_module.as_operation().to_string(),
