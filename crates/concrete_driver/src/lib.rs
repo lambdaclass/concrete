@@ -59,6 +59,11 @@ enum Commands {
         #[arg(short, long)]
         profile: Option<String>,
     },
+    /// Run a concrete file
+    Run {
+        #[arg(required = false)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -350,6 +355,36 @@ mod {} {{
                     ""
                 }
             );
+        }
+        Commands::Run { path } => {
+            let input = path.unwrap();
+
+            let stem = input
+                .file_stem()
+                .context("could not get file stem")?
+                .to_str()
+                .context("could not convert file stem to string")?;
+            let output = std::env::current_dir()?.join("build").join(stem);
+
+            let compile_args = CompilerArgs {
+                input,
+                output: output.clone(),
+                release: false,
+                optlevel: None,
+                debug_info: None,
+                library: false,
+                ast: false,
+                ir: false,
+                llvm: true,
+                asm: false,
+                object: true,
+                mlir: true,
+            };
+
+            let start = Instant::now();
+            let object = compile(&compile_args)?;
+
+            link_binary(&[object], &output)?;
         }
     }
 
