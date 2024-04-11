@@ -9,7 +9,7 @@ use concrete_ast::{
     },
     functions::FunctionDef,
     modules::{Module, ModuleDefItem},
-    statements::{self, AssignStmt, LetStmt, LetStmtTarget, ReturnStmt, WhileStmt},
+    statements::{self, AssignStmt, ForStmt, LetStmt, LetStmtTarget, ReturnStmt, WhileStmt},
     structs::StructDecl,
     types::{RefType, TypeSpec},
     Program,
@@ -276,7 +276,7 @@ fn lower_statement(
     match info {
         statements::Statement::Assign(info) => lower_assign(builder, info)?,
         statements::Statement::Match(_) => todo!(),
-        statements::Statement::For(_) => todo!(),
+        statements::Statement::For(info) => lower_for(builder, info)?,
         statements::Statement::If(info) => lower_if_statement(builder, info)?,
         statements::Statement::Let(info) => lower_let(builder, info)?,
         statements::Statement::Return(info) => {
@@ -344,6 +344,120 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), Lowe
         builder.body.basic_blocks.last().unwrap().terminator.kind,
         TerminatorKind::Return
     ) {
+        builder.body.basic_blocks.len();
+        let statements = std::mem::take(&mut builder.statements);
+        let idx = builder.body.basic_blocks.len();
+        builder.body.basic_blocks.push(BasicBlock {
+            statements,
+            terminator: Box::new(Terminator {
+                span: None,
+                kind: TerminatorKind::Unreachable,
+            }),
+        });
+        Some(idx)
+    } else {
+        None
+    };
+
+    let otherwise_block_idx = builder.body.basic_blocks.len();
+
+    let targets = SwitchTargets {
+        values: vec![discriminator_type.get_falsy_value()],
+        targets: vec![otherwise_block_idx, first_then_block_idx],
+    };
+
+    let kind = TerminatorKind::SwitchInt {
+        discriminator: Operand::Place(place),
+        targets,
+    };
+    builder.body.basic_blocks[check_block_idx].terminator.kind = kind;
+
+    if let Some(last_then_block_idx) = last_then_block_idx {
+        builder.body.basic_blocks[last_then_block_idx]
+            .terminator
+            .kind = TerminatorKind::Goto {
+            target: check_block_idx,
+        };
+    }
+
+    Ok(())
+}
+
+fn lower_for(builder: &mut FnBodyBuilder, info: &ForStmt) -> Result<(), LoweringError> {
+    if let Some(init) = &info.init {
+        lower_let(builder, init)?;
+    }
+
+    let statements = std::mem::take(&mut builder.statements);
+    builder.body.basic_blocks.push(BasicBlock {
+        statements,
+        terminator: Box::new(Terminator {
+            span: None,
+            kind: TerminatorKind::Goto {
+                target: builder.body.basic_blocks.len() + 1,
+            },
+        }),
+    });
+
+    let (discriminator, discriminator_type, _disc_span) = if let Some(condition) = &info.condition {
+        let (discriminator, discriminator_type, span) = lower_expression(builder, condition, None)?;
+
+        (discriminator, discriminator_type, Some(span))
+    } else {
+        // todo: don't use discriminator when no loop condition
+        let discriminator = Rvalue::Use(Operand::Const(ConstData {
+            ty: TyKind::Bool,
+            data: ConstKind::Value(ValueTree::Leaf(ConstValue::Bool(true))),
+        }));
+
+        let discriminator_type = TyKind::Bool;
+
+        (discriminator, discriminator_type, None)
+    };
+
+    let local = builder.add_temp_local(TyKind::Bool);
+    let place = Place {
+        local,
+        projection: vec![],
+    };
+
+    builder.statements.push(Statement {
+        span: None,
+        kind: StatementKind::Assign(place.clone(), discriminator),
+    });
+
+    // keep idx to change terminator
+    let check_block_idx = builder.body.basic_blocks.len();
+
+    let statements = std::mem::take(&mut builder.statements);
+    builder.body.basic_blocks.push(BasicBlock {
+        statements,
+        terminator: Box::new(Terminator {
+            span: None,
+            kind: TerminatorKind::Unreachable,
+        }),
+    });
+
+    // keep idx for switch targets
+    let first_then_block_idx = builder.body.basic_blocks.len();
+
+    for stmt in &info.contents {
+        lower_statement(
+            builder,
+            stmt,
+            builder.body.locals[builder.ret_local].ty.clone(),
+        )?;
+    }
+
+    // keet idx to change terminator if there is no return
+    let last_then_block_idx = if !matches!(
+        builder.body.basic_blocks.last().unwrap().terminator.kind,
+        TerminatorKind::Return
+    ) {
+        if let Some(post) = &info.post {
+            lower_assign(builder, post)?;
+        }
+
         builder.body.basic_blocks.len();
         let statements = std::mem::take(&mut builder.statements);
         let idx = builder.body.basic_blocks.len();
