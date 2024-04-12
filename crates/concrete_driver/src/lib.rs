@@ -364,7 +364,12 @@ mod {} {{
                 .context("could not get file stem")?
                 .to_str()
                 .context("could not convert file stem to string")?;
-            let output = std::env::current_dir()?.join("build").join(stem);
+
+            let build_dir = std::env::current_dir()?.join("build");
+            if !build_dir.exists() {
+                std::fs::create_dir_all(&build_dir)?;
+            }
+            let output = build_dir.with_file_name(stem);
 
             let compile_args = CompilerArgs {
                 input,
@@ -380,10 +385,7 @@ mod {} {{
                 object: true,
                 mlir: true,
             };
-
-            let start = Instant::now();
             let object = compile(&compile_args)?;
-
             link_binary(&[object], &output)?;
         }
     }
