@@ -292,7 +292,7 @@ mod {} {{
                 None => build_command(profile, release)?,
             };
 
-            Err(std::process::Command::new(&output).exec())?;
+            Err(std::process::Command::new(output).exec())?;
         }
     }
 
