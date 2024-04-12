@@ -17,6 +17,7 @@ mod common;
 #[test_case(include_str!("../../../examples/casts.con"), "casts", false, 2 ; "casts.con")]
 #[test_case(include_str!("../../../examples/malloc.con"), "malloc", false, 5 ; "malloc.con")]
 #[test_case(include_str!("../../../examples/while_if_false.con"), "while_if_false", false, 7 ; "while_if_false.con")]
+#[test_case(include_str!("../../../examples/if_if_false.con"), "if_if_false", false, 7 ; "if_if_false.con")]
 fn example_tests(source: &str, name: &str, is_library: bool, status_code: i32) {
     assert_eq!(
         status_code,
