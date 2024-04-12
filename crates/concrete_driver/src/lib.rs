@@ -267,7 +267,7 @@ mod {} {{
                     if !build_dir.exists() {
                         std::fs::create_dir_all(&build_dir)?;
                     }
-                    let output = build_dir.join(&input_stem);
+                    let output = build_dir.join(input_stem);
 
                     let compile_args = CompilerArgs {
                         input: input.clone(),
