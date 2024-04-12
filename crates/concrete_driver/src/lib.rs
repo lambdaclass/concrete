@@ -257,7 +257,7 @@ mod {} {{
         } => {
             let output = match path {
                 Some(input) => {
-                    let output_stem = input
+                    let input_stem = input
                         .file_stem()
                         .context("could not get file stem")?
                         .to_str()
@@ -267,10 +267,10 @@ mod {} {{
                     if !build_dir.exists() {
                         std::fs::create_dir_all(&build_dir)?;
                     }
-                    let output = build_dir.join(output_stem);
+                    let output = build_dir.join(&input_stem);
 
                     let compile_args = CompilerArgs {
-                        input,
+                        input: input.clone(),
                         output: output.clone(),
                         release,
                         optlevel: None,
@@ -283,14 +283,31 @@ mod {} {{
                         object: true,
                         mlir: true,
                     };
-                    let object = compile(&compile_args)?;
 
+                    println!(
+                        "   {} {} ({})",
+                        "Compiling".green().bold(),
+                        input_stem,
+                        input.display()
+                    );
+
+                    let start = Instant::now();
+                    let object = compile(&compile_args)?;
                     link_binary(&[object], &output)?;
+                    let elapsed = start.elapsed();
+
+                    println!(
+                        "   {} {} in {elapsed:?}",
+                        "Finished".green().bold(),
+                        if release { "release" } else { "dev" },
+                    );
 
                     output
                 }
                 None => build_command(profile, release)?,
             };
+
+            println!("   {} {}", "Running".green().bold(), &output.display());
 
             Err(std::process::Command::new(output).exec())?;
         }
