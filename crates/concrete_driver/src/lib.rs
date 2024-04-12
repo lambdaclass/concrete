@@ -60,10 +60,7 @@ enum Commands {
         profile: Option<String>,
     },
     /// Run a concrete file
-    Run {
-        #[arg(required = false)]
-        path: Option<PathBuf>,
-    },
+    Run { path: PathBuf },
 }
 
 #[derive(Parser, Debug)]
@@ -356,9 +353,7 @@ mod {} {{
                 }
             );
         }
-        Commands::Run { path } => {
-            let input = path.unwrap();
-
+        Commands::Run { path: input } => {
             let output_stem = input
                 .file_stem()
                 .context("could not get file stem")?
