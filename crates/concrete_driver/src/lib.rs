@@ -61,7 +61,18 @@ enum Commands {
         profile: Option<String>,
     },
     /// Run a concrete file
-    Run { path: PathBuf },
+    Run {
+        #[arg(required = false)]
+        path: Option<PathBuf>,
+
+        /// Build for release with all optimizations.
+        #[arg(short, long, default_value_t = false)]
+        release: bool,
+
+        /// Override the profile to use.
+        #[arg(short, long)]
+        profile: Option<String>,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -239,36 +250,47 @@ mod {} {{
         Commands::Build { release, profile } => {
             build_command(profile, release)?;
         }
-        Commands::Run { path: input } => {
-            let output_stem = input
-                .file_stem()
-                .context("could not get file stem")?
-                .to_str()
-                .context("could not convert file stem to string")?;
+        Commands::Run {
+            path,
+            release,
+            profile,
+        } => {
+            let output = match path {
+                Some(input) => {
+                    let output_stem = input
+                        .file_stem()
+                        .context("could not get file stem")?
+                        .to_str()
+                        .context("could not convert file stem to string")?;
 
-            let build_dir = std::env::current_dir()?.join("build");
-            if !build_dir.exists() {
-                std::fs::create_dir_all(&build_dir)?;
-            }
-            let output = build_dir.join(output_stem);
+                    let build_dir = std::env::current_dir()?.join("build");
+                    if !build_dir.exists() {
+                        std::fs::create_dir_all(&build_dir)?;
+                    }
+                    let output = build_dir.join(output_stem);
 
-            let compile_args = CompilerArgs {
-                input,
-                output: output.clone(),
-                release: false,
-                optlevel: None,
-                debug_info: None,
-                library: false,
-                ast: false,
-                ir: false,
-                llvm: true,
-                asm: false,
-                object: true,
-                mlir: true,
+                    let compile_args = CompilerArgs {
+                        input,
+                        output: output.clone(),
+                        release,
+                        optlevel: None,
+                        debug_info: None,
+                        library: false,
+                        ast: false,
+                        ir: false,
+                        llvm: true,
+                        asm: false,
+                        object: true,
+                        mlir: true,
+                    };
+                    let object = compile(&compile_args)?;
+
+                    link_binary(&[object], &output)?;
+
+                    output
+                }
+                None => build_command(profile, release)?,
             };
-            let object = compile(&compile_args)?;
-
-            link_binary(&[object], &output)?;
 
             Err(std::process::Command::new(&output).exec())?;
         }
