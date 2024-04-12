@@ -12,6 +12,7 @@ use config::{Package, Profile};
 use git2::{IndexAddOption, Repository};
 use owo_colors::OwoColorize;
 use std::io::Read;
+use std::os::unix::process::CommandExt;
 use std::{collections::HashMap, fs::File, path::PathBuf, time::Instant};
 use walkdir::WalkDir;
 
@@ -383,6 +384,8 @@ mod {} {{
             let object = compile(&compile_args)?;
 
             link_binary(&[object], &output)?;
+
+            Err(std::process::Command::new(&output).exec())?;
         }
     }
 
