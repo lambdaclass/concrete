@@ -60,7 +60,6 @@ pub fn link_binary(objects: &[PathBuf], output_filename: &Path) -> std::io::Resu
             let mut args = vec![
                 "-L/usr/local/lib",
                 "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
-                &input_path.display().to_string(),
             ];
 
             args.extend(objects.iter().map(|x| x.as_str()));
