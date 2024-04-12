@@ -366,12 +366,18 @@ fn lower_statement(
         statements::Statement::Assign(info) => lower_assign(builder, info)?,
         statements::Statement::Match(_) => todo!(),
         statements::Statement::For(_) => todo!(),
-        statements::Statement::If(info) => lower_if_statement(builder, info)?,
+        statements::Statement::If(info) => {
+            lower_if_statement(builder, info)?;
+            assert!(builder.statements.is_empty());
+        }
         statements::Statement::Let(info) => lower_let(builder, info)?,
         statements::Statement::Return(info) => {
             lower_return(builder, info, ret_type)?;
         }
-        statements::Statement::While(info) => lower_while(builder, info)?,
+        statements::Statement::While(info) => {
+            lower_while(builder, info)?;
+            assert!(builder.statements.is_empty());
+        }
         statements::Statement::FnCall(info) => {
             lower_fn_call(builder, info)?;
         }
