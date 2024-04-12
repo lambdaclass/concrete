@@ -309,16 +309,14 @@ fn lower_func(
         lower_statement(&mut builder, stmt, ret_type.clone())?;
     }
 
-    if !builder.statements.is_empty() {
-        let statements = std::mem::take(&mut builder.statements);
-        builder.body.basic_blocks.push(BasicBlock {
-            statements,
-            terminator: Box::new(Terminator {
-                span: None,
-                kind: TerminatorKind::Return,
-            }),
-        });
-    }
+    let statements = std::mem::take(&mut builder.statements);
+    builder.body.basic_blocks.push(BasicBlock {
+        statements,
+        terminator: Box::new(Terminator {
+            span: None,
+            kind: TerminatorKind::Return,
+        }),
+    });
 
     let (mut ctx, body) = (builder.ctx, builder.body);
     ctx.unresolved_function_signatures.remove(&body.id);
@@ -501,13 +499,9 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
     }
 
     // keet idx to change terminator
-    let last_then_block_idx = if !matches!(
-        builder.body.basic_blocks.last().unwrap().terminator.kind,
-        TerminatorKind::Return
-    ) {
+    let last_then_block_idx = {
         builder.body.basic_blocks.len();
         let statements = std::mem::take(&mut builder.statements);
-        let idx = builder.body.basic_blocks.len();
         builder.body.basic_blocks.push(BasicBlock {
             statements,
             terminator: Box::new(Terminator {
@@ -515,9 +509,7 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
                 kind: TerminatorKind::Unreachable,
             }),
         });
-        Some(idx)
-    } else {
-        None
+        builder.body.basic_blocks.len() - 1
     };
 
     let first_else_block_idx = builder.body.basic_blocks.len();
@@ -530,32 +522,23 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
                 builder.body.locals[builder.ret_local].ty.clone(),
             )?;
         }
-    }
 
-    let last_else_block_idx = if !matches!(
-        builder.body.basic_blocks.last().unwrap().terminator.kind,
-        TerminatorKind::Return
-    ) {
-        builder.body.basic_blocks.len();
         let statements = std::mem::take(&mut builder.statements);
-        let idx = builder.body.basic_blocks.len();
         builder.body.basic_blocks.push(BasicBlock {
             statements,
             terminator: Box::new(Terminator {
                 span: None,
-                kind: TerminatorKind::Unreachable,
+                kind: TerminatorKind::Goto {
+                    target: builder.body.basic_blocks.len() + 1,
+                },
             }),
         });
-        Some(idx)
-    } else {
-        None
-    };
+    }
 
     let targets = SwitchTargets {
         values: vec![discriminator_type.kind.get_falsy_value()],
         targets: vec![first_else_block_idx, first_then_block_idx],
     };
-
     let kind = TerminatorKind::SwitchInt {
         discriminator: Operand::Place(place),
         targets,
@@ -564,22 +547,11 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
 
     let next_block_idx = builder.body.basic_blocks.len();
 
-    // check if the
-    if let Some(last_then_block_idx) = last_then_block_idx {
-        builder.body.basic_blocks[last_then_block_idx]
-            .terminator
-            .kind = TerminatorKind::Goto {
-            target: next_block_idx,
-        };
-    }
-
-    if let Some(last_else_block_idx) = last_else_block_idx {
-        builder.body.basic_blocks[last_else_block_idx]
-            .terminator
-            .kind = TerminatorKind::Goto {
-            target: next_block_idx,
-        };
-    }
+    builder.body.basic_blocks[last_then_block_idx]
+        .terminator
+        .kind = TerminatorKind::Goto {
+        target: next_block_idx,
+    };
 
     Ok(())
 }
