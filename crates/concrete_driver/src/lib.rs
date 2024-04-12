@@ -359,7 +359,7 @@ mod {} {{
         Commands::Run { path } => {
             let input = path.unwrap();
 
-            let stem = input
+            let output_stem = input
                 .file_stem()
                 .context("could not get file stem")?
                 .to_str()
@@ -369,7 +369,7 @@ mod {} {{
             if !build_dir.exists() {
                 std::fs::create_dir_all(&build_dir)?;
             }
-            let output = build_dir.with_file_name(stem);
+            let output = build_dir.join(output_stem);
 
             let compile_args = CompilerArgs {
                 input,
@@ -386,6 +386,7 @@ mod {} {{
                 mlir: true,
             };
             let object = compile(&compile_args)?;
+
             link_binary(&[object], &output)?;
         }
     }
