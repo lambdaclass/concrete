@@ -1,0 +1,7 @@
+coverage:
+  status:
+    project:
+      default: # This can be anything, but it needs to exist as the name
+        threshold: 65%
+        paths:
+          - "src"
