@@ -1,4 +1,6 @@
-use concrete_ir::lowering::{errors::LoweringError, lower_program};
+use std::path::PathBuf;
+
+use concrete_ir::lowering::{errors::LoweringError, lower_programs};
 use concrete_parser::{error::Diagnostics, ProgramSource};
 
 #[test]
@@ -9,7 +11,7 @@ fn module_not_found() {
     assert!(
         matches!(
             &error,
-            LoweringError::ModuleNotFound { span: _, module } if module == "Other"
+            LoweringError::ModuleNotFound { span: _, module, .. } if module == "Other"
         ),
         "{:#?}",
         error
@@ -65,7 +67,7 @@ pub fn check_invalid_program(source: &str, name: &str) -> LoweringError {
     let db = concrete_driver::db::Database::default();
     let source = ProgramSource::new(&db, source.to_string(), name.to_string());
 
-    let program = match concrete_parser::parse_ast(&db, source) {
+    let mut program = match concrete_parser::parse_ast(&db, source) {
         Some(x) => x,
         None => {
             Diagnostics::dump(
@@ -78,8 +80,9 @@ pub fn check_invalid_program(source: &str, name: &str) -> LoweringError {
             panic!("error parsing ast");
         }
     };
+    program.file_path = Some(PathBuf::from(name).with_extension("con"));
 
-    lower_program(&program).expect_err("expected error")
+    lower_programs(&[program]).expect_err("expected error")
 }
 
 #[test]

@@ -11,6 +11,9 @@ pub struct FunctionDecl {
     pub name: Ident,
     pub params: Vec<Param>,
     pub ret_type: Option<TypeSpec>,
+    pub is_extern: bool,
+    pub is_pub: bool,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

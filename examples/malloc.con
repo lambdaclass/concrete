@@ -1,0 +1,10 @@
+mod Example {
+    // Pointers are meant to use within std or ffi. (not yet restricted but will be)
+    extern fn malloc(size: u64) -> *mut u8;
+
+    pub fn main() -> i32 {
+        let a: *mut i32 = malloc(16) as *mut i32;
+        *a = 5;
+        return *a;
+    }
+}

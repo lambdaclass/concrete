@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fmt,
+    path::PathBuf,
 };
 
 use concrete_ast::common::Ident;
@@ -38,6 +39,8 @@ pub struct ProgramBody {
     pub structs: BTreeMap<DefId, AdtBody>,
     /// The function signatures.
     pub function_signatures: HashMap<DefId, (Vec<Ty>, Ty)>,
+    /// The file paths (program_id from the DefId) -> path.
+    pub file_paths: HashMap<usize, PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +67,7 @@ pub struct ModuleBody {
 pub struct FnBody {
     pub id: DefId,
     pub name: String,
+    pub is_extern: bool,
     pub basic_blocks: Vec<BasicBlock>,
     pub locals: Vec<Local>,
 }
@@ -74,6 +78,18 @@ impl FnBody {
             .iter()
             .filter(|x| matches!(x.kind, LocalKind::Arg))
             .collect()
+    }
+
+    pub fn get_mangled_name(&self) -> String {
+        if self.is_extern {
+            return self.name.clone();
+        }
+
+        if self.name == "main" {
+            "main".to_string()
+        } else {
+            format!("{}@{}@{}", self.name, self.id.program_id, self.id.id)
+        }
     }
 }
 
@@ -158,6 +174,8 @@ pub enum Rvalue {
     UnaryOp(UnOp, Operand),
     /// A reference to a place.
     Ref(Mutability, Place),
+    /// A cast.
+    Cast(Operand, Ty, Span),
 }
 
 /// A operand is a value, either from a place in memory or constant data.
@@ -286,7 +304,8 @@ pub enum TyKind {
     Float(FloatTy),
     String,
     Array(Box<Ty>, Box<ConstData>),
-    Ref(Box<Self>, Mutability),
+    Ref(Box<Ty>, Mutability),
+    Ptr(Box<Ty>, Mutability),
     // Type param <T>
     Param {
         index: usize,
@@ -296,6 +315,59 @@ pub enum TyKind {
         id: DefId,
         generics: Vec<Ty>,
     },
+}
+
+impl TyKind {
+    pub fn is_ptr_like(&self) -> bool {
+        matches!(self, TyKind::Ptr(_, _) | TyKind::Ref(_, _))
+    }
+
+    pub fn is_int(&self) -> bool {
+        matches!(self, TyKind::Int(_) | TyKind::Uint(_))
+    }
+
+    pub fn is_signed(&self) -> bool {
+        matches!(self, TyKind::Int(_))
+    }
+
+    pub fn is_float(&self) -> bool {
+        matches!(self, TyKind::Float(_))
+    }
+
+    /// Returns the type bit width, None if unsized.
+    ///
+    /// Meant for use in casts.
+    pub fn get_bit_width(&self) -> Option<usize> {
+        match self {
+            TyKind::Unit => None,
+            TyKind::Bool => Some(1),
+            TyKind::Char => Some(8),
+            TyKind::Int(ty) => match ty {
+                IntTy::I8 => Some(8),
+                IntTy::I16 => Some(16),
+                IntTy::I32 => Some(32),
+                IntTy::I64 => Some(64),
+                IntTy::I128 => Some(128),
+            },
+            TyKind::Uint(ty) => match ty {
+                UintTy::U8 => Some(8),
+                UintTy::U16 => Some(16),
+                UintTy::U32 => Some(32),
+                UintTy::U64 => Some(64),
+                UintTy::U128 => Some(128),
+            },
+            TyKind::Float(ty) => match ty {
+                FloatTy::F32 => Some(32),
+                FloatTy::F64 => Some(64),
+            },
+            TyKind::String => todo!(),
+            TyKind::Array(_, _) => todo!(),
+            TyKind::Ref(_, _) => todo!(),
+            TyKind::Ptr(_, _) => todo!(),
+            TyKind::Param { .. } => todo!(),
+            TyKind::Struct { .. } => todo!(),
+        }
+    }
 }
 
 impl fmt::Display for TyKind {
@@ -331,7 +403,16 @@ impl fmt::Display for TyKind {
                     "const"
                 };
 
-                write!(f, "&{word} {}", inner)
+                write!(f, "&{word} {}", inner.kind)
+            }
+            TyKind::Ptr(inner, is_mut) => {
+                let word = if let Mutability::Mut = is_mut {
+                    "mut"
+                } else {
+                    "const"
+                };
+
+                write!(f, "*{word} {}", inner.kind)
             }
             TyKind::Param { .. } => todo!(),
             TyKind::Struct { .. } => todo!(),
@@ -365,6 +446,7 @@ impl TyKind {
             TyKind::Ref(_, _) => todo!(),
             TyKind::Param { .. } => todo!(),
             TyKind::Struct { .. } => todo!(),
+            TyKind::Ptr(_, _) => todo!(),
         }
     }
 }
@@ -401,7 +483,7 @@ pub enum FloatTy {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct ConstData {
-    pub ty: TyKind,
+    pub ty: Ty,
     pub data: ConstKind,
 }
 
