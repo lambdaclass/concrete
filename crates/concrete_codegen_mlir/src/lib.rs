@@ -39,7 +39,6 @@ use module::MLIRModule;
 mod codegen;
 mod context;
 pub mod errors;
-pub mod linker;
 mod module;
 mod pass_manager;
 
@@ -93,16 +92,10 @@ pub fn get_data_layout_rep(session: &Session) -> Result<String, CodegenError> {
         let error_buffer = addr_of_mut!(null);
 
         let target_triple = LLVMGetDefaultTargetTriple();
-        tracing::debug!("Target triple: {:?}", CStr::from_ptr(target_triple));
 
         let target_cpu = LLVMGetHostCPUName();
-        tracing::debug!("Target CPU: {:?}", CStr::from_ptr(target_cpu));
 
         let target_cpu_features = LLVMGetHostCPUFeatures();
-        tracing::debug!(
-            "Target CPU Features: {:?}",
-            CStr::from_ptr(target_cpu_features)
-        );
 
         let mut target: MaybeUninit<LLVMTargetRef> = MaybeUninit::uninit();
 
@@ -155,21 +148,9 @@ pub fn compile_to_object(
     module: &MLIRModule<'_>,
 ) -> Result<PathBuf, CodegenError> {
     tracing::debug!("Compiling to object file");
-    if !session.target_dir.exists() {
-        std::fs::create_dir_all(&session.target_dir)?;
-    }
 
-    let target_file = session
-        .file_path
-        .clone()
-        .file_stem()
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
-    let target_file = PathBuf::from(target_file).with_extension("o");
+    let target_file = session.output_file.with_extension("o");
     tracing::debug!("Target file: {:?}", target_file);
-
-    let target_path = session.target_dir.join(target_file);
 
     // TODO: Rework so you can specify target and host features, etc.
     // Right now it compiles for the native cpu feature set and arch
@@ -249,9 +230,9 @@ pub fn compile_to_object(
 
         LLVMDisposePassBuilderOptions(opts);
 
-        if session.output_ll || session.output_all {
+        if session.output_ll {
             let filename = CString::new(
-                target_path
+                target_file
                     .with_extension("ll")
                     .as_os_str()
                     .to_string_lossy()
@@ -270,7 +251,7 @@ pub fn compile_to_object(
             }
         }
 
-        let filename = CString::new(target_path.as_os_str().to_string_lossy().as_bytes()).unwrap();
+        let filename = CString::new(target_file.as_os_str().to_string_lossy().as_bytes()).unwrap();
         tracing::debug!("filename to llvm: {:?}", filename);
         let ok = LLVMTargetMachineEmitToFile(
             machine,
@@ -290,9 +271,9 @@ pub fn compile_to_object(
             LLVMDisposeMessage(*error_buffer);
         }
 
-        if session.output_asm || session.output_all {
+        if session.output_asm {
             let filename = CString::new(
-                target_path
+                target_file
                     .with_extension("asm")
                     .as_os_str()
                     .to_string_lossy()
@@ -322,6 +303,6 @@ pub fn compile_to_object(
         LLVMDisposeModule(llvm_module);
         LLVMContextDispose(llvm_context);
 
-        Ok(target_path)
+        Ok(target_file)
     }
 }
