@@ -509,11 +509,14 @@ fn lower_for(builder: &mut FnBodyBuilder, info: &ForStmt) -> Result<(), Lowering
     let (discriminator, discriminator_type, _disc_span) = if let Some(condition) = &info.condition {
         let (discriminator, discriminator_type, span) = lower_expression(builder, condition, None)?;
 
-        (discriminator, discriminator_type, Some(span))
+        (discriminator, discriminator_type.kind, Some(span))
     } else {
         // todo: don't use discriminator when no loop condition
         let discriminator = Rvalue::Use(Operand::Const(ConstData {
-            ty: TyKind::Bool,
+            ty: Ty {
+                span: None,
+                kind: TyKind::Bool,
+            },
             data: ConstKind::Value(ValueTree::Leaf(ConstValue::Bool(true))),
         }));
 
