@@ -139,7 +139,7 @@ pub fn main() -> Result<()> {
         } => {
             let name = name.unwrap_or_else(|| {
                 path.file_name()
-                    .context("Failed to get project name")
+                    .context("failed to get project name")
                     .unwrap()
                     .to_string_lossy()
                     .to_string()
@@ -324,7 +324,7 @@ fn build_command(profile: Option<String>, release: bool) -> Result<PathBuf> {
             current_dir = if let Some(parent) = current_dir.parent() {
                 parent.to_path_buf()
             } else {
-                bail!("Couldn't find Concrete.toml");
+                bail!("couldn't find Concrete.toml");
             };
         } else {
             config_path = Some(current_dir.join("Concrete.toml"));
@@ -333,12 +333,12 @@ fn build_command(profile: Option<String>, release: bool) -> Result<PathBuf> {
     }
     let config_path = match config_path {
         Some(x) => x,
-        None => bail!("Couldn't find Concrete.toml"),
+        None => bail!("couldn't find Concrete.toml"),
     };
     let base_dir = config_path
         .parent()
         .context("couldn't get config parent dir")?;
-    let mut config = File::open(&config_path).context("Failed to open Concrete.toml")?;
+    let mut config = File::open(&config_path).context("failed to open Concrete.toml")?;
     let mut buf = String::new();
     config.read_to_string(&mut buf)?;
     let config: Config = toml::from_str(&buf).context("failed to parse Concrete.toml")?;
@@ -361,7 +361,7 @@ fn build_command(profile: Option<String>, release: bool) -> Result<PathBuf> {
             config
                 .profile
                 .get(&profile)
-                .context("Couldn't get requested profile")?,
+                .context("couldn't get requested profile")?,
             profile,
         )
     } else if release {
@@ -369,7 +369,7 @@ fn build_command(profile: Option<String>, release: bool) -> Result<PathBuf> {
             config
                 .profile
                 .get("release")
-                .context("Couldn't get profile: release")?,
+                .context("couldn't get profile: release")?,
             "release".to_string(),
         )
     } else {
@@ -377,7 +377,7 @@ fn build_command(profile: Option<String>, release: bool) -> Result<PathBuf> {
             config
                 .profile
                 .get("dev")
-                .context("Couldn't get profile: dev")?,
+                .context("couldn't get profile: dev")?,
             "dev".to_string(),
         )
     };
