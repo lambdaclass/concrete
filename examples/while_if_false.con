@@ -1,0 +1,14 @@
+mod Example {
+    fn main() -> i32 {
+        let mut result: i32 = 7;
+
+        while false {
+            if false {
+                return 0;
+            }
+            result = 14;
+        }
+
+        return result;
+    }
+}
