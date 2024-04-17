@@ -9,6 +9,7 @@ use melior::{
     dialect::{
         arith, cf, func,
         llvm::{self, r#type::opaque_pointer, AllocaOptions, LoadStoreOptions},
+        ods,
     },
     ir::{
         attribute::{
@@ -16,7 +17,8 @@ use melior::{
             StringAttribute, TypeAttribute,
         },
         r#type::{FunctionType, IntegerType},
-        Attribute, Block, Location, Module as MeliorModule, Region, Type, Value, ValueLike,
+        Attribute, Block, Identifier, Location, Module as MeliorModule, Region, Type, Value,
+        ValueLike,
     },
     Context as MeliorContext,
 };
@@ -57,12 +59,12 @@ impl<'a> ModuleCodegenCtx<'a> {
     /// Gets a MLIR location from the given span, or unknown if the span is `None`.
     pub fn get_location(&self, span: Option<Span>) -> Location {
         if let Some(span) = span {
-            let (_, line, col) = self.ctx.session.source.get_offset_line(span.from).unwrap();
+            let (_, line, col) = self.ctx.session.sources[self.module_id.program_id]
+                .get_offset_line(span.from)
+                .unwrap();
             Location::new(
                 self.ctx.mlir_context,
-                self.ctx
-                    .session
-                    .file_path
+                self.ctx.program.file_paths[&self.module_id.program_id]
                     .file_name()
                     .unwrap()
                     .to_str()
@@ -150,20 +152,19 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
     // Functions only have 1 region with multiple blocks within.
     let region = Region::new();
 
-    let params = body.get_params();
-
     // Compile the parameter types.
-    let params_ty: Vec<_> = params
+    let params_ty: Vec<_> = body_signature
+        .0
         .iter()
         .map(|x| {
             (
-                compile_type(ctx.module_ctx, &x.ty),
+                compile_type(ctx.module_ctx, x),
                 ctx.module_ctx.get_location(x.span),
             )
         })
         .collect();
 
-    {
+    if !body.is_extern {
         // The entry block doesn't exist in the IR, its where we create all the stack allocations for the locals.
         let entry_block = region.append_block(Block::new(&params_ty));
 
@@ -342,8 +343,10 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                         .iter()
                         .map(|x| compile_rvalue(&ctx, mlir_block, x, &locals).map(|x| x.0))
                         .collect::<Result<_, _>>()?;
-                    let fn_symbol =
-                        FlatSymbolRefAttribute::new(ctx.context(), &target_fn_body.name); // todo: good name resolution
+                    let fn_symbol = FlatSymbolRefAttribute::new(
+                        ctx.context(),
+                        &target_fn_body.get_mangled_name(),
+                    );
                     let ret_type = match &target_fn_body_sig.1.kind {
                         TyKind::Unit => None,
                         _ => Some(compile_type(ctx.module_ctx, &target_fn_body_sig.1)),
@@ -430,12 +433,22 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
     // Create the function mlir attribute.
     let func_type = FunctionType::new(ctx.context(), &param_types, return_type.as_slice());
 
+    let mut fn_attributes = vec![];
+
+    if body.is_extern {
+        // extern declared functions need private visibility
+        fn_attributes.push((
+            Identifier::new(ctx.context(), "sym_visibility"),
+            StringAttribute::new(ctx.context(), "private").into(),
+        ));
+    }
+
     let func_op = func::func(
         ctx.context(),
-        StringAttribute::new(ctx.context(), &body.name),
+        StringAttribute::new(ctx.context(), &body.get_mangled_name()),
         TypeAttribute::new(func_type.into()),
         region,
-        &[],
+        &fn_attributes,
         Location::unknown(ctx.context()),
     );
 
@@ -454,22 +467,23 @@ fn compile_rvalue<'c: 'b, 'b>(
     block: &'b Block<'c>,
     info: &Rvalue,
     locals: &'b HashMap<usize, Value<'c, '_>>,
-) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+) -> Result<(Value<'c, 'b>, Ty), CodegenError> {
     Ok(match info {
         Rvalue::Use(info) => compile_load_operand(ctx, block, info, locals)?,
         Rvalue::LogicOp(_, _) => todo!(),
         Rvalue::BinaryOp(op, (lhs, rhs)) => compile_binop(ctx, block, op, lhs, rhs, locals)?,
         Rvalue::UnaryOp(_, _) => todo!(),
-        Rvalue::Ref(mutability, place) => {
+        Rvalue::Ref(_mutability, place) => {
             let mut value = locals[&place.local];
-            let mut local_ty = ctx.get_fn_body().locals[place.local].ty.kind.clone();
+            let mut local_ty = ctx.get_fn_body().locals[place.local].ty.clone();
 
             // Handle the projection.
             for projection in &place.projection {
                 match projection {
                     PlaceElem::Deref => {
-                        local_ty = match local_ty {
+                        local_ty = match local_ty.kind {
                             TyKind::Ref(inner, _) => *(inner.clone()),
+                            TyKind::Ptr(inner, _) => *(inner.clone()),
                             _ => unreachable!(),
                         };
 
@@ -477,13 +491,7 @@ fn compile_rvalue<'c: 'b, 'b>(
                             .append_operation(llvm::load(
                                 ctx.context(),
                                 value,
-                                compile_type(
-                                    ctx.module_ctx,
-                                    &Ty {
-                                        span: None,
-                                        kind: local_ty.clone(),
-                                    },
-                                ),
+                                compile_type(ctx.module_ctx, &local_ty),
                                 Location::unknown(ctx.context()),
                                 LoadStoreOptions::default(),
                             ))
@@ -495,7 +503,96 @@ fn compile_rvalue<'c: 'b, 'b>(
                 }
             }
 
-            (value, TyKind::Ref(Box::new(local_ty), *mutability))
+            (value, local_ty)
+        }
+        Rvalue::Cast(op, target_ty, _span) => {
+            let location = Location::unknown(ctx.context());
+            let target_ty = target_ty.clone();
+            let target_mlir_ty = compile_type(ctx.module_ctx, &target_ty);
+            let (value, current_ty) = compile_load_operand(ctx, block, op, locals)?;
+            let is_signed = target_ty.kind.is_signed();
+
+            if target_ty.kind.is_ptr_like() {
+                // int to ptr
+                if current_ty.kind.is_int() {
+                    let value = block
+                        .append_operation(
+                            ods::llvm::inttoptr(ctx.context(), target_mlir_ty, value, location)
+                                .into(),
+                        )
+                        .result(0)?
+                        .into();
+                    (value, target_ty.clone())
+                } else if current_ty.kind.is_ptr_like() {
+                    // ptr to ptr: noop
+                    (value, target_ty.clone())
+                } else {
+                    unreachable!("cast from {:?} to ptr", current_ty.kind)
+                }
+            } else if target_ty.kind.is_int() {
+                if current_ty.kind.is_int() {
+                    // int to int casts
+                    match current_ty
+                        .kind
+                        .get_bit_width()
+                        .unwrap()
+                        .cmp(&target_ty.kind.get_bit_width().unwrap())
+                    {
+                        std::cmp::Ordering::Less => {
+                            if is_signed {
+                                let value = block
+                                    .append_operation(arith::extsi(value, target_mlir_ty, location))
+                                    .result(0)?
+                                    .into();
+                                (value, target_ty.clone())
+                            } else {
+                                let value = block
+                                    .append_operation(arith::extui(value, target_mlir_ty, location))
+                                    .result(0)?
+                                    .into();
+                                (value, target_ty.clone())
+                            }
+                        }
+                        std::cmp::Ordering::Equal => (value, target_ty.clone()),
+                        std::cmp::Ordering::Greater => {
+                            let value = block
+                                .append_operation(arith::trunci(value, target_mlir_ty, location))
+                                .result(0)?
+                                .into();
+                            (value, target_ty.clone())
+                        }
+                    }
+                } else if current_ty.kind.is_float() {
+                    // float to int
+                    if is_signed {
+                        let value = block
+                            .append_operation(arith::fptosi(value, target_mlir_ty, location))
+                            .result(0)?
+                            .into();
+                        (value, target_ty.clone())
+                    } else {
+                        let value = block
+                            .append_operation(arith::fptoui(value, target_mlir_ty, location))
+                            .result(0)?
+                            .into();
+                        (value, target_ty.clone())
+                    }
+                } else if current_ty.kind.is_ptr_like() {
+                    // ptr to int
+                    let value = block
+                        .append_operation(
+                            ods::llvm::ptrtoint(ctx.context(), target_mlir_ty, value, location)
+                                .into(),
+                        )
+                        .result(0)?
+                        .into();
+                    (value, target_ty.clone())
+                } else {
+                    todo!("cast from {:?} to {:?}", current_ty, target_ty)
+                }
+            } else {
+                todo!("cast from {:?} to {:?}", current_ty, target_ty)
+            }
         }
     })
 }
@@ -508,13 +605,13 @@ fn compile_binop<'c: 'b, 'b>(
     lhs: &Operand,
     rhs: &Operand,
     locals: &HashMap<usize, Value<'c, '_>>,
-) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+) -> Result<(Value<'c, 'b>, Ty), CodegenError> {
     let (lhs, lhs_ty) = compile_load_operand(ctx, block, lhs, locals)?;
     let (rhs, _rhs_ty) = compile_load_operand(ctx, block, rhs, locals)?;
     let location = Location::unknown(ctx.context());
 
-    let is_float = matches!(lhs_ty, TyKind::Float(_));
-    let is_signed = matches!(lhs_ty, TyKind::Int(_));
+    let is_float = matches!(lhs_ty.kind, TyKind::Float(_));
+    let is_signed = matches!(lhs_ty.kind, TyKind::Int(_));
 
     Ok(match op {
         BinOp::Add => {
@@ -626,7 +723,13 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, TyKind::Bool)
+            (
+                value,
+                Ty {
+                    span: None,
+                    kind: TyKind::Bool,
+                },
+            )
         }
         BinOp::Lt => {
             let value = if is_float {
@@ -663,7 +766,13 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, TyKind::Bool)
+            (
+                value,
+                Ty {
+                    span: None,
+                    kind: TyKind::Bool,
+                },
+            )
         }
         BinOp::Le => {
             let value = if is_float {
@@ -700,7 +809,13 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, TyKind::Bool)
+            (
+                value,
+                Ty {
+                    span: None,
+                    kind: TyKind::Bool,
+                },
+            )
         }
         BinOp::Ne => {
             let value = if is_float {
@@ -726,7 +841,13 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, TyKind::Bool)
+            (
+                value,
+                Ty {
+                    span: None,
+                    kind: TyKind::Bool,
+                },
+            )
         }
         BinOp::Ge => {
             let value = if is_float {
@@ -763,7 +884,13 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, TyKind::Bool)
+            (
+                value,
+                Ty {
+                    span: None,
+                    kind: TyKind::Bool,
+                },
+            )
         }
         BinOp::Gt => {
             let value = if is_float {
@@ -800,7 +927,13 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, TyKind::Bool)
+            (
+                value,
+                Ty {
+                    span: None,
+                    kind: TyKind::Bool,
+                },
+            )
         }
     })
 }
@@ -810,7 +943,7 @@ fn compile_load_operand<'c: 'b, 'b>(
     block: &'b Block<'c>,
     info: &Operand,
     locals: &HashMap<usize, Value<'c, '_>>,
-) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+) -> Result<(Value<'c, 'b>, Ty), CodegenError> {
     Ok(match info {
         Operand::Place(info) => compile_load_place(ctx, block, info, locals)?,
         Operand::Const(data) => match &data.data {
@@ -833,7 +966,7 @@ fn compile_store_place<'c: 'b, 'b>(
 ) -> Result<(), CodegenError> {
     let mut ptr = locals[&info.local];
     let local = &ctx.get_fn_body().locals[info.local];
-    let mut local_ty = local.ty.kind.clone();
+    let mut local_ty = local.ty.clone();
 
     for proj in &info.projection {
         match proj {
@@ -842,22 +975,17 @@ fn compile_store_place<'c: 'b, 'b>(
                     .append_operation(llvm::load(
                         ctx.context(),
                         ptr,
-                        compile_type(
-                            ctx.module_ctx,
-                            &Ty {
-                                span: local.span,
-                                kind: local_ty.clone(),
-                            },
-                        ),
+                        compile_type(ctx.module_ctx, &local_ty),
                         Location::unknown(ctx.context()),
                         LoadStoreOptions::default(),
                     ))
                     .result(0)?
                     .into();
 
-                local_ty = match local_ty {
+                local_ty = match local_ty.kind {
                     TyKind::Ref(inner, _) => *inner,
-                    _ => unreachable!(),
+                    TyKind::Ptr(inner, _) => *inner,
+                    ty => unreachable!("tried to deref: {:?}", ty),
                 };
             }
             PlaceElem::Field(field_idx) => {
@@ -869,22 +997,16 @@ fn compile_store_place<'c: 'b, 'b>(
                             ctx.context(),
                             &[0, (*field_idx).try_into().unwrap()],
                         ),
-                        compile_type(
-                            ctx.module_ctx,
-                            &Ty {
-                                span: None,
-                                kind: local_ty.clone(),
-                            },
-                        ),
+                        compile_type(ctx.module_ctx, &local_ty),
                         opaque_pointer(ctx.context()),
                         Location::unknown(ctx.context()),
                     ))
                     .result(0)?
                     .into();
-                local_ty = match local_ty {
+                local_ty = match local_ty.kind {
                     TyKind::Struct { id, generics: _ } => {
                         let strc = ctx.module_ctx.ctx.program.structs.get(&id).unwrap();
-                        strc.variants[*field_idx].ty.kind.clone()
+                        strc.variants[*field_idx].ty.clone()
                     }
                     _ => unreachable!(),
                 }
@@ -910,11 +1032,11 @@ fn compile_load_place<'c: 'b, 'b>(
     block: &'b Block<'c>,
     info: &Place,
     locals: &HashMap<usize, Value<'c, '_>>,
-) -> Result<(Value<'c, 'b>, TyKind), CodegenError> {
+) -> Result<(Value<'c, 'b>, Ty), CodegenError> {
     let mut ptr = locals[&info.local];
     let body = ctx.get_fn_body();
 
-    let mut local_ty = body.locals[info.local].ty.kind.clone();
+    let mut local_ty = body.locals[info.local].ty.clone();
 
     for projection in &info.projection {
         match projection {
@@ -923,26 +1045,21 @@ fn compile_load_place<'c: 'b, 'b>(
                     .append_operation(llvm::load(
                         ctx.context(),
                         ptr,
-                        compile_type(
-                            ctx.module_ctx,
-                            &Ty {
-                                span: None,
-                                kind: local_ty.clone(),
-                            },
-                        ),
+                        compile_type(ctx.module_ctx, &local_ty),
                         Location::unknown(ctx.context()),
                         LoadStoreOptions::default(),
                     ))
                     .result(0)?
                     .into();
 
-                local_ty = match local_ty {
+                local_ty = match local_ty.kind {
                     TyKind::Ref(inner, _) => *(inner.clone()),
+                    TyKind::Ptr(inner, _) => *(inner.clone()),
                     _ => unreachable!(),
                 };
             }
             PlaceElem::Field(field_idx) => {
-                local_ty = match local_ty {
+                local_ty = match local_ty.kind {
                     TyKind::Struct { id, generics: _ } => {
                         let struct_body = ctx.module_ctx.ctx.program.structs.get(&id).unwrap();
                         let ty = struct_body.variants[*field_idx].ty.clone();
@@ -954,19 +1071,13 @@ fn compile_load_place<'c: 'b, 'b>(
                                     ctx.context(),
                                     &[0, (*field_idx).try_into().unwrap()],
                                 ),
-                                compile_type(
-                                    ctx.module_ctx,
-                                    &Ty {
-                                        span: None,
-                                        kind: local_ty.clone(),
-                                    },
-                                ),
+                                compile_type(ctx.module_ctx, &local_ty),
                                 opaque_pointer(ctx.context()),
                                 Location::unknown(ctx.context()),
                             ))
                             .result(0)?
                             .into();
-                        ty.kind.clone()
+                        ty.clone()
                     }
                     _ => unreachable!(),
                 }
@@ -979,13 +1090,7 @@ fn compile_load_place<'c: 'b, 'b>(
         .append_operation(llvm::load(
             ctx.context(),
             ptr,
-            compile_type(
-                ctx.module_ctx,
-                &Ty {
-                    span: None,
-                    kind: local_ty.clone(),
-                },
-            ),
+            compile_type(ctx.module_ctx, &local_ty),
             Location::unknown(ctx.context()),
             LoadStoreOptions::default(),
         ))
@@ -1165,7 +1270,7 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
         },
         concrete_ir::TyKind::String => todo!(),
         concrete_ir::TyKind::Array(_, _) => todo!(),
-        concrete_ir::TyKind::Ref(_inner_ty, _) => {
+        concrete_ir::TyKind::Ref(_inner_ty, _) | concrete_ir::TyKind::Ptr(_inner_ty, _) => {
             llvm::r#type::opaque_pointer(ctx.ctx.mlir_context)
         }
         concrete_ir::TyKind::Param { .. } => todo!(),

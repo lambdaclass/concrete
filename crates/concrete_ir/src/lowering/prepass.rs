@@ -95,6 +95,21 @@ pub fn prepass_module(
                         .insert(info.name.name.clone(), next_id);
                     current_module.modules.insert(next_id);
                 }
+                ast::modules::ModuleDefItem::FunctionDecl(info) => {
+                    let next_id = gen.next_defid();
+                    current_module
+                        .symbols
+                        .functions
+                        .insert(info.name.name.clone(), next_id);
+                    current_module.functions.insert(next_id);
+                    ctx.unresolved_function_signatures.insert(
+                        next_id,
+                        (
+                            info.params.iter().map(|x| &x.r#type).cloned().collect(),
+                            info.ret_type.clone(),
+                        ),
+                    );
+                }
             }
         }
 
@@ -195,6 +210,21 @@ pub fn prepass_sub_module(
                         .insert(info.name.name.clone(), next_id);
                     submodule.modules.insert(next_id);
                 }
+                ast::modules::ModuleDefItem::FunctionDecl(info) => {
+                    let next_id = gen.next_defid();
+                    submodule
+                        .symbols
+                        .functions
+                        .insert(info.name.name.clone(), next_id);
+                    submodule.functions.insert(next_id);
+                    ctx.unresolved_function_signatures.insert(
+                        next_id,
+                        (
+                            info.params.iter().map(|x| &x.r#type).cloned().collect(),
+                            info.ret_type.clone(),
+                        ),
+                    );
+                }
             }
         }
 
@@ -231,6 +261,7 @@ pub fn prepass_imports(
             .ok_or(LoweringError::ModuleNotFound {
                 span: import.module[0].span,
                 module: import.module[0].name.clone(),
+                program_id: mod_id.program_id,
             })?;
         let mut imported_module =
             ctx.body
@@ -239,6 +270,7 @@ pub fn prepass_imports(
                 .ok_or(LoweringError::IdNotFound {
                     span: mod_def.span,
                     id: *imported_module_id,
+                    program_id: mod_id.program_id,
                 })?;
 
         for x in import.module.iter().skip(1) {
@@ -250,11 +282,13 @@ pub fn prepass_imports(
                     .ok_or_else(|| LoweringError::ModuleNotFound {
                         span: x.span,
                         module: x.name.clone(),
+                        program_id: mod_id.program_id,
                     })?;
             imported_module = ctx.body.modules.get(imported_module_id).ok_or({
                 LoweringError::IdNotFound {
                     span: x.span,
                     id: *imported_module_id,
+                    program_id: mod_id.program_id,
                 }
             })?;
         }
@@ -275,6 +309,7 @@ pub fn prepass_imports(
                     module_span: mod_def.span,
                     import_span: import.span,
                     symbol: sym.clone(),
+                    program_id: mod_id.program_id,
                 })?;
             }
         }
@@ -308,6 +343,7 @@ pub fn prepass_imports_submodule(
         .ok_or(LoweringError::IdNotFound {
             span: mod_def.span,
             id: parent_id,
+            program_id: parent_id.program_id,
         })?
         .symbols
         .modules
@@ -315,6 +351,7 @@ pub fn prepass_imports_submodule(
         .ok_or_else(|| LoweringError::ModuleNotFound {
             span: mod_def.span,
             module: mod_def.name.name.clone(),
+            program_id: parent_id.program_id,
         })?;
 
     for import in &mod_def.imports {
@@ -325,6 +362,7 @@ pub fn prepass_imports_submodule(
             .ok_or_else(|| LoweringError::ModuleNotFound {
                 span: import.module[0].span,
                 module: import.module[0].name.clone(),
+                program_id: parent_id.program_id,
             })?;
         let mut imported_module =
             ctx.body
@@ -333,6 +371,7 @@ pub fn prepass_imports_submodule(
                 .ok_or(LoweringError::IdNotFound {
                     span: import.span,
                     id: *imported_module_id,
+                    program_id: parent_id.program_id,
                 })?;
 
         for module_path in import.module.iter().skip(1) {
@@ -343,11 +382,13 @@ pub fn prepass_imports_submodule(
                 .ok_or_else(|| LoweringError::ModuleNotFound {
                     span: module_path.span,
                     module: module_path.name.clone(),
+                    program_id: parent_id.program_id,
                 })?;
             imported_module = ctx.body.modules.get(imported_module_id).ok_or({
                 LoweringError::IdNotFound {
                     span: import.span,
                     id: *imported_module_id,
+                    program_id: parent_id.program_id,
                 }
             })?;
         }
@@ -368,6 +409,7 @@ pub fn prepass_imports_submodule(
                     module_span: mod_def.span,
                     import_span: import.span,
                     symbol: sym.clone(),
+                    program_id: parent_id.program_id,
                 })?;
             }
         }
@@ -378,6 +420,7 @@ pub fn prepass_imports_submodule(
             .ok_or(LoweringError::IdNotFound {
                 span: mod_def.span,
                 id: mod_id,
+                program_id: mod_id.program_id,
             })?
             .imports
             .extend(imports);
