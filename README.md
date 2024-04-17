@@ -43,6 +43,11 @@ export LLVM_SYS_170_PREFIX=/usr/lib/llvm-17
 export TABLEGEN_170_PREFIX=/usr/lib/llvm-17
 ```
 
+If you installed llvm with brew, source the `env-macos.sh` script to set up the needed env vars:
+```sh
+source scripts/env-macos.sh
+```
+
 ## Table of Contents
 
 - [Design](#design)
