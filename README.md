@@ -27,6 +27,7 @@ Make sure you have installed the dependencies:
 - git
 - Rust
 - LLVM 17 with MLIR enabled
+- libgit2
 
 If building LLVM from source, you'll need additional tools:
 - g++, clang++, or MSVC with versions listed on [LLVM's documentation](https://llvm.org/docs/GettingStarted.html#host-c-toolchain-both-compiler-and-standard-library)
@@ -230,6 +231,7 @@ Features:
 - floats ✔️
 - borrowing ✔️
 - structs ✔️
+- casts ✔️
 - arrays 🏗️
 - iterators :x:
 - for :x:

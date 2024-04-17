@@ -29,6 +29,8 @@ extern {
     "pub" => Token::KeywordPub,
     "mut" => Token::KeywordMut,
     "import" => Token::KeywordImport,
+    "extern" => Token::KeywordExtern,
+    "as" => Token::KeywordAs,
 
     // literals
     "identifier" => Token::Identifier(<String>),
@@ -135,27 +137,29 @@ pub(crate) Ident: ast::common::Ident = {
   }
 }
 
-pub(crate) RefType: ast::types::RefType = {
-  "&" => ast::types::RefType::Borrow,
-  "&" "mut" => ast::types::RefType::MutBorrow,
+pub(crate) TypeQualifier: ast::types::TypeQualifier = {
+  "&" => ast::types::TypeQualifier::Ref,
+  "&" "mut" => ast::types::TypeQualifier::RefMut,
+  "*" "const" => ast::types::TypeQualifier::Ptr,
+  "*" "mut" => ast::types::TypeQualifier::PtrMut,
 }
 
 pub(crate) TypeSpec: ast::types::TypeSpec = {
-  <lo:@L> <is_ref:RefType?> <name:Ident> <hi:@R> => ast::types::TypeSpec::Simple {
+  <lo:@L> <qualifiers:TypeQualifier*> <name:Ident> <hi:@R> => ast::types::TypeSpec::Simple {
     name,
-    is_ref,
+    qualifiers,
     span: Span::new(lo, hi),
   },
-  <lo:@L> <is_ref:RefType?> <name:Ident> "<" <type_params:Comma<TypeSpec>> ">" <hi:@R> => ast::types::TypeSpec::Generic {
+  <lo:@L> <qualifiers:TypeQualifier*> <name:Ident> "<" <type_params:Comma<TypeSpec>> ">" <hi:@R> => ast::types::TypeSpec::Generic {
     name,
     type_params,
-    is_ref,
+    qualifiers,
     span: Span::new(lo, hi),
   },
-  <lo:@L> <is_ref:RefType?> "[" <of_type:TypeSpec> <size:(";" <"integer">)> "]"<hi:@R> => ast::types::TypeSpec::Array {
+  <lo:@L> <qualifiers:TypeQualifier*> "[" <of_type:TypeSpec> <size:(";" <"integer">)> "]"<hi:@R> => ast::types::TypeSpec::Array {
     of_type: Box::new(of_type),
     size: size.try_into().expect("size is too big"),
-    is_ref,
+    qualifiers,
     span: Span::new(lo, hi),
   }
 }
@@ -182,6 +186,7 @@ pub(crate) GenericParams: Vec<ast::common::GenericParam> = {
 pub Program: ast::Program = {
   <Module> => {
     ast::Program {
+      file_path: None,
       modules: vec![<>],
     }
   },
@@ -249,6 +254,9 @@ pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
   <FunctionDef> => {
     ast::modules::ModuleDefItem::Function(<>)
   },
+  <FunctionDecl> ";" => {
+    ast::modules::ModuleDefItem::FunctionDecl(<>)
+  },
   <Module> => {
     ast::modules::ModuleDefItem::Module(<>)
   },
@@ -283,18 +291,26 @@ pub(crate) Param: ast::functions::Param = {
   }
 }
 
-pub(crate) FunctionDef: ast::functions::FunctionDef = {
-  <lo:@L> <is_pub:"pub"?> "fn" <name:Ident> <generic_params:GenericParams?> "(" <params:Comma<Param>> ")" <ret_type:FunctionRetType?> "{"
-    <statements:StatementList?>
-  "}" <hi:@R> => {
-    ast::functions::FunctionDef {
-      decl: ast::functions::FunctionDecl {
+pub(crate) FunctionDecl: ast::functions::FunctionDecl = {
+  <lo:@L> <is_pub:"pub"?> <is_extern:"extern"?>
+      "fn" <name:Ident> <generic_params:GenericParams?> "(" <params:Comma<Param>> ")"
+        <ret_type:FunctionRetType?> <hi:@R> =>
+    ast::functions::FunctionDecl {
         doc_string: None,
         generic_params: generic_params.unwrap_or(vec![]),
         name,
         params,
         ret_type,
-      },
+        is_extern: is_extern.is_some(),
+        is_pub: is_pub.is_some(),
+        span: Span::new(lo, hi),
+  }
+}
+
+pub(crate) FunctionDef: ast::functions::FunctionDef = {
+  <lo:@L> <decl:FunctionDecl> "{" <statements:StatementList?> "}" <hi:@R> => {
+    ast::functions::FunctionDef {
+      decl,
       body: statements.unwrap_or_else(Vec::new),
       span: Span::new(lo, hi),
     }
@@ -376,7 +392,6 @@ pub(crate) Term: ast::expressions::Expression = {
   <FnCallOp> => ast::expressions::Expression::FnCall(<>),
   <MatchExpr> => ast::expressions::Expression::Match(<>),
   <IfExpr> => ast::expressions::Expression::If(<>),
-  "(" <StructInitExpr> ")" => ast::expressions::Expression::StructInit(<>),
   #[precedence(level="1")] #[assoc(side="left")]
   "(" <Expression> ")",
 }
@@ -385,9 +400,9 @@ pub(crate) Expression: ast::expressions::Expression = {
   #[precedence(level="0")]
   <Term>,
   #[precedence(level="1")] #[assoc(side="left")]
-  "&" "mut" <Expression> => ast::expressions::Expression::AsRef(Box::new(<>), ast::types::RefType::MutBorrow),
-  "&" <Expression> => ast::expressions::Expression::AsRef(Box::new(<>), ast::types::RefType::Borrow),
-  "*" <Expression> => ast::expressions::Expression::Deref(Box::new(<>)),
+  <lo:@L> "&" "mut" <e:Expression> <hi:@R> => ast::expressions::Expression::AsRef(Box::new(e), true, Span::new(lo, hi)),
+  <lo:@L> "&" <e:Expression> <hi:@R> => ast::expressions::Expression::AsRef(Box::new(e), false, Span::new(lo, hi)),
+  <lo:@L> "*" <e:Expression> <hi:@R> => ast::expressions::Expression::Deref(Box::new(e), Span::new(lo, hi)),
   <op:UnaryOp> <rhs:Expression> => ast::expressions::Expression::UnaryOp(
     op,
     Box::new(rhs)
@@ -410,7 +425,9 @@ pub(crate) Expression: ast::expressions::Expression = {
     op,
     Box::new(rhs)
   ),
-
+  #[precedence(level="5")] #[assoc(side="left")]
+  <lo:@L> <a:Expression> "as" <b: TypeSpec> <hi:@R> => ast::expressions::Expression::Cast(Box::new(a), b, Span::new(lo, hi)),
+  "(" <StructInitExpr> ")" => ast::expressions::Expression::StructInit(<>),
 }
 
 pub BinaryFirstLvlOp: ast::expressions::BinaryOp = {
@@ -445,11 +462,11 @@ pub UnaryOp: ast::expressions::UnaryOp = {
 }
 
 pub(crate) ValueExpr: ast::expressions::ValueExpr = {
-  <"integer"> => ast::expressions::ValueExpr::ConstInt(<>),
-  <"float"> => ast::expressions::ValueExpr::ConstFloat(<>),
-  <"boolean"> => ast::expressions::ValueExpr::ConstBool(<>),
-  <"string"> => ast::expressions::ValueExpr::ConstStr(<>),
-  <"char"> => ast::expressions::ValueExpr::ConstChar(<>),
+  <lo:@L> <v:"integer"> <hi:@R> => ast::expressions::ValueExpr::ConstInt(v, Span::new(lo, hi)),
+  <lo:@L> <v:"float"> <hi:@R> => ast::expressions::ValueExpr::ConstFloat(v, Span::new(lo, hi)),
+  <lo:@L> <v:"boolean"> <hi:@R> => ast::expressions::ValueExpr::ConstBool(v, Span::new(lo, hi)),
+  <lo:@L> <v:"string"> <hi:@R> => ast::expressions::ValueExpr::ConstStr(v, Span::new(lo, hi)),
+  <lo:@L> <v:"char"> <hi:@R> => ast::expressions::ValueExpr::ConstChar(v, Span::new(lo, hi)),
   <PathOp> => ast::expressions::ValueExpr::Path(<>),
 }
 
