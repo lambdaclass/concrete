@@ -1,9 +1,9 @@
 mod Example {
     fn main() -> i64 {
-        return sum_to_twice(4);
+        return sum_to(4);
     }
 
-    fn sum_to_twice(limit: i64) -> i64 {
+    fn sum_to(limit: i64) -> i64 {
         let mut result: i64 = 0;
 
         let n: i64 = 1;
