@@ -7,11 +7,6 @@ mod Example {
         let mut result: i64 = 0;
 
         let n: i64 = 1;
-        for (;;) {
-            result = result + n;
-            n = n + 1;
-        }
-        
         for {
             result = result + n;
             n = n + 1;
