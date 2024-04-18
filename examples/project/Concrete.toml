@@ -1,0 +1,14 @@
+[package]
+name = "project"
+version = "0.1.0"
+license = "MIT"
+
+[profile.release]
+release = true
+opt_level = 3
+debug_info = false
+
+[profile.dev]
+release = false
+opt_level = 0
+debug_info = true
