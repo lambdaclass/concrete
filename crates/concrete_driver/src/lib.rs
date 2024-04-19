@@ -52,6 +52,9 @@ enum Commands {
     },
     /// Build a project
     Build {
+        #[arg(required = false)]
+        path: Option<PathBuf>,
+
         /// Build for release with all optimizations.
         #[arg(short, long, default_value_t = false)]
         release: bool,
@@ -247,7 +250,11 @@ mod {} {{
                 println!("  {} library `{}` package", "Created".green(), name);
             }
         }
-        Commands::Build { release, profile } => {
+        Commands::Build {
+            path,
+            release,
+            profile,
+        } => {
             build_command(profile, release)?;
         }
         Commands::Run {
