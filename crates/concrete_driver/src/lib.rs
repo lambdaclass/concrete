@@ -1,6 +1,7 @@
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use clap::Args;
 use clap::{Parser, Subcommand};
 use concrete_ir::lowering::lower_programs;
 use concrete_parser::{error::Diagnostics, ProgramSource};
@@ -56,7 +57,7 @@ enum Commands {
     Run(BuildArgs),
 }
 
-#[derive(Args)]
+#[derive(Args, Debug)]
 pub struct BuildArgs {
     /// Build specific file
     #[arg(required = false)]
