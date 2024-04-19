@@ -50,32 +50,49 @@ enum Commands {
         #[arg(long, group = "binary")]
         lib: bool,
     },
-    /// Build a project
-    Build {
-        #[arg(required = false)]
-        path: Option<PathBuf>,
+    /// Build a project or file
+    Build(BuildArgs),
+    /// Run a project or file
+    Run(BuildArgs),
+}
 
-        /// Build for release with all optimizations.
-        #[arg(short, long, default_value_t = false)]
-        release: bool,
+#[derive(Args)]
+pub struct BuildArgs {
+    /// Build specific file
+    #[arg(required = false)]
+    path: Option<PathBuf>,
 
-        /// Override the profile to use.
-        #[arg(short, long)]
-        profile: Option<String>,
-    },
-    /// Run a concrete file
-    Run {
-        #[arg(required = false)]
-        path: Option<PathBuf>,
+    /// Build for release with all optimizations.
+    #[arg(short, long, default_value_t = false)]
+    release: bool,
 
-        /// Build for release with all optimizations.
-        #[arg(short, long, default_value_t = false)]
-        release: bool,
+    /// Override the profile to use.
+    #[arg(short, long)]
+    profile: Option<String>,
 
-        /// Override the profile to use.
-        #[arg(short, long)]
-        profile: Option<String>,
-    },
+    /// Also output the ast.
+    #[arg(long, default_value_t = false)]
+    ast: bool,
+
+    /// Also output the ir.
+    #[arg(long, default_value_t = false)]
+    ir: bool,
+
+    /// Also output the llvm ir file.
+    #[arg(long, default_value_t = false)]
+    llvm: bool,
+
+    /// Also output the mlir file
+    #[arg(long, default_value_t = false)]
+    mlir: bool,
+
+    /// Also output the asm file.
+    #[arg(long, default_value_t = false)]
+    asm: bool,
+
+    /// Also output the object file.
+    #[arg(long, default_value_t = false)]
+    object: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -250,19 +267,11 @@ mod {} {{
                 println!("  {} library `{}` package", "Created".green(), name);
             }
         }
-        Commands::Build {
-            path,
-            release,
-            profile,
-        } => {
-            handle_build(path, release, profile)?;
+        Commands::Build(args) => {
+            handle_build(args)?;
         }
-        Commands::Run {
-            path,
-            release,
-            profile,
-        } => {
-            let output = handle_build(path, release, profile)?;
+        Commands::Run(args) => {
+            let output = handle_build(args)?;
             Err(std::process::Command::new(output).exec())?;
         }
     }
@@ -270,7 +279,19 @@ mod {} {{
     Ok(())
 }
 
-fn handle_build(path: Option<PathBuf>, release: bool, profile: Option<String>) -> Result<PathBuf> {
+fn handle_build(
+    BuildArgs {
+        path,
+        release,
+        profile,
+        ast,
+        ir,
+        llvm,
+        mlir,
+        asm,
+        object,
+    }: BuildArgs,
+) -> Result<PathBuf> {
     match path {
         Some(input) => {
             let input_stem = input
@@ -292,12 +313,12 @@ fn handle_build(path: Option<PathBuf>, release: bool, profile: Option<String>) -
                 optlevel: None,
                 debug_info: None,
                 library: false,
-                ast: false,
-                ir: false,
-                llvm: true,
-                asm: false,
-                object: true,
-                mlir: true,
+                ast,
+                ir,
+                llvm,
+                asm,
+                object,
+                mlir,
             };
 
             println!(
@@ -392,12 +413,12 @@ fn handle_build(path: Option<PathBuf>, release: bool, profile: Option<String>) -
                 optlevel: Some(profile.opt_level),
                 debug_info: Some(profile.debug_info),
                 library: !has_main,
-                ast: false,
-                ir: false,
-                llvm: true,
-                asm: false,
-                object: true,
-                mlir: true,
+                ast,
+                ir,
+                llvm,
+                asm,
+                object,
+                mlir,
             };
             let start = Instant::now();
             let object = compile(&compile_args)?;
