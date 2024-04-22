@@ -230,6 +230,8 @@ mod ModuleName {
         let source = r##"mod MyMod {
     fn hello() {
         let mut arr: [u32; 3] = [1, 2, 3];
+
+        return arr[1];
     }
 }"##;
         let lexer = Lexer::new(source);
