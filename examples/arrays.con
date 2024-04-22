@@ -1,0 +1,8 @@
+mod Example {
+    fn main() -> i64 {
+        let array: [i32; 4] = [1, 2, 3, 4];
+        let nested_array: [[i32; 2]; 2] = [[1, 2], [3, 4]];
+
+        return 0;
+    }
+}
