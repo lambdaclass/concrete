@@ -238,4 +238,18 @@ mod ModuleName {
         let parser = grammar::ProgramParser::new();
         parser.parse(lexer).unwrap();
     }
+
+    #[test]
+    fn parse_nested_array() {
+        let source = r##"mod MyMod {
+    fn hello() {
+        let mut arr: [[u32; 2]; 2] = [[1, 2], [3, 4]];
+
+        return arr[1][0];
+    }
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
+    }
 }
