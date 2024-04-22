@@ -1395,7 +1395,35 @@ pub fn lower_path(
                     ty = struct_body.variants[idx].ty.clone();
                 }
             }
-            PathSegment::ArrayIndex(_, _) => todo!(),
+            PathSegment::ArrayIndex(expression, _) => {
+                while let TyKind::Ref(inner, _) = ty.kind {
+                    projection.push(PlaceElem::Deref);
+                    ty = *inner;
+                }
+
+                if let TyKind::Array(element_type, _) = ty.kind {
+                    let (index, index_ty) = lower_value_expr(builder, expression, None)?;
+
+                    let index_local = builder.add_temp_local(index_ty.kind);
+                    let index_place = Place {
+                        local: index_local,
+                        projection: vec![],
+                    };
+
+                    builder.statements.push(Statement {
+                        span: None,
+                        kind: StatementKind::StorageLive(index_local),
+                    });
+                    builder.statements.push(Statement {
+                        span: None,
+                        kind: StatementKind::Assign(index_place.clone(), index),
+                    });
+
+                    projection.push(PlaceElem::Index(index_local));
+
+                    ty = *element_type;
+                }
+            }
         }
     }
 
