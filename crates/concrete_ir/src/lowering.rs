@@ -740,13 +740,9 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
         }
         Expression::Cast(_, _, _) => todo!(),
         Expression::ArrayInit(info) => {
-            let Some(first_element) = info.values.get(0) else {
-                return None;
-            };
+            let first_element = info.values.first()?;
 
-            let Some(first_type) = find_expression_type(builder, first_element) else {
-                return None;
-            };
+            let first_type = find_expression_type(builder, first_element)?;
 
             let length = info.values.len() as u64;
 
@@ -994,7 +990,7 @@ fn lower_expression(
                 element_place.projection.push(PlaceElem::Index(idx));
 
                 let (value, _value_ty, _field_span) =
-                    lower_expression(builder, &element, Some(element_type.clone()))?;
+                    lower_expression(builder, element, Some(element_type.clone()))?;
 
                 builder.statements.push(Statement {
                     span: Some(info.span),
