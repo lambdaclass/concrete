@@ -938,7 +938,72 @@ fn lower_expression(
 
             (rvalue, new_ty, *span)
         }
-        Expression::ArrayInit(_) => todo!(),
+        Expression::ArrayInit(info) => {
+            let element_type_hint = match type_hint.clone() {
+                Some(type_hint) => match type_hint.kind {
+                    TyKind::Array(type_hint, _) => Some(*type_hint),
+                    _ => None,
+                },
+                None => None,
+            };
+
+            let mut values = info.values.iter().enumerate();
+
+            let (first_idx, first_element) = values.next().expect("array init cannot be empty");
+            let (first_value, element_type, _element_span) =
+                lower_expression(builder, first_element, element_type_hint)?;
+
+            let length = info.values.len() as u64;
+
+            let ty = Ty {
+                span: Some(info.span),
+                kind: TyKind::Array(
+                    Box::new(element_type.clone()),
+                    Box::new(ConstData {
+                        ty: Ty {
+                            span: None,
+                            kind: TyKind::Uint(UintTy::U64),
+                        },
+                        data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(length))),
+                    }),
+                ),
+            };
+
+            let array_local = builder.add_local(Local::temp(ty.clone()));
+
+            let place = Place {
+                local: array_local,
+                projection: Default::default(),
+            };
+
+            builder.statements.push(Statement {
+                span: None,
+                kind: StatementKind::StorageLive(array_local),
+            });
+
+            let mut first_place = place.clone();
+            first_place.projection.push(PlaceElem::Index(first_idx));
+
+            builder.statements.push(Statement {
+                span: Some(info.span),
+                kind: StatementKind::Assign(first_place, first_value),
+            });
+
+            for (idx, element) in info.values.iter().enumerate() {
+                let mut element_place = place.clone();
+                element_place.projection.push(PlaceElem::Index(idx));
+
+                let (value, _value_ty, _field_span) =
+                    lower_expression(builder, &element, Some(element_type.clone()))?;
+
+                builder.statements.push(Statement {
+                    span: Some(info.span),
+                    kind: StatementKind::Assign(element_place, value),
+                });
+            }
+
+            (Rvalue::Use(Operand::Place(place)), ty, info.span)
+        }
     })
 }
 
