@@ -935,13 +935,10 @@ fn lower_expression(
             (rvalue, new_ty, *span)
         }
         Expression::ArrayInit(info) => {
-            let element_type_hint = match type_hint.clone() {
-                Some(type_hint) => match type_hint.kind {
-                    TyKind::Array(type_hint, _) => Some(*type_hint),
-                    _ => None,
-                },
-                None => None,
-            };
+            let element_type_hint = type_hint.and_then(|type_hint| match type_hint.kind {
+                TyKind::Array(type_hint, _) => Some(*type_hint),
+                _ => None,
+            });
 
             let mut values = info.values.iter().enumerate();
 
