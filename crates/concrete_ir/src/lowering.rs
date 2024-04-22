@@ -739,7 +739,31 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
             })
         }
         Expression::Cast(_, _, _) => todo!(),
-        Expression::ArrayInit(_) => todo!(),
+        Expression::ArrayInit(info) => {
+            let Some(first_element) = info.values.get(0) else {
+                return None;
+            };
+
+            let Some(first_type) = find_expression_type(builder, first_element) else {
+                return None;
+            };
+
+            let length = info.values.len() as u64;
+
+            Some(Ty {
+                span: Some(info.span),
+                kind: TyKind::Array(
+                    Box::new(first_type),
+                    Box::new(ConstData {
+                        ty: Ty {
+                            span: None,
+                            kind: TyKind::Uint(UintTy::U64),
+                        },
+                        data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(length))),
+                    }),
+                ),
+            })
+        }
     }
 }
 
