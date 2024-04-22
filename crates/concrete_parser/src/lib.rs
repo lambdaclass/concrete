@@ -169,12 +169,14 @@ mod ModuleName {
 
 		// unsafe!
 		let bar: i32 = foo.bar;
+	}
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
         parser.parse(lexer).unwrap();
     }
 
+    #[test]
     fn parse_for() {
         let source = r##"mod MyMod {
     fn hello() {
@@ -203,12 +205,14 @@ mod ModuleName {
 
     fn main() -> i32 {
         let mut foo: Foo = Foo.Bar;
+    }
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
         parser.parse(lexer).unwrap();
     }
 
+    #[test]
     fn parse_for_while() {
         let source = r##"mod MyMod {
     fn hello() {
