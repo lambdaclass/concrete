@@ -15,6 +15,7 @@ pub enum Expression {
     UnaryOp(UnaryOp, Box<Self>),
     BinaryOp(Box<Self>, BinaryOp, Box<Self>),
     StructInit(StructInitExpr),
+    ArrayInit(ArrayInitExpr),
     Deref(Box<Self>, Span),
     AsRef(Box<Self>, bool, Span),
     Cast(Box<Self>, TypeSpec, Span),
@@ -40,6 +41,12 @@ pub struct StructInitExpr {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructInitField {
     pub value: Expression,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArrayInitExpr {
+    pub values: Vec<Expression>,
     pub span: Span,
 }
 
