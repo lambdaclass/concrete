@@ -989,7 +989,7 @@ fn lower_expression(
                 kind: StatementKind::Assign(first_place, first_value),
             });
 
-            for (idx, element) in info.values.iter().enumerate() {
+            for (idx, element) in values {
                 let mut element_place = place.clone();
                 element_place.projection.push(PlaceElem::Index(idx));
 
