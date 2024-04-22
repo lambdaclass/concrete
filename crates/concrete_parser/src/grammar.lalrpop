@@ -554,6 +554,7 @@ pub(crate) Statement: ast::statements::Statement = {
   <MatchExpr> ";"? => ast::statements::Statement::Match(<>),
   <IfExpr> ";"? => ast::statements::Statement::If(<>),
   <WhileStmt> ";"? => ast::statements::Statement::While(<>),
+  <ForStmt> ";"? => ast::statements::Statement::For(<>),
   <LetStmt> ";" => ast::statements::Statement::Let(<>),
   <AssignStmt> ";" => ast::statements::Statement::Assign(<>),
   <FnCallOp> ";" => ast::statements::Statement::FnCall(<>),
@@ -608,6 +609,37 @@ pub(crate) WhileStmt: ast::statements::WhileStmt = {
     ast::statements::WhileStmt {
       value,
       contents,
+    }
+  }
+}
+
+
+pub(crate) ForStmt: ast::statements::ForStmt = {
+  <lo:@L> "for" "(" <init:LetStmt?> ";" <condition:Expression?> ";" <post:AssignStmt?> ")" "{" <contents:StatementList> "}" <hi:@R> => {
+    ast::statements::ForStmt {
+      init,
+      condition,
+      post,
+      contents,
+      span: Span::new(lo, hi)
+    }
+  },
+  <lo:@L> "for" "(" <condition:Expression> ")" "{" <contents:StatementList> "}" <hi:@R> => {
+    ast::statements::ForStmt {
+      init: None,
+      condition: Some(condition),
+      post: None,
+      contents,
+      span: Span::new(lo, hi)
+    }
+  },
+  <lo:@L> "for" "{" <contents:StatementList> "}" <hi:@R> => {
+    ast::statements::ForStmt {
+      init: None,
+      condition: None,
+      post: None,
+      contents,
+      span: Span::new(lo, hi)
     }
   }
 }
