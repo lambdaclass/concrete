@@ -1,8 +1,11 @@
 mod Example {
-    fn main() -> i64 {
+    fn main() -> i32 {
         let array: [i32; 4] = [1, 2, 3, 4];
         let nested_array: [[i32; 2]; 2] = [[1, 2], [3, 4]];
 
-        return 0;
+        let a: i32 = array[1];
+        let b: i32 = nested_array[1][0];
+
+        return a + b;
     }
 }
