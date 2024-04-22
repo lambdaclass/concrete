@@ -347,6 +347,14 @@ pub(crate) StructInitExpr: ast::expressions::StructInitExpr = {
   }
 }
 
+
+pub(crate) ArrayInitExpr: ast::expressions::ArrayInitExpr = {
+  <lo:@L> "[" <values:Comma<Expression>> "]" <hi:@R> => ast::expressions::ArrayInitExpr {
+    values: values.into_iter().collect(),
+    span: Span::new(lo, hi),
+  }
+}
+
 // Expressions
 
 pub(crate) Term: ast::expressions::Expression = {
@@ -391,6 +399,7 @@ pub(crate) Expression: ast::expressions::Expression = {
   #[precedence(level="5")] #[assoc(side="left")]
   <lo:@L> <a:Expression> "as" <b: TypeSpec> <hi:@R> => ast::expressions::Expression::Cast(Box::new(a), b, Span::new(lo, hi)),
   "(" <StructInitExpr> ")" => ast::expressions::Expression::StructInit(<>),
+  <ArrayInitExpr> => ast::expressions::Expression::ArrayInit(<>),
 }
 
 pub BinaryFirstLvlOp: ast::expressions::BinaryOp = {
