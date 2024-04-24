@@ -975,7 +975,9 @@ fn lower_expression(
             });
 
             let mut first_place = place.clone();
-            first_place.projection.push(PlaceElem::Index(first_idx));
+            first_place
+                .projection
+                .push(PlaceElem::ConstantIndex(first_idx as u64));
 
             builder.statements.push(Statement {
                 span: Some(info.span),
@@ -984,7 +986,9 @@ fn lower_expression(
 
             for (idx, element) in values {
                 let mut element_place = place.clone();
-                element_place.projection.push(PlaceElem::Index(idx));
+                element_place
+                    .projection
+                    .push(PlaceElem::ConstantIndex(idx as u64));
 
                 let (value, _value_ty, _field_span) =
                     lower_expression(builder, element, Some(element_type.clone()))?;
