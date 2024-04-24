@@ -974,8 +974,43 @@ fn lower_expression(
                 kind: StatementKind::StorageLive(array_local),
             });
 
+            let first_idx_local = {
+                let idx_kind = TyKind::Uint(UintTy::U64);
+
+                let first_idx_local = builder.add_temp_local(idx_kind.clone());
+                builder.statements.push(Statement {
+                    span: None,
+                    kind: StatementKind::StorageLive(first_idx_local),
+                });
+
+                let first_idx_place = Place {
+                    local: first_idx_local,
+                    projection: Default::default(),
+                };
+
+                builder.statements.push(Statement {
+                    span: None,
+                    kind: StatementKind::Assign(
+                        first_idx_place,
+                        Rvalue::Use(Operand::Const(ConstData {
+                            ty: Ty {
+                                span: None,
+                                kind: idx_kind,
+                            },
+                            data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(
+                                first_idx as u64,
+                            ))),
+                        })),
+                    ),
+                });
+
+                first_idx_local
+            };
+
             let mut first_place = place.clone();
-            first_place.projection.push(PlaceElem::Index(first_idx));
+            first_place
+                .projection
+                .push(PlaceElem::Index(first_idx_local));
 
             builder.statements.push(Statement {
                 span: Some(info.span),
@@ -983,8 +1018,41 @@ fn lower_expression(
             });
 
             for (idx, element) in values {
+                let idx_local = {
+                    let idx_kind = TyKind::Uint(UintTy::U64);
+
+                    let idx_local = builder.add_temp_local(idx_kind.clone());
+                    builder.statements.push(Statement {
+                        span: None,
+                        kind: StatementKind::StorageLive(first_idx_local),
+                    });
+
+                    let idx_place = Place {
+                        local: first_idx_local,
+                        projection: Default::default(),
+                    };
+
+                    builder.statements.push(Statement {
+                        span: None,
+                        kind: StatementKind::Assign(
+                            idx_place,
+                            Rvalue::Use(Operand::Const(ConstData {
+                                ty: Ty {
+                                    span: None,
+                                    kind: idx_kind,
+                                },
+                                data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(
+                                    idx as u64,
+                                ))),
+                            })),
+                        ),
+                    });
+
+                    idx_local
+                };
+
                 let mut element_place = place.clone();
-                element_place.projection.push(PlaceElem::Index(idx));
+                element_place.projection.push(PlaceElem::Index(idx_local));
 
                 let (value, _value_ty, _field_span) =
                     lower_expression(builder, element, Some(element_type.clone()))?;
