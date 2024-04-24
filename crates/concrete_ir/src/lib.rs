@@ -201,6 +201,8 @@ pub enum PlaceElem {
     Field(FieldIndex),
     /// array index
     Index(LocalIndex),
+    /// constant array index
+    ConstantIndex(u64),
 }
 
 /// A local, akin to a variable, it can be user defined or compiler-introduced.
