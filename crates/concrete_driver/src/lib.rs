@@ -1,6 +1,7 @@
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use clap::Args;
 use clap::{Parser, Subcommand};
 use concrete_ir::lowering::lower_programs;
 use concrete_parser::{error::Diagnostics, ProgramSource};
@@ -50,29 +51,49 @@ enum Commands {
         #[arg(long, group = "binary")]
         lib: bool,
     },
-    /// Build a project
-    Build {
-        /// Build for release with all optimizations.
-        #[arg(short, long, default_value_t = false)]
-        release: bool,
+    /// Build a project or file
+    Build(BuildArgs),
+    /// Run a project or file
+    Run(BuildArgs),
+}
 
-        /// Override the profile to use.
-        #[arg(short, long)]
-        profile: Option<String>,
-    },
-    /// Run a concrete file
-    Run {
-        #[arg(required = false)]
-        path: Option<PathBuf>,
+#[derive(Args, Debug)]
+pub struct BuildArgs {
+    /// Build specific file
+    #[arg(required = false)]
+    path: Option<PathBuf>,
 
-        /// Build for release with all optimizations.
-        #[arg(short, long, default_value_t = false)]
-        release: bool,
+    /// Build for release with all optimizations.
+    #[arg(short, long, default_value_t = false)]
+    release: bool,
 
-        /// Override the profile to use.
-        #[arg(short, long)]
-        profile: Option<String>,
-    },
+    /// Override the profile to use.
+    #[arg(short, long)]
+    profile: Option<String>,
+
+    /// Also output the ast.
+    #[arg(long, default_value_t = false)]
+    ast: bool,
+
+    /// Also output the ir.
+    #[arg(long, default_value_t = false)]
+    ir: bool,
+
+    /// Also output the llvm ir file.
+    #[arg(long, default_value_t = false)]
+    llvm: bool,
+
+    /// Also output the mlir file
+    #[arg(long, default_value_t = false)]
+    mlir: bool,
+
+    /// Also output the asm file.
+    #[arg(long, default_value_t = false)]
+    asm: bool,
+
+    /// Also output the object file.
+    #[arg(long, default_value_t = false)]
+    object: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -247,68 +268,11 @@ mod {} {{
                 println!("  {} library `{}` package", "Created".green(), name);
             }
         }
-        Commands::Build { release, profile } => {
-            build_command(profile, release)?;
+        Commands::Build(args) => {
+            handle_build(args)?;
         }
-        Commands::Run {
-            path,
-            release,
-            profile,
-        } => {
-            let output = match path {
-                Some(input) => {
-                    let input_stem = input
-                        .file_stem()
-                        .context("could not get file stem")?
-                        .to_str()
-                        .context("could not convert file stem to string")?;
-
-                    let build_dir = std::env::current_dir()?.join("build");
-                    if !build_dir.exists() {
-                        std::fs::create_dir_all(&build_dir)?;
-                    }
-                    let output = build_dir.join(input_stem);
-
-                    let compile_args = CompilerArgs {
-                        input: input.clone(),
-                        output: output.clone(),
-                        release,
-                        optlevel: None,
-                        debug_info: None,
-                        library: false,
-                        ast: false,
-                        ir: false,
-                        llvm: true,
-                        asm: false,
-                        object: true,
-                        mlir: true,
-                    };
-
-                    println!(
-                        "   {} {} ({})",
-                        "Compiling".green().bold(),
-                        input_stem,
-                        input.display()
-                    );
-
-                    let start = Instant::now();
-                    let object = compile(&compile_args)?;
-                    link_binary(&[object], &output)?;
-                    let elapsed = start.elapsed();
-
-                    println!(
-                        "   {} {} in {elapsed:?}",
-                        "Finished".green().bold(),
-                        if release { "release" } else { "dev" },
-                    );
-
-                    output
-                }
-                None => build_command(profile, release)?,
-            };
-
-            println!("   {} {}", "Running".green().bold(), &output.display());
-
+        Commands::Run(args) => {
+            let output = handle_build(args)?;
             Err(std::process::Command::new(output).exec())?;
         }
     }
@@ -316,110 +280,174 @@ mod {} {{
     Ok(())
 }
 
-fn build_command(profile: Option<String>, release: bool) -> Result<PathBuf> {
-    let mut current_dir = std::env::current_dir()?;
-    let mut config_path = None;
-    for _ in 0..3 {
-        if !current_dir.join("Concrete.toml").exists() {
-            current_dir = if let Some(parent) = current_dir.parent() {
-                parent.to_path_buf()
-            } else {
-                bail!("couldn't find Concrete.toml");
-            };
-        } else {
-            config_path = Some(current_dir.join("Concrete.toml"));
-            break;
-        }
-    }
-    let config_path = match config_path {
-        Some(x) => x,
-        None => bail!("couldn't find Concrete.toml"),
-    };
-    let base_dir = config_path
-        .parent()
-        .context("couldn't get config parent dir")?;
-    let mut config = File::open(&config_path).context("failed to open Concrete.toml")?;
-    let mut buf = String::new();
-    config.read_to_string(&mut buf)?;
-    let config: Config = toml::from_str(&buf).context("failed to parse Concrete.toml")?;
-    println!(
-        "   {} {} v{} ({})",
-        "Compiling".green().bold(),
-        config.package.name,
-        config.package.version,
-        base_dir.display()
-    );
-    let src_dir = base_dir.join("src");
-    let target_dir = base_dir.join("build");
-    if !target_dir.exists() {
-        std::fs::create_dir_all(&target_dir)?;
-    }
-    let has_main = src_dir.join("main.con").exists();
-    let output = target_dir.join(config.package.name);
-    let (profile, profile_name) = if let Some(profile) = profile {
-        (
-            config
-                .profile
-                .get(&profile)
-                .context("couldn't get requested profile")?,
-            profile,
-        )
-    } else if release {
-        (
-            config
-                .profile
-                .get("release")
-                .context("couldn't get profile: release")?,
-            "release".to_string(),
-        )
-    } else {
-        (
-            config
-                .profile
-                .get("dev")
-                .context("couldn't get profile: dev")?,
-            "dev".to_string(),
-        )
-    };
-    let compile_args = CompilerArgs {
-        input: src_dir,
-        output: output.clone(),
+fn handle_build(
+    BuildArgs {
+        path,
         release,
-        optlevel: Some(profile.opt_level),
-        debug_info: Some(profile.debug_info),
-        library: !has_main,
-        ast: false,
-        ir: false,
-        llvm: true,
-        asm: false,
-        object: true,
-        mlir: true,
-    };
-    let start = Instant::now();
-    let object = compile(&compile_args)?;
-    if !has_main {
-        link_shared_lib(&[object], &output)?;
-    } else {
-        link_binary(&[object], &output)?;
-    }
-    let elapsed = start.elapsed();
-    println!(
-        "   {} {} [{}{}] in {elapsed:?}",
-        "Finished".green().bold(),
-        profile_name,
-        if profile.opt_level > 0 {
-            "optimized"
-        } else {
-            "unoptimized"
-        },
-        if profile.debug_info {
-            " + debuginfo"
-        } else {
-            ""
-        }
-    );
+        profile,
+        ast,
+        ir,
+        llvm,
+        mlir,
+        asm,
+        object,
+    }: BuildArgs,
+) -> Result<PathBuf> {
+    match path {
+        Some(input) => {
+            let input_stem = input
+                .file_stem()
+                .context("could not get file stem")?
+                .to_str()
+                .context("could not convert file stem to string")?;
 
-    Ok(output)
+            let build_dir = std::env::current_dir()?.join("build");
+            if !build_dir.exists() {
+                std::fs::create_dir_all(&build_dir)?;
+            }
+            let output = build_dir.join(input_stem);
+
+            let compile_args = CompilerArgs {
+                input: input.clone(),
+                output: output.clone(),
+                release,
+                optlevel: None,
+                debug_info: None,
+                library: false,
+                ast,
+                ir,
+                llvm,
+                asm,
+                object,
+                mlir,
+            };
+
+            println!(
+                "   {} {} ({})",
+                "Compiling".green().bold(),
+                input_stem,
+                input.display()
+            );
+
+            let start = Instant::now();
+            let object = compile(&compile_args)?;
+            link_binary(&[object], &output)?;
+            let elapsed = start.elapsed();
+
+            println!(
+                "   {} {} in {elapsed:?}",
+                "Finished".green().bold(),
+                if release { "release" } else { "dev" },
+            );
+
+            Ok(output)
+        }
+        None => {
+            let mut current_dir = std::env::current_dir()?;
+            let mut config_path = None;
+            for _ in 0..3 {
+                if !current_dir.join("Concrete.toml").exists() {
+                    current_dir = if let Some(parent) = current_dir.parent() {
+                        parent.to_path_buf()
+                    } else {
+                        bail!("couldn't find Concrete.toml");
+                    };
+                } else {
+                    config_path = Some(current_dir.join("Concrete.toml"));
+                    break;
+                }
+            }
+            let config_path = match config_path {
+                Some(x) => x,
+                None => bail!("couldn't find Concrete.toml"),
+            };
+            let base_dir = config_path
+                .parent()
+                .context("couldn't get config parent dir")?;
+            let mut config = File::open(&config_path).context("failed to open Concrete.toml")?;
+            let mut buf = String::new();
+            config.read_to_string(&mut buf)?;
+            let config: Config = toml::from_str(&buf).context("failed to parse Concrete.toml")?;
+            println!(
+                "   {} {} v{} ({})",
+                "Compiling".green().bold(),
+                config.package.name,
+                config.package.version,
+                base_dir.display()
+            );
+            let src_dir = base_dir.join("src");
+            let target_dir = base_dir.join("build");
+            if !target_dir.exists() {
+                std::fs::create_dir_all(&target_dir)?;
+            }
+            let has_main = src_dir.join("main.con").exists();
+            let output = target_dir.join(config.package.name);
+            let (profile, profile_name) = if let Some(profile) = profile {
+                (
+                    config
+                        .profile
+                        .get(&profile)
+                        .context("couldn't get requested profile")?,
+                    profile,
+                )
+            } else if release {
+                (
+                    config
+                        .profile
+                        .get("release")
+                        .context("couldn't get profile: release")?,
+                    "release".to_string(),
+                )
+            } else {
+                (
+                    config
+                        .profile
+                        .get("dev")
+                        .context("couldn't get profile: dev")?,
+                    "dev".to_string(),
+                )
+            };
+            let compile_args = CompilerArgs {
+                input: src_dir,
+                output: output.clone(),
+                release,
+                optlevel: Some(profile.opt_level),
+                debug_info: Some(profile.debug_info),
+                library: !has_main,
+                ast,
+                ir,
+                llvm,
+                asm,
+                object,
+                mlir,
+            };
+            let start = Instant::now();
+            let object = compile(&compile_args)?;
+            if !has_main {
+                link_shared_lib(&[object], &output)?;
+            } else {
+                link_binary(&[object], &output)?;
+            }
+            let elapsed = start.elapsed();
+            println!(
+                "   {} {} [{}{}] in {elapsed:?}",
+                "Finished".green().bold(),
+                profile_name,
+                if profile.opt_level > 0 {
+                    "optimized"
+                } else {
+                    "unoptimized"
+                },
+                if profile.debug_info {
+                    " + debuginfo"
+                } else {
+                    ""
+                }
+            );
+
+            Ok(output)
+        }
+    }
 }
 
 pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
