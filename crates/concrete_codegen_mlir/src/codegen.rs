@@ -1277,7 +1277,15 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
             concrete_ir::FloatTy::F64 => Type::float64(ctx.ctx.mlir_context),
         },
         concrete_ir::TyKind::String => todo!(),
-        concrete_ir::TyKind::Array(_, _) => todo!(),
+        concrete_ir::TyKind::Array(inner_type, length) => {
+            let inner_type = compile_type(ctx, inner_type);
+            let length = match length.data {
+                concrete_ir::ConstKind::Value(ValueTree::Leaf(ConstValue::U64(length))) => length,
+                _ => unimplemented!(),
+            };
+
+            melior::dialect::llvm::r#type::array(inner_type, length as u32)
+        }
         concrete_ir::TyKind::Ref(_inner_ty, _) | concrete_ir::TyKind::Ptr(_inner_ty, _) => {
             llvm::r#type::opaque_pointer(ctx.ctx.mlir_context)
         }
