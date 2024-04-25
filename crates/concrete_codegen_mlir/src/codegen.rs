@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use concrete_ir::{
-    BinOp, DefId, FnBody, LocalKind, ModuleBody, Operand, Place, PlaceElem, ProgramBody, Rvalue,
-    Span, Ty, TyKind, ValueTree,
+    BinOp, ConstValue, DefId, FnBody, LocalKind, ModuleBody, Operand, Place, PlaceElem,
+    ProgramBody, Rvalue, Span, Ty, TyKind, ValueTree,
 };
 use concrete_session::Session;
 use melior::{
@@ -1014,6 +1014,21 @@ fn compile_store_place<'c: 'b, 'b>(
             }
             PlaceElem::Index(_) => todo!(),
             PlaceElem::ConstantIndex(index) => {
+                ptr = block
+                    .append_operation(llvm::get_element_ptr(
+                        ctx.context(),
+                        ptr,
+                        DenseI32ArrayAttribute::new(
+                            ctx.context(),
+                            &[0, (*index).try_into().unwrap()],
+                        ),
+                        compile_type(ctx.module_ctx, &local_ty),
+                        opaque_pointer(ctx.context()),
+                        Location::unknown(ctx.context()),
+                    ))
+                    .result(0)?
+                    .into();
+
                 local_ty = match local_ty.kind {
                     TyKind::Array(inner, _) => *inner,
                     _ => unreachable!(),
