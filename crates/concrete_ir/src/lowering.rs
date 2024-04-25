@@ -739,6 +739,7 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
             })
         }
         Expression::Cast(_, _, _) => todo!(),
+        Expression::ArrayInit(_) => todo!(),
     }
 }
 
@@ -913,6 +914,7 @@ fn lower_expression(
 
             (rvalue, new_ty, *span)
         }
+        Expression::ArrayInit(_) => todo!(),
     })
 }
 
