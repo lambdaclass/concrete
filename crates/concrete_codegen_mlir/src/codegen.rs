@@ -1013,7 +1013,12 @@ fn compile_store_place<'c: 'b, 'b>(
                 }
             }
             PlaceElem::Index(_) => todo!(),
-            PlaceElem::ConstantIndex(_) => todo!(),
+            PlaceElem::ConstantIndex(index) => {
+                local_ty = match local_ty.kind {
+                    TyKind::Array(inner, _) => *inner,
+                    _ => unreachable!(),
+                }
+            }
         }
     }
 
