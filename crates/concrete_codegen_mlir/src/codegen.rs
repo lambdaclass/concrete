@@ -500,6 +500,7 @@ fn compile_rvalue<'c: 'b, 'b>(
                     }
                     PlaceElem::Field(_) => todo!(),
                     PlaceElem::Index(_) => todo!(),
+                    PlaceElem::ConstantIndex(_) => todo!(),
                 }
             }
 
@@ -1012,6 +1013,7 @@ fn compile_store_place<'c: 'b, 'b>(
                 }
             }
             PlaceElem::Index(_) => todo!(),
+            PlaceElem::ConstantIndex(_) => todo!(),
         }
     }
 
@@ -1083,6 +1085,7 @@ fn compile_load_place<'c: 'b, 'b>(
                 }
             }
             PlaceElem::Index(_) => todo!(),
+            PlaceElem::ConstantIndex(_) => todo!(),
         }
     }
 
