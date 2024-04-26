@@ -1522,14 +1522,13 @@ pub fn lower_path(
                 }
 
                 if let TyKind::Array(element_type, _) = ty.kind {
+                    // Assign the index expression to a temporary local
                     let (index, index_ty) = lower_value_expr(builder, expression, None)?;
-
                     let index_local = builder.add_temp_local(index_ty.kind);
                     let index_place = Place {
                         local: index_local,
                         projection: vec![],
                     };
-
                     builder.statements.push(Statement {
                         span: None,
                         kind: StatementKind::StorageLive(index_local),
@@ -1539,6 +1538,7 @@ pub fn lower_path(
                         kind: StatementKind::Assign(index_place.clone(), index),
                     });
 
+                    // Use the local's value as index of the array
                     projection.push(PlaceElem::Index(index_local));
 
                     ty = *element_type;
