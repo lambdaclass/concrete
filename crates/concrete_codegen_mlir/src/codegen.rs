@@ -1108,8 +1108,8 @@ fn compile_load_place<'c: 'b, 'b>(
                 };
 
                 let place = Place {
-                    local,
-                    projection: None,
+                    local: *local,
+                    projection: Default::default(),
                 };
 
                 let (index, _) = compile_load_place(ctx, block, &place, locals)?;
