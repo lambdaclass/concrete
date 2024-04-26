@@ -1126,7 +1126,23 @@ fn compile_load_place<'c: 'b, 'b>(
                     .result(0)?
                     .into();
             }
-            PlaceElem::ConstantIndex(_) => todo!(),
+            PlaceElem::ConstantIndex(index) => {
+                local_ty = match local_ty.kind {
+                    TyKind::Array(inner, _) => *inner,
+                    _ => unreachable!(),
+                };
+                ptr = block
+                    .append_operation(llvm::get_element_ptr(
+                        ctx.context(),
+                        ptr,
+                        DenseI32ArrayAttribute::new(ctx.context(), &[(*index).try_into().unwrap()]),
+                        compile_type(ctx.module_ctx, &local_ty),
+                        opaque_pointer(ctx.context()),
+                        Location::unknown(ctx.context()),
+                    ))
+                    .result(0)?
+                    .into();
+            }
         }
     }
 
