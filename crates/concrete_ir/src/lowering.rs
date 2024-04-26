@@ -1064,6 +1064,7 @@ fn lower_expression(
 
             let mut values = info.values.iter().enumerate();
 
+            // Extract the first value from the array init. It's type will be used as type hint for the following elements.
             let (first_idx, first_element) = values.next().expect("array init cannot be empty");
             let (first_value, element_type, _element_span) =
                 lower_expression(builder, first_element, element_type_hint)?;
@@ -1084,28 +1085,28 @@ fn lower_expression(
                 ),
             };
 
+            // Create and init local for the array init expression.
             let array_local = builder.add_local(Local::temp(ty.clone()));
-
             let place = Place {
                 local: array_local,
                 projection: Default::default(),
             };
-
             builder.statements.push(Statement {
                 span: None,
                 kind: StatementKind::StorageLive(array_local),
             });
 
+            // Assign the first value of the expression
             let mut first_place = place.clone();
             first_place
                 .projection
                 .push(PlaceElem::ConstantIndex(first_idx as u64));
-
             builder.statements.push(Statement {
                 span: Some(info.span),
                 kind: StatementKind::Assign(first_place, first_value),
             });
 
+            // Loop over the remaining values and assign them
             for (idx, element) in values {
                 let mut element_place = place.clone();
                 element_place
@@ -1521,14 +1522,13 @@ pub fn lower_path(
                 }
 
                 if let TyKind::Array(element_type, _) = ty.kind {
+                    // Assign the index expression to a temporary local
                     let (index, index_ty) = lower_value_expr(builder, expression, None)?;
-
                     let index_local = builder.add_temp_local(index_ty.kind);
                     let index_place = Place {
                         local: index_local,
                         projection: vec![],
                     };
-
                     builder.statements.push(Statement {
                         span: None,
                         kind: StatementKind::StorageLive(index_local),
@@ -1538,6 +1538,7 @@ pub fn lower_path(
                         kind: StatementKind::Assign(index_place.clone(), index),
                     });
 
+                    // Use the local's value as index of the array
                     projection.push(PlaceElem::Index(index_local));
 
                     ty = *element_type;
