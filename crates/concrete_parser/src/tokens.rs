@@ -33,6 +33,10 @@ pub enum Token {
     KeywordReturn,
     #[token("struct")]
     KeywordStruct,
+    #[token("union")]
+    KeywordUnion,
+    #[token("enum")]
+    KeywordEnum,
     #[token("if")]
     KeywordIf,
     #[token("else")]

@@ -95,6 +95,8 @@ pub fn prepass_module(
                         .insert(info.name.name.clone(), next_id);
                     current_module.modules.insert(next_id);
                 }
+                ast::modules::ModuleDefItem::Union(_) => todo!(),
+                ast::modules::ModuleDefItem::Enum(_) => todo!(),
                 ast::modules::ModuleDefItem::FunctionDecl(info) => {
                     let next_id = gen.next_defid();
                     current_module
@@ -210,6 +212,8 @@ pub fn prepass_sub_module(
                         .insert(info.name.name.clone(), next_id);
                     submodule.modules.insert(next_id);
                 }
+                ast::modules::ModuleDefItem::Union(_) => todo!(),
+                ast::modules::ModuleDefItem::Enum(_) => todo!(),
                 ast::modules::ModuleDefItem::FunctionDecl(info) => {
                     let next_id = gen.next_defid();
                     submodule

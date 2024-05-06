@@ -18,6 +18,8 @@ extern {
     "fn" => Token::KeywordFn,
     "return" => Token::KeywordReturn,
     "struct" => Token::KeywordStruct,
+    "union" => Token::KeywordUnion,
+    "enum" => Token::KeywordEnum,
     "if" => Token::KeywordIf,
     "else" => Token::KeywordElse,
     "while" => Token::KeywordWhile,
@@ -243,6 +245,12 @@ pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
   <StructDef> => {
     ast::modules::ModuleDefItem::Struct(<>)
   },
+  <UnionDef> => {
+    ast::modules::ModuleDefItem::Union(<>)
+  },
+  <EnumDef> => {
+    ast::modules::ModuleDefItem::Enum(<>)
+  },
   <FunctionDef> => {
     ast::modules::ModuleDefItem::Function(<>)
   },
@@ -324,6 +332,35 @@ pub(crate) StructDef: ast::structs::StructDecl = {
         name,
         fields,
         generics: generics.unwrap_or(vec![]),
+        span: Span::new(lo, hi),
+    }
+}
+
+
+pub(crate) UnionDef: ast::enums::UnionDecl = {
+    <lo:@L> "union" <name:Ident> <generics:GenericParams?> "{" <variants:Comma<StructField>> "}" <hi:@R> => ast::enums::UnionDecl {
+        name,
+        variants,
+        generics: generics.unwrap_or(vec![]),
+        span: Span::new(lo, hi),
+    }
+}
+
+pub(crate) EnumDef: ast::enums::EnumDecl = {
+    <lo:@L> "enum" <name:Ident> <generics:GenericParams?> "{" <variants:Comma<EnumVariant>> "}" <hi:@R> => ast::enums::EnumDecl {
+        name,
+        variants,
+        generics: generics.unwrap_or(vec![]),
+        span: Span::new(lo, hi),
+    }
+}
+
+
+pub(crate) EnumVariant: ast::enums::EnumVariant = {
+    <lo:@L> <name:Ident> <fields:("{" <Comma<StructField>> "}")?> <discriminant:("=" <Expression>)?><hi:@R> => ast::enums::EnumVariant {
+        name,
+        fields: fields.unwrap_or_default(),
+        discriminant,
         span: Span::new(lo, hi),
     }
 }

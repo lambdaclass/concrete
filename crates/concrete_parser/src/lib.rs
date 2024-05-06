@@ -157,6 +157,26 @@ mod ModuleName {
     }
 
     #[test]
+    fn parse_union_declaration() {
+        let source = r##"mod MyMod {
+    union Foo {
+        bar: i32,
+        baz: i64,
+    }
+
+    fn main() -> i32 {
+        let mut foo: Foo = Foo { bar: 1 };
+
+		// unsafe!
+		let bar: i32 = foo.bar;
+	}
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
+    }
+
+    #[test]
     fn parse_for() {
         let source = r##"mod MyMod {
     fn hello() {
@@ -167,6 +187,24 @@ mod ModuleName {
         }
 
         return result;
+    }
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
+    }
+
+    #[test]
+    fn parse_enum() {
+        let source = r##"mod MyMod {
+    enum Foo {
+        Bar,
+		Baz { n1: i32, n2: i32 },
+		Qux = 3,
+    }
+
+    fn main() -> i32 {
+        let mut foo: Foo = Foo.Bar;
     }
 }"##;
         let lexer = Lexer::new(source);
