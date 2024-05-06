@@ -13,16 +13,16 @@ check-deps:
 ifeq (, $(shell which cargo))
 	$(error "The cargo command could not be found in your PATH, please install Rust: https://www.rust-lang.org/tools/install")
 endif
-ifndef LLVM_SYS_170_PREFIX
-	$(error Could not find a suitable LLVM 17 toolchain, please set LLVM_SYS_170_PREFIX env pointing to the LLVM 17 dir)
+ifndef LLVM_SYS_180_PREFIX
+	$(error Could not find a suitable LLVM 18 toolchain, please set LLVM_SYS_180_PREFIX env pointing to the LLVM 18 dir)
 endif
-ifndef MLIR_SYS_170_PREFIX
-	$(error Could not find a suitable LLVM 17 toolchain (mlir), please set MLIR_SYS_170_PREFIX env pointing to the LLVM 17 dir)
+ifndef MLIR_SYS_180_PREFIX
+	$(error Could not find a suitable LLVM 18 toolchain (mlir), please set MLIR_SYS_180_PREFIX env pointing to the LLVM 18 dir)
 endif
-ifndef TABLEGEN_170_PREFIX
-	$(error Could not find a suitable LLVM 17 toolchain (tablegen), please set TABLEGEN_170_PREFIX env pointing to the LLVM 17 dir)
+ifndef TABLEGEN_180_PREFIX
+	$(error Could not find a suitable LLVM 18 toolchain (tablegen), please set TABLEGEN_180_PREFIX env pointing to the LLVM 18 dir)
 endif
-	@echo "[make] LLVM is correctly set at $(MLIR_SYS_170_PREFIX)."
+	@echo "[make] LLVM is correctly set at $(MLIR_SYS_180_PREFIX)."
 
 .PHONY: build
 build: check-deps
@@ -48,4 +48,3 @@ coverage: check-deps
 .PHONY: bench
 bench: check-deps
 	./bench/bench.sh
-

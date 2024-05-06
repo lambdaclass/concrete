@@ -137,7 +137,7 @@ jobs:
         - name: Retreive cached dependecies
           uses: Swatinem/rust-cache@v2
         - name: add llvm deb repository
-          uses: myci-actions/add-deb-repo@10
+          uses: myci-actions/add-deb-repo@11
           with:
                 repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main
                 repo-name: llvm-repo
