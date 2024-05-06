@@ -1,7 +1,7 @@
 use std::env::var;
 
 fn main() {
-    let mlir_path = var("MLIR_SYS_170_PREFIX").expect("MLIR path should be set.");
+    let mlir_path = var("MLIR_SYS_180_PREFIX").expect("MLIR path should be set.");
 
     cc::Build::new()
         .cpp(true)
