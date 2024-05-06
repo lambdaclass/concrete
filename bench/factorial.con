@@ -1,5 +1,6 @@
 mod Factorial {
-    fn concrete_function(n: u64) -> u64 {
+    // todo: add no mangle attribute
+    pub fn concrete_function(n: u64) -> u64 {
         if n == 0 {
             return 1;
         } else {

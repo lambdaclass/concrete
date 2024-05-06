@@ -88,7 +88,7 @@ impl FnBody {
         if self.name == "main" {
             "main".to_string()
         } else {
-            format!("{}@{}@{}", self.name, self.id.program_id, self.id.id)
+            format!("{}_{}_{}", self.name, self.id.program_id, self.id.id)
         }
     }
 }

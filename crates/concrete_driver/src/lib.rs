@@ -63,6 +63,10 @@ pub struct BuildArgs {
     #[arg(required = false)]
     path: Option<PathBuf>,
 
+    /// Build the specific file as a library, only used when compiling a single file.
+    #[arg(short, long, required = false, default_value_t = false)]
+    lib: bool,
+
     /// Build for release with all optimizations.
     #[arg(short, long, default_value_t = false)]
     release: bool,
@@ -291,9 +295,11 @@ fn handle_build(
         mlir,
         asm,
         object,
+        lib,
     }: BuildArgs,
 ) -> Result<PathBuf> {
     match path {
+        // Single file compilation
         Some(input) => {
             let input_stem = input
                 .file_stem()
@@ -301,10 +307,7 @@ fn handle_build(
                 .to_str()
                 .context("could not convert file stem to string")?;
 
-            let build_dir = std::env::current_dir()?.join("build");
-            if !build_dir.exists() {
-                std::fs::create_dir_all(&build_dir)?;
-            }
+            let build_dir = std::env::current_dir()?;
             let output = build_dir.join(input_stem);
 
             let compile_args = CompilerArgs {
@@ -313,7 +316,7 @@ fn handle_build(
                 release,
                 optlevel: None,
                 debug_info: None,
-                library: false,
+                library: lib,
                 ast,
                 ir,
                 llvm,
@@ -331,7 +334,17 @@ fn handle_build(
 
             let start = Instant::now();
             let object = compile(&compile_args)?;
-            link_binary(&[object], &output)?;
+
+            if lib {
+                link_shared_lib(&[object.clone()], &output)?;
+            } else {
+                link_binary(&[object.clone()], &output)?;
+            }
+
+            if !compile_args.object {
+                std::fs::remove_file(object)?;
+            }
+
             let elapsed = start.elapsed();
 
             println!(
@@ -342,6 +355,7 @@ fn handle_build(
 
             Ok(output)
         }
+        // Project compilation.
         None => {
             let mut current_dir = std::env::current_dir()?;
             let mut config_path = None;
