@@ -20,6 +20,7 @@ mod common;
 #[test_case(include_str!("../../../examples/if_if_false.con"), "if_if_false", false, 7 ; "if_if_false.con")]
 #[test_case(include_str!("../../../examples/for.con"), "for", false, 10 ; "for.con")]
 #[test_case(include_str!("../../../examples/for_while.con"), "for_while", false, 10 ; "for_while.con")]
+#[test_case(include_str!("../../../examples/arrays.con"), "arrays", false, 5 ; "arrays.con")]
 fn example_tests(source: &str, name: &str, is_library: bool, status_code: i32) {
     assert_eq!(
         status_code,

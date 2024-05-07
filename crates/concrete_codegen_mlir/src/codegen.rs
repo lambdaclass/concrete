@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use concrete_ir::{
-    BinOp, DefId, FnBody, LocalKind, ModuleBody, Operand, Place, PlaceElem, ProgramBody, Rvalue,
-    Span, Ty, TyKind, ValueTree,
+    BinOp, ConstValue, DefId, FnBody, LocalKind, ModuleBody, Operand, Place, PlaceElem,
+    ProgramBody, Rvalue, Span, Ty, TyKind, ValueTree,
 };
 use concrete_session::Session;
 use melior::{
@@ -1012,8 +1012,49 @@ fn compile_store_place<'c: 'b, 'b>(
                     _ => unreachable!(),
                 }
             }
-            PlaceElem::Index(_) => todo!(),
-            PlaceElem::ConstantIndex(_) => todo!(),
+            PlaceElem::Index(local) => {
+                local_ty = match local_ty.kind {
+                    TyKind::Array(inner, _) => *inner,
+                    _ => unreachable!(),
+                };
+
+                let place = Place {
+                    local: *local,
+                    projection: vec![],
+                };
+
+                let (index, _) = compile_load_place(ctx, block, &place, locals)?;
+
+                ptr = block
+                    .append_operation(llvm::get_element_ptr_dynamic(
+                        ctx.context(),
+                        ptr,
+                        &[index],
+                        compile_type(ctx.module_ctx, &local_ty),
+                        opaque_pointer(ctx.context()),
+                        Location::unknown(ctx.context()),
+                    ))
+                    .result(0)?
+                    .into();
+            }
+            PlaceElem::ConstantIndex(index) => {
+                local_ty = match local_ty.kind {
+                    TyKind::Array(inner, _) => *inner,
+                    _ => unreachable!(),
+                };
+
+                ptr = block
+                    .append_operation(llvm::get_element_ptr(
+                        ctx.context(),
+                        ptr,
+                        DenseI32ArrayAttribute::new(ctx.context(), &[(*index).try_into().unwrap()]),
+                        compile_type(ctx.module_ctx, &local_ty),
+                        opaque_pointer(ctx.context()),
+                        Location::unknown(ctx.context()),
+                    ))
+                    .result(0)?
+                    .into();
+            }
         }
     }
 
@@ -1084,8 +1125,48 @@ fn compile_load_place<'c: 'b, 'b>(
                     _ => unreachable!(),
                 }
             }
-            PlaceElem::Index(_) => todo!(),
-            PlaceElem::ConstantIndex(_) => todo!(),
+            PlaceElem::Index(local) => {
+                local_ty = match local_ty.kind {
+                    TyKind::Array(inner, _) => *inner,
+                    _ => unreachable!(),
+                };
+
+                let place = Place {
+                    local: *local,
+                    projection: Default::default(),
+                };
+
+                let (index, _) = compile_load_place(ctx, block, &place, locals)?;
+
+                ptr = block
+                    .append_operation(llvm::get_element_ptr_dynamic(
+                        ctx.context(),
+                        ptr,
+                        &[index],
+                        compile_type(ctx.module_ctx, &local_ty),
+                        opaque_pointer(ctx.context()),
+                        Location::unknown(ctx.context()),
+                    ))
+                    .result(0)?
+                    .into();
+            }
+            PlaceElem::ConstantIndex(index) => {
+                local_ty = match local_ty.kind {
+                    TyKind::Array(inner, _) => *inner,
+                    _ => unreachable!(),
+                };
+                ptr = block
+                    .append_operation(llvm::get_element_ptr(
+                        ctx.context(),
+                        ptr,
+                        DenseI32ArrayAttribute::new(ctx.context(), &[(*index).try_into().unwrap()]),
+                        compile_type(ctx.module_ctx, &local_ty),
+                        opaque_pointer(ctx.context()),
+                        Location::unknown(ctx.context()),
+                    ))
+                    .result(0)?
+                    .into();
+            }
         }
     }
 
@@ -1272,7 +1353,15 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
             concrete_ir::FloatTy::F64 => Type::float64(ctx.ctx.mlir_context),
         },
         concrete_ir::TyKind::String => todo!(),
-        concrete_ir::TyKind::Array(_, _) => todo!(),
+        concrete_ir::TyKind::Array(inner_type, length) => {
+            let inner_type = compile_type(ctx, inner_type);
+            let length = match length.data {
+                concrete_ir::ConstKind::Value(ValueTree::Leaf(ConstValue::U64(length))) => length,
+                _ => unimplemented!(),
+            };
+
+            melior::dialect::llvm::r#type::array(inner_type, length as u32)
+        }
         concrete_ir::TyKind::Ref(_inner_ty, _) | concrete_ir::TyKind::Ptr(_inner_ty, _) => {
             llvm::r#type::pointer(ctx.ctx.mlir_context, 0)
         }
