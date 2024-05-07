@@ -7,9 +7,10 @@ pub mod config;
 
 #[derive(Debug, Clone)]
 pub struct Session {
+    pub file_paths: Vec<PathBuf>,
     pub debug_info: DebugInfo,
     pub optlevel: OptLevel,
-    pub sources: Vec<Source>, // for debugging locations
+    pub sources: Vec<Source<String>>, // for debugging locations
     /// True if it should be compiled as a library false for binary.
     pub library: bool,
     pub output_file: PathBuf,
