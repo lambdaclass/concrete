@@ -53,6 +53,7 @@ extern {
     ":" => Token::Colon,
     "->" => Token::Arrow,
     "," => Token::Coma,
+    "#" => Token::Hashtag,
     "<" => Token::LessThanSign,
     ">" => Token::MoreThanSign,
     ">=" => Token::MoreThanEqSign,
@@ -118,6 +119,14 @@ PlusSeparated<T>: Vec<T> = {
         }
     }
 };
+
+List<T>: Vec<T> = {
+  <T> => vec![<>],
+  <mut s:List<T>> <n:T> => {
+      s.push(n);
+      s
+  },
+}
 
 // Requires the semicolon at end
 SemiColonSeparated<T>: Vec<T> = {
@@ -291,13 +300,22 @@ pub(crate) Param: ast::functions::Param = {
   }
 }
 
+pub(crate) Attribute: ast::common::Attribute = {
+  <lo:@L> "#" "[" <name:"identifier"> <value:("=" <"string">)?> "]" <hi:@R> => ast::common::Attribute {
+    name,
+    value,
+    span: ast::common::Span::new(lo, hi),
+  }
+}
+
 pub(crate) FunctionDecl: ast::functions::FunctionDecl = {
-  <lo:@L> <is_pub:"pub"?> <is_extern:"extern"?>
+  <lo:@L> <attributes:List<Attribute>?> <is_pub:"pub"?> <is_extern:"extern"?>
       "fn" <name:Ident> <generic_params:GenericParams?> "(" <params:Comma<Param>> ")"
         <ret_type:FunctionRetType?> <hi:@R> =>
     ast::functions::FunctionDecl {
         doc_string: None,
         generic_params: generic_params.unwrap_or(vec![]),
+        attributes: attributes.unwrap_or(vec![]),
         name,
         params,
         ret_type,

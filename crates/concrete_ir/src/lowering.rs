@@ -16,10 +16,10 @@ use concrete_ast::{
 };
 
 use crate::{
-    AdtBody, BasicBlock, BinOp, ConstData, ConstKind, ConstValue, DefId, FloatTy, FnBody, IntTy,
-    Local, LocalKind, LogOp, Mutability, Operand, Place, PlaceElem, ProgramBody, Rvalue, Statement,
-    StatementKind, SwitchTargets, Terminator, TerminatorKind, Ty, TyKind, UintTy, ValueTree,
-    VariantDef,
+    AdtBody, BasicBlock, BinOp, ConcreteIntrinsic, ConstData, ConstKind, ConstValue, DefId,
+    FloatTy, FnBody, IntTy, Local, LocalKind, LogOp, Mutability, Operand, Place, PlaceElem,
+    ProgramBody, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, Ty,
+    TyKind, UintTy, ValueTree, VariantDef,
 };
 
 use self::errors::LoweringError;
@@ -217,11 +217,16 @@ fn lower_func(
     func: &FunctionDef,
     module_id: DefId,
 ) -> Result<BuildCtx, LoweringError> {
+    let is_intrinsic: Option<ConcreteIntrinsic> = None;
+
+    // TODO: parse insintrics here.
+
     let mut builder = FnBodyBuilder {
         body: FnBody {
             basic_blocks: Vec::new(),
             locals: Vec::new(),
             is_extern: func.decl.is_extern,
+            is_intrinsic,
             name: func.decl.name.name.clone(),
             id: {
                 let body = ctx.body.modules.get(&module_id).unwrap();
@@ -350,11 +355,16 @@ fn lower_func_decl(
     func: &FunctionDecl,
     module_id: DefId,
 ) -> Result<BuildCtx, LoweringError> {
+    let is_intrinsic: Option<ConcreteIntrinsic> = None;
+
+    // TODO: parse insintrics here.
+
     let builder = FnBodyBuilder {
         body: FnBody {
             basic_blocks: Vec::new(),
             locals: Vec::new(),
             is_extern: func.is_extern,
+            is_intrinsic,
             name: func.name.name.clone(),
             id: {
                 let body = ctx.body.modules.get(&module_id).unwrap();
@@ -1236,14 +1246,22 @@ fn lower_binary_op(
     } else {
         lower_expression(builder, lhs, type_hint.clone())?
     };
+
+    // We must handle the special case where you can do ptr + offset.
+    let is_lhs_ptr = matches!(lhs_ty.kind, TyKind::Ptr(_, _));
+
     let (rhs, rhs_ty, rhs_span) = if type_hint.is_none() {
         let ty = find_expression_type(builder, rhs).unwrap_or(lhs_ty.clone());
-        lower_expression(builder, rhs, Some(ty))?
+        lower_expression(builder, rhs, if is_lhs_ptr { None } else { Some(ty) })?
     } else {
-        lower_expression(builder, rhs, type_hint.clone())?
+        lower_expression(
+            builder,
+            rhs,
+            if is_lhs_ptr { None } else { type_hint.clone() },
+        )?
     };
 
-    if lhs_ty != rhs_ty {
+    if !is_lhs_ptr && lhs_ty != rhs_ty {
         return Err(LoweringError::UnexpectedType {
             span: rhs_span,
             found: rhs_ty,
@@ -1409,6 +1427,9 @@ fn lower_value_expr(
                                 UintTy::U128 => ConstValue::U128(*value),
                             },
                             TyKind::Bool => ConstValue::Bool(*value != 0),
+                            TyKind::Ptr(ref _inner, _mutable) => {
+                                ConstValue::I64((*value).try_into().expect("value out of range"))
+                            }
                             x => unreachable!("{:?}", x),
                         })),
                     },
