@@ -1,10 +1,17 @@
 use std::path::{Path, PathBuf};
 
+use concrete_session::Session;
 use tracing::instrument;
 
 #[instrument(level = "debug")]
 pub fn link_shared_lib(objects: &[PathBuf], output_filename: &Path) -> std::io::Result<()> {
+    let mut output_filename = output_filename.to_path_buf();
     let objects: Vec<_> = objects.iter().map(|x| x.display().to_string()).collect();
+
+    if output_filename.extension().is_none() {
+        output_filename = output_filename.with_extension(Session::get_platform_library_ext());
+    }
+
     let output_filename = output_filename.to_string_lossy().to_string();
 
     let args: Vec<_> = {

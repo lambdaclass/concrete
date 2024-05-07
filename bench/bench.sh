@@ -16,8 +16,8 @@ function bench_program() {
     echo -e "### ${RED}Benchmarking $name ${NC}"
 
     rustc --crate-type=cdylib "$name.rs" -C target-cpu=native -C opt-level=3 -o "${name}_rs.so" > /dev/null 2>&1
-    cargo r -- "$name.con"  --library --release > /dev/null 2>&1
-    cp "./build_artifacts/$name.so" "${name}_con.so"
+    cargo r -- build "$name.con" --lib --release
+    cp "$name.so" "${name}_con.so"
 
     cc -march=native -mtune=native bench.c -L . -l:./"${name}"_rs.so -l:./"${name}"_con.so -Wl,-rpath -o bench_"${name}"
 

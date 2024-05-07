@@ -8,7 +8,7 @@ use concrete_session::Session;
 use melior::{
     dialect::{
         arith, cf, func,
-        llvm::{self, r#type::opaque_pointer, AllocaOptions, LoadStoreOptions},
+        llvm::{self, r#type::pointer, AllocaOptions, LoadStoreOptions},
         ods,
     },
     ir::{
@@ -181,7 +181,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
         let const1 = entry_block
             .append_operation(arith::constant(
                 ctx.context(),
-                IntegerAttribute::new(1, IntegerType::new(ctx.context(), 64).into()).into(),
+                IntegerAttribute::new(IntegerType::new(ctx.context(), 64).into(), 1).into(),
                 location,
             ))
             .result(0)?
@@ -198,7 +198,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                         .append_operation(llvm::alloca(
                             ctx.context(),
                             const1,
-                            llvm::r#type::opaque_pointer(ctx.context()),
+                            pointer(ctx.context(), 0),
                             location,
                             AllocaOptions::new()
                                 .elem_type(Some(TypeAttribute::new(local_mlir_type))),
@@ -216,7 +216,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                         .append_operation(llvm::alloca(
                             ctx.context(),
                             const1,
-                            llvm::r#type::opaque_pointer(ctx.context()),
+                            pointer(ctx.context(), 0),
                             location,
                             AllocaOptions::new()
                                 .elem_type(Some(TypeAttribute::new(local_mlir_type))),
@@ -243,7 +243,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                             .append_operation(llvm::alloca(
                                 ctx.context(),
                                 const1,
-                                llvm::r#type::opaque_pointer(ctx.context()),
+                                pointer(ctx.context(), 0),
                                 location,
                                 AllocaOptions::new()
                                     .elem_type(Some(TypeAttribute::new(local_mlir_type))),
@@ -999,7 +999,7 @@ fn compile_store_place<'c: 'b, 'b>(
                             &[0, (*field_idx).try_into().unwrap()],
                         ),
                         compile_type(ctx.module_ctx, &local_ty),
-                        opaque_pointer(ctx.context()),
+                        pointer(ctx.context(), 0),
                         Location::unknown(ctx.context()),
                     ))
                     .result(0)?
@@ -1074,7 +1074,7 @@ fn compile_load_place<'c: 'b, 'b>(
                                     &[0, (*field_idx).try_into().unwrap()],
                                 ),
                                 compile_type(ctx.module_ctx, &local_ty),
-                                opaque_pointer(ctx.context()),
+                                pointer(ctx.context(), 0),
                                 Location::unknown(ctx.context()),
                             ))
                             .result(0)?
@@ -1227,8 +1227,8 @@ fn compile_value_tree<'c: 'b, 'b>(
                     ctx.context(),
                     FloatAttribute::new(
                         ctx.context(),
-                        (*value).into(),
                         Type::float32(ctx.context()),
+                        (*value).into(),
                     )
                     .into(),
                     Location::unknown(ctx.context()),
@@ -1238,7 +1238,7 @@ fn compile_value_tree<'c: 'b, 'b>(
             concrete_ir::ConstValue::F64(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    FloatAttribute::new(ctx.context(), *value, Type::float64(ctx.context())).into(),
+                    FloatAttribute::new(ctx.context(), Type::float64(ctx.context()), *value).into(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)?
@@ -1274,7 +1274,7 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
         concrete_ir::TyKind::String => todo!(),
         concrete_ir::TyKind::Array(_, _) => todo!(),
         concrete_ir::TyKind::Ref(_inner_ty, _) | concrete_ir::TyKind::Ptr(_inner_ty, _) => {
-            llvm::r#type::opaque_pointer(ctx.ctx.mlir_context)
+            llvm::r#type::pointer(ctx.ctx.mlir_context, 0)
         }
         concrete_ir::TyKind::Param { .. } => todo!(),
         concrete_ir::TyKind::Struct { id, generics: _ } => {
