@@ -1,7 +1,7 @@
 mod Simple {
 
     fn main() -> i32 {
-        let x: i32 = 1;
+        let mut x: i32 = 1;
         hello(&x);
         return x;
     }
