@@ -102,3 +102,36 @@ fn undeclared_var() {
         error
     );
 }
+
+#[test]
+fn call_count_mismatch() {
+    let (source, name) = (
+        include_str!("invalid_programs/call_count_mismatch.con"),
+        "call_count_mismatch",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(
+            &error,
+            LoweringError::CallParamCountMismatch { found, needs, .. } if *found == 2 && *needs == 1
+        ),
+        "{:#?}",
+        error
+    );
+}
+
+#[test]
+fn invalid_call_params() {
+    let (source, name) = (
+        include_str!("invalid_programs/invalid_call_params.con"),
+        "invalid_call_params",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::UnexpectedType { .. }),
+        "{:#?}",
+        error
+    );
+}

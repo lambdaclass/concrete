@@ -222,5 +222,24 @@ pub fn lowering_error_to_report(
                 .with_message(msg)
                 .finish()
         }
+        LoweringError::CallParamCountMismatch {
+            span,
+            found,
+            needs,
+            program_id,
+        } => {
+            let path = file_paths[program_id].to_str().unwrap().to_string();
+            Report::build(ReportKind::Error, path.clone(), span.from)
+                .with_code("CallParamCountMismatch")
+                .with_label(
+                    Label::new((path, span.into()))
+                        .with_message(format!(
+                            "function call parameter count mismatch: found {}, needs {}.",
+                            found, needs
+                        ))
+                        .with_color(colors.next()),
+                )
+                .finish()
+        }
     }
 }
