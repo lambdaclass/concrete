@@ -1031,7 +1031,7 @@ fn compile_store_place<'c: 'b, 'b>(
                         ptr,
                         &[index],
                         compile_type(ctx.module_ctx, &local_ty),
-                        opaque_pointer(ctx.context()),
+                        pointer(ctx.context(), 0),
                         Location::unknown(ctx.context()),
                     ))
                     .result(0)?
@@ -1049,7 +1049,7 @@ fn compile_store_place<'c: 'b, 'b>(
                         ptr,
                         DenseI32ArrayAttribute::new(ctx.context(), &[(*index).try_into().unwrap()]),
                         compile_type(ctx.module_ctx, &local_ty),
-                        opaque_pointer(ctx.context()),
+                        pointer(ctx.context(), 0),
                         Location::unknown(ctx.context()),
                     ))
                     .result(0)?
@@ -1144,7 +1144,7 @@ fn compile_load_place<'c: 'b, 'b>(
                         ptr,
                         &[index],
                         compile_type(ctx.module_ctx, &local_ty),
-                        opaque_pointer(ctx.context()),
+                        pointer(ctx.context(), 0),
                         Location::unknown(ctx.context()),
                     ))
                     .result(0)?
@@ -1161,7 +1161,7 @@ fn compile_load_place<'c: 'b, 'b>(
                         ptr,
                         DenseI32ArrayAttribute::new(ctx.context(), &[(*index).try_into().unwrap()]),
                         compile_type(ctx.module_ctx, &local_ty),
-                        opaque_pointer(ctx.context()),
+                        pointer(ctx.context(), 0),
                         Location::unknown(ctx.context()),
                     ))
                     .result(0)?
