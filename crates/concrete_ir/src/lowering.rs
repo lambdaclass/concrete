@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use common::{BuildCtx, FnBodyBuilder, IdGenerator};
 use concrete_ast::{
     common::Span,
+    constants::ConstantDef,
     expressions::{
         ArithOp, BinaryOp, BitwiseOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp,
         PathSegment, ValueExpr,
@@ -75,7 +76,9 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
     // lower first structs, constants, types
     for content in &module.contents {
         match content {
-            ModuleDefItem::Constant(_) => todo!(),
+            ModuleDefItem::Constant(info) => {
+                ctx = lower_constant(ctx, info, id)?;
+            }
             ModuleDefItem::Struct(info) => {
                 ctx = lower_struct(ctx, info, id)?;
             }
@@ -157,7 +160,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
 
     for content in &module.contents {
         match content {
-            ModuleDefItem::Constant(_) => todo!(),
+            ModuleDefItem::Constant(_) => { /* already processed */ }
             ModuleDefItem::Function(fn_def) => {
                 ctx = lower_func(ctx, fn_def, id)?;
             }
@@ -177,6 +180,11 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
     }
 
     Ok(ctx)
+}
+
+fn lower_constant(ctx: BuildCtx, info: &ConstantDef, id: DefId) -> Result<BuildCtx, LoweringError> {
+    let _ = (ctx, info, id);
+    todo!()
 }
 
 fn lower_struct(
