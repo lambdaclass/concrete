@@ -104,10 +104,10 @@ fn undeclared_var() {
 }
 
 #[test]
-fn call_count_mismatch() {
+fn call_param_count_mismatch() {
     let (source, name) = (
-        include_str!("invalid_programs/call_count_mismatch.con"),
-        "call_count_mismatch",
+        include_str!("invalid_programs/call_param_count_mismatch.con"),
+        "call_param_count_mismatch",
     );
     let error = check_invalid_program(source, name);
 
@@ -122,10 +122,10 @@ fn call_count_mismatch() {
 }
 
 #[test]
-fn invalid_call_params() {
+fn call_param_type_mismatch() {
     let (source, name) = (
-        include_str!("invalid_programs/invalid_call_params.con"),
-        "invalid_call_params",
+        include_str!("invalid_programs/call_param_type_mismatch.con"),
+        "call_param_type_mismatch",
     );
     let error = check_invalid_program(source, name);
 
