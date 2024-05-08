@@ -738,7 +738,16 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
         place.projection.push(PlaceElem::Deref);
     }
 
-    let (rvalue, _rvalue_ty, _exp_span) = lower_expression(builder, &info.value, Some(ty.clone()))?;
+    let (rvalue, rvalue_ty, _exp_span) = lower_expression(builder, &info.value, Some(ty.clone()))?;
+
+    if ty.kind != rvalue_ty.kind {
+        return Err(LoweringError::UnexpectedType {
+            span: info.span,
+            found: rvalue_ty,
+            expected: ty.clone(),
+            program_id: builder.local_module.program_id,
+        });
+    }
 
     builder.statements.push(Statement {
         span: Some(info.target.first.span),
