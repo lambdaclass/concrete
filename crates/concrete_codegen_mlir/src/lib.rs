@@ -19,7 +19,6 @@ use llvm_sys::{
         LLVMPrintModuleToFile,
     },
     error::LLVMGetErrorMessage,
-    prelude::{LLVMContextRef, LLVMModuleRef},
     target::{
         LLVM_InitializeAllAsmPrinters, LLVM_InitializeAllTargetInfos, LLVM_InitializeAllTargetMCs,
         LLVM_InitializeAllTargets,
@@ -34,6 +33,7 @@ use llvm_sys::{
         LLVMCreatePassBuilderOptions, LLVMDisposePassBuilderOptions, LLVMRunPasses,
     },
 };
+use mlir_sys::mlirTranslateModuleToLLVMIR;
 use module::MLIRModule;
 
 mod codegen;
@@ -66,15 +66,6 @@ pub fn compile(session: &Session, program: &ProgramBody) -> Result<PathBuf, Code
     tracing::debug!("Compile llvm time {:?}", compile_llvm_time);
 
     Ok(object_path)
-}
-
-extern "C" {
-    /// Translate operation that satisfies LLVM dialect module requirements into an LLVM IR module living in the given context.
-    /// This translates operations from any dilalect that has a registered implementation of LLVMTranslationDialectInterface.
-    fn mlirTranslateModuleToLLVMIR(
-        module_operation_ptr: mlir_sys::MlirOperation,
-        llvm_context: LLVMContextRef,
-    ) -> LLVMModuleRef;
 }
 
 pub fn get_target_triple(_session: &Session) -> String {
@@ -160,7 +151,7 @@ pub fn compile_to_object(
 
         let op = module.melior_module.as_operation().to_raw();
 
-        let llvm_module = mlirTranslateModuleToLLVMIR(op, llvm_context);
+        let llvm_module = mlirTranslateModuleToLLVMIR(op, llvm_context as *mut _) as *mut _;
 
         let mut null = null_mut();
         let mut error_buffer = addr_of_mut!(null);
@@ -219,7 +210,7 @@ pub fn compile_to_object(
             OptLevel::Aggressive => 3,
         };
         let passes = CString::new(format!("default<O{opt}>")).unwrap();
-        let error = LLVMRunPasses(llvm_module, passes.as_ptr(), machine, opts);
+        let error = LLVMRunPasses(llvm_module as *mut _, passes.as_ptr(), machine, opts);
         if !error.is_null() {
             let msg = LLVMGetErrorMessage(error);
             let msg = CStr::from_ptr(msg);
