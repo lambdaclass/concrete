@@ -1,0 +1,8 @@
+mod Simple {
+    fn main() -> i32 {
+        let var: i32 = 5;
+        var = foo();
+    }
+
+    fn foo() {}
+}

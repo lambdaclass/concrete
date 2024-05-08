@@ -19,6 +19,21 @@ fn module_not_found() {
 }
 
 #[test]
+fn assign_unexpected_type() {
+    let (source, name) = (
+        include_str!("invalid_programs/assign_unexpected_type.con"),
+        "assign_unexpected_type",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::UnexpectedType { .. }),
+        "{:#?}",
+        error
+    );
+}
+
+#[test]
 fn import_not_found() {
     let (source, name) = (include_str!("invalid_programs/import2.con"), "import2");
     let error = check_invalid_program(source, name);
