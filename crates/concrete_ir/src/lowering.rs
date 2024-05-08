@@ -1480,10 +1480,11 @@ fn lower_value_expr(
             (Rvalue::Use(Operand::Const(data)), ty)
         }
         ValueExpr::ConstStr(_, _) => todo!(),
-        ValueExpr::Path(info) => {
-            let (place, place_ty, _span) = lower_path(builder, info)?;
-            (Rvalue::Use(Operand::Place(place.clone())), place_ty)
-        }
+        ValueExpr::Path(info) => match lower_path(builder, info) {
+            Ok((place, place_ty, _span)) => (Rvalue::Use(Operand::Place(place.clone())), place_ty),
+            Err(err @ LoweringError::UseOfUndeclaredVariable { .. }) => return Err(err),
+            Err(err) => return Err(err),
+        },
     })
 }
 
