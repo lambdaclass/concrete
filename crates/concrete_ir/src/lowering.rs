@@ -202,7 +202,9 @@ fn lower_constant(
             .expect("constant should exist")
     };
 
-    let value = lower_constant_expression(&info.value)?;
+    let value_ty = lower_type(&ctx, &info.decl.r#type, module_id)?;
+
+    let value = lower_constant_expression(&info.value, value_ty)?;
 
     let body = ConstBody { id, name, value };
 
@@ -211,8 +213,31 @@ fn lower_constant(
     Ok(ctx)
 }
 
-fn lower_constant_expression(value: &Expression) -> Result<ConstData, LoweringError> {
-    todo!()
+fn lower_constant_expression(
+    expression: &Expression,
+    type_hint: Ty,
+) -> Result<ConstData, LoweringError> {
+    match expression {
+        Expression::Value(value, _) => match value {
+            ValueExpr::ConstInt(int, _) => match type_hint.kind {
+                TyKind::Int(int_ty) => match int_ty {
+                    int_ty @ IntTy::I32 => Ok(ConstData {
+                        ty: Ty {
+                            span: None,
+                            kind: TyKind::Int(int_ty),
+                        },
+                        data: ConstKind::Value(ValueTree::Leaf(ConstValue::I32(
+                            (*int).try_into().expect("value out of range"),
+                        ))),
+                    }),
+                    _ => unimplemented!(),
+                },
+                _ => unimplemented!(),
+            },
+            _ => unimplemented!(),
+        },
+        _ => unimplemented!(),
+    }
 }
 
 fn lower_struct(
