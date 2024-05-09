@@ -38,6 +38,7 @@ pub struct ProgramBody {
     /// This stores all the structs from all modules
     pub structs: BTreeMap<DefId, AdtBody>,
     /// The function signatures.
+    pub constants: BTreeMap<DefId, ConstBody>,
     pub function_signatures: HashMap<DefId, (Vec<Ty>, Ty)>,
     /// The file paths (program_id from the DefId) -> path.
     pub file_paths: HashMap<usize, PathBuf>,
@@ -268,6 +269,13 @@ pub struct VariantDef {
     pub name: String,
     pub discriminant: usize,
     pub ty: Ty,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConstBody {
+    pub id: DefId,
+    pub name: String,
+    pub value: ConstData,
 }
 
 // A definition id.
