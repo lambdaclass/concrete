@@ -263,10 +263,13 @@ fn lower_func(
         .clone();
 
     builder.ret_local = builder.body.locals.len();
-    builder
-        .body
-        .locals
-        .push(Local::new(None, LocalKind::ReturnPointer, ret_ty, None));
+    builder.body.locals.push(Local::new(
+        None,
+        LocalKind::ReturnPointer,
+        ret_ty,
+        None,
+        false,
+    ));
 
     for (arg, ty) in func.decl.params.iter().zip(args_ty) {
         builder
@@ -277,6 +280,7 @@ fn lower_func(
             LocalKind::Arg,
             ty,
             Some(arg.name.name.clone()),
+            false,
         ));
     }
 
@@ -294,6 +298,7 @@ fn lower_func(
                         LocalKind::Temp,
                         ty,
                         Some(name.name.clone()),
+                        info.is_mutable,
                     ));
                 }
                 LetStmtTarget::Destructure(_) => todo!(),
@@ -311,6 +316,7 @@ fn lower_func(
                             LocalKind::Temp,
                             ty,
                             Some(name.name.clone()),
+                            info.is_mutable,
                         ));
                     }
                     LetStmtTarget::Destructure(_) => todo!(),
@@ -694,12 +700,12 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), Lowering
     match &info.target {
         LetStmtTarget::Simple { name, r#type } => {
             let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
-            let (rvalue, rvalue_ty, _exp_span) =
+            let (rvalue, rvalue_ty, rvalue_span) =
                 lower_expression(builder, &info.value, Some(ty.clone()))?;
 
             if ty.kind != rvalue_ty.kind {
                 return Err(LoweringError::UnexpectedType {
-                    span: info.span,
+                    span: rvalue_span,
                     found: rvalue_ty,
                     expected: ty.clone(),
                     program_id: builder.local_module.program_id,
@@ -730,6 +736,14 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), Lowering
 fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), LoweringError> {
     let (mut place, mut ty, _path_span) = lower_path(builder, &info.target)?;
 
+    if !builder.body.locals[place.local].is_mutable() {
+        return Err(LoweringError::NotMutable {
+            span: info.span,
+            declare_span: builder.body.locals[place.local].span,
+            program_id: builder.body.id.program_id,
+        });
+    }
+
     for _ in 0..info.derefs {
         match &ty.kind {
             TyKind::Ref(inner, is_mut) | TyKind::Ptr(inner, is_mut) => {
@@ -748,7 +762,17 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
         place.projection.push(PlaceElem::Deref);
     }
 
-    let (rvalue, _rvalue_ty, _exp_span) = lower_expression(builder, &info.value, Some(ty.clone()))?;
+    let (rvalue, rvalue_ty, rvalue_span) =
+        lower_expression(builder, &info.value, Some(ty.clone()))?;
+
+    if ty.kind != rvalue_ty.kind {
+        return Err(LoweringError::UnexpectedType {
+            span: rvalue_span,
+            found: rvalue_ty,
+            expected: ty.clone(),
+            program_id: builder.local_module.program_id,
+        });
+    }
 
     builder.statements.push(Statement {
         span: Some(info.target.first.span),
@@ -945,7 +969,17 @@ fn lower_expression(
                 },
                 None => None,
             };
-            let (value, ty, _span) = lower_expression(builder, inner, type_hint)?;
+            let (value, ty, _ref_target_span) = lower_expression(builder, inner, type_hint)?;
+
+            if let Some(local) = value.get_local() {
+                if *mutable && !builder.body.locals[local].mutable {
+                    return Err(LoweringError::CantTakeMutableBorrow {
+                        span: *asref_span,
+                        declare_span: builder.body.locals[local].span,
+                        program_id: builder.body.id.program_id,
+                    });
+                }
+            }
 
             let mutability = match mutable {
                 false => Mutability::Not,
