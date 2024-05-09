@@ -213,78 +213,55 @@ fn lower_constant(
     Ok(ctx)
 }
 
-fn lower_constant_expression(
-    expression: &Expression,
-    type_hint: Ty,
-) -> Result<ConstData, LoweringError> {
-    match expression {
+fn lower_constant_expression(expression: &Expression, ty: Ty) -> Result<ConstData, LoweringError> {
+    let data = match expression {
         Expression::Value(value, _) => match value {
-            ValueExpr::ConstBool(value, _) => Ok(ConstData {
-                ty: type_hint.clone(),
-                data: ConstKind::Value(ValueTree::Leaf(ConstValue::Bool(*value))),
-            }),
-            ValueExpr::ConstChar(value, _) => Ok(ConstData {
-                ty: type_hint.clone(),
-                data: ConstKind::Value(ValueTree::Leaf(ConstValue::U32((*value) as u32))),
-            }),
-            ValueExpr::ConstInt(value, _) => Ok(ConstData {
-                ty: type_hint.clone(),
-                data: ConstKind::Value(ValueTree::Leaf(match type_hint.kind {
-                    TyKind::Int(ty) => match ty {
-                        IntTy::I8 => {
-                            ConstValue::I8((*value).try_into().expect("value out of range"))
-                        }
-                        IntTy::I16 => {
-                            ConstValue::I16((*value).try_into().expect("value out of range"))
-                        }
-                        IntTy::I32 => {
-                            ConstValue::I32((*value).try_into().expect("value out of range"))
-                        }
-                        IntTy::I64 => {
-                            ConstValue::I64((*value).try_into().expect("value out of range"))
-                        }
-                        IntTy::I128 => {
-                            ConstValue::I128((*value).try_into().expect("value out of range"))
-                        }
-                    },
-                    TyKind::Uint(ty) => match ty {
-                        UintTy::U8 => {
-                            ConstValue::U8((*value).try_into().expect("value out of range"))
-                        }
-                        UintTy::U16 => {
-                            ConstValue::U16((*value).try_into().expect("value out of range"))
-                        }
-                        UintTy::U32 => {
-                            ConstValue::U32((*value).try_into().expect("value out of range"))
-                        }
-                        UintTy::U64 => {
-                            ConstValue::U64((*value).try_into().expect("value out of range"))
-                        }
-                        UintTy::U128 => ConstValue::U128(*value),
-                    },
-                    TyKind::Bool => ConstValue::Bool(*value != 0),
-                    x => unreachable!("{:?}", x),
-                })),
-            }),
-            ValueExpr::ConstFloat(value, _) => Ok(ConstData {
-                ty: type_hint.clone(),
-                data: ConstKind::Value(ValueTree::Leaf(match &type_hint.kind {
-                    TyKind::Float(ty) => match ty {
-                        FloatTy::F32 => {
-                            ConstValue::F32(value.parse().expect("error parsing float"))
-                        }
-                        FloatTy::F64 => {
-                            ConstValue::F64(value.parse().expect("error parsing float"))
-                        }
-                    },
-                    _ => unreachable!(),
-                })),
-            }),
+            ValueExpr::ConstBool(value, _) => {
+                ConstKind::Value(ValueTree::Leaf(ConstValue::Bool(*value)))
+            }
+            ValueExpr::ConstChar(value, _) => {
+                ConstKind::Value(ValueTree::Leaf(ConstValue::U32((*value) as u32)))
+            }
+            ValueExpr::ConstInt(value, _) => ConstKind::Value(ValueTree::Leaf(match ty.kind {
+                TyKind::Int(ty) => match ty {
+                    IntTy::I8 => ConstValue::I8((*value).try_into().expect("value out of range")),
+                    IntTy::I16 => ConstValue::I16((*value).try_into().expect("value out of range")),
+                    IntTy::I32 => ConstValue::I32((*value).try_into().expect("value out of range")),
+                    IntTy::I64 => ConstValue::I64((*value).try_into().expect("value out of range")),
+                    IntTy::I128 => {
+                        ConstValue::I128((*value).try_into().expect("value out of range"))
+                    }
+                },
+                TyKind::Uint(ty) => match ty {
+                    UintTy::U8 => ConstValue::U8((*value).try_into().expect("value out of range")),
+                    UintTy::U16 => {
+                        ConstValue::U16((*value).try_into().expect("value out of range"))
+                    }
+                    UintTy::U32 => {
+                        ConstValue::U32((*value).try_into().expect("value out of range"))
+                    }
+                    UintTy::U64 => {
+                        ConstValue::U64((*value).try_into().expect("value out of range"))
+                    }
+                    UintTy::U128 => ConstValue::U128(*value),
+                },
+                TyKind::Bool => ConstValue::Bool(*value != 0),
+                x => unreachable!("{:?}", x),
+            })),
+            ValueExpr::ConstFloat(value, _) => ConstKind::Value(ValueTree::Leaf(match &ty.kind {
+                TyKind::Float(ty) => match ty {
+                    FloatTy::F32 => ConstValue::F32(value.parse().expect("error parsing float")),
+                    FloatTy::F64 => ConstValue::F64(value.parse().expect("error parsing float")),
+                },
+                x => unreachable!("{:?}", x),
+            })),
             ValueExpr::ConstStr(_, _) => todo!(),
             _ => unimplemented!(),
         },
         _ => unimplemented!(),
-    }
+    };
+
+    Ok(ConstData { ty, data })
 }
 
 fn lower_struct(
