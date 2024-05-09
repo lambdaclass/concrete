@@ -1,5 +1,5 @@
 use crate::{
-    common::{DocString, GenericParam, Ident, Span},
+    common::{Attribute, DocString, GenericParam, Ident, Span},
     statements::Statement,
     types::TypeSpec,
 };
@@ -13,6 +13,7 @@ pub struct FunctionDecl {
     pub ret_type: Option<TypeSpec>,
     pub is_extern: bool,
     pub is_pub: bool,
+    pub attributes: Vec<Attribute>,
     pub span: Span,
 }
 

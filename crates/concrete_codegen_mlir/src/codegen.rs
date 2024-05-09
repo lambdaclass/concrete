@@ -613,10 +613,32 @@ fn compile_binop<'c: 'b, 'b>(
 
     let is_float = matches!(lhs_ty.kind, TyKind::Float(_));
     let is_signed = matches!(lhs_ty.kind, TyKind::Int(_));
+    let is_ptr = if let TyKind::Ptr(inner, _) = &lhs_ty.kind {
+        Some((*inner).clone())
+    } else {
+        None
+    };
 
     Ok(match op {
         BinOp::Add => {
-            let value = if is_float {
+            let value = if let Some(inner) = is_ptr {
+                let inner_ty = compile_type(ctx.module_ctx, &inner);
+                block
+                    .append_operation(
+                        ods::llvm::getelementptr(
+                            ctx.context(),
+                            pointer(ctx.context(), 0),
+                            lhs,
+                            &[rhs],
+                            DenseI32ArrayAttribute::new(ctx.context(), &[i32::MIN]),
+                            TypeAttribute::new(inner_ty),
+                            location,
+                        )
+                        .into(),
+                    )
+                    .result(0)?
+                    .into()
+            } else if is_float {
                 block
                     .append_operation(arith::addf(lhs, rhs, location))
                     .result(0)?
@@ -630,6 +652,11 @@ fn compile_binop<'c: 'b, 'b>(
             (value, lhs_ty)
         }
         BinOp::Sub => {
+            if is_ptr.is_some() {
+                return Err(CodegenError::NotImplemented(
+                    "substracting from a pointer is not yet implemented".to_string(),
+                ));
+            }
             let value = if is_float {
                 block
                     .append_operation(arith::subf(lhs, rhs, location))
@@ -644,6 +671,11 @@ fn compile_binop<'c: 'b, 'b>(
             (value, lhs_ty)
         }
         BinOp::Mul => {
+            if is_ptr.is_some() {
+                return Err(CodegenError::NotImplemented(
+                    "multiplying a pointer is not yet implemented".to_string(),
+                ));
+            }
             let value = if is_float {
                 block
                     .append_operation(arith::mulf(lhs, rhs, location))
@@ -658,6 +690,11 @@ fn compile_binop<'c: 'b, 'b>(
             (value, lhs_ty)
         }
         BinOp::Div => {
+            if is_ptr.is_some() {
+                return Err(CodegenError::NotImplemented(
+                    "dividing a pointer is not yet implemented".to_string(),
+                ));
+            }
             let value = if is_float {
                 block
                     .append_operation(arith::divf(lhs, rhs, location))
