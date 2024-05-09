@@ -511,7 +511,7 @@ fn compile_rvalue<'c: 'b, 'b>(
             let target_ty = target_ty.clone();
             let target_mlir_ty = compile_type(ctx.module_ctx, &target_ty);
             let (value, current_ty) = compile_load_operand(ctx, block, op, locals)?;
-            let is_signed = target_ty.kind.is_signed();
+            let is_signed = current_ty.kind.is_signed();
 
             if target_ty.kind.is_ptr_like() {
                 // int to ptr
@@ -525,8 +525,51 @@ fn compile_rvalue<'c: 'b, 'b>(
                         .into();
                     (value, target_ty.clone())
                 } else if current_ty.kind.is_ptr_like() {
-                    // ptr to ptr: noop
                     (value, target_ty.clone())
+                } else if current_ty.kind.is_array() {
+                    let k1 = block
+                        .append_operation(arith::constant(
+                            ctx.context(),
+                            IntegerAttribute::new(IntegerType::new(ctx.context(), 64).into(), 1)
+                                .into(),
+                            location,
+                        ))
+                        .result(0)?
+                        .into();
+                    let ptr = block
+                        .append_operation(
+                            ods::llvm::alloca(
+                                ctx.context(),
+                                pointer(ctx.context(), 0),
+                                k1,
+                                TypeAttribute::new(compile_type(ctx.module_ctx, &current_ty)),
+                                location,
+                            )
+                            .into(),
+                        )
+                        .result(0)?
+                        .into();
+                    block.append_operation(
+                        ods::llvm::store(ctx.context(), value, ptr, location).into(),
+                    );
+                    let ptr = block.append_operation(
+                        {
+                            let mut op = ods::llvm::getelementptr(
+                                ctx.context(),
+                                pointer(ctx.context(), 0),
+                                ptr,
+                                &[],
+                                DenseI32ArrayAttribute::new(ctx.context(), &[0]),
+                                TypeAttribute::new(compile_type(ctx.module_ctx, &current_ty)),
+                                location,
+                            );
+                            op.set_inbounds(Attribute::unit(ctx.context()));
+                            op
+                        }
+                        .into(),
+                    ).result(0)?.into();
+
+                    (ptr, target_ty.clone())
                 } else {
                     unreachable!("cast from {:?} to ptr", current_ty.kind)
                 }
@@ -1370,7 +1413,7 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
     match &ty.kind {
         concrete_ir::TyKind::Unit => Type::none(ctx.ctx.mlir_context),
         concrete_ir::TyKind::Bool => IntegerType::new(ctx.ctx.mlir_context, 1).into(),
-        concrete_ir::TyKind::Char => IntegerType::new(ctx.ctx.mlir_context, 32).into(),
+        concrete_ir::TyKind::Char => IntegerType::new(ctx.ctx.mlir_context, 8).into(),
         concrete_ir::TyKind::Int(int_ty) => match int_ty {
             concrete_ir::IntTy::I8 => IntegerType::new(ctx.ctx.mlir_context, 8).into(),
             concrete_ir::IntTy::I16 => IntegerType::new(ctx.ctx.mlir_context, 16).into(),

@@ -325,6 +325,10 @@ impl TyKind {
         matches!(self, TyKind::Ptr(_, _) | TyKind::Ref(_, _))
     }
 
+    pub fn is_array(&self) -> bool {
+        matches!(self, TyKind::Array(_, _))
+    }
+
     pub fn is_int(&self) -> bool {
         matches!(self, TyKind::Int(_) | TyKind::Uint(_))
     }
