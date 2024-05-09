@@ -1,9 +1,9 @@
 mod Example {
 	const foo: i32 = 10;
-	const var: i32 = 5;
+	const var: i64 = 5;
 
     fn main() -> i32 {
 		let vix: i32 = foo + 5;
-		return vix + var;
+		return vix + (var as i32);
     }
 }
