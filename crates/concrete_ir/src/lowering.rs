@@ -17,10 +17,10 @@ use concrete_ast::{
 };
 
 use crate::{
-    AdtBody, BasicBlock, BinOp, ConstData, ConstKind, ConstValue, DefId, FloatTy, FnBody, IntTy,
-    Local, LocalKind, LogOp, Mutability, Operand, Place, PlaceElem, ProgramBody, Rvalue, Statement,
-    StatementKind, SwitchTargets, Terminator, TerminatorKind, Ty, TyKind, UintTy, ValueTree,
-    VariantDef,
+    AdtBody, BasicBlock, BinOp, ConstBody, ConstData, ConstKind, ConstValue, DefId, FloatTy,
+    FnBody, IntTy, Local, LocalKind, LogOp, Mutability, Operand, Place, PlaceElem, ProgramBody,
+    Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, Ty, TyKind,
+    UintTy, ValueTree, VariantDef,
 };
 
 use self::errors::LoweringError;
@@ -182,8 +182,36 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
     Ok(ctx)
 }
 
-fn lower_constant(ctx: BuildCtx, info: &ConstantDef, id: DefId) -> Result<BuildCtx, LoweringError> {
-    let _ = (ctx, info, id);
+fn lower_constant(
+    mut ctx: BuildCtx,
+    info: &ConstantDef,
+    module_id: DefId,
+) -> Result<BuildCtx, LoweringError> {
+    let name = info.decl.name.name.clone();
+
+    let id = {
+        let module = ctx
+            .body
+            .modules
+            .get(&module_id)
+            .expect("module should exist");
+        *module
+            .symbols
+            .constants
+            .get(&name)
+            .expect("constant should exist")
+    };
+
+    let value = lower_constant_expression(&info.value)?;
+
+    let body = ConstBody { id, name, value };
+
+    ctx.body.constants.insert(body.id, body);
+
+    Ok(ctx)
+}
+
+fn lower_constant_expression(value: &Expression) -> Result<ConstData, LoweringError> {
     todo!()
 }
 
