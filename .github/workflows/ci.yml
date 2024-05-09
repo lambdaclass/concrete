@@ -73,7 +73,25 @@ jobs:
           run: sudo apt-get install libc-dev build-essential
         - name: test
           run: make test
-
+    test-macos:
+      name: test (macOS)
+      runs-on: macos-14
+      env:
+        CARGO_TERM_COLOR: always
+        LIBRARY_PATH: /opt/homebrew/lib
+        MLIR_SYS_180_PREFIX: /opt/homebrew/opt/llvm@18
+        LLVM_SYS_180_PREFIX: /opt/homebrew/opt/llvm@18
+        TABLEGEN_180_PREFIX: /opt/homebrew/opt/llvm@18
+        RUST_LOG: debug
+      steps:
+        - uses: actions/checkout@v4
+        - name: Rustup toolchain install
+          uses: dtolnay/rust-toolchain@1.78.0
+        - uses: homebrew/actions/setup-homebrew@master
+        - name: install llvm
+          run: brew install llvm@18
+        - name: Run tests
+          run: make test
     coverage:
         name: coverage
         runs-on: ubuntu-latest

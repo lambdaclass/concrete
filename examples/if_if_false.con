@@ -1,6 +1,6 @@
 mod Example {
     fn main() -> i32 {
-        let foo: i32 = 7;
+        let mut foo: i32 = 7;
 
         if true {
             if false {

@@ -109,6 +109,8 @@ pub enum Token {
     Coma,
     #[token(".")]
     Dot,
+    #[token("#")]
+    Hashtag,
     #[token("<")]
     LessThanSign,
     #[token(">")]
