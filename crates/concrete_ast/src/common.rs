@@ -37,3 +37,10 @@ pub struct GenericParam {
     pub params: Vec<TypeSpec>,
     pub span: Span,
 }
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub struct Attribute {
+    pub name: String,
+    pub value: Option<String>,
+    pub span: Span,
+}

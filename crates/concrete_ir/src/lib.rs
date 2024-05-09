@@ -68,6 +68,7 @@ pub struct FnBody {
     pub id: DefId,
     pub name: String,
     pub is_extern: bool,
+    pub is_intrinsic: Option<ConcreteIntrinsic>,
     pub basic_blocks: Vec<BasicBlock>,
     pub locals: Vec<Local>,
 }
@@ -397,7 +398,15 @@ impl fmt::Display for TyKind {
                 FloatTy::F64 => write!(f, "f32"),
             },
             TyKind::String => write!(f, "string"),
-            TyKind::Array(_, _) => todo!(),
+            TyKind::Array(inner, size) => {
+                let value =
+                    if let ConstKind::Value(ValueTree::Leaf(ConstValue::U64(x))) = &size.data {
+                        *x
+                    } else {
+                        unreachable!("const data for array sizes should always be u64")
+                    };
+                write!(f, "[{}; {:?}]", inner.kind, value)
+            }
             TyKind::Ref(inner, is_mut) => {
                 let word = if let Mutability::Mut = is_mut {
                     "mut"
@@ -570,4 +579,9 @@ pub enum ConstValue {
     U128(u128),
     F32(f32),
     F64(f64),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum ConcreteIntrinsic {
+    // Todo: Add intrinsics here
 }
