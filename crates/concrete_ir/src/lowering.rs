@@ -1564,16 +1564,13 @@ fn lower_value_expr(
             } else {
                 let mod_body = builder.get_module_body();
 
-                let constant_id =
-                    if let Some(constant_id) = mod_body.symbols.constants.get(&info.first.name) {
-                        *constant_id
-                    } else {
-                        return Err(LoweringError::UseOfUndeclaredVariable {
-                            span: info.span,
-                            name: info.first.name.clone(),
-                            program_id: builder.local_module.program_id,
-                        });
-                    };
+                let Some(&constant_id) = mod_body.symbols.constants.get(&info.first.name) else {
+                    return Err(LoweringError::UseOfUndeclaredVariable {
+                        span: info.span,
+                        name: info.first.name.clone(),
+                        program_id: builder.local_module.program_id,
+                    });
+                };
 
                 let constant_value = builder
                     .ctx
