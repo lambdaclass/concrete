@@ -552,22 +552,6 @@ fn compile_rvalue<'c: 'b, 'b>(
                     block.append_operation(
                         ods::llvm::store(ctx.context(), value, ptr, location).into(),
                     );
-                    let ptr = block.append_operation(
-                        {
-                            let mut op = ods::llvm::getelementptr(
-                                ctx.context(),
-                                pointer(ctx.context(), 0),
-                                ptr,
-                                &[],
-                                DenseI32ArrayAttribute::new(ctx.context(), &[0]),
-                                TypeAttribute::new(compile_type(ctx.module_ctx, &current_ty)),
-                                location,
-                            );
-                            op.set_inbounds(Attribute::unit(ctx.context()));
-                            op
-                        }
-                        .into(),
-                    ).result(0)?.into();
 
                     (ptr, target_ty.clone())
                 } else {
@@ -1093,11 +1077,6 @@ fn compile_store_place<'c: 'b, 'b>(
                 }
             }
             PlaceElem::Index(local) => {
-                local_ty = match local_ty.kind {
-                    TyKind::Array(inner, _) => *inner,
-                    _ => unreachable!(),
-                };
-
                 let place = Place {
                     local: *local,
                     projection: vec![],
@@ -1106,34 +1085,58 @@ fn compile_store_place<'c: 'b, 'b>(
                 let (index, _) = compile_load_place(ctx, block, &place, locals)?;
 
                 ptr = block
-                    .append_operation(llvm::get_element_ptr_dynamic(
-                        ctx.context(),
-                        ptr,
-                        &[index],
-                        compile_type(ctx.module_ctx, &local_ty),
-                        pointer(ctx.context(), 0),
-                        Location::unknown(ctx.context()),
-                    ))
+                    .append_operation(
+                        {
+                            let mut op = ods::llvm::getelementptr(
+                                ctx.context(),
+                                pointer(ctx.context(), 0),
+                                ptr,
+                                &[index],
+                                DenseI32ArrayAttribute::new(ctx.context(), &[0, i32::MIN]),
+                                TypeAttribute::new(compile_type(ctx.module_ctx, &local_ty)),
+                                Location::unknown(ctx.context()),
+                            );
+                            op.set_inbounds(Attribute::unit(ctx.context()));
+                            op
+                        }
+                        .into(),
+                    )
                     .result(0)?
                     .into();
-            }
-            PlaceElem::ConstantIndex(index) => {
+
                 local_ty = match local_ty.kind {
                     TyKind::Array(inner, _) => *inner,
                     _ => unreachable!(),
                 };
-
+            }
+            PlaceElem::ConstantIndex(index) => {
                 ptr = block
-                    .append_operation(llvm::get_element_ptr(
-                        ctx.context(),
-                        ptr,
-                        DenseI32ArrayAttribute::new(ctx.context(), &[(*index).try_into().unwrap()]),
-                        compile_type(ctx.module_ctx, &local_ty),
-                        pointer(ctx.context(), 0),
-                        Location::unknown(ctx.context()),
-                    ))
+                    .append_operation(
+                        {
+                            let mut op = ods::llvm::getelementptr(
+                                ctx.context(),
+                                pointer(ctx.context(), 0),
+                                ptr,
+                                &[],
+                                DenseI32ArrayAttribute::new(
+                                    ctx.context(),
+                                    &[0, (*index).try_into().unwrap()],
+                                ),
+                                TypeAttribute::new(compile_type(ctx.module_ctx, &local_ty)),
+                                Location::unknown(ctx.context()),
+                            );
+                            op.set_inbounds(Attribute::unit(ctx.context()));
+                            op
+                        }
+                        .into(),
+                    )
                     .result(0)?
                     .into();
+
+                local_ty = match local_ty.kind {
+                    TyKind::Array(inner, _) => *inner,
+                    _ => unreachable!(),
+                };
             }
         }
     }
@@ -1206,11 +1209,6 @@ fn compile_load_place<'c: 'b, 'b>(
                 }
             }
             PlaceElem::Index(local) => {
-                local_ty = match local_ty.kind {
-                    TyKind::Array(inner, _) => *inner,
-                    _ => unreachable!(),
-                };
-
                 let place = Place {
                     local: *local,
                     projection: Default::default(),
@@ -1219,33 +1217,58 @@ fn compile_load_place<'c: 'b, 'b>(
                 let (index, _) = compile_load_place(ctx, block, &place, locals)?;
 
                 ptr = block
-                    .append_operation(llvm::get_element_ptr_dynamic(
-                        ctx.context(),
-                        ptr,
-                        &[index],
-                        compile_type(ctx.module_ctx, &local_ty),
-                        pointer(ctx.context(), 0),
-                        Location::unknown(ctx.context()),
-                    ))
+                    .append_operation(
+                        {
+                            let mut op = ods::llvm::getelementptr(
+                                ctx.context(),
+                                pointer(ctx.context(), 0),
+                                ptr,
+                                &[index],
+                                DenseI32ArrayAttribute::new(ctx.context(), &[0, i32::MIN]),
+                                TypeAttribute::new(compile_type(ctx.module_ctx, &local_ty)),
+                                Location::unknown(ctx.context()),
+                            );
+                            op.set_inbounds(Attribute::unit(ctx.context()));
+                            op
+                        }
+                        .into(),
+                    )
                     .result(0)?
                     .into();
-            }
-            PlaceElem::ConstantIndex(index) => {
+
                 local_ty = match local_ty.kind {
                     TyKind::Array(inner, _) => *inner,
                     _ => unreachable!(),
                 };
+            }
+            PlaceElem::ConstantIndex(index) => {
                 ptr = block
-                    .append_operation(llvm::get_element_ptr(
-                        ctx.context(),
-                        ptr,
-                        DenseI32ArrayAttribute::new(ctx.context(), &[(*index).try_into().unwrap()]),
-                        compile_type(ctx.module_ctx, &local_ty),
-                        pointer(ctx.context(), 0),
-                        Location::unknown(ctx.context()),
-                    ))
+                    .append_operation(
+                        {
+                            let mut op = ods::llvm::getelementptr(
+                                ctx.context(),
+                                pointer(ctx.context(), 0),
+                                ptr,
+                                &[],
+                                DenseI32ArrayAttribute::new(
+                                    ctx.context(),
+                                    &[0, (*index).try_into().unwrap()],
+                                ),
+                                TypeAttribute::new(compile_type(ctx.module_ctx, &local_ty)),
+                                Location::unknown(ctx.context()),
+                            );
+                            op.set_inbounds(Attribute::unit(ctx.context()));
+                            op
+                        }
+                        .into(),
+                    )
                     .result(0)?
                     .into();
+
+                local_ty = match local_ty.kind {
+                    TyKind::Array(inner, _) => *inner,
+                    _ => unreachable!(),
+                };
             }
         }
     }
@@ -1276,6 +1299,7 @@ fn value_tree_to_int(value: &ValueTree) -> Option<i64> {
             concrete_ir::ConstValue::I64(value) => Some(*value),
             concrete_ir::ConstValue::I128(value) => Some((*value) as i64),
             concrete_ir::ConstValue::U8(value) => Some((*value) as i64),
+            concrete_ir::ConstValue::Char(value) => Some((*value) as i64),
             concrete_ir::ConstValue::U16(value) => Some((*value) as i64),
             concrete_ir::ConstValue::U32(value) => Some((*value) as i64),
             concrete_ir::ConstValue::U64(value) => Some((*value) as i64),
@@ -1339,6 +1363,14 @@ fn compile_value_tree<'c: 'b, 'b>(
                 .append_operation(arith::constant(
                     ctx.context(),
                     Attribute::parse(ctx.context(), &format!("{} : i128", value)).unwrap(),
+                    Location::unknown(ctx.context()),
+                ))
+                .result(0)?
+                .into(),
+            concrete_ir::ConstValue::Char(value) => block
+                .append_operation(arith::constant(
+                    ctx.context(),
+                    Attribute::parse(ctx.context(), &format!("{} : i8", value)).unwrap(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)?
