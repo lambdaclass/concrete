@@ -1580,16 +1580,22 @@ fn lower_value_expr(
             (Rvalue::Use(Operand::Const(data)), ty)
         }
         ValueExpr::ConstStr(_, _) => todo!(),
-        ValueExpr::Path(info) => match lower_path(builder, info) {
-            Ok((place, place_ty, _span)) => (Rvalue::Use(Operand::Place(place.clone())), place_ty),
-            Err(err @ LoweringError::UseOfUndeclaredVariable { .. }) => {
+        ValueExpr::Path(info) => {
+            if builder.name_to_local.contains_key(&info.first.name) {
+                let (place, place_ty, _span) = lower_path(builder, info)?;
+                (Rvalue::Use(Operand::Place(place.clone())), place_ty)
+            } else {
                 let mod_body = builder.get_module_body();
 
                 let constant_id =
                     if let Some(constant_id) = mod_body.symbols.constants.get(&info.first.name) {
                         *constant_id
                     } else {
-                        return Err(err);
+                        return Err(LoweringError::UseOfUndeclaredVariable {
+                            span: info.span,
+                            name: info.first.name.clone(),
+                            program_id: builder.local_module.program_id,
+                        });
                     };
 
                 let constant_value = builder
@@ -1605,8 +1611,7 @@ fn lower_value_expr(
 
                 (Rvalue::Use(Operand::Const(constant_value)), ty)
             }
-            Err(err) => return Err(err),
-        },
+        }
     })
 }
 
