@@ -1535,7 +1535,29 @@ fn lower_value_expr(
         ValueExpr::ConstStr(_, _) => todo!(),
         ValueExpr::Path(info) => match lower_path(builder, info) {
             Ok((place, place_ty, _span)) => (Rvalue::Use(Operand::Place(place.clone())), place_ty),
-            Err(err @ LoweringError::UseOfUndeclaredVariable { .. }) => return Err(err),
+            Err(err @ LoweringError::UseOfUndeclaredVariable { .. }) => {
+                let mod_body = builder.get_module_body();
+
+                let constant_id =
+                    if let Some(constant_id) = mod_body.symbols.constants.get(&info.first.name) {
+                        *constant_id
+                    } else {
+                        return Err(err);
+                    };
+
+                let constant_value = builder
+                    .ctx
+                    .body
+                    .constants
+                    .get(&constant_id)
+                    .expect("constant should exist")
+                    .value
+                    .clone();
+
+                let ty = constant_value.ty.clone();
+
+                (Rvalue::Use(Operand::Const(constant_value)), ty)
+            }
             Err(err) => return Err(err),
         },
     })
