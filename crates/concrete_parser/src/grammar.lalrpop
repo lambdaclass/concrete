@@ -207,11 +207,16 @@ pub Program: ast::Program = {
 
 // Modules
 
+pub(crate) ExternalModule: ast::common::Ident = {
+  "mod" <name:Ident> ";" => name
+}
+
 pub(crate) Module: ast::modules::Module = {
-  <lo:@L> "mod" <name:Ident> "{" <imports:ImportList?> <contents:ModuleItems?> "}" <hi:@R> => {
+  <lo:@L> "mod" <name:Ident> "{" <external_modules:List<ExternalModule>?> <imports:ImportList?> <contents:ModuleItems?> "}" <hi:@R> => {
     ast::modules::Module {
       doc_string: None,
       imports: imports.unwrap_or_else(Vec::new),
+      external_modules: external_modules.unwrap_or(vec![]),
       name,
       contents: contents.unwrap_or_else(Vec::new),
       span: Span::new(lo, hi),
