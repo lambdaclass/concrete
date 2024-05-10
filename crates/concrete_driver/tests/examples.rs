@@ -42,6 +42,7 @@ fn example_tests(source: &str, name: &str, is_library: bool, status_code: i32) {
 }
 
 #[test_case(include_str!("../../../examples/hello_world_hacky.con"), "hello_world_hacky", false, "Hello World\n" ; "hello_world_hacky.con")]
+#[test_case(include_str!("../../../examples/hello_world_array.con"), "hello_world_array", false, "hello world!\n" ; "hello_world_array.con")]
 fn example_tests_with_output(source: &str, name: &str, is_library: bool, result: &str) {
     assert_eq!(
         result,

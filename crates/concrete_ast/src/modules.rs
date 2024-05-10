@@ -11,6 +11,7 @@ use crate::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Module {
     pub doc_string: Option<DocString>,
+    pub external_modules: Vec<Ident>,
     pub imports: Vec<ImportStmt>,
     pub name: Ident,
     pub contents: Vec<ModuleDefItem>,

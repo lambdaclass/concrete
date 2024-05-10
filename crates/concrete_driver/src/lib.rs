@@ -1,8 +1,10 @@
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use ariadne::Source;
 use clap::Args;
 use clap::{Parser, Subcommand};
+use concrete_ast::Program;
 use concrete_ir::lowering::lower_programs;
 use concrete_parser::{error::Diagnostics, ProgramSource};
 use concrete_session::{
@@ -10,12 +12,12 @@ use concrete_session::{
     Session,
 };
 use config::{Package, Profile};
+use db::Database;
 use git2::{IndexAddOption, Repository};
 use owo_colors::OwoColorize;
 use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::{collections::HashMap, fs::File, path::PathBuf, time::Instant};
-use walkdir::WalkDir;
 
 use crate::{
     config::Config,
@@ -394,7 +396,6 @@ fn handle_build(
             if !target_dir.exists() {
                 std::fs::create_dir_all(&target_dir)?;
             }
-            let has_main = src_dir.join("main.con").exists();
             let output = target_dir.join(config.package.name);
             let (profile, profile_name) = if let Some(profile) = profile {
                 (
@@ -421,26 +422,46 @@ fn handle_build(
                     "dev".to_string(),
                 )
             };
-            let compile_args = CompilerArgs {
-                input: src_dir,
-                output: output.clone(),
-                release,
-                optlevel: Some(profile.opt_level),
-                debug_info: Some(profile.debug_info),
-                library: !has_main,
-                ast,
-                ir,
-                llvm,
-                asm,
-                object,
-                mlir,
-            };
+
+            let lib_ed = src_dir.join("lib.con");
+            let main_ed = src_dir.join("main.con");
+
             let start = Instant::now();
-            let object = compile(&compile_args)?;
-            if !has_main {
-                link_shared_lib(&[object], &output)?;
-            } else {
-                link_binary(&[object], &output)?;
+
+            for file in [main_ed, lib_ed] {
+                if file.exists() {
+                    let is_lib = file.file_stem().unwrap() == "lib";
+
+                    let compile_args = CompilerArgs {
+                        input: file,
+                        output: if is_lib {
+                            let name = output.file_stem().unwrap().to_string_lossy().to_string();
+                            let name = format!("lib{name}");
+                            output
+                                .with_file_name(name)
+                                .with_extension(Session::get_platform_library_ext())
+                        } else {
+                            output.clone()
+                        },
+                        release,
+                        optlevel: Some(profile.opt_level),
+                        debug_info: Some(profile.debug_info),
+                        library: is_lib,
+                        ast,
+                        ir,
+                        llvm,
+                        asm,
+                        object,
+                        mlir,
+                    };
+                    let object = compile(&compile_args)?;
+
+                    if compile_args.library {
+                        link_shared_lib(&[object], &compile_args.output)?;
+                    } else {
+                        link_binary(&[object], &compile_args.output)?;
+                    }
+                }
             }
             let elapsed = start.elapsed();
             println!(
@@ -464,54 +485,56 @@ fn handle_build(
     }
 }
 
-pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
-    let mut files = Vec::new();
-    for entry in WalkDir::new(&args.input) {
-        let entry = entry?;
-        if let Some(ext) = entry.path().extension() {
-            if ext.eq_ignore_ascii_case("con") {
-                files.push(entry.path().to_path_buf());
-            }
+pub fn parse_file(
+    modules: &mut Vec<(PathBuf, String, Program)>,
+    mut path: PathBuf,
+    db: &Database,
+) -> Result<()> {
+    if path.is_dir() {
+        path = path.join("mod.ed");
+    }
+
+    let real_source = std::fs::read_to_string(&path)?;
+    let source = ProgramSource::new(db, real_source.clone(), path.display().to_string());
+
+    let mut program = match concrete_parser::parse_ast(db, source) {
+        Some(x) => x,
+        None => {
+            Diagnostics::dump(
+                db,
+                source,
+                &concrete_parser::parse_ast::accumulated::<concrete_parser::error::Diagnostics>(
+                    db, source,
+                ),
+            );
+            std::process::exit(1);
         }
+    };
+    program.file_path = Some(path.clone());
+
+    for ident in program.modules.iter().flat_map(|x| &x.external_modules) {
+        let module_path = path
+            .parent()
+            .unwrap()
+            .join(&ident.name)
+            .with_extension("con");
+        parse_file(modules, module_path, db)?;
     }
 
-    if files.is_empty() {
-        panic!("files is empty");
-    }
+    modules.push((path, real_source, program));
 
+    Ok(())
+}
+
+pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     let start_time = Instant::now();
 
     let mut programs = Vec::new();
-
     let db = crate::db::Database::default();
-
-    let mut sources = Vec::new();
-    let mut sources_str = Vec::new();
-
-    for path in files {
-        let source = std::fs::read_to_string(&path)?;
-        let source = ProgramSource::new(&db, source, args.input.display().to_string());
-
-        let mut program = match concrete_parser::parse_ast(&db, source) {
-            Some(x) => x,
-            None => {
-                Diagnostics::dump(
-                    &db,
-                    source,
-                    &concrete_parser::parse_ast::accumulated::<concrete_parser::error::Diagnostics>(
-                        &db, source,
-                    ),
-                );
-                std::process::exit(1);
-            }
-        };
-        program.file_path = Some(path);
-        sources.push(ariadne::Source::from(source.input(&db).clone()));
-        sources_str.push(source.input(&db).clone());
-        programs.push(program);
-    }
+    parse_file(&mut programs, args.input.clone(), &db)?;
 
     let session = Session {
+        file_paths: programs.iter().map(|x| x.0.clone()).collect(),
         debug_info: if let Some(debug_info) = args.debug_info {
             if debug_info {
                 DebugInfo::Full
@@ -535,7 +558,7 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
         } else {
             OptLevel::None
         },
-        sources,
+        sources: programs.iter().map(|x| Source::from(x.1.clone())).collect(),
         library: args.library,
         output_file: args.output.with_extension("o"),
         output_asm: args.asm,
@@ -549,18 +572,7 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
 
     let path_cache: Vec<_> = programs
         .iter()
-        .zip(&sources_str)
-        .map(|(program, source)| {
-            (
-                program
-                    .file_path
-                    .clone()
-                    .expect("path should always exist here")
-                    .to_string_lossy()
-                    .to_string(),
-                source.clone(),
-            )
-        })
+        .map(|x| (x.0.display().to_string(), x.1.clone()))
         .collect();
 
     if args.ast {
@@ -570,14 +582,11 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
         )?;
     }
 
-    let program_ir = match lower_programs(&programs) {
+    let modules: Vec<_> = programs.iter().map(|x| x.2.clone()).collect();
+    let program_ir = match lower_programs(&modules) {
         Ok(ir) => ir,
         Err(error) => {
-            let file_paths: Vec<_> = programs
-                .iter()
-                .map(|x| x.file_path.clone().unwrap())
-                .collect();
-            let report = concrete_check::lowering_error_to_report(error, &file_paths);
+            let report = concrete_check::lowering_error_to_report(error, &session);
             report.eprint(ariadne::sources(path_cache))?;
             std::process::exit(1);
         }
