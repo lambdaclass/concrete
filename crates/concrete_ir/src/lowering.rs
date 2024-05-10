@@ -1434,7 +1434,7 @@ fn lower_value_expr(
                     span: Some(*const_span),
                     kind: TyKind::Char,
                 },
-                data: ConstKind::Value(ValueTree::Leaf(ConstValue::U32((*value) as u32))),
+                data: ConstKind::Value(ValueTree::Leaf(ConstValue::Char((*value) as u8))),
             })),
             Ty {
                 span: Some(*const_span),

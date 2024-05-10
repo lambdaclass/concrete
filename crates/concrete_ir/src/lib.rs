@@ -367,6 +367,10 @@ impl TyKind {
         matches!(self, TyKind::Ptr(_, _) | TyKind::Ref(_, _))
     }
 
+    pub fn is_array(&self) -> bool {
+        matches!(self, TyKind::Array(_, _))
+    }
+
     pub fn is_int(&self) -> bool {
         matches!(self, TyKind::Int(_) | TyKind::Uint(_))
     }
@@ -478,7 +482,7 @@ impl TyKind {
         match self {
             TyKind::Unit => unreachable!(),
             TyKind::Bool => ValueTree::Leaf(ConstValue::Bool(false)),
-            TyKind::Char => todo!(),
+            TyKind::Char => ValueTree::Leaf(ConstValue::Char(0)),
             TyKind::Int(ty) => match ty {
                 IntTy::I8 => ValueTree::Leaf(ConstValue::I8(0)),
                 IntTy::I16 => ValueTree::Leaf(ConstValue::I16(0)),
@@ -609,6 +613,7 @@ pub enum UnOp {
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum ConstValue {
     Bool(bool),
+    Char(u8),
     I8(i8),
     I16(i16),
     I32(i32),
