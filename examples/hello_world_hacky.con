@@ -1,0 +1,36 @@
+mod HelloWorld {
+    pub extern fn malloc(size: u64) -> *mut u8;
+    pub extern fn puts(data: *mut u8) -> i32;
+
+    fn main() -> i32 {
+        let origin: *mut u8 = malloc(12);
+        let mut p: *mut u8 = origin;
+
+        *p = 'H';
+        p = p + 1;
+        *p = 'e';
+        p = p + 1;
+        *p = 'l';
+        p = p + 1;
+        *p = 'l';
+        p = p + 1;
+         *p = 'o';
+        p = p + 1;
+         *p = ' ';
+        p = p + 1;
+         *p = 'W';
+        p = p + 1;
+         *p = 'o';
+        p = p + 1;
+         *p = 'r';
+        p = p + 1;
+         *p = 'l';
+        p = p + 1;
+         *p = 'd';
+        p = p + 1;
+        *p = '\0';
+        puts(origin);
+
+        return 0;
+    }
+}

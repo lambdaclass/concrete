@@ -2,7 +2,7 @@ use std::{
     borrow::Cow,
     fmt,
     path::{Path, PathBuf},
-    process::Output,
+    process::{Output, Stdio},
 };
 
 use ariadne::Source;
@@ -110,6 +110,7 @@ pub fn compile_program(
 
 pub fn run_program(program: &Path) -> Result<Output, std::io::Error> {
     std::process::Command::new(program)
+        .stdout(Stdio::piped())
         .spawn()?
         .wait_with_output()
 }
@@ -121,4 +122,19 @@ pub fn compile_and_run(source: &str, name: &str, library: bool, optlevel: OptLev
     let output = run_program(&result.binary_file).expect("failed to run");
 
     output.status.code().unwrap()
+}
+
+#[allow(unused)] // false positive
+#[track_caller]
+pub fn compile_and_run_output(
+    source: &str,
+    name: &str,
+    library: bool,
+    optlevel: OptLevel,
+) -> String {
+    let result = compile_program(source, name, library, optlevel).expect("failed to compile");
+
+    let output = run_program(&result.binary_file).expect("failed to run");
+
+    std::str::from_utf8(&output.stdout).unwrap().to_string()
 }

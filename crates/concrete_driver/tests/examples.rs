@@ -1,4 +1,4 @@
-use crate::common::compile_and_run;
+use crate::common::{compile_and_run, compile_and_run_output};
 use concrete_session::config::OptLevel;
 use test_case::test_case;
 
@@ -37,5 +37,25 @@ fn example_tests(source: &str, name: &str, is_library: bool, status_code: i32) {
     assert_eq!(
         status_code,
         compile_and_run(source, name, is_library, OptLevel::Aggressive)
+    );
+}
+
+#[test_case(include_str!("../../../examples/hello_world_hacky.con"), "hello_world_hacky", false, "Hello World\n" ; "hello_world_hacky.con")]
+fn example_tests_with_output(source: &str, name: &str, is_library: bool, result: &str) {
+    assert_eq!(
+        result,
+        compile_and_run_output(source, name, is_library, OptLevel::None)
+    );
+    assert_eq!(
+        result,
+        compile_and_run_output(source, name, is_library, OptLevel::Less)
+    );
+    assert_eq!(
+        result,
+        compile_and_run_output(source, name, is_library, OptLevel::Default)
+    );
+    assert_eq!(
+        result,
+        compile_and_run_output(source, name, is_library, OptLevel::Aggressive)
     );
 }

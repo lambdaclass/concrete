@@ -43,6 +43,18 @@ pub enum LoweringError {
         name: String,
         program_id: usize,
     },
+    #[error("can't mutate this value because it's not declared mutable")]
+    NotMutable {
+        span: Span,
+        declare_span: Option<Span>,
+        program_id: usize,
+    },
+    #[error("can't take a mutable borrow to this value because it's not declared mutable")]
+    CantTakeMutableBorrow {
+        span: Span,
+        declare_span: Option<Span>,
+        program_id: usize,
+    },
     #[error("unrecognized type {name}")]
     UnrecognizedType {
         span: Span,

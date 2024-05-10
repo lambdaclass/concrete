@@ -241,5 +241,52 @@ pub fn lowering_error_to_report(
                 )
                 .finish()
         }
+
+        LoweringError::NotMutable {
+            span,
+            declare_span,
+            program_id,
+        } => {
+            let path = file_paths[program_id].display().to_string();
+            let mut report = Report::build(ReportKind::Error, path.clone(), span.from)
+                .with_code("NotMutable")
+                .with_label(
+                    Label::new((path.clone(), span.into()))
+                        .with_message("can't mutate this variable because it's not mutable")
+                        .with_color(colors.next()),
+                );
+
+            if let Some(declare_span) = declare_span {
+                report = report.with_label(
+                    Label::new((path, declare_span.into()))
+                        .with_message("variable declared here")
+                        .with_color(colors.next()),
+                );
+            }
+            report.finish()
+        }
+        LoweringError::CantTakeMutableBorrow {
+            span,
+            declare_span,
+            program_id,
+        } => {
+            let path = file_paths[program_id].display().to_string();
+            let mut report = Report::build(ReportKind::Error, path.clone(), span.from)
+                .with_code("CantTakeMutableBorrow")
+                .with_label(
+                    Label::new((path.clone(), span.into()))
+                        .with_message("can't take a mutate borrow to this variable because it's not declared mutable")
+                        .with_color(colors.next()),
+                );
+
+            if let Some(declare_span) = declare_span {
+                report = report.with_label(
+                    Label::new((path, declare_span.into()))
+                        .with_message("variable declared here")
+                        .with_color(colors.next()),
+                );
+            }
+            report.finish()
+        }
     }
 }
