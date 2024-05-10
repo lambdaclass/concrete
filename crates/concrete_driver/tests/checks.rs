@@ -104,6 +104,39 @@ fn undeclared_var() {
 }
 
 #[test]
+fn call_param_count_mismatch() {
+    let (source, name) = (
+        include_str!("invalid_programs/call_param_count_mismatch.con"),
+        "call_param_count_mismatch",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(
+            &error,
+            LoweringError::CallParamCountMismatch { found, needs, .. } if *found == 2 && *needs == 1
+        ),
+        "{:#?}",
+        error
+    );
+}
+
+#[test]
+fn call_param_type_mismatch() {
+    let (source, name) = (
+        include_str!("invalid_programs/call_param_type_mismatch.con"),
+        "call_param_type_mismatch",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::UnexpectedType { .. }),
+        "{:#?}",
+        error
+    );
+}
+
+#[test]
 fn invalid_assign() {
     let (source, name) = (
         include_str!("invalid_programs/invalid_assign.con"),

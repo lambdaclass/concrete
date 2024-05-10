@@ -61,7 +61,7 @@ pub fn compile_program(
 
     let input_file = test_dir_path.join(name).with_extension(".con");
     std::fs::write(&input_file, source.input(&db))?;
-    program.file_path = Some(input_file);
+    program.file_path = Some(input_file.clone());
 
     let output_file = test_dir_path.join(name);
     let output_file = if library {
@@ -81,6 +81,7 @@ pub fn compile_program(
         output_mlir: false,
         output_ll: false,
         output_asm: false,
+        file_paths: vec![input_file],
     };
 
     let program_ir = lower_programs(&[program])?;
