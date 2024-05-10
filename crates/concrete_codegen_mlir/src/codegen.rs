@@ -527,6 +527,8 @@ fn compile_rvalue<'c: 'b, 'b>(
                 } else if current_ty.kind.is_ptr_like() {
                     (value, target_ty.clone())
                 } else if current_ty.kind.is_array() {
+                    // Cast from fixed size array to pointer.
+                    // We need to create a alloca and store the array there, because we have it by-value.
                     let k1 = block
                         .append_operation(arith::constant(
                             ctx.context(),
@@ -552,6 +554,8 @@ fn compile_rvalue<'c: 'b, 'b>(
                     block.append_operation(
                         ods::llvm::store(ctx.context(), value, ptr, location).into(),
                     );
+
+                    // Return the alloca ptr, making this "the cast".
 
                     (ptr, target_ty.clone())
                 } else {
