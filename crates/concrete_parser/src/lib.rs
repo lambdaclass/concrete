@@ -290,4 +290,15 @@ mod ModuleName {
         let parser = grammar::ProgramParser::new();
         parser.parse(lexer).unwrap();
     }
+
+    #[test]
+    fn parse_intrinsic() {
+        let source = r##"mod MyMod {
+    #[intrinsic = "simdsomething"]
+    pub extern fn myintrinsic();
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
+    }
 }

@@ -35,14 +35,14 @@ fn import_not_found() {
 
 #[test]
 fn invalid_borrow_mut() {
-    let (source, name) = (include_str!("invalid_programs/refmut.con"), "refmut");
+    let (source, name) = (
+        include_str!("invalid_programs/invalid_borrow_mut.con"),
+        "invalid_borrow_mut",
+    );
     let error = check_invalid_program(source, name);
 
     assert!(
-        matches!(
-            &error,
-            LoweringError::BorrowNotMutable { name, .. } if name == "a"
-        ),
+        matches!(&error, LoweringError::NotMutable { .. }),
         "{:#?}",
         error
     );
@@ -98,6 +98,84 @@ fn undeclared_var() {
             &error,
             LoweringError::UseOfUndeclaredVariable { name, .. } if name == "b"
         ),
+        "{:#?}",
+        error
+    );
+}
+
+#[test]
+fn call_param_count_mismatch() {
+    let (source, name) = (
+        include_str!("invalid_programs/call_param_count_mismatch.con"),
+        "call_param_count_mismatch",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(
+            &error,
+            LoweringError::CallParamCountMismatch { found, needs, .. } if *found == 2 && *needs == 1
+        ),
+        "{:#?}",
+        error
+    );
+}
+
+#[test]
+fn call_param_type_mismatch() {
+    let (source, name) = (
+        include_str!("invalid_programs/call_param_type_mismatch.con"),
+        "call_param_type_mismatch",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::UnexpectedType { .. }),
+        "{:#?}",
+        error
+    );
+}
+
+#[test]
+fn invalid_assign() {
+    let (source, name) = (
+        include_str!("invalid_programs/invalid_assign.con"),
+        "invalid_assign",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::UnexpectedType { .. }),
+        "{:#?}",
+        error
+    );
+}
+
+#[test]
+fn immutable_mutation() {
+    let (source, name) = (
+        include_str!("invalid_programs/immutable_mutation.con"),
+        "immutable_mutation",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::NotMutable { .. }),
+        "{:#?}",
+        error
+    );
+}
+
+#[test]
+fn mutable_nonmut_borrow() {
+    let (source, name) = (
+        include_str!("invalid_programs/mutable_nonmut_borrow.con"),
+        "mutable_nonmut_borrow",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::CantTakeMutableBorrow { .. }),
         "{:#?}",
         error
     );

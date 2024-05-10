@@ -8,4 +8,6 @@ pub enum CodegenError {
     LLVMCompileError(String),
     #[error("melior error: {0}")]
     MeliorError(#[from] melior::Error),
+    #[error("not yet implemented: {0}")]
+    NotImplemented(String),
 }

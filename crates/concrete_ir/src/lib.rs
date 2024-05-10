@@ -68,6 +68,7 @@ pub struct FnBody {
     pub id: DefId,
     pub name: String,
     pub is_extern: bool,
+    pub is_intrinsic: Option<ConcreteIntrinsic>,
     pub basic_blocks: Vec<BasicBlock>,
     pub locals: Vec<Local>,
 }
@@ -178,11 +179,31 @@ pub enum Rvalue {
     Cast(Operand, Ty, Span),
 }
 
+impl Rvalue {
+    pub fn get_local(&self) -> Option<usize> {
+        match self {
+            Rvalue::Use(op) => op.get_local(),
+            Rvalue::Ref(_, op) => Some(op.local),
+            Rvalue::Cast(op, _, _) => op.get_local(),
+            _ => None,
+        }
+    }
+}
+
 /// A operand is a value, either from a place in memory or constant data.
 #[derive(Debug, Clone)]
 pub enum Operand {
     Place(Place),
     Const(ConstData),
+}
+
+impl Operand {
+    pub fn get_local(&self) -> Option<usize> {
+        match self {
+            Operand::Place(place) => Some(place.local),
+            Operand::Const(_) => None,
+        }
+    }
 }
 
 /// A place in memory, defined by the given local and it's projection (deref, field, index, etc).
@@ -216,15 +237,24 @@ pub struct Local {
     pub ty: Ty,
     /// The type of local.
     pub kind: LocalKind,
+    /// Whether this local is declared mutable.
+    pub mutable: bool,
 }
 
 impl Local {
-    pub fn new(span: Option<Span>, kind: LocalKind, ty: Ty, debug_name: Option<String>) -> Self {
+    pub fn new(
+        span: Option<Span>,
+        kind: LocalKind,
+        ty: Ty,
+        debug_name: Option<String>,
+        mutable: bool,
+    ) -> Self {
         Self {
             span,
             kind,
             ty,
             debug_name,
+            mutable,
         }
     }
 
@@ -234,6 +264,19 @@ impl Local {
             ty,
             kind: LocalKind::Temp,
             debug_name: None,
+            mutable: false,
+        }
+    }
+
+    pub fn is_mutable(&self) -> bool {
+        if self.mutable {
+            return true;
+        }
+
+        match self.ty.kind {
+            TyKind::Ptr(_, is_mut) => matches!(is_mut, Mutability::Mut),
+            TyKind::Ref(_, is_mut) => matches!(is_mut, Mutability::Mut),
+            _ => false,
         }
     }
 }
@@ -397,7 +440,15 @@ impl fmt::Display for TyKind {
                 FloatTy::F64 => write!(f, "f32"),
             },
             TyKind::String => write!(f, "string"),
-            TyKind::Array(_, _) => todo!(),
+            TyKind::Array(inner, size) => {
+                let value =
+                    if let ConstKind::Value(ValueTree::Leaf(ConstValue::U64(x))) = &size.data {
+                        *x
+                    } else {
+                        unreachable!("const data for array sizes should always be u64")
+                    };
+                write!(f, "[{}; {:?}]", inner.kind, value)
+            }
             TyKind::Ref(inner, is_mut) => {
                 let word = if let Mutability::Mut = is_mut {
                     "mut"
@@ -570,4 +621,9 @@ pub enum ConstValue {
     U128(u128),
     F32(f32),
     F64(f64),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub enum ConcreteIntrinsic {
+    // Todo: Add intrinsics here
 }

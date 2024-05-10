@@ -43,6 +43,18 @@ pub enum LoweringError {
         name: String,
         program_id: usize,
     },
+    #[error("can't mutate this value because it's not declared mutable")]
+    NotMutable {
+        span: Span,
+        declare_span: Option<Span>,
+        program_id: usize,
+    },
+    #[error("can't take a mutable borrow to this value because it's not declared mutable")]
+    CantTakeMutableBorrow {
+        span: Span,
+        declare_span: Option<Span>,
+        program_id: usize,
+    },
     #[error("unrecognized type {name}")]
     UnrecognizedType {
         span: Span,
@@ -76,4 +88,11 @@ pub enum LoweringError {
     },
     #[error("internal error: {0}")]
     InternalError(String, usize),
+    #[error("function call parameter count mismatch, found {found}, needs {needs}")]
+    CallParamCountMismatch {
+        span: Span,
+        found: usize,
+        needs: usize,
+        program_id: usize,
+    },
 }
