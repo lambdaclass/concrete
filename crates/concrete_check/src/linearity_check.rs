@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use concrete_session::Session;
-//pub mod linearityError;
 
 
 use self::errors::LinearityError;
