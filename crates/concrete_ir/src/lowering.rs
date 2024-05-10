@@ -1636,31 +1636,39 @@ fn lower_value_expr(
                 let (place, place_ty, _span) = lower_path(builder, info)?;
                 (Rvalue::Use(Operand::Place(place.clone())), place_ty)
             } else {
-                let mod_body = builder.get_module_body();
-
-                let Some(&constant_id) = mod_body.symbols.constants.get(&info.first.name) else {
-                    return Err(LoweringError::UseOfUndeclaredVariable {
-                        span: info.span,
-                        name: info.first.name.clone(),
-                        program_id: builder.local_module.program_id,
-                    });
-                };
-
-                let constant_value = builder
-                    .ctx
-                    .body
-                    .constants
-                    .get(&constant_id)
-                    .expect("constant should exist")
-                    .value
-                    .clone();
-
-                let ty = constant_value.ty.clone();
-
+                let (constant_value, ty) = lower_constant_ref(builder, info)?;
                 (Rvalue::Use(Operand::Const(constant_value)), ty)
             }
         }
     })
+}
+
+fn lower_constant_ref(
+    builder: &mut FnBodyBuilder,
+    info: &PathOp,
+) -> Result<(ConstData, Ty), LoweringError> {
+    let mod_body = builder.get_module_body();
+
+    let Some(&constant_id) = mod_body.symbols.constants.get(&info.first.name) else {
+        return Err(LoweringError::UseOfUndeclaredVariable {
+            span: info.span,
+            name: info.first.name.clone(),
+            program_id: builder.local_module.program_id,
+        });
+    };
+
+    let constant_value = builder
+        .ctx
+        .body
+        .constants
+        .get(&constant_id)
+        .expect("constant should exist")
+        .value
+        .clone();
+
+    let ty = constant_value.ty.clone();
+
+    Ok((constant_value, ty))
 }
 
 pub fn lower_path(
