@@ -592,6 +592,16 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
         }
     };
 
+    #[allow(unused_variables)]
+    let linearity_result = match concrete_check::linearity_check::linearity_check_program(&program_ir, &session) {
+        Ok(ir) => ir,
+        Err(error) => {
+            println!("TODO error message when linearity fails");
+            std::process::exit(1);
+        }
+    };
+
+    
     if args.ir {
         std::fs::write(
             session.output_file.with_extension("ir"),
