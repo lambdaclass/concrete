@@ -13,7 +13,6 @@ mod LinearExampleIfStub {
                     };
           // FIXME Prefered initialization but not yet implemented
           // [1, 0];
-  let sum: i32 = xy.x + xy.y;
   let mut consumed: i32 = 0;
   if xy.x > xy.y{
    consume_x(&xy, 1);
@@ -24,7 +23,7 @@ mod LinearExampleIfStub {
   return xy.x;
  }
  
- fn consume_x(value: &Linear, i: i32) {
+ fn consume_x(value: & mut Linear, i: i32) {
   value.x = value.x + i;
  }
  

@@ -6,14 +6,13 @@ mod LinearExampleStub {
 	}
 	
 	fn main() -> i32 {
-		let xy: Linear = 
+		let mut xy: Linear = 
                     Linear {
                         x: 0,
                         y: 1,
                     };
           // FIXME Prefered initialization but not yet implemented
           // [1, 0];
-		let sum: i32 = xy.x + xy.y;
 		// linear value is written/consumed
 		xy.x = xy.x + 1;
 		return xy.x;
