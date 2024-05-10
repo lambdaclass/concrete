@@ -5,6 +5,8 @@ use config::{DebugInfo, OptLevel};
 
 pub mod config;
 
+/// This struct holds the information needed to compile this compilation unit,
+/// like whether to generate debug info, optimization levels, target, host, etc.
 #[derive(Debug, Clone)]
 pub struct Session {
     pub file_paths: Vec<PathBuf>,
