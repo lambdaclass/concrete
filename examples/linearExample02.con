@@ -14,7 +14,7 @@ mod LinearExampleStub {
           // FIXME Prefered initialization but not yet implemented
           // [1, 0];
 		// linear value is written/consumed
-		consume_x(&xy);
+		consume_x(&mut xy);
 		return xy.x;
 	}
 	
