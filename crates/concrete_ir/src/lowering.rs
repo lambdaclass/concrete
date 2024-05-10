@@ -1223,11 +1223,30 @@ fn lower_fn_call(
         }
     };
 
+    if args_ty.len() != info.args.len() {
+        return Err(LoweringError::CallParamCountMismatch {
+            span: info.span,
+            found: info.args.len(),
+            needs: args_ty.len(),
+            program_id: builder.get_module_body().id.program_id,
+        });
+    }
+
     let mut args = Vec::new();
 
     for (arg, arg_ty) in info.args.iter().zip(args_ty) {
-        let rvalue = lower_expression(builder, arg, Some(arg_ty.clone()))?;
-        args.push(rvalue.0);
+        let (rvalue, rvalue_ty, arg_span) = lower_expression(builder, arg, Some(arg_ty.clone()))?;
+
+        if rvalue_ty.kind != arg_ty.kind {
+            return Err(LoweringError::UnexpectedType {
+                span: arg_span,
+                found: rvalue_ty,
+                expected: arg_ty,
+                program_id: builder.get_module_body().id.program_id,
+            });
+        }
+
+        args.push(rvalue);
     }
 
     let dest_local = builder.add_local(Local::temp(ret_ty.clone()));

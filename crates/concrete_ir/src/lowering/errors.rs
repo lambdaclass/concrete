@@ -88,4 +88,11 @@ pub enum LoweringError {
     },
     #[error("internal error: {0}")]
     InternalError(String, usize),
+    #[error("function call parameter count mismatch, found {found}, needs {needs}")]
+    CallParamCountMismatch {
+        span: Span,
+        found: usize,
+        needs: usize,
+        program_id: usize,
+    },
 }
