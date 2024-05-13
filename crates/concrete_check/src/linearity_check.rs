@@ -59,8 +59,8 @@ impl StateTbl {
     }
 
     // Example of updating the state table
-    fn update_state(&mut self, var: String, state: VarState) {
-        self.vars.insert(var, state);
+    fn update_state(&mut self, var: & str, state: VarState) {
+        self.vars.insert(var.to_string(), state);
     }
 
     // Remove a variable from the state table
@@ -96,37 +96,43 @@ fn count(name: &str, expr: &str) -> Appearances {
 }
 
 
+
 #[allow(dead_code)]
 #[allow(unreachable_patterns)]
-fn check_var_in_expr(state_tbl: &mut StateTbl, depth: u32, name: &str, expr: &str) -> Result<StateTbl, String> {
+//fn check_var_in_expr(state_tbl: &mut StateTbl, depth: u32, name: &str, expr: &str) -> Result<StateTbl, String> {
+fn check_var_in_expr(state_tbl: &mut StateTbl, _depth: u32, name: &str, expr: &str) -> Result<StateTbl, LinearityError> {
     let apps = count(name, expr); // Assume count function implementation
     let Appearances { consumed, write, read, path } = apps;
 
     let state = state_tbl.get_state(name).unwrap_or(&VarState::Unconsumed); // Assume default state
 
     match (state, Appearances::partition(consumed), Appearances::partition(write), Appearances::partition(read), Appearances::partition(path)) {
-        (VarState::Unconsumed, CountResult::Zero, CountResult::Zero, _, _) => Ok(state_tbl.clone()),
+        /*(        State            Consumed           WBorrow             RBorrow           Path      )
+        (* ------------------|-------------------|-----------------|------------------|----------------)*/
+        (VarState::Unconsumed, CountResult::Zero, CountResult::Zero,                _,                 _) => Ok(state_tbl.clone()),
         (VarState::Unconsumed, CountResult::Zero, CountResult::One, CountResult::Zero, CountResult::Zero) => Ok(state_tbl.clone()),
-        (VarState::Unconsumed, CountResult::Zero, CountResult::One, _, _) => Err("Error: Borrowed mutably and used".to_string()),
-        (VarState::Unconsumed, CountResult::Zero, CountResult::MoreThanOne, _, _) => Err("Error: Borrowed mutably more than once".to_string()),
-        (VarState::Unconsumed, CountResult::One, CountResult::Zero, CountResult::Zero, CountResult::Zero) => consume_once(state_tbl, depth, name),
-        (VarState::Unconsumed, CountResult::One, _, _, _) => Err("Error: Consumed and something else".to_string()),
-        (VarState::Unconsumed, CountResult::MoreThanOne, _, _, _) => Err("Error: Consumed more than once".to_string()),
-        (VarState::Borrowed, CountResult::Zero, CountResult::Zero, CountResult::Zero, _) => Ok(state_tbl.clone()),
-        (VarState::Borrowed, _, _, _, _) => Err("Error: Read borrowed and something else".to_string()),
-        (VarState::BorrowedMut, CountResult::Zero, CountResult::Zero, CountResult::Zero, CountResult::Zero) => Ok(state_tbl.clone()),
-        (VarState::BorrowedMut, _, _, _, _) => Err("Error: Write borrowed and used".to_string()),
-        (VarState::Consumed, CountResult::Zero, CountResult::Zero, CountResult::Zero, CountResult::Zero) => Ok(state_tbl.clone()),
-        (VarState::Consumed, _, _, _, _) => Err("Error: Already consumed".to_string()),
-        _ => Err("Unhandled state or appearance count".to_string()),
+        (VarState::Unconsumed, CountResult::Zero, CountResult::MoreThanOne,         _,                 _) =>
+            Err(LinearityError::BorrowedMutMoreThanOnce { variable: name.to_string() }),
+        (VarState::Unconsumed, CountResult::One,                         _,         _,                 _) =>
+            Err(LinearityError::ConsumedAndUsed { variable: name.to_string() }),
+        (VarState::Unconsumed, CountResult::MoreThanOne,                 _,          _,                 _) =>
+            Err(LinearityError::ConsumedMoreThanOnce { variable: name.to_string() }),
+        (VarState::Borrowed,                  _,                         _,          _,                 _) =>
+            Err(LinearityError::ReadBorrowedAndUsed { variable: name.to_string() }),
+        (VarState::BorrowedMut,               _,                         _,          _,                 _) =>
+            Err(LinearityError::WriteBorrowedAndUsed { variable: name.to_string() }),
+        (VarState::Consumed,                  _,                         _,          _,                 _) =>
+            Err(LinearityError::AlreadyConsumedAndUsed { variable: name.to_string() }),
+        _ => Err(LinearityError::UnhandledStateOrCount { variable: name.to_string() }),
     }
 }
 
 
+#[allow(dead_code)]
 #[allow(unused_variables)]
 fn consume_once(state_tbl: &mut StateTbl, depth: u32, name: &str) -> Result<StateTbl, String> {
     // TODO Implement the logic to consume a variable once, updating the state table and handling depth
-    state_tbl.update_state(name.to_string(), VarState::Consumed);
+    state_tbl.update_state(name, VarState::Consumed);
     Ok(state_tbl.clone())
 }
 
@@ -135,10 +141,10 @@ fn consume_once(state_tbl: &mut StateTbl, depth: u32, name: &str) -> Result<Stat
 #[allow(unused_variables)]
 pub fn linearity_check_program(program_ir: &ProgramBody, session: &Session) ->  Result<String, LinearityError> {
     let mut linearity_table = StateTbl::new();
-    linearity_table.update_state("x".to_string(), VarState::Unconsumed);
-    linearity_table.update_state("y".to_string(), VarState::Consumed);
-    linearity_table.update_state("z".to_string(), VarState::Borrowed);
-    linearity_table.update_state("w".to_string(), VarState::BorrowedMut);
+    linearity_table.update_state("x", VarState::Unconsumed);
+    linearity_table.update_state("y", VarState::Consumed);
+    linearity_table.update_state("z", VarState::Borrowed);
+    linearity_table.update_state("w", VarState::BorrowedMut);
     
     linearity_table.remove_entry("x");
     let state = linearity_table.get_state("y");
