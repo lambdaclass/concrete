@@ -12,3 +12,7 @@ concrete_ir = { version = "0.1.0", path = "../concrete_ir" }
 concrete_session = { version = "0.1.0", path = "../concrete_session" }
 itertools = "0.12.0"
 thiserror = "1.0.56"
+
+
+[features]
+linearity = []

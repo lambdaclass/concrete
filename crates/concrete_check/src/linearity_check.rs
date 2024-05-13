@@ -7,9 +7,8 @@ use self::errors::LinearityError;
 pub mod errors;
 
 
-use concrete_ir::ProgramBody;
-
-
+use concrete_ir::{ProgramBody, FnBody, Statement};
+use concrete_ast::expressions::Expression;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum VarState {
@@ -149,59 +148,11 @@ impl StateTbl {
     }
 }
 
-/* 
-// Placeholder function signatures (implementation required)
-fn check_expr(expr: &str, state_tbl: &mut StateTbl) {
-    // Implementation needed 
-}
-
-fn count(vars: &[String], state_tbl: &StateTbl) -> usize {
-    // Implementation needed 
-    0
-}
-
-*/
 
 
 
 #[allow(dead_code)]
 #[allow(unused_variables)]
-/* 
-fn count(name: &str, expr: &Expr) -> Appearances {
-    match expr {
-        Expr::NilConstant | Expr::BoolConstant(_) | Expr::IntConstant(_) | Expr::FloatConstant(_) | Expr::StringConstant(_) | Expr::ConstVar | Expr::FunVar | Expr::SizeOf => 
-            Appearances::zero(),
-        Expr::ParamVar(var_name) | Expr::LocalVar(var_name) => 
-            if var_name == name { Appearances::consumed_once() } else { Appearances::zero() },
-        Expr::Funcall(func, args) | Expr::MethodCall(func, args) | Expr::VarMethodCall(args) | Expr::FptrCall(func, args) | Expr::Embed(args) => 
-            args.iter().map(|arg| count(name, arg)).collect::<Vec<_>>().into_iter().fold(Appearances::zero(), |acc, x| acc.merge(&x)),
-        Expr::Cast(e, _) | Expr::Negation(e) | Expr::Deref(e) => 
-            count(name, e),
-        Expr::Comparison(lhs, rhs) | Expr::Conjunction(lhs, rhs) | Expr::Disjunction(lhs, rhs) => 
-            count(name, lhs).merge(&count(name, rhs)),
-        Expr::IfExpression(cond, then_expr, else_expr) => 
-            count(name, cond).merge(&count(name, then_expr)).merge(&count(name, else_expr)),
-        Expr::RecordConstructor(args) | Expr::UnionConstructor(args) => 
-            args.iter().map(|arg| count(name, arg)).collect::<Vec<_>>().into_iter().fold(Appearances::zero(), |acc, x| acc.merge(&x)),
-        Expr::Path { head, elems } => {
-            let head_apps = count(name, head);
-            let elems_apps = elems.iter().map(|elem| count(name, elem)).collect::<Vec<_>>().into_iter().fold(Appearances::zero(), |acc, x| acc.merge(&x));
-            head_apps.merge(&elems_apps)
-        },
-        Expr::BorrowExpr(mode, var_name) => 
-            if var_name == name {
-                match mode {
-                    BorrowMode::ReadBorrow => Appearances::read_once(),
-                    BorrowMode::WriteBorrow => Appearances::write_once(),
-                }
-            } else {
-                Appearances::zero()
-            },
-        Expr::ArrayIndex(e) => 
-            count(name, e),
-    }
-}
-*/
 fn count(name: &str, expr: &Expr) -> Appearances {
     match expr {
         Expr::NilConstant | Expr::BoolConstant(_) | Expr::IntConstant(_) | Expr::FloatConstant(_) | Expr::StringConstant(_) | Expr::ConstVar | Expr::FunVar | Expr::SizeOf => 
@@ -255,35 +206,6 @@ fn count(name: &str, expr: &Expr) -> Appearances {
 
 
 
-#[allow(dead_code)]
-#[allow(unreachable_patterns)]
-//fn check_var_in_expr(state_tbl: &mut StateTbl, depth: u32, name: &str, expr: &str) -> Result<StateTbl, String> {
-fn check_var_in_expr(state_tbl: &mut StateTbl, _depth: u32, name: &str, expr: &Expr) -> Result<StateTbl, LinearityError> {
-    let apps = count(name, expr); // Assume count function implementation
-    let Appearances { consumed, write, read, path } = apps;
-
-    let state = state_tbl.get_state(name).unwrap_or(&VarState::Unconsumed); // Assume default state
-
-    match (state, Appearances::partition(consumed), Appearances::partition(write), Appearances::partition(read), Appearances::partition(path)) {
-        /*(        State            Consumed           WBorrow             RBorrow           Path      )
-        (* ------------------|-------------------|-----------------|------------------|----------------)*/
-        (VarState::Unconsumed, CountResult::Zero, CountResult::Zero,                _,                 _) => Ok(state_tbl.clone()),
-        (VarState::Unconsumed, CountResult::Zero, CountResult::One, CountResult::Zero, CountResult::Zero) => Ok(state_tbl.clone()),
-        (VarState::Unconsumed, CountResult::Zero, CountResult::MoreThanOne,         _,                 _) =>
-            Err(LinearityError::BorrowedMutMoreThanOnce { variable: name.to_string() }),
-        (VarState::Unconsumed, CountResult::One,                         _,         _,                 _) =>
-            Err(LinearityError::ConsumedAndUsed { variable: name.to_string() }),
-        (VarState::Unconsumed, CountResult::MoreThanOne,                 _,          _,                 _) =>
-            Err(LinearityError::ConsumedMoreThanOnce { variable: name.to_string() }),
-        (VarState::Borrowed,                  _,                         _,          _,                 _) =>
-            Err(LinearityError::ReadBorrowedAndUsed { variable: name.to_string() }),
-        (VarState::BorrowedMut,               _,                         _,          _,                 _) =>
-            Err(LinearityError::WriteBorrowedAndUsed { variable: name.to_string() }),
-        (VarState::Consumed,                  _,                         _,          _,                 _) =>
-            Err(LinearityError::AlreadyConsumedAndUsed { variable: name.to_string() }),
-        _ => Err(LinearityError::UnhandledStateOrCount { variable: name.to_string() }),
-    }
-}
 
 
 #[allow(dead_code)]
@@ -295,7 +217,91 @@ fn consume_once(state_tbl: &mut StateTbl, depth: u32, name: &str) -> Result<Stat
 }
 
 
+struct LinearityChecker {
+    state_tbl: StateTbl,
+}
+
+#[allow(dead_code)]
+#[allow(unused_variables)]
+impl LinearityChecker {
+    fn new() -> Self {
+        LinearityChecker {
+            state_tbl: StateTbl::new(),
+        }
+    }
+
+    fn linearity_check(&mut self, program: &ProgramBody) -> Result<(), LinearityError> {
+        // Assume Program is a struct that represents the entire program.
+        for function in &program.functions {
+            self.check_function(&function.1)?;
+        }
+        Ok(())
+    }
+
+    fn check_function(&mut self, function: &FnBody) -> Result<(), LinearityError> {
+        // Logic to check linearity within a function
+        // This may involve iterating over statements and expressions, similar to OCaml's recursion.
+        for basic_block in &function.basic_blocks{
+            for statement in &basic_block.statements {
+                self.check_statement(&statement)?;
+            }
+            
+        } 
+        Ok(())
+    }
+
+    fn check_statement(&mut self, statement: &Statement) -> Result<(), LinearityError> {
+        // TODO here we have to decide a unique Expression enum like declared above (translated from OCAML) for treating code
+        //
+        /*
+        match statement {
+            Statement::Expression(expr) => self.check_expr(expr),
+            statement.
+            // Add more statement types as needed
+        }*/
+        Ok(())
+    }
+
+    fn check_expr(&self, expr: &Expression) -> Result<(), LinearityError> {
+        // Expression checking logic here
+        Ok(())
+    }
+
+    fn check_var_in_expr(&mut self, _depth: u32, name: &str, expr: &Expr) -> Result<(), LinearityError> {
+        let apps = count(name, expr); // Assume count function implementation
+        let Appearances { consumed, write, read, path } = apps;
+    
+        let state = self.state_tbl.get_state(name).unwrap_or(&VarState::Unconsumed); // Assume default state
+    
+        match (state, Appearances::partition(consumed), Appearances::partition(write), Appearances::partition(read), Appearances::partition(path)) {
+            /*(        State            Consumed           WBorrow             RBorrow           Path      )
+            (* ------------------|-------------------|-----------------|------------------|----------------)*/
+            //(VarState::Unconsumed, CountResult::Zero, CountResult::Zero,                _,                 _) => Ok(state_tbl.clone()),
+            //(VarState::Unconsumed, CountResult::Zero, CountResult::One, CountResult::Zero, CountResult::Zero) => Ok(state_tbl.clone()),
+            (VarState::Unconsumed, CountResult::Zero, CountResult::Zero,                _,                 _) => Ok(()),
+            (VarState::Unconsumed, CountResult::Zero, CountResult::One, CountResult::Zero, CountResult::Zero) => Ok(()),
+            (VarState::Unconsumed, CountResult::Zero, CountResult::MoreThanOne,         _,                 _) =>
+                Err(LinearityError::BorrowedMutMoreThanOnce { variable: name.to_string() }),
+            (VarState::Unconsumed, CountResult::One,                         _,         _,                 _) =>
+                Err(LinearityError::ConsumedAndUsed { variable: name.to_string() }),
+            (VarState::Unconsumed, CountResult::MoreThanOne,                 _,          _,                 _) =>
+                Err(LinearityError::ConsumedMoreThanOnce { variable: name.to_string() }),
+            (VarState::Borrowed,                  _,                         _,          _,                 _) =>
+                Err(LinearityError::ReadBorrowedAndUsed { variable: name.to_string() }),
+            (VarState::BorrowedMut,               _,                         _,          _,                 _) =>
+                Err(LinearityError::WriteBorrowedAndUsed { variable: name.to_string() }),
+            (VarState::Consumed,                  _,                         _,          _,                 _) =>
+                Err(LinearityError::AlreadyConsumedAndUsed { variable: name.to_string() }),
+            _ => Err(LinearityError::UnhandledStateOrCount { variable: name.to_string() }),
+        }
+    }
+    
+}
+
+
+
 // Do nothing implementation of linearity check
+//#[cfg(feature = "linearity")]
 #[allow(unused_variables)]
 pub fn linearity_check_program(program_ir: &ProgramBody, session: &Session) ->  Result<String, LinearityError> {
     let mut linearity_table = StateTbl::new();
