@@ -45,4 +45,8 @@ pub enum LinearityError {
         variable: String,
         message: String,
     },
+    #[error("Unhandled statement type {r#type}")]
+    UnhandledStatementType{
+        r#type: String,
+    },
 }
