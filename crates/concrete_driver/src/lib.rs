@@ -598,7 +598,7 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     let linearity_result = match concrete_check::linearity_check::linearity_check_program(&programs, &session) {
         Ok(ir) => ir,
         Err(error) => {
-            println!("TODO error message when linearity fails");
+            println!("Linearity check failed: {:#?}", error);
             std::process::exit(1);
         }
     };

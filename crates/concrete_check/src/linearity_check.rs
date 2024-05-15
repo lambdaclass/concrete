@@ -13,8 +13,9 @@ use std::path::PathBuf;
 use concrete_ast::Program;
 use concrete_ast::modules::ModuleDefItem;
 //use concrete_ast::functions::FunctionDef;
-use concrete_ast::expressions::Expression;
-use concrete_ast::statements::{Statement, AssignStmt, LetStmt, WhileStmt, ForStmt, LetStmtTarget, Binding};
+use concrete_ast::expressions::{Expression, StructInitField};
+//use concrete_ast::statements::{Statement, AssignStmt, LetStmt, WhileStmt, ForStmt, LetStmtTarget, Binding};
+use concrete_ast::statements::{Statement, AssignStmt, LetStmt, LetStmtTarget, Binding};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum VarState {
@@ -143,10 +144,12 @@ impl StateTbl {
         self.vars.insert(var.to_string(), state);
     }
 
+    /* 
     // Remove a variable from the state table
     fn remove_entry(&mut self, var: &str) {
         self.vars.remove(var);
     }
+    */
 
     // Retrieve a variable's state
     fn get_state(&self, var: &str) -> Option<&VarState> {
@@ -221,56 +224,6 @@ impl LinearityChecker {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    #[allow(unused_variables)]
-    /*
-    fn count(name: &str, expr: &Expr) -> Appearances {
-        match expr {
-            Expr::NilConstant | Expr::BoolConstant(_) | Expr::IntConstant(_) | Expr::FloatConstant(_) | Expr::StringConstant(_) | Expr::ConstVar | Expr::FunVar | Expr::SizeOf => 
-                Appearances::zero(),
-
-            Expr::ParamVar(var_name) | Expr::LocalVar(var_name) => 
-                if var_name == name { Appearances::consumed_once() } else { Appearances::zero() },
-
-            Expr::Funcall(func, args) | Expr::MethodCall(func, args) | Expr::FptrCall(func, args) => 
-                args.iter().map(|arg| count(name, arg)).fold(Appearances::zero(), |acc, x| acc.merge(&x)),
-
-            Expr::VarMethodCall(args) | Expr::Embed(args) => 
-                args.iter().map(|arg| count(name, arg)).fold(Appearances::zero(), |acc, x| acc.merge(&x)),
-
-            Expr::Cast(e, _) | Expr::Negation(e) | Expr::Deref(e) => 
-                count(name, e),
-
-            Expr::Comparison(lhs, rhs) | Expr::Conjunction(lhs, rhs) | Expr::Disjunction(lhs, rhs) => 
-                count(name, lhs).merge(&count(name, rhs)),
-
-            Expr::IfExpression(cond, then_expr, else_expr) => 
-                count(name, cond).merge(&count(name, then_expr)).merge(&count(name, else_expr)),
-
-            Expr::RecordConstructor(args) | Expr::UnionConstructor(args) => 
-                args.iter().map(|arg| count(name, arg)).fold(Appearances::zero(), |acc, x| acc.merge(&x)),
-
-            Expr::Path { head, elems } => {
-                let head_apps = count(name, head);
-                let elems_apps = elems.iter().map(|elem| count(name, elem)).fold(Appearances::zero(), |acc, x| acc.merge(&x));
-                head_apps.merge(&elems_apps)
-            },
-
-            Expr::BorrowExpr(mode, var_name) => 
-                if var_name == name {
-                    match mode {
-                        BorrowMode::ReadBorrow => Appearances::read_once(),
-                        BorrowMode::WriteBorrow => Appearances::write_once(),
-                    }
-                } else {
-                    Appearances::zero()
-                },
-
-            Expr::ArrayIndex(e) => 
-                count(name, e),
-        }
-    }
-    */
 
     fn count_in_statements(&self, name: &str, statements: &Vec<Statement>) -> Appearances {
         statements.iter().map(|stmt| self.count_in_statement(name, stmt)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
@@ -300,7 +253,7 @@ impl LinearityChecker {
                 let cond= &while_expr.value;
                 let block = &while_expr.contents;
                 // Handle while loops
-                self.count_in_expression(name, cond).merge(&&self.count_in_statements(name, block))
+                self.count_in_expression(name, cond).merge(&self.count_in_statements(name, block))
             },
             Statement::For(for_expr) => {
                 // Handle for loops
@@ -383,12 +336,11 @@ impl LinearityChecker {
                 // Handle binary operations by processing both sides
                 self.count_in_expression(name, left).merge(&&self.count_in_expression(name, right))
             },
-            Expression::StructInit(_) => todo!(),
-            /* 
+            //Expression::StructInit(_) => todo!(),
             Expression::StructInit(struct_init_expr) => {
                 // Handle struct initialization
-                struct_init_expr.fields.iter().map(|(_, expr)| self.count(name, expr)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
-            },*/
+                struct_init_expr.fields.iter().map(|(_, expr)| self.count_struct_init(name, expr)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
+            },
             Expression::ArrayInit(array_init_expr) => {
                 // Handle array initializations
                 array_init_expr.values.iter().map(|expr| self.count_in_expression(name, expr)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
@@ -401,6 +353,10 @@ impl LinearityChecker {
         }
     }
 
+
+    fn count_struct_init(&self, name: &str, struct_init: &StructInitField) -> Appearances {
+        self.count_in_expression(name, &struct_init.value)
+    }
 
     fn check_stmt_let(&mut self, depth: u32, binding: &LetStmt) -> Result<(), LinearityError> {
         // Handle let bindings, possibly involving pattern matching
