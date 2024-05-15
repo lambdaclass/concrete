@@ -428,15 +428,29 @@ impl LinearityChecker {
                 }
                 self.check_stmts(depth + 1, &for_stmt.contents)
             },
-            /* 
-            Statement::Block(statements) => {
-                // Handle blocks of statements
-                for statement in statements {
-                    self.check_stmt(depth + 1, statement)?;
+            Statement::Assign(assign_stmt) => {
+                // Handle assignments
+                let AssignStmt { target, derefs, value, span } = assign_stmt;
+                self.check_expr(depth, value)
+            },
+            Statement::Return(return_stmt) => {
+                if let Some(value) = &return_stmt.value {
+                    self.check_expr(depth, value)
+                } else {
+                    Ok(())
+                }
+            },
+            Statement::FnCall(fn_call_op) => {
+                // Process function call arguments
+                for arg in &fn_call_op.args {
+                    self.check_expr(depth, arg)?;
                 }
                 Ok(())
-            },*/
-            _ => Err(LinearityError::UnhandledStatementType { r#type: format!("{:?}", stmt) }),
+            },
+            Statement::Match(_) => {
+                println!("Skipping linearity check for statement type: \n{:?}", stmt);
+                todo!()
+            }            
         }
     }
 
@@ -494,6 +508,7 @@ pub fn linearity_check_program(programs: &Vec<(PathBuf, String, Program)>, sessi
     linearity_table.remove_entry("x");
     let state = linearity_table.get_state("y");
     */
+    println!("Starting linearity check");
     let mut checker = LinearityChecker::new();
     for (path, name, program) in programs {
         println!("Checking linearity for program: {}", name);
@@ -507,6 +522,7 @@ pub fn linearity_check_program(programs: &Vec<(PathBuf, String, Program)>, sessi
                             //checker.check_function(&function)?;
                             checker.check_stmt(0, &statement)?;
                         }
+                        println!("Finished checking linearity for function: {} {:?}", function.decl.name.name, checker.state_tbl);
                         //checker.linearity_check(&function)?;
                     }
                     _ => 
