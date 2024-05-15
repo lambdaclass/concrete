@@ -593,7 +593,9 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     };
 
     #[allow(unused_variables)]
-    let linearity_result = match concrete_check::linearity_check::linearity_check_program(&program_ir, &session) {
+    //When tried to use ir representation for linearity check
+    //let linearity_result = match concrete_check::linearity_check::linearity_check_program(&program_ir, &session) {
+    let linearity_result = match concrete_check::linearity_check::linearity_check_program(&programs, &session) {
         Ok(ir) => ir,
         Err(error) => {
             println!("TODO error message when linearity fails");

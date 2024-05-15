@@ -7,12 +7,14 @@ use self::errors::LinearityError;
 pub mod errors;
 
 
-
+use std::path::PathBuf;
 //use concrete_ir::{ProgramBody, FnBody};
 //use concrete_ast::Program{ ProgramBody, FnBody };
-use concrete_ast::functions::FunctionDef;
+use concrete_ast::Program;
+use concrete_ast::modules::ModuleDefItem;
+//use concrete_ast::functions::FunctionDef;
 use concrete_ast::expressions::Expression;
-use concrete_ast::statements::{Statement, AssignStmt, LetStmt, WhileStmt, ForStmt, LetStmtTarget};
+use concrete_ast::statements::{Statement, AssignStmt, LetStmt, WhileStmt, ForStmt, LetStmtTarget, Binding};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum VarState {
@@ -186,6 +188,8 @@ impl LinearityChecker {
         }
     }
 
+    //TODO remove
+    /* 
     fn linearity_check(&mut self, program: &FunctionDef) -> Result<(), LinearityError> {
         // Assume Program is a struct that represents the entire program.
         for statement in &program.body {
@@ -193,6 +197,7 @@ impl LinearityChecker {
         }
         Ok(())
     }
+    */
     /* 
     fn check_function(&mut self, function: &FnBody) -> Result<(), LinearityError> {
         // Logic to check linearity within a function
@@ -267,25 +272,25 @@ impl LinearityChecker {
     }
     */
 
-    fn countInStatements(&self, name: &str, statements: &Vec<Statement>) -> Appearances {
-        statements.iter().map(|stmt| self.countInStatement(name, stmt)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
+    fn count_in_statements(&self, name: &str, statements: &Vec<Statement>) -> Appearances {
+        statements.iter().map(|stmt| self.count_in_statement(name, stmt)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
     }
     
-    fn countInStatement(&self, name: &str, statement: &Statement) -> Appearances {
+    fn count_in_statement(&self, name: &str, statement: &Statement) -> Appearances {
         match statement {
             Statement::Let(binding) => {
                 // Handle let bindings, possibly involving pattern matching
-                self.countInExpression(name, &binding.value)
+                self.count_in_expression(name, &binding.value)
             },
             Statement::If(if_stmt) => {
                 // Process all components of an if expression
-                let cond_apps = self.countInExpression(name, &if_stmt.value);
-                //let then_apps = self.countInStatement(name, &if_stmt.contents);
-                let then_apps = self.countInStatements(name, &if_stmt.contents);
+                let cond_apps = self.count_in_expression(name, &if_stmt.value);
+                //let then_apps = self.count_in_statement(name, &if_stmt.contents);
+                let then_apps = self.count_in_statements(name, &if_stmt.contents);
                 let else_apps;
                 let else_statements = &if_stmt.r#else;
                 if let Some(else_statements) = else_statements {
-                    else_apps = self.countInStatements(name, &else_statements);
+                    else_apps = self.count_in_statements(name, &else_statements);
                 } else {
                     else_apps = Appearances::zero();
                 }
@@ -295,7 +300,7 @@ impl LinearityChecker {
                 let cond= &while_expr.value;
                 let block = &while_expr.contents;
                 // Handle while loops
-                self.countInExpression(name, cond).merge(&&self.countInStatements(name, block))
+                self.count_in_expression(name, cond).merge(&&self.count_in_statements(name, block))
             },
             Statement::For(for_expr) => {
                 // Handle for loops
@@ -308,7 +313,7 @@ impl LinearityChecker {
                 if let Some(init) = init{
                     if let Some(cond) = cond{
                         if let Some(post) = post{
-                            apps = self.countInLetStatement(name, init).merge(&self.countInExpression(name, cond)).merge(&self.countInAssignStatement(name, post)).merge(&self.countInStatements(name, block))
+                            apps = self.count_in_let_statements(name, init).merge(&self.count_in_expression(name, cond)).merge(&self.count_in_assign_statement(name, post)).merge(&self.count_in_statements(name, block))
                         }
                     }
                 }
@@ -318,31 +323,31 @@ impl LinearityChecker {
             Statement::Block(statements) => {
                 // Handle blocks of statements
                 //statements.iter().map(|stmt| self.count(name, stmt)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
-                self.countInStatements(name, statements)
+                self.count_in_statements(name, statements)
             },*/
             _ => Appearances::zero(),
         } 
     }
 
-    fn countInAssignStatement(&self, name: &str, assign_stmt: &AssignStmt) -> Appearances {
+    fn count_in_assign_statement(&self, name: &str, assign_stmt: &AssignStmt) -> Appearances {
         match assign_stmt {
             AssignStmt { target, derefs, value, span } => {
                 // Handle assignments
-                self.countInExpression(name, value)
+                self.count_in_expression(name, value)
             },
         }
     }
 
-    fn countInLetStatement(&self, name: &str, let_stmt: &LetStmt) -> Appearances {
+    fn count_in_let_statements(&self, name: &str, let_stmt: &LetStmt) -> Appearances {
         match let_stmt {
             LetStmt { is_mutable, target, value, span } => {
                 // Handle let bindings, possibly involving pattern matching
-                self.countInExpression(name, value)
+                self.count_in_expression(name, value)
             },
         }
     }
 
-    fn countInExpression(&self, name: &str, expr: &Expression) -> Appearances {
+    fn count_in_expression(&self, name: &str, expr: &Expression) -> Appearances {
         match expr {
             Expression::Value(value_expr, _) => {
                 // Handle value expressions, typically constant or simple values
@@ -350,7 +355,7 @@ impl LinearityChecker {
             },
             Expression::FnCall(fn_call_op) => {
                 // Process function call arguments
-                fn_call_op.args.iter().map(|arg| self.countInExpression(name, arg)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
+                fn_call_op.args.iter().map(|arg| self.count_in_expression(name, arg)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
             },
             Expression::Match(match_expr) => todo!(),            
             /* 
@@ -360,19 +365,23 @@ impl LinearityChecker {
             },*/
             Expression::If(if_expr) => {
                 // Process all components of an if expression
-                let cond_apps = self.countInExpression(name, &if_expr.value);
-                let then_apps = self.countInStatements(name, &if_expr.contents);
+                let cond_apps = self.count_in_expression(name, &if_expr.value);
+                let then_apps = self.count_in_statements(name, &if_expr.contents);
                 //let else_apps = if_expr.else.as_ref().map(|e| self.count(name, e)).unwrap_or_default();
-                let else_apps = if_expr.r#else.map(|e| self.countInStatement(name, e)).unwrap_or_default();
-                cond_apps.merge(&then_apps).merge(&else_apps)                
+                cond_apps.merge(&then_apps);
+                if let Some(else_block) = &if_expr.r#else {
+                    let else_apps = self.count_in_statements(name, else_block);
+                    cond_apps.merge(&then_apps).merge(&else_apps);
+                }
+                cond_apps
             },
             Expression::UnaryOp(_, expr) => {
                 // Unary operations likely don't change the count but process the inner expression
-                self.countInExpression(name, expr)
+                self.count_in_expression(name, expr)
             },
             Expression::BinaryOp(left, _, right) => {
                 // Handle binary operations by processing both sides
-                self.countInExpression(name, left).merge(&&self.countInExpression(name, right))
+                self.count_in_expression(name, left).merge(&&self.count_in_expression(name, right))
             },
             Expression::StructInit(_) => todo!(),
             /* 
@@ -382,23 +391,23 @@ impl LinearityChecker {
             },*/
             Expression::ArrayInit(array_init_expr) => {
                 // Handle array initializations
-                array_init_expr.values.iter().map(|expr| self.countInExpression(name, expr)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
+                array_init_expr.values.iter().map(|expr| self.count_in_expression(name, expr)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
             },
             Expression::Deref(expr, _) | Expression::AsRef(expr, _, _) | Expression::Cast(expr, _, _) => {
                 // Deref, AsRef, and Cast are handled by just checking the inner expression
-                self.countInExpression(name, expr)
+                self.count_in_expression(name, expr)
             },
             // Add more cases as necessary based on the Expression types you expect
         }
     }
 
 
-    fn check_bindings(&mut self, depth: u32, binding: &LetStmt) -> Result<(), LinearityError> {
+    fn check_stmt_let(&mut self, depth: u32, binding: &LetStmt) -> Result<(), LinearityError> {
         // Handle let bindings, possibly involving pattern matching
         let LetStmt { is_mutable, target, value, span } = binding;
         match target {
             LetStmtTarget::Simple { name, r#type } => {
-                self.check_var_in_expr(depth, name, &VarState::Unconsumed, value)
+                self.check_var_in_expr(depth, &name.name, &VarState::Unconsumed, value)
             },
             LetStmtTarget::Destructure(bindings) => {
                 for binding in bindings {
@@ -407,6 +416,11 @@ impl LinearityChecker {
                 Ok(())
             },
         }
+    }
+
+    fn check_bindings(&mut self, depth: u32, binding: &Binding) -> Result<(), LinearityError> {
+        // Do something with the bindings        
+        Ok(())
     }
 
     fn check_stmts(&mut self, depth: u32, stmts: &Vec<Statement>) -> Result<(), LinearityError> {
@@ -425,15 +439,15 @@ impl LinearityChecker {
             },*/
             Statement::Let(binding) => {
                 // Handle let bindings, possibly involving pattern matching
-                self.check_bindings(depth, binding)
+                self.check_stmt_let(depth, binding)
             },
             //Statement::If(cond, then_block, else_block) => {
             Statement::If(if_stmt) => {
                 // Handle conditional statements
                 self.check_expr(depth, &if_stmt.value)?;
                 self.check_stmts(depth + 1, &if_stmt.contents)?;
-                if let Some(else_block) = if_stmt.else_block {
-                    self.check_stmt(depth + 1, else_block)?;
+                if let Some(else_block) = &if_stmt.r#else {
+                    self.check_stmts(depth + 1, &else_block)?;
                 }
                 Ok(())
             },
@@ -444,25 +458,28 @@ impl LinearityChecker {
                 self.check_stmts(depth + 1, &while_stmt.contents)
             },
             //Statement::For(init, cond, post, block) => {
-                Statement::For(for_stmt) => {
+            Statement::For(for_stmt) => {
                 // Handle for loops
-                if let Some(init) = for_stmt.init   {
-                    self.check_stmt(depth, init)?;
+                if let Some(init) = &for_stmt.init   {
+                    self.check_stmt_let(depth, &init)?;
                 }
-                self.check_stmt(depth, &for_stmt.init)?;
-                self.check_expr(depth, &for_stmt.condition)?;
+                if let Some(condition) = &for_stmt.condition   {
+                    self.check_expr(depth, &condition)?;
+                }
                 if let Some(post) = &for_stmt.post {
-                    self.check_stmt(depth, post)?;
+                    //TODO check assign statement
+                    //self.check_stmt_assign(depth, post)?;
                 }
-                self.check_stmt(depth + 1, &for_stmt.block)
+                self.check_stmts(depth + 1, &for_stmt.contents)
             },
+            /* 
             Statement::Block(statements) => {
                 // Handle blocks of statements
                 for statement in statements {
                     self.check_stmt(depth + 1, statement)?;
                 }
                 Ok(())
-            },
+            },*/
             _ => Err(LinearityError::UnhandledStatementType { r#type: format!("{:?}", stmt) }),
         }
     }
@@ -475,7 +492,7 @@ impl LinearityChecker {
 
     //fn check_var_in_expr(&mut self, depth: u32, name: &str, ty: &VarState, expr: &Expr) -> Result<(), LinearityError> {
     fn check_var_in_expr(&mut self, depth: u32, name: &str, ty: &VarState, expr: &Expression) -> Result<(), LinearityError> {
-        let apps = self.countInExpression(name, expr); // Assume count function implementation
+        let apps = self.count_in_expression(name, expr); // Assume count function implementation
         let Appearances { consumed, write, read, path } = apps;
     
         let state = self.state_tbl.get_state(name).unwrap_or(&VarState::Unconsumed); // Assume default state
@@ -507,10 +524,10 @@ impl LinearityChecker {
 
 
 
-// Do nothing implementation of linearity check
 //#[cfg(feature = "linearity")]
 #[allow(unused_variables)]
-pub fn linearity_check_program(program_ir: &FunctionDef, session: &Session) ->  Result<String, LinearityError> {
+//pub fn linearity_check_program(program_ir: &FunctionDef, session: &Session) ->  Result<String, LinearityError> {
+pub fn linearity_check_program(programs: &Vec<(PathBuf, String, Program)>, session: &Session) ->  Result<String, LinearityError> {
     /*
     let mut linearity_table = StateTbl::new();
     linearity_table.update_state("x", VarState::Unconsumed);
@@ -522,7 +539,29 @@ pub fn linearity_check_program(program_ir: &FunctionDef, session: &Session) ->  
     let state = linearity_table.get_state("y");
     */
     let mut checker = LinearityChecker::new();
-    checker.linearity_check(program_ir)?;
+    for (path, name, program) in programs {
+        println!("Checking linearity for program: {}", name);
+        for module in &program.modules {
+            println!("Checking linearity for module: {}", module.name.name);
+            for module_content in &module.contents {
+                match module_content {
+                    ModuleDefItem::Function(function) => {
+                        //checker.check_function(&function)?;
+                        for statement in &function.body {
+                            //checker.check_function(&function)?;
+                            checker.check_stmt(0, &statement)?;
+                        }
+                        //checker.linearity_check(&function)?;
+                    }
+                    _ => 
+                    { 
+                        println!("Skipping linear check for module content: {:?}", module_content);
+                        ()
+                    },                    
+                }                
+            }
+        }
+    }
     Ok("OK".to_string())
 }
 
