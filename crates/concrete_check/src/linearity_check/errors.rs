@@ -45,6 +45,10 @@ pub enum LinearityError {
         variable: String,
         message: String,
     },
+    #[error("Variable {variable} not found")]
+    VariableNotFound{
+        variable: String,
+    },
     #[error("Unhandled statement type {r#type}")]
     UnhandledStatementType{
         r#type: String,
