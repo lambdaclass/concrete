@@ -11,12 +11,13 @@ use std::path::PathBuf;
 //use concrete_ir::{ProgramBody, FnBody};
 //use concrete_ast::Program{ ProgramBody, FnBody };
 use concrete_ast::Program;
+//use concrete_ast::modules::{Module, ModuleDefItem};
 use concrete_ast::modules::ModuleDefItem;
 //use concrete_ast::functions::FunctionDef;
 use concrete_ast::expressions::{Expression, StructInitField, PathOp};
 //use concrete_ast::statements::{Statement, AssignStmt, LetStmt, WhileStmt, ForStmt, LetStmtTarget, Binding};
 use concrete_ast::statements::{Statement, AssignStmt, LetStmt, LetStmtTarget, Binding};
-
+use concrete_ast::types::TypeSpec;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum VarState {
     Unconsumed,
@@ -120,6 +121,14 @@ impl Appearances {
         Self::new(0, 0, 0, 1)
     }
 
+    /* TODO implementation of merge without copying
+    fn merge(&mut self, other: &Appearances) {
+            self.consumed += other.consumed;
+            self.write += other.write;
+            self.read += other.read;
+            self.path += other.path;
+    }*/
+
     fn merge(&self, other: &Appearances) -> Self {
         Appearances {
             consumed: self.consumed + other.consumed,
@@ -128,6 +137,7 @@ impl Appearances {
             path: self.path + other.path,
         }
     }
+    
 
     fn merge_list(appearances: Vec<Appearances>) -> Self {
         appearances.into_iter().fold(Self::zero(), |acc, x| acc.merge(&x))
@@ -163,6 +173,7 @@ impl StateTbl {
     fn get_info(&mut self, var: &str) -> Option<&mut VarInfo> {
         if !self.vars.contains_key(var){
             self.vars.insert(var.to_string(), VarInfo{ty: "".to_string(), depth: 0, state: VarState::Unconsumed});
+            println!("Variable {} not found in state table. Inserting with default state", var);
         }
         self.vars.get_mut(var)        
     }
@@ -330,13 +341,33 @@ impl LinearityChecker {
                 }
                 apps
             },
-            /* 
+            /* Alucination of GPT
             Statement::Block(statements) => {
                 // Handle blocks of statements
                 //statements.iter().map(|stmt| self.count(name, stmt)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
                 self.count_in_statements(name, statements)
             },*/
-            _ => Appearances::zero(),
+            Statement::Assign(assign_stmt) => {
+                // Handle assignments
+                self.count_in_assign_statement(name, assign_stmt)
+            },
+            Statement::Return(return_stmt) => {
+                // Handle return statements
+                if let Some(value) = &return_stmt.value {
+                    self.count_in_expression(name, value)
+                } else {
+                    Appearances::zero()
+                }
+            },
+            Statement::FnCall(fn_call_op) => {
+                // Process function call arguments
+                //fn_call_op.target.iter().map(|arg| self.count_in_path_op(name, arg)).fold(Appearances::zero(), |acc, x| acc.merge(&x));
+                fn_call_op.args.iter().map(|arg| self.count_in_expression(name, arg)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
+            },
+            Statement::Match(_) => {
+                todo!("do not support match statement")
+            },
+            //_ => Appearances::zero(),
         } 
     }
 
@@ -344,9 +375,22 @@ impl LinearityChecker {
         match assign_stmt {
             AssignStmt { target, derefs, value, span } => {
                 // Handle assignments
-                self.count_in_expression(name, value)
+                let ret = self.count_in_path_op(name, target);
+                ret.merge(&self.count_in_expression(name, value));                
+                ret
             },
         }
+    }
+
+    fn count_in_path_op(&self, name: &str, path_op: &PathOp) -> Appearances {
+        let apps:   Appearances;
+        if name == path_op.first.name{
+            apps = Appearances::path_once();
+        }
+        else{
+            apps = Appearances::zero();
+        }
+        apps
     }
 
     fn count_in_let_statements(&self, name: &str, let_stmt: &LetStmt) -> Appearances {
@@ -412,6 +456,7 @@ impl LinearityChecker {
 
 
     fn count_struct_init(&self, name: &str, struct_init: &StructInitField) -> Appearances {
+        println!("Checking struct init: {:?}", struct_init);
         self.count_in_expression(name, &struct_init.value)
     }
 
@@ -420,6 +465,18 @@ impl LinearityChecker {
         let LetStmt { is_mutable, target, value, span } = binding;
         match target {
             LetStmtTarget::Simple { name, r#type } => {
+                match r#type {
+                    TypeSpec::Simple{ name: variable_type , qualifiers, span} => {
+                        self.state_tbl.update_info(&name.name, VarInfo{ty: variable_type.name.clone(), depth, state: VarState::Unconsumed});
+                    },                    
+                    TypeSpec::Generic { name: variable_type, qualifiers, type_params, span } =>{
+                        self.state_tbl.update_info(&name.name, VarInfo{ty: variable_type.name.clone(), depth, state: VarState::Unconsumed});
+                    },
+                    TypeSpec::Array { of_type, size, qualifiers, span } => {
+                        let array_type = "Array<".to_string() + &of_type.get_name() + ">";
+                        self.state_tbl.update_info(&name.name, VarInfo{ty: array_type, depth, state: VarState::Unconsumed});
+                    },
+                }
                 self.check_var_in_expr(depth, &name.name, &VarState::Unconsumed, value)
             },
             LetStmtTarget::Destructure(bindings) => {
@@ -490,6 +547,7 @@ impl LinearityChecker {
                 let AssignStmt { target, derefs, value, span } = assign_stmt;
                 println!("Checking assignment: {:?}", assign_stmt);
                 // TODO check target
+                self.check_path_opt(depth, target)?;
                 //self.check_expr(depth, &self.path_op_to_expression(target))?;
                 self.check_expr(depth, value)
             },
@@ -510,10 +568,16 @@ impl LinearityChecker {
             Statement::Match(_) => {
                 println!("Skipping linearity check for statement type: \n{:?}", stmt);
                 todo!()
-            }            
+            }           
         }
     }
 
+    fn check_path_opt(&mut self, depth: usize, path_op: &PathOp) -> Result<(), LinearityError> {
+        println!("Checking path: {:?}", path_op);
+        println!("TODO add to: {:?}", path_op);
+        //path_op.first.name;
+        Ok(())
+    }
     /*
     fn path_op_to_expression(&self, path_op: &PathOp) -> Expression {
         // Convert the first identifier part of the path into an Expression
@@ -641,12 +705,49 @@ pub fn linearity_check_program(programs: &Vec<(PathBuf, String, Program)>, sessi
                         }
                         println!("Finished checking linearity for function: {} {:?}", function.decl.name.name, checker.state_tbl);
                         //checker.linearity_check(&function)?;
-                    }
-                    _ => 
-                    { 
-                        println!("Skipping linear check for module content: {:?}", module_content);
+                    },
+                    ModuleDefItem::FunctionDecl(function_decl) => 
+                    {
+                        println!("Skipping linearity check for FunctionDecl: {:?}", module_content);
                         ()
-                    },                    
+                    },
+                    ModuleDefItem::Module(module) => 
+                    { 
+                        println!("Skipping linearity check for Module: {:?}", module_content);
+                        ()
+                    },
+                    ModuleDefItem::Struct(struc) => 
+                    { 
+                        //println!("Skipping linearity check for Struct: {:?}", module_content);
+                        //checker.
+                        checker.state_tbl.update_info(&struc.name.name, VarInfo{ty: "Struct".to_string(), depth: 0, state: VarState::Unconsumed});
+                        ()
+                    },
+                    ModuleDefItem::Enum(_) => 
+                    { 
+                        println!("Skipping linearity check for Enum: {:?}", module_content);
+                        ()
+                    },
+                    ModuleDefItem::Constant(_) => 
+                    { 
+                        println!("Skipping linearity check for Constant: {:?}", module_content);
+                        ()
+                    },
+                    ModuleDefItem::Union(_) => 
+                    { 
+                        println!("Skipping linearity check for Uinon: {:?}", module_content);
+                        ()
+                    },
+                    ModuleDefItem::Type(_) => 
+                    { 
+                        println!("Skipping linearity check for module content: {:?}", module_content);
+                        ()
+                    },
+                    /*_ => 
+                    { 
+                        println!("Skipping linearity check for module content: {:?}", module_content);
+                        ()
+                    },*/                    
                 }                
             }
         }
