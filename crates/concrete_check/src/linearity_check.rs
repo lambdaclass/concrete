@@ -287,9 +287,9 @@ impl LinearityChecker {
         //let vars = &mut self.state_tbl.vars; 
         //TODO check if we can avoid cloning
         let vars = self.state_tbl.vars.clone(); 
-        for (name, info) in vars.iter() {
+        for (name, _info) in vars.iter() {
             //self.check_var_in_expr(depth, &name, &info.ty, expr)?;
-            self.check_var_in_expr(depth, &name, &info.state, expr)?;
+            self.check_var_in_expr(depth, &name, expr)?;
         }
         Ok(())
     }
@@ -477,7 +477,7 @@ impl LinearityChecker {
                         self.state_tbl.update_info(&name.name, VarInfo{ty: array_type, depth, state: VarState::Unconsumed});
                     },
                 }
-                self.check_var_in_expr(depth, &name.name, &VarState::Unconsumed, value)
+                self.check_var_in_expr(depth, &name.name, value)
             },
             LetStmtTarget::Destructure(bindings) => {
                 for binding in bindings {
@@ -547,7 +547,6 @@ impl LinearityChecker {
                 // Handle assignments
                 let AssignStmt { target, derefs, value, span } = assign_stmt;
                 println!("Checking assignment: {:?}", assign_stmt);
-                // TODO check target
                 self.check_path_opt(depth, target)?;
                 //self.check_expr(depth, &self.path_op_to_expression(target))?;
                 self.check_expr(depth, value)
@@ -575,7 +574,8 @@ impl LinearityChecker {
 
     fn check_path_opt(&mut self, depth: usize, path_op: &PathOp) -> Result<(), LinearityError> {
         println!("Checking path: {:?}", path_op);
-        println!("TODO add to: {:?}", path_op);
+        let var_expression = Expression::Value{ValueVar{path_op.first.clone(), path_op.span}};
+        self.check_var_in_expr(depth, &path_op.first.name, &var_expression );
         //path_op.first.name;
         Ok(())
     }
@@ -607,16 +607,16 @@ impl LinearityChecker {
         Expression::Variable(components.iter().map(|c| c.to_string()).collect::<Vec<_>>().join("."))
     }*/
 
-    fn check_var_in_expr(&mut self, depth: usize, name: &str, state: &VarState, expr: &Expression) -> Result<(), LinearityError> {
+    fn check_var_in_expr(&mut self, depth: usize, name: &str, expr: &Expression) -> Result<(), LinearityError> {
         
         let info = self.state_tbl.get_info(name); // Assume default state
         if let Some(info) = info{
             //Only checks Linearity for types of name Linear
             // TODO improve this approach
             if info.ty == "Linear".to_string(){
+                let state = &info.state;
                 let apps = self.count_in_expression(name, expr); // Assume count function implementation
-                let Appearances { consumed, write, read, path } = apps;
-            
+                let Appearances { consumed, write, read, path } = apps;            
                 println!("Checking variable: {} with state: {:?} and appearances: {:?} in expression {:?}", name, state, apps, expr);
                 match (state, Appearances::partition(consumed), Appearances::partition(write), Appearances::partition(read), Appearances::partition(path)) {
                   /*(        State            Consumed           WBorrow             RBorrow           Path      )
