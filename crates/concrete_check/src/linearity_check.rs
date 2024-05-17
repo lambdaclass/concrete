@@ -26,6 +26,13 @@ enum VarState {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct VarInfo {
+    ty: String, //TODO Define 'Type' as needed
+    depth: usize,
+    state: VarState,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 enum CountResult {
     Zero,
     One,
@@ -40,6 +47,8 @@ struct Appearances {
     path: u32,
 }
 
+
+// TODO remove. This are structures translated from Austral
 #[allow(dead_code)]
 enum Expr {
     NilConstant,
@@ -128,7 +137,7 @@ impl Appearances {
 
 #[derive(Debug, Clone)]
 struct StateTbl {
-    vars: HashMap<String, VarState>,
+    vars: HashMap<String, VarInfo>,
 }
 
 impl StateTbl {
@@ -140,7 +149,7 @@ impl StateTbl {
     }
 
     // Example of updating the state table
-    fn update_state(&mut self, var: & str, state: VarState) {
+    fn update_info(&mut self, var: & str, state: VarInfo) {
         self.vars.insert(var.to_string(), state);
     }
 
@@ -151,9 +160,38 @@ impl StateTbl {
     }
     */
 
+    fn get_info(&mut self, var: &str) -> Option<&mut VarInfo> {
+        if !self.vars.contains_key(var){
+            self.vars.insert(var.to_string(), VarInfo{ty: "".to_string(), depth: 0, state: VarState::Unconsumed});
+        }
+        self.vars.get_mut(var)        
+    }
+
     // Retrieve a variable's state
-    fn get_state(&self, var: &str) -> Option<&VarState> {
-        self.vars.get(var)
+    fn get_state(&mut self, var: &str) -> Option<&VarState> {
+        if let Some(info) = self.get_info(var) {
+            Some(&info.state)
+        } else {
+            None
+        }
+    }
+
+    // Retrieve a variable's state
+    fn update_state(&mut self, var: &str, new_state: &VarState){
+        let info = self.get_info(var);
+        if let Some(info) = info {
+            info.state = new_state.clone();
+        } 
+    }
+
+
+    fn get_loop_depth(&mut self, name: &str) -> usize {
+        let state = self.get_info(name);
+        if let Some(state) = state {
+            state.depth
+        } else {
+            0
+        }
     }
 }
 
@@ -169,13 +207,6 @@ impl StateTbl {
 
 
 
-#[allow(dead_code)]
-#[allow(unused_variables)]
-fn consume_once(state_tbl: &mut StateTbl, depth: u32, name: &str) -> Result<StateTbl, String> {
-    // TODO Implement the logic to consume a variable once, updating the state table and handling depth
-    state_tbl.update_state(name, VarState::Consumed);
-    Ok(state_tbl.clone())
-}
 
 
 struct LinearityChecker {
@@ -214,12 +245,51 @@ impl LinearityChecker {
         Ok(())
     }*/
 
+    
+
+    fn consume_once(&mut self, depth: usize, name: &String) -> Result<(), LinearityError> {
+        if depth == self.state_tbl.get_loop_depth(name) {
+            self.state_tbl.update_state(name, &VarState::Consumed);
+            /* 
+            let mut state = self.state_tbl.get_state(name);
+            if let Some(state) = state {
+                state = &VarState::Consumed;
+            }
+            else{
+                //self.state_tbl.update_state(name, VarInfo{"".to_string(), depth, VarState::Unconsumed});
+            }*/
+            
+            Ok(())
+        }
+        else{
+            Err(LinearityError::ConsumedMoreThanOnce { variable: name.to_string()})
+        }
+    }
+
+    /* 
+    fn consume_once(&mut self, name: &str, depth: usize) -> Result<(), LinearityError> {
+        if let Some(var_state) = self.state_tbl.get_state(name) {
+            if var_state.depth == depth {
+                var_state.state = VarState::Consumed;
+                Ok(())
+            } else {
+                Err(LinearityError::InvalidLoopDepth)
+            }
+        } else {
+            Err(LinearityError::VariableNotFound)
+        }
+    }
+    */
+    
     fn check_expr(&mut self, depth: u32, expr: &Expression) -> Result<(), LinearityError> {
         // Assuming you have a method to get all variable names and types
         //let vars = &mut self.state_tbl.vars; 
         let vars = self.state_tbl.vars.clone(); 
-        for (name, ty) in vars.iter() {
-            self.check_var_in_expr(depth, &name, &ty, expr)?;
+        for (name, info) in vars.iter() {
+            //self.check_var_in_expr(depth, &name, &info.ty, expr)?;
+            self.check_var_in_expr(depth, &name, &info.state, expr)?;
+            //fn check_var_in_expr(&mut self, depth: u32, name: &str, ty: &VarState, expr: &Expression) -> Result<(), LinearityError> {
+    
         }
         Ok(())
     }
@@ -238,7 +308,6 @@ impl LinearityChecker {
             Statement::If(if_stmt) => {
                 // Process all components of an if expression
                 let cond_apps = self.count_in_expression(name, &if_stmt.value);
-                //let then_apps = self.count_in_statement(name, &if_stmt.contents);
                 let then_apps = self.count_in_statements(name, &if_stmt.contents);
                 let else_apps;
                 let else_statements = &if_stmt.r#else;
@@ -461,7 +530,7 @@ impl LinearityChecker {
     }*/
 
     //fn check_var_in_expr(&mut self, depth: u32, name: &str, ty: &VarState, expr: &Expr) -> Result<(), LinearityError> {
-    fn check_var_in_expr(&mut self, depth: u32, name: &str, ty: &VarState, expr: &Expression) -> Result<(), LinearityError> {
+    fn check_var_in_expr(&mut self, depth: u32, name: &str, state: &VarState, expr: &Expression) -> Result<(), LinearityError> {
         let apps = self.count_in_expression(name, expr); // Assume count function implementation
         let Appearances { consumed, write, read, path } = apps;
     
@@ -498,16 +567,6 @@ impl LinearityChecker {
 #[allow(unused_variables)]
 //pub fn linearity_check_program(program_ir: &FunctionDef, session: &Session) ->  Result<String, LinearityError> {
 pub fn linearity_check_program(programs: &Vec<(PathBuf, String, Program)>, session: &Session) ->  Result<String, LinearityError> {
-    /*
-    let mut linearity_table = StateTbl::new();
-    linearity_table.update_state("x", VarState::Unconsumed);
-    linearity_table.update_state("y", VarState::Consumed);
-    linearity_table.update_state("z", VarState::Borrowed);
-    linearity_table.update_state("w", VarState::BorrowedMut);
-    
-    linearity_table.remove_entry("x");
-    let state = linearity_table.get_state("y");
-    */
     println!("Starting linearity check");
     let mut checker = LinearityChecker::new();
     for (path, name, program) in programs {
