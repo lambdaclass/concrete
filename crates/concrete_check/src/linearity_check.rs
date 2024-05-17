@@ -368,7 +368,7 @@ impl LinearityChecker {
                 // Process function call arguments
                 fn_call_op.args.iter().map(|arg| self.count_in_expression(name, arg)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
             },
-            Expression::Match(match_expr) => todo!(),            
+            Expression::Match(match_expr) => todo!("do not support match expression"),            
             /* 
             Expression::Match(match_expr) => {
                 // Handle match arms
@@ -394,7 +394,6 @@ impl LinearityChecker {
                 // Handle binary operations by processing both sides
                 self.count_in_expression(name, left).merge(&&self.count_in_expression(name, right))
             },
-            //Expression::StructInit(_) => todo!(),
             Expression::StructInit(struct_init_expr) => {
                 // Handle struct initialization
                 struct_init_expr.fields.iter().map(|(_, expr)| self.count_struct_init(name, expr)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
