@@ -21,8 +21,8 @@ use concrete_ast::statements::{Statement, AssignStmt, LetStmt, LetStmtTarget, Bi
 enum VarState {
     Unconsumed,
     Consumed,
-    Borrowed,
-    BorrowedMut,
+    _Borrowed,
+    _BorrowedMut,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -566,13 +566,13 @@ impl LinearityChecker {
             // Not yet consumed, consumed more than once.
             (VarState::Unconsumed, CountResult::MoreThanOne,           _,                 _,                 _) => Err(LinearityError::ConsumedMoreThanOnce { variable: name.to_string() }),
             // Read borrowed, and at most accessed through a path.
-            (VarState::Borrowed, CountResult::Zero, CountResult::Zero, CountResult::Zero, _) => Ok(()),
+            (VarState::_Borrowed, CountResult::Zero, CountResult::Zero, CountResult::Zero, _) => Ok(()),
             // Read borrowed, and either consumed or borrowed again.
-            (VarState::Borrowed,                    _,                 _,                 _,                 _) => Err(LinearityError::ReadBorrowedAndUsed { variable: name.to_string() }),
+            (VarState::_Borrowed,                    _,                 _,                 _,                 _) => Err(LinearityError::ReadBorrowedAndUsed { variable: name.to_string() }),
             // Write borrowed, unused.
-            (VarState::BorrowedMut,  CountResult::Zero, CountResult::Zero, CountResult::Zero, CountResult::Zero) => Ok(()),
+            (VarState::_BorrowedMut,  CountResult::Zero, CountResult::Zero, CountResult::Zero, CountResult::Zero) => Ok(()),
             // Write borrowed, used in some way.
-            (VarState::BorrowedMut,                 _,                 _,                 _,                  _) => Err(LinearityError::WriteBorrowedAndUsed { variable: name.to_string() }),
+            (VarState::_BorrowedMut,                 _,                 _,                 _,                  _) => Err(LinearityError::WriteBorrowedAndUsed { variable: name.to_string() }),
             // Already consumed, and unused.
             (VarState::Consumed,     CountResult::Zero, CountResult::Zero, CountResult::Zero, CountResult::Zero) => Ok(()),
             // Already consumed, and used in some way.
