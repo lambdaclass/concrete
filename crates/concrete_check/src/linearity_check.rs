@@ -179,7 +179,7 @@ impl StateTbl {
     }
 
     // Retrieve a variable's state
-    fn get_state(&mut self, var: &str) -> Option<&VarState> {
+    fn _get_state(&mut self, var: &str) -> Option<&VarState> {
         if let Some(info) = self.get_info(var) {
             Some(&info.state)
         } else {
@@ -489,7 +489,8 @@ impl LinearityChecker {
     }
 
     fn check_bindings(&mut self, depth: usize, binding: &Binding) -> Result<(), LinearityError> {
-        // Do something with the bindings        
+        // TODO Do something with the bindings        
+        println!("TODO implement Checking bindings: {:?}", binding);
         Ok(())
     }
 
@@ -607,40 +608,54 @@ impl LinearityChecker {
     }*/
 
     fn check_var_in_expr(&mut self, depth: usize, name: &str, state: &VarState, expr: &Expression) -> Result<(), LinearityError> {
-        let apps = self.count_in_expression(name, expr); // Assume count function implementation
-        let Appearances { consumed, write, read, path } = apps;
-    
-        let state = self.state_tbl.get_state(name).unwrap_or(&VarState::Unconsumed); // Assume default state
-        println!("Checking variable: {} with state: {:?} and appearances: {:?} in expression {:?}", name, state, apps, expr);
-        match (state, Appearances::partition(consumed), Appearances::partition(write), Appearances::partition(read), Appearances::partition(path)) {
-          /*(        State            Consumed           WBorrow             RBorrow           Path      )
-            (* ------------------|-------------------|-----------------|------------------|----------------)*/
-            // Not yet consumed, and at most used through immutable borrows or path reads.
-            (VarState::Unconsumed, CountResult::Zero, CountResult::Zero,                 _,                 _) => Ok(()),
-            // Not yet consumed, borrowed mutably once, and nothing else.
-            (VarState::Unconsumed, CountResult::Zero, CountResult::One,  CountResult::Zero, CountResult::Zero) => Ok(()),
-            // Not yet consumed, borrowed mutably, then either borrowed immutably or accessed through a path.
-            (VarState::Unconsumed, CountResult::Zero, CountResult::One,                  _,                 _) => Err(LinearityError::BorrowedMutUsed { variable: name.to_string() }),
-            // Not yet consumed, borrowed mutably more than once.
-            (VarState::Unconsumed, CountResult::Zero, CountResult::MoreThanOne,          _,                 _) => Err(LinearityError::BorrowedMutMoreThanOnce { variable: name.to_string() }),
-            // Not yet consumed, consumed once, and nothing else. Valid IF the loop depth matches.
-            (VarState::Unconsumed, CountResult::One,   CountResult::Zero, CountResult::Zero, CountResult::Zero) => self.consume_once(depth, name),
-            // Not yet consumed, consumed once, then either borrowed or accessed through a path.
-            (VarState::Unconsumed, CountResult::One,                   _,                 _,                 _) => Err(LinearityError::ConsumedAndUsed { variable: name.to_string() }),
-            // Not yet consumed, consumed more than once.
-            (VarState::Unconsumed, CountResult::MoreThanOne,           _,                 _,                 _) => Err(LinearityError::ConsumedMoreThanOnce { variable: name.to_string() }),
-            // Read borrowed, and at most accessed through a path.
-            (VarState::_Borrowed, CountResult::Zero, CountResult::Zero, CountResult::Zero, _) => Ok(()),
-            // Read borrowed, and either consumed or borrowed again.
-            (VarState::_Borrowed,                    _,                 _,                 _,                 _) => Err(LinearityError::ReadBorrowedAndUsed { variable: name.to_string() }),
-            // Write borrowed, unused.
-            (VarState::_BorrowedMut,  CountResult::Zero, CountResult::Zero, CountResult::Zero, CountResult::Zero) => Ok(()),
-            // Write borrowed, used in some way.
-            (VarState::_BorrowedMut,                 _,                 _,                 _,                  _) => Err(LinearityError::WriteBorrowedAndUsed { variable: name.to_string() }),
-            // Already consumed, and unused.
-            (VarState::Consumed,     CountResult::Zero, CountResult::Zero, CountResult::Zero, CountResult::Zero) => Ok(()),
-            // Already consumed, and used in some way.
-            (VarState::Consumed,                     _,                 _,                 _,                 _) => Err(LinearityError::AlreadyConsumedAndUsed { variable: name.to_string() }),
+        
+        let info = self.state_tbl.get_info(name); // Assume default state
+        if let Some(info) = info{
+            //Only checks Linearity for types of name Linear
+            // TODO improve this approach
+            if info.ty == "Linear".to_string(){
+                let apps = self.count_in_expression(name, expr); // Assume count function implementation
+                let Appearances { consumed, write, read, path } = apps;
+            
+                println!("Checking variable: {} with state: {:?} and appearances: {:?} in expression {:?}", name, state, apps, expr);
+                match (state, Appearances::partition(consumed), Appearances::partition(write), Appearances::partition(read), Appearances::partition(path)) {
+                  /*(        State            Consumed           WBorrow             RBorrow           Path      )
+                    (* ------------------|-------------------|-----------------|------------------|----------------)*/
+                    // Not yet consumed, and at most used through immutable borrows or path reads.
+                    (VarState::Unconsumed, CountResult::Zero, CountResult::Zero,                 _,                 _) => Ok(()),
+                    // Not yet consumed, borrowed mutably once, and nothing else.
+                    (VarState::Unconsumed, CountResult::Zero, CountResult::One,  CountResult::Zero, CountResult::Zero) => Ok(()),
+                    // Not yet consumed, borrowed mutably, then either borrowed immutably or accessed through a path.
+                    (VarState::Unconsumed, CountResult::Zero, CountResult::One,                  _,                 _) => Err(LinearityError::BorrowedMutUsed { variable: name.to_string() }),
+                    // Not yet consumed, borrowed mutably more than once.
+                    (VarState::Unconsumed, CountResult::Zero, CountResult::MoreThanOne,          _,                 _) => Err(LinearityError::BorrowedMutMoreThanOnce { variable: name.to_string() }),
+                    // Not yet consumed, consumed once, and nothing else. Valid IF the loop depth matches.
+                    (VarState::Unconsumed, CountResult::One,   CountResult::Zero, CountResult::Zero, CountResult::Zero) => self.consume_once(depth, name),
+                    // Not yet consumed, consumed once, then either borrowed or accessed through a path.
+                    (VarState::Unconsumed, CountResult::One,                   _,                 _,                 _) => Err(LinearityError::ConsumedAndUsed { variable: name.to_string() }),
+                    // Not yet consumed, consumed more than once.
+                    (VarState::Unconsumed, CountResult::MoreThanOne,           _,                 _,                 _) => Err(LinearityError::ConsumedMoreThanOnce { variable: name.to_string() }),
+                    // Read borrowed, and at most accessed through a path.
+                    (VarState::_Borrowed, CountResult::Zero, CountResult::Zero, CountResult::Zero, _) => Ok(()),
+                    // Read borrowed, and either consumed or borrowed again.
+                    (VarState::_Borrowed,                    _,                 _,                 _,                 _) => Err(LinearityError::ReadBorrowedAndUsed { variable: name.to_string() }),
+                    // Write borrowed, unused.
+                    (VarState::_BorrowedMut,  CountResult::Zero, CountResult::Zero, CountResult::Zero, CountResult::Zero) => Ok(()),
+                    // Write borrowed, used in some way.
+                    (VarState::_BorrowedMut,                 _,                 _,                 _,                  _) => Err(LinearityError::WriteBorrowedAndUsed { variable: name.to_string() }),
+                    // Already consumed, and unused.
+                    (VarState::Consumed,     CountResult::Zero, CountResult::Zero, CountResult::Zero, CountResult::Zero) => Ok(()),
+                    // Already consumed, and used in some way.
+                    (VarState::Consumed,                     _,                 _,                 _,                 _) => Err(LinearityError::AlreadyConsumedAndUsed { variable: name.to_string() }),
+                }
+            }
+            else{
+                //Only checks Linearity for types of name Linear
+                Ok(())
+            }
+        }
+        else {
+            Err(LinearityError::VariableNotFound { variable: name.to_string()})
         }
     }
     /*
