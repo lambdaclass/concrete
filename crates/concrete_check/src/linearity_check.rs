@@ -379,8 +379,7 @@ impl LinearityChecker {
             }
             Statement::Match(_) => {
                 todo!("do not support match statement")
-            }
-            //_ => Appearances::zero(),
+            } //_ => Appearances::zero(),
         }
     }
 
@@ -491,8 +490,7 @@ impl LinearityChecker {
             | Expression::Cast(expr, _, _) => {
                 // Deref, AsRef, and Cast are handled by just checking the inner expression
                 self.count_in_expression(name, expr)
-            }
-            // Add more cases as necessary based on the Expression types you expect
+            } // Add more cases as necessary based on the Expression types you expect
         }
     }
 
@@ -925,12 +923,11 @@ pub fn linearity_check_program(
                             "Skipping linearity check for module content: {:?}",
                             module_content
                         );
-                    }
-                    /*_ =>
-                    {
-                        println!("Skipping linearity check for module content: {:?}", module_content);
-                        ()
-                    },*/
+                    } /*_ =>
+                      {
+                          println!("Skipping linearity check for module content: {:?}", module_content);
+                          ()
+                      },*/
                 }
             }
         }
