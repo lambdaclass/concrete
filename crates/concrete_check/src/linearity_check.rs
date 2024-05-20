@@ -88,7 +88,6 @@ enum BorrowMode {
     WriteBorrow,
 }
 
-#[allow(dead_code)]
 impl Appearances {
     fn new(consumed: u32, write: u32, read: u32, path: u32) -> Self {
         Appearances { consumed, write, read, path }
@@ -110,11 +109,12 @@ impl Appearances {
         Self::new(1, 0, 0, 0)
     }
 
-    fn read_once() -> Self {
+    // When borrowed implemented
+    fn _read_once() -> Self {
         Self::new(0, 0, 1, 0)
     }
 
-    fn write_once() -> Self {
+    fn _write_once() -> Self {
         Self::new(0, 1, 0, 0)
     }
 
@@ -411,7 +411,21 @@ impl LinearityChecker {
         match expr {
             Expression::Value(value_expr, _) => {
                 // Handle value expressions, typically constant or simple values
-                Appearances::zero()
+                //Appearances::zero()
+                match value_expr {
+                    ValueExpr::ValueVar(ident, _) => {
+                        if name == ident.name {
+                            Appearances::consumed_once()
+                        } else {
+                            Appearances::zero()
+                        }
+                    },
+                    ValueExpr::Path(path) => {
+                        //path.first.name == name;
+                        Appearances::zero()
+                    },
+                    _ => Appearances::zero(),
+                }
             },
             Expression::FnCall(fn_call_op) => {
                 // Process function call arguments
@@ -622,6 +636,7 @@ impl LinearityChecker {
                 let apps = self.count_in_expression(name, expr); // Assume count function implementation
                 let Appearances { consumed, write, read, path } = apps;            
                 //println!("Checking variable: {} with state: {:?} and appearances: {:?} in expression {:?}", name, state, apps, expr);
+                println!("Checking state_tbl variable: {}: {:?} {:?} in expression {:?}", name, info, apps, expr);
                 match (state, Appearances::partition(consumed), Appearances::partition(write), Appearances::partition(read), Appearances::partition(path)) {
                   /*(        State            Consumed           WBorrow             RBorrow           Path      )
                     (* ------------------|-------------------|-----------------|------------------|----------------)*/
