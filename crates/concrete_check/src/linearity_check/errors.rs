@@ -5,52 +5,27 @@ use thiserror::Error;
 #[derive(Debug, Error, Clone)]
 pub enum LinearityError {
     #[error("Variable {variable} not consumed")]
-    NotConsumed {
-        variable: String,
-    },
+    NotConsumed { variable: String },
     #[error("Borrowed mutably and used for Variable {variable}")]
-    BorrowedMutUsed {
-        variable: String,
-    },
+    BorrowedMutUsed { variable: String },
     #[error("Variable {variable} borrowed mutably more than once")]
-    BorrowedMutMoreThanOnce {
-        variable: String,
-    },
+    BorrowedMutMoreThanOnce { variable: String },
     #[error("Variable {variable} consumed once and then used again")]
-    ConsumedAndUsed {
-        variable: String,
-    },
+    ConsumedAndUsed { variable: String },
     #[error("Variable {variable} consumed more than once")]
-    ConsumedMoreThanOnce {
-        variable: String,
-    },
+    ConsumedMoreThanOnce { variable: String },
     #[error("Variable {variable} read borrowed and used in other ways")]
-    ReadBorrowedAndUsed {
-        variable: String,
-    },
+    ReadBorrowedAndUsed { variable: String },
     #[error("Variable {variable} write borrowed and used")]
-    WriteBorrowedAndUsed {
-        variable: String,
-    },
+    WriteBorrowedAndUsed { variable: String },
     #[error("Variable {variable} already consumed and used again")]
-    AlreadyConsumedAndUsed {
-        variable: String,
-    },
+    AlreadyConsumedAndUsed { variable: String },
     #[error("Unhandled state or appearance count for Variable {variable}")]
-    UnhandledStateOrCount {
-        variable: String,
-    },
+    UnhandledStateOrCount { variable: String },
     #[error("Linearity error. Variable {variable} generated {message}")]
-    Unspecified {
-        variable: String,
-        message: String,
-    },
+    Unspecified { variable: String, message: String },
     #[error("Variable {variable} not found")]
-    VariableNotFound{
-        variable: String,
-    },
+    VariableNotFound { variable: String },
     #[error("Unhandled statement type {r#type}")]
-    UnhandledStatementType{
-        r#type: String,
-    },
+    UnhandledStatementType { r#type: String },
 }
