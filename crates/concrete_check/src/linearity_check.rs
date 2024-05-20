@@ -78,7 +78,7 @@ enum Expr {
     Embed(Vec<Expr>),
     Deref(Box<Expr>),
     SizeOf,
-    BorrowExpr(BorrowMode, String),
+    Borrow(BorrowMode, String),
     ArrayIndex(Box<Expr>),
 }
 
@@ -294,7 +294,7 @@ impl LinearityChecker {
         let vars = self.state_tbl.vars.clone(); 
         for (name, _info) in vars.iter() {
             //self.check_var_in_expr(depth, &name, &info.ty, expr)?;
-            self.check_var_in_expr(depth, &name, expr)?;
+            self.check_var_in_expr(depth, name, expr)?;
         }
         Ok(())
     }
@@ -551,10 +551,10 @@ impl LinearityChecker {
             Statement::For(for_stmt) => {
                 // Handle for loops
                 if let Some(init) = &for_stmt.init   {
-                    self.check_stmt_let(depth, &init)?;
+                    self.check_stmt_let(depth, init)?;
                 }
                 if let Some(condition) = &for_stmt.condition   {
-                    self.check_expr(depth, &condition)?;
+                    self.check_expr(depth, condition)?;
                 }
                 if let Some(post) = &for_stmt.post {
                     //TODO check assign statement
@@ -631,7 +631,7 @@ impl LinearityChecker {
         if let Some(info) = info{
             //Only checks Linearity for types of name Linear
             // TODO improve this approach
-            if info.ty == "Linear".to_string(){
+            if info.ty == *"Linear".to_string(){
                 let state = &info.state;
                 let apps = self.count_in_expression(name, expr); // Assume count function implementation
                 let Appearances { consumed, write, read, path } = apps;            
@@ -735,7 +735,7 @@ pub fn linearity_check_program(programs: &Vec<(PathBuf, String, Program)>, sessi
                         //checker.check_function(&function)?;
                         for statement in &function.body {
                             //println!("Checking linearity for function body: {:?}", function.body);                        
-                            checker.check_stmt(0, &statement)?;
+                            checker.check_stmt(0, statement)?;
                         }
                         println!("Finished checking linearity for function: {} {:?}", function.decl.name.name, checker.state_tbl);
                         //checker.linearity_check(&function)?;
@@ -743,39 +743,32 @@ pub fn linearity_check_program(programs: &Vec<(PathBuf, String, Program)>, sessi
                     ModuleDefItem::FunctionDecl(function_decl) => 
                     {
                         println!("Skipping linearity check for FunctionDecl: {:?}", module_content);
-                        ()
                     },
                     ModuleDefItem::Module(module) => 
                     { 
                         println!("Skipping linearity check for Module: {:?}", module_content);
-                        ()
                     },
                     ModuleDefItem::Struct(struc) => 
                     { 
                         //println!("Skipping linearity check for Struct: {:?}", module_content);
                         //checker.
                         checker.state_tbl.update_info(&struc.name.name, VarInfo{ty: "Struct".to_string(), depth: 0, state: VarState::Unconsumed});
-                        ()
                     },
                     ModuleDefItem::Enum(_) => 
                     { 
                         println!("Skipping linearity check for Enum: {:?}", module_content);
-                        ()
                     },
                     ModuleDefItem::Constant(_) => 
                     { 
                         println!("Skipping linearity check for Constant: {:?}", module_content);
-                        ()
                     },
                     ModuleDefItem::Union(_) => 
                     { 
                         println!("Skipping linearity check for Uinon: {:?}", module_content);
-                        ()
                     },
                     ModuleDefItem::Type(_) => 
                     { 
                         println!("Skipping linearity check for module content: {:?}", module_content);
-                        ()
                     },
                     /*_ => 
                     { 
