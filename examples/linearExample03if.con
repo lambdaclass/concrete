@@ -11,8 +11,6 @@ mod LinearExampleIfStub {
                         x: 1,
                         y: 0,
                     };
-          // FIXME Prefered initialization but not yet implemented
-          // [1, 0];
   if xy.x < xy.y{
    consume_x(&mut xy, 1);   
   }
