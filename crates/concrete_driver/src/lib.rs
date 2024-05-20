@@ -606,15 +606,16 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     };
 
     #[allow(unused_variables)]
-    //When tried to use ir representation for linearity check
-    //let linearity_result = match concrete_check::linearity_check::linearity_check_program(&program_ir, &session) {
-    let linearity_result = match concrete_check::linearity_check::linearity_check_program(&programs, &session) {
-        Ok(ir) => ir,
-        Err(error) => {
-            println!("Linearity check failed: {:#?}", error);
-            std::process::exit(1);
-        }
-    };
+    if args.check {
+        let linearity_result = match concrete_check::linearity_check::linearity_check_program(&programs, &session) {
+            Ok(ir) => ir,
+            Err(error) => {
+                //TODO improve reporting
+                println!("Linearity check failed: {:#?}", error);
+                std::process::exit(1);
+            }
+        };
+    }
 
     
     if args.ir {
