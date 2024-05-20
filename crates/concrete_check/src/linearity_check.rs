@@ -300,7 +300,7 @@ impl LinearityChecker {
     }
 
 
-    fn count_in_statements(&self, name: &str, statements: &Vec<Statement>) -> Appearances {
+    fn count_in_statements(&self, name: &str, statements: &[Statement]) -> Appearances {
         statements.iter().map(|stmt| self.count_in_statement(name, stmt)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
     }
     
@@ -317,7 +317,7 @@ impl LinearityChecker {
                 let else_apps;
                 let else_statements = &if_stmt.r#else;
                 if let Some(else_statements) = else_statements {
-                    else_apps = self.count_in_statements(name, &else_statements);
+                    else_apps = self.count_in_statements(name, else_statements);
                 } else {
                     else_apps = Appearances::zero();
                 }
@@ -377,34 +377,25 @@ impl LinearityChecker {
     }
 
     fn count_in_assign_statement(&self, name: &str, assign_stmt: &AssignStmt) -> Appearances {
-        match assign_stmt {
-            AssignStmt { target, derefs, value, span } => {
-                // Handle assignments
-                let ret = self.count_in_path_op(name, target);
-                ret.merge(&self.count_in_expression(name, value));                
-                ret
-            },
-        }
+        let AssignStmt { target, derefs, value, span } = assign_stmt;
+        // Handle assignments
+        let ret = self.count_in_path_op(name, target);
+        ret.merge(&self.count_in_expression(name, value));                
+        ret
     }
 
     fn count_in_path_op(&self, name: &str, path_op: &PathOp) -> Appearances {
-        let apps:   Appearances;
         if name == path_op.first.name{
-            apps = Appearances::path_once();
+            Appearances::path_once()
         }
         else{
-            apps = Appearances::zero();
-        }
-        apps
+            Appearances::zero()
+        }        
     }
 
     fn count_in_let_statements(&self, name: &str, let_stmt: &LetStmt) -> Appearances {
-        match let_stmt {
-            LetStmt { is_mutable, target, value, span } => {
-                // Handle let bindings, possibly involving pattern matching
-                self.count_in_expression(name, value)
-            },
-        }
+        let LetStmt { is_mutable, target, value, span } = let_stmt;
+        self.count_in_expression(name, value)                
     }
 
     fn count_in_expression(&self, name: &str, expr: &Expression) -> Appearances {
@@ -455,11 +446,11 @@ impl LinearityChecker {
             },
             Expression::BinaryOp(left, _, right) => {
                 // Handle binary operations by processing both sides
-                self.count_in_expression(name, left).merge(&&self.count_in_expression(name, right))
+                self.count_in_expression(name, left).merge(&self.count_in_expression(name, right))
             },
             Expression::StructInit(struct_init_expr) => {
                 // Handle struct initialization
-                struct_init_expr.fields.iter().map(|(_, expr)| self.count_struct_init(name, expr)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
+                struct_init_expr.fields.values().map(|expr| self.count_struct_init(name, expr)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
             },
             Expression::ArrayInit(array_init_expr) => {
                 // Handle array initializations
@@ -537,7 +528,7 @@ impl LinearityChecker {
                 self.check_expr(depth, &if_stmt.value)?;
                 self.check_stmts(depth + 1, &if_stmt.contents)?;
                 if let Some(else_block) = &if_stmt.r#else {
-                    self.check_stmts(depth + 1, &else_block)?;
+                    self.check_stmts(depth + 1, else_block)?;
                 }
                 Ok(())
             },
