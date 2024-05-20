@@ -220,6 +220,32 @@ impl StateTbl {
             0
         }
     }
+    
+    pub fn _tables_are_consistent(&self, other: &StateTbl) -> Result<(), LinearityError> {
+        for (key, value) in &self.vars {
+            if let Some(other_value) = other.vars.get(key) {
+                if value != other_value {
+                    return Err(LinearityError::StateInconsistency {
+                        message: format!("Variable '{}' state mismatch: {:?} != {:?}", key, value, other_value),
+                    });
+                }
+            } else {
+                return Err(LinearityError::StateInconsistency {
+                    message: format!("Variable '{}' not found in the other table", key),
+                });
+            }
+        }
+        // Also check for variables in `other` not present in `self`
+        for key in other.vars.keys() {
+            if !self.vars.contains_key(key) {
+                return Err(LinearityError::StateInconsistency {
+                    message: format!("Variable '{}' not found in the first table", key),
+                });
+            }
+        }
+
+        Ok(())
+    }
 }
 
 struct LinearityChecker {
