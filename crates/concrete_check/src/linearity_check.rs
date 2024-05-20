@@ -14,10 +14,11 @@ use concrete_ast::Program;
 //use concrete_ast::modules::{Module, ModuleDefItem};
 use concrete_ast::modules::ModuleDefItem;
 //use concrete_ast::functions::FunctionDef;
-use concrete_ast::expressions::{Expression, StructInitField, PathOp};
+use concrete_ast::expressions::{Expression, StructInitField, PathOp, ValueExpr};
 //use concrete_ast::statements::{Statement, AssignStmt, LetStmt, WhileStmt, ForStmt, LetStmtTarget, Binding};
 use concrete_ast::statements::{Statement, AssignStmt, LetStmt, LetStmtTarget, Binding};
 use concrete_ast::types::TypeSpec;
+//use concrete_ast::expressions::Value; // Import the missing module
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum VarState {
     Unconsumed,
@@ -170,12 +171,16 @@ impl StateTbl {
     }
     */
 
-    fn get_info(&mut self, var: &str) -> Option<&mut VarInfo> {
+    fn get_info_mut(&mut self, var: &str) -> Option<&mut VarInfo> {
         if !self.vars.contains_key(var){
             self.vars.insert(var.to_string(), VarInfo{ty: "".to_string(), depth: 0, state: VarState::Unconsumed});
             println!("Variable {} not found in state table. Inserting with default state", var);
         }
         self.vars.get_mut(var)        
+    }
+
+    fn get_info(& self, var: &str) -> Option<& VarInfo> {
+        self.vars.get(var)        
     }
 
     // Retrieve a variable's state
@@ -189,7 +194,7 @@ impl StateTbl {
 
     // Retrieve a variable's state
     fn update_state(&mut self, var: &str, new_state: &VarState){
-        let info = self.get_info(var);
+        let info = self.get_info_mut(var);
         if let Some(info) = info {
             info.state = new_state.clone();
         } 
@@ -571,13 +576,12 @@ impl LinearityChecker {
             }           
         }
     }
-
+    
     fn check_path_opt(&mut self, depth: usize, path_op: &PathOp) -> Result<(), LinearityError> {
         println!("Checking path: {:?}", path_op);
-        let var_expression = Expression::Value{ValueVar{path_op.first.clone(), path_op.span}};
-        self.check_var_in_expr(depth, &path_op.first.name, &var_expression );
-        //path_op.first.name;
-        Ok(())
+        //let var_expression = Value::new(path_op.first.clone(), path_op.span); // Use the imported module    
+        let var_expression = Expression::Value(ValueExpr::ValueVar(path_op.first.clone(), path_op.span), path_op.span);         
+        self.check_var_in_expr(depth, &path_op.first.name, &var_expression)        
     }
     /*
     fn path_op_to_expression(&self, path_op: &PathOp) -> Expression {
@@ -617,7 +621,7 @@ impl LinearityChecker {
                 let state = &info.state;
                 let apps = self.count_in_expression(name, expr); // Assume count function implementation
                 let Appearances { consumed, write, read, path } = apps;            
-                println!("Checking variable: {} with state: {:?} and appearances: {:?} in expression {:?}", name, state, apps, expr);
+                //println!("Checking variable: {} with state: {:?} and appearances: {:?} in expression {:?}", name, state, apps, expr);
                 match (state, Appearances::partition(consumed), Appearances::partition(write), Appearances::partition(read), Appearances::partition(path)) {
                   /*(        State            Consumed           WBorrow             RBorrow           Path      )
                     (* ------------------|-------------------|-----------------|------------------|----------------)*/
