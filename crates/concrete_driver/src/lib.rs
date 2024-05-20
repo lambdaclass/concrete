@@ -100,6 +100,11 @@ pub struct BuildArgs {
     /// Also output the object file.
     #[arg(long, default_value_t = false)]
     object: bool,
+
+    /// This option is for checking the program for linearity.
+    #[arg(long, default_value_t = false)]
+    check: bool,
+
 }
 
 #[derive(Parser, Debug)]
@@ -150,6 +155,11 @@ pub struct CompilerArgs {
     /// Also output the object file.
     #[arg(long, default_value_t = false)]
     object: bool,
+
+    /// This option is for checking the program for linearity.
+    #[arg(long, default_value_t = false)]
+    check: bool,
+    
 }
 
 pub fn main() -> Result<()> {
@@ -298,6 +308,7 @@ fn handle_build(
         asm,
         object,
         lib,
+        check,
     }: BuildArgs,
 ) -> Result<PathBuf> {
     match path {
@@ -325,6 +336,7 @@ fn handle_build(
                 asm,
                 object,
                 mlir,
+                check,
             };
 
             println!(
@@ -453,6 +465,7 @@ fn handle_build(
                         asm,
                         object,
                         mlir,
+                        check,
                     };
                     let object = compile(&compile_args)?;
 

@@ -140,7 +140,7 @@ impl Appearances {
     }
     
 
-    fn merge_list(appearances: Vec<Appearances>) -> Self {
+    fn _merge_list(appearances: Vec<Appearances>) -> Self {
         appearances.into_iter().fold(Self::zero(), |acc, x| acc.merge(&x))
     }
 }
