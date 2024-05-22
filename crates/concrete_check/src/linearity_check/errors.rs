@@ -28,6 +28,8 @@ pub enum LinearityError {
     VariableNotFound { variable: String },
     #[error("Inconsistent state {message}")]
     StateInconsistency { message: String },
+    #[error("Not implemented: {message}")]
+    NotImplemented{message: String},
     #[error("Unhandled statement type {r#type}")]
     UnhandledStatementType { r#type: String },
 }

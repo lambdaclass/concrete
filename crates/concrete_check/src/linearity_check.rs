@@ -11,10 +11,12 @@ use std::path::PathBuf;
 use concrete_ast::Program;
 //use concrete_ast::modules::{Module, ModuleDefItem};
 use concrete_ast::modules::ModuleDefItem;
+use concrete_ast::functions::{FunctionDecl, Param};
 //use concrete_ast::functions::FunctionDef;
 use concrete_ast::expressions::{Expression, PathOp, StructInitField, ValueExpr};
 //use concrete_ast::statements::{Statement, AssignStmt, LetStmt, WhileStmt, ForStmt, LetStmtTarget, Binding};
 use concrete_ast::statements::{AssignStmt, Binding, LetStmt, LetStmtTarget, Statement};
+
 use concrete_ast::types::TypeSpec;
 //use concrete_ast::expressions::Value; // Import the missing module
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -580,6 +582,66 @@ impl LinearityChecker {
         Ok(state_tbl.clone())
     }
 
+    //fn check_function_decl(&self, mut state_tbl: StateTbl, depth: usize, decl: &FunctionDecl) -> Result<StateTbl, Vec<LinearityError>> {
+    fn check_function_decl(&self, mut state_tbl: StateTbl, depth: usize, decl: &FunctionDecl) -> Result<StateTbl, LinearityError> {
+        // Handle function declarations
+        let FunctionDecl {
+            doc_string,
+            generic_params,
+            name,
+            params,
+            ret_type,
+            is_extern,
+            is_pub,
+            attributes,
+            span,
+        } = decl;
+        let mut errors: Vec<LinearityError> = Vec::new();
+        println!("Checking function declaration: {:?}", decl);
+        for param in params {
+            let Param { name, r#type } = param;
+            match r#type {
+                TypeSpec::Simple {
+                    name: variable_type,
+                    qualifiers,
+                    span,
+                } => {
+                    let var_expression = Expression::Value(
+                        ValueExpr::ValueVar(name.clone(), *span), *span);
+                    println!("Checking parameter: {:?}", param);
+                    state_tbl = self.check_var_in_expr(state_tbl, depth, &name.name, &var_expression)?;
+                }
+                TypeSpec::Generic {
+                    name: variable_type,
+                    qualifiers,
+                    type_params,
+                    span,
+                } => {
+                    errors.push(LinearityError::NotImplemented {
+                        message: "Generic type parameters not yet supported".to_string(),
+                    })
+                }
+                TypeSpec::Array {
+                    of_type,
+                    size,
+                    qualifiers,
+                    span,
+                } => {
+                    let array_type = "Array<".to_string() + &of_type.get_name() + ">";
+                    errors.push(LinearityError::NotImplemented {
+                        message: "Generic type parameters not yet supported".to_string(),
+                    })
+                }
+            }
+        }
+        if errors.len() > 0 {
+            //FIXME replace with Vec<LinearityError>
+            Err(errors[0].clone())
+        } else {
+            Ok(state_tbl)
+        }
+    }
+
     fn check_stmts(& self, mut state_tbl: StateTbl, depth: usize, stmts: &Vec<Statement>) -> Result<StateTbl, LinearityError> {
         for stmt in stmts {
             state_tbl = self.check_stmt(state_tbl, depth, stmt)?;
@@ -589,11 +651,6 @@ impl LinearityChecker {
 
     fn check_stmt(&self, mut state_tbl: StateTbl, depth: usize, stmt: &Statement) -> Result<StateTbl, LinearityError> {
         match stmt {
-            /*
-            Statement::Expression(expr) => {
-                // Handle expressions (e.g., variable assignments, function calls)
-                self.check_expr(depth, expr)
-            },*/
             Statement::Let(binding) => {
                 // Handle let bindings, possibly involving pattern matching
                 self.check_stmt_let(state_tbl, depth, binding)
@@ -651,8 +708,6 @@ impl LinearityChecker {
                 } = assign_stmt;
                 println!("Checking assignment: {:?}", assign_stmt);
                 state_tbl = self.check_path_opt(state_tbl, depth, target)?;
-                //FIXME add target
-                //state_tbl = self.check_expr(state_tbl, depth, &self.path_op_to_expression(target))?;
                 state_tbl = self.check_expr(state_tbl, depth, value)?;
                 /*let new_state_tbl = self.check_expr(state_tbl, depth, value);
                 if let Ok(new_state_tbl) = new_state_tbl{
@@ -852,6 +907,9 @@ pub fn linearity_check_program(
                     ModuleDefItem::Function(function) => {
                         //println!("Checking linearity for function: {:?}", function);
                         //checker.check_function(&function)?;
+                        //FIXME check function function.decl
+                        state_tbl = checker.check_function_decl(state_tbl, 0, &function.decl)?; 
+                        //function.decl
                         for statement in &function.body {
                             //println!("Checking linearity for function body: {:?}", function.body);
                             state_tbl = checker.check_stmt(state_tbl, 0, statement)?;
