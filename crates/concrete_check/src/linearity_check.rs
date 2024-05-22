@@ -606,7 +606,7 @@ impl LinearityChecker {
             attributes,
             span,
         } = decl;
-        let mut errors: Vec<LinearityError> = Vec::new();
+        let errors: Vec<LinearityError> = Vec::new();
         println!("Checking function declaration: {:?}", decl);
         let mut params_vec: Vec<(String, String)> = Vec::new();
         for param in params {
@@ -641,6 +641,8 @@ impl LinearityChecker {
             params_vec.push((name.clone(), r#type));
         }
         state_tbl.init(params_vec, depth);
+        // Only initialize parameters in table. Not consume them
+        /* 
         for param in params {
             let Param { name, r#type } = param;            
             match r#type {
@@ -678,6 +680,7 @@ impl LinearityChecker {
                 }
             }
         }
+        */
         if errors.len() > 0 {
             //FIXME replace with Vec<LinearityError>
             Err(errors[0].clone())
