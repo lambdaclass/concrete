@@ -163,18 +163,28 @@ impl StateTbl {
         }
     }
 
+    fn init(&mut self, vars: Vec<(String, String)>, depth: usize) {
+        for (name, ty) in vars {
+            self.vars.insert(
+                name.to_string(),
+                VarInfo {
+                    ty: ty.to_string(),
+                    depth,
+                    state: VarState::Unconsumed,
+                },
+            );
+        };
+    }
     // Example of updating the state table
     fn update_info(&mut self, var: &str, info: VarInfo) {
         self.vars.insert(var.to_string(), info);
     }
 
-    /*
     // Remove a variable from the state table
-    fn remove_entry(&mut self, var: &str) {
+    fn _remove_entry(&mut self, var: &str) {
         self.vars.remove(var);
     }
-    */
-
+    
     fn get_info_mut(&mut self, var: &str) -> Option<&mut VarInfo> {
         if !self.vars.contains_key(var) {
             self.vars.insert(
@@ -598,8 +608,41 @@ impl LinearityChecker {
         } = decl;
         let mut errors: Vec<LinearityError> = Vec::new();
         println!("Checking function declaration: {:?}", decl);
+        let mut params_vec: Vec<(String, String)> = Vec::new();
         for param in params {
-            let Param { name, r#type } = param;
+            let Param { name, r#type } = param;            
+            let name = name.name.clone();
+            let r#type = 
+            match r#type {
+                TypeSpec::Simple {
+                    name: variable_type,
+                    qualifiers,
+                    span,
+                } => {
+                   variable_type.name.clone()
+                }
+                TypeSpec::Generic {
+                    name: variable_type,
+                    qualifiers,
+                    type_params,
+                    span,
+                } => {
+                    variable_type.name.clone()
+                }
+                TypeSpec::Array {
+                    of_type,
+                    size,
+                    qualifiers,
+                    span,
+                } => {
+                    "Array<".to_string() + &of_type.get_name() + ">"
+                }                
+            };
+            params_vec.push((name.clone(), r#type));
+        }
+        state_tbl.init(params_vec, depth);
+        for param in params {
+            let Param { name, r#type } = param;            
             match r#type {
                 TypeSpec::Simple {
                     name: variable_type,
@@ -617,9 +660,10 @@ impl LinearityChecker {
                     type_params,
                     span,
                 } => {
-                    errors.push(LinearityError::NotImplemented {
-                        message: "Generic type parameters not yet supported".to_string(),
-                    })
+                    let var_expression = Expression::Value(
+                        ValueExpr::ValueVar(name.clone(), *span), *span);
+                    println!("Checking parameter: {:?}", param);
+                    state_tbl = self.check_var_in_expr(state_tbl, depth, &name.name, &var_expression)?;
                 }
                 TypeSpec::Array {
                     of_type,
