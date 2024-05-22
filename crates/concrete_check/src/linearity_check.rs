@@ -17,7 +17,7 @@ use concrete_ast::expressions::{Expression, PathOp, StructInitField, ValueExpr};
 use concrete_ast::statements::{AssignStmt, Binding, LetStmt, LetStmtTarget, Statement};
 use concrete_ast::types::TypeSpec;
 //use concrete_ast::expressions::Value; // Import the missing module
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum VarState {
     Unconsumed,
     Consumed,
@@ -27,12 +27,12 @@ enum VarState {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct VarInfo {
-    ty: String, //TODO Define 'Type' as needed
+    ty: String, //TODO Define 'Type' as a struct or enum?
     depth: usize,
     state: VarState,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum CountResult {
     Zero,
     One,
@@ -249,7 +249,7 @@ impl StateTbl {
 }
 
 struct LinearityChecker {
-    state_tbl: StateTbl,
+    //state_tbl: StateTbl,
 }
 
 #[allow(dead_code)]
@@ -257,41 +257,19 @@ struct LinearityChecker {
 impl LinearityChecker {
     fn new() -> Self {
         LinearityChecker {
-            state_tbl: StateTbl::new(),
+            //state_tbl: StateTbl::new(),
         }
     }
 
-    //TODO remove
-    /*
-    fn linearity_check(&mut self, program: &FunctionDef) -> Result<(), LinearityError> {
-        // Assume Program is a struct that represents the entire program.
-        for statement in &program.body {
-            self.check_stmt(0, &statement);
-        }
-        Ok(())
-    }
-    */
-    /*
-    fn check_function(&mut self, function: &FnBody) -> Result<(), LinearityError> {
-        // Logic to check linearity within a function
-        // This may involve iterating over statements and expressions, similar to OCaml's recursion.
-        for basic_block in &function.basic_blocks{
-            for statement in &basic_block.statements {
-                self.check_stmt(0, &statement)?;
-            }
-
-        }
-        Ok(())
-    }*/
-
-    fn consume_once(&mut self, depth: usize, name: &str) -> Result<(), LinearityError> {
-        let loop_depth = self.state_tbl.get_loop_depth(name);
+    
+    fn consume_once(& self, mut state_tbl: StateTbl, depth: usize, name: &str) -> Result<StateTbl, LinearityError> {
+        let loop_depth = state_tbl.get_loop_depth(name);
         println!(
             "Consuming variable: {} depth {} loop_depth {}",
             name, depth, loop_depth
         );
-        if depth == self.state_tbl.get_loop_depth(name) {
-            self.state_tbl.update_state(name, &VarState::Consumed);
+        if depth == state_tbl.get_loop_depth(name) {
+            state_tbl.update_state(name, &VarState::Consumed);
             println!("Consumed variable: {}", name);
             /*
             let mut state = self.state_tbl.get_state(name);
@@ -302,7 +280,7 @@ impl LinearityChecker {
                 //self.state_tbl.update_state(name, VarInfo{"".to_string(), depth, VarState::Unconsumed});
             }*/
 
-            Ok(())
+            Ok(state_tbl)
         } else {
             Err(LinearityError::ConsumedMoreThanOnce {
                 variable: name.to_string(),
@@ -310,16 +288,16 @@ impl LinearityChecker {
         }
     }
 
-    fn check_expr(&mut self, depth: usize, expr: &Expression) -> Result<(), LinearityError> {
+    fn check_expr(& self, mut state_tbl:StateTbl, depth: usize, expr: &Expression) -> Result<StateTbl, LinearityError> {
         // Assuming you have a method to get all variable names and types
         //let vars = &mut self.state_tbl.vars;
         //TODO check if we can avoid cloning
-        let vars = self.state_tbl.vars.clone();
+        let vars = state_tbl.vars.clone();
         for (name, _info) in vars.iter() {
             //self.check_var_in_expr(depth, &name, &info.ty, expr)?;
-            self.check_var_in_expr(depth, name, expr)?;
+            state_tbl = self.check_var_in_expr(state_tbl, depth, name, expr).unwrap();
         }
-        Ok(())
+        Ok(state_tbl)
     }
 
     fn count_in_statements(&self, name: &str, statements: &[Statement]) -> Appearances {
@@ -525,7 +503,7 @@ impl LinearityChecker {
         self.count_in_expression(name, &struct_init.value)
     }
 
-    fn check_stmt_let(&mut self, depth: usize, binding: &LetStmt) -> Result<(), LinearityError> {
+    fn check_stmt_let(&self, mut state_tbl: StateTbl, depth: usize, binding: &LetStmt) -> Result<StateTbl, LinearityError> {
         // Handle let bindings, possibly involving pattern matching
         let LetStmt {
             is_mutable,
@@ -541,7 +519,7 @@ impl LinearityChecker {
                         qualifiers,
                         span,
                     } => {
-                        self.state_tbl.update_info(
+                        state_tbl.update_info(
                             &name.name,
                             VarInfo {
                                 ty: variable_type.name.clone(),
@@ -556,7 +534,7 @@ impl LinearityChecker {
                         type_params,
                         span,
                     } => {
-                        self.state_tbl.update_info(
+                        state_tbl.update_info(
                             &name.name,
                             VarInfo {
                                 ty: variable_type.name.clone(),
@@ -572,7 +550,7 @@ impl LinearityChecker {
                         span,
                     } => {
                         let array_type = "Array<".to_string() + &of_type.get_name() + ">";
-                        self.state_tbl.update_info(
+                        state_tbl.update_info(
                             &name.name,
                             VarInfo {
                                 ty: array_type,
@@ -582,31 +560,34 @@ impl LinearityChecker {
                         );
                     }
                 }
-                self.check_var_in_expr(depth, &name.name, value)
+                self.check_var_in_expr(state_tbl, depth, &name.name, value)
             }
             LetStmtTarget::Destructure(bindings) => {
                 for binding in bindings {
-                    self.check_bindings(depth, binding)?;
+                    let new_state_tbl = self.check_bindings(&state_tbl, depth, binding);
+                    if let Ok(new_state_tbl) = new_state_tbl{
+                        state_tbl = new_state_tbl;
+                    }
                 }
-                Ok(())
+                Ok(state_tbl)
             }
         }
     }
 
-    fn check_bindings(&mut self, depth: usize, binding: &Binding) -> Result<(), LinearityError> {
+    fn check_bindings(&self, state_tbl: &StateTbl, depth: usize, binding: &Binding) -> Result<StateTbl, LinearityError> {
         // TODO Do something with the bindings
         println!("TODO implement Checking bindings: {:?}", binding);
-        Ok(())
+        Ok(state_tbl.clone())
     }
 
-    fn check_stmts(&mut self, depth: usize, stmts: &Vec<Statement>) -> Result<(), LinearityError> {
+    fn check_stmts(& self, mut state_tbl: StateTbl, depth: usize, stmts: &Vec<Statement>) -> Result<StateTbl, LinearityError> {
         for stmt in stmts {
-            self.check_stmt(depth, stmt)?;
+            state_tbl = self.check_stmt(state_tbl, depth, stmt)?;
         }
-        Ok(())
+        Ok(state_tbl)
     }
 
-    fn check_stmt(&mut self, depth: usize, stmt: &Statement) -> Result<(), LinearityError> {
+    fn check_stmt(&self, mut state_tbl: StateTbl, depth: usize, stmt: &Statement) -> Result<StateTbl, LinearityError> {
         match stmt {
             /*
             Statement::Expression(expr) => {
@@ -615,38 +596,50 @@ impl LinearityChecker {
             },*/
             Statement::Let(binding) => {
                 // Handle let bindings, possibly involving pattern matching
-                self.check_stmt_let(depth, binding)
+                self.check_stmt_let(state_tbl, depth, binding)
             }
             //Statement::If(cond, then_block, else_block) => {
             Statement::If(if_stmt) => {
                 // Handle conditional statements
-                self.check_expr(depth, &if_stmt.value)?;
-                self.check_stmts(depth + 1, &if_stmt.contents)?;
+                state_tbl = self.check_expr(state_tbl, depth, &if_stmt.value)?;
+                state_tbl = self.check_stmts(state_tbl, depth + 1, &if_stmt.contents)?;
                 if let Some(else_block) = &if_stmt.r#else {
-                    self.check_stmts(depth + 1, else_block)?;
+                    state_tbl = self.check_stmts(state_tbl, depth + 1, else_block)?;
                 }
-                Ok(())
+                Ok(state_tbl)
             }
             //Statement::While(cond, block) => {
             Statement::While(while_stmt) => {
                 // Handle while loops
-                self.check_expr(depth, &while_stmt.value)?;
-                self.check_stmts(depth + 1, &while_stmt.contents)
+                state_tbl = self.check_expr(state_tbl, depth, &while_stmt.value)?;
+                state_tbl = self.check_stmts(state_tbl, depth + 1, &while_stmt.contents)?;
+                /* 
+                let new_state_tbl = self.check_stmts(state_tbl, depth + 1, &while_stmt.contents);
+                if let Ok(new_state_tbl) = new_state_tbl{
+                    state_tbl = new_state_tbl.clone();
+                }*/
+                Ok(state_tbl)
             }
             //Statement::For(init, cond, post, block) => {
             Statement::For(for_stmt) => {
                 // Handle for loops
                 if let Some(init) = &for_stmt.init {
-                    self.check_stmt_let(depth, init)?;
+                    state_tbl = self.check_stmt_let(state_tbl, depth, init)?;
                 }
                 if let Some(condition) = &for_stmt.condition {
-                    self.check_expr(depth, condition)?;
+                    state_tbl = self.check_expr(state_tbl, depth, condition)?;
                 }
                 if let Some(post) = &for_stmt.post {
                     //TODO check assign statement
                     //self.check_stmt_assign(depth, post)?;
                 }
-                self.check_stmts(depth + 1, &for_stmt.contents)
+                state_tbl = self.check_stmts(state_tbl, depth + 1, &for_stmt.contents)?;
+                /* 
+                let new_state_tbl = self.check_stmts(state_tbl, depth + 1, &for_stmt.contents);
+                if let Ok(new_state_tbl) = new_state_tbl{
+                    state_tbl = new_state_tbl;
+                }*/
+                Ok(state_tbl)
             }
             Statement::Assign(assign_stmt) => {
                 // Handle assignments
@@ -657,23 +650,41 @@ impl LinearityChecker {
                     span,
                 } = assign_stmt;
                 println!("Checking assignment: {:?}", assign_stmt);
-                self.check_path_opt(depth, target)?;
-                //self.check_expr(depth, &self.path_op_to_expression(target))?;
-                self.check_expr(depth, value)
+                state_tbl = self.check_path_opt(state_tbl, depth, target)?;
+                //FIXME add target
+                //state_tbl = self.check_expr(state_tbl, depth, &self.path_op_to_expression(target))?;
+                state_tbl = self.check_expr(state_tbl, depth, value)?;
+                /*let new_state_tbl = self.check_expr(state_tbl, depth, value);
+                if let Ok(new_state_tbl) = new_state_tbl{
+                    state_tbl = new_state_tbl;
+                }*/
+                state_tbl = self.check_expr(state_tbl, depth, value)?;
+                /*
+                let new_state_tbl = self.check_expr(state_tbl, depth, value);
+                if let Ok(new_state_tbl) = new_state_tbl{
+                    state_tbl = new_state_tbl;
+                }*/                
+                Ok(state_tbl)
             }
             Statement::Return(return_stmt) => {
                 if let Some(value) = &return_stmt.value {
-                    self.check_expr(depth, value)
+                    state_tbl = self.check_expr(state_tbl, depth, value)?;
+                    /*
+                    let new_state_tbl = self.check_expr(state_tbl, depth, value);
+                    if let Ok(new_state_tbl) = new_state_tbl{
+                        state_tbl = new_state_tbl;
+                    }*/
+                    Ok(state_tbl)
                 } else {
-                    Ok(())
+                    Ok(state_tbl)
                 }
             }
             Statement::FnCall(fn_call_op) => {
                 // Process function call arguments
                 for arg in &fn_call_op.args {
-                    self.check_expr(depth, arg)?;
+                    state_tbl = self.check_expr(state_tbl, depth, arg)?;
                 }
-                Ok(())
+                Ok(state_tbl)
             }
             Statement::Match(_) => {
                 println!("Skipping linearity check for statement type: \n{:?}", stmt);
@@ -682,50 +693,24 @@ impl LinearityChecker {
         }
     }
 
-    fn check_path_opt(&mut self, depth: usize, path_op: &PathOp) -> Result<(), LinearityError> {
+    fn check_path_opt(&self, state_tbl: StateTbl, depth: usize, path_op: &PathOp) -> Result<StateTbl, LinearityError> {
         println!("Checking path: {:?}", path_op);
         //let var_expression = Value::new(path_op.first.clone(), path_op.span); // Use the imported module
         let var_expression = Expression::Value(
             ValueExpr::ValueVar(path_op.first.clone(), path_op.span),
             path_op.span,
         );
-        self.check_var_in_expr(depth, &path_op.first.name, &var_expression)
+        self.check_var_in_expr(state_tbl, depth, &path_op.first.name, &var_expression)
     }
-    /*
-    fn path_op_to_expression(&self, path_op: &PathOp) -> Expression {
-        // Convert the first identifier part of the path into an Expression
-        let mut expr = Expression::Variable(path_op.first.clone());
-
-        // Process additional path segments
-        for segment in &path_op.extra {
-            match segment {
-                PathSegment::Field(field) => {
-                    expr = Expression::Field(Box::new(expr), field.clone());
-                },
-                PathSegment::Index(index) => {
-                    // Assuming index is an Expression
-                    expr = Expression::Index(Box::new(expr), Box::new(Expression::Variable(index.clone())));
-                },
-                // Add other cases as necessary
-            }
-        }
-
-        expr
-    }
-
-    fn build_complex_expression_from_path(&self, components: &[PathComponent]) -> Expression {
-        // Construct a complex expression from path components
-        // This is just a placeholder, real implementation will depend on your specific case
-        Expression::Variable(components.iter().map(|c| c.to_string()).collect::<Vec<_>>().join("."))
-    }*/
 
     fn check_var_in_expr(
-        &mut self,
+        & self,
+        state_tbl: StateTbl,
         depth: usize,
         name: &str,
         expr: &Expression,
-    ) -> Result<(), LinearityError> {
-        let info = self.state_tbl.get_info(name); // Assume default state
+    ) -> Result<StateTbl, LinearityError> {
+        let info = state_tbl.get_info(name); // Assume default state
         if let Some(info) = info {
             //Only checks Linearity for types of name Linear
             // TODO improve this approach
@@ -753,7 +738,7 @@ impl LinearityChecker {
                     /*(        State            Consumed           WBorrow             RBorrow           Path      )
                     (* ------------------|-------------------|-----------------|------------------|----------------)*/
                     // Not yet consumed, and at most used through immutable borrows or path reads.
-                    (VarState::Unconsumed, CountResult::Zero, CountResult::Zero, _, _) => Ok(()),
+                    (VarState::Unconsumed, CountResult::Zero, CountResult::Zero, _, _) => Ok(state_tbl),
                     // Not yet consumed, borrowed mutably once, and nothing else.
                     (
                         VarState::Unconsumed,
@@ -761,7 +746,7 @@ impl LinearityChecker {
                         CountResult::One,
                         CountResult::Zero,
                         CountResult::Zero,
-                    ) => Ok(()),
+                    ) => Ok(state_tbl),
                     // Not yet consumed, borrowed mutably, then either borrowed immutably or accessed through a path.
                     (VarState::Unconsumed, CountResult::Zero, CountResult::One, _, _) => {
                         Err(LinearityError::BorrowedMutUsed {
@@ -781,7 +766,7 @@ impl LinearityChecker {
                         CountResult::Zero,
                         CountResult::Zero,
                         CountResult::Zero,
-                    ) => self.consume_once(depth, name),
+                    ) => self.consume_once(state_tbl, depth, name),
                     // Not yet consumed, consumed once, then either borrowed or accessed through a path.
                     (VarState::Unconsumed, CountResult::One, _, _, _) => {
                         Err(LinearityError::ConsumedAndUsed {
@@ -801,7 +786,7 @@ impl LinearityChecker {
                         CountResult::Zero,
                         CountResult::Zero,
                         _,
-                    ) => Ok(()),
+                    ) => Ok(state_tbl),
                     // Read borrowed, and either consumed or borrowed again.
                     (VarState::_Borrowed, _, _, _, _) => Err(LinearityError::ReadBorrowedAndUsed {
                         variable: name.to_string(),
@@ -813,7 +798,7 @@ impl LinearityChecker {
                         CountResult::Zero,
                         CountResult::Zero,
                         CountResult::Zero,
-                    ) => Ok(()),
+                    ) => Ok(state_tbl),
                     // Write borrowed, used in some way.
                     (VarState::_BorrowedMut, _, _, _, _) => {
                         Err(LinearityError::WriteBorrowedAndUsed {
@@ -827,7 +812,7 @@ impl LinearityChecker {
                         CountResult::Zero,
                         CountResult::Zero,
                         CountResult::Zero,
-                    ) => Ok(()),
+                    ) => Ok(state_tbl),
                     // Already consumed, and used in some way.
                     (VarState::Consumed, _, _, _, _) => {
                         Err(LinearityError::AlreadyConsumedAndUsed {
@@ -837,7 +822,7 @@ impl LinearityChecker {
                 }
             } else {
                 //Only checks Linearity for types of name Linear
-                Ok(())
+                Ok(state_tbl)
             }
         } else {
             Err(LinearityError::VariableNotFound {
@@ -845,42 +830,7 @@ impl LinearityChecker {
             })
         }
     }
-    /*
-    fn check_var_in_expr(&mut self, depth: u32, name: &str, state: &VarState, expr: &Expression) -> Result<(), LinearityError> {
-        let apps = self.count_in_expression(name, expr); // Assume count function implementation
-        let Appearances { consumed, write, read, path } = apps;
-
-        //let state = self.state_tbl.get_state(name).unwrap_or(&VarState::Unconsumed); // Assume default state
-        let state = self.state_tbl.get_state(name);// Assume default state
-        if let Some(state) = state{
-            println!("Checking variable: {} with state: {:?} and appearances: {:?}", name, state, apps);
-            match (state, Appearances::partition(consumed), Appearances::partition(write), Appearances::partition(read), Appearances::partition(path)) {
-                /*(        State            Consumed           WBorrow             RBorrow           Path      )
-                (* ------------------|-------------------|-----------------|------------------|----------------)*/
-                //(VarState::Unconsumed, CountResult::Zero, CountResult::Zero,                _,                 _) => Ok(state_tbl.clone()),
-                //(VarState::Unconsumed, CountResult::Zero, CountResult::One, CountResult::Zero, CountResult::Zero) => Ok(state_tbl.clone()),
-                (VarState::Unconsumed, CountResult::Zero, CountResult::Zero,                 _,                 _) => Ok(()),
-                (VarState::Unconsumed, CountResult::Zero, CountResult::One, CountResult::Zero, CountResult::Zero) => Ok(()),
-                (VarState::Unconsumed, CountResult::Zero, CountResult::MoreThanOne,          _,                 _) =>
-                    Err(LinearityError::BorrowedMutMoreThanOnce { variable: name.to_string() }),
-                (VarState::Unconsumed, CountResult::One,                         _,          _,                 _) =>
-                    Err(LinearityError::ConsumedAndUsed { variable: name.to_string() }),
-                (VarState::Unconsumed, CountResult::MoreThanOne,                 _,          _,                 _) =>
-                    Err(LinearityError::ConsumedMoreThanOnce { variable: name.to_string() }),
-                (VarState::Borrowed,                  _,                         _,          _,                 _) =>
-                    Err(LinearityError::ReadBorrowedAndUsed { variable: name.to_string() }),
-                (VarState::BorrowedMut,               _,                         _,          _,                 _) =>
-                    Err(LinearityError::WriteBorrowedAndUsed { variable: name.to_string() }),
-                (VarState::Consumed,                  _,                         _,          _,                 _) =>
-                    Err(LinearityError::AlreadyConsumedAndUsed { variable: name.to_string() }),
-                _ => Err(LinearityError::UnhandledStateOrCount { variable: name.to_string() }),
-            }
-        }
-        else {
-            Err(LinearityError::VariableNotFound { variable: name.to_string() })
-        }
-
-    }*/
+    
 }
 
 //#[cfg(feature = "linearity")]
@@ -891,23 +841,24 @@ pub fn linearity_check_program(
     session: &Session,
 ) -> Result<String, LinearityError> {
     println!("Starting linearity check");
-    let mut checker = LinearityChecker::new();
+    let checker = LinearityChecker::new();
     for (path, name, program) in programs {
         println!("Checking linearity for program: {}", name);
         for module in &program.modules {
             println!("Checking linearity for module: {}", module.name.name);
             for module_content in &module.contents {
+                let mut state_tbl = StateTbl::new();
                 match module_content {
                     ModuleDefItem::Function(function) => {
                         //println!("Checking linearity for function: {:?}", function);
                         //checker.check_function(&function)?;
                         for statement in &function.body {
                             //println!("Checking linearity for function body: {:?}", function.body);
-                            checker.check_stmt(0, statement)?;
+                            state_tbl = checker.check_stmt(state_tbl, 0, statement)?;
                         }
                         println!(
                             "Finished checking linearity for function: {} {:?}",
-                            function.decl.name.name, checker.state_tbl
+                            function.decl.name.name, state_tbl
                         );
                         //checker.linearity_check(&function)?;
                     }
@@ -923,7 +874,7 @@ pub fn linearity_check_program(
                     ModuleDefItem::Struct(struc) => {
                         //println!("Skipping linearity check for Struct: {:?}", module_content);
                         //checker.
-                        checker.state_tbl.update_info(
+                        state_tbl.update_info(
                             &struc.name.name,
                             VarInfo {
                                 ty: "Struct".to_string(),
