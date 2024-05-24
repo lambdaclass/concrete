@@ -348,6 +348,7 @@ dependencies = [
  "concrete_session",
  "itertools 0.12.1",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]

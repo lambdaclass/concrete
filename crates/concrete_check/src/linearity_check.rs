@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+
+
+
 use concrete_session::Session;
 
 use self::errors::LinearityError;
@@ -185,6 +188,7 @@ impl StateTbl {
         self.vars.remove(var);
     }
     
+
     fn get_info_mut(&mut self, var: &str) -> Option<&mut VarInfo> {
         if !self.vars.contains_key(var) {
             self.vars.insert(
@@ -195,7 +199,7 @@ impl StateTbl {
                     state: VarState::Unconsumed,
                 },
             );
-            println!(
+            tracing::debug!(
                 "Variable {} not found in state table. Inserting with default state",
                 var
             );
@@ -276,13 +280,13 @@ impl LinearityChecker {
     
     fn consume_once(& self, mut state_tbl: StateTbl, depth: usize, name: &str) -> Result<StateTbl, LinearityError> {
         let loop_depth = state_tbl.get_loop_depth(name);
-        println!(
+        tracing::debug!(
             "Consuming variable: {} depth {} loop_depth {}",
             name, depth, loop_depth
         );
         if depth == state_tbl.get_loop_depth(name) {
             state_tbl.update_state(name, &VarState::Consumed);
-            println!("Consumed variable: {}", name);
+            tracing::debug!("Consumed variable: {}", name);
             /*
             let mut state = self.state_tbl.get_state(name);
             if let Some(state) = state {
@@ -511,7 +515,7 @@ impl LinearityChecker {
     }
 
     fn count_struct_init(&self, name: &str, struct_init: &StructInitField) -> Appearances {
-        println!("Checking struct init: {:?}", struct_init);
+        tracing::debug!("Checking struct init: {:?}", struct_init);
         self.count_in_expression(name, &struct_init.value)
     }
 
@@ -588,7 +592,7 @@ impl LinearityChecker {
 
     fn check_bindings(&self, state_tbl: &StateTbl, depth: usize, binding: &Binding) -> Result<StateTbl, LinearityError> {
         // TODO Do something with the bindings
-        println!("TODO implement Checking bindings: {:?}", binding);
+        tracing::debug!("TODO implement Checking bindings: {:?}", binding);
         Ok(state_tbl.clone())
     }
 
@@ -607,7 +611,7 @@ impl LinearityChecker {
             span,
         } = decl;
         let errors: Vec<LinearityError> = Vec::new();
-        println!("Checking function declaration: {:?}", decl);
+        tracing::debug!("Checking function declaration: {:?}", decl);
         let mut params_vec: Vec<(String, String)> = Vec::new();
         for param in params {
             let Param { name, r#type } = param;            
@@ -653,7 +657,7 @@ impl LinearityChecker {
                 } => {
                     let var_expression = Expression::Value(
                         ValueExpr::ValueVar(name.clone(), *span), *span);
-                    println!("Checking parameter: {:?}", param);
+                    tracing::debug!("Checking parameter: {:?}", param);
                     state_tbl = self.check_var_in_expr(state_tbl, depth, &name.name, &var_expression)?;
                 }
                 TypeSpec::Generic {
@@ -664,7 +668,7 @@ impl LinearityChecker {
                 } => {
                     let var_expression = Expression::Value(
                         ValueExpr::ValueVar(name.clone(), *span), *span);
-                    println!("Checking parameter: {:?}", param);
+                    tracing::debug!("Checking parameter: {:?}", param);
                     state_tbl = self.check_var_in_expr(state_tbl, depth, &name.name, &var_expression)?;
                 }
                 TypeSpec::Array {
@@ -753,7 +757,7 @@ impl LinearityChecker {
                     value,
                     span,
                 } = assign_stmt;
-                println!("Checking assignment: {:?}", assign_stmt);
+                tracing::debug!("Checking assignment: {:?}", assign_stmt);
                 state_tbl = self.check_path_opt(state_tbl, depth, target)?;
                 state_tbl = self.check_expr(state_tbl, depth, value)?;
                 /*let new_state_tbl = self.check_expr(state_tbl, depth, value);
@@ -789,14 +793,14 @@ impl LinearityChecker {
                 Ok(state_tbl)
             }
             Statement::Match(_) => {
-                println!("Skipping linearity check for statement type: \n{:?}", stmt);
+                tracing::debug!("Skipping linearity check for statement type: \n{:?}", stmt);
                 todo!()
             }
         }
     }
 
     fn check_path_opt(&self, state_tbl: StateTbl, depth: usize, path_op: &PathOp) -> Result<StateTbl, LinearityError> {
-        println!("Checking path: {:?}", path_op);
+        tracing::debug!("Checking path: {:?}", path_op);
         //let var_expression = Value::new(path_op.first.clone(), path_op.span); // Use the imported module
         let var_expression = Expression::Value(
             ValueExpr::ValueVar(path_op.first.clone(), path_op.span),
@@ -825,8 +829,8 @@ impl LinearityChecker {
                     read,
                     path,
                 } = apps;
-                //println!("Checking variable: {} with state: {:?} and appearances: {:?} in expression {:?}", name, state, apps, expr);
-                println!(
+                //tracing::debug!("Checking variable: {} with state: {:?} and appearances: {:?} in expression {:?}", name, state, apps, expr);
+                tracing::debug!(
                     "Checking state_tbl variable: {}: {:?} {:?} in expression {:?}",
                     name, info, apps, expr
                 );
@@ -942,42 +946,42 @@ pub fn linearity_check_program(
     programs: &Vec<(PathBuf, String, Program)>,
     session: &Session,
 ) -> Result<String, LinearityError> {
-    println!("Starting linearity check");
+    tracing::debug!("Starting linearity check");
     let checker = LinearityChecker::new();
     for (path, name, program) in programs {
-        println!("Checking linearity for program: {}", name);
+        tracing::debug!("Checking linearity for program: {}", name);
         for module in &program.modules {
-            println!("Checking linearity for module: {}", module.name.name);
+            tracing::debug!("Checking linearity for module: {}", module.name.name);
             for module_content in &module.contents {
                 let mut state_tbl = StateTbl::new();
                 match module_content {
                     ModuleDefItem::Function(function) => {
-                        //println!("Checking linearity for function: {:?}", function);
+                        //tracing::debug!("Checking linearity for function: {:?}", function);
                         //checker.check_function(&function)?;
                         //FIXME check function function.decl
                         state_tbl = checker.check_function_decl(state_tbl, 0, &function.decl)?; 
                         //function.decl
                         for statement in &function.body {
-                            //println!("Checking linearity for function body: {:?}", function.body);
+                            //tracing::debug!("Checking linearity for function body: {:?}", function.body);
                             state_tbl = checker.check_stmt(state_tbl, 0, statement)?;
                         }
-                        println!(
+                        tracing::debug!(
                             "Finished checking linearity for function: {} {:?}",
                             function.decl.name.name, state_tbl
                         );
                         //checker.linearity_check(&function)?;
                     }
                     ModuleDefItem::FunctionDecl(function_decl) => {
-                        println!(
+                        tracing::debug!(
                             "Skipping linearity check for FunctionDecl: {:?}",
                             module_content
                         );
                     }
                     ModuleDefItem::Module(module) => {
-                        println!("Skipping linearity check for Module: {:?}", module_content);
+                        tracing::debug!("Skipping linearity check for Module: {:?}", module_content);
                     }
                     ModuleDefItem::Struct(struc) => {
-                        //println!("Skipping linearity check for Struct: {:?}", module_content);
+                        //tracing::debug!("Skipping linearity check for Struct: {:?}", module_content);
                         //checker.
                         state_tbl.update_info(
                             &struc.name.name,
@@ -989,25 +993,25 @@ pub fn linearity_check_program(
                         );
                     }
                     ModuleDefItem::Enum(_) => {
-                        println!("Skipping linearity check for Enum: {:?}", module_content);
+                        tracing::debug!("Skipping linearity check for Enum: {:?}", module_content);
                     }
                     ModuleDefItem::Constant(_) => {
-                        println!(
+                        tracing::debug!(
                             "Skipping linearity check for Constant: {:?}",
                             module_content
                         );
                     }
                     ModuleDefItem::Union(_) => {
-                        println!("Skipping linearity check for Uinon: {:?}", module_content);
+                        tracing::debug!("Skipping linearity check for Uinon: {:?}", module_content);
                     }
                     ModuleDefItem::Type(_) => {
-                        println!(
+                        tracing::debug!(
                             "Skipping linearity check for module content: {:?}",
                             module_content
                         );
                     } /*_ =>
                       {
-                          println!("Skipping linearity check for module content: {:?}", module_content);
+                          tracing::debug!("Skipping linearity check for module content: {:?}", module_content);
                           ()
                       },*/
                 }
