@@ -721,11 +721,6 @@ impl LinearityChecker {
                 // Handle while loops
                 state_tbl = self.check_expr(state_tbl, depth, &while_stmt.value)?;
                 state_tbl = self.check_stmts(state_tbl, depth + 1, &while_stmt.contents)?;
-                /* 
-                let new_state_tbl = self.check_stmts(state_tbl, depth + 1, &while_stmt.contents);
-                if let Ok(new_state_tbl) = new_state_tbl{
-                    state_tbl = new_state_tbl.clone();
-                }*/
                 Ok(state_tbl)
             }
             //Statement::For(init, cond, post, block) => {
@@ -742,11 +737,6 @@ impl LinearityChecker {
                     //self.check_stmt_assign(depth, post)?;
                 }
                 state_tbl = self.check_stmts(state_tbl, depth + 1, &for_stmt.contents)?;
-                /* 
-                let new_state_tbl = self.check_stmts(state_tbl, depth + 1, &for_stmt.contents);
-                if let Ok(new_state_tbl) = new_state_tbl{
-                    state_tbl = new_state_tbl;
-                }*/
                 Ok(state_tbl)
             }
             Statement::Assign(assign_stmt) => {
@@ -760,26 +750,12 @@ impl LinearityChecker {
                 tracing::debug!("Checking assignment: {:?}", assign_stmt);
                 state_tbl = self.check_path_opt(state_tbl, depth, target)?;
                 state_tbl = self.check_expr(state_tbl, depth, value)?;
-                /*let new_state_tbl = self.check_expr(state_tbl, depth, value);
-                if let Ok(new_state_tbl) = new_state_tbl{
-                    state_tbl = new_state_tbl;
-                }*/
                 state_tbl = self.check_expr(state_tbl, depth, value)?;
-                /*
-                let new_state_tbl = self.check_expr(state_tbl, depth, value);
-                if let Ok(new_state_tbl) = new_state_tbl{
-                    state_tbl = new_state_tbl;
-                }*/                
                 Ok(state_tbl)
             }
             Statement::Return(return_stmt) => {
                 if let Some(value) = &return_stmt.value {
                     state_tbl = self.check_expr(state_tbl, depth, value)?;
-                    /*
-                    let new_state_tbl = self.check_expr(state_tbl, depth, value);
-                    if let Ok(new_state_tbl) = new_state_tbl{
-                        state_tbl = new_state_tbl;
-                    }*/
                     Ok(state_tbl)
                 } else {
                     Ok(state_tbl)
