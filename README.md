@@ -239,12 +239,12 @@ Features:
 - casts ✔️
 - arrays 🏗️
 - iterators :x:
-- for :x:
+- for 🏗️
 - match :x:
 - option :x:
 - enums :x:
 - impl :x:
-- linear type checker :x:
+- linear type checker 🏗️
 - borrow checker :x:
 - generics :x:
 - traits :x:
