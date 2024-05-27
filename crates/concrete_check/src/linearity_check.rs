@@ -817,8 +817,8 @@ impl LinearityChecker {
             concrete_ast::expressions::ValueExpr::Path(path_op.clone()),
             path_op.span,
         );
-        //self.check_var_in_expr(state_tbl, depth, &path_op.first.name, &var_expression, context)
-        Ok(state_tbl)
+        self.check_var_in_expr(state_tbl, depth, &path_op.first.name, &var_expression, context)
+        //Ok(state_tbl)
     }
 
     fn check_var_in_expr(
