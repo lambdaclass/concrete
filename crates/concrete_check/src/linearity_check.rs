@@ -224,7 +224,8 @@ impl StateTbl {
     fn update_state(&mut self, var: &str, new_state: &VarState) {
         let info = self.get_info_mut(var);
         if let Some(info) = info {
-            info.state = new_state.clone();
+            //info.state = new_state.clone();
+            info.state = *new_state;
         }
     }
 
@@ -691,7 +692,8 @@ impl LinearityChecker {
             }
         }
         */
-        if errors.len() > 0 {
+        //if errors.len() > 0 {
+        if !errors.is_empty() {
             //FIXME replace with Vec<LinearityError>
             Err(errors[0].clone())
         } else {
@@ -782,7 +784,8 @@ impl LinearityChecker {
                     }
                     */                    
                 }
-                if errors.len() > 0 {
+                //if errors.len() > 0 {
+                if !errors.is_empty() {
                     Err(errors[0].clone())
                 } else {
                     Ok(state_tbl)
