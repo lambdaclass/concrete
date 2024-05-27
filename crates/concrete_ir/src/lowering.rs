@@ -846,7 +846,7 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
                 Some(local.ty.clone())
             }
             //TODO check this behavior
-            ValueExpr::ValueVar(_, _span) => None,
+            //ValueExpr::ValueVar(_, _span) => None,
         },
         Expression::FnCall(info) => {
             let fn_id = {
@@ -1552,7 +1552,7 @@ fn lower_value_expr(
             let (place, place_ty, _span) = lower_path(builder, info)?;
             (Rvalue::Use(Operand::Place(place.clone())), place_ty)
         }
-        ValueExpr::ValueVar(_, _) => todo!("ValueVar not yet implemented"),
+        //ValueExpr::ValueVar(_, _) => todo!("ValueVar not yet implemented"),
     })
 }
 

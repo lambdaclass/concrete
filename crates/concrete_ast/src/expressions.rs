@@ -29,7 +29,6 @@ pub enum ValueExpr {
     ConstFloat(String, Span),
     ConstStr(String, Span),
     Path(PathOp),
-    ValueVar(Ident, Span),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

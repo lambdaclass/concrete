@@ -304,14 +304,15 @@ impl LinearityChecker {
         }
     }
 
-    fn check_expr(& self, mut state_tbl:StateTbl, depth: usize, expr: &Expression) -> Result<StateTbl, LinearityError> {
+    fn check_expr(& self, mut state_tbl:StateTbl, depth: usize, expr: &Expression, context: &str) -> Result<StateTbl, LinearityError> {
         // Assuming you have a method to get all variable names and types
         //let vars = &mut self.state_tbl.vars;
         //TODO check if we can avoid cloning
         let vars = state_tbl.vars.clone();
+        println!("Check_expr vars {:?}", vars);
         for (name, _info) in vars.iter() {
             //self.check_var_in_expr(depth, &name, &info.ty, expr)?;
-            state_tbl = self.check_var_in_expr(state_tbl, depth, name, expr).unwrap();
+            state_tbl = self.check_var_in_expr(state_tbl, depth, name, expr, context).unwrap();
         }
         Ok(state_tbl)
     }
@@ -440,16 +441,20 @@ impl LinearityChecker {
                 // Handle value expressions, typically constant or simple values
                 //Appearances::zero()
                 match value_expr {
+                    /*
                     ValueExpr::ValueVar(ident, _) => {
                         if name == ident.name {
                             Appearances::consumed_once()
                         } else {
                             Appearances::zero()
                         }
-                    }
+                    }*/
                     ValueExpr::Path(path) => {
-                        //path.first.name == name;
-                        Appearances::zero()
+                        if name == path.first.name {
+                            Appearances::consumed_once()
+                        } else {
+                            Appearances::zero()
+                        }
                     }
                     _ => Appearances::zero(),
                 }
@@ -519,7 +524,8 @@ impl LinearityChecker {
         self.count_in_expression(name, &struct_init.value)
     }
 
-    fn check_stmt_let(&self, mut state_tbl: StateTbl, depth: usize, binding: &LetStmt) -> Result<StateTbl, LinearityError> {
+    fn check_stmt_let(&self, mut state_tbl: StateTbl, depth: usize, binding: &LetStmt,
+                      context: &str) -> Result<StateTbl, LinearityError> {
         // Handle let bindings, possibly involving pattern matching
         let LetStmt {
             is_mutable,
@@ -576,7 +582,7 @@ impl LinearityChecker {
                         );
                     }
                 }
-                self.check_var_in_expr(state_tbl, depth, &name.name, value)
+                self.check_var_in_expr(state_tbl, depth, &name.name, value, context)
             }
             LetStmtTarget::Destructure(bindings) => {
                 for binding in bindings {
@@ -693,50 +699,50 @@ impl LinearityChecker {
         }
     }
 
-    fn check_stmts(& self, mut state_tbl: StateTbl, depth: usize, stmts: &Vec<Statement>) -> Result<StateTbl, LinearityError> {
+    fn check_stmts(& self, mut state_tbl: StateTbl, depth: usize, stmts: &Vec<Statement>, context: &str) -> Result<StateTbl, LinearityError> {
         for stmt in stmts {
-            state_tbl = self.check_stmt(state_tbl, depth, stmt)?;
+            state_tbl = self.check_stmt(state_tbl, depth, stmt, context)?;
         }
         Ok(state_tbl)
     }
 
-    fn check_stmt(&self, mut state_tbl: StateTbl, depth: usize, stmt: &Statement) -> Result<StateTbl, LinearityError> {
+    fn check_stmt(&self, mut state_tbl: StateTbl, depth: usize, stmt: &Statement, context: &str) -> Result<StateTbl, LinearityError> {
         match stmt {
             Statement::Let(binding) => {
                 // Handle let bindings, possibly involving pattern matching
-                self.check_stmt_let(state_tbl, depth, binding)
+                self.check_stmt_let(state_tbl, depth, binding, context)
             }
             //Statement::If(cond, then_block, else_block) => {
             Statement::If(if_stmt) => {
                 // Handle conditional statements
-                state_tbl = self.check_expr(state_tbl, depth, &if_stmt.value)?;
-                state_tbl = self.check_stmts(state_tbl, depth + 1, &if_stmt.contents)?;
+                state_tbl = self.check_expr(state_tbl, depth, &if_stmt.value, context)?;
+                state_tbl = self.check_stmts(state_tbl, depth + 1, &if_stmt.contents, context)?;
                 if let Some(else_block) = &if_stmt.r#else {
-                    state_tbl = self.check_stmts(state_tbl, depth + 1, else_block)?;
+                    state_tbl = self.check_stmts(state_tbl, depth + 1, else_block, context)?;
                 }
                 Ok(state_tbl)
             }
             //Statement::While(cond, block) => {
             Statement::While(while_stmt) => {
                 // Handle while loops
-                state_tbl = self.check_expr(state_tbl, depth, &while_stmt.value)?;
-                state_tbl = self.check_stmts(state_tbl, depth + 1, &while_stmt.contents)?;
+                state_tbl = self.check_expr(state_tbl, depth, &while_stmt.value, context)?;
+                state_tbl = self.check_stmts(state_tbl, depth + 1, &while_stmt.contents, context)?;
                 Ok(state_tbl)
             }
             //Statement::For(init, cond, post, block) => {
             Statement::For(for_stmt) => {
                 // Handle for loops
                 if let Some(init) = &for_stmt.init {
-                    state_tbl = self.check_stmt_let(state_tbl, depth, init)?;
+                    state_tbl = self.check_stmt_let(state_tbl, depth, init, context)?;
                 }
                 if let Some(condition) = &for_stmt.condition {
-                    state_tbl = self.check_expr(state_tbl, depth, condition)?;
+                    state_tbl = self.check_expr(state_tbl, depth, condition, context)?;
                 }
                 if let Some(post) = &for_stmt.post {
                     //TODO check assign statement
                     //self.check_stmt_assign(depth, post)?;
                 }
-                state_tbl = self.check_stmts(state_tbl, depth + 1, &for_stmt.contents)?;
+                state_tbl = self.check_stmts(state_tbl, depth + 1, &for_stmt.contents, context)?;
                 Ok(state_tbl)
             }
             Statement::Assign(assign_stmt) => {
@@ -748,41 +754,71 @@ impl LinearityChecker {
                     span,
                 } = assign_stmt;
                 tracing::debug!("Checking assignment: {:?}", assign_stmt);
-                state_tbl = self.check_path_opt(state_tbl, depth, target)?;
-                state_tbl = self.check_expr(state_tbl, depth, value)?;
-                state_tbl = self.check_expr(state_tbl, depth, value)?;
+                let target_context = format!("target <{:?}>", target);
+                state_tbl = self.check_path_opt(state_tbl, depth, target, &target_context)?;
+                let value_context = format!("value <{:?}>", value);
+                state_tbl = self.check_expr(state_tbl, depth, value, &value_context)?;
                 Ok(state_tbl)
             }
             Statement::Return(return_stmt) => {
-                if let Some(value) = &return_stmt.value {
-                    state_tbl = self.check_expr(state_tbl, depth, value)?;
-                    Ok(state_tbl)
+                let errors: Vec<LinearityError> = Vec::new();
+                for (name, var_info) in state_tbl.vars.iter() {
+                    //FIXME implement Checking of consumed variables
+                    /* 
+                    match var_info.state {
+                        VarState::Consumed => (), // If consumed, do nothing.
+                        _ => match var_info.ty {
+                            Type::WriteRef(_) | Type::SpanMut(_) => (), // Write references and write spans can be dropped implicitly.
+                            _ if self.universe_linear_ish(var_info.ty) => {
+                                // If the type is linear-ish and the variable is not consumed, raise an error.
+                                errors.push(Err(LinearityError::VariableNotConsumed {
+                                    variable_name: name.clone(),
+                                    message: format!("The variable {} is not consumed by the time of the return statement. Did you forget to call a destructor, or destructure the contents?", name),
+                                }));
+                                ()
+                            }
+                            _ => ()
+                        }
+                    }
+                    */                    
+                }
+                if errors.len() > 0 {
+                    Err(errors[0].clone())
                 } else {
                     Ok(state_tbl)
                 }
+                /* 
+                if let Some(value) = &return_stmt.value {
+                    state_tbl = self.check_expr(state_tbl, depth, value, context)?;
+                    Ok(state_tbl)
+                } else {
+                    Ok(state_tbl)
+                }*/
             }
             Statement::FnCall(fn_call_op) => {
                 // Process function call arguments
                 for arg in &fn_call_op.args {
-                    state_tbl = self.check_expr(state_tbl, depth, arg)?;
+                    state_tbl = self.check_expr(state_tbl, depth, arg, context)?;
                 }
                 Ok(state_tbl)
             }
             Statement::Match(_) => {
                 tracing::debug!("Skipping linearity check for statement type: \n{:?}", stmt);
-                todo!()
+                todo!("Implement linearity checkt for match statement")
             }
         }
     }
 
-    fn check_path_opt(&self, state_tbl: StateTbl, depth: usize, path_op: &PathOp) -> Result<StateTbl, LinearityError> {
+    fn check_path_opt(&self, state_tbl: StateTbl, depth: usize, path_op: &PathOp, context: &str) -> Result<StateTbl, LinearityError> {
         tracing::debug!("Checking path: {:?}", path_op);
         //let var_expression = Value::new(path_op.first.clone(), path_op.span); // Use the imported module
         let var_expression = Expression::Value(
-            ValueExpr::ValueVar(path_op.first.clone(), path_op.span),
+            //ValueExpr::ValueVar(path_op.first.clone(), path_op.span),
+            concrete_ast::expressions::ValueExpr::Path(path_op.clone()),
             path_op.span,
         );
-        self.check_var_in_expr(state_tbl, depth, &path_op.first.name, &var_expression)
+        //self.check_var_in_expr(state_tbl, depth, &path_op.first.name, &var_expression, context)
+        Ok(state_tbl)
     }
 
     fn check_var_in_expr(
@@ -791,6 +827,7 @@ impl LinearityChecker {
         depth: usize,
         name: &str,
         expr: &Expression,
+        context: &str,
     ) -> Result<StateTbl, LinearityError> {
         let info = state_tbl.get_info(name); // Assume default state
         if let Some(info) = info {
@@ -807,8 +844,8 @@ impl LinearityChecker {
                 } = apps;
                 //tracing::debug!("Checking variable: {} with state: {:?} and appearances: {:?} in expression {:?}", name, state, apps, expr);
                 tracing::debug!(
-                    "Checking state_tbl variable: {}: {:?} {:?} in expression {:?}",
-                    name, info, apps, expr
+                    "Checking state_tbl variable: {}: {:?} {:?} \n <<< context {:?} >>> \n << expression {:?} >>",
+                    name, info, apps, context, expr
                 );
                 match (
                     state,
@@ -915,16 +952,14 @@ impl LinearityChecker {
     
 }
 
-//#[cfg(feature = "linearity")]
-#[allow(unused_variables)]
-//pub fn linearity_check_program(program_ir: &FunctionDef, session: &Session) ->  Result<String, LinearityError> {
+//#[allow(unused_variables)]
 pub fn linearity_check_program(
     programs: &Vec<(PathBuf, String, Program)>,
-    session: &Session,
+    _session: &Session,
 ) -> Result<String, LinearityError> {
     tracing::debug!("Starting linearity check");
     let checker = LinearityChecker::new();
-    for (path, name, program) in programs {
+    for (_path, name, program) in programs {
         tracing::debug!("Checking linearity for program: {}", name);
         for module in &program.modules {
             tracing::debug!("Checking linearity for module: {}", module.name.name);
@@ -939,7 +974,8 @@ pub fn linearity_check_program(
                         //function.decl
                         for statement in &function.body {
                             //tracing::debug!("Checking linearity for function body: {:?}", function.body);
-                            state_tbl = checker.check_stmt(state_tbl, 0, statement)?;
+                            let stmt_context =  format!("{:?}", statement);
+                            state_tbl = checker.check_stmt(state_tbl, 0, statement, &stmt_context)?;
                         }
                         tracing::debug!(
                             "Finished checking linearity for function: {} {:?}",
@@ -950,11 +986,11 @@ pub fn linearity_check_program(
                     ModuleDefItem::FunctionDecl(function_decl) => {
                         tracing::debug!(
                             "Skipping linearity check for FunctionDecl: {:?}",
-                            module_content
+                            function_decl
                         );
                     }
                     ModuleDefItem::Module(module) => {
-                        tracing::debug!("Skipping linearity check for Module: {:?}", module_content);
+                        tracing::debug!("Skipping linearity check for Module: {:?}", module);
                     }
                     ModuleDefItem::Struct(struc) => {
                         //tracing::debug!("Skipping linearity check for Struct: {:?}", module_content);
