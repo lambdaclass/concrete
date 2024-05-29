@@ -5,12 +5,12 @@ use concrete_session::Session;
 use self::errors::LinearityError;
 pub mod errors;
 
-use std::path::PathBuf;
-use concrete_ast::Program;
+use concrete_ast::expressions::{Expression, PathOp, StructInitField, ValueExpr};
 use concrete_ast::functions::{FunctionDecl, FunctionDef, Param};
 use concrete_ast::modules::ModuleDefItem;
-use concrete_ast::expressions::{Expression, PathOp, StructInitField, ValueExpr};
 use concrete_ast::statements::{AssignStmt, Binding, LetStmt, LetStmtTarget, Statement};
+use concrete_ast::Program;
+use std::path::PathBuf;
 
 use concrete_ast::types::TypeSpec;
 //use concrete_ast::expressions::Value; // Import the missing module
@@ -120,7 +120,7 @@ impl Appearances {
     fn path_once() -> Self {
         Self::new(0, 0, 0, 1)
     }
-    
+
     fn merge(&self, other: &Appearances) -> Self {
         Appearances {
             consumed: self.consumed + other.consumed,
@@ -141,7 +141,6 @@ impl Appearances {
 struct StateTbl {
     vars: HashMap<String, VarInfo>,
 }
-
 
 /// StateTbl is a table that keeps track of the state of variables in a program for doing linearityCheck. The core of algorithm is decision table
 impl StateTbl {
@@ -259,15 +258,13 @@ impl StateTbl {
     }
 }
 
-struct LinearityChecker {
-}
+struct LinearityChecker {}
 
 #[allow(dead_code)]
 #[allow(unused_variables)]
 impl LinearityChecker {
     fn new() -> Self {
-        LinearityChecker {
-        }
+        LinearityChecker {}
     }
 
     fn consume_once(
