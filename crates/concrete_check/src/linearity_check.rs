@@ -6,15 +6,10 @@ use self::errors::LinearityError;
 pub mod errors;
 
 use std::path::PathBuf;
-//use concrete_ir::{ProgramBody, FnBody};
-//use concrete_ast::Program{ ProgramBody, FnBody };
 use concrete_ast::Program;
-//use concrete_ast::modules::{Module, ModuleDefItem};
-use concrete_ast::functions::{FunctionDef, FunctionDecl, Param};
+use concrete_ast::functions::{FunctionDecl, FunctionDef, Param};
 use concrete_ast::modules::ModuleDefItem;
-//use concrete_ast::functions::FunctionDef;
 use concrete_ast::expressions::{Expression, PathOp, StructInitField, ValueExpr};
-//use concrete_ast::statements::{Statement, AssignStmt, LetStmt, WhileStmt, ForStmt, LetStmtTarget, Binding};
 use concrete_ast::statements::{AssignStmt, Binding, LetStmt, LetStmtTarget, Statement};
 
 use concrete_ast::types::TypeSpec;
@@ -125,15 +120,7 @@ impl Appearances {
     fn path_once() -> Self {
         Self::new(0, 0, 0, 1)
     }
-
-    /* TODO implementation of merge without copying
-    fn merge(&mut self, other: &Appearances) {
-            self.consumed += other.consumed;
-            self.write += other.write;
-            self.read += other.read;
-            self.path += other.path;
-    }*/
-
+    
     fn merge(&self, other: &Appearances) -> Self {
         Appearances {
             consumed: self.consumed + other.consumed,
@@ -155,6 +142,8 @@ struct StateTbl {
     vars: HashMap<String, VarInfo>,
 }
 
+
+/// StateTbl is a table that keeps track of the state of variables in a program for doing linearityCheck. The core of algorithm is decision table
 impl StateTbl {
     // Initialize with an empty state table
     fn new() -> Self {
@@ -186,12 +175,10 @@ impl StateTbl {
     }
 
     fn remove_entries(&mut self, vars: Vec<String>) {
-        for var in vars{
+        for var in vars {
             self.vars.remove(&var);
         }
     }
-
-    
 
     fn get_info_mut(&mut self, var: &str) -> Option<&mut VarInfo> {
         if !self.vars.contains_key(var) {
@@ -273,7 +260,6 @@ impl StateTbl {
 }
 
 struct LinearityChecker {
-    //state_tbl: StateTbl,
 }
 
 #[allow(dead_code)]
@@ -281,7 +267,6 @@ struct LinearityChecker {
 impl LinearityChecker {
     fn new() -> Self {
         LinearityChecker {
-            //state_tbl: StateTbl::new(),
         }
     }
 
@@ -299,20 +284,12 @@ impl LinearityChecker {
             loop_depth
         );
         if depth == state_tbl.get_loop_depth(name) {
+            // Consumed when a variable defined inside the loop is consumed
             state_tbl.update_state(name, &VarState::Consumed);
             tracing::debug!("Consumed variable: {}", name);
-            /*
-            let mut state = self.state_tbl.get_state(name);
-            if let Some(state) = state {
-                state = &VarState::Consumed;
-            }
-            else{
-                //self.state_tbl.update_state(name, VarInfo{"".to_string(), depth, VarState::Unconsumed});
-            }*/
-
             Ok(state_tbl)
         } else {
-            Err(LinearityError::ConsumedMoreThanOnce {
+            Err(LinearityError::ConsumedVariableInLoop {
                 variable: name.to_string(),
             })
         }
@@ -393,12 +370,6 @@ impl LinearityChecker {
                 }
                 apps
             }
-            /* Alucination of GPT. We have no 
-            Statement::Block(statements) => {
-                // Handle blocks of statements
-                //statements.iter().map(|stmt| self.count(name, stmt)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
-                self.count_in_statements(name, statements)
-            },*/
             Statement::Assign(assign_stmt) => {
                 // Handle assignments
                 self.count_in_assign_statement(name, assign_stmt)
@@ -480,13 +451,12 @@ impl LinearityChecker {
                         } else {
                             Appearances::zero()
                         }
-                    },
-                    ValueExpr::ConstBool(_, _) | 
-                    ValueExpr::ConstChar(_, _) | 
-                    ValueExpr::ConstInt(_, _) | 
-                    ValueExpr::ConstFloat(_, _) | 
-                    ValueExpr::ConstStr(_, _) => 
-                        Appearances::zero(),                    
+                    }
+                    ValueExpr::ConstBool(_, _)
+                    | ValueExpr::ConstChar(_, _)
+                    | ValueExpr::ConstInt(_, _)
+                    | ValueExpr::ConstFloat(_, _)
+                    | ValueExpr::ConstStr(_, _) => Appearances::zero(),
                 }
             }
             Expression::FnCall(fn_call_op) => {
@@ -737,8 +707,7 @@ impl LinearityChecker {
         for statement in &function_def.body {
             //tracing::debug!("Checking linearity for function body: {:?}", function.body);
             let stmt_context = format!("{:?}", statement);
-            state_tbl =
-                self.check_stmt(state_tbl, 0, statement, &stmt_context)?;
+            state_tbl = self.check_stmt(state_tbl, 0, statement, &stmt_context)?;
         }
         tracing::debug!(
             "Finished checking linearity for function: {} {:?}",
@@ -827,7 +796,7 @@ impl LinearityChecker {
                 state_tbl = self.check_path_opt(state_tbl, depth, target, &target_context)?;
                 let value_context = format!("value <{:?}>", value);
                 state_tbl = self.check_expr(state_tbl, depth, value, &value_context)?;
-                
+
                 //state_tbl = self.check_var_in_expr(state_tbl, depth, name, expr, "");
                 Ok(state_tbl)
             }
@@ -899,7 +868,7 @@ impl LinearityChecker {
             &path_op.first.name,
             &var_expression,
             context,
-        )        
+        )
     }
 
     fn check_var_in_expr(
@@ -1034,7 +1003,6 @@ impl LinearityChecker {
     }
 }
 
-
 // This is because there is no warranty check_function returned state_tbl is readed once
 //#[allow(unused_assignments)]
 pub fn linearity_check_program(
@@ -1101,8 +1069,11 @@ pub fn linearity_check_program(
                           ()
                       },*/
                 }
-                tracing::debug!("Finished linearity check for module {} with resulting state_tbl {:?}", 
-                                module.name.name, state_tbl);    
+                tracing::debug!(
+                    "Finished linearity check for module {} with resulting state_tbl {:?}",
+                    module.name.name,
+                    state_tbl
+                );
             }
         }
     }

@@ -22,7 +22,9 @@ pub enum LinearityError {
     AlreadyConsumedAndUsed { variable: String },
     #[error("Unhandled state or appearance count for Variable {variable}")]
     UnhandledStateOrCount { variable: String },
-    #[error("Linearity error. Variable {variable} generated {message}")]
+    #[error("Consumed variable {variable} in loop created outside the loop")]
+    ConsumedVariableInLoop{variable: String},
+    #[error("Unspecified Linearity error. Variable {variable} generated {message}")]
     Unspecified { variable: String, message: String },
     #[error("Variable {variable} not found")]
     VariableNotFound { variable: String },
