@@ -393,7 +393,7 @@ impl LinearityChecker {
                 }
                 apps
             }
-            /* Alucination of GPT
+            /* Alucination of GPT. We have no 
             Statement::Block(statements) => {
                 // Handle blocks of statements
                 //statements.iter().map(|stmt| self.count(name, stmt)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
@@ -642,7 +642,6 @@ impl LinearityChecker {
         Ok(state_tbl.clone())
     }
 
-    //fn check_function_decl(&self, mut state_tbl: StateTbl, depth: usize, decl: &FunctionDecl) -> Result<StateTbl, Vec<LinearityError>> {
     fn check_function(
         &self,
         mut state_tbl: StateTbl,
@@ -1055,7 +1054,7 @@ pub fn linearity_check_program(
                         //tracing::debug!("Checking linearity for function: {:?}", function);
                         //checker.check_function(&function)?;
                         //FIXME check function function.decl
-                        state_tbl = checker.check_function(state_tbl, 0, &function)?;
+                        state_tbl = checker.check_function(state_tbl, 0, function)?;
                         //checker.linearity_check(&function)?;
                     }
                     ModuleDefItem::FunctionDecl(function_decl) => {
