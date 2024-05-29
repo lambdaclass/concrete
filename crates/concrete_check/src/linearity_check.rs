@@ -10,7 +10,7 @@ use std::path::PathBuf;
 //use concrete_ast::Program{ ProgramBody, FnBody };
 use concrete_ast::Program;
 //use concrete_ast::modules::{Module, ModuleDefItem};
-use concrete_ast::functions::{FunctionDecl, Param};
+use concrete_ast::functions::{FunctionDef, FunctionDecl, Param};
 use concrete_ast::modules::ModuleDefItem;
 //use concrete_ast::functions::FunctionDef;
 use concrete_ast::expressions::{Expression, PathOp, StructInitField, ValueExpr};
@@ -184,6 +184,14 @@ impl StateTbl {
     fn _remove_entry(&mut self, var: &str) {
         self.vars.remove(var);
     }
+
+    fn remove_entries(&mut self, vars: Vec<String>) {
+        for var in vars{
+            self.vars.remove(&var);
+        }
+    }
+
+    
 
     fn get_info_mut(&mut self, var: &str) -> Option<&mut VarInfo> {
         if !self.vars.contains_key(var) {
@@ -426,14 +434,18 @@ impl LinearityChecker {
             span,
         } = assign_stmt;
         // Handle assignments
-        let ret = self.count_in_path_op(name, target);
+        let ret = self.count_in_path_op(name, target, true);
         ret.merge(&self.count_in_expression(name, value));
         ret
     }
 
-    fn count_in_path_op(&self, name: &str, path_op: &PathOp) -> Appearances {
+    fn count_in_path_op(&self, name: &str, path_op: &PathOp, lvalue: bool) -> Appearances {
         if name == path_op.first.name {
-            Appearances::path_once()
+            if lvalue {
+                Appearances::consumed_once()
+            } else {
+                Appearances::path_once()
+            }
         } else {
             Appearances::zero()
         }
@@ -453,7 +465,6 @@ impl LinearityChecker {
         match expr {
             Expression::Value(value_expr, _) => {
                 // Handle value expressions, typically constant or simple values
-                //Appearances::zero()
                 match value_expr {
                     /*
                     ValueExpr::ValueVar(ident, _) => {
@@ -465,12 +476,17 @@ impl LinearityChecker {
                     }*/
                     ValueExpr::Path(path) => {
                         if name == path.first.name {
-                            Appearances::consumed_once()
+                            Appearances::path_once()
                         } else {
                             Appearances::zero()
                         }
-                    }
-                    _ => Appearances::zero(),
+                    },
+                    ValueExpr::ConstBool(_, _) | 
+                    ValueExpr::ConstChar(_, _) | 
+                    ValueExpr::ConstInt(_, _) | 
+                    ValueExpr::ConstFloat(_, _) | 
+                    ValueExpr::ConstStr(_, _) => 
+                        Appearances::zero(),                    
                 }
             }
             Expression::FnCall(fn_call_op) => {
@@ -627,12 +643,13 @@ impl LinearityChecker {
     }
 
     //fn check_function_decl(&self, mut state_tbl: StateTbl, depth: usize, decl: &FunctionDecl) -> Result<StateTbl, Vec<LinearityError>> {
-    fn check_function_decl(
+    fn check_function(
         &self,
         mut state_tbl: StateTbl,
         depth: usize,
-        decl: &FunctionDecl,
+        function_def: &FunctionDef,
     ) -> Result<StateTbl, LinearityError> {
+        let decl = &function_def.decl;
         // Handle function declarations
         let FunctionDecl {
             doc_string,
@@ -648,6 +665,7 @@ impl LinearityChecker {
         let errors: Vec<LinearityError> = Vec::new();
         tracing::debug!("Checking function declaration: {:?}", decl);
         let mut params_vec: Vec<(String, String)> = Vec::new();
+        let mut params_clean_vec: Vec<String> = Vec::new();
         for param in params {
             let Param { name, r#type } = param;
             let name = name.name.clone();
@@ -671,6 +689,8 @@ impl LinearityChecker {
                 } => "Array<".to_string() + &of_type.get_name() + ">",
             };
             params_vec.push((name.clone(), r#type));
+            let var_clean = name.clone();
+            params_clean_vec.push(var_clean);
         }
         state_tbl.init(params_vec, depth);
         // Only initialize parameters in table. Not consume them
@@ -713,6 +733,20 @@ impl LinearityChecker {
             }
         }
         */
+
+        //function.decl
+        for statement in &function_def.body {
+            //tracing::debug!("Checking linearity for function body: {:?}", function.body);
+            let stmt_context = format!("{:?}", statement);
+            state_tbl =
+                self.check_stmt(state_tbl, 0, statement, &stmt_context)?;
+        }
+        tracing::debug!(
+            "Finished checking linearity for function: {} {:?}",
+            function_def.decl.name.name,
+            state_tbl
+        );
+        state_tbl.remove_entries(params_clean_vec);
         //if errors.len() > 0 {
         if !errors.is_empty() {
             //FIXME replace with Vec<LinearityError>
@@ -794,6 +828,8 @@ impl LinearityChecker {
                 state_tbl = self.check_path_opt(state_tbl, depth, target, &target_context)?;
                 let value_context = format!("value <{:?}>", value);
                 state_tbl = self.check_expr(state_tbl, depth, value, &value_context)?;
+                
+                //state_tbl = self.check_var_in_expr(state_tbl, depth, name, expr, "");
                 Ok(state_tbl)
             }
             Statement::Return(return_stmt) => {
@@ -854,9 +890,7 @@ impl LinearityChecker {
         context: &str,
     ) -> Result<StateTbl, LinearityError> {
         tracing::debug!("Checking path: {:?}", path_op);
-        //let var_expression = Value::new(path_op.first.clone(), path_op.span); // Use the imported module
         let var_expression = Expression::Value(
-            //ValueExpr::ValueVar(path_op.first.clone(), path_op.span),
             concrete_ast::expressions::ValueExpr::Path(path_op.clone()),
             path_op.span,
         );
@@ -866,8 +900,7 @@ impl LinearityChecker {
             &path_op.first.name,
             &var_expression,
             context,
-        )
-        //Ok(state_tbl)
+        )        
     }
 
     fn check_var_in_expr(
@@ -1002,7 +1035,9 @@ impl LinearityChecker {
     }
 }
 
-//#[allow(unused_variables)]
+
+// This is because there is no warranty check_function returned state_tbl is readed once
+//#[allow(unused_assignments)]
 pub fn linearity_check_program(
     programs: &Vec<(PathBuf, String, Program)>,
     _session: &Session,
@@ -1020,19 +1055,7 @@ pub fn linearity_check_program(
                         //tracing::debug!("Checking linearity for function: {:?}", function);
                         //checker.check_function(&function)?;
                         //FIXME check function function.decl
-                        state_tbl = checker.check_function_decl(state_tbl, 0, &function.decl)?;
-                        //function.decl
-                        for statement in &function.body {
-                            //tracing::debug!("Checking linearity for function body: {:?}", function.body);
-                            let stmt_context = format!("{:?}", statement);
-                            state_tbl =
-                                checker.check_stmt(state_tbl, 0, statement, &stmt_context)?;
-                        }
-                        tracing::debug!(
-                            "Finished checking linearity for function: {} {:?}",
-                            function.decl.name.name,
-                            state_tbl
-                        );
+                        state_tbl = checker.check_function(state_tbl, 0, &function)?;
                         //checker.linearity_check(&function)?;
                     }
                     ModuleDefItem::FunctionDecl(function_decl) => {
@@ -1079,6 +1102,8 @@ pub fn linearity_check_program(
                           ()
                       },*/
                 }
+                tracing::debug!("Finished linearity check for module {} with resulting state_tbl {:?}", 
+                                module.name.name, state_tbl);    
             }
         }
     }
