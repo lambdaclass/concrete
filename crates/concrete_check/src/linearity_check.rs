@@ -13,7 +13,7 @@ use concrete_ast::Program;
 use std::path::PathBuf;
 
 use concrete_ast::types::TypeSpec;
-//use concrete_ast::expressions::Value; // Import the missing module
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum VarState {
     Unconsumed,
@@ -434,17 +434,14 @@ impl LinearityChecker {
             Expression::Value(value_expr, _) => {
                 // Handle value expressions, typically constant or simple values
                 match value_expr {
-                    /*
-                    ValueExpr::ValueVar(ident, _) => {
-                        if name == ident.name {
-                            Appearances::consumed_once()
-                        } else {
-                            Appearances::zero()
-                        }
-                    }*/
                     ValueExpr::Path(path) => {
                         if name == path.first.name {
                             Appearances::path_once()
+                            // FIXME
+                            // This is a stub implementation. The only call with path is as an lvalue
+                            // But we should have a clever implementation.
+                            // An approach is to difference when a path is an lvalue or an rvalue, contained in the Path itself
+                            //Appearances::consumed_once()
                         } else {
                             Appearances::zero()
                         }
@@ -465,16 +462,12 @@ impl LinearityChecker {
                     .fold(Appearances::zero(), |acc, x| acc.merge(&x))
             }
             Expression::Match(match_expr) => todo!("do not support match expression"),
-            /*
-            Expression::Match(match_expr) => {
-                // Handle match arms
-                match_expr.variants.iter().map(|(_, expr)| self.count(name, expr)).fold(Appearances::zero(), |acc, x| acc.merge(&x))
-            },*/
+            //Match expressions should be implemented as an extension of if expressions
             Expression::If(if_expr) => {
                 // Process all components of an if expression
+                // TODO review this code. If expressions should be processed counting both branches and comparing them
                 let cond_apps = self.count_in_expression(name, &if_expr.value);
                 let then_apps = self.count_in_statements(name, &if_expr.contents);
-                //let else_apps = if_expr.else.as_ref().map(|e| self.count(name, e)).unwrap_or_default();
                 cond_apps.merge(&then_apps);
                 if let Some(else_block) = &if_expr.r#else {
                     let else_apps = self.count_in_statements(name, else_block);
@@ -659,46 +652,6 @@ impl LinearityChecker {
             params_clean_vec.push(var_clean);
         }
         state_tbl.init(params_vec, depth);
-        // Only initialize parameters in table. Not consume them
-        /*
-        for param in params {
-            let Param { name, r#type } = param;
-            match r#type {
-                TypeSpec::Simple {
-                    name: variable_type,
-                    qualifiers,
-                    span,
-                } => {
-                    let var_expression = Expression::Value(
-                        ValueExpr::ValueVar(name.clone(), *span), *span);
-                    tracing::debug!("Checking parameter: {:?}", param);
-                    state_tbl = self.check_var_in_expr(state_tbl, depth, &name.name, &var_expression)?;
-                }
-                TypeSpec::Generic {
-                    name: variable_type,
-                    qualifiers,
-                    type_params,
-                    span,
-                } => {
-                    let var_expression = Expression::Value(
-                        ValueExpr::ValueVar(name.clone(), *span), *span);
-                    tracing::debug!("Checking parameter: {:?}", param);
-                    state_tbl = self.check_var_in_expr(state_tbl, depth, &name.name, &var_expression)?;
-                }
-                TypeSpec::Array {
-                    of_type,
-                    size,
-                    qualifiers,
-                    span,
-                } => {
-                    let array_type = "Array<".to_string() + &of_type.get_name() + ">";
-                    errors.push(LinearityError::NotImplemented {
-                        message: "Generic type parameters not yet supported".to_string(),
-                    })
-                }
-            }
-        }
-        */
 
         //function.decl
         for statement in &function_def.body {
@@ -825,13 +778,6 @@ impl LinearityChecker {
                 } else {
                     Ok(state_tbl)
                 }
-                /*
-                if let Some(value) = &return_stmt.value {
-                    state_tbl = self.check_expr(state_tbl, depth, value, context)?;
-                    Ok(state_tbl)
-                } else {
-                    Ok(state_tbl)
-                }*/
             }
             Statement::FnCall(fn_call_op) => {
                 // Process function call arguments
