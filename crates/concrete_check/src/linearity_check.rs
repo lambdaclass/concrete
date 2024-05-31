@@ -694,6 +694,7 @@ impl LinearityChecker {
         stmt: &Statement,
         context: &str,
     ) -> Result<StateTbl, LinearityError> {
+        let mut errors: Vec<LinearityError> = Vec::new();
         match stmt {
             Statement::Let(binding) => {
                 // Handle let bindings, possibly involving pattern matching
@@ -751,28 +752,25 @@ impl LinearityChecker {
                 Ok(state_tbl)
             }
             Statement::Return(return_stmt) => {
-                let errors: Vec<LinearityError> = Vec::new();
+                if let Some(return_stmt) = &return_stmt.value{
+                    state_tbl = self.check_expr(state_tbl, depth, &return_stmt, "return")?;
+                }
+                // Ensure that all variables are properly consumed
                 for (name, var_info) in state_tbl.vars.iter() {
-                    //FIXME implement Checking of consumed variables
-                    /*
                     match var_info.state {
-                        VarState::Consumed => (), // If consumed, do nothing.
+                        VarState::Consumed => (),  // If consumed, no action needed
                         _ => match var_info.ty {
-                            Type::WriteRef(_) | Type::SpanMut(_) => (), // Write references and write spans can be dropped implicitly.
-                            _ if self.universe_linear_ish(var_info.ty) => {
-                                // If the type is linear-ish and the variable is not consumed, raise an error.
-                                errors.push(Err(LinearityError::VariableNotConsumed {
-                                    variable_name: name.clone(),
-                                    message: format!("The variable {} is not consumed by the time of the return statement. Did you forget to call a destructor, or destructure the contents?", name),
-                                }));
-                                ()
-                            }
+                           // Type::WriteRef(_) | Type::SpanMut(_) => (),  // These can be dropped implicitly
+                            _ if self.is_universe_linear_ish(&var_info.ty) => {
+                                // Collect error if a variable that needs to be consumed hasn't been
+                                errors.push(LinearityError::VariableNotConsumed {
+                                    variable: name.clone(),                                    
+                                });
+                            },
                             _ => ()
                         }
                     }
-                    */
                 }
-                //if errors.len() > 0 {
                 if !errors.is_empty() {
                     Err(errors[0].clone())
                 } else {
@@ -814,6 +812,10 @@ impl LinearityChecker {
         )
     }
 
+    fn is_universe_linear_ish(&self, ty: &str) -> bool {
+        *ty == *"Linear".to_string()
+    }
+
     fn check_var_in_expr(
         &self,
         state_tbl: StateTbl,
@@ -826,7 +828,7 @@ impl LinearityChecker {
         if let Some(info) = info {
             //Only checks Linearity for types of name Linear
             // TODO improve this approach
-            if info.ty == *"Linear".to_string() {
+            if self.is_universe_linear_ish(&info.ty) {
                 let state = &info.state;
                 let apps = self.count_in_expression(name, expr); // Assume count function implementation
                 let Appearances {
