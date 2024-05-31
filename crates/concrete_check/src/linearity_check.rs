@@ -703,7 +703,8 @@ impl LinearityChecker {
             Statement::If(if_stmt) => {
                 // Handle conditional statements
                 state_tbl = self.check_expr(state_tbl, depth, &if_stmt.cond, context)?;
-                state_tbl = self.check_stmts(state_tbl, depth + 1, &if_stmt.block_stmts, context)?;
+                state_tbl =
+                    self.check_stmts(state_tbl, depth + 1, &if_stmt.block_stmts, context)?;
                 if let Some(else_block) = &if_stmt.else_stmts {
                     state_tbl = self.check_stmts(state_tbl, depth + 1, else_block, context)?;
                 }
@@ -730,7 +731,8 @@ impl LinearityChecker {
                     //TODO check assign statement
                     //self.check_stmt_assign(depth, post)?;
                 }
-                state_tbl = self.check_stmts(state_tbl, depth + 1, &for_stmt.block_stmts, context)?;
+                state_tbl =
+                    self.check_stmts(state_tbl, depth + 1, &for_stmt.block_stmts, context)?;
                 Ok(state_tbl)
             }
             Statement::Assign(assign_stmt) => {
