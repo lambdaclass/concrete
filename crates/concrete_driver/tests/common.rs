@@ -7,6 +7,8 @@ use std::{
 
 use ariadne::Source;
 use concrete_driver::linker::{link_binary, link_shared_lib};
+// TODO uncomment when CompilerArgs tests calls are functional
+//use concrete_driver::CompilerArgs;
 use concrete_ir::lowering::lower_programs;
 use concrete_parser::{error::Diagnostics, ProgramSource};
 use concrete_session::{
@@ -33,12 +35,48 @@ pub struct CompileResult {
     pub binary_file: PathBuf,
 }
 
+
 pub fn compile_program(
     source: &str,
     name: &str,
     library: bool,
     optlevel: OptLevel,
 ) -> Result<CompileResult, Box<dyn std::error::Error>> {
+    // TODO need to implement to build CompilerArgs for testing with options
+    /* 
+    let mut input_path = std::env::current_dir()?;
+    input_path.join(source);
+    let build_dir = std::env::current_dir()?;
+    let output = build_dir.join(source);
+
+    let compile_args = CompilerArgs {
+        input: input_path.clone(),
+        output: output.clone(),
+        false,
+        optlevel: None,
+        debug_info: None,
+        library: lib,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+    };
+    */
+    //compile_program_with_args(source, name, library, optlevel, &compile_args);
+    compile_program_with_args(source, name, library, optlevel)
+}
+
+pub fn compile_program_with_args(
+    source: &str,
+    name: &str,
+    library: bool,
+    optlevel: OptLevel,
+    //args: &CompilerArgs,
+) -> Result<CompileResult, Box<dyn std::error::Error>> {
+    //TODO run parser with CompilerArgs
     let db = concrete_driver::db::Database::default();
     let source = ProgramSource::new(&db, source.to_string(), name.to_string());
     tracing::debug!("source code:\n{}", source.input(&db));
@@ -119,7 +157,6 @@ pub fn run_program(program: &Path) -> Result<Output, std::io::Error> {
 #[track_caller]
 pub fn compile_and_run(source: &str, name: &str, library: bool, optlevel: OptLevel) -> i32 {
     let result = compile_program(source, name, library, optlevel).expect("failed to compile");
-
     let output = run_program(&result.binary_file).expect("failed to run");
 
     output.status.code().unwrap()
