@@ -752,23 +752,23 @@ impl LinearityChecker {
                 Ok(state_tbl)
             }
             Statement::Return(return_stmt) => {
-                if let Some(return_stmt) = &return_stmt.value{
-                    state_tbl = self.check_expr(state_tbl, depth, &return_stmt, "return")?;
+                if let Some(return_stmt) = &return_stmt.value {
+                    state_tbl = self.check_expr(state_tbl, depth, return_stmt, "return")?;
                 }
                 // Ensure that all variables are properly consumed
                 for (name, var_info) in state_tbl.vars.iter() {
                     match var_info.state {
-                        VarState::Consumed => (),  // If consumed, no action needed
+                        VarState::Consumed => (), // If consumed, no action needed
                         _ => match var_info.ty {
-                           // Type::WriteRef(_) | Type::SpanMut(_) => (),  // These can be dropped implicitly
+                            // Type::WriteRef(_) | Type::SpanMut(_) => (),  // These can be dropped implicitly
                             _ if self.is_universe_linear_ish(&var_info.ty) => {
                                 // Collect error if a variable that needs to be consumed hasn't been
                                 errors.push(LinearityError::VariableNotConsumed {
-                                    variable: name.clone(),                                    
+                                    variable: name.clone(),
                                 });
-                            },
-                            _ => ()
-                        }
+                            }
+                            _ => (),
+                        },
                     }
                 }
                 if !errors.is_empty() {

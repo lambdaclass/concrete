@@ -35,7 +35,6 @@ pub struct CompileResult {
     pub binary_file: PathBuf,
 }
 
-
 pub fn compile_program(
     source: &str,
     name: &str,
@@ -43,7 +42,7 @@ pub fn compile_program(
     optlevel: OptLevel,
 ) -> Result<CompileResult, Box<dyn std::error::Error>> {
     // TODO need to implement to build CompilerArgs for testing with options
-    /* 
+    /*
     let mut input_path = std::env::current_dir()?;
     input_path.join(source);
     let build_dir = std::env::current_dir()?;

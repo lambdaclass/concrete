@@ -44,7 +44,13 @@ fn example_tests(source: &str, name: &str, is_library: bool, status_code: i32) {
 #[test_case(include_str!("../../../examples/linearExample01.con"), "--check", "linearity", false, 2; "linearExample01.con")]
 #[test_case(include_str!("../../../examples/linearExample02.con"), "--check", "linearity", false, 2 ; "linearExample02.con")]
 #[test_case(include_str!("../../../examples/linearExample03if.con"), "--check", "linearity", false, 0 ; "linearExample03if.con")]
-fn example_tests_with_options(source: &str,  options: &str, name: &str, is_library: bool, status_code: i32) {
+fn example_tests_with_options(
+    source: &str,
+    options: &str,
+    name: &str,
+    is_library: bool,
+    status_code: i32,
+) {
     // TODO need compile_and_run with Options for using args
     let _args = [options];
     assert_eq!(
