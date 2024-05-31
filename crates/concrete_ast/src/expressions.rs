@@ -99,16 +99,16 @@ pub enum BitwiseOp {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MatchExpr {
-    pub value: Box<Expression>,
+    pub match_expr: Box<Expression>,
     pub variants: Vec<MatchVariant>,
     pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IfExpr {
-    pub value: Box<Expression>,
-    pub contents: Vec<Statement>,
-    pub r#else: Option<Vec<Statement>>,
+    pub cond: Box<Expression>,
+    pub block_stmts: Vec<Statement>,
+    pub else_stmts: Option<Vec<Statement>>,
     pub span: Span,
 }
 
