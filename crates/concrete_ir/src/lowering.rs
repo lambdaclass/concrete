@@ -288,7 +288,7 @@ fn lower_func(
     for stmt in &func.body {
         if let statements::Statement::Let(info) = stmt {
             match &info.target {
-                LetStmtTarget::Simple { name, r#type } => {
+                LetStmtTarget::Simple { id: name, r#type } => {
                     let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
                     builder
                         .name_to_local
@@ -306,7 +306,7 @@ fn lower_func(
         } else if let statements::Statement::For(info) = stmt {
             if let Some(info) = &info.init {
                 match &info.target {
-                    LetStmtTarget::Simple { name, r#type } => {
+                    LetStmtTarget::Simple { id: name, r#type } => {
                         let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
                         builder
                             .name_to_local
@@ -435,7 +435,7 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), Lowe
     });
 
     let (discriminator, discriminator_type, _disc_span) =
-        lower_expression(builder, &info.value, None)?;
+        lower_expression(builder, &info.condition, None)?;
 
     let local = builder.add_temp_local(TyKind::Bool);
     let place = Place {
@@ -463,7 +463,7 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), Lowe
     // keep idx for switch targets
     let first_then_block_idx = builder.body.basic_blocks.len();
 
-    for stmt in &info.contents {
+    for stmt in &info.block_stmts {
         lower_statement(
             builder,
             stmt,
@@ -560,7 +560,7 @@ fn lower_for(builder: &mut FnBodyBuilder, info: &ForStmt) -> Result<(), Lowering
     // keep idx for switch targets
     let first_then_block_idx = builder.body.basic_blocks.len();
 
-    for stmt in &info.contents {
+    for stmt in &info.block_stmts {
         lower_statement(
             builder,
             stmt,
@@ -602,7 +602,7 @@ fn lower_for(builder: &mut FnBodyBuilder, info: &ForStmt) -> Result<(), Lowering
 
 fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), LoweringError> {
     let (discriminator, discriminator_type, _disc_span) =
-        lower_expression(builder, &info.value, None)?;
+        lower_expression(builder, &info.cond, None)?;
 
     let local = builder.add_temp_local(TyKind::Bool);
     let place = Place {
@@ -630,7 +630,7 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
     // keep idx for switch targets
     let first_then_block_idx = builder.body.basic_blocks.len();
 
-    for stmt in &info.contents {
+    for stmt in &info.block_stmts {
         lower_statement(
             builder,
             stmt,
@@ -654,7 +654,7 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
 
     let first_else_block_idx = builder.body.basic_blocks.len();
 
-    if let Some(contents) = &info.r#else {
+    if let Some(contents) = &info.else_stmts {
         for stmt in contents {
             lower_statement(
                 builder,
@@ -698,7 +698,7 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
 
 fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), LoweringError> {
     match &info.target {
-        LetStmtTarget::Simple { name, r#type } => {
+        LetStmtTarget::Simple { id: name, r#type } => {
             let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
             let (rvalue, rvalue_ty, rvalue_span) =
                 lower_expression(builder, &info.value, Some(ty.clone()))?;
@@ -734,7 +734,7 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), Lowering
 }
 
 fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), LoweringError> {
-    let (mut place, mut ty, _path_span) = lower_path(builder, &info.target)?;
+    let (mut place, mut ty, _path_span) = lower_path(builder, &info.lvalue)?;
 
     if !builder.body.locals[place.local].is_mutable() {
         return Err(LoweringError::NotMutable {
@@ -749,8 +749,8 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
             TyKind::Ref(inner, is_mut) | TyKind::Ptr(inner, is_mut) => {
                 if matches!(is_mut, Mutability::Not) {
                     Err(LoweringError::BorrowNotMutable {
-                        span: info.target.first.span,
-                        name: info.target.first.name.clone(),
+                        span: info.lvalue.first.span,
+                        name: info.lvalue.first.name.clone(),
                         type_span: ty.span,
                         program_id: builder.local_module.program_id,
                     })?;
@@ -763,7 +763,7 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
     }
 
     let (rvalue, rvalue_ty, rvalue_span) =
-        lower_expression(builder, &info.value, Some(ty.clone()))?;
+        lower_expression(builder, &info.rvalue, Some(ty.clone()))?;
 
     if ty.kind != rvalue_ty.kind {
         return Err(LoweringError::UnexpectedType {
@@ -775,7 +775,7 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
     }
 
     builder.statements.push(Statement {
-        span: Some(info.target.first.span),
+        span: Some(info.lvalue.first.span),
         kind: StatementKind::Assign(place, rvalue),
     });
 

@@ -18,7 +18,7 @@ pub enum Statement {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LetStmtTarget {
-    Simple { name: Ident, r#type: TypeSpec },
+    Simple { id: Ident, r#type: TypeSpec },
     Destructure(Vec<Binding>),
 }
 
@@ -38,15 +38,15 @@ pub struct ReturnStmt {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AssignStmt {
-    pub target: PathOp,
+    pub lvalue: PathOp,
     pub derefs: usize,
-    pub value: Expression,
+    pub rvalue: Expression,
     pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Binding {
-    pub name: Ident,
+    pub id: Ident,
     pub rename: Option<Ident>,
     pub r#type: TypeSpec,
 }
@@ -56,12 +56,12 @@ pub struct ForStmt {
     pub init: Option<LetStmt>,
     pub condition: Option<Expression>,
     pub post: Option<AssignStmt>,
-    pub contents: Vec<Statement>,
+    pub block_stmts: Vec<Statement>,
     pub span: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WhileStmt {
-    pub value: Expression,
-    pub contents: Vec<Statement>,
+    pub condition: Expression,
+    pub block_stmts: Vec<Statement>,
 }
