@@ -110,18 +110,18 @@ pub struct BuildArgs {
 #[command(author, version, about = "concrete compiler", long_about = None)]
 pub struct CompilerArgs {
     /// The input file.
-    input: PathBuf,
+    pub input: PathBuf,
 
     /// The output file.
     pub output: PathBuf,
 
     /// Build for release with all optimizations.
     #[arg(short, long, default_value_t = false)]
-    release: bool,
+    pub release: bool,
 
     /// Set the optimization level, 0,1,2,3
     #[arg(short = 'O', long)]
-    optlevel: Option<u8>,
+    pub optlevel: Option<u8>,
 
     /// Always add debug info
     #[arg(long)]
@@ -129,35 +129,35 @@ pub struct CompilerArgs {
 
     /// Build as a library.
     #[arg(short, long, default_value_t = false)]
-    library: bool,
+    pub library: bool,
 
     /// Also output the ast.
     #[arg(long, default_value_t = false)]
-    ast: bool,
+    pub ast: bool,
 
     /// Also output the ir.
     #[arg(long, default_value_t = false)]
-    ir: bool,
+    pub ir: bool,
 
     /// Also output the llvm ir file.
     #[arg(long, default_value_t = false)]
-    llvm: bool,
+    pub llvm: bool,
 
     /// Also output the mlir file
     #[arg(long, default_value_t = false)]
-    mlir: bool,
+    pub mlir: bool,
 
     /// Also output the asm file.
     #[arg(long, default_value_t = false)]
-    asm: bool,
+    pub asm: bool,
 
     /// Also output the object file.
     #[arg(long, default_value_t = false)]
-    object: bool,
+    pub object: bool,
 
     /// This option is for checking the program for linearity.
     #[arg(long, default_value_t = false)]
-    check: bool,
+    pub check: bool,
 }
 
 pub fn main() -> Result<()> {

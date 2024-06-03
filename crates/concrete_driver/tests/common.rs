@@ -7,8 +7,7 @@ use std::{
 
 use ariadne::Source;
 use concrete_driver::linker::{link_binary, link_shared_lib};
-// TODO uncomment when CompilerArgs tests calls are functional
-//use concrete_driver::CompilerArgs;
+use concrete_driver::CompilerArgs;
 use concrete_ir::lowering::lower_programs;
 use concrete_parser::{error::Diagnostics, ProgramSource};
 use concrete_session::{
@@ -35,47 +34,43 @@ pub struct CompileResult {
     pub binary_file: PathBuf,
 }
 
+/* 
 pub fn compile_program(
     source: &str,
     name: &str,
     library: bool,
     optlevel: OptLevel,
 ) -> Result<CompileResult, Box<dyn std::error::Error>> {
-    // TODO need to implement to build CompilerArgs for testing with options
-    /*
     let mut input_path = std::env::current_dir()?;
-    input_path.join(source);
+    input_path = input_path.join(source);
     let build_dir = std::env::current_dir()?;
     let output = build_dir.join(source);
 
     let compile_args = CompilerArgs {
         input: input_path.clone(),
         output: output.clone(),
-        false,
+        release: false,
+        ast: false,
         optlevel: None,
         debug_info: None,
-        library: lib,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
+        library,
+        ir: false,
+        llvm: false,
+        mlir: false,
+        asm: false,
+        object: false,
+        check: false,
     };
-    */
-    //compile_program_with_args(source, name, library, optlevel, &compile_args);
-    compile_program_with_args(source, name, library, optlevel)
+    compile_program_with_args(source, name, library, optlevel, &compile_args)
 }
+*/
 
-pub fn compile_program_with_args(
+pub fn compile_program(
     source: &str,
     name: &str,
     library: bool,
     optlevel: OptLevel,
-    //args: &CompilerArgs,
 ) -> Result<CompileResult, Box<dyn std::error::Error>> {
-    //TODO run parser with CompilerArgs
     let db = concrete_driver::db::Database::default();
     let source = ProgramSource::new(&db, source.to_string(), name.to_string());
     tracing::debug!("source code:\n{}", source.input(&db));
@@ -146,6 +141,111 @@ pub fn compile_program_with_args(
     })
 }
 
+
+pub fn _compile_program_with_args(
+    source: &str,
+    name: &str,
+    library: bool,
+    optlevel: OptLevel,
+    args: &CompilerArgs,
+) -> Result<CompileResult, Box<dyn std::error::Error>> {
+    let mut programs_for_check = Vec::new();
+
+    let db = concrete_driver::db::Database::default();
+    let source = ProgramSource::new(&db, source.to_string(), name.to_string());
+    tracing::debug!("source code:\n{}", source.input(&db));
+    let mut program = match concrete_parser::parse_ast(&db, source) {
+        Some(x) => x,
+        None => {
+            Diagnostics::dump(
+                &db,
+                source,
+                &concrete_parser::parse_ast::accumulated::<concrete_parser::error::Diagnostics>(
+                    &db, source,
+                ),
+            );
+            return Err(Box::new(TestError("error compiling".into())));
+        }
+    };
+    
+    let test_dir = tempfile::tempdir()?;
+    let test_dir_path = test_dir.path();
+
+    let input_file = test_dir_path.join(name).with_extension(".con");
+
+    let real_source = std::fs::read_to_string(input_file.clone())?;
+    //Build Vec for programs_for_check before moving program
+    if args.check {
+        programs_for_check.push((input_file.clone(), real_source, program.clone()));
+    }
+
+    std::fs::write(&input_file, source.input(&db))?;
+    program.file_path = Some(input_file.clone());
+    println!("*");
+    println!("*");
+    println!("*");
+    println!("*");
+    println!("input file: {:?}", input_file);
+    let output_file = test_dir_path.join(name);
+    let output_file = if library {
+        output_file.with_extension(Session::get_platform_library_ext())
+    } else if cfg!(target_os = "windows") {
+        output_file.with_extension("exe")
+    } else {
+        output_file.with_extension("")
+    };
+
+    let session = Session {
+        debug_info: DebugInfo::Full,
+        optlevel,
+        sources: vec![Source::from(source.input(&db).to_string())],
+        library,
+        output_file,
+        output_mlir: false,
+        output_ll: false,
+        output_asm: false,
+        file_paths: vec![input_file],
+    };
+    
+    // By now only used check for being able to run tests with linearity checking
+    #[allow(unused_variables)]
+    if args.check {
+        let linearity_result =
+            match concrete_check::linearity_check::linearity_check_program(&programs_for_check, &session) {
+                Ok(ir) => ir,
+                Err(error) => {
+                    //TODO improve reporting
+                    println!("Linearity check failed: {:#?}", error);
+                    std::process::exit(1);
+                }
+            };
+    }
+
+    let program_ir = lower_programs(&[program])?;
+
+    let object_path = concrete_codegen_mlir::compile(&session, &program_ir)?;
+
+    if library {
+        link_shared_lib(
+            &[object_path.clone()],
+            &session
+                .output_file
+                .with_extension(Session::get_platform_library_ext()),
+        )?;
+    } else {
+        link_binary(
+            &[object_path.clone()],
+            &session.output_file.with_extension(""),
+        )?;
+    }
+
+    Ok(CompileResult {
+        folder: test_dir,
+        object_file: object_path,
+        binary_file: session.output_file,
+    })
+}
+
 pub fn run_program(program: &Path) -> Result<Output, std::io::Error> {
     std::process::Command::new(program)
         .stdout(Stdio::piped())
@@ -158,6 +258,13 @@ pub fn compile_and_run(source: &str, name: &str, library: bool, optlevel: OptLev
     let result = compile_program(source, name, library, optlevel).expect("failed to compile");
     let output = run_program(&result.binary_file).expect("failed to run");
 
+    output.status.code().unwrap()
+}
+
+#[track_caller]
+pub fn _compile_and_run_with_args(source: &str, name: &str, library: bool, optlevel: OptLevel, args: &CompilerArgs) -> i32 {
+    let result = _compile_program_with_args(source, name, library, optlevel, args).expect("failed to compile");
+    let output = run_program(&result.binary_file).expect("failed to run");
     output.status.code().unwrap()
 }
 
