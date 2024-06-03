@@ -44,38 +44,6 @@ struct Appearances {
     path: u32,
 }
 
-// TODO remove. This are structures translated from Austral
-#[allow(dead_code)]
-enum Expr {
-    NilConstant,
-    BoolConstant(bool),
-    IntConstant(i32),
-    FloatConstant(f64),
-    StringConstant(String),
-    ConstVar,
-    ParamVar(String),
-    LocalVar(String),
-    FunVar,
-    Funcall(Box<Expr>, Vec<Expr>),
-    MethodCall(Box<Expr>, Vec<Expr>),
-    VarMethodCall(Vec<Expr>),
-    FptrCall(Box<Expr>, Vec<Expr>),
-    Cast(Box<Expr>, String),
-    Comparison(Box<Expr>, Box<Expr>),
-    Conjunction(Box<Expr>, Box<Expr>),
-    Disjunction(Box<Expr>, Box<Expr>),
-    Negation(Box<Expr>),
-    IfExpression(Box<Expr>, Box<Expr>, Box<Expr>),
-    RecordConstructor(Vec<Expr>),
-    UnionConstructor(Vec<Expr>),
-    Path { head: Box<Expr>, elems: Vec<Expr> },
-    Embed(Vec<Expr>),
-    Deref(Box<Expr>),
-    SizeOf,
-    Borrow(BorrowMode, String),
-    ArrayIndex(Box<Expr>),
-}
-
 #[allow(dead_code)]
 enum BorrowMode {
     ReadBorrow,
