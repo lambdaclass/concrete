@@ -64,89 +64,6 @@ pub fn compile_program(
     compile_program_with_args(source, name, library, optlevel, &compile_args)
 }
 
-/* 
-pub fn compile_program(
-    source: &str,
-    name: &str,
-    library: bool,
-    optlevel: OptLevel,
-) -> Result<CompileResult, Box<dyn std::error::Error>> {
-    let db = concrete_driver::db::Database::default();
-    let source = ProgramSource::new(&db, source.to_string(), name.to_string());
-    tracing::debug!("source code:\n{}", source.input(&db));
-    let mut program = match concrete_parser::parse_ast(&db, source) {
-        Some(x) => x,
-        None => {
-            Diagnostics::dump(
-                &db,
-                source,
-                &concrete_parser::parse_ast::accumulated::<concrete_parser::error::Diagnostics>(
-                    &db, source,
-                ),
-            );
-            return Err(Box::new(TestError("error compiling".into())));
-        }
-    };
-
-    let test_dir = tempfile::tempdir()?;
-    let test_dir_path = test_dir.path();
-
-    let input_file = test_dir_path.join(name).with_extension("con");
-    println!("*");
-    println!("*");
-    println!("*");
-    println!("*");
-    println!("input file: {:?}", input_file);
-    
-    std::fs::write(&input_file, source.input(&db))?;
-    program.file_path = Some(input_file.clone());
-
-    let output_file = test_dir_path.join(name);
-    let output_file = if library {
-        output_file.with_extension(Session::get_platform_library_ext())
-    } else if cfg!(target_os = "windows") {
-        output_file.with_extension("exe")
-    } else {
-        output_file.with_extension("")
-    };
-
-    let session = Session {
-        debug_info: DebugInfo::Full,
-        optlevel,
-        sources: vec![Source::from(source.input(&db).to_string())],
-        library,
-        output_file,
-        output_mlir: false,
-        output_ll: false,
-        output_asm: false,
-        file_paths: vec![input_file],
-    };
-
-    let program_ir = lower_programs(&[program])?;
-
-    let object_path = concrete_codegen_mlir::compile(&session, &program_ir)?;
-
-    if library {
-        link_shared_lib(
-            &[object_path.clone()],
-            &session
-                .output_file
-                .with_extension(Session::get_platform_library_ext()),
-        )?;
-    } else {
-        link_binary(
-            &[object_path.clone()],
-            &session.output_file.with_extension(""),
-        )?;
-    }
-
-    Ok(CompileResult {
-        folder: test_dir,
-        object_file: object_path,
-        binary_file: session.output_file,
-    })
-}
-*/
 
 pub fn compile_program_with_args(
     source: &str,
@@ -162,7 +79,6 @@ pub fn compile_program_with_args(
     let real_source = source.to_string();
     let source = ProgramSource::new(&db, source.to_string(), name.to_string());
     tracing::debug!("source code:\n{}", source.input(&db));
-    //println!("source code:\n{}", source.input(&db));    
     let mut program = match concrete_parser::parse_ast(&db, source) {
         Some(x) => x,
         None => {
@@ -176,20 +92,11 @@ pub fn compile_program_with_args(
             return Err(Box::new(TestError("error compiling".into())));
         }
     };
-    //println!("program: {:?}", program);    
     
     let test_dir = tempfile::tempdir()?;
     let test_dir_path = test_dir.path();
 
     let input_file = test_dir_path.join(name).with_extension("con");
-    println!("*");
-    println!("*");
-    println!("*");
-    println!("*");
-    
-    println!("input file: {:?}", input_file);
-    
-    //println!("After read_to_string: {:?}", real_source);
     
     //Build Vec for programs_for_check before moving program
     if args.check {
