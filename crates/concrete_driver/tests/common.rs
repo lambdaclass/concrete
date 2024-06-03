@@ -10,6 +10,7 @@ use concrete_driver::linker::{link_binary, link_shared_lib};
 use concrete_driver::CompilerArgs;
 use concrete_ir::lowering::lower_programs;
 use concrete_parser::{error::Diagnostics, ProgramSource};
+use concrete_ast::Program;
 use concrete_session::{
     config::{DebugInfo, OptLevel},
     Session,
@@ -34,7 +35,6 @@ pub struct CompileResult {
     pub binary_file: PathBuf,
 }
 
-/* 
 pub fn compile_program(
     source: &str,
     name: &str,
@@ -63,8 +63,8 @@ pub fn compile_program(
     };
     compile_program_with_args(source, name, library, optlevel, &compile_args)
 }
-*/
 
+/* 
 pub fn compile_program(
     source: &str,
     name: &str,
@@ -91,7 +91,13 @@ pub fn compile_program(
     let test_dir = tempfile::tempdir()?;
     let test_dir_path = test_dir.path();
 
-    let input_file = test_dir_path.join(name).with_extension(".con");
+    let input_file = test_dir_path.join(name).with_extension("con");
+    println!("*");
+    println!("*");
+    println!("*");
+    println!("*");
+    println!("input file: {:?}", input_file);
+    
     std::fs::write(&input_file, source.input(&db))?;
     program.file_path = Some(input_file.clone());
 
@@ -140,20 +146,23 @@ pub fn compile_program(
         binary_file: session.output_file,
     })
 }
+*/
 
-
-pub fn _compile_program_with_args(
+pub fn compile_program_with_args(
     source: &str,
     name: &str,
     library: bool,
     optlevel: OptLevel,
     args: &CompilerArgs,
 ) -> Result<CompileResult, Box<dyn std::error::Error>> {
-    let mut programs_for_check = Vec::new();
+    let mut programs_for_check: Vec<(PathBuf, String, Program)> = Vec::new();
 
     let db = concrete_driver::db::Database::default();
+    // Real source for programs_for_check
+    let real_source = source.to_string();
     let source = ProgramSource::new(&db, source.to_string(), name.to_string());
     tracing::debug!("source code:\n{}", source.input(&db));
+    //println!("source code:\n{}", source.input(&db));    
     let mut program = match concrete_parser::parse_ast(&db, source) {
         Some(x) => x,
         None => {
@@ -167,13 +176,21 @@ pub fn _compile_program_with_args(
             return Err(Box::new(TestError("error compiling".into())));
         }
     };
+    //println!("program: {:?}", program);    
     
     let test_dir = tempfile::tempdir()?;
     let test_dir_path = test_dir.path();
 
-    let input_file = test_dir_path.join(name).with_extension(".con");
-
-    let real_source = std::fs::read_to_string(input_file.clone())?;
+    let input_file = test_dir_path.join(name).with_extension("con");
+    println!("*");
+    println!("*");
+    println!("*");
+    println!("*");
+    
+    println!("input file: {:?}", input_file);
+    
+    //println!("After read_to_string: {:?}", real_source);
+    
     //Build Vec for programs_for_check before moving program
     if args.check {
         programs_for_check.push((input_file.clone(), real_source, program.clone()));
@@ -181,11 +198,6 @@ pub fn _compile_program_with_args(
 
     std::fs::write(&input_file, source.input(&db))?;
     program.file_path = Some(input_file.clone());
-    println!("*");
-    println!("*");
-    println!("*");
-    println!("*");
-    println!("input file: {:?}", input_file);
     let output_file = test_dir_path.join(name);
     let output_file = if library {
         output_file.with_extension(Session::get_platform_library_ext())
@@ -246,6 +258,7 @@ pub fn _compile_program_with_args(
     })
 }
 
+
 pub fn run_program(program: &Path) -> Result<Output, std::io::Error> {
     std::process::Command::new(program)
         .stdout(Stdio::piped())
@@ -263,7 +276,7 @@ pub fn compile_and_run(source: &str, name: &str, library: bool, optlevel: OptLev
 
 #[track_caller]
 pub fn _compile_and_run_with_args(source: &str, name: &str, library: bool, optlevel: OptLevel, args: &CompilerArgs) -> i32 {
-    let result = _compile_program_with_args(source, name, library, optlevel, args).expect("failed to compile");
+    let result = compile_program_with_args(source, name, library, optlevel, args).expect("failed to compile");
     let output = run_program(&result.binary_file).expect("failed to run");
     output.status.code().unwrap()
 }
