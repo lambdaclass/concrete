@@ -25,8 +25,8 @@ pub enum LetStmtTarget {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LetStmt {
     pub is_mutable: bool,
-    pub lvalue: LetStmtTarget,
-    pub rvalue: Expression,
+    pub target: LetStmtTarget,
+    pub value: Expression,
     pub span: Span,
 }
 
@@ -54,7 +54,7 @@ pub struct Binding {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ForStmt {
     pub init: Option<LetStmt>,
-    pub cond: Option<Expression>,
+    pub condition: Option<Expression>,
     pub post: Option<AssignStmt>,
     pub block_stmts: Vec<Statement>,
     pub span: Span,
@@ -62,6 +62,6 @@ pub struct ForStmt {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WhileStmt {
-    pub cond: Expression,
+    pub condition: Expression,
     pub block_stmts: Vec<Statement>,
 }

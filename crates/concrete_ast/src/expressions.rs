@@ -99,7 +99,7 @@ pub enum BitwiseOp {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MatchExpr {
-    pub match_expr: Box<Expression>,
+    pub expr: Box<Expression>,
     pub variants: Vec<MatchVariant>,
     pub span: Span,
 }

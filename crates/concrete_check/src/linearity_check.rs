@@ -324,7 +324,7 @@ impl LinearityChecker {
         match statement {
             Statement::Let(binding) => {
                 // Handle let bindings, possibly involving pattern matching
-                self.count_in_expression(name, &binding.rvalue)
+                self.count_in_expression(name, &binding.value)
             }
             Statement::If(if_stmt) => {
                 // Process all components of an if expression
@@ -340,7 +340,7 @@ impl LinearityChecker {
                 cond_apps.merge(&then_apps).merge(&else_apps)
             }
             Statement::While(while_expr) => {
-                let cond = &while_expr.cond;
+                let cond = &while_expr.condition;
                 let block = &while_expr.block_stmts;
                 // Handle while loops
                 self.count_in_expression(name, cond)
@@ -350,7 +350,7 @@ impl LinearityChecker {
                 // Handle for loops
                 //init, cond, post, block
                 let init = &for_expr.init;
-                let cond = &for_expr.cond;
+                let cond = &for_expr.condition;
                 let post = &for_expr.post;
                 let block = &for_expr.block_stmts;
                 let mut apps = Appearances::zero();
@@ -422,8 +422,8 @@ impl LinearityChecker {
     fn count_in_let_statements(&self, name: &str, let_stmt: &LetStmt) -> Appearances {
         let LetStmt {
             is_mutable,
-            lvalue: target,
-            rvalue: value,
+            target,
+            value,
             span,
         } = let_stmt;
         self.count_in_expression(name, value)
@@ -524,8 +524,8 @@ impl LinearityChecker {
         // Handle let bindings, possibly involving pattern matching
         let LetStmt {
             is_mutable,
-            lvalue: target,
-            rvalue: value,
+            target,
+            value,
             span,
         } = binding;
         match target {
@@ -713,7 +713,7 @@ impl LinearityChecker {
             //Statement::While(cond, block) => {
             Statement::While(while_stmt) => {
                 // Handle while loops
-                state_tbl = self.check_expr(state_tbl, depth, &while_stmt.cond, context)?;
+                state_tbl = self.check_expr(state_tbl, depth, &while_stmt.condition, context)?;
                 state_tbl =
                     self.check_stmts(state_tbl, depth + 1, &while_stmt.block_stmts, context)?;
                 Ok(state_tbl)
@@ -724,7 +724,7 @@ impl LinearityChecker {
                 if let Some(init) = &for_stmt.init {
                     state_tbl = self.check_stmt_let(state_tbl, depth, init, context)?;
                 }
-                if let Some(condition) = &for_stmt.cond {
+                if let Some(condition) = &for_stmt.condition {
                     state_tbl = self.check_expr(state_tbl, depth, condition, context)?;
                 }
                 if let Some(post) = &for_stmt.post {

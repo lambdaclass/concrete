@@ -515,9 +515,9 @@ pub(crate) IfExpr: ast::expressions::IfExpr = {
 }
 
 pub(crate) MatchExpr: ast::expressions::MatchExpr = {
-  <lo:@L> "match" <match_expr:Expression> "{" <variants:Comma<MatchVariant>> "}" <hi:@R> => {
+  <lo:@L> "match" <expr:Expression> "{" <variants:Comma<MatchVariant>> "}" <hi:@R> => {
     ast::expressions::MatchExpr {
-      match_expr: Box::new(match_expr),
+      expr: Box::new(expr),
       variants,
       span: Span::new(lo, hi)
     }
@@ -594,22 +594,22 @@ pub(crate) Statement: ast::statements::Statement = {
 }
 
 pub(crate) LetStmt: ast::statements::LetStmt = {
-  <lo:@L> "let" <is_mutable:"mut"?> <id:Ident> ":" <target_type:TypeSpec> "=" <rvalue:Expression> <hi:@R> => ast::statements::LetStmt {
+  <lo:@L> "let" <is_mutable:"mut"?> <id:Ident> ":" <target_type:TypeSpec> "=" <value:Expression> <hi:@R> => ast::statements::LetStmt {
     is_mutable: is_mutable.is_some(),
-    lvalue: ast::statements::LetStmtTarget::Simple {
+    target: ast::statements::LetStmtTarget::Simple {
       id,
       r#type: target_type
     },
-    rvalue,
+    value,
     span: Span::new(lo, hi),
   },
-  <lo:@L> "let" <is_mutable:"mut"?> <id:Ident> ":" <target_type:TypeSpec> "=" <rvalue:StructInitExpr> <hi:@R> => ast::statements::LetStmt {
+  <lo:@L> "let" <is_mutable:"mut"?> <id:Ident> ":" <target_type:TypeSpec> "=" <value:StructInitExpr> <hi:@R> => ast::statements::LetStmt {
     is_mutable: is_mutable.is_some(),
-    lvalue: ast::statements::LetStmtTarget::Simple {
+    target: ast::statements::LetStmtTarget::Simple {
       id,
       r#type: target_type
     },
-    rvalue: ast::expressions::Expression::StructInit(rvalue),
+    value: ast::expressions::Expression::StructInit(value),
     span: Span::new(lo, hi),
   },
 }
@@ -637,9 +637,9 @@ pub(crate) ReturnStmt: ast::statements::ReturnStmt = {
 }
 
 pub(crate) WhileStmt: ast::statements::WhileStmt = {
-  "while" <cond:Expression> "{" <block_stmts:StatementList> "}" => {
+  "while" <condition:Expression> "{" <block_stmts:StatementList> "}" => {
     ast::statements::WhileStmt {
-      cond,
+      condition,
       block_stmts,
     }
   }
@@ -647,19 +647,19 @@ pub(crate) WhileStmt: ast::statements::WhileStmt = {
 
 
 pub(crate) ForStmt: ast::statements::ForStmt = {
-  <lo:@L> "for" "(" <init:LetStmt?> ";" <cond:Expression?> ";" <post:AssignStmt?> ")" "{" <block_stmts:StatementList> "}" <hi:@R> => {
+  <lo:@L> "for" "(" <init:LetStmt?> ";" <condition:Expression?> ";" <post:AssignStmt?> ")" "{" <block_stmts:StatementList> "}" <hi:@R> => {
     ast::statements::ForStmt {
       init,
-      cond,
+      condition,
       post,
       block_stmts,
       span: Span::new(lo, hi)
     }
   },
-  <lo:@L> "for" "(" <cond:Expression> ")" "{" <block_stmts:StatementList> "}" <hi:@R> => {
+  <lo:@L> "for" "(" <condition:Expression> ")" "{" <block_stmts:StatementList> "}" <hi:@R> => {
     ast::statements::ForStmt {
       init: None,
-      cond: Some(cond),
+      condition: Some(condition),
       post: None,
       block_stmts, 
       span: Span::new(lo, hi)
@@ -668,7 +668,7 @@ pub(crate) ForStmt: ast::statements::ForStmt = {
   <lo:@L> "for" "{" <block_stmts:StatementList> "}" <hi:@R> => {
     ast::statements::ForStmt {
       init: None,
-      cond: None,
+      condition: None,
       post: None,
       block_stmts,
       span: Span::new(lo, hi)

@@ -287,7 +287,7 @@ fn lower_func(
     // Get all locals
     for stmt in &func.body {
         if let statements::Statement::Let(info) = stmt {
-            match &info.lvalue {
+            match &info.target {
                 LetStmtTarget::Simple { id: name, r#type } => {
                     let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
                     builder
@@ -305,7 +305,7 @@ fn lower_func(
             }
         } else if let statements::Statement::For(info) = stmt {
             if let Some(info) = &info.init {
-                match &info.lvalue {
+                match &info.target {
                     LetStmtTarget::Simple { id: name, r#type } => {
                         let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
                         builder
@@ -435,7 +435,7 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), Lowe
     });
 
     let (discriminator, discriminator_type, _disc_span) =
-        lower_expression(builder, &info.cond, None)?;
+        lower_expression(builder, &info.condition, None)?;
 
     let local = builder.add_temp_local(TyKind::Bool);
     let place = Place {
@@ -515,7 +515,7 @@ fn lower_for(builder: &mut FnBodyBuilder, info: &ForStmt) -> Result<(), Lowering
         }),
     });
 
-    let (discriminator, discriminator_type, _disc_span) = if let Some(condition) = &info.cond {
+    let (discriminator, discriminator_type, _disc_span) = if let Some(condition) = &info.condition {
         let (discriminator, discriminator_type, span) = lower_expression(builder, condition, None)?;
 
         (discriminator, discriminator_type, Some(span))
@@ -697,11 +697,11 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
 }
 
 fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), LoweringError> {
-    match &info.lvalue {
+    match &info.target {
         LetStmtTarget::Simple { id: name, r#type } => {
             let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
             let (rvalue, rvalue_ty, rvalue_span) =
-                lower_expression(builder, &info.rvalue, Some(ty.clone()))?;
+                lower_expression(builder, &info.value, Some(ty.clone()))?;
 
             if ty.kind != rvalue_ty.kind {
                 return Err(LoweringError::UnexpectedType {
