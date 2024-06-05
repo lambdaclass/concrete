@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-#[derive(Debug, Error, Clone)]
+#[derive(Debug, Error, Clone, PartialEq)]
 pub enum LinearityError {
     #[error("Variable {variable} not consumed")]
     NotConsumed { variable: String },

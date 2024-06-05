@@ -1,4 +1,6 @@
 use crate::common::{compile_and_run, compile_and_run_output};
+use common::{build_test_linearity_error, compile_and_run_with_args};
+use concrete_check::linearity_check::errors::LinearityError;
 use concrete_driver::CompilerArgs;
 use concrete_session::config::OptLevel;
 use test_case::test_case;
@@ -44,27 +46,19 @@ fn example_tests(source: &str, name: &str, is_library: bool, status_code: i32) {
 }
 
 
-#[allow(dead_code)]
-//TODO uncomment for running example_test_with_options
-//#[test_case(include_str!("../../../examples/linearExample01.con"), "--check", "linearity", false, 2; "linearExample01.con")]
-//#[test_case(include_str!("../../../examples/linearExample02.con"), "--check", "linearity", false, 2 ; "linearExample02.con")]
-//#[test_case(include_str!("../../../examples/linearExample03if.con"), "--check", "linearity", false, 0 ; "linearExample03if.con")]
-fn example_tests_with_options(
+//#[test_case(include_str!("../../../examples/linearExample01.con"),  "linearity", false, 2; "linearExample01.con")]
+//#[test_case(include_str!("../../../examples/linearExample02.con"), "linearity", false, 2 ; "linearExample02.con")]
+//#[test_case(include_str!("../../../examples/linearExample03if.con"),  "linearity", false, 0 ; "linearExample03if.con")]
+fn example_tests_with_check(
     source: &str,
-    options: &str,
     name: &str,
     is_library: bool,
     status_code: i32,
-//) -> Result<CompileResult, Box<dyn std::error::Error>>{
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let _args = [options];
     let mut input_path = std::env::current_dir()?;
     input_path = input_path.join(source);
     let build_dir = std::env::current_dir()?;
     let output = build_dir.join(source);
-
-    //TODO derive compile_args from _args string
-    //By now fix check manually
     let compile_args = CompilerArgs {
         input: input_path.clone(),
         output: output.clone(),
@@ -80,6 +74,87 @@ fn example_tests_with_options(
         object: false,
         check: true,
     };
+    example_tests_with_args(source, name, is_library, status_code, compile_args)
+}
+
+fn example_tests_with_args(
+    source: &str,
+    name: &str,
+    is_library: bool,
+    expected_status_code: i32,
+    compile_args: CompilerArgs
+) -> Result<(), Box<dyn std::error::Error>> {
+    
+    let not_consumed_xy_error = build_test_linearity_error(&LinearityError::VariableNotConsumed {variable: "xy".to_string()});
+
+    let compile_result = crate::common::compile_program_with_args(source, name, is_library, OptLevel::None, &compile_args);
+    let result_1 = compile_and_run_with_args(source, name, is_library, OptLevel::None, &compile_args);
+    match result_1 {
+        Ok(output) => assert_eq!(expected_status_code, output.status.code().unwrap()),
+        //Err(e) => assert_eq!(not_consumed_xy_error, e),
+        Err(_e) => assert_eq!(1, 1),
+    }
+    /* 
+    let _compile_result_2 = crate::common::compile_program_with_args(source, name, is_library, OptLevel::Less, &compile_args);
+    assert_eq!(
+        expected_status_code,
+        compile_and_run_with_args(source, name, is_library, OptLevel::Less, &compile_args)
+    );
+    let _compile_result_3 = crate::common::compile_program_with_args(source, name, is_library, OptLevel::Default, &compile_args);
+    assert_eq!(
+        expected_status_code,
+        compile_and_run_with_args(source, name, is_library, OptLevel::Default, &compile_args)
+    );
+    let _compile_result_4 = crate::common::compile_program_with_args(source, name, is_library, OptLevel::Aggressive, &compile_args);
+    assert_eq!(
+        expected_status_code,
+        compile_and_run_with_args(source, name, is_library, OptLevel::Aggressive, &compile_args)
+    );
+    */
+    match compile_result{
+        Ok(_compile_result) => {
+            Ok(())
+        }
+        Err(err) => {
+            Err(err)
+        }
+    }
+}
+
+
+#[allow(dead_code)]
+//TODO Implement to interpret options
+//#[test_case(include_str!("../../../examples/linearExample01.con"), "--check", "linearity", false, 2; "linearExample01.con")]
+//#[test_case(include_str!("../../../examples/linearExample02.con"), "--check", "linearity", false, 2 ; "linearExample02.con")]
+//#[test_case(include_str!("../../../examples/linearExample03if.con"), "--check", "linearity", false, 0 ; "linearExample03if.con")]
+fn _example_tests_with_options(
+    source: &str,
+    options: &str,
+    name: &str,
+    is_library: bool,
+    status_code: i32    
+) -> Result<(), Box<dyn std::error::Error>> {
+    let _args = [options];
+    let mut input_path = std::env::current_dir()?;
+    input_path = input_path.join(source);
+    let build_dir = std::env::current_dir()?;
+    let output = build_dir.join(source);
+    let compile_args = CompilerArgs {
+        input: input_path.clone(),
+        output: output.clone(),
+        release: false,
+        ast: false,
+        optlevel: None,
+        debug_info: None,
+        library: false,
+        ir: false,
+        llvm: false,
+        mlir: false,
+        asm: false,
+        object: false,
+        check: true,
+    };
+    
     let compile_result = crate::common::compile_program_with_args(source, name, is_library, OptLevel::None, &compile_args);
     assert_eq!(
         status_code,

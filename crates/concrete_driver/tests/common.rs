@@ -127,15 +127,16 @@ pub fn compile_program_with_args(
     };
     
     // By now only used check for being able to run tests with linearity checking
-    #[allow(unused_variables)]
+    let mut linearity_errors = Vec::new();
+    //#[allow(unused_variables)]
     if args.check {
-        let linearity_result =
+        let _linearity_result =
             match concrete_check::linearity_check::linearity_check_program(&programs_for_check, &session) {
                 Ok(ir) => ir,
                 Err(error) => {
                     //TODO improve reporting
                     println!("Linearity check failed: {:#?}", error);
-                    std::process::exit(1);
+                    linearity_errors.push(error);
                 }
             };
     }
@@ -157,14 +158,25 @@ pub fn compile_program_with_args(
             &session.output_file.with_extension(""),
         )?;
     }
-
-    Ok(CompileResult {
-        folder: test_dir,
-        object_file: object_path,
-        binary_file: session.output_file,
-    })
+    if linearity_errors.len() > 0 {
+        let error = build_test_linearity_error(&linearity_errors[0]);
+        Err(error)
+    }
+    else{
+        Ok(CompileResult {
+            folder: test_dir,
+            object_file: object_path,
+            binary_file: session.output_file,
+        })
+    }    
 }
 
+pub fn build_test_linearity_error(linearity_error: &concrete_check::linearity_check::errors::LinearityError) -> Box<dyn std::error::Error> {
+    let mut ret = "Linearity check failed<".to_string();
+    ret.push_str(&linearity_error.to_string());
+    ret.push_str(">");    
+    Box::new(TestError(ret.into()))
+}
 
 pub fn run_program(program: &Path) -> Result<Output, std::io::Error> {
     std::process::Command::new(program)
@@ -177,15 +189,17 @@ pub fn run_program(program: &Path) -> Result<Output, std::io::Error> {
 pub fn compile_and_run(source: &str, name: &str, library: bool, optlevel: OptLevel) -> i32 {
     let result = compile_program(source, name, library, optlevel).expect("failed to compile");
     let output = run_program(&result.binary_file).expect("failed to run");
-
     output.status.code().unwrap()
 }
 
 #[track_caller]
-pub fn _compile_and_run_with_args(source: &str, name: &str, library: bool, optlevel: OptLevel, args: &CompilerArgs) -> i32 {
+pub fn compile_and_run_with_args(source: &str, name: &str, library: bool, optlevel: OptLevel, args: &CompilerArgs) -> Result<Output, std::io::Error>  {
     let result = compile_program_with_args(source, name, library, optlevel, args).expect("failed to compile");
+    //let result = compile_program_with_args(source, name, library, optlevel, args);
     let output = run_program(&result.binary_file).expect("failed to run");
-    output.status.code().unwrap()
+    //output.status.code().unwrap()
+    Ok(output)
+
 }
 
 #[allow(unused)] // false positive

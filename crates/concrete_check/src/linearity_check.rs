@@ -923,7 +923,7 @@ impl LinearityChecker {
 pub fn linearity_check_program(
     programs: &Vec<(PathBuf, String, Program)>,
     _session: &Session,
-) -> Result<String, LinearityError> {
+) -> Result<(), LinearityError> {
     tracing::debug!("Starting linearity check");
     let checker = LinearityChecker::new();
     for (_path, name, program) in programs {
@@ -992,5 +992,5 @@ pub fn linearity_check_program(
             }
         }
     }
-    Ok("OK".to_string())
+    Ok(())
 }
