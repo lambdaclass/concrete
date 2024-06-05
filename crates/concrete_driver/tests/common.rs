@@ -159,7 +159,7 @@ pub fn compile_program_with_args(
             &session.output_file.with_extension(""),
         )?;
     }
-    if linearity_errors.len() > 0 {
+    if !linearity_errors.is_empty() {
         let error = build_test_linearity_error(&linearity_errors[0]);
         Err(error)
     } else {
@@ -176,7 +176,7 @@ pub fn build_test_linearity_error(
 ) -> Box<dyn std::error::Error> {
     let mut ret = "Linearity check failed<".to_string();
     ret.push_str(&linearity_error.to_string());
-    ret.push_str(">");
+    ret.push('>');
     Box::new(TestError(ret.into()))
 }
 
@@ -194,6 +194,7 @@ pub fn compile_and_run(source: &str, name: &str, library: bool, optlevel: OptLev
     output.status.code().unwrap()
 }
 
+#[cfg(test)]
 #[track_caller]
 pub fn compile_and_run_with_args(
     source: &str,
