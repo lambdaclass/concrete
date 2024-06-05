@@ -193,13 +193,18 @@ pub fn compile_and_run(source: &str, name: &str, library: bool, optlevel: OptLev
 }
 
 #[track_caller]
-pub fn compile_and_run_with_args(source: &str, name: &str, library: bool, optlevel: OptLevel, args: &CompilerArgs) -> Result<Output, std::io::Error>  {
-    let result = compile_program_with_args(source, name, library, optlevel, args).expect("failed to compile");
-    //let result = compile_program_with_args(source, name, library, optlevel, args);
-    let output = run_program(&result.binary_file).expect("failed to run");
-    //output.status.code().unwrap()
-    Ok(output)
-
+pub fn compile_and_run_with_args(source: &str, name: &str, library: bool, optlevel: OptLevel, args: &CompilerArgs) -> 
+//Result<Output, std::io::Error>  {
+    Result<Output, Box<dyn std::error::Error>>{
+    let compile_result = compile_program_with_args(source, name, library, optlevel, args);
+    match compile_result {
+        //Err(e) => Err(std::error::Error::new(std::io::ErrorKind::Other, e.to_string())),
+        Err(e) => Err(e),
+        Ok(result) => {
+            let run_output = run_program(&result.binary_file)?;
+            Ok(run_output)
+        }
+    }
 }
 
 #[allow(unused)] // false positive
