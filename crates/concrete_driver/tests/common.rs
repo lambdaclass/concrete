@@ -129,7 +129,7 @@ pub fn compile_program_with_args(
     let mut linearity_errors = Vec::new();
     //#[allow(unused_variables)]
     if args.check {
-        let _linearity_result = match concrete_check::linearity_check::linearity_check_program(
+        match concrete_check::linearity_check::linearity_check_program(
             &programs_for_check,
             &session,
         ) {
@@ -194,7 +194,8 @@ pub fn compile_and_run(source: &str, name: &str, library: bool, optlevel: OptLev
     output.status.code().unwrap()
 }
 
-#[cfg(test)]
+#[allow(unused)] // false positive
+//#[cfg(test)] //TODO It should solve the warning but it doesn't
 #[track_caller]
 pub fn compile_and_run_with_args(
     source: &str,
