@@ -12,6 +12,7 @@ use concrete_session::{
     Session,
 };
 use config::{Package, Profile};
+use core::panic;
 use db::Database;
 use git2::{IndexAddOption, Repository};
 use owo_colors::OwoColorize;
@@ -605,15 +606,14 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
 
     #[allow(unused_variables)]
     if args.check {
-        let linearity_result =
-            match concrete_check::linearity_check::linearity_check_program(&programs, &session) {
-                Ok(ir) => ir,
-                Err(error) => {
-                    //TODO improve reporting
-                    println!("Linearity check failed: {:#?}", error);
-                    std::process::exit(1);
-                }
-            };
+        //let linearity_result =
+        match concrete_check::linearity_check::linearity_check_program(&programs, &session) {
+            Ok(ir) => ir,
+            Err(error) => {
+                //TODO improve reporting
+                panic!("Linearity check failed: {:#?}", error);
+            }
+        };
     }
 
     if args.ir {

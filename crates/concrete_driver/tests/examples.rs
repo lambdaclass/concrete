@@ -5,7 +5,6 @@ use concrete_driver::CompilerArgs;
 use concrete_session::config::OptLevel;
 use test_case::test_case;
 
-
 mod common;
 
 #[test_case(include_str!("../../../examples/borrow.con"), "borrow", false, 2 ; "borrow.con")]
@@ -45,7 +44,6 @@ fn example_tests(source: &str, name: &str, is_library: bool, status_code: i32) {
     );
 }
 
-
 #[test_case(include_str!("../../../examples/linearExample01.con"),  "linearity", false, 2; "linearExample01.con")]
 #[test_case(include_str!("../../../examples/linearExample02.con"), "linearity", false, 2 ; "linearExample02.con")]
 #[test_case(include_str!("../../../examples/linearExample03if.con"),  "linearity", false, 0 ; "linearExample03if.con")]
@@ -82,38 +80,46 @@ fn example_tests_with_args(
     name: &str,
     is_library: bool,
     expected_status_code: i32,
-    compile_args: CompilerArgs
+    compile_args: CompilerArgs,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    
-    let not_consumed_xy_error = build_test_linearity_error(&LinearityError::VariableNotConsumed {variable: "xy".to_string()});
+    let not_consumed_xy_error = build_test_linearity_error(&LinearityError::VariableNotConsumed {
+        variable: "xy".to_string(),
+    });
 
     //let compile_result = crate::common::compile_program_with_args(source, name, is_library, OptLevel::None, &compile_args);
-    let result_1 = compile_and_run_with_args(source, name, is_library, OptLevel::None, &compile_args);
+    let result_1 =
+        compile_and_run_with_args(source, name, is_library, OptLevel::None, &compile_args);
     match result_1 {
         Ok(output) => assert_eq!(expected_status_code, output.status.code().unwrap()),
         Err(e) => assert_eq!(not_consumed_xy_error.to_string(), e.to_string()),
     }
-    let result_2 = compile_and_run_with_args(source, name, is_library, OptLevel::Less, &compile_args);
+    let result_2 =
+        compile_and_run_with_args(source, name, is_library, OptLevel::Less, &compile_args);
     match result_2 {
         Ok(output) => assert_eq!(expected_status_code, output.status.code().unwrap()),
         Err(e) => assert_eq!(not_consumed_xy_error.to_string(), e.to_string()),
     }
-    
-    let result_3 = compile_and_run_with_args(source, name, is_library, OptLevel::Default, &compile_args);
+
+    let result_3 =
+        compile_and_run_with_args(source, name, is_library, OptLevel::Default, &compile_args);
     match result_3 {
         Ok(output) => assert_eq!(expected_status_code, output.status.code().unwrap()),
         Err(e) => assert_eq!(not_consumed_xy_error.to_string(), e.to_string()),
     }
-    
-    let result_4 = compile_and_run_with_args(source, name, is_library, OptLevel::Aggressive, &compile_args);
+
+    let result_4 = compile_and_run_with_args(
+        source,
+        name,
+        is_library,
+        OptLevel::Aggressive,
+        &compile_args,
+    );
     match result_4 {
         Ok(output) => assert_eq!(expected_status_code, output.status.code().unwrap()),
         Err(e) => assert_eq!(not_consumed_xy_error.to_string(), e.to_string()),
     }
     Ok(())
 }
-
-
 
 #[test_case(include_str!("../../../examples/hello_world_hacky.con"), "hello_world_hacky", false, "Hello World\n" ; "hello_world_hacky.con")]
 #[test_case(include_str!("../../../examples/hello_world_array.con"), "hello_world_array", false, "hello world!\n" ; "hello_world_array.con")]

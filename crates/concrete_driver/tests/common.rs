@@ -6,11 +6,11 @@ use std::{
 };
 
 use ariadne::Source;
+use concrete_ast::Program;
 use concrete_driver::linker::{link_binary, link_shared_lib};
 use concrete_driver::CompilerArgs;
 use concrete_ir::lowering::lower_programs;
 use concrete_parser::{error::Diagnostics, ProgramSource};
-use concrete_ast::Program;
 use concrete_session::{
     config::{DebugInfo, OptLevel},
     Session,
@@ -64,7 +64,6 @@ pub fn compile_program(
     compile_program_with_args(source, name, library, optlevel, &compile_args)
 }
 
-
 pub fn compile_program_with_args(
     source: &str,
     name: &str,
@@ -92,12 +91,12 @@ pub fn compile_program_with_args(
             return Err(Box::new(TestError("error compiling".into())));
         }
     };
-    
+
     let test_dir = tempfile::tempdir()?;
     let test_dir_path = test_dir.path();
 
     let input_file = test_dir_path.join(name).with_extension("con");
-    
+
     //Build Vec for programs_for_check before moving program
     if args.check {
         programs_for_check.push((input_file.clone(), real_source, program.clone()));
@@ -125,20 +124,22 @@ pub fn compile_program_with_args(
         output_asm: false,
         file_paths: vec![input_file],
     };
-    
+
     // By now only used check for being able to run tests with linearity checking
     let mut linearity_errors = Vec::new();
     //#[allow(unused_variables)]
     if args.check {
-        let _linearity_result =
-            match concrete_check::linearity_check::linearity_check_program(&programs_for_check, &session) {
-                Ok(ir) => ir,
-                Err(error) => {
-                    //TODO improve reporting
-                    println!("Linearity check failed: {:#?}", error);
-                    linearity_errors.push(error);
-                }
-            };
+        let _linearity_result = match concrete_check::linearity_check::linearity_check_program(
+            &programs_for_check,
+            &session,
+        ) {
+            Ok(ir) => ir,
+            Err(error) => {
+                //TODO improve reporting
+                println!("Linearity check failed: {:#?}", error);
+                linearity_errors.push(error);
+            }
+        };
     }
 
     let program_ir = lower_programs(&[program])?;
@@ -161,20 +162,21 @@ pub fn compile_program_with_args(
     if linearity_errors.len() > 0 {
         let error = build_test_linearity_error(&linearity_errors[0]);
         Err(error)
-    }
-    else{
+    } else {
         Ok(CompileResult {
             folder: test_dir,
             object_file: object_path,
             binary_file: session.output_file,
         })
-    }    
+    }
 }
 
-pub fn build_test_linearity_error(linearity_error: &concrete_check::linearity_check::errors::LinearityError) -> Box<dyn std::error::Error> {
+pub fn build_test_linearity_error(
+    linearity_error: &concrete_check::linearity_check::errors::LinearityError,
+) -> Box<dyn std::error::Error> {
     let mut ret = "Linearity check failed<".to_string();
     ret.push_str(&linearity_error.to_string());
-    ret.push_str(">");    
+    ret.push_str(">");
     Box::new(TestError(ret.into()))
 }
 
@@ -193,9 +195,13 @@ pub fn compile_and_run(source: &str, name: &str, library: bool, optlevel: OptLev
 }
 
 #[track_caller]
-pub fn compile_and_run_with_args(source: &str, name: &str, library: bool, optlevel: OptLevel, args: &CompilerArgs) -> 
-//Result<Output, std::io::Error>  {
-    Result<Output, Box<dyn std::error::Error>>{
+pub fn compile_and_run_with_args(
+    source: &str,
+    name: &str,
+    library: bool,
+    optlevel: OptLevel,
+    args: &CompilerArgs,
+) -> Result<Output, Box<dyn std::error::Error>> {
     let compile_result = compile_program_with_args(source, name, library, optlevel, args);
     match compile_result {
         //Err(e) => Err(std::error::Error::new(std::io::ErrorKind::Other, e.to_string())),
