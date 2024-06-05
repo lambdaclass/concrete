@@ -6,7 +6,7 @@ use thiserror::Error;
 pub enum LinearityError {
     #[error("Variable {variable} not consumed")]
     NotConsumed { variable: String },
-    #[error("Borrowed mutably and used for Variable {variable}")]
+    #[error("Borrowed mutably and used for variable {variable}")]
     BorrowedMutUsed { variable: String },
     #[error("Variable {variable} borrowed mutably more than once")]
     BorrowedMutMoreThanOnce { variable: String },
