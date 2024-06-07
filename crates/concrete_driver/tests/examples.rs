@@ -107,13 +107,8 @@ fn example_tests_with_args(
         Err(e) => assert_eq!(not_consumed_xy_error.to_string(), e.to_string()),
     }
 
-    let result_4 = compile_and_run_with_args(
-        source,
-        name,
-        is_library,
-        OptLevel::Aggressive,
-        &compile_args,
-    );
+    let result_4 = 
+        compile_and_run_with_args(source, name, is_library, OptLevel::Aggressive, &compile_args);
     match result_4 {
         Ok(output) => assert_eq!(expected_status_code, output.status.code().unwrap()),
         Err(e) => assert_eq!(not_consumed_xy_error.to_string(), e.to_string()),
