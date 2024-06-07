@@ -4,6 +4,8 @@ use ariadne::{ColorGenerator, Label, Report, ReportKind};
 use concrete_ir::lowering::errors::LoweringError;
 use concrete_session::Session;
 
+pub mod linearity_check;
+
 /// Creates a report from a lowering error.
 pub fn lowering_error_to_report(
     error: LoweringError,

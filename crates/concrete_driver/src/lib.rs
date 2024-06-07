@@ -100,6 +100,10 @@ pub struct BuildArgs {
     /// Also output the object file.
     #[arg(long, default_value_t = false)]
     object: bool,
+
+    /// This option is for checking the program for linearity.
+    #[arg(long, default_value_t = false)]
+    check: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -150,6 +154,10 @@ pub struct CompilerArgs {
     /// Also output the object file.
     #[arg(long, default_value_t = false)]
     object: bool,
+
+    /// This option is for checking the program for linearity.
+    #[arg(long, default_value_t = false)]
+    check: bool,
 }
 
 pub fn main() -> Result<()> {
@@ -298,6 +306,7 @@ fn handle_build(
         asm,
         object,
         lib,
+        check,
     }: BuildArgs,
 ) -> Result<PathBuf> {
     match path {
@@ -325,6 +334,7 @@ fn handle_build(
                 asm,
                 object,
                 mlir,
+                check,
             };
 
             println!(
@@ -453,6 +463,7 @@ fn handle_build(
                         asm,
                         object,
                         mlir,
+                        check,
                     };
                     let object = compile(&compile_args)?;
 
@@ -591,6 +602,19 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
             std::process::exit(1);
         }
     };
+
+    #[allow(unused_variables)]
+    if args.check {
+        let linearity_result =
+            match concrete_check::linearity_check::linearity_check_program(&programs, &session) {
+                Ok(ir) => ir,
+                Err(error) => {
+                    //TODO improve reporting
+                    println!("Linearity check failed: {:#?}", error);
+                    std::process::exit(1);
+                }
+            };
+    }
 
     if args.ir {
         std::fs::write(

@@ -1,0 +1,27 @@
+mod LinearExampleIfStub {
+
+ struct Linear {
+     x: i32,
+     y: i32,
+ }
+ 
+ fn main() -> i32 {
+  let mut xy: Linear = 
+                    Linear {
+                        x: 1,
+                        y: 0,
+                    };
+  if xy.x < xy.y{
+   consume_x(&mut xy, 1);   
+  }
+  else {
+   consume_x(&mut xy, 0-1);  
+  }
+  return xy.x;
+ }
+ 
+ fn consume_x(value: & mut Linear, i: i32) {
+  value.x = value.x + i;
+ }
+ 
+}
