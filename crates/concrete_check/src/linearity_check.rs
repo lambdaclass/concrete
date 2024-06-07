@@ -268,15 +268,13 @@ impl LinearityChecker {
         context: &str,
     ) -> Result<StateTbl, LinearityError> {
         // Assuming you have a method to get all variable names and types
-        //let vars = &mut self.state_tbl.vars;
-        //TODO check if we can avoid cloning
         let vars = state_tbl.vars.clone();
         println!("Check_expr vars {:?}", vars);
         for (name, _info) in vars.iter() {
             //self.check_var_in_expr(depth, &name, &info.ty, expr)?;
             state_tbl = self
                 .check_var_in_expr(state_tbl, depth, name, expr, context)
-                .unwrap();
+                .expect("Linearity error");
         }
         Ok(state_tbl)
     }
