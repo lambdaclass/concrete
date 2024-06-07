@@ -296,10 +296,10 @@ impl LinearityChecker {
             }
             Statement::If(if_stmt) => {
                 // Process all components of an if expression
-                let cond_apps = self.count_in_expression(name, &if_stmt.value);
-                let then_apps = self.count_in_statements(name, &if_stmt.contents);
+                let cond_apps = self.count_in_expression(name, &if_stmt.cond);
+                let then_apps = self.count_in_statements(name, &if_stmt.block_stmts);
                 let else_apps;
-                let else_statements = &if_stmt.r#else;
+                let else_statements = &if_stmt.else_stmts;
                 if let Some(else_statements) = else_statements {
                     else_apps = self.count_in_statements(name, else_statements);
                 } else {
@@ -308,8 +308,8 @@ impl LinearityChecker {
                 cond_apps.merge(&then_apps).merge(&else_apps)
             }
             Statement::While(while_expr) => {
-                let cond = &while_expr.value;
-                let block = &while_expr.contents;
+                let cond = &while_expr.condition;
+                let block = &while_expr.block_stmts;
                 // Handle while loops
                 self.count_in_expression(name, cond)
                     .merge(&self.count_in_statements(name, block))
@@ -320,7 +320,7 @@ impl LinearityChecker {
                 let init = &for_expr.init;
                 let cond = &for_expr.condition;
                 let post = &for_expr.post;
-                let block = &for_expr.contents;
+                let block = &for_expr.block_stmts;
                 let mut apps = Appearances::zero();
                 if let Some(init) = init {
                     if let Some(cond) = cond {
@@ -364,9 +364,9 @@ impl LinearityChecker {
 
     fn count_in_assign_statement(&self, name: &str, assign_stmt: &AssignStmt) -> Appearances {
         let AssignStmt {
-            target,
+            lvalue: target,
             derefs,
-            value,
+            rvalue: value,
             span,
         } = assign_stmt;
         // Handle assignments
@@ -434,10 +434,10 @@ impl LinearityChecker {
             Expression::If(if_expr) => {
                 // Process all components of an if expression
                 // TODO review this code. If expressions should be processed counting both branches and comparing them
-                let cond_apps = self.count_in_expression(name, &if_expr.value);
-                let then_apps = self.count_in_statements(name, &if_expr.contents);
+                let cond_apps = self.count_in_expression(name, &if_expr.cond);
+                let then_apps = self.count_in_statements(name, &if_expr.block_stmts);
                 cond_apps.merge(&then_apps);
-                if let Some(else_block) = &if_expr.r#else {
+                if let Some(else_block) = &if_expr.else_stmts {
                     let else_apps = self.count_in_statements(name, else_block);
                     cond_apps.merge(&then_apps).merge(&else_apps);
                 }
@@ -497,7 +497,7 @@ impl LinearityChecker {
             span,
         } = binding;
         match target {
-            LetStmtTarget::Simple { name, r#type } => {
+            LetStmtTarget::Simple { id: name, r#type } => {
                 match r#type {
                     TypeSpec::Simple {
                         name: variable_type,
@@ -670,9 +670,10 @@ impl LinearityChecker {
             //Statement::If(cond, then_block, else_block) => {
             Statement::If(if_stmt) => {
                 // Handle conditional statements
-                state_tbl = self.check_expr(state_tbl, depth, &if_stmt.value, context)?;
-                state_tbl = self.check_stmts(state_tbl, depth + 1, &if_stmt.contents, context)?;
-                if let Some(else_block) = &if_stmt.r#else {
+                state_tbl = self.check_expr(state_tbl, depth, &if_stmt.cond, context)?;
+                state_tbl =
+                    self.check_stmts(state_tbl, depth + 1, &if_stmt.block_stmts, context)?;
+                if let Some(else_block) = &if_stmt.else_stmts {
                     state_tbl = self.check_stmts(state_tbl, depth + 1, else_block, context)?;
                 }
                 Ok(state_tbl)
@@ -680,9 +681,9 @@ impl LinearityChecker {
             //Statement::While(cond, block) => {
             Statement::While(while_stmt) => {
                 // Handle while loops
-                state_tbl = self.check_expr(state_tbl, depth, &while_stmt.value, context)?;
+                state_tbl = self.check_expr(state_tbl, depth, &while_stmt.condition, context)?;
                 state_tbl =
-                    self.check_stmts(state_tbl, depth + 1, &while_stmt.contents, context)?;
+                    self.check_stmts(state_tbl, depth + 1, &while_stmt.block_stmts, context)?;
                 Ok(state_tbl)
             }
             //Statement::For(init, cond, post, block) => {
@@ -698,15 +699,16 @@ impl LinearityChecker {
                     //TODO check assign statement
                     //self.check_stmt_assign(depth, post)?;
                 }
-                state_tbl = self.check_stmts(state_tbl, depth + 1, &for_stmt.contents, context)?;
+                state_tbl =
+                    self.check_stmts(state_tbl, depth + 1, &for_stmt.block_stmts, context)?;
                 Ok(state_tbl)
             }
             Statement::Assign(assign_stmt) => {
                 // Handle assignments
                 let AssignStmt {
-                    target,
+                    lvalue: target,
                     derefs,
-                    value,
+                    rvalue: value,
                     span,
                 } = assign_stmt;
                 tracing::debug!("Checking assignment: {:?}", assign_stmt);
