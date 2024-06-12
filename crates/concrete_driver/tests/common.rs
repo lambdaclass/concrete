@@ -6,7 +6,9 @@ use std::{
 };
 
 use ariadne::Source;
+use concrete_ast::Program;
 use concrete_driver::linker::{link_binary, link_shared_lib};
+use concrete_driver::CompilerArgs;
 use concrete_ir::lowering::lower_programs;
 use concrete_parser::{error::Diagnostics, ProgramSource};
 use concrete_session::{
@@ -39,7 +41,41 @@ pub fn compile_program(
     library: bool,
     optlevel: OptLevel,
 ) -> Result<CompileResult, Box<dyn std::error::Error>> {
+    let mut input_path = std::env::current_dir()?;
+    input_path = input_path.join(source);
+    let build_dir = std::env::current_dir()?;
+    let output = build_dir.join(source);
+
+    let compile_args = CompilerArgs {
+        input: input_path.clone(),
+        output: output.clone(),
+        release: false,
+        ast: false,
+        optlevel: None,
+        debug_info: None,
+        library,
+        ir: false,
+        llvm: false,
+        mlir: false,
+        asm: false,
+        object: false,
+        check: false,
+    };
+    compile_program_with_args(source, name, library, optlevel, &compile_args)
+}
+
+pub fn compile_program_with_args(
+    source: &str,
+    name: &str,
+    library: bool,
+    optlevel: OptLevel,
+    args: &CompilerArgs,
+) -> Result<CompileResult, Box<dyn std::error::Error>> {
+    let mut programs_for_check: Vec<(PathBuf, String, Program)> = Vec::new();
+
     let db = concrete_driver::db::Database::default();
+    // Real source for programs_for_check
+    let real_source = source.to_string();
     let source = ProgramSource::new(&db, source.to_string(), name.to_string());
     tracing::debug!("source code:\n{}", source.input(&db));
     let mut program = match concrete_parser::parse_ast(&db, source) {
@@ -59,10 +95,15 @@ pub fn compile_program(
     let test_dir = tempfile::tempdir()?;
     let test_dir_path = test_dir.path();
 
-    let input_file = test_dir_path.join(name).with_extension(".con");
+    let input_file = test_dir_path.join(name).with_extension("con");
+
+    //Build Vec for programs_for_check before moving program
+    if args.check {
+        programs_for_check.push((input_file.clone(), real_source, program.clone()));
+    }
+
     std::fs::write(&input_file, source.input(&db))?;
     program.file_path = Some(input_file.clone());
-
     let output_file = test_dir_path.join(name);
     let output_file = if library {
         output_file.with_extension(Session::get_platform_library_ext())
@@ -84,6 +125,23 @@ pub fn compile_program(
         file_paths: vec![input_file],
     };
 
+    // By now only used check for being able to run tests with linearity checking
+    let mut linearity_errors = Vec::new();
+    //#[allow(unused_variables)]
+    if args.check {
+        match concrete_check::linearity_check::linearity_check_program(
+            &programs_for_check,
+            &session,
+        ) {
+            Ok(ir) => ir,
+            Err(error) => {
+                //TODO improve reporting
+                println!("Linearity check failed: {:#?}", error);
+                linearity_errors.push(error);
+            }
+        };
+    }
+
     let program_ir = lower_programs(&[program])?;
 
     let object_path = concrete_codegen_mlir::compile(&session, &program_ir)?;
@@ -101,12 +159,25 @@ pub fn compile_program(
             &session.output_file.with_extension(""),
         )?;
     }
+    if !linearity_errors.is_empty() {
+        let error = build_test_linearity_error(&linearity_errors[0]);
+        Err(error)
+    } else {
+        Ok(CompileResult {
+            folder: test_dir,
+            object_file: object_path,
+            binary_file: session.output_file,
+        })
+    }
+}
 
-    Ok(CompileResult {
-        folder: test_dir,
-        object_file: object_path,
-        binary_file: session.output_file,
-    })
+pub fn build_test_linearity_error(
+    linearity_error: &concrete_check::linearity_check::errors::LinearityError,
+) -> Box<dyn std::error::Error> {
+    let mut ret = "Linearity check failed<".to_string();
+    ret.push_str(&linearity_error.to_string());
+    ret.push('>');
+    Box::new(TestError(ret.into()))
 }
 
 pub fn run_program(program: &Path) -> Result<Output, std::io::Error> {
@@ -119,10 +190,29 @@ pub fn run_program(program: &Path) -> Result<Output, std::io::Error> {
 #[track_caller]
 pub fn compile_and_run(source: &str, name: &str, library: bool, optlevel: OptLevel) -> i32 {
     let result = compile_program(source, name, library, optlevel).expect("failed to compile");
-
     let output = run_program(&result.binary_file).expect("failed to run");
-
     output.status.code().unwrap()
+}
+
+#[allow(unused)] // false positive
+//#[cfg(test)] //TODO It should solve the warning but it doesn't
+#[track_caller]
+pub fn compile_and_run_with_args(
+    source: &str,
+    name: &str,
+    library: bool,
+    optlevel: OptLevel,
+    args: &CompilerArgs,
+) -> Result<Output, Box<dyn std::error::Error>> {
+    let compile_result = compile_program_with_args(source, name, library, optlevel, args);
+    match compile_result {
+        //Err(e) => Err(std::error::Error::new(std::io::ErrorKind::Other, e.to_string())),
+        Err(e) => Err(e),
+        Ok(result) => {
+            let run_output = run_program(&result.binary_file)?;
+            Ok(run_output)
+        }
+    }
 }
 
 #[allow(unused)] // false positive

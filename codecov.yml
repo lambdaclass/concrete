@@ -1,0 +1,15 @@
+codecov:
+  require_ci_to_pass: yes
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto  # Automatically sets the target based on the previous commits
+        threshold: 0% # Allows any decrease in coverage without failing the check
+        base: auto
+    patch:
+      default:
+        target: auto  # Automatically sets the target based on the previous commits
+        threshold: 0% # Allows any decrease in coverage without failing the check
+        base: auto
