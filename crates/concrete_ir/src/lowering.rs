@@ -87,7 +87,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
         }
     }
 
-    let body = ctx.body.modules.get(&id).unwrap();
+    let body = ctx.body.modules.get(&id).expect("no body");
 
     // fill fn sigs
     for content in &module.contents {
@@ -166,8 +166,8 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
             }
             ModuleDefItem::Type(_) => todo!(),
             ModuleDefItem::Module(mod_def) => {
-                let body = ctx.body.modules.get(&id).unwrap();
-                let id = *body.symbols.modules.get(&mod_def.name.name).unwrap();
+                let body = ctx.body.modules.get(&id).expect("no body");
+                let id = *body.symbols.modules.get(&mod_def.name.name).expect("no id");
                 ctx = lower_module(ctx, mod_def, id)?;
             }
             ModuleDefItem::Struct(_) => { /* already processed */ }
@@ -271,8 +271,8 @@ fn lower_struct(
 ) -> Result<BuildCtx, LoweringError> {
     let mut body = AdtBody {
         def_id: {
-            let body = ctx.body.modules.get(&module_id).unwrap();
-            *body.symbols.structs.get(&info.name.name).unwrap()
+            let body = ctx.body.modules.get(&module_id).expect("no body");
+            *body.symbols.structs.get(&info.name.name).expect("no symbols")
         },
         is_pub: true, // todo struct pub
         name: info.name.name.clone(),
@@ -314,8 +314,8 @@ fn lower_func(
             is_intrinsic,
             name: func.decl.name.name.clone(),
             id: {
-                let body = ctx.body.modules.get(&module_id).unwrap();
-                *body.symbols.functions.get(&func.decl.name.name).unwrap()
+                let body = ctx.body.modules.get(&module_id).expect("no body");
+                *body.symbols.functions.get(&func.decl.name.name).expect("no symbols")
             },
         },
         local_module: module_id,
@@ -338,13 +338,13 @@ fn lower_func(
         .symbols
         .functions
         .get(&func.decl.name.name)
-        .unwrap();
+        .expect("no fn_id");
     let (args_ty, ret_ty) = builder
         .ctx
         .body
         .function_signatures
         .get(&fn_id)
-        .unwrap()
+        .expect("no args")
         .clone();
 
     builder.ret_local = builder.body.locals.len();
@@ -458,8 +458,8 @@ fn lower_func_decl(
             is_intrinsic,
             name: func.name.name.clone(),
             id: {
-                let body = ctx.body.modules.get(&module_id).unwrap();
-                *body.symbols.functions.get(&func.name.name).unwrap()
+                let body = ctx.body.modules.get(&module_id).expect("no body");
+                *body.symbols.functions.get(&func.name.name).expect("no symbols")
             },
         },
         local_module: module_id,
@@ -797,7 +797,7 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), Lowering
                 });
             }
 
-            let local_idx = builder.name_to_local.get(&name.name).copied().unwrap();
+            let local_idx = builder.name_to_local.get(&name.name).copied().expect("no local_idx");
             builder.statements.push(Statement {
                 span: Some(name.span),
                 kind: StatementKind::StorageLive(local_idx),
@@ -927,7 +927,7 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
                 kind: TyKind::String,
             }),
             ValueExpr::Path(path) => {
-                let local = builder.get_local(&path.first.name).unwrap(); // todo handle segments
+                let local = builder.get_local(&path.first.name).expect("no local"); // todo handle segments
                 Some(local.ty.clone())
             }
         },
@@ -944,7 +944,7 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
                         .expect("function call not found")
                 }
             };
-            let fn_sig = builder.ctx.body.function_signatures.get(&fn_id).unwrap();
+            let fn_sig = builder.ctx.body.function_signatures.get(&fn_id).expect("no fn_sig");
             Some(fn_sig.1.clone())
         }
         Expression::Match(_) => None,
@@ -1114,7 +1114,7 @@ fn lower_expression(
                 .structs
                 .get(&info.name.name)
                 .expect("struct not found");
-            let struct_body = builder.ctx.body.structs.get(&id).unwrap().clone();
+            let struct_body = builder.ctx.body.structs.get(&id).expect("struct_body").clone();
             let ty = Ty {
                 span: Some(info.span),
                 kind: TyKind::Struct {
@@ -1286,7 +1286,7 @@ fn lower_fn_call(
                 .ctx
                 .unresolved_function_signatures
                 .get(&fn_id)
-                .unwrap();
+                .expect("no unresolved function signature");
 
             let args: Vec<Ty> = args
                 .iter()
@@ -1697,7 +1697,7 @@ pub fn lower_path(
                 }
 
                 if let TyKind::Struct { id, generics: _ } = ty.kind {
-                    let struct_body = builder.ctx.body.structs.get(&id).unwrap();
+                    let struct_body = builder.ctx.body.structs.get(&id).expect("struct_body");
                     let idx = *struct_body.name_to_idx.get(&name.name).ok_or_else(|| {
                         LoweringError::StructFieldNotFound {
                             span: *field_span,
