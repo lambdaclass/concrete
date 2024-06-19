@@ -1,0 +1,22 @@
+mod LinearExampleStub {
+
+	struct Linear {
+	    x: i32,
+	    y: i32,
+	}
+	
+
+	fn main() -> i32 {
+		let mut xy: Linear = 
+                    Linear {
+                        x: 1,
+                        y: 0,
+                    };
+		if true { //if true because current stage of the AST does not support an anonymous block
+			// xy is "consumed". _consume has Linear type and goes out of scope
+			let _consume: Linear = xy;
+            //FIXME this code is not compiling in concrete because a problem in lowering with variables defined in an block
+		}
+		return xy.x;
+	}				
+}

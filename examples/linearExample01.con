@@ -5,14 +5,16 @@ mod LinearExampleStub {
 	    y: i32,
 	}
 	
+
 	fn main() -> i32 {
 		let mut xy: Linear = 
                     Linear {
                         x: 1,
                         y: 0,
                     };
-		// linear value is written/consumed
-		xy.x = xy.x + 1;
+		// xy is "consumed". _consume has Linear type and goes out of scope
+		let _consume: Linear = xy;
+		//without block, _cosume is not consumed and linearity check should fail
 		return xy.x;
 	}				
 }
