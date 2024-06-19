@@ -783,7 +783,7 @@ impl LinearityChecker {
     fn is_universe_linear_ish(&self, ty: &str) -> bool {
         *ty == *"Linear".to_string()
     }
-    
+
     fn check_var_in_expr(
         &self,
         state_tbl: StateTbl,
@@ -809,7 +809,7 @@ impl LinearityChecker {
                 tracing::debug!(
                     "Checking state_tbl variable: {}: {:?} {:?} \n <<< context {:?} >>> \n << expression {:?} >>",
                     name, info, apps, context, expr
-                );                                
+                );
                 match (
                     state,
                     Appearances::partition(consumed),
