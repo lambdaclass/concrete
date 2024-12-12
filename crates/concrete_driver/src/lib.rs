@@ -6,13 +6,12 @@ use clap::Args;
 use clap::{Parser, Subcommand};
 use concrete_ast::Program;
 use concrete_ir::lowering::lower_programs;
-use concrete_parser::{error::Diagnostics, ProgramSource};
+use concrete_parser::ProgramSource;
 use concrete_session::{
     config::{DebugInfo, OptLevel},
     Session,
 };
 use config::{Package, Profile};
-use db::Database;
 use git2::{IndexAddOption, Repository};
 use owo_colors::OwoColorize;
 use std::io::Read;
@@ -499,7 +498,7 @@ fn handle_build(
 pub fn parse_file(
     modules: &mut Vec<(PathBuf, String, Program)>,
     mut path: PathBuf,
-    db: &Database,
+    db: &dyn crate::db::Db,
 ) -> Result<()> {
     if path.is_dir() {
         path = path.join("mod.ed");
@@ -511,13 +510,14 @@ pub fn parse_file(
     let mut program = match concrete_parser::parse_ast(db, source) {
         Some(x) => x,
         None => {
-            Diagnostics::dump(
-                db,
-                source,
-                &concrete_parser::parse_ast::accumulated::<concrete_parser::error::Diagnostics>(
-                    db, source,
-                ),
-            );
+            let diagnostics = concrete_parser::parse_ast::accumulated::<
+                concrete_parser::error::Diagnostics,
+            >(db, source);
+
+            for diag in &diagnostics {
+                diag.render(db, source);
+            }
+
             std::process::exit(1);
         }
     };
@@ -541,7 +541,7 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     let start_time = Instant::now();
 
     let mut programs = Vec::new();
-    let db = crate::db::Database::default();
+    let db = crate::db::DatabaseImpl::default();
     parse_file(&mut programs, args.input.clone(), &db)?;
 
     let session = Session {

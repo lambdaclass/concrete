@@ -32,6 +32,6 @@ pub enum LinearityError {
     StateInconsistency { message: String },
     #[error("Not implemented: {message}")]
     NotImplemented { message: String },
-    #[error("Unhandled statement type {r#type}")]
+    #[error("Unhandled statement type {}", r#type)]
     UnhandledStatementType { r#type: String },
 }

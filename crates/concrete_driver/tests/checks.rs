@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use concrete_ir::lowering::{errors::LoweringError, lower_programs};
-use concrete_parser::{error::Diagnostics, ProgramSource};
+use concrete_parser::ProgramSource;
 
 #[test]
 fn module_not_found() {
@@ -64,18 +64,14 @@ fn unrecorgnized_type() {
 }
 
 pub fn check_invalid_program(source: &str, name: &str) -> LoweringError {
-    let db = concrete_driver::db::Database::default();
+    let db = concrete_driver::db::DatabaseImpl::default();
     let source = ProgramSource::new(&db, source.to_string(), name.to_string());
 
     let mut program = match concrete_parser::parse_ast(&db, source) {
         Some(x) => x,
         None => {
-            Diagnostics::dump(
-                &db,
-                source,
-                &concrete_parser::parse_ast::accumulated::<concrete_parser::error::Diagnostics>(
-                    &db, source,
-                ),
+            concrete_parser::parse_ast::accumulated::<concrete_parser::error::Diagnostics>(
+                &db, source,
             );
             panic!("error parsing ast");
         }

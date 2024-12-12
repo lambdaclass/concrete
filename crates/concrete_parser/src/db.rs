@@ -1,14 +1,15 @@
-#[salsa::jar(db = Db)]
-pub struct Jar(
-    crate::error::Diagnostics,
-    crate::parse_ast,
-    crate::ProgramSource,
-);
+pub use salsa::Database as Db;
 
-pub trait Db
-where
-    Self: salsa::DbWithJar<Jar>,
-{
+#[salsa::db]
+#[derive(Default, Clone)]
+pub struct DatabaseImpl {
+    storage: salsa::Storage<Self>,
 }
 
-impl<T> Db for T where T: ?Sized + salsa::DbWithJar<Jar> {}
+#[salsa::db]
+impl salsa::Database for DatabaseImpl {
+    fn salsa_event(&self, event: &dyn Fn() -> salsa::Event) {
+        let event = event();
+        eprintln!("Event: {event:?}");
+    }
+}

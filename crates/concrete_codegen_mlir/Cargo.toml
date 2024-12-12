@@ -9,13 +9,13 @@ edition = "2021"
 concrete_ir = { version = "0.1.0", path = "../concrete_ir" }
 concrete_check = { version = "0.1.0", path = "../concrete_check" }
 concrete_session = { path = "../concrete_session"}
-itertools = "0.12.0"
+itertools = "0.13.0"
 tracing = { workspace = true }
-thiserror = "1.0.57"
+thiserror = "2.0.6"
 
-melior = { version = "0.19.0", features = ["ods-dialects"] }
+melior = { version = "0.20.0", features = ["ods-dialects"] }
 llvm-sys = "191.0.0"
-mlir-sys = "0.3.0"
+mlir-sys = "0.4.1"
 
 [build-dependencies]
-cc = "1.0.83"
+cc = "1.2.3"

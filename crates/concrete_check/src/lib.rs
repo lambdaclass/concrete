@@ -19,9 +19,8 @@ pub fn lowering_error_to_report(
             module,
             program_id,
         } => {
-            let offset = span.from;
             let path = session.file_paths[program_id].display().to_string();
-            Report::build(ReportKind::Error, path.clone(), offset)
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("ModuleNotFound")
                 .with_label(
                     Label::new((path, span.into()))
@@ -37,7 +36,7 @@ pub fn lowering_error_to_report(
             program_id,
         } => {
             let path = session.file_paths[program_id].display().to_string();
-            Report::build(ReportKind::Error, path.clone(), span.from)
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("FunctionNotFound")
                 .with_label(
                     Label::new((path, span.into()))
@@ -52,7 +51,7 @@ pub fn lowering_error_to_report(
             program_id,
         } => {
             let path = session.file_paths[program_id].display().to_string();
-            Report::build(ReportKind::Error, path.clone(), span.from)
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("StructFieldNotFound")
                 .with_label(
                     Label::new((path, span.into()))
@@ -68,8 +67,8 @@ pub fn lowering_error_to_report(
             program_id,
         } => {
             let path = session.file_paths[program_id].display().to_string();
-            let offset = symbol.span.from;
-            Report::build(ReportKind::Error, path.clone(), offset)
+            let span = symbol.span;
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("ImportNotFound")
                 .with_label(
                     Label::new((path.clone(), module_span.into()))
@@ -108,7 +107,7 @@ pub fn lowering_error_to_report(
                 );
             }
 
-            Report::build(ReportKind::Error, path.clone(), span.from)
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("BorrowNotMutable")
                 .with_labels(labels)
                 .finish()
@@ -119,7 +118,7 @@ pub fn lowering_error_to_report(
             program_id,
         } => {
             let path = session.file_paths[program_id].display().to_string();
-            Report::build(ReportKind::Error, path.clone(), span.from)
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("UnrecognizedType")
                 .with_label(
                     Label::new((path, span.into()))
@@ -135,7 +134,7 @@ pub fn lowering_error_to_report(
             program_id,
         } => {
             let path = session.file_paths[program_id].display().to_string();
-            Report::build(ReportKind::Error, path.clone(), span.from)
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("E_ID")
                 .with_label(
                     Label::new((path, span.into()))
@@ -151,7 +150,7 @@ pub fn lowering_error_to_report(
             program_id,
         } => {
             let path = session.file_paths[program_id].display().to_string();
-            Report::build(ReportKind::Error, path.clone(), span.from)
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("NotYetImplemented")
                 .with_label(
                     Label::new((path, span.into()))
@@ -182,7 +181,7 @@ pub fn lowering_error_to_report(
                 );
             }
 
-            Report::build(ReportKind::Error, path.clone(), span.from)
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("UnexpectedType")
                 .with_labels(labels)
                 .with_message(format!("expected type {}.", expected.kind))
@@ -194,7 +193,7 @@ pub fn lowering_error_to_report(
             program_id,
         } => {
             let path = session.file_paths[program_id].display().to_string();
-            Report::build(ReportKind::Error, path.clone(), span.from)
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("UseOfUndeclaredVariable")
                 .with_label(
                     Label::new((path, span.into()))
@@ -209,7 +208,7 @@ pub fn lowering_error_to_report(
             program_id,
         } => {
             let path = session.file_paths[program_id].display().to_string();
-            Report::build(ReportKind::Error, path.clone(), span.from)
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("ExternFnWithBody")
                 .with_label(
                     Label::new((path, span.into()))
@@ -220,7 +219,7 @@ pub fn lowering_error_to_report(
         }
         LoweringError::InternalError(msg, program_id) => {
             let path = session.file_paths[program_id].display().to_string();
-            Report::build(ReportKind::Error, path.clone(), 0)
+            Report::build(ReportKind::Error, (path.clone(), 0..0))
                 .with_code("InternalError")
                 .with_message(msg)
                 .finish()
@@ -232,7 +231,7 @@ pub fn lowering_error_to_report(
             program_id,
         } => {
             let path = session.file_paths[program_id].display().to_string();
-            Report::build(ReportKind::Error, path.clone(), span.from)
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("CallParamCountMismatch")
                 .with_label(
                     Label::new((path, span.into()))
@@ -251,7 +250,7 @@ pub fn lowering_error_to_report(
             program_id,
         } => {
             let path = session.file_paths[program_id].display().to_string();
-            let mut report = Report::build(ReportKind::Error, path.clone(), span.from)
+            let mut report = Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("NotMutable")
                 .with_label(
                     Label::new((path.clone(), span.into()))
@@ -274,7 +273,7 @@ pub fn lowering_error_to_report(
             program_id,
         } => {
             let path = session.file_paths[program_id].display().to_string();
-            let mut report = Report::build(ReportKind::Error, path.clone(), span.from)
+            let mut report = Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("CantTakeMutableBorrow")
                 .with_label(
                     Label::new((path.clone(), span.into()))

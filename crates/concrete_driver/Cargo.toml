@@ -6,24 +6,24 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.4.16", features = ["derive"] }
+clap = { version = "4.5.23", features = ["derive"] }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 concrete_ast = { path = "../concrete_ast"}
 concrete_parser = { path = "../concrete_parser"}
 concrete_session = { path = "../concrete_session"}
 concrete_codegen_mlir = { path = "../concrete_codegen_mlir"}
-salsa = { git = "https://github.com/salsa-rs/salsa.git", package = "salsa-2022" }
-ariadne = { version = "0.4.0", features = ["auto-color"] }
+salsa = { git = "https://github.com/salsa-rs/salsa.git", rev = "c2a6d6238efa5f4642e8f0d2b5097f06b5f46dd0"}
+ariadne = { version = "0.5.0", features = ["auto-color"] }
 concrete_ir = { version = "0.1.0", path = "../concrete_ir" }
 concrete_check = { version = "0.1.0", path = "../concrete_check" }
 walkdir = "2.5.0"
 anyhow = "1"
-toml = "0.8.10"
-git2 = "0.18.2"
-owo-colors = "4.0.0"
-serde = { version = "1.0.197", features = ["derive"] }
+toml = "0.8.19"
+git2 = "0.19.0"
+owo-colors = "4.1.0"
+serde = { version = "1.0.216", features = ["derive"] }
 
 [dev-dependencies]
-tempfile = "3.9.0"
+tempfile = "3.14.0"
 test-case = "3.3.1"

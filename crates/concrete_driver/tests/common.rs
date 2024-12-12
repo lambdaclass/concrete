@@ -8,7 +8,7 @@ use std::{
 use ariadne::Source;
 use concrete_driver::linker::{link_binary, link_shared_lib};
 use concrete_ir::lowering::lower_programs;
-use concrete_parser::{error::Diagnostics, ProgramSource};
+use concrete_parser::ProgramSource;
 use concrete_session::{
     config::{DebugInfo, OptLevel},
     Session,
@@ -28,7 +28,9 @@ impl std::error::Error for TestError {}
 
 #[derive(Debug)]
 pub struct CompileResult {
+    #[allow(unused)]
     pub folder: TempDir,
+    #[allow(unused)]
     pub object_file: PathBuf,
     pub binary_file: PathBuf,
 }
@@ -39,18 +41,14 @@ pub fn compile_program(
     library: bool,
     optlevel: OptLevel,
 ) -> Result<CompileResult, Box<dyn std::error::Error>> {
-    let db = concrete_driver::db::Database::default();
+    let db = concrete_driver::db::DatabaseImpl::default();
     let source = ProgramSource::new(&db, source.to_string(), name.to_string());
     tracing::debug!("source code:\n{}", source.input(&db));
     let mut program = match concrete_parser::parse_ast(&db, source) {
         Some(x) => x,
         None => {
-            Diagnostics::dump(
-                &db,
-                source,
-                &concrete_parser::parse_ast::accumulated::<concrete_parser::error::Diagnostics>(
-                    &db, source,
-                ),
+            concrete_parser::parse_ast::accumulated::<concrete_parser::error::Diagnostics>(
+                &db, source,
             );
             return Err(Box::new(TestError("error compiling".into())));
         }

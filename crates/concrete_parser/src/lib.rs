@@ -1,10 +1,13 @@
 use concrete_ast::Program;
+use error::Diagnostics;
 use lexer::Lexer;
+use salsa::Accumulator;
 
 pub mod db;
 pub mod error;
 mod lexer;
 pub mod tokens;
+pub use db::Db;
 
 pub mod grammar {
     #![allow(dead_code, unused_imports, unused_variables)]
@@ -15,8 +18,8 @@ pub mod grammar {
     lalrpop_mod!(pub grammar);
 }
 
-#[salsa::interned(jar = crate::db::Jar)]
-pub struct ProgramSource {
+#[salsa::interned]
+pub struct ProgramSource<'db> {
     #[return_ref]
     pub input: String,
     #[return_ref]
@@ -24,15 +27,15 @@ pub struct ProgramSource {
 }
 
 // Todo: better error handling
-#[salsa::tracked(jar = crate::db::Jar)]
-pub fn parse_ast(db: &dyn crate::db::Db, source: ProgramSource) -> Option<Program> {
+#[salsa::tracked]
+pub fn parse_ast<'db>(db: &'db dyn crate::db::Db, source: ProgramSource<'db>) -> Option<Program> {
     let lexer = Lexer::new(source.input(db));
     let parser = grammar::ProgramParser::new();
 
     match parser.parse(lexer) {
         Ok(ast) => Some(ast),
         Err(e) => {
-            crate::error::Diagnostics::push(db, e);
+            Diagnostics(e).accumulate(db);
             None
         }
     }

@@ -46,7 +46,7 @@ struct ModuleCodegenCtx<'a> {
     pub module_id: DefId,
 }
 
-impl<'a> ModuleCodegenCtx<'a> {
+impl ModuleCodegenCtx<'_> {
     /// Gets the module IR body.
     pub fn get_module_body(&self) -> &ModuleBody {
         self.ctx
@@ -118,7 +118,7 @@ struct FunctionCodegenCtx<'a> {
     pub function_id: DefId,
 }
 
-impl<'a> FunctionCodegenCtx<'a> {
+impl FunctionCodegenCtx<'_> {
     /// Gets the function IR body.
     pub fn get_fn_body(&self) -> &FnBody {
         self.module_ctx
