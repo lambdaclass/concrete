@@ -26,7 +26,7 @@ Make sure you have installed the dependencies:
 
 - git
 - Rust
-- LLVM 18 with MLIR enabled
+- LLVM 19 with MLIR enabled
 - libgit2
 
 If building LLVM from source, you'll need additional tools:
@@ -37,10 +37,10 @@ If building LLVM from source, you'll need additional tools:
 
 Setup the following env vars:
 ```bash
-# For Debian/Ubuntu using the repository, the path will be /usr/lib/llvm-18
-export MLIR_SYS_180_PREFIX=/usr/lib/llvm-18
-export LLVM_SYS_180_PREFIX=/usr/lib/llvm-18
-export TABLEGEN_180_PREFIX=/usr/lib/llvm-18
+# For Debian/Ubuntu using the repository, the path will be /usr/lib/llvm-19
+export MLIR_SYS_190_PREFIX=/usr/lib/llvm-19
+export LLVM_SYS_191_PREFIX=/usr/lib/llvm-19
+export TABLEGEN_190_PREFIX=/usr/lib/llvm-19
 ```
 
 If you installed llvm with brew, source the `env-macos.sh` script to set up the needed env vars:
