@@ -20,7 +20,7 @@ impl From<Infallible> for LexingError {
     }
 }
 
-#[derive(Logos, Debug, PartialEq, Clone)]
+#[derive(Logos, logos_display::Debug, logos_display::Display, PartialEq, Clone)]
 #[logos(error = LexingError, skip r"[ \t\n\f]+", skip r"//[^\n]*", skip r"/\*(?:[^*]|\*[^/])*\*/")]
 pub enum Token {
     #[token("let")]

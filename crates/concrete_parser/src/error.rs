@@ -24,6 +24,7 @@ impl Diagnostics {
                 let loc = *location;
                 Report::build(ReportKind::Error, (path, loc..loc))
                     .with_code("P1")
+                    .with_message("Parse error.")
                     .with_label(
                         Label::new((path, loc..(loc + 1)))
                             .with_color(colors.next())
@@ -39,6 +40,7 @@ impl Diagnostics {
                 let loc = *location;
                 Report::build(ReportKind::Error, (path, loc..loc))
                     .with_code("P2")
+                    .with_message("Parse error.")
                     .with_label(
                         Label::new((path, loc..(loc + 1)))
                             .with_message("unrecognized eof")
@@ -57,9 +59,10 @@ impl Diagnostics {
             ParseError::UnrecognizedToken { token, expected } => {
                 Report::build(ReportKind::Error, (path, token.0..token.2))
                     .with_code(3)
+                    .with_message("Parse error.")
                     .with_label(
                         Label::new((path, token.0..token.2))
-                            .with_message(format!("unrecognized token {:?}", token.1))
+                            .with_message(format!("unrecognized token '{:?}'", token.1))
                             .with_color(colors.next()),
                     )
                     .with_note(format!(
@@ -75,7 +78,7 @@ impl Diagnostics {
             ParseError::ExtraToken { token } => {
                 Report::build(ReportKind::Error, (path, token.0..token.2))
                     .with_code("P3")
-                    .with_message("Extra token")
+                    .with_message("Parse error.")
                     .with_label(
                         Label::new((path, token.0..token.2))
                             .with_message(format!("unexpected extra token {:?}", token.1)),
