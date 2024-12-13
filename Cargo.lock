@@ -366,101 +366,29 @@ dependencies = [
 name = "concrete"
 version = "0.1.0"
 dependencies = [
- "concrete_driver",
-]
-
-[[package]]
-name = "concrete_ast"
-version = "0.1.0"
-dependencies = [
- "tracing",
-]
-
-[[package]]
-name = "concrete_check"
-version = "0.1.0"
-dependencies = [
- "ariadne",
- "concrete_ast",
- "concrete_ir",
- "concrete_session",
- "itertools 0.13.0",
- "thiserror 2.0.6",
- "tracing",
-]
-
-[[package]]
-name = "concrete_codegen_mlir"
-version = "0.1.0"
-dependencies = [
- "cc",
- "concrete_check",
- "concrete_ir",
- "concrete_session",
- "itertools 0.13.0",
- "llvm-sys",
- "melior",
- "mlir-sys",
- "thiserror 2.0.6",
- "tracing",
-]
-
-[[package]]
-name = "concrete_driver"
-version = "0.1.0"
-dependencies = [
  "anyhow",
  "ariadne",
  "clap",
- "concrete_ast",
- "concrete_check",
- "concrete_codegen_mlir",
- "concrete_ir",
- "concrete_parser",
- "concrete_session",
+ "educe",
  "git2",
+ "itertools 0.13.0",
+ "lalrpop",
+ "lalrpop-util",
+ "llvm-sys",
+ "logos",
+ "logos-display",
+ "melior",
+ "mlir-sys",
  "owo-colors",
  "salsa",
  "serde",
  "tempfile",
  "test-case",
+ "thiserror 2.0.6",
  "toml",
  "tracing",
  "tracing-subscriber",
- "walkdir",
-]
-
-[[package]]
-name = "concrete_ir"
-version = "0.1.0"
-dependencies = [
- "concrete_ast",
- "educe",
- "thiserror 2.0.6",
- "tracing",
-]
-
-[[package]]
-name = "concrete_parser"
-version = "0.1.0"
-dependencies = [
- "ariadne",
- "concrete_ast",
- "itertools 0.13.0",
- "lalrpop",
- "lalrpop-util",
- "logos",
- "logos-display",
- "salsa",
- "tracing",
  "unescaper",
-]
-
-[[package]]
-name = "concrete_session"
-version = "0.1.0"
-dependencies = [
- "ariadne",
 ]
 
 [[package]]

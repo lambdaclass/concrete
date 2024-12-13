@@ -1,7 +1,9 @@
 [workspace]
 resolver = "2"
 
-members = [ "crates/concrete","crates/concrete_ast", "crates/concrete_codegen_mlir", "crates/concrete_driver", "crates/concrete_ir", "crates/concrete_parser", "crates/concrete_session", "crates/concrete_check"]
+members = [
+    "crates/concrete",
+]
 
 [profile.release]
 lto = true
@@ -14,6 +16,3 @@ opt-level = 3
 # On dev optimize dependencies a bit so it's not as slow.
 [profile.dev.package."*"]
 opt-level = 1
-
-[workspace.dependencies]
-tracing = "0.1.41"
