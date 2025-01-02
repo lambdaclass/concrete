@@ -26,30 +26,15 @@ fn test_while() {
 
     assert_eq!(
         16,
-        compile_and_run(
-            source,
-            "while",
-            false,
-            concrete::session::OptLevel::None
-        )
+        compile_and_run(source, "while", false, concrete::session::OptLevel::None)
     );
     assert_eq!(
         16,
-        compile_and_run(
-            source,
-            "while",
-            false,
-            concrete::session::OptLevel::Less
-        )
+        compile_and_run(source, "while", false, concrete::session::OptLevel::Less)
     );
     assert_eq!(
         16,
-        compile_and_run(
-            source,
-            "while",
-            false,
-            concrete::session::OptLevel::Default
-        )
+        compile_and_run(source, "while", false, concrete::session::OptLevel::Default)
     );
     assert_eq!(
         16,
@@ -138,30 +123,15 @@ fn test_fib_with_if() {
 
     assert_eq!(
         55,
-        compile_and_run(
-            source,
-            "fib",
-            false,
-            concrete::session::OptLevel::None
-        )
+        compile_and_run(source, "fib", false, concrete::session::OptLevel::None)
     );
     assert_eq!(
         55,
-        compile_and_run(
-            source,
-            "fib",
-            false,
-            concrete::session::OptLevel::Less
-        )
+        compile_and_run(source, "fib", false, concrete::session::OptLevel::Less)
     );
     assert_eq!(
         55,
-        compile_and_run(
-            source,
-            "fib",
-            false,
-            concrete::session::OptLevel::Default
-        )
+        compile_and_run(source, "fib", false, concrete::session::OptLevel::Default)
     );
     assert_eq!(
         55,
@@ -250,21 +220,11 @@ fn test_import() {
 
     assert_eq!(
         8,
-        compile_and_run(
-            source,
-            "import",
-            false,
-            concrete::session::OptLevel::None
-        )
+        compile_and_run(source, "import", false, concrete::session::OptLevel::None)
     );
     assert_eq!(
         8,
-        compile_and_run(
-            source,
-            "import",
-            false,
-            concrete::session::OptLevel::Less
-        )
+        compile_and_run(source, "import", false, concrete::session::OptLevel::Less)
     );
     assert_eq!(
         8,
@@ -314,21 +274,11 @@ fn test_floats() {
 
     assert_eq!(
         1,
-        compile_and_run(
-            source,
-            "floats",
-            false,
-            concrete::session::OptLevel::None
-        )
+        compile_and_run(source, "floats", false, concrete::session::OptLevel::None)
     );
     assert_eq!(
         1,
-        compile_and_run(
-            source,
-            "floats",
-            false,
-            concrete::session::OptLevel::Less
-        )
+        compile_and_run(source, "floats", false, concrete::session::OptLevel::Less)
     );
     assert_eq!(
         1,

@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use common::{BuildCtx, FnBodyBuilder, IdGenerator};
 use crate::ast::{
     common::Span,
     constants::ConstantDef,
@@ -15,6 +14,7 @@ use crate::ast::{
     types::{TypeQualifier, TypeSpec},
     Program,
 };
+use common::{BuildCtx, FnBodyBuilder, IdGenerator};
 
 use crate::ir::{
     AdtBody, BasicBlock, BinOp, ConcreteIntrinsic, ConstBody, ConstData, ConstKind, ConstValue,

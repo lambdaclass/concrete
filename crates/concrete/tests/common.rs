@@ -9,10 +9,7 @@ use ariadne::Source;
 use concrete::driver::linker::{link_binary, link_shared_lib};
 use concrete::ir::lowering::lower_programs;
 use concrete::parser::ProgramSource;
-use concrete::session::{
-    DebugInfo, OptLevel,
-    Session,
-};
+use concrete::session::{DebugInfo, OptLevel, Session};
 use tempfile::TempDir;
 
 #[derive(Debug, Clone)]

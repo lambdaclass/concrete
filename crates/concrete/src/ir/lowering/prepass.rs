@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::ir::{DefId, ModuleBody};
 
-use crate::ir::lowering::{common::BuildCtx, errors::LoweringError};
 use crate::ast;
+use crate::ir::lowering::{common::BuildCtx, errors::LoweringError};
 
 pub fn prepass_module(
     mut ctx: BuildCtx,

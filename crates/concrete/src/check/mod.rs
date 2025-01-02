@@ -1,8 +1,8 @@
 use std::ops::Range;
 
-use ariadne::{ColorGenerator, Label, Report, ReportKind};
 use crate::ir::lowering::errors::LoweringError;
 use crate::session::Session;
+use ariadne::{ColorGenerator, Label, Report, ReportKind};
 
 pub mod linearity_check;
 
