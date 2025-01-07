@@ -12,23 +12,23 @@ jobs:
         name: clippy
         runs-on: ubuntu-latest
         env:
-            MLIR_SYS_180_PREFIX: /usr/lib/llvm-18/
-            LLVM_SYS_180_PREFIX: /usr/lib/llvm-18/
-            TABLEGEN_180_PREFIX: /usr/lib/llvm-18/
+            MLIR_SYS_190_PREFIX: /usr/lib/llvm-19/
+            LLVM_SYS_191_PREFIX: /usr/lib/llvm-19/
+            TABLEGEN_190_PREFIX: /usr/lib/llvm-19/
         steps:
         - uses: actions/checkout@v3
-        - uses: dtolnay/rust-toolchain@1.78.0
+        - uses: dtolnay/rust-toolchain@1.83.0
           with:
             components: rustfmt, clippy
         - uses: Swatinem/rust-cache@v2
         - name: add llvm deb repository
           uses: myci-actions/add-deb-repo@10
           with:
-                repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main
+                repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main
                 repo-name: llvm-repo
                 keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
         - name: Install LLVM
-          run: sudo apt-get install llvm-18 llvm-18-dev llvm-18-runtime clang-18 clang-tools-18 lld-18 libpolly-18-dev libmlir-18-dev mlir-18-tools
+          run: sudo apt-get install llvm-19 llvm-19-dev llvm-19-runtime clang-19 clang-tools-19 lld-19 libpolly-19-dev libmlir-19-dev mlir-19-tools
         - name: Clippy
           run: make check
 
@@ -37,7 +37,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
         - uses: actions/checkout@v3
-        - uses: dtolnay/rust-toolchain@1.78.0
+        - uses: dtolnay/rust-toolchain@1.83.0
           with:
             components: rustfmt
         - run: cargo fmt --all -- --check
@@ -46,9 +46,9 @@ jobs:
         name: test (linux, amd64)
         runs-on: ubuntu-latest
         env:
-            MLIR_SYS_180_PREFIX: /usr/lib/llvm-18/
-            LLVM_SYS_180_PREFIX: /usr/lib/llvm-18/
-            TABLEGEN_180_PREFIX: /usr/lib/llvm-18/
+            MLIR_SYS_190_PREFIX: /usr/lib/llvm-19/
+            LLVM_SYS_191_PREFIX: /usr/lib/llvm-19/
+            TABLEGEN_190_PREFIX: /usr/lib/llvm-19/
             RUST_LOG: debug
         steps:
         - uses: actions/checkout@v3
@@ -58,17 +58,17 @@ jobs:
             sudo rm -rf /usr/share/dotnet/
             sudo rm -rf /usr/local/lib/android
         - name: Setup rust env
-          uses: dtolnay/rust-toolchain@1.78.0
+          uses: dtolnay/rust-toolchain@1.83.0
         - name: Retreive cached dependecies
           uses: Swatinem/rust-cache@v2
         - name: add llvm deb repository
           uses: myci-actions/add-deb-repo@10
           with:
-            repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main
+            repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main
             repo-name: llvm-repo
             keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
         - name: Install LLVM
-          run: sudo apt-get install llvm-18 llvm-18-dev llvm-18-runtime clang-18 clang-tools-18 lld-18 libpolly-18-dev libmlir-18-dev mlir-18-tools
+          run: sudo apt-get install llvm-19 llvm-19-dev llvm-19-runtime clang-19 clang-tools-19 lld-19 libpolly-19-dev libmlir-19-dev mlir-19-tools
         - name: Install Link deps
           run: sudo apt-get install libc-dev build-essential
         - name: test
@@ -79,17 +79,17 @@ jobs:
       env:
         CARGO_TERM_COLOR: always
         LIBRARY_PATH: /opt/homebrew/lib
-        MLIR_SYS_180_PREFIX: /opt/homebrew/opt/llvm@18
-        LLVM_SYS_180_PREFIX: /opt/homebrew/opt/llvm@18
-        TABLEGEN_180_PREFIX: /opt/homebrew/opt/llvm@18
+        MLIR_SYS_190_PREFIX: /opt/homebrew/opt/llvm@19
+        LLVM_SYS_191_PREFIX: /opt/homebrew/opt/llvm@19
+        TABLEGEN_190_PREFIX: /opt/homebrew/opt/llvm@19
         RUST_LOG: debug
       steps:
         - uses: actions/checkout@v4
         - name: Rustup toolchain install
-          uses: dtolnay/rust-toolchain@1.78.0
+          uses: dtolnay/rust-toolchain@1.83.0
         - uses: homebrew/actions/setup-homebrew@master
         - name: install llvm
-          run: brew install llvm@18
+          run: brew install llvm@19
         - name: Run tests
           run: make test
     coverage:
@@ -97,9 +97,9 @@ jobs:
         runs-on: ubuntu-latest
         env:
             CARGO_TERM_COLOR: always
-            MLIR_SYS_180_PREFIX: /usr/lib/llvm-18/
-            LLVM_SYS_180_PREFIX: /usr/lib/llvm-18/
-            TABLEGEN_180_PREFIX: /usr/lib/llvm-18/
+            MLIR_SYS_190_PREFIX: /usr/lib/llvm-19/
+            LLVM_SYS_191_PREFIX: /usr/lib/llvm-19/
+            TABLEGEN_190_PREFIX: /usr/lib/llvm-19/
             RUST_LOG: debug
         steps:
             - uses: actions/checkout@v3
@@ -109,17 +109,17 @@ jobs:
                     sudo rm -rf /usr/share/dotnet/
                     sudo rm -rf /usr/local/lib/android
             - name: Setup rust env
-              uses: dtolnay/rust-toolchain@1.78.0
+              uses: dtolnay/rust-toolchain@1.83.0
             - name: Retreive cached dependecies
               uses: Swatinem/rust-cache@v2
             - name: add llvm deb repository
               uses: myci-actions/add-deb-repo@10
               with:
-                    repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main
+                    repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main
                     repo-name: llvm-repo
                     keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
             - name: Install LLVM
-              run: sudo apt-get install llvm-18 llvm-18-dev llvm-18-runtime clang-18 clang-tools-18 lld-18 libpolly-18-dev libmlir-18-dev mlir-18-tools
+              run: sudo apt-get install llvm-19 llvm-19-dev llvm-19-runtime clang-19 clang-tools-19 lld-19 libpolly-19-dev libmlir-19-dev mlir-19-tools
             - name: Install Link deps
               run: sudo apt-get install libc-dev build-essential
             - name: Install cargo-llvm-cov
@@ -136,9 +136,9 @@ jobs:
       name: Bench
       runs-on: ubuntu-latest
       env:
-        MLIR_SYS_180_PREFIX: /usr/lib/llvm-18/
-        LLVM_SYS_180_PREFIX: /usr/lib/llvm-18/
-        TABLEGEN_180_PREFIX: /usr/lib/llvm-18/
+        MLIR_SYS_190_PREFIX: /usr/lib/llvm-19/
+        LLVM_SYS_191_PREFIX: /usr/lib/llvm-19/
+        TABLEGEN_190_PREFIX: /usr/lib/llvm-19/
       steps:
         - uses: actions/checkout@v4
         - name: free HDD space
@@ -146,22 +146,22 @@ jobs:
                 # deleting space
                 sudo rm -rf /usr/share/dotnet/
                 sudo rm -rf /usr/local/lib/android
-        - uses: dtolnay/rust-toolchain@1.78.0
+        - uses: dtolnay/rust-toolchain@1.83.0
           with:
             components: clippy
         - uses: Swatinem/rust-cache@v2
         - name: Setup rust env
-          uses: dtolnay/rust-toolchain@1.78.0
+          uses: dtolnay/rust-toolchain@1.83.0
         - name: Retreive cached dependecies
           uses: Swatinem/rust-cache@v2
         - name: add llvm deb repository
           uses: myci-actions/add-deb-repo@11
           with:
-                repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main
+                repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main
                 repo-name: llvm-repo
                 keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
         - name: Install LLVM
-          run: sudo apt-get install llvm-18 llvm-18-dev llvm-18-runtime clang-18 clang-tools-18 lld-18 libpolly-18-dev libmlir-18-dev mlir-18-tools
+          run: sudo apt-get install llvm-19 llvm-19-dev llvm-19-runtime clang-19 clang-tools-19 lld-19 libpolly-19-dev libmlir-19-dev mlir-19-tools
         - name: Install Link deps
           run: sudo apt-get install libc-dev build-essential
         - name: Run bench
