@@ -216,6 +216,7 @@ The design was very heavily influenced by all these programming languages:
 - [Lua](https://www.lua.org/)
 - [Clojure](https://clojure.org/)
 - [Nim](https://nim-lang.org/)
+- [Acton](https://www.acton-lang.org)
 
 ## Roadmap
 
