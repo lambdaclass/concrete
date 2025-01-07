@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    common::Span,
+    common::{GenericParam, Span},
     constants::ConstantDef,
     expressions::{
         ArithOp, BinaryOp, BitwiseOp, CmpOp, Expression, FnCallOp, IfExpr, LogicOp, PathOp,
@@ -107,12 +107,12 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                 let ret_type;
 
                 for arg in &fn_def.decl.params {
-                    let ty = lower_type(&ctx, &arg.r#type, id)?;
+                    let ty = lower_type(&ctx, &arg.r#type, id, &[])?;
                     args.push(ty);
                 }
 
                 if let Some(ty) = &fn_def.decl.ret_type {
-                    ret_type = lower_type(&ctx, ty, id)?;
+                    ret_type = lower_type(&ctx, ty, id, &[])?;
                 } else {
                     ret_type = Ty {
                         span: None,
@@ -138,12 +138,12 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                 let ret_type;
 
                 for arg in &fn_decl.params {
-                    let ty = lower_type(&ctx, &arg.r#type, id)?;
+                    let ty = lower_type(&ctx, &arg.r#type, id, &[])?;
                     args.push(ty);
                 }
 
                 if let Some(ty) = &fn_decl.ret_type {
-                    ret_type = lower_type(&ctx, ty, id)?;
+                    ret_type = lower_type(&ctx, ty, id, &[])?;
                 } else {
                     ret_type = Ty {
                         span: None,
@@ -202,7 +202,7 @@ fn lower_constant(
             .expect("constant should exist")
     };
 
-    let value_ty = lower_type(&ctx, &info.decl.r#type, module_id)?;
+    let value_ty = lower_type(&ctx, &info.decl.r#type, module_id, &[])?;
 
     let value = lower_constant_expression(&info.value, value_ty)?;
 
@@ -285,7 +285,7 @@ fn lower_struct(
         let variant = VariantDef {
             def_id: ctx.gen.next_defid(),
             name: field.name.name.clone(),
-            ty: lower_type(&ctx, &field.r#type, module_id)?,
+            ty: lower_type(&ctx, &field.r#type, module_id, &info.generics)?,
             discriminant: i,
         };
         body.variants.push(variant);
@@ -374,7 +374,7 @@ fn lower_func(
         if let statements::Statement::Let(info) = stmt {
             match &info.target {
                 LetStmtTarget::Simple { id: name, r#type } => {
-                    let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
+                    let ty = lower_type(&builder.ctx, r#type, builder.local_module, &[])?;
                     builder
                         .name_to_local
                         .insert(name.name.clone(), builder.body.locals.len());
@@ -392,7 +392,7 @@ fn lower_func(
             if let Some(info) = &info.init {
                 match &info.target {
                     LetStmtTarget::Simple { id: name, r#type } => {
-                        let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
+                        let ty = lower_type(&builder.ctx, r#type, builder.local_module, &[])?;
                         builder
                             .name_to_local
                             .insert(name.name.clone(), builder.body.locals.len());
@@ -414,7 +414,7 @@ fn lower_func(
         .decl
         .ret_type
         .as_ref()
-        .map(|r| lower_type(&builder.ctx, r, builder.local_module))
+        .map(|r| lower_type(&builder.ctx, r, builder.local_module, &[]))
         .transpose()?
         .unwrap_or(Ty {
             span: None,
@@ -784,7 +784,7 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
 fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), LoweringError> {
     match &info.target {
         LetStmtTarget::Simple { id: name, r#type } => {
-            let ty = lower_type(&builder.ctx, r#type, builder.local_module)?;
+            let ty = lower_type(&builder.ctx, r#type, builder.local_module, &[])?;
             let (rvalue, rvalue_ty, rvalue_span) =
                 lower_expression(builder, &info.value, Some(ty.clone()))?;
 
@@ -1158,7 +1158,7 @@ fn lower_expression(
         Expression::Cast(value, cast_ty, span) => {
             let (value, ty, _span) = lower_expression(builder, value, None)?;
 
-            let new_ty = lower_type(&builder.ctx, cast_ty, builder.local_module)?;
+            let new_ty = lower_type(&builder.ctx, cast_ty, builder.local_module, &[])?;
 
             // todo: check if the cast is valid
 
@@ -1290,11 +1290,11 @@ fn lower_fn_call(
 
             let args: Vec<Ty> = args
                 .iter()
-                .map(|arg| lower_type(&builder.ctx, arg, builder.local_module))
+                .map(|arg| lower_type(&builder.ctx, arg, builder.local_module, &[]))
                 .collect::<Result<Vec<_>, _>>()?;
             let ret = ret
                 .as_ref()
-                .map(|arg| lower_type(&builder.ctx, arg, builder.local_module))
+                .map(|arg| lower_type(&builder.ctx, arg, builder.local_module, &[]))
                 .unwrap_or(Ok(Ty {
                     span: None,
                     kind: TyKind::Unit,
@@ -1744,14 +1744,22 @@ pub fn lower_path(
     Ok((Place { local, projection }, ty, info.span))
 }
 
-pub fn lower_type(ctx: &BuildCtx, spec: &TypeSpec, module_id: DefId) -> Result<Ty, LoweringError> {
+pub fn lower_type(
+    ctx: &BuildCtx,
+    spec: &TypeSpec,
+    module_id: DefId,
+    generics: &[GenericParam],
+) -> Result<Ty, LoweringError> {
     Ok(match spec {
         TypeSpec::Simple {
             name,
             qualifiers,
             span,
         } => {
-            let mut ty = Ty::new(span, name_to_tykind(ctx, &name.name, *span, module_id)?);
+            let mut ty = Ty::new(
+                span,
+                name_to_tykind(ctx, &name.name, *span, module_id, generics)?,
+            );
 
             for qual in qualifiers.iter().rev() {
                 ty = match qual {
@@ -1767,11 +1775,46 @@ pub fn lower_type(ctx: &BuildCtx, spec: &TypeSpec, module_id: DefId) -> Result<T
             }
             ty
         }
-        TypeSpec::Generic { span, .. } => Err(LoweringError::NotYetImplemented {
-            span: *span,
-            message: "Generics not yet implemented",
-            program_id: module_id.program_id,
-        })?,
+        TypeSpec::Generic {
+            span,
+            name,
+            qualifiers,
+            type_params,
+        } => {
+            let mut generic_tys = Vec::new();
+
+            for ts in type_params {
+                generic_tys.push(lower_type(ctx, ts, module_id, generics)?);
+            }
+
+            let mut ty = Ty::new(
+                span,
+                name_to_tykind(ctx, &name.name, *span, module_id, generics)?,
+            );
+
+            match ty.kind {
+                TyKind::Struct { id: _, ref mut generics } => {
+                    *generics = generic_tys
+                },
+                _ => {
+                    todo!()
+                }
+            }
+
+            for qual in qualifiers.iter().rev() {
+                ty = match qual {
+                    TypeQualifier::Ref => Ty::new(span, TyKind::Ref(Box::new(ty), Mutability::Not)),
+                    TypeQualifier::RefMut => {
+                        Ty::new(span, TyKind::Ref(Box::new(ty), Mutability::Mut))
+                    }
+                    TypeQualifier::Ptr => Ty::new(span, TyKind::Ptr(Box::new(ty), Mutability::Not)),
+                    TypeQualifier::PtrMut => {
+                        Ty::new(span, TyKind::Ptr(Box::new(ty), Mutability::Mut))
+                    }
+                }
+            }
+            ty
+        }
         TypeSpec::Array {
             of_type,
             size,
@@ -1781,7 +1824,7 @@ pub fn lower_type(ctx: &BuildCtx, spec: &TypeSpec, module_id: DefId) -> Result<T
             let mut ty = Ty {
                 span: Some(*span),
                 kind: TyKind::Array(
-                    Box::new(lower_type(ctx, of_type, module_id)?),
+                    Box::new(lower_type(ctx, of_type, module_id, generics)?),
                     Box::new(ConstData {
                         ty: Ty {
                             span: Some(*span),
@@ -1809,11 +1852,38 @@ pub fn lower_type(ctx: &BuildCtx, spec: &TypeSpec, module_id: DefId) -> Result<T
     })
 }
 
+pub fn type_spec_to_generic_param(ty: &TypeSpec) -> GenericParam {
+    match ty {
+        TypeSpec::Simple {
+            name,
+            qualifiers,
+            span,
+        } => GenericParam {
+            name: name.clone(),
+            params: vec![],
+            span: *span,
+        },
+        TypeSpec::Generic {
+            name,
+            qualifiers,
+            type_params,
+            span,
+        } => todo!(),
+        TypeSpec::Array {
+            of_type,
+            size,
+            qualifiers,
+            span,
+        } => todo!(),
+    }
+}
+
 pub fn name_to_tykind(
     ctx: &BuildCtx,
     name: &str,
     span: Span,
     module_id: DefId,
+    generics: &[GenericParam],
 ) -> Result<TyKind, LoweringError> {
     Ok(match name {
         "i64" => TyKind::Int(IntTy::I64),
@@ -1834,9 +1904,57 @@ pub fn name_to_tykind(
             if let Some(struct_id) = module.symbols.structs.get(other) {
                 TyKind::Struct {
                     id: *struct_id,
-                    generics: vec![],
+                    generics: {
+                        let mut struct_generics = Vec::new();
+
+                        for (i, param) in generics.iter().enumerate() {
+                            let mut params = Vec::new();
+                            for p in &param.params {
+                                params.push(type_spec_to_generic_param(p));
+                            }
+                            struct_generics.push(Ty {
+                                span: Some(param.span.clone()),
+                                kind: TyKind::Param {
+                                    index: i,
+                                    ty: Box::new(Ty {
+                                        span: Some(param.span.clone()),
+                                        kind: name_to_tykind(
+                                            ctx,
+                                            &param.name.name,
+                                            span,
+                                            module_id,
+                                            &params,
+                                        )?,
+                                    }),
+                                },
+                            });
+                        }
+                        struct_generics
+                    },
                 }
             } else {
+                for (i, generic) in generics.iter().enumerate() {
+                    if generic.name.name == other {
+                        let mut params = Vec::new();
+                        for p in &generic.params {
+                            params.push(type_spec_to_generic_param(p));
+                        }
+                        return Ok(TyKind::Param {
+                            index: i,
+                            ty: Box::new(Ty {
+                                span: Some(generic.span.clone()),
+                                kind: name_to_tykind(
+                                    ctx,
+                                    &generic.name.name,
+                                    span,
+                                    module_id,
+                                    &params,
+                                )?,
+                            }),
+                        });
+                    }
+                }
+
                 Err(LoweringError::UnrecognizedType {
                     span,
                     name: other.to_string(),

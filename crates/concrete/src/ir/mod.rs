@@ -362,7 +362,7 @@ pub enum TyKind {
     // Type param <T>
     Param {
         index: usize,
-        name: String, // todo: change me?
+        ty: Box<Ty>
     },
     Struct {
         id: DefId,
