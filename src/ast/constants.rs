@@ -1,7 +1,7 @@
 use super::{
     common::{DocString, Ident},
     expressions::Expression,
-    types::TypeSpec,
+    types::TypeDescriptor,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -9,7 +9,7 @@ pub struct ConstantDecl {
     pub doc_string: Option<DocString>,
     pub name: Ident,
     pub is_pub: bool,
-    pub r#type: TypeSpec,
+    pub r#type: TypeDescriptor,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

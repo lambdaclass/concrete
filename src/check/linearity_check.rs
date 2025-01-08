@@ -12,7 +12,7 @@ use crate::ast::statements::{AssignStmt, Binding, LetStmt, LetStmtTarget, Statem
 use crate::ast::Program;
 use std::path::PathBuf;
 
-use crate::ast::types::TypeSpec;
+use crate::ast::types::TypeDescriptor;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum VarState {

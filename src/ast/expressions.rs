@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::{
     common::{Ident, Span},
     statements::Statement,
-    types::TypeSpec,
+    types::TypeDescriptor,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -18,7 +18,7 @@ pub enum Expression {
     ArrayInit(ArrayInitExpr),
     Deref(Box<Self>, Span),
     AsRef(Box<Self>, bool, Span),
-    Cast(Box<Self>, TypeSpec, Span),
+    Cast(Box<Self>, TypeDescriptor, Span),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

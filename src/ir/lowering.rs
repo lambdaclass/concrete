@@ -11,7 +11,7 @@ use crate::ast::{
     modules::{Module, ModuleDefItem},
     statements::{self, AssignStmt, ForStmt, LetStmt, LetStmtTarget, ReturnStmt, WhileStmt},
     structs::StructDecl,
-    types::{TypeQualifier, TypeSpec},
+    types::TypeDescriptor,
     Program,
 };
 use common::{BuildCtx, FnBodyBuilder, IdGenerator};
@@ -1744,105 +1744,82 @@ pub fn lower_path(
     Ok((Place { local, projection }, ty, info.span))
 }
 
-pub fn lower_type(ctx: &BuildCtx, spec: &TypeSpec, module_id: DefId) -> Result<Ty, LoweringError> {
-    Ok(match spec {
-        TypeSpec::Simple {
-            name,
-            qualifiers,
-            span,
-        } => {
-            let mut ty = Ty::new(span, name_to_tykind(ctx, &name.name, *span, module_id)?);
-
-            for qual in qualifiers.iter().rev() {
-                ty = match qual {
-                    TypeQualifier::Ref => Ty::new(span, TyKind::Ref(Box::new(ty), Mutability::Not)),
-                    TypeQualifier::RefMut => {
-                        Ty::new(span, TyKind::Ref(Box::new(ty), Mutability::Mut))
-                    }
-                    TypeQualifier::Ptr => Ty::new(span, TyKind::Ptr(Box::new(ty), Mutability::Not)),
-                    TypeQualifier::PtrMut => {
-                        Ty::new(span, TyKind::Ptr(Box::new(ty), Mutability::Mut))
-                    }
-                }
-            }
-            ty
-        }
-        TypeSpec::Generic { span, .. } => Err(LoweringError::NotYetImplemented {
-            span: *span,
-            message: "Generics not yet implemented",
-            program_id: module_id.program_id,
-        })?,
-        TypeSpec::Array {
-            of_type,
-            size,
-            qualifiers,
-            span,
-        } => {
-            let mut ty = Ty {
-                span: Some(*span),
-                kind: TyKind::Array(
-                    Box::new(lower_type(ctx, of_type, module_id)?),
-                    Box::new(ConstData {
-                        ty: Ty {
-                            span: Some(*span),
-                            kind: TyKind::Uint(UintTy::U64),
-                        },
-                        data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(*size))),
-                    }),
-                ),
-            };
-
-            for qual in qualifiers.iter().rev() {
-                ty = match qual {
-                    TypeQualifier::Ref => Ty::new(span, TyKind::Ref(Box::new(ty), Mutability::Not)),
-                    TypeQualifier::RefMut => {
-                        Ty::new(span, TyKind::Ref(Box::new(ty), Mutability::Mut))
-                    }
-                    TypeQualifier::Ptr => Ty::new(span, TyKind::Ptr(Box::new(ty), Mutability::Not)),
-                    TypeQualifier::PtrMut => {
-                        Ty::new(span, TyKind::Ptr(Box::new(ty), Mutability::Mut))
-                    }
-                }
-            }
-            ty
-        }
-    })
-}
-
-pub fn name_to_tykind(
+pub fn lower_type(
     ctx: &BuildCtx,
-    name: &str,
-    span: Span,
+    ty: &TypeDescriptor,
     module_id: DefId,
-) -> Result<TyKind, LoweringError> {
-    Ok(match name {
-        "i64" => TyKind::Int(IntTy::I64),
-        "i32" => TyKind::Int(IntTy::I32),
-        "i16" => TyKind::Int(IntTy::I16),
-        "i8" => TyKind::Int(IntTy::I8),
-        "u64" => TyKind::Uint(UintTy::U64),
-        "u32" => TyKind::Uint(UintTy::U32),
-        "u16" => TyKind::Uint(UintTy::U16),
-        "u8" => TyKind::Uint(UintTy::U8),
-        "f32" => TyKind::Float(FloatTy::F32),
-        "f64" => TyKind::Float(FloatTy::F64),
-        "bool" => TyKind::Bool,
-        "string" => TyKind::String,
-        "char" => TyKind::Char,
-        other => {
-            let module = ctx.body.modules.get(&module_id).expect("module not found");
-            if let Some(struct_id) = module.symbols.structs.get(other) {
-                TyKind::Struct {
-                    id: *struct_id,
-                    generics: vec![],
+) -> Result<Ty, LoweringError> {
+    Ok(match ty {
+        TypeDescriptor::Type {
+            name,
+            generics,
+            span,
+        } => match name.name.as_str() {
+            "i64" => Ty::new(span, TyKind::Int(IntTy::I64)),
+            "i32" => Ty::new(span, TyKind::Int(IntTy::I32)),
+            "i16" => Ty::new(span, TyKind::Int(IntTy::I16)),
+            "i8" => Ty::new(span, TyKind::Int(IntTy::I8)),
+            "u64" => Ty::new(span, TyKind::Uint(UintTy::U64)),
+            "u32" => Ty::new(span, TyKind::Uint(UintTy::U32)),
+            "u16" => Ty::new(span, TyKind::Uint(UintTy::U16)),
+            "u8" => Ty::new(span, TyKind::Uint(UintTy::U8)),
+            "f32" => Ty::new(span, TyKind::Float(FloatTy::F32)),
+            "f64" => Ty::new(span, TyKind::Float(FloatTy::F64)),
+            "bool" => Ty::new(span, TyKind::Bool),
+            "string" => Ty::new(span, TyKind::String),
+            "char" => Ty::new(span, TyKind::Char),
+            other => {
+                let module = ctx.body.modules.get(&module_id).expect("module not found");
+                // Check if the type is a struct
+                if let Some(struct_id) = module.symbols.structs.get(other) {
+                    let mut generic_tys = Vec::new();
+                    for generic in generics {
+                        generic_tys.push(lower_type(ctx, generic, module_id)?);
+                    }
+                    Ty::new(
+                        span,
+                        TyKind::Struct {
+                            id: *struct_id,
+                            generics: generic_tys,
+                        },
+                    )
+                } else {
+                    Err(LoweringError::UnrecognizedType {
+                        span: *span,
+                        name: other.to_string(),
+                        program_id: module_id.program_id,
+                    })?
                 }
-            } else {
-                Err(LoweringError::UnrecognizedType {
-                    span,
-                    name: other.to_string(),
-                    program_id: module_id.program_id,
-                })?
             }
-        }
+        },
+        TypeDescriptor::Ref { of, span } => Ty::new(
+            span,
+            TyKind::Ref(Box::new(lower_type(ctx, of, module_id)?), Mutability::Not),
+        ),
+        TypeDescriptor::MutRef { of, span } => Ty::new(
+            span,
+            TyKind::Ref(Box::new(lower_type(ctx, of, module_id)?), Mutability::Mut),
+        ),
+        TypeDescriptor::ConstPtr { of, span } => Ty::new(
+            span,
+            TyKind::Ptr(Box::new(lower_type(ctx, of, module_id)?), Mutability::Not),
+        ),
+        TypeDescriptor::MutPtr { of, span } => Ty::new(
+            span,
+            TyKind::Ptr(Box::new(lower_type(ctx, of, module_id)?), Mutability::Mut),
+        ),
+        TypeDescriptor::Array { of, size, span } => Ty::new(
+            span,
+            TyKind::Array(
+                Box::new(lower_type(ctx, of, module_id)?),
+                Box::new(ConstData {
+                    ty: Ty {
+                        span: Some(*span),
+                        kind: TyKind::Uint(UintTy::U64),
+                    },
+                    data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(*size))),
+                }),
+            ),
+        ),
     })
 }

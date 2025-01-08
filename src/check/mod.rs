@@ -4,7 +4,7 @@ use crate::ir::lowering::errors::LoweringError;
 use crate::session::Session;
 use ariadne::{ColorGenerator, Label, Report, ReportKind};
 
-pub mod linearity_check;
+// pub mod linearity_check;
 
 /// Creates a report from a lowering error.
 pub fn lowering_error_to_report(

@@ -1,7 +1,5 @@
 use std::ops::Range;
 
-use super::types::TypeSpec;
-
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Span {
     pub from: usize,
@@ -34,7 +32,6 @@ pub struct Ident {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct GenericParam {
     pub name: Ident,
-    pub params: Vec<TypeSpec>,
     pub span: Span,
 }
 

@@ -598,6 +598,7 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
         }
     };
 
+    /*
     #[allow(unused_variables)]
     if args.check {
         let linearity_result =
@@ -610,6 +611,7 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
                 }
             };
     }
+     */
 
     if args.ir {
         std::fs::write(
