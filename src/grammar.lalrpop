@@ -140,14 +140,14 @@ SemiColonSeparated<T>: Vec<T> = {
 
 // -- Common
 
-pub(crate) Ident: ast::common::Ident = {
+Ident: ast::common::Ident = {
   <lo:@L> <name:"identifier"> <hi:@R> => ast::common::Ident {
     name,
     span: ast::common::Span::new(lo, hi),
   }
 }
 
-pub(crate) TypeDescriptor: ast::types::TypeDescriptor = {
+TypeDescriptor: ast::types::TypeDescriptor = {
   <lo:@L> <name:Ident> <hi:@R> => ast::types::TypeDescriptor::Type {
     name,
     generics: Vec::new(),
@@ -181,14 +181,14 @@ pub(crate) TypeDescriptor: ast::types::TypeDescriptor = {
   }
 }
 
-pub(crate) GenericParam: ast::common::GenericParam = {
+GenericParam: ast::common::GenericParam = {
   <lo:@L> <name:Ident> <hi:@R> => ast::common::GenericParam {
     name,
     span: Span::new(lo, hi),
   },
 }
 
-pub(crate) GenericParams: Vec<ast::common::GenericParam> = {
+GenericParams: Vec<ast::common::GenericParam> = {
   "<" <Comma<GenericParam>> ">" => <>
 }
 
@@ -209,11 +209,11 @@ pub Program: ast::Program = {
 
 // Modules
 
-pub(crate) ExternalModule: ast::common::Ident = {
+ExternalModule: ast::common::Ident = {
   "mod" <name:Ident> ";" => name
 }
 
-pub(crate) Module: ast::modules::Module = {
+Module: ast::modules::Module = {
   <lo:@L> "mod" <name:Ident> "{" <external_modules:List<ExternalModule>?> <imports:ImportList?> <contents:ModuleItems?> "}" <hi:@R> => {
     ast::modules::Module {
       doc_string: None,
@@ -226,7 +226,7 @@ pub(crate) Module: ast::modules::Module = {
   }
 }
 
-pub(crate) ImportList: Vec<ast::imports::ImportStmt> = {
+ImportList: Vec<ast::imports::ImportStmt> = {
   <ImportStmt> => vec![<>],
   <mut s:ImportList> <n:ImportStmt> => {
       s.push(n);
@@ -235,7 +235,7 @@ pub(crate) ImportList: Vec<ast::imports::ImportStmt> = {
 }
 
 
-pub(crate) ImportStmt: ast::imports::ImportStmt = {
+ImportStmt: ast::imports::ImportStmt = {
   <lo:@L> "import" <module:Dot<Ident>> "{" <symbols:Comma<Ident>> "}" ";" <hi:@R>  => {
     ast::imports::ImportStmt {
       module,
@@ -246,7 +246,7 @@ pub(crate) ImportStmt: ast::imports::ImportStmt = {
 }
 
 
-pub(crate) ModuleItems: Vec<ast::modules::ModuleDefItem> = {
+ModuleItems: Vec<ast::modules::ModuleDefItem> = {
   <ModuleDefItem> => vec![<>],
   <mut s:ModuleItems> <n:ModuleDefItem> => {
       s.push(n);
@@ -254,7 +254,7 @@ pub(crate) ModuleItems: Vec<ast::modules::ModuleDefItem> = {
   },
 }
 
-pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
+ModuleDefItem: ast::modules::ModuleDefItem = {
   <ConstantDef> ";" => {
     ast::modules::ModuleDefItem::Constant(<>)
   },
@@ -283,7 +283,7 @@ pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
 
 // Constants
 
-pub(crate) ConstantDef: ast::constants::ConstantDef = {
+ConstantDef: ast::constants::ConstantDef = {
   <is_pub:"pub"?> "const" <name:Ident> ":" <type_spec:TypeDescriptor> "=" <exp:Expression> => {
     ast::constants::ConstantDef {
       decl: ast::constants::ConstantDecl {
@@ -299,18 +299,18 @@ pub(crate) ConstantDef: ast::constants::ConstantDef = {
 
 // -- Functions
 
-pub(crate) FunctionRetType: ast::types::TypeDescriptor = {
+FunctionRetType: ast::types::TypeDescriptor = {
   "->" <TypeDescriptor> => <>
 }
 
-pub(crate) Param: ast::functions::Param = {
+Param: ast::functions::Param = {
   <name:Ident> ":" <param_type:TypeDescriptor> => ast::functions::Param {
     name,
     r#type: param_type
   }
 }
 
-pub(crate) Attribute: ast::common::Attribute = {
+Attribute: ast::common::Attribute = {
   <lo:@L> "#" "[" <name:"identifier"> <value:("=" <"string">)?> "]" <hi:@R> => ast::common::Attribute {
     name,
     value,
@@ -318,7 +318,7 @@ pub(crate) Attribute: ast::common::Attribute = {
   }
 }
 
-pub(crate) FunctionDecl: ast::functions::FunctionDecl = {
+FunctionDecl: ast::functions::FunctionDecl = {
   <lo:@L> <attributes:List<Attribute>?> <is_pub:"pub"?> <is_extern:"extern"?>
       "fn" <name:Ident> <generic_params:GenericParams?> "(" <params:Comma<Param>> ")"
         <ret_type:FunctionRetType?> <hi:@R> =>
@@ -335,7 +335,7 @@ pub(crate) FunctionDecl: ast::functions::FunctionDecl = {
   }
 }
 
-pub(crate) FunctionDef: ast::functions::FunctionDef = {
+FunctionDef: ast::functions::FunctionDef = {
   <lo:@L> <decl:FunctionDecl> "{" <statements:StatementList?> "}" <hi:@R> => {
     ast::functions::FunctionDef {
       decl,
@@ -345,7 +345,7 @@ pub(crate) FunctionDef: ast::functions::FunctionDef = {
   }
 }
 
-pub(crate) ImplBlock: ast::functions::ImplBlock = {
+ImplBlock: ast::functions::ImplBlock = {
   <lo:@L> "impl" <target:Ident> "{" <methods:FunctionDef*> "}" <hi:@R> => {
     ast::functions::ImplBlock {
       target,
@@ -357,7 +357,7 @@ pub(crate) ImplBlock: ast::functions::ImplBlock = {
 
 // Struct
 
-pub(crate) StructField: ast::structs::Field = {
+StructField: ast::structs::Field = {
     <lo:@L> <name:Ident> ":" <r#type:TypeDescriptor> <hi:@R> => ast::structs::Field {
         name,
         r#type,
@@ -365,7 +365,7 @@ pub(crate) StructField: ast::structs::Field = {
     }
 }
 
-pub(crate) StructDef: ast::structs::StructDecl = {
+StructDef: ast::structs::StructDecl = {
     <lo:@L> "struct" <name:Ident> <generics:GenericParams?> "{" <fields:Comma<StructField>> "}" <hi:@R> => ast::structs::StructDecl {
         name,
         fields,
@@ -375,7 +375,7 @@ pub(crate) StructDef: ast::structs::StructDecl = {
 }
 
 
-pub(crate) UnionDef: ast::enums::UnionDecl = {
+UnionDef: ast::enums::UnionDecl = {
     <lo:@L> "union" <name:Ident> <generics:GenericParams?> "{" <variants:Comma<StructField>> "}" <hi:@R> => ast::enums::UnionDecl {
         name,
         variants,
@@ -384,7 +384,7 @@ pub(crate) UnionDef: ast::enums::UnionDecl = {
     }
 }
 
-pub(crate) EnumDef: ast::enums::EnumDecl = {
+EnumDef: ast::enums::EnumDecl = {
     <lo:@L> "enum" <name:Ident> <generics:GenericParams?> "{" <variants:Comma<EnumVariant>> "}" <hi:@R> => ast::enums::EnumDecl {
         name,
         variants,
@@ -394,7 +394,7 @@ pub(crate) EnumDef: ast::enums::EnumDecl = {
 }
 
 
-pub(crate) EnumVariant: ast::enums::EnumVariant = {
+EnumVariant: ast::enums::EnumVariant = {
     <lo:@L> <name:Ident> <fields:("{" <Comma<StructField>> "}")?> <discriminant:("=" <Expression>)?><hi:@R> => ast::enums::EnumVariant {
         name,
         fields: fields.unwrap_or_default(),
@@ -403,7 +403,7 @@ pub(crate) EnumVariant: ast::enums::EnumVariant = {
     }
 }
 
-pub(crate) StructInitField: (ast::common::Ident, ast::expressions::StructInitField) = {
+StructInitField: (ast::common::Ident, ast::expressions::StructInitField) = {
     <lo:@L> <name:Ident> ":" <value:Expression> <hi:@R> => (name, ast::expressions::StructInitField {
         value,
         span: Span::new(lo, hi),
@@ -414,7 +414,7 @@ pub(crate) StructInitField: (ast::common::Ident, ast::expressions::StructInitFie
     })
 }
 
-pub(crate) StructInitExpr: ast::expressions::StructInitExpr = {
+StructInitExpr: ast::expressions::StructInitExpr = {
   <lo:@L> <name:Ident> "{" <fields:Comma<StructInitField>> "}" <hi:@R> => ast::expressions::StructInitExpr {
     name,
     fields: fields.into_iter().collect(),
@@ -423,7 +423,7 @@ pub(crate) StructInitExpr: ast::expressions::StructInitExpr = {
 }
 
 
-pub(crate) ArrayInitExpr: ast::expressions::ArrayInitExpr = {
+ArrayInitExpr: ast::expressions::ArrayInitExpr = {
   <lo:@L> "[" <values:Comma<Expression>> "]" <hi:@R> => ast::expressions::ArrayInitExpr {
     values: values.into_iter().collect(),
     span: Span::new(lo, hi),
@@ -432,7 +432,7 @@ pub(crate) ArrayInitExpr: ast::expressions::ArrayInitExpr = {
 
 // Expressions
 
-pub(crate) Term: ast::expressions::Expression = {
+Term: ast::expressions::Expression = {
   #[precedence(level="0")]
   <lo:@L> <v:ValueExpr> <hi:@R> => ast::expressions::Expression::Value(v, Span::new(lo, hi)),
   <FnCallOp> => ast::expressions::Expression::FnCall(<>),
@@ -442,7 +442,7 @@ pub(crate) Term: ast::expressions::Expression = {
   "(" <Expression> ")",
 }
 
-pub(crate) Expression: ast::expressions::Expression = {
+Expression: ast::expressions::Expression = {
   #[precedence(level="0")]
   <Term>,
   #[precedence(level="1")] #[assoc(side="left")]
@@ -477,7 +477,7 @@ pub(crate) Expression: ast::expressions::Expression = {
   <ArrayInitExpr> => ast::expressions::Expression::ArrayInit(<>),
 }
 
-pub BinaryFirstLvlOp: ast::expressions::BinaryOp = {
+BinaryFirstLvlOp: ast::expressions::BinaryOp = {
   "==" => ast::expressions::BinaryOp::Compare(ast::expressions::CmpOp::Eq),
   "!=" => ast::expressions::BinaryOp::Compare(ast::expressions::CmpOp::NotEq),
   "<" => ast::expressions::BinaryOp::Compare(ast::expressions::CmpOp::Lt),
@@ -488,13 +488,13 @@ pub BinaryFirstLvlOp: ast::expressions::BinaryOp = {
   "||" => ast::expressions::BinaryOp::Logic(ast::expressions::LogicOp::Or),
 }
 
-pub BinarySecondLvlOp: ast::expressions::BinaryOp = {
+BinarySecondLvlOp: ast::expressions::BinaryOp = {
   "/" => ast::expressions::BinaryOp::Arith(ast::expressions::ArithOp::Div),
   "*" => ast::expressions::BinaryOp::Arith(ast::expressions::ArithOp::Mul),
   "%" => ast::expressions::BinaryOp::Arith(ast::expressions::ArithOp::Mod),
 }
 
-pub BinaryThirdLvlOp: ast::expressions::BinaryOp = {
+BinaryThirdLvlOp: ast::expressions::BinaryOp = {
   "+" => ast::expressions::BinaryOp::Arith(ast::expressions::ArithOp::Add),
   "-" => ast::expressions::BinaryOp::Arith(ast::expressions::ArithOp::Sub),
   "&" => ast::expressions::BinaryOp::Bitwise(ast::expressions::BitwiseOp::And),
@@ -502,13 +502,13 @@ pub BinaryThirdLvlOp: ast::expressions::BinaryOp = {
   "^" => ast::expressions::BinaryOp::Bitwise(ast::expressions::BitwiseOp::Xor),
 }
 
-pub UnaryOp: ast::expressions::UnaryOp = {
+UnaryOp: ast::expressions::UnaryOp = {
   "-" => ast::expressions::UnaryOp::ArithNeg,
   "!" => ast::expressions::UnaryOp::LogicalNot,
   "~" => ast::expressions::UnaryOp::BitwiseNot,
 }
 
-pub(crate) ValueExpr: ast::expressions::ValueExpr = {
+ValueExpr: ast::expressions::ValueExpr = {
   <lo:@L> <v:"integer"> <hi:@R> => ast::expressions::ValueExpr::ConstInt(v, Span::new(lo, hi)),
   <lo:@L> <v:"float"> <hi:@R> => ast::expressions::ValueExpr::ConstFloat(v, Span::new(lo, hi)),
   <lo:@L> <v:"boolean"> <hi:@R> => ast::expressions::ValueExpr::ConstBool(v, Span::new(lo, hi)),
@@ -517,7 +517,7 @@ pub(crate) ValueExpr: ast::expressions::ValueExpr = {
   <PathOp> => ast::expressions::ValueExpr::Path(<>),
 }
 
-pub(crate) IfExpr: ast::expressions::IfExpr = {
+IfExpr: ast::expressions::IfExpr = {
   <lo:@L> "if" <cond:Expression> "{" <block_stmts:StatementList> "}"
     <else_stmts:("else" "{" <StatementList> "}")?> <hi:@R> => {
     ast::expressions::IfExpr {
@@ -529,7 +529,7 @@ pub(crate) IfExpr: ast::expressions::IfExpr = {
   }
 }
 
-pub(crate) MatchExpr: ast::expressions::MatchExpr = {
+MatchExpr: ast::expressions::MatchExpr = {
   <lo:@L> "match" <expr:Expression> "{" <variants:Comma<MatchVariant>> "}" <hi:@R> => {
     ast::expressions::MatchExpr {
       expr: Box::new(expr),
@@ -539,7 +539,7 @@ pub(crate) MatchExpr: ast::expressions::MatchExpr = {
   }
 }
 
-pub(crate) MatchVariant: ast::expressions::MatchVariant = {
+MatchVariant: ast::expressions::MatchVariant = {
   // 0 -> 1
   <lo:@L> <case:ValueExpr> "->" <stmt:Statement> <hi:@R> => {
     ast::expressions::MatchVariant {
@@ -558,7 +558,7 @@ pub(crate) MatchVariant: ast::expressions::MatchVariant = {
   }
 }
 
-pub(crate) PathOp: ast::expressions::PathOp = {
+PathOp: ast::expressions::PathOp = {
   <lo:@L> <first:Ident> <extra:PathSegments?> <hi:@R> => ast::expressions::PathOp {
     first,
     extra: extra.unwrap_or(vec![]),
@@ -566,12 +566,12 @@ pub(crate) PathOp: ast::expressions::PathOp = {
   },
 }
 
-pub(crate) PathSegment: ast::expressions::PathSegment = {
+PathSegment: ast::expressions::PathSegment = {
   <lo:@L> "." <e:Ident> <hi:@R> => ast::expressions::PathSegment::FieldAccess(e, Span::new(lo, hi)),
   <lo:@L> "[" <e:ValueExpr> "]" <hi:@R> => ast::expressions::PathSegment::ArrayIndex(e, Span::new(lo, hi)),
 }
 
-pub PathSegments: Vec<ast::expressions::PathSegment> = {
+PathSegments: Vec<ast::expressions::PathSegment> = {
   <PathSegment> => vec![<>],
   <mut s:PathSegments> <n:PathSegment> => {
       s.push(n);
@@ -579,7 +579,7 @@ pub PathSegments: Vec<ast::expressions::PathSegment> = {
   },
 }
 
-pub(crate) FnCallOp: ast::expressions::FnCallOp = {
+FnCallOp: ast::expressions::FnCallOp = {
   <lo:@L> <target:Ident> "(" <args:Comma<Expression>> ")" <hi:@R> => ast::expressions::FnCallOp {
     target,
     args,
@@ -589,7 +589,7 @@ pub(crate) FnCallOp: ast::expressions::FnCallOp = {
 
 // -- Statements
 
-pub StatementList: Vec<ast::statements::Statement> = {
+StatementList: Vec<ast::statements::Statement> = {
   <Statement> => vec![<>],
   <mut s:StatementList> <n:Statement> => {
       s.push(n);
@@ -597,7 +597,7 @@ pub StatementList: Vec<ast::statements::Statement> = {
   },
 }
 
-pub(crate) Statement: ast::statements::Statement = {
+Statement: ast::statements::Statement = {
   <MatchExpr> ";"? => ast::statements::Statement::Match(<>),
   <IfExpr> ";"? => ast::statements::Statement::If(<>),
   <WhileStmt> ";"? => ast::statements::Statement::While(<>),
@@ -608,7 +608,7 @@ pub(crate) Statement: ast::statements::Statement = {
   <ReturnStmt> ";" => ast::statements::Statement::Return(<>),
 }
 
-pub(crate) LetStmt: ast::statements::LetStmt = {
+LetStmt: ast::statements::LetStmt = {
   <lo:@L> "let" <is_mutable:"mut"?> <id:Ident> ":" <target_type:TypeDescriptor> "=" <value:Expression> <hi:@R> => ast::statements::LetStmt {
     is_mutable: is_mutable.is_some(),
     target: ast::statements::LetStmtTarget::Simple {
@@ -629,7 +629,7 @@ pub(crate) LetStmt: ast::statements::LetStmt = {
   },
 }
 
-pub(crate) AssignStmt: ast::statements::AssignStmt = {
+AssignStmt: ast::statements::AssignStmt = {
   <lo:@L> <derefs:"*"*> <lvalue:PathOp> "=" <rvalue:Expression> <hi:@R> => ast::statements::AssignStmt {
     lvalue,
     rvalue,
@@ -644,14 +644,14 @@ pub(crate) AssignStmt: ast::statements::AssignStmt = {
   },
 }
 
-pub(crate) ReturnStmt: ast::statements::ReturnStmt = {
+ReturnStmt: ast::statements::ReturnStmt = {
   <lo:@L> "return" <value:Expression?> <hi:@R> => ast::statements::ReturnStmt {
     value,
     span: Span::new(lo, hi),
   },
 }
 
-pub(crate) WhileStmt: ast::statements::WhileStmt = {
+WhileStmt: ast::statements::WhileStmt = {
   "while" <condition:Expression> "{" <block_stmts:StatementList> "}" => {
     ast::statements::WhileStmt {
       condition,
@@ -661,7 +661,7 @@ pub(crate) WhileStmt: ast::statements::WhileStmt = {
 }
 
 
-pub(crate) ForStmt: ast::statements::ForStmt = {
+ForStmt: ast::statements::ForStmt = {
   <lo:@L> "for" "(" <init:LetStmt?> ";" <condition:Expression?> ";" <post:AssignStmt?> ")" "{" <block_stmts:StatementList> "}" <hi:@R> => {
     ast::statements::ForStmt {
       init,
