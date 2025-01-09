@@ -176,6 +176,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
             ModuleDefItem::FunctionDecl(fn_decl) => {
                 ctx = lower_func_decl(ctx, fn_decl, id)?;
             }
+            ModuleDefItem::Impl(_impl_block) => todo!(),
         }
     }
 

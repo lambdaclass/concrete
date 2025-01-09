@@ -20,6 +20,7 @@ extern {
     "struct" => Token::KeywordStruct,
     "union" => Token::KeywordUnion,
     "enum" => Token::KeywordEnum,
+    "impl" => Token::KeywordImpl,
     "if" => Token::KeywordIf,
     "else" => Token::KeywordElse,
     "while" => Token::KeywordWhile,
@@ -272,6 +273,9 @@ pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
   <FunctionDecl> ";" => {
     ast::modules::ModuleDefItem::FunctionDecl(<>)
   },
+  <ImplBlock> => {
+    ast::modules::ModuleDefItem::Impl(<>)
+  },
   <Module> => {
     ast::modules::ModuleDefItem::Module(<>)
   },
@@ -336,6 +340,16 @@ pub(crate) FunctionDef: ast::functions::FunctionDef = {
     ast::functions::FunctionDef {
       decl,
       body: statements.unwrap_or_else(Vec::new),
+      span: Span::new(lo, hi),
+    }
+  }
+}
+
+pub(crate) ImplBlock: ast::functions::ImplBlock = {
+  <lo:@L> "impl" <target:Ident> "{" <methods:FunctionDef*> "}" <hi:@R> => {
+    ast::functions::ImplBlock {
+      target,
+      methods,
       span: Span::new(lo, hi),
     }
   }
