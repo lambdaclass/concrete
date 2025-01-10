@@ -1751,11 +1751,7 @@ pub fn lower_type(
     module_id: DefId,
 ) -> Result<Ty, LoweringError> {
     Ok(match ty {
-        TypeDescriptor::Type {
-            name,
-            generics,
-            span,
-        } => match name.name.as_str() {
+        TypeDescriptor::Type { name, span } => match name.name.name.as_str() {
             "i64" => Ty::new(span, TyKind::Int(IntTy::I64)),
             "i32" => Ty::new(span, TyKind::Int(IntTy::I32)),
             "i16" => Ty::new(span, TyKind::Int(IntTy::I16)),
@@ -1774,8 +1770,15 @@ pub fn lower_type(
                 // Check if the type is a struct
                 if let Some(struct_id) = module.symbols.structs.get(other) {
                     let mut generic_tys = Vec::new();
-                    for generic in generics {
-                        generic_tys.push(lower_type(ctx, generic, module_id)?);
+                    for generic in &name.generics {
+                        generic_tys.push(lower_type(
+                            ctx,
+                            &TypeDescriptor::Type {
+                                name: generic.clone(),
+                                span: generic.span,
+                            },
+                            module_id,
+                        )?);
                     }
                     Ty::new(
                         span,
