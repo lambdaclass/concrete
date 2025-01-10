@@ -102,16 +102,6 @@ Comma<T>: Vec<T> = {
     }
 };
 
-Colon<T>: Vec<T> = {
-    <mut v:(<T> ":")*> <e:T?> => match e {
-        None => v,
-        Some(e) => {
-            v.push(e);
-            v
-        }
-    }
-};
-
 SemiColon<T>: Vec<T> = {
     <mut v:(<T> ";")*> <e:T?> => match e {
         None => v,
