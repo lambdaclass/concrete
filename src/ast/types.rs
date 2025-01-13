@@ -27,6 +27,11 @@ pub enum TypeDescriptor {
         size: u64,
         span: Span,
     },
+    // Used in impl blocks.
+    SelfType {
+        is_ref: bool,
+        is_mut: bool,
+    },
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

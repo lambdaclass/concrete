@@ -32,6 +32,7 @@ extern {
     "import" => Token::KeywordImport,
     "extern" => Token::KeywordExtern,
     "as" => Token::KeywordAs,
+    "self" => Token::KeywordSelf,
 
     // literals
     "identifier" => Token::Identifier(<String>),
@@ -144,6 +145,10 @@ SemiColonSeparated<T>: Vec<T> = {
 Ident: ast::common::Ident = {
   <lo:@L> <name:"identifier"> <hi:@R> => ast::common::Ident {
     name,
+    span: ast::common::Span::new(lo, hi),
+  },
+  <lo:@L> <name:"self"> <hi:@R> => ast::common::Ident {
+    name: name.to_string(),
     span: ast::common::Span::new(lo, hi),
   }
 }
@@ -311,6 +316,16 @@ Param: ast::functions::Param = {
   <name:Ident> ":" <param_type:TypeDescriptor> => ast::functions::Param {
     name,
     r#type: param_type
+  },
+   <lo:@L> <is_ref:"&"?> <is_mut:"mut"?> "self" <hi:@R> => ast::functions::Param {
+    name: ast::common::Ident {
+      name: "self".to_string(),
+      span: Span::new(lo, hi),
+    },
+    r#type: ast::types::TypeDescriptor::SelfType {
+      is_ref: is_ref.is_some(),
+      is_mut: is_mut.is_some(),
+    },
   }
 }
 
@@ -572,6 +587,7 @@ PathOp: ast::expressions::PathOp = {
 
 PathSegment: ast::expressions::PathSegment = {
   <lo:@L> "." <e:Ident> <hi:@R> => ast::expressions::PathSegment::FieldAccess(e, Span::new(lo, hi)),
+  <lo:@L> "." <e:FnCallOp> <hi:@R> => ast::expressions::PathSegment::MethodCall(e, Span::new(lo, hi)),
   <lo:@L> "[" <e:ValueExpr> "]" <hi:@R> => ast::expressions::PathSegment::ArrayIndex(e, Span::new(lo, hi)),
 }
 
