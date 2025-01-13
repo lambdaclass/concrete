@@ -229,7 +229,7 @@ Meaning:
 - :x: = work not started yet
 - 🤔 = to be defined
 
-Features:
+Builtin Features:
 - if/else ✔️
 - while ✔️
 - modules ✔️
@@ -238,21 +238,23 @@ Features:
 - borrowing ✔️
 - structs ✔️
 - casts ✔️
-- arrays 🏗️
-- iterators :x:
 - for 🏗️
-- match :x:
-- option :x:
-- enums :x:
-- impl :x:
+- ffi 🏗️
 - linear type checker 🏗️
+- impl block 🏗️
+- generics 🏗️
+- enums :x:
+- match :x:
 - borrow checker :x:
-- generics :x:
 - traits :x:
 - unsafe :x:
+
+Standard lib features:
+- arrays 🏗️
+- iterators :x:
+- option :x:
 - box :x:
 - rc (for cyclical data structures like graphs) :x:
-- ffi :x:
 - operating system threads with move only semantics :x:
 - rayon-like :x:
 

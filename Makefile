@@ -26,12 +26,12 @@ endif
 
 .PHONY: build
 build: check-deps
-	cargo build --workspace --release --all-features
+	cargo build --release --all-features
 
 .PHONY: check
 check: check-deps
 	cargo fmt --all -- --check
-	cargo clippy --workspace --all-targets --all-features -- -D warnings
+	cargo clippy --all-targets --all-features -- -D warnings
 
 .PHONY: clean
 clean:
@@ -39,12 +39,16 @@ clean:
 
 .PHONY: test
 test: check-deps
-	cargo test --workspace --all-targets --all-features
+	cargo test --all-targets --all-features
 
 .PHONY: coverage
 coverage: check-deps
-	cargo llvm-cov --verbose --all-features --all-targets --workspace --lcov --output-path lcov.info
+	cargo llvm-cov --verbose --all-features --all-targets --lcov --output-path lcov.info
 
 .PHONY: bench
 bench: check-deps
 	./bench/bench.sh
+
+.PHONY: book
+book:
+	cd ./docs/book && mdbook serve --open
