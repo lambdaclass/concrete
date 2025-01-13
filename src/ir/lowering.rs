@@ -1739,7 +1739,7 @@ pub fn lower_path(
                     ty = *element_type;
                 }
             }
-            PathSegment::MethodCall(fn_call_op, span) => todo!(),
+            PathSegment::MethodCall(_fn_call_op, _span) => todo!(),
         }
     }
 
