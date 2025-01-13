@@ -52,6 +52,7 @@ extern {
     "=" => Token::Assign,
     ";" => Token::Semicolon,
     ":" => Token::Colon,
+    "::" => Token::DoubleColon,
     "->" => Token::Arrow,
     "," => Token::Coma,
     "#" => Token::Hashtag,
@@ -147,15 +148,18 @@ Ident: ast::common::Ident = {
   }
 }
 
+TypeName: ast::common::TypeName = {
+  <lo:@L> <path:(<Ident> "::")*> <name:Ident> <generics:("<" <Comma<TypeName>> ">")?> <hi:@R> => ast::common::TypeName {
+    name,
+    path,
+    generics: generics.unwrap_or_default(),
+    span: ast::common::Span::new(lo, hi),
+  }
+}
+
 TypeDescriptor: ast::types::TypeDescriptor = {
-  <lo:@L> <name:Ident> <hi:@R> => ast::types::TypeDescriptor::Type {
+  <lo:@L> <name:TypeName> <hi:@R> => ast::types::TypeDescriptor::Type {
     name,
-    generics: Vec::new(),
-    span: Span::new(lo, hi),
-  },
-  <lo:@L> <name:Ident> "<" <generics:Comma<TypeDescriptor>> ">" <hi:@R> => ast::types::TypeDescriptor::Type {
-    name,
-    generics,
     span: Span::new(lo, hi),
   },
   <lo:@L> "[" <of_type:TypeDescriptor> <size:(";" <"integer">)> "]"<hi:@R> => ast::types::TypeDescriptor::Array {

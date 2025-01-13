@@ -23,12 +23,27 @@ pub struct DocString {
     contents: String,
 }
 
+/// Identifiers, without a path or generics.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct Ident {
     pub name: String,
     pub span: Span,
 }
 
+/// A type name, supporting fully qualified paths and generics:
+/// ```
+/// std::module::X<T>
+/// ```
+/// Used only when specifying types.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub struct TypeName {
+    pub path: Vec<Ident>,
+    pub name: Ident,
+    pub generics: Vec<TypeName>,
+    pub span: Span,
+}
+
+/// Used as a generic param in function and struct declarations.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct GenericParam {
     pub name: Ident,
