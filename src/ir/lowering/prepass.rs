@@ -116,12 +116,6 @@ pub fn prepass_module(
                     );
                 }
                 ast::modules::ModuleDefItem::Impl(impl_block) => {
-                    // TODO: traverse target path and deal with generics
-                    let struct_id = current_module
-                        .symbols
-                        .structs
-                        .get(&impl_block.target.name.name)
-                        .expect("target struct not found");
                     for info in &impl_block.methods {
                         let next_id = gen.next_defid();
                         current_module
@@ -132,10 +126,7 @@ pub fn prepass_module(
                         ctx.unresolved_function_signatures.insert(
                             next_id,
                             (
-                                [TypeDescriptor::Type {
-                                    name: impl_block.target.clone(),
-                                    span: impl_block.target.span,
-                                }]
+                                [impl_block.target.clone()]
                                 .into_iter()
                                 .chain(info.decl.params.iter().map(|x| &x.r#type).cloned())
                                 .collect(),

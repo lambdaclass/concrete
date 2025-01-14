@@ -365,7 +365,7 @@ FunctionDef: ast::functions::FunctionDef = {
 }
 
 ImplBlock: ast::functions::ImplBlock = {
-  <lo:@L> "impl" <target:TypeName> "{" <methods:FunctionDef*> "}" <hi:@R> => {
+  <lo:@L> "impl" <target:TypeDescriptor> "{" <methods:FunctionDef*> "}" <hi:@R> => {
     ast::functions::ImplBlock {
       target,
       methods,

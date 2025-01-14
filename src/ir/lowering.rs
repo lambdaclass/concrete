@@ -162,7 +162,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
         match content {
             ModuleDefItem::Constant(_) => { /* already processed */ }
             ModuleDefItem::Function(fn_def) => {
-                ctx = lower_func(ctx, fn_def, id)?;
+                ctx = lower_func(ctx, fn_def, id, None)?;
             }
             ModuleDefItem::Type(_) => todo!(),
             ModuleDefItem::Module(mod_def) => {
@@ -176,7 +176,12 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
             ModuleDefItem::FunctionDecl(fn_decl) => {
                 ctx = lower_func_decl(ctx, fn_decl, id)?;
             }
-            ModuleDefItem::Impl(_impl_block) => todo!(),
+            ModuleDefItem::Impl(impl_block) => {
+                let self_ty = lower_type(&ctx, &impl_block.target, id)?;
+                for info in &impl_block.methods {
+                    ctx = lower_func(ctx, info, id, Some(self_ty.clone()))?;
+                }
+            },
         }
     }
 
@@ -302,6 +307,7 @@ fn lower_func(
     ctx: BuildCtx,
     func: &FunctionDef,
     module_id: DefId,
+    has_self: Option<Ty>,
 ) -> Result<BuildCtx, LoweringError> {
     let is_intrinsic: Option<ConcreteIntrinsic> = None;
 
