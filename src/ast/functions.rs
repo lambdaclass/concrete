@@ -29,3 +29,10 @@ pub struct Param {
     pub name: Ident,
     pub r#type: TypeDescriptor,
 }
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImplBlock {
+    pub target: Ident,
+    pub methods: Vec<FunctionDef>,
+    pub span: Span,
+}

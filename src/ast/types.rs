@@ -1,10 +1,9 @@
-use super::common::{DocString, Ident, Span};
+use super::common::{DocString, Ident, Span, TypeName};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum TypeDescriptor {
     Type {
-        name: Ident,
-        generics: Vec<Self>,
+        name: TypeName,
         span: Span,
     },
     Ref {

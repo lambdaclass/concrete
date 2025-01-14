@@ -37,6 +37,8 @@ pub enum Token {
     KeywordUnion,
     #[token("enum")]
     KeywordEnum,
+    #[token("impl")]
+    KeywordImpl,
     #[token("if")]
     KeywordIf,
     #[token("else")]
@@ -103,6 +105,8 @@ pub enum Token {
     Semicolon,
     #[token(":")]
     Colon,
+    #[token("::")]
+    DoubleColon,
     #[token("->")]
     Arrow,
     #[token(",")]

@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::ir::{DefId, FnBody, Local, LocalIndex, ModuleBody, ProgramBody, Statement, Ty, TyKind};
+use crate::{
+    ast::types::TypeDescriptor,
+    ir::{DefId, FnBody, Local, LocalIndex, ModuleBody, ProgramBody, Statement, Ty, TyKind},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct IdGenerator {
@@ -34,13 +37,8 @@ impl IdGenerator {
 #[derive(Debug, Clone)]
 pub struct BuildCtx {
     pub body: ProgramBody,
-    pub unresolved_function_signatures: HashMap<
-        DefId,
-        (
-            Vec<crate::ast::types::TypeDescriptor>,
-            Option<crate::ast::types::TypeDescriptor>,
-        ),
-    >,
+    pub unresolved_function_signatures:
+        HashMap<DefId, (Vec<TypeDescriptor>, Option<TypeDescriptor>)>,
     pub gen: IdGenerator,
 }
 

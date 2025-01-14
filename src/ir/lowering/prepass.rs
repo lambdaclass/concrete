@@ -112,6 +112,7 @@ pub fn prepass_module(
                         ),
                     );
                 }
+                ast::modules::ModuleDefItem::Impl(_impl_block) => todo!(),
             }
         }
 
@@ -229,6 +230,7 @@ pub fn prepass_sub_module(
                         ),
                     );
                 }
+                ast::modules::ModuleDefItem::Impl(_impl_block) => todo!(),
             }
         }
 
