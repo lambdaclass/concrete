@@ -1739,6 +1739,7 @@ pub fn lower_path(
                     ty = *element_type;
                 }
             }
+            PathSegment::MethodCall(_fn_call_op, _span) => todo!(),
         }
     }
 
@@ -1825,5 +1826,9 @@ pub fn lower_type(
                 }),
             ),
         ),
+        TypeDescriptor::SelfType {
+            is_ref: _,
+            is_mut: _,
+        } => todo!(),
     })
 }

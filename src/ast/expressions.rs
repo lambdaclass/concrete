@@ -123,6 +123,7 @@ pub struct MatchVariant {
 pub enum PathSegment {
     FieldAccess(Ident, Span),
     ArrayIndex(ValueExpr, Span),
+    MethodCall(FnCallOp, Span),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

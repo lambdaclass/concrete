@@ -302,4 +302,60 @@ mod ModuleName {
         let parser = grammar::ProgramParser::new();
         parser.parse(lexer).unwrap();
     }
+
+    #[test]
+    fn parse_impl() {
+        let source = r##"mod MyMod {
+    struct A {
+        a: i32,
+        b: i32,
+    }
+
+    impl A {
+        pub fn hello(&self, other: i32) -> i32 {
+            return self.a * other;
+        }
+    }
+
+    pub fn main() -> i32 {
+        let x: A = A {
+            a: 2,
+            b: 3,
+        };
+
+        return x.hello(4);
+    }
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
+    }
+
+    #[test]
+    fn parse_impl_mut() {
+        let source = r##"mod MyMod {
+    struct A {
+        a: i32,
+        b: i32,
+    }
+
+    impl A {
+        pub fn hello(&mut self, other: i32) -> i32 {
+            return self.a * other;
+        }
+    }
+
+    pub fn main() -> i32 {
+        let x: A = A {
+            a: 2,
+            b: 3,
+        };
+
+        return x.hello(4);
+    }
+}"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        parser.parse(lexer).unwrap();
+    }
 }

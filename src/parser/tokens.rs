@@ -61,6 +61,8 @@ pub enum Token {
     KeywordExtern,
     #[token("as")]
     KeywordAs,
+    #[token("self")]
+    KeywordSelf,
 
     // Modern way of allowing identifiers, read: https://unicode.org/reports/tr31/
     #[regex(r"[\p{XID_Start}_]\p{XID_Continue}*", |lex| lex.slice().to_string())]
