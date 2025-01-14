@@ -1,5 +1,5 @@
 use super::{
-    common::{Attribute, DocString, GenericParam, Ident, Span},
+    common::{Attribute, DocString, GenericParam, Ident, Span, TypeName},
     statements::Statement,
     types::TypeDescriptor,
 };
@@ -32,7 +32,7 @@ pub struct Param {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImplBlock {
-    pub target: Ident,
+    pub target: TypeName,
     pub methods: Vec<FunctionDef>,
     pub span: Span,
 }

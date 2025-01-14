@@ -21,6 +21,8 @@ pub struct SymbolTable {
     pub symbols: HashMap<DefId, String>,
     pub modules: HashMap<String, DefId>,
     pub functions: HashMap<String, DefId>,
+    /// (Struct ID, Name) -> id
+    pub methods: HashMap<(DefId, String), DefId>,
     pub constants: HashMap<String, DefId>,
     pub structs: HashMap<String, DefId>,
     pub types: HashMap<String, DefId>,

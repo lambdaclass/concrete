@@ -1,5 +1,8 @@
 use std::collections::HashMap;
+use std::io::Read;
 
+use crate::ast::common::TypeName;
+use crate::ast::types::TypeDescriptor;
 use crate::ir::{DefId, ModuleBody};
 
 use crate::ast;
@@ -112,7 +115,35 @@ pub fn prepass_module(
                         ),
                     );
                 }
-                ast::modules::ModuleDefItem::Impl(_impl_block) => todo!(),
+                ast::modules::ModuleDefItem::Impl(impl_block) => {
+                    // TODO: traverse target path and deal with generics
+                    let struct_id = current_module
+                        .symbols
+                        .structs
+                        .get(&impl_block.target.name.name)
+                        .expect("target struct not found");
+                    for info in &impl_block.methods {
+                        let next_id = gen.next_defid();
+                        current_module
+                            .symbols
+                            .methods
+                            .insert((*struct_id, info.decl.name.name.clone()), next_id);
+                        current_module.functions.insert(next_id);
+                        ctx.unresolved_function_signatures.insert(
+                            next_id,
+                            (
+                                [TypeDescriptor::Type {
+                                    name: impl_block.target.clone(),
+                                    span: impl_block.target.span,
+                                }]
+                                .into_iter()
+                                .chain(info.decl.params.iter().map(|x| &x.r#type).cloned())
+                                .collect(),
+                                info.decl.ret_type.clone(),
+                            ),
+                        );
+                    }
+                }
             }
         }
 
