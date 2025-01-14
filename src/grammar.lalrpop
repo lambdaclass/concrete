@@ -146,29 +146,36 @@ pub(crate) Ident: ast::common::Ident = {
   }
 }
 
-pub(crate) TypeQualifier: ast::types::TypeQualifier = {
-  "&" => ast::types::TypeQualifier::Ref,
-  "&" "mut" => ast::types::TypeQualifier::RefMut,
-  "*" "const" => ast::types::TypeQualifier::Ptr,
-  "*" "mut" => ast::types::TypeQualifier::PtrMut,
-}
-
-pub(crate) TypeSpec: ast::types::TypeSpec = {
-  <lo:@L> <qualifiers:TypeQualifier*> <name:Ident> <hi:@R> => ast::types::TypeSpec::Simple {
+pub(crate) TypeDescriptor: ast::types::TypeDescriptor = {
+  <lo:@L> <name:Ident> <hi:@R> => ast::types::TypeDescriptor::Type {
     name,
-    qualifiers,
+    generics: Vec::new(),
     span: Span::new(lo, hi),
   },
-  <lo:@L> <qualifiers:TypeQualifier*> <name:Ident> "<" <type_params:Comma<TypeSpec>> ">" <hi:@R> => ast::types::TypeSpec::Generic {
+  <lo:@L> <name:Ident> "<" <generics:Comma<TypeDescriptor>> ">" <hi:@R> => ast::types::TypeDescriptor::Type {
     name,
-    type_params,
-    qualifiers,
+    generics,
     span: Span::new(lo, hi),
   },
-  <lo:@L> <qualifiers:TypeQualifier*> "[" <of_type:TypeSpec> <size:(";" <"integer">)> "]"<hi:@R> => ast::types::TypeSpec::Array {
-    of_type: Box::new(of_type),
+  <lo:@L> "[" <of_type:TypeDescriptor> <size:(";" <"integer">)> "]"<hi:@R> => ast::types::TypeDescriptor::Array {
+    of: Box::new(of_type),
     size: size.try_into().expect("size is too big"),
-    qualifiers,
+    span: Span::new(lo, hi),
+  },
+  <lo:@L> "&" <ty:TypeDescriptor> <hi:@R> =>  ast::types::TypeDescriptor::Ref {
+    of: Box::new(ty),
+    span: Span::new(lo, hi),
+  },
+  <lo:@L> "&" "mut" <ty:TypeDescriptor> <hi:@R> =>  ast::types::TypeDescriptor::MutRef {
+    of: Box::new(ty),
+    span: Span::new(lo, hi),
+  },
+  <lo:@L> "*" "const" <ty:TypeDescriptor> <hi:@R> =>  ast::types::TypeDescriptor::ConstPtr {
+    of: Box::new(ty),
+    span: Span::new(lo, hi),
+  },
+  <lo:@L> "*" "mut" <ty:TypeDescriptor> <hi:@R> =>  ast::types::TypeDescriptor::MutPtr {
+    of: Box::new(ty),
     span: Span::new(lo, hi),
   }
 }
@@ -176,12 +183,6 @@ pub(crate) TypeSpec: ast::types::TypeSpec = {
 pub(crate) GenericParam: ast::common::GenericParam = {
   <lo:@L> <name:Ident> <hi:@R> => ast::common::GenericParam {
     name,
-    params: vec![],
-    span: Span::new(lo, hi),
-  },
-  <lo:@L> <name:Ident> ":" <params: PlusSeparated<TypeSpec>> <hi:@R> => ast::common::GenericParam {
-    name,
-    params,
     span: Span::new(lo, hi),
   },
 }
@@ -279,7 +280,7 @@ pub(crate) ModuleDefItem: ast::modules::ModuleDefItem = {
 // Constants
 
 pub(crate) ConstantDef: ast::constants::ConstantDef = {
-  <is_pub:"pub"?> "const" <name:Ident> ":" <type_spec:TypeSpec> "=" <exp:Expression> => {
+  <is_pub:"pub"?> "const" <name:Ident> ":" <type_spec:TypeDescriptor> "=" <exp:Expression> => {
     ast::constants::ConstantDef {
       decl: ast::constants::ConstantDecl {
         doc_string: None,
@@ -294,12 +295,12 @@ pub(crate) ConstantDef: ast::constants::ConstantDef = {
 
 // -- Functions
 
-pub(crate) FunctionRetType: ast::types::TypeSpec = {
-  "->" <TypeSpec> => <>
+pub(crate) FunctionRetType: ast::types::TypeDescriptor = {
+  "->" <TypeDescriptor> => <>
 }
 
 pub(crate) Param: ast::functions::Param = {
-  <name:Ident> ":" <param_type:TypeSpec> => ast::functions::Param {
+  <name:Ident> ":" <param_type:TypeDescriptor> => ast::functions::Param {
     name,
     r#type: param_type
   }
@@ -343,7 +344,7 @@ pub(crate) FunctionDef: ast::functions::FunctionDef = {
 // Struct
 
 pub(crate) StructField: ast::structs::Field = {
-    <lo:@L> <name:Ident> ":" <r#type:TypeSpec> <hi:@R> => ast::structs::Field {
+    <lo:@L> <name:Ident> ":" <r#type:TypeDescriptor> <hi:@R> => ast::structs::Field {
         name,
         r#type,
         span: Span::new(lo, hi),
@@ -457,7 +458,7 @@ pub(crate) Expression: ast::expressions::Expression = {
     Box::new(rhs)
   ),
   #[precedence(level="5")] #[assoc(side="left")]
-  <lo:@L> <a:Expression> "as" <b: TypeSpec> <hi:@R> => ast::expressions::Expression::Cast(Box::new(a), b, Span::new(lo, hi)),
+  <lo:@L> <a:Expression> "as" <b: TypeDescriptor> <hi:@R> => ast::expressions::Expression::Cast(Box::new(a), b, Span::new(lo, hi)),
   "(" <StructInitExpr> ")" => ast::expressions::Expression::StructInit(<>),
   <ArrayInitExpr> => ast::expressions::Expression::ArrayInit(<>),
 }
@@ -594,7 +595,7 @@ pub(crate) Statement: ast::statements::Statement = {
 }
 
 pub(crate) LetStmt: ast::statements::LetStmt = {
-  <lo:@L> "let" <is_mutable:"mut"?> <id:Ident> ":" <target_type:TypeSpec> "=" <value:Expression> <hi:@R> => ast::statements::LetStmt {
+  <lo:@L> "let" <is_mutable:"mut"?> <id:Ident> ":" <target_type:TypeDescriptor> "=" <value:Expression> <hi:@R> => ast::statements::LetStmt {
     is_mutable: is_mutable.is_some(),
     target: ast::statements::LetStmtTarget::Simple {
       id,
@@ -603,7 +604,7 @@ pub(crate) LetStmt: ast::statements::LetStmt = {
     value,
     span: Span::new(lo, hi),
   },
-  <lo:@L> "let" <is_mutable:"mut"?> <id:Ident> ":" <target_type:TypeSpec> "=" <value:StructInitExpr> <hi:@R> => ast::statements::LetStmt {
+  <lo:@L> "let" <is_mutable:"mut"?> <id:Ident> ":" <target_type:TypeDescriptor> "=" <value:StructInitExpr> <hi:@R> => ast::statements::LetStmt {
     is_mutable: is_mutable.is_some(),
     target: ast::statements::LetStmtTarget::Simple {
       id,

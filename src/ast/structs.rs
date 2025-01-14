@@ -1,6 +1,6 @@
 use super::{
     common::{GenericParam, Ident, Span},
-    types::TypeSpec,
+    types::TypeDescriptor,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -14,6 +14,6 @@ pub struct StructDecl {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Field {
     pub name: Ident,
-    pub r#type: TypeSpec,
+    pub r#type: TypeDescriptor,
     pub span: Span,
 }

@@ -37,8 +37,8 @@ pub struct BuildCtx {
     pub unresolved_function_signatures: HashMap<
         DefId,
         (
-            Vec<crate::ast::types::TypeSpec>,
-            Option<crate::ast::types::TypeSpec>,
+            Vec<crate::ast::types::TypeDescriptor>,
+            Option<crate::ast::types::TypeDescriptor>,
         ),
     >,
     pub gen: IdGenerator,

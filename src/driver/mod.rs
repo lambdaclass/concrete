@@ -598,19 +598,6 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
         }
     };
 
-    #[allow(unused_variables)]
-    if args.check {
-        let linearity_result =
-            match crate::check::linearity_check::linearity_check_program(&programs, &session) {
-                Ok(ir) => ir,
-                Err(error) => {
-                    //TODO improve reporting
-                    println!("Linearity check failed: {:#?}", error);
-                    std::process::exit(1);
-                }
-            };
-    }
-
     if args.ir {
         std::fs::write(
             session.output_file.with_extension("ir"),

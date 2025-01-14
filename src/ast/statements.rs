@@ -1,7 +1,7 @@
 use super::{
     common::{Ident, Span},
     expressions::{Expression, FnCallOp, IfExpr, MatchExpr, PathOp},
-    types::TypeSpec,
+    types::TypeDescriptor,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -18,7 +18,7 @@ pub enum Statement {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LetStmtTarget {
-    Simple { id: Ident, r#type: TypeSpec },
+    Simple { id: Ident, r#type: TypeDescriptor },
     Destructure(Vec<Binding>),
 }
 
@@ -48,7 +48,7 @@ pub struct AssignStmt {
 pub struct Binding {
     pub id: Ident,
     pub rename: Option<Ident>,
-    pub r#type: TypeSpec,
+    pub r#type: TypeDescriptor,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
