@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 tracing = "0.1.41"
 itertools = "0.14.0"
-thiserror = "2.0.9"
+thiserror = "2.0.11"
 educe = "0.5.11"
 lalrpop-util = { version = "0.22.0", features = ["unicode"] }
 logos = "0.15.0"
@@ -23,7 +23,7 @@ mlir-sys = "0.4.1"
 anyhow = "1.0.95"
 git2 = "0.20.0"
 owo-colors = "4.1.0"
-clap = { version = "4.5.24", features = ["derive"] }
+clap = { version = "4.5.26", features = ["derive"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 serde = { version = "1.0.217", features = ["derive"] }
 toml = "0.8.19"
