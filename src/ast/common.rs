@@ -20,7 +20,8 @@ impl From<Span> for Range<usize> {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct DocString {
-    contents: String,
+    pub contents: Vec<String>,
+    pub span: Span,
 }
 
 /// Identifiers, without a path or generics.

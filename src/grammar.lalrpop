@@ -43,6 +43,7 @@ extern {
     "boolean" => Token::Boolean(<bool>),
 
     // Other
+    "docstring" => Token::DocString(<String>),
 
     "(" => Token::LeftParen,
     ")" => Token::RightParen,
@@ -142,6 +143,13 @@ SemiColonSeparated<T>: Vec<T> = {
 
 // -- Common
 
+DocString: ast::common::DocString = {
+  <lo:@L> <contents:"docstring"+> <hi:@R> => ast::common::DocString {
+    contents,
+    span: ast::common::Span::new(lo, hi),
+  },
+};
+
 Ident: ast::common::Ident = {
   <lo:@L> <name:"identifier"> <hi:@R> => ast::common::Ident {
     name,
@@ -223,9 +231,9 @@ ExternalModule: ast::common::Ident = {
 }
 
 Module: ast::modules::Module = {
-  <lo:@L> "mod" <name:Ident> "{" <external_modules:List<ExternalModule>?> <imports:ImportList?> <contents:ModuleItems?> "}" <hi:@R> => {
+  <lo:@L> <doc_string:DocString?> "mod" <name:Ident> "{" <external_modules:List<ExternalModule>?> <imports:ImportList?> <contents:ModuleItems?> "}" <hi:@R> => {
     ast::modules::Module {
-      doc_string: None,
+      doc_string,
       imports: imports.unwrap_or_else(Vec::new),
       external_modules: external_modules.unwrap_or(vec![]),
       name,
@@ -293,10 +301,10 @@ ModuleDefItem: ast::modules::ModuleDefItem = {
 // Constants
 
 ConstantDef: ast::constants::ConstantDef = {
-  <is_pub:"pub"?> "const" <name:Ident> ":" <type_spec:TypeDescriptor> "=" <exp:Expression> => {
+  <doc_string:DocString?> <is_pub:"pub"?> "const" <name:Ident> ":" <type_spec:TypeDescriptor> "=" <exp:Expression> => {
     ast::constants::ConstantDef {
       decl: ast::constants::ConstantDecl {
-        doc_string: None,
+        doc_string,
         name,
         is_pub: is_pub.is_some(),
         r#type: type_spec
@@ -338,11 +346,11 @@ Attribute: ast::common::Attribute = {
 }
 
 FunctionDecl: ast::functions::FunctionDecl = {
-  <lo:@L> <attributes:List<Attribute>?> <is_pub:"pub"?> <is_extern:"extern"?>
+  <lo:@L> <doc_string:DocString?> <attributes:List<Attribute>?> <is_pub:"pub"?> <is_extern:"extern"?>
       "fn" <name:Ident> <generic_params:GenericParams?> "(" <params:Comma<Param>> ")"
         <ret_type:FunctionRetType?> <hi:@R> =>
     ast::functions::FunctionDecl {
-        doc_string: None,
+        doc_string,
         generic_params: generic_params.unwrap_or(vec![]),
         attributes: attributes.unwrap_or(vec![]),
         name,
