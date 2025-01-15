@@ -199,11 +199,16 @@ mod UsesOption {
 
 ## Inspiration
 The design was very heavily influenced by all these programming languages:
-- [Rust](https://www.rust-lang.org/)
-- [Erlang](https://www.erlang.org/)
-- [Austral](https://austral-lang.org/spec/spec.html)
-- [Zig](https://ziglang.org/)
-- [Vale](https://vale.dev/)
+- [Erlang](https://www.erlang.org) (Preemptive scheduler, message passing, runtime)
+- [Rust](https://www.rust-lang.org/) (Syntax, features, low-level focus)
+- [Commonware](https://commonware.xyz/blogs/commonware-runtime.html) (Deterministic runtime)
+- [Austral](https://austral-lang.org/spec/spec.html) (Linear type system) 
+- [Pony](https://www.ponylang.io) / [Gleam](https://gleam.run) (Typed message passing)
+- [Go](https://go.dev) (Preemptive scheduler)
+- [Loom](https://github.com/tokio-rs/loom) (Concurrency permutation testing for Rust)
+- [Resonate](https://blog.resonatehq.io/deterministic-simulation-testing) (Deterministic simulation testing)
+- [Vale](https://verdagon.dev/blog/perfect-replayability-prototyped) (Perfect Replayability)
+- [Zig](https://ziglang.org/) (Simplicity and low-level focus)
 
  We want to thanks everyone of them. We also took core ideas, specs and features from these languages:
 - [Elixir](https://elixir-lang.org/)
