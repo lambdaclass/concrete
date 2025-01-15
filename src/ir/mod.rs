@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::ast::common::Ident;
+use crate::ast::{common::Ident, types::TypeDescriptor};
 
 pub mod lowering;
 
@@ -21,8 +21,8 @@ pub struct SymbolTable {
     pub symbols: HashMap<DefId, String>,
     pub modules: HashMap<String, DefId>,
     pub functions: HashMap<String, DefId>,
-    /// (Struct ID, Name) -> id
-    pub methods: HashMap<(DefId, String), DefId>,
+    /// (type name, Name) -> id
+    pub methods: HashMap<(TypeDescriptor, String), DefId>,
     pub constants: HashMap<String, DefId>,
     pub structs: HashMap<String, DefId>,
     pub types: HashMap<String, DefId>,

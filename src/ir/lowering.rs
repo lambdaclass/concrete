@@ -181,7 +181,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                 for info in &impl_block.methods {
                     ctx = lower_func(ctx, info, id, Some(self_ty.clone()))?;
                 }
-            },
+            }
         }
     }
 
