@@ -177,9 +177,8 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                 ctx = lower_func_decl(ctx, fn_decl, id)?;
             }
             ModuleDefItem::Impl(impl_block) => {
-                let self_ty = lower_type(&ctx, &impl_block.target, id)?;
                 for info in &impl_block.methods {
-                    ctx = lower_func(ctx, info, id, Some(self_ty.clone()))?;
+                    ctx = lower_func(ctx, info, id, Some(&impl_block.target))?;
                 }
             }
         }
@@ -307,11 +306,24 @@ fn lower_func(
     ctx: BuildCtx,
     func: &FunctionDef,
     module_id: DefId,
-    has_self: Option<Ty>,
+    has_self: Option<&TypeDescriptor>,
 ) -> Result<BuildCtx, LoweringError> {
     let is_intrinsic: Option<ConcreteIntrinsic> = None;
 
     // TODO: parse insintrics here.
+
+    let id = {
+        let body = ctx.body.modules.get(&module_id).unwrap();
+        if let Some(self_ty) = has_self {
+            *body
+                .symbols
+                .methods
+                .get(&(self_ty.clone(), func.decl.name.name.clone()))
+                .unwrap()
+        } else {
+            *body.symbols.functions.get(&func.decl.name.name).unwrap()
+        }
+    };
 
     let mut builder = FnBodyBuilder {
         body: FnBody {
@@ -319,11 +331,8 @@ fn lower_func(
             locals: Vec::new(),
             is_extern: func.decl.is_extern,
             is_intrinsic,
-            name: func.decl.name.name.clone(),
-            id: {
-                let body = ctx.body.modules.get(&module_id).unwrap();
-                *body.symbols.functions.get(&func.decl.name.name).unwrap()
-            },
+            name: format!("{}_{}_{}", &func.decl.name.name, id.program_id, id.id),
+            id,
         },
         local_module: module_id,
         ret_local: 0,
@@ -346,7 +355,7 @@ fn lower_func(
         .functions
         .get(&func.decl.name.name)
         .unwrap();
-    let (args_ty, ret_ty) = builder
+    let (mut args_ty, ret_ty) = builder
         .ctx
         .body
         .function_signatures
