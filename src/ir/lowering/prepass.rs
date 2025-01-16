@@ -1,9 +1,5 @@
-use std::collections::HashMap;
-use std::io::Read;
-
-use crate::ast::common::TypeName;
-use crate::ast::types::TypeDescriptor;
 use crate::ir::{DefId, ModuleBody};
+use std::collections::HashMap;
 
 use crate::ast;
 use crate::ir::lowering::{common::BuildCtx, errors::LoweringError};

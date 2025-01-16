@@ -154,6 +154,65 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                 ctx.body.function_signatures.insert(fn_id, (args, ret_type));
                 ctx.unresolved_function_signatures.remove(&fn_id);
             }
+            ModuleDefItem::Impl(impl_block) => {
+                for fn_def in &impl_block.methods {
+                    let fn_id = *body
+                        .symbols
+                        .methods
+                        .get(&(impl_block.target.clone(), fn_def.decl.name.name.clone()))
+                        .ok_or_else(|| LoweringError::FunctionNotFound {
+                            span: fn_def.span,
+                            function: fn_def.decl.name.name.clone(),
+                            program_id: body.id.program_id,
+                        })?;
+
+                    let mut args = Vec::new();
+                    let ret_type;
+
+                    let mut first_is_self = false;
+                    if let Some(self_ty) = fn_def.decl.params.first() {
+                        if let TypeDescriptor::SelfType { is_ref, is_mut } = self_ty.r#type {
+                            let mut target_ty = lower_type(&ctx, &impl_block.target, id)?;
+                            if is_ref {
+                                target_ty = Ty {
+                                    span: target_ty.span,
+                                    kind: TyKind::Ref(
+                                        Box::new(target_ty),
+                                        if is_mut {
+                                            Mutability::Mut
+                                        } else {
+                                            Mutability::Not
+                                        },
+                                    ),
+                                };
+                            }
+                            args.push(target_ty);
+                            first_is_self = true;
+                        }
+                    }
+
+                    let mut arg_iter = fn_def.decl.params.iter();
+                    if first_is_self {
+                        arg_iter.next();
+                    }
+                    for arg in arg_iter {
+                        let ty = lower_type(&ctx, &arg.r#type, id)?;
+                        args.push(ty);
+                    }
+
+                    if let Some(ty) = &fn_def.decl.ret_type {
+                        ret_type = lower_type(&ctx, ty, id)?;
+                    } else {
+                        ret_type = Ty {
+                            span: None,
+                            kind: TyKind::Unit,
+                        };
+                    }
+
+                    ctx.body.function_signatures.insert(fn_id, (args, ret_type));
+                    ctx.unresolved_function_signatures.remove(&fn_id);
+                }
+            }
             _ => {}
         }
     }
@@ -312,7 +371,7 @@ fn lower_func(
 
     // TODO: parse insintrics here.
 
-    let id = {
+    let fn_id = {
         let body = ctx.body.modules.get(&module_id).unwrap();
         if let Some(self_ty) = has_self {
             *body
@@ -331,8 +390,8 @@ fn lower_func(
             locals: Vec::new(),
             is_extern: func.decl.is_extern,
             is_intrinsic,
-            name: format!("{}_{}_{}", &func.decl.name.name, id.program_id, id.id),
-            id,
+            name: format!("{}_{}_{}", &func.decl.name.name, fn_id.program_id, fn_id.id),
+            id: fn_id,
         },
         local_module: module_id,
         ret_local: 0,
@@ -349,13 +408,7 @@ fn lower_func(
         });
     }
 
-    let fn_id = *builder
-        .get_module_body()
-        .symbols
-        .functions
-        .get(&func.decl.name.name)
-        .unwrap();
-    let (mut args_ty, ret_ty) = builder
+    let (args_ty, ret_ty) = builder
         .ctx
         .body
         .function_signatures
@@ -517,7 +570,7 @@ fn lower_statement(
             assert!(builder.statements.is_empty());
         }
         statements::Statement::FnCall(info) => {
-            lower_fn_call(builder, info)?;
+            lower_fn_call(builder, info, None)?;
         }
     }
     Ok(())
@@ -1032,7 +1085,7 @@ fn lower_expression(
             let value = lower_value_expr(builder, info, type_hint)?;
             (value.0, value.1, *span)
         }
-        Expression::FnCall(info) => lower_fn_call(builder, info)?,
+        Expression::FnCall(info) => lower_fn_call(builder, info, None)?,
         Expression::Match(_) => todo!(),
         Expression::If(_) => todo!(),
         Expression::UnaryOp(_, _) => todo!(),
@@ -1277,6 +1330,7 @@ fn lower_expression(
 fn lower_fn_call(
     builder: &mut FnBodyBuilder,
     info: &FnCallOp,
+    self_value: Option<(Place, Ty)>,
 ) -> Result<(Rvalue, Ty, Span), LoweringError> {
     let fn_id = {
         let mod_body = builder.get_module_body();
@@ -1306,7 +1360,14 @@ fn lower_fn_call(
 
             let args: Vec<Ty> = args
                 .iter()
-                .map(|arg| lower_type(&builder.ctx, arg, builder.local_module))
+                .map(|arg| {
+                    lower_type_with_self(
+                        &builder.ctx,
+                        arg,
+                        builder.local_module,
+                        self_value.as_ref().map(|x| &x.1),
+                    )
+                })
                 .collect::<Result<Vec<_>, _>>()?;
             let ret = ret
                 .as_ref()
@@ -1691,7 +1752,7 @@ pub fn lower_path(
     builder: &mut FnBodyBuilder,
     info: &PathOp,
 ) -> Result<(Place, Ty, Span), LoweringError> {
-    let local = *builder.name_to_local.get(&info.first.name).ok_or(
+    let mut local = *builder.name_to_local.get(&info.first.name).ok_or(
         LoweringError::UseOfUndeclaredVariable {
             span: info.span,
             name: info.first.name.clone(),
@@ -1754,11 +1815,70 @@ pub fn lower_path(
                     ty = *element_type;
                 }
             }
-            PathSegment::MethodCall(_fn_call_op, _span) => todo!(),
+            PathSegment::MethodCall(fn_call_op, _span) => {
+                // auto deref
+                while let TyKind::Ref(inner, _) = ty.kind {
+                    projection.push(PlaceElem::Deref);
+                    ty = *inner;
+                }
+
+                let (value, new_ty, _span) = lower_fn_call(
+                    builder,
+                    fn_call_op,
+                    Some((
+                        Place {
+                            local,
+                            projection: projection.clone(),
+                        },
+                        ty.clone(),
+                    )),
+                )?;
+
+                ty = new_ty;
+
+                match value {
+                    Rvalue::Use(operand) => match operand {
+                        Operand::Place(place) => {
+                            local = place.local;
+                            projection = place.projection;
+                        }
+                        Operand::Const(_const_data) => todo!(),
+                    },
+                    Rvalue::Ref(_mutability, _place) => todo!(),
+                    _ => unreachable!(),
+                }
+            }
         }
     }
 
     Ok((Place { local, projection }, ty, info.span))
+}
+
+pub fn lower_type_with_self(
+    ctx: &BuildCtx,
+    ty: &TypeDescriptor,
+    module_id: DefId,
+    self_ty: Option<&Ty>,
+) -> Result<Ty, LoweringError> {
+    if let TypeDescriptor::SelfType { is_ref, is_mut } = ty {
+        let self_ty = self_ty.unwrap().clone();
+        if *is_ref {
+            return Ok(Ty {
+                span: self_ty.span,
+                kind: TyKind::Ref(
+                    Box::new(self_ty),
+                    if *is_mut {
+                        Mutability::Mut
+                    } else {
+                        Mutability::Not
+                    },
+                ),
+            });
+        }
+        Ok(self_ty)
+    } else {
+        lower_type(&ctx, ty, module_id)
+    }
 }
 
 pub fn lower_type(
