@@ -1,0 +1,21 @@
+mod ImplBlock {
+    struct A {
+        a: i64,
+        b: i64,
+    }
+
+    impl A {
+        pub fn hello(&self, other: i64) -> i64 {
+            return self.a * other;
+        }
+    }
+
+    pub fn main() -> i64 {
+        let x: A = A {
+            a: 2,
+            b: 3,
+        };
+
+        return x.hello(4);
+    }
+}
