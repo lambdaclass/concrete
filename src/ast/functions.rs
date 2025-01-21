@@ -1,5 +1,5 @@
 use super::{
-    common::{Attribute, DocString, GenericParam, Ident, Span, TypeName},
+    common::{Attribute, DocString, GenericParam, Ident, Span},
     statements::Statement,
     types::TypeDescriptor,
 };

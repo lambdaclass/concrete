@@ -1425,7 +1425,7 @@ fn compile_value_tree<'c: 'b, 'b>(
                     FloatAttribute::new(
                         ctx.context(),
                         Type::float32(ctx.context()),
-                        (*value).into(),
+                        value.parse().unwrap(),
                     )
                     .into(),
                     Location::unknown(ctx.context()),
@@ -1435,7 +1435,12 @@ fn compile_value_tree<'c: 'b, 'b>(
             crate::ir::ConstValue::F64(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
-                    FloatAttribute::new(ctx.context(), Type::float64(ctx.context()), *value).into(),
+                    FloatAttribute::new(
+                        ctx.context(),
+                        Type::float64(ctx.context()),
+                        value.parse().unwrap(),
+                    )
+                    .into(),
                     Location::unknown(ctx.context()),
                 ))
                 .result(0)?

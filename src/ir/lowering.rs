@@ -169,6 +169,8 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                     let mut args = Vec::new();
                     let ret_type;
 
+                    let target_tykind = lower_type(&ctx, &impl_block.target, id)?.kind;
+
                     let mut first_is_self = false;
                     if let Some(self_ty) = fn_def.decl.params.first() {
                         if let TypeDescriptor::SelfType { is_ref, is_mut } = self_ty.r#type {
@@ -210,6 +212,11 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                     }
 
                     ctx.body.function_signatures.insert(fn_id, (args, ret_type));
+                    ctx.body
+                        .methods
+                        .entry(target_tykind.clone())
+                        .or_default()
+                        .insert(fn_def.decl.name.name.clone(), fn_id);
                     ctx.unresolved_function_signatures.remove(&fn_id);
                 }
             }
@@ -390,7 +397,11 @@ fn lower_func(
             locals: Vec::new(),
             is_extern: func.decl.is_extern,
             is_intrinsic,
-            name: format!("{}_{}_{}", &func.decl.name.name, fn_id.program_id, fn_id.id),
+            name: if has_self.is_some() {
+                format!("{}_{}_{}", &func.decl.name.name, fn_id.program_id, fn_id.id)
+            } else {
+                func.decl.name.name.clone()
+            },
             id: fn_id,
         },
         local_module: module_id,
@@ -570,7 +581,7 @@ fn lower_statement(
             assert!(builder.statements.is_empty());
         }
         statements::Statement::FnCall(info) => {
-            lower_fn_call(builder, info, None)?;
+            lower_fn_call(builder, info, None, None)?;
         }
     }
     Ok(())
@@ -1085,7 +1096,7 @@ fn lower_expression(
             let value = lower_value_expr(builder, info, type_hint)?;
             (value.0, value.1, *span)
         }
-        Expression::FnCall(info) => lower_fn_call(builder, info, None)?,
+        Expression::FnCall(info) => lower_fn_call(builder, info, None, None)?,
         Expression::Match(_) => todo!(),
         Expression::If(_) => todo!(),
         Expression::UnaryOp(_, _) => todo!(),
@@ -1331,11 +1342,15 @@ fn lower_fn_call(
     builder: &mut FnBodyBuilder,
     info: &FnCallOp,
     self_value: Option<(Place, Ty)>,
+    // The id of the fn to call, in case its a method.
+    fn_id: Option<DefId>,
 ) -> Result<(Rvalue, Ty, Span), LoweringError> {
     let fn_id = {
         let mod_body = builder.get_module_body();
 
-        if let Some(id) = mod_body.symbols.functions.get(&info.target.name) {
+        if let Some(id) = fn_id {
+            id
+        } else if let Some(id) = mod_body.symbols.functions.get(&info.target.name) {
             *id
         } else {
             *mod_body
@@ -1385,7 +1400,15 @@ fn lower_fn_call(
         }
     };
 
-    if args_ty.len() != info.args.len() {
+    if args_ty.len()
+        != info.args.len() + {
+            if self_value.is_some() {
+                1
+            } else {
+                0
+            }
+        }
+    {
         return Err(LoweringError::CallParamCountMismatch {
             span: info.span,
             found: info.args.len(),
@@ -1396,7 +1419,24 @@ fn lower_fn_call(
 
     let mut args = Vec::new();
 
-    for (arg, arg_ty) in info.args.iter().zip(args_ty) {
+    let mut args_ty_iter = args_ty.into_iter();
+
+    // Add the self value if there is one.
+    if let Some((arg, _arg_ty)) = self_value {
+        // Here arg_ty is the type without references.
+        // We should use the type from the fn sig to know if it needs a reference.
+        let expected_ty = args_ty_iter.next().expect("self ty should be there");
+        match expected_ty.kind {
+            TyKind::Ref(_, mutability) => {
+                args.push(Rvalue::Ref(mutability, arg.clone()));
+            }
+            _ => {
+                args.push(Rvalue::Use(Operand::Place(arg.clone())));
+            }
+        }
+    }
+
+    for (arg, arg_ty) in info.args.iter().zip(args_ty_iter) {
         let (rvalue, rvalue_ty, arg_span) = lower_expression(builder, arg, Some(arg_ty.clone()))?;
 
         if rvalue_ty.kind != arg_ty.kind {
@@ -1817,35 +1857,49 @@ pub fn lower_path(
             }
             PathSegment::MethodCall(fn_call_op, _span) => {
                 // auto deref
-                while let TyKind::Ref(inner, _) = ty.kind {
-                    projection.push(PlaceElem::Deref);
-                    ty = *inner;
-                }
 
-                let (value, new_ty, _span) = lower_fn_call(
-                    builder,
-                    fn_call_op,
-                    Some((
-                        Place {
-                            local,
-                            projection: projection.clone(),
-                        },
-                        ty.clone(),
-                    )),
-                )?;
+                loop {
+                    if let Some(methods) = builder.ctx.body.methods.get(&ty.kind) {
+                        if let Some(defid) = methods.get(&fn_call_op.target.name) {
+                            let (value, new_ty, _span) = lower_fn_call(
+                                builder,
+                                fn_call_op,
+                                Some((
+                                    Place {
+                                        local,
+                                        projection: projection.clone(),
+                                    },
+                                    ty.clone(),
+                                )),
+                                Some(*defid),
+                            )?;
 
-                ty = new_ty;
+                            ty = new_ty;
 
-                match value {
-                    Rvalue::Use(operand) => match operand {
-                        Operand::Place(place) => {
-                            local = place.local;
-                            projection = place.projection;
+                            match value {
+                                Rvalue::Use(operand) => match operand {
+                                    Operand::Place(place) => {
+                                        local = place.local;
+                                        projection = place.projection;
+                                    }
+                                    Operand::Const(_const_data) => todo!(),
+                                },
+                                Rvalue::Ref(_mutability, _place) => todo!(),
+                                _ => unreachable!(),
+                            }
+
+                            break;
                         }
-                        Operand::Const(_const_data) => todo!(),
-                    },
-                    Rvalue::Ref(_mutability, _place) => todo!(),
-                    _ => unreachable!(),
+                    } else if let TyKind::Ref(inner, _) = ty.kind {
+                        projection.push(PlaceElem::Deref);
+                        ty = *inner;
+                    } else {
+                        Err(LoweringError::FunctionNotFound {
+                            span: fn_call_op.target.span,
+                            function: fn_call_op.target.name.clone(),
+                            program_id: builder.local_module.program_id,
+                        })?;
+                    }
                 }
             }
         }
