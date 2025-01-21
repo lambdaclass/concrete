@@ -5,6 +5,7 @@ use crate::ir::{
     ProgramBody, Rvalue, Span, Ty, TyKind, ValueTree,
 };
 use crate::session::Session;
+use melior::ir::BlockLike;
 use melior::{
     dialect::{
         arith, cf, func,

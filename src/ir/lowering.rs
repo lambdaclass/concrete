@@ -1931,7 +1931,7 @@ pub fn lower_type_with_self(
         }
         Ok(self_ty)
     } else {
-        lower_type(&ctx, ty, module_id)
+        lower_type(ctx, ty, module_id)
     }
 }
 
