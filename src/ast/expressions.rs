@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::{
-    common::{Ident, Span},
+    common::{Ident, Span, TypeName},
     statements::Statement,
     types::TypeDescriptor,
 };
@@ -136,6 +136,7 @@ pub struct PathOp {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FnCallOp {
     pub target: Ident,
+    pub generics: Vec<TypeName>,
     pub args: Vec<Expression>,
     pub span: Span,
 }
