@@ -14,6 +14,8 @@ pub enum Statement {
     Return(ReturnStmt),
     While(WhileStmt),
     FnCall(FnCallOp),
+    // To allow method calls.
+    PathOp(PathOp),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

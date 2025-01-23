@@ -625,6 +625,7 @@ Statement: ast::statements::Statement = {
   <LetStmt> ";" => ast::statements::Statement::Let(<>),
   <AssignStmt> ";" => ast::statements::Statement::Assign(<>),
   <FnCallOp> ";" => ast::statements::Statement::FnCall(<>),
+  <PathOp> ";" => ast::statements::Statement::PathOp(<>),
   <ReturnStmt> ";" => ast::statements::Statement::Return(<>),
 }
 
