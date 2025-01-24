@@ -21,7 +21,7 @@ impl From<Infallible> for LexingError {
 }
 
 #[derive(Logos, logos_display::Debug, logos_display::Display, PartialEq, Clone)]
-#[logos(error = LexingError, skip r"[ \t\n\f]+", skip r"//[^\n]*", skip r"/\*(?:[^*]|\*[^/])*\*/")]
+#[logos(error = LexingError, skip r"[ \t\n\f]+", skip r"//[^/][^\n]*", skip r"/\*(?:[^*]|\*[^/])*\*/")]
 pub enum Token {
     #[token("let")]
     KeywordLet,
@@ -154,4 +154,7 @@ pub enum Token {
     Ampersand,
     #[token("|")]
     OperatorBitwiseOr,
+
+    #[regex("///[^\n]*", |lex| lex.slice().strip_prefix("///").unwrap().to_string())]
+    DocString(String),
 }
