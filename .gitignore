@@ -23,3 +23,7 @@ build/
 
 *.so
 *.a
+*.mlir
+*.ast
+*.ll
+*.ir

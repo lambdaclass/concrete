@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::ast::common::Ident;
+use crate::ast::{common::Ident, types::TypeDescriptor};
 
 pub mod lowering;
 
@@ -21,6 +21,8 @@ pub struct SymbolTable {
     pub symbols: HashMap<DefId, String>,
     pub modules: HashMap<String, DefId>,
     pub functions: HashMap<String, DefId>,
+    /// (type name, Name) -> id
+    pub methods: HashMap<(TypeDescriptor, String), DefId>,
     pub constants: HashMap<String, DefId>,
     pub structs: HashMap<String, DefId>,
     pub types: HashMap<String, DefId>,
@@ -35,6 +37,8 @@ pub struct ProgramBody {
     pub modules: BTreeMap<DefId, ModuleBody>,
     /// This stores all the functions from all modules
     pub functions: BTreeMap<DefId, FnBody>,
+    /// Impl block methods.
+    pub methods: BTreeMap<TyKind, BTreeMap<String, DefId>>,
     /// This stores all the structs from all modules
     pub structs: BTreeMap<DefId, AdtBody>,
     /// The function signatures.
@@ -330,8 +334,8 @@ pub struct DefId {
 }
 
 /// A type
-#[derive(Debug, Clone, Educe, PartialOrd)]
-#[educe(PartialEq)]
+#[derive(Debug, Clone, Educe, PartialOrd, Ord, Eq)]
+#[educe(PartialEq, Hash)]
 pub struct Ty {
     #[educe(PartialEq(ignore))]
     pub span: Option<Span>,
@@ -347,7 +351,7 @@ impl Ty {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Hash)]
 pub enum TyKind {
     Unit, // ()
     Bool,
@@ -546,13 +550,13 @@ pub enum FloatTy {
     F64,
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct ConstData {
     pub ty: Ty,
     pub data: ConstKind,
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum ConstKind {
     /// A generic parameter constant.
     Param(ParamConst),
@@ -571,7 +575,7 @@ pub struct ParamConst {
 }
 
 /// Constant data, in case the data is complex such as an array it will be a branch with leaf values.
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/consts/valtree/enum.ValTree.html
 pub enum ValueTree {
     Leaf(ConstValue),
@@ -579,7 +583,7 @@ pub enum ValueTree {
 }
 
 /// Constant expression
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum ConstExpr {
     Binop(BinOp, ConstData, ConstData),
     UnOp(UnOp, ConstData),
@@ -618,7 +622,7 @@ pub enum UnOp {
     Neg,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum ConstValue {
     Bool(bool),
     Char(u8),
@@ -632,8 +636,8 @@ pub enum ConstValue {
     U32(u32),
     U64(u64),
     U128(u128),
-    F32(f32),
-    F64(f64),
+    F32(String),
+    F64(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]

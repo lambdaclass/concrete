@@ -32,7 +32,7 @@ pub struct Ident {
 }
 
 /// A type name, supporting fully qualified paths and generics:
-/// ```
+/// ```text
 /// std::module::X<T>
 /// ```
 /// Used only when specifying types.

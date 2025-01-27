@@ -1,6 +1,5 @@
-use std::collections::HashMap;
-
 use crate::ir::{DefId, ModuleBody};
+use std::collections::HashMap;
 
 use crate::ast;
 use crate::ir::lowering::{common::BuildCtx, errors::LoweringError};
@@ -112,7 +111,26 @@ pub fn prepass_module(
                         ),
                     );
                 }
-                ast::modules::ModuleDefItem::Impl(_impl_block) => todo!(),
+                ast::modules::ModuleDefItem::Impl(impl_block) => {
+                    for info in &impl_block.methods {
+                        let next_id = gen.next_defid();
+                        current_module.symbols.methods.insert(
+                            (impl_block.target.clone(), info.decl.name.name.clone()),
+                            next_id,
+                        );
+                        current_module.functions.insert(next_id);
+                        ctx.unresolved_function_signatures.insert(
+                            next_id,
+                            (
+                                [impl_block.target.clone()]
+                                    .into_iter()
+                                    .chain(info.decl.params.iter().map(|x| &x.r#type).cloned())
+                                    .collect(),
+                                info.decl.ret_type.clone(),
+                            ),
+                        );
+                    }
+                }
             }
         }
 
