@@ -9,6 +9,7 @@ mod common;
 #[test_case(include_str!("../examples/fib_if.con"), "fib_if", false, 55 ; "fib_if.con")]
 #[test_case(include_str!("../examples/import.con"), "import", false, 12 ; "import.con")]
 #[test_case(include_str!("../examples/impl_block.con"), "impl_block", false, 8 ; "impl_block.con")]
+#[test_case(include_str!("../examples/impl_block_mut.con"), "impl_block_mut", false, 4 ; "impl_block_mut.con")]
 #[test_case(include_str!("../examples/simple.con"), "simple", false, 8 ; "simple.con")]
 #[test_case(include_str!("../examples/while.con"), "while", false, 16 ; "while.con")]
 #[test_case(include_str!("../examples/chars.con"), "chars", false, 117 ; "chars.con")]

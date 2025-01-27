@@ -583,6 +583,9 @@ fn lower_statement(
         statements::Statement::FnCall(info) => {
             lower_fn_call(builder, info, None, None)?;
         }
+        statements::Statement::PathOp(info) => {
+            lower_path(builder, info)?;
+        }
     }
     Ok(())
 }
