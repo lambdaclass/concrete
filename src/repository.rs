@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, types::FromSql, Connection, Result, Row};
+use serde::Deserialize;
 
 #[derive(Debug, Clone)]
 pub struct Repo {
@@ -10,11 +11,13 @@ pub struct Repo {
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DbType {
     pub name: String,
-    pub generics: Option<String>,
+    /// JSON array of type names (maybe in the future with trait bounds?)
+    pub generics: Option<Vec<String>>,
     pub is_struct: bool,
     pub is_enum: bool,
     pub size: Option<u64>,
-    pub variants: Option<String>,
+    /// JSON array of type names, this can be fields for struct or variants for enum
+    pub variants: Option<Vec<String>>,
     pub path: String,
 }
 
@@ -34,6 +37,19 @@ impl Repo {
     }
 
     pub fn add_type(&self, ty: &DbType) -> Result<()> {
+        let generics = ty
+            .generics
+            .as_deref()
+            .map(serde_json::to_string)
+            .transpose()
+            .expect("failed to deserialize");
+        let variants = ty
+            .variants
+            .as_deref()
+            .map(serde_json::to_string)
+            .transpose()
+            .expect("failed to deserialize");
+
         self.db.execute(
             r#"
         INSERT INTO Types (name, generics, is_struct, is_enum, size, variants, path) VALUES
@@ -41,11 +57,11 @@ impl Repo {
         "#,
             params![
                 ty.name,
-                ty.generics,
+                generics,
                 ty.is_struct,
                 ty.is_enum,
                 ty.size,
-                ty.variants,
+                variants,
                 ty.path
             ],
         )?;
@@ -62,13 +78,23 @@ impl Repo {
         let mut rows = stmt.query(params![name, path])?;
 
         if let Some(row) = rows.next()? {
+            let generics: Option<String> = row.get("generics")?;
+            let generics: Option<Vec<String>> = generics
+                .map(|x| serde_json::from_str(&x))
+                .transpose()
+                .expect("failed to deserialize");
+            let variants: Option<String> = row.get("variants")?;
+            let variants: Option<Vec<String>> = variants
+                .map(|x| serde_json::from_str(&x))
+                .transpose()
+                .expect("failed to deserialize");
             Ok(Some(DbType {
                 name: row.get("name")?,
-                generics: row.get("generics")?,
+                generics,
                 is_struct: row.get("is_struct")?,
                 is_enum: row.get("is_enum")?,
                 size: row.get("size")?,
-                variants: row.get("variants")?,
+                variants,
                 path: row.get("path")?,
             }))
         } else {
@@ -89,7 +115,7 @@ mod tests {
             name: "A".to_string(),
             path: "mymod".to_string(),
             is_struct: true,
-            variants: Some("[i64, i32]".to_string()),
+            variants: Some(vec!["i64".to_string(), "i32".to_string()]),
             ..Default::default()
         };
 

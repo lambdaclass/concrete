@@ -25,6 +25,7 @@ CREATE TABLE Functions (
     is_extern BOOLEAN NOT NULL,
     is_pub BOOLEAN NOT NULL,
     path TEXT NOT NULL,
+    params TEXT, -- json
     generics TEXT DEFAULT NULL, -- format: json array [of names]
     abi TEXT,
     body BLOB,
