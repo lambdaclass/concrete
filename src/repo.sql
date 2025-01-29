@@ -10,11 +10,11 @@ CREATE INDEX idx_module_path ON Modules(path);
 
 CREATE TABLE Types (
     name TEXT NOT NULL,
-    generics TEXT NULL, -- format: json array [of names]
+    generics TEXT NULL, -- json
     is_struct BOOLEAN NOT NULL DEFAULT FALSE,
     is_enum BOOLEAN NOT NULL DEFAULT FALSE,
     size INT,
-    variants TEXT NULL, -- either struct fields or enum variants: json array of names (with generics?)
+    variants TEXT NULL, -- json
     path TEXT NOT NULL,
     span_from INT,
     span_to INT,
@@ -30,7 +30,7 @@ CREATE TABLE Functions (
     is_extern BOOLEAN NOT NULL,
     is_pub BOOLEAN NOT NULL,
     params TEXT NULL, -- json
-    generics TEXT NULL, -- format: json array [of names]
+    generics TEXT NULL, -- json
     abi TEXT,
     body BLOB NULL,
     path TEXT NOT NULL,
