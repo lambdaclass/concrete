@@ -9,12 +9,14 @@ CREATE TABLE Module (
 
 CREATE TABLE Types (
     name TEXT NOT NULL,
-    generics TEXT DEFAULT NULL, -- format: json array [of names]
+    generics TEXT NULL, -- format: json array [of names]
     is_struct BOOLEAN NOT NULL DEFAULT FALSE,
     is_enum BOOLEAN NOT NULL DEFAULT FALSE,
     size INT,
-    variants TEXT DEFAULT NULL, -- either struct fields or enum variants: json array of names (with generics?)
+    variants TEXT NULL, -- either struct fields or enum variants: json array of names (with generics?)
     path TEXT NOT NULL,
+    span_from INT,
+    span_to INT,
     PRIMARY KEY(name, path)
 );
 
@@ -24,11 +26,13 @@ CREATE TABLE Functions (
     name TEXT NOT NULL,
     is_extern BOOLEAN NOT NULL,
     is_pub BOOLEAN NOT NULL,
-    path TEXT NOT NULL,
-    params TEXT, -- json
-    generics TEXT DEFAULT NULL, -- format: json array [of names]
+    params TEXT NULL, -- json
+    generics TEXT NULL, -- format: json array [of names]
     abi TEXT,
-    body BLOB,
+    body BLOB NULL,
+    path TEXT NOT NULL,
+    span_from INT,
+    span_to INT,
     PRIMARY KEY(name, path)
 );
 
