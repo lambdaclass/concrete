@@ -78,6 +78,15 @@ impl Repo {
         backup.run_to_completion(5, time::Duration::from_millis(250), None)
     }
 
+    pub fn add_module(&self, path: &str, is_pub: bool) -> Result<()> {
+        self.db.execute(
+            r#"
+        INSERT INTO Modules (path, is_public) VALUES (?1, ?2) "#,
+            params![path, is_pub],
+        )?;
+        Ok(())
+    }
+
     pub fn add_type(&self, ty: &DbType) -> Result<()> {
         let generics = serde_json::to_string(&ty.generics).expect("failed to deserialize");
         let variants = serde_json::to_string(&ty.variants).expect("failed to deserialize");
@@ -206,6 +215,8 @@ mod tests {
     #[test]
     fn create() {
         let repo = Repo::new().unwrap();
+
+        repo.add_module("mymod", true).unwrap();
 
         let ty = DbType {
             name: "A".to_string(),

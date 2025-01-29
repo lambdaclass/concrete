@@ -1,11 +1,12 @@
 BEGIN;
 
-CREATE TABLE Module (
-    name TEXT NOT NULL,
+CREATE TABLE Modules (
     path TEXT NOT NULL,
     is_public BOOLEAN NOT NULL,
-    PRIMARY KEY(name, path)
+    PRIMARY KEY(path)
 );
+
+CREATE INDEX idx_module_path ON Modules(path);
 
 CREATE TABLE Types (
     name TEXT NOT NULL,
@@ -17,10 +18,12 @@ CREATE TABLE Types (
     path TEXT NOT NULL,
     span_from INT,
     span_to INT,
-    PRIMARY KEY(name, path)
+    PRIMARY KEY(name, path),
+    FOREIGN KEY(path) REFERENCES Modules(path)
 );
 
-CREATE INDEX idx_types_name ON types(name);
+CREATE INDEX idx_types_name ON Types(name);
+CREATE INDEX idx_types_path ON Types(path);
 
 CREATE TABLE Functions (
     name TEXT NOT NULL,
@@ -33,10 +36,24 @@ CREATE TABLE Functions (
     path TEXT NOT NULL,
     span_from INT,
     span_to INT,
-    PRIMARY KEY(name, path)
+    PRIMARY KEY(name, path),
+    FOREIGN KEY(path) REFERENCES Modules(path)
 );
 
-CREATE INDEX idx_functions_name ON functions(name);
+CREATE INDEX idx_functions_name ON Functions(name);
+CREATE INDEX idx_functions_path ON Functions(path);
+
+CREATE TABLE TypeImpl (
+    type_name TEXT NOT NULL,
+    type_path TEXT NOT NULL,
+    fn_name TEXT NOT NULL,
+    fn_path TEXT NOT NULL,
+    PRIMARY KEY(type_name, type_path, fn_name, fn_path),
+    FOREIGN KEY(type_name, type_path) REFERENCES Types(name, path),
+    FOREIGN KEY(fn_name, fn_path) REFERENCES Functions(name, path)
+);
+
+INSERT INTO Modules (path, is_public) VALUES ('std', true);
 
 INSERT INTO Types (name, size, path) VALUES ('bool', 1, "std");
 INSERT INTO Types (name, size, path) VALUES ('char', 32, "std");
