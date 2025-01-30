@@ -236,7 +236,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
             ModuleDefItem::Constant(_) => { /* already processed */ }
             ModuleDefItem::Function(fn_def) => {
                 if fn_def.decl.generic_params.is_empty() {
-                    ctx = lower_func(ctx, fn_def, id, None, None)?;
+                    ctx = lower_func(ctx, fn_def, id, None, None)?.0;
                 }
             }
             ModuleDefItem::Type(_) => todo!(),
@@ -253,7 +253,7 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
             }
             ModuleDefItem::Impl(impl_block) => {
                 for info in &impl_block.methods {
-                    ctx = lower_func(ctx, info, id, Some(&impl_block.target), None)?;
+                    ctx = lower_func(ctx, info, id, Some(&impl_block.target), None)?.0;
                 }
             }
         }
@@ -384,7 +384,7 @@ fn lower_func(
     module_id: DefId,
     has_self: Option<&TypeDescriptor>,
     generics: Option<&HashMap<String, TypeName>>,
-) -> Result<BuildCtx, LoweringError> {
+) -> Result<(BuildCtx, DefId), LoweringError> {
     debug!("lowering function");
     let is_intrinsic: Option<ConcreteIntrinsic> = None;
 
@@ -402,6 +402,7 @@ fn lower_func(
             *body.symbols.functions.get(&func.decl.name.name).unwrap()
         }
     };
+    debug!("function id: {:?}", fn_id);
 
     // Check if its a generic function
     // If it is, lower it and save its id, to avoid lowering the same monomorphized function again.
@@ -444,7 +445,15 @@ fn lower_func(
                 .function_signatures
                 .insert(fn_id, (args_ty, ret_ty));
             debug!("created with id={fn_id:?}");
+            ctx.body
+                .modules
+                .get_mut(&module_id)
+                .expect("module should exist")
+                .functions
+                .insert(fn_id);
         }
+
+        debug!("new function id: {:?}", fn_id);
     }
 
     let mut builder = FnBodyBuilder {
@@ -590,9 +599,10 @@ fn lower_func(
 
     let (mut ctx, body) = (builder.ctx, builder.body);
     ctx.unresolved_function_signatures.remove(&body.id);
+    debug!("added function {} with id {:?} to ir", body.name, body.id);
     ctx.body.functions.insert(body.id, body);
 
-    Ok(ctx)
+    Ok((ctx, fn_id))
 }
 
 fn lower_func_decl(
@@ -1434,8 +1444,8 @@ fn lower_fn_call(
     // The id of the fn to call, in case its a method.
     fn_id: Option<DefId>,
 ) -> Result<(Rvalue, Ty, Span), LoweringError> {
-    dbg!("lowering fn call");
-    let fn_id = {
+    debug!("lowering fn call");
+    let mut fn_id = {
         let mod_body = builder.get_module_body();
 
         if let Some(id) = fn_id {
@@ -1464,7 +1474,7 @@ fn lower_fn_call(
             panic!();
         }
 
-        dbg!("lowering generic fn");
+        debug!("lowering call to generic function");
 
         for (generic_ty, generic_param) in info
             .generics
@@ -1474,15 +1484,13 @@ fn lower_fn_call(
             generic_map.insert(generic_param.name.name.clone(), generic_ty.clone());
         }
 
-        builder.ctx = lower_func(
+        (builder.ctx, fn_id) = lower_func(
             builder.ctx.clone(),
             &generic_fn_def.clone(),
             builder.local_module,
             None,
             Some(&generic_map),
         )?;
-
-        dbg!("generic fn lowered");
     }
 
     let (args_ty, ret_ty) = {

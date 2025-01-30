@@ -42,13 +42,6 @@ pub struct GenericFn {
     pub generics: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PolymorphicSignature {
-    pub id: DefId,
-    pub params: Vec<TypeDescriptor>,
-    pub ret_ty: Option<TypeDescriptor>,
-}
-
 #[derive(Debug, Clone)]
 pub struct BuildCtx {
     pub body: ProgramBody,

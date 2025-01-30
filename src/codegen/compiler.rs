@@ -23,6 +23,7 @@ use melior::{
     },
     Context as MeliorContext,
 };
+use tracing::info;
 
 use super::errors::CodegenError;
 
@@ -94,6 +95,7 @@ pub(crate) fn compile_program(ctx: CodegenCtx) -> Result<(), CodegenError> {
 /// Compiles the given module within the context.
 fn compile_module(ctx: ModuleCodegenCtx) -> Result<(), CodegenError> {
     let body = ctx.get_module_body();
+    info!("compiling module {:?}", body.id);
 
     for fn_id in body.functions.iter() {
         let ctx = FunctionCodegenCtx {
@@ -130,6 +132,14 @@ impl FunctionCodegenCtx<'_> {
             .expect("function body should exist")
     }
 
+    pub fn has_fn_body(&self) -> bool {
+        self.module_ctx
+            .ctx
+            .program
+            .functions
+            .contains_key(&self.function_id)
+    }
+
     /// Gets the function argument types and return type.
     pub fn get_fn_signature(&self) -> &(Vec<Ty>, Ty) {
         self.module_ctx
@@ -147,8 +157,15 @@ impl FunctionCodegenCtx<'_> {
 
 /// Compiles the given function IR.
 fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
+    if !ctx.has_fn_body() {
+        // todo: maybe remove polymorphic functions entirely from the list before so compile_function is never called.
+        // This is a polymorphic version of the function, so it has no fn body, skip it.
+        return Ok(());
+    }
     let body = ctx.get_fn_body();
     let body_signature = ctx.get_fn_signature();
+
+    info!("compiling function {}", body.name);
 
     // Functions only have 1 region with multiple blocks within.
     let region = Region::new();
