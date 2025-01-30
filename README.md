@@ -154,13 +154,20 @@ mod StructExample {
         baz: i64,
     }
 
+    impl Foo {
+        pub fn mul_bar(&mut self, value: i32) {
+            self.bar = self.bar * 2;
+        }
+    }
+
     fn main() -> i32 {
         let mut foo: Foo = Foo {
             bar: 2,
             baz: 3,
         };
 
-        foo.bar = foo.bar * 2;
+        foo.mul_bar(2);
+        foo.baz = foo.baz * 5;
 
         return get_foo_field_by_borrow(&foo) + foo.bar;
     }
@@ -178,10 +185,12 @@ mod Option {
         Some(T),
     }
 
-    pub fn map<A, B>(opt: Option<A>, f: A -> B) -> Option<B> {
-        match opt {
-            None -> None,
-            Some(x) -> Some(f(x)),
+    impl<A> Option<A> {
+        pub fn map<A, B>(self, f: A -> B) -> Option<B> {
+            match self {
+                None -> None,
+                Some(x) -> Some(f(x)),
+            }
         }
     }
 }
@@ -202,7 +211,7 @@ The design was very heavily influenced by all these programming languages:
 - [Erlang](https://www.erlang.org) (Preemptive scheduler, message passing, runtime)
 - [Rust](https://www.rust-lang.org/) (Syntax, features, low-level focus)
 - [Commonware](https://commonware.xyz/blogs/commonware-runtime.html) (Deterministic runtime)
-- [Austral](https://austral-lang.org/spec/spec.html) (Linear type system) 
+- [Austral](https://austral-lang.org/spec/spec.html) (Linear type system)
 - [Pony](https://www.ponylang.io) / [Gleam](https://gleam.run) (Typed message passing)
 - [Go](https://go.dev) (Preemptive scheduler)
 - [Loom](https://github.com/tokio-rs/loom) (Concurrency permutation testing for Rust)
