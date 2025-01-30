@@ -42,6 +42,7 @@ pub fn parse_ast<'db>(db: &'db dyn salsa::Database, source: ProgramSource<'db>) 
 #[cfg(test)]
 mod tests {
     use super::{grammar, lexer::Lexer};
+    use crate::ast;
 
     #[test]
     fn parse_simple_program() {
@@ -357,5 +358,61 @@ mod ModuleName {
         let lexer = Lexer::new(source);
         let parser = grammar::ProgramParser::new();
         parser.parse(lexer).unwrap();
+    }
+
+    #[test]
+    fn parse_doc_strings() {
+        let source = r##"
+/// Documentation for `MyMod`.
+mod MyMod {
+    /// The PI number.
+    ///
+    /// Note: Rounded to an integer.
+    const ROUNDED_PI: u8 = 3;
+
+    /// Increment a number.
+    pub fn my_func(x: u64) -> u64 {
+        return x + 1;
+    }
+}
+"##;
+        let lexer = Lexer::new(source);
+        let parser = grammar::ProgramParser::new();
+        let module = parser.parse(lexer).unwrap();
+
+        let const_item = match &module.modules[0].contents[0] {
+            ast::modules::ModuleDefItem::Constant(x) => x,
+            _ => unreachable!(),
+        };
+        let fn_item = match &module.modules[0].contents[1] {
+            ast::modules::ModuleDefItem::Function(x) => x,
+            _ => unreachable!(),
+        };
+
+        assert_eq!(
+            module.modules[0].doc_string,
+            Some(ast::common::DocString {
+                contents: vec![" Documentation for `MyMod`.".to_string()],
+                span: ast::common::Span::new(1, 31),
+            }),
+        );
+        assert_eq!(
+            const_item.decl.doc_string,
+            Some(ast::common::DocString {
+                contents: vec![
+                    " The PI number.".to_string(),
+                    "".to_string(),
+                    " Note: Rounded to an integer.".to_string(),
+                ],
+                span: ast::common::Span::new(48, 111),
+            }),
+        );
+        assert_eq!(
+            fn_item.decl.doc_string,
+            Some(ast::common::DocString {
+                contents: vec![" Increment a number.".to_string()],
+                span: ast::common::Span::new(147, 170),
+            }),
+        );
     }
 }
