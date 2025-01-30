@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{common::TypeName, functions::{FunctionDecl, FunctionDef}, types::TypeDescriptor},
+    ast::{common::TypeName, functions::FunctionDef, types::TypeDescriptor},
     ir::{DefId, FnBody, Local, LocalIndex, ModuleBody, ProgramBody, Statement, Ty, TyKind},
 };
 

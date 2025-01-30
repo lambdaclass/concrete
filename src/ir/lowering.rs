@@ -14,7 +14,8 @@ use crate::ast::{
     types::TypeDescriptor,
     Program,
 };
-use common::{BuildCtx, FnBodyBuilder, GenericFn, IdGenerator, PolymorphicSignature};
+use common::{BuildCtx, FnBodyBuilder, GenericFn, IdGenerator};
+use tracing::{debug, instrument};
 
 use crate::ir::{
     AdtBody, BasicBlock, BinOp, ConcreteIntrinsic, ConstBody, ConstData, ConstKind, ConstValue,
@@ -376,6 +377,7 @@ fn lower_struct(
     Ok(ctx)
 }
 
+#[instrument(level = "debug", skip_all, fields(name = func.decl.name.name))]
 fn lower_func(
     mut ctx: BuildCtx,
     func: &FunctionDef,
@@ -383,6 +385,7 @@ fn lower_func(
     has_self: Option<&TypeDescriptor>,
     generics: Option<&HashMap<String, TypeName>>,
 ) -> Result<BuildCtx, LoweringError> {
+    debug!("lowering function");
     let is_intrinsic: Option<ConcreteIntrinsic> = None;
 
     // TODO: parse insintrics here.
@@ -403,14 +406,17 @@ fn lower_func(
     // Check if its a generic function
     // If it is, lower it and save its id, to avoid lowering the same monomorphized function again.
     if let Some(generics) = generics {
+        debug!("function is generic over {} parameters", generics.len());
         let gfn = GenericFn {
             id: fn_id,
             generics: generics.iter().map(|x| x.0).cloned().collect(),
         };
 
         if let Some(generic_defid) = ctx.generic_functions.get(&gfn).cloned() {
+            debug!("generic function already monomorphized");
             fn_id = generic_defid;
         } else {
+            debug!("monomorphizing generic function");
             let next_id = ctx.gen.next_defid();
 
             ctx.generic_functions.insert(gfn, next_id);
@@ -437,6 +443,7 @@ fn lower_func(
             ctx.body
                 .function_signatures
                 .insert(fn_id, (args_ty, ret_ty));
+            debug!("created with id={fn_id:?}");
         }
     }
 
@@ -1427,6 +1434,7 @@ fn lower_fn_call(
     // The id of the fn to call, in case its a method.
     fn_id: Option<DefId>,
 ) -> Result<(Rvalue, Ty, Span), LoweringError> {
+    dbg!("lowering fn call");
     let fn_id = {
         let mod_body = builder.get_module_body();
 
@@ -1456,6 +1464,8 @@ fn lower_fn_call(
             panic!();
         }
 
+        dbg!("lowering generic fn");
+
         for (generic_ty, generic_param) in info
             .generics
             .iter()
@@ -1471,6 +1481,8 @@ fn lower_fn_call(
             None,
             Some(&generic_map),
         )?;
+
+        dbg!("generic fn lowered");
     }
 
     let (args_ty, ret_ty) = {
@@ -1587,6 +1599,8 @@ fn lower_fn_call(
             kind,
         }),
     });
+
+    dbg!("lowering fn call end");
 
     Ok((
         Rvalue::Use(Operand::Place(dest_place)),
@@ -2047,6 +2061,7 @@ pub fn lower_type_with_self(
     }
 }
 
+#[instrument(level = "debug", skip_all, fields(ty = %ty))]
 pub fn lower_type(
     ctx: &BuildCtx,
     ty: &TypeDescriptor,
@@ -2054,6 +2069,7 @@ pub fn lower_type(
     // A local context map to resolve generics to specific types
     generic_map: Option<&HashMap<String, TypeName>>,
 ) -> Result<Ty, LoweringError> {
+    debug!("lowering type");
     Ok(match ty {
         TypeDescriptor::Type { name, span } => match name.name.name.as_str() {
             "i64" => Ty::new(span, TyKind::Int(IntTy::I64)),
@@ -2071,6 +2087,21 @@ pub fn lower_type(
             "char" => Ty::new(span, TyKind::Char),
             other => {
                 let module = ctx.body.modules.get(&module_id).expect("module not found");
+
+                if let Some(inner_generic_map) = generic_map {
+                    if let Some(generic_ty_name) = inner_generic_map.get(other) {
+                        debug!("Type found in generic map: {}", generic_ty_name);
+                        return lower_type(
+                            ctx,
+                            &TypeDescriptor::Type {
+                                name: generic_ty_name.clone(),
+                                span: generic_ty_name.span,
+                            },
+                            module_id,
+                            generic_map,
+                        );
+                    }
+                }
 
                 // Find on imports or local module
                 let def_id = module

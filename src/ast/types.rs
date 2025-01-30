@@ -1,3 +1,5 @@
+use std::fmt;
+
 use super::common::{DocString, Ident, Span, TypeName};
 use educe::Educe;
 
@@ -40,6 +42,27 @@ pub enum TypeDescriptor {
         is_ref: bool,
         is_mut: bool,
     },
+}
+
+impl fmt::Display for TypeDescriptor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TypeDescriptor::Type { name, .. } => {
+                write!(f, "{}", name)
+            }
+            TypeDescriptor::Ref { of, span: _ } => write!(f, "&{of}"),
+            TypeDescriptor::MutRef { of, .. } => write!(f, "&mut {of}"),
+            TypeDescriptor::ConstPtr { of, .. } => write!(f, "*const {of}"),
+            TypeDescriptor::MutPtr { of, .. } => write!(f, "*mut {of}"),
+            TypeDescriptor::Array { of, .. } => write!(f, "&{of}"),
+            TypeDescriptor::SelfType { is_ref, is_mut } => match (*is_ref, *is_mut) {
+                (true, true) => write!(f, "&mut self"),
+                (true, false) => write!(f, "&self"),
+                (false, true) => write!(f, "mut self"),
+                (false, false) => write!(f, "self"),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
