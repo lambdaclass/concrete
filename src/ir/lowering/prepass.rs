@@ -57,6 +57,11 @@ pub fn prepass_module(
                         .functions
                         .insert(info.decl.name.name.clone(), next_id);
                     current_module.functions.insert(next_id);
+
+                    if !info.decl.generic_params.is_empty() {
+                        ctx.generic_fn_bodies.insert(next_id, info.clone());
+                    }
+
                     ctx.unresolved_function_signatures.insert(
                         next_id,
                         (

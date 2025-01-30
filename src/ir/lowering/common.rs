@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::types::TypeDescriptor,
+    ast::{common::TypeName, functions::{FunctionDecl, FunctionDef}, types::TypeDescriptor},
     ir::{DefId, FnBody, Local, LocalIndex, ModuleBody, ProgramBody, Statement, Ty, TyKind},
 };
 
@@ -34,11 +34,33 @@ impl IdGenerator {
     }
 }
 
+// Helper struct to store generic function monomorphizations
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GenericFn {
+    pub id: DefId,
+    // This vec contains the specific types of the generics used.
+    pub generics: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PolymorphicSignature {
+    pub id: DefId,
+    pub params: Vec<TypeDescriptor>,
+    pub ret_ty: Option<TypeDescriptor>,
+}
+
 #[derive(Debug, Clone)]
 pub struct BuildCtx {
     pub body: ProgramBody,
+    // A map of already generated monomorphized versions of generic functions.
+    pub generic_functions: HashMap<GenericFn, DefId>,
+    // A function may be called from another module before that module is "lowered"
+    // So the prepass step stores all unlowered function signatures here, before doing the lower step.
+    // If a call uses a unresolved function signature, it will resolve it to their lowered types. Removing it from here.
     pub unresolved_function_signatures:
         HashMap<DefId, (Vec<TypeDescriptor>, Option<TypeDescriptor>)>,
+    // The ast of generic functions, to implement each monomorphized version.
+    pub generic_fn_bodies: HashMap<DefId, FunctionDef>,
     pub gen: IdGenerator,
 }
 
@@ -56,6 +78,7 @@ pub struct FnBodyBuilder {
     pub name_to_local: HashMap<String, LocalIndex>,
     pub statements: Vec<Statement>,
     pub ret_local: LocalIndex,
+    pub generic_map: Option<HashMap<String, TypeName>>,
     pub ctx: BuildCtx,
 }
 
