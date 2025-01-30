@@ -477,6 +477,7 @@ fn lower_func(
         ctx,
     };
 
+    // A extern fn cannot have a body.
     if !func.body.is_empty() && func.decl.is_extern {
         return Err(LoweringError::ExternFnWithBody {
             span: func.span,
@@ -493,6 +494,7 @@ fn lower_func(
         .unwrap()
         .clone();
 
+    // Add the return local.
     builder.ret_local = builder.body.locals.len();
     builder.body.locals.push(Local::new(
         None,
@@ -502,6 +504,7 @@ fn lower_func(
         false,
     ));
 
+    // Add argument locals.
     for (arg, ty) in func.decl.params.iter().zip(args_ty) {
         builder
             .name_to_local
@@ -2069,6 +2072,10 @@ pub fn lower_type_with_self(
     }
 }
 
+/// Lowers a type to it's IR version.
+///
+/// If a generic map is given, it will be used to resolve a generic type name like "T"
+/// to its proper non-generic type.
 #[instrument(level = "debug", skip_all, fields(ty = %ty))]
 pub fn lower_type(
     ctx: &BuildCtx,
@@ -2096,6 +2103,7 @@ pub fn lower_type(
             other => {
                 let module = ctx.body.modules.get(&module_id).expect("module not found");
 
+                // Check if the type name exists in the generic map.
                 if let Some(inner_generic_map) = generic_map {
                     if let Some(generic_ty_name) = inner_generic_map.get(other) {
                         debug!("Type found in generic map: {}", generic_ty_name);
@@ -2122,20 +2130,21 @@ pub fn lower_type(
                         program_id: module_id.program_id,
                     })?;
 
-                let mut generic_tys = Vec::new();
-                for generic in &name.generics {
-                    generic_tys.push(lower_type(
-                        ctx,
-                        &TypeDescriptor::Type {
-                            name: generic.clone(),
-                            span: generic.span,
-                        },
-                        module_id,
-                        generic_map,
-                    )?);
-                }
-
+                // Check if its a struct.
                 if ctx.body.structs.contains_key(def_id) {
+                    let mut generic_tys = Vec::new();
+                    for generic in &name.generics {
+                        generic_tys.push(lower_type(
+                            ctx,
+                            &TypeDescriptor::Type {
+                                name: generic.clone(),
+                                span: generic.span,
+                            },
+                            module_id,
+                            generic_map,
+                        )?);
+                    }
+
                     return Ok(Ty::new(
                         span,
                         TyKind::Struct {
@@ -2143,7 +2152,8 @@ pub fn lower_type(
                             generics: generic_tys,
                         },
                     ));
-                } else {
+                }
+                else {
                     Err(LoweringError::UnrecognizedType {
                         span: *span,
                         name: other.to_string(),
