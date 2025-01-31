@@ -2152,8 +2152,7 @@ pub fn lower_type(
                             generics: generic_tys,
                         },
                     ));
-                }
-                else {
+                } else {
                     Err(LoweringError::UnrecognizedType {
                         span: *span,
                         name: other.to_string(),
