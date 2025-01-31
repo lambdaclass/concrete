@@ -1611,8 +1611,6 @@ fn lower_fn_call(
         }),
     });
 
-    dbg!("lowering fn call end");
-
     Ok((
         Rvalue::Use(Operand::Place(dest_place)),
         ret_ty.clone(),
