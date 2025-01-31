@@ -1179,7 +1179,7 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
                 .get_module_body()
                 .symbols
                 .structs
-                .get(&info.name.name)
+                .get(&info.name.name.name)
                 .expect("struct not found");
 
             // todo: struct generics
@@ -1322,8 +1322,8 @@ fn lower_expression(
                 .get_module_body()
                 .symbols
                 .structs
-                .get(&info.name.name)
-                .or_else(|| builder.get_module_body().imports.get(&info.name.name))
+                .get(&info.name.name.name)
+                .or_else(|| builder.get_module_body().imports.get(&info.name.name.name))
                 .expect("struct not found");
             let struct_body = builder.ctx.body.structs.get(&id).unwrap().clone();
             let ty = Ty {

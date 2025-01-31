@@ -33,7 +33,7 @@ pub enum ValueExpr {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructInitExpr {
-    pub name: Ident,
+    pub name: TypeName,
     pub fields: HashMap<Ident, StructInitField>,
     pub span: Span,
 }
