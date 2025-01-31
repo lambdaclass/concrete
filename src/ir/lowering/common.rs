@@ -101,3 +101,21 @@ impl FnBodyBuilder {
         self.ctx.body.modules.get(&self.local_module).unwrap()
     }
 }
+
+impl BuildCtx {
+    pub fn get_mangled_name(&self, module_id: DefId, fn_name: &str, fn_id: DefId) -> Option<String> {
+        let mut name_path: Vec<&str> = Vec::new();
+
+        let cur_module = &self.body.modules.get(&module_id)?;
+
+        for parent_id in &cur_module.parent_ids {
+            let module = &self.body.modules.get(parent_id)?;
+            name_path.push(module.name.as_ref());
+        }
+        name_path.push(cur_module.name.as_ref());
+
+        name_path.push(fn_name);
+
+        Some(format!("{}@{}", name_path.join("::"), fn_id.id))
+    }
+}

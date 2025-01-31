@@ -462,8 +462,9 @@ fn lower_func(
             locals: Vec::new(),
             is_extern: func.decl.is_extern,
             is_intrinsic,
-            name: if has_self.is_some() {
-                format!("{}_{}_{}", &func.decl.name.name, fn_id.program_id, fn_id.id)
+            name: if !func.decl.is_extern && func.decl.name.name != "main" {
+                ctx.get_mangled_name(module_id, &func.decl.name.name, fn_id)
+                    .expect("failed to get mangled name")
             } else {
                 func.decl.name.name.clone()
             },

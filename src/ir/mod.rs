@@ -51,6 +51,7 @@ pub struct ProgramBody {
 #[derive(Debug, Clone)]
 pub struct ModuleBody {
     pub id: DefId,
+    pub name: String,
     pub parent_ids: Vec<DefId>,
     pub symbols: SymbolTable,
     /// Functions defined in this module.
@@ -65,6 +66,7 @@ pub struct ModuleBody {
     pub modules: HashSet<DefId>,
     /// Imported items. symbol -> id
     pub imports: HashMap<String, DefId>,
+    pub span: Span,
 }
 
 /// Function body
@@ -87,15 +89,7 @@ impl FnBody {
     }
 
     pub fn get_mangled_name(&self) -> String {
-        if self.is_extern {
-            return self.name.clone();
-        }
-
-        if self.name == "main" {
-            "main".to_string()
-        } else {
-            format!("{}_{}_{}", self.name, self.id.program_id, self.id.id)
-        }
+        self.name.clone()
     }
 }
 
