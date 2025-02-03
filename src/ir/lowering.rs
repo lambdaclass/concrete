@@ -415,7 +415,7 @@ fn lower_func(
 
         if let Some(generic_defid) = ctx.generic_functions.get(&gfn).cloned() {
             debug!("generic function already monomorphized");
-            fn_id = generic_defid;
+            return Ok((ctx, generic_defid));
         } else {
             debug!("monomorphizing generic function");
             let next_id = ctx.gen.next_defid();
