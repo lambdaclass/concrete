@@ -1196,6 +1196,7 @@ fn lower_expression(
                 .symbols
                 .structs
                 .get(&info.name.name)
+                .or_else(|| builder.get_module_body().imports.get(&info.name.name))
                 .expect("struct not found");
             let struct_body = builder.ctx.body.structs.get(&id).unwrap().clone();
             let ty = Ty {
@@ -1960,26 +1961,38 @@ pub fn lower_type(
             "char" => Ty::new(span, TyKind::Char),
             other => {
                 let module = ctx.body.modules.get(&module_id).expect("module not found");
-                // Check if the type is a struct
-                if let Some(struct_id) = module.symbols.structs.get(other) {
-                    let mut generic_tys = Vec::new();
-                    for generic in &name.generics {
-                        generic_tys.push(lower_type(
-                            ctx,
-                            &TypeDescriptor::Type {
-                                name: generic.clone(),
-                                span: generic.span,
-                            },
-                            module_id,
-                        )?);
-                    }
-                    Ty::new(
+
+                // Find on imports or local module
+                let def_id = module
+                    .imports
+                    .get(other)
+                    .or_else(|| module.symbols.structs.get(other))
+                    .ok_or_else(|| LoweringError::UnrecognizedType {
+                        span: *span,
+                        name: other.to_string(),
+                        program_id: module_id.program_id,
+                    })?;
+
+                let mut generic_tys = Vec::new();
+                for generic in &name.generics {
+                    generic_tys.push(lower_type(
+                        ctx,
+                        &TypeDescriptor::Type {
+                            name: generic.clone(),
+                            span: generic.span,
+                        },
+                        module_id,
+                    )?);
+                }
+
+                if ctx.body.structs.contains_key(def_id) {
+                    return Ok(Ty::new(
                         span,
                         TyKind::Struct {
-                            id: *struct_id,
+                            id: *def_id,
                             generics: generic_tys,
                         },
-                    )
+                    ));
                 } else {
                     Err(LoweringError::UnrecognizedType {
                         span: *span,
