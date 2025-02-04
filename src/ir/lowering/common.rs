@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::types::TypeDescriptor,
@@ -57,6 +57,8 @@ pub struct FnBodyBuilder {
     pub statements: Vec<Statement>,
     pub ret_local: LocalIndex,
     pub ctx: BuildCtx,
+    // To check when a variable is used before its declared/init
+    pub local_exists: HashSet<LocalIndex>,
 }
 
 impl FnBodyBuilder {

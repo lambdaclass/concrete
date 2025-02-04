@@ -408,6 +408,7 @@ fn lower_func(
         ret_local: 0,
         name_to_local: HashMap::new(),
         statements: Vec::new(),
+        local_exists: Default::default(),
         ctx,
     };
 
@@ -440,6 +441,7 @@ fn lower_func(
         builder
             .name_to_local
             .insert(arg.name.name.clone(), builder.body.locals.len());
+        builder.local_exists.insert(builder.body.locals.len());
         builder.body.locals.push(Local::new(
             Some(arg.name.span),
             LocalKind::Arg,
@@ -546,6 +548,7 @@ fn lower_func_decl(
         ret_local: 0,
         name_to_local: HashMap::new(),
         statements: Vec::new(),
+        local_exists: Default::default(),
         ctx,
     };
 
@@ -881,6 +884,8 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), Lowering
             }
 
             let local_idx = builder.name_to_local.get(&name.name).copied().unwrap();
+            builder.local_exists.insert(local_idx);
+
             builder.statements.push(Statement {
                 span: Some(name.span),
                 kind: StatementKind::StorageLive(local_idx),
@@ -1803,6 +1808,14 @@ pub fn lower_path(
             program_id: builder.local_module.program_id,
         },
     )?;
+
+    if !builder.local_exists.contains(&local) {
+        Err(LoweringError::UseOfUndeclaredVariable {
+            span: info.span,
+            name: info.first.name.clone(),
+            program_id: builder.local_module.program_id,
+        })?;
+    }
 
     let ty = builder.body.locals[local].ty.clone();
     let mut ty = ty;

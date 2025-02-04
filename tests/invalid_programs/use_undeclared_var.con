@@ -1,0 +1,8 @@
+mod foo {
+    pub fn main() -> i32 {
+        let b: i32 = a;
+        let a: i32 = 69;
+
+        return b;
+    }
+}
