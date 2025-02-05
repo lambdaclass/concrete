@@ -1,0 +1,13 @@
+mod VarInsideIf {
+    pub fn main() -> i32 {
+
+        let mut x: i32 = 4;
+
+        if x > 2 {
+            let y: i32 = x;
+            x = y * x;
+        }
+
+        return x;
+    }
+}
