@@ -518,55 +518,9 @@ fn lower_func(
         ));
     }
 
-    // Get all locals
+    // Get all top level locals
     for stmt in &func.body {
-        if let statements::Statement::Let(info) = stmt {
-            match &info.target {
-                LetStmtTarget::Simple { id: name, r#type } => {
-                    let ty = lower_type(
-                        &builder.ctx,
-                        r#type,
-                        builder.local_module,
-                        builder.generic_map.as_ref(),
-                    )?;
-                    builder
-                        .name_to_local
-                        .insert(name.name.clone(), builder.body.locals.len());
-                    builder.body.locals.push(Local::new(
-                        Some(name.span),
-                        LocalKind::Temp,
-                        ty,
-                        Some(name.name.clone()),
-                        info.is_mutable,
-                    ));
-                }
-                LetStmtTarget::Destructure(_) => todo!(),
-            }
-        } else if let statements::Statement::For(info) = stmt {
-            if let Some(info) = &info.init {
-                match &info.target {
-                    LetStmtTarget::Simple { id: name, r#type } => {
-                        let ty = lower_type(
-                            &builder.ctx,
-                            r#type,
-                            builder.local_module,
-                            builder.generic_map.as_ref(),
-                        )?;
-                        builder
-                            .name_to_local
-                            .insert(name.name.clone(), builder.body.locals.len());
-                        builder.body.locals.push(Local::new(
-                            Some(name.span),
-                            LocalKind::Temp,
-                            ty,
-                            Some(name.name.clone()),
-                            info.is_mutable,
-                        ));
-                    }
-                    LetStmtTarget::Destructure(_) => todo!(),
-                }
-            }
-        }
+        get_locals(&mut builder, stmt)?;
     }
 
     let ret_type = func
@@ -606,6 +560,73 @@ fn lower_func(
     ctx.body.functions.insert(body.id, body);
 
     Ok((ctx, fn_id))
+}
+
+/// Get and map names to locals.
+///
+/// Should be called on each new scope.
+fn get_locals(
+    builder: &mut FnBodyBuilder,
+    stmt: &crate::ast::statements::Statement,
+) -> Result<(), LoweringError> {
+    match stmt {
+        statements::Statement::Assign(_assign_stmt) => {}
+        statements::Statement::Match(_match_expr) => todo!(),
+        statements::Statement::For(info) => {
+            if let Some(info) = &info.init {
+                match &info.target {
+                    LetStmtTarget::Simple { id: name, r#type } => {
+                        let ty = lower_type(
+                            &builder.ctx,
+                            r#type,
+                            builder.local_module,
+                            builder.generic_map.as_ref(),
+                        )?;
+                        builder
+                            .name_to_local
+                            .insert(name.name.clone(), builder.body.locals.len());
+                        builder.body.locals.push(Local::new(
+                            Some(name.span),
+                            LocalKind::Temp,
+                            ty,
+                            Some(name.name.clone()),
+                            info.is_mutable,
+                        ));
+                    }
+                    LetStmtTarget::Destructure(_) => todo!(),
+                }
+            }
+        }
+        // handled in the lower function
+        statements::Statement::If(_info) => {}
+        statements::Statement::Let(info) => match &info.target {
+            LetStmtTarget::Simple { id: name, r#type } => {
+                let ty = lower_type(
+                    &builder.ctx,
+                    r#type,
+                    builder.local_module,
+                    builder.generic_map.as_ref(),
+                )?;
+                builder
+                    .name_to_local
+                    .insert(name.name.clone(), builder.body.locals.len());
+                builder.body.locals.push(Local::new(
+                    Some(name.span),
+                    LocalKind::Temp,
+                    ty,
+                    Some(name.name.clone()),
+                    info.is_mutable,
+                ));
+            }
+            LetStmtTarget::Destructure(_) => todo!(),
+        },
+        statements::Statement::Return(_return_stmt) => {}
+        statements::Statement::While(_while_stmt) => {}
+        statements::Statement::FnCall(_fn_call_op) => {}
+        statements::Statement::PathOp(_path_op) => {}
+    }
+
+    Ok(())
 }
 
 fn lower_func_decl(
@@ -874,6 +895,8 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
     // keep idx to change terminator
     let current_block_idx = builder.body.basic_blocks.len();
 
+    let old_name_to_local = builder.name_to_local.clone();
+
     let statements = std::mem::take(&mut builder.statements);
     builder.body.basic_blocks.push(BasicBlock {
         statements,
@@ -887,6 +910,7 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
     let first_then_block_idx = builder.body.basic_blocks.len();
 
     for stmt in &info.block_stmts {
+        get_locals(builder, stmt)?;
         lower_statement(
             builder,
             stmt,
@@ -910,8 +934,11 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
 
     let first_else_block_idx = builder.body.basic_blocks.len();
 
+    builder.name_to_local = old_name_to_local.clone();
+
     if let Some(contents) = &info.else_stmts {
         for stmt in contents {
+            get_locals(builder, stmt)?;
             lower_statement(
                 builder,
                 stmt,
@@ -930,6 +957,8 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
             }),
         });
     }
+
+    builder.name_to_local = old_name_to_local;
 
     let targets = SwitchTargets {
         values: vec![discriminator_type.kind.get_falsy_value()],
