@@ -1502,8 +1502,13 @@ fn lower_fn_call(
         // todo: fix this clone
 
         if info.generics.len() != generic_fn_def.decl.generic_params.len() {
-            // todo: error mismatch generics
-            panic!();
+            // todo: this check will be removed/refactored when we have inference for generics from the arguments used.
+            return Err(LoweringError::GenericCountMismatch {
+                span: info.span,
+                found: info.generics.len(),
+                needs: generic_fn_def.decl.generic_params.len(),
+                program_id: builder.local_module.program_id,
+            });
         }
 
         debug!("lowering call to generic function");
