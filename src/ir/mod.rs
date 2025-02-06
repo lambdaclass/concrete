@@ -331,7 +331,7 @@ pub struct DefId {
 #[derive(Debug, Clone, Educe, PartialOrd, Ord, Eq)]
 #[educe(PartialEq, Hash)]
 pub struct Ty {
-    #[educe(PartialEq(ignore))]
+    #[educe(PartialEq(ignore), Hash(ignore))]
     pub span: Option<Span>,
     pub kind: TyKind,
 }
@@ -480,8 +480,12 @@ impl fmt::Display for TyKind {
                 write!(f, "*{word} {}", inner.kind)
             }
             TyKind::Param { .. } => todo!(),
-            TyKind::Struct { id, name, generics } => {
-                write!(f, "({id:?}) {name}")?;
+            TyKind::Struct {
+                id: _,
+                name,
+                generics,
+            } => {
+                write!(f, "{name}")?;
                 if !generics.is_empty() {
                     write!(f, "<")?;
 

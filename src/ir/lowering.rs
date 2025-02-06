@@ -77,7 +77,9 @@ pub fn lower_programs(program: &[Program]) -> Result<ProgramBody, LoweringError>
     Ok(ctx.body)
 }
 
+#[instrument(level = "debug", skip_all, fields(module = ?module.name.name))]
 fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCtx, LoweringError> {
+    debug!("lowering module");
     // lower first structs, constants, types
     for content in &module.contents {
         match content {
@@ -271,11 +273,13 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
     Ok(ctx)
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_constant(
     mut ctx: BuildCtx,
     info: &ConstantDef,
     module_id: DefId,
 ) -> Result<BuildCtx, LoweringError> {
+    debug!("lowering constant");
     let name = info.decl.name.name.clone();
 
     let id = {
@@ -302,7 +306,9 @@ fn lower_constant(
     Ok(ctx)
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_constant_expression(expression: &Expression, ty: Ty) -> Result<ConstData, LoweringError> {
+    debug!("lowering const expression");
     let data = match expression {
         Expression::Value(value, _) => match value {
             ValueExpr::ConstBool(value, _) => {
@@ -353,6 +359,7 @@ fn lower_constant_expression(expression: &Expression, ty: Ty) -> Result<ConstDat
     Ok(ConstData { ty, data })
 }
 
+#[instrument(level = "debug", skip_all, fields(name = ?info.name.name))]
 fn lower_struct(
     ctx: &mut BuildCtx,
     info: &StructDecl,
@@ -360,6 +367,7 @@ fn lower_struct(
     module_id: DefId,
     generics: Option<&HashMap<String, TypeName>>,
 ) -> Result<(), LoweringError> {
+    debug!("lowering struct");
     let mut body = AdtBody {
         def_id: id,
         is_pub: true, // todo struct pub
@@ -640,11 +648,13 @@ fn get_locals(
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all, fields(name = ?func.name.name))]
 fn lower_func_decl(
     ctx: BuildCtx,
     func: &FunctionDecl,
     module_id: DefId,
 ) -> Result<BuildCtx, LoweringError> {
+    debug!("lowering function declaration");
     let is_intrinsic: Option<ConcreteIntrinsic> = None;
 
     // TODO: parse insintrics here.
@@ -711,7 +721,9 @@ fn lower_statement(
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), LoweringError> {
+    debug!("lowering while");
     let statements = std::mem::take(&mut builder.statements);
     builder.body.basic_blocks.push(BasicBlock {
         statements,
@@ -788,7 +800,9 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), Lowe
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_for(builder: &mut FnBodyBuilder, info: &ForStmt) -> Result<(), LoweringError> {
+    debug!("lowering for");
     if let Some(init) = &info.init {
         lower_let(builder, init)?;
     }
@@ -889,7 +903,9 @@ fn lower_for(builder: &mut FnBodyBuilder, info: &ForStmt) -> Result<(), Lowering
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), LoweringError> {
+    debug!("begin lowering if");
     let (discriminator, discriminator_type, _disc_span) =
         lower_expression(builder, &info.cond, None)?;
 
@@ -993,19 +1009,22 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), LoweringError> {
+    debug!("begin lowering let");
     match &info.target {
         LetStmtTarget::Simple { id: name, r#type } => {
+            debug!("let target is simple");
             let ty = lower_type(
                 &mut builder.ctx,
                 r#type,
                 builder.local_module,
                 builder.generic_map.as_ref(),
             )?;
-            debug!("let target type: {}", ty.kind);
+            debug!("let target type: {:?}", ty.kind);
             let (rvalue, rvalue_ty, rvalue_span) =
                 lower_expression(builder, &info.value, Some(ty.clone()))?;
-            debug!("let rvalue type: {}", rvalue_ty.kind);
+            debug!("let rvalue type: {:?}", rvalue_ty.kind);
 
             if ty.kind != rvalue_ty.kind {
                 return Err(LoweringError::UnexpectedType {
@@ -1034,12 +1053,17 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), Lowering
                 ),
             });
         }
-        LetStmtTarget::Destructure(_) => todo!(),
+        LetStmtTarget::Destructure(_) => {
+            debug!("let target is a destructure");
+            todo!()
+        }
     };
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), LoweringError> {
+    debug!("begin lowering assign");
     let (mut place, mut ty, _path_span) = lower_path(builder, &info.lvalue)?;
 
     if !builder.body.locals[place.local].is_mutable() {
@@ -1088,12 +1112,15 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_return(
     builder: &mut FnBodyBuilder,
     info: &ReturnStmt,
     ret_type: Ty,
 ) -> Result<(), LoweringError> {
+    debug!("begin lowering return");
     if let Some(value_exp) = &info.value {
+        debug!("return has value");
         let (value, value_ty, _exp_span) =
             lower_expression(builder, value_exp, Some(ret_type.clone()))?;
 
@@ -1130,10 +1157,12 @@ fn lower_return(
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn find_expression_type(
     builder: &mut FnBodyBuilder,
     info: &Expression,
 ) -> Result<Option<Ty>, LoweringError> {
+    debug!("finding expression type");
     Ok(match info {
         Expression::Value(value, _) => match value {
             ValueExpr::ConstBool(_, span) => Some(Ty {
@@ -1189,7 +1218,6 @@ fn find_expression_type(
         }
         Expression::AsRef(_, _, _) => todo!(),
         Expression::StructInit(info) => {
-            dbg!(&builder.ctx.generic_structs);
             let mut id = *builder
                 .get_module_body()
                 .symbols
@@ -1309,6 +1337,7 @@ fn find_expression_type(
     })
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_expression(
     builder: &mut FnBodyBuilder,
     info: &Expression,
@@ -1316,15 +1345,29 @@ fn lower_expression(
 ) -> Result<(Rvalue, Ty, Span), LoweringError> {
     Ok(match info {
         Expression::Value(info, span) => {
+            debug!("lowering value");
             let value = lower_value_expr(builder, info, type_hint)?;
             (value.0, value.1, *span)
         }
-        Expression::FnCall(info) => lower_fn_call(builder, info, None, None)?,
-        Expression::Match(_) => todo!(),
-        Expression::If(_) => todo!(),
-        Expression::UnaryOp(_, _) => todo!(),
+        Expression::FnCall(info) => {
+            debug!("lowering fncall");
+            lower_fn_call(builder, info, None, None)?
+        }
+        Expression::Match(_) => {
+            debug!("lowering match");
+            todo!()
+        }
+        Expression::If(_) => {
+            debug!("lowering if expression");
+            todo!()
+        }
+        Expression::UnaryOp(_, _) => {
+            debug!("lowering unary op");
+            todo!()
+        }
         Expression::BinaryOp(lhs, op, rhs) => lower_binary_op(builder, lhs, *op, rhs, type_hint)?,
         Expression::Deref(info, deref_span) => {
+            debug!("lowering deref");
             let (value, ty, _span) = lower_expression(builder, info, type_hint)?;
 
             let mut place = match value {
@@ -1350,6 +1393,7 @@ fn lower_expression(
             (Rvalue::Use(Operand::Place(place)), ty, *deref_span)
         }
         Expression::AsRef(inner, mutable, asref_span) => {
+            debug!("lowering asref");
             let type_hint = match type_hint {
                 Some(inner) => match inner.kind {
                     TyKind::Ref(inner, _) => Some(*inner.clone()),
@@ -1411,6 +1455,7 @@ fn lower_expression(
             (rvalue, ty, *asref_span)
         }
         Expression::StructInit(info) => {
+            debug!("lowering struct init for struct {}", info.name);
             let mut id = *builder
                 .get_module_body()
                 .symbols
@@ -1445,10 +1490,17 @@ fn lower_expression(
                     generics: generics.clone(),
                 };
 
+                debug!(
+                    "struct has generics, checking generic struct id: {:?}",
+                    generic_struct_id
+                );
+
                 if let Some(mono_id) = builder.ctx.generic_structs.get(&generic_struct_id) {
+                    debug!("monomorphized struct id found: {mono_id:?}");
                     id = *mono_id;
                 } else {
                     let next_id = builder.ctx.gen.next_defid();
+                    debug!("monomorphized id not found, lowering with id {next_id:?}");
                     let body = builder
                         .ctx
                         .generic_struct_bodies
@@ -1633,6 +1685,7 @@ fn lower_expression(
     })
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_fn_call(
     builder: &mut FnBodyBuilder,
     info: &FnCallOp,
@@ -2361,6 +2414,8 @@ pub fn lower_type(
                         generic_map,
                     )?);
                 }
+
+                debug!("generic_tys: {:?}", &generic_tys);
 
                 let generic_struct = GenericStruct {
                     id: def_id,
