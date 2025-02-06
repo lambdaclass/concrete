@@ -6,6 +6,7 @@ mod common;
 
 #[test_case(include_str!("../examples/borrow.con"), "borrow", false, 2 ; "borrow.con")]
 #[test_case(include_str!("../examples/variable_inside_if.con"), "variable_inside_if", false, 16 ; "variable_inside_if.con")]
+#[test_case(include_str!("../examples/if_with_literals.con"), "if_with_literals", false, 1 ; "if_with_literals.con")]
 #[test_case(include_str!("../examples/factorial_if.con"), "factorial_if", false, 24 ; "factorial_if.con")]
 #[test_case(include_str!("../examples/fib_if.con"), "fib_if", false, 55 ; "fib_if.con")]
 #[test_case(include_str!("../examples/import.con"), "import", false, 12 ; "import.con")]
