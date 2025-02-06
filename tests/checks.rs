@@ -176,3 +176,18 @@ fn mutable_nonmut_borrow() {
         error
     );
 }
+
+#[test]
+fn use_undeclared_var() {
+    let (source, name) = (
+        include_str!("invalid_programs/use_undeclared_var.con"),
+        "use_undeclared_var",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::UseOfUndeclaredVariable { .. }),
+        "{:#?}",
+        error
+    );
+}
