@@ -84,6 +84,10 @@ pub fn prepass_module(
                         .structs
                         .insert(info.name.name.clone(), next_id);
                     current_module.structs.insert(next_id);
+
+                    if !info.generics.is_empty() {
+                        ctx.generic_struct_bodies.insert(next_id, info.clone());
+                    }
                 }
                 ast::modules::ModuleDefItem::Type(info) => {
                     let next_id = gen.next_defid();
@@ -227,6 +231,10 @@ pub fn prepass_sub_module(
                         .structs
                         .insert(info.name.name.clone(), next_id);
                     submodule.structs.insert(next_id);
+
+                    if !info.generics.is_empty() {
+                        ctx.generic_struct_bodies.insert(next_id, info.clone());
+                    }
                 }
                 ast::modules::ModuleDefItem::Type(info) => {
                     let next_id = gen.next_defid();

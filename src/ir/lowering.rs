@@ -14,7 +14,7 @@ use crate::ast::{
     types::TypeDescriptor,
     Program,
 };
-use common::{BuildCtx, FnBodyBuilder, GenericFn, IdGenerator};
+use common::{BuildCtx, FnBodyBuilder, GenericFn, GenericStruct, IdGenerator};
 use tracing::{debug, instrument};
 
 use crate::ir::{
@@ -37,6 +37,8 @@ pub fn lower_programs(program: &[Program]) -> Result<ProgramBody, LoweringError>
         unresolved_function_signatures: Default::default(),
         generic_fn_bodies: Default::default(),
         generic_functions: Default::default(),
+        generic_structs: Default::default(),
+        generic_struct_bodies: Default::default(),
     };
 
     for (program_id, program) in program.iter().enumerate() {
@@ -83,7 +85,9 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                 ctx = lower_constant(ctx, info, id)?;
             }
             ModuleDefItem::Struct(info) => {
-                ctx = lower_struct(ctx, info, id)?;
+                if info.generics.is_empty() {
+                    ctx = lower_struct(ctx, info, id, None)?;
+                }
             }
             ModuleDefItem::Type(_) => todo!(),
             _ => {}
@@ -348,6 +352,7 @@ fn lower_struct(
     mut ctx: BuildCtx,
     info: &StructDecl,
     module_id: DefId,
+    generics: Option<&HashMap<String, TypeName>>,
 ) -> Result<BuildCtx, LoweringError> {
     let mut body = AdtBody {
         def_id: {
@@ -2166,7 +2171,7 @@ pub fn lower_type(
                 }
 
                 // Find on imports or local module
-                let def_id = module
+                let mut def_id = *module
                     .imports
                     .get(other)
                     .or_else(|| module.symbols.structs.get(other))
@@ -2176,9 +2181,9 @@ pub fn lower_type(
                         program_id: module_id.program_id,
                     })?;
 
-                // Check if its a struct.
-                if ctx.body.structs.contains_key(def_id) {
-                    let mut generic_tys = Vec::new();
+                debug!("Found def_id={def_id:?}");
+
+                let mut generic_tys = Vec::new();
                     for generic in &name.generics {
                         generic_tys.push(lower_type(
                             ctx,
@@ -2191,14 +2196,45 @@ pub fn lower_type(
                         )?);
                     }
 
+                let generic_struct = GenericStruct {
+                    id: def_id,
+                    generics: generic_tys.clone(),
+                };
+
+                if let Some(body) = ctx.generic_structs.get(&generic_struct) {
+                    debug!("Found monomorphized struct generic: {body:?}");
+                    def_id = *body;
+                }
+
+                // Check if its a struct.
+                if ctx.body.structs.contains_key(&def_id) {
                     return Ok(Ty::new(
                         span,
                         TyKind::Struct {
-                            id: *def_id,
+                            id: def_id,
                             generics: generic_tys,
                         },
                     ));
-                } else {
+                } else if let Some(adt_body) = ctx.generic_struct_bodies.get(&def_id) {
+                    let next_id = ctx.gen.next_defid();
+                    // struct not yet monomorphized.
+
+                    let mut generic_map = generic_map.cloned().unwrap_or_default();
+
+                    assert_eq!(adt_body.generics.len(), name.generics.len());
+                    for (gen_ty, gen_name) in name.generics.iter().zip(adt_body.generics.iter()) {
+                        if generic_map.contains_key(&gen_name.name.name) {
+                            debug!("Generic map already countains a record: {}, wanted to add {}", gen_name.name.name, gen_ty);
+                            continue;
+                        }
+                        generic_map.insert(gen_name.name.name.clone(), gen_ty.clone());
+                    }
+
+                    ctx = lower_struct(ctx, adt_body, module_id, Some(&generic_map));
+
+                    todo!()
+                }
+                else {
                     Err(LoweringError::UnrecognizedType {
                         span: *span,
                         name: other.to_string(),
