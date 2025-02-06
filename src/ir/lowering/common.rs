@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{common::TypeName, functions::FunctionDef, types::TypeDescriptor},
@@ -73,6 +73,8 @@ pub struct FnBodyBuilder {
     pub ret_local: LocalIndex,
     pub generic_map: Option<HashMap<String, TypeName>>,
     pub ctx: BuildCtx,
+    // To check when a variable is used before its declared/init
+    pub local_exists: HashSet<LocalIndex>,
 }
 
 impl FnBodyBuilder {
