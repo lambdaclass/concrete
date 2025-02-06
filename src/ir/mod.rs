@@ -480,9 +480,19 @@ impl fmt::Display for TyKind {
                 write!(f, "*{word} {}", inner.kind)
             }
             TyKind::Param { .. } => todo!(),
-            TyKind::Struct { id, generics  } => {
+            TyKind::Struct { id, name, generics } => {
+                write!(f, "({id:?}) {name}")?;
+                if !generics.is_empty() {
+                    write!(f, "<")?;
 
-            },
+                    for g in generics {
+                        write!(f, "{}", g.kind)?;
+                    }
+                    write!(f, ">")?;
+                }
+
+                Ok(())
+            }
         }
     }
 }

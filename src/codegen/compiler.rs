@@ -1091,7 +1091,11 @@ fn compile_store_place<'c: 'b, 'b>(
                     .result(0)?
                     .into();
                 local_ty = match local_ty.kind {
-                    TyKind::Struct { id, generics: _ } => {
+                    TyKind::Struct {
+                        id,
+                        generics: _,
+                        name: _,
+                    } => {
                         let strc = ctx.module_ctx.ctx.program.structs.get(&id).unwrap();
                         strc.variants[*field_idx].ty.clone()
                     }
@@ -1208,7 +1212,11 @@ fn compile_load_place<'c: 'b, 'b>(
             }
             PlaceElem::Field(field_idx) => {
                 local_ty = match local_ty.kind {
-                    TyKind::Struct { id, generics: _ } => {
+                    TyKind::Struct {
+                        id,
+                        generics: _,
+                        name: _,
+                    } => {
                         let struct_body = ctx.module_ctx.ctx.program.structs.get(&id).unwrap();
                         let ty = struct_body.variants[*field_idx].ty.clone();
                         ptr = block
@@ -1505,7 +1513,11 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
             llvm::r#type::pointer(ctx.ctx.mlir_context, 0)
         }
         crate::ir::TyKind::Param { .. } => todo!(),
-        crate::ir::TyKind::Struct { id, generics: _ } => {
+        crate::ir::TyKind::Struct {
+            id,
+            generics: _,
+            name: _,
+        } => {
             let body = ctx.ctx.program.structs.get(id).unwrap();
 
             let mut fields = Vec::new();

@@ -113,7 +113,12 @@ impl FnBodyBuilder {
 }
 
 impl BuildCtx {
-    pub fn get_mangled_name(&self, module_id: DefId, fn_name: &str, fn_id: DefId) -> Option<String> {
+    pub fn get_mangled_name(
+        &self,
+        module_id: DefId,
+        fn_name: &str,
+        fn_id: DefId,
+    ) -> Option<String> {
         let mut name_path: Vec<&str> = Vec::new();
 
         let cur_module = &self.body.modules.get(&module_id)?;
