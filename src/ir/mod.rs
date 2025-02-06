@@ -365,6 +365,8 @@ pub enum TyKind {
     Struct {
         id: DefId,
         generics: Vec<Ty>,
+        // Mostly for fmt stuff.
+        name: String,
     },
 }
 
@@ -478,7 +480,9 @@ impl fmt::Display for TyKind {
                 write!(f, "*{word} {}", inner.kind)
             }
             TyKind::Param { .. } => todo!(),
-            TyKind::Struct { .. } => todo!(),
+            TyKind::Struct { id, generics  } => {
+
+            },
         }
     }
 }

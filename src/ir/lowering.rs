@@ -1327,19 +1327,70 @@ fn lower_expression(
             (rvalue, ty, *asref_span)
         }
         Expression::StructInit(info) => {
-            let id = *builder
+            let mut id = *builder
                 .get_module_body()
                 .symbols
                 .structs
                 .get(&info.name.name.name)
                 .or_else(|| builder.get_module_body().imports.get(&info.name.name.name))
                 .expect("struct not found");
+            let module_id = builder.local_module;
+
+            let mut generics = Vec::new();
+
+            if !info.name.generics.is_empty() {
+                generics = info
+                    .name
+                    .generics
+                    .iter()
+                    .map(|x| {
+                        lower_type(
+                            &mut builder.ctx,
+                            &TypeDescriptor::Type {
+                                name: x.clone(),
+                                span: x.span,
+                            },
+                            module_id,
+                            builder.generic_map.as_ref(),
+                        )
+                    })
+                    .collect::<Result<_, _>>()?;
+
+                let generic_struct_id = GenericStruct { id, generics: generics.clone() };
+
+                if let Some(mono_id) = builder
+                .ctx
+                .generic_structs
+                .get(&generic_struct_id) {
+                    id = *mono_id;
+                } else {
+                    let next_id = builder.ctx.gen.next_defid();
+                    let body = builder.ctx.generic_struct_bodies.get(&id).expect("generic body not found").clone();
+                    let mut generic_map = builder.generic_map.clone().unwrap_or_default();
+
+                    for (gen_ty, gen_name) in info.name.generics.iter().zip(body.generics.iter()) {
+                        if generic_map.contains_key(&gen_name.name.name) {
+                            debug!(
+                                "Generic map already countains a record: {}, wanted to add {}",
+                                gen_name.name.name, gen_ty
+                            );
+                            continue;
+                        }
+                        generic_map.insert(gen_name.name.name.clone(), gen_ty.clone());
+                    }
+
+                    lower_struct(&mut builder.ctx, &body, next_id, module_id, Some(&generic_map))?;
+                    id = next_id;
+                    builder.ctx.generic_structs.insert(generic_struct_id, next_id);
+                }
+            }
             let struct_body = builder.ctx.body.structs.get(&id).unwrap().clone();
+
             let ty = Ty {
                 span: Some(info.span),
                 kind: TyKind::Struct {
                     id,
-                    generics: vec![],
+                    generics,
                 },
             };
             let struct_local = builder.add_local(Local::temp(ty.clone()));
@@ -1552,7 +1603,8 @@ fn lower_fn_call(
                 .ctx
                 .unresolved_function_signatures
                 .get(&fn_id)
-                .unwrap().clone();
+                .unwrap()
+                .clone();
 
             let args: Vec<Ty> = args
                 .iter()
@@ -1568,7 +1620,14 @@ fn lower_fn_call(
                 .collect::<Result<Vec<_>, _>>()?;
             let ret = ret
                 .as_ref()
-                .map(|arg| lower_type(&mut builder.ctx, arg, builder.local_module, Some(&generic_map)))
+                .map(|arg| {
+                    lower_type(
+                        &mut builder.ctx,
+                        arg,
+                        builder.local_module,
+                        Some(&generic_map),
+                    )
+                })
                 .unwrap_or(Ok(Ty {
                     span: None,
                     kind: TyKind::Unit,
@@ -2187,17 +2246,17 @@ pub fn lower_type(
                 debug!("Found def_id={def_id:?}");
 
                 let mut generic_tys = Vec::new();
-                    for generic in &name.generics {
-                        generic_tys.push(lower_type(
-                            ctx,
-                            &TypeDescriptor::Type {
-                                name: generic.clone(),
-                                span: generic.span,
-                            },
-                            module_id,
-                            generic_map,
-                        )?);
-                    }
+                for generic in &name.generics {
+                    generic_tys.push(lower_type(
+                        ctx,
+                        &TypeDescriptor::Type {
+                            name: generic.clone(),
+                            span: generic.span,
+                        },
+                        module_id,
+                        generic_map,
+                    )?);
+                }
 
                 let generic_struct = GenericStruct {
                     id: def_id,
@@ -2227,7 +2286,10 @@ pub fn lower_type(
                     assert_eq!(adt_body.generics.len(), name.generics.len());
                     for (gen_ty, gen_name) in name.generics.iter().zip(adt_body.generics.iter()) {
                         if generic_map.contains_key(&gen_name.name.name) {
-                            debug!("Generic map already countains a record: {}, wanted to add {}", gen_name.name.name, gen_ty);
+                            debug!(
+                                "Generic map already countains a record: {}, wanted to add {}",
+                                gen_name.name.name, gen_ty
+                            );
                             continue;
                         }
                         generic_map.insert(gen_name.name.name.clone(), gen_ty.clone());
@@ -2244,8 +2306,7 @@ pub fn lower_type(
                             generics: generic_tys,
                         },
                     ));
-                }
-                else {
+                } else {
                     Err(LoweringError::UnrecognizedType {
                         span: *span,
                         name: other.to_string(),
