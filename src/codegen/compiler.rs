@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
 use crate::ir::{
-    BinOp, ConstValue, DefId, FnBody, LocalKind, ModuleBody, Operand, Place, PlaceElem,
-    ProgramBody, Rvalue, Span, Ty, TyKind, ValueTree,
+    BinOp, ConstValue, FnBody, FnIndex, LocalKind, ModuleBody, ModuleIndex, Operand, Place,
+    PlaceElem, ProgramBody, Rvalue, Span, TyKind, TypeIndex, ValueTree,
 };
-use crate::session::Session;
+use ariadne::Source;
 use melior::ir::BlockLike;
 use melior::{
     dialect::{
@@ -34,8 +34,6 @@ pub(crate) struct CodegenCtx<'a> {
     pub mlir_context: &'a MeliorContext,
     /// The MLIR module.
     pub mlir_module: &'a MeliorModule<'a>,
-    /// The compile session info.
-    pub session: &'a Session,
     /// The program IR.
     pub program: &'a ProgramBody,
 }
@@ -45,28 +43,24 @@ pub(crate) struct CodegenCtx<'a> {
 struct ModuleCodegenCtx<'a> {
     pub ctx: CodegenCtx<'a>,
     /// The id of the module.
-    pub module_id: DefId,
+    pub module_id: ModuleIndex,
 }
 
 impl ModuleCodegenCtx<'_> {
     /// Gets the module IR body.
     pub fn get_module_body(&self) -> &ModuleBody {
-        self.ctx
-            .program
-            .modules
-            .get(&self.module_id)
-            .expect("module should exist")
+        &self.ctx.program.modules[self.module_id]
     }
 
     /// Gets a MLIR location from the given span, or unknown if the span is `None`.
     pub fn get_location(&self, span: Option<Span>) -> Location {
         if let Some(span) = span {
-            let (_, line, col) = self.ctx.session.sources[self.module_id.program_id]
-                .get_offset_line(span.from)
-                .unwrap();
+            let source = std::fs::read_to_string(&self.get_module_body().file_path).unwrap();
+            let (_, line, col) = Source::from(source).get_offset_line(span.from).unwrap();
             Location::new(
                 self.ctx.mlir_context,
-                self.ctx.program.file_paths[&self.module_id.program_id]
+                self.get_module_body()
+                    .file_path
                     .file_name()
                     .unwrap()
                     .to_str()
@@ -78,10 +72,29 @@ impl ModuleCodegenCtx<'_> {
             Location::unknown(self.ctx.mlir_context)
         }
     }
+
+    pub fn get_type(&self, ty: TypeIndex) -> TyKind {
+        self.ctx.program.types[ty].clone().unwrap()
+    }
+
+    pub fn get_fn_signature(&self, id: FnIndex) -> (Vec<TyKind>, TyKind) {
+        let body = self.ctx.program.functions[id].as_ref().unwrap();
+        let mut args = Vec::new();
+
+        for arg_idx in &body.args {
+            let ty = self.get_type(*arg_idx);
+            args.push(ty);
+        }
+
+        let ret_ty = self.get_type(body.ret_ty);
+
+        (args, ret_ty)
+    }
 }
 
 /// Compiles the program within the context.
 pub(crate) fn compile_program(ctx: CodegenCtx) -> Result<(), CodegenError> {
+    info!("compiling program");
     for module_id in &ctx.program.top_level_modules {
         let ctx = ModuleCodegenCtx {
             ctx,
@@ -95,17 +108,17 @@ pub(crate) fn compile_program(ctx: CodegenCtx) -> Result<(), CodegenError> {
 /// Compiles the given module within the context.
 fn compile_module(ctx: ModuleCodegenCtx) -> Result<(), CodegenError> {
     let body = ctx.get_module_body();
-    info!("compiling module {:?}", body.id);
+    info!("compiling module {:?}", body.name);
 
     for fn_id in body.functions.iter() {
         let ctx = FunctionCodegenCtx {
-            module_ctx: ctx,
-            function_id: *fn_id,
+            module: ctx,
+            fn_idx: *fn_id,
         };
         compile_function(ctx)?;
     }
 
-    for mod_id in body.modules.iter() {
+    for mod_id in body.modules.values() {
         let mut sub_ctx = ctx;
         sub_ctx.module_id = *mod_id;
         compile_module(sub_ctx)?;
@@ -117,52 +130,37 @@ fn compile_module(ctx: ModuleCodegenCtx) -> Result<(), CodegenError> {
 /// Context used when compiling code within a function body.
 #[derive(Debug, Clone, Copy)]
 struct FunctionCodegenCtx<'a> {
-    pub module_ctx: ModuleCodegenCtx<'a>,
-    pub function_id: DefId,
+    pub module: ModuleCodegenCtx<'a>,
+    pub fn_idx: FnIndex,
 }
 
 impl FunctionCodegenCtx<'_> {
     /// Gets the function IR body.
     pub fn get_fn_body(&self) -> &FnBody {
-        self.module_ctx
-            .ctx
-            .program
-            .functions
-            .get(&self.function_id)
-            .expect("function body should exist")
-    }
-
-    pub fn has_fn_body(&self) -> bool {
-        self.module_ctx
-            .ctx
-            .program
-            .functions
-            .contains_key(&self.function_id)
+        self.module.ctx.program.functions[self.fn_idx]
+            .as_ref()
+            .unwrap()
     }
 
     /// Gets the function argument types and return type.
-    pub fn get_fn_signature(&self) -> &(Vec<Ty>, Ty) {
-        self.module_ctx
-            .ctx
-            .program
-            .function_signatures
-            .get(&self.function_id)
-            .expect("function body should exist")
+    pub fn get_fn_signature(&self) -> (Vec<TyKind>, TyKind) {
+        self.module.get_fn_signature(self.fn_idx)
     }
 
     pub fn context(&self) -> &MeliorContext {
-        self.module_ctx.ctx.mlir_context
+        self.module.ctx.mlir_context
     }
 }
 
 /// Compiles the given function IR.
 fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
-    if !ctx.has_fn_body() {
-        // todo: maybe remove polymorphic functions entirely from the list before so compile_function is never called.
-        // This is a polymorphic version of the function, so it has no fn body, skip it.
+    let body = ctx.get_fn_body();
+
+    // Only codegen once.
+    if !body.module_idx.eq(&ctx.module.module_id) {
         return Ok(());
     }
-    let body = ctx.get_fn_body();
+
     let body_signature = ctx.get_fn_signature();
 
     info!("compiling function {}", body.name);
@@ -176,8 +174,8 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
         .iter()
         .map(|x| {
             (
-                compile_type(ctx.module_ctx, x),
-                ctx.module_ctx.get_location(x.span),
+                compile_type(ctx.module, x),
+                ctx.module.get_location(None), // Todo: add arg span vec to ir
             )
         })
         .collect();
@@ -207,7 +205,8 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
 
         for (index, local) in body.locals.iter().enumerate() {
             // Get the MLIR local type.
-            let local_mlir_type = compile_type(ctx.module_ctx, &local.ty);
+            let local_ty = ctx.module.get_type(local.ty);
+            let local_mlir_type = compile_type(ctx.module, &local_ty);
 
             match local.kind {
                 // User-declared variable binding or compiler-introduced temporary.
@@ -254,7 +253,8 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                 }
                 // Return pointer.
                 LocalKind::ReturnPointer => {
-                    if let TyKind::Unit = local.ty.kind {
+                    let ty = ctx.module.get_type(local.ty);
+                    if let TyKind::Unit = ty {
                     } else {
                         return_local = Some(index);
                         let ptr: Value = entry_block
@@ -317,11 +317,12 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                     // Load the return value from the return local and return it.
                     if let Some(ret_local) = return_local {
                         let ptr = locals.get(&ret_local).unwrap();
+                        let ret_ty = ctx.module.get_type(body.locals[ret_local].ty);
                         let value = mlir_block
                             .append_operation(llvm::load(
                                 ctx.context(),
                                 *ptr,
-                                compile_type(ctx.module_ctx, &body.locals[ret_local].ty),
+                                compile_type(ctx.module, &ret_ty),
                                 Location::unknown(ctx.context()),
                                 LoadStoreOptions::default(),
                             ))
@@ -349,14 +350,8 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                     destination,
                     target,
                 } => {
-                    let target_fn_body = ctx.module_ctx.ctx.program.functions.get(func).unwrap();
-                    let target_fn_body_sig = ctx
-                        .module_ctx
-                        .ctx
-                        .program
-                        .function_signatures
-                        .get(func)
-                        .unwrap();
+                    let target_fn_body = ctx.module.ctx.program.functions[*func].as_ref().unwrap();
+                    let target_fn_body_sig = ctx.module.get_fn_signature(*func);
                     let args: Vec<Value> = args
                         .iter()
                         .map(|x| compile_rvalue(&ctx, mlir_block, x, &locals).map(|x| x.0))
@@ -365,9 +360,10 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                         ctx.context(),
                         &target_fn_body.get_mangled_name(),
                     );
-                    let ret_type = match &target_fn_body_sig.1.kind {
+                    let ret_type = target_fn_body_sig.1;
+                    let ret_type = match &ret_type {
                         TyKind::Unit => None,
-                        _ => Some(compile_type(ctx.module_ctx, &target_fn_body_sig.1)),
+                        _ => Some(compile_type(ctx.module, &ret_type)),
                     };
                     let result = mlir_block.append_operation(func::call(
                         ctx.context(),
@@ -443,9 +439,9 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
 
     let param_types: Vec<_> = params_ty.iter().map(|x| x.0).collect();
     // If the return type is unit, pass a empty slice to mlir.
-    let return_type = match &body_signature.1.kind {
+    let return_type = match &body_signature.1 {
         TyKind::Unit => None,
-        _ => Some(compile_type(ctx.module_ctx, &body_signature.1)),
+        _ => Some(compile_type(ctx.module, &body_signature.1)),
     };
 
     // Create the function mlir attribute.
@@ -470,11 +466,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
         Location::unknown(ctx.context()),
     );
 
-    ctx.module_ctx
-        .ctx
-        .mlir_module
-        .body()
-        .append_operation(func_op);
+    ctx.module.ctx.mlir_module.body().append_operation(func_op);
 
     Ok(())
 }
@@ -485,7 +477,7 @@ fn compile_rvalue<'c: 'b, 'b>(
     block: &'b Block<'c>,
     info: &Rvalue,
     locals: &'b HashMap<usize, Value<'c, '_>>,
-) -> Result<(Value<'c, 'b>, Ty), CodegenError> {
+) -> Result<(Value<'c, 'b>, TypeIndex), CodegenError> {
     Ok(match info {
         Rvalue::Use(info) => compile_load_operand(ctx, block, info, locals)?,
         Rvalue::LogicOp(_, _) => todo!(),
@@ -493,23 +485,21 @@ fn compile_rvalue<'c: 'b, 'b>(
         Rvalue::UnaryOp(_, _) => todo!(),
         Rvalue::Ref(_mutability, place) => {
             let mut value = locals[&place.local];
-            let mut local_ty = ctx.get_fn_body().locals[place.local].ty.clone();
+            let mut local_type_idx = ctx.get_fn_body().locals[place.local].ty;
+            let mut local_ty = ctx.module.get_type(local_type_idx);
 
             // Handle the projection.
             for projection in &place.projection {
                 match projection {
                     PlaceElem::Deref => {
-                        local_ty = match local_ty.kind {
-                            TyKind::Ref(inner, _) => *(inner.clone()),
-                            TyKind::Ptr(inner, _) => *(inner.clone()),
-                            _ => unreachable!(),
-                        };
+                        local_type_idx = local_ty.get_inner_type().expect("should have inner type");
+                        local_ty = ctx.module.get_type(local_type_idx);
 
                         value = block
                             .append_operation(llvm::load(
                                 ctx.context(),
                                 value,
-                                compile_type(ctx.module_ctx, &local_ty),
+                                compile_type(ctx.module, &local_ty),
                                 Location::unknown(ctx.context()),
                                 LoadStoreOptions::default(),
                             ))
@@ -522,18 +512,20 @@ fn compile_rvalue<'c: 'b, 'b>(
                 }
             }
 
-            (value, local_ty)
+            (value, local_type_idx)
         }
-        Rvalue::Cast(op, target_ty, _span) => {
+        Rvalue::Cast(op, target_type_idx, _span) => {
             let location = Location::unknown(ctx.context());
-            let target_ty = target_ty.clone();
-            let target_mlir_ty = compile_type(ctx.module_ctx, &target_ty);
-            let (value, current_ty) = compile_load_operand(ctx, block, op, locals)?;
-            let is_signed = current_ty.kind.is_signed();
+            let target_type_idx = *target_type_idx;
+            let target_ty = ctx.module.get_type(target_type_idx);
+            let target_mlir_ty = compile_type(ctx.module, &target_ty);
+            let (value, current_type_idx) = compile_load_operand(ctx, block, op, locals)?;
+            let current_ty = ctx.module.get_type(current_type_idx);
+            let is_signed = current_ty.is_signed();
 
-            if target_ty.kind.is_ptr_like() {
+            if target_ty.is_ptr_like() {
                 // int to ptr
-                if current_ty.kind.is_int() {
+                if current_ty.is_int() {
                     let value = block
                         .append_operation(
                             ods::llvm::inttoptr(ctx.context(), target_mlir_ty, value, location)
@@ -541,10 +533,10 @@ fn compile_rvalue<'c: 'b, 'b>(
                         )
                         .result(0)?
                         .into();
-                    (value, target_ty.clone())
-                } else if current_ty.kind.is_ptr_like() {
-                    (value, target_ty.clone())
-                } else if current_ty.kind.is_array() {
+                    (value, target_type_idx)
+                } else if current_ty.is_ptr_like() {
+                    (value, target_type_idx)
+                } else if current_ty.is_array() {
                     // Cast from fixed size array to pointer.
                     // We need to create a alloca and store the array there, because we have it by-value.
                     let k1 = block
@@ -562,7 +554,7 @@ fn compile_rvalue<'c: 'b, 'b>(
                                 ctx.context(),
                                 pointer(ctx.context(), 0),
                                 k1,
-                                TypeAttribute::new(compile_type(ctx.module_ctx, &current_ty)),
+                                TypeAttribute::new(compile_type(ctx.module, &current_ty)),
                                 location,
                             )
                             .into(),
@@ -575,18 +567,20 @@ fn compile_rvalue<'c: 'b, 'b>(
 
                     // Return the alloca ptr, making this "the cast".
 
-                    (ptr, target_ty.clone())
+                    (ptr, target_type_idx)
                 } else {
-                    unreachable!("cast from {:?} to ptr", current_ty.kind)
+                    unreachable!(
+                        "cast from {:?} to ptr",
+                        current_ty.display(ctx.module.ctx.program)
+                    )
                 }
-            } else if target_ty.kind.is_int() {
-                if current_ty.kind.is_int() {
+            } else if target_ty.is_int() {
+                if current_ty.is_int() {
                     // int to int casts
                     match current_ty
-                        .kind
                         .get_bit_width()
                         .unwrap()
-                        .cmp(&target_ty.kind.get_bit_width().unwrap())
+                        .cmp(&target_ty.get_bit_width().unwrap())
                     {
                         std::cmp::Ordering::Less => {
                             if is_signed {
@@ -594,40 +588,40 @@ fn compile_rvalue<'c: 'b, 'b>(
                                     .append_operation(arith::extsi(value, target_mlir_ty, location))
                                     .result(0)?
                                     .into();
-                                (value, target_ty.clone())
+                                (value, target_type_idx)
                             } else {
                                 let value = block
                                     .append_operation(arith::extui(value, target_mlir_ty, location))
                                     .result(0)?
                                     .into();
-                                (value, target_ty.clone())
+                                (value, target_type_idx)
                             }
                         }
-                        std::cmp::Ordering::Equal => (value, target_ty.clone()),
+                        std::cmp::Ordering::Equal => (value, target_type_idx),
                         std::cmp::Ordering::Greater => {
                             let value = block
                                 .append_operation(arith::trunci(value, target_mlir_ty, location))
                                 .result(0)?
                                 .into();
-                            (value, target_ty.clone())
+                            (value, target_type_idx)
                         }
                     }
-                } else if current_ty.kind.is_float() {
+                } else if current_ty.is_float() {
                     // float to int
                     if is_signed {
                         let value = block
                             .append_operation(arith::fptosi(value, target_mlir_ty, location))
                             .result(0)?
                             .into();
-                        (value, target_ty.clone())
+                        (value, target_type_idx)
                     } else {
                         let value = block
                             .append_operation(arith::fptoui(value, target_mlir_ty, location))
                             .result(0)?
                             .into();
-                        (value, target_ty.clone())
+                        (value, target_type_idx)
                     }
-                } else if current_ty.kind.is_ptr_like() {
+                } else if current_ty.is_ptr_like() {
                     // ptr to int
                     let value = block
                         .append_operation(
@@ -636,12 +630,20 @@ fn compile_rvalue<'c: 'b, 'b>(
                         )
                         .result(0)?
                         .into();
-                    (value, target_ty.clone())
+                    (value, target_type_idx)
                 } else {
-                    todo!("cast from {:?} to {:?}", current_ty, target_ty)
+                    todo!(
+                        "cast from {:?} to {:?}",
+                        current_ty.display(ctx.module.ctx.program),
+                        target_ty.display(ctx.module.ctx.program)
+                    )
                 }
             } else {
-                todo!("cast from {:?} to {:?}", current_ty, target_ty)
+                todo!(
+                    "cast from {:?} to {:?}",
+                    current_ty.display(ctx.module.ctx.program),
+                    target_ty.display(ctx.module.ctx.program)
+                )
             }
         }
     })
@@ -655,23 +657,25 @@ fn compile_binop<'c: 'b, 'b>(
     lhs: &Operand,
     rhs: &Operand,
     locals: &HashMap<usize, Value<'c, '_>>,
-) -> Result<(Value<'c, 'b>, Ty), CodegenError> {
-    let (lhs, lhs_ty) = compile_load_operand(ctx, block, lhs, locals)?;
-    let (rhs, _rhs_ty) = compile_load_operand(ctx, block, rhs, locals)?;
+) -> Result<(Value<'c, 'b>, TypeIndex), CodegenError> {
+    let (lhs, lhs_type_idx) = compile_load_operand(ctx, block, lhs, locals)?;
+    let (rhs, _rhs_type_idx) = compile_load_operand(ctx, block, rhs, locals)?;
     let location = Location::unknown(ctx.context());
+    let lhs_ty = ctx.module.get_type(lhs_type_idx);
 
-    let is_float = matches!(lhs_ty.kind, TyKind::Float(_));
-    let is_signed = matches!(lhs_ty.kind, TyKind::Int(_));
-    let is_ptr = if let TyKind::Ptr(inner, _) = &lhs_ty.kind {
-        Some((*inner).clone())
+    let is_float = matches!(lhs_ty, TyKind::Float(_));
+    let is_signed = matches!(lhs_ty, TyKind::Int(_));
+    let is_ptr = if let TyKind::Ptr(inner, _) = &lhs_ty {
+        Some(*inner)
     } else {
         None
     };
 
     Ok(match op {
         BinOp::Add => {
-            let value = if let Some(inner) = is_ptr {
-                let inner_ty = compile_type(ctx.module_ctx, &inner);
+            let value = if let Some(inner_type_idx) = is_ptr {
+                let inner = ctx.module.get_type(inner_type_idx);
+                let inner_ty = compile_type(ctx.module, &inner);
                 block
                     .append_operation(
                         ods::llvm::getelementptr(
@@ -698,7 +702,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, lhs_ty)
+            (value, lhs_type_idx)
         }
         BinOp::Sub => {
             if is_ptr.is_some() {
@@ -717,7 +721,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, lhs_ty)
+            (value, lhs_type_idx)
         }
         BinOp::Mul => {
             if is_ptr.is_some() {
@@ -736,7 +740,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, lhs_ty)
+            (value, lhs_type_idx)
         }
         BinOp::Div => {
             if is_ptr.is_some() {
@@ -760,7 +764,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, lhs_ty)
+            (value, lhs_type_idx)
         }
         BinOp::Mod => {
             let value = if is_float {
@@ -779,7 +783,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (value, lhs_ty)
+            (value, lhs_type_idx)
         }
         BinOp::BitXor => todo!(),
         BinOp::BitAnd => todo!(),
@@ -810,13 +814,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (
-                value,
-                Ty {
-                    span: None,
-                    kind: TyKind::Bool,
-                },
-            )
+            (value, ctx.module.ctx.program.get_bool_ty())
         }
         BinOp::Lt => {
             let value = if is_float {
@@ -853,13 +851,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (
-                value,
-                Ty {
-                    span: None,
-                    kind: TyKind::Bool,
-                },
-            )
+            (value, ctx.module.ctx.program.get_bool_ty())
         }
         BinOp::Le => {
             let value = if is_float {
@@ -896,13 +888,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (
-                value,
-                Ty {
-                    span: None,
-                    kind: TyKind::Bool,
-                },
-            )
+            (value, ctx.module.ctx.program.get_bool_ty())
         }
         BinOp::Ne => {
             let value = if is_float {
@@ -928,13 +914,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (
-                value,
-                Ty {
-                    span: None,
-                    kind: TyKind::Bool,
-                },
-            )
+            (value, ctx.module.ctx.program.get_bool_ty())
         }
         BinOp::Ge => {
             let value = if is_float {
@@ -971,13 +951,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (
-                value,
-                Ty {
-                    span: None,
-                    kind: TyKind::Bool,
-                },
-            )
+            (value, ctx.module.ctx.program.get_bool_ty())
         }
         BinOp::Gt => {
             let value = if is_float {
@@ -1014,13 +988,7 @@ fn compile_binop<'c: 'b, 'b>(
                     .result(0)?
                     .into()
             };
-            (
-                value,
-                Ty {
-                    span: None,
-                    kind: TyKind::Bool,
-                },
-            )
+            (value, ctx.module.ctx.program.get_bool_ty())
         }
     })
 }
@@ -1030,14 +998,11 @@ fn compile_load_operand<'c: 'b, 'b>(
     block: &'b Block<'c>,
     info: &Operand,
     locals: &HashMap<usize, Value<'c, '_>>,
-) -> Result<(Value<'c, 'b>, Ty), CodegenError> {
+) -> Result<(Value<'c, 'b>, TypeIndex), CodegenError> {
     Ok(match info {
         Operand::Place(info) => compile_load_place(ctx, block, info, locals)?,
         Operand::Const(data) => match &data.data {
-            crate::ir::ConstKind::Param(_) => todo!(),
-            crate::ir::ConstKind::Value(value) => {
-                (compile_value_tree(ctx, block, value)?, data.ty.clone())
-            }
+            crate::ir::ConstKind::Value(value) => (compile_value_tree(ctx, block, value)?, data.ty),
             crate::ir::ConstKind::Expr(_) => todo!(),
         },
     })
@@ -1053,7 +1018,8 @@ fn compile_store_place<'c: 'b, 'b>(
 ) -> Result<(), CodegenError> {
     let mut ptr = locals[&info.local];
     let local = &ctx.get_fn_body().locals[info.local];
-    let mut local_ty = local.ty.clone();
+    let mut local_type_idx = local.ty;
+    let mut local_ty = ctx.module.get_type(local_type_idx);
 
     for proj in &info.projection {
         match proj {
@@ -1062,18 +1028,15 @@ fn compile_store_place<'c: 'b, 'b>(
                     .append_operation(llvm::load(
                         ctx.context(),
                         ptr,
-                        compile_type(ctx.module_ctx, &local_ty),
+                        compile_type(ctx.module, &local_ty),
                         Location::unknown(ctx.context()),
                         LoadStoreOptions::default(),
                     ))
                     .result(0)?
                     .into();
 
-                local_ty = match local_ty.kind {
-                    TyKind::Ref(inner, _) => *inner,
-                    TyKind::Ptr(inner, _) => *inner,
-                    ty => unreachable!("tried to deref: {:?}", ty),
-                };
+                local_type_idx = local_ty.get_inner_type().expect("should have inner");
+                local_ty = ctx.module.get_type(local_type_idx);
             }
             PlaceElem::Field(field_idx) => {
                 ptr = block
@@ -1084,23 +1047,20 @@ fn compile_store_place<'c: 'b, 'b>(
                             ctx.context(),
                             &[0, (*field_idx).try_into().unwrap()],
                         ),
-                        compile_type(ctx.module_ctx, &local_ty),
+                        compile_type(ctx.module, &local_ty),
                         pointer(ctx.context(), 0),
                         Location::unknown(ctx.context()),
                     ))
                     .result(0)?
                     .into();
-                local_ty = match local_ty.kind {
-                    TyKind::Struct {
-                        id,
-                        generics: _,
-                        name: _,
-                    } => {
-                        let strc = ctx.module_ctx.ctx.program.structs.get(&id).unwrap();
-                        strc.variants[*field_idx].ty.clone()
+                local_type_idx = match local_ty {
+                    TyKind::Struct(id) => {
+                        let strc = ctx.module.ctx.program.structs[id].as_ref().unwrap();
+                        strc.variants[*field_idx].ty
                     }
                     _ => unreachable!(),
-                }
+                };
+                local_ty = ctx.module.get_type(local_type_idx);
             }
             PlaceElem::Index(local) => {
                 let place = Place {
@@ -1119,7 +1079,7 @@ fn compile_store_place<'c: 'b, 'b>(
                                 ptr,
                                 &[index],
                                 DenseI32ArrayAttribute::new(ctx.context(), &[0, i32::MIN]),
-                                TypeAttribute::new(compile_type(ctx.module_ctx, &local_ty)),
+                                TypeAttribute::new(compile_type(ctx.module, &local_ty)),
                                 Location::unknown(ctx.context()),
                             );
                             op.set_inbounds(Attribute::unit(ctx.context()));
@@ -1130,10 +1090,8 @@ fn compile_store_place<'c: 'b, 'b>(
                     .result(0)?
                     .into();
 
-                local_ty = match local_ty.kind {
-                    TyKind::Array(inner, _) => *inner,
-                    _ => unreachable!(),
-                };
+                local_type_idx = local_ty.get_inner_type().expect("should have inner");
+                local_ty = ctx.module.get_type(local_type_idx);
             }
             PlaceElem::ConstantIndex(index) => {
                 ptr = block
@@ -1148,7 +1106,7 @@ fn compile_store_place<'c: 'b, 'b>(
                                     ctx.context(),
                                     &[0, (*index).try_into().unwrap()],
                                 ),
-                                TypeAttribute::new(compile_type(ctx.module_ctx, &local_ty)),
+                                TypeAttribute::new(compile_type(ctx.module, &local_ty)),
                                 Location::unknown(ctx.context()),
                             );
                             op.set_inbounds(Attribute::unit(ctx.context()));
@@ -1159,10 +1117,8 @@ fn compile_store_place<'c: 'b, 'b>(
                     .result(0)?
                     .into();
 
-                local_ty = match local_ty.kind {
-                    TyKind::Array(inner, _) => *inner,
-                    _ => unreachable!(),
-                };
+                local_type_idx = local_ty.get_inner_type().expect("should have inner");
+                local_ty = ctx.module.get_type(local_type_idx);
             }
         }
     }
@@ -1184,11 +1140,12 @@ fn compile_load_place<'c: 'b, 'b>(
     block: &'b Block<'c>,
     info: &Place,
     locals: &HashMap<usize, Value<'c, '_>>,
-) -> Result<(Value<'c, 'b>, Ty), CodegenError> {
+) -> Result<(Value<'c, 'b>, TypeIndex), CodegenError> {
     let mut ptr = locals[&info.local];
     let body = ctx.get_fn_body();
 
-    let mut local_ty = body.locals[info.local].ty.clone();
+    let mut local_type_idx = body.locals[info.local].ty;
+    let mut local_ty = ctx.module.get_type(local_type_idx);
 
     for projection in &info.projection {
         match projection {
@@ -1197,28 +1154,23 @@ fn compile_load_place<'c: 'b, 'b>(
                     .append_operation(llvm::load(
                         ctx.context(),
                         ptr,
-                        compile_type(ctx.module_ctx, &local_ty),
+                        compile_type(ctx.module, &local_ty),
                         Location::unknown(ctx.context()),
                         LoadStoreOptions::default(),
                     ))
                     .result(0)?
                     .into();
 
-                local_ty = match local_ty.kind {
-                    TyKind::Ref(inner, _) => *(inner.clone()),
-                    TyKind::Ptr(inner, _) => *(inner.clone()),
-                    _ => unreachable!(),
-                };
+                local_type_idx = local_ty
+                    .get_inner_type()
+                    .expect("should always have inner type");
+                local_ty = ctx.module.get_type(local_type_idx);
             }
             PlaceElem::Field(field_idx) => {
-                local_ty = match local_ty.kind {
-                    TyKind::Struct {
-                        id,
-                        generics: _,
-                        name: _,
-                    } => {
-                        let struct_body = ctx.module_ctx.ctx.program.structs.get(&id).unwrap();
-                        let ty = struct_body.variants[*field_idx].ty.clone();
+                local_type_idx = match local_ty {
+                    TyKind::Struct(id) => {
+                        let struct_body = ctx.module.ctx.program.structs[id].as_ref().unwrap();
+                        let variant_type_idx = struct_body.variants[*field_idx].ty;
                         ptr = block
                             .append_operation(llvm::get_element_ptr(
                                 ctx.context(),
@@ -1227,16 +1179,17 @@ fn compile_load_place<'c: 'b, 'b>(
                                     ctx.context(),
                                     &[0, (*field_idx).try_into().unwrap()],
                                 ),
-                                compile_type(ctx.module_ctx, &local_ty),
+                                compile_type(ctx.module, &local_ty),
                                 pointer(ctx.context(), 0),
                                 Location::unknown(ctx.context()),
                             ))
                             .result(0)?
                             .into();
-                        ty.clone()
+                        variant_type_idx
                     }
                     _ => unreachable!(),
-                }
+                };
+                local_ty = ctx.module.get_type(local_type_idx);
             }
             PlaceElem::Index(local) => {
                 let place = Place {
@@ -1244,7 +1197,7 @@ fn compile_load_place<'c: 'b, 'b>(
                     projection: Default::default(),
                 };
 
-                let (index, _) = compile_load_place(ctx, block, &place, locals)?;
+                let (index, _index_type_idx) = compile_load_place(ctx, block, &place, locals)?;
 
                 ptr = block
                     .append_operation(
@@ -1255,7 +1208,7 @@ fn compile_load_place<'c: 'b, 'b>(
                                 ptr,
                                 &[index],
                                 DenseI32ArrayAttribute::new(ctx.context(), &[0, i32::MIN]),
-                                TypeAttribute::new(compile_type(ctx.module_ctx, &local_ty)),
+                                TypeAttribute::new(compile_type(ctx.module, &local_ty)),
                                 Location::unknown(ctx.context()),
                             );
                             op.set_inbounds(Attribute::unit(ctx.context()));
@@ -1266,10 +1219,8 @@ fn compile_load_place<'c: 'b, 'b>(
                     .result(0)?
                     .into();
 
-                local_ty = match local_ty.kind {
-                    TyKind::Array(inner, _) => *inner,
-                    _ => unreachable!(),
-                };
+                local_type_idx = local_ty.get_inner_type().expect("should have inner");
+                local_ty = ctx.module.get_type(local_type_idx);
             }
             PlaceElem::ConstantIndex(index) => {
                 ptr = block
@@ -1284,7 +1235,7 @@ fn compile_load_place<'c: 'b, 'b>(
                                     ctx.context(),
                                     &[0, (*index).try_into().unwrap()],
                                 ),
-                                TypeAttribute::new(compile_type(ctx.module_ctx, &local_ty)),
+                                TypeAttribute::new(compile_type(ctx.module, &local_ty)),
                                 Location::unknown(ctx.context()),
                             );
                             op.set_inbounds(Attribute::unit(ctx.context()));
@@ -1295,10 +1246,8 @@ fn compile_load_place<'c: 'b, 'b>(
                     .result(0)?
                     .into();
 
-                local_ty = match local_ty.kind {
-                    TyKind::Array(inner, _) => *inner,
-                    _ => unreachable!(),
-                };
+                local_type_idx = local_ty.get_inner_type().expect("should have inner");
+                local_ty = ctx.module.get_type(local_type_idx);
             }
         }
     }
@@ -1307,14 +1256,14 @@ fn compile_load_place<'c: 'b, 'b>(
         .append_operation(llvm::load(
             ctx.context(),
             ptr,
-            compile_type(ctx.module_ctx, &local_ty),
+            compile_type(ctx.module, &local_ty),
             Location::unknown(ctx.context()),
             LoadStoreOptions::default(),
         ))
         .result(0)?
         .into();
 
-    Ok((value, local_ty))
+    Ok((value, local_type_idx))
 }
 
 /// Used in switch
@@ -1476,8 +1425,8 @@ fn compile_value_tree<'c: 'b, 'b>(
     })
 }
 
-fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
-    match &ty.kind {
+fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &TyKind) -> Type<'c> {
+    match ty {
         crate::ir::TyKind::Unit => Type::none(ctx.ctx.mlir_context),
         crate::ir::TyKind::Bool => IntegerType::new(ctx.ctx.mlir_context, 1).into(),
         crate::ir::TyKind::Char => IntegerType::new(ctx.ctx.mlir_context, 8).into(),
@@ -1500,8 +1449,9 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
             crate::ir::FloatTy::F64 => Type::float64(ctx.ctx.mlir_context),
         },
         crate::ir::TyKind::String => todo!(),
-        crate::ir::TyKind::Array(inner_type, length) => {
-            let inner_type = compile_type(ctx, inner_type);
+        crate::ir::TyKind::Array(inner_type_idx, length) => {
+            let inner_type = ctx.get_type(*inner_type_idx);
+            let inner_type = compile_type(ctx, &inner_type);
             let length = match length.data {
                 crate::ir::ConstKind::Value(ValueTree::Leaf(ConstValue::U64(length))) => length,
                 _ => unimplemented!(),
@@ -1512,18 +1462,14 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &Ty) -> Type<'c> {
         crate::ir::TyKind::Ref(_inner_ty, _) | crate::ir::TyKind::Ptr(_inner_ty, _) => {
             llvm::r#type::pointer(ctx.ctx.mlir_context, 0)
         }
-        crate::ir::TyKind::Param { .. } => todo!(),
-        crate::ir::TyKind::Struct {
-            id,
-            generics: _,
-            name: _,
-        } => {
-            let body = ctx.ctx.program.structs.get(id).unwrap();
+        crate::ir::TyKind::Struct(id) => {
+            let body = ctx.ctx.program.structs[*id].as_ref().unwrap();
 
             let mut fields = Vec::new();
 
             for field in &body.variants {
-                let ty = compile_type(ctx, &field.ty);
+                let field_ty = ctx.get_type(field.ty);
+                let ty = compile_type(ctx, &field_ty);
                 fields.push(ty);
             }
 

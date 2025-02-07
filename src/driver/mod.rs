@@ -1,7 +1,7 @@
 use crate::ast::Program;
+use crate::compile_unit_info::{CompileUnitInfo, DebugInfo, OptLevel};
 use crate::ir::lowering::lower_programs;
 use crate::parser::ProgramSource;
-use crate::session::{DebugInfo, OptLevel, Session};
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
@@ -443,7 +443,7 @@ fn handle_build(
                             let name = format!("lib{name}");
                             output
                                 .with_file_name(name)
-                                .with_extension(Session::get_platform_library_ext())
+                                .with_extension(CompileUnitInfo::get_platform_library_ext())
                         } else {
                             output.clone()
                         },
@@ -539,7 +539,7 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     let db = crate::driver::db::DatabaseImpl::default();
     parse_file(&mut programs, args.input.clone(), &db)?;
 
-    let session = Session {
+    let session = CompileUnitInfo {
         file_paths: programs.iter().map(|x| x.0.clone()).collect(),
         debug_info: if let Some(debug_info) = args.debug_info {
             if debug_info {
@@ -592,7 +592,7 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     let program_ir = match lower_programs(&modules) {
         Ok(ir) => ir,
         Err(error) => {
-            let report = crate::check::lowering_error_to_report(error, &session);
+            let report = crate::check::lowering_error_to_report(error);
             report.eprint(ariadne::sources(path_cache))?;
             std::process::exit(1);
         }

@@ -343,6 +343,7 @@ Param: ast::functions::Param = {
     r#type: ast::types::TypeDescriptor::SelfType {
       is_ref: is_ref.is_some(),
       is_mut: is_mut.is_some(),
+      span: Span::new(lo, hi),
     },
   }
 }

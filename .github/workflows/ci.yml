@@ -17,7 +17,7 @@ jobs:
             TABLEGEN_190_PREFIX: /usr/lib/llvm-19/
         steps:
         - uses: actions/checkout@v3
-        - uses: dtolnay/rust-toolchain@1.83.0
+        - uses: dtolnay/rust-toolchain@1.84.1
           with:
             components: rustfmt, clippy
         - uses: Swatinem/rust-cache@v2
@@ -37,7 +37,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
         - uses: actions/checkout@v3
-        - uses: dtolnay/rust-toolchain@1.83.0
+        - uses: dtolnay/rust-toolchain@1.84.1
           with:
             components: rustfmt
         - run: cargo fmt --all -- --check
@@ -58,7 +58,7 @@ jobs:
             sudo rm -rf /usr/share/dotnet/
             sudo rm -rf /usr/local/lib/android
         - name: Setup rust env
-          uses: dtolnay/rust-toolchain@1.83.0
+          uses: dtolnay/rust-toolchain@1.84.1
         - name: Retreive cached dependecies
           uses: Swatinem/rust-cache@v2
         - name: add llvm deb repository
@@ -86,7 +86,7 @@ jobs:
       steps:
         - uses: actions/checkout@v4
         - name: Rustup toolchain install
-          uses: dtolnay/rust-toolchain@1.83.0
+          uses: dtolnay/rust-toolchain@1.84.1
         - uses: homebrew/actions/setup-homebrew@master
         - name: install llvm
           run: brew install llvm@19
@@ -109,7 +109,7 @@ jobs:
                     sudo rm -rf /usr/share/dotnet/
                     sudo rm -rf /usr/local/lib/android
             - name: Setup rust env
-              uses: dtolnay/rust-toolchain@1.83.0
+              uses: dtolnay/rust-toolchain@1.84.1
             - name: Retreive cached dependecies
               uses: Swatinem/rust-cache@v2
             - name: add llvm deb repository
@@ -146,12 +146,12 @@ jobs:
                 # deleting space
                 sudo rm -rf /usr/share/dotnet/
                 sudo rm -rf /usr/local/lib/android
-        - uses: dtolnay/rust-toolchain@1.83.0
+        - uses: dtolnay/rust-toolchain@1.84.1
           with:
             components: clippy
         - uses: Swatinem/rust-cache@v2
         - name: Setup rust env
-          uses: dtolnay/rust-toolchain@1.83.0
+          uses: dtolnay/rust-toolchain@1.84.1
         - name: Retreive cached dependecies
           uses: Swatinem/rust-cache@v2
         - name: add llvm deb repository

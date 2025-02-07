@@ -1,82 +1,103 @@
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    fmt,
+    collections::{HashMap, HashSet},
+    fmt::Write,
     path::PathBuf,
+    sync::Arc,
 };
-
-use crate::ast::{common::Ident, types::TypeDescriptor};
 
 pub mod lowering;
 
 pub type LocalIndex = usize;
 pub type BlockIndex = usize;
-pub type TypeIndex = usize;
 pub type FieldIndex = usize;
 
-pub use crate::ast::common::Span;
-use educe::Educe;
+pub type ModuleIndex = SmallSlabIndex<ModuleBody>;
+pub type StructIndex = SmallSlabIndex<Option<AdtBody>>;
+pub type FnIndex = SmallSlabIndex<Option<FnBody>>;
+pub type TypeIndex = SmallSlabIndex<Option<TyKind>>;
+pub type ConstIndex = SmallSlabIndex<Option<ConstBody>>;
 
-#[derive(Debug, Clone, Default)]
-pub struct SymbolTable {
-    pub symbols: HashMap<DefId, String>,
-    pub modules: HashMap<String, DefId>,
-    pub functions: HashMap<String, DefId>,
-    /// (type name, Name) -> id
-    pub methods: HashMap<(TypeDescriptor, String), DefId>,
-    pub constants: HashMap<String, DefId>,
-    pub structs: HashMap<String, DefId>,
-    pub types: HashMap<String, DefId>,
+pub type Types = SmallSlab<Option<TyKind>>;
+pub type Functions = SmallSlab<Option<FnBody>>;
+pub type Structs = SmallSlab<Option<AdtBody>>;
+pub type Constants = SmallSlab<Option<ConstBody>>;
+pub type Modules = SmallSlab<ModuleBody>;
+
+pub use crate::ast::common::Span;
+use typed_generational_arena::{SmallSlab, SmallSlabIndex};
+
+#[derive(Debug, Clone)]
+pub struct ProgramBody {
+    pub types: Types,
+    pub functions: Functions,
+    pub structs: Structs,
+    pub constants: Constants,
+    pub modules: Modules,
+    pub top_level_modules: Vec<ModuleIndex>,
+    pub builtin_types: HashMap<TyKind, TypeIndex>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct ProgramBody {
-    pub top_level_module_names: BTreeMap<String, DefId>,
-    /// The top level modules.
-    pub top_level_modules: Vec<DefId>,
-    /// All the modules in a flat map.
-    pub modules: BTreeMap<DefId, ModuleBody>,
-    /// This stores all the functions from all modules
-    pub functions: BTreeMap<DefId, FnBody>,
-    /// Impl block methods.
-    pub methods: BTreeMap<TyKind, BTreeMap<String, DefId>>,
-    /// This stores all the structs from all modules
-    pub structs: BTreeMap<DefId, AdtBody>,
-    /// The function signatures.
-    pub constants: BTreeMap<DefId, ConstBody>,
-    pub function_signatures: HashMap<DefId, (Vec<Ty>, Ty)>,
-    /// The file paths (program_id from the DefId) -> path.
-    pub file_paths: HashMap<usize, PathBuf>,
+impl ProgramBody {
+    pub fn get_bool_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&TyKind::Bool).unwrap()
+    }
+
+    pub fn get_char_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&TyKind::Char).unwrap()
+    }
+
+    pub fn get_i64_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&TyKind::Int(IntTy::I64)).unwrap()
+    }
+
+    pub fn get_u64_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&TyKind::Uint(UintTy::U64)).unwrap()
+    }
+
+    pub fn get_f64_ty(&self) -> TypeIndex {
+        *self
+            .builtin_types
+            .get(&TyKind::Float(FloatTy::F64))
+            .unwrap()
+    }
+
+    pub fn get_string_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&TyKind::String).unwrap()
+    }
+
+    pub fn get_unit_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&TyKind::Unit).unwrap()
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ModuleBody {
-    pub id: DefId,
     pub name: String,
-    pub parent_ids: Vec<DefId>,
-    pub symbols: SymbolTable,
-    /// Functions defined in this module.
-    pub functions: HashSet<DefId>,
-    /// Structs defined in this module.
-    pub structs: HashSet<DefId>,
-    /// Types defined in this module.
-    pub types: HashSet<DefId>,
-    /// Constants defined in this module.
-    pub constants: HashSet<DefId>,
-    /// Submodules defined in this module.
-    pub modules: HashSet<DefId>,
-    /// Imported items. symbol -> id
-    pub imports: HashMap<String, DefId>,
+    pub parents: Vec<ModuleIndex>,
+    /// Functions in this module.
+    pub functions: HashSet<FnIndex>,
+    /// Structs in this module.
+    pub structs: HashSet<StructIndex>,
+    /// Types in this module.
+    pub types: HashSet<TypeIndex>,
+    /// Constants in this module.
+    pub constants: HashSet<ConstIndex>,
+    /// Submodules in this module.
+    pub modules: HashMap<String, ModuleIndex>,
     pub span: Span,
+    pub file_path: PathBuf,
 }
 
 /// Function body
 #[derive(Debug, Clone)]
 pub struct FnBody {
-    pub id: DefId,
     pub name: String,
+    pub args: Vec<TypeIndex>,
+    pub ret_ty: TypeIndex,
     pub is_extern: bool,
     pub is_intrinsic: Option<ConcreteIntrinsic>,
     pub basic_blocks: Vec<BasicBlock>,
+    pub module_idx: ModuleIndex,
     pub locals: Vec<Local>,
 }
 
@@ -130,7 +151,7 @@ pub enum TerminatorKind {
     /// Function call
     Call {
         /// The function to call.
-        func: DefId,
+        func: FnIndex,
         /// The arguments.
         args: Vec<Rvalue>,
         /// The place in memory to store the return value of the function call.
@@ -175,7 +196,7 @@ pub enum Rvalue {
     /// A reference to a place.
     Ref(Mutability, Place),
     /// A cast.
-    Cast(Operand, Ty, Span),
+    Cast(Operand, TypeIndex, Span),
 }
 
 impl Rvalue {
@@ -233,7 +254,7 @@ pub struct Local {
     /// A name exists for user-defined variables.
     pub debug_name: Option<String>,
     /// The type of the local.
-    pub ty: Ty,
+    pub ty: TypeIndex,
     /// The type of local.
     pub kind: LocalKind,
     /// Whether this local is declared mutable.
@@ -244,7 +265,7 @@ impl Local {
     pub fn new(
         span: Option<Span>,
         kind: LocalKind,
-        ty: Ty,
+        ty: TypeIndex,
         debug_name: Option<String>,
         mutable: bool,
     ) -> Self {
@@ -257,7 +278,7 @@ impl Local {
         }
     }
 
-    pub const fn temp(ty: Ty) -> Self {
+    pub const fn temp(ty: TypeIndex) -> Self {
         Self {
             span: None,
             ty,
@@ -267,12 +288,12 @@ impl Local {
         }
     }
 
-    pub fn is_mutable(&self) -> bool {
+    pub fn is_mutable(&self, types: &Types) -> bool {
         if self.mutable {
             return true;
         }
 
-        match self.ty.kind {
+        match types[self.ty].as_ref().unwrap() {
             TyKind::Ptr(_, is_mut) => matches!(is_mut, Mutability::Mut),
             TyKind::Ref(_, is_mut) => matches!(is_mut, Mutability::Mut),
             _ => false,
@@ -294,57 +315,30 @@ pub enum LocalKind {
 /// Aggregate data type: struct, enum, tuple..
 #[derive(Debug, Clone)]
 pub struct AdtBody {
-    pub def_id: DefId,
     pub is_pub: bool,
     pub name: String,
     pub variants: Vec<VariantDef>,
-    pub name_to_idx: HashMap<String, usize>,
+    pub name_to_variant_idx: HashMap<String, usize>,
     pub span: Span,
 }
 
 /// Definition of a variant, a struct field or enum variant.
 #[derive(Debug, Clone)]
 pub struct VariantDef {
-    pub def_id: DefId,
     // The relative position in the aggregate structure.
     pub name: String,
     pub discriminant: usize,
-    pub ty: Ty,
+    pub ty: TypeIndex,
 }
 
 #[derive(Debug, Clone)]
 pub struct ConstBody {
-    pub id: DefId,
     pub name: String,
     pub value: ConstData,
+    pub span: Span,
 }
 
-// A definition id.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct DefId {
-    // The program id, like a crate in rust.
-    pub program_id: usize,
-    pub id: usize,
-}
-
-/// A type
-#[derive(Debug, Clone, Educe, PartialOrd, Ord, Eq)]
-#[educe(PartialEq, Hash)]
-pub struct Ty {
-    #[educe(PartialEq(ignore), Hash(ignore))]
-    pub span: Option<Span>,
-    pub kind: TyKind,
-}
-
-impl Ty {
-    pub fn new(span: &Span, kind: TyKind) -> Self {
-        Self {
-            span: Some(*span),
-            kind,
-        }
-    }
-}
-
+/// A type kind, cheaply clonable.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Hash)]
 pub enum TyKind {
     Unit, // ()
@@ -354,25 +348,78 @@ pub enum TyKind {
     Uint(UintTy),
     Float(FloatTy),
     String,
-    Array(Box<Ty>, Box<ConstData>),
-    Ref(Box<Ty>, Mutability),
-    Ptr(Box<Ty>, Mutability),
-    // Type param <T>
-    Param {
-        index: usize,
-        name: String, // todo: change me?
-    },
-    Struct {
-        id: DefId,
-        generics: Vec<Ty>,
-        // Mostly for fmt stuff.
-        name: String,
-    },
+    Array(TypeIndex, Arc<ConstData>),
+    Ref(TypeIndex, Mutability),
+    Ptr(TypeIndex, Mutability),
+    Struct(StructIndex),
 }
 
 impl TyKind {
+    // checks if a type equals another
+    pub fn is_equal(&self, other: &TyKind, ir: &ProgramBody) -> bool {
+        match self {
+            TyKind::Unit
+            | TyKind::Bool
+            | TyKind::Char
+            | TyKind::Int(_)
+            | TyKind::Uint(_)
+            | TyKind::Float(_)
+            | TyKind::String => self == other,
+            TyKind::Array(index, const_data) => {
+                if let TyKind::Array(other_index, other_const_data) = other {
+                    let self_ty = ir.types[*index].as_ref().unwrap();
+                    let other_ty = ir.types[*other_index].as_ref().unwrap();
+                    const_data.data == other_const_data.data && self_ty.is_equal(other_ty, ir)
+                } else {
+                    false
+                }
+            }
+            TyKind::Ref(index, mutability) => {
+                if let TyKind::Ref(other_index, other_mutability) = other {
+                    let self_ty = ir.types[*index].as_ref().unwrap();
+                    let other_ty = ir.types[*other_index].as_ref().unwrap();
+                    mutability == other_mutability && self_ty.is_equal(other_ty, ir)
+                } else {
+                    false
+                }
+            }
+            TyKind::Ptr(index, mutability) => {
+                if let TyKind::Ptr(other_index, other_mutability) = other {
+                    let self_ty = ir.types[*index].as_ref().unwrap();
+                    let other_ty = ir.types[*other_index].as_ref().unwrap();
+                    mutability == other_mutability && self_ty.is_equal(other_ty, ir)
+                } else {
+                    false
+                }
+            }
+            TyKind::Struct(index) => {
+                if let TyKind::Struct(other_index) = other {
+                    index == other_index
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
     pub fn is_ptr_like(&self) -> bool {
         matches!(self, TyKind::Ptr(_, _) | TyKind::Ref(_, _))
+    }
+
+    pub fn get_inner_type(&self) -> Option<TypeIndex> {
+        match self {
+            TyKind::Unit => None,
+            TyKind::Bool => None,
+            TyKind::Char => None,
+            TyKind::Int(_) => None,
+            TyKind::Uint(_) => None,
+            TyKind::Float(_) => None,
+            TyKind::String => None,
+            TyKind::Array(index, _) => Some(*index),
+            TyKind::Ref(index, _) => Some(*index),
+            TyKind::Ptr(index, _) => Some(*index),
+            TyKind::Struct { .. } => None,
+        }
     }
 
     pub fn is_array(&self) -> bool {
@@ -421,14 +468,14 @@ impl TyKind {
             TyKind::Array(_, _) => todo!(),
             TyKind::Ref(_, _) => todo!(),
             TyKind::Ptr(_, _) => todo!(),
-            TyKind::Param { .. } => todo!(),
             TyKind::Struct { .. } => todo!(),
         }
     }
 }
 
-impl fmt::Display for TyKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl TyKind {
+    pub fn display(&self, ir: &ProgramBody) -> Result<String, std::fmt::Error> {
+        let mut f = String::new();
         match self {
             TyKind::Unit => write!(f, "()"),
             TyKind::Bool => write!(f, "bool"),
@@ -459,7 +506,12 @@ impl fmt::Display for TyKind {
                     } else {
                         unreachable!("const data for array sizes should always be u64")
                     };
-                write!(f, "[{}; {:?}]", inner.kind, value)
+                write!(
+                    f,
+                    "[{}; {:?}]",
+                    ir.types[*inner].as_ref().unwrap().display(ir)?,
+                    value
+                )
             }
             TyKind::Ref(inner, is_mut) => {
                 let word = if let Mutability::Mut = is_mut {
@@ -468,7 +520,11 @@ impl fmt::Display for TyKind {
                     "const"
                 };
 
-                write!(f, "&{word} {}", inner.kind)
+                write!(
+                    f,
+                    "&{word} {}",
+                    ir.types[*inner].as_ref().unwrap().display(ir)?
+                )
             }
             TyKind::Ptr(inner, is_mut) => {
                 let word = if let Mutability::Mut = is_mut {
@@ -477,27 +533,27 @@ impl fmt::Display for TyKind {
                     "const"
                 };
 
-                write!(f, "*{word} {}", inner.kind)
+                write!(
+                    f,
+                    "*{word} {}",
+                    ir.types[*inner].as_ref().unwrap().display(ir)?
+                )
             }
-            TyKind::Param { .. } => todo!(),
-            TyKind::Struct {
-                id: _,
-                name,
-                generics,
-            } => {
-                write!(f, "{name}")?;
-                if !generics.is_empty() {
-                    write!(f, "<")?;
+            TyKind::Struct(index) => {
+                let body = ir.structs[*index].as_ref().unwrap();
+                writeln!(f, "{} {{", body.name)?;
 
-                    for g in generics {
-                        write!(f, "{}", g.kind)?;
-                    }
-                    write!(f, ">")?;
+                for var in &body.variants {
+                    let ty = ir.types[var.ty].as_ref().unwrap().display(ir)?;
+                    writeln!(f, "\t{}: {},", var.name, ty)?;
                 }
+                write!(f, "}}")?;
 
                 Ok(())
             }
-        }
+        }?;
+
+        Ok(f)
     }
 }
 
@@ -525,7 +581,6 @@ impl TyKind {
             TyKind::String => todo!(),
             TyKind::Array(_, _) => todo!(),
             TyKind::Ref(_, _) => todo!(),
-            TyKind::Param { .. } => todo!(),
             TyKind::Struct { .. } => todo!(),
             TyKind::Ptr(_, _) => todo!(),
         }
@@ -564,26 +619,17 @@ pub enum FloatTy {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct ConstData {
-    pub ty: Ty,
+    pub ty: TypeIndex,
+    pub span: Span,
     pub data: ConstKind,
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum ConstKind {
-    /// A generic parameter constant.
-    Param(ParamConst),
     /// The value of the constant.
     Value(ValueTree),
     /// A constant expression: todo.
     Expr(Box<ConstExpr>),
-}
-
-/// A generic constant
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ParamConst {
-    pub index: usize,
-    // todo: change me
-    pub ident: Ident,
 }
 
 /// Constant data, in case the data is complex such as an array it will be a branch with leaf values.

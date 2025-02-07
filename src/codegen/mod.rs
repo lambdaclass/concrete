@@ -9,8 +9,8 @@ use std::{
     time::Instant,
 };
 
+use crate::compile_unit_info::{CompileUnitInfo, OptLevel};
 use crate::ir::ProgramBody;
-use crate::session::{OptLevel, Session};
 use context::Context;
 use errors::CodegenError;
 use llvm_sys::{
@@ -43,7 +43,7 @@ mod module;
 mod pass_manager;
 
 /// Compiles the given program and returns the object file path.
-pub fn compile(session: &Session, program: &ProgramBody) -> Result<PathBuf, CodegenError> {
+pub fn compile(session: &CompileUnitInfo, program: &ProgramBody) -> Result<PathBuf, CodegenError> {
     static INITIALIZED: OnceLock<()> = OnceLock::new();
     INITIALIZED.get_or_init(|| unsafe {
         LLVM_InitializeAllTargets();
@@ -68,7 +68,7 @@ pub fn compile(session: &Session, program: &ProgramBody) -> Result<PathBuf, Code
     Ok(object_path)
 }
 
-pub fn get_target_triple(_session: &Session) -> String {
+pub fn get_target_triple(_session: &CompileUnitInfo) -> String {
     // TODO: use session to get the specified target triple
     let target_triple = unsafe {
         let value = LLVMGetDefaultTargetTriple();
@@ -77,7 +77,7 @@ pub fn get_target_triple(_session: &Session) -> String {
     target_triple
 }
 
-pub fn get_data_layout_rep(session: &Session) -> Result<String, CodegenError> {
+pub fn get_data_layout_rep(session: &CompileUnitInfo) -> Result<String, CodegenError> {
     unsafe {
         let mut null = null_mut();
         let error_buffer = addr_of_mut!(null);
@@ -135,7 +135,7 @@ pub fn get_data_layout_rep(session: &Session) -> Result<String, CodegenError> {
 ///
 /// Returns the path to the object.
 pub fn compile_to_object(
-    session: &Session,
+    session: &CompileUnitInfo,
     module: &MLIRModule<'_>,
 ) -> Result<PathBuf, CodegenError> {
     tracing::debug!("Compiling to object file");

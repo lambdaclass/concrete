@@ -41,7 +41,34 @@ pub enum TypeDescriptor {
     SelfType {
         is_ref: bool,
         is_mut: bool,
+        span: Span,
     },
+}
+
+impl TypeDescriptor {
+    pub fn get_name(&self) -> Option<String> {
+        match self {
+            TypeDescriptor::Type { name, .. } => Some(name.name.name.clone()),
+            TypeDescriptor::Ref { of, .. } => of.get_name(),
+            TypeDescriptor::MutRef { of, .. } => of.get_name(),
+            TypeDescriptor::ConstPtr { of, .. } => of.get_name(),
+            TypeDescriptor::MutPtr { of, .. } => of.get_name(),
+            TypeDescriptor::Array { .. } => None,
+            TypeDescriptor::SelfType { .. } => None,
+        }
+    }
+
+    pub fn get_span(&self) -> Span {
+        match self {
+            TypeDescriptor::Type { span, .. } => *span,
+            TypeDescriptor::Ref { span, .. } => *span,
+            TypeDescriptor::MutRef { span, .. } => *span,
+            TypeDescriptor::ConstPtr { span, .. } => *span,
+            TypeDescriptor::MutPtr { span, .. } => *span,
+            TypeDescriptor::Array { span, .. } => *span,
+            TypeDescriptor::SelfType { span, .. } => *span,
+        }
+    }
 }
 
 impl fmt::Display for TypeDescriptor {
@@ -55,7 +82,7 @@ impl fmt::Display for TypeDescriptor {
             TypeDescriptor::ConstPtr { of, .. } => write!(f, "*const {of}"),
             TypeDescriptor::MutPtr { of, .. } => write!(f, "*mut {of}"),
             TypeDescriptor::Array { of, .. } => write!(f, "&{of}"),
-            TypeDescriptor::SelfType { is_ref, is_mut } => match (*is_ref, *is_mut) {
+            TypeDescriptor::SelfType { is_ref, is_mut, .. } => match (*is_ref, *is_mut) {
                 (true, true) => write!(f, "&mut self"),
                 (true, false) => write!(f, "&self"),
                 (false, true) => write!(f, "mut self"),

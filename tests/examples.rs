@@ -1,5 +1,5 @@
 use crate::common::{compile_and_run, compile_and_run_output};
-use concrete::session::OptLevel;
+use concrete::compile_unit_info::OptLevel;
 use test_case::test_case;
 
 mod common;

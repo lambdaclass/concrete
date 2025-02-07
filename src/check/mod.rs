@@ -1,25 +1,16 @@
-use std::ops::Range;
-
-use crate::ir::lowering::errors::LoweringError;
-use crate::session::Session;
+use crate::ir::lowering::LoweringError;
 use ariadne::{ColorGenerator, Label, Report, ReportKind};
+use std::ops::Range;
 
 // pub mod linearity_check;
 
 /// Creates a report from a lowering error.
-pub fn lowering_error_to_report(
-    error: LoweringError,
-    session: &Session,
-) -> Report<'static, (String, Range<usize>)> {
+pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, (String, Range<usize>)> {
     let mut colors = ColorGenerator::new();
     colors.next();
     match error {
-        LoweringError::ModuleNotFound {
-            span,
-            module,
-            program_id,
-        } => {
-            let path = session.file_paths[program_id].display().to_string();
+        LoweringError::ModuleNotFound { span, module, path } => {
+            let path = path.display().to_string();
             Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("ModuleNotFound")
                 .with_label(
@@ -33,9 +24,9 @@ pub fn lowering_error_to_report(
         LoweringError::FunctionNotFound {
             span,
             function,
-            program_id,
+            path,
         } => {
-            let path = session.file_paths[program_id].display().to_string();
+            let path = path.display().to_string();
             Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("FunctionNotFound")
                 .with_label(
@@ -45,12 +36,8 @@ pub fn lowering_error_to_report(
                 )
                 .finish()
         }
-        LoweringError::StructFieldNotFound {
-            span,
-            name,
-            program_id,
-        } => {
-            let path = session.file_paths[program_id].display().to_string();
+        LoweringError::StructFieldNotFound { span, name, path } => {
+            let path = path.display().to_string();
             Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("StructFieldNotFound")
                 .with_label(
@@ -64,9 +51,9 @@ pub fn lowering_error_to_report(
             import_span,
             module_span,
             symbol,
-            program_id,
+            path,
         } => {
-            let path = session.file_paths[program_id].display().to_string();
+            let path = path.display().to_string();
             let span = symbol.span;
             Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("ImportNotFound")
@@ -90,9 +77,9 @@ pub fn lowering_error_to_report(
             span,
             name,
             type_span,
-            program_id,
+            path,
         } => {
-            let path = session.file_paths[program_id].display().to_string();
+            let path = path.display().to_string();
             let mut labels = vec![Label::new((path.clone(), span.into()))
                 .with_message(format!(
                     "Can't mutate {name:?} because it's behind a immutable borrow"
@@ -112,12 +99,8 @@ pub fn lowering_error_to_report(
                 .with_labels(labels)
                 .finish()
         }
-        LoweringError::UnrecognizedType {
-            span,
-            name,
-            program_id,
-        } => {
-            let path = session.file_paths[program_id].display().to_string();
+        LoweringError::UnrecognizedType { span, name, path } => {
+            let path = path.display().to_string();
             Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("UnrecognizedType")
                 .with_label(
@@ -128,28 +111,12 @@ pub fn lowering_error_to_report(
                 .with_message(format!("Unresolved type {:?}.", name))
                 .finish()
         }
-        LoweringError::IdNotFound {
-            span,
-            id,
-            program_id,
-        } => {
-            let path = session.file_paths[program_id].display().to_string();
-            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
-                .with_code("E_ID")
-                .with_label(
-                    Label::new((path, span.into()))
-                        .with_message("Failed to definition id")
-                        .with_color(colors.next()),
-                )
-                .with_message(format!("Failed to find definition id {id:?}, this is most likely a compiler bug or a unimplemented lowering"))
-                .finish()
-        }
         LoweringError::NotYetImplemented {
             span,
             message,
-            program_id,
+            path,
         } => {
-            let path = session.file_paths[program_id].display().to_string();
+            let path = path.display().to_string();
             Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("NotYetImplemented")
                 .with_label(
@@ -160,23 +127,24 @@ pub fn lowering_error_to_report(
                 .finish()
         }
         LoweringError::UnexpectedType {
-            span,
+            found_span: span,
             found,
             expected,
-            program_id,
+            expected_span,
+            path,
         } => {
-            let path = session.file_paths[program_id].display().to_string();
+            let path = path.display().to_string();
             let mut labels = vec![Label::new((path.clone(), span.into()))
                 .with_message(format!(
                     "Unexpected type '{}', expected '{}'",
-                    found.kind, expected.kind
+                    found, expected
                 ))
                 .with_color(colors.next())];
 
-            if let Some(span) = expected.span {
+            if let Some(span) = expected_span {
                 labels.push(
                     Label::new((path.clone(), span.into()))
-                        .with_message(format!("expected '{}' due to this type", expected.kind))
+                        .with_message(format!("expected '{}' due to this expression", expected))
                         .with_color(colors.next()),
                 );
             }
@@ -184,15 +152,11 @@ pub fn lowering_error_to_report(
             Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("UnexpectedType")
                 .with_labels(labels)
-                .with_message(format!("expected type {}.", expected.kind))
+                .with_message(format!("expected type {}", expected))
                 .finish()
         }
-        LoweringError::UseOfUndeclaredVariable {
-            span,
-            name,
-            program_id,
-        } => {
-            let path = session.file_paths[program_id].display().to_string();
+        LoweringError::UseOfUndeclaredVariable { span, name, path } => {
+            let path = path.display().to_string();
             Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("UseOfUndeclaredVariable")
                 .with_label(
@@ -202,12 +166,8 @@ pub fn lowering_error_to_report(
                 )
                 .finish()
         }
-        LoweringError::ExternFnWithBody {
-            span,
-            name,
-            program_id,
-        } => {
-            let path = session.file_paths[program_id].display().to_string();
+        LoweringError::ExternFnWithBody { span, name, path } => {
+            let path = path.display().to_string();
             Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("ExternFnWithBody")
                 .with_label(
@@ -217,9 +177,8 @@ pub fn lowering_error_to_report(
                 )
                 .finish()
         }
-        LoweringError::InternalError(msg, program_id) => {
-            let path = session.file_paths[program_id].display().to_string();
-            Report::build(ReportKind::Error, (path.clone(), 0..0))
+        LoweringError::InternalError(msg) => {
+            Report::build(ReportKind::Error, ("".to_string(), 0..0))
                 .with_code("InternalError")
                 .with_message(msg)
                 .finish()
@@ -228,9 +187,9 @@ pub fn lowering_error_to_report(
             span,
             found,
             needs,
-            program_id,
+            path,
         } => {
-            let path = session.file_paths[program_id].display().to_string();
+            let path = path.display().to_string();
             Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("CallParamCountMismatch")
                 .with_label(
@@ -247,9 +206,9 @@ pub fn lowering_error_to_report(
             span,
             found,
             needs,
-            program_id,
+            path,
         } => {
-            let path = session.file_paths[program_id].display().to_string();
+            let path = path.display().to_string();
             Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("GenericCountMismatch")
                 .with_label(
@@ -265,9 +224,9 @@ pub fn lowering_error_to_report(
         LoweringError::NotMutable {
             span,
             declare_span,
-            program_id,
+            path,
         } => {
-            let path = session.file_paths[program_id].display().to_string();
+            let path = path.display().to_string();
             let mut report = Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("NotMutable")
                 .with_label(
@@ -288,9 +247,9 @@ pub fn lowering_error_to_report(
         LoweringError::CantTakeMutableBorrow {
             span,
             declare_span,
-            program_id,
+            path,
         } => {
-            let path = session.file_paths[program_id].display().to_string();
+            let path = path.display().to_string();
             let mut report = Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
                 .with_code("CantTakeMutableBorrow")
                 .with_label(

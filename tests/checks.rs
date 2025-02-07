@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use concrete::ir::lowering::{errors::LoweringError, lower_programs};
+use concrete::ir::lowering::{lower_programs, LoweringError};
 use concrete::parser::ProgramSource;
 
 #[test]
