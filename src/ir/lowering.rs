@@ -14,6 +14,7 @@ use crate::ast::{
     types::TypeDescriptor,
     Program,
 };
+
 use common::{BuildCtx, FnBodyBuilder, GenericFn, IdGenerator};
 use tracing::{debug, instrument};
 
@@ -1665,11 +1666,21 @@ fn lower_binary_op(
     type_hint: Option<Ty>,
 ) -> Result<(Rvalue, Ty, Span), LoweringError> {
     let (lhs, lhs_ty, lhs_span) = if type_hint.is_none() {
-        let ty = find_expression_type(builder, lhs).unwrap_or_else(|| {
-            find_expression_type(builder, rhs).expect(
-                "couldn't find the expression type, this shouldnt happen and it's a compiler bug",
-            )
-        });
+        let ty = find_expression_type(builder, lhs).or_else(|| find_expression_type(builder, rhs));
+
+        let ty = if let Some(ty) = ty {
+            ty
+        } else {
+            // Default to i32 if cant infer type.
+            // Should be ok because at other points if the i32 doesn't match the expected type
+            // a error will be thrown, forcing user to specify types.
+            debug!("can't infer type, defaulting to i32");
+            Ty {
+                span: None,
+                kind: TyKind::Int(IntTy::I32),
+            }
+        };
+
         lower_expression(builder, lhs, Some(ty))?
     } else {
         lower_expression(builder, lhs, type_hint.clone())?
