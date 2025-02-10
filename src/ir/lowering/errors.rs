@@ -95,4 +95,11 @@ pub enum LoweringError {
         needs: usize,
         program_id: usize,
     },
+    #[error("function generic parameter count mismatch, found {found}, needs {needs}")]
+    GenericCountMismatch {
+        span: Span,
+        found: usize,
+        needs: usize,
+        program_id: usize,
+    },
 }

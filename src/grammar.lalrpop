@@ -608,8 +608,9 @@ PathSegments: Vec<ast::expressions::PathSegment> = {
 }
 
 FnCallOp: ast::expressions::FnCallOp = {
-  <lo:@L> <target:Ident> "(" <args:Comma<Expression>> ")" <hi:@R> => ast::expressions::FnCallOp {
+  <lo:@L> <target:Ident> <generics:("::" "<" <Comma<TypeName>> ">")?> "(" <args:Comma<Expression>> ")" <hi:@R> => ast::expressions::FnCallOp {
     target,
+    generics: generics.unwrap_or_default(),
     args,
     span: Span::new(lo, hi),
   }

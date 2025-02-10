@@ -57,6 +57,11 @@ pub fn prepass_module(
                         .functions
                         .insert(info.decl.name.name.clone(), next_id);
                     current_module.functions.insert(next_id);
+
+                    if !info.decl.generic_params.is_empty() {
+                        ctx.generic_fn_bodies.insert(next_id, info.clone());
+                    }
+
                     ctx.unresolved_function_signatures.insert(
                         next_id,
                         (
@@ -194,6 +199,10 @@ pub fn prepass_sub_module(
                         .functions
                         .insert(info.decl.name.name.clone(), next_id);
                     submodule.functions.insert(next_id);
+                    if !info.decl.generic_params.is_empty() {
+                        ctx.generic_fn_bodies.insert(next_id, info.clone());
+                    }
+
                     ctx.unresolved_function_signatures.insert(
                         next_id,
                         (
@@ -248,7 +257,26 @@ pub fn prepass_sub_module(
                         ),
                     );
                 }
-                ast::modules::ModuleDefItem::Impl(_impl_block) => todo!(),
+                ast::modules::ModuleDefItem::Impl(impl_block) => {
+                    for info in &impl_block.methods {
+                        let next_id = gen.next_defid();
+                        submodule.symbols.methods.insert(
+                            (impl_block.target.clone(), info.decl.name.name.clone()),
+                            next_id,
+                        );
+                        submodule.functions.insert(next_id);
+                        ctx.unresolved_function_signatures.insert(
+                            next_id,
+                            (
+                                [impl_block.target.clone()]
+                                    .into_iter()
+                                    .chain(info.decl.params.iter().map(|x| &x.r#type).cloned())
+                                    .collect(),
+                                info.decl.ret_type.clone(),
+                            ),
+                        );
+                    }
+                }
             }
         }
 

@@ -243,7 +243,25 @@ pub fn lowering_error_to_report(
                 )
                 .finish()
         }
-
+        LoweringError::GenericCountMismatch {
+            span,
+            found,
+            needs,
+            program_id,
+        } => {
+            let path = session.file_paths[program_id].display().to_string();
+            Report::build(ReportKind::Error, (path.clone(), span.from..span.to))
+                .with_code("GenericCountMismatch")
+                .with_label(
+                    Label::new((path, span.into()))
+                        .with_message(format!(
+                            "function call generic parameter count mismatch: found {}, needs {}.",
+                            found, needs
+                        ))
+                        .with_color(colors.next()),
+                )
+                .finish()
+        }
         LoweringError::NotMutable {
             span,
             declare_span,

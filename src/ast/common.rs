@@ -1,4 +1,7 @@
+use core::fmt;
 use std::ops::Range;
+
+use itertools::Itertools;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Span {
@@ -42,6 +45,17 @@ pub struct TypeName {
     pub name: Ident,
     pub generics: Vec<TypeName>,
     pub span: Span,
+}
+
+impl fmt::Display for TypeName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut generics = self.generics.iter().map(|x| x.to_string()).join(", ");
+        if !generics.is_empty() {
+            generics = format!("<{}>", generics);
+        }
+        let path = self.path.iter().map(|x| &x.name).join(".");
+        write!(f, "{}{}{}", path, self.name.name, generics)
+    }
 }
 
 /// Used as a generic param in function and struct declarations.
