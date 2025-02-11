@@ -1889,9 +1889,21 @@ fn lower_binary_op(
         let ty = find_expression_type(builder, lhs)
             .transpose()
             .or_else(|| find_expression_type(builder, rhs).transpose())
-            .expect(
-                "couldn't find the expression type, this shouldnt happen and it's a compiler bug",
-            )?;
+            .transpose()?;
+
+        let ty = if let Some(ty) = ty {
+            ty
+        } else {
+            // Default to i32 if cant infer type.
+            // Should be ok because at other points if the i32 doesn't match the expected type
+            // a error will be thrown, forcing user to specify types.
+            debug!("can't infer type, defaulting to i32");
+            Ty {
+                span: None,
+                kind: TyKind::Int(IntTy::I32),
+            }
+        };
+
         lower_expression(builder, lhs, Some(ty))?
     } else {
         lower_expression(builder, lhs, type_hint.clone())?
