@@ -1467,6 +1467,7 @@ fn lower_expression(
 
             let mut generics = Vec::new();
 
+            // For now a generic struct needs to be instanced specifying the generic types.
             if !info.name.generics.is_empty() {
                 generics = info
                     .name
@@ -1885,11 +1886,12 @@ fn lower_binary_op(
     type_hint: Option<Ty>,
 ) -> Result<(Rvalue, Ty, Span), LoweringError> {
     let (lhs, lhs_ty, lhs_span) = if type_hint.is_none() {
-        let ty = find_expression_type(builder, lhs)?.unwrap_or_else(|| {
-            find_expression_type(builder, rhs).unwrap().expect(
+        let ty = find_expression_type(builder, lhs)
+            .transpose()
+            .or_else(|| find_expression_type(builder, rhs).transpose())
+            .expect(
                 "couldn't find the expression type, this shouldnt happen and it's a compiler bug",
-            )
-        });
+            )?;
         lower_expression(builder, lhs, Some(ty))?
     } else {
         lower_expression(builder, lhs, type_hint.clone())?
@@ -2439,7 +2441,7 @@ pub fn lower_type(
                     ));
                 } else if let Some(adt_body) = ctx.generic_struct_bodies.get(&def_id).cloned() {
                     let next_id = ctx.gen.next_defid();
-                    // struct not yet monomorphized.
+                    // the struct with the specific generic types is not yet monomorphized, so we monomorphize it here.
 
                     let mut generic_map = generic_map.cloned().unwrap_or_default();
 

@@ -113,6 +113,7 @@ impl FnBodyBuilder {
 }
 
 impl BuildCtx {
+    /// Gets the mangled name for the given function name.
     pub fn get_mangled_name(
         &self,
         module_id: DefId,
