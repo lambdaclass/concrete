@@ -7,9 +7,9 @@ use crate::{
         ArithOp, BinaryOp, BitwiseOp, CmpOp, Expression, LogicOp, PathOp, PathSegment, ValueExpr,
     },
     ir::{
-        lowering::{functions::lower_fn_call, structs::lower_struct}, ConstKind, ConstValue, FloatTy, IntTy, Local,
-        Mutability, Operand, Place, PlaceElem, Span, Statement, StatementKind, TyKind, UintTy,
-        ValueTree,
+        lowering::{functions::lower_fn_call, structs::lower_struct},
+        ConstKind, ConstValue, FloatTy, IntTy, Local, Mutability, Operand, Place, PlaceElem, Span,
+        Statement, StatementKind, TyKind, UintTy, ValueTree,
     },
 };
 
@@ -18,7 +18,7 @@ use super::{
     errors::LoweringError,
     ir::{BinOp, ConstData, LogOp, Rvalue, TypeIndex},
     types::lower_type,
-    FnIrBuilder, Symbol,
+    FnIrBuilder,
 };
 
 #[instrument(level = "debug", skip_all)]
@@ -567,7 +567,10 @@ pub(crate) fn lower_path(
 
                 if let TyKind::Struct(mut id) = ty {
                     if fn_builder.builder.ir.structs[id].is_none() {
-                        id = lower_struct(fn_builder.builder, &fn_builder.builder.bodies.structs.get(&id).unwrap().clone())?;
+                        id = lower_struct(
+                            fn_builder.builder,
+                            &fn_builder.builder.bodies.structs.get(&id).unwrap().clone(),
+                        )?;
                     }
 
                     let struct_body = fn_builder.builder.get_struct(id);
@@ -617,56 +620,34 @@ pub(crate) fn lower_path(
                 }
             }
             PathSegment::MethodCall(fn_call_op, _span) => {
-                loop {
-                    if let Some(methods) = fn_builder.builder.methods.get(&type_idx) {
-                        if methods.contains_key(&Symbol {
-                            name: fn_call_op.target.name.clone(),
-                            generics: Vec::new(),
-                        }) {
-                            let (value, new_type_idx, _span) = lower_fn_call(
-                                fn_builder,
-                                fn_call_op,
-                                Some((
-                                    Place {
-                                        local,
-                                        projection: projection.clone(),
-                                    },
-                                    type_idx,
-                                )),
-                                Some(type_idx),
-                            )?;
+                // TODO: auto deref?
 
-                            type_idx = new_type_idx;
-                            ty = fn_builder.builder.get_type(type_idx).clone();
+                let (value, new_type_idx, _span) = lower_fn_call(
+                    fn_builder,
+                    fn_call_op,
+                    Some((
+                        Place {
+                            local,
+                            projection: projection.clone(),
+                        },
+                        type_idx,
+                    )),
+                    Some(type_idx),
+                )?;
 
-                            match value {
-                                Rvalue::Use(operand) => match operand {
-                                    Operand::Place(place) => {
-                                        local = place.local;
-                                        projection = place.projection;
-                                    }
-                                    Operand::Const(_const_data) => todo!(),
-                                },
-                                Rvalue::Ref(_mutability, _place) => todo!(),
-                                _ => unreachable!(),
-                            }
+                type_idx = new_type_idx;
+                ty = fn_builder.builder.get_type(type_idx).clone();
 
-                            break;
+                match value {
+                    Rvalue::Use(operand) => match operand {
+                        Operand::Place(place) => {
+                            local = place.local;
+                            projection = place.projection;
                         }
-                    }
-
-                    if let TyKind::Ref(inner, _) = ty {
-                        // if method not found on ref type, try deref.
-                        projection.push(PlaceElem::Deref);
-                        type_idx = inner;
-                        ty = fn_builder.builder.get_type(type_idx).clone();
-                    } else {
-                        Err(LoweringError::FunctionNotFound {
-                            span: fn_call_op.target.span,
-                            function: fn_call_op.target.name.clone(),
-                            path: fn_builder.get_file_path().clone(),
-                        })?;
-                    }
+                        Operand::Const(_const_data) => todo!(),
+                    },
+                    Rvalue::Ref(_mutability, _place) => todo!(),
+                    _ => unreachable!(),
                 }
             }
         }
@@ -683,11 +664,17 @@ pub(crate) fn lower_binary_op(
     type_hint: Option<TypeIndex>,
 ) -> Result<(Rvalue, TypeIndex, Span), LoweringError> {
     let (lhs, lhs_type_idx, lhs_span) = if type_hint.is_none() {
-        let ty = find_expression_type(builder, lhs)?.unwrap_or_else(|| {
-            find_expression_type(builder, rhs).unwrap().expect(
-                "couldn't find the expression type, this shouldnt happen and it's a compiler bug",
-            )
-        });
+        let ty = find_expression_type(builder, lhs)?.or(find_expression_type(builder, rhs)?);
+
+        let ty = if let Some(ty) = ty {
+            ty
+        } else {
+            // Default to i32 if cant infer type.
+            // Should be ok because at other points if the i32 doesn't match the expected type
+            // a error will be thrown, forcing user to specify types.
+            debug!("can't infer type, defaulting to i32");
+            builder.builder.ir.get_i32_ty()
+        };
         lower_expression(builder, lhs, Some(ty))?
     } else {
         lower_expression(builder, lhs, type_hint)?

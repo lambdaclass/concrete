@@ -30,6 +30,7 @@ use super::{
 pub(crate) fn lower_func(
     builder: &mut IRBuilder,
     func: &FunctionDef,
+    method_of: Option<TypeIndex>,
 ) -> Result<FnIndex, LoweringError> {
     debug!("lowering function {:?}", func.decl.name.name);
     let is_intrinsic: Option<ConcreteIntrinsic> = None;
@@ -41,6 +42,7 @@ pub(crate) fn lower_func(
     // id resolution
     let mut symbol = Symbol {
         name: func.decl.name.name.clone(),
+        method_of,
         generics: Vec::new(),
     };
 
@@ -74,6 +76,7 @@ pub(crate) fn lower_func(
                 // Construct the monomorphized function symbol.
                 symbol = Symbol {
                     name: func.decl.name.name.clone(),
+                    method_of,
                     generics: generic_types,
                 };
 
@@ -366,6 +369,7 @@ pub(crate) fn lower_func_decl(
     // id resolution
     let mut symbol = Symbol {
         name: func.name.name.clone(),
+        method_of: None,
         generics: Vec::new(),
     };
 
@@ -399,6 +403,7 @@ pub(crate) fn lower_func_decl(
                 // Construct the monomorphized function symbol.
                 symbol = Symbol {
                     name: func.name.name.clone(),
+                    method_of: None,
                     generics: generic_types,
                 };
 

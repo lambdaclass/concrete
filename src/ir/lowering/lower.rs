@@ -17,7 +17,7 @@ use crate::{
 use super::{
     constants::lower_constant,
     functions::{lower_func, lower_func_decl},
-    ir::{FnIndex, ModuleIndex, ProgramBody, TyKind},
+    ir::{ModuleIndex, ProgramBody, TyKind},
     structs::lower_struct,
     types::lower_type,
     Symbol,
@@ -34,10 +34,10 @@ pub fn lower_programs(programs: &[Program]) -> Result<ProgramBody, LoweringError
             top_level_modules: Vec::new(),
             builtin_types: Default::default(),
         },
-        methods: Default::default(),
         symbols: Default::default(),
         top_level_modules_names: Default::default(),
         current_generics_map: Default::default(),
+        struct_to_type_idx: Default::default(),
         bodies: Bodies::default(),
         self_ty: None,
         local_module: None,
@@ -161,6 +161,7 @@ fn prepass_module(
                     .insert(
                         Symbol {
                             name: function_def.decl.name.name.clone(),
+                            method_of: None,
                             generics: Vec::new(),
                         },
                         idx,
@@ -185,6 +186,7 @@ fn prepass_module(
                     .insert(
                         Symbol {
                             name: function_decl.name.name.clone(),
+                            method_of: None,
                             generics: Vec::new(),
                         },
                         idx,
@@ -207,11 +209,15 @@ fn prepass_module(
                     .insert(
                         Symbol {
                             name: struct_decl.name.name.clone(),
+                            method_of: None,
                             generics: Vec::new(),
                         },
                         idx,
                     );
                 builder.ir.modules[module_idx].structs.insert(idx);
+                let type_idx = builder.ir.types.insert(Some(TyKind::Struct(idx)));
+                builder.ir.modules[module_idx].types.insert(type_idx);
+                builder.struct_to_type_idx.insert(idx, type_idx);
                 debug!(
                     "Adding struct symbol {:?} to module {:?}",
                     struct_decl.name.name, module.name.name
@@ -243,8 +249,6 @@ fn prepass_module(
         if let ModuleDefItem::Impl(impl_block) = item {
             let ty = lower_type(builder, &impl_block.target)?;
 
-            let mut methods: HashMap<Symbol, FnIndex> = HashMap::new();
-
             // TODO: when implementing impl generics, deal with it here.
             // e.g impl Array<u32> would be different than impl<T> Array<T>
             // the first is a specific type the second is a generic type
@@ -254,19 +258,17 @@ fn prepass_module(
                 builder.bodies.functions.insert(idx, function_def.clone());
                 let sym = Symbol {
                     name: function_def.decl.name.name.clone(),
+                    method_of: Some(ty),
                     generics: Vec::new(),
                 };
                 builder
                     .symbols
                     .get_mut(&module_idx)
                     .unwrap()
-                    .methods
-                    .insert((ty, sym.clone()), idx);
-                methods.insert(sym.clone(), idx);
+                    .functions
+                    .insert(sym.clone(), idx);
                 builder.ir.modules[module_idx].functions.insert(idx);
             }
-
-            builder.methods.insert(ty, methods);
         }
     }
 
@@ -332,6 +334,7 @@ fn lower_imports(
 
             let symbol = Symbol {
                 name: sym.name.clone(),
+                method_of: None,
                 generics: Vec::new(),
             };
             if let Some(id) = target_symbols.functions.get(&symbol).cloned() {
@@ -347,8 +350,6 @@ fn lower_imports(
 
             let target_symbols = builder.symbols.get(&target_module).unwrap();
             if let Some(id) = target_symbols.structs.get(&symbol).cloned() {
-                dbg!(&symbol);
-                dbg!(&id);
                 builder.ir.modules[module_idx].structs.insert(id);
                 builder
                     .symbols
@@ -451,12 +452,19 @@ pub fn lower_module(
             }
             ModuleDefItem::Type(_) => todo!(),
             ModuleDefItem::Function(function_def) => {
-                lower_func(builder, function_def)?;
+                lower_func(builder, function_def, None)?;
             }
             ModuleDefItem::FunctionDecl(function_decl) => {
                 lower_func_decl(builder, function_decl)?;
             }
-            ModuleDefItem::Impl(_impl_block) => todo!(),
+            ModuleDefItem::Impl(impl_block) => {
+                let target_ty = lower_type(builder, &impl_block.target)?;
+                builder.self_ty = Some(target_ty);
+                for method in &impl_block.methods {
+                    lower_func(builder, method, Some(target_ty))?;
+                }
+                builder.self_ty = None;
+            }
             ModuleDefItem::Union(_union_decl) => todo!(),
             ModuleDefItem::Enum(_enum_decl) => todo!(),
             ModuleDefItem::Module(module) => {

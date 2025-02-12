@@ -52,11 +52,6 @@ jobs:
             RUST_LOG: debug
         steps:
         - uses: actions/checkout@v3
-        - name: free HDD space
-          run: |
-            # deleting space
-            sudo rm -rf /usr/share/dotnet/
-            sudo rm -rf /usr/local/lib/android
         - name: Setup rust env
           uses: dtolnay/rust-toolchain@1.84.1
         - name: Retreive cached dependecies
@@ -103,11 +98,6 @@ jobs:
             RUST_LOG: debug
         steps:
             - uses: actions/checkout@v3
-            - name: free HDD space
-              run: |
-                    # deleting space
-                    sudo rm -rf /usr/share/dotnet/
-                    sudo rm -rf /usr/local/lib/android
             - name: Setup rust env
               uses: dtolnay/rust-toolchain@1.84.1
             - name: Retreive cached dependecies
@@ -141,11 +131,6 @@ jobs:
         TABLEGEN_190_PREFIX: /usr/lib/llvm-19/
       steps:
         - uses: actions/checkout@v4
-        - name: free HDD space
-          run: |
-                # deleting space
-                sudo rm -rf /usr/share/dotnet/
-                sudo rm -rf /usr/local/lib/android
         - uses: dtolnay/rust-toolchain@1.84.1
           with:
             components: clippy

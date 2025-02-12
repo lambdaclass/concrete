@@ -86,10 +86,12 @@ pub(crate) fn lower_type(
 
                 let mut sym = Symbol {
                     name: other.to_string(),
+                    method_of: None,
                     generics: Vec::new(),
                 };
 
                 if let Some(struct_idx) = symbols.structs.get(&sym) {
+                    let struct_type_idx = *builder.struct_to_type_idx.get(struct_idx).unwrap();
                     let body = &builder.bodies.structs.get(struct_idx).unwrap();
 
                     if !body.generics.is_empty() {
@@ -117,8 +119,10 @@ pub(crate) fn lower_type(
                         // for borrowck
                         let symbols = builder.symbols.get(&module_idx).unwrap();
                         if let Some(mono_struct_idx) = symbols.structs.get(&sym) {
-                            let ty = TyKind::Struct(*mono_struct_idx);
-                            builder.ir.types.insert(Some(ty))
+                            *builder
+                                .struct_to_type_idx
+                                .get(mono_struct_idx)
+                                .expect("should have a type idx")
                         } else {
                             Err(LoweringError::UnrecognizedType {
                                 span: *span,
@@ -129,8 +133,7 @@ pub(crate) fn lower_type(
                             })?
                         }
                     } else {
-                        let ty = TyKind::Struct(*struct_idx);
-                        builder.ir.types.insert(Some(ty))
+                        struct_type_idx
                     }
                 } else {
                     Err(LoweringError::UnrecognizedType {

@@ -46,6 +46,10 @@ impl ProgramBody {
         *self.builtin_types.get(&TyKind::Char).unwrap()
     }
 
+    pub fn get_i32_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&TyKind::Int(IntTy::I32)).unwrap()
+    }
+
     pub fn get_i64_ty(&self) -> TypeIndex {
         *self.builtin_types.get(&TyKind::Int(IntTy::I64)).unwrap()
     }

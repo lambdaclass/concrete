@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use tracing::instrument;
 
-use crate::ast::{structs::StructDecl, types::TypeDescriptor};
+use crate::{
+    ast::{structs::StructDecl, types::TypeDescriptor},
+    ir::TyKind,
+};
 
 use super::{
     errors::LoweringError,
@@ -22,6 +25,7 @@ pub(crate) fn lower_struct(
     // Sym initially is the polymorphic symbol of the struct (only matters, if the struct is generic)
     let mut sym = Symbol {
         name: info.name.name.clone(),
+        method_of: None,
         generics: Vec::new(),
     };
 
@@ -63,6 +67,8 @@ pub(crate) fn lower_struct(
                 .unwrap()
                 .structs
                 .insert(sym.clone(), id);
+            let struct_type_idx = builder.ir.types.insert(Some(TyKind::Struct(id)));
+            builder.struct_to_type_idx.insert(id, struct_type_idx);
             Some(id)
         }
     } else {

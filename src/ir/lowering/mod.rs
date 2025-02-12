@@ -38,6 +38,7 @@ pub use lower::lower_programs;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Symbol {
     pub name: String,
+    pub method_of: Option<TypeIndex>,
     // This vec contains the specific types of the generics used.
     pub generics: Vec<TypeIndex>,
 }
@@ -46,8 +47,6 @@ pub struct Symbol {
 pub struct SymbolTable {
     pub modules: HashMap<String, ModuleIndex>,
     pub functions: HashMap<Symbol, FnIndex>,
-    /// (type name, Name) -> id
-    pub methods: HashMap<(TypeIndex, Symbol), FnIndex>,
     pub constants: HashMap<String, ConstIndex>,
     pub structs: HashMap<Symbol, StructIndex>,
     pub types: HashMap<String, TypeIndex>,
@@ -66,13 +65,14 @@ pub struct Bodies {
 #[derive(Debug, Clone)]
 pub struct IRBuilder {
     pub ir: ProgramBody,
-    pub methods: HashMap<TypeIndex, HashMap<Symbol, FnIndex>>,
     pub symbols: HashMap<ModuleIndex, SymbolTable>,
     pub top_level_modules_names: HashMap<String, ModuleIndex>,
     pub current_generics_map: HashMap<String, TypeName>,
     pub self_ty: Option<TypeIndex>,
     pub bodies: Bodies,
     pub local_module: Option<ModuleIndex>,
+    // Needed to not duplicate TypeIndexes for structs.
+    pub struct_to_type_idx: HashMap<StructIndex, TypeIndex>,
 }
 
 #[derive(Debug)]
@@ -133,6 +133,7 @@ impl IRBuilder {
     ) -> Result<StructIndex, LoweringError> {
         let sym = Symbol {
             name: info.name.name.name.clone(),
+            method_of: None,
             generics: Vec::new(),
         };
 
@@ -206,17 +207,11 @@ impl FnIrBuilder<'_> {
 
             let poly_symbol = Symbol {
                 name: info.target.name.clone(),
+                method_of: method_ty_idx,
                 generics: Vec::new(),
             };
 
-            let fn_found = if let Some(id) = method_ty_idx {
-                symbols.methods.get(&(id, poly_symbol.clone()))
-            } else {
-                symbols.functions.get(&poly_symbol)
-            }
-            .copied();
-
-            if let Some(poly_id) = fn_found {
+            if let Some(poly_id) = symbols.functions.get(&poly_symbol).copied() {
                 if !info.generics.is_empty() {
                     let old_generics = self.builder.current_generics_map.clone();
                     let fn_decl = self.builder.bodies.functions.get(&poly_id).unwrap().clone();
@@ -247,29 +242,19 @@ impl FnIrBuilder<'_> {
 
                     let mono_symbol = Symbol {
                         name: info.target.name.clone(),
+                        method_of: method_ty_idx,
                         generics: generic_types,
                     };
 
                     let symbols = self.get_symbols_table(); // needed for borrowck
                     let id = {
-                        if let Some(method_idx) = method_ty_idx {
-                            if let Some(id) =
-                                symbols.methods.get(&(method_idx, mono_symbol)).copied()
-                            {
-                                id
-                            } else {
-                                let fn_decl =
-                                    self.builder.bodies.functions.get(&poly_id).unwrap().clone();
-
-                                lower_func(self.builder, &fn_decl)?
-                            }
-                        } else if let Some(id) = symbols.functions.get(&mono_symbol).copied() {
+                        if let Some(id) = symbols.functions.get(&mono_symbol).copied() {
                             id
                         } else {
                             let fn_decl =
                                 self.builder.bodies.functions.get(&poly_id).unwrap().clone();
 
-                            lower_func(self.builder, &fn_decl)?
+                            lower_func(self.builder, &fn_decl, method_ty_idx)?
                         }
                     }; // todo error
 
@@ -282,6 +267,7 @@ impl FnIrBuilder<'_> {
                 panic!("fn not found")
             }
         };
+
         Ok(fn_id)
     }
 }
