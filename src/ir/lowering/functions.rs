@@ -60,6 +60,8 @@ pub(crate) fn lower_func(
                 for generic_param in &func.decl.generic_params {
                     if let Some(ty) = builder.current_generics_map.get(&generic_param.name.name) {
                         generic_types.push(*ty);
+                    } else {
+                        panic!()
                     }
                 }
 

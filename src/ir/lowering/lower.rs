@@ -452,7 +452,9 @@ pub fn lower_module(
             }
             ModuleDefItem::Type(_) => todo!(),
             ModuleDefItem::Function(function_def) => {
-                lower_func(builder, function_def, None)?;
+                if function_def.decl.generic_params.is_empty() {
+                    lower_func(builder, function_def, None)?;
+                }
             }
             ModuleDefItem::FunctionDecl(function_decl) => {
                 lower_func_decl(builder, function_decl)?;

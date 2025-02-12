@@ -137,9 +137,11 @@ struct FunctionCodegenCtx<'a> {
 impl FunctionCodegenCtx<'_> {
     /// Gets the function IR body.
     pub fn get_fn_body(&self) -> &FnBody {
-        self.module.ctx.program.functions[self.fn_idx]
-            .as_ref()
-            .unwrap()
+        self.module.ctx.program.functions[self.fn_idx].as_ref().expect("should have body")
+    }
+
+    pub fn has_fn_body(&self) -> bool {
+        self.module.ctx.program.functions[self.fn_idx].is_some()
     }
 
     /// Gets the function argument types and return type.
@@ -154,6 +156,11 @@ impl FunctionCodegenCtx<'_> {
 
 /// Compiles the given function IR.
 fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
+
+    if !ctx.has_fn_body() {
+         // dont compile "polymorphic" versions of functions.
+        return Ok(());
+    }
     let body = ctx.get_fn_body();
 
     // Only codegen once.
