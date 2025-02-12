@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use concrete::ir::lowering::{lower_programs, LoweringError};
+use concrete::ir::lowering::{lower_compile_units, LoweringError};
 use concrete::parser::ProgramSource;
 
 #[test]
@@ -78,7 +78,7 @@ pub fn check_invalid_program(source: &str, name: &str) -> LoweringError {
     };
     program.file_path = Some(PathBuf::from(name).with_extension("con"));
 
-    lower_programs(&[program]).expect_err("expected error")
+    lower_compile_units(&[program]).expect_err("expected error")
 }
 
 #[test]

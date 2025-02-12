@@ -8,7 +8,7 @@ use std::{
 use ariadne::Source;
 use concrete::compile_unit_info::{CompileUnitInfo, DebugInfo, OptLevel};
 use concrete::driver::linker::{link_binary, link_shared_lib};
-use concrete::ir::lowering::lower_programs;
+use concrete::ir::lowering::lower_compile_units;
 use concrete::parser::ProgramSource;
 use tempfile::TempDir;
 
@@ -79,7 +79,7 @@ pub fn compile_program(
         file_paths: vec![input_file],
     };
 
-    let program_ir = lower_programs(&[program])?;
+    let program_ir = lower_compile_units(&[program])?;
 
     let object_path = concrete::codegen::compile(&session, &program_ir)?;
 

@@ -221,14 +221,14 @@ GenericParams: Vec<ast::common::GenericParam> = {
 
 // Module list
 
-pub Program: ast::Program = {
+pub CompileUnit: ast::CompileUnit = {
   <Module> => {
-    ast::Program {
+    ast::CompileUnit {
       file_path: None,
       modules: vec![<>],
     }
   },
-  <mut s:Program> <n:Module> => {
+  <mut s:CompileUnit> <n:Module> => {
       s.modules.push(n);
       s
   },

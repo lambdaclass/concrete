@@ -32,7 +32,7 @@ mod structs;
 mod types;
 
 pub use errors::LoweringError;
-pub use lower::lower_programs;
+pub use lower::lower_compile_units;
 
 /// Monomorphized symbol (currently either a struct/adt or function).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

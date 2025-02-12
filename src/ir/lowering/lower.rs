@@ -20,7 +20,7 @@ use super::{
     Symbol,
 };
 
-pub fn lower_programs(programs: &[ast::Program]) -> Result<IR, LoweringError> {
+pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, LoweringError> {
     let mut builder = IRBuilder {
         ir: IR {
             types: Types::new(),
@@ -42,25 +42,25 @@ pub fn lower_programs(programs: &[ast::Program]) -> Result<IR, LoweringError> {
     };
 
     // Prepass to fill some symbols.
-    for program in programs {
-        let file_path = program
+    for compile_unit in compile_units {
+        let file_path = compile_unit
             .file_path
             .as_ref()
             .ok_or_else(|| LoweringError::InternalError("Missing program file path".to_string()))?;
 
-        for module in &program.modules {
+        for module in &compile_unit.modules {
             prepass_module(&mut builder, module, &[], file_path)?;
         }
     }
 
     // Handle imports so they are transparent afterwards.
-    for program in programs {
-        let file_path = program
+    for compile_unit in compile_units {
+        let file_path = compile_unit
             .file_path
             .as_ref()
             .ok_or_else(|| LoweringError::InternalError("Missing program file path".to_string()))?;
 
-        for module in &program.modules {
+        for module in &compile_unit.modules {
             debug!("lowering imports for module: {:?}", &module.name.name);
             let module_idx = *builder
                 .top_level_modules_names
@@ -71,8 +71,8 @@ pub fn lower_programs(programs: &[ast::Program]) -> Result<IR, LoweringError> {
         }
     }
 
-    for program in programs {
-        for module in &program.modules {
+    for compile_unit in compile_units {
+        for module in &compile_unit.modules {
             let module_idx = *builder
                 .top_level_modules_names
                 .get(&module.name.name)
