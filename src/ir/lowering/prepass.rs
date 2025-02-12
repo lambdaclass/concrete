@@ -21,6 +21,7 @@ pub fn prepass_module(
         module_id,
         ModuleBody {
             id: module_id,
+            name: mod_def.name.name.clone(),
             parent_ids: vec![],
             symbols: Default::default(),
             modules: Default::default(),
@@ -29,6 +30,7 @@ pub fn prepass_module(
             types: Default::default(),
             constants: Default::default(),
             imports: Default::default(),
+            span: mod_def.span,
         },
     );
 
@@ -82,6 +84,10 @@ pub fn prepass_module(
                         .structs
                         .insert(info.name.name.clone(), next_id);
                     current_module.structs.insert(next_id);
+
+                    if !info.generics.is_empty() {
+                        ctx.generic_struct_bodies.insert(next_id, info.clone());
+                    }
                 }
                 ast::modules::ModuleDefItem::Type(info) => {
                     let next_id = gen.next_defid();
@@ -173,6 +179,7 @@ pub fn prepass_sub_module(
         let mut submodule = ModuleBody {
             id,
             parent_ids: parent_ids.to_vec(),
+            name: mod_def.name.name.clone(),
             imports: Default::default(),
             symbols: Default::default(),
             modules: Default::default(),
@@ -180,6 +187,7 @@ pub fn prepass_sub_module(
             structs: Default::default(),
             types: Default::default(),
             constants: Default::default(),
+            span: mod_def.span,
         };
 
         for ct in &mod_def.contents {
@@ -223,6 +231,10 @@ pub fn prepass_sub_module(
                         .structs
                         .insert(info.name.name.clone(), next_id);
                     submodule.structs.insert(next_id);
+
+                    if !info.generics.is_empty() {
+                        ctx.generic_struct_bodies.insert(next_id, info.clone());
+                    }
                 }
                 ast::modules::ModuleDefItem::Type(info) => {
                     let next_id = gen.next_defid();

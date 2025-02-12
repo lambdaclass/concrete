@@ -5,6 +5,7 @@ use test_case::test_case;
 mod common;
 
 #[test_case(include_str!("../examples/generics_basic.con"), "generics_basic", false, 4 ; "generics_basic.con")]
+#[test_case(include_str!("../examples/generic_struct.con"), "generic_struct", false, 2 ; "generic_struct.con")]
 #[test_case(include_str!("../examples/borrow.con"), "borrow", false, 2 ; "borrow.con")]
 #[test_case(include_str!("../examples/variable_inside_if.con"), "variable_inside_if", false, 16 ; "variable_inside_if.con")]
 #[test_case(include_str!("../examples/if_with_literals.con"), "if_with_literals", false, 1 ; "if_with_literals.con")]

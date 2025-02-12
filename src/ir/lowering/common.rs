@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ast::{common::TypeName, functions::FunctionDef, types::TypeDescriptor},
+    ast::{common::TypeName, functions::FunctionDef, structs::StructDecl, types::TypeDescriptor},
     ir::{DefId, FnBody, Local, LocalIndex, ModuleBody, ProgramBody, Statement, Ty, TyKind},
 };
 
@@ -42,11 +42,20 @@ pub struct GenericFn {
     pub generics: Vec<String>,
 }
 
+// Helper struct to store generic struct monomorphizations
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GenericStruct {
+    pub id: DefId,
+    // This vec contains the specific types of the generics used.
+    pub generics: Vec<Ty>,
+}
+
 #[derive(Debug, Clone)]
 pub struct BuildCtx {
     pub body: ProgramBody,
     // A map of already generated monomorphized versions of generic functions.
     pub generic_functions: HashMap<GenericFn, DefId>,
+    pub generic_structs: HashMap<GenericStruct, DefId>,
     // A function may be called from another module before that module is "lowered"
     // So the prepass step stores all unlowered function signatures here, before doing the lower step.
     // If a call uses a unresolved function signature, it will resolve it to their lowered types. Removing it from here.
@@ -54,6 +63,7 @@ pub struct BuildCtx {
         HashMap<DefId, (Vec<TypeDescriptor>, Option<TypeDescriptor>)>,
     // The ast of generic functions, to implement each monomorphized version.
     pub generic_fn_bodies: HashMap<DefId, FunctionDef>,
+    pub generic_struct_bodies: HashMap<DefId, StructDecl>,
     pub gen: IdGenerator,
 }
 
@@ -99,5 +109,29 @@ impl FnBodyBuilder {
 
     pub fn get_module_body(&self) -> &ModuleBody {
         self.ctx.body.modules.get(&self.local_module).unwrap()
+    }
+}
+
+impl BuildCtx {
+    /// Gets the mangled name for the given function name.
+    pub fn get_mangled_name(
+        &self,
+        module_id: DefId,
+        fn_name: &str,
+        fn_id: DefId,
+    ) -> Option<String> {
+        let mut name_path: Vec<&str> = Vec::new();
+
+        let cur_module = &self.body.modules.get(&module_id)?;
+
+        for parent_id in &cur_module.parent_ids {
+            let module = &self.body.modules.get(parent_id)?;
+            name_path.push(module.name.as_ref());
+        }
+        name_path.push(cur_module.name.as_ref());
+
+        name_path.push(fn_name);
+
+        Some(format!("{}@{}", name_path.join("::"), fn_id.id))
     }
 }

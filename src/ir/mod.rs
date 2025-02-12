@@ -51,6 +51,7 @@ pub struct ProgramBody {
 #[derive(Debug, Clone)]
 pub struct ModuleBody {
     pub id: DefId,
+    pub name: String,
     pub parent_ids: Vec<DefId>,
     pub symbols: SymbolTable,
     /// Functions defined in this module.
@@ -65,6 +66,7 @@ pub struct ModuleBody {
     pub modules: HashSet<DefId>,
     /// Imported items. symbol -> id
     pub imports: HashMap<String, DefId>,
+    pub span: Span,
 }
 
 /// Function body
@@ -87,15 +89,7 @@ impl FnBody {
     }
 
     pub fn get_mangled_name(&self) -> String {
-        if self.is_extern {
-            return self.name.clone();
-        }
-
-        if self.name == "main" {
-            "main".to_string()
-        } else {
-            format!("{}_{}_{}", self.name, self.id.program_id, self.id.id)
-        }
+        self.name.clone()
     }
 }
 
@@ -337,7 +331,7 @@ pub struct DefId {
 #[derive(Debug, Clone, Educe, PartialOrd, Ord, Eq)]
 #[educe(PartialEq, Hash)]
 pub struct Ty {
-    #[educe(PartialEq(ignore))]
+    #[educe(PartialEq(ignore), Hash(ignore))]
     pub span: Option<Span>,
     pub kind: TyKind,
 }
@@ -371,6 +365,8 @@ pub enum TyKind {
     Struct {
         id: DefId,
         generics: Vec<Ty>,
+        // Mostly for fmt stuff.
+        name: String,
     },
 }
 
@@ -484,7 +480,23 @@ impl fmt::Display for TyKind {
                 write!(f, "*{word} {}", inner.kind)
             }
             TyKind::Param { .. } => todo!(),
-            TyKind::Struct { .. } => todo!(),
+            TyKind::Struct {
+                id: _,
+                name,
+                generics,
+            } => {
+                write!(f, "{name}")?;
+                if !generics.is_empty() {
+                    write!(f, "<")?;
+
+                    for g in generics {
+                        write!(f, "{}", g.kind)?;
+                    }
+                    write!(f, ">")?;
+                }
+
+                Ok(())
+            }
         }
     }
 }

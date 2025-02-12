@@ -14,8 +14,7 @@ use crate::ast::{
     types::TypeDescriptor,
     Program,
 };
-
-use common::{BuildCtx, FnBodyBuilder, GenericFn, IdGenerator};
+use common::{BuildCtx, FnBodyBuilder, GenericFn, GenericStruct, IdGenerator};
 use tracing::{debug, instrument};
 
 use crate::ir::{
@@ -38,6 +37,8 @@ pub fn lower_programs(program: &[Program]) -> Result<ProgramBody, LoweringError>
         unresolved_function_signatures: Default::default(),
         generic_fn_bodies: Default::default(),
         generic_functions: Default::default(),
+        generic_structs: Default::default(),
+        generic_struct_bodies: Default::default(),
     };
 
     for (program_id, program) in program.iter().enumerate() {
@@ -76,7 +77,9 @@ pub fn lower_programs(program: &[Program]) -> Result<ProgramBody, LoweringError>
     Ok(ctx.body)
 }
 
+#[instrument(level = "debug", skip_all, fields(module = ?module.name.name))]
 fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCtx, LoweringError> {
+    debug!("lowering module");
     // lower first structs, constants, types
     for content in &module.contents {
         match content {
@@ -84,17 +87,24 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                 ctx = lower_constant(ctx, info, id)?;
             }
             ModuleDefItem::Struct(info) => {
-                ctx = lower_struct(ctx, info, id)?;
+                if info.generics.is_empty() {
+                    let def_id = {
+                        let body = ctx.body.modules.get(&id).unwrap();
+                        *body.symbols.structs.get(&info.name.name).unwrap()
+                    };
+                    lower_struct(&mut ctx, info, def_id, id, None)?;
+                }
             }
             ModuleDefItem::Type(_) => todo!(),
             _ => {}
         }
     }
 
-    let body = ctx.body.modules.get(&id).unwrap();
+    // todo: needed for borrowck, maybe use a rc refcell to avoid expensive clones
+    let body = ctx.body.modules.get(&id).unwrap().clone();
 
     // fill fn sigs
-    for content in &module.contents {
+    for content in module.contents.iter() {
         match content {
             ModuleDefItem::Function(fn_def) => {
                 let fn_id = *body
@@ -115,12 +125,12 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                 let ret_type;
 
                 for arg in &fn_def.decl.params {
-                    let ty = lower_type(&ctx, &arg.r#type, id, None)?;
+                    let ty = lower_type(&mut ctx, &arg.r#type, id, None)?;
                     args.push(ty);
                 }
 
                 if let Some(ty) = &fn_def.decl.ret_type {
-                    ret_type = lower_type(&ctx, ty, id, None)?;
+                    ret_type = lower_type(&mut ctx, ty, id, None)?;
                 } else {
                     ret_type = Ty {
                         span: None,
@@ -146,12 +156,12 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                 let ret_type;
 
                 for arg in &fn_decl.params {
-                    let ty = lower_type(&ctx, &arg.r#type, id, None)?;
+                    let ty = lower_type(&mut ctx, &arg.r#type, id, None)?;
                     args.push(ty);
                 }
 
                 if let Some(ty) = &fn_decl.ret_type {
-                    ret_type = lower_type(&ctx, ty, id, None)?;
+                    ret_type = lower_type(&mut ctx, ty, id, None)?;
                 } else {
                     ret_type = Ty {
                         span: None,
@@ -177,12 +187,12 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                     let mut args = Vec::new();
                     let ret_type;
 
-                    let target_tykind = lower_type(&ctx, &impl_block.target, id, None)?.kind;
+                    let target_tykind = lower_type(&mut ctx, &impl_block.target, id, None)?.kind;
 
                     let mut first_is_self = false;
                     if let Some(self_ty) = fn_def.decl.params.first() {
                         if let TypeDescriptor::SelfType { is_ref, is_mut } = self_ty.r#type {
-                            let mut target_ty = lower_type(&ctx, &impl_block.target, id, None)?;
+                            let mut target_ty = lower_type(&mut ctx, &impl_block.target, id, None)?;
                             if is_ref {
                                 target_ty = Ty {
                                     span: target_ty.span,
@@ -206,12 +216,12 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
                         arg_iter.next();
                     }
                     for arg in arg_iter {
-                        let ty = lower_type(&ctx, &arg.r#type, id, None)?;
+                        let ty = lower_type(&mut ctx, &arg.r#type, id, None)?;
                         args.push(ty);
                     }
 
                     if let Some(ty) = &fn_def.decl.ret_type {
-                        ret_type = lower_type(&ctx, ty, id, None)?;
+                        ret_type = lower_type(&mut ctx, ty, id, None)?;
                     } else {
                         ret_type = Ty {
                             span: None,
@@ -263,11 +273,13 @@ fn lower_module(mut ctx: BuildCtx, module: &Module, id: DefId) -> Result<BuildCt
     Ok(ctx)
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_constant(
     mut ctx: BuildCtx,
     info: &ConstantDef,
     module_id: DefId,
 ) -> Result<BuildCtx, LoweringError> {
+    debug!("lowering constant");
     let name = info.decl.name.name.clone();
 
     let id = {
@@ -283,7 +295,7 @@ fn lower_constant(
             .expect("constant should exist")
     };
 
-    let value_ty = lower_type(&ctx, &info.decl.r#type, module_id, None)?;
+    let value_ty = lower_type(&mut ctx, &info.decl.r#type, module_id, None)?;
 
     let value = lower_constant_expression(&info.value, value_ty)?;
 
@@ -294,7 +306,9 @@ fn lower_constant(
     Ok(ctx)
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_constant_expression(expression: &Expression, ty: Ty) -> Result<ConstData, LoweringError> {
+    debug!("lowering const expression");
     let data = match expression {
         Expression::Value(value, _) => match value {
             ValueExpr::ConstBool(value, _) => {
@@ -345,16 +359,17 @@ fn lower_constant_expression(expression: &Expression, ty: Ty) -> Result<ConstDat
     Ok(ConstData { ty, data })
 }
 
+#[instrument(level = "debug", skip_all, fields(name = ?info.name.name))]
 fn lower_struct(
-    mut ctx: BuildCtx,
+    ctx: &mut BuildCtx,
     info: &StructDecl,
+    id: DefId,
     module_id: DefId,
-) -> Result<BuildCtx, LoweringError> {
+    generics: Option<&HashMap<String, TypeName>>,
+) -> Result<(), LoweringError> {
+    debug!("lowering struct");
     let mut body = AdtBody {
-        def_id: {
-            let body = ctx.body.modules.get(&module_id).unwrap();
-            *body.symbols.structs.get(&info.name.name).unwrap()
-        },
+        def_id: id,
         is_pub: true, // todo struct pub
         name: info.name.name.clone(),
         variants: Vec::new(),
@@ -366,7 +381,7 @@ fn lower_struct(
         let variant = VariantDef {
             def_id: ctx.gen.next_defid(),
             name: field.name.name.clone(),
-            ty: lower_type(&ctx, &field.r#type, module_id, None)?, // todo: struct generics
+            ty: lower_type(ctx, &field.r#type, module_id, generics)?,
             discriminant: i,
         };
         body.variants.push(variant);
@@ -375,7 +390,7 @@ fn lower_struct(
     }
 
     ctx.body.structs.insert(body.def_id, body);
-    Ok(ctx)
+    Ok(())
 }
 
 #[instrument(level = "debug", skip_all, fields(name = func.decl.name.name))]
@@ -427,13 +442,13 @@ fn lower_func(
                 .decl
                 .params
                 .iter()
-                .map(|param| lower_type(&ctx, &param.r#type, module_id, Some(generics)))
+                .map(|param| lower_type(&mut ctx, &param.r#type, module_id, Some(generics)))
                 .collect::<Result<_, _>>()?;
             let ret_ty = func
                 .decl
                 .ret_type
                 .as_ref()
-                .map(|x| lower_type(&ctx, x, module_id, Some(generics)))
+                .map(|x| lower_type(&mut ctx, x, module_id, Some(generics)))
                 .unwrap_or_else(|| {
                     Ok(Ty {
                         span: None,
@@ -463,8 +478,9 @@ fn lower_func(
             locals: Vec::new(),
             is_extern: func.decl.is_extern,
             is_intrinsic,
-            name: if has_self.is_some() {
-                format!("{}_{}_{}", &func.decl.name.name, fn_id.program_id, fn_id.id)
+            name: if !func.decl.is_extern && func.decl.name.name != "main" {
+                ctx.get_mangled_name(module_id, &func.decl.name.name, fn_id)
+                    .expect("failed to get mangled name")
             } else {
                 func.decl.name.name.clone()
             },
@@ -532,7 +548,7 @@ fn lower_func(
         .as_ref()
         .map(|r| {
             lower_type(
-                &builder.ctx,
+                &mut builder.ctx,
                 r,
                 builder.local_module,
                 builder.generic_map.as_ref(),
@@ -580,7 +596,7 @@ fn get_locals(
                 match &info.target {
                     LetStmtTarget::Simple { id: name, r#type } => {
                         let ty = lower_type(
-                            &builder.ctx,
+                            &mut builder.ctx,
                             r#type,
                             builder.local_module,
                             builder.generic_map.as_ref(),
@@ -605,7 +621,7 @@ fn get_locals(
         statements::Statement::Let(info) => match &info.target {
             LetStmtTarget::Simple { id: name, r#type } => {
                 let ty = lower_type(
-                    &builder.ctx,
+                    &mut builder.ctx,
                     r#type,
                     builder.local_module,
                     builder.generic_map.as_ref(),
@@ -632,11 +648,13 @@ fn get_locals(
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all, fields(name = ?func.name.name))]
 fn lower_func_decl(
     ctx: BuildCtx,
     func: &FunctionDecl,
     module_id: DefId,
 ) -> Result<BuildCtx, LoweringError> {
+    debug!("lowering function declaration");
     let is_intrinsic: Option<ConcreteIntrinsic> = None;
 
     // TODO: parse insintrics here.
@@ -703,7 +721,9 @@ fn lower_statement(
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), LoweringError> {
+    debug!("lowering while");
     let statements = std::mem::take(&mut builder.statements);
     builder.body.basic_blocks.push(BasicBlock {
         statements,
@@ -780,7 +800,9 @@ fn lower_while(builder: &mut FnBodyBuilder, info: &WhileStmt) -> Result<(), Lowe
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_for(builder: &mut FnBodyBuilder, info: &ForStmt) -> Result<(), LoweringError> {
+    debug!("lowering for");
     if let Some(init) = &info.init {
         lower_let(builder, init)?;
     }
@@ -881,7 +903,9 @@ fn lower_for(builder: &mut FnBodyBuilder, info: &ForStmt) -> Result<(), Lowering
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), LoweringError> {
+    debug!("begin lowering if");
     let (discriminator, discriminator_type, _disc_span) =
         lower_expression(builder, &info.cond, None)?;
 
@@ -985,17 +1009,22 @@ fn lower_if_statement(builder: &mut FnBodyBuilder, info: &IfExpr) -> Result<(), 
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), LoweringError> {
+    debug!("begin lowering let");
     match &info.target {
         LetStmtTarget::Simple { id: name, r#type } => {
+            debug!("let target is simple");
             let ty = lower_type(
-                &builder.ctx,
+                &mut builder.ctx,
                 r#type,
                 builder.local_module,
                 builder.generic_map.as_ref(),
             )?;
+            debug!("let target type: {:?}", ty.kind);
             let (rvalue, rvalue_ty, rvalue_span) =
                 lower_expression(builder, &info.value, Some(ty.clone()))?;
+            debug!("let rvalue type: {:?}", rvalue_ty.kind);
 
             if ty.kind != rvalue_ty.kind {
                 return Err(LoweringError::UnexpectedType {
@@ -1024,12 +1053,17 @@ fn lower_let(builder: &mut FnBodyBuilder, info: &LetStmt) -> Result<(), Lowering
                 ),
             });
         }
-        LetStmtTarget::Destructure(_) => todo!(),
+        LetStmtTarget::Destructure(_) => {
+            debug!("let target is a destructure");
+            todo!()
+        }
     };
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), LoweringError> {
+    debug!("begin lowering assign");
     let (mut place, mut ty, _path_span) = lower_path(builder, &info.lvalue)?;
 
     if !builder.body.locals[place.local].is_mutable() {
@@ -1078,12 +1112,15 @@ fn lower_assign(builder: &mut FnBodyBuilder, info: &AssignStmt) -> Result<(), Lo
     Ok(())
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_return(
     builder: &mut FnBodyBuilder,
     info: &ReturnStmt,
     ret_type: Ty,
 ) -> Result<(), LoweringError> {
+    debug!("begin lowering return");
     if let Some(value_exp) = &info.value {
+        debug!("return has value");
         let (value, value_ty, _exp_span) =
             lower_expression(builder, value_exp, Some(ret_type.clone()))?;
 
@@ -1120,8 +1157,13 @@ fn lower_return(
     Ok(())
 }
 
-fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Option<Ty> {
-    match info {
+#[instrument(level = "debug", skip_all)]
+fn find_expression_type(
+    builder: &mut FnBodyBuilder,
+    info: &Expression,
+) -> Result<Option<Ty>, LoweringError> {
+    debug!("finding expression type");
+    Ok(match info {
         Expression::Value(value, _) => match value {
             ValueExpr::ConstBool(_, span) => Some(Ty {
                 span: Some(*span),
@@ -1160,7 +1202,7 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
         }
         Expression::Match(_) => None,
         Expression::If(_) => None,
-        Expression::UnaryOp(_, info) => find_expression_type(builder, info),
+        Expression::UnaryOp(_, info) => find_expression_type(builder, info)?,
         Expression::BinaryOp(lhs, op, rhs) => {
             if matches!(op, BinaryOp::Logic(_)) {
                 Some(Ty {
@@ -1168,7 +1210,7 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
                     kind: TyKind::Bool,
                 })
             } else {
-                find_expression_type(builder, lhs).or(find_expression_type(builder, rhs))
+                find_expression_type(builder, lhs)?.or(find_expression_type(builder, rhs)?)
             }
         }
         Expression::Deref(_, _) => {
@@ -1176,27 +1218,105 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
         }
         Expression::AsRef(_, _, _) => todo!(),
         Expression::StructInit(info) => {
-            let id = *builder
+            let mut id = *builder
                 .get_module_body()
                 .symbols
                 .structs
-                .get(&info.name.name)
+                .get(&info.name.name.name)
+                .or_else(|| builder.get_module_body().imports.get(&info.name.name.name))
                 .expect("struct not found");
+            let module_id = builder.local_module;
 
-            // todo: struct generics
-            Some(Ty {
+            let mut generics = Vec::new();
+
+            if !info.name.generics.is_empty() {
+                generics = info
+                    .name
+                    .generics
+                    .iter()
+                    .map(|x| {
+                        lower_type(
+                            &mut builder.ctx,
+                            &TypeDescriptor::Type {
+                                name: x.clone(),
+                                span: x.span,
+                            },
+                            module_id,
+                            builder.generic_map.as_ref(),
+                        )
+                    })
+                    .collect::<Result<_, _>>()?;
+
+                let generic_struct_id = GenericStruct {
+                    id,
+                    generics: generics.clone(),
+                };
+
+                if let Some(mono_id) = builder.ctx.generic_structs.get(&generic_struct_id) {
+                    id = *mono_id;
+                } else {
+                    let next_id = builder.ctx.gen.next_defid();
+                    let body = builder
+                        .ctx
+                        .generic_struct_bodies
+                        .get(&id)
+                        .expect("generic body not found")
+                        .clone();
+                    let mut generic_map = builder.generic_map.clone().unwrap_or_default();
+
+                    for (gen_ty, gen_name) in info.name.generics.iter().zip(body.generics.iter()) {
+                        if generic_map.contains_key(&gen_name.name.name) {
+                            debug!(
+                                "Generic map already countains a record: {}, wanted to add {}",
+                                gen_name.name.name, gen_ty
+                            );
+                            continue;
+                        }
+                        generic_map.insert(gen_name.name.name.clone(), gen_ty.clone());
+                    }
+
+                    lower_struct(
+                        &mut builder.ctx,
+                        &body,
+                        next_id,
+                        module_id,
+                        Some(&generic_map),
+                    )?;
+                    id = next_id;
+                    builder
+                        .ctx
+                        .generic_structs
+                        .insert(generic_struct_id, next_id);
+                }
+            }
+
+            let ty = Ty {
                 span: Some(info.span),
                 kind: TyKind::Struct {
                     id,
-                    generics: vec![],
+                    name: info.name.name.name.clone(),
+                    generics,
                 },
-            })
+            };
+            Some(ty)
         }
         Expression::Cast(_, _, _) => todo!(),
         Expression::ArrayInit(info) => {
-            let first_element = info.values.first()?;
+            let first_element = info.values.first();
+
+            if first_element.is_none() {
+                return Ok(None);
+            }
+
+            let first_element = first_element.unwrap();
 
             let first_type = find_expression_type(builder, first_element)?;
+
+            if first_type.is_none() {
+                return Ok(None);
+            }
+
+            let first_type = first_type.unwrap();
 
             let length = info.values.len() as u64;
 
@@ -1214,9 +1334,10 @@ fn find_expression_type(builder: &mut FnBodyBuilder, info: &Expression) -> Optio
                 ),
             })
         }
-    }
+    })
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_expression(
     builder: &mut FnBodyBuilder,
     info: &Expression,
@@ -1224,15 +1345,29 @@ fn lower_expression(
 ) -> Result<(Rvalue, Ty, Span), LoweringError> {
     Ok(match info {
         Expression::Value(info, span) => {
+            debug!("lowering value");
             let value = lower_value_expr(builder, info, type_hint)?;
             (value.0, value.1, *span)
         }
-        Expression::FnCall(info) => lower_fn_call(builder, info, None, None)?,
-        Expression::Match(_) => todo!(),
-        Expression::If(_) => todo!(),
-        Expression::UnaryOp(_, _) => todo!(),
+        Expression::FnCall(info) => {
+            debug!("lowering fncall");
+            lower_fn_call(builder, info, None, None)?
+        }
+        Expression::Match(_) => {
+            debug!("lowering match");
+            todo!()
+        }
+        Expression::If(_) => {
+            debug!("lowering if expression");
+            todo!()
+        }
+        Expression::UnaryOp(_, _) => {
+            debug!("lowering unary op");
+            todo!()
+        }
         Expression::BinaryOp(lhs, op, rhs) => lower_binary_op(builder, lhs, *op, rhs, type_hint)?,
         Expression::Deref(info, deref_span) => {
+            debug!("lowering deref");
             let (value, ty, _span) = lower_expression(builder, info, type_hint)?;
 
             let mut place = match value {
@@ -1258,6 +1393,7 @@ fn lower_expression(
             (Rvalue::Use(Operand::Place(place)), ty, *deref_span)
         }
         Expression::AsRef(inner, mutable, asref_span) => {
+            debug!("lowering asref");
             let type_hint = match type_hint {
                 Some(inner) => match inner.kind {
                     TyKind::Ref(inner, _) => Some(*inner.clone()),
@@ -1319,19 +1455,94 @@ fn lower_expression(
             (rvalue, ty, *asref_span)
         }
         Expression::StructInit(info) => {
-            let id = *builder
+            debug!("lowering struct init for struct {}", info.name);
+            let mut id = *builder
                 .get_module_body()
                 .symbols
                 .structs
-                .get(&info.name.name)
-                .or_else(|| builder.get_module_body().imports.get(&info.name.name))
+                .get(&info.name.name.name)
+                .or_else(|| builder.get_module_body().imports.get(&info.name.name.name))
                 .expect("struct not found");
+            let module_id = builder.local_module;
+
+            let mut generics = Vec::new();
+
+            // For now a generic struct needs to be instanced specifying the generic types.
+            if !info.name.generics.is_empty() {
+                generics = info
+                    .name
+                    .generics
+                    .iter()
+                    .map(|x| {
+                        lower_type(
+                            &mut builder.ctx,
+                            &TypeDescriptor::Type {
+                                name: x.clone(),
+                                span: x.span,
+                            },
+                            module_id,
+                            builder.generic_map.as_ref(),
+                        )
+                    })
+                    .collect::<Result<_, _>>()?;
+
+                let generic_struct_id = GenericStruct {
+                    id,
+                    generics: generics.clone(),
+                };
+
+                debug!(
+                    "struct has generics, checking generic struct id: {:?}",
+                    generic_struct_id
+                );
+
+                if let Some(mono_id) = builder.ctx.generic_structs.get(&generic_struct_id) {
+                    debug!("monomorphized struct id found: {mono_id:?}");
+                    id = *mono_id;
+                } else {
+                    let next_id = builder.ctx.gen.next_defid();
+                    debug!("monomorphized id not found, lowering with id {next_id:?}");
+                    let body = builder
+                        .ctx
+                        .generic_struct_bodies
+                        .get(&id)
+                        .expect("generic body not found")
+                        .clone();
+                    let mut generic_map = builder.generic_map.clone().unwrap_or_default();
+
+                    for (gen_ty, gen_name) in info.name.generics.iter().zip(body.generics.iter()) {
+                        if generic_map.contains_key(&gen_name.name.name) {
+                            debug!(
+                                "Generic map already countains a record: {}, wanted to add {}",
+                                gen_name.name.name, gen_ty
+                            );
+                            continue;
+                        }
+                        generic_map.insert(gen_name.name.name.clone(), gen_ty.clone());
+                    }
+
+                    lower_struct(
+                        &mut builder.ctx,
+                        &body,
+                        next_id,
+                        module_id,
+                        Some(&generic_map),
+                    )?;
+                    id = next_id;
+                    builder
+                        .ctx
+                        .generic_structs
+                        .insert(generic_struct_id, next_id);
+                }
+            }
             let struct_body = builder.ctx.body.structs.get(&id).unwrap().clone();
+
             let ty = Ty {
                 span: Some(info.span),
                 kind: TyKind::Struct {
                     id,
-                    generics: vec![],
+                    name: info.name.name.name.clone(),
+                    generics,
                 },
             };
             let struct_local = builder.add_local(Local::temp(ty.clone()));
@@ -1371,7 +1582,7 @@ fn lower_expression(
             let (value, ty, _span) = lower_expression(builder, value, None)?;
 
             let new_ty = lower_type(
-                &builder.ctx,
+                &mut builder.ctx,
                 cast_ty,
                 builder.local_module,
                 builder.generic_map.as_ref(),
@@ -1475,6 +1686,7 @@ fn lower_expression(
     })
 }
 
+#[instrument(level = "debug", skip_all)]
 fn lower_fn_call(
     builder: &mut FnBodyBuilder,
     info: &FnCallOp,
@@ -1544,13 +1756,14 @@ fn lower_fn_call(
                 .ctx
                 .unresolved_function_signatures
                 .get(&fn_id)
-                .unwrap();
+                .unwrap()
+                .clone();
 
             let args: Vec<Ty> = args
                 .iter()
                 .map(|arg| {
                     lower_type_with_self(
-                        &builder.ctx,
+                        &mut builder.ctx,
                         arg,
                         builder.local_module,
                         self_value.as_ref().map(|x| &x.1),
@@ -1560,7 +1773,14 @@ fn lower_fn_call(
                 .collect::<Result<Vec<_>, _>>()?;
             let ret = ret
                 .as_ref()
-                .map(|arg| lower_type(&builder.ctx, arg, builder.local_module, Some(&generic_map)))
+                .map(|arg| {
+                    lower_type(
+                        &mut builder.ctx,
+                        arg,
+                        builder.local_module,
+                        Some(&generic_map),
+                    )
+                })
                 .unwrap_or(Ok(Ty {
                     span: None,
                     kind: TyKind::Unit,
@@ -1666,7 +1886,10 @@ fn lower_binary_op(
     type_hint: Option<Ty>,
 ) -> Result<(Rvalue, Ty, Span), LoweringError> {
     let (lhs, lhs_ty, lhs_span) = if type_hint.is_none() {
-        let ty = find_expression_type(builder, lhs).or_else(|| find_expression_type(builder, rhs));
+        let ty = find_expression_type(builder, lhs)
+            .transpose()
+            .or_else(|| find_expression_type(builder, rhs).transpose())
+            .transpose()?;
 
         let ty = if let Some(ty) = ty {
             ty
@@ -1690,7 +1913,7 @@ fn lower_binary_op(
     let is_lhs_ptr = matches!(lhs_ty.kind, TyKind::Ptr(_, _));
 
     let (rhs, rhs_ty, rhs_span) = if type_hint.is_none() {
-        let ty = find_expression_type(builder, rhs).unwrap_or(lhs_ty.clone());
+        let ty = find_expression_type(builder, rhs)?.unwrap_or(lhs_ty.clone());
         lower_expression(builder, rhs, if is_lhs_ptr { None } else { Some(ty) })?
     } else {
         lower_expression(
@@ -2005,7 +2228,12 @@ pub fn lower_path(
                     ty = *inner;
                 }
 
-                if let TyKind::Struct { id, generics: _ } = ty.kind {
+                if let TyKind::Struct {
+                    id,
+                    generics: _,
+                    name: _,
+                } = ty.kind
+                {
                     let struct_body = builder.ctx.body.structs.get(&id).unwrap();
                     let idx = *struct_body.name_to_idx.get(&name.name).ok_or_else(|| {
                         LoweringError::StructFieldNotFound {
@@ -2101,7 +2329,7 @@ pub fn lower_path(
 }
 
 pub fn lower_type_with_self(
-    ctx: &BuildCtx,
+    ctx: &mut BuildCtx,
     ty: &TypeDescriptor,
     module_id: DefId,
     self_ty: Option<&Ty>,
@@ -2134,7 +2362,7 @@ pub fn lower_type_with_self(
 /// to its proper non-generic type.
 #[instrument(level = "debug", skip_all, fields(ty = %ty))]
 pub fn lower_type(
-    ctx: &BuildCtx,
+    ctx: &mut BuildCtx,
     ty: &TypeDescriptor,
     module_id: DefId,
     // A local context map to resolve generics to specific types
@@ -2176,7 +2404,7 @@ pub fn lower_type(
                 }
 
                 // Find on imports or local module
-                let def_id = module
+                let mut def_id = *module
                     .imports
                     .get(other)
                     .or_else(|| module.symbols.structs.get(other))
@@ -2186,25 +2414,70 @@ pub fn lower_type(
                         program_id: module_id.program_id,
                     })?;
 
+                debug!("Found def_id={def_id:?}");
+
+                let mut generic_tys = Vec::new();
+                for generic in &name.generics {
+                    generic_tys.push(lower_type(
+                        ctx,
+                        &TypeDescriptor::Type {
+                            name: generic.clone(),
+                            span: generic.span,
+                        },
+                        module_id,
+                        generic_map,
+                    )?);
+                }
+
+                debug!("generic_tys: {:?}", &generic_tys);
+
+                let generic_struct = GenericStruct {
+                    id: def_id,
+                    generics: generic_tys.clone(),
+                };
+
+                if let Some(body) = ctx.generic_structs.get(&generic_struct) {
+                    debug!("Found monomorphized struct generic: {body:?}");
+                    def_id = *body;
+                }
+
                 // Check if its a struct.
-                if ctx.body.structs.contains_key(def_id) {
-                    let mut generic_tys = Vec::new();
-                    for generic in &name.generics {
-                        generic_tys.push(lower_type(
-                            ctx,
-                            &TypeDescriptor::Type {
-                                name: generic.clone(),
-                                span: generic.span,
-                            },
-                            module_id,
-                            generic_map,
-                        )?);
+                if ctx.body.structs.contains_key(&def_id) {
+                    return Ok(Ty::new(
+                        span,
+                        TyKind::Struct {
+                            id: def_id,
+                            name: other.to_string(),
+                            generics: generic_tys,
+                        },
+                    ));
+                } else if let Some(adt_body) = ctx.generic_struct_bodies.get(&def_id).cloned() {
+                    let next_id = ctx.gen.next_defid();
+                    // the struct with the specific generic types is not yet monomorphized, so we monomorphize it here.
+
+                    let mut generic_map = generic_map.cloned().unwrap_or_default();
+
+                    assert_eq!(adt_body.generics.len(), name.generics.len());
+                    for (gen_ty, gen_name) in name.generics.iter().zip(adt_body.generics.iter()) {
+                        if generic_map.contains_key(&gen_name.name.name) {
+                            debug!(
+                                "Generic map already countains a record: {}, wanted to add {}",
+                                gen_name.name.name, gen_ty
+                            );
+                            continue;
+                        }
+                        generic_map.insert(gen_name.name.name.clone(), gen_ty.clone());
                     }
+
+                    lower_struct(ctx, &adt_body, next_id, module_id, Some(&generic_map))?;
+
+                    ctx.generic_structs.insert(generic_struct, next_id);
 
                     return Ok(Ty::new(
                         span,
                         TyKind::Struct {
-                            id: *def_id,
+                            id: next_id,
+                            name: other.to_string(),
                             generics: generic_tys,
                         },
                     ));

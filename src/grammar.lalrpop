@@ -170,6 +170,16 @@ TypeName: ast::common::TypeName = {
   }
 }
 
+// A Type name in "use" form, needs "::" at end to avoid ambiguity
+TypeNameUse: ast::common::TypeName = {
+  <lo:@L> <path:(<Ident> "::")*> <name:Ident> <generics:("::" "<" <Comma<TypeName>> ">")?> <hi:@R> => ast::common::TypeName {
+    name,
+    path,
+    generics: generics.unwrap_or_default(),
+    span: ast::common::Span::new(lo, hi),
+  }
+}
+
 TypeDescriptor: ast::types::TypeDescriptor = {
   <lo:@L> <name:TypeName> <hi:@R> => ast::types::TypeDescriptor::Type {
     name,
@@ -431,18 +441,18 @@ EnumVariant: ast::enums::EnumVariant = {
 }
 
 StructInitField: (ast::common::Ident, ast::expressions::StructInitField) = {
+    <lo:@L> <name:Ident> ":" <value:StructInitExpr>  <hi:@R> => (name, ast::expressions::StructInitField {
+        value: ast::expressions::Expression::StructInit(value),
+        span: Span::new(lo, hi),
+    }),
     <lo:@L> <name:Ident> ":" <value:Expression> <hi:@R> => (name, ast::expressions::StructInitField {
         value,
         span: Span::new(lo, hi),
     }),
-    <lo:@L> <name:Ident> ":" <value:StructInitExpr> <hi:@R> => (name, ast::expressions::StructInitField {
-        value: ast::expressions::Expression::StructInit(value),
-        span: Span::new(lo, hi),
-    })
 }
 
 StructInitExpr: ast::expressions::StructInitExpr = {
-  <lo:@L> <name:Ident> "{" <fields:Comma<StructInitField>> "}" <hi:@R> => ast::expressions::StructInitExpr {
+  <lo:@L> <name:TypeNameUse> "{" <fields:Comma<StructInitField>> "}" <hi:@R> => ast::expressions::StructInitExpr {
     name,
     fields: fields.into_iter().collect(),
     span: Span::new(lo, hi),
