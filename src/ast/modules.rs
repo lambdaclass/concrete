@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::{
     common::{DocString, Ident, Span},
     constants::ConstantDef,
@@ -18,15 +20,16 @@ pub struct Module {
     pub span: Span,
 }
 
+/// Top level module items, behind Arcs so they are cheaply clonable during lowering.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ModuleDefItem {
-    Constant(ConstantDef),
-    Function(FunctionDef),
-    FunctionDecl(FunctionDecl),
-    Impl(ImplBlock),
-    Struct(StructDecl),
-    Union(UnionDecl),
-    Enum(EnumDecl),
-    Type(TypeDecl),
-    Module(Module),
+    Constant(Arc<ConstantDef>),
+    Function(Arc<FunctionDef>),
+    FunctionDecl(Arc<FunctionDecl>),
+    Impl(Arc<ImplBlock>),
+    Struct(Arc<StructDecl>),
+    Union(Arc<UnionDecl>),
+    Enum(Arc<EnumDecl>),
+    Type(Arc<TypeDecl>),
+    Module(Arc<Module>),
 }

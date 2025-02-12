@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::ir::{
-    BinOp, ConstValue, FnBody, FnIndex, LocalKind, ModuleBody, ModuleIndex, Operand, Place,
-    PlaceElem, ProgramBody, Rvalue, Span, TyKind, TypeIndex, ValueTree,
+    BinOp, ConstValue, FnIndex, Function, LocalKind, Module, ModuleIndex, Operand, Place,
+    PlaceElem, Rvalue, Span, Type as IRType, TypeIndex, ValueTree, IR,
 };
 use ariadne::Source;
 use melior::ir::BlockLike;
@@ -35,7 +35,7 @@ pub(crate) struct CodegenCtx<'a> {
     /// The MLIR module.
     pub mlir_module: &'a MeliorModule<'a>,
     /// The program IR.
-    pub program: &'a ProgramBody,
+    pub program: &'a IR,
 }
 
 /// Codegen context for a module
@@ -48,7 +48,7 @@ struct ModuleCodegenCtx<'a> {
 
 impl ModuleCodegenCtx<'_> {
     /// Gets the module IR body.
-    pub fn get_module_body(&self) -> &ModuleBody {
+    pub fn get_module_body(&self) -> &Module {
         &self.ctx.program.modules[self.module_id]
     }
 
@@ -73,11 +73,11 @@ impl ModuleCodegenCtx<'_> {
         }
     }
 
-    pub fn get_type(&self, ty: TypeIndex) -> TyKind {
+    pub fn get_type(&self, ty: TypeIndex) -> IRType {
         self.ctx.program.types[ty].clone().unwrap()
     }
 
-    pub fn get_fn_signature(&self, id: FnIndex) -> (Vec<TyKind>, TyKind) {
+    pub fn get_fn_signature(&self, id: FnIndex) -> (Vec<IRType>, IRType) {
         let body = self.ctx.program.functions[id].as_ref().unwrap();
         let mut args = Vec::new();
 
@@ -136,7 +136,7 @@ struct FunctionCodegenCtx<'a> {
 
 impl FunctionCodegenCtx<'_> {
     /// Gets the function IR body.
-    pub fn get_fn_body(&self) -> &FnBody {
+    pub fn get_fn_body(&self) -> &Function {
         self.module.ctx.program.functions[self.fn_idx]
             .as_ref()
             .expect("should have body")
@@ -147,7 +147,7 @@ impl FunctionCodegenCtx<'_> {
     }
 
     /// Gets the function argument types and return type.
-    pub fn get_fn_signature(&self) -> (Vec<TyKind>, TyKind) {
+    pub fn get_fn_signature(&self) -> (Vec<IRType>, IRType) {
         self.module.get_fn_signature(self.fn_idx)
     }
 
@@ -262,7 +262,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                 // Return pointer.
                 LocalKind::ReturnPointer => {
                     let ty = ctx.module.get_type(local.ty);
-                    if let TyKind::Unit = ty {
+                    if let IRType::Unit = ty {
                     } else {
                         return_local = Some(index);
                         let ptr: Value = entry_block
@@ -370,7 +370,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                     );
                     let ret_type = target_fn_body_sig.1;
                     let ret_type = match &ret_type {
-                        TyKind::Unit => None,
+                        IRType::Unit => None,
                         _ => Some(compile_type(ctx.module, &ret_type)),
                     };
                     let result = mlir_block.append_operation(func::call(
@@ -448,7 +448,7 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
     let param_types: Vec<_> = params_ty.iter().map(|x| x.0).collect();
     // If the return type is unit, pass a empty slice to mlir.
     let return_type = match &body_signature.1 {
-        TyKind::Unit => None,
+        IRType::Unit => None,
         _ => Some(compile_type(ctx.module, &body_signature.1)),
     };
 
@@ -671,9 +671,9 @@ fn compile_binop<'c: 'b, 'b>(
     let location = Location::unknown(ctx.context());
     let lhs_ty = ctx.module.get_type(lhs_type_idx);
 
-    let is_float = matches!(lhs_ty, TyKind::Float(_));
-    let is_signed = matches!(lhs_ty, TyKind::Int(_));
-    let is_ptr = if let TyKind::Ptr(inner, _) = &lhs_ty {
+    let is_float = matches!(lhs_ty, IRType::Float(_));
+    let is_signed = matches!(lhs_ty, IRType::Int(_));
+    let is_ptr = if let IRType::Ptr(inner, _) = &lhs_ty {
         Some(*inner)
     } else {
         None
@@ -1062,7 +1062,7 @@ fn compile_store_place<'c: 'b, 'b>(
                     .result(0)?
                     .into();
                 local_type_idx = match local_ty {
-                    TyKind::Struct(id) => {
+                    IRType::Struct(id) => {
                         let strc = ctx.module.ctx.program.structs[id].as_ref().unwrap();
                         strc.variants[*field_idx].ty
                     }
@@ -1176,7 +1176,7 @@ fn compile_load_place<'c: 'b, 'b>(
             }
             PlaceElem::Field(field_idx) => {
                 local_type_idx = match local_ty {
-                    TyKind::Struct(id) => {
+                    IRType::Struct(id) => {
                         let struct_body = ctx.module.ctx.program.structs[id].as_ref().unwrap();
                         let variant_type_idx = struct_body.variants[*field_idx].ty;
                         ptr = block
@@ -1433,31 +1433,31 @@ fn compile_value_tree<'c: 'b, 'b>(
     })
 }
 
-fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &TyKind) -> Type<'c> {
+fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &IRType) -> Type<'c> {
     match ty {
-        crate::ir::TyKind::Unit => Type::none(ctx.ctx.mlir_context),
-        crate::ir::TyKind::Bool => IntegerType::new(ctx.ctx.mlir_context, 1).into(),
-        crate::ir::TyKind::Char => IntegerType::new(ctx.ctx.mlir_context, 8).into(),
-        crate::ir::TyKind::Int(int_ty) => match int_ty {
+        crate::ir::Type::Unit => Type::none(ctx.ctx.mlir_context),
+        crate::ir::Type::Bool => IntegerType::new(ctx.ctx.mlir_context, 1).into(),
+        crate::ir::Type::Char => IntegerType::new(ctx.ctx.mlir_context, 8).into(),
+        crate::ir::Type::Int(int_ty) => match int_ty {
             crate::ir::IntTy::I8 => IntegerType::new(ctx.ctx.mlir_context, 8).into(),
             crate::ir::IntTy::I16 => IntegerType::new(ctx.ctx.mlir_context, 16).into(),
             crate::ir::IntTy::I32 => IntegerType::new(ctx.ctx.mlir_context, 32).into(),
             crate::ir::IntTy::I64 => IntegerType::new(ctx.ctx.mlir_context, 64).into(),
             crate::ir::IntTy::I128 => IntegerType::new(ctx.ctx.mlir_context, 128).into(),
         },
-        crate::ir::TyKind::Uint(uint_ty) => match uint_ty {
+        crate::ir::Type::Uint(uint_ty) => match uint_ty {
             crate::ir::UintTy::U8 => IntegerType::new(ctx.ctx.mlir_context, 8).into(),
             crate::ir::UintTy::U16 => IntegerType::new(ctx.ctx.mlir_context, 16).into(),
             crate::ir::UintTy::U32 => IntegerType::new(ctx.ctx.mlir_context, 32).into(),
             crate::ir::UintTy::U64 => IntegerType::new(ctx.ctx.mlir_context, 64).into(),
             crate::ir::UintTy::U128 => IntegerType::new(ctx.ctx.mlir_context, 128).into(),
         },
-        crate::ir::TyKind::Float(float_ty) => match float_ty {
+        crate::ir::Type::Float(float_ty) => match float_ty {
             crate::ir::FloatTy::F32 => Type::float32(ctx.ctx.mlir_context),
             crate::ir::FloatTy::F64 => Type::float64(ctx.ctx.mlir_context),
         },
-        crate::ir::TyKind::String => todo!(),
-        crate::ir::TyKind::Array(inner_type_idx, length) => {
+        crate::ir::Type::String => todo!(),
+        crate::ir::Type::Array(inner_type_idx, length) => {
             let inner_type = ctx.get_type(*inner_type_idx);
             let inner_type = compile_type(ctx, &inner_type);
             let length = match length.data {
@@ -1467,10 +1467,10 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &TyKind) -> Type<'c> {
 
             melior::dialect::llvm::r#type::array(inner_type, length as u32)
         }
-        crate::ir::TyKind::Ref(_inner_ty, _) | crate::ir::TyKind::Ptr(_inner_ty, _) => {
+        crate::ir::Type::Ref(_inner_ty, _) | crate::ir::Type::Ptr(_inner_ty, _) => {
             llvm::r#type::pointer(ctx.ctx.mlir_context, 0)
         }
-        crate::ir::TyKind::Struct(id) => {
+        crate::ir::Type::Struct(id) => {
             let body = ctx.ctx.program.structs[*id].as_ref().unwrap();
 
             let mut fields = Vec::new();

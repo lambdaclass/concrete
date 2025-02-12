@@ -5,7 +5,7 @@ use crate::{
         constants::ConstantDef,
         expressions::{Expression, PathOp, ValueExpr},
     },
-    ir::{ConstKind, ConstValue, FloatTy, IntTy, TyKind, UintTy, ValueTree},
+    ir::{ConstKind, ConstValue, FloatTy, IntTy, Type, UintTy, ValueTree},
 };
 
 use super::{
@@ -68,7 +68,7 @@ pub(crate) fn lower_constant_expression(
             },
             ValueExpr::ConstInt(value, span) => ConstData {
                 data: ConstKind::Value(ValueTree::Leaf(match &ty {
-                    TyKind::Int(ty) => match ty {
+                    Type::Int(ty) => match ty {
                         IntTy::I8 => {
                             ConstValue::I8((*value).try_into().expect("value out of range"))
                         }
@@ -85,7 +85,7 @@ pub(crate) fn lower_constant_expression(
                             ConstValue::I128((*value).try_into().expect("value out of range"))
                         }
                     },
-                    TyKind::Uint(ty) => match ty {
+                    Type::Uint(ty) => match ty {
                         UintTy::U8 => {
                             ConstValue::U8((*value).try_into().expect("value out of range"))
                         }
@@ -100,7 +100,7 @@ pub(crate) fn lower_constant_expression(
                         }
                         UintTy::U128 => ConstValue::U128(*value),
                     },
-                    TyKind::Bool => ConstValue::Bool(*value != 0),
+                    Type::Bool => ConstValue::Bool(*value != 0),
                     x => unreachable!("{:?}", x),
                 })),
                 ty: type_idx,
@@ -108,7 +108,7 @@ pub(crate) fn lower_constant_expression(
             },
             ValueExpr::ConstFloat(value, span) => ConstData {
                 data: ConstKind::Value(ValueTree::Leaf(match &ty {
-                    TyKind::Float(ty) => match ty {
+                    Type::Float(ty) => match ty {
                         FloatTy::F32 => {
                             ConstValue::F32(value.parse().expect("error parsing float"))
                         }

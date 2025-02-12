@@ -9,7 +9,7 @@ use crate::{
     ir::{
         lowering::{functions::lower_fn_call, structs::lower_struct},
         ConstKind, ConstValue, FloatTy, IntTy, Local, Mutability, Operand, Place, PlaceElem, Span,
-        Statement, StatementKind, TyKind, UintTy, ValueTree,
+        Statement, StatementKind, Type, UintTy, ValueTree,
     },
 };
 
@@ -127,7 +127,7 @@ pub(crate) fn lower_expression(
                 .builder
                 .ir
                 .types
-                .insert(Some(TyKind::Ref(ty, mutability)));
+                .insert(Some(Type::Ref(ty, mutability)));
 
             (rvalue, ref_ty, *asref_span)
         }
@@ -141,7 +141,7 @@ pub(crate) fn lower_expression(
                 .builder
                 .ir
                 .types
-                .insert(Some(TyKind::Struct(struct_idx)));
+                .insert(Some(Type::Struct(struct_idx)));
             let struct_local = builder.add_local(Local::temp(struct_ty));
 
             let place = Place {
@@ -156,7 +156,7 @@ pub(crate) fn lower_expression(
 
             for (field, value) in info.fields.iter() {
                 let idx = *struct_body
-                    .name_to_variant_idx
+                    .variant_names
                     .get(&field.name)
                     .expect("failed to find field");
                 let mut field_place = place.clone();
@@ -220,7 +220,7 @@ pub(crate) fn lower_expression(
 
             let length = info.values.len() as u64;
 
-            let ty_kind = TyKind::Array(
+            let ty_kind = Type::Array(
                 element_type,
                 Arc::new(ConstData {
                     ty: builder.builder.ir.get_u64_ty(),
@@ -314,7 +314,7 @@ pub(crate) fn find_expression_type(
             if let Some(inner_type_idx) = inner_type_idx {
                 let inner_ty = fn_builder.builder.get_type(inner_type_idx).clone();
 
-                if let TyKind::Ref(inner, _) = inner_ty {
+                if let Type::Ref(inner, _) = inner_ty {
                     Some(inner)
                 } else {
                     None
@@ -327,7 +327,7 @@ pub(crate) fn find_expression_type(
             let inner_ty = find_expression_type(fn_builder, inner)?;
 
             if let Some(inner_ty) = inner_ty {
-                let tykind = TyKind::Ref(
+                let tykind = Type::Ref(
                     inner_ty,
                     if *mutable {
                         Mutability::Mut
@@ -351,7 +351,7 @@ pub(crate) fn find_expression_type(
                 .builder
                 .ir
                 .types
-                .insert(Some(TyKind::Struct(struct_idx)));
+                .insert(Some(Type::Struct(struct_idx)));
 
             Some(struct_ty)
         }
@@ -378,7 +378,7 @@ pub(crate) fn find_expression_type(
 
             let length = info.values.len() as u64;
 
-            let tykind = TyKind::Array(
+            let tykind = Type::Array(
                 first_type,
                 Arc::new(ConstData {
                     ty: fn_builder.builder.ir.get_u64_ty(),
@@ -425,7 +425,7 @@ pub(crate) fn lower_value_expr(
                             ty: type_idx,
                             span: *const_span,
                             data: ConstKind::Value(ValueTree::Leaf(match ty {
-                                TyKind::Int(ty) => match ty {
+                                Type::Int(ty) => match ty {
                                     IntTy::I8 => ConstValue::I8(
                                         (*value).try_into().expect("value out of range"),
                                     ),
@@ -442,7 +442,7 @@ pub(crate) fn lower_value_expr(
                                         (*value).try_into().expect("value out of range"),
                                     ),
                                 },
-                                TyKind::Uint(ty) => match ty {
+                                Type::Uint(ty) => match ty {
                                     UintTy::U8 => ConstValue::U8(
                                         (*value).try_into().expect("value out of range"),
                                     ),
@@ -457,8 +457,8 @@ pub(crate) fn lower_value_expr(
                                     ),
                                     UintTy::U128 => ConstValue::U128(*value),
                                 },
-                                TyKind::Bool => ConstValue::Bool(*value != 0),
-                                TyKind::Ptr(ref _inner, _mutable) => ConstValue::I64(
+                                Type::Bool => ConstValue::Bool(*value != 0),
+                                Type::Ptr(ref _inner, _mutable) => ConstValue::I64(
                                     (*value).try_into().expect("value out of range"),
                                 ),
                                 x => unreachable!("{:?}", x),
@@ -490,7 +490,7 @@ pub(crate) fn lower_value_expr(
                             ty: type_idx,
                             span: *const_span,
                             data: ConstKind::Value(ValueTree::Leaf(match &ty {
-                                TyKind::Float(ty) => match ty {
+                                Type::Float(ty) => match ty {
                                     FloatTy::F32 => {
                                         ConstValue::F32(value.parse().expect("error parsing float"))
                                     }
@@ -559,13 +559,13 @@ pub(crate) fn lower_path(
         match segment {
             PathSegment::FieldAccess(name, field_span) => {
                 // auto deref
-                while let TyKind::Ref(inner, _) = ty {
+                while let Type::Ref(inner, _) = ty {
                     projection.push(PlaceElem::Deref);
                     type_idx = inner;
                     ty = fn_builder.builder.get_type(type_idx).clone();
                 }
 
-                if let TyKind::Struct(mut id) = ty {
+                if let Type::Struct(mut id) = ty {
                     if fn_builder.builder.ir.structs[id].is_none() {
                         id = lower_struct(
                             fn_builder.builder,
@@ -574,28 +574,26 @@ pub(crate) fn lower_path(
                     }
 
                     let struct_body = fn_builder.builder.get_struct(id);
-                    let idx =
-                        *struct_body
-                            .name_to_variant_idx
-                            .get(&name.name)
-                            .ok_or_else(|| LoweringError::StructFieldNotFound {
-                                span: *field_span,
-                                name: name.name.clone(),
-                                path: fn_builder.get_file_path().clone(),
-                            })?;
+                    let idx = *struct_body.variant_names.get(&name.name).ok_or_else(|| {
+                        LoweringError::StructFieldNotFound {
+                            span: *field_span,
+                            name: name.name.clone(),
+                            path: fn_builder.get_file_path().clone(),
+                        }
+                    })?;
                     projection.push(PlaceElem::Field(idx));
                     type_idx = struct_body.variants[idx].ty;
                     ty = fn_builder.builder.get_type(type_idx).clone();
                 }
             }
             PathSegment::ArrayIndex(expression, _) => {
-                while let TyKind::Ref(inner, _) = ty {
+                while let Type::Ref(inner, _) = ty {
                     projection.push(PlaceElem::Deref);
                     type_idx = inner;
                     ty = fn_builder.builder.get_type(type_idx).clone();
                 }
 
-                if let TyKind::Array(element_type, _) = ty {
+                if let Type::Array(element_type, _) = ty {
                     // Assign the index expression to a temporary local
                     let (index, index_type_idx) = lower_value_expr(fn_builder, expression, None)?;
                     let index_local = fn_builder.add_temp_local(index_type_idx);
@@ -683,7 +681,7 @@ pub(crate) fn lower_binary_op(
     let lhs_ty = builder.builder.get_type(lhs_type_idx).clone();
 
     // We must handle the special case where you can do ptr + offset.
-    let is_lhs_ptr = matches!(lhs_ty, TyKind::Ptr(_, _));
+    let is_lhs_ptr = matches!(lhs_ty, Type::Ptr(_, _));
 
     let (rhs, rhs_type_idx, rhs_span) = if type_hint.is_none() {
         let ty = find_expression_type(builder, rhs)?.unwrap_or(lhs_type_idx);

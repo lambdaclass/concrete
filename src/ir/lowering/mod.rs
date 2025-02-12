@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
+    sync::Arc,
 };
 
 use functions::lower_func;
@@ -8,8 +9,8 @@ use structs::lower_struct;
 
 use crate::ir;
 use crate::ir::{
-    AdtBody, ConstBody, ConstIndex, FnBody, FnIndex, Local, LocalIndex, ModuleBody, ModuleIndex,
-    ProgramBody, Statement, StructIndex, TyKind, TypeIndex,
+    AdtBody, ConstBody, ConstIndex, FnIndex, Function, Local, LocalIndex, Module, ModuleIndex,
+    Statement, StructIndex, Type, TypeIndex, IR,
 };
 use types::lower_type;
 
@@ -33,15 +34,17 @@ mod types;
 pub use errors::LoweringError;
 pub use lower::lower_programs;
 
-/// Monomorphized symbol.
+/// Monomorphized symbol (currently either a struct/adt or function).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Symbol {
     pub name: String,
+    /// Whether this symbol is a method of the given type.
     pub method_of: Option<TypeIndex>,
-    // This vec contains the specific types of the generics used.
+    /// This vec contains the specific types of the generics used.
     pub generics: Vec<TypeIndex>,
 }
 
+/// A symbol table to map names to indexes.
 #[derive(Debug, Clone, Default)]
 pub struct SymbolTable {
     pub modules: HashMap<String, ModuleIndex>,
@@ -51,19 +54,21 @@ pub struct SymbolTable {
     pub types: HashMap<String, TypeIndex>,
 }
 
+/// A Struct holding the AST bodies of the given structures.
+/// Needed to make lowering overall easier and for generics.
 #[derive(Debug, Clone, Default)]
 pub struct Bodies {
-    pub structs: HashMap<StructIndex, StructDecl>,
-    pub functions: HashMap<FnIndex, FunctionDef>,
-    pub functions_decls: HashMap<FnIndex, FunctionDecl>,
-    pub types: HashMap<TypeIndex, TypeDecl>,
-    pub constants: HashMap<ConstIndex, ConstantDef>,
+    pub structs: HashMap<StructIndex, Arc<StructDecl>>,
+    pub functions: HashMap<FnIndex, Arc<FunctionDef>>,
+    pub functions_decls: HashMap<FnIndex, Arc<FunctionDecl>>,
+    pub types: HashMap<TypeIndex, Arc<TypeDecl>>,
+    pub constants: HashMap<ConstIndex, Arc<ConstantDef>>,
 }
 
 /// Context to help build the IR.
 #[derive(Debug, Clone)]
 pub struct IRBuilder {
-    pub ir: ProgramBody,
+    pub ir: IR,
     pub symbols: HashMap<ModuleIndex, SymbolTable>,
     pub top_level_modules_names: HashMap<String, ModuleIndex>,
     pub current_generics_map: HashMap<String, TypeIndex>,
@@ -78,7 +83,7 @@ pub struct IRBuilder {
 
 #[derive(Debug)]
 pub struct FnIrBuilder<'b> {
-    pub body: FnBody,
+    pub body: Function,
     pub name_to_local: HashMap<String, LocalIndex>,
     pub statements: Vec<Statement>,
     pub ret_local: LocalIndex,
@@ -88,11 +93,11 @@ pub struct FnIrBuilder<'b> {
 }
 
 impl IRBuilder {
-    pub fn get_type(&self, idx: TypeIndex) -> &TyKind {
+    pub fn get_type(&self, idx: TypeIndex) -> &Type {
         self.ir.types[idx].as_ref().unwrap()
     }
 
-    pub fn get_function(&self, idx: FnIndex) -> &FnBody {
+    pub fn get_function(&self, idx: FnIndex) -> &Function {
         self.ir.functions[idx].as_ref().unwrap()
     }
 
@@ -167,7 +172,7 @@ impl IRBuilder {
 
 impl FnIrBuilder<'_> {
     /// Gets the module where this fn is located.
-    pub fn get_module_body(&self) -> &ModuleBody {
+    pub fn get_module_body(&self) -> &Module {
         &self.builder.ir.modules[self.builder.local_module.unwrap()]
     }
 

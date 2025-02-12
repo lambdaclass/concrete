@@ -8,7 +8,7 @@ use crate::{
     ir::{
         lowering::{expressions::lower_expression, functions::get_locals, types::lower_type},
         BasicBlock, ConstData, ConstKind, ConstValue, Mutability, Operand, Place, PlaceElem,
-        Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, TyKind,
+        Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, Type,
         ValueTree,
     },
 };
@@ -130,7 +130,7 @@ fn lower_assign(builder: &mut FnIrBuilder, info: &AssignStmt) -> Result<(), Lowe
 
     for _ in 0..info.derefs {
         match &ty {
-            TyKind::Ref(inner, is_mut) | TyKind::Ptr(inner, is_mut) => {
+            Type::Ref(inner, is_mut) | Type::Ptr(inner, is_mut) => {
                 if matches!(is_mut, Mutability::Not) {
                     Err(LoweringError::BorrowNotMutable {
                         span: info.lvalue.first.span,

@@ -10,7 +10,7 @@ use std::{
 };
 
 use crate::compile_unit_info::{CompileUnitInfo, OptLevel};
-use crate::ir::ProgramBody;
+use crate::ir::IR;
 use context::Context;
 use errors::CodegenError;
 use llvm_sys::{
@@ -43,7 +43,7 @@ mod module;
 mod pass_manager;
 
 /// Compiles the given program and returns the object file path.
-pub fn compile(session: &CompileUnitInfo, program: &ProgramBody) -> Result<PathBuf, CodegenError> {
+pub fn compile(session: &CompileUnitInfo, program: &IR) -> Result<PathBuf, CodegenError> {
     static INITIALIZED: OnceLock<()> = OnceLock::new();
     INITIALIZED.get_or_init(|| unsafe {
         LLVM_InitializeAllTargets();

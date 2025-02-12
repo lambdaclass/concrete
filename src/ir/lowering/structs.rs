@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use tracing::instrument;
 
-use crate::{ast::structs::StructDecl, ir::TyKind};
+use crate::{ast::structs::StructDecl, ir::Type};
 
 use super::{
     errors::LoweringError,
@@ -61,7 +61,7 @@ pub(crate) fn lower_struct(
                 .unwrap()
                 .structs
                 .insert(sym.clone(), id);
-            let struct_type_idx = builder.ir.types.insert(Some(TyKind::Struct(id)));
+            let struct_type_idx = builder.ir.types.insert(Some(Type::Struct(id)));
             builder.struct_to_type_idx.insert(id, struct_type_idx);
             Some(id)
         }
@@ -81,7 +81,7 @@ pub(crate) fn lower_struct(
         is_pub: true, // todo: pub
         name: info.name.name.clone(),
         variants: Vec::new(),
-        name_to_variant_idx: HashMap::new(),
+        variant_names: HashMap::new(),
         span: info.span,
     };
 
@@ -92,7 +92,7 @@ pub(crate) fn lower_struct(
             discriminant: i,
         };
         body.variants.push(variant);
-        body.name_to_variant_idx
+        body.variant_names
             .insert(field.name.name.clone(), body.variants.len() - 1);
     }
 

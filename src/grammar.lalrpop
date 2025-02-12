@@ -3,7 +3,7 @@ use crate::parser::lexer::LexicalError;
 use crate::ast;
 use crate::ast::common::Span;
 use std::str::FromStr;
-
+use std::sync::Arc;
 
 grammar;
 
@@ -283,28 +283,28 @@ ModuleItems: Vec<ast::modules::ModuleDefItem> = {
 
 ModuleDefItem: ast::modules::ModuleDefItem = {
   <ConstantDef> ";" => {
-    ast::modules::ModuleDefItem::Constant(<>)
+    ast::modules::ModuleDefItem::Constant(Arc::new(<>))
   },
   <StructDef> => {
-    ast::modules::ModuleDefItem::Struct(<>)
+    ast::modules::ModuleDefItem::Struct(Arc::new(<>))
   },
   <UnionDef> => {
-    ast::modules::ModuleDefItem::Union(<>)
+    ast::modules::ModuleDefItem::Union(Arc::new(<>))
   },
   <EnumDef> => {
-    ast::modules::ModuleDefItem::Enum(<>)
+    ast::modules::ModuleDefItem::Enum(Arc::new(<>))
   },
   <FunctionDef> => {
-    ast::modules::ModuleDefItem::Function(<>)
+    ast::modules::ModuleDefItem::Function(Arc::new(<>))
   },
   <FunctionDecl> ";" => {
-    ast::modules::ModuleDefItem::FunctionDecl(<>)
+    ast::modules::ModuleDefItem::FunctionDecl(Arc::new(<>))
   },
   <ImplBlock> => {
-    ast::modules::ModuleDefItem::Impl(<>)
+    ast::modules::ModuleDefItem::Impl(Arc::new(<>))
   },
   <Module> => {
-    ast::modules::ModuleDefItem::Module(<>)
+    ast::modules::ModuleDefItem::Module(Arc::new(<>))
   },
 }
 
@@ -376,7 +376,7 @@ FunctionDecl: ast::functions::FunctionDecl = {
 FunctionDef: ast::functions::FunctionDef = {
   <lo:@L> <decl:FunctionDecl> "{" <statements:StatementList?> "}" <hi:@R> => {
     ast::functions::FunctionDef {
-      decl,
+      decl: decl.into(),
       body: statements.unwrap_or_else(Vec::new),
       span: Span::new(lo, hi),
     }
@@ -387,7 +387,7 @@ ImplBlock: ast::functions::ImplBlock = {
   <lo:@L> "impl" <target:TypeDescriptor> "{" <methods:FunctionDef*> "}" <hi:@R> => {
     ast::functions::ImplBlock {
       target,
-      methods,
+      methods: methods.into_iter().map(|x| Arc::new(x)).collect(),
       span: Span::new(lo, hi),
     }
   }

@@ -6,26 +6,23 @@ use std::{
 use tracing::debug;
 
 use crate::{
-    ast::{
-        modules::{Module, ModuleDefItem},
-        Program,
-    },
+    ast,
     ir::lowering::{errors::LoweringError, Bodies, IRBuilder},
-    ir::{Constants, Functions, ModuleBody, Modules, Structs, Types},
+    ir::{Constants, Functions, Module, Modules, Structs, Types},
 };
 
 use super::{
     constants::lower_constant,
     functions::{lower_func, lower_func_decl},
-    ir::{ModuleIndex, ProgramBody, TyKind},
+    ir::{ModuleIndex, Type, IR},
     structs::lower_struct,
     types::lower_type,
     Symbol,
 };
 
-pub fn lower_programs(programs: &[Program]) -> Result<ProgramBody, LoweringError> {
+pub fn lower_programs(programs: &[ast::Program]) -> Result<IR, LoweringError> {
     let mut builder = IRBuilder {
-        ir: ProgramBody {
+        ir: IR {
             types: Types::new(),
             functions: Functions::new(),
             structs: Structs::new(),
@@ -90,13 +87,13 @@ pub fn lower_programs(programs: &[Program]) -> Result<ProgramBody, LoweringError
 
 fn prepass_module(
     builder: &mut IRBuilder,
-    module: &Module,
+    module: &ast::modules::Module,
     parents: &[ModuleIndex],
     file_path: &Path,
 ) -> Result<ModuleIndex, LoweringError> {
     add_builtins(builder);
 
-    let module_body = ModuleBody {
+    let module_body = Module {
         name: module.name.name.clone(),
         parents: parents.to_vec(),
         functions: HashSet::new(),
@@ -141,9 +138,12 @@ fn prepass_module(
 
     for item in &module.contents {
         match item {
-            ModuleDefItem::Constant(constant_def) => {
+            ast::modules::ModuleDefItem::Constant(constant_def) => {
                 let idx = builder.ir.constants.insert(None);
-                builder.bodies.constants.insert(idx, constant_def.clone());
+                builder
+                    .bodies
+                    .constants
+                    .insert(idx, constant_def.clone().into());
                 builder
                     .symbols
                     .get_mut(&module_idx)
@@ -151,7 +151,7 @@ fn prepass_module(
                     .constants
                     .insert(constant_def.decl.name.name.clone(), idx);
             }
-            ModuleDefItem::Function(function_def) => {
+            ast::modules::ModuleDefItem::Function(function_def) => {
                 let idx = builder.ir.functions.insert(None);
                 builder.bodies.functions.insert(idx, function_def.clone());
                 builder
@@ -173,7 +173,7 @@ fn prepass_module(
                     function_def.decl.name.name, module.name.name
                 );
             }
-            ModuleDefItem::FunctionDecl(function_decl) => {
+            ast::modules::ModuleDefItem::FunctionDecl(function_decl) => {
                 let idx = builder.ir.functions.insert(None);
                 builder
                     .bodies
@@ -198,8 +198,8 @@ fn prepass_module(
                     function_decl.name.name, module.name.name
                 );
             }
-            ModuleDefItem::Impl(_) => {}
-            ModuleDefItem::Struct(struct_decl) => {
+            ast::modules::ModuleDefItem::Impl(_) => {}
+            ast::modules::ModuleDefItem::Struct(struct_decl) => {
                 let idx = builder.ir.structs.insert(None);
                 builder.bodies.structs.insert(idx, struct_decl.clone());
                 builder
@@ -216,7 +216,7 @@ fn prepass_module(
                         idx,
                     );
                 builder.ir.modules[module_idx].structs.insert(idx);
-                let type_idx = builder.ir.types.insert(Some(TyKind::Struct(idx)));
+                let type_idx = builder.ir.types.insert(Some(Type::Struct(idx)));
                 builder.ir.modules[module_idx].types.insert(type_idx);
                 builder.struct_to_type_idx.insert(idx, type_idx);
                 builder.type_module_idx.insert(type_idx, module_idx);
@@ -225,9 +225,9 @@ fn prepass_module(
                     struct_decl.name.name, module.name.name
                 );
             }
-            ModuleDefItem::Union(_union_decl) => todo!(),
-            ModuleDefItem::Enum(_enum_decl) => todo!(),
-            ModuleDefItem::Type(type_decl) => {
+            ast::modules::ModuleDefItem::Union(_union_decl) => todo!(),
+            ast::modules::ModuleDefItem::Enum(_enum_decl) => todo!(),
+            ast::modules::ModuleDefItem::Type(type_decl) => {
                 let idx = builder.ir.types.insert(None);
                 builder.bodies.types.insert(idx, type_decl.clone());
                 builder
@@ -238,7 +238,7 @@ fn prepass_module(
                     .insert(type_decl.name.name.clone(), idx);
                 builder.type_module_idx.insert(idx, module_idx);
             }
-            ModuleDefItem::Module(submodule) => {
+            ast::modules::ModuleDefItem::Module(submodule) => {
                 let mut parents = parents.to_vec();
                 parents.push(module_idx);
 
@@ -249,7 +249,7 @@ fn prepass_module(
 
     // Second pass
     for item in &module.contents {
-        if let ModuleDefItem::Impl(impl_block) = item {
+        if let ast::modules::ModuleDefItem::Impl(impl_block) = item {
             let ty = lower_type(builder, &impl_block.target)?;
 
             // TODO: when implementing impl generics, deal with it here.
@@ -284,7 +284,7 @@ fn prepass_module(
 
 fn lower_imports(
     builder: &mut IRBuilder,
-    module: &Module,
+    module: &ast::modules::Module,
     module_idx: ModuleIndex,
     parents: &[ModuleIndex],
     path: &Path,
@@ -418,7 +418,7 @@ fn lower_imports(
     }
 
     for m in &module.contents {
-        if let ModuleDefItem::Module(submodule) = m {
+        if let ast::modules::ModuleDefItem::Module(submodule) = m {
             let mut parents = parents.to_vec();
             parents.push(module_idx);
             let new_module_idx = *builder.ir.modules[module_idx]
@@ -434,21 +434,21 @@ fn lower_imports(
 
 fn add_builtins(builder: &mut IRBuilder) {
     for kind in [
-        (TyKind::Unit),
-        (TyKind::Bool),
-        (TyKind::Char),
-        (TyKind::Int(super::ir::IntTy::I8)),
-        (TyKind::Int(super::ir::IntTy::I16)),
-        (TyKind::Int(super::ir::IntTy::I32)),
-        (TyKind::Int(super::ir::IntTy::I64)),
-        (TyKind::Int(super::ir::IntTy::I128)),
-        (TyKind::Uint(super::ir::UintTy::U8)),
-        (TyKind::Uint(super::ir::UintTy::U16)),
-        (TyKind::Uint(super::ir::UintTy::U32)),
-        (TyKind::Uint(super::ir::UintTy::U64)),
-        (TyKind::Uint(super::ir::UintTy::U128)),
-        (TyKind::Float(super::ir::FloatTy::F32)),
-        (TyKind::Float(super::ir::FloatTy::F64)),
+        (Type::Unit),
+        (Type::Bool),
+        (Type::Char),
+        (Type::Int(super::ir::IntTy::I8)),
+        (Type::Int(super::ir::IntTy::I16)),
+        (Type::Int(super::ir::IntTy::I32)),
+        (Type::Int(super::ir::IntTy::I64)),
+        (Type::Int(super::ir::IntTy::I128)),
+        (Type::Uint(super::ir::UintTy::U8)),
+        (Type::Uint(super::ir::UintTy::U16)),
+        (Type::Uint(super::ir::UintTy::U32)),
+        (Type::Uint(super::ir::UintTy::U64)),
+        (Type::Uint(super::ir::UintTy::U128)),
+        (Type::Float(super::ir::FloatTy::F32)),
+        (Type::Float(super::ir::FloatTy::F64)),
     ] {
         builder
             .ir
@@ -459,31 +459,31 @@ fn add_builtins(builder: &mut IRBuilder) {
 
 pub fn lower_module(
     builder: &mut IRBuilder,
-    module: &Module,
+    module: &ast::modules::Module,
     module_idx: ModuleIndex,
 ) -> Result<(), LoweringError> {
     builder.local_module = Some(module_idx);
 
     for item in &module.contents {
         match item {
-            ModuleDefItem::Constant(constant_def) => {
+            ast::modules::ModuleDefItem::Constant(constant_def) => {
                 lower_constant(builder, module_idx, constant_def)?;
             }
-            ModuleDefItem::Struct(info) => {
+            ast::modules::ModuleDefItem::Struct(info) => {
                 if info.generics.is_empty() {
                     lower_struct(builder, info)?;
                 }
             }
-            ModuleDefItem::Type(_) => todo!(),
-            ModuleDefItem::Function(function_def) => {
+            ast::modules::ModuleDefItem::Type(_) => todo!(),
+            ast::modules::ModuleDefItem::Function(function_def) => {
                 if function_def.decl.generic_params.is_empty() {
                     lower_func(builder, function_def, None)?;
                 }
             }
-            ModuleDefItem::FunctionDecl(function_decl) => {
+            ast::modules::ModuleDefItem::FunctionDecl(function_decl) => {
                 lower_func_decl(builder, function_decl)?;
             }
-            ModuleDefItem::Impl(impl_block) => {
+            ast::modules::ModuleDefItem::Impl(impl_block) => {
                 let target_ty = lower_type(builder, &impl_block.target)?;
                 builder.self_ty = Some(target_ty);
                 for method in &impl_block.methods {
@@ -491,9 +491,9 @@ pub fn lower_module(
                 }
                 builder.self_ty = None;
             }
-            ModuleDefItem::Union(_union_decl) => todo!(),
-            ModuleDefItem::Enum(_enum_decl) => todo!(),
-            ModuleDefItem::Module(module) => {
+            ast::modules::ModuleDefItem::Union(_union_decl) => todo!(),
+            ast::modules::ModuleDefItem::Enum(_enum_decl) => todo!(),
+            ast::modules::ModuleDefItem::Module(module) => {
                 let new_module_idx = *builder
                     .symbols
                     .get(&module_idx)

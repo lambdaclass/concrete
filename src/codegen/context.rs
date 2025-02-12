@@ -1,5 +1,5 @@
 use crate::compile_unit_info::CompileUnitInfo;
-use crate::ir::ProgramBody;
+use crate::ir::IR;
 use melior::{
     dialect::DialectRegistry,
     ir::{
@@ -37,7 +37,7 @@ impl Context {
     pub fn compile(
         &self,
         compile_unit_info: &CompileUnitInfo,
-        program: &ProgramBody,
+        program: &IR,
     ) -> Result<MLIRModule, CodegenError> {
         let location = Location::unknown(&self.melior_context);
         let target_triple = get_target_triple(compile_unit_info);

@@ -4,9 +4,7 @@ use crate::{ast::types::TypeDescriptor, ir::lowering::Symbol};
 
 use super::{
     errors::LoweringError,
-    ir::{
-        self, ConstData, ConstKind, ConstValue, FloatTy, Mutability, TyKind, TypeIndex, ValueTree,
-    },
+    ir::{self, ConstData, ConstKind, ConstValue, FloatTy, Mutability, Type, TypeIndex, ValueTree},
     structs::lower_struct,
     IRBuilder,
 };
@@ -21,51 +19,51 @@ pub(crate) fn lower_type(
             "i32" => *builder
                 .ir
                 .builtin_types
-                .get(&TyKind::Int(ir::IntTy::I32))
+                .get(&Type::Int(ir::IntTy::I32))
                 .unwrap(),
             "i16" => *builder
                 .ir
                 .builtin_types
-                .get(&TyKind::Int(ir::IntTy::I16))
+                .get(&Type::Int(ir::IntTy::I16))
                 .unwrap(),
             "i8" => *builder
                 .ir
                 .builtin_types
-                .get(&TyKind::Int(ir::IntTy::I8))
+                .get(&Type::Int(ir::IntTy::I8))
                 .unwrap(),
             "u64" => *builder
                 .ir
                 .builtin_types
-                .get(&TyKind::Uint(ir::UintTy::U64))
+                .get(&Type::Uint(ir::UintTy::U64))
                 .unwrap(),
             "u32" => *builder
                 .ir
                 .builtin_types
-                .get(&TyKind::Uint(ir::UintTy::U32))
+                .get(&Type::Uint(ir::UintTy::U32))
                 .unwrap(),
             "u16" => *builder
                 .ir
                 .builtin_types
-                .get(&TyKind::Uint(ir::UintTy::U16))
+                .get(&Type::Uint(ir::UintTy::U16))
                 .unwrap(),
             "u8" => *builder
                 .ir
                 .builtin_types
-                .get(&TyKind::Uint(ir::UintTy::U8))
+                .get(&Type::Uint(ir::UintTy::U8))
                 .unwrap(),
             "f32" => *builder
                 .ir
                 .builtin_types
-                .get(&TyKind::Float(FloatTy::F32))
+                .get(&Type::Float(FloatTy::F32))
                 .unwrap(),
             "f64" => *builder
                 .ir
                 .builtin_types
-                .get(&TyKind::Float(FloatTy::F64))
+                .get(&Type::Float(FloatTy::F64))
                 .unwrap(),
-            "bool" => *builder.ir.builtin_types.get(&TyKind::Bool).unwrap(),
-            "string" => *builder.ir.builtin_types.get(&TyKind::String).unwrap(),
-            "char" => *builder.ir.builtin_types.get(&TyKind::Char).unwrap(),
+            "bool" => *builder.ir.builtin_types.get(&Type::Bool).unwrap(),
+            "string" => *builder.ir.builtin_types.get(&Type::String).unwrap(),
+            "char" => *builder.ir.builtin_types.get(&Type::Char).unwrap(),
             other => {
                 // Check if the type name exists in the generic map.
                 if let Some(ty) = builder.current_generics_map.get(other).copied() {
@@ -118,10 +116,8 @@ pub(crate) fn lower_type(
                                 mono_struct_idx
                             } else {
                                 let mono_struct_idx = builder.ir.structs.insert(None);
-                                let type_id = builder
-                                    .ir
-                                    .types
-                                    .insert(Some(TyKind::Struct(mono_struct_idx)));
+                                let type_id =
+                                    builder.ir.types.insert(Some(Type::Struct(mono_struct_idx)));
                                 builder.struct_to_type_idx.insert(mono_struct_idx, type_id);
                                 builder
                                     .symbols
@@ -170,23 +166,23 @@ pub(crate) fn lower_type(
             }
         },
         TypeDescriptor::Ref { of, span: _ } => {
-            let tykind = TyKind::Ref(lower_type(builder, of)?, Mutability::Not);
+            let tykind = Type::Ref(lower_type(builder, of)?, Mutability::Not);
             builder.ir.types.insert(Some(tykind))
         }
         TypeDescriptor::MutRef { of, span: _ } => {
-            let tykind = TyKind::Ref(lower_type(builder, of)?, Mutability::Mut);
+            let tykind = Type::Ref(lower_type(builder, of)?, Mutability::Mut);
             builder.ir.types.insert(Some(tykind))
         }
         TypeDescriptor::ConstPtr { of, span: _ } => {
-            let tykind = TyKind::Ptr(lower_type(builder, of)?, Mutability::Not);
+            let tykind = Type::Ptr(lower_type(builder, of)?, Mutability::Not);
             builder.ir.types.insert(Some(tykind))
         }
         TypeDescriptor::MutPtr { of, span: _ } => {
-            let tykind = TyKind::Ptr(lower_type(builder, of)?, Mutability::Mut);
+            let tykind = Type::Ptr(lower_type(builder, of)?, Mutability::Mut);
             builder.ir.types.insert(Some(tykind))
         }
         TypeDescriptor::Array { of, size, span } => {
-            let tykind = TyKind::Array(
+            let tykind = Type::Array(
                 lower_type(builder, of)?,
                 Arc::new(ConstData {
                     ty: builder.ir.get_u64_ty(),
@@ -200,7 +196,7 @@ pub(crate) fn lower_type(
             let ty = builder.self_ty.expect("should have self type");
 
             if *is_ref {
-                let tykind = TyKind::Ref(
+                let tykind = Type::Ref(
                     ty,
                     if *is_mut {
                         Mutability::Mut

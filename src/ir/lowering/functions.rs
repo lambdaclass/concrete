@@ -11,8 +11,8 @@ use crate::{
     },
     ir::{
         lowering::{expressions::lower_expression, types::lower_type, Symbol},
-        BasicBlock, ConcreteIntrinsic, FnBody, Local, LocalKind, Operand, Place, Span, Terminator,
-        TerminatorKind, TyKind,
+        BasicBlock, ConcreteIntrinsic, Function, Local, LocalKind, Operand, Place, Span,
+        Terminator, TerminatorKind, Type,
     },
 };
 
@@ -23,7 +23,7 @@ use super::{
     FnIrBuilder, IRBuilder,
 };
 
-/// Lowers a function if its not yet lowered.
+/// Lowers a function or method if its not yet lowered.
 ///
 /// If the function is generic, `builder.current_generics_map` should contain types for the generics.
 #[instrument(level = "debug", skip_all, fields(name = ?func.decl.name.name))]
@@ -33,7 +33,13 @@ pub(crate) fn lower_func(
     method_of: Option<TypeIndex>,
 ) -> Result<FnIndex, LoweringError> {
     debug!("lowering function {:?}", func.decl.name.name);
+
     let is_intrinsic: Option<ConcreteIntrinsic> = None;
+
+    // Get the module id of this function/method
+    // This is needed incase this is a method in a impl block, if its imported the `lower_import` doesn't
+    // bring them into the target module functions struct,
+    // rather we have to get the module and find the method in the original module.
     let module_idx = if let Some(id) = method_of {
         builder
             .type_module_idx
@@ -122,7 +128,7 @@ pub(crate) fn lower_func(
         .unwrap_or(Ok(builder.ir.get_unit_ty()))?;
 
     let mut fn_builder = FnIrBuilder {
-        body: FnBody {
+        body: Function {
             name: if !func.decl.is_extern && func.decl.name.name != "main" {
                 builder
                     .get_mangled_name(module_idx, &func.decl.name.name, fn_id)
@@ -217,8 +223,15 @@ pub(crate) fn lower_fn_call(
         .bodies
         .functions
         .get(&poly_fn_id)
-        .map(|x| &x.decl)
-        .or_else(|| fn_builder.builder.bodies.functions_decls.get(&poly_fn_id))
+        .map(|x| x.decl.clone())
+        .or_else(|| {
+            fn_builder
+                .builder
+                .bodies
+                .functions_decls
+                .get(&poly_fn_id)
+                .cloned()
+        })
         .unwrap()
         .clone();
 
@@ -263,8 +276,8 @@ pub(crate) fn lower_fn_call(
         args_ty.push(ty);
     }
 
-    let return_ty = if let Some(ret_ty) = target_fn_decl.ret_type {
-        lower_type(fn_builder.builder, &ret_ty)?
+    let return_ty = if let Some(ret_ty) = &target_fn_decl.ret_type {
+        lower_type(fn_builder.builder, ret_ty)?
     } else {
         fn_builder.builder.ir.get_unit_ty()
     };
@@ -297,7 +310,7 @@ pub(crate) fn lower_fn_call(
         let expected_type_idx = args_ty_iter.next().expect("self ty should be there");
         let expected_ty = fn_builder.builder.get_type(expected_type_idx);
         match expected_ty {
-            TyKind::Ref(_, mutability) => {
+            Type::Ref(_, mutability) => {
                 args.push(Rvalue::Ref(*mutability, arg.clone()));
             }
             _ => {
@@ -451,7 +464,7 @@ pub(crate) fn lower_func_decl(
         .unwrap_or(Ok(builder.ir.get_unit_ty()))?;
 
     let fn_builder = FnIrBuilder {
-        body: FnBody {
+        body: Function {
             name: if !func.is_extern && func.name.name != "main" {
                 builder
                     .get_mangled_name(module_idx, &func.name.name, fn_id)
