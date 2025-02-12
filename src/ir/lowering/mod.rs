@@ -72,6 +72,8 @@ pub struct IRBuilder {
     pub local_module: Option<ModuleIndex>,
     // Needed to not duplicate TypeIndexes for structs.
     pub struct_to_type_idx: HashMap<StructIndex, TypeIndex>,
+    // Type to module id where it resides, needed to find methods for the given types.
+    pub type_module_idx: HashMap<TypeIndex, ModuleIndex>,
 }
 
 #[derive(Debug)]
@@ -206,8 +208,14 @@ impl FnIrBuilder<'_> {
         info: &FnCallOp,
         method_ty_idx: Option<TypeIndex>,
     ) -> Result<(FnIndex, Option<FnIndex>), LoweringError> {
+        let module_id = if let Some(id) = method_ty_idx {
+            self.builder.type_module_idx.get(&id).copied().unwrap()
+        } else {
+            self.get_module_idx()
+        };
+
         let fn_id = {
-            let symbols = self.get_symbols_table();
+            let symbols = self.builder.symbols.get(&module_id).unwrap();
 
             let mut generic_types = Vec::new();
 
@@ -216,6 +224,8 @@ impl FnIrBuilder<'_> {
                 method_of: method_ty_idx,
                 generics: Vec::new(),
             };
+
+            dbg!(&symbols.functions);
 
             if let Some(poly_id) = symbols.functions.get(&poly_symbol).copied() {
                 if !info.generics.is_empty() {
@@ -252,7 +262,7 @@ impl FnIrBuilder<'_> {
                         generics: generic_types,
                     };
 
-                    let symbols = self.get_symbols_table(); // needed for borrowck
+                    let symbols = self.builder.symbols.get(&module_id).unwrap(); // needed for borrowck
                     let id = {
                         if let Some(id) = symbols.functions.get(&mono_symbol).copied() {
                             id

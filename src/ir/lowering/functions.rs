@@ -34,7 +34,15 @@ pub(crate) fn lower_func(
 ) -> Result<FnIndex, LoweringError> {
     debug!("lowering function {:?}", func.decl.name.name);
     let is_intrinsic: Option<ConcreteIntrinsic> = None;
-    let module_idx = builder.local_module.expect("should exist");
+    let module_idx = if let Some(id) = method_of {
+        builder
+            .type_module_idx
+            .get(&id)
+            .copied()
+            .expect("should exist")
+    } else {
+        builder.local_module.expect("should exist")
+    };
 
     let mut generic_types = Vec::new();
 

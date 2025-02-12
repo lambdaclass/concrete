@@ -38,6 +38,7 @@ pub fn lower_programs(programs: &[Program]) -> Result<ProgramBody, LoweringError
         top_level_modules_names: Default::default(),
         current_generics_map: Default::default(),
         struct_to_type_idx: Default::default(),
+        type_module_idx: Default::default(),
         bodies: Bodies::default(),
         self_ty: None,
         local_module: None,
@@ -218,6 +219,7 @@ fn prepass_module(
                 let type_idx = builder.ir.types.insert(Some(TyKind::Struct(idx)));
                 builder.ir.modules[module_idx].types.insert(type_idx);
                 builder.struct_to_type_idx.insert(idx, type_idx);
+                builder.type_module_idx.insert(type_idx, module_idx);
                 debug!(
                     "Adding struct symbol {:?} to module {:?}",
                     struct_decl.name.name, module.name.name
@@ -234,6 +236,7 @@ fn prepass_module(
                     .unwrap()
                     .types
                     .insert(type_decl.name.name.clone(), idx);
+                builder.type_module_idx.insert(idx, module_idx);
             }
             ModuleDefItem::Module(submodule) => {
                 let mut parents = parents.to_vec();
@@ -254,6 +257,10 @@ fn prepass_module(
             // the first is a specific type the second is a generic type
 
             for function_def in &impl_block.methods {
+                debug!(
+                    "Adding method {}::{} to module {:?}",
+                    impl_block.target, function_def.decl.name.name, module.name.name
+                );
                 let idx = builder.ir.functions.insert(None);
                 builder.bodies.functions.insert(idx, function_def.clone());
                 let sym = Symbol {
@@ -338,6 +345,10 @@ fn lower_imports(
                 generics: Vec::new(),
             };
             if let Some(id) = target_symbols.functions.get(&symbol).cloned() {
+                debug!(
+                    "Imported function symbol {:?} to module {}",
+                    symbol, builder.ir.modules[module_idx].name
+                );
                 builder.ir.modules[module_idx].functions.insert(id);
                 builder
                     .symbols
@@ -349,19 +360,28 @@ fn lower_imports(
             }
 
             let target_symbols = builder.symbols.get(&target_module).unwrap();
-            if let Some(id) = target_symbols.structs.get(&symbol).cloned() {
-                builder.ir.modules[module_idx].structs.insert(id);
+            if let Some(struct_idx) = target_symbols.structs.get(&symbol).cloned() {
+                debug!(
+                    "Imported struct symbol {:?} to module {}",
+                    symbol, builder.ir.modules[module_idx].name
+                );
+                builder.ir.modules[module_idx].structs.insert(struct_idx);
                 builder
                     .symbols
                     .get_mut(&module_idx)
                     .unwrap()
                     .structs
-                    .insert(symbol.clone(), id);
+                    .insert(symbol.clone(), struct_idx);
+
                 continue;
             }
 
             let target_symbols = builder.symbols.get(&target_module).unwrap();
             if let Some(id) = target_symbols.types.get(&sym.name).cloned() {
+                debug!(
+                    "Imported type symbol {:?} to module {}",
+                    symbol, builder.ir.modules[module_idx].name
+                );
                 builder.ir.modules[module_idx].types.insert(id);
                 builder
                     .symbols
@@ -374,6 +394,10 @@ fn lower_imports(
 
             let target_symbols = builder.symbols.get(&target_module).unwrap();
             if let Some(id) = target_symbols.constants.get(&sym.name).cloned() {
+                debug!(
+                    "Imported constant symbol {:?} to module {}",
+                    symbol, builder.ir.modules[module_idx].name
+                );
                 builder.ir.modules[module_idx].constants.insert(id);
                 builder
                     .symbols
