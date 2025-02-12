@@ -140,10 +140,7 @@ fn prepass_module(
         match item {
             ast::modules::ModuleDefItem::Constant(constant_def) => {
                 let idx = builder.ir.constants.insert(None);
-                builder
-                    .bodies
-                    .constants
-                    .insert(idx, constant_def.clone().into());
+                builder.bodies.constants.insert(idx, constant_def.clone());
                 builder
                     .symbols
                     .get_mut(&module_idx)
