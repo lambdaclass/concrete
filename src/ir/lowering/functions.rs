@@ -58,18 +58,8 @@ pub(crate) fn lower_func(
                 );
 
                 for generic_param in &func.decl.generic_params {
-                    for generic_type in builder.current_generics_map.clone().iter() {
-                        if generic_param.name.name == *generic_type.0 {
-                            let ty = lower_type(
-                                builder,
-                                &TypeDescriptor::Type {
-                                    name: generic_type.1.clone(),
-                                    span: generic_type.1.span,
-                                },
-                            )?;
-                            generic_types.push(ty);
-                            break;
-                        }
+                    if let Some(ty) = builder.current_generics_map.get(&generic_param.name.name) {
+                        generic_types.push(*ty);
                     }
                 }
 
@@ -204,35 +194,42 @@ pub(crate) fn lower_func(
 
 #[instrument(level = "debug", skip_all)]
 pub(crate) fn lower_fn_call(
-    builder: &mut FnIrBuilder,
+    fn_builder: &mut FnIrBuilder,
     info: &FnCallOp,
     self_value: Option<(Place, TypeIndex)>,
     method_idx: Option<TypeIndex>, // in case its a method
 ) -> Result<(Rvalue, TypeIndex, Span), LoweringError> {
     debug!("lowering fn call");
-    let (poly_fn_id, mono_fn_id) = builder.get_id_for_fn_call(info, method_idx)?;
+    let (poly_fn_id, mono_fn_id) = fn_builder.get_id_for_fn_call(info, method_idx)?;
 
-    let target_fn_decl = builder
+    let target_fn_decl = fn_builder
         .builder
         .bodies
         .functions
         .get(&poly_fn_id)
         .map(|x| &x.decl)
-        .or_else(|| builder.builder.bodies.functions_decls.get(&poly_fn_id))
+        .or_else(|| fn_builder.builder.bodies.functions_decls.get(&poly_fn_id))
         .unwrap()
         .clone();
 
-    let old_generic_map = builder.builder.current_generics_map.clone();
+    let old_generic_map = fn_builder.builder.current_generics_map.clone();
 
     for (generic_ty, generic_param) in info
         .generics
         .iter()
         .zip(target_fn_decl.generic_params.iter())
     {
-        builder
+        let ty = lower_type(
+            fn_builder.builder,
+            &TypeDescriptor::Type {
+                name: generic_ty.clone(),
+                span: generic_ty.span,
+            },
+        )?;
+        fn_builder
             .builder
             .current_generics_map
-            .insert(generic_param.name.name.clone(), generic_ty.clone());
+            .insert(generic_param.name.name.clone(), ty);
     }
 
     if info.generics.len() != target_fn_decl.generic_params.len() {
@@ -241,25 +238,25 @@ pub(crate) fn lower_fn_call(
             span: info.span,
             found: info.generics.len(),
             needs: target_fn_decl.generic_params.len(),
-            path: builder.get_file_path().clone(),
+            path: fn_builder.get_file_path().clone(),
         });
     }
 
     let mut args_ty = Vec::new();
 
     if let Some((_, self_ty)) = self_value {
-        builder.builder.self_ty = Some(self_ty);
+        fn_builder.builder.self_ty = Some(self_ty);
     }
 
     for param in &target_fn_decl.params {
-        let ty = lower_type(builder.builder, &param.r#type)?;
+        let ty = lower_type(fn_builder.builder, &param.r#type)?;
         args_ty.push(ty);
     }
 
     let return_ty = if let Some(ret_ty) = target_fn_decl.ret_type {
-        lower_type(builder.builder, &ret_ty)?
+        lower_type(fn_builder.builder, &ret_ty)?
     } else {
-        builder.builder.ir.get_unit_ty()
+        fn_builder.builder.ir.get_unit_ty()
     };
 
     if args_ty.len()
@@ -275,7 +272,7 @@ pub(crate) fn lower_fn_call(
             span: info.span,
             found: info.args.len(),
             needs: args_ty.len(),
-            path: builder.get_file_path().clone(),
+            path: fn_builder.get_file_path().clone(),
         });
     }
 
@@ -288,7 +285,7 @@ pub(crate) fn lower_fn_call(
         // Here arg_ty is the type without references.
         // We should use the type from the fn sig to know if it needs a reference.
         let expected_type_idx = args_ty_iter.next().expect("self ty should be there");
-        let expected_ty = builder.builder.get_type(expected_type_idx);
+        let expected_ty = fn_builder.builder.get_type(expected_type_idx);
         match expected_ty {
             TyKind::Ref(_, mutability) => {
                 args.push(Rvalue::Ref(*mutability, arg.clone()));
@@ -301,31 +298,31 @@ pub(crate) fn lower_fn_call(
 
     for (arg, arg_type_idx) in info.args.iter().zip(args_ty_iter) {
         let (rvalue, rvalue_type_idx, rvalue_span) =
-            lower_expression(builder, arg, Some(arg_type_idx))?;
-        let arg_ty = builder.builder.get_type(arg_type_idx);
-        let rvalue_ty = builder.builder.get_type(rvalue_type_idx);
+            lower_expression(fn_builder, arg, Some(arg_type_idx))?;
+        let arg_ty = fn_builder.builder.get_type(arg_type_idx);
+        let rvalue_ty = fn_builder.builder.get_type(rvalue_type_idx);
 
-        if !rvalue_ty.is_equal(arg_ty, &builder.builder.ir) {
+        if !rvalue_ty.is_equal(arg_ty, &fn_builder.builder.ir) {
             return Err(LoweringError::UnexpectedType {
                 found_span: rvalue_span,
-                found: rvalue_ty.display(&builder.builder.ir).unwrap(),
-                expected: arg_ty.display(&builder.builder.ir).unwrap(),
+                found: rvalue_ty.display(&fn_builder.builder.ir).unwrap(),
+                expected: arg_ty.display(&fn_builder.builder.ir).unwrap(),
                 expected_span: Some(rvalue_span),
-                path: builder.get_file_path().clone(),
+                path: fn_builder.get_file_path().clone(),
             });
         }
 
         args.push(rvalue);
     }
 
-    let dest_local = builder.add_local(Local::temp(return_ty));
+    let dest_local = fn_builder.add_local(Local::temp(return_ty));
 
     let dest_place = Place {
         local: dest_local,
         projection: Vec::new(),
     };
 
-    let target_block = builder.body.basic_blocks.len() + 1;
+    let target_block = fn_builder.body.basic_blocks.len() + 1;
 
     // todo: check if function is diverging such as exit().
     let kind = TerminatorKind::Call {
@@ -335,8 +332,8 @@ pub(crate) fn lower_fn_call(
         target: Some(target_block),
     };
 
-    let statements = std::mem::take(&mut builder.statements);
-    builder.body.basic_blocks.push(BasicBlock {
+    let statements = std::mem::take(&mut fn_builder.statements);
+    fn_builder.body.basic_blocks.push(BasicBlock {
         statements,
         terminator: Box::new(Terminator {
             span: Some(info.target.span),
@@ -344,9 +341,9 @@ pub(crate) fn lower_fn_call(
         }),
     });
 
-    builder.builder.self_ty = None;
+    fn_builder.builder.self_ty = None;
 
-    builder.builder.current_generics_map = old_generic_map;
+    fn_builder.builder.current_generics_map = old_generic_map;
 
     Ok((
         Rvalue::Use(Operand::Place(dest_place)),
@@ -385,18 +382,14 @@ pub(crate) fn lower_func_decl(
                 );
 
                 for generic_param in &func.generic_params {
-                    for generic_type in builder.current_generics_map.clone().iter() {
-                        if generic_param.name.name == *generic_type.0 {
-                            let ty = lower_type(
-                                builder,
-                                &TypeDescriptor::Type {
-                                    name: generic_type.1.clone(),
-                                    span: generic_type.1.span,
-                                },
-                            )?;
-                            generic_types.push(ty);
-                            break;
-                        }
+                    if let Some(ty) = builder
+                        .current_generics_map
+                        .get(&generic_param.name.name)
+                        .copied()
+                    {
+                        generic_types.push(ty);
+                    } else {
+                        // todo: should error?
                     }
                 }
 

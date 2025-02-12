@@ -2,10 +2,7 @@ use std::collections::HashMap;
 
 use tracing::instrument;
 
-use crate::{
-    ast::{structs::StructDecl, types::TypeDescriptor},
-    ir::TyKind,
-};
+use crate::{ast::structs::StructDecl, ir::TyKind};
 
 use super::{
     errors::LoweringError,
@@ -34,16 +31,13 @@ pub(crate) fn lower_struct(
     let poly_idx = *builder.symbols[&module_idx].structs.get(&sym).unwrap();
 
     let mut generic_types = Vec::new();
-    for g in &info.generics {
-        let ty = builder.current_generics_map.get(&g.name.name).unwrap();
-        let ty_idx = lower_type(
-            builder,
-            &TypeDescriptor::Type {
-                name: ty.clone(),
-                span: info.span,
-            },
-        )?;
-        generic_types.push(ty_idx);
+
+    for generic_param in &info.generics {
+        let ty = *builder
+            .current_generics_map
+            .get(&generic_param.name.name)
+            .unwrap_or_else(|| panic!("Missing generic type mapping {:?}", generic_param));
+        generic_types.push(ty);
     }
 
     // If struct is generic, get or create the id for this monomorphized struct.

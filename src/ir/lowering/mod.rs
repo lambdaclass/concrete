@@ -14,7 +14,6 @@ use crate::ir::{
 use types::lower_type;
 
 use crate::ast::{
-    common::TypeName,
     constants::ConstantDef,
     expressions::{FnCallOp, StructInitExpr},
     functions::{FunctionDecl, FunctionDef},
@@ -67,7 +66,7 @@ pub struct IRBuilder {
     pub ir: ProgramBody,
     pub symbols: HashMap<ModuleIndex, SymbolTable>,
     pub top_level_modules_names: HashMap<String, ModuleIndex>,
-    pub current_generics_map: HashMap<String, TypeName>,
+    pub current_generics_map: HashMap<String, TypeIndex>,
     pub self_ty: Option<TypeIndex>,
     pub bodies: Bodies,
     pub local_module: Option<ModuleIndex>,
@@ -145,8 +144,15 @@ impl IRBuilder {
         let old_generic_params = self.current_generics_map.clone();
 
         for (gen_ty, gen_param) in info.name.generics.iter().zip(struct_decl.generics.iter()) {
+            let ty = lower_type(
+                self,
+                &TypeDescriptor::Type {
+                    name: gen_ty.clone(),
+                    span: gen_ty.span,
+                },
+            )?;
             self.current_generics_map
-                .insert(gen_param.name.name.clone(), gen_ty.clone());
+                .insert(gen_param.name.name.clone(), ty);
         }
 
         let id = lower_struct(self, &struct_decl)?;
@@ -231,7 +237,7 @@ impl FnIrBuilder<'_> {
                         generic_types.push(ty);
                         self.builder
                             .current_generics_map
-                            .insert(gen_param.name.name.clone(), gen_ty.clone());
+                            .insert(gen_param.name.name.clone(), ty);
                     }
 
                     assert_eq!(

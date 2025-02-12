@@ -7,6 +7,7 @@ use super::{
     ir::{
         self, ConstData, ConstKind, ConstValue, FloatTy, Mutability, TyKind, TypeIndex, ValueTree,
     },
+    structs::lower_struct,
     IRBuilder,
 };
 
@@ -67,14 +68,8 @@ pub(crate) fn lower_type(
             "char" => *builder.ir.builtin_types.get(&TyKind::Char).unwrap(),
             other => {
                 // Check if the type name exists in the generic map.
-                if let Some(d) = builder.current_generics_map.get(other) {
-                    return lower_type(
-                        builder,
-                        &TypeDescriptor::Type {
-                            name: d.clone(),
-                            span: d.span,
-                        },
-                    );
+                if let Some(ty) = builder.current_generics_map.get(other).copied() {
+                    return Ok(ty);
                 }
 
                 let module_idx = builder.local_module.unwrap();
@@ -90,48 +85,76 @@ pub(crate) fn lower_type(
                     generics: Vec::new(),
                 };
 
-                if let Some(struct_idx) = symbols.structs.get(&sym) {
-                    let struct_type_idx = *builder.struct_to_type_idx.get(struct_idx).unwrap();
-                    let body = &builder.bodies.structs.get(struct_idx).unwrap();
+                if let Some(struct_idx) = symbols.structs.get(&sym).copied() {
+                    let struct_type_idx = *builder.struct_to_type_idx.get(&struct_idx).unwrap();
+                    let body = builder.bodies.structs.get(&struct_idx).unwrap();
 
                     if !body.generics.is_empty() {
+                        let type_name_generics = name.generics.clone();
+                        let mut type_name_generics = type_name_generics.iter().peekable();
                         let mut generics = Vec::new();
 
                         for generic_param in body.generics.clone().iter() {
-                            if let Some(g) = builder
+                            if type_name_generics.peek().is_some() {
+                                let tyname = type_name_generics.next().unwrap();
+                                let ty = lower_type(builder, &tyname.clone().into())?;
+                                generics.push(ty);
+                            } else if let Some(ty) = builder
                                 .current_generics_map
                                 .get(&generic_param.name.name)
-                                .cloned()
+                                .copied()
                             {
-                                let ty = lower_type(
-                                    builder,
-                                    &TypeDescriptor::Type {
-                                        name: g.clone(),
-                                        span: generic_param.span,
-                                    },
-                                )?;
                                 generics.push(ty);
                             }
                         }
 
-                        sym.generics = generics;
+                        sym.generics = generics.clone();
 
                         // for borrowck
                         let symbols = builder.symbols.get(&module_idx).unwrap();
-                        if let Some(mono_struct_idx) = symbols.structs.get(&sym) {
-                            *builder
-                                .struct_to_type_idx
-                                .get(mono_struct_idx)
-                                .expect("should have a type idx")
-                        } else {
-                            Err(LoweringError::UnrecognizedType {
-                                span: *span,
-                                name: other.to_string(),
-                                path: builder.ir.modules[builder.local_module.unwrap()]
-                                    .file_path
-                                    .clone(),
-                            })?
+
+                        let mono_struct_idx =
+                            if let Some(mono_struct_idx) = symbols.structs.get(&sym).copied() {
+                                mono_struct_idx
+                            } else {
+                                let mono_struct_idx = builder.ir.structs.insert(None);
+                                let type_id = builder
+                                    .ir
+                                    .types
+                                    .insert(Some(TyKind::Struct(mono_struct_idx)));
+                                builder.struct_to_type_idx.insert(mono_struct_idx, type_id);
+                                builder
+                                    .symbols
+                                    .get_mut(&builder.local_module.unwrap())
+                                    .unwrap()
+                                    .structs
+                                    .insert(sym.clone(), mono_struct_idx);
+
+                                mono_struct_idx
+                            };
+
+                        let body = builder.bodies.structs.get(&struct_idx).unwrap().clone();
+                        if builder.ir.structs[mono_struct_idx].is_none() {
+                            let generics_mapping = builder.current_generics_map.clone();
+                            for (gen_ty, gen_param) in generics.iter().zip(body.generics.iter()) {
+                                builder
+                                    .current_generics_map
+                                    .insert(gen_param.name.name.clone(), *gen_ty);
+                            }
+
+                            let id = lower_struct(builder, &body)?;
+                            assert_eq!(
+                                id, mono_struct_idx,
+                                "struct was already inserted so id should match"
+                            );
+
+                            builder.current_generics_map = generics_mapping;
                         }
+
+                        *builder
+                            .struct_to_type_idx
+                            .get(&mono_struct_idx)
+                            .expect("should have a type idx")
                     } else {
                         struct_type_idx
                     }

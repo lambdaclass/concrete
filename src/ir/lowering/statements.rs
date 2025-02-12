@@ -73,7 +73,7 @@ fn lower_let(builder: &mut FnIrBuilder, info: &LetStmt) -> Result<(), LoweringEr
 
             let rvalue_ty = builder.builder.ir.types[rvalue_type_idx].clone().unwrap();
             debug!(
-                "let rvalue type: {:?}",
+                "let rvalue type: {}",
                 rvalue_ty.display(&builder.builder.ir).unwrap()
             );
 

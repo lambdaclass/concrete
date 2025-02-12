@@ -58,6 +58,13 @@ impl TypeDescriptor {
         }
     }
 
+    pub fn get_generics(&self) -> Option<Vec<TypeName>> {
+        match self {
+            TypeDescriptor::Type { name, .. } => Some(name.generics.clone()),
+            _ => None,
+        }
+    }
+
     pub fn get_span(&self) -> Span {
         match self {
             TypeDescriptor::Type { span, .. } => *span,
@@ -67,6 +74,15 @@ impl TypeDescriptor {
             TypeDescriptor::MutPtr { span, .. } => *span,
             TypeDescriptor::Array { span, .. } => *span,
             TypeDescriptor::SelfType { span, .. } => *span,
+        }
+    }
+}
+
+impl From<TypeName> for TypeDescriptor {
+    fn from(value: TypeName) -> Self {
+        Self::Type {
+            span: value.span,
+            name: value,
         }
     }
 }

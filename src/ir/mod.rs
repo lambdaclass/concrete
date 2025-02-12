@@ -544,14 +544,17 @@ impl TyKind {
                 )
             }
             TyKind::Struct(index) => {
-                let body = ir.structs[*index].as_ref().unwrap();
-                writeln!(f, "{} {{", body.name)?;
+                if let Some(body) = ir.structs[*index].as_ref() {
+                    writeln!(f, "{} {{", body.name)?;
 
-                for var in &body.variants {
-                    let ty = ir.types[var.ty].as_ref().unwrap().display(ir)?;
-                    writeln!(f, "\t{}: {},", var.name, ty)?;
+                    for var in &body.variants {
+                        let ty = ir.types[var.ty].as_ref().unwrap().display(ir)?;
+                        writeln!(f, "\t{}: {},", var.name, ty)?;
+                    }
+                    write!(f, "}}")?;
+                } else {
+                    writeln!(f, "Unknown({}) {{}}", index.to_idx())?;
                 }
-                write!(f, "}}")?;
 
                 Ok(())
             }

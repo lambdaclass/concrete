@@ -446,7 +446,7 @@ pub fn lower_module(
                 lower_constant(builder, module_idx, constant_def)?;
             }
             ModuleDefItem::Struct(info) => {
-                if !info.generics.is_empty() {
+                if info.generics.is_empty() {
                     lower_struct(builder, info)?;
                 }
             }
