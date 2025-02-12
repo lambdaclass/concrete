@@ -208,6 +208,9 @@ pub(crate) fn lower_func(
     Ok(fn_id)
 }
 
+/// Lowers a function or method call.
+///
+/// If the function is generic, and hasn't been monomorphized yet, it gets lowered with the given generic types.
 #[instrument(level = "debug", skip_all)]
 pub(crate) fn lower_fn_call(
     fn_builder: &mut FnIrBuilder,
@@ -218,6 +221,7 @@ pub(crate) fn lower_fn_call(
     debug!("lowering fn call");
     let (poly_fn_id, mono_fn_id) = fn_builder.get_id_for_fn_call(info, method_idx)?;
 
+    // Get the function declaration to inspect its types.
     let target_fn_decl = fn_builder
         .builder
         .bodies
@@ -235,8 +239,10 @@ pub(crate) fn lower_fn_call(
         .unwrap()
         .clone();
 
+    // Enter a new scope for generics.
     let old_generic_map = fn_builder.builder.current_generics_map.clone();
 
+    // Save the generics info.
     for (generic_ty, generic_param) in info
         .generics
         .iter()
@@ -267,15 +273,19 @@ pub(crate) fn lower_fn_call(
 
     let mut args_ty = Vec::new();
 
+    // Set self_ty if there is one.
+    // Used in lower_type.
     if let Some((_, self_ty)) = self_value {
         fn_builder.builder.self_ty = Some(self_ty);
     }
 
+    // Lower the param types.
     for param in &target_fn_decl.params {
         let ty = lower_type(fn_builder.builder, &param.r#type)?;
         args_ty.push(ty);
     }
 
+    // Lower the return type.
     let return_ty = if let Some(ret_ty) = &target_fn_decl.ret_type {
         lower_type(fn_builder.builder, ret_ty)?
     } else {
@@ -319,6 +329,7 @@ pub(crate) fn lower_fn_call(
         }
     }
 
+    // Lower the argument expressions.
     for (arg, arg_type_idx) in info.args.iter().zip(args_ty_iter) {
         let (rvalue, rvalue_type_idx, rvalue_span) =
             lower_expression(fn_builder, arg, Some(arg_type_idx))?;
@@ -338,6 +349,7 @@ pub(crate) fn lower_fn_call(
         args.push(rvalue);
     }
 
+    // Add a local for the returned value.
     let dest_local = fn_builder.add_local(Local::temp(return_ty));
 
     let dest_place = Place {

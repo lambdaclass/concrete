@@ -29,15 +29,15 @@ use typed_generational_arena::{SmallSlab, SmallSlabIndex};
 /// Holds all the IR structures.
 #[derive(Debug, Clone)]
 pub struct IR {
-    /// The types defined in this program.
+    /// The types defined in this compile unit.
     pub types: Types,
-    /// The functions defined in this program.
+    /// The functions defined in this compile unit.
     pub functions: Functions,
-    /// The structs defined in this program.
+    /// The structs defined in this compile unit.
     pub structs: Structs,
-    /// The constants defined in this program.
+    /// The constants defined in this compile unit.
     pub constants: Constants,
-    /// The modules defined in this program.
+    /// The modules defined in this compile unit.
     pub modules: Modules,
     /// The top level modules, to start traversing them from this.
     /// Since the `modules` field is a flat structure holding all modules regardles of depth.

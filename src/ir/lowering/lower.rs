@@ -49,7 +49,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
             .ok_or_else(|| LoweringError::InternalError("Missing program file path".to_string()))?;
 
         for module in &compile_unit.modules {
-            prepass_module(&mut builder, module, &[], file_path)?;
+            lower_module_symbols(&mut builder, module, &[], file_path)?;
         }
     }
 
@@ -85,7 +85,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
     Ok(builder.ir)
 }
 
-fn prepass_module(
+fn lower_module_symbols(
     builder: &mut IRBuilder,
     module: &ast::modules::Module,
     parents: &[ModuleIndex],
@@ -239,7 +239,7 @@ fn prepass_module(
                 let mut parents = parents.to_vec();
                 parents.push(module_idx);
 
-                prepass_module(builder, submodule, &parents, file_path)?;
+                lower_module_symbols(builder, submodule, &parents, file_path)?;
             }
         }
     }
