@@ -128,7 +128,7 @@ impl IRBuilder {
 
         name_path.push(fn_name);
 
-        Some(format!("{}@{}", name_path.join("::"), fn_idx.to_idx()))
+        Some(format!("{}_{}", name_path.join("_"), fn_idx.to_idx()))
     }
 
     /// Gets the struct index for the given StructInitExpr (+ using the current generics map in builder).
@@ -229,8 +229,6 @@ impl FnIrBuilder<'_> {
                 method_of: method_ty_idx,
                 generics: Vec::new(),
             };
-
-            dbg!(&symbols.functions);
 
             if let Some(poly_id) = symbols.functions.get(&poly_symbol).copied() {
                 if !info.generics.is_empty() {
