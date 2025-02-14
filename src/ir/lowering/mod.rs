@@ -88,6 +88,7 @@ pub struct FnIrBuilder<'b> {
     pub statements: Vec<Statement>,
     pub ret_local: LocalIndex,
     pub builder: &'b mut IRBuilder,
+    pub fn_id: FnIndex,
     // To check when a variable is used before its declared/init
     pub local_exists: HashSet<LocalIndex>,
 }
@@ -273,7 +274,18 @@ impl FnIrBuilder<'_> {
                             let fn_decl =
                                 self.builder.bodies.functions.get(&poly_id).unwrap().clone();
 
-                            lower_func(self.builder, &fn_decl, method_ty_idx)?
+                            // Add the id from here to avoid infinite recursion on recursive functions.
+                            let id = self.builder.ir.functions.insert(None);
+                            self.builder
+                                .symbols
+                                .get_mut(&module_id)
+                                .unwrap()
+                                .functions
+                                .insert(mono_symbol, id);
+                            let lowered_id = lower_func(self.builder, &fn_decl, method_ty_idx)?;
+
+                            assert_eq!(id, lowered_id);
+                            id
                         }
                     }; // todo error
 

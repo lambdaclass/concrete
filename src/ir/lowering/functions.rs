@@ -144,6 +144,7 @@ pub(crate) fn lower_func(
             module_idx,
             locals: Vec::new(),
         },
+        fn_id,
         name_to_local: HashMap::new(),
         statements: Vec::new(),
         ret_local: 0,
@@ -496,6 +497,7 @@ pub(crate) fn lower_func_decl(
         statements: Vec::new(),
         ret_local: 0,
         builder,
+        fn_id,
         local_exists: Default::default(),
     };
 

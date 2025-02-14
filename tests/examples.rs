@@ -11,6 +11,7 @@ mod common;
 #[test_case(include_str!("../examples/if_with_literals.con"), "if_with_literals", false, 1 ; "if_with_literals.con")]
 #[test_case(include_str!("../examples/factorial_if.con"), "factorial_if", false, 24 ; "factorial_if.con")]
 #[test_case(include_str!("../examples/fib_if.con"), "fib_if", false, 55 ; "fib_if.con")]
+#[test_case(include_str!("../examples/fib_generic.con"), "fib", false, 55 ; "fib_generic.con")]
 #[test_case(include_str!("../examples/import.con"), "import", false, 12 ; "import.con")]
 #[test_case(include_str!("../examples/import_struct.con"), "import_struct", false, 2 ; "import_struct.con")]
 #[test_case(include_str!("../examples/import_struct_impl.con"), "import_struct_impl", false, 8 ; "import_struct_impl.con")]

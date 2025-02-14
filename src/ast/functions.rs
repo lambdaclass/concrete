@@ -35,6 +35,7 @@ pub struct Param {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImplBlock {
     pub target: TypeDescriptor,
+    pub generic_params: Vec<GenericParam>,
     pub methods: Vec<Arc<FunctionDef>>,
     pub span: Span,
 }
