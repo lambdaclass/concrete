@@ -78,7 +78,7 @@ pub struct IRBuilder {
     // Needed to not duplicate TypeIndexes for structs.
     pub struct_to_type_idx: HashMap<StructIndex, TypeIndex>,
     // Type to module id where it resides, needed to find methods for the given types.
-    pub type_module_idx: HashMap<TypeIndex, ModuleIndex>,
+    pub type_to_module: HashMap<TypeIndex, ModuleIndex>,
     pub mono_type_to_poly: HashMap<TypeIndex, TypeIndex>,
 }
 
@@ -213,17 +213,30 @@ impl FnIrBuilder<'_> {
     pub fn get_id_for_fn_call(
         &mut self,
         info: &FnCallOp,
-        method_ty_idx: Option<TypeIndex>,
+        method_of_type_idx: Option<TypeIndex>,
     ) -> Result<(FnIndex, Option<FnIndex>), LoweringError> {
-        let module_id = if let Some(id) = method_ty_idx {
-            self.builder.type_module_idx.get(&id).copied().unwrap()
+        // If the function call is a method of the given type,
+        // we need to handle the case were the given type is polymorphic.
+        // The passed id here will be the monomorphic version in that case, so
+        // we need to get the polymorphic type id of this type
+        // to be able to get the function.
+        let mut polymorphic_method_of_type_idx = method_of_type_idx;
+
+        if let Some(method_ty_idx) = method_of_type_idx {
+            if let Some(ty) = self.builder.mono_type_to_poly.get(&method_ty_idx) {
+                polymorphic_method_of_type_idx = Some(*ty);
+            }
+        }
+
+        let module_id = if let Some(id) = polymorphic_method_of_type_idx {
+            self.builder.type_to_module.get(&id).copied().unwrap()
         } else {
             self.get_module_idx()
         };
 
-        let mut poly_symbol = Symbol {
+        let poly_symbol = Symbol {
             name: info.target.name.clone(),
-            method_of: method_ty_idx,
+            method_of: polymorphic_method_of_type_idx,
             generics: Vec::new(),
         };
 
@@ -232,15 +245,10 @@ impl FnIrBuilder<'_> {
 
             let mut generic_types = Vec::new();
 
-            // change the symbol method_of to the poly type to be able to find the method.
-            if let Some(method_ty_idx) = method_ty_idx {
-                if let Some(ty) = self.builder.mono_type_to_poly.get(&method_ty_idx) {
-                    poly_symbol.method_of = Some(*ty);
-                }
-            }
-
             if let Some(poly_id) = symbols.functions.get(&poly_symbol).copied() {
-                if !info.generics.is_empty() {
+                // If function is generic or the self type is generic, monomorphize here.
+                if !info.generics.is_empty() || polymorphic_method_of_type_idx != method_of_type_idx
+                {
                     let old_generics = self.builder.current_generics_map.clone();
                     let fn_decl = self.builder.bodies.functions.get(&poly_id).unwrap().clone();
 
@@ -270,9 +278,11 @@ impl FnIrBuilder<'_> {
 
                     let mono_symbol = Symbol {
                         name: info.target.name.clone(),
-                        method_of: method_ty_idx,
+                        method_of: method_of_type_idx,
                         generics: generic_types,
                     };
+
+                    dbg!(&mono_symbol);
 
                     let symbols = self.builder.symbols.get(&module_id).unwrap(); // needed for borrowck
                     let id = {
@@ -290,7 +300,8 @@ impl FnIrBuilder<'_> {
                                 .unwrap()
                                 .functions
                                 .insert(mono_symbol, id);
-                            let lowered_id = lower_func(self.builder, &fn_decl, method_ty_idx)?;
+                            let lowered_id =
+                                lower_func(self.builder, &fn_decl, method_of_type_idx)?;
 
                             assert_eq!(id, lowered_id);
                             id

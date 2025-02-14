@@ -45,7 +45,7 @@ pub(crate) fn lower_func(
     let module_idx = if let Some(id) = method_of {
         builder.self_ty = Some(id);
         builder
-            .type_module_idx
+            .type_to_module
             .get(&id)
             .copied()
             .expect("should exist")
@@ -225,7 +225,7 @@ pub(crate) fn lower_fn_call(
     method_idx: Option<TypeIndex>, // in case its a method
 ) -> Result<(Rvalue, TypeIndex, Span), LoweringError> {
     debug!("lowering fn call");
-    let (poly_fn_id, mono_fn_id) = fn_builder.get_id_for_fn_call(info, method_idx)?;
+    let (poly_fn_id, mono_fn_id) = fn_builder.get_id_for_fn_call(info, dbg!(method_idx))?;
 
     // Get the function declaration to inspect its types.
     let target_fn_decl = fn_builder

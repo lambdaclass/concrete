@@ -37,7 +37,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
         top_level_modules_names: Default::default(),
         current_generics_map: Default::default(),
         struct_to_type_idx: Default::default(),
-        type_module_idx: Default::default(),
+        type_to_module: Default::default(),
         bodies: Bodies::default(),
         self_ty: None,
         local_module: None,
@@ -219,7 +219,7 @@ fn lower_module_symbols(
                 let type_idx = builder.ir.types.insert(Some(Type::Struct(idx)));
                 builder.ir.modules[module_idx].types.insert(type_idx);
                 builder.struct_to_type_idx.insert(idx, type_idx);
-                builder.type_module_idx.insert(type_idx, module_idx);
+                builder.type_to_module.insert(type_idx, module_idx);
                 debug!(
                     "Adding struct symbol {:?} to module {:?}",
                     struct_decl.name.name, module.name.name
@@ -236,7 +236,7 @@ fn lower_module_symbols(
                     .unwrap()
                     .types
                     .insert(type_decl.name.name.clone(), idx);
-                builder.type_module_idx.insert(idx, module_idx);
+                builder.type_to_module.insert(idx, module_idx);
             }
             ast::modules::ModuleDefItem::Module(submodule) => {
                 let mut parents = parents.to_vec();

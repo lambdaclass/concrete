@@ -11,7 +11,6 @@ mod opaque_vec {
 
     impl OpaqueVec {
         pub fn push<T>(&mut self, value: T) {
-            // doesnt handle cap realloc
             if self.len <= self.cap {
                 let new_cap: u64 = self.cap * 2;
                 self.ptr = realloc(self.ptr, self.element_size * new_cap);

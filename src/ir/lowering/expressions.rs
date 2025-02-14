@@ -589,10 +589,21 @@ pub(crate) fn lower_path(
                     let struct_adt = fn_builder.builder.get_struct(struct_index); // borrowck
                     let field_index = *struct_adt.variant_names.get(&field.name.name).unwrap();
                     let field_ty = struct_adt.variants[field_index].ty;
-                    fn_builder
-                        .builder
-                        .current_generics_map
-                        .insert(name, field_ty);
+                    let field_type = fn_builder.builder.get_type(field_ty);
+                    let mut map_ty = field_ty;
+                    if let Some(inner) = field_type.get_inner_type() {
+                        map_ty = inner;
+                    }
+                    debug!(
+                        "Adding field type to generics mapping {} -> {}",
+                        name,
+                        fn_builder
+                            .builder
+                            .get_type(map_ty)
+                            .display(&fn_builder.builder.ir)
+                            .unwrap()
+                    );
+                    fn_builder.builder.current_generics_map.insert(name, map_ty);
                 }
             }
         }
