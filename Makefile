@@ -39,7 +39,8 @@ clean:
 
 .PHONY: test
 test: check-deps
-	cargo test --all-targets --all-features
+	cargo test --all-targets --all-features && \
+	echo "Testing example concrete project" && cd examples/project && cargo run -- build
 
 .PHONY: coverage
 coverage: check-deps

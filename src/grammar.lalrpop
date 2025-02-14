@@ -3,7 +3,7 @@ use crate::parser::lexer::LexicalError;
 use crate::ast;
 use crate::ast::common::Span;
 use std::str::FromStr;
-
+use std::sync::Arc;
 
 grammar;
 
@@ -221,14 +221,14 @@ GenericParams: Vec<ast::common::GenericParam> = {
 
 // Module list
 
-pub Program: ast::Program = {
+pub CompileUnit: ast::CompileUnit = {
   <Module> => {
-    ast::Program {
+    ast::CompileUnit {
       file_path: None,
       modules: vec![<>],
     }
   },
-  <mut s:Program> <n:Module> => {
+  <mut s:CompileUnit> <n:Module> => {
       s.modules.push(n);
       s
   },
@@ -240,25 +240,56 @@ ExternalModule: ast::common::Ident = {
   "mod" <name:Ident> ";" => name
 }
 
+ModuleItems: Vec<ast::modules::ModuleDefItem> = {
+  <ModuleDefItem> => vec![<>],
+  <mut s:ModuleItems> <n:ModuleDefItem> => {
+      s.push(n);
+      s
+  },
+}
+
+ModuleDefItem: ast::modules::ModuleDefItem = {
+  <ConstantDef> ";" => {
+    ast::modules::ModuleDefItem::Constant(Arc::new(<>))
+  },
+  <StructDef> => {
+    ast::modules::ModuleDefItem::Struct(Arc::new(<>))
+  },
+  <UnionDef> => {
+    ast::modules::ModuleDefItem::Union(Arc::new(<>))
+  },
+  <EnumDef> => {
+    ast::modules::ModuleDefItem::Enum(Arc::new(<>))
+  },
+  <FunctionDef> => {
+    ast::modules::ModuleDefItem::Function(Arc::new(<>))
+  },
+  <FunctionDecl> ";" => {
+    ast::modules::ModuleDefItem::FunctionDecl(Arc::new(<>))
+  },
+  <ImplBlock> => {
+    ast::modules::ModuleDefItem::Impl(Arc::new(<>))
+  },
+  <Module> => {
+    ast::modules::ModuleDefItem::Module(Arc::new(<>))
+  },
+  <ExternalModule> => {
+    ast::modules::ModuleDefItem::ExternalModule(<>)
+  },
+  <ImportStmt> => {
+    ast::modules::ModuleDefItem::Import(Arc::new(<>))
+  },
+}
+
 Module: ast::modules::Module = {
-  <lo:@L> <doc_string:DocString?> "mod" <name:Ident> "{" <external_modules:List<ExternalModule>?> <imports:ImportList?> <contents:ModuleItems?> "}" <hi:@R> => {
+  <lo:@L> <doc_string:DocString?> "mod" <name:Ident> "{" <contents:ModuleItems?> "}" <hi:@R> => {
     ast::modules::Module {
       doc_string,
-      imports: imports.unwrap_or_else(Vec::new),
-      external_modules: external_modules.unwrap_or(vec![]),
       name,
       contents: contents.unwrap_or_else(Vec::new),
       span: Span::new(lo, hi),
     }
   }
-}
-
-ImportList: Vec<ast::imports::ImportStmt> = {
-  <ImportStmt> => vec![<>],
-  <mut s:ImportList> <n:ImportStmt> => {
-      s.push(n);
-      s
-  },
 }
 
 
@@ -270,42 +301,6 @@ ImportStmt: ast::imports::ImportStmt = {
       span: Span::new(lo, hi),
     }
   }
-}
-
-
-ModuleItems: Vec<ast::modules::ModuleDefItem> = {
-  <ModuleDefItem> => vec![<>],
-  <mut s:ModuleItems> <n:ModuleDefItem> => {
-      s.push(n);
-      s
-  },
-}
-
-ModuleDefItem: ast::modules::ModuleDefItem = {
-  <ConstantDef> ";" => {
-    ast::modules::ModuleDefItem::Constant(<>)
-  },
-  <StructDef> => {
-    ast::modules::ModuleDefItem::Struct(<>)
-  },
-  <UnionDef> => {
-    ast::modules::ModuleDefItem::Union(<>)
-  },
-  <EnumDef> => {
-    ast::modules::ModuleDefItem::Enum(<>)
-  },
-  <FunctionDef> => {
-    ast::modules::ModuleDefItem::Function(<>)
-  },
-  <FunctionDecl> ";" => {
-    ast::modules::ModuleDefItem::FunctionDecl(<>)
-  },
-  <ImplBlock> => {
-    ast::modules::ModuleDefItem::Impl(<>)
-  },
-  <Module> => {
-    ast::modules::ModuleDefItem::Module(<>)
-  },
 }
 
 // Constants
@@ -343,6 +338,7 @@ Param: ast::functions::Param = {
     r#type: ast::types::TypeDescriptor::SelfType {
       is_ref: is_ref.is_some(),
       is_mut: is_mut.is_some(),
+      span: Span::new(lo, hi),
     },
   }
 }
@@ -375,7 +371,7 @@ FunctionDecl: ast::functions::FunctionDecl = {
 FunctionDef: ast::functions::FunctionDef = {
   <lo:@L> <decl:FunctionDecl> "{" <statements:StatementList?> "}" <hi:@R> => {
     ast::functions::FunctionDef {
-      decl,
+      decl: decl.into(),
       body: statements.unwrap_or_else(Vec::new),
       span: Span::new(lo, hi),
     }
@@ -383,10 +379,11 @@ FunctionDef: ast::functions::FunctionDef = {
 }
 
 ImplBlock: ast::functions::ImplBlock = {
-  <lo:@L> "impl" <target:TypeDescriptor> "{" <methods:FunctionDef*> "}" <hi:@R> => {
+  <lo:@L> "impl" <generic_params:GenericParams?> <target:TypeDescriptor> "{" <methods:FunctionDef*> "}" <hi:@R> => {
     ast::functions::ImplBlock {
       target,
-      methods,
+      methods: methods.into_iter().map(Arc::new).collect(),
+      generic_params: generic_params.unwrap_or(vec![]),
       span: Span::new(lo, hi),
     }
   }

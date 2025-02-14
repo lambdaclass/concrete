@@ -14,7 +14,7 @@ pub mod structs;
 pub mod types;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Program {
+pub struct CompileUnit {
     pub file_path: Option<PathBuf>,
     pub modules: Vec<Module>,
 }

@@ -1,3 +1,5 @@
+use concrete::compile_unit_info::OptLevel;
+
 use crate::common::compile_and_run;
 
 mod common;
@@ -24,26 +26,15 @@ fn test_while() {
         }
     "#;
 
+    assert_eq!(16, compile_and_run(source, "while", false, OptLevel::None));
+    assert_eq!(16, compile_and_run(source, "while", false, OptLevel::Less));
     assert_eq!(
         16,
-        compile_and_run(source, "while", false, concrete::session::OptLevel::None)
+        compile_and_run(source, "while", false, OptLevel::Default)
     );
     assert_eq!(
         16,
-        compile_and_run(source, "while", false, concrete::session::OptLevel::Less)
-    );
-    assert_eq!(
-        16,
-        compile_and_run(source, "while", false, concrete::session::OptLevel::Default)
-    );
-    assert_eq!(
-        16,
-        compile_and_run(
-            source,
-            "while",
-            false,
-            concrete::session::OptLevel::Aggressive
-        )
+        compile_and_run(source, "while", false, OptLevel::Aggressive)
     );
 }
 
@@ -67,39 +58,19 @@ fn test_factorial_with_if() {
 
     assert_eq!(
         24,
-        compile_and_run(
-            source,
-            "factorial",
-            false,
-            concrete::session::OptLevel::None
-        )
+        compile_and_run(source, "factorial", false, OptLevel::None)
     );
     assert_eq!(
         24,
-        compile_and_run(
-            source,
-            "factorial",
-            false,
-            concrete::session::OptLevel::Less
-        )
+        compile_and_run(source, "factorial", false, OptLevel::Less)
     );
     assert_eq!(
         24,
-        compile_and_run(
-            source,
-            "factorial",
-            false,
-            concrete::session::OptLevel::Default
-        )
+        compile_and_run(source, "factorial", false, OptLevel::Default)
     );
     assert_eq!(
         24,
-        compile_and_run(
-            source,
-            "factorial",
-            false,
-            concrete::session::OptLevel::Aggressive
-        )
+        compile_and_run(source, "factorial", false, OptLevel::Aggressive)
     );
 }
 
@@ -121,26 +92,12 @@ fn test_fib_with_if() {
         }
     "#;
 
+    assert_eq!(55, compile_and_run(source, "fib", false, OptLevel::None));
+    assert_eq!(55, compile_and_run(source, "fib", false, OptLevel::Less));
+    assert_eq!(55, compile_and_run(source, "fib", false, OptLevel::Default));
     assert_eq!(
         55,
-        compile_and_run(source, "fib", false, concrete::session::OptLevel::None)
-    );
-    assert_eq!(
-        55,
-        compile_and_run(source, "fib", false, concrete::session::OptLevel::Less)
-    );
-    assert_eq!(
-        55,
-        compile_and_run(source, "fib", false, concrete::session::OptLevel::Default)
-    );
-    assert_eq!(
-        55,
-        compile_and_run(
-            source,
-            "fib",
-            false,
-            concrete::session::OptLevel::Aggressive
-        )
+        compile_and_run(source, "fib", false, OptLevel::Aggressive)
     );
 }
 
@@ -164,39 +121,19 @@ fn test_simple_add() {
 
     assert_eq!(
         8,
-        compile_and_run(
-            source,
-            "simple_add",
-            false,
-            concrete::session::OptLevel::None
-        )
+        compile_and_run(source, "simple_add", false, OptLevel::None)
     );
     assert_eq!(
         8,
-        compile_and_run(
-            source,
-            "simple_add",
-            false,
-            concrete::session::OptLevel::Less
-        )
+        compile_and_run(source, "simple_add", false, OptLevel::Less)
     );
     assert_eq!(
         8,
-        compile_and_run(
-            source,
-            "simple_add",
-            false,
-            concrete::session::OptLevel::Default
-        )
+        compile_and_run(source, "simple_add", false, OptLevel::Default)
     );
     assert_eq!(
         8,
-        compile_and_run(
-            source,
-            "simple_add",
-            false,
-            concrete::session::OptLevel::Aggressive
-        )
+        compile_and_run(source, "simple_add", false, OptLevel::Aggressive)
     );
 }
 
@@ -218,31 +155,15 @@ fn test_import() {
         }
     "#;
 
+    assert_eq!(8, compile_and_run(source, "import", false, OptLevel::None));
+    assert_eq!(8, compile_and_run(source, "import", false, OptLevel::Less));
     assert_eq!(
         8,
-        compile_and_run(source, "import", false, concrete::session::OptLevel::None)
+        compile_and_run(source, "import", false, OptLevel::Default)
     );
     assert_eq!(
         8,
-        compile_and_run(source, "import", false, concrete::session::OptLevel::Less)
-    );
-    assert_eq!(
-        8,
-        compile_and_run(
-            source,
-            "import",
-            false,
-            concrete::session::OptLevel::Default
-        )
-    );
-    assert_eq!(
-        8,
-        compile_and_run(
-            source,
-            "import",
-            false,
-            concrete::session::OptLevel::Aggressive
-        )
+        compile_and_run(source, "import", false, OptLevel::Aggressive)
     );
 }
 
@@ -272,31 +193,15 @@ fn test_floats() {
     }
     "#;
 
+    assert_eq!(1, compile_and_run(source, "floats", false, OptLevel::None));
+    assert_eq!(1, compile_and_run(source, "floats", false, OptLevel::Less));
     assert_eq!(
         1,
-        compile_and_run(source, "floats", false, concrete::session::OptLevel::None)
+        compile_and_run(source, "floats", false, OptLevel::Default)
     );
     assert_eq!(
         1,
-        compile_and_run(source, "floats", false, concrete::session::OptLevel::Less)
-    );
-    assert_eq!(
-        1,
-        compile_and_run(
-            source,
-            "floats",
-            false,
-            concrete::session::OptLevel::Default
-        )
-    );
-    assert_eq!(
-        1,
-        compile_and_run(
-            source,
-            "floats",
-            false,
-            concrete::session::OptLevel::Aggressive
-        )
+        compile_and_run(source, "floats", false, OptLevel::Aggressive)
     );
 }
 
@@ -323,38 +228,18 @@ fn test_reference() {
 
     assert_eq!(
         2,
-        compile_and_run(
-            source,
-            "references",
-            false,
-            concrete::session::OptLevel::None
-        )
+        compile_and_run(source, "references", false, OptLevel::None)
     );
     assert_eq!(
         2,
-        compile_and_run(
-            source,
-            "references",
-            false,
-            concrete::session::OptLevel::Less
-        )
+        compile_and_run(source, "references", false, OptLevel::Less)
     );
     assert_eq!(
         2,
-        compile_and_run(
-            source,
-            "references",
-            false,
-            concrete::session::OptLevel::Default
-        )
+        compile_and_run(source, "references", false, OptLevel::Default)
     );
     assert_eq!(
         2,
-        compile_and_run(
-            source,
-            "references",
-            false,
-            concrete::session::OptLevel::Aggressive
-        )
+        compile_and_run(source, "references", false, OptLevel::Aggressive)
     );
 }

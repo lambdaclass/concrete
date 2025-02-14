@@ -1,4 +1,4 @@
-use crate::ast::Program;
+use crate::ast::CompileUnit;
 use error::Diagnostics;
 use lexer::Lexer;
 use salsa::Accumulator;
@@ -26,9 +26,12 @@ pub struct ProgramSource<'db> {
 
 // Todo: better error handling
 #[salsa::tracked]
-pub fn parse_ast<'db>(db: &'db dyn salsa::Database, source: ProgramSource<'db>) -> Option<Program> {
+pub fn parse_ast<'db>(
+    db: &'db dyn salsa::Database,
+    source: ProgramSource<'db>,
+) -> Option<CompileUnit> {
     let lexer = Lexer::new(source.input(db));
-    let parser = grammar::ProgramParser::new();
+    let parser = grammar::CompileUnitParser::new();
 
     match parser.parse(lexer) {
         Ok(ast) => Some(ast),
@@ -92,7 +95,7 @@ mod ModuleName {
 }
         "##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -111,7 +114,7 @@ mod ModuleName {
     }
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -123,7 +126,7 @@ mod ModuleName {
     }
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -135,7 +138,7 @@ mod ModuleName {
     }
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -144,7 +147,7 @@ mod ModuleName {
         let source = r##"mod MyMod {
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -154,7 +157,7 @@ mod ModuleName {
             fn hello() {}
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -174,7 +177,7 @@ mod ModuleName {
 	}
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -192,7 +195,7 @@ mod ModuleName {
     }
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -210,7 +213,7 @@ mod ModuleName {
     }
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -236,7 +239,7 @@ mod ModuleName {
     }
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -261,7 +264,7 @@ mod ModuleName {
     }
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -275,7 +278,7 @@ mod ModuleName {
     }
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -289,7 +292,7 @@ mod ModuleName {
     }
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -300,7 +303,7 @@ mod ModuleName {
     pub extern fn myintrinsic();
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -328,7 +331,7 @@ mod ModuleName {
     }
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -356,7 +359,7 @@ mod ModuleName {
     }
 }"##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         parser.parse(lexer).unwrap();
     }
 
@@ -377,7 +380,7 @@ mod MyMod {
 }
 "##;
         let lexer = Lexer::new(source);
-        let parser = grammar::ProgramParser::new();
+        let parser = grammar::CompileUnitParser::new();
         let module = parser.parse(lexer).unwrap();
 
         let const_item = match &module.modules[0].contents[0] {

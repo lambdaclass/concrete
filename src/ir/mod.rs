@@ -1,86 +1,128 @@
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    fmt,
+    collections::{HashMap, HashSet},
+    fmt::Write,
     path::PathBuf,
+    sync::Arc,
 };
-
-use crate::ast::{common::Ident, types::TypeDescriptor};
 
 pub mod lowering;
 
 pub type LocalIndex = usize;
 pub type BlockIndex = usize;
-pub type TypeIndex = usize;
 pub type FieldIndex = usize;
 
+pub type ModuleIndex = SmallSlabIndex<Module>;
+pub type StructIndex = SmallSlabIndex<Option<AdtBody>>;
+pub type FnIndex = SmallSlabIndex<Option<Function>>;
+pub type TypeIndex = SmallSlabIndex<Option<Type>>;
+pub type ConstIndex = SmallSlabIndex<Option<ConstBody>>;
+
+pub type Types = SmallSlab<Option<Type>>;
+pub type Functions = SmallSlab<Option<Function>>;
+pub type Structs = SmallSlab<Option<AdtBody>>;
+pub type Constants = SmallSlab<Option<ConstBody>>;
+pub type Modules = SmallSlab<Module>;
+
 pub use crate::ast::common::Span;
-use educe::Educe;
+use typed_generational_arena::{SmallSlab, SmallSlabIndex};
 
-#[derive(Debug, Clone, Default)]
-pub struct SymbolTable {
-    pub symbols: HashMap<DefId, String>,
-    pub modules: HashMap<String, DefId>,
-    pub functions: HashMap<String, DefId>,
-    /// (type name, Name) -> id
-    pub methods: HashMap<(TypeDescriptor, String), DefId>,
-    pub constants: HashMap<String, DefId>,
-    pub structs: HashMap<String, DefId>,
-    pub types: HashMap<String, DefId>,
+/// Holds all the IR structures.
+#[derive(Debug, Clone)]
+pub struct IR {
+    /// The types defined in this compile unit.
+    pub types: Types,
+    /// The functions defined in this compile unit.
+    pub functions: Functions,
+    /// The structs defined in this compile unit.
+    pub structs: Structs,
+    /// The constants defined in this compile unit.
+    pub constants: Constants,
+    /// The modules defined in this compile unit.
+    pub modules: Modules,
+    /// The top level modules, to start traversing them from this.
+    /// Since the `modules` field is a flat structure holding all modules regardles of depth.
+    pub top_level_modules: Vec<ModuleIndex>,
+    pub builtin_types: HashMap<Type, TypeIndex>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct ProgramBody {
-    pub top_level_module_names: BTreeMap<String, DefId>,
-    /// The top level modules.
-    pub top_level_modules: Vec<DefId>,
-    /// All the modules in a flat map.
-    pub modules: BTreeMap<DefId, ModuleBody>,
-    /// This stores all the functions from all modules
-    pub functions: BTreeMap<DefId, FnBody>,
-    /// Impl block methods.
-    pub methods: BTreeMap<TyKind, BTreeMap<String, DefId>>,
-    /// This stores all the structs from all modules
-    pub structs: BTreeMap<DefId, AdtBody>,
-    /// The function signatures.
-    pub constants: BTreeMap<DefId, ConstBody>,
-    pub function_signatures: HashMap<DefId, (Vec<Ty>, Ty)>,
-    /// The file paths (program_id from the DefId) -> path.
-    pub file_paths: HashMap<usize, PathBuf>,
+impl IR {
+    /// Get the builtin `bool` type.
+    pub fn get_bool_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&Type::Bool).unwrap()
+    }
+
+    /// Get the builtin `char` type.
+    pub fn get_char_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&Type::Char).unwrap()
+    }
+
+    /// Get the builtin `i32` type.
+    pub fn get_i32_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&Type::Int(IntTy::I32)).unwrap()
+    }
+
+    /// Get the builtin `i64` type.
+    pub fn get_i64_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&Type::Int(IntTy::I64)).unwrap()
+    }
+
+    /// Get the builtin `u64` type.
+    pub fn get_u64_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&Type::Uint(UintTy::U64)).unwrap()
+    }
+
+    /// Get the builtin `f64` type.
+    pub fn get_f64_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&Type::Float(FloatTy::F64)).unwrap()
+    }
+
+    /// Get the builtin `string` type.
+    pub fn get_string_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&Type::String).unwrap()
+    }
+
+    /// Get the builtin `unit` type.
+    pub fn get_unit_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&Type::Unit).unwrap()
+    }
 }
 
 #[derive(Debug, Clone)]
-pub struct ModuleBody {
-    pub id: DefId,
+pub struct Module {
+    /// The name of the module.
     pub name: String,
-    pub parent_ids: Vec<DefId>,
-    pub symbols: SymbolTable,
-    /// Functions defined in this module.
-    pub functions: HashSet<DefId>,
-    /// Structs defined in this module.
-    pub structs: HashSet<DefId>,
-    /// Types defined in this module.
-    pub types: HashSet<DefId>,
-    /// Constants defined in this module.
-    pub constants: HashSet<DefId>,
-    /// Submodules defined in this module.
-    pub modules: HashSet<DefId>,
-    /// Imported items. symbol -> id
-    pub imports: HashMap<String, DefId>,
+    // The parents of this module.
+    pub parents: Vec<ModuleIndex>,
+    /// Functions in this module.
+    pub functions: HashSet<FnIndex>,
+    /// Structs in this module.
+    pub structs: HashSet<StructIndex>,
+    /// Types in this module.
+    pub types: HashSet<TypeIndex>,
+    /// Constants in this module.
+    pub constants: HashSet<ConstIndex>,
+    /// Submodules in this module.
+    pub modules: HashMap<String, ModuleIndex>,
     pub span: Span,
+    /// The file where this module resides.
+    pub file_path: PathBuf,
 }
 
-/// Function body
+/// A monomorphized function.
 #[derive(Debug, Clone)]
-pub struct FnBody {
-    pub id: DefId,
+pub struct Function {
+    /// The name of this function
     pub name: String,
+    pub args: Vec<TypeIndex>,
+    pub ret_ty: TypeIndex,
     pub is_extern: bool,
     pub is_intrinsic: Option<ConcreteIntrinsic>,
     pub basic_blocks: Vec<BasicBlock>,
+    pub module_idx: ModuleIndex,
     pub locals: Vec<Local>,
 }
 
-impl FnBody {
+impl Function {
     pub fn get_params(&self) -> Vec<&Local> {
         self.locals
             .iter()
@@ -130,7 +172,7 @@ pub enum TerminatorKind {
     /// Function call
     Call {
         /// The function to call.
-        func: DefId,
+        func: FnIndex,
         /// The arguments.
         args: Vec<Rvalue>,
         /// The place in memory to store the return value of the function call.
@@ -175,7 +217,7 @@ pub enum Rvalue {
     /// A reference to a place.
     Ref(Mutability, Place),
     /// A cast.
-    Cast(Operand, Ty, Span),
+    Cast(Operand, TypeIndex, Span),
 }
 
 impl Rvalue {
@@ -233,7 +275,7 @@ pub struct Local {
     /// A name exists for user-defined variables.
     pub debug_name: Option<String>,
     /// The type of the local.
-    pub ty: Ty,
+    pub ty: TypeIndex,
     /// The type of local.
     pub kind: LocalKind,
     /// Whether this local is declared mutable.
@@ -244,7 +286,7 @@ impl Local {
     pub fn new(
         span: Option<Span>,
         kind: LocalKind,
-        ty: Ty,
+        ty: TypeIndex,
         debug_name: Option<String>,
         mutable: bool,
     ) -> Self {
@@ -257,7 +299,7 @@ impl Local {
         }
     }
 
-    pub const fn temp(ty: Ty) -> Self {
+    pub const fn temp(ty: TypeIndex) -> Self {
         Self {
             span: None,
             ty,
@@ -267,14 +309,14 @@ impl Local {
         }
     }
 
-    pub fn is_mutable(&self) -> bool {
+    pub fn is_mutable(&self, types: &Types) -> bool {
         if self.mutable {
             return true;
         }
 
-        match self.ty.kind {
-            TyKind::Ptr(_, is_mut) => matches!(is_mut, Mutability::Mut),
-            TyKind::Ref(_, is_mut) => matches!(is_mut, Mutability::Mut),
+        match types[self.ty].as_ref().unwrap() {
+            Type::Ptr(_, is_mut) => matches!(is_mut, Mutability::Mut),
+            Type::Ref(_, is_mut) => matches!(is_mut, Mutability::Mut),
             _ => false,
         }
     }
@@ -291,62 +333,41 @@ pub enum LocalKind {
     ReturnPointer,
 }
 
-/// Aggregate data type: struct, enum, tuple..
+/// Aggregate data type.
+///
+/// A IR structure able to represent structs, enums, unions.
 #[derive(Debug, Clone)]
 pub struct AdtBody {
-    pub def_id: DefId,
     pub is_pub: bool,
     pub name: String,
+    /// A variant in a Adt can be a struct field, enum variant...
     pub variants: Vec<VariantDef>,
-    pub name_to_idx: HashMap<String, usize>,
+    /// A mapping from name to variant.
+    pub variant_names: HashMap<String, usize>,
     pub span: Span,
 }
 
-/// Definition of a variant, a struct field or enum variant.
+/// Definition of Adt variant.
+///
+/// E.g: struct field, enum variant.
 #[derive(Debug, Clone)]
 pub struct VariantDef {
-    pub def_id: DefId,
     // The relative position in the aggregate structure.
     pub name: String,
     pub discriminant: usize,
-    pub ty: Ty,
+    pub ty: TypeIndex,
 }
 
 #[derive(Debug, Clone)]
 pub struct ConstBody {
-    pub id: DefId,
     pub name: String,
     pub value: ConstData,
+    pub span: Span,
 }
 
-// A definition id.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct DefId {
-    // The program id, like a crate in rust.
-    pub program_id: usize,
-    pub id: usize,
-}
-
-/// A type
-#[derive(Debug, Clone, Educe, PartialOrd, Ord, Eq)]
-#[educe(PartialEq, Hash)]
-pub struct Ty {
-    #[educe(PartialEq(ignore), Hash(ignore))]
-    pub span: Option<Span>,
-    pub kind: TyKind,
-}
-
-impl Ty {
-    pub fn new(span: &Span, kind: TyKind) -> Self {
-        Self {
-            span: Some(*span),
-            kind,
-        }
-    }
-}
-
+/// A  IR type, cheaply clonable.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Ord, Eq, Hash)]
-pub enum TyKind {
+pub enum Type {
     Unit, // ()
     Bool,
     Char,
@@ -354,41 +375,95 @@ pub enum TyKind {
     Uint(UintTy),
     Float(FloatTy),
     String,
-    Array(Box<Ty>, Box<ConstData>),
-    Ref(Box<Ty>, Mutability),
-    Ptr(Box<Ty>, Mutability),
-    // Type param <T>
-    Param {
-        index: usize,
-        name: String, // todo: change me?
-    },
-    Struct {
-        id: DefId,
-        generics: Vec<Ty>,
-        // Mostly for fmt stuff.
-        name: String,
-    },
+    /// A fixed size array.
+    Array(TypeIndex, Arc<ConstData>),
+    Ref(TypeIndex, Mutability),
+    Ptr(TypeIndex, Mutability),
+    Struct(StructIndex),
 }
 
-impl TyKind {
+impl Type {
+    // checks if a type equals another
+    pub fn is_equal(&self, other: &Type, ir: &IR) -> bool {
+        match self {
+            Type::Unit
+            | Type::Bool
+            | Type::Char
+            | Type::Int(_)
+            | Type::Uint(_)
+            | Type::Float(_)
+            | Type::String => self == other,
+            Type::Array(index, const_data) => {
+                if let Type::Array(other_index, other_const_data) = other {
+                    let self_ty = ir.types[*index].as_ref().unwrap();
+                    let other_ty = ir.types[*other_index].as_ref().unwrap();
+                    const_data.data == other_const_data.data && self_ty.is_equal(other_ty, ir)
+                } else {
+                    false
+                }
+            }
+            Type::Ref(index, mutability) => {
+                if let Type::Ref(other_index, other_mutability) = other {
+                    let self_ty = ir.types[*index].as_ref().unwrap();
+                    let other_ty = ir.types[*other_index].as_ref().unwrap();
+                    mutability == other_mutability && self_ty.is_equal(other_ty, ir)
+                } else {
+                    false
+                }
+            }
+            Type::Ptr(index, mutability) => {
+                if let Type::Ptr(other_index, other_mutability) = other {
+                    let self_ty = ir.types[*index].as_ref().unwrap();
+                    let other_ty = ir.types[*other_index].as_ref().unwrap();
+                    mutability == other_mutability && self_ty.is_equal(other_ty, ir)
+                } else {
+                    false
+                }
+            }
+            Type::Struct(index) => {
+                if let Type::Struct(other_index) = other {
+                    index == other_index
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
     pub fn is_ptr_like(&self) -> bool {
-        matches!(self, TyKind::Ptr(_, _) | TyKind::Ref(_, _))
+        matches!(self, Type::Ptr(_, _) | Type::Ref(_, _))
+    }
+
+    pub fn get_inner_type(&self) -> Option<TypeIndex> {
+        match self {
+            Type::Unit => None,
+            Type::Bool => None,
+            Type::Char => None,
+            Type::Int(_) => None,
+            Type::Uint(_) => None,
+            Type::Float(_) => None,
+            Type::String => None,
+            Type::Array(index, _) => Some(*index),
+            Type::Ref(index, _) => Some(*index),
+            Type::Ptr(index, _) => Some(*index),
+            Type::Struct { .. } => None,
+        }
     }
 
     pub fn is_array(&self) -> bool {
-        matches!(self, TyKind::Array(_, _))
+        matches!(self, Type::Array(_, _))
     }
 
     pub fn is_int(&self) -> bool {
-        matches!(self, TyKind::Int(_) | TyKind::Uint(_))
+        matches!(self, Type::Int(_) | Type::Uint(_))
     }
 
     pub fn is_signed(&self) -> bool {
-        matches!(self, TyKind::Int(_))
+        matches!(self, Type::Int(_))
     }
 
     pub fn is_float(&self) -> bool {
-        matches!(self, TyKind::Float(_))
+        matches!(self, Type::Float(_))
     }
 
     /// Returns the type bit width, None if unsized.
@@ -396,138 +471,149 @@ impl TyKind {
     /// Meant for use in casts.
     pub fn get_bit_width(&self) -> Option<usize> {
         match self {
-            TyKind::Unit => None,
-            TyKind::Bool => Some(1),
-            TyKind::Char => Some(8),
-            TyKind::Int(ty) => match ty {
+            Type::Unit => None,
+            Type::Bool => Some(1),
+            Type::Char => Some(8),
+            Type::Int(ty) => match ty {
                 IntTy::I8 => Some(8),
                 IntTy::I16 => Some(16),
                 IntTy::I32 => Some(32),
                 IntTy::I64 => Some(64),
                 IntTy::I128 => Some(128),
             },
-            TyKind::Uint(ty) => match ty {
+            Type::Uint(ty) => match ty {
                 UintTy::U8 => Some(8),
                 UintTy::U16 => Some(16),
                 UintTy::U32 => Some(32),
                 UintTy::U64 => Some(64),
                 UintTy::U128 => Some(128),
             },
-            TyKind::Float(ty) => match ty {
+            Type::Float(ty) => match ty {
                 FloatTy::F32 => Some(32),
                 FloatTy::F64 => Some(64),
             },
-            TyKind::String => todo!(),
-            TyKind::Array(_, _) => todo!(),
-            TyKind::Ref(_, _) => todo!(),
-            TyKind::Ptr(_, _) => todo!(),
-            TyKind::Param { .. } => todo!(),
-            TyKind::Struct { .. } => todo!(),
+            Type::String => todo!(),
+            Type::Array(_, _) => todo!(),
+            Type::Ref(_, _) => todo!(),
+            Type::Ptr(_, _) => todo!(),
+            Type::Struct { .. } => todo!(),
         }
     }
 }
 
-impl fmt::Display for TyKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Type {
+    pub fn display(&self, ir: &IR) -> Result<String, std::fmt::Error> {
+        let mut f = String::new();
         match self {
-            TyKind::Unit => write!(f, "()"),
-            TyKind::Bool => write!(f, "bool"),
-            TyKind::Char => write!(f, "char"),
-            TyKind::Int(ty) => match ty {
+            Type::Unit => write!(f, "()"),
+            Type::Bool => write!(f, "bool"),
+            Type::Char => write!(f, "char"),
+            Type::Int(ty) => match ty {
                 IntTy::I128 => write!(f, "i128"),
                 IntTy::I64 => write!(f, "i64"),
                 IntTy::I32 => write!(f, "i32"),
                 IntTy::I16 => write!(f, "i16"),
                 IntTy::I8 => write!(f, "i8"),
             },
-            TyKind::Uint(ty) => match ty {
+            Type::Uint(ty) => match ty {
                 UintTy::U128 => write!(f, "u128"),
                 UintTy::U64 => write!(f, "u64"),
                 UintTy::U32 => write!(f, "u32"),
                 UintTy::U16 => write!(f, "u16"),
                 UintTy::U8 => write!(f, "u8"),
             },
-            TyKind::Float(ty) => match ty {
+            Type::Float(ty) => match ty {
                 FloatTy::F32 => write!(f, "f64"),
                 FloatTy::F64 => write!(f, "f32"),
             },
-            TyKind::String => write!(f, "string"),
-            TyKind::Array(inner, size) => {
+            Type::String => write!(f, "string"),
+            Type::Array(inner, size) => {
                 let value =
                     if let ConstKind::Value(ValueTree::Leaf(ConstValue::U64(x))) = &size.data {
                         *x
                     } else {
                         unreachable!("const data for array sizes should always be u64")
                     };
-                write!(f, "[{}; {:?}]", inner.kind, value)
+                write!(
+                    f,
+                    "[{}; {:?}]",
+                    ir.types[*inner].as_ref().unwrap().display(ir)?,
+                    value
+                )
             }
-            TyKind::Ref(inner, is_mut) => {
+            Type::Ref(inner, is_mut) => {
                 let word = if let Mutability::Mut = is_mut {
                     "mut"
                 } else {
                     "const"
                 };
 
-                write!(f, "&{word} {}", inner.kind)
+                write!(
+                    f,
+                    "&{word} {}",
+                    ir.types[*inner].as_ref().unwrap().display(ir)?
+                )
             }
-            TyKind::Ptr(inner, is_mut) => {
+            Type::Ptr(inner, is_mut) => {
                 let word = if let Mutability::Mut = is_mut {
                     "mut"
                 } else {
                     "const"
                 };
 
-                write!(f, "*{word} {}", inner.kind)
+                write!(
+                    f,
+                    "*{word} {}",
+                    ir.types[*inner].as_ref().unwrap().display(ir)?
+                )
             }
-            TyKind::Param { .. } => todo!(),
-            TyKind::Struct {
-                id: _,
-                name,
-                generics,
-            } => {
-                write!(f, "{name}")?;
-                if !generics.is_empty() {
-                    write!(f, "<")?;
+            Type::Struct(index) => {
+                if let Some(body) = ir.structs[*index].as_ref() {
+                    writeln!(f, "{} {{", body.name)?;
 
-                    for g in generics {
-                        write!(f, "{}", g.kind)?;
+                    for var in &body.variants {
+                        let ty = ir.types[var.ty].as_ref().unwrap().display(ir)?;
+                        writeln!(f, "\t{}: {},", var.name, ty)?;
                     }
-                    write!(f, ">")?;
+                    write!(f, "}}")?;
+                } else {
+                    writeln!(f, "Unknown({}) {{}}", index.to_idx())?;
                 }
 
                 Ok(())
             }
-        }
+        }?;
+
+        Ok(f)
     }
 }
 
-impl TyKind {
+impl Type {
     pub fn get_falsy_value(&self) -> ValueTree {
         match self {
-            TyKind::Unit => unreachable!(),
-            TyKind::Bool => ValueTree::Leaf(ConstValue::Bool(false)),
-            TyKind::Char => ValueTree::Leaf(ConstValue::Char(0)),
-            TyKind::Int(ty) => match ty {
+            Type::Unit => unreachable!(),
+            Type::Bool => ValueTree::Leaf(ConstValue::Bool(false)),
+            Type::Char => ValueTree::Leaf(ConstValue::Char(0)),
+            Type::Int(ty) => match ty {
                 IntTy::I8 => ValueTree::Leaf(ConstValue::I8(0)),
                 IntTy::I16 => ValueTree::Leaf(ConstValue::I16(0)),
                 IntTy::I32 => ValueTree::Leaf(ConstValue::I32(0)),
                 IntTy::I64 => ValueTree::Leaf(ConstValue::I64(0)),
                 IntTy::I128 => ValueTree::Leaf(ConstValue::I128(0)),
             },
-            TyKind::Uint(ty) => match ty {
+            Type::Uint(ty) => match ty {
                 UintTy::U8 => ValueTree::Leaf(ConstValue::U8(0)),
                 UintTy::U16 => ValueTree::Leaf(ConstValue::U16(0)),
                 UintTy::U32 => ValueTree::Leaf(ConstValue::U32(0)),
                 UintTy::U64 => ValueTree::Leaf(ConstValue::U64(0)),
                 UintTy::U128 => ValueTree::Leaf(ConstValue::U128(0)),
             },
-            TyKind::Float(_) => todo!(),
-            TyKind::String => todo!(),
-            TyKind::Array(_, _) => todo!(),
-            TyKind::Ref(_, _) => todo!(),
-            TyKind::Param { .. } => todo!(),
-            TyKind::Struct { .. } => todo!(),
-            TyKind::Ptr(_, _) => todo!(),
+            Type::Float(_) => todo!(),
+            Type::String => todo!(),
+            Type::Array(_, _) => todo!(),
+            Type::Ref(_, _) => todo!(),
+            Type::Struct { .. } => todo!(),
+            Type::Ptr(_, _) => todo!(),
         }
     }
 }
@@ -562,28 +648,21 @@ pub enum FloatTy {
     F64,
 }
 
+/// Constant data.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct ConstData {
-    pub ty: Ty,
+    pub ty: TypeIndex,
+    pub span: Span,
     pub data: ConstKind,
 }
 
+/// The kind of a const data.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub enum ConstKind {
-    /// A generic parameter constant.
-    Param(ParamConst),
     /// The value of the constant.
     Value(ValueTree),
-    /// A constant expression: todo.
+    /// A constant expression, not yet implemented.
     Expr(Box<ConstExpr>),
-}
-
-/// A generic constant
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ParamConst {
-    pub index: usize,
-    // todo: change me
-    pub ident: Ident,
 }
 
 /// Constant data, in case the data is complex such as an array it will be a branch with leaf values.

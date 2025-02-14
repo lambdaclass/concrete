@@ -1,4 +1,4 @@
-mod Fibonacci {
+mod Bench {
     pub fn concrete_function(n: u64) -> u64 {
         if n < 2 {
             return n;

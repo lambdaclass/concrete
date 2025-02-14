@@ -4,7 +4,8 @@
 #include <stdlib.h>
 #include <time.h>
 
-extern uint64_t concrete_function_0_2(uint64_t n);
+extern uint64_t Bench_concrete_function_0(uint64_t n);
+
 extern uint64_t rust_function(uint64_t n);
 
 struct timespec timer_start() {
@@ -40,7 +41,7 @@ int main(int argc, const char **argv) {
 
   // warmup + sanity check
   for (size_t i = 0; i < 3; ++i) {
-    assert(concrete_function_0_2(input) == rust_function(input));
+    assert(Bench_concrete_function_0(input) == rust_function(input));
   }
 
   printf("Running %d iterations\n", num_iters);
@@ -49,7 +50,7 @@ int main(int argc, const char **argv) {
   {
     struct timespec vartime = timer_start();
     for (size_t i = 0; i < num_iters; ++i) {
-      result_concrete = concrete_function_0_2(input);
+      result_concrete = Bench_concrete_function_0(input);
     }
     long time_elapsed_nanos = timer_end(vartime);
     printf("Concrete Result =\t%lu\t\tTime taken : %.2Lf ms\n", result_concrete,

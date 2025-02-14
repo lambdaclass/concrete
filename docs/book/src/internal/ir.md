@@ -7,23 +7,21 @@ This IR is based on the concept of basic blocks, where within each block there i
 Each block has a terminator, which for example can return or jump to another block, this is what defines the control flow of the program.
 
 
-## The ProgramBody
+## The IR struct
 
-The `ProgramBody` holds the whole program, with all the modules defined within.
+The `IR` struct holds the whole compile unit, with all the modules, structs, functions, types, etc defined within.
 
-All modules, functions, constants, struct types, types, etc have a defined `DefId`.
+An arena is used to store the data types, so they can be cheaply referenced by the given typed index.
 
-The `ProgramBody` stores all of these in a flat structure, i.e, functions defined in a submodule are available for lookup directly by their id.
+The `IR` stores all of these in a flat structure, i.e, functions defined in a submodule are available for lookup directly by their index through the arena.
 
-## The ModuleBody
+## The Module struct
 
 Defines a module in concrete.
 
-This structure holds the ids of the functions, structs, modules, etc defined within this module. This allows to resolve imports.
+This structure holds the indexes of the functions, structs, modules, etc defined within this module.
 
-It also has a symbol table and a import table to aid during the construction of the IR.
-
-## The FnBody
+## The Function struct
 
 Defines a function in concrete.
 

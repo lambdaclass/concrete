@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::{
     common::{Attribute, DocString, GenericParam, Ident, Span},
     statements::Statement,
@@ -19,7 +21,7 @@ pub struct FunctionDecl {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FunctionDef {
-    pub decl: FunctionDecl,
+    pub decl: Arc<FunctionDecl>,
     pub body: Vec<Statement>,
     pub span: Span,
 }
@@ -33,6 +35,7 @@ pub struct Param {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImplBlock {
     pub target: TypeDescriptor,
-    pub methods: Vec<FunctionDef>,
+    pub generic_params: Vec<GenericParam>,
+    pub methods: Vec<Arc<FunctionDef>>,
     pub span: Span,
 }

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 /// This struct holds the information needed to compile this compilation unit,
 /// like whether to generate debug info, optimization levels, target, host, etc.
 #[derive(Debug, Clone)]
-pub struct Session {
+pub struct CompileUnitInfo {
     /// The file paths of the included sources from the initial compile unit.
     pub file_paths: Vec<PathBuf>,
     /// Whether to output debug info.
@@ -28,7 +28,7 @@ pub struct Session {
     // todo: include target, host, etc
 }
 
-impl Session {
+impl CompileUnitInfo {
     pub fn get_platform_library_ext() -> &'static str {
         if cfg!(target_os = "macos") {
             "dylib"

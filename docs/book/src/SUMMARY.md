@@ -5,3 +5,4 @@
     - [Installation](./installation.md)
 - [Internal Details](./internal/index.md)
     - [The IR](./internal/ir.md)
+    - [The IR builder](./internal/builder.md)
