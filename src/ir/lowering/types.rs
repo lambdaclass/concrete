@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use tracing::{debug, instrument};
+
 use crate::{ast::types::TypeDescriptor, ir::lowering::Symbol};
 
 use super::{
@@ -9,6 +11,7 @@ use super::{
     IRBuilder,
 };
 
+#[instrument(skip_all, fields(name = ?ty.get_name()))]
 pub(crate) fn lower_type(
     builder: &mut IRBuilder,
     ty: &TypeDescriptor,
@@ -67,6 +70,11 @@ pub(crate) fn lower_type(
             other => {
                 // Check if the type name exists in the generic map.
                 if let Some(ty) = builder.current_generics_map.get(other).copied() {
+                    debug!(
+                        "found in generics map: {} -> {}",
+                        other,
+                        builder.get_type(ty).display(&builder.ir).unwrap()
+                    );
                     return Ok(ty);
                 }
 
@@ -85,7 +93,7 @@ pub(crate) fn lower_type(
 
                 if let Some(struct_idx) = symbols.structs.get(&sym).copied() {
                     let struct_type_idx = *builder.struct_to_type_idx.get(&struct_idx).unwrap();
-                    let body = builder.bodies.structs.get(&struct_idx).unwrap();
+                    let body = builder.bodies.structs.get(&struct_idx).unwrap().clone();
 
                     if !body.generics.is_empty() {
                         let type_name_generics = name.generics.clone();
@@ -119,12 +127,14 @@ pub(crate) fn lower_type(
                                 let type_id =
                                     builder.ir.types.insert(Some(Type::Struct(mono_struct_idx)));
                                 builder.struct_to_type_idx.insert(mono_struct_idx, type_id);
+                                builder.type_to_module.insert(type_id, module_idx);
                                 builder
                                     .symbols
                                     .get_mut(&builder.local_module.unwrap())
                                     .unwrap()
                                     .structs
                                     .insert(sym.clone(), mono_struct_idx);
+                                builder.bodies.structs.insert(mono_struct_idx, body.clone());
 
                                 mono_struct_idx
                             };
@@ -142,6 +152,11 @@ pub(crate) fn lower_type(
                             assert_eq!(
                                 id, mono_struct_idx,
                                 "struct was already inserted so id should match"
+                            );
+
+                            builder.mono_type_to_poly.insert(
+                                *builder.struct_to_type_idx.get(&mono_struct_idx).unwrap(),
+                                struct_type_idx,
                             );
 
                             builder.current_generics_map = generics_mapping;
