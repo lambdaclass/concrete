@@ -554,6 +554,7 @@ pub(crate) fn lower_path(
     let mut type_idx = fn_builder.body.locals[local].ty;
     let mut ty = fn_builder.builder.get_type(type_idx).clone();
     let mut projection = Vec::new();
+    let old_generics = fn_builder.builder.current_generics_map.clone();
 
     for segment in &info.extra {
         match segment {
@@ -619,7 +620,6 @@ pub(crate) fn lower_path(
             }
             PathSegment::MethodCall(fn_call_op, _span) => {
                 // TODO: auto deref?
-
                 let (value, new_type_idx, _span) = lower_fn_call(
                     fn_builder,
                     fn_call_op,

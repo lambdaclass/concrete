@@ -79,6 +79,7 @@ pub struct IRBuilder {
     pub struct_to_type_idx: HashMap<StructIndex, TypeIndex>,
     // Type to module id where it resides, needed to find methods for the given types.
     pub type_module_idx: HashMap<TypeIndex, ModuleIndex>,
+    pub mono_type_to_poly: HashMap<TypeIndex, TypeIndex>,
 }
 
 #[derive(Debug)]
@@ -220,16 +221,23 @@ impl FnIrBuilder<'_> {
             self.get_module_idx()
         };
 
+        let mut poly_symbol = Symbol {
+            name: info.target.name.clone(),
+            method_of: method_ty_idx,
+            generics: Vec::new(),
+        };
+
         let fn_id = {
             let symbols = self.builder.symbols.get(&module_id).unwrap();
 
             let mut generic_types = Vec::new();
 
-            let poly_symbol = Symbol {
-                name: info.target.name.clone(),
-                method_of: method_ty_idx,
-                generics: Vec::new(),
-            };
+            // change the symbol method_of to the poly type to be able to find the method.
+            if let Some(method_ty_idx) = method_ty_idx {
+                if let Some(ty) = self.builder.mono_type_to_poly.get(&method_ty_idx) {
+                    poly_symbol.method_of = Some(*ty);
+                }
+            }
 
             if let Some(poly_id) = symbols.functions.get(&poly_symbol).copied() {
                 if !info.generics.is_empty() {
