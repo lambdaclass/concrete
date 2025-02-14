@@ -303,7 +303,11 @@ impl FnIrBuilder<'_> {
                     (poly_id, None)
                 }
             } else {
-                panic!("fn not found")
+                return Err(LoweringError::FunctionNotFound {
+                    span: info.span,
+                    function: info.target.name.clone(),
+                    path: self.get_file_path().clone(),
+                });
             }
         };
 

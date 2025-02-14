@@ -40,7 +40,10 @@ pub(crate) fn lower_func(
     // This is needed incase this is a method in a impl block, if its imported the `lower_import` doesn't
     // bring them into the target module functions struct,
     // rather we have to get the module and find the method in the original module.
+
+    let old_self_ty = builder.self_ty;
     let module_idx = if let Some(id) = method_of {
+        builder.self_ty = Some(id);
         builder
             .type_module_idx
             .get(&id)
@@ -206,13 +209,15 @@ pub(crate) fn lower_func(
     fn_builder.builder.ir.functions[fn_id] = Some(fn_builder.body);
     builder.ir.modules[module_idx].functions.insert(fn_id);
 
+    builder.self_ty = old_self_ty;
+
     Ok(fn_id)
 }
 
 /// Lowers a function or method call.
 ///
 /// If the function is generic, and hasn't been monomorphized yet, it gets lowered with the given generic types.
-#[instrument(level = "debug", skip_all)]
+#[instrument(level = "debug", skip_all, fields(name = ?info.target.name))]
 pub(crate) fn lower_fn_call(
     fn_builder: &mut FnIrBuilder,
     info: &FnCallOp,
@@ -305,7 +310,7 @@ pub(crate) fn lower_fn_call(
         return Err(LoweringError::CallParamCountMismatch {
             span: info.span,
             found: info.args.len(),
-            needs: args_ty.len(),
+            needs: args_ty.len() - if self_value.is_some() { 1 } else { 0 },
             path: fn_builder.get_file_path().clone(),
         });
     }
@@ -338,6 +343,7 @@ pub(crate) fn lower_fn_call(
         let rvalue_ty = fn_builder.builder.get_type(rvalue_type_idx);
 
         if !rvalue_ty.is_equal(arg_ty, &fn_builder.builder.ir) {
+            dbg!("here");
             return Err(LoweringError::UnexpectedType {
                 found_span: rvalue_span,
                 found: rvalue_ty.display(&fn_builder.builder.ir).unwrap(),

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use tracing::{debug, instrument};
 
@@ -531,6 +531,7 @@ pub(crate) fn lower_value_expr(
     })
 }
 
+#[instrument(level = "debug", skip_all, fields(first = ?info.first.name))]
 pub(crate) fn lower_path(
     fn_builder: &mut FnIrBuilder,
     info: &PathOp,
@@ -555,6 +556,47 @@ pub(crate) fn lower_path(
     let mut ty = fn_builder.builder.get_type(type_idx).clone();
     let mut projection = Vec::new();
     let old_generics = fn_builder.builder.current_generics_map.clone();
+
+    if let Type::Struct(struct_index) = ty {
+        let poly_idx = fn_builder
+            .builder
+            .mono_type_to_poly
+            .get(&type_idx)
+            .copied()
+            .unwrap_or(type_idx);
+        let poly_struct_idx = if let Type::Struct(id) = fn_builder.builder.get_type(poly_idx) {
+            *id
+        } else {
+            panic!("poly struct not found")
+        };
+        let struct_body = fn_builder
+            .builder
+            .bodies
+            .structs
+            .get(&poly_struct_idx)
+            .unwrap()
+            .clone();
+
+        let generics: HashSet<String> = struct_body
+            .generics
+            .iter()
+            .map(|x| x.name.name.clone())
+            .collect();
+
+        for field in &struct_body.fields {
+            if let Some(name) = field.r#type.get_name() {
+                if generics.contains(&name) {
+                    let struct_adt = fn_builder.builder.get_struct(struct_index); // borrowck
+                    let field_index = *struct_adt.variant_names.get(&field.name.name).unwrap();
+                    let field_ty = struct_adt.variants[field_index].ty;
+                    fn_builder
+                        .builder
+                        .current_generics_map
+                        .insert(name, field_ty);
+                }
+            }
+        }
+    }
 
     for segment in &info.extra {
         match segment {
@@ -650,6 +692,8 @@ pub(crate) fn lower_path(
             }
         }
     }
+
+    fn_builder.builder.current_generics_map = old_generics;
 
     Ok((Place { local, projection }, type_idx, info.span))
 }
