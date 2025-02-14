@@ -522,26 +522,23 @@ pub fn parse_file(
     compile_unit.file_path = Some(path.clone());
 
     for stmt in compile_unit.modules.iter().flat_map(|x| &x.contents) {
-        match stmt {
-            ModuleDefItem::ExternalModule(external_module) => {
-                let parent = path.parent().unwrap();
-                let mut module_path = parent.join(&external_module.name).with_extension("con");
+        if let ModuleDefItem::ExternalModule(external_module) = stmt {
+            let parent = path.parent().unwrap();
+            let mut module_path = parent.join(&external_module.name).with_extension("con");
 
-                if !module_path.exists() {
-                    module_path = parent.join(&external_module.name).join("mod.con");
-                }
-
-                if !module_path.exists() {
-                    bail!("External module {} not found", external_module.name);
-                }
-
-                debug!(
-                    "Parsing externally declared module '{}'",
-                    module_path.display()
-                );
-                parse_file(compile_units, module_path, db)?;
+            if !module_path.exists() {
+                module_path = parent.join(&external_module.name).join("mod.con");
             }
-            _ => {}
+
+            if !module_path.exists() {
+                bail!("External module {} not found", external_module.name);
+            }
+
+            debug!(
+                "Parsing externally declared module '{}'",
+                module_path.display()
+            );
+            parse_file(compile_units, module_path, db)?;
         }
     }
 
