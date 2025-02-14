@@ -240,39 +240,6 @@ ExternalModule: ast::common::Ident = {
   "mod" <name:Ident> ";" => name
 }
 
-Module: ast::modules::Module = {
-  <lo:@L> <doc_string:DocString?> "mod" <name:Ident> "{" <external_modules:List<ExternalModule>?> <imports:ImportList?> <contents:ModuleItems?> "}" <hi:@R> => {
-    ast::modules::Module {
-      doc_string,
-      imports: imports.unwrap_or_else(Vec::new),
-      external_modules: external_modules.unwrap_or(vec![]),
-      name,
-      contents: contents.unwrap_or_else(Vec::new),
-      span: Span::new(lo, hi),
-    }
-  }
-}
-
-ImportList: Vec<ast::imports::ImportStmt> = {
-  <ImportStmt> => vec![<>],
-  <mut s:ImportList> <n:ImportStmt> => {
-      s.push(n);
-      s
-  },
-}
-
-
-ImportStmt: ast::imports::ImportStmt = {
-  <lo:@L> "import" <module:Dot<Ident>> "{" <symbols:Comma<Ident>> "}" ";" <hi:@R>  => {
-    ast::imports::ImportStmt {
-      module,
-      symbols,
-      span: Span::new(lo, hi),
-    }
-  }
-}
-
-
 ModuleItems: Vec<ast::modules::ModuleDefItem> = {
   <ModuleDefItem> => vec![<>],
   <mut s:ModuleItems> <n:ModuleDefItem> => {
@@ -306,6 +273,34 @@ ModuleDefItem: ast::modules::ModuleDefItem = {
   <Module> => {
     ast::modules::ModuleDefItem::Module(Arc::new(<>))
   },
+  <ExternalModule> => {
+    ast::modules::ModuleDefItem::ExternalModule(<>)
+  },
+  <ImportStmt> => {
+    ast::modules::ModuleDefItem::Import(Arc::new(<>))
+  },
+}
+
+Module: ast::modules::Module = {
+  <lo:@L> <doc_string:DocString?> "mod" <name:Ident> "{" <contents:ModuleItems?> "}" <hi:@R> => {
+    ast::modules::Module {
+      doc_string,
+      name,
+      contents: contents.unwrap_or_else(Vec::new),
+      span: Span::new(lo, hi),
+    }
+  }
+}
+
+
+ImportStmt: ast::imports::ImportStmt = {
+  <lo:@L> "import" <module:Dot<Ident>> "{" <symbols:Comma<Ident>> "}" ";" <hi:@R>  => {
+    ast::imports::ImportStmt {
+      module,
+      symbols,
+      span: Span::new(lo, hi),
+    }
+  }
 }
 
 // Constants

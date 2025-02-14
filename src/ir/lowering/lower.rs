@@ -6,9 +6,11 @@ use std::{
 use tracing::debug;
 
 use crate::{
-    ast,
-    ir::lowering::{errors::LoweringError, Bodies, IRBuilder},
-    ir::{Constants, Functions, Module, Modules, Structs, Types},
+    ast::{self, modules::ModuleDefItem},
+    ir::{
+        lowering::{errors::LoweringError, Bodies, IRBuilder},
+        Constants, Functions, Module, Modules, Structs, Types,
+    },
 };
 
 use super::{
@@ -241,6 +243,8 @@ fn lower_module_symbols(
 
                 lower_module_symbols(builder, submodule, &parents, file_path)?;
             }
+            ast::modules::ModuleDefItem::ExternalModule(_) => {}
+            ast::modules::ModuleDefItem::Import(_) => {}
         }
     }
 
@@ -288,141 +292,140 @@ fn lower_imports(
 ) -> Result<(), LoweringError> {
     builder.local_module = Some(module_idx);
 
-    for import in &module.imports {
-        let mut target_module = None;
+    for stmt in &module.contents {
+        if let ModuleDefItem::Import(import) = stmt {
+            let mut target_module = None;
 
-        let mut root_requested = false;
+            let mut root_requested = false;
 
-        for (i, m) in import.module.iter().enumerate() {
-            if i == 0 || root_requested {
-                if m.name == "super" && !root_requested {
-                    if let Some(parent) = parents.last().copied() {
-                        target_module = Some(parent);
+            for (i, m) in import.module.iter().enumerate() {
+                if i == 0 || root_requested {
+                    if m.name == "super" && !root_requested {
+                        if let Some(parent) = parents.last().copied() {
+                            target_module = Some(parent);
+                        } else {
+                            panic!("no parent found for super, todo turn into error")
+                        }
+                    } else if m.name == "root" && !root_requested {
+                        root_requested = true;
                     } else {
-                        panic!("no parent found for super, todo turn into error")
+                        let id =
+                            *builder
+                                .top_level_modules_names
+                                .get(&m.name)
+                                .ok_or_else(|| LoweringError::ModuleNotFound {
+                                    span: m.span,
+                                    module: m.name.clone(),
+                                    path: path.to_path_buf(),
+                                })?;
+                        target_module = Some(id);
+                        root_requested = false;
                     }
-                } else if m.name == "root" && !root_requested {
-                    root_requested = true;
-                } else {
-                    let id = *builder
-                        .top_level_modules_names
-                        .get(&m.name)
-                        .ok_or_else(|| LoweringError::ModuleNotFound {
-                            span: m.span,
-                            module: m.name.clone(),
-                            path: path.to_path_buf(),
-                        })?;
-                    target_module = Some(id);
-                    root_requested = false;
+                    continue;
                 }
-                continue;
+
+                let info = &builder.ir.modules[target_module.unwrap()];
+                target_module = Some(*info.modules.get(&m.name).ok_or_else(|| {
+                    LoweringError::ModuleNotFound {
+                        span: m.span,
+                        module: m.name.clone(),
+                        path: path.to_path_buf(),
+                    }
+                })?);
             }
 
-            let info = &builder.ir.modules[target_module.unwrap()];
-            target_module =
-                Some(
-                    *info
-                        .modules
-                        .get(&m.name)
-                        .ok_or_else(|| LoweringError::ModuleNotFound {
-                            span: m.span,
-                            module: m.name.clone(),
-                            path: path.to_path_buf(),
-                        })?,
-                );
+            let target_module = target_module.unwrap();
+            for sym in &import.symbols {
+                let target_symbols = builder.symbols.get(&target_module).unwrap();
+
+                let symbol = Symbol {
+                    name: sym.name.clone(),
+                    method_of: None,
+                    generics: Vec::new(),
+                };
+                if let Some(id) = target_symbols.functions.get(&symbol).cloned() {
+                    debug!(
+                        "Imported function symbol {:?} to module {}",
+                        symbol, builder.ir.modules[module_idx].name
+                    );
+                    builder.ir.modules[module_idx].functions.insert(id);
+                    builder
+                        .symbols
+                        .get_mut(&module_idx)
+                        .unwrap()
+                        .functions
+                        .insert(symbol.clone(), id);
+                    continue;
+                }
+
+                let target_symbols = builder.symbols.get(&target_module).unwrap();
+                if let Some(struct_idx) = target_symbols.structs.get(&symbol).cloned() {
+                    debug!(
+                        "Imported struct symbol {:?} to module {}",
+                        symbol, builder.ir.modules[module_idx].name
+                    );
+                    builder.ir.modules[module_idx].structs.insert(struct_idx);
+                    builder
+                        .symbols
+                        .get_mut(&module_idx)
+                        .unwrap()
+                        .structs
+                        .insert(symbol.clone(), struct_idx);
+
+                    continue;
+                }
+
+                let target_symbols = builder.symbols.get(&target_module).unwrap();
+                if let Some(id) = target_symbols.types.get(&sym.name).cloned() {
+                    debug!(
+                        "Imported type symbol {:?} to module {}",
+                        symbol, builder.ir.modules[module_idx].name
+                    );
+                    builder.ir.modules[module_idx].types.insert(id);
+                    builder
+                        .symbols
+                        .get_mut(&module_idx)
+                        .unwrap()
+                        .types
+                        .insert(sym.name.clone(), id);
+                    continue;
+                }
+
+                let target_symbols = builder.symbols.get(&target_module).unwrap();
+                if let Some(id) = target_symbols.constants.get(&sym.name).cloned() {
+                    debug!(
+                        "Imported constant symbol {:?} to module {}",
+                        symbol, builder.ir.modules[module_idx].name
+                    );
+                    builder.ir.modules[module_idx].constants.insert(id);
+                    builder
+                        .symbols
+                        .get_mut(&module_idx)
+                        .unwrap()
+                        .constants
+                        .insert(sym.name.clone(), id);
+                    continue;
+                }
+
+                Err(LoweringError::ImportNotFound {
+                    module_span: module.span,
+                    import_span: import.span,
+                    symbol: sym.clone(),
+                    path: path.to_path_buf(),
+                })?;
+            }
         }
 
-        let target_module = target_module.unwrap();
-        for sym in &import.symbols {
-            let target_symbols = builder.symbols.get(&target_module).unwrap();
-
-            let symbol = Symbol {
-                name: sym.name.clone(),
-                method_of: None,
-                generics: Vec::new(),
-            };
-            if let Some(id) = target_symbols.functions.get(&symbol).cloned() {
-                debug!(
-                    "Imported function symbol {:?} to module {}",
-                    symbol, builder.ir.modules[module_idx].name
-                );
-                builder.ir.modules[module_idx].functions.insert(id);
-                builder
-                    .symbols
-                    .get_mut(&module_idx)
-                    .unwrap()
-                    .functions
-                    .insert(symbol.clone(), id);
-                continue;
+        for m in &module.contents {
+            if let ast::modules::ModuleDefItem::Module(submodule) = m {
+                let mut parents = parents.to_vec();
+                parents.push(module_idx);
+                let new_module_idx = *builder.ir.modules[module_idx]
+                    .modules
+                    .get(&submodule.name.name)
+                    .expect("failed to find submodule id");
+                lower_imports(builder, submodule, new_module_idx, &parents, path)?;
             }
-
-            let target_symbols = builder.symbols.get(&target_module).unwrap();
-            if let Some(struct_idx) = target_symbols.structs.get(&symbol).cloned() {
-                debug!(
-                    "Imported struct symbol {:?} to module {}",
-                    symbol, builder.ir.modules[module_idx].name
-                );
-                builder.ir.modules[module_idx].structs.insert(struct_idx);
-                builder
-                    .symbols
-                    .get_mut(&module_idx)
-                    .unwrap()
-                    .structs
-                    .insert(symbol.clone(), struct_idx);
-
-                continue;
-            }
-
-            let target_symbols = builder.symbols.get(&target_module).unwrap();
-            if let Some(id) = target_symbols.types.get(&sym.name).cloned() {
-                debug!(
-                    "Imported type symbol {:?} to module {}",
-                    symbol, builder.ir.modules[module_idx].name
-                );
-                builder.ir.modules[module_idx].types.insert(id);
-                builder
-                    .symbols
-                    .get_mut(&module_idx)
-                    .unwrap()
-                    .types
-                    .insert(sym.name.clone(), id);
-                continue;
-            }
-
-            let target_symbols = builder.symbols.get(&target_module).unwrap();
-            if let Some(id) = target_symbols.constants.get(&sym.name).cloned() {
-                debug!(
-                    "Imported constant symbol {:?} to module {}",
-                    symbol, builder.ir.modules[module_idx].name
-                );
-                builder.ir.modules[module_idx].constants.insert(id);
-                builder
-                    .symbols
-                    .get_mut(&module_idx)
-                    .unwrap()
-                    .constants
-                    .insert(sym.name.clone(), id);
-                continue;
-            }
-
-            Err(LoweringError::ImportNotFound {
-                module_span: module.span,
-                import_span: import.span,
-                symbol: sym.clone(),
-                path: path.to_path_buf(),
-            })?;
-        }
-    }
-
-    for m in &module.contents {
-        if let ast::modules::ModuleDefItem::Module(submodule) = m {
-            let mut parents = parents.to_vec();
-            parents.push(module_idx);
-            let new_module_idx = *builder.ir.modules[module_idx]
-                .modules
-                .get(&submodule.name.name)
-                .expect("failed to find submodule id");
-            lower_imports(builder, submodule, new_module_idx, &parents, path)?;
         }
     }
 
@@ -500,6 +503,8 @@ pub fn lower_module(
                     .unwrap();
                 lower_module(builder, module, new_module_idx)?;
             }
+            ast::modules::ModuleDefItem::ExternalModule(_) => {}
+            ast::modules::ModuleDefItem::Import(_) => {}
         }
     }
 

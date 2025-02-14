@@ -1,3 +1,4 @@
+use crate::ast::modules::ModuleDefItem;
 use crate::ast::CompileUnit;
 use crate::compile_unit_info::{CompileUnitInfo, DebugInfo, OptLevel};
 use crate::ir::lowering::lower_compile_units;
@@ -14,6 +15,7 @@ use owo_colors::OwoColorize;
 use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::{collections::HashMap, fs::File, path::PathBuf, time::Instant};
+use tracing::debug;
 
 use config::Config;
 use linker::{link_binary, link_shared_lib};
@@ -516,19 +518,31 @@ pub fn parse_file(
             std::process::exit(1);
         }
     };
+
     compile_unit.file_path = Some(path.clone());
 
-    for ident in compile_unit
-        .modules
-        .iter()
-        .flat_map(|x| &x.external_modules)
-    {
-        let module_path = path
-            .parent()
-            .unwrap()
-            .join(&ident.name)
-            .with_extension("con");
-        parse_file(compile_units, module_path, db)?;
+    for stmt in compile_unit.modules.iter().flat_map(|x| &x.contents) {
+        match stmt {
+            ModuleDefItem::ExternalModule(external_module) => {
+                let parent = path.parent().unwrap();
+                let mut module_path = parent.join(&external_module.name).with_extension("con");
+
+                if !module_path.exists() {
+                    module_path = parent.join(&external_module.name).join("mod.con");
+                }
+
+                if !module_path.exists() {
+                    bail!("External module {} not found", external_module.name);
+                }
+
+                debug!(
+                    "Parsing externally declared module '{}'",
+                    module_path.display()
+                );
+                parse_file(compile_units, module_path, db)?;
+            }
+            _ => {}
+        }
     }
 
     compile_units.push((path, real_source, compile_unit));

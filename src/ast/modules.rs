@@ -13,8 +13,6 @@ use super::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Module {
     pub doc_string: Option<DocString>,
-    pub external_modules: Vec<Ident>,
-    pub imports: Vec<ImportStmt>,
     pub name: Ident,
     pub contents: Vec<ModuleDefItem>,
     pub span: Span,
@@ -32,4 +30,6 @@ pub enum ModuleDefItem {
     Enum(Arc<EnumDecl>),
     Type(Arc<TypeDecl>),
     Module(Arc<Module>),
+    ExternalModule(Ident),
+    Import(Arc<ImportStmt>),
 }
