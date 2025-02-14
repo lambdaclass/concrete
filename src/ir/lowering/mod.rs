@@ -282,8 +282,6 @@ impl FnIrBuilder<'_> {
                         generics: generic_types,
                     };
 
-                    dbg!(&mono_symbol);
-
                     let symbols = self.builder.symbols.get(&module_id).unwrap(); // needed for borrowck
                     let id = {
                         if let Some(id) = symbols.functions.get(&mono_symbol).copied() {

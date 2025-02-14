@@ -225,7 +225,7 @@ pub(crate) fn lower_fn_call(
     method_idx: Option<TypeIndex>, // in case its a method
 ) -> Result<(Rvalue, TypeIndex, Span), LoweringError> {
     debug!("lowering fn call");
-    let (poly_fn_id, mono_fn_id) = fn_builder.get_id_for_fn_call(info, dbg!(method_idx))?;
+    let (poly_fn_id, mono_fn_id) = fn_builder.get_id_for_fn_call(info, method_idx)?;
 
     // Get the function declaration to inspect its types.
     let target_fn_decl = fn_builder
@@ -343,7 +343,6 @@ pub(crate) fn lower_fn_call(
         let rvalue_ty = fn_builder.builder.get_type(rvalue_type_idx);
 
         if !rvalue_ty.is_equal(arg_ty, &fn_builder.builder.ir) {
-            dbg!("here");
             return Err(LoweringError::UnexpectedType {
                 found_span: rvalue_span,
                 found: rvalue_ty.display(&fn_builder.builder.ir).unwrap(),
