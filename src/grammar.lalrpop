@@ -456,6 +456,15 @@ StructInitExpr: ast::expressions::StructInitExpr = {
   }
 }
 
+AssocMethodCall: ast::expressions::AssocMethodCall = {
+  // TODO: Using # because :: and . give a grammar ambiguous error.
+  <lo:@L> <name:TypeNameUse> "#" <fn_call:FnCallOp> <hi:@R> => ast::expressions::AssocMethodCall {
+    assoc_type: name,
+    fn_call: fn_call,
+    span: Span::new(lo, hi),
+  }
+}
+
 
 ArrayInitExpr: ast::expressions::ArrayInitExpr = {
   <lo:@L> "[" <values:Comma<Expression>> "]" <hi:@R> => ast::expressions::ArrayInitExpr {
@@ -507,6 +516,7 @@ Expression: ast::expressions::Expression = {
   ),
   #[precedence(level="5")] #[assoc(side="left")]
   <lo:@L> <a:Expression> "as" <b: TypeDescriptor> <hi:@R> => ast::expressions::Expression::Cast(Box::new(a), b, Span::new(lo, hi)),
+  "(" <AssocMethodCall> ")" => ast::expressions::Expression::AssocMethodCall(<>),
   "(" <StructInitExpr> ")" => ast::expressions::Expression::StructInit(<>),
   <ArrayInitExpr> => ast::expressions::Expression::ArrayInit(<>),
 }
@@ -673,9 +683,15 @@ AssignStmt: ast::statements::AssignStmt = {
     derefs: derefs.len(),
     span: Span::new(lo, hi),
   },
-   <lo:@L> <derefs:"*"*> <lvalue:PathOp> "=" <rvalue:StructInitExpr> <hi:@R> => ast::statements::AssignStmt {
+  <lo:@L> <derefs:"*"*> <lvalue:PathOp> "=" <rvalue:StructInitExpr> <hi:@R> => ast::statements::AssignStmt {
     lvalue,
     rvalue: ast::expressions::Expression::StructInit(rvalue),
+    derefs: derefs.len(),
+    span: Span::new(lo, hi),
+  },
+  <lo:@L> <derefs:"*"*> <lvalue:PathOp> "=" <rvalue:AssocMethodCall> <hi:@R> => ast::statements::AssignStmt {
+    lvalue,
+    rvalue: ast::expressions::Expression::AssocMethodCall(rvalue),
     derefs: derefs.len(),
     span: Span::new(lo, hi),
   },
