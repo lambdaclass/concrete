@@ -4,7 +4,7 @@ use melior::{
     dialect::DialectRegistry,
     ir::{
         attribute::StringAttribute, operation::OperationBuilder, Block, Identifier, Location,
-        Module as MeliorModule, Region,
+        Module as MeliorModule, Region, RegionLike,
     },
     utility::{register_all_dialects, register_all_llvm_translations, register_all_passes},
     Context as MeliorContext,

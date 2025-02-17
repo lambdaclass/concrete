@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use functions::lower_func;
+use functions::{lower_func, lower_func_decl};
 use structs::lower_struct;
 
 use crate::ir;
@@ -250,12 +250,20 @@ impl FnIrBuilder<'_> {
                 if !info.generics.is_empty() || polymorphic_method_of_type_idx != method_of_type_idx
                 {
                     let old_generics = self.builder.current_generics_map.clone();
-                    let fn_decl = self.builder.bodies.functions.get(&poly_id).unwrap().clone();
+                    let fn_decl = self
+                        .builder
+                        .bodies
+                        .functions
+                        .get(&poly_id)
+                        .map(|x| x.decl.clone())
+                        .or_else(|| self.builder.bodies.functions_decls.get(&poly_id).cloned())
+                        .clone()
+                        .unwrap();
 
                     // TODO: Generic param type inference should be added around here.
 
                     for (gen_ty, gen_param) in
-                        info.generics.iter().zip(fn_decl.decl.generic_params.iter())
+                        info.generics.iter().zip(fn_decl.generic_params.iter())
                     {
                         let ty = lower_type(
                             self.builder,
@@ -272,7 +280,7 @@ impl FnIrBuilder<'_> {
 
                     assert_eq!(
                         generic_types.len(),
-                        fn_decl.decl.generic_params.len(),
+                        fn_decl.generic_params.len(),
                         "generic param mismatch"
                     );
 
@@ -287,9 +295,6 @@ impl FnIrBuilder<'_> {
                         if let Some(id) = symbols.functions.get(&mono_symbol).copied() {
                             id
                         } else {
-                            let fn_decl =
-                                self.builder.bodies.functions.get(&poly_id).unwrap().clone();
-
                             // Add the id from here to avoid infinite recursion on recursive functions.
                             let id = self.builder.ir.functions.insert(None);
                             self.builder
@@ -298,10 +303,21 @@ impl FnIrBuilder<'_> {
                                 .unwrap()
                                 .functions
                                 .insert(mono_symbol, id);
-                            let lowered_id =
-                                lower_func(self.builder, &fn_decl, method_of_type_idx)?;
 
-                            assert_eq!(id, lowered_id);
+                            if let Some(fn_def) =
+                                self.builder.bodies.functions.get(&poly_id).cloned()
+                            {
+                                let lowered_id =
+                                    lower_func(self.builder, &fn_def, method_of_type_idx)?;
+
+                                assert_eq!(id, lowered_id);
+                            } else if let Some(fn_decl) =
+                                self.builder.bodies.functions_decls.get(&poly_id).cloned()
+                            {
+                                let lowered_id = lower_func_decl(self.builder, &fn_decl)?;
+
+                                assert_eq!(id, lowered_id);
+                            }
                             id
                         }
                     }; // todo error

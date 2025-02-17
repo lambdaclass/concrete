@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
 use crate::ir::{
-    BinOp, ConstValue, FnIndex, Function, LocalKind, Module, ModuleIndex, Operand, Place,
-    PlaceElem, Rvalue, Span, Type as IRType, TypeIndex, ValueTree, IR,
+    BinOp, ConcreteIntrinsic, ConstValue, FnIndex, Function, LocalKind, Module, ModuleIndex,
+    Operand, Place, PlaceElem, Rvalue, Span, Type as IRType, TypeIndex, ValueTree, IR,
 };
 use ariadne::Source;
-use melior::ir::BlockLike;
+use melior::helpers::ArithBlockExt;
+use melior::ir::{BlockLike, RegionLike};
 use melior::{
     dialect::{
         arith, cf, func,
@@ -167,6 +168,10 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
     // Only codegen once.
     if !body.module_idx.eq(&ctx.module.module_id) {
         return Ok(());
+    }
+
+    if body.is_intrinsic.is_some() {
+        return compile_intrinsic_function(ctx);
     }
 
     let body_signature = ctx.get_fn_signature();
@@ -588,9 +593,8 @@ fn compile_rvalue<'c: 'b, 'b>(
                 if current_ty.is_int() {
                     // int to int casts
                     match current_ty
-                        .get_bit_width()
-                        .unwrap()
-                        .cmp(&target_ty.get_bit_width().unwrap())
+                        .get_bit_width(ctx.module.ctx.program)
+                        .cmp(&target_ty.get_bit_width(ctx.module.ctx.program))
                     {
                         std::cmp::Ordering::Less => {
                             if is_signed {
@@ -1488,4 +1492,81 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &IRType) -> Type<'c> {
             ty
         }
     }
+}
+
+fn compile_intrinsic_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
+    let body = ctx.get_fn_body();
+    let body_signature = ctx.get_fn_signature();
+
+    // Functions only have 1 region with multiple blocks within.
+    let region = Region::new();
+
+    // Compile the parameter types.
+    let params_ty: Vec<_> = body_signature
+        .0
+        .iter()
+        .map(|x| {
+            (
+                compile_type(ctx.module, x),
+                ctx.module.get_location(None), // Todo: add arg span vec to ir
+            )
+        })
+        .collect();
+
+    // The entry block doesn't exist in the IR, its where we create all the stack allocations for the locals.
+    let entry_block = region.append_block(Block::new(&params_ty));
+
+    let location = Location::unknown(ctx.context());
+
+    let param_types: Vec<_> = params_ty.iter().map(|x| x.0).collect();
+    // If the return type is unit, pass a empty slice to mlir.
+    let return_type = match &body_signature.1 {
+        IRType::Unit => None,
+        _ => Some(compile_type(ctx.module, &body_signature.1)),
+    };
+
+    match body.is_intrinsic.as_ref().unwrap() {
+        ConcreteIntrinsic::SizeOf(type_idx) => {
+            // no arguments only a generic type.
+            let ty = ctx.module.get_type(*type_idx);
+            let size = ty.get_bit_width(ctx.module.ctx.program) / 8;
+            let ret_value = entry_block.const_int_from_type(
+                ctx.context(),
+                location,
+                size,
+                return_type.unwrap(),
+            )?;
+            entry_block.append_operation(func::r#return(&[ret_value], location));
+        }
+        ConcreteIntrinsic::AlignOf(type_idx) => {
+            // no arguments only a generic type.
+            let ty = ctx.module.get_type(*type_idx);
+            let size = ty.get_align(ctx.module.ctx.program) / 8;
+            let ret_value = entry_block.const_int_from_type(
+                ctx.context(),
+                location,
+                size,
+                return_type.unwrap(),
+            )?;
+            entry_block.append_operation(func::r#return(&[ret_value], location));
+        }
+    }
+
+    // Create the function mlir attribute.
+    let func_type = FunctionType::new(ctx.context(), &param_types, return_type.as_slice());
+
+    let fn_attributes = vec![];
+
+    let func_op = func::func(
+        ctx.context(),
+        StringAttribute::new(ctx.context(), &body.get_mangled_name()),
+        TypeAttribute::new(func_type.into()),
+        region,
+        &fn_attributes,
+        Location::unknown(ctx.context()),
+    );
+
+    ctx.module.ctx.mlir_module.body().append_operation(func_op);
+
+    Ok(())
 }

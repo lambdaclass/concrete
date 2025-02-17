@@ -503,7 +503,9 @@ pub fn lower_module(
                 }
             }
             ast::modules::ModuleDefItem::FunctionDecl(function_decl) => {
-                lower_func_decl(builder, function_decl)?;
+                if function_decl.generic_params.is_empty() {
+                    lower_func_decl(builder, function_decl)?;
+                }
             }
             ast::modules::ModuleDefItem::Impl(impl_block) => {
                 if impl_block.generic_params.is_empty() {
