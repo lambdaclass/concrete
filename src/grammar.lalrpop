@@ -460,7 +460,7 @@ AssocMethodCall: ast::expressions::AssocMethodCall = {
   // TODO: Using # because :: and . give a grammar ambiguous error.
   <lo:@L> <name:TypeNameUse> "#" <fn_call:FnCallOp> <hi:@R> => ast::expressions::AssocMethodCall {
     assoc_type: name,
-    fn_call: fn_call,
+    fn_call,
     span: Span::new(lo, hi),
   }
 }
@@ -672,6 +672,15 @@ LetStmt: ast::statements::LetStmt = {
       r#type: target_type
     },
     value: ast::expressions::Expression::StructInit(value),
+    span: Span::new(lo, hi),
+  },
+  <lo:@L> "let" <is_mutable:"mut"?> <id:Ident> ":" <target_type:TypeDescriptor> "=" <value:AssocMethodCall> <hi:@R> => ast::statements::LetStmt {
+    is_mutable: is_mutable.is_some(),
+    target: ast::statements::LetStmtTarget::Simple {
+      id,
+      r#type: target_type
+    },
+    value: ast::expressions::Expression::AssocMethodCall(value),
     span: Span::new(lo, hi),
   },
 }
