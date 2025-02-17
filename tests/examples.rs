@@ -4,6 +4,7 @@ use test_case::test_case;
 
 mod common;
 
+#[test_case(include_str!("../examples/sizeof_intrinsic.con"), "foo", false, 5 ; "sizeof_intrinsic.con")]
 #[test_case(include_str!("../examples/assoc_method.con"), "assoc", false, 2 ; "assoc_method.con")]
 #[test_case(include_str!("../examples/opaque_vec.con"), "opaque_vec", false, 4 ; "opaque_vec.con")]
 #[test_case(include_str!("../examples/vec.con"), "vec", false, 4 ; "vec.con")]

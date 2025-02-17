@@ -469,34 +469,110 @@ impl Type {
     /// Returns the type bit width, None if unsized.
     ///
     /// Meant for use in casts.
-    pub fn get_bit_width(&self) -> Option<usize> {
+    pub fn get_bit_width(&self, ir: &IR) -> usize {
         match self {
-            Type::Unit => None,
-            Type::Bool => Some(1),
-            Type::Char => Some(8),
+            Type::Unit => 1,
+            Type::Bool => 1,
+            Type::Char => 8,
             Type::Int(ty) => match ty {
-                IntTy::I8 => Some(8),
-                IntTy::I16 => Some(16),
-                IntTy::I32 => Some(32),
-                IntTy::I64 => Some(64),
-                IntTy::I128 => Some(128),
+                IntTy::I8 => 8,
+                IntTy::I16 => 16,
+                IntTy::I32 => 32,
+                IntTy::I64 => 64,
+                IntTy::I128 => 128,
             },
             Type::Uint(ty) => match ty {
-                UintTy::U8 => Some(8),
-                UintTy::U16 => Some(16),
-                UintTy::U32 => Some(32),
-                UintTy::U64 => Some(64),
-                UintTy::U128 => Some(128),
+                UintTy::U8 => 8,
+                UintTy::U16 => 16,
+                UintTy::U32 => 32,
+                UintTy::U64 => 64,
+                UintTy::U128 => 128,
             },
             Type::Float(ty) => match ty {
-                FloatTy::F32 => Some(32),
-                FloatTy::F64 => Some(64),
+                FloatTy::F32 => 32,
+                FloatTy::F64 => 64,
             },
             Type::String => todo!(),
-            Type::Array(_, _) => todo!(),
-            Type::Ref(_, _) => todo!(),
-            Type::Ptr(_, _) => todo!(),
-            Type::Struct { .. } => todo!(),
+            Type::Array(inner_idx, size_data) => {
+                let inner_ty = ir.types[*inner_idx].as_ref().unwrap();
+                let inner_size = inner_ty.get_bit_width(ir);
+                let align = inner_ty.get_align(ir);
+                let size = inner_size.max(align);
+
+                if let ConstKind::Value(x) = &size_data.data {
+                    match x {
+                        ValueTree::Leaf(const_value) => match const_value {
+                            ConstValue::U64(value) => return size * (*value as usize),
+                            _ => unreachable!(),
+                        },
+                        ValueTree::Branch(_value_trees) => todo!(),
+                    }
+                }
+                todo!()
+            }
+            Type::Ref(_, _) => 64,
+            Type::Ptr(_, _) => 64,
+            Type::Struct(idx) => {
+                let struct_adt = ir.structs[*idx].as_ref().unwrap();
+                let mut total_size = 0;
+
+                for field in &struct_adt.variants {
+                    let ty = ir.types[field.ty].as_ref().unwrap();
+                    let size = ty.get_bit_width(ir);
+
+                    total_size += size;
+                }
+
+                total_size
+            }
+        }
+    }
+
+    /// In bits
+    pub fn get_align(&self, ir: &IR) -> usize {
+        match self {
+            Type::Unit => 1,
+            Type::Bool => 1,
+            Type::Char => 8,
+            Type::Int(ty) => match ty {
+                IntTy::I8 => 8,
+                IntTy::I16 => 16,
+                IntTy::I32 => 32,
+                IntTy::I64 => 64,
+                IntTy::I128 => 128,
+            },
+            Type::Uint(ty) => match ty {
+                UintTy::U8 => 8,
+                UintTy::U16 => 16,
+                UintTy::U32 => 32,
+                UintTy::U64 => 64,
+                UintTy::U128 => 128,
+            },
+            Type::Float(ty) => match ty {
+                FloatTy::F32 => 32,
+                FloatTy::F64 => 64,
+            },
+            Type::String => todo!(),
+            Type::Array(inner_idx, _size_data) => {
+                let inner_ty = ir.types[*inner_idx].as_ref().unwrap();
+
+                inner_ty.get_align(ir)
+            }
+            Type::Ref(_, _) => 64,
+            Type::Ptr(_, _) => 64,
+            Type::Struct(idx) => {
+                let struct_adt = ir.structs[*idx].as_ref().unwrap();
+
+                let mut max_align = 0;
+
+                // todo: padding
+                for field in &struct_adt.variants {
+                    let align = ir.types[field.ty].as_ref().unwrap().get_align(ir);
+                    max_align = max_align.max(align);
+                }
+
+                max_align
+            }
         }
     }
 }
@@ -733,5 +809,5 @@ pub enum ConstValue {
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum ConcreteIntrinsic {
-    // Todo: Add intrinsics here
+    SizeOf(TypeIndex),
 }
