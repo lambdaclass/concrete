@@ -1,0 +1,21 @@
+mod assoc {
+    struct Test {
+        a: i32,
+    }
+
+    impl Test {
+        pub fn new() -> Test {
+            let value: Test = Test {
+                a: 2,
+            };
+
+            return value;
+        }
+    }
+
+    fn main() -> i32 {
+        let x: Test = Test#new();
+
+        return x.a;
+    }
+}
