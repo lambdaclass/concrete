@@ -473,7 +473,8 @@ pub(crate) fn find_expression_type(
                             }
                         }
                         PathSegment::MethodCall(fn_call_op, _span) => {
-                            let (poly_id, mono_id) = fn_builder.get_id_for_fn_call(fn_call_op, Some(type_idx))?;
+                            let (poly_id, mono_id) =
+                                fn_builder.get_id_for_fn_call(fn_call_op, Some(type_idx))?;
                             let body = fn_builder.builder.get_function(mono_id.unwrap_or(poly_id));
 
                             type_idx = body.ret_ty;
