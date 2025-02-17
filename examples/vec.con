@@ -11,6 +11,16 @@ mod vec {
     }
 
     impl<T> Vec<T> {
+        pub fn new(type_size: u64) -> Vec<T> {
+            let vec: Vec<T> = Vec::<T> {
+                ptr: malloc(type_size * 32) as *mut T,
+                len: 0,
+                cap: 32,
+                type_size: type_size,
+            };
+            return vec;
+        }
+
         pub fn push(&mut self, value: T) {
             if self.len <= self.cap {
                 let new_cap: u64 = self.cap * 2;
@@ -29,21 +39,9 @@ mod vec {
         }
     }
 
-    pub fn new_vec<T>(type_size: u64) -> Vec<T> {
-        let vec: Vec<T> = Vec::<T> {
-            ptr: malloc(type_size * 32) as *mut T,
-            len: 0,
-            cap: 32,
-            type_size: type_size,
-        };
-        return vec;
-    }
-
     fn main() -> i32 {
-        // Still missing impl static methods.
-
         let type_size: u64 = 4;
-        let mut vec: Vec<i32> = new_vec::<i32>(type_size);
+        let mut vec: Vec<i32> = Vec::<i32>#new(type_size);
 
         vec.push(2);
         vec.push(3);
