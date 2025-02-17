@@ -809,5 +809,14 @@ pub enum ConstValue {
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum ConcreteIntrinsic {
+    /// ```no_run
+    ///    #[intrinsic = "sizeof"]
+    ///    fn sizeof<T>() -> u64;
+    /// ```
     SizeOf(TypeIndex),
+    /// ```no_run
+    ///    #[intrinsic = "alignof"]
+    ///    fn alignof<T>() -> u64;
+    /// ```
+    AlignOf(TypeIndex),
 }

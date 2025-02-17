@@ -1527,9 +1527,21 @@ fn compile_intrinsic_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenErro
 
     match body.is_intrinsic.as_ref().unwrap() {
         ConcreteIntrinsic::SizeOf(type_idx) => {
-            // noarguments only a generic type.
+            // no arguments only a generic type.
             let ty = ctx.module.get_type(*type_idx);
             let size = ty.get_bit_width(ctx.module.ctx.program) / 8;
+            let ret_value = entry_block.const_int_from_type(
+                ctx.context(),
+                location,
+                size,
+                return_type.unwrap(),
+            )?;
+            entry_block.append_operation(func::r#return(&[ret_value], location));
+        }
+        ConcreteIntrinsic::AlignOf(type_idx) => {
+            // no arguments only a generic type.
+            let ty = ctx.module.get_type(*type_idx);
+            let size = ty.get_align(ctx.module.ctx.program) / 8;
             let ret_value = entry_block.const_int_from_type(
                 ctx.context(),
                 location,

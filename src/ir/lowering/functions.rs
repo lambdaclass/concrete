@@ -421,6 +421,10 @@ pub(crate) fn lower_func_decl(
                         is_intrinsic =
                             Some(ConcreteIntrinsic::SizeOf(*generic_types.first().unwrap()));
                     }
+                    "alignof" => {
+                        is_intrinsic =
+                            Some(ConcreteIntrinsic::AlignOf(*generic_types.first().unwrap()));
+                    }
                     _ => {
                         debug!("Unknown intrinsic attribute {:?}", attr);
                     }
