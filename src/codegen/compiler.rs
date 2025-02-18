@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::ir::{
-    BinOp, ConcreteIntrinsic, ConstValue, FnIndex, Function, LocalKind, Module, ModuleIndex,
-    Operand, Place, PlaceElem, Rvalue, Span, Type as IRType, TypeIndex, ValueTree, IR,
+    AdtKind, BinOp, ConcreteIntrinsic, ConstValue, FnIndex, Function, LocalKind, Module,
+    ModuleIndex, Operand, Place, PlaceElem, Rvalue, Span, Type as IRType, TypeIndex, ValueTree, IR,
 };
 use ariadne::Source;
 use melior::helpers::ArithBlockExt;
@@ -1068,9 +1068,13 @@ fn compile_store_place<'c: 'b, 'b>(
                     .result(0)?
                     .into();
                 local_type_idx = match local_ty {
-                    IRType::Struct(id) => {
-                        let strc = ctx.module.ctx.program.structs[id].as_ref().unwrap();
-                        strc.variants[*field_idx].ty
+                    IRType::Adt(id) => {
+                        let adt = ctx.module.ctx.program.aggregates[id].as_ref().unwrap();
+                        match adt.kind {
+                            AdtKind::Struct => adt.variants.first().unwrap().fields[*field_idx].ty,
+                            AdtKind::Enum => todo!(),
+                            AdtKind::Union => todo!(),
+                        }
                     }
                     _ => unreachable!(),
                 };
@@ -1182,24 +1186,31 @@ fn compile_load_place<'c: 'b, 'b>(
             }
             PlaceElem::Field(field_idx) => {
                 local_type_idx = match local_ty {
-                    IRType::Struct(id) => {
-                        let struct_body = ctx.module.ctx.program.structs[id].as_ref().unwrap();
-                        let variant_type_idx = struct_body.variants[*field_idx].ty;
-                        ptr = block
-                            .append_operation(llvm::get_element_ptr(
-                                ctx.context(),
-                                ptr,
-                                DenseI32ArrayAttribute::new(
-                                    ctx.context(),
-                                    &[0, (*field_idx).try_into().unwrap()],
-                                ),
-                                compile_type(ctx.module, &local_ty),
-                                pointer(ctx.context(), 0),
-                                Location::unknown(ctx.context()),
-                            ))
-                            .result(0)?
-                            .into();
-                        variant_type_idx
+                    IRType::Adt(id) => {
+                        let adt_body = ctx.module.ctx.program.aggregates[id].as_ref().unwrap();
+                        match adt_body.kind {
+                            AdtKind::Struct => {
+                                let field_type_idx =
+                                    adt_body.variants.first().unwrap().fields[*field_idx].ty;
+                                ptr = block
+                                    .append_operation(llvm::get_element_ptr(
+                                        ctx.context(),
+                                        ptr,
+                                        DenseI32ArrayAttribute::new(
+                                            ctx.context(),
+                                            &[0, (*field_idx).try_into().unwrap()],
+                                        ),
+                                        compile_type(ctx.module, &local_ty),
+                                        pointer(ctx.context(), 0),
+                                        Location::unknown(ctx.context()),
+                                    ))
+                                    .result(0)?
+                                    .into();
+                                field_type_idx
+                            }
+                            AdtKind::Enum => todo!(),
+                            AdtKind::Union => todo!(),
+                        }
                     }
                     _ => unreachable!(),
                 };
@@ -1476,15 +1487,22 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &IRType) -> Type<'c> {
         crate::ir::Type::Ref(_inner_ty, _) | crate::ir::Type::Ptr(_inner_ty, _) => {
             llvm::r#type::pointer(ctx.ctx.mlir_context, 0)
         }
-        crate::ir::Type::Struct(id) => {
-            let body = ctx.ctx.program.structs[*id].as_ref().unwrap();
+        crate::ir::Type::Adt(id) => {
+            let body = ctx.ctx.program.aggregates[*id].as_ref().unwrap();
 
             let mut fields = Vec::new();
 
-            for field in &body.variants {
-                let field_ty = ctx.get_type(field.ty);
-                let ty = compile_type(ctx, &field_ty);
-                fields.push(ty);
+            match body.kind {
+                AdtKind::Struct => {
+                    let variant = body.variants.first().unwrap();
+                    for field in &variant.fields {
+                        let field_ty = ctx.get_type(field.ty);
+                        let ty = compile_type(ctx, &field_ty);
+                        fields.push(ty);
+                    }
+                }
+                AdtKind::Enum => todo!(),
+                AdtKind::Union => todo!(),
             }
 
             let ty = melior::dialect::llvm::r#type::r#struct(ctx.ctx.mlir_context, &fields, false);

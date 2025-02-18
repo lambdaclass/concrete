@@ -392,17 +392,19 @@ ImplBlock: ast::functions::ImplBlock = {
 // Struct
 
 StructField: ast::structs::Field = {
-    <lo:@L> <name:Ident> ":" <r#type:TypeDescriptor> <hi:@R> => ast::structs::Field {
+    <lo:@L> <is_pub:"pub"?> <name:Ident> ":" <r#type:TypeDescriptor> <hi:@R> => ast::structs::Field {
         name,
         r#type,
+        is_pub: is_pub.is_some(),
         span: Span::new(lo, hi),
     }
 }
 
 StructDef: ast::structs::StructDecl = {
-    <lo:@L> "struct" <name:Ident> <generics:GenericParams?> "{" <fields:Comma<StructField>> "}" <hi:@R> => ast::structs::StructDecl {
+    <lo:@L> <is_pub:"pub"?> "struct" <name:Ident> <generics:GenericParams?> "{" <fields:Comma<StructField>> "}" <hi:@R> => ast::structs::StructDecl {
         name,
         fields,
+        is_pub: is_pub.is_some(),
         generics: generics.unwrap_or(vec![]),
         span: Span::new(lo, hi),
     }

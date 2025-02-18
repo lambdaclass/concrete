@@ -8,6 +8,7 @@ pub struct StructDecl {
     pub name: Ident,
     pub generics: Vec<GenericParam>,
     pub fields: Vec<Field>,
+    pub is_pub: bool,
     pub span: Span,
 }
 
@@ -15,5 +16,6 @@ pub struct StructDecl {
 pub struct Field {
     pub name: Ident,
     pub r#type: TypeDescriptor,
+    pub is_pub: bool,
     pub span: Span,
 }

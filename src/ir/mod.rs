@@ -12,14 +12,14 @@ pub type BlockIndex = usize;
 pub type FieldIndex = usize;
 
 pub type ModuleIndex = SmallSlabIndex<Module>;
-pub type StructIndex = SmallSlabIndex<Option<AdtBody>>;
+pub type AdtIndex = SmallSlabIndex<Option<AdtBody>>;
 pub type FnIndex = SmallSlabIndex<Option<Function>>;
 pub type TypeIndex = SmallSlabIndex<Option<Type>>;
 pub type ConstIndex = SmallSlabIndex<Option<ConstBody>>;
 
 pub type Types = SmallSlab<Option<Type>>;
 pub type Functions = SmallSlab<Option<Function>>;
-pub type Structs = SmallSlab<Option<AdtBody>>;
+pub type Adts = SmallSlab<Option<AdtBody>>;
 pub type Constants = SmallSlab<Option<ConstBody>>;
 pub type Modules = SmallSlab<Module>;
 
@@ -33,8 +33,8 @@ pub struct IR {
     pub types: Types,
     /// The functions defined in this compile unit.
     pub functions: Functions,
-    /// The structs defined in this compile unit.
-    pub structs: Structs,
+    /// The aggregate data types defined in this compile unit.
+    pub aggregates: Adts,
     /// The constants defined in this compile unit.
     pub constants: Constants,
     /// The modules defined in this compile unit.
@@ -96,7 +96,7 @@ pub struct Module {
     /// Functions in this module.
     pub functions: HashSet<FnIndex>,
     /// Structs in this module.
-    pub structs: HashSet<StructIndex>,
+    pub structs: HashSet<AdtIndex>,
     /// Types in this module.
     pub types: HashSet<TypeIndex>,
     /// Constants in this module.
@@ -339,23 +339,54 @@ pub enum LocalKind {
 #[derive(Debug, Clone)]
 pub struct AdtBody {
     pub is_pub: bool,
+    /// May be the name of the enum.
+    /// (Struct name is in the first variant.)
     pub name: String,
-    /// A variant in a Adt can be a struct field, enum variant...
+    /// A variant in a Adt, if its a struct there is a single variant.
     pub variants: Vec<VariantDef>,
+    pub kind: AdtKind,
     /// A mapping from name to variant.
     pub variant_names: HashMap<String, usize>,
     pub span: Span,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum AdtKind {
+    Struct,
+    Enum,
+    Union,
+}
+
 /// Definition of Adt variant.
 ///
-/// E.g: struct field, enum variant.
+/// E.g: struct, enum variant.
 #[derive(Debug, Clone)]
 pub struct VariantDef {
-    // The relative position in the aggregate structure.
+    // Variant or struct name.
     pub name: String,
-    pub discriminant: usize,
+    pub fields: Vec<FieldDef>,
+    /// A mapping from field name to to field index.
+    pub field_names: HashMap<String, usize>,
+    pub discriminant: VariantDiscr,
+}
+
+/// A struct field.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FieldDef {
+    pub name: String,
+    pub is_pub: bool,
     pub ty: TypeIndex,
+}
+
+// A variant discriminant
+#[derive(Debug, Clone)]
+pub enum VariantDiscr {
+    /// An explicit discriminant X = 2
+    Explicit(ConstData),
+    /// A the previous discriminant + 1.
+    ///
+    /// For perfomance, the distance from the last explicit discriminant is stored or for none.
+    Relative(u32),
 }
 
 #[derive(Debug, Clone)]
@@ -379,7 +410,7 @@ pub enum Type {
     Array(TypeIndex, Arc<ConstData>),
     Ref(TypeIndex, Mutability),
     Ptr(TypeIndex, Mutability),
-    Struct(StructIndex),
+    Adt(AdtIndex),
 }
 
 impl Type {
@@ -420,8 +451,8 @@ impl Type {
                     false
                 }
             }
-            Type::Struct(index) => {
-                if let Type::Struct(other_index) = other {
+            Type::Adt(index) => {
+                if let Type::Adt(other_index) = other {
                     index == other_index
                 } else {
                     false
@@ -446,7 +477,7 @@ impl Type {
             Type::Array(index, _) => Some(*index),
             Type::Ref(index, _) => Some(*index),
             Type::Ptr(index, _) => Some(*index),
-            Type::Struct { .. } => None,
+            Type::Adt { .. } => None,
         }
     }
 
@@ -512,16 +543,22 @@ impl Type {
             }
             Type::Ref(_, _) => 64,
             Type::Ptr(_, _) => 64,
-            Type::Struct(idx) => {
-                let struct_adt = ir.structs[*idx].as_ref().unwrap();
+            Type::Adt(idx) => {
+                let adt = ir.aggregates[*idx].as_ref().unwrap();
                 let mut total_size = 0;
 
-                for field in &struct_adt.variants {
-                    let ty = ir.types[field.ty].as_ref().unwrap();
-                    let size = ty.get_bit_width(ir);
+                for variant in &adt.variants {
+                    let mut variant_size = 0;
+                    for field in &variant.fields {
+                        let ty = ir.types[field.ty].as_ref().unwrap();
+                        let size = ty.get_bit_width(ir);
 
-                    total_size += size;
+                        variant_size += size;
+                    }
+                    total_size = total_size.max(variant_size);
                 }
+
+                // todo: check if padding/ align is needed.
 
                 total_size
             }
@@ -560,15 +597,19 @@ impl Type {
             }
             Type::Ref(_, _) => 64,
             Type::Ptr(_, _) => 64,
-            Type::Struct(idx) => {
-                let struct_adt = ir.structs[*idx].as_ref().unwrap();
+            Type::Adt(idx) => {
+                let adt = ir.aggregates[*idx].as_ref().unwrap();
 
                 let mut max_align = 0;
 
-                // todo: padding
-                for field in &struct_adt.variants {
-                    let align = ir.types[field.ty].as_ref().unwrap().get_align(ir);
-                    max_align = max_align.max(align);
+                for variant in &adt.variants {
+                    let mut max_variant_align = 0;
+                    for field in &variant.fields {
+                        let align = ir.types[field.ty].as_ref().unwrap().get_align(ir);
+                        max_variant_align = max_variant_align.max(align);
+                    }
+
+                    max_align = max_align.max(max_variant_align);
                 }
 
                 max_align
@@ -643,15 +684,22 @@ impl Type {
                     ir.types[*inner].as_ref().unwrap().display(ir)?
                 )
             }
-            Type::Struct(index) => {
-                if let Some(body) = ir.structs[*index].as_ref() {
-                    writeln!(f, "{} {{", body.name)?;
+            Type::Adt(index) => {
+                if let Some(body) = ir.aggregates[*index].as_ref() {
+                    match body.kind {
+                        AdtKind::Struct => {
+                            let variant = body.variants.first().unwrap();
+                            writeln!(f, "{} {{", variant.name)?;
 
-                    for var in &body.variants {
-                        let ty = ir.types[var.ty].as_ref().unwrap().display(ir)?;
-                        writeln!(f, "\t{}: {},", var.name, ty)?;
+                            for field in &variant.fields {
+                                let ty = ir.types[field.ty].as_ref().unwrap().display(ir)?;
+                                writeln!(f, "\t{}: {},", field.name, ty)?;
+                            }
+                            write!(f, "}}")?;
+                        }
+                        AdtKind::Enum => todo!(),
+                        AdtKind::Union => todo!(),
                     }
-                    write!(f, "}}")?;
                 } else {
                     writeln!(f, "Unknown({}) {{}}", index.to_idx())?;
                 }
@@ -688,7 +736,7 @@ impl Type {
             Type::String => todo!(),
             Type::Array(_, _) => todo!(),
             Type::Ref(_, _) => todo!(),
-            Type::Struct { .. } => todo!(),
+            Type::Adt { .. } => todo!(),
             Type::Ptr(_, _) => todo!(),
         }
     }

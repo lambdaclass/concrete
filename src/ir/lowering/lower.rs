@@ -9,7 +9,7 @@ use crate::{
     ast::{self, modules::ModuleDefItem},
     ir::{
         lowering::{errors::LoweringError, Bodies, IRBuilder},
-        Constants, Functions, Module, Modules, Structs, Types,
+        Adts, Constants, Functions, Module, Modules, Types,
     },
 };
 
@@ -27,7 +27,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
         ir: IR {
             types: Types::new(),
             functions: Functions::new(),
-            structs: Structs::new(),
+            aggregates: Adts::new(),
             constants: Constants::new(),
             modules: Modules::new(),
             top_level_modules: Vec::new(),
@@ -200,13 +200,13 @@ fn lower_module_symbols(
             }
             ast::modules::ModuleDefItem::Impl(_) => {}
             ast::modules::ModuleDefItem::Struct(struct_decl) => {
-                let idx = builder.ir.structs.insert(None);
+                let idx = builder.ir.aggregates.insert(None);
                 builder.bodies.structs.insert(idx, struct_decl.clone());
                 builder
                     .symbols
                     .get_mut(&module_idx)
                     .unwrap()
-                    .structs
+                    .aggregates
                     .insert(
                         Symbol {
                             name: struct_decl.name.name.clone(),
@@ -216,7 +216,7 @@ fn lower_module_symbols(
                         idx,
                     );
                 builder.ir.modules[module_idx].structs.insert(idx);
-                let type_idx = builder.ir.types.insert(Some(Type::Struct(idx)));
+                let type_idx = builder.ir.types.insert(Some(Type::Adt(idx)));
                 builder.ir.modules[module_idx].types.insert(type_idx);
                 builder.struct_to_type_idx.insert(idx, type_idx);
                 builder.type_to_module.insert(type_idx, module_idx);
@@ -263,7 +263,7 @@ fn lower_module_symbols(
                     .symbols
                     .get(&builder.local_module.unwrap())
                     .unwrap()
-                    .structs
+                    .aggregates
                     .get(&struct_sym)
                     .unwrap();
 
@@ -381,7 +381,7 @@ fn lower_imports(
                 }
 
                 let target_symbols = builder.symbols.get(&target_module).unwrap();
-                if let Some(struct_idx) = target_symbols.structs.get(&symbol).cloned() {
+                if let Some(struct_idx) = target_symbols.aggregates.get(&symbol).cloned() {
                     debug!(
                         "Imported struct symbol {:?} to module {}",
                         symbol, builder.ir.modules[module_idx].name
@@ -391,7 +391,7 @@ fn lower_imports(
                         .symbols
                         .get_mut(&module_idx)
                         .unwrap()
-                        .structs
+                        .aggregates
                         .insert(symbol.clone(), struct_idx);
 
                     continue;
