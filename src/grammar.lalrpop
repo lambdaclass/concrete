@@ -5,7 +5,7 @@ use crate::ast::common::Span;
 use std::str::FromStr;
 use std::sync::Arc;
 
-grammar;
+grammar(file_path: &std::path::Path);
 
 extern {
   type Location = usize;
@@ -224,7 +224,7 @@ GenericParams: Vec<ast::common::GenericParam> = {
 pub CompileUnit: ast::CompileUnit = {
   <Module> => {
     ast::CompileUnit {
-      file_path: None,
+      file_path: file_path.to_path_buf(),
       modules: vec![<>],
     }
   },
@@ -287,6 +287,7 @@ Module: ast::modules::Module = {
       doc_string,
       name,
       contents: contents.unwrap_or_else(Vec::new),
+      file_path: file_path.to_path_buf(),
       span: Span::new(lo, hi),
     }
   }

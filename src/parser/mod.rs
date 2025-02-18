@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::ast::CompileUnit;
 use error::Diagnostics;
 use lexer::Lexer;
@@ -29,11 +31,12 @@ pub struct ProgramSource<'db> {
 pub fn parse_ast<'db>(
     db: &'db dyn salsa::Database,
     source: ProgramSource<'db>,
+    file_path: &Path,
 ) -> Option<CompileUnit> {
     let lexer = Lexer::new(source.input(db));
     let parser = grammar::CompileUnitParser::new();
 
-    match parser.parse(lexer) {
+    match parser.parse(file_path, lexer) {
         Ok(ast) => Some(ast),
         Err(e) => {
             Diagnostics(e).accumulate(db);

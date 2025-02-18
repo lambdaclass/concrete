@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use super::{
     common::{DocString, Ident, Span},
@@ -15,6 +15,7 @@ pub struct Module {
     pub doc_string: Option<DocString>,
     pub name: Ident,
     pub contents: Vec<ModuleDefItem>,
+    pub file_path: PathBuf,
     pub span: Span,
 }
 

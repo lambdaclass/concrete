@@ -501,12 +501,12 @@ pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<Compile
     let real_source = std::fs::read_to_string(&path)?;
     let source = ProgramSource::new(db, real_source.clone(), path.display().to_string());
 
-    let mut compile_unit = match crate::parser::parse_ast(db, source) {
+    let mut compile_unit = match crate::parser::parse_ast(db, source, &path) {
         Some(x) => x,
         None => {
             let diagnostics = crate::parser::parse_ast::accumulated::<
                 crate::parser::error::Diagnostics,
-            >(db, source);
+            >(db, source, &path);
 
             for diag in &diagnostics {
                 diag.render(db, source);
@@ -516,10 +516,7 @@ pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<Compile
         }
     };
 
-    compile_unit.file_path = Some(path.clone());
-
     let mut modules_to_add: HashMap<String, Vec<CompileUnit>> = HashMap::new();
-
     for module in &compile_unit.modules {
         let mut list = Vec::new();
         for stmt in &module.contents {
@@ -548,7 +545,7 @@ pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<Compile
                     "Parsing externally declared module '{}'",
                     module_path.display()
                 );
-                let parsed_unit = parse_file(module_path, db)?;
+                let parsed_unit = parse_file(module_path.clone(), db)?;
                 list.push(parsed_unit);
             }
         }

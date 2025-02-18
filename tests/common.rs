@@ -40,7 +40,7 @@ pub fn compile_program(
     let db = concrete::driver::db::DatabaseImpl::default();
     let source = ProgramSource::new(&db, source.to_string(), name.to_string());
     tracing::debug!("source code:\n{}", source.input(&db));
-    let mut program = match concrete::parser::parse_ast(&db, source) {
+    let mut program = match concrete::parser::parse_ast(&db, source, source.path(&db)) {
         Some(x) => x,
         None => {
             concrete::parser::parse_ast::accumulated::<concrete::parser::error::Diagnostics>(
@@ -55,7 +55,7 @@ pub fn compile_program(
 
     let input_file = test_dir_path.join(name).with_extension(".con");
     std::fs::write(&input_file, source.input(&db))?;
-    program.file_path = Some(input_file.clone());
+    program.file_path = input_file.clone();
 
     let output_file = test_dir_path.join(name);
     let output_file = if library {

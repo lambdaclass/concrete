@@ -212,12 +212,6 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 )
                 .finish()
         }
-        LoweringError::InternalError(msg) => {
-            Report::build(ReportKind::Error, FileSpan::new("".to_string(), 0..0))
-                .with_code("InternalError")
-                .with_message(msg)
-                .finish()
-        }
         LoweringError::CallParamCountMismatch {
             span,
             found,
