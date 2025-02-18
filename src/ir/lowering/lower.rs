@@ -52,6 +52,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
             .ok_or_else(|| LoweringError::InternalError("Missing program file path".to_string()))?;
 
         for module in &compile_unit.modules {
+            debug!("Lowering symbols for module {:?}", module.name.name);
             lower_module_symbols(&mut builder, module, &[], file_path)?;
         }
     }
@@ -316,7 +317,7 @@ fn lower_imports(
 
     for stmt in &module.contents {
         if let ModuleDefItem::Import(import) = stmt {
-            let mut target_module = None;
+            let mut target_module = module_idx;
 
             let mut root_requested = false;
 
@@ -324,14 +325,14 @@ fn lower_imports(
                 if i == 0 || root_requested {
                     if m.name == "super" && !root_requested {
                         if let Some(parent) = parents.last().copied() {
-                            target_module = Some(parent);
+                            target_module = parent;
                         } else {
                             panic!("no parent found for super, todo turn into error")
                         }
                     } else if m.name == "root" && !root_requested {
                         root_requested = true;
                     } else {
-                        let id =
+                        let id = if root_requested {
                             *builder
                                 .top_level_modules_names
                                 .get(&m.name)
@@ -339,24 +340,41 @@ fn lower_imports(
                                     span: m.span,
                                     module: m.name.clone(),
                                     path: path.to_path_buf(),
-                                })?;
-                        target_module = Some(id);
+                                })?
+                        } else {
+                            *builder
+                                .symbols
+                                .get(&target_module)
+                                .unwrap()
+                                .modules
+                                .get(&m.name)
+                                .or_else(|| builder.top_level_modules_names.get(&m.name))
+                                .ok_or_else(|| LoweringError::ModuleNotFound {
+                                    span: m.span,
+                                    module: m.name.clone(),
+                                    path: path.to_path_buf(),
+                                })?
+                        };
+
+                        target_module = id;
                         root_requested = false;
                     }
                     continue;
                 }
 
-                let info = &builder.ir.modules[target_module.unwrap()];
-                target_module = Some(*info.modules.get(&m.name).ok_or_else(|| {
-                    LoweringError::ModuleNotFound {
-                        span: m.span,
-                        module: m.name.clone(),
-                        path: path.to_path_buf(),
-                    }
-                })?);
+                let info = &builder.ir.modules[target_module];
+                target_module =
+                    *info
+                        .modules
+                        .get(&m.name)
+                        .ok_or_else(|| LoweringError::ModuleNotFound {
+                            span: m.span,
+                            module: m.name.clone(),
+                            path: path.to_path_buf(),
+                        })?;
             }
 
-            let target_module = target_module.unwrap();
+            let target_module = target_module;
             for sym in &import.symbols {
                 let target_symbols = builder.symbols.get(&target_module).unwrap();
 
