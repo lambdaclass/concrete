@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-};
+use std::collections::{HashMap, HashSet};
 
 use tracing::debug;
 
@@ -48,7 +45,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
     for compile_unit in compile_units {
         for module in &compile_unit.modules {
             debug!("Lowering symbols for module {:?}", module.name.name);
-            lower_module_symbols(&mut builder, module, &[], &compile_unit.file_path)?;
+            lower_module_symbols(&mut builder, module, &[])?;
         }
     }
 
@@ -62,13 +59,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
                 .expect("should exist");
 
             builder.local_module = Some(module_idx);
-            lower_imports(
-                &mut builder,
-                module,
-                module_idx,
-                &[],
-                &compile_unit.file_path,
-            )?;
+            lower_imports(&mut builder, module, module_idx, &[])?;
         }
     }
 
@@ -90,7 +81,6 @@ fn lower_module_symbols(
     builder: &mut IRBuilder,
     module: &ast::modules::Module,
     parents: &[ModuleIndex],
-    file_path: &Path,
 ) -> Result<ModuleIndex, LoweringError> {
     add_builtins(builder);
 
@@ -103,7 +93,7 @@ fn lower_module_symbols(
         constants: HashSet::new(),
         modules: HashMap::new(),
         span: module.span,
-        file_path: file_path.to_path_buf(),
+        file_path: module.file_path.clone(),
     };
 
     // Add the empty module body to the arena.
@@ -240,7 +230,7 @@ fn lower_module_symbols(
                 let mut parents = parents.to_vec();
                 parents.push(module_idx);
 
-                lower_module_symbols(builder, submodule, &parents, file_path)?;
+                lower_module_symbols(builder, submodule, &parents)?;
             }
             ast::modules::ModuleDefItem::ExternalModule(_) => {}
             ast::modules::ModuleDefItem::Import(_) => {}
@@ -308,9 +298,9 @@ fn lower_imports(
     module: &ast::modules::Module,
     module_idx: ModuleIndex,
     parents: &[ModuleIndex],
-    path: &Path,
 ) -> Result<(), LoweringError> {
     builder.local_module = Some(module_idx);
+    let import_from_path = builder.ir.modules[module_idx].file_path.clone();
 
     for stmt in &module.contents {
         if let ModuleDefItem::Import(import) = stmt {
@@ -319,6 +309,8 @@ fn lower_imports(
             let mut root_requested = false;
 
             for (i, m) in import.module.iter().enumerate() {
+                let cur_path = builder.ir.modules[target_module].file_path.clone();
+
                 if i == 0 || root_requested {
                     if m.name == "super" && !root_requested {
                         if let Some(parent) = parents.last().copied() {
@@ -336,7 +328,7 @@ fn lower_imports(
                                 .ok_or_else(|| LoweringError::ModuleNotFound {
                                     span: m.span,
                                     module: m.name.clone(),
-                                    path: path.to_path_buf(),
+                                    path: cur_path.to_path_buf(),
                                 })?
                         } else {
                             *builder
@@ -349,7 +341,7 @@ fn lower_imports(
                                 .ok_or_else(|| LoweringError::ModuleNotFound {
                                     span: m.span,
                                     module: m.name.clone(),
-                                    path: path.to_path_buf(),
+                                    path: cur_path.to_path_buf(),
                                 })?
                         };
 
@@ -367,11 +359,12 @@ fn lower_imports(
                         .ok_or_else(|| LoweringError::ModuleNotFound {
                             span: m.span,
                             module: m.name.clone(),
-                            path: path.to_path_buf(),
+                            path: info.file_path.clone(),
                         })?;
             }
 
             let target_module = target_module;
+
             for sym in &import.symbols {
                 let target_symbols = builder.symbols.get(&target_module).unwrap();
 
@@ -448,7 +441,7 @@ fn lower_imports(
                     module_span: module.span,
                     import_span: import.span,
                     symbol: sym.clone(),
-                    path: path.to_path_buf(),
+                    path: import_from_path.to_path_buf(),
                 })?;
             }
         }
@@ -461,7 +454,7 @@ fn lower_imports(
                     .modules
                     .get(&submodule.name.name)
                     .expect("failed to find submodule id");
-                lower_imports(builder, submodule, new_module_idx, &parents, path)?;
+                lower_imports(builder, submodule, new_module_idx, &parents)?;
             }
         }
     }
