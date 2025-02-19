@@ -63,6 +63,9 @@ pub(crate) fn lower_func(
         generics: Vec::new(),
     };
 
+    dbg!(&module_idx);
+    dbg!(&builder.symbols);
+
     // Find the function id, and if its generic, the monormorphic function id.
     let (poly_fn_id, mono_fn_id) = {
         let symbols = builder.symbols.get(&module_idx).unwrap();

@@ -545,6 +545,7 @@ pub fn lower_module(
                     .get(&module.name.name)
                     .unwrap();
                 lower_module(builder, module, new_module_idx)?;
+                builder.local_module = Some(module_idx);
             }
             ast::modules::ModuleDefItem::ExternalModule(_) => {}
             ast::modules::ModuleDefItem::Import(_) => {}

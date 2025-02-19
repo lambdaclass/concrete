@@ -41,10 +41,6 @@ enum Commands {
         #[arg(long)]
         name: Option<String>,
 
-        /// Use a binary (application) template [default]
-        #[arg(long, group = "binary", default_value_t = true)]
-        bin: bool,
-
         /// Use a library template
         #[arg(long, group = "binary")]
         lib: bool,
@@ -162,12 +158,7 @@ pub fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::New {
-            path,
-            name,
-            bin,
-            lib,
-        } => {
+        Commands::New { path, name, lib } => {
             let name = name.unwrap_or_else(|| {
                 path.file_name()
                     .context("failed to get project name")
@@ -210,6 +201,7 @@ pub fn main() -> Result<()> {
                     license: "MIT".to_string(),
                 },
                 profile: profiles,
+                dependencies: HashMap::new(),
             };
 
             std::fs::write(config_path, toml::to_string_pretty(&config)?)
@@ -222,7 +214,7 @@ pub fn main() -> Result<()> {
             )
             .context("failed to write .gitattributes")?;
 
-            if bin {
+            if !lib {
                 std::fs::write(
                     path.join("src").join("main.con"),
                     format!(
@@ -235,9 +227,7 @@ mod {} {{
                         name
                     ),
                 )?;
-            }
-
-            if lib {
+            } else {
                 std::fs::write(
                     path.join("src").join("lib.con"),
                     format!(
@@ -268,7 +258,7 @@ mod {} {{
                     .context("failed to create initial commit")?;
             }
 
-            if bin {
+            if !lib {
                 println!(
                     "  {} binary (application) `{}` package",
                     "Created".green().bold(),
