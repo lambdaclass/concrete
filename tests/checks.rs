@@ -67,7 +67,7 @@ pub fn check_invalid_program(source: &str, name: &str) -> LoweringError {
     let db = concrete::driver::db::DatabaseImpl::default();
     let source = ProgramSource::new(&db, source.to_string(), name.to_string());
 
-    let mut program = match concrete::parser::parse_ast(&db, source) {
+    let mut program = match concrete::parser::parse_ast(&db, source, source.path(&db)) {
         Some(x) => x,
         None => {
             concrete::parser::parse_ast::accumulated::<concrete::parser::error::Diagnostics>(
@@ -76,7 +76,6 @@ pub fn check_invalid_program(source: &str, name: &str) -> LoweringError {
             panic!("error parsing ast");
         }
     };
-    program.file_path = Some(PathBuf::from(name).with_extension("con"));
 
     lower_compile_units(&[program]).expect_err("expected error")
 }

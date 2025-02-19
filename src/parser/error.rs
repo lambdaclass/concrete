@@ -1,3 +1,5 @@
+use crate::check::FileSpan;
+
 use super::{
     lexer::LexicalError,
     tokens::{self, Token},
@@ -22,7 +24,7 @@ impl Diagnostics {
         let report = match error {
             ParseError::InvalidToken { location } => {
                 let loc = *location;
-                Report::build(ReportKind::Error, (path, loc..loc))
+                Report::build(ReportKind::Error, FileSpan::new(path.display().to_string(), loc..loc))
                     .with_code("P1")
                     .with_message("Parse error.")
                     .with_label(
@@ -38,7 +40,7 @@ impl Diagnostics {
             }
             ParseError::UnrecognizedEof { location, expected } => {
                 let loc = *location;
-                Report::build(ReportKind::Error, (path, loc..loc))
+                Report::build(ReportKind::Error, FileSpan::new(path.display().to_string(), loc..loc))
                     .with_code("P2")
                     .with_message("Parse error.")
                     .with_label(
@@ -114,7 +116,7 @@ impl Diagnostics {
         };
 
         report
-            .eprint((path, Source::from(source)))
+            .eprint((path.display().to_string(), Source::from(source)))
             .expect("failed to print to stderr");
     }
 }

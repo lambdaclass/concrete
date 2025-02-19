@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::ast::CompileUnit;
 use error::Diagnostics;
@@ -23,7 +23,7 @@ pub struct ProgramSource<'db> {
     #[return_ref]
     pub input: String,
     #[return_ref]
-    pub path: String,
+    pub path: PathBuf,
 }
 
 // Todo: better error handling
@@ -31,12 +31,11 @@ pub struct ProgramSource<'db> {
 pub fn parse_ast<'db>(
     db: &'db dyn salsa::Database,
     source: ProgramSource<'db>,
-    file_path: &Path,
 ) -> Option<CompileUnit> {
     let lexer = Lexer::new(source.input(db));
     let parser = grammar::CompileUnitParser::new();
 
-    match parser.parse(file_path, lexer) {
+    match parser.parse(source.path(db), lexer) {
         Ok(ast) => Some(ast),
         Err(e) => {
             Diagnostics(e).accumulate(db);
@@ -47,6 +46,8 @@ pub fn parse_ast<'db>(
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::{grammar, lexer::Lexer};
     use crate::ast;
 
@@ -118,7 +119,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(&PathBuf::new(), lexer).unwrap();
     }
 
     #[test]

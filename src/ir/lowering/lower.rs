@@ -46,32 +46,24 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
 
     // Prepass to fill some symbols.
     for compile_unit in compile_units {
-        let file_path = compile_unit
-            .file_path
-            .as_ref()
-            .ok_or_else(|| LoweringError::InternalError("Missing program file path".to_string()))?;
 
         for module in &compile_unit.modules {
             debug!("Lowering symbols for module {:?}", module.name.name);
-            lower_module_symbols(&mut builder, module, &[], file_path)?;
+            lower_module_symbols(&mut builder, module, &[], &compile_unit.file_path)?;
         }
     }
 
     // Handle imports so they are transparent afterwards.
     for compile_unit in compile_units {
-        let file_path = compile_unit
-            .file_path
-            .as_ref()
-            .ok_or_else(|| LoweringError::InternalError("Missing program file path".to_string()))?;
-
         for module in &compile_unit.modules {
             debug!("lowering imports for module: {:?}", &module.name.name);
             let module_idx = *builder
                 .top_level_modules_names
                 .get(&module.name.name)
                 .expect("should exist");
+
             builder.local_module = Some(module_idx);
-            lower_imports(&mut builder, module, module_idx, &[], file_path)?;
+            lower_imports(&mut builder, module, module_idx, &[], &compile_unit.file_path)?;
         }
     }
 

@@ -499,7 +499,7 @@ pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<Compile
     }
 
     let real_source = std::fs::read_to_string(&path)?;
-    let source = ProgramSource::new(db, real_source.clone(), path.display().to_string());
+    let source = ProgramSource::new(db, real_source.clone(), &path);
 
     let mut compile_unit = match crate::parser::parse_ast(db, source, &path) {
         Some(x) => x,
