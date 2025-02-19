@@ -38,9 +38,9 @@ pub fn compile_program(
     optlevel: OptLevel,
 ) -> Result<CompileResult, Box<dyn std::error::Error>> {
     let db = concrete::driver::db::DatabaseImpl::default();
-    let source = ProgramSource::new(&db, source.to_string(), name.to_string());
+    let source = ProgramSource::new(&db, source.to_string(), Path::new(""));
     tracing::debug!("source code:\n{}", source.input(&db));
-    let mut program = match concrete::parser::parse_ast(&db, source, source.path(&db)) {
+    let mut program = match concrete::parser::parse_ast(&db, source) {
         Some(x) => x,
         None => {
             concrete::parser::parse_ast::accumulated::<concrete::parser::error::Diagnostics>(

@@ -46,7 +46,6 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
 
     // Prepass to fill some symbols.
     for compile_unit in compile_units {
-
         for module in &compile_unit.modules {
             debug!("Lowering symbols for module {:?}", module.name.name);
             lower_module_symbols(&mut builder, module, &[], &compile_unit.file_path)?;
@@ -63,7 +62,13 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
                 .expect("should exist");
 
             builder.local_module = Some(module_idx);
-            lower_imports(&mut builder, module, module_idx, &[], &compile_unit.file_path)?;
+            lower_imports(
+                &mut builder,
+                module,
+                module_idx,
+                &[],
+                &compile_unit.file_path,
+            )?;
         }
     }
 
