@@ -228,6 +228,34 @@ pub(crate) fn lower_fn_call(
     method_idx: Option<TypeIndex>, // in case its a method
 ) -> Result<(Rvalue, TypeIndex, Span), LoweringError> {
     debug!("lowering fn call");
+
+    let original_module_idx = fn_builder.get_module_idx();
+    let mut module_idx = original_module_idx;
+
+    for target in &info.path {
+        // first search on local modules
+        if let Some(target_module) = fn_builder.builder.ir.modules[module_idx]
+            .modules
+            .get(&target.name)
+        {
+            module_idx = *target_module;
+        }
+        // Then search on top level modules
+        else if let Some(target_module) =
+            fn_builder.builder.top_level_modules_names.get(&target.name)
+        {
+            module_idx = *target_module;
+        } else {
+            Err(LoweringError::ModuleNotFound {
+                span: target.span,
+                module: target.name.clone(),
+                path: fn_builder.get_file_path().clone(),
+            })?;
+        }
+    }
+
+    fn_builder.builder.local_module = Some(module_idx);
+
     let (poly_fn_id, mono_fn_id) = fn_builder.get_id_for_fn_call(info, method_idx)?;
 
     // Get the function declaration to inspect its types.
@@ -388,6 +416,7 @@ pub(crate) fn lower_fn_call(
     fn_builder.builder.self_ty = None;
 
     fn_builder.builder.current_generics_map = old_generic_map;
+    fn_builder.builder.local_module = Some(original_module_idx);
 
     Ok((
         Rvalue::Use(Operand::Place(dest_place)),

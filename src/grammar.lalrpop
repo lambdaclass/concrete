@@ -461,6 +461,7 @@ StructInitExpr: ast::expressions::StructInitExpr = {
 
 AssocMethodCall: ast::expressions::AssocMethodCall = {
   // TODO: Using # because :: and . give a grammar ambiguous error.
+  // Note(edg-l): I tried to make the FnCallOp handle assoc methods but the :: gets tricky (ambiguous) when generics are involved.
   <lo:@L> <name:TypeNameUse> "#" <fn_call:FnCallOp> <hi:@R> => ast::expressions::AssocMethodCall {
     assoc_type: name,
     fn_call,
@@ -615,7 +616,7 @@ PathOp: ast::expressions::PathOp = {
 
 PathSegment: ast::expressions::PathSegment = {
   <lo:@L> "." <e:Ident> <hi:@R> => ast::expressions::PathSegment::FieldAccess(e, Span::new(lo, hi)),
-  <lo:@L> "." <e:FnCallOp> <hi:@R> => ast::expressions::PathSegment::MethodCall(e, Span::new(lo, hi)),
+  <lo:@L> "." <e:MethodCall> <hi:@R> => ast::expressions::PathSegment::MethodCall(e, Span::new(lo, hi)),
   <lo:@L> "[" <e:ValueExpr> "]" <hi:@R> => ast::expressions::PathSegment::ArrayIndex(e, Span::new(lo, hi)),
 }
 
@@ -627,9 +628,20 @@ PathSegments: Vec<ast::expressions::PathSegment> = {
   },
 }
 
-FnCallOp: ast::expressions::FnCallOp = {
+MethodCall: ast::expressions::FnCallOp = {
   <lo:@L> <target:Ident> <generics:("::" "<" <Comma<TypeName>> ">")?> "(" <args:Comma<Expression>> ")" <hi:@R> => ast::expressions::FnCallOp {
     target,
+    path: Vec::new(),
+    generics: generics.unwrap_or_default(),
+    args,
+    span: Span::new(lo, hi),
+  }
+}
+
+FnCallOp: ast::expressions::FnCallOp = {
+  <lo:@L> <path:(<Ident> "::")*> <target:Ident> <generics:("::" "<" <Comma<TypeName>> ">")?> "(" <args:Comma<Expression>> ")" <hi:@R> => ast::expressions::FnCallOp {
+    target,
+    path,
     generics: generics.unwrap_or_default(),
     args,
     span: Span::new(lo, hi),

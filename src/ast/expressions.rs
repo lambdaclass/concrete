@@ -144,6 +144,7 @@ pub struct PathOp {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FnCallOp {
+    pub path: Vec<Ident>,
     pub target: Ident,
     pub generics: Vec<TypeName>,
     pub args: Vec<Expression>,
