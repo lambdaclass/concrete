@@ -48,7 +48,7 @@ pub struct Symbol {
 #[derive(Debug, Clone, Default)]
 pub struct SymbolTable {
     pub modules: HashMap<String, ModuleIndex>,
-    pub functions: HashMap<Symbol, FnIndex>,
+    pub functions: HashMap<Symbol, (FnIndex, ModuleIndex)>,
     pub constants: HashMap<String, ConstIndex>,
     pub aggregates: HashMap<Symbol, AdtIndex>,
     pub types: HashMap<String, TypeIndex>,
@@ -75,11 +75,17 @@ pub struct IRBuilder {
     pub self_ty: Option<TypeIndex>,
     pub bodies: Bodies,
     pub local_module: Option<ModuleIndex>,
-    // Needed to not duplicate TypeIndexes for structs.
+    /// Needed to not duplicate TypeIndexes for structs.
     pub struct_to_type_idx: HashMap<AdtIndex, TypeIndex>,
-    // Type to module id where it resides, needed to find methods for the given types.
+    /// Type to module id where it resides, needed to find methods for the given types.
     pub type_to_module: HashMap<TypeIndex, ModuleIndex>,
     pub mono_type_to_poly: HashMap<TypeIndex, TypeIndex>,
+    /// A stack for the current module id.
+    ///
+    /// Sometimes we need to temporarely enter the "context" of another module, e.g when handling
+    /// a generic function from a import that needs to be lowered at the time of a function call
+    /// from another module.
+    pub current_module_context: Vec<ModuleIndex>,
 }
 
 #[derive(Debug)]
@@ -231,7 +237,7 @@ impl FnIrBuilder<'_> {
         let module_id = if let Some(id) = polymorphic_method_of_type_idx {
             self.builder.type_to_module.get(&id).copied().unwrap()
         } else {
-            self.get_module_idx()
+            self.builder.local_module.unwrap()
         };
 
         let poly_symbol = Symbol {
@@ -245,7 +251,11 @@ impl FnIrBuilder<'_> {
 
             let mut generic_types = Vec::new();
 
-            if let Some(poly_id) = symbols.functions.get(&poly_symbol).copied() {
+            dbg!(&poly_symbol);
+            dbg!(&symbols.functions);
+            dbg!(&module_id);
+
+            if let Some((poly_id, fn_module_id)) = symbols.functions.get(&poly_symbol).copied() {
                 // If function is generic or the self type is generic, monomorphize here.
                 if !info.generics.is_empty() || polymorphic_method_of_type_idx != method_of_type_idx
                 {
@@ -293,7 +303,7 @@ impl FnIrBuilder<'_> {
                     let symbols = self.builder.symbols.get(&module_id).unwrap(); // needed for borrowck
                     let id = {
                         if let Some(id) = symbols.functions.get(&mono_symbol).copied() {
-                            id
+                            id.0
                         } else {
                             // Add the id from here to avoid infinite recursion on recursive functions.
                             let id = self.builder.ir.functions.insert(None);
@@ -302,25 +312,44 @@ impl FnIrBuilder<'_> {
                                 .get_mut(&module_id)
                                 .unwrap()
                                 .functions
-                                .insert(mono_symbol, id);
+                                .insert(mono_symbol.clone(), (id, fn_module_id));
+
+                            self.builder
+                                .symbols
+                                .get_mut(&fn_module_id)
+                                .unwrap()
+                                .functions
+                                .insert(mono_symbol, (id, fn_module_id));
 
                             if let Some(fn_def) =
                                 self.builder.bodies.functions.get(&poly_id).cloned()
                             {
+                                // Temporarly set the local module to the module where the function is defined to lower it in the correct context.
+                                let old_mod_id = self.builder.local_module;
+                                self.builder.local_module = Some(fn_module_id);
+
                                 let lowered_id =
                                     lower_func(self.builder, &fn_def, method_of_type_idx)?;
+
+                                self.builder.local_module = old_mod_id;
 
                                 assert_eq!(id, lowered_id);
                             } else if let Some(fn_decl) =
                                 self.builder.bodies.functions_decls.get(&poly_id).cloned()
                             {
+                                // Temporarly set the local module to the module where the function is defined to lower it in the correct context.
+                                let old_mod_id = self.builder.local_module;
+                                self.builder.local_module = Some(fn_module_id);
+
                                 let lowered_id = lower_func_decl(self.builder, &fn_decl)?;
+
+                                self.builder.local_module = old_mod_id;
 
                                 assert_eq!(id, lowered_id);
                             }
                             id
                         }
-                    }; // todo error
+                    };
 
                     self.builder.current_generics_map = old_generics;
                     (poly_id, Some(id))
@@ -328,6 +357,7 @@ impl FnIrBuilder<'_> {
                     (poly_id, None)
                 }
             } else {
+                dbg!("here");
                 return Err(LoweringError::FunctionNotFound {
                     span: info.span,
                     function: info.target.name.clone(),

@@ -58,7 +58,6 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
                 .get(&module.name.name)
                 .expect("should exist");
 
-            builder.local_module = Some(module_idx);
             lower_imports(&mut builder, module, module_idx, &[])?;
         }
     }
@@ -69,7 +68,6 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
                 .top_level_modules_names
                 .get(&module.name.name)
                 .unwrap();
-            builder.local_module = Some(module_idx);
             lower_module(&mut builder, module, module_idx)?;
         }
     }
@@ -88,7 +86,7 @@ fn lower_module_symbols(
         name: module.name.name.clone(),
         parents: parents.to_vec(),
         functions: HashSet::new(),
-        structs: HashSet::new(),
+        aggregates: HashSet::new(),
         types: HashSet::new(),
         constants: HashSet::new(),
         modules: HashMap::new(),
@@ -153,12 +151,12 @@ fn lower_module_symbols(
                             method_of: None,
                             generics: Vec::new(),
                         },
-                        idx,
+                        (idx, module_idx),
                     );
                 builder.ir.modules[module_idx].functions.insert(idx);
                 debug!(
-                    "Adding function symbol {:?} to module {:?}",
-                    function_def.decl.name.name, module.name.name
+                    "Adding function symbol {:?} to module {:?} ({})",
+                    function_def.decl.name.name, module.name.name, module_idx.to_idx()
                 );
             }
             ast::modules::ModuleDefItem::FunctionDecl(function_decl) => {
@@ -178,12 +176,12 @@ fn lower_module_symbols(
                             method_of: None,
                             generics: Vec::new(),
                         },
-                        idx,
+                        (idx, module_idx),
                     );
                 builder.ir.modules[module_idx].functions.insert(idx);
                 debug!(
-                    "Adding function symbol {:?} to module {:?}",
-                    function_decl.name.name, module.name.name
+                    "Adding function decl symbol {:?} to module {:?} ({})",
+                    function_decl.name.name, module.name.name, module_idx.to_idx(),
                 );
             }
             ast::modules::ModuleDefItem::Impl(_) => {}
@@ -203,7 +201,7 @@ fn lower_module_symbols(
                         },
                         idx,
                     );
-                builder.ir.modules[module_idx].structs.insert(idx);
+                builder.ir.modules[module_idx].aggregates.insert(idx);
                 let type_idx = builder.ir.types.insert(Some(Type::Adt(idx)));
                 builder.ir.modules[module_idx].types.insert(type_idx);
                 builder.struct_to_type_idx.insert(idx, type_idx);
@@ -282,7 +280,7 @@ fn lower_module_symbols(
                     .get_mut(&module_idx)
                     .unwrap()
                     .functions
-                    .insert(sym.clone(), idx);
+                    .insert(sym.clone(), (idx, module_idx));
                 builder.ir.modules[module_idx].functions.insert(idx);
 
                 // todo: add to list of methods for this idx, so later we can copy to the instanced type
@@ -373,10 +371,10 @@ fn lower_imports(
                     method_of: None,
                     generics: Vec::new(),
                 };
-                if let Some(id) = target_symbols.functions.get(&symbol).cloned() {
+                if let Some((id, mod_id)) = target_symbols.functions.get(&symbol).cloned() {
                     debug!(
-                        "Imported function symbol {:?} to module {}",
-                        symbol, builder.ir.modules[module_idx].name
+                        "Imported function symbol {:?} ({}) to module {} ({})",
+                        symbol.name, mod_id.to_idx(), builder.ir.modules[module_idx].name, module_idx.to_idx()
                     );
                     builder.ir.modules[module_idx].functions.insert(id);
                     builder
@@ -384,23 +382,23 @@ fn lower_imports(
                         .get_mut(&module_idx)
                         .unwrap()
                         .functions
-                        .insert(symbol.clone(), id);
+                        .insert(symbol.clone(), (id, mod_id));
                     continue;
                 }
 
                 let target_symbols = builder.symbols.get(&target_module).unwrap();
-                if let Some(struct_idx) = target_symbols.aggregates.get(&symbol).cloned() {
+                if let Some(adt_idx) = target_symbols.aggregates.get(&symbol).cloned() {
                     debug!(
-                        "Imported struct symbol {:?} to module {}",
+                        "Imported adt symbol {:?} to module {}",
                         symbol, builder.ir.modules[module_idx].name
                     );
-                    builder.ir.modules[module_idx].structs.insert(struct_idx);
+                    builder.ir.modules[module_idx].aggregates.insert(adt_idx);
                     builder
                         .symbols
                         .get_mut(&module_idx)
                         .unwrap()
                         .aggregates
-                        .insert(symbol.clone(), struct_idx);
+                        .insert(symbol.clone(), adt_idx);
 
                     continue;
                 }

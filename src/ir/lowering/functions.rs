@@ -26,7 +26,7 @@ use super::{
 /// Lowers a function or method if its not yet lowered.
 ///
 /// If the function is generic, `builder.current_generics_map` should contain types for the generics.
-#[instrument(level = "debug", skip_all, fields(name = ?func.decl.name.name))]
+#[instrument(level = "debug", skip_all, fields(name = ?func.decl.name.name, mod_id))]
 pub(crate) fn lower_func(
     builder: &mut IRBuilder,
     func: &FunctionDef,
@@ -50,8 +50,11 @@ pub(crate) fn lower_func(
             .copied()
             .expect("should exist")
     } else {
+        dbg!("using local module");
         builder.local_module.expect("should exist")
     };
+
+    tracing::span::Span::current().record("mod_id", module_idx.to_idx());
 
     let mut generic_types = Vec::new();
 
@@ -64,7 +67,7 @@ pub(crate) fn lower_func(
     };
 
     // Find the function id, and if its generic, the monormorphic function id.
-    let (poly_fn_id, mono_fn_id) = {
+    let ((poly_fn_id, fn_mod_id), mono_fn_id) = {
         let symbols = builder.symbols.get(&module_idx).unwrap();
 
         if let Some(poly_id) = symbols.functions.get(&symbol).copied() {
@@ -92,7 +95,7 @@ pub(crate) fn lower_func(
                 let symbols = builder.symbols.get(&module_idx).unwrap(); // needed for borrowck
 
                 let mono_id = if let Some(id) = symbols.functions.get(&symbol) {
-                    *id
+                    id.0
                 } else {
                     builder.ir.functions.insert(None)
                 };
@@ -226,8 +229,7 @@ pub(crate) fn lower_fn_call(
 ) -> Result<(Rvalue, TypeIndex, Span), LoweringError> {
     debug!("lowering fn call");
 
-    let original_module_idx = fn_builder.get_module_idx();
-    let mut module_idx = original_module_idx;
+    let mut module_idx = fn_builder.get_module_idx();
 
     for target in &info.path {
         // first search on local modules
@@ -251,9 +253,14 @@ pub(crate) fn lower_fn_call(
         }
     }
 
+    // Temporarly set the local module to the import module in case the function is not yet
+    // lowered and needs to be.
+    let old_module_id = fn_builder.get_module_idx();
     fn_builder.builder.local_module = Some(module_idx);
 
     let (poly_fn_id, mono_fn_id) = fn_builder.get_id_for_fn_call(info, method_idx)?;
+
+    fn_builder.builder.local_module = Some(old_module_id);
 
     // Get the function declaration to inspect its types.
     let target_fn_decl = fn_builder
@@ -413,7 +420,6 @@ pub(crate) fn lower_fn_call(
     fn_builder.builder.self_ty = None;
 
     fn_builder.builder.current_generics_map = old_generic_map;
-    fn_builder.builder.local_module = Some(original_module_idx);
 
     Ok((
         Rvalue::Use(Operand::Place(dest_place)),
@@ -474,7 +480,7 @@ pub(crate) fn lower_func_decl(
     };
 
     // Find the function id, and if its generic, the monormorphic function id.
-    let (poly_fn_id, mono_fn_id) = {
+    let ((poly_fn_id, fn_mod_id), mono_fn_id) = {
         let symbols = builder.symbols.get(&module_idx).unwrap();
 
         if let Some(poly_id) = symbols.functions.get(&symbol).copied() {
@@ -494,7 +500,7 @@ pub(crate) fn lower_func_decl(
                 let symbols = builder.symbols.get(&module_idx).unwrap(); // needed for borrowck
 
                 let mono_id = if let Some(id) = symbols.functions.get(&symbol) {
-                    *id
+                    id.0
                 } else {
                     builder.ir.functions.insert(None)
                 };

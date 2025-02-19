@@ -113,7 +113,7 @@ pub(crate) fn lower_struct(
 
     builder.ir.aggregates[idx] = Some(body);
     builder.ir.modules[builder.local_module.unwrap()]
-        .structs
+        .aggregates
         .insert(idx);
 
     Ok(idx)
