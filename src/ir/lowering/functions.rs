@@ -50,8 +50,7 @@ pub(crate) fn lower_func(
             .copied()
             .expect("should exist")
     } else {
-        dbg!("using local module");
-        builder.local_module.expect("should exist")
+        builder.get_current_module_idx()
     };
 
     tracing::span::Span::current().record("mod_id", module_idx.to_idx());
@@ -67,7 +66,7 @@ pub(crate) fn lower_func(
     };
 
     // Find the function id, and if its generic, the monormorphic function id.
-    let ((poly_fn_id, fn_mod_id), mono_fn_id) = {
+    let ((poly_fn_id, _fn_mod_id), mono_fn_id) = {
         let symbols = builder.symbols.get(&module_idx).unwrap();
 
         if let Some(poly_id) = symbols.functions.get(&symbol).copied() {
@@ -229,7 +228,7 @@ pub(crate) fn lower_fn_call(
 ) -> Result<(Rvalue, TypeIndex, Span), LoweringError> {
     debug!("lowering fn call");
 
-    let mut module_idx = fn_builder.get_module_idx();
+    let mut module_idx = fn_builder.get_current_module_idx();
 
     for target in &info.path {
         // first search on local modules
@@ -255,12 +254,11 @@ pub(crate) fn lower_fn_call(
 
     // Temporarly set the local module to the import module in case the function is not yet
     // lowered and needs to be.
-    let old_module_id = fn_builder.get_module_idx();
-    fn_builder.builder.local_module = Some(module_idx);
+    fn_builder.enter_module_context(module_idx);
 
     let (poly_fn_id, mono_fn_id) = fn_builder.get_id_for_fn_call(info, method_idx)?;
 
-    fn_builder.builder.local_module = Some(old_module_id);
+    fn_builder.leave_module_context();
 
     // Get the function declaration to inspect its types.
     let target_fn_decl = fn_builder
@@ -435,7 +433,7 @@ pub(crate) fn lower_func_decl(
 ) -> Result<FnIndex, LoweringError> {
     let mut is_intrinsic: Option<ConcreteIntrinsic> = None;
 
-    let module_idx = builder.local_module.expect("should exist");
+    let module_idx = builder.get_current_module_idx();
 
     let mut generic_types = Vec::new();
 
@@ -480,7 +478,7 @@ pub(crate) fn lower_func_decl(
     };
 
     // Find the function id, and if its generic, the monormorphic function id.
-    let ((poly_fn_id, fn_mod_id), mono_fn_id) = {
+    let ((poly_fn_id, _fn_mod_id), mono_fn_id) = {
         let symbols = builder.symbols.get(&module_idx).unwrap();
 
         if let Some(poly_id) = symbols.functions.get(&symbol).copied() {

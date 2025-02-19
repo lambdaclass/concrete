@@ -74,7 +74,6 @@ pub struct IRBuilder {
     pub current_generics_map: HashMap<String, TypeIndex>,
     pub self_ty: Option<TypeIndex>,
     pub bodies: Bodies,
-    pub local_module: Option<ModuleIndex>,
     /// Needed to not duplicate TypeIndexes for structs.
     pub struct_to_type_idx: HashMap<AdtIndex, TypeIndex>,
     /// Type to module id where it resides, needed to find methods for the given types.
@@ -101,6 +100,27 @@ pub struct FnIrBuilder<'b> {
 }
 
 impl IRBuilder {
+    /// Gets the module in the current context.
+    pub fn get_current_module(&self) -> &Module {
+        &self.ir.modules[self.get_current_module_idx()]
+    }
+
+    /// Gets the module id in the current context.
+    pub fn get_current_module_idx(&self) -> ModuleIndex {
+        *self
+            .current_module_context
+            .last()
+            .expect("There should always be a module in context")
+    }
+
+    pub fn enter_module_context(&mut self, module_id: ModuleIndex) {
+        self.current_module_context.push(module_id);
+    }
+
+    pub fn leave_module_context(&mut self) {
+        self.current_module_context.pop();
+    }
+
     pub fn get_type(&self, idx: TypeIndex) -> &Type {
         self.ir.types[idx].as_ref().unwrap()
     }
@@ -151,7 +171,7 @@ impl IRBuilder {
             generics: Vec::new(),
         };
 
-        let module_idx = self.local_module.unwrap();
+        let module_idx = self.get_current_module_idx();
 
         let poly_idx = *self.symbols[&module_idx].aggregates.get(&sym).unwrap();
         let struct_decl = self.bodies.structs.get(&poly_idx).unwrap().clone();
@@ -180,17 +200,25 @@ impl IRBuilder {
 
 impl FnIrBuilder<'_> {
     /// Gets the module where this fn is located.
-    pub fn get_module_body(&self) -> &Module {
-        &self.builder.ir.modules[self.builder.local_module.unwrap()]
+    pub fn get_current_module(&self) -> &Module {
+        self.builder.get_current_module()
     }
 
-    pub fn get_module_idx(&self) -> ModuleIndex {
-        self.builder.local_module.unwrap()
+    pub fn get_current_module_idx(&self) -> ModuleIndex {
+        self.builder.get_current_module_idx()
+    }
+
+    pub fn enter_module_context(&mut self, module_id: ModuleIndex) {
+        self.builder.current_module_context.push(module_id);
+    }
+
+    pub fn leave_module_context(&mut self) {
+        self.builder.current_module_context.pop();
     }
 
     /// Gets the local module sym table.
     pub fn get_symbols_table(&self) -> &SymbolTable {
-        &self.builder.symbols[&self.builder.local_module.unwrap()]
+        &self.builder.symbols[&self.get_current_module_idx()]
     }
 
     pub fn add_local(&mut self, local: Local) -> LocalIndex {
@@ -210,7 +238,7 @@ impl FnIrBuilder<'_> {
     }
 
     pub fn get_file_path(&self) -> &PathBuf {
-        &self.get_module_body().file_path
+        &self.get_current_module().file_path
     }
 
     /// Returns the polymorphic id and optionally the monomorphized id.
@@ -237,7 +265,7 @@ impl FnIrBuilder<'_> {
         let module_id = if let Some(id) = polymorphic_method_of_type_idx {
             self.builder.type_to_module.get(&id).copied().unwrap()
         } else {
-            self.builder.local_module.unwrap()
+            self.builder.get_current_module_idx()
         };
 
         let poly_symbol = Symbol {
@@ -250,10 +278,6 @@ impl FnIrBuilder<'_> {
             let symbols = self.builder.symbols.get(&module_id).unwrap();
 
             let mut generic_types = Vec::new();
-
-            dbg!(&poly_symbol);
-            dbg!(&symbols.functions);
-            dbg!(&module_id);
 
             if let Some((poly_id, fn_module_id)) = symbols.functions.get(&poly_symbol).copied() {
                 // If function is generic or the self type is generic, monomorphize here.
@@ -325,25 +349,23 @@ impl FnIrBuilder<'_> {
                                 self.builder.bodies.functions.get(&poly_id).cloned()
                             {
                                 // Temporarly set the local module to the module where the function is defined to lower it in the correct context.
-                                let old_mod_id = self.builder.local_module;
-                                self.builder.local_module = Some(fn_module_id);
+                                self.enter_module_context(fn_module_id);
 
                                 let lowered_id =
                                     lower_func(self.builder, &fn_def, method_of_type_idx)?;
 
-                                self.builder.local_module = old_mod_id;
+                                self.builder.leave_module_context();
 
                                 assert_eq!(id, lowered_id);
                             } else if let Some(fn_decl) =
                                 self.builder.bodies.functions_decls.get(&poly_id).cloned()
                             {
                                 // Temporarly set the local module to the module where the function is defined to lower it in the correct context.
-                                let old_mod_id = self.builder.local_module;
-                                self.builder.local_module = Some(fn_module_id);
+                                self.enter_module_context(fn_module_id);
 
                                 let lowered_id = lower_func_decl(self.builder, &fn_decl)?;
 
-                                self.builder.local_module = old_mod_id;
+                                self.leave_module_context();
 
                                 assert_eq!(id, lowered_id);
                             }
@@ -357,7 +379,6 @@ impl FnIrBuilder<'_> {
                     (poly_id, None)
                 }
             } else {
-                dbg!("here");
                 return Err(LoweringError::FunctionNotFound {
                     span: info.span,
                     function: info.target.name.clone(),

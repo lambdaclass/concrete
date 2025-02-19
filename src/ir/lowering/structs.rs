@@ -29,7 +29,7 @@ pub(crate) fn lower_struct(
         generics: Vec::new(),
     };
 
-    let module_idx = builder.local_module.unwrap();
+    let module_idx = builder.get_current_module_idx();
 
     let poly_idx = *builder.symbols[&module_idx].aggregates.get(&sym).unwrap();
 
@@ -112,9 +112,7 @@ pub(crate) fn lower_struct(
     body.variant_names.insert(String::new(), 0);
 
     builder.ir.aggregates[idx] = Some(body);
-    builder.ir.modules[builder.local_module.unwrap()]
-        .aggregates
-        .insert(idx);
+    builder.ir.modules[module_idx].aggregates.insert(idx);
 
     Ok(idx)
 }

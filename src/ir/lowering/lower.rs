@@ -37,7 +37,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
         type_to_module: Default::default(),
         bodies: Bodies::default(),
         self_ty: None,
-        local_module: None,
+        current_module_context: Vec::with_capacity(8),
         mono_type_to_poly: Default::default(),
     };
 
@@ -96,7 +96,7 @@ fn lower_module_symbols(
 
     // Add the empty module body to the arena.
     let module_idx = builder.ir.modules.insert(module_body);
-    builder.local_module = Some(module_idx);
+    builder.enter_module_context(module_idx);
 
     // If its a top level module, save it as such.
     if parents.is_empty() {
@@ -156,7 +156,9 @@ fn lower_module_symbols(
                 builder.ir.modules[module_idx].functions.insert(idx);
                 debug!(
                     "Adding function symbol {:?} to module {:?} ({})",
-                    function_def.decl.name.name, module.name.name, module_idx.to_idx()
+                    function_def.decl.name.name,
+                    module.name.name,
+                    module_idx.to_idx()
                 );
             }
             ast::modules::ModuleDefItem::FunctionDecl(function_decl) => {
@@ -181,7 +183,9 @@ fn lower_module_symbols(
                 builder.ir.modules[module_idx].functions.insert(idx);
                 debug!(
                     "Adding function decl symbol {:?} to module {:?} ({})",
-                    function_decl.name.name, module.name.name, module_idx.to_idx(),
+                    function_decl.name.name,
+                    module.name.name,
+                    module_idx.to_idx(),
                 );
             }
             ast::modules::ModuleDefItem::Impl(_) => {}
@@ -247,7 +251,7 @@ fn lower_module_symbols(
 
                 let id = *builder
                     .symbols
-                    .get(&builder.local_module.unwrap())
+                    .get(&builder.get_current_module_idx())
                     .unwrap()
                     .aggregates
                     .get(&struct_sym)
@@ -258,10 +262,6 @@ fn lower_module_symbols(
             } else {
                 lower_type(builder, &impl_block.target)?
             };
-
-            // TODO: when implementing impl generics, deal with it here.
-            // e.g impl Array<u32> would be different than impl<T> Array<T>
-            // the first is a specific type the second is a generic type
 
             for function_def in &impl_block.methods {
                 debug!(
@@ -282,11 +282,11 @@ fn lower_module_symbols(
                     .functions
                     .insert(sym.clone(), (idx, module_idx));
                 builder.ir.modules[module_idx].functions.insert(idx);
-
-                // todo: add to list of methods for this idx, so later we can copy to the instanced type
             }
         }
     }
+
+    builder.leave_module_context();
 
     Ok(module_idx)
 }
@@ -297,7 +297,7 @@ fn lower_imports(
     module_idx: ModuleIndex,
     parents: &[ModuleIndex],
 ) -> Result<(), LoweringError> {
-    builder.local_module = Some(module_idx);
+    builder.enter_module_context(module_idx);
     let import_from_path = builder.ir.modules[module_idx].file_path.clone();
 
     for stmt in &module.contents {
@@ -374,7 +374,10 @@ fn lower_imports(
                 if let Some((id, mod_id)) = target_symbols.functions.get(&symbol).cloned() {
                     debug!(
                         "Imported function symbol {:?} ({}) to module {} ({})",
-                        symbol.name, mod_id.to_idx(), builder.ir.modules[module_idx].name, module_idx.to_idx()
+                        symbol.name,
+                        mod_id.to_idx(),
+                        builder.ir.modules[module_idx].name,
+                        module_idx.to_idx()
                     );
                     builder.ir.modules[module_idx].functions.insert(id);
                     builder
@@ -457,6 +460,8 @@ fn lower_imports(
         }
     }
 
+    builder.leave_module_context();
+
     Ok(())
 }
 
@@ -490,12 +495,12 @@ pub fn lower_module(
     module: &ast::modules::Module,
     module_idx: ModuleIndex,
 ) -> Result<(), LoweringError> {
-    builder.local_module = Some(module_idx);
+    builder.enter_module_context(module_idx);
 
     for item in &module.contents {
         match item {
             ast::modules::ModuleDefItem::Constant(constant_def) => {
-                lower_constant(builder, module_idx, constant_def)?;
+                lower_constant(builder, constant_def)?;
             }
             ast::modules::ModuleDefItem::Struct(info) => {
                 if info.generics.is_empty() {
@@ -536,12 +541,13 @@ pub fn lower_module(
                     .get(&module.name.name)
                     .unwrap();
                 lower_module(builder, module, new_module_idx)?;
-                builder.local_module = Some(module_idx);
             }
             ast::modules::ModuleDefItem::ExternalModule(_) => {}
             ast::modules::ModuleDefItem::Import(_) => {}
         }
     }
+
+    builder.leave_module_context();
 
     Ok(())
 }
