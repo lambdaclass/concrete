@@ -1,6 +1,10 @@
-
 mod project {
-    pub fn main() -> i32 {
-        return 17;
+    mod other;
+
+    import other.{hello};
+
+    pub fn main() -> u32 {
+        let y: u32 = 2;
+        return hello(8);
     }
 }

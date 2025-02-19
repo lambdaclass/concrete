@@ -6,10 +6,10 @@ use std::{
 };
 
 use ariadne::Source;
+use concrete::compile_unit_info::{CompileUnitInfo, DebugInfo, OptLevel};
 use concrete::driver::linker::{link_binary, link_shared_lib};
-use concrete::ir::lowering::lower_programs;
+use concrete::ir::lowering::lower_compile_units;
 use concrete::parser::ProgramSource;
-use concrete::session::{DebugInfo, OptLevel, Session};
 use tempfile::TempDir;
 
 #[derive(Debug, Clone)]
@@ -60,14 +60,14 @@ pub fn compile_program(
 
     let output_file = test_dir_path.join(name);
     let output_file = if library {
-        output_file.with_extension(Session::get_platform_library_ext())
+        output_file.with_extension(CompileUnitInfo::get_platform_library_ext())
     } else if cfg!(target_os = "windows") {
         output_file.with_extension("exe")
     } else {
         output_file.with_extension("")
     };
 
-    let session = Session {
+    let session = CompileUnitInfo {
         debug_info: DebugInfo::Full,
         optlevel,
         sources: vec![Source::from(source.input(&db).to_string())],
@@ -79,7 +79,7 @@ pub fn compile_program(
         file_paths: vec![input_file],
     };
 
-    let program_ir = lower_programs(&[program])?;
+    let program_ir = lower_compile_units(&[program])?;
 
     let object_path = concrete::codegen::compile(&session, &program_ir)?;
 
@@ -88,7 +88,7 @@ pub fn compile_program(
             &[object_path.clone()],
             &session
                 .output_file
-                .with_extension(Session::get_platform_library_ext()),
+                .with_extension(CompileUnitInfo::get_platform_library_ext()),
         )?;
     } else {
         link_binary(

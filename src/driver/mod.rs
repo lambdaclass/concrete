@@ -1,7 +1,8 @@
-use crate::ast::Program;
-use crate::ir::lowering::lower_programs;
+use crate::ast::modules::ModuleDefItem;
+use crate::ast::CompileUnit;
+use crate::compile_unit_info::{CompileUnitInfo, DebugInfo, OptLevel};
+use crate::ir::lowering::lower_compile_units;
 use crate::parser::ProgramSource;
-use crate::session::{DebugInfo, OptLevel, Session};
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
@@ -14,6 +15,7 @@ use owo_colors::OwoColorize;
 use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::{collections::HashMap, fs::File, path::PathBuf, time::Instant};
+use tracing::debug;
 
 use config::Config;
 use linker::{link_binary, link_shared_lib};
@@ -443,7 +445,7 @@ fn handle_build(
                             let name = format!("lib{name}");
                             output
                                 .with_file_name(name)
-                                .with_extension(Session::get_platform_library_ext())
+                                .with_extension(CompileUnitInfo::get_platform_library_ext())
                         } else {
                             output.clone()
                         },
@@ -491,7 +493,7 @@ fn handle_build(
 }
 
 pub fn parse_file(
-    modules: &mut Vec<(PathBuf, String, Program)>,
+    compile_units: &mut Vec<(PathBuf, String, CompileUnit)>,
     mut path: PathBuf,
     db: &dyn salsa::Database,
 ) -> Result<()> {
@@ -502,7 +504,7 @@ pub fn parse_file(
     let real_source = std::fs::read_to_string(&path)?;
     let source = ProgramSource::new(db, real_source.clone(), path.display().to_string());
 
-    let mut program = match crate::parser::parse_ast(db, source) {
+    let mut compile_unit = match crate::parser::parse_ast(db, source) {
         Some(x) => x,
         None => {
             let diagnostics = crate::parser::parse_ast::accumulated::<
@@ -516,18 +518,31 @@ pub fn parse_file(
             std::process::exit(1);
         }
     };
-    program.file_path = Some(path.clone());
 
-    for ident in program.modules.iter().flat_map(|x| &x.external_modules) {
-        let module_path = path
-            .parent()
-            .unwrap()
-            .join(&ident.name)
-            .with_extension("con");
-        parse_file(modules, module_path, db)?;
+    compile_unit.file_path = Some(path.clone());
+
+    for stmt in compile_unit.modules.iter().flat_map(|x| &x.contents) {
+        if let ModuleDefItem::ExternalModule(external_module) = stmt {
+            let parent = path.parent().unwrap();
+            let mut module_path = parent.join(&external_module.name).with_extension("con");
+
+            if !module_path.exists() {
+                module_path = parent.join(&external_module.name).join("mod.con");
+            }
+
+            if !module_path.exists() {
+                bail!("External module {} not found", external_module.name);
+            }
+
+            debug!(
+                "Parsing externally declared module '{}'",
+                module_path.display()
+            );
+            parse_file(compile_units, module_path, db)?;
+        }
     }
 
-    modules.push((path, real_source, program));
+    compile_units.push((path, real_source, compile_unit));
 
     Ok(())
 }
@@ -535,12 +550,12 @@ pub fn parse_file(
 pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     let start_time = Instant::now();
 
-    let mut programs = Vec::new();
+    let mut compile_units = Vec::new();
     let db = crate::driver::db::DatabaseImpl::default();
-    parse_file(&mut programs, args.input.clone(), &db)?;
+    parse_file(&mut compile_units, args.input.clone(), &db)?;
 
-    let session = Session {
-        file_paths: programs.iter().map(|x| x.0.clone()).collect(),
+    let session = CompileUnitInfo {
+        file_paths: compile_units.iter().map(|x| x.0.clone()).collect(),
         debug_info: if let Some(debug_info) = args.debug_info {
             if debug_info {
                 DebugInfo::Full
@@ -564,7 +579,10 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
         } else {
             OptLevel::None
         },
-        sources: programs.iter().map(|x| Source::from(x.1.clone())).collect(),
+        sources: compile_units
+            .iter()
+            .map(|x| Source::from(x.1.clone()))
+            .collect(),
         library: args.library,
         output_file: args.output.with_extension("o"),
         output_asm: args.asm,
@@ -576,7 +594,7 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     tracing::debug!("Optlevel: {:#?}", session.optlevel);
     tracing::debug!("Debug Info: {:#?}", session.debug_info);
 
-    let path_cache: Vec<_> = programs
+    let path_cache: Vec<_> = compile_units
         .iter()
         .map(|x| (x.0.display().to_string(), x.1.clone()))
         .collect();
@@ -584,15 +602,15 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     if args.ast {
         std::fs::write(
             session.output_file.with_extension("ast"),
-            format!("{:#?}", programs),
+            format!("{:#?}", compile_units),
         )?;
     }
 
-    let modules: Vec<_> = programs.iter().map(|x| x.2.clone()).collect();
-    let program_ir = match lower_programs(&modules) {
+    let modules: Vec<_> = compile_units.iter().map(|x| x.2.clone()).collect();
+    let compile_unit_ir = match lower_compile_units(&modules) {
         Ok(ir) => ir,
         Err(error) => {
-            let report = crate::check::lowering_error_to_report(error, &session);
+            let report = crate::check::lowering_error_to_report(error);
             report.eprint(ariadne::sources(path_cache))?;
             std::process::exit(1);
         }
@@ -601,11 +619,11 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     if args.ir {
         std::fs::write(
             session.output_file.with_extension("ir"),
-            format!("{:#?}", program_ir),
+            format!("{:#?}", compile_unit_ir),
         )?;
     }
 
-    let object_path = crate::codegen::compile(&session, &program_ir).unwrap();
+    let object_path = crate::codegen::compile(&session, &compile_unit_ir).unwrap();
 
     let elapsed = start_time.elapsed();
     tracing::debug!("Done in {:?}", elapsed);

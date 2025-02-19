@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::session::Session;
+use crate::compile_unit_info::CompileUnitInfo;
 use tracing::instrument;
 
 #[instrument(level = "debug")]
@@ -9,7 +9,8 @@ pub fn link_shared_lib(objects: &[PathBuf], output_filename: &Path) -> std::io::
     let objects: Vec<_> = objects.iter().map(|x| x.display().to_string()).collect();
 
     if output_filename.extension().is_none() {
-        output_filename = output_filename.with_extension(Session::get_platform_library_ext());
+        output_filename =
+            output_filename.with_extension(CompileUnitInfo::get_platform_library_ext());
     }
 
     let output_filename = output_filename.to_string_lossy().to_string();

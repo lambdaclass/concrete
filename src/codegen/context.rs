@@ -1,5 +1,5 @@
-use crate::ir::ProgramBody;
-use crate::session::Session;
+use crate::compile_unit_info::CompileUnitInfo;
+use crate::ir::IR;
 use melior::{
     dialect::DialectRegistry,
     ir::{
@@ -36,16 +36,16 @@ impl Context {
 
     pub fn compile(
         &self,
-        session: &Session,
-        program: &ProgramBody,
+        compile_unit_info: &CompileUnitInfo,
+        program: &IR,
     ) -> Result<MLIRModule, CodegenError> {
         let location = Location::unknown(&self.melior_context);
-        let target_triple = get_target_triple(session);
+        let target_triple = get_target_triple(compile_unit_info);
 
         let module_region = Region::new();
         module_region.append_block(Block::new(&[]));
 
-        let data_layout_ret = &get_data_layout_rep(session)?;
+        let data_layout_ret = &get_data_layout_rep(compile_unit_info)?;
 
         let op = OperationBuilder::new("builtin.module", location)
             .add_attributes(&[
@@ -66,16 +66,17 @@ impl Context {
 
         let codegen_ctx = CodegenCtx {
             mlir_context: &self.melior_context,
-            session,
             mlir_module: &melior_module,
             program,
         };
 
         super::compiler::compile_program(codegen_ctx)?;
 
-        if session.output_mlir {
+        if compile_unit_info.output_mlir {
             std::fs::write(
-                session.output_file.with_extension("before-pass.mlir"),
+                compile_unit_info
+                    .output_file
+                    .with_extension("before-pass.mlir"),
                 melior_module.as_operation().to_string(),
             )?;
         }
@@ -95,9 +96,11 @@ impl Context {
             );
         }
 
-        if session.output_mlir {
+        if compile_unit_info.output_mlir {
             std::fs::write(
-                session.output_file.with_extension("after-pass.mlir"),
+                compile_unit_info
+                    .output_file
+                    .with_extension("after-pass.mlir"),
                 melior_module.as_operation().to_string(),
             )?;
         }
