@@ -1,0 +1,12 @@
+[package]
+name = "concrete-lang-syntactic"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bigdecimal.workspace = true
+itertools.workspace = true
+logos.workspace = true
+num-bigint.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
