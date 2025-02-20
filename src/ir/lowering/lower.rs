@@ -210,6 +210,22 @@ fn lower_module_symbols(
                 builder.ir.modules[module_idx].types.insert(type_idx);
                 builder.struct_to_type_idx.insert(idx, type_idx);
                 builder.type_to_module.insert(type_idx, module_idx);
+
+                for attr in &struct_decl.attributes {
+                    if attr.name == "langitem" {
+                        let langitem = attr.value.as_ref().unwrap();
+
+                        match langitem.as_str() {
+                            "String" => {
+                                builder.ir.builtin_types.insert(Type::String, type_idx);
+                            }
+                            _ => {
+                                panic!("unknown lang item: {:?}", langitem)
+                            }
+                        }
+                    }
+                }
+
                 debug!(
                     "Adding struct symbol {:?} to module {:?}",
                     struct_decl.name.name, module.name.name
