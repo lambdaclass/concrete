@@ -6,7 +6,6 @@ use crate::parser::ProgramSource;
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
-use ariadne::Source;
 use clap::Args;
 use clap::{Parser, Subcommand};
 use config::{Package, Profile};
@@ -14,6 +13,7 @@ use git2::{IndexAddOption, Repository};
 use owo_colors::OwoColorize;
 use std::io::Read;
 use std::os::unix::process::CommandExt;
+use std::path::Path;
 use std::{collections::HashMap, fs::File, path::PathBuf, time::Instant};
 use tracing::debug;
 
@@ -40,10 +40,6 @@ enum Commands {
         /// The name of the project, defaults to the directory name
         #[arg(long)]
         name: Option<String>,
-
-        /// Use a binary (application) template [default]
-        #[arg(long, group = "binary", default_value_t = true)]
-        bin: bool,
 
         /// Use a library template
         #[arg(long, group = "binary")]
@@ -162,12 +158,7 @@ pub fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::New {
-            path,
-            name,
-            bin,
-            lib,
-        } => {
+        Commands::New { path, name, lib } => {
             let name = name.unwrap_or_else(|| {
                 path.file_name()
                     .context("failed to get project name")
@@ -210,6 +201,7 @@ pub fn main() -> Result<()> {
                     license: "MIT".to_string(),
                 },
                 profile: profiles,
+                dependencies: HashMap::new(),
             };
 
             std::fs::write(config_path, toml::to_string_pretty(&config)?)
@@ -222,7 +214,7 @@ pub fn main() -> Result<()> {
             )
             .context("failed to write .gitattributes")?;
 
-            if bin {
+            if !lib {
                 std::fs::write(
                     path.join("src").join("main.con"),
                     format!(
@@ -235,9 +227,7 @@ mod {} {{
                         name
                     ),
                 )?;
-            }
-
-            if lib {
+            } else {
                 std::fs::write(
                     path.join("src").join("lib.con"),
                     format!(
@@ -268,7 +258,7 @@ mod {} {{
                     .context("failed to create initial commit")?;
             }
 
-            if bin {
+            if !lib {
                 println!(
                     "  {} binary (application) `{}` package",
                     "Created".green().bold(),
@@ -283,6 +273,7 @@ mod {} {{
         }
         Commands::Run(args) => {
             let output = handle_build(args)?;
+            println!();
             Err(std::process::Command::new(output).exec())?;
         }
     }
@@ -492,17 +483,13 @@ fn handle_build(
     }
 }
 
-pub fn parse_file(
-    compile_units: &mut Vec<(PathBuf, String, CompileUnit)>,
-    mut path: PathBuf,
-    db: &dyn salsa::Database,
-) -> Result<()> {
+pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<CompileUnit> {
     if path.is_dir() {
         path = path.join("mod.ed");
     }
 
     let real_source = std::fs::read_to_string(&path)?;
-    let source = ProgramSource::new(db, real_source.clone(), path.display().to_string());
+    let source = ProgramSource::new(db, real_source.clone(), &path);
 
     let mut compile_unit = match crate::parser::parse_ast(db, source) {
         Some(x) => x,
@@ -519,43 +506,67 @@ pub fn parse_file(
         }
     };
 
-    compile_unit.file_path = Some(path.clone());
+    let mut modules_to_add: HashMap<String, Vec<CompileUnit>> = HashMap::new();
+    for module in &compile_unit.modules {
+        let mut list = Vec::new();
+        for stmt in &module.contents {
+            if let ModuleDefItem::ExternalModule(external_module) = stmt {
+                let base_path = path.parent().unwrap();
+                let mut module_path = base_path.join(&external_module.name).with_extension("con");
 
-    for stmt in compile_unit.modules.iter().flat_map(|x| &x.contents) {
-        if let ModuleDefItem::ExternalModule(external_module) = stmt {
-            let parent = path.parent().unwrap();
-            let mut module_path = parent.join(&external_module.name).with_extension("con");
+                debug!(
+                    "Checking module {:?} at {}",
+                    external_module.name,
+                    module_path.display()
+                );
+                if !module_path.exists() {
+                    module_path = base_path.join(&external_module.name).join("mod.con");
+                }
 
-            if !module_path.exists() {
-                module_path = parent.join(&external_module.name).join("mod.con");
+                if !module_path.exists() {
+                    bail!(
+                        "External module '{}' not found at {}",
+                        external_module.name,
+                        module_path.display()
+                    );
+                }
+
+                debug!(
+                    "Parsing externally declared module '{}'",
+                    module_path.display()
+                );
+                let parsed_unit = parse_file(module_path.clone(), db)?;
+                list.push(parsed_unit);
             }
+        }
+        modules_to_add.insert(module.name.name.clone(), list);
+    }
 
-            if !module_path.exists() {
-                bail!("External module {} not found", external_module.name);
+    for (name, list) in modules_to_add.into_iter() {
+        for module in &mut compile_unit.modules {
+            if module.name.name == *name {
+                for subunit in list.into_iter() {
+                    for submodule in subunit.modules {
+                        module
+                            .contents
+                            .push(ModuleDefItem::Module(submodule.into()));
+                    }
+                }
+                break;
             }
-
-            debug!(
-                "Parsing externally declared module '{}'",
-                module_path.display()
-            );
-            parse_file(compile_units, module_path, db)?;
         }
     }
 
-    compile_units.push((path, real_source, compile_unit));
-
-    Ok(())
+    Ok(compile_unit)
 }
 
 pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     let start_time = Instant::now();
 
-    let mut compile_units = Vec::new();
     let db = crate::driver::db::DatabaseImpl::default();
-    parse_file(&mut compile_units, args.input.clone(), &db)?;
+    let compile_units = parse_file(args.input.clone(), &db)?;
 
     let session = CompileUnitInfo {
-        file_paths: compile_units.iter().map(|x| x.0.clone()).collect(),
         debug_info: if let Some(debug_info) = args.debug_info {
             if debug_info {
                 DebugInfo::Full
@@ -579,10 +590,6 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
         } else {
             OptLevel::None
         },
-        sources: compile_units
-            .iter()
-            .map(|x| Source::from(x.1.clone()))
-            .collect(),
         library: args.library,
         output_file: args.output.with_extension("o"),
         output_asm: args.asm,
@@ -594,11 +601,6 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     tracing::debug!("Optlevel: {:#?}", session.optlevel);
     tracing::debug!("Debug Info: {:#?}", session.debug_info);
 
-    let path_cache: Vec<_> = compile_units
-        .iter()
-        .map(|x| (x.0.display().to_string(), x.1.clone()))
-        .collect();
-
     if args.ast {
         std::fs::write(
             session.output_file.with_extension("ast"),
@@ -606,12 +608,14 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
         )?;
     }
 
-    let modules: Vec<_> = compile_units.iter().map(|x| x.2.clone()).collect();
-    let compile_unit_ir = match lower_compile_units(&modules) {
+    let compile_unit_ir = match lower_compile_units(&[compile_units]) {
         Ok(ir) => ir,
         Err(error) => {
             let report = crate::check::lowering_error_to_report(error);
-            report.eprint(ariadne::sources(path_cache))?;
+            report.eprint(ariadne::FnCache::new(|x: &String| {
+                Ok(std::fs::read_to_string(Path::new(x.as_str())).unwrap())
+            }))?;
+            //report.eprint(ariadne::sources(path_cache))?;
             std::process::exit(1);
         }
     };

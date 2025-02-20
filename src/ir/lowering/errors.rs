@@ -81,8 +81,6 @@ pub enum LoweringError {
         name: String,
         path: PathBuf,
     },
-    #[error("internal error: {0}")]
-    InternalError(String),
     #[error("function call parameter count mismatch, found {found}, needs {needs}")]
     CallParamCountMismatch {
         span: Span,

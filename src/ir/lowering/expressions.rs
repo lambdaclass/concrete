@@ -755,6 +755,7 @@ pub(crate) fn lower_path(
     fn_builder: &mut FnIrBuilder,
     info: &PathOp,
 ) -> Result<(Place, TypeIndex, Span), LoweringError> {
+    debug!("lowering path");
     let mut local = *fn_builder.name_to_local.get(&info.first.name).ok_or(
         LoweringError::UseOfUndeclaredVariable {
             span: info.span,

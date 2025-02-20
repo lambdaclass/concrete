@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::ast::CompileUnit;
 use error::Diagnostics;
 use lexer::Lexer;
@@ -21,7 +23,7 @@ pub struct ProgramSource<'db> {
     #[return_ref]
     pub input: String,
     #[return_ref]
-    pub path: String,
+    pub path: PathBuf,
 }
 
 // Todo: better error handling
@@ -33,7 +35,7 @@ pub fn parse_ast<'db>(
     let lexer = Lexer::new(source.input(db));
     let parser = grammar::CompileUnitParser::new();
 
-    match parser.parse(lexer) {
+    match parser.parse(source.path(db), lexer) {
         Ok(ast) => Some(ast),
         Err(e) => {
             Diagnostics(e).accumulate(db);
@@ -44,6 +46,8 @@ pub fn parse_ast<'db>(
 
 #[cfg(test)]
 mod tests {
+    use std::path::{Path, PathBuf};
+
     use super::{grammar, lexer::Lexer};
     use crate::ast;
 
@@ -96,7 +100,7 @@ mod ModuleName {
         "##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -115,7 +119,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(&PathBuf::new(), lexer).unwrap();
     }
 
     #[test]
@@ -127,7 +131,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -139,7 +143,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -148,7 +152,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -158,7 +162,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -178,7 +182,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -196,7 +200,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -214,7 +218,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -240,7 +244,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -265,7 +269,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -279,7 +283,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -293,7 +297,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -304,7 +308,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -332,7 +336,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -360,7 +364,7 @@ mod ModuleName {
 }"##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        parser.parse(lexer).unwrap();
+        parser.parse(Path::new(""), lexer).unwrap();
     }
 
     #[test]
@@ -381,7 +385,7 @@ mod MyMod {
 "##;
         let lexer = Lexer::new(source);
         let parser = grammar::CompileUnitParser::new();
-        let module = parser.parse(lexer).unwrap();
+        let module = parser.parse(Path::new(""), lexer).unwrap();
 
         let const_item = match &module.modules[0].contents[0] {
             ast::modules::ModuleDefItem::Constant(x) => x,

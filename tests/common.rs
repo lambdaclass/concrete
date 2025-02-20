@@ -5,7 +5,6 @@ use std::{
     process::{Output, Stdio},
 };
 
-use ariadne::Source;
 use concrete::compile_unit_info::{CompileUnitInfo, DebugInfo, OptLevel};
 use concrete::driver::linker::{link_binary, link_shared_lib};
 use concrete::ir::lowering::lower_compile_units;
@@ -39,7 +38,7 @@ pub fn compile_program(
     optlevel: OptLevel,
 ) -> Result<CompileResult, Box<dyn std::error::Error>> {
     let db = concrete::driver::db::DatabaseImpl::default();
-    let source = ProgramSource::new(&db, source.to_string(), name.to_string());
+    let source = ProgramSource::new(&db, source.to_string(), Path::new(""));
     tracing::debug!("source code:\n{}", source.input(&db));
     let mut program = match concrete::parser::parse_ast(&db, source) {
         Some(x) => x,
@@ -56,7 +55,7 @@ pub fn compile_program(
 
     let input_file = test_dir_path.join(name).with_extension(".con");
     std::fs::write(&input_file, source.input(&db))?;
-    program.file_path = Some(input_file.clone());
+    program.file_path = input_file.clone();
 
     let output_file = test_dir_path.join(name);
     let output_file = if library {
@@ -70,13 +69,11 @@ pub fn compile_program(
     let session = CompileUnitInfo {
         debug_info: DebugInfo::Full,
         optlevel,
-        sources: vec![Source::from(source.input(&db).to_string())],
         library,
         output_file,
         output_mlir: false,
         output_ll: false,
         output_asm: false,
-        file_paths: vec![input_file],
     };
 
     let program_ir = lower_compile_units(&[program])?;

@@ -10,16 +10,17 @@ use crate::{
 
 use super::{
     errors::LoweringError,
-    ir::{ConstBody, ConstData, ModuleIndex, TypeIndex},
+    ir::{ConstBody, ConstData, TypeIndex},
     types::lower_type,
     FnIrBuilder, IRBuilder,
 };
 
 pub(crate) fn lower_constant(
     builder: &mut IRBuilder,
-    module_idx: ModuleIndex,
     info: &ConstantDef,
 ) -> Result<(), LoweringError> {
+    let module_idx = builder.get_current_module_idx();
+
     let idx = *builder.symbols[&module_idx]
         .constants
         .get(&info.decl.name.name)
@@ -39,9 +40,7 @@ pub(crate) fn lower_constant(
     };
 
     builder.ir.constants[idx] = Some(body);
-    builder.ir.modules[builder.local_module.unwrap()]
-        .constants
-        .insert(idx);
+    builder.ir.modules[module_idx].constants.insert(idx);
 
     Ok(())
 }

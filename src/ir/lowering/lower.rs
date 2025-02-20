@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-};
+use std::collections::{HashMap, HashSet};
 
 use tracing::debug;
 
@@ -40,37 +37,28 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
         type_to_module: Default::default(),
         bodies: Bodies::default(),
         self_ty: None,
-        local_module: None,
+        current_module_context: Vec::with_capacity(8),
         mono_type_to_poly: Default::default(),
     };
 
     // Prepass to fill some symbols.
     for compile_unit in compile_units {
-        let file_path = compile_unit
-            .file_path
-            .as_ref()
-            .ok_or_else(|| LoweringError::InternalError("Missing program file path".to_string()))?;
-
         for module in &compile_unit.modules {
-            lower_module_symbols(&mut builder, module, &[], file_path)?;
+            debug!("Lowering symbols for module {:?}", module.name.name);
+            lower_module_symbols(&mut builder, module, &[])?;
         }
     }
 
     // Handle imports so they are transparent afterwards.
     for compile_unit in compile_units {
-        let file_path = compile_unit
-            .file_path
-            .as_ref()
-            .ok_or_else(|| LoweringError::InternalError("Missing program file path".to_string()))?;
-
         for module in &compile_unit.modules {
             debug!("lowering imports for module: {:?}", &module.name.name);
             let module_idx = *builder
                 .top_level_modules_names
                 .get(&module.name.name)
                 .expect("should exist");
-            builder.local_module = Some(module_idx);
-            lower_imports(&mut builder, module, module_idx, &[], file_path)?;
+
+            lower_imports(&mut builder, module, module_idx, &[])?;
         }
     }
 
@@ -80,7 +68,6 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
                 .top_level_modules_names
                 .get(&module.name.name)
                 .unwrap();
-            builder.local_module = Some(module_idx);
             lower_module(&mut builder, module, module_idx)?;
         }
     }
@@ -92,7 +79,6 @@ fn lower_module_symbols(
     builder: &mut IRBuilder,
     module: &ast::modules::Module,
     parents: &[ModuleIndex],
-    file_path: &Path,
 ) -> Result<ModuleIndex, LoweringError> {
     add_builtins(builder);
 
@@ -100,17 +86,17 @@ fn lower_module_symbols(
         name: module.name.name.clone(),
         parents: parents.to_vec(),
         functions: HashSet::new(),
-        structs: HashSet::new(),
+        aggregates: HashSet::new(),
         types: HashSet::new(),
         constants: HashSet::new(),
         modules: HashMap::new(),
         span: module.span,
-        file_path: file_path.to_path_buf(),
+        file_path: module.file_path.clone(),
     };
 
     // Add the empty module body to the arena.
     let module_idx = builder.ir.modules.insert(module_body);
-    builder.local_module = Some(module_idx);
+    builder.enter_module_context(module_idx);
 
     // If its a top level module, save it as such.
     if parents.is_empty() {
@@ -165,12 +151,14 @@ fn lower_module_symbols(
                             method_of: None,
                             generics: Vec::new(),
                         },
-                        idx,
+                        (idx, module_idx),
                     );
                 builder.ir.modules[module_idx].functions.insert(idx);
                 debug!(
-                    "Adding function symbol {:?} to module {:?}",
-                    function_def.decl.name.name, module.name.name
+                    "Adding function symbol {:?} to module {:?} ({})",
+                    function_def.decl.name.name,
+                    module.name.name,
+                    module_idx.to_idx()
                 );
             }
             ast::modules::ModuleDefItem::FunctionDecl(function_decl) => {
@@ -190,12 +178,14 @@ fn lower_module_symbols(
                             method_of: None,
                             generics: Vec::new(),
                         },
-                        idx,
+                        (idx, module_idx),
                     );
                 builder.ir.modules[module_idx].functions.insert(idx);
                 debug!(
-                    "Adding function symbol {:?} to module {:?}",
-                    function_decl.name.name, module.name.name
+                    "Adding function decl symbol {:?} to module {:?} ({})",
+                    function_decl.name.name,
+                    module.name.name,
+                    module_idx.to_idx(),
                 );
             }
             ast::modules::ModuleDefItem::Impl(_) => {}
@@ -215,7 +205,7 @@ fn lower_module_symbols(
                         },
                         idx,
                     );
-                builder.ir.modules[module_idx].structs.insert(idx);
+                builder.ir.modules[module_idx].aggregates.insert(idx);
                 let type_idx = builder.ir.types.insert(Some(Type::Adt(idx)));
                 builder.ir.modules[module_idx].types.insert(type_idx);
                 builder.struct_to_type_idx.insert(idx, type_idx);
@@ -242,7 +232,7 @@ fn lower_module_symbols(
                 let mut parents = parents.to_vec();
                 parents.push(module_idx);
 
-                lower_module_symbols(builder, submodule, &parents, file_path)?;
+                lower_module_symbols(builder, submodule, &parents)?;
             }
             ast::modules::ModuleDefItem::ExternalModule(_) => {}
             ast::modules::ModuleDefItem::Import(_) => {}
@@ -261,7 +251,7 @@ fn lower_module_symbols(
 
                 let id = *builder
                     .symbols
-                    .get(&builder.local_module.unwrap())
+                    .get(&builder.get_current_module_idx())
                     .unwrap()
                     .aggregates
                     .get(&struct_sym)
@@ -272,10 +262,6 @@ fn lower_module_symbols(
             } else {
                 lower_type(builder, &impl_block.target)?
             };
-
-            // TODO: when implementing impl generics, deal with it here.
-            // e.g impl Array<u32> would be different than impl<T> Array<T>
-            // the first is a specific type the second is a generic type
 
             for function_def in &impl_block.methods {
                 debug!(
@@ -294,13 +280,13 @@ fn lower_module_symbols(
                     .get_mut(&module_idx)
                     .unwrap()
                     .functions
-                    .insert(sym.clone(), idx);
+                    .insert(sym.clone(), (idx, module_idx));
                 builder.ir.modules[module_idx].functions.insert(idx);
-
-                // todo: add to list of methods for this idx, so later we can copy to the instanced type
             }
         }
     }
+
+    builder.leave_module_context();
 
     Ok(module_idx)
 }
@@ -310,53 +296,73 @@ fn lower_imports(
     module: &ast::modules::Module,
     module_idx: ModuleIndex,
     parents: &[ModuleIndex],
-    path: &Path,
 ) -> Result<(), LoweringError> {
-    builder.local_module = Some(module_idx);
+    builder.enter_module_context(module_idx);
+    let import_from_path = builder.ir.modules[module_idx].file_path.clone();
 
     for stmt in &module.contents {
         if let ModuleDefItem::Import(import) = stmt {
-            let mut target_module = None;
+            let mut target_module = module_idx;
 
             let mut root_requested = false;
 
             for (i, m) in import.module.iter().enumerate() {
+                let cur_path = builder.ir.modules[target_module].file_path.clone();
+
                 if i == 0 || root_requested {
                     if m.name == "super" && !root_requested {
                         if let Some(parent) = parents.last().copied() {
-                            target_module = Some(parent);
+                            target_module = parent;
                         } else {
                             panic!("no parent found for super, todo turn into error")
                         }
                     } else if m.name == "root" && !root_requested {
                         root_requested = true;
                     } else {
-                        let id =
+                        let id = if root_requested {
                             *builder
                                 .top_level_modules_names
                                 .get(&m.name)
                                 .ok_or_else(|| LoweringError::ModuleNotFound {
                                     span: m.span,
                                     module: m.name.clone(),
-                                    path: path.to_path_buf(),
-                                })?;
-                        target_module = Some(id);
+                                    path: cur_path.to_path_buf(),
+                                })?
+                        } else {
+                            *builder
+                                .symbols
+                                .get(&target_module)
+                                .unwrap()
+                                .modules
+                                .get(&m.name)
+                                .or_else(|| builder.top_level_modules_names.get(&m.name))
+                                .ok_or_else(|| LoweringError::ModuleNotFound {
+                                    span: m.span,
+                                    module: m.name.clone(),
+                                    path: cur_path.to_path_buf(),
+                                })?
+                        };
+
+                        target_module = id;
                         root_requested = false;
                     }
                     continue;
                 }
 
-                let info = &builder.ir.modules[target_module.unwrap()];
-                target_module = Some(*info.modules.get(&m.name).ok_or_else(|| {
-                    LoweringError::ModuleNotFound {
-                        span: m.span,
-                        module: m.name.clone(),
-                        path: path.to_path_buf(),
-                    }
-                })?);
+                let info = &builder.ir.modules[target_module];
+                target_module =
+                    *info
+                        .modules
+                        .get(&m.name)
+                        .ok_or_else(|| LoweringError::ModuleNotFound {
+                            span: m.span,
+                            module: m.name.clone(),
+                            path: info.file_path.clone(),
+                        })?;
             }
 
-            let target_module = target_module.unwrap();
+            let target_module = target_module;
+
             for sym in &import.symbols {
                 let target_symbols = builder.symbols.get(&target_module).unwrap();
 
@@ -365,10 +371,13 @@ fn lower_imports(
                     method_of: None,
                     generics: Vec::new(),
                 };
-                if let Some(id) = target_symbols.functions.get(&symbol).cloned() {
+                if let Some((id, mod_id)) = target_symbols.functions.get(&symbol).cloned() {
                     debug!(
-                        "Imported function symbol {:?} to module {}",
-                        symbol, builder.ir.modules[module_idx].name
+                        "Imported function symbol {:?} ({}) to module {} ({})",
+                        symbol.name,
+                        mod_id.to_idx(),
+                        builder.ir.modules[module_idx].name,
+                        module_idx.to_idx()
                     );
                     builder.ir.modules[module_idx].functions.insert(id);
                     builder
@@ -376,23 +385,23 @@ fn lower_imports(
                         .get_mut(&module_idx)
                         .unwrap()
                         .functions
-                        .insert(symbol.clone(), id);
+                        .insert(symbol.clone(), (id, mod_id));
                     continue;
                 }
 
                 let target_symbols = builder.symbols.get(&target_module).unwrap();
-                if let Some(struct_idx) = target_symbols.aggregates.get(&symbol).cloned() {
+                if let Some(adt_idx) = target_symbols.aggregates.get(&symbol).cloned() {
                     debug!(
-                        "Imported struct symbol {:?} to module {}",
+                        "Imported adt symbol {:?} to module {}",
                         symbol, builder.ir.modules[module_idx].name
                     );
-                    builder.ir.modules[module_idx].structs.insert(struct_idx);
+                    builder.ir.modules[module_idx].aggregates.insert(adt_idx);
                     builder
                         .symbols
                         .get_mut(&module_idx)
                         .unwrap()
                         .aggregates
-                        .insert(symbol.clone(), struct_idx);
+                        .insert(symbol.clone(), adt_idx);
 
                     continue;
                 }
@@ -433,7 +442,7 @@ fn lower_imports(
                     module_span: module.span,
                     import_span: import.span,
                     symbol: sym.clone(),
-                    path: path.to_path_buf(),
+                    path: import_from_path.to_path_buf(),
                 })?;
             }
         }
@@ -446,10 +455,12 @@ fn lower_imports(
                     .modules
                     .get(&submodule.name.name)
                     .expect("failed to find submodule id");
-                lower_imports(builder, submodule, new_module_idx, &parents, path)?;
+                lower_imports(builder, submodule, new_module_idx, &parents)?;
             }
         }
     }
+
+    builder.leave_module_context();
 
     Ok(())
 }
@@ -484,12 +495,12 @@ pub fn lower_module(
     module: &ast::modules::Module,
     module_idx: ModuleIndex,
 ) -> Result<(), LoweringError> {
-    builder.local_module = Some(module_idx);
+    builder.enter_module_context(module_idx);
 
     for item in &module.contents {
         match item {
             ast::modules::ModuleDefItem::Constant(constant_def) => {
-                lower_constant(builder, module_idx, constant_def)?;
+                lower_constant(builder, constant_def)?;
             }
             ast::modules::ModuleDefItem::Struct(info) => {
                 if info.generics.is_empty() {
@@ -535,6 +546,8 @@ pub fn lower_module(
             ast::modules::ModuleDefItem::Import(_) => {}
         }
     }
+
+    builder.leave_module_context();
 
     Ok(())
 }

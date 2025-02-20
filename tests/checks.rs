@@ -1,11 +1,31 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use concrete::ir::lowering::{lower_compile_units, LoweringError};
 use concrete::parser::ProgramSource;
 
+pub fn check_invalid_program(source: &str, path: &str) -> LoweringError {
+    let db = concrete::driver::db::DatabaseImpl::default();
+    let source = ProgramSource::new(&db, source.to_string(), Path::new(path));
+
+    let program = match concrete::parser::parse_ast(&db, source) {
+        Some(x) => x,
+        None => {
+            concrete::parser::parse_ast::accumulated::<concrete::parser::error::Diagnostics>(
+                &db, source,
+            );
+            panic!("error parsing ast");
+        }
+    };
+
+    lower_compile_units(&[program]).expect_err("expected error")
+}
+
 #[test]
 fn module_not_found() {
-    let (source, name) = (include_str!("invalid_programs/import1.con"), "import1");
+    let (source, name) = (
+        include_str!("invalid_programs/import1.con"),
+        "invalid_programs/import1.con",
+    );
     let error = check_invalid_program(source, name);
 
     assert!(
@@ -20,7 +40,10 @@ fn module_not_found() {
 
 #[test]
 fn import_not_found() {
-    let (source, name) = (include_str!("invalid_programs/import2.con"), "import2");
+    let (source, name) = (
+        include_str!("invalid_programs/import2.con"),
+        "invalid_programs/import2.con",
+    );
     let error = check_invalid_program(source, name);
 
     assert!(
@@ -37,7 +60,7 @@ fn import_not_found() {
 fn invalid_borrow_mut() {
     let (source, name) = (
         include_str!("invalid_programs/invalid_borrow_mut.con"),
-        "invalid_borrow_mut",
+        "invalid_programs/invalid_borrow_mut.con",
     );
     let error = check_invalid_program(source, name);
 
@@ -50,7 +73,10 @@ fn invalid_borrow_mut() {
 
 #[test]
 fn unrecorgnized_type() {
-    let (source, name) = (include_str!("invalid_programs/type.con"), "type");
+    let (source, name) = (
+        include_str!("invalid_programs/type.con"),
+        "invalid_programs/type.con",
+    );
     let error = check_invalid_program(source, name);
 
     assert!(
@@ -63,29 +89,11 @@ fn unrecorgnized_type() {
     );
 }
 
-pub fn check_invalid_program(source: &str, name: &str) -> LoweringError {
-    let db = concrete::driver::db::DatabaseImpl::default();
-    let source = ProgramSource::new(&db, source.to_string(), name.to_string());
-
-    let mut program = match concrete::parser::parse_ast(&db, source) {
-        Some(x) => x,
-        None => {
-            concrete::parser::parse_ast::accumulated::<concrete::parser::error::Diagnostics>(
-                &db, source,
-            );
-            panic!("error parsing ast");
-        }
-    };
-    program.file_path = Some(PathBuf::from(name).with_extension("con"));
-
-    lower_compile_units(&[program]).expect_err("expected error")
-}
-
 #[test]
 fn undeclared_var() {
     let (source, name) = (
         include_str!("invalid_programs/undeclared_var.con"),
-        "undeclared_var",
+        "invalid_programs/undeclared_var.con",
     );
     let error = check_invalid_program(source, name);
 
@@ -103,7 +111,7 @@ fn undeclared_var() {
 fn call_param_count_mismatch() {
     let (source, name) = (
         include_str!("invalid_programs/call_param_count_mismatch.con"),
-        "call_param_count_mismatch",
+        "invalid_programs/call_param_count_mismatch.con",
     );
     let error = check_invalid_program(source, name);
 
@@ -121,7 +129,7 @@ fn call_param_count_mismatch() {
 fn call_param_type_mismatch() {
     let (source, name) = (
         include_str!("invalid_programs/call_param_type_mismatch.con"),
-        "call_param_type_mismatch",
+        "invalid_programs/call_param_type_mismatch.con",
     );
     let error = check_invalid_program(source, name);
 
@@ -136,7 +144,7 @@ fn call_param_type_mismatch() {
 fn invalid_assign() {
     let (source, name) = (
         include_str!("invalid_programs/invalid_assign.con"),
-        "invalid_assign",
+        "invalid_programs/invalid_assign.con",
     );
     let error = check_invalid_program(source, name);
 
@@ -151,7 +159,7 @@ fn invalid_assign() {
 fn immutable_mutation() {
     let (source, name) = (
         include_str!("invalid_programs/immutable_mutation.con"),
-        "immutable_mutation",
+        "invalid_programs/immutable_mutation.con",
     );
     let error = check_invalid_program(source, name);
 
@@ -166,7 +174,7 @@ fn immutable_mutation() {
 fn mutable_nonmut_borrow() {
     let (source, name) = (
         include_str!("invalid_programs/mutable_nonmut_borrow.con"),
-        "mutable_nonmut_borrow",
+        "invalid_programs/mutable_nonmut_borrow.con",
     );
     let error = check_invalid_program(source, name);
 
@@ -181,7 +189,7 @@ fn mutable_nonmut_borrow() {
 fn use_undeclared_var() {
     let (source, name) = (
         include_str!("invalid_programs/use_undeclared_var.con"),
-        "use_undeclared_var",
+        "invalid_programs/use_undeclared_var.con",
     );
     let error = check_invalid_program(source, name);
 
@@ -196,7 +204,7 @@ fn use_undeclared_var() {
 fn undef_var_in_for() {
     let (source, name) = (
         include_str!("invalid_programs/undef_var_in_for.con"),
-        "undef_var_in_for",
+        "invalid_programs/undef_var_in_for.con",
     );
     let error = check_invalid_program(source, name);
 

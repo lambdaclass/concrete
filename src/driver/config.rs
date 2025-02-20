@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
     pub package: Package,
     pub profile: HashMap<String, Profile>,
+    #[serde(default)]
+    pub dependencies: HashMap<String, Dependency>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -20,4 +22,10 @@ pub struct Profile {
     pub release: bool,
     pub opt_level: u8,
     pub debug_info: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct Dependency {
+    pub path: PathBuf,
+    pub version: String,
 }

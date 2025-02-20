@@ -78,7 +78,7 @@ pub(crate) fn lower_type(
                     return Ok(ty);
                 }
 
-                let module_idx = builder.local_module.unwrap();
+                let module_idx = builder.get_current_module_idx();
 
                 let symbols = builder
                     .symbols
@@ -130,7 +130,7 @@ pub(crate) fn lower_type(
                             builder.type_to_module.insert(type_id, module_idx);
                             builder
                                 .symbols
-                                .get_mut(&builder.local_module.unwrap())
+                                .get_mut(&builder.get_current_module_idx())
                                 .unwrap()
                                 .aggregates
                                 .insert(sym.clone(), mono_struct_idx);
@@ -173,7 +173,7 @@ pub(crate) fn lower_type(
                     Err(LoweringError::UnrecognizedType {
                         span: *span,
                         name: other.to_string(),
-                        path: builder.ir.modules[builder.local_module.unwrap()]
+                        path: builder.ir.modules[builder.get_current_module_idx()]
                             .file_path
                             .clone(),
                     })?

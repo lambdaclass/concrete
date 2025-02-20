@@ -1,18 +1,13 @@
-use ariadne::Source;
 use std::path::PathBuf;
 
 /// This struct holds the information needed to compile this compilation unit,
 /// like whether to generate debug info, optimization levels, target, host, etc.
 #[derive(Debug, Clone)]
 pub struct CompileUnitInfo {
-    /// The file paths of the included sources from the initial compile unit.
-    pub file_paths: Vec<PathBuf>,
     /// Whether to output debug info.
     pub debug_info: DebugInfo,
     /// The optimization level to use with this compilation unit.
     pub optlevel: OptLevel,
-    /// Sources for debugging locations.
-    pub sources: Vec<Source<String>>,
     /// True if it should be compiled as a library false for binary.
     pub library: bool,
     /// The file where to put the compilation result.

@@ -96,7 +96,7 @@ pub struct Module {
     /// Functions in this module.
     pub functions: HashSet<FnIndex>,
     /// Structs in this module.
-    pub structs: HashSet<AdtIndex>,
+    pub aggregates: HashSet<AdtIndex>,
     /// Types in this module.
     pub types: HashSet<TypeIndex>,
     /// Constants in this module.
