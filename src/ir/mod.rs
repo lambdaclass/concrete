@@ -853,6 +853,7 @@ pub enum ConstValue {
     U128(u128),
     F32(String),
     F64(String),
+    String(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]

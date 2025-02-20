@@ -401,10 +401,12 @@ StructField: ast::structs::Field = {
     }
 }
 
+
 StructDef: ast::structs::StructDecl = {
-    <lo:@L> <is_pub:"pub"?> "struct" <name:Ident> <generics:GenericParams?> "{" <fields:Comma<StructField>> "}" <hi:@R> => ast::structs::StructDecl {
+    <lo:@L> <attributes:List<Attribute>?> <is_pub:"pub"?> "struct" <name:Ident> <generics:GenericParams?> "{" <fields:Comma<StructField>> "}" <hi:@R> => ast::structs::StructDecl {
         name,
         fields,
+        attributes: attributes.unwrap_or_default(),
         is_pub: is_pub.is_some(),
         generics: generics.unwrap_or(vec![]),
         span: Span::new(lo, hi),

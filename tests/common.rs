@@ -129,5 +129,5 @@ pub fn compile_and_run_output(
 
     let output = run_program(&result.binary_file).expect("failed to run");
 
-    std::str::from_utf8(&output.stdout).unwrap().to_string()
+    String::from_utf8_lossy(&output.stdout).to_string()
 }

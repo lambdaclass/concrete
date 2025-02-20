@@ -1,5 +1,5 @@
 use super::{
-    common::{GenericParam, Ident, Span},
+    common::{Attribute, GenericParam, Ident, Span},
     types::TypeDescriptor,
 };
 
@@ -7,6 +7,7 @@ use super::{
 pub struct StructDecl {
     pub name: Ident,
     pub generics: Vec<GenericParam>,
+    pub attributes: Vec<Attribute>,
     pub fields: Vec<Field>,
     pub is_pub: bool,
     pub span: Span,

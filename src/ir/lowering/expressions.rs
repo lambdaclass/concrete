@@ -737,7 +737,15 @@ pub(crate) fn lower_value_expr(
 
             (Rvalue::Use(Operand::Const(data)), ty)
         }
-        ValueExpr::ConstStr(_, _) => todo!(),
+        ValueExpr::ConstStr(value, span) => {
+            let ty = fn_builder.builder.ir.get_string_ty();
+            let data = ConstData {
+                ty,
+                span: *span,
+                data: ConstKind::Value(ValueTree::Leaf(ConstValue::String(value.clone()))),
+            };
+            (Rvalue::Use(Operand::Const(data)), ty)
+        }
         ValueExpr::Path(info) => {
             if fn_builder.name_to_local.contains_key(&info.first.name) {
                 let (place, place_ty, _span) = lower_path(fn_builder, info)?;
