@@ -1,0 +1,56 @@
+mod vec {
+    extern fn malloc(size: u64) -> *mut u8;
+    extern fn realloc(ptr: *mut u8, size: u64) -> *mut u8;
+
+    struct Vec<T> {
+        ptr: *mut T,
+        len: u64,
+        cap: u64,
+        // needed cuz missing sizeof instrinsic
+        type_size: u64,
+    }
+
+    impl<T> Vec<T> {
+        pub fn push(&mut self, value: T) {
+            if self.len <= self.cap {
+                let new_cap: u64 = self.cap * 2;
+                self.ptr = realloc(self.ptr as *mut u8, self.type_size * new_cap) as *mut T;
+                self.cap = new_cap;
+            }
+            let target_ptr: *mut T = (self.ptr + (self.len * self.type_size)) as *mut T;
+            *target_ptr = value;
+            self.len = self.len + 1;
+        }
+
+        pub fn get(&self, at: u64) -> &T {
+            // todo: bounds check
+            let target_ptr: *mut T = (self.ptr + (at * self.type_size)) as *mut T;
+            return target_ptr as &T;
+        }
+    }
+
+    pub fn new_vec<T>(type_size: u64) -> Vec<T> {
+        let vec: Vec<T> = Vec::<T> {
+            ptr: malloc(type_size * 32) as *mut T,
+            len: 0,
+            cap: 32,
+            type_size: type_size,
+        };
+        return vec;
+    }
+
+    fn main() -> i32 {
+        // Still missing impl static methods.
+
+        let type_size: u64 = 4;
+        let mut vec: Vec<i32> = new_vec::<i32>(type_size);
+
+        vec.push(2);
+        vec.push(3);
+        vec.push(4);
+        vec.push(5);
+        let pushed: &i32 = vec.get(2);
+
+        return *pushed;
+    }
+}

@@ -37,10 +37,11 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
         top_level_modules_names: Default::default(),
         current_generics_map: Default::default(),
         struct_to_type_idx: Default::default(),
-        type_module_idx: Default::default(),
+        type_to_module: Default::default(),
         bodies: Bodies::default(),
         self_ty: None,
         local_module: None,
+        mono_type_to_poly: Default::default(),
     };
 
     // Prepass to fill some symbols.
@@ -218,7 +219,7 @@ fn lower_module_symbols(
                 let type_idx = builder.ir.types.insert(Some(Type::Struct(idx)));
                 builder.ir.modules[module_idx].types.insert(type_idx);
                 builder.struct_to_type_idx.insert(idx, type_idx);
-                builder.type_module_idx.insert(type_idx, module_idx);
+                builder.type_to_module.insert(type_idx, module_idx);
                 debug!(
                     "Adding struct symbol {:?} to module {:?}",
                     struct_decl.name.name, module.name.name
@@ -235,7 +236,7 @@ fn lower_module_symbols(
                     .unwrap()
                     .types
                     .insert(type_decl.name.name.clone(), idx);
-                builder.type_module_idx.insert(idx, module_idx);
+                builder.type_to_module.insert(idx, module_idx);
             }
             ast::modules::ModuleDefItem::Module(submodule) => {
                 let mut parents = parents.to_vec();
@@ -251,7 +252,26 @@ fn lower_module_symbols(
     // Second pass
     for item in &module.contents {
         if let ast::modules::ModuleDefItem::Impl(impl_block) = item {
-            let ty = lower_type(builder, &impl_block.target)?;
+            let ty = if !impl_block.generic_params.is_empty() {
+                let struct_sym = Symbol {
+                    name: impl_block.target.get_name().unwrap(),
+                    method_of: None,
+                    generics: Vec::new(),
+                };
+
+                let id = *builder
+                    .symbols
+                    .get(&builder.local_module.unwrap())
+                    .unwrap()
+                    .structs
+                    .get(&struct_sym)
+                    .unwrap();
+
+                let type_id = *builder.struct_to_type_idx.get(&id).unwrap();
+                type_id
+            } else {
+                lower_type(builder, &impl_block.target)?
+            };
 
             // TODO: when implementing impl generics, deal with it here.
             // e.g impl Array<u32> would be different than impl<T> Array<T>
@@ -276,6 +296,8 @@ fn lower_module_symbols(
                     .functions
                     .insert(sym.clone(), idx);
                 builder.ir.modules[module_idx].functions.insert(idx);
+
+                // todo: add to list of methods for this idx, so later we can copy to the instanced type
             }
         }
     }
@@ -484,12 +506,16 @@ pub fn lower_module(
                 lower_func_decl(builder, function_decl)?;
             }
             ast::modules::ModuleDefItem::Impl(impl_block) => {
-                let target_ty = lower_type(builder, &impl_block.target)?;
-                builder.self_ty = Some(target_ty);
-                for method in &impl_block.methods {
-                    lower_func(builder, method, Some(target_ty))?;
+                if impl_block.generic_params.is_empty() {
+                    let target_ty = lower_type(builder, &impl_block.target)?;
+                    builder.self_ty = Some(target_ty);
+                    for method in &impl_block.methods {
+                        if method.decl.generic_params.is_empty() {
+                            lower_func(builder, method, Some(target_ty))?;
+                        }
+                    }
+                    builder.self_ty = None;
                 }
-                builder.self_ty = None;
             }
             ast::modules::ModuleDefItem::Union(_union_decl) => todo!(),
             ast::modules::ModuleDefItem::Enum(_enum_decl) => todo!(),

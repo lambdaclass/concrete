@@ -358,7 +358,9 @@ fn compile_function(ctx: FunctionCodegenCtx) -> Result<(), CodegenError> {
                     destination,
                     target,
                 } => {
-                    let target_fn_body = ctx.module.ctx.program.functions[*func].as_ref().unwrap();
+                    let target_fn_body = ctx.module.ctx.program.functions[*func]
+                        .as_ref()
+                        .expect("function call target body not found");
                     let target_fn_body_sig = ctx.module.get_fn_signature(*func);
                     let args: Vec<Value> = args
                         .iter()

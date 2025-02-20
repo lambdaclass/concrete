@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use tracing::{debug, instrument};
 
@@ -531,6 +531,7 @@ pub(crate) fn lower_value_expr(
     })
 }
 
+#[instrument(level = "debug", skip_all, fields(first = ?info.first.name))]
 pub(crate) fn lower_path(
     fn_builder: &mut FnIrBuilder,
     info: &PathOp,
@@ -554,6 +555,59 @@ pub(crate) fn lower_path(
     let mut type_idx = fn_builder.body.locals[local].ty;
     let mut ty = fn_builder.builder.get_type(type_idx).clone();
     let mut projection = Vec::new();
+    let old_generics = fn_builder.builder.current_generics_map.clone();
+
+    if let Type::Struct(struct_index) = ty {
+        let poly_idx = fn_builder
+            .builder
+            .mono_type_to_poly
+            .get(&type_idx)
+            .copied()
+            .unwrap_or(type_idx);
+        let poly_struct_idx = if let Type::Struct(id) = fn_builder.builder.get_type(poly_idx) {
+            *id
+        } else {
+            panic!("poly struct not found")
+        };
+        let struct_body = fn_builder
+            .builder
+            .bodies
+            .structs
+            .get(&poly_struct_idx)
+            .unwrap()
+            .clone();
+
+        let generics: HashSet<String> = struct_body
+            .generics
+            .iter()
+            .map(|x| x.name.name.clone())
+            .collect();
+
+        for field in &struct_body.fields {
+            if let Some(name) = field.r#type.get_name() {
+                if generics.contains(&name) {
+                    let struct_adt = fn_builder.builder.get_struct(struct_index); // borrowck
+                    let field_index = *struct_adt.variant_names.get(&field.name.name).unwrap();
+                    let field_ty = struct_adt.variants[field_index].ty;
+                    let field_type = fn_builder.builder.get_type(field_ty);
+                    let mut map_ty = field_ty;
+                    if let Some(inner) = field_type.get_inner_type() {
+                        map_ty = inner;
+                    }
+                    debug!(
+                        "Adding field type to generics mapping {} -> {}",
+                        name,
+                        fn_builder
+                            .builder
+                            .get_type(map_ty)
+                            .display(&fn_builder.builder.ir)
+                            .unwrap()
+                    );
+                    fn_builder.builder.current_generics_map.insert(name, map_ty);
+                }
+            }
+        }
+    }
 
     for segment in &info.extra {
         match segment {
@@ -619,7 +673,6 @@ pub(crate) fn lower_path(
             }
             PathSegment::MethodCall(fn_call_op, _span) => {
                 // TODO: auto deref?
-
                 let (value, new_type_idx, _span) = lower_fn_call(
                     fn_builder,
                     fn_call_op,
@@ -650,6 +703,8 @@ pub(crate) fn lower_path(
             }
         }
     }
+
+    fn_builder.builder.current_generics_map = old_generics;
 
     Ok((Place { local, projection }, type_idx, info.span))
 }
