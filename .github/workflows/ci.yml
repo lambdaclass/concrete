@@ -83,6 +83,8 @@ jobs:
         - name: Rustup toolchain install
           uses: dtolnay/rust-toolchain@1.84.1
         - uses: homebrew/actions/setup-homebrew@master
+        - name: Retreive cached dependecies
+          uses: Swatinem/rust-cache@v2
         - name: install llvm
           run: brew install llvm@19
         - name: Run tests
