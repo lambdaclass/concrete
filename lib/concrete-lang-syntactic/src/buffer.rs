@@ -1,6 +1,6 @@
 use crate::UpdateResult;
 use std::{
-    ops::{Bound, Range, RangeBounds},
+    ops::{Bound, Deref, Range, RangeBounds},
     path::PathBuf,
 };
 
@@ -9,6 +9,7 @@ use std::{
 pub struct InputBuffer {
     /// Path to the source, relative to the project root.
     path: PathBuf,
+
     /// Buffer contents.
     data: String,
 }
@@ -34,5 +35,13 @@ impl InputBuffer {
             },
             length: value.len(),
         }
+    }
+}
+
+impl Deref for InputBuffer {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
     }
 }
