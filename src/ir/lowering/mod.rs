@@ -9,8 +9,8 @@ use structs::lower_struct;
 
 use crate::ir;
 use crate::ir::{
-    AdtBody, ConstBody, ConstIndex, FnIndex, Function, Local, LocalIndex, Module, ModuleIndex,
-    Statement, StructIndex, Type, TypeIndex, IR,
+    AdtBody, AdtIndex, ConstBody, ConstIndex, FnIndex, Function, Local, LocalIndex, Module,
+    ModuleIndex, Statement, Type, TypeIndex, IR,
 };
 use types::lower_type;
 
@@ -50,7 +50,7 @@ pub struct SymbolTable {
     pub modules: HashMap<String, ModuleIndex>,
     pub functions: HashMap<Symbol, FnIndex>,
     pub constants: HashMap<String, ConstIndex>,
-    pub structs: HashMap<Symbol, StructIndex>,
+    pub aggregates: HashMap<Symbol, AdtIndex>,
     pub types: HashMap<String, TypeIndex>,
 }
 
@@ -58,7 +58,7 @@ pub struct SymbolTable {
 /// Needed to make lowering overall easier and for generics.
 #[derive(Debug, Clone, Default)]
 pub struct Bodies {
-    pub structs: HashMap<StructIndex, Arc<StructDecl>>,
+    pub structs: HashMap<AdtIndex, Arc<StructDecl>>,
     pub functions: HashMap<FnIndex, Arc<FunctionDef>>,
     pub functions_decls: HashMap<FnIndex, Arc<FunctionDecl>>,
     pub types: HashMap<TypeIndex, Arc<TypeDecl>>,
@@ -76,7 +76,7 @@ pub struct IRBuilder {
     pub bodies: Bodies,
     pub local_module: Option<ModuleIndex>,
     // Needed to not duplicate TypeIndexes for structs.
-    pub struct_to_type_idx: HashMap<StructIndex, TypeIndex>,
+    pub struct_to_type_idx: HashMap<AdtIndex, TypeIndex>,
     // Type to module id where it resides, needed to find methods for the given types.
     pub type_to_module: HashMap<TypeIndex, ModuleIndex>,
     pub mono_type_to_poly: HashMap<TypeIndex, TypeIndex>,
@@ -103,8 +103,8 @@ impl IRBuilder {
         self.ir.functions[idx].as_ref().unwrap()
     }
 
-    pub fn get_struct(&self, idx: StructIndex) -> &AdtBody {
-        self.ir.structs[idx].as_ref().unwrap()
+    pub fn get_struct(&self, idx: AdtIndex) -> &AdtBody {
+        self.ir.aggregates[idx].as_ref().unwrap()
     }
 
     pub fn get_constant(&self, idx: ConstIndex) -> &ConstBody {
@@ -138,7 +138,7 @@ impl IRBuilder {
     pub fn get_or_lower_for_struct_init(
         &mut self,
         info: &StructInitExpr,
-    ) -> Result<StructIndex, LoweringError> {
+    ) -> Result<AdtIndex, LoweringError> {
         let sym = Symbol {
             name: info.name.name.name.clone(),
             method_of: None,
@@ -147,7 +147,7 @@ impl IRBuilder {
 
         let module_idx = self.local_module.unwrap();
 
-        let poly_idx = *self.symbols[&module_idx].structs.get(&sym).unwrap();
+        let poly_idx = *self.symbols[&module_idx].aggregates.get(&sym).unwrap();
         let struct_decl = self.bodies.structs.get(&poly_idx).unwrap().clone();
 
         let old_generic_params = self.current_generics_map.clone();

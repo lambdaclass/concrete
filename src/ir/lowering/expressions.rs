@@ -137,14 +137,14 @@ pub(crate) fn lower_expression(
 
             let old_generic_params = builder.builder.current_generics_map.clone();
 
-            if let Type::Struct(struct_index) = ty {
+            if let Type::Adt(struct_index) = ty {
                 let poly_idx = builder
                     .builder
                     .mono_type_to_poly
                     .get(&type_idx)
                     .copied()
                     .unwrap_or(type_idx);
-                let poly_struct_idx = if let Type::Struct(id) = builder.builder.get_type(poly_idx) {
+                let poly_struct_idx = if let Type::Adt(id) = builder.builder.get_type(poly_idx) {
                     *id
                 } else {
                     panic!("poly struct not found")
@@ -167,9 +167,10 @@ pub(crate) fn lower_expression(
                     if let Some(name) = field.r#type.get_name() {
                         if generics.contains(&name) {
                             let struct_adt = builder.builder.get_struct(struct_index); // borrowck
+                            let struct_variant = struct_adt.variants.first().unwrap();
                             let field_index =
-                                *struct_adt.variant_names.get(&field.name.name).unwrap();
-                            let field_ty = struct_adt.variants[field_index].ty;
+                                *struct_variant.field_names.get(&field.name.name).unwrap();
+                            let field_ty = struct_variant.fields[field_index].ty;
                             let field_type = builder.builder.get_type(field_ty);
                             let mut map_ty = field_ty;
                             if let Some(inner) = field_type.get_inner_type() {
@@ -201,13 +202,15 @@ pub(crate) fn lower_expression(
             debug!("lowering struct init for struct {}", info.name);
 
             let struct_idx = builder.builder.get_or_lower_for_struct_init(info)?;
-            let struct_body = builder.builder.get_struct(struct_idx).clone();
-
-            let struct_ty = builder
+            let struct_body = builder
                 .builder
-                .ir
-                .types
-                .insert(Some(Type::Struct(struct_idx)));
+                .get_struct(struct_idx)
+                .variants
+                .first()
+                .unwrap()
+                .clone();
+
+            let struct_ty = builder.builder.ir.types.insert(Some(Type::Adt(struct_idx)));
             let struct_local = builder.add_local(Local::temp(struct_ty));
 
             let place = Place {
@@ -222,13 +225,13 @@ pub(crate) fn lower_expression(
 
             for (field, value) in info.fields.iter() {
                 let idx = *struct_body
-                    .variant_names
+                    .field_names
                     .get(&field.name)
                     .expect("failed to find field");
                 let mut field_place = place.clone();
                 field_place.projection.push(PlaceElem::Field(idx));
 
-                let variant = struct_body.variants[idx].ty;
+                let variant = struct_body.fields[idx].ty;
 
                 let (value, _value_ty, _field_span) =
                     lower_expression(builder, &value.value, Some(variant))?;
@@ -372,7 +375,7 @@ pub(crate) fn find_expression_type(
                 let mut ty = fn_builder.builder.get_type(type_idx).clone();
                 let old_generics = fn_builder.builder.current_generics_map.clone();
 
-                if let Type::Struct(struct_index) = ty {
+                if let Type::Adt(struct_index) = ty {
                     let poly_idx = fn_builder
                         .builder
                         .mono_type_to_poly
@@ -380,7 +383,7 @@ pub(crate) fn find_expression_type(
                         .copied()
                         .unwrap_or(type_idx);
                     let poly_struct_idx =
-                        if let Type::Struct(id) = fn_builder.builder.get_type(poly_idx) {
+                        if let Type::Adt(id) = fn_builder.builder.get_type(poly_idx) {
                             *id
                         } else {
                             panic!("poly struct not found")
@@ -402,10 +405,15 @@ pub(crate) fn find_expression_type(
                     for field in &struct_body.fields {
                         if let Some(name) = field.r#type.get_name() {
                             if generics.contains(&name) {
-                                let struct_adt = fn_builder.builder.get_struct(struct_index); // borrowck
+                                let struct_adt = fn_builder
+                                    .builder
+                                    .get_struct(struct_index)
+                                    .variants
+                                    .first()
+                                    .unwrap(); // borrowck
                                 let field_index =
-                                    *struct_adt.variant_names.get(&field.name.name).unwrap();
-                                let field_ty = struct_adt.variants[field_index].ty;
+                                    *struct_adt.field_names.get(&field.name.name).unwrap();
+                                let field_ty = struct_adt.fields[field_index].ty;
                                 let field_type = fn_builder.builder.get_type(field_ty);
                                 let mut map_ty = field_ty;
                                 if let Some(inner) = field_type.get_inner_type() {
@@ -435,8 +443,8 @@ pub(crate) fn find_expression_type(
                                 ty = fn_builder.builder.get_type(type_idx).clone();
                             }
 
-                            if let Type::Struct(mut id) = ty {
-                                if fn_builder.builder.ir.structs[id].is_none() {
+                            if let Type::Adt(mut id) = ty {
+                                if fn_builder.builder.ir.aggregates[id].is_none() {
                                     id = lower_struct(
                                         fn_builder.builder,
                                         &fn_builder
@@ -449,15 +457,17 @@ pub(crate) fn find_expression_type(
                                     )?;
                                 }
 
-                                let struct_body = fn_builder.builder.get_struct(id);
-                                let idx = *struct_body.variant_names.get(&name.name).ok_or_else(
-                                    || LoweringError::StructFieldNotFound {
-                                        span: *field_span,
-                                        name: name.name.clone(),
-                                        path: fn_builder.get_file_path().clone(),
-                                    },
-                                )?;
-                                type_idx = struct_body.variants[idx].ty;
+                                let struct_body =
+                                    fn_builder.builder.get_struct(id).variants.first().unwrap();
+                                let idx =
+                                    *struct_body.field_names.get(&name.name).ok_or_else(|| {
+                                        LoweringError::StructFieldNotFound {
+                                            span: *field_span,
+                                            name: name.name.clone(),
+                                            path: fn_builder.get_file_path().clone(),
+                                        }
+                                    })?;
+                                type_idx = struct_body.fields[idx].ty;
                                 ty = fn_builder.builder.get_type(type_idx).clone();
                             }
                         }
@@ -549,7 +559,7 @@ pub(crate) fn find_expression_type(
                 .builder
                 .ir
                 .types
-                .insert(Some(Type::Struct(struct_idx)));
+                .insert(Some(Type::Adt(struct_idx)));
 
             Some(struct_ty)
         }
@@ -766,14 +776,14 @@ pub(crate) fn lower_path(
     let mut projection = Vec::new();
     let old_generics = fn_builder.builder.current_generics_map.clone();
 
-    if let Type::Struct(struct_index) = ty {
+    if let Type::Adt(struct_index) = ty {
         let poly_idx = fn_builder
             .builder
             .mono_type_to_poly
             .get(&type_idx)
             .copied()
             .unwrap_or(type_idx);
-        let poly_struct_idx = if let Type::Struct(id) = fn_builder.builder.get_type(poly_idx) {
+        let poly_struct_idx = if let Type::Adt(id) = fn_builder.builder.get_type(poly_idx) {
             *id
         } else {
             panic!("poly struct not found")
@@ -795,9 +805,14 @@ pub(crate) fn lower_path(
         for field in &struct_body.fields {
             if let Some(name) = field.r#type.get_name() {
                 if generics.contains(&name) {
-                    let struct_adt = fn_builder.builder.get_struct(struct_index); // borrowck
-                    let field_index = *struct_adt.variant_names.get(&field.name.name).unwrap();
-                    let field_ty = struct_adt.variants[field_index].ty;
+                    let struct_adt = fn_builder
+                        .builder
+                        .get_struct(struct_index)
+                        .variants
+                        .first()
+                        .unwrap(); // borrowck
+                    let field_index = *struct_adt.field_names.get(&field.name.name).unwrap();
+                    let field_ty = struct_adt.fields[field_index].ty;
                     let field_type = fn_builder.builder.get_type(field_ty);
                     let mut map_ty = field_ty;
                     if let Some(inner) = field_type.get_inner_type() {
@@ -828,16 +843,16 @@ pub(crate) fn lower_path(
                     ty = fn_builder.builder.get_type(type_idx).clone();
                 }
 
-                if let Type::Struct(mut id) = ty {
-                    if fn_builder.builder.ir.structs[id].is_none() {
+                if let Type::Adt(mut id) = ty {
+                    if fn_builder.builder.ir.aggregates[id].is_none() {
                         id = lower_struct(
                             fn_builder.builder,
                             &fn_builder.builder.bodies.structs.get(&id).unwrap().clone(),
                         )?;
                     }
 
-                    let struct_body = fn_builder.builder.get_struct(id);
-                    let idx = *struct_body.variant_names.get(&name.name).ok_or_else(|| {
+                    let struct_body = fn_builder.builder.get_struct(id).variants.first().unwrap();
+                    let idx = *struct_body.field_names.get(&name.name).ok_or_else(|| {
                         LoweringError::StructFieldNotFound {
                             span: *field_span,
                             name: name.name.clone(),
@@ -845,7 +860,7 @@ pub(crate) fn lower_path(
                         }
                     })?;
                     projection.push(PlaceElem::Field(idx));
-                    type_idx = struct_body.variants[idx].ty;
+                    type_idx = struct_body.fields[idx].ty;
                     ty = fn_builder.builder.get_type(type_idx).clone();
                 }
             }

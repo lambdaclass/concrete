@@ -91,7 +91,7 @@ pub(crate) fn lower_type(
                     generics: Vec::new(),
                 };
 
-                if let Some(struct_idx) = symbols.structs.get(&sym).copied() {
+                if let Some(struct_idx) = symbols.aggregates.get(&sym).copied() {
                     let struct_type_idx = *builder.struct_to_type_idx.get(&struct_idx).unwrap();
                     let body = builder.bodies.structs.get(&struct_idx).unwrap().clone();
 
@@ -119,28 +119,28 @@ pub(crate) fn lower_type(
                         // for borrowck
                         let symbols = builder.symbols.get(&module_idx).unwrap();
 
-                        let mono_struct_idx =
-                            if let Some(mono_struct_idx) = symbols.structs.get(&sym).copied() {
-                                mono_struct_idx
-                            } else {
-                                let mono_struct_idx = builder.ir.structs.insert(None);
-                                let type_id =
-                                    builder.ir.types.insert(Some(Type::Struct(mono_struct_idx)));
-                                builder.struct_to_type_idx.insert(mono_struct_idx, type_id);
-                                builder.type_to_module.insert(type_id, module_idx);
-                                builder
-                                    .symbols
-                                    .get_mut(&builder.local_module.unwrap())
-                                    .unwrap()
-                                    .structs
-                                    .insert(sym.clone(), mono_struct_idx);
-                                builder.bodies.structs.insert(mono_struct_idx, body.clone());
+                        let mono_struct_idx = if let Some(mono_struct_idx) =
+                            symbols.aggregates.get(&sym).copied()
+                        {
+                            mono_struct_idx
+                        } else {
+                            let mono_struct_idx = builder.ir.aggregates.insert(None);
+                            let type_id = builder.ir.types.insert(Some(Type::Adt(mono_struct_idx)));
+                            builder.struct_to_type_idx.insert(mono_struct_idx, type_id);
+                            builder.type_to_module.insert(type_id, module_idx);
+                            builder
+                                .symbols
+                                .get_mut(&builder.local_module.unwrap())
+                                .unwrap()
+                                .aggregates
+                                .insert(sym.clone(), mono_struct_idx);
+                            builder.bodies.structs.insert(mono_struct_idx, body.clone());
 
-                                mono_struct_idx
-                            };
+                            mono_struct_idx
+                        };
 
                         let body = builder.bodies.structs.get(&struct_idx).unwrap().clone();
-                        if builder.ir.structs[mono_struct_idx].is_none() {
+                        if builder.ir.aggregates[mono_struct_idx].is_none() {
                             let generics_mapping = builder.current_generics_map.clone();
                             for (gen_ty, gen_param) in generics.iter().zip(body.generics.iter()) {
                                 builder
