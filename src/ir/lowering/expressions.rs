@@ -131,6 +131,72 @@ pub(crate) fn lower_expression(
 
             (rvalue, ref_ty, *asref_span)
         }
+        Expression::AssocMethodCall(info) => {
+            let type_idx = lower_type(builder.builder, &info.assoc_type.clone().into())?;
+            let ty = builder.builder.get_type(type_idx).clone();
+
+            let old_generic_params = builder.builder.current_generics_map.clone();
+
+            if let Type::Struct(struct_index) = ty {
+                let poly_idx = builder
+                    .builder
+                    .mono_type_to_poly
+                    .get(&type_idx)
+                    .copied()
+                    .unwrap_or(type_idx);
+                let poly_struct_idx = if let Type::Struct(id) = builder.builder.get_type(poly_idx) {
+                    *id
+                } else {
+                    panic!("poly struct not found")
+                };
+                let struct_body = builder
+                    .builder
+                    .bodies
+                    .structs
+                    .get(&poly_struct_idx)
+                    .unwrap()
+                    .clone();
+
+                let generics: HashSet<String> = struct_body
+                    .generics
+                    .iter()
+                    .map(|x| x.name.name.clone())
+                    .collect();
+
+                for field in &struct_body.fields {
+                    if let Some(name) = field.r#type.get_name() {
+                        if generics.contains(&name) {
+                            let struct_adt = builder.builder.get_struct(struct_index); // borrowck
+                            let field_index =
+                                *struct_adt.variant_names.get(&field.name.name).unwrap();
+                            let field_ty = struct_adt.variants[field_index].ty;
+                            let field_type = builder.builder.get_type(field_ty);
+                            let mut map_ty = field_ty;
+                            if let Some(inner) = field_type.get_inner_type() {
+                                map_ty = inner;
+                            }
+                            debug!(
+                                "Adding field type to generics mapping {} -> {}",
+                                name,
+                                builder
+                                    .builder
+                                    .get_type(map_ty)
+                                    .display(&builder.builder.ir)
+                                    .unwrap()
+                            );
+                            builder.builder.current_generics_map.insert(name, map_ty);
+                        }
+                    }
+                }
+            }
+
+            let (value, return_type_idx, _span) =
+                lower_fn_call(builder, &info.fn_call, None, Some(type_idx))?;
+
+            builder.builder.current_generics_map = old_generic_params;
+
+            (value, return_type_idx, info.span)
+        }
         Expression::StructInit(info) => {
             debug!("lowering struct init for struct {}", info.name);
 
@@ -354,6 +420,17 @@ pub(crate) fn find_expression_type(
                 .insert(Some(Type::Struct(struct_idx)));
 
             Some(struct_ty)
+        }
+        Expression::AssocMethodCall(info) => {
+            let type_idx = lower_type(fn_builder.builder, &info.assoc_type.clone().into())?;
+            let (poly_fn_id, mono_fn_id) =
+                fn_builder.get_id_for_fn_call(&info.fn_call, Some(type_idx))?;
+            let ret_ty = fn_builder.builder.ir.functions[mono_fn_id.unwrap_or(poly_fn_id)]
+                .as_ref()
+                .unwrap()
+                .ret_ty;
+
+            Some(ret_ty)
         }
         Expression::Cast(_, cast_ty, _) => {
             let new_ty = lower_type(fn_builder.builder, cast_ty)?;

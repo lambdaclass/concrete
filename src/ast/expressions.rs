@@ -9,6 +9,8 @@ use super::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Expression {
     Value(ValueExpr, Span),
+    // Type#func()
+    AssocMethodCall(AssocMethodCall),
     FnCall(FnCallOp),
     Match(MatchExpr),
     If(IfExpr),
@@ -41,6 +43,13 @@ pub struct StructInitExpr {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructInitField {
     pub value: Expression,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssocMethodCall {
+    pub assoc_type: TypeName,
+    pub fn_call: FnCallOp,
     pub span: Span,
 }
 
