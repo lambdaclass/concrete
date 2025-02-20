@@ -191,3 +191,18 @@ fn use_undeclared_var() {
         error
     );
 }
+
+#[test]
+fn undef_var_in_for() {
+    let (source, name) = (
+        include_str!("invalid_programs/undef_var_in_for.con"),
+        "undef_var_in_for",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::UseOfUndeclaredVariable { .. }),
+        "{:#?}",
+        error
+    );
+}

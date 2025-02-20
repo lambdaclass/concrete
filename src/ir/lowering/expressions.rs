@@ -351,9 +351,141 @@ pub(crate) fn find_expression_type(
             ValueExpr::ConstInt(_, _) => None,
             ValueExpr::ConstFloat(_, _) => None,
             ValueExpr::ConstStr(_, _) => Some(fn_builder.builder.ir.get_string_ty()),
-            ValueExpr::Path(path) => {
-                let local = fn_builder.get_local(&path.first.name).unwrap(); // todo handle segments
-                Some(local.ty)
+            ValueExpr::Path(info) => {
+                let local = *fn_builder.name_to_local.get(&info.first.name).ok_or(
+                    LoweringError::UseOfUndeclaredVariable {
+                        span: info.span,
+                        name: info.first.name.clone(),
+                        path: fn_builder.get_file_path().clone(),
+                    },
+                )?;
+
+                if !fn_builder.local_exists.contains(&local) {
+                    Err(LoweringError::UseOfUndeclaredVariable {
+                        span: info.span,
+                        name: info.first.name.clone(),
+                        path: fn_builder.get_file_path().clone(),
+                    })?;
+                }
+
+                let mut type_idx = fn_builder.body.locals[local].ty;
+                let mut ty = fn_builder.builder.get_type(type_idx).clone();
+                let old_generics = fn_builder.builder.current_generics_map.clone();
+
+                if let Type::Struct(struct_index) = ty {
+                    let poly_idx = fn_builder
+                        .builder
+                        .mono_type_to_poly
+                        .get(&type_idx)
+                        .copied()
+                        .unwrap_or(type_idx);
+                    let poly_struct_idx =
+                        if let Type::Struct(id) = fn_builder.builder.get_type(poly_idx) {
+                            *id
+                        } else {
+                            panic!("poly struct not found")
+                        };
+                    let struct_body = fn_builder
+                        .builder
+                        .bodies
+                        .structs
+                        .get(&poly_struct_idx)
+                        .unwrap()
+                        .clone();
+
+                    let generics: HashSet<String> = struct_body
+                        .generics
+                        .iter()
+                        .map(|x| x.name.name.clone())
+                        .collect();
+
+                    for field in &struct_body.fields {
+                        if let Some(name) = field.r#type.get_name() {
+                            if generics.contains(&name) {
+                                let struct_adt = fn_builder.builder.get_struct(struct_index); // borrowck
+                                let field_index =
+                                    *struct_adt.variant_names.get(&field.name.name).unwrap();
+                                let field_ty = struct_adt.variants[field_index].ty;
+                                let field_type = fn_builder.builder.get_type(field_ty);
+                                let mut map_ty = field_ty;
+                                if let Some(inner) = field_type.get_inner_type() {
+                                    map_ty = inner;
+                                }
+                                debug!(
+                                    "Adding field type to generics mapping {} -> {}",
+                                    name,
+                                    fn_builder
+                                        .builder
+                                        .get_type(map_ty)
+                                        .display(&fn_builder.builder.ir)
+                                        .unwrap()
+                                );
+                                fn_builder.builder.current_generics_map.insert(name, map_ty);
+                            }
+                        }
+                    }
+                }
+
+                for segment in &info.extra {
+                    match segment {
+                        PathSegment::FieldAccess(name, field_span) => {
+                            // auto deref
+                            while let Type::Ref(inner, _) = ty {
+                                type_idx = inner;
+                                ty = fn_builder.builder.get_type(type_idx).clone();
+                            }
+
+                            if let Type::Struct(mut id) = ty {
+                                if fn_builder.builder.ir.structs[id].is_none() {
+                                    id = lower_struct(
+                                        fn_builder.builder,
+                                        &fn_builder
+                                            .builder
+                                            .bodies
+                                            .structs
+                                            .get(&id)
+                                            .unwrap()
+                                            .clone(),
+                                    )?;
+                                }
+
+                                let struct_body = fn_builder.builder.get_struct(id);
+                                let idx = *struct_body.variant_names.get(&name.name).ok_or_else(
+                                    || LoweringError::StructFieldNotFound {
+                                        span: *field_span,
+                                        name: name.name.clone(),
+                                        path: fn_builder.get_file_path().clone(),
+                                    },
+                                )?;
+                                type_idx = struct_body.variants[idx].ty;
+                                ty = fn_builder.builder.get_type(type_idx).clone();
+                            }
+                        }
+                        PathSegment::ArrayIndex(_expression, _) => {
+                            while let Type::Ref(inner, _) = ty {
+                                type_idx = inner;
+                                ty = fn_builder.builder.get_type(type_idx).clone();
+                            }
+
+                            if let Type::Array(element_type, _) = ty {
+                                type_idx = element_type;
+                                ty = fn_builder.builder.get_type(type_idx).clone();
+                            }
+                        }
+                        PathSegment::MethodCall(fn_call_op, _span) => {
+                            let (poly_id, mono_id) =
+                                fn_builder.get_id_for_fn_call(fn_call_op, Some(type_idx))?;
+                            let body = fn_builder.builder.get_function(mono_id.unwrap_or(poly_id));
+
+                            type_idx = body.ret_ty;
+                            ty = fn_builder.builder.get_type(type_idx).clone();
+                        }
+                    }
+                }
+
+                fn_builder.builder.current_generics_map = old_generics;
+
+                Some(type_idx)
             }
         },
         Expression::FnCall(info) => {
