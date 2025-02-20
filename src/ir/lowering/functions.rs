@@ -398,10 +398,43 @@ pub(crate) fn lower_func_decl(
     builder: &mut IRBuilder,
     func: &FunctionDecl,
 ) -> Result<FnIndex, LoweringError> {
-    let is_intrinsic: Option<ConcreteIntrinsic> = None;
+    let mut is_intrinsic: Option<ConcreteIntrinsic> = None;
+
     let module_idx = builder.local_module.expect("should exist");
 
     let mut generic_types = Vec::new();
+
+    for generic_param in &func.generic_params {
+        if let Some(ty) = builder.current_generics_map.get(&generic_param.name.name) {
+            generic_types.push(*ty);
+        } else {
+            panic!()
+        }
+    }
+
+    for attr in &func.attributes {
+        match attr.name.as_str() {
+            "intrinsic" => {
+                let value = attr.value.as_ref().unwrap();
+                match value.as_str() {
+                    "sizeof" => {
+                        is_intrinsic =
+                            Some(ConcreteIntrinsic::SizeOf(*generic_types.first().unwrap()));
+                    }
+                    "alignof" => {
+                        is_intrinsic =
+                            Some(ConcreteIntrinsic::AlignOf(*generic_types.first().unwrap()));
+                    }
+                    _ => {
+                        debug!("Unknown intrinsic attribute {:?}", attr);
+                    }
+                }
+            }
+            _ => {
+                debug!("Unknown attribute {:?}", attr);
+            }
+        }
+    }
 
     // Initially, this is the polymorphic symbol, if its a generic function, the symbol changes to the monomorphic version after
     // id resolution
@@ -421,18 +454,6 @@ pub(crate) fn lower_func_decl(
                     "function is generic over {} parameters",
                     func.generic_params.len()
                 );
-
-                for generic_param in &func.generic_params {
-                    if let Some(ty) = builder
-                        .current_generics_map
-                        .get(&generic_param.name.name)
-                        .copied()
-                    {
-                        generic_types.push(ty);
-                    } else {
-                        // todo: should error?
-                    }
-                }
 
                 // Construct the monomorphized function symbol.
                 symbol = Symbol {

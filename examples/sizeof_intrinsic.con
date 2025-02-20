@@ -1,0 +1,8 @@
+mod foo {
+    #[intrinsic = "sizeof"]
+    fn sizeof<T>() -> u64;
+
+    pub fn main() -> u64 {
+        return sizeof::<u8>() + sizeof::<u32>();
+    }
+}
