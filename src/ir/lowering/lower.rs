@@ -5,18 +5,18 @@ use tracing::debug;
 use crate::{
     ast::{self, modules::ModuleDefItem},
     ir::{
-        lowering::{errors::LoweringError, Bodies, IRBuilder},
         Adts, Constants, Functions, Module, Modules, Types,
+        lowering::{Bodies, IRBuilder, errors::LoweringError},
     },
 };
 
 use super::{
+    Symbol,
     constants::lower_constant,
     functions::{lower_func, lower_func_decl},
-    ir::{ModuleIndex, Type, IR},
+    ir::{IR, ModuleIndex, Type},
     structs::lower_struct,
     types::lower_type,
-    Symbol,
 };
 
 pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, LoweringError> {

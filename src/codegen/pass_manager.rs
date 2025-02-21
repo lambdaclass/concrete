@@ -1,7 +1,7 @@
 use melior::{
+    Context, Error,
     ir::Module as MeliorModule,
     pass::{self, PassManager},
-    Context, Error,
 };
 
 pub fn run_pass_manager(context: &Context, module: &mut MeliorModule) -> Result<(), Error> {

@@ -8,10 +8,10 @@ use crate::{
 };
 
 use super::{
+    IRBuilder, Symbol,
     errors::LoweringError,
     ir::{AdtBody, AdtIndex, VariantDef},
     types::lower_type,
-    IRBuilder, Symbol,
 };
 
 /// Lowers a struct.

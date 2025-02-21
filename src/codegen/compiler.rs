@@ -1,28 +1,28 @@
 use std::collections::HashMap;
 
 use crate::ir::{
-    AdtKind, BinOp, ConcreteIntrinsic, ConstValue, FnIndex, Function, LocalKind, Module,
-    ModuleIndex, Operand, Place, PlaceElem, Rvalue, Span, Type as IRType, TypeIndex, ValueTree, IR,
+    AdtKind, BinOp, ConcreteIntrinsic, ConstValue, FnIndex, Function, IR, LocalKind, Module,
+    ModuleIndex, Operand, Place, PlaceElem, Rvalue, Span, Type as IRType, TypeIndex, ValueTree,
 };
 use ariadne::Source;
 use melior::helpers::ArithBlockExt;
 use melior::ir::{BlockLike, RegionLike};
 use melior::{
+    Context as MeliorContext,
     dialect::{
         arith, cf, func,
-        llvm::{self, r#type::pointer, AllocaOptions, LoadStoreOptions},
+        llvm::{self, AllocaOptions, LoadStoreOptions, r#type::pointer},
         ods,
     },
     ir::{
+        Attribute, Block, Identifier, Location, Module as MeliorModule, Region, Type, Value,
+        ValueLike,
         attribute::{
             DenseI32ArrayAttribute, FlatSymbolRefAttribute, FloatAttribute, IntegerAttribute,
             StringAttribute, TypeAttribute,
         },
         r#type::{FunctionType, IntegerType},
-        Attribute, Block, Identifier, Location, Module as MeliorModule, Region, Type, Value,
-        ValueLike,
     },
-    Context as MeliorContext,
 };
 use tracing::info;
 

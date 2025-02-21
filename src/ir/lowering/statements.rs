@@ -6,16 +6,16 @@ use crate::{
         statements::{self, AssignStmt, ForStmt, LetStmt, LetStmtTarget, ReturnStmt, WhileStmt},
     },
     ir::{
-        lowering::{expressions::lower_expression, functions::get_locals, types::lower_type},
         BasicBlock, ConstData, ConstKind, ConstValue, Mutability, Operand, Place, PlaceElem,
         Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, Type,
         ValueTree,
+        lowering::{expressions::lower_expression, functions::get_locals, types::lower_type},
     },
 };
 
 use super::{
-    errors::LoweringError, expressions::lower_path, functions::lower_fn_call, ir::TypeIndex,
-    FnIrBuilder,
+    FnIrBuilder, errors::LoweringError, expressions::lower_path, functions::lower_fn_call,
+    ir::TypeIndex,
 };
 
 pub(crate) fn lower_statement(
