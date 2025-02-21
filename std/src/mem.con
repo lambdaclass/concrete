@@ -1,0 +1,7 @@
+mod mem {
+    #[intrinsic = "sizeof"]
+    pub fn sizeof<T>() -> u64;
+
+    #[intrinsic = "alignof"]
+    pub fn alignof<T>() -> u64;
+}
