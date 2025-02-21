@@ -25,7 +25,7 @@ mod string {
         }
 
         fn grow(&mut self) {
-            let new_cap: u64 = self.cap * 2;
+            let new_cap: u64 = std::math::max::<u64>(self.cap, 4) * 2;
             self.ptr = realloc::<u8>(self.ptr, new_cap);
             self.cap = new_cap;
         }
