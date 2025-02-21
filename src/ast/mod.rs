@@ -13,8 +13,9 @@ pub mod statements;
 pub mod structs;
 pub mod types;
 
+/// A compile represents a whole package, made up of various modules.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CompileUnit {
+pub struct CompilationUnit {
     pub file_path: PathBuf,
     pub modules: Vec<Module>,
 }

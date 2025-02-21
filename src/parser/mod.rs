@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::ast::CompileUnit;
+use crate::ast::CompilationUnit;
 use error::Diagnostics;
 use lexer::Lexer;
 use salsa::Accumulator;
@@ -31,7 +31,7 @@ pub struct ProgramSource<'db> {
 pub fn parse_ast<'db>(
     db: &'db dyn salsa::Database,
     source: ProgramSource<'db>,
-) -> Option<CompileUnit> {
+) -> Option<CompilationUnit> {
     let lexer = Lexer::new(source.input(db));
     let parser = grammar::CompileUnitParser::new();
 
