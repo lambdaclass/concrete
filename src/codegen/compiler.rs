@@ -690,21 +690,13 @@ fn compile_binop<'c: 'b, 'b>(
             let value = if let Some(inner_type_idx) = is_ptr {
                 let inner = ctx.module.get_type(inner_type_idx);
                 let inner_ty = compile_type(ctx.module, &inner);
-                block
-                    .append_operation(
-                        ods::llvm::getelementptr(
-                            ctx.context(),
-                            pointer(ctx.context(), 0),
-                            lhs,
-                            &[rhs],
-                            DenseI32ArrayAttribute::new(ctx.context(), &[i32::MIN]),
-                            TypeAttribute::new(inner_ty),
-                            location,
-                        )
-                        .into(),
-                    )
-                    .result(0)?
-                    .into()
+                block.gep(
+                    ctx.context(),
+                    location,
+                    lhs,
+                    &[GepIndex::Value(rhs)],
+                    inner_ty,
+                )?
             } else if is_float {
                 block
                     .append_operation(arith::addf(lhs, rhs, location))

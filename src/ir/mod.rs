@@ -486,7 +486,7 @@ impl Type {
     }
 
     pub fn is_int(&self) -> bool {
-        matches!(self, Type::Int(_) | Type::Uint(_))
+        matches!(self, Type::Int(_) | Type::Uint(_) | Type::Char)
     }
 
     pub fn is_signed(&self) -> bool {
