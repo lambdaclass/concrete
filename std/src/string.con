@@ -38,7 +38,7 @@ mod string {
             }
         }
 
-        /// TODO: drop should be a trait, and doesnt really isn't really called yet automatically.
+        /// TODO: drop should be a trait, and isn't really called yet automatically.
         pub fn drop(self) {
             free::<u8>(self.ptr);
         }
