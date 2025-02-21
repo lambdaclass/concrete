@@ -323,8 +323,6 @@ fn lower_imports(
             let mut root_requested = false;
 
             for (i, m) in import.module.iter().enumerate() {
-                let cur_path = builder.ir.modules[target_module].file_path.clone();
-
                 if i == 0 || root_requested {
                     if m.name == "super" && !root_requested {
                         if let Some(parent) = parents.last().copied() {
@@ -342,7 +340,7 @@ fn lower_imports(
                                 .ok_or_else(|| LoweringError::ModuleNotFound {
                                     span: m.span,
                                     module: m.name.clone(),
-                                    path: cur_path.to_path_buf(),
+                                    path: import_from_path.to_path_buf(),
                                 })?
                         } else {
                             *builder
@@ -355,7 +353,7 @@ fn lower_imports(
                                 .ok_or_else(|| LoweringError::ModuleNotFound {
                                     span: m.span,
                                     module: m.name.clone(),
-                                    path: cur_path.to_path_buf(),
+                                    path: import_from_path.to_path_buf(),
                                 })?
                         };
 
@@ -373,7 +371,7 @@ fn lower_imports(
                         .ok_or_else(|| LoweringError::ModuleNotFound {
                             span: m.span,
                             module: m.name.clone(),
-                            path: info.file_path.clone(),
+                            path: import_from_path.clone(),
                         })?;
             }
 
