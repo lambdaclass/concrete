@@ -16,4 +16,20 @@ mod math {
             return b;
         }
     }
+
+    import std.test.{assert_eq};
+
+    #[test]
+    fn test_min() -> i32 {
+        let result: i32 = min::<i32>(4, 2);
+        assert_eq::<i32>(result, 2, "Should give the min value");
+        return 0;
+    }
+
+    #[test]
+    fn test_min_fail_on_purpose() -> i32 {
+        let result: i32 = min::<i32>(4, 2);
+        assert_eq::<i32>(result, 4, "Should give the min value");
+        return 0;
+    }
 }

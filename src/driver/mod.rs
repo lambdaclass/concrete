@@ -11,9 +11,12 @@ use clap::{Parser, Subcommand};
 use config::{Package, Profile};
 use git2::{IndexAddOption, Repository};
 use owo_colors::OwoColorize;
+use signal_hook::consts::SIGUSR1;
+use signal_hook::iterator::Signals;
 use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
+use std::sync::Arc;
 use std::{collections::HashMap, fs::File, path::PathBuf, time::Instant};
 use tracing::debug;
 
@@ -49,6 +52,8 @@ enum Commands {
     Build(BuildArgs),
     /// Run a project or file
     Run(BuildArgs),
+    /// Test a project or file.
+    Test(BuildArgs),
 }
 
 #[derive(Args, Debug)]
@@ -219,11 +224,11 @@ pub fn main() -> Result<()> {
                     path.join("src").join("main.con"),
                     format!(
                         r#"
-mod {} {{
-    pub fn main() -> i32 {{
-        return 0;
-    }}
-}}"#,
+        mod {} {{
+            pub fn main() -> i32 {{
+                return 0;
+            }}
+        }}"#,
                         name
                     ),
                 )?;
@@ -232,11 +237,11 @@ mod {} {{
                     path.join("src").join("lib.con"),
                     format!(
                         r#"
-mod {} {{
-    pub fn hello_world() -> i32 {{
-        return 0;
-    }}
-}}"#,
+        mod {} {{
+            pub fn hello_world() -> i32 {{
+                return 0;
+            }}
+        }}"#,
                         name
                     ),
                 )?;
@@ -272,9 +277,82 @@ mod {} {{
             handle_build(args)?;
         }
         Commands::Run(args) => {
-            let output = handle_build(args)?;
+            let output = handle_build(args)?.0;
             println!();
             Err(std::process::Command::new(output).exec())?;
+        }
+        Commands::Test(mut args) => {
+            args.lib = true;
+            let (output, tests) = handle_build(args)?;
+            println!();
+
+            println!("Running {} tests", tests.len());
+
+            let mut passed = 0;
+
+            let lib = Arc::new(unsafe { libloading::os::unix::Library::new(output).expect("failed to load")});
+
+            for test in &tests {
+                let mut signals = Signals::new([SIGUSR1])?;
+                let handle = signals.handle();
+                let test = test.clone();
+                let lib = lib.clone();
+                let handle = std::thread::spawn(move || {
+                    print!("Running test {:?}...", test);
+
+                    let test_fn = unsafe { lib.get::<unsafe extern "C" fn() -> i32>(test.as_bytes()) };
+
+                    if test_fn.is_err() {
+                        handle.close();
+                        eprintln!("Symbol not found: {:?}", test_fn);
+                        return 1;
+                    }
+
+                    let test_fn = test_fn.unwrap();
+
+                    let result = unsafe { (test_fn)() };
+
+                    handle.close();
+
+                    result
+                });
+
+
+                let sig = signals.wait();
+                let raised_signals: Vec<_> = sig.collect();
+
+                let mut error = false;
+                for sig in raised_signals {
+                    if sig == SIGUSR1 {
+                        error = true;
+                        break;
+                    }
+                }
+
+                if error {
+                    println!("error");
+                } else {
+                    let result = handle.join().unwrap();
+
+                    if result == 0 {
+                        println!("ok");
+                        passed += 1;
+                    } else {
+                        println!("err");
+                    }
+                }
+            }
+
+            if !tests.is_empty() {
+                println!(
+                    "Tests passed {}/{} ({}%)",
+                    passed,
+                    tests.len(),
+                    ((passed as f64 / tests.len() as f64) * 100.0)
+                );
+            }
+
+            return Ok(());
         }
     }
 
@@ -295,7 +373,7 @@ fn handle_build(
         lib,
         check,
     }: BuildArgs,
-) -> Result<PathBuf> {
+) -> Result<(PathBuf, Vec<String>)> {
     match path {
         // Single file compilation
         Some(input) => {
@@ -332,7 +410,7 @@ fn handle_build(
             );
 
             let start = Instant::now();
-            let object = compile(&compile_args)?;
+            let (object, tests) = compile(&compile_args)?;
 
             if lib {
                 link_shared_lib(&[object.clone()], &output)?;
@@ -352,7 +430,7 @@ fn handle_build(
                 if release { "release" } else { "dev" },
             );
 
-            Ok(output)
+            Ok((output, tests))
         }
         // Project compilation.
         None => {
@@ -393,7 +471,7 @@ fn handle_build(
             if !target_dir.exists() {
                 std::fs::create_dir_all(&target_dir)?;
             }
-            let output = target_dir.join(config.package.name);
+            let mut output = target_dir.join(config.package.name);
             let (profile, profile_name) = if let Some(profile) = profile {
                 (
                     config
@@ -425,6 +503,8 @@ fn handle_build(
 
             let start = Instant::now();
 
+            let mut tests = Vec::new();
+
             for file in [main_ed, lib_ed] {
                 if file.exists() {
                     let is_lib = file.file_stem().unwrap() == "lib";
@@ -452,12 +532,17 @@ fn handle_build(
                         mlir,
                         check,
                     };
-                    let object = compile(&compile_args)?;
+                    let (object, file_tests) = compile(&compile_args)?;
+                    tests.extend(file_tests);
 
                     if compile_args.library {
                         link_shared_lib(&[object], &compile_args.output)?;
                     } else {
                         link_binary(&[object], &compile_args.output)?;
+                    }
+
+                    if is_lib {
+                        output = compile_args.output;
                     }
                 }
             }
@@ -478,7 +563,7 @@ fn handle_build(
                 }
             );
 
-            Ok(output)
+            Ok((output, tests))
         }
     }
 }
@@ -560,7 +645,7 @@ pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<Compile
     Ok(compile_unit)
 }
 
-pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
+pub fn compile(args: &CompilerArgs) -> Result<(PathBuf, Vec<String>)> {
     let start_time = Instant::now();
 
     let db = crate::driver::db::DatabaseImpl::default();
@@ -632,5 +717,11 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     let elapsed = start_time.elapsed();
     tracing::debug!("Done in {:?}", elapsed);
 
-    Ok(object_path)
+    let mut test_names = Vec::new();
+    for t in &compile_unit_ir.tests {
+        let f = compile_unit_ir.functions[*t].as_ref().unwrap().name.clone();
+        test_names.push(f);
+    }
+
+    Ok((object_path, test_names))
 }

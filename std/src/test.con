@@ -1,0 +1,15 @@
+mod test {
+    pub fn assert(result: bool, message: String) {
+        if result == false {
+            std::io::print(&message);
+            std::libc::raise(10); // SIGUSR1
+        }
+    }
+
+    pub fn assert_eq<T>(expected: T, result: T, message: String) {
+        if expected != result {
+            std::io::print(&message);
+            std::libc::raise(10); // SIGUSR1
+        }
+    }
+}

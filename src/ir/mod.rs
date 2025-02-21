@@ -43,6 +43,8 @@ pub struct IR {
     /// Since the `modules` field is a flat structure holding all modules regardles of depth.
     pub top_level_modules: Vec<ModuleIndex>,
     pub builtin_types: HashMap<Type, TypeIndex>,
+    // Test functions.
+    pub tests: Vec<FnIndex>,
 }
 
 impl IR {

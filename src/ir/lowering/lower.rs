@@ -29,6 +29,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, Low
             modules: Modules::new(),
             top_level_modules: Vec::new(),
             builtin_types: Default::default(),
+            tests: Vec::new(),
         },
         symbols: Default::default(),
         top_level_modules_names: Default::default(),
