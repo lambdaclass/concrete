@@ -3,9 +3,9 @@ use std::path::Path;
 use crate::check::FileSpan;
 
 use super::{
+    ProgramSource,
     lexer::LexicalError,
     tokens::{self, Token},
-    ProgramSource,
 };
 use ariadne::{ColorGenerator, Label, Report, ReportKind};
 use itertools::Itertools;
