@@ -83,7 +83,7 @@ jobs:
         - name: Rustup toolchain install
           uses: dtolnay/rust-toolchain@1.84.1
         - uses: homebrew/actions/setup-homebrew@master
-        # makes melior be bugged with ods
+        # makes melior be bugged with ods due to paths changing probably
         #- name: Retreive cached dependecies
           #uses: Swatinem/rust-cache@v2
         - name: install llvm
