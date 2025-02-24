@@ -336,8 +336,72 @@ pub(crate) fn lower_expression(
 
             (Rvalue::Use(Operand::Place(place)), ty, info.span)
         }
-        Expression::EnumInit(enum_init) => {
-            todo!()
+        Expression::EnumInit(info) => {
+            debug!("lowering enum init for struct {}", info.name);
+
+            let enum_idx = builder.builder.get_or_lower_for_enum_init(info)?;
+            let enum_body = builder.builder.get_adt(enum_idx).clone();
+
+            let enum_ty = builder.builder.ir.types.insert(Some(Type::Adt(enum_idx)));
+            let enum_local = builder.add_local(Local::temp(enum_ty));
+
+            let place = Place {
+                local: enum_local,
+                projection: Default::default(),
+            };
+
+            builder.statements.push(Statement {
+                span: None,
+                kind: StatementKind::StorageLive(enum_local),
+            });
+
+            let variant_idx = *enum_body
+                .variant_names
+                .get(&info.variant.name)
+                .expect("variant not found");
+
+            // add tag at start.
+            {
+                let mut tag_place = place.clone();
+                tag_place.projection.push(PlaceElem::Field(0));
+
+                builder.statements.push(Statement {
+                    span: Some(info.span),
+                    kind: StatementKind::Assign(
+                        tag_place,
+                        Rvalue::Use(Operand::Const(ConstData {
+                            ty: builder.builder.ir.get_u64_ty(),
+                            span: info.span,
+                            data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(
+                                variant_idx as u64,
+                            ))),
+                        })),
+                    ),
+                });
+            }
+
+            let variant_body = &enum_body.variants[variant_idx];
+
+            for (field, value) in info.fields.iter() {
+                let idx = *variant_body
+                    .field_names
+                    .get(&field.name)
+                    .expect("failed to find field");
+                let mut field_place = place.clone();
+                field_place.projection.push(PlaceElem::Field(idx + 1));
+
+                let field_ty = variant_body.fields[idx].ty;
+
+                let (value, _value_ty, _field_span) =
+                    lower_expression(builder, &value.value, Some(field_ty))?;
+
+                builder.statements.push(Statement {
+                    span: Some(info.span),
+                    kind: StatementKind::Assign(field_place, value),
+                });
+            }
+
+            (Rvalue::Use(Operand::Place(place)), enum_ty, info.span)
         }
     })
 }
