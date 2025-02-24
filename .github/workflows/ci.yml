@@ -17,7 +17,7 @@ jobs:
             TABLEGEN_190_PREFIX: /usr/lib/llvm-19/
         steps:
         - uses: actions/checkout@v3
-        - uses: dtolnay/rust-toolchain@1.84.1
+        - uses: dtolnay/rust-toolchain@1.85.0
           with:
             components: rustfmt, clippy
         - uses: Swatinem/rust-cache@v2
@@ -37,7 +37,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
         - uses: actions/checkout@v3
-        - uses: dtolnay/rust-toolchain@1.84.1
+        - uses: dtolnay/rust-toolchain@1.85.0
           with:
             components: rustfmt
         - run: cargo fmt --all -- --check
@@ -53,7 +53,7 @@ jobs:
         steps:
         - uses: actions/checkout@v3
         - name: Setup rust env
-          uses: dtolnay/rust-toolchain@1.84.1
+          uses: dtolnay/rust-toolchain@1.85.0
         - name: Retreive cached dependecies
           uses: Swatinem/rust-cache@v2
         - name: add llvm deb repository
@@ -81,7 +81,7 @@ jobs:
       steps:
         - uses: actions/checkout@v4
         - name: Rustup toolchain install
-          uses: dtolnay/rust-toolchain@1.84.1
+          uses: dtolnay/rust-toolchain@1.85.0
         - uses: homebrew/actions/setup-homebrew@master
         - name: Retreive cached dependecies
           uses: Swatinem/rust-cache@v2
@@ -101,7 +101,7 @@ jobs:
         steps:
             - uses: actions/checkout@v3
             - name: Setup rust env
-              uses: dtolnay/rust-toolchain@1.84.1
+              uses: dtolnay/rust-toolchain@1.85.0
             - name: Retreive cached dependecies
               uses: Swatinem/rust-cache@v2
             - name: add llvm deb repository
@@ -133,12 +133,12 @@ jobs:
         TABLEGEN_190_PREFIX: /usr/lib/llvm-19/
       steps:
         - uses: actions/checkout@v4
-        - uses: dtolnay/rust-toolchain@1.84.1
+        - uses: dtolnay/rust-toolchain@1.85.0
           with:
             components: clippy
         - uses: Swatinem/rust-cache@v2
         - name: Setup rust env
-          uses: dtolnay/rust-toolchain@1.84.1
+          uses: dtolnay/rust-toolchain@1.85.0
         - name: Retreive cached dependecies
           uses: Swatinem/rust-cache@v2
         - name: add llvm deb repository
