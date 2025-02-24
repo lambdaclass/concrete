@@ -461,6 +461,15 @@ StructInitExpr: ast::expressions::StructInitExpr = {
   }
 }
 
+EnumInitExpr: ast::expressions::EnumInitExpr = {
+  <lo:@L> <name:TypeNameUse> "#" <variant:Ident> <fields:("{" <Comma<StructInitField>> "}")?> <hi:@R> => ast::expressions::EnumInitExpr {
+    name,
+    variant,
+    fields: fields.unwrap_or_default().into_iter().collect(),
+    span: Span::new(lo, hi),
+  }
+}
+
 AssocMethodCall: ast::expressions::AssocMethodCall = {
   // TODO: Using # because :: and . give a grammar ambiguous error.
   // Note(edg-l): I tried to make the FnCallOp handle assoc methods but the :: gets tricky (ambiguous) when generics are involved.
@@ -700,6 +709,15 @@ LetStmt: ast::statements::LetStmt = {
     value: ast::expressions::Expression::AssocMethodCall(value),
     span: Span::new(lo, hi),
   },
+  <lo:@L> "let" <is_mutable:"mut"?> <id:Ident> ":" <target_type:TypeDescriptor> "=" <value:EnumInitExpr> <hi:@R> => ast::statements::LetStmt {
+    is_mutable: is_mutable.is_some(),
+    target: ast::statements::LetStmtTarget::Simple {
+      id,
+      r#type: target_type
+    },
+    value: ast::expressions::Expression::EnumInit(value),
+    span: Span::new(lo, hi),
+  },
 }
 
 AssignStmt: ast::statements::AssignStmt = {
@@ -718,6 +736,12 @@ AssignStmt: ast::statements::AssignStmt = {
   <lo:@L> <derefs:"*"*> <lvalue:PathOp> "=" <rvalue:AssocMethodCall> <hi:@R> => ast::statements::AssignStmt {
     lvalue,
     rvalue: ast::expressions::Expression::AssocMethodCall(rvalue),
+    derefs: derefs.len(),
+    span: Span::new(lo, hi),
+  },
+  <lo:@L> <derefs:"*"*> <lvalue:PathOp> "=" <rvalue:EnumInitExpr> <hi:@R> => ast::statements::AssignStmt {
+    lvalue,
+    rvalue: ast::expressions::Expression::EnumInit(rvalue),
     derefs: derefs.len(),
     span: Span::new(lo, hi),
   },

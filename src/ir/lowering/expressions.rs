@@ -336,6 +336,9 @@ pub(crate) fn lower_expression(
 
             (Rvalue::Use(Operand::Place(place)), ty, info.span)
         }
+        Expression::EnumInit(enum_init) => {
+            todo!()
+        }
     })
 }
 
@@ -607,6 +610,9 @@ pub(crate) fn find_expression_type(
             let ty = fn_builder.builder.ir.types.insert(Some(tykind));
 
             Some(ty)
+        }
+        Expression::EnumInit(enum_init) => {
+            todo!()
         }
     })
 }
