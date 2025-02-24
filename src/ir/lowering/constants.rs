@@ -9,10 +9,10 @@ use crate::{
 };
 
 use super::{
+    FnIrBuilder, IRBuilder,
     errors::LoweringError,
     ir::{ConstBody, ConstData, TypeIndex},
     types::lower_type,
-    FnIrBuilder, IRBuilder,
 };
 
 pub(crate) fn lower_constant(

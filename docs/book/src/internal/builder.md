@@ -22,7 +22,7 @@ When lowering a function the IR builder is wrapper around a function builder, ho
 - The return local index.
 - A hashset to know whether a local has been initialized (aids error checking).
 
-# Pases
+# Passes
 
 Lowering is done roughly with the following passes:
 
