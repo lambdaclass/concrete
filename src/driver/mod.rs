@@ -1,5 +1,5 @@
-use crate::ast::modules::ModuleDefItem;
 use crate::ast::CompilationUnit;
+use crate::ast::modules::ModuleDefItem;
 use crate::compile_unit_info::{CompileUnitInfo, DebugInfo, OptLevel};
 use crate::ir::lowering::lower_compile_units;
 use crate::parser::ProgramSource;
