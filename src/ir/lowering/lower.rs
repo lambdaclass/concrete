@@ -11,10 +11,10 @@ use crate::{
 };
 
 use super::{
+    adts::{lower_enum, lower_struct},
     constants::lower_constant,
     functions::{lower_func, lower_func_decl},
     ir::{ModuleIndex, Type, IR},
-    structs::lower_struct,
     types::lower_type,
     Symbol,
 };
@@ -572,7 +572,11 @@ pub fn lower_module(
                 }
             }
             ast::modules::ModuleDefItem::Union(_union_decl) => todo!(),
-            ast::modules::ModuleDefItem::Enum(_enum_decl) => todo!(),
+            ast::modules::ModuleDefItem::Enum(info) => {
+                if info.generics.is_empty() {
+                    lower_enum(builder, info)?;
+                }
+            }
             ast::modules::ModuleDefItem::Module(module) => {
                 let new_module_idx = *builder
                     .symbols

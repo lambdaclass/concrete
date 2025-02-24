@@ -424,9 +424,10 @@ UnionDef: ast::enums::UnionDecl = {
 }
 
 EnumDef: ast::enums::EnumDecl = {
-    <lo:@L> "enum" <name:Ident> <generics:GenericParams?> "{" <variants:Comma<EnumVariant>> "}" <hi:@R> => ast::enums::EnumDecl {
+    <lo:@L> <is_pub:"pub"?> "enum" <name:Ident> <generics:GenericParams?> "{" <variants:Comma<EnumVariant>> "}" <hi:@R> => ast::enums::EnumDecl {
         name,
         variants,
+        is_pub: is_pub.is_some(),
         generics: generics.unwrap_or(vec![]),
         span: Span::new(lo, hi),
     }

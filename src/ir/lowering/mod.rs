@@ -4,8 +4,8 @@ use std::{
     sync::Arc,
 };
 
+use adts::lower_struct;
 use functions::{lower_func, lower_func_decl};
-use structs::lower_struct;
 
 use crate::ir::{
     AdtBody, AdtIndex, ConstBody, ConstIndex, FnIndex, Function, Local, LocalIndex, Module,
@@ -22,13 +22,13 @@ use crate::ast::{
     types::{TypeDecl, TypeDescriptor},
 };
 
+mod adts;
 mod constants;
 mod errors;
 mod expressions;
 mod functions;
 mod lower;
 mod statements;
-mod structs;
 mod types;
 
 pub use errors::LoweringError;
@@ -130,7 +130,7 @@ impl IRBuilder {
         self.ir.functions[idx].as_ref().unwrap()
     }
 
-    pub fn get_struct(&self, idx: AdtIndex) -> &AdtBody {
+    pub fn get_adt(&self, idx: AdtIndex) -> &AdtBody {
         self.ir.aggregates[idx].as_ref().unwrap()
     }
 

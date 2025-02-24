@@ -8,7 +8,7 @@ use crate::{
         ValueExpr,
     },
     ir::{
-        lowering::{functions::lower_fn_call, structs::lower_struct},
+        lowering::{adts::lower_struct, functions::lower_fn_call},
         ConstKind, ConstValue, FloatTy, IntTy, Local, Mutability, Operand, Place, PlaceElem, Span,
         Statement, StatementKind, Type, UintTy, ValueTree,
     },
@@ -164,7 +164,7 @@ pub(crate) fn lower_expression(
                 for field in &struct_body.fields {
                     if let Some(name) = field.r#type.get_name() {
                         if generics.contains(&name) {
-                            let struct_adt = builder.builder.get_struct(struct_index); // borrowck
+                            let struct_adt = builder.builder.get_adt(struct_index); // borrowck
                             let struct_variant = struct_adt.variants.first().unwrap();
                             let field_index =
                                 *struct_variant.field_names.get(&field.name.name).unwrap();
@@ -202,7 +202,7 @@ pub(crate) fn lower_expression(
             let struct_idx = builder.builder.get_or_lower_for_struct_init(info)?;
             let struct_body = builder
                 .builder
-                .get_struct(struct_idx)
+                .get_adt(struct_idx)
                 .variants
                 .first()
                 .unwrap()
@@ -408,7 +408,7 @@ pub(crate) fn find_expression_type(
                             if generics.contains(&name) {
                                 let struct_adt = fn_builder
                                     .builder
-                                    .get_struct(struct_index)
+                                    .get_adt(struct_index)
                                     .variants
                                     .first()
                                     .unwrap(); // borrowck
@@ -459,7 +459,7 @@ pub(crate) fn find_expression_type(
                                 }
 
                                 let struct_body =
-                                    fn_builder.builder.get_struct(id).variants.first().unwrap();
+                                    fn_builder.builder.get_adt(id).variants.first().unwrap();
                                 let idx =
                                     *struct_body.field_names.get(&name.name).ok_or_else(|| {
                                         LoweringError::StructFieldNotFound {
@@ -554,7 +554,7 @@ pub(crate) fn find_expression_type(
 
             let struct_idx = fn_builder.builder.get_or_lower_for_struct_init(info)?;
 
-            fn_builder.builder.get_struct(struct_idx);
+            fn_builder.builder.get_adt(struct_idx);
 
             let struct_ty = fn_builder
                 .builder
@@ -820,7 +820,7 @@ pub(crate) fn lower_path(
                 if generics.contains(&name) {
                     let struct_adt = fn_builder
                         .builder
-                        .get_struct(struct_index)
+                        .get_adt(struct_index)
                         .variants
                         .first()
                         .unwrap(); // borrowck
@@ -864,7 +864,7 @@ pub(crate) fn lower_path(
                         )?;
                     }
 
-                    let struct_body = fn_builder.builder.get_struct(id).variants.first().unwrap();
+                    let struct_body = fn_builder.builder.get_adt(id).variants.first().unwrap();
                     let idx = *struct_body.field_names.get(&name.name).ok_or_else(|| {
                         LoweringError::StructFieldNotFound {
                             span: *field_span,
