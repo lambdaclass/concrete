@@ -110,11 +110,13 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
         } => {
             let path = path.display().to_string();
             let filespan = FileSpan::new(path.clone(), span.into());
-            let mut labels = vec![Label::new(filespan.clone())
-                .with_message(format!(
-                    "Can't mutate {name:?} because it's behind a immutable borrow"
-                ))
-                .with_color(colors.next())];
+            let mut labels = vec![
+                Label::new(filespan.clone())
+                    .with_message(format!(
+                        "Can't mutate {name:?} because it's behind a immutable borrow"
+                    ))
+                    .with_color(colors.next()),
+            ];
 
             if let Some(type_span) = type_span {
                 labels.push(
@@ -167,12 +169,14 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
         } => {
             let path = path.display().to_string();
             let filespan = FileSpan::new(path.clone(), span.from..span.to);
-            let mut labels = vec![Label::new(filespan.clone())
-                .with_message(format!(
-                    "Unexpected type '{}', expected '{}'",
-                    found, expected
-                ))
-                .with_color(colors.next())];
+            let mut labels = vec![
+                Label::new(filespan.clone())
+                    .with_message(format!(
+                        "Unexpected type '{}', expected '{}'",
+                        found, expected
+                    ))
+                    .with_color(colors.next()),
+            ];
 
             if let Some(span) = expected_span {
                 labels.push(
