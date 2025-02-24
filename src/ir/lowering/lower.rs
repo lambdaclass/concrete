@@ -19,7 +19,7 @@ use super::{
     types::lower_type,
 };
 
-pub fn lower_compile_units(compile_units: &[ast::CompileUnit]) -> Result<IR, LoweringError> {
+pub fn lower_compile_units(compile_units: &[ast::CompilationUnit]) -> Result<IR, LoweringError> {
     let mut builder = IRBuilder {
         ir: IR {
             types: Types::new(),
