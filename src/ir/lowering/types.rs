@@ -92,7 +92,7 @@ pub(crate) fn lower_type(
                 };
 
                 if let Some(struct_idx) = symbols.aggregates.get(&sym).copied() {
-                    let struct_type_idx = *builder.struct_to_type_idx.get(&struct_idx).unwrap();
+                    let struct_type_idx = *builder.adt_to_type_idx.get(&struct_idx).unwrap();
                     let body = builder.bodies.structs.get(&struct_idx).unwrap().clone();
 
                     if !body.generics.is_empty() {
@@ -126,7 +126,7 @@ pub(crate) fn lower_type(
                         } else {
                             let mono_struct_idx = builder.ir.aggregates.insert(None);
                             let type_id = builder.ir.types.insert(Some(Type::Adt(mono_struct_idx)));
-                            builder.struct_to_type_idx.insert(mono_struct_idx, type_id);
+                            builder.adt_to_type_idx.insert(mono_struct_idx, type_id);
                             builder.type_to_module.insert(type_id, module_idx);
                             builder
                                 .symbols
@@ -155,7 +155,7 @@ pub(crate) fn lower_type(
                             );
 
                             builder.mono_type_to_poly.insert(
-                                *builder.struct_to_type_idx.get(&mono_struct_idx).unwrap(),
+                                *builder.adt_to_type_idx.get(&mono_struct_idx).unwrap(),
                                 struct_type_idx,
                             );
 
@@ -163,7 +163,7 @@ pub(crate) fn lower_type(
                         }
 
                         *builder
-                            .struct_to_type_idx
+                            .adt_to_type_idx
                             .get(&mono_struct_idx)
                             .expect("should have a type idx")
                     } else {

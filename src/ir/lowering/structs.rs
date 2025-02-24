@@ -65,7 +65,7 @@ pub(crate) fn lower_struct(
                 .aggregates
                 .insert(sym.clone(), id);
             let struct_type_idx = builder.ir.types.insert(Some(Type::Adt(id)));
-            builder.struct_to_type_idx.insert(id, struct_type_idx);
+            builder.adt_to_type_idx.insert(id, struct_type_idx);
             Some(id)
         }
     } else {

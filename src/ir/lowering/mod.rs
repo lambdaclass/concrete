@@ -7,11 +7,11 @@ use std::{
 use functions::{lower_func, lower_func_decl};
 use structs::lower_struct;
 
-use crate::ir;
 use crate::ir::{
     AdtBody, AdtIndex, ConstBody, ConstIndex, FnIndex, Function, Local, LocalIndex, Module,
     ModuleIndex, Statement, Type, TypeIndex, IR,
 };
+use crate::{ast::enums::EnumDecl, ir};
 use types::lower_type;
 
 use crate::ast::{
@@ -59,6 +59,7 @@ pub struct SymbolTable {
 #[derive(Debug, Clone, Default)]
 pub struct Bodies {
     pub structs: HashMap<AdtIndex, Arc<StructDecl>>,
+    pub enums: HashMap<AdtIndex, Arc<EnumDecl>>,
     pub functions: HashMap<FnIndex, Arc<FunctionDef>>,
     pub functions_decls: HashMap<FnIndex, Arc<FunctionDecl>>,
     pub types: HashMap<TypeIndex, Arc<TypeDecl>>,
@@ -75,7 +76,7 @@ pub struct IRBuilder {
     pub self_ty: Option<TypeIndex>,
     pub bodies: Bodies,
     /// Needed to not duplicate TypeIndexes for structs.
-    pub struct_to_type_idx: HashMap<AdtIndex, TypeIndex>,
+    pub adt_to_type_idx: HashMap<AdtIndex, TypeIndex>,
     /// Type to module id where it resides, needed to find methods for the given types.
     pub type_to_module: HashMap<TypeIndex, ModuleIndex>,
     pub mono_type_to_poly: HashMap<TypeIndex, TypeIndex>,
