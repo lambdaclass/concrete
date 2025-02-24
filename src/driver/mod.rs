@@ -295,13 +295,13 @@ pub fn main() -> Result<()> {
             });
 
             for test in tests.iter() {
-                print!("{}...", test.symbol.bold());
+                print!("test {} ... ", test.symbol);
                 let test_fn = unsafe {
                     lib.get::<unsafe extern "C" fn() -> i32>(test.mangled_symbol.as_bytes())
                 };
 
                 if test_fn.is_err() {
-                    println!("{}", "err".red().bold());
+                    println!("{}", "err".red());
                     eprintln!("Symbol not found: {:?}", test_fn);
                     continue;
                 }
@@ -312,17 +312,23 @@ pub fn main() -> Result<()> {
 
                 if result == 0 {
                     passed += 1;
-                    println!("{}", "ok".green().bold());
+                    println!("{}", "ok".green());
                 } else {
-                    println!("{}", "err".red().bold());
+                    println!("{}", "err".red());
                 }
             }
 
+            println!();
             if !tests.is_empty() {
                 println!(
-                    "Tests passed {}/{} ({}%)",
+                    "test result: {}. {} passed; {} failed; ({:.2}%)",
+                    if passed == tests.len() {
+                        "ok".green().to_string()
+                    } else {
+                        "err".red().to_string()
+                    },
                     passed,
-                    tests.len(),
+                    tests.len() - passed,
                     ((passed as f64 / tests.len() as f64) * 100.0).bold()
                 );
             }
