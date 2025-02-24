@@ -11,8 +11,6 @@ use clap::{Parser, Subcommand};
 use config::{Package, Profile};
 use git2::{IndexAddOption, Repository};
 use owo_colors::OwoColorize;
-use signal_hook::consts::SIGUSR1;
-use signal_hook::iterator::Signals;
 use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
@@ -286,60 +284,37 @@ pub fn main() -> Result<()> {
             let (output, tests) = handle_build(args)?;
             println!();
 
+            let tests = Arc::new(tests);
+
             println!("Running {} tests", tests.len());
 
             let mut passed = 0;
 
-            let lib = Arc::new(unsafe { libloading::os::unix::Library::new(output).expect("failed to load")});
+            let lib = Arc::new(unsafe {
+                libloading::os::unix::Library::new(output).expect("failed to load")
+            });
 
-            for test in &tests {
-                let mut signals = Signals::new([SIGUSR1])?;
-                let handle = signals.handle();
-                let test = test.clone();
-                let lib = lib.clone();
-                let handle = std::thread::spawn(move || {
-                    print!("Running test {:?}...", test);
+            for test in tests.iter() {
+                print!("{}...", test.symbol.bold());
+                let test_fn = unsafe {
+                    lib.get::<unsafe extern "C" fn() -> i32>(test.mangled_symbol.as_bytes())
+                };
 
-                    let test_fn = unsafe { lib.get::<unsafe extern "C" fn() -> i32>(test.as_bytes()) };
-
-                    if test_fn.is_err() {
-                        handle.close();
-                        eprintln!("Symbol not found: {:?}", test_fn);
-                        return 1;
-                    }
-
-                    let test_fn = test_fn.unwrap();
-
-                    let result = unsafe { (test_fn)() };
-
-                    handle.close();
-
-                    result
-                });
-
-
-                let sig = signals.wait();
-                let raised_signals: Vec<_> = sig.collect();
-
-                let mut error = false;
-                for sig in raised_signals {
-                    if sig == SIGUSR1 {
-                        error = true;
-                        break;
-                    }
+                if test_fn.is_err() {
+                    println!("{}", "err".red().bold());
+                    eprintln!("Symbol not found: {:?}", test_fn);
+                    continue;
                 }
 
-                if error {
-                    println!("error");
-                } else {
-                    let result = handle.join().unwrap();
+                let test_fn = test_fn.unwrap();
 
-                    if result == 0 {
-                        println!("ok");
-                        passed += 1;
-                    } else {
-                        println!("err");
-                    }
+                let result = unsafe { (test_fn)() };
+
+                if result == 0 {
+                    passed += 1;
+                    println!("{}", "ok".green().bold());
+                } else {
+                    println!("{}", "err".red().bold());
                 }
             }
 
@@ -348,7 +323,7 @@ pub fn main() -> Result<()> {
                     "Tests passed {}/{} ({}%)",
                     passed,
                     tests.len(),
-                    ((passed as f64 / tests.len() as f64) * 100.0)
+                    ((passed as f64 / tests.len() as f64) * 100.0).bold()
                 );
             }
 
@@ -357,6 +332,12 @@ pub fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub struct TestInfo {
+    pub mangled_symbol: String,
+    pub symbol: String,
 }
 
 fn handle_build(
@@ -373,7 +354,7 @@ fn handle_build(
         lib,
         check,
     }: BuildArgs,
-) -> Result<(PathBuf, Vec<String>)> {
+) -> Result<(PathBuf, Vec<TestInfo>)> {
     match path {
         // Single file compilation
         Some(input) => {
@@ -645,7 +626,7 @@ pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<Compile
     Ok(compile_unit)
 }
 
-pub fn compile(args: &CompilerArgs) -> Result<(PathBuf, Vec<String>)> {
+pub fn compile(args: &CompilerArgs) -> Result<(PathBuf, Vec<TestInfo>)> {
     let start_time = Instant::now();
 
     let db = crate::driver::db::DatabaseImpl::default();
@@ -719,8 +700,11 @@ pub fn compile(args: &CompilerArgs) -> Result<(PathBuf, Vec<String>)> {
 
     let mut test_names = Vec::new();
     for t in &compile_unit_ir.tests {
-        let f = compile_unit_ir.functions[*t].as_ref().unwrap().name.clone();
-        test_names.push(f);
+        let f = compile_unit_ir.functions[*t].as_ref().unwrap();
+        test_names.push(TestInfo {
+            mangled_symbol: f.name.clone(),
+            symbol: f.debug_name.clone().unwrap(),
+        });
     }
 
     Ok((object_path, test_names))

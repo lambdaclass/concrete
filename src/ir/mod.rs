@@ -115,6 +115,7 @@ pub struct Module {
 pub struct Function {
     /// The name of this function
     pub name: String,
+    pub debug_name: Option<String>,
     pub args: Vec<TypeIndex>,
     pub ret_ty: TypeIndex,
     pub is_extern: bool,
