@@ -16,6 +16,11 @@ In the realm of low-level programming, language safety, performance and simplici
 
 Writing good code should be easy. The language must be simple enough to fit in a single person’s head. Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. We aim to develop a simpler version of Rust that includes an optional default runtime featuring green threads and a preemptive scheduler, similar to those found in Go and Erlang.
 
+## Roadmap
+
+Check out our feature roadmap [here](ROADMAP.md)
+For a detailed view of current status check the [project](https://github.com/orgs/lambdaclass/projects/23).
+
 ## Installing from Source
 
 Building is as simple as cloning this repository and running the `make build` command, provided you have all the needed dependencies.
@@ -231,61 +236,6 @@ The design was very heavily influenced by all these programming languages:
 - [Clojure](https://clojure.org/)
 - [Nim](https://nim-lang.org/)
 - [Acton](https://www.acton-lang.org)
-
-## Roadmap
-
-For a full roadmap check the [project](https://github.com/orgs/lambdaclass/projects/23).
-
-
-Meaning:
--  ✔️ = implemented
-- 🏗️ = work in progress
-- :x: = work not started yet
-- 🤔 = to be defined
-
-Builtin Features:
-- if/else ✔️
-- while ✔️
-- modules ✔️
-- imports ✔️
-- floats ✔️
-- borrowing ✔️
-- structs ✔️
-- casts ✔️
-- for 🏗️
-- ffi 🏗️
-- linear type checker 🏗️
-- impl block 🏗️
-- generics 🏗️
-- enums :x:
-- match :x:
-- borrow checker :x:
-- traits :x:
-- unsafe :x:
-
-Standard lib features:
-- arrays 🏗️
-- iterators :x:
-- option :x:
-- box :x:
-- rc (for cyclical data structures like graphs) :x:
-- operating system threads with move only semantics :x:
-- rayon-like :x:
-
-Post-runtime features:
-- runtime with preemptive green threads :x:
-- erlang like profiling :x:
-- erlang like tracing :x:
-- erlang like observer :x:
-- standard library :x:
-    - gleam otp like library patterns :x:
-- http server :x:
-- json :x:
-- sql server :x:
-- serde replacement :x:
-- rustler like binding generator to call rust code :x:
-- embeddable concrete (no allocator, first-class support for no standard library, etc) :x:
-- capabilities 🤔
 
 ## Benchmarking
 
