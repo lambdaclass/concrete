@@ -17,6 +17,7 @@ pub enum Expression {
     UnaryOp(UnaryOp, Box<Self>),
     BinaryOp(Box<Self>, BinaryOp, Box<Self>),
     StructInit(StructInitExpr),
+    EnumInit(EnumInitExpr),
     ArrayInit(ArrayInitExpr),
     Deref(Box<Self>, Span),
     AsRef(Box<Self>, bool, Span),
@@ -50,6 +51,14 @@ pub struct StructInitField {
 pub struct AssocMethodCall {
     pub assoc_type: TypeName,
     pub fn_call: FnCallOp,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumInitExpr {
+    pub name: TypeName,
+    pub variant: Ident,
+    pub fields: HashMap<Ident, StructInitField>,
     pub span: Span,
 }
 

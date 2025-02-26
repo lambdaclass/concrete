@@ -12,10 +12,10 @@ use crate::{
 
 use super::{
     Symbol,
+    adts::{lower_enum, lower_struct},
     constants::lower_constant,
     functions::{lower_func, lower_func_decl},
     ir::{IR, ModuleIndex, Type},
-    structs::lower_struct,
     types::lower_type,
 };
 
@@ -34,7 +34,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompilationUnit]) -> Result<IR,
         symbols: Default::default(),
         top_level_modules_names: Default::default(),
         current_generics_map: Default::default(),
-        struct_to_type_idx: Default::default(),
+        adt_to_type_idx: Default::default(),
         type_to_module: Default::default(),
         bodies: Bodies::default(),
         self_ty: None,
@@ -209,7 +209,7 @@ fn lower_module_symbols(
                 builder.ir.modules[module_idx].aggregates.insert(idx);
                 let type_idx = builder.ir.types.insert(Some(Type::Adt(idx)));
                 builder.ir.modules[module_idx].types.insert(type_idx);
-                builder.struct_to_type_idx.insert(idx, type_idx);
+                builder.adt_to_type_idx.insert(idx, type_idx);
                 builder.type_to_module.insert(type_idx, module_idx);
 
                 for attr in &struct_decl.attributes {
@@ -237,7 +237,33 @@ fn lower_module_symbols(
                 );
             }
             ast::modules::ModuleDefItem::Union(_union_decl) => todo!(),
-            ast::modules::ModuleDefItem::Enum(_enum_decl) => todo!(),
+            ast::modules::ModuleDefItem::Enum(enum_decl) => {
+                let idx = builder.ir.aggregates.insert(None);
+                builder.bodies.enums.insert(idx, enum_decl.clone());
+                builder
+                    .symbols
+                    .get_mut(&module_idx)
+                    .unwrap()
+                    .aggregates
+                    .insert(
+                        Symbol {
+                            name: enum_decl.name.name.clone(),
+                            method_of: None,
+                            generics: Vec::new(),
+                        },
+                        idx,
+                    );
+                builder.ir.modules[module_idx].aggregates.insert(idx);
+                let type_idx = builder.ir.types.insert(Some(Type::Adt(idx)));
+                builder.ir.modules[module_idx].types.insert(type_idx);
+                builder.adt_to_type_idx.insert(idx, type_idx);
+                builder.type_to_module.insert(type_idx, module_idx);
+
+                debug!(
+                    "Adding enum symbol {:?} to module {:?}",
+                    enum_decl.name.name, module.name.name
+                );
+            }
             ast::modules::ModuleDefItem::Type(type_decl) => {
                 let idx = builder.ir.types.insert(None);
                 builder.bodies.types.insert(idx, type_decl.clone());
@@ -278,7 +304,7 @@ fn lower_module_symbols(
                     .get(&struct_sym)
                     .unwrap();
 
-                let type_id = *builder.struct_to_type_idx.get(&id).unwrap();
+                let type_id = *builder.adt_to_type_idx.get(&id).unwrap();
                 type_id
             } else {
                 lower_type(builder, &impl_block.target)?
@@ -550,7 +576,11 @@ pub fn lower_module(
                 }
             }
             ast::modules::ModuleDefItem::Union(_union_decl) => todo!(),
-            ast::modules::ModuleDefItem::Enum(_enum_decl) => todo!(),
+            ast::modules::ModuleDefItem::Enum(info) => {
+                if info.generics.is_empty() {
+                    lower_enum(builder, info)?;
+                }
+            }
             ast::modules::ModuleDefItem::Module(module) => {
                 let new_module_idx = *builder
                     .symbols

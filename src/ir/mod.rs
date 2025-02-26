@@ -696,11 +696,23 @@ impl Type {
 
                             for field in &variant.fields {
                                 let ty = ir.types[field.ty].as_ref().unwrap().display(ir)?;
-                                writeln!(f, "\t{}: {},", field.name, ty)?;
+                                writeln!(f, " {}: {},", field.name, ty)?;
                             }
                             write!(f, "}}")?;
                         }
-                        AdtKind::Enum => todo!(),
+                        AdtKind::Enum => {
+                            writeln!(f, "{} {{", body.name)?;
+
+                            for variant in &body.variants {
+                                writeln!(f, " {} {{", variant.name)?;
+                                for field in &variant.fields {
+                                    let ty = ir.types[field.ty].as_ref().unwrap().display(ir)?;
+                                    writeln!(f, "  {}: {},", field.name, ty)?;
+                                }
+                                writeln!(f, " }},")?;
+                            }
+                            write!(f, "}}")?;
+                        }
                         AdtKind::Union => todo!(),
                     }
                 } else {

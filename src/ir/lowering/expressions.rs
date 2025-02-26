@@ -10,7 +10,7 @@ use crate::{
     ir::{
         ConstKind, ConstValue, FloatTy, IntTy, Local, Mutability, Operand, Place, PlaceElem, Span,
         Statement, StatementKind, Type, UintTy, ValueTree,
-        lowering::{functions::lower_fn_call, structs::lower_struct},
+        lowering::{adts::lower_struct, functions::lower_fn_call},
     },
 };
 
@@ -164,7 +164,7 @@ pub(crate) fn lower_expression(
                 for field in &struct_body.fields {
                     if let Some(name) = field.r#type.get_name() {
                         if generics.contains(&name) {
-                            let struct_adt = builder.builder.get_struct(struct_index); // borrowck
+                            let struct_adt = builder.builder.get_adt(struct_index); // borrowck
                             let struct_variant = struct_adt.variants.first().unwrap();
                             let field_index =
                                 *struct_variant.field_names.get(&field.name.name).unwrap();
@@ -202,7 +202,7 @@ pub(crate) fn lower_expression(
             let struct_idx = builder.builder.get_or_lower_for_struct_init(info)?;
             let struct_body = builder
                 .builder
-                .get_struct(struct_idx)
+                .get_adt(struct_idx)
                 .variants
                 .first()
                 .unwrap()
@@ -336,6 +336,73 @@ pub(crate) fn lower_expression(
 
             (Rvalue::Use(Operand::Place(place)), ty, info.span)
         }
+        Expression::EnumInit(info) => {
+            debug!("lowering enum init for struct {}", info.name);
+
+            let enum_idx = builder.builder.get_or_lower_for_enum_init(info)?;
+            let enum_body = builder.builder.get_adt(enum_idx).clone();
+
+            let enum_ty = builder.builder.ir.types.insert(Some(Type::Adt(enum_idx)));
+            let enum_local = builder.add_local(Local::temp(enum_ty));
+
+            let place = Place {
+                local: enum_local,
+                projection: Default::default(),
+            };
+
+            builder.statements.push(Statement {
+                span: None,
+                kind: StatementKind::StorageLive(enum_local),
+            });
+
+            let variant_idx = *enum_body
+                .variant_names
+                .get(&info.variant.name)
+                .expect("variant not found");
+
+            // add tag at start.
+            {
+                let mut tag_place = place.clone();
+                tag_place.projection.push(PlaceElem::Field(0));
+
+                builder.statements.push(Statement {
+                    span: Some(info.span),
+                    kind: StatementKind::Assign(
+                        tag_place,
+                        Rvalue::Use(Operand::Const(ConstData {
+                            ty: builder.builder.ir.get_u64_ty(),
+                            span: info.span,
+                            data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(
+                                variant_idx as u64,
+                            ))),
+                        })),
+                    ),
+                });
+            }
+
+            let variant_body = &enum_body.variants[variant_idx];
+
+            for (field, value) in info.fields.iter() {
+                let idx = *variant_body
+                    .field_names
+                    .get(&field.name)
+                    .expect("failed to find field");
+                let mut field_place = place.clone();
+                field_place.projection.push(PlaceElem::Field(idx + 1));
+
+                let field_ty = variant_body.fields[idx].ty;
+
+                let (value, _value_ty, _field_span) =
+                    lower_expression(builder, &value.value, Some(field_ty))?;
+
+                builder.statements.push(Statement {
+                    span: Some(info.span),
+                    kind: StatementKind::Assign(field_place, value),
+                });
+            }
+
+            (Rvalue::Use(Operand::Place(place)), enum_ty, info.span)
+        }
     })
 }
 
@@ -405,7 +472,7 @@ pub(crate) fn find_expression_type(
                             if generics.contains(&name) {
                                 let struct_adt = fn_builder
                                     .builder
-                                    .get_struct(struct_index)
+                                    .get_adt(struct_index)
                                     .variants
                                     .first()
                                     .unwrap(); // borrowck
@@ -456,7 +523,7 @@ pub(crate) fn find_expression_type(
                                 }
 
                                 let struct_body =
-                                    fn_builder.builder.get_struct(id).variants.first().unwrap();
+                                    fn_builder.builder.get_adt(id).variants.first().unwrap();
                                 let idx =
                                     *struct_body.field_names.get(&name.name).ok_or_else(|| {
                                         LoweringError::StructFieldNotFound {
@@ -551,7 +618,7 @@ pub(crate) fn find_expression_type(
 
             let struct_idx = fn_builder.builder.get_or_lower_for_struct_init(info)?;
 
-            fn_builder.builder.get_struct(struct_idx);
+            fn_builder.builder.get_adt(struct_idx);
 
             let struct_ty = fn_builder
                 .builder
@@ -607,6 +674,9 @@ pub(crate) fn find_expression_type(
             let ty = fn_builder.builder.ir.types.insert(Some(tykind));
 
             Some(ty)
+        }
+        Expression::EnumInit(_enum_init) => {
+            todo!()
         }
     })
 }
@@ -814,7 +884,7 @@ pub(crate) fn lower_path(
                 if generics.contains(&name) {
                     let struct_adt = fn_builder
                         .builder
-                        .get_struct(struct_index)
+                        .get_adt(struct_index)
                         .variants
                         .first()
                         .unwrap(); // borrowck
@@ -858,7 +928,7 @@ pub(crate) fn lower_path(
                         )?;
                     }
 
-                    let struct_body = fn_builder.builder.get_struct(id).variants.first().unwrap();
+                    let struct_body = fn_builder.builder.get_adt(id).variants.first().unwrap();
                     let idx = *struct_body.field_names.get(&name.name).ok_or_else(|| {
                         LoweringError::StructFieldNotFound {
                             span: *field_span,

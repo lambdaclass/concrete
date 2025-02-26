@@ -4,13 +4,16 @@ use std::{
     sync::Arc,
 };
 
+use adts::{lower_enum, lower_struct};
 use functions::{lower_func, lower_func_decl};
-use structs::lower_struct;
 
-use crate::ir;
-use crate::ir::{
-    AdtBody, AdtIndex, ConstBody, ConstIndex, FnIndex, Function, IR, Local, LocalIndex, Module,
-    ModuleIndex, Statement, Type, TypeIndex,
+use crate::{ast::enums::EnumDecl, ir};
+use crate::{
+    ast::expressions::EnumInitExpr,
+    ir::{
+        AdtBody, AdtIndex, ConstBody, ConstIndex, FnIndex, Function, IR, Local, LocalIndex, Module,
+        ModuleIndex, Statement, Type, TypeIndex,
+    },
 };
 use types::lower_type;
 
@@ -22,13 +25,13 @@ use crate::ast::{
     types::{TypeDecl, TypeDescriptor},
 };
 
+mod adts;
 mod constants;
 mod errors;
 mod expressions;
 mod functions;
 mod lower;
 mod statements;
-mod structs;
 mod types;
 
 pub use errors::LoweringError;
@@ -59,6 +62,7 @@ pub struct SymbolTable {
 #[derive(Debug, Clone, Default)]
 pub struct Bodies {
     pub structs: HashMap<AdtIndex, Arc<StructDecl>>,
+    pub enums: HashMap<AdtIndex, Arc<EnumDecl>>,
     pub functions: HashMap<FnIndex, Arc<FunctionDef>>,
     pub functions_decls: HashMap<FnIndex, Arc<FunctionDecl>>,
     pub types: HashMap<TypeIndex, Arc<TypeDecl>>,
@@ -75,7 +79,7 @@ pub struct IRBuilder {
     pub self_ty: Option<TypeIndex>,
     pub bodies: Bodies,
     /// Needed to not duplicate TypeIndexes for structs.
-    pub struct_to_type_idx: HashMap<AdtIndex, TypeIndex>,
+    pub adt_to_type_idx: HashMap<AdtIndex, TypeIndex>,
     /// Type to module id where it resides, needed to find methods for the given types.
     pub type_to_module: HashMap<TypeIndex, ModuleIndex>,
     pub mono_type_to_poly: HashMap<TypeIndex, TypeIndex>,
@@ -129,7 +133,7 @@ impl IRBuilder {
         self.ir.functions[idx].as_ref().unwrap()
     }
 
-    pub fn get_struct(&self, idx: AdtIndex) -> &AdtBody {
+    pub fn get_adt(&self, idx: AdtIndex) -> &AdtBody {
         self.ir.aggregates[idx].as_ref().unwrap()
     }
 
@@ -208,6 +212,44 @@ impl IRBuilder {
         }
 
         let id = lower_struct(self, &struct_decl)?;
+
+        self.current_generics_map = old_generic_params;
+
+        Ok(id)
+    }
+
+    /// Gets the struct index for the given EnumInitExpr (+ using the current generics map in builder).
+    /// If the given enum isn't lowered yet its gets lowered (generics).
+    pub fn get_or_lower_for_enum_init(
+        &mut self,
+        info: &EnumInitExpr,
+    ) -> Result<AdtIndex, LoweringError> {
+        let sym = Symbol {
+            name: info.name.name.name.clone(),
+            method_of: None,
+            generics: Vec::new(),
+        };
+
+        let module_idx = self.get_current_module_idx();
+
+        let poly_idx = *self.symbols[&module_idx].aggregates.get(&sym).unwrap();
+        let enum_decl = self.bodies.enums.get(&poly_idx).unwrap().clone();
+
+        let old_generic_params = self.current_generics_map.clone();
+
+        for (gen_ty, gen_param) in info.name.generics.iter().zip(enum_decl.generics.iter()) {
+            let ty = lower_type(
+                self,
+                &TypeDescriptor::Type {
+                    name: gen_ty.clone(),
+                    span: gen_ty.span,
+                },
+            )?;
+            self.current_generics_map
+                .insert(gen_param.name.name.clone(), ty);
+        }
+
+        let id = lower_enum(self, &enum_decl)?;
 
         self.current_generics_map = old_generic_params;
 
