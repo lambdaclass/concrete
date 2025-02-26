@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use concrete::ir::lowering::{lower_compile_units, LoweringError};
+use concrete::ir::lowering::{LoweringError, lower_compile_units};
 use concrete::parser::ProgramSource;
 
 pub fn check_invalid_program(source: &str, path: &str) -> LoweringError {

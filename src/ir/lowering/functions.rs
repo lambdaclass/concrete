@@ -10,17 +10,17 @@ use crate::{
         types::TypeDescriptor,
     },
     ir::{
-        lowering::{expressions::lower_expression, types::lower_type, Symbol},
         BasicBlock, ConcreteIntrinsic, Function, Local, LocalKind, Operand, Place, Span,
         Terminator, TerminatorKind, Type,
+        lowering::{Symbol, expressions::lower_expression, types::lower_type},
     },
 };
 
 use super::{
+    FnIrBuilder, IRBuilder,
     errors::LoweringError,
     ir::{FnIndex, Rvalue, TypeIndex},
     statements::lower_statement,
-    FnIrBuilder, IRBuilder,
 };
 
 /// Lowers a function or method if its not yet lowered.
@@ -344,15 +344,7 @@ pub(crate) fn lower_fn_call(
         fn_builder.builder.ir.get_unit_ty()
     };
 
-    if args_ty.len()
-        != info.args.len() + {
-            if self_value.is_some() {
-                1
-            } else {
-                0
-            }
-        }
-    {
+    if args_ty.len() != info.args.len() + { if self_value.is_some() { 1 } else { 0 } } {
         return Err(LoweringError::CallParamCountMismatch {
             span: info.span,
             found: info.args.len(),

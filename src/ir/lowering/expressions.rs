@@ -8,18 +8,18 @@ use crate::{
         ValueExpr,
     },
     ir::{
-        lowering::{functions::lower_fn_call, structs::lower_struct},
         ConstKind, ConstValue, FloatTy, IntTy, Local, Mutability, Operand, Place, PlaceElem, Span,
         Statement, StatementKind, Type, UintTy, ValueTree,
+        lowering::{functions::lower_fn_call, structs::lower_struct},
     },
 };
 
 use super::{
+    FnIrBuilder,
     constants::lower_constant_ref,
     errors::LoweringError,
     ir::{BinOp, ConstData, LogOp, Rvalue, TypeIndex},
     types::lower_type,
-    FnIrBuilder,
 };
 
 #[instrument(level = "debug", skip_all)]
@@ -675,7 +675,7 @@ pub(crate) fn lower_value_expr(
                                     UintTy::U128 => ConstValue::U128(*value),
                                 },
                                 Type::Bool => ConstValue::Bool(*value != 0),
-                                Type::Ptr(ref _inner, _mutable) => ConstValue::I64(
+                                Type::Ptr(_inner, _mutable) => ConstValue::I64(
                                     (*value).try_into().expect("value out of range"),
                                 ),
                                 x => unreachable!("{:?}", x),

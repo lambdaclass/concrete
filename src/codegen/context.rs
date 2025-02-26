@@ -1,13 +1,13 @@
 use crate::compile_unit_info::CompileUnitInfo;
 use crate::ir::IR;
 use melior::{
+    Context as MeliorContext,
     dialect::DialectRegistry,
     ir::{
-        attribute::StringAttribute, operation::OperationBuilder, Block, Identifier, Location,
-        Module as MeliorModule, Region, RegionLike,
+        Block, Identifier, Location, Module as MeliorModule, Region, RegionLike,
+        attribute::StringAttribute, operation::OperationBuilder,
     },
     utility::{register_all_dialects, register_all_llvm_translations, register_all_passes},
-    Context as MeliorContext,
 };
 
 use super::{compiler::CodegenCtx, errors::CodegenError, get_data_layout_rep, get_target_triple};
