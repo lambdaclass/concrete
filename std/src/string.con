@@ -1,0 +1,56 @@
+mod string {
+    import std.alloc.{realloc,free};
+
+    #[langitem = "String"]
+    pub struct String {
+        ptr: *mut u8,
+        len: u64,
+        cap: u64,
+    }
+
+    impl String {
+        pub fn new() -> String {
+            let value: String = String {
+                ptr: 0 as *mut u8,
+                len: 0,
+                cap: 0,
+            };
+            return value;
+        }
+
+        pub fn get(&self, at: u64) -> char {
+            // todo: bounds check
+            let target_ptr: *mut u8 = self.ptr + self.len;
+            return (*target_ptr) as  char;
+        }
+
+        fn grow(&mut self) {
+            let new_cap: u64 = std::math::max::<u64>(self.cap, 4) * 2;
+            self.ptr = realloc::<u8>(self.ptr, new_cap);
+            self.cap = new_cap;
+        }
+
+        pub fn clear(&mut self) {
+            self.len = 0;
+            if self.cap > 0 {
+                // c-str, set first to null just in case.
+                *self.ptr = 0;
+            }
+        }
+
+        /// TODO: drop should be a trait, and isn't really called yet automatically.
+        pub fn drop(self) {
+            free::<u8>(self.ptr);
+        }
+
+        // TODO: insert, remove
+    }
+
+    pub fn digit_to_int<T>(value: char) -> T {
+        return (value as T) - 48;
+    }
+
+    pub fn int_to_digit<T>(value: T) -> char {
+        return (value + 48) as T;
+    }
+}

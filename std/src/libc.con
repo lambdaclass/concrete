@@ -1,0 +1,10 @@
+mod libc {
+    extern fn malloc(size: u64) -> *mut u8;
+    extern fn realloc(ptr: *mut u8, size: u64) -> *mut u8;
+    extern fn free(ptr: *mut u8);
+    extern fn puts(ptr: *mut u8) -> i32;
+    extern fn fopen(name: *mut u8, mode: *mut u8) -> *const u8;
+    extern fn fdopen(name: i32, mode: *mut u8) -> *const u8;
+    extern fn fdopen(name: i32, mode: *mut u8) -> *const u8;
+    extern fn fclose(file: *const u8) -> i32;
+}
