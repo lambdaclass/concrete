@@ -16,4 +16,40 @@ mod math {
             return b;
         }
     }
+
+    import std.test.{assert_eq};
+
+    #[test]
+    fn test_min() -> i32 {
+        if !assert_eq::<i32>(min::<i32>(4, 2), 2, "Should give the min value") {
+            return 1;
+        }
+
+        if !assert_eq::<i32>(min::<i32>(2, 2), 2, "Should give the min value") {
+            return 1;
+        }
+
+        if !assert_eq::<i32>(min::<i32>(2, 4), 2, "Should give the min value") {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    #[test]
+    fn test_max() -> i32 {
+        if !assert_eq::<i32>(max::<i32>(4, 2), 4, "Should give the max value") {
+            return 1;
+        }
+
+        if !assert_eq::<i32>(max::<i32>(4, 4), 4, "Should give the max value") {
+            return 1;
+        }
+
+        if !assert_eq::<i32>(max::<i32>(4, 5), 4, "Should give the max value") {
+            return 1;
+        }
+
+        return 0;
+    }
 }
