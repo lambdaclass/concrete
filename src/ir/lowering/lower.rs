@@ -220,7 +220,11 @@ fn lower_module_symbols(
                                 builder.ir.builtin_types.insert(Type::String, type_idx);
                             }
                             _ => {
-                                panic!("unknown lang item: {:?}", langitem)
+                                return Err(LoweringError::UnknownLangItem {
+                                    span: attr.span,
+                                    item: attr.name.clone(),
+                                    path: builder.get_current_module().file_path.clone(),
+                                });
                             }
                         }
                     }
