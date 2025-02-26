@@ -1,11 +1,11 @@
+use crate::ast::CompilationUnit;
 use crate::ast::modules::ModuleDefItem;
-use crate::ast::CompileUnit;
 use crate::compile_unit_info::{CompileUnitInfo, DebugInfo, OptLevel};
 use crate::ir::lowering::lower_compile_units;
 use crate::parser::ProgramSource;
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
 use clap::Args;
 use clap::{Parser, Subcommand};
 use config::{Package, Profile};
@@ -555,7 +555,7 @@ fn handle_build(
     }
 }
 
-pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<CompileUnit> {
+pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<CompilationUnit> {
     if path.is_dir() {
         path = path.join("mod.ed");
     }
@@ -578,7 +578,7 @@ pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<Compile
         }
     };
 
-    let mut modules_to_add: HashMap<String, Vec<CompileUnit>> = HashMap::new();
+    let mut modules_to_add: HashMap<String, Vec<CompilationUnit>> = HashMap::new();
     for module in &compile_unit.modules {
         let mut list = Vec::new();
         for stmt in &module.contents {

@@ -4,14 +4,14 @@ use tracing::{debug, instrument};
 
 use crate::{
     ast::types::TypeDescriptor,
-    ir::lowering::{adts::lower_enum, Symbol},
+    ir::lowering::{Symbol, adts::lower_enum},
 };
 
 use super::{
+    IRBuilder,
     adts::lower_struct,
     errors::LoweringError,
     ir::{self, ConstData, ConstKind, ConstValue, FloatTy, Mutability, Type, TypeIndex, ValueTree},
-    IRBuilder,
 };
 
 #[instrument(skip_all, fields(name = ?ty.get_name()))]

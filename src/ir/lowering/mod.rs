@@ -11,8 +11,8 @@ use crate::{ast::enums::EnumDecl, ir};
 use crate::{
     ast::expressions::EnumInitExpr,
     ir::{
-        AdtBody, AdtIndex, ConstBody, ConstIndex, FnIndex, Function, Local, LocalIndex, Module,
-        ModuleIndex, Statement, Type, TypeIndex, IR,
+        AdtBody, AdtIndex, ConstBody, ConstIndex, FnIndex, Function, IR, Local, LocalIndex, Module,
+        ModuleIndex, Statement, Type, TypeIndex,
     },
 };
 use types::lower_type;

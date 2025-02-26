@@ -101,4 +101,10 @@ pub enum LoweringError {
         needs: usize,
         path: PathBuf,
     },
+    #[error("unknown lang item {item}")]
+    UnknownLangItem {
+        span: Span,
+        item: String,
+        path: PathBuf,
+    },
 }

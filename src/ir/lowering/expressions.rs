@@ -8,18 +8,18 @@ use crate::{
         ValueExpr,
     },
     ir::{
-        lowering::{adts::lower_struct, functions::lower_fn_call},
         ConstKind, ConstValue, FloatTy, IntTy, Local, Mutability, Operand, Place, PlaceElem, Span,
         Statement, StatementKind, Type, UintTy, ValueTree,
+        lowering::{adts::lower_struct, functions::lower_fn_call},
     },
 };
 
 use super::{
+    FnIrBuilder,
     constants::lower_constant_ref,
     errors::LoweringError,
     ir::{BinOp, ConstData, LogOp, Rvalue, TypeIndex},
     types::lower_type,
-    FnIrBuilder,
 };
 
 #[instrument(level = "debug", skip_all)]
@@ -675,7 +675,7 @@ pub(crate) fn find_expression_type(
 
             Some(ty)
         }
-        Expression::EnumInit(enum_init) => {
+        Expression::EnumInit(_enum_init) => {
             todo!()
         }
     })
@@ -745,7 +745,7 @@ pub(crate) fn lower_value_expr(
                                     UintTy::U128 => ConstValue::U128(*value),
                                 },
                                 Type::Bool => ConstValue::Bool(*value != 0),
-                                Type::Ptr(ref _inner, _mutable) => ConstValue::I64(
+                                Type::Ptr(_inner, _mutable) => ConstValue::I64(
                                     (*value).try_into().expect("value out of range"),
                                 ),
                                 x => unreachable!("{:?}", x),
