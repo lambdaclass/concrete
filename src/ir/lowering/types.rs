@@ -95,27 +95,19 @@ pub(crate) fn lower_type(
                 };
 
                 if let Some(adt_idx) = symbols.aggregates.get(&sym).copied() {
-                    let kind = builder.get_adt(adt_idx).kind;
+                    debug!("Found adt with symbol {:?}", sym);
                     let adt_type_idx = *builder.adt_to_type_idx.get(&adt_idx).unwrap();
-                    let body_generics = match kind {
-                        ir::AdtKind::Struct => builder
-                            .bodies
-                            .structs
-                            .get(&adt_idx)
-                            .as_ref()
-                            .unwrap()
-                            .generics
-                            .clone(),
-                        ir::AdtKind::Enum => builder
-                            .bodies
-                            .enums
-                            .get(&adt_idx)
-                            .as_ref()
-                            .unwrap()
-                            .generics
-                            .clone(),
-                        ir::AdtKind::Union => todo!(),
-                    };
+                    let mut kind = ir::AdtKind::Struct;
+
+                    let body_generics =
+                        if let Some(body) = builder.bodies.structs.get(&adt_idx).as_ref() {
+                            body.generics.clone()
+                        } else if let Some(body) = builder.bodies.enums.get(&adt_idx).as_ref() {
+                            kind = ir::AdtKind::Enum;
+                            body.generics.clone()
+                        } else {
+                            panic!("adt should be found")
+                        };
 
                     if !body_generics.is_empty() {
                         let type_name_generics = name.generics.clone();
