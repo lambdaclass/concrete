@@ -553,8 +553,16 @@ impl Type {
                 let adt_align = self.get_align(ir);
 
                 for variant in &adt.variants {
-                    let mut size = 32; // tag
-                    let mut align = 32;
+                    let mut size = match adt.kind {
+                        AdtKind::Struct => 0,
+                        AdtKind::Enum => 32, // u32 tag
+                        AdtKind::Union => todo!(),
+                    };
+                    let mut align = match adt.kind {
+                        AdtKind::Struct => 1,
+                        AdtKind::Enum => 32, // u32 tag
+                        AdtKind::Union => todo!(),
+                    };
 
                     for field in &variant.fields {
                         let field_align = ir.types[field.ty].as_ref().unwrap().get_align(ir);
@@ -587,8 +595,8 @@ impl Type {
     /// In bits
     pub fn get_align(&self, ir: &IR) -> usize {
         match self {
-            Type::Unit => 1,
-            Type::Bool => 1,
+            Type::Unit => 0,
+            Type::Bool => 8,
             Type::Char => 8,
             Type::Int(ty) => match ty {
                 IntTy::I8 => 8,
@@ -619,10 +627,14 @@ impl Type {
             Type::Adt(idx) => {
                 let adt = ir.aggregates[*idx].as_ref().unwrap();
 
-                let mut max_align = 32; // tag u32 align
+                let mut max_align = match adt.kind {
+                    AdtKind::Struct => 8,
+                    AdtKind::Enum => 32, // u32 tag
+                    AdtKind::Union => todo!(),
+                };
 
                 for variant in &adt.variants {
-                    let mut max_variant_align = 1;
+                    let mut max_variant_align = 8;
                     for field in &variant.fields {
                         let align = ir.types[field.ty].as_ref().unwrap().get_align(ir);
                         max_variant_align = max_variant_align.max(align);
