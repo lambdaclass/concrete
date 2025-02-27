@@ -1603,14 +1603,27 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &IRType) -> Type<'c> {
                         let ty = compile_type(ctx, &field_ty);
                         fields.push(ty);
                     }
+                    let ty = melior::dialect::llvm::r#type::r#struct(
+                        ctx.ctx.mlir_context,
+                        &fields,
+                        false,
+                    );
+
+                    ty
                 }
-                AdtKind::Enum => todo!(),
+                AdtKind::Enum => {
+                    let tag_type = ctx.get_type(ctx.ctx.program.get_i32_ty());
+                    let tag_ty = compile_type(ctx, &tag_type);
+                    let payload_size = ty.get_bit_width(ctx.ctx.program) - 32;
+                    let u8_ty = IntegerType::new(ctx.ctx.mlir_context, 32).into();
+                    let arr_ty =
+                        melior::dialect::llvm::r#type::array(u8_ty, (payload_size / 8) as u32);
+                    let enum_ty =
+                        llvm::r#type::r#struct(ctx.ctx.mlir_context, &[tag_ty, arr_ty], false);
+                    enum_ty
+                }
                 AdtKind::Union => todo!(),
             }
-
-            let ty = melior::dialect::llvm::r#type::r#struct(ctx.ctx.mlir_context, &fields, false);
-
-            ty
         }
     }
 }

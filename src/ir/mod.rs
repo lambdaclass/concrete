@@ -548,22 +548,38 @@ impl Type {
             Type::Ptr(_, _) => 64,
             Type::Adt(idx) => {
                 let adt = ir.aggregates[*idx].as_ref().unwrap();
-                let mut total_size = 0;
+
+                let mut max_size = 0;
+                let adt_align = self.get_align(ir);
 
                 for variant in &adt.variants {
-                    let mut variant_size = 0;
-                    for field in &variant.fields {
-                        let ty = ir.types[field.ty].as_ref().unwrap();
-                        let size = ty.get_bit_width(ir);
+                    let mut size = 32; // tag
+                    let mut align = 32;
 
-                        variant_size += size;
+                    for field in &variant.fields {
+                        let field_align = ir.types[field.ty].as_ref().unwrap().get_align(ir);
+                        let field_size = ir.types[field.ty].as_ref().unwrap().get_bit_width(ir);
+                        align = align.max(field_align);
+
+                        if size % field_align != 0 {
+                            let padding = (field_align - (size % field_align)) % field_align;
+                            size += padding;
+                        }
+
+                        size += field_size;
                     }
-                    total_size = total_size.max(variant_size);
+
+                    max_size = if size % adt_align == 0 {
+                        size
+                    } else {
+                        let padding = (adt_align - (size % adt_align)) % adt_align;
+                        size += padding;
+                        size
+                    }
+                    .max(max_size)
                 }
 
-                // todo: check if padding/ align is needed.
-
-                total_size
+                max_size
             }
         }
     }
@@ -603,10 +619,10 @@ impl Type {
             Type::Adt(idx) => {
                 let adt = ir.aggregates[*idx].as_ref().unwrap();
 
-                let mut max_align = 0;
+                let mut max_align = 32; // tag u32 align
 
                 for variant in &adt.variants {
-                    let mut max_variant_align = 0;
+                    let mut max_variant_align = 1;
                     for field in &variant.fields {
                         let align = ir.types[field.ty].as_ref().unwrap().get_align(ir);
                         max_variant_align = max_variant_align.max(align);
