@@ -12,7 +12,7 @@
 
 >Most ideas come from previous ideas - Alan C. Kay, The Early History Of Smalltalk
 
-In the realm of low-level programming, language safety, performance and simplicity are paramount features. We are confident that these attributes can be achieved in system programming languages without substantially sacrificing expressiveness. Thanks to advancements in type systems theory and practice pioneered by languages like Rust, Mojo, and Austral, it is now possible to create languages that offer both high safety guarantees and excellent developer experience.
+In the realm of low-level programming, language safety, performance and simplicity are paramount features. We are confident that these attributes can be achieved in system programming languages without substantially sacrificing expressiveness. Thanks to advancements in type systems theory and practice pioneered by languages like [Rust](https://www.rust-lang.org), [Mojo](https://www.youtube.com/watch?v=Ab8WQ1wwhV8), and [Austral](https://borretti.me/article/introducing-austral), it is now possible to create languages that offer both high safety guarantees and excellent developer experience.
 
 Concrete achieves this balance, offering a programming language that is fast, simple and safe without having a garbage collector and a complex borrow checker. Additionally, it features a default pluggable runtime, enabling the development of highly scalable systems that are not only reliable and efficient but also straightforward to maintain.
 
@@ -83,7 +83,6 @@ Concrete take many features from Rust like:
 
 But we want to take a different path with respect to:
 - Linear type system rather than affine type system
-- No lifetimes
 - Simpler borrow checker
 - Concurrency model. We provide a default runtime with green threads. There is no support for low-level primitives like atomics, mutex and OS threads.
 - There is no Sync and Send traits. This implies that mutability can only happen inside the same process.
