@@ -9,6 +9,7 @@ pub mod lowering;
 
 pub type LocalIndex = usize;
 pub type BlockIndex = usize;
+pub type VariantIndex = usize;
 pub type FieldIndex = usize;
 
 pub type ModuleIndex = SmallSlabIndex<Module>;
@@ -263,6 +264,7 @@ pub enum PlaceElem {
     /// Dereference
     Deref,
     /// Get a field
+    Variant(FieldIndex),
     Field(FieldIndex),
     /// array index
     Index(LocalIndex),
@@ -490,6 +492,16 @@ impl Type {
 
     pub fn is_int(&self) -> bool {
         matches!(self, Type::Int(_) | Type::Uint(_) | Type::Char)
+    }
+
+    pub fn has_tag(&self, ir: &IR) -> bool {
+        match self {
+            Type::Adt(index) => {
+                let body = ir.aggregates[*index].as_ref().unwrap().kind;
+                matches!(body, AdtKind::Enum | AdtKind::Union)
+            }
+            _ => false,
+        }
     }
 
     pub fn is_signed(&self) -> bool {

@@ -363,7 +363,7 @@ pub(crate) fn lower_expression(
             // add tag at start.
             {
                 let mut tag_place = place.clone();
-                tag_place.projection.push(PlaceElem::Field(0));
+                tag_place.projection.push(PlaceElem::Variant(variant_idx));
 
                 builder.statements.push(Statement {
                     span: Some(info.span),

@@ -522,6 +522,7 @@ fn compile_rvalue<'c: 'b, 'b>(
                             .result(0)?
                             .into();
                     }
+                    PlaceElem::Variant(_) => todo!(),
                     PlaceElem::Field(_) => todo!(),
                     PlaceElem::Index(_) => todo!(),
                     PlaceElem::ConstantIndex(_) => todo!(),
@@ -1076,6 +1077,7 @@ fn compile_store_place<'c: 'b, 'b>(
     let local = &ctx.get_fn_body().locals[info.local];
     let mut local_type_idx = local.ty;
     let mut local_ty = ctx.module.get_type(local_type_idx);
+    let mut variant_idx = 0;
 
     for proj in &info.projection {
         match proj {
@@ -1093,6 +1095,25 @@ fn compile_store_place<'c: 'b, 'b>(
 
                 local_type_idx = local_ty.get_inner_type().expect("should have inner");
                 local_ty = ctx.module.get_type(local_type_idx);
+            }
+            PlaceElem::Variant(target_variant_idx) => {
+                match local_ty {
+                    IRType::Adt(id) => {
+                        let adt = ctx.module.ctx.program.aggregates[id].as_ref().unwrap();
+                        match adt.kind {
+                            AdtKind::Struct => {
+                                unreachable!();
+                            }
+                            AdtKind::Enum => {
+                                variant_idx = *target_variant_idx;
+                            }
+                            AdtKind::Union => {
+                                variant_idx = *target_variant_idx;
+                            }
+                        }
+                    }
+                    _ => unreachable!(),
+                };
             }
             PlaceElem::Field(field_idx) => {
                 ptr = block
@@ -1113,8 +1134,9 @@ fn compile_store_place<'c: 'b, 'b>(
                     IRType::Adt(id) => {
                         let adt = ctx.module.ctx.program.aggregates[id].as_ref().unwrap();
                         match adt.kind {
-                            AdtKind::Struct => adt.variants.first().unwrap().fields[*field_idx].ty,
-                            AdtKind::Enum => todo!(),
+                            // On structs the variant idx should always be 0.
+                            AdtKind::Struct => adt.variants[variant_idx].fields[*field_idx].ty,
+                            AdtKind::Enum => adt.variants[variant_idx].fields[(*field_idx) - 1].ty,
                             AdtKind::Union => todo!(),
                         }
                     }
@@ -1206,6 +1228,7 @@ fn compile_load_place<'c: 'b, 'b>(
 
     let mut local_type_idx = body.locals[info.local].ty;
     let mut local_ty = ctx.module.get_type(local_type_idx);
+    let mut variant_idx = 0;
 
     for projection in &info.projection {
         match projection {
@@ -1226,6 +1249,9 @@ fn compile_load_place<'c: 'b, 'b>(
                     .expect("should always have inner type");
                 local_ty = ctx.module.get_type(local_type_idx);
             }
+            PlaceElem::Variant(target_variant_idx) => {
+                variant_idx = *target_variant_idx;
+            }
             PlaceElem::Field(field_idx) => {
                 local_type_idx = match local_ty {
                     IRType::Adt(id) => {
@@ -1233,7 +1259,7 @@ fn compile_load_place<'c: 'b, 'b>(
                         match adt_body.kind {
                             AdtKind::Struct => {
                                 let field_type_idx =
-                                    adt_body.variants.first().unwrap().fields[*field_idx].ty;
+                                    adt_body.variants[variant_idx].fields[*field_idx].ty;
                                 ptr = block
                                     .append_operation(llvm::get_element_ptr(
                                         ctx.context(),
@@ -1615,7 +1641,7 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &IRType) -> Type<'c> {
                     let tag_type = ctx.get_type(ctx.ctx.program.get_i32_ty());
                     let tag_ty = compile_type(ctx, &tag_type);
                     let payload_size = ty.get_bit_width(ctx.ctx.program) - 32;
-                    let u8_ty = IntegerType::new(ctx.ctx.mlir_context, 32).into();
+                    let u8_ty = IntegerType::new(ctx.ctx.mlir_context, 8).into();
                     let arr_ty =
                         melior::dialect::llvm::r#type::array(u8_ty, (payload_size / 8) as u32);
                     let enum_ty =
