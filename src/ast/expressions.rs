@@ -63,6 +63,14 @@ pub struct EnumInitExpr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumMatchExpr {
+    pub name: TypeName,
+    pub variant: Ident,
+    pub field_values: Vec<Ident>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArrayInitExpr {
     pub values: Vec<Expression>,
     pub span: Span,
@@ -132,9 +140,15 @@ pub struct IfExpr {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MatchVariant {
-    pub case: ValueExpr,
+    pub case: MatchCaseExpr,
     pub block: Vec<Statement>,
     pub span: Span,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MatchCaseExpr {
+    Value(ValueExpr),
+    Enum(EnumMatchExpr),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -56,6 +56,7 @@ extern {
     ":" => Token::Colon,
     "::" => Token::DoubleColon,
     "->" => Token::Arrow,
+    "=>" => Token::DoubleArrow,
     "," => Token::Coma,
     "#" => Token::Hashtag,
     "<" => Token::LessThanSign,
@@ -601,20 +602,36 @@ MatchExpr: ast::expressions::MatchExpr = {
 
 MatchVariant: ast::expressions::MatchVariant = {
   // 0 -> 1
-  <lo:@L> <case:ValueExpr> "->" <stmt:Statement> <hi:@R> => {
+  <lo:@L> <case:ValueExpr> "=>" <stmt:Statement> <hi:@R> => {
     ast::expressions::MatchVariant {
-      case,
+      case: ast::expressions::MatchCaseExpr::Value(case),
       block: vec![stmt],
       span: Span::new(lo, hi)
     }
   },
   // x -> { ... }
-  <lo:@L> <case:ValueExpr> "->" "{" <stmts:StatementList> "}" <hi:@R> => {
+  <lo:@L> <case:ValueExpr> "=>" "{" <stmts:StatementList> "}" <hi:@R> => {
     ast::expressions::MatchVariant {
-      case,
+      case: ast::expressions::MatchCaseExpr::Value(case),
       block: stmts,
       span: Span::new(lo, hi)
     }
+  },
+  <lo:@L> <case:EnumMatchExpr> "=>" "{" <stmts:StatementList> "}" <hi:@R> => {
+    ast::expressions::MatchVariant {
+      case: ast::expressions::MatchCaseExpr::Enum(case),
+      block: stmts,
+      span: Span::new(lo, hi)
+    }
+  }
+}
+
+EnumMatchExpr: ast::expressions::EnumMatchExpr = {
+  <lo:@L> <name:TypeNameUse> "#" <variant:Ident> <fields:("{" <Comma<Ident>> "}")?> <hi:@R> => ast::expressions::EnumMatchExpr {
+    name,
+    variant,
+    field_values: fields.unwrap_or_default().into_iter().collect(),
+    span: Span::new(lo, hi),
   }
 }
 
