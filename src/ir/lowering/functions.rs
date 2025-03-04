@@ -4,7 +4,7 @@ use tracing::{debug, instrument};
 
 use crate::{
     ast::{
-        expressions::FnCallOp,
+        expressions::{FnCallOp, MatchCaseExpr},
         functions::{FunctionDecl, FunctionDef},
         statements::{self, LetStmtTarget},
         types::TypeDescriptor,
@@ -585,7 +585,7 @@ pub(crate) fn get_locals(
 ) -> Result<(), LoweringError> {
     match stmt {
         statements::Statement::Assign(_assign_stmt) => {}
-        statements::Statement::Match(_match_expr) => todo!(),
+        statements::Statement::Match(_match_expr) => {}
         statements::Statement::For(info) => {
             if let Some(info) = &info.init {
                 match &info.target {

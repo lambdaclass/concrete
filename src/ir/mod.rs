@@ -64,6 +64,11 @@ impl IR {
         *self.builtin_types.get(&Type::Int(IntTy::I32)).unwrap()
     }
 
+    /// Get the builtin `u32` type.
+    pub fn get_u32_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&Type::Uint(UintTy::U32)).unwrap()
+    }
+
     /// Get the builtin `i64` type.
     pub fn get_i64_ty(&self) -> TypeIndex {
         *self.builtin_types.get(&Type::Int(IntTy::I64)).unwrap()
@@ -263,8 +268,11 @@ pub struct Place {
 pub enum PlaceElem {
     /// Dereference
     Deref,
+    /// Get the variant discrimantor.
+    GetVariant,
+    /// Use the given variant
+    Variant(VariantIndex),
     /// Get a field
-    Variant(FieldIndex),
     Field(FieldIndex),
     /// array index
     Index(LocalIndex),

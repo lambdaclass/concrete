@@ -522,6 +522,7 @@ fn compile_rvalue<'c: 'b, 'b>(
                             .result(0)?
                             .into();
                     }
+                    PlaceElem::GetVariant => todo!(),
                     PlaceElem::Variant(_) => todo!(),
                     PlaceElem::Field(_) => todo!(),
                     PlaceElem::Index(_) => todo!(),
@@ -1096,6 +1097,9 @@ fn compile_store_place<'c: 'b, 'b>(
                 local_type_idx = local_ty.get_inner_type().expect("should have inner");
                 local_ty = ctx.module.get_type(local_type_idx);
             }
+            PlaceElem::GetVariant => {
+                unreachable!()
+            }
             PlaceElem::Variant(target_variant_idx) => {
                 match local_ty {
                     IRType::Adt(id) => {
@@ -1340,6 +1344,36 @@ fn compile_load_place<'c: 'b, 'b>(
                     .into();
 
                 local_type_idx = local_ty.get_inner_type().expect("should have inner");
+                local_ty = ctx.module.get_type(local_type_idx);
+            }
+            PlaceElem::GetVariant => {
+                local_type_idx = match local_ty {
+                    IRType::Adt(id) => {
+                        let adt_body = ctx.module.ctx.program.aggregates[id].as_ref().unwrap();
+                        match adt_body.kind {
+                            AdtKind::Struct => {
+                                unreachable!()
+                            }
+                            AdtKind::Enum => {
+                                let variant_type_idx = ctx.module.ctx.program.get_i32_ty();
+                                ptr = block
+                                    .append_operation(llvm::get_element_ptr(
+                                        ctx.context(),
+                                        ptr,
+                                        DenseI32ArrayAttribute::new(ctx.context(), &[0, 0]),
+                                        compile_type(ctx.module, &local_ty),
+                                        pointer(ctx.context(), 0),
+                                        Location::unknown(ctx.context()),
+                                    ))
+                                    .result(0)?
+                                    .into();
+                                variant_type_idx
+                            }
+                            AdtKind::Union => todo!(),
+                        }
+                    }
+                    _ => unreachable!(),
+                };
                 local_ty = ctx.module.get_type(local_type_idx);
             }
         }
@@ -1638,7 +1672,7 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &IRType) -> Type<'c> {
                     ty
                 }
                 AdtKind::Enum => {
-                    let tag_type = ctx.get_type(ctx.ctx.program.get_i32_ty());
+                    let tag_type = ctx.get_type(ctx.ctx.program.get_u32_ty());
                     let tag_ty = compile_type(ctx, &tag_type);
                     let payload_size = ty.get_bit_width(ctx.ctx.program) - 32;
                     let u8_ty = IntegerType::new(ctx.ctx.mlir_context, 8).into();

@@ -2,14 +2,21 @@ use tracing::{debug, instrument};
 
 use crate::{
     ast::{
-        expressions::IfExpr,
+        common::TypeName,
+        expressions::{Expression, IfExpr, MatchCaseExpr, MatchExpr},
         statements::{self, AssignStmt, ForStmt, LetStmt, LetStmtTarget, ReturnStmt, WhileStmt},
+        types::TypeDescriptor,
     },
     ir::{
         BasicBlock, ConstData, ConstKind, ConstValue, Mutability, Operand, Place, PlaceElem,
         Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, Type,
         ValueTree,
-        lowering::{expressions::lower_expression, functions::get_locals, types::lower_type},
+        lowering::{
+            Symbol,
+            expressions::{lower_expression, lower_value_expr},
+            functions::get_locals,
+            types::lower_type,
+        },
     },
 };
 
@@ -25,7 +32,7 @@ pub(crate) fn lower_statement(
 ) -> Result<(), LoweringError> {
     match info {
         statements::Statement::Assign(info) => lower_assign(builder, info)?,
-        statements::Statement::Match(_) => todo!(),
+        statements::Statement::Match(info) => lower_match(builder, info)?,
         statements::Statement::For(info) => {
             lower_for(builder, info)?;
             assert!(builder.statements.is_empty());
@@ -317,6 +324,141 @@ fn lower_if_statement(builder: &mut FnIrBuilder, info: &IfExpr) -> Result<(), Lo
     };
 
     Ok(())
+}
+
+#[instrument(level = "debug", skip_all)]
+fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), LoweringError> {
+    debug!("begin lowering match");
+
+    let (discriminator, discriminator_type_idx, _disc_span) =
+        lower_expression(builder, &info.expr, None)?;
+
+    let local = builder.add_temp_local(builder.builder.ir.get_bool_ty());
+    let place = Place {
+        local,
+        projection: vec![],
+    };
+
+    builder.statements.push(Statement {
+        span: None,
+        kind: StatementKind::Assign(place.clone(), discriminator),
+    });
+
+    // keep idx to change terminator
+    let current_block_idx = builder.body.basic_blocks.len();
+
+    let outer_scope_locals = builder.name_to_local.clone();
+
+    // flush current block
+    let statements = std::mem::take(&mut builder.statements);
+    builder.body.basic_blocks.push(BasicBlock {
+        statements,
+        terminator: Box::new(Terminator {
+            span: None,
+            kind: TerminatorKind::Unreachable,
+        }),
+    });
+
+    let mut targets = Vec::new();
+    let mut targets_last_block = Vec::new();
+    let mut target_conds = Vec::new();
+
+    let mut is_enum_match: Option<Option<TypeName>> = None;
+
+    for variant in &info.variants {
+        let mut variant_scope_locals = outer_scope_locals.clone();
+
+        match &variant.case {
+            MatchCaseExpr::Value(value_expr) => {
+                let value = lower_value_expr(builder, value_expr, None)?;
+                target_conds.push(value);
+                is_enum_match = Some(None);
+            }
+            MatchCaseExpr::Enum(enum_match_expr) => {
+                if let Some(None) = is_enum_match {
+                    panic!("enum on a non enum match")
+                }
+
+                if let Some(Some(name)) = &is_enum_match {
+                    if name.name != enum_match_expr.name.name
+                        && name.generics != enum_match_expr.name.generics
+                    {
+                        panic!("mismatched enum types")
+                    }
+                } else {
+                    is_enum_match = Some(Some(enum_match_expr.name.clone()));
+                }
+
+                // monomorphic enum should already be lowered here.
+                let mut generics = Vec::new();
+                for gen_ty in enum_match_expr.name.generics.iter() {
+                    let ty = lower_type(
+                        builder.builder,
+                        &TypeDescriptor::Type {
+                            name: gen_ty.clone(),
+                            span: gen_ty.span,
+                        },
+                    )?;
+                    generics.push(ty);
+                }
+                let sym = Symbol {
+                    name: enum_match_expr.name.name.name.clone(),
+                    method_of: None,
+                    generics,
+                };
+
+                let adt_id = *builder
+                    .get_symbols_table()
+                    .aggregates
+                    .get(&sym)
+                    .expect("enum not found");
+                let adt_body = builder.builder.get_adt(adt_id);
+
+                let variant_idx = *adt_body
+                    .variant_names
+                    .get(&enum_match_expr.variant.name)
+                    .expect("variant not found");
+
+                let variant_value = Rvalue::Use(Operand::Const(ConstData {
+                    ty: builder.builder.ir.get_u32_ty(),
+                    span: enum_match_expr.span,
+                    data: ConstKind::Value(ValueTree::Leaf(ConstValue::U32(variant_idx as u32))),
+                }));
+
+                target_conds.push((variant_value, builder.builder.ir.get_u32_ty()));
+            }
+        }
+
+        // todo: add locals from destructure, on each enum match block add the value extraction on the start of block.
+
+        // keep idx for switch targets
+        targets.push(builder.body.basic_blocks.len());
+        let current_block_idx = builder.body.basic_blocks.len();
+
+        for stmt in &variant.block {
+            get_locals(builder, stmt)?;
+            lower_statement(builder, stmt, builder.body.locals[builder.ret_local].ty)?;
+        }
+
+        // keet idx to change terminator
+        let last_then_block_idx = {
+            builder.body.basic_blocks.len();
+            let statements = std::mem::take(&mut builder.statements);
+            builder.body.basic_blocks.push(BasicBlock {
+                statements,
+                terminator: Box::new(Terminator {
+                    span: None,
+                    kind: TerminatorKind::Unreachable,
+                }),
+            });
+            builder.body.basic_blocks.len() - 1
+        };
+        targets_last_block.push(last_then_block_idx);
+
+        builder.name_to_local = outer_scope_locals.clone();
+    }
+
+    todo!()
 }
 
 #[instrument(level = "debug", skip_all)]
