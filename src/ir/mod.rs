@@ -264,7 +264,7 @@ pub struct Place {
 }
 
 /// A element of the place projection.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PlaceElem {
     /// Dereference
     Deref,

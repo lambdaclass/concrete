@@ -3,14 +3,14 @@ use tracing::{debug, instrument};
 use crate::{
     ast::{
         common::TypeName,
-        expressions::{Expression, IfExpr, MatchCaseExpr, MatchExpr},
+        expressions::{Expression, IfExpr, MatchCaseExpr, MatchExpr, ValueExpr},
         statements::{self, AssignStmt, ForStmt, LetStmt, LetStmtTarget, ReturnStmt, WhileStmt},
         types::TypeDescriptor,
     },
     ir::{
-        BasicBlock, ConstData, ConstKind, ConstValue, Mutability, Operand, Place, PlaceElem,
-        Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, Type,
-        ValueTree,
+        BasicBlock, ConstData, ConstKind, ConstValue, Local, LocalKind, Mutability, Operand, Place,
+        PlaceElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
+        Type, ValueTree,
         lowering::{
             Symbol,
             expressions::{lower_expression, lower_value_expr},
@@ -333,7 +333,7 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
     let (discriminator, discriminator_type_idx, _disc_span) =
         lower_expression(builder, &info.expr, None)?;
 
-    let local = builder.add_temp_local(builder.builder.ir.get_bool_ty());
+    let local = builder.add_temp_local(discriminator_type_idx);
     let place = Place {
         local,
         projection: vec![],
@@ -341,16 +341,12 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
 
     builder.statements.push(Statement {
         span: None,
-        kind: StatementKind::Assign(place.clone(), discriminator),
+        kind: StatementKind::Assign(place.clone(), discriminator.clone()),
     });
 
-    // keep idx to change terminator
-    let current_block_idx = builder.body.basic_blocks.len();
-
-    let outer_scope_locals = builder.name_to_local.clone();
-
-    // flush current block
     let statements = std::mem::take(&mut builder.statements);
+    // keep idx to change terminator
+    let cond_block_idx = builder.body.basic_blocks.len();
     builder.body.basic_blocks.push(BasicBlock {
         statements,
         terminator: Box::new(Terminator {
@@ -365,16 +361,39 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
 
     let mut is_enum_match: Option<Option<TypeName>> = None;
 
-    for variant in &info.variants {
-        let mut variant_scope_locals = outer_scope_locals.clone();
+    let outer_scope_locals = builder.name_to_local.clone();
+    let outer_scope_local_exists = builder.local_exists.clone();
+
+    for variant in info.variants.iter() {
+        debug!("lowering variant");
+        // keep idx for switch targets
+        let current_block_idx = builder.body.basic_blocks.len();
+        targets.push(current_block_idx);
+
+        let statements = std::mem::take(&mut builder.statements);
+        builder.body.basic_blocks.push(BasicBlock {
+            statements,
+            terminator: Box::new(Terminator {
+                span: None,
+                kind: TerminatorKind::Unreachable,
+            }),
+        });
 
         match &variant.case {
             MatchCaseExpr::Value(value_expr) => {
-                let value = lower_value_expr(builder, value_expr, None)?;
-                target_conds.push(value);
+                let idx = match value_expr {
+                    ValueExpr::ConstBool(v, _) => (*v) as u32,
+                    ValueExpr::ConstChar(v, _) => (*v) as u32,
+                    ValueExpr::ConstInt(v, _) => (*v) as u32,
+                    ValueExpr::ConstFloat(_, _) => todo!(),
+                    ValueExpr::ConstStr(_, _) => todo!(),
+                    ValueExpr::Path(_) => todo!("todo: bind variable to other?"),
+                };
+                target_conds.push(ValueTree::Leaf(ConstValue::U32(idx)));
                 is_enum_match = Some(None);
             }
             MatchCaseExpr::Enum(enum_match_expr) => {
+                debug!("lowering enum variant {}", enum_match_expr.name.name.name);
                 if let Some(None) = is_enum_match {
                     panic!("enum on a non enum match")
                 }
@@ -419,21 +438,83 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                     .get(&enum_match_expr.variant.name)
                     .expect("variant not found");
 
-                let variant_value = Rvalue::Use(Operand::Const(ConstData {
-                    ty: builder.builder.ir.get_u32_ty(),
-                    span: enum_match_expr.span,
-                    data: ConstKind::Value(ValueTree::Leaf(ConstValue::U32(variant_idx as u32))),
-                }));
+                let variant_value = ValueTree::Leaf(ConstValue::U32(variant_idx as u32));
 
-                target_conds.push((variant_value, builder.builder.ir.get_u32_ty()));
+                target_conds.push(variant_value);
+
+                // todo: add locals from destructure, on each enum match block add the value extraction on the start of block.
+
+                let enum_place = match &discriminator {
+                    Rvalue::Use(operand) => match operand {
+                        Operand::Place(place) => {
+                            let mut place = place.clone(); // this place should have the GetVariant projection, remove it.
+                            let popped = place.projection.pop();
+                            assert_eq!(popped, Some(PlaceElem::GetVariant));
+                            place
+                        }
+                        Operand::Const(_) => todo!(),
+                    },
+                    Rvalue::LogicOp(_, _) => todo!(),
+                    Rvalue::BinaryOp(_, _) => todo!(),
+                    Rvalue::UnaryOp(_, _) => todo!(),
+                    Rvalue::Ref(mutability, place) => todo!(),
+                    Rvalue::Cast(operand, index, _span) => todo!(),
+                };
+
+                for field_value in &enum_match_expr.field_values {
+                    debug!("lowering variant field {}", field_value.name);
+                    let field_idx = *adt_body.variants[variant_idx]
+                        .field_names
+                        .get(&field_value.name)
+                        .expect("field not found");
+                    let ty_idx = adt_body.variants[variant_idx].fields[field_idx].ty;
+
+                    let field_local_idx = builder.body.locals.len();
+                    builder
+                        .name_to_local
+                        .insert(field_value.name.clone(), field_local_idx);
+                    builder.local_exists.insert(field_local_idx);
+
+                    let field_local = Local::new(
+                        Some(field_value.span),
+                        LocalKind::Temp,
+                        ty_idx,
+                        Some(field_value.name.clone()),
+                        false,
+                    );
+
+                    builder.body.locals.push(field_local);
+                    builder.local_exists.insert(field_local_idx);
+
+                    let field_place = Place {
+                        local: field_local_idx,
+                        projection: Vec::new(),
+                    };
+
+                    // todo: maybe add a "mut ref" keyword to be able to modify the field in the match
+
+                    let enum_field_place = {
+                        let mut place = enum_place.clone();
+                        place.projection.push(PlaceElem::Variant(variant_idx));
+                        place.projection.push(PlaceElem::Field(field_idx));
+                        place
+                    };
+
+                    builder.statements.push(Statement {
+                        span: Some(enum_match_expr.span),
+                        kind: StatementKind::Assign(
+                            field_place,
+                            Rvalue::Use(Operand::Place(enum_field_place)),
+                        ),
+                    });
+
+                    builder.statements.push(Statement {
+                        span: Some(enum_match_expr.span),
+                        kind: StatementKind::StorageLive(field_local_idx),
+                    });
+                }
             }
         }
-
-        // todo: add locals from destructure, on each enum match block add the value extraction on the start of block.
-
-        // keep idx for switch targets
-        targets.push(builder.body.basic_blocks.len());
-        let current_block_idx = builder.body.basic_blocks.len();
 
         for stmt in &variant.block {
             get_locals(builder, stmt)?;
@@ -456,9 +537,51 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
         targets_last_block.push(last_then_block_idx);
 
         builder.name_to_local = outer_scope_locals.clone();
+        builder.local_exists = outer_scope_local_exists.clone();
     }
 
-    todo!()
+    // todo: add otherwise block
+
+    // otherwise block
+    // todo: maybe its not needed if user adds a catch all.
+    // todo: identify catch all, maybe path
+    let statements = std::mem::take(&mut builder.statements);
+    let otherwise_block_idx = builder.body.basic_blocks.len();
+    builder.body.basic_blocks.push(BasicBlock {
+        statements,
+        terminator: Box::new(Terminator {
+            span: None,
+            kind: TerminatorKind::Unreachable,
+        }),
+    });
+    targets.push(otherwise_block_idx);
+
+    let targets = SwitchTargets {
+        values: target_conds,
+        targets,
+    };
+
+    let kind = TerminatorKind::SwitchInt {
+        discriminator: Operand::Place(place),
+        targets,
+    };
+    builder.body.basic_blocks[cond_block_idx].terminator.kind = kind;
+    builder.name_to_local = outer_scope_locals;
+
+    let next_block_idx = builder.body.basic_blocks.len();
+
+    for blockidx in &targets_last_block {
+        if matches!(
+            builder.body.basic_blocks[*blockidx].terminator.kind,
+            TerminatorKind::Unreachable
+        ) {
+            builder.body.basic_blocks[*blockidx].terminator.kind = TerminatorKind::Goto {
+                target: next_block_idx,
+            };
+        }
+    }
+
+    Ok(())
 }
 
 #[instrument(level = "debug", skip_all)]

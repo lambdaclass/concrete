@@ -913,7 +913,7 @@ pub(crate) fn lower_path(
             // expression can only be used in a match, so we return the variant discriminant.
             if info.extra.is_empty() {
                 projection.push(PlaceElem::GetVariant);
-                type_idx = fn_builder.builder.ir.get_u64_ty();
+                type_idx = fn_builder.builder.ir.get_u32_ty();
                 ty = fn_builder.builder.get_type(type_idx).clone();
             }
             // if extra is not empty it means its a method call
