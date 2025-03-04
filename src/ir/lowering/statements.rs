@@ -440,7 +440,7 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
             lower_statement(builder, stmt, builder.body.locals[builder.ret_local].ty)?;
         }
 
-        // keet idx to change terminator
+        // keep idx to change terminator
         let last_then_block_idx = {
             builder.body.basic_blocks.len();
             let statements = std::mem::take(&mut builder.statements);
