@@ -12,7 +12,7 @@ mod vec {
     }
 
     impl<T> Vec<T> {
-        pub fn new(type_size: u64) -> Vec<T> {
+        pub fn new() -> Vec<T> {
             let vec: Vec<T> = Vec::<T> {
                 ptr: malloc(sizeof::<T>() * 32) as *mut T,
                 len: 0,
@@ -30,21 +30,20 @@ mod vec {
                 self.cap = new_cap;
             }
 
-            let target_ptr: *mut T = (self.ptr + (self.len * type_size)) as *mut T;
+            let target_ptr: *mut T = (self.ptr + self.len) as *mut T;
             *target_ptr = value;
             self.len = self.len + 1;
         }
 
         pub fn get(&self, at: u64) -> &T {
             // todo: bounds check
-            let target_ptr: *mut T = (self.ptr + (at * sizeof::<T>())) as *mut T;
+            let target_ptr: *mut T = self.ptr + at;
             return target_ptr as &T;
         }
     }
 
     fn main() -> i32 {
-        let type_size: u64 = 4;
-        let mut vec: Vec<i32> = Vec::<i32>#new(type_size);
+        let mut vec: Vec<i32> = Vec::<i32>#new();
 
         vec.push(2);
         vec.push(3);

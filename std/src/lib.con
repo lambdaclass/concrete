@@ -1,0 +1,10 @@
+mod std {
+    mod mem;
+    mod alloc;
+    mod libc;
+    mod math;
+    mod ptr;
+    mod string;
+    mod vec;
+    mod io;
+}
