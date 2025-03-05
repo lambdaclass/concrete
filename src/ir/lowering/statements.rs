@@ -370,15 +370,6 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
         let current_block_idx = builder.body.basic_blocks.len();
         targets.push(current_block_idx);
 
-        let statements = std::mem::take(&mut builder.statements);
-        builder.body.basic_blocks.push(BasicBlock {
-            statements,
-            terminator: Box::new(Terminator {
-                span: None,
-                kind: TerminatorKind::Unreachable,
-            }),
-        });
-
         match &variant.case {
             MatchCaseExpr::Value(value_expr) => {
                 let idx = match value_expr {

@@ -1280,7 +1280,26 @@ fn compile_load_place<'c: 'b, 'b>(
                                     .into();
                                 field_type_idx
                             }
-                            AdtKind::Enum => todo!(),
+                            AdtKind::Enum => {
+                                let field_type_idx =
+                                    adt_body.variants[variant_idx].fields[*field_idx].ty;
+                                ptr = block
+                                    .append_operation(llvm::get_element_ptr(
+                                        ctx.context(),
+                                        ptr,
+                                        // enums have the first field offseted by 1, the tag.
+                                        DenseI32ArrayAttribute::new(
+                                            ctx.context(),
+                                            &[0, (1 + field_idx) as i32],
+                                        ),
+                                        compile_type(ctx.module, &local_ty),
+                                        pointer(ctx.context(), 0),
+                                        Location::unknown(ctx.context()),
+                                    ))
+                                    .result(0)?
+                                    .into();
+                                field_type_idx
+                            }
                             AdtKind::Union => todo!(),
                         }
                     }
