@@ -12,9 +12,16 @@
 
 >Most ideas come from previous ideas - Alan C. Kay, The Early History Of Smalltalk
 
-In the realm of low-level programming, language safety, performance and simplicity are paramount features. We are confident that these attributes can be achieved in system programming languages without substantially sacrificing expressiveness. Concrete achieves this balance, offering a programming language that is fast, simple and safe without having a garbage collector, lifetimes and a complex borrow checker. Additionally, it features a default pluggable runtime, enabling the development of highly scalable systems that are not only reliable and efficient but also straightforward to maintain.
+In the realm of low-level programming, language safety, performance and simplicity are paramount features. We are confident that these attributes can be achieved in system programming languages without substantially sacrificing expressiveness. Thanks to advancements in type systems theory and practice pioneered by languages like [Rust](https://www.rust-lang.org), [Mojo](https://www.youtube.com/watch?v=Ab8WQ1wwhV8), and [Austral](https://borretti.me/article/introducing-austral), it is now possible to create languages that offer both high safety guarantees and excellent developer experience.
 
-Writing good code should be easy. The language must be simple enough to fit in a single person’s head. Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. We aim to develop a simpler version of Rust that includes an optional default runtime featuring green threads and a preemptive scheduler, similar to those found in Go and Erlang.
+Concrete achieves this balance, offering a programming language that is fast, simple and safe without having a garbage collector and a complex borrow checker. Additionally, it features a default pluggable runtime, enabling the development of highly scalable systems that are not only reliable and efficient but also straightforward to maintain.
+
+Writing good code should be easy. The language must be simple enough to fit in a single person's head. Programs are about transforming data into other forms of data. Code is about expressing algorithms, not the type system. We aim to develop a simpler version of Rust that includes an optional default runtime featuring green threads and a preemptive scheduler, similar to those found in Go and Erlang.
+
+## Roadmap
+
+Check out our feature roadmap [here](ROADMAP.md)
+For a detailed view of current status check the [project](https://github.com/orgs/lambdaclass/projects/23).
 
 ## Installing from Source
 
@@ -48,18 +55,6 @@ If you installed llvm with brew, source the `env-macos.sh` script to set up the 
 source scripts/env-macos.sh
 ```
 
-## Table of Contents
-
-- [Design](#design)
-- - [Rust similarities and differences](#rust-similarities-and-differences)
-- - [Core Features](#core-features)
-- - - [Second Level Features](#second-level-features)
-- - [Anti Features](#anti-features)
-- - [Features that are being debated](#features-that-are-being-debated)
-- [Syntax](#syntax)
-- [Inspirations](#inspiration)
-- [Roadmap](#roadmap)
-
 ## Design
 
 ### Rust similarities and differences
@@ -76,7 +71,6 @@ Concrete take many features from Rust like:
 
 But we want to take a different path with respect to:
 - Linear type system rather than affine type system
-- No lifetimes
 - Simpler borrow checker
 - Concurrency model. We provide a default runtime with green threads. There is no support for low-level primitives like atomics, mutex and OS threads.
 - There is no Sync and Send traits. This implies that mutability can only happen inside the same process.
@@ -231,61 +225,6 @@ The design was very heavily influenced by all these programming languages:
 - [Clojure](https://clojure.org/)
 - [Nim](https://nim-lang.org/)
 - [Acton](https://www.acton-lang.org)
-
-## Roadmap
-
-For a full roadmap check the [project](https://github.com/orgs/lambdaclass/projects/23).
-
-
-Meaning:
--  ✔️ = implemented
-- 🏗️ = work in progress
-- :x: = work not started yet
-- 🤔 = to be defined
-
-Builtin Features:
-- if/else ✔️
-- while ✔️
-- modules ✔️
-- imports ✔️
-- floats ✔️
-- borrowing ✔️
-- structs ✔️
-- casts ✔️
-- for 🏗️
-- ffi 🏗️
-- linear type checker 🏗️
-- impl block 🏗️
-- generics 🏗️
-- enums :x:
-- match :x:
-- borrow checker :x:
-- traits :x:
-- unsafe :x:
-
-Standard lib features:
-- arrays 🏗️
-- iterators :x:
-- option :x:
-- box :x:
-- rc (for cyclical data structures like graphs) :x:
-- operating system threads with move only semantics :x:
-- rayon-like :x:
-
-Post-runtime features:
-- runtime with preemptive green threads :x:
-- erlang like profiling :x:
-- erlang like tracing :x:
-- erlang like observer :x:
-- standard library :x:
-    - gleam otp like library patterns :x:
-- http server :x:
-- json :x:
-- sql server :x:
-- serde replacement :x:
-- rustler like binding generator to call rust code :x:
-- embeddable concrete (no allocator, first-class support for no standard library, etc) :x:
-- capabilities 🤔
 
 ## Benchmarking
 
