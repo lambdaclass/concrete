@@ -159,6 +159,23 @@ impl IRBuilder {
         Some(format!("{}_{}", name_path.join("_"), fn_idx.to_idx()))
     }
 
+    /// Gets the mangled name for the given function name.
+    pub fn get_debug_name(&self, module_idx: ModuleIndex, fn_name: &str) -> Option<String> {
+        let mut name_path: Vec<&str> = Vec::new();
+
+        let cur_module = &self.ir.modules[module_idx];
+
+        for parent_id in &cur_module.parents {
+            let module = &self.ir.modules[*parent_id];
+            name_path.push(module.name.as_ref());
+        }
+        name_path.push(cur_module.name.as_ref());
+
+        name_path.push(fn_name);
+
+        Some(name_path.join("::"))
+    }
+
     /// Gets the struct index for the given StructInitExpr (+ using the current generics map in builder).
     /// If the given struct isn't lowered yet its gets lowered (generics).
     pub fn get_or_lower_for_struct_init(

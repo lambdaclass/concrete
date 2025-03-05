@@ -7,4 +7,5 @@ mod std {
     mod string;
     mod vec;
     mod io;
+    mod test;
 }

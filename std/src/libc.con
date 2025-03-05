@@ -7,4 +7,6 @@ mod libc {
     extern fn fdopen(name: i32, mode: *mut u8) -> *const u8;
     extern fn fdopen(name: i32, mode: *mut u8) -> *const u8;
     extern fn fclose(file: *const u8) -> i32;
+    extern fn exit(status: i32);
+    extern fn raise(signal: i32);
 }

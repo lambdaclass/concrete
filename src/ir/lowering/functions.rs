@@ -141,6 +141,11 @@ pub(crate) fn lower_func(
             } else {
                 func.decl.name.name.clone()
             },
+            debug_name: if !func.decl.is_extern && func.decl.name.name != "main" {
+                builder.get_debug_name(module_idx, &func.decl.name.name)
+            } else {
+                Some(func.decl.name.name.clone())
+            },
             args: args_ty.clone(),
             ret_ty,
             is_extern: func.decl.is_extern,
@@ -212,6 +217,14 @@ pub(crate) fn lower_func(
     builder.ir.modules[module_idx].functions.insert(fn_id);
 
     builder.self_ty = old_self_ty;
+
+    for attr in &func.decl.attributes {
+        if attr.name.as_str() == "test" {
+            builder.ir.tests.push(fn_id);
+            // TODO: check its a valid test function, i.e: no arguments, returns a i32.
+            break;
+        }
+    }
 
     Ok(fn_id)
 }
@@ -535,6 +548,11 @@ pub(crate) fn lower_func_decl(
                     .expect("should get mangled name")
             } else {
                 func.name.name.clone()
+            },
+            debug_name: if !func.is_extern && func.name.name != "main" {
+                builder.get_debug_name(module_idx, &func.name.name)
+            } else {
+                Some(func.name.name.clone())
             },
             args: args_ty.clone(),
             ret_ty,
