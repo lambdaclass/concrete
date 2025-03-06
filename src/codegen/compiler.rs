@@ -1140,6 +1140,7 @@ fn compile_store_place<'c: 'b, 'b>(
                         match adt.kind {
                             // On structs the variant idx should always be 0.
                             AdtKind::Struct => adt.variants[variant_idx].fields[*field_idx].ty,
+                            // Substract the first tag index, because the fields vec doesnt have it.
                             AdtKind::Enum => adt.variants[variant_idx].fields[(*field_idx) - 1].ty,
                             AdtKind::Union => todo!(),
                         }
@@ -1694,6 +1695,7 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &IRType) -> Type<'c> {
                     let tag_type = ctx.get_type(ctx.ctx.program.get_u32_ty());
                     let tag_ty = compile_type(ctx, &tag_type);
                     let payload_size = ty.get_bit_width(ctx.ctx.program) - 32;
+                    dbg!(&payload_size);
                     let u8_ty = IntegerType::new(ctx.ctx.mlir_context, 8).into();
                     let arr_ty =
                         melior::dialect::llvm::r#type::array(u8_ty, (payload_size / 8) as u32);

@@ -579,7 +579,7 @@ impl Type {
                         AdtKind::Union => todo!(),
                     };
                     let mut align = match adt.kind {
-                        AdtKind::Struct => 1,
+                        AdtKind::Struct => 8,
                         AdtKind::Enum => 32, // u32 tag
                         AdtKind::Union => todo!(),
                     };
@@ -595,6 +595,7 @@ impl Type {
                         }
 
                         size += field_size;
+                        dbg!(&size);
                     }
 
                     max_size = if size % adt_align == 0 {
