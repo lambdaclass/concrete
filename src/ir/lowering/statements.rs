@@ -414,17 +414,22 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                 }
 
                 if let Some(Some(name)) = &is_enum_match {
-                    if name.name.name != enum_match_expr.name.name.name
-                    {
-                        panic!("mismatched enum types \n{:?}, \n{:?}", name, enum_match_expr.name)
+                    if name.name.name != enum_match_expr.name.name.name {
+                        panic!(
+                            "mismatched enum types \n{:?}, \n{:?}",
+                            name, enum_match_expr.name
+                        )
                     }
                 } else {
                     is_enum_match = Some(Some(enum_match_expr.name.clone()));
                 }
 
                 // monomorphic enum should already be lowered here.
+
+                // If generics where specified, lower them.
                 let mut generics = Vec::new();
                 for gen_ty in enum_match_expr.name.generics.iter() {
+                    dbg!(&gen_ty);
                     let ty = lower_type(
                         builder.builder,
                         &TypeDescriptor::Type {
@@ -440,29 +445,20 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                     generics,
                 };
 
-                let adt_id = *builder
-                    .get_symbols_table()
-                    .aggregates
-                    .get(&sym)
-                    .expect("enum not found");
-                let adt_body = builder.builder.get_adt(adt_id);
+                dbg!(&sym);
 
-                let variant_idx = *adt_body
-                    .variant_names
-                    .get(&enum_match_expr.variant.name)
-                    .expect("variant not found");
+                // Find the expected adt id with the given generics (if any).
+                let expected_adt_id_if_generics =
+                    builder.get_symbols_table().aggregates.get(&sym).cloned();
 
-                let variant_value = ValueTree::Leaf(ConstValue::U32(variant_idx as u32));
-
-                target_conds.push(variant_value);
-
-                let enum_place = match &discriminator {
+                let (enum_place, enum_ty) = match &discriminator {
                     Rvalue::Use(operand) => match operand {
                         Operand::Place(place) => {
                             let mut place = place.clone(); // this place should have the GetVariant projection, remove it.
                             let popped = place.projection.pop();
                             assert_eq!(popped, Some(PlaceElem::GetVariant));
-                            place
+                            let ty = builder.body.locals[place.local].ty;
+                            (place, ty)
                         }
                         Operand::Const(_) => {
                             return Err(LoweringError::Unimplemented {
@@ -487,6 +483,51 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                         });
                     }
                 };
+
+                let adt_id = match builder.builder.get_type(enum_ty) {
+                    Type::Adt(index) => *index,
+                    _ => unreachable!(),
+                };
+
+                if !sym.generics.is_empty() {
+                    dbg!(&enum_ty);
+                    dbg!(&expected_adt_id_if_generics);
+                    dbg!(&adt_id);
+                    if let Some(expected_adt_id_if_generics) = expected_adt_id_if_generics {
+                        if expected_adt_id_if_generics != adt_id {
+                            return Err(LoweringError::UnexpectedType {
+                                found_span: disc_span,
+                                found: Type::Adt(adt_id).display(&builder.builder.ir).unwrap(),
+                                expected: Type::Adt(expected_adt_id_if_generics)
+                                    .display(&builder.builder.ir)
+                                    .unwrap(),
+                                expected_span: Some(enum_match_expr.span),
+                                path: builder.get_file_path().clone(),
+                            });
+                        }
+                    } else {
+                        // Type not found, meaning it may not be lowered, but nonetheless doesn't match the expected type.
+                        // Because generics where specified explicitly.
+                        return Err(LoweringError::UnexpectedType {
+                            found_span: enum_match_expr.name.span,
+                            found: enum_match_expr.name.to_string(),
+                            expected: builder.builder.display_typename(enum_ty),
+                            expected_span: Some(disc_span),
+                            path: builder.get_file_path().clone(),
+                        });
+                    }
+                }
+
+                let adt_body = builder.builder.get_adt(adt_id);
+
+                let variant_idx = *adt_body
+                    .variant_names
+                    .get(&enum_match_expr.variant.name)
+                    .expect("variant not found");
+
+                let variant_value = ValueTree::Leaf(ConstValue::U32(variant_idx as u32));
+
+                target_conds.push(variant_value);
 
                 for field_value in &enum_match_expr.field_values {
                     debug!("lowering variant field {}", field_value.name);

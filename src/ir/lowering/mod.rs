@@ -6,8 +6,12 @@ use std::{
 
 use adts::{lower_enum, lower_struct};
 use functions::{lower_func, lower_func_decl};
+use itertools::Itertools;
 
-use crate::{ast::enums::EnumDecl, ir};
+use crate::{
+    ast::enums::EnumDecl,
+    ir::{self, ConstKind, ConstValue, Mutability, ValueTree},
+};
 use crate::{
     ast::expressions::EnumInitExpr,
     ir::{
@@ -254,6 +258,85 @@ impl IRBuilder {
         self.current_generics_map = old_generic_params;
 
         Ok(id)
+    }
+
+    pub fn display_typename(&self, id: TypeIndex) -> String {
+        let ty = self.get_type(id);
+
+        match ty {
+            Type::Array(index, const_data) => {
+                let value = if let ConstKind::Value(ValueTree::Leaf(ConstValue::U64(x))) =
+                    &const_data.data
+                {
+                    *x
+                } else {
+                    unreachable!("const data for array sizes should always be u64")
+                };
+                format!("[{}; {}]", self.display_typename(*index), value)
+            }
+            Type::Ref(index, mutability) => {
+                let word = if let Mutability::Mut = mutability {
+                    "mut"
+                } else {
+                    "const"
+                };
+
+                format!("&{word} {}", self.display_typename(*index))
+            }
+            Type::Ptr(index, mutability) => {
+                let word = if let Mutability::Mut = mutability {
+                    "mut"
+                } else {
+                    "const"
+                };
+
+                format!("*{word} {}", self.display_typename(*index))
+            }
+            Type::Adt(index) => {
+                let adt_body = self.get_adt(*index);
+                let generics = match adt_body.kind {
+                    ir::AdtKind::Struct => self
+                        .bodies
+                        .structs
+                        .get(index)
+                        .unwrap()
+                        .generics
+                        .iter()
+                        .map(|x| x.name.name.clone())
+                        .collect_vec(),
+                    ir::AdtKind::Enum => self
+                        .bodies
+                        .enums
+                        .get(index)
+                        .unwrap()
+                        .generics
+                        .iter()
+                        .map(|x| x.name.name.clone())
+                        .collect_vec(),
+                    ir::AdtKind::Union => todo!(),
+                };
+
+                let mut result = String::new();
+                result.push_str(&adt_body.name);
+
+                if !generics.is_empty() {
+                    result.push('<');
+
+                    for (i, g) in generics.iter().enumerate() {
+                        let ty = self.current_generics_map.get(g).unwrap();
+                        result.push_str(&self.display_typename(*ty));
+
+                        if i != generics.len() {
+                            result.push_str(", ");
+                        }
+                    }
+                    result.push('>');
+                }
+
+                result
+            }
+            _ => ty.display(&self.ir).unwrap(),
+        }
     }
 }
 

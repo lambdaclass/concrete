@@ -595,7 +595,6 @@ impl Type {
                         }
 
                         size += field_size;
-                        dbg!(&size);
                     }
 
                     max_size = if size % adt_align == 0 {
@@ -774,6 +773,7 @@ impl Type {
 
         Ok(f)
     }
+
 }
 
 impl Type {
