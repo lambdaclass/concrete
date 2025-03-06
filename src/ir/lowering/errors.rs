@@ -107,4 +107,16 @@ pub enum LoweringError {
         item: String,
         path: PathBuf,
     },
+    #[error("invalid match, reason: {reason}")]
+    InvalidMatch {
+        span: Span,
+        reason: String,
+        path: PathBuf,
+    },
+    #[error("unimplemented: {reason}")]
+    Unimplemented {
+        span: Span,
+        reason: String,
+        path: PathBuf,
+    },
 }

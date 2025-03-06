@@ -111,6 +111,8 @@ pub enum Token {
     DoubleColon,
     #[token("->")]
     Arrow,
+    #[token("=>")]
+    DoubleArrow,
     #[token(",")]
     Coma,
     #[token(".")]

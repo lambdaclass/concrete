@@ -156,6 +156,21 @@ fn invalid_assign() {
 }
 
 #[test]
+fn invalid_match_generic() {
+    let (source, name) = (
+        include_str!("invalid_programs/invalid_match_generic.con"),
+        "invalid_programs/invalid_match_generic.con",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::UnexpectedType { .. }),
+        "{:#?}",
+        error
+    );
+}
+
+#[test]
 fn immutable_mutation() {
     let (source, name) = (
         include_str!("invalid_programs/immutable_mutation.con"),

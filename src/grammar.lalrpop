@@ -56,6 +56,7 @@ extern {
     ":" => Token::Colon,
     "::" => Token::DoubleColon,
     "->" => Token::Arrow,
+    "=>" => Token::DoubleArrow,
     "," => Token::Coma,
     "#" => Token::Hashtag,
     "<" => Token::LessThanSign,
@@ -424,9 +425,10 @@ UnionDef: ast::enums::UnionDecl = {
 }
 
 EnumDef: ast::enums::EnumDecl = {
-    <lo:@L> "enum" <name:Ident> <generics:GenericParams?> "{" <variants:Comma<EnumVariant>> "}" <hi:@R> => ast::enums::EnumDecl {
+    <lo:@L> <is_pub:"pub"?> "enum" <name:Ident> <generics:GenericParams?> "{" <variants:Comma<EnumVariant>> "}" <hi:@R> => ast::enums::EnumDecl {
         name,
         variants,
+        is_pub: is_pub.is_some(),
         generics: generics.unwrap_or(vec![]),
         span: Span::new(lo, hi),
     }
@@ -457,6 +459,15 @@ StructInitExpr: ast::expressions::StructInitExpr = {
   <lo:@L> <name:TypeNameUse> "{" <fields:Comma<StructInitField>> "}" <hi:@R> => ast::expressions::StructInitExpr {
     name,
     fields: fields.into_iter().collect(),
+    span: Span::new(lo, hi),
+  }
+}
+
+EnumInitExpr: ast::expressions::EnumInitExpr = {
+  <lo:@L> <name:TypeNameUse> "#" <variant:Ident> <fields:("{" <Comma<StructInitField>> "}")?> <hi:@R> => ast::expressions::EnumInitExpr {
+    name,
+    variant,
+    fields: fields.unwrap_or_default().into_iter().collect(),
     span: Span::new(lo, hi),
   }
 }
@@ -591,20 +602,36 @@ MatchExpr: ast::expressions::MatchExpr = {
 
 MatchVariant: ast::expressions::MatchVariant = {
   // 0 -> 1
-  <lo:@L> <case:ValueExpr> "->" <stmt:Statement> <hi:@R> => {
+  <lo:@L> <case:ValueExpr> "=>" <stmt:Statement> <hi:@R> => {
     ast::expressions::MatchVariant {
-      case,
+      case: ast::expressions::MatchCaseExpr::Value(case),
       block: vec![stmt],
       span: Span::new(lo, hi)
     }
   },
   // x -> { ... }
-  <lo:@L> <case:ValueExpr> "->" "{" <stmts:StatementList> "}" <hi:@R> => {
+  <lo:@L> <case:ValueExpr> "=>" "{" <stmts:StatementList> "}" <hi:@R> => {
     ast::expressions::MatchVariant {
-      case,
+      case: ast::expressions::MatchCaseExpr::Value(case),
       block: stmts,
       span: Span::new(lo, hi)
     }
+  },
+  <lo:@L> <case:EnumMatchExpr> "=>" "{" <stmts:StatementList> "}" <hi:@R> => {
+    ast::expressions::MatchVariant {
+      case: ast::expressions::MatchCaseExpr::Enum(case),
+      block: stmts,
+      span: Span::new(lo, hi)
+    }
+  }
+}
+
+EnumMatchExpr: ast::expressions::EnumMatchExpr = {
+  <lo:@L> <name:TypeNameUse> "#" <variant:Ident> <fields:("{" <Comma<Ident>> "}")?> <hi:@R> => ast::expressions::EnumMatchExpr {
+    name,
+    variant,
+    field_values: fields.unwrap_or_default().into_iter().collect(),
+    span: Span::new(lo, hi),
   }
 }
 
@@ -700,6 +727,15 @@ LetStmt: ast::statements::LetStmt = {
     value: ast::expressions::Expression::AssocMethodCall(value),
     span: Span::new(lo, hi),
   },
+  <lo:@L> "let" <is_mutable:"mut"?> <id:Ident> ":" <target_type:TypeDescriptor> "=" <value:EnumInitExpr> <hi:@R> => ast::statements::LetStmt {
+    is_mutable: is_mutable.is_some(),
+    target: ast::statements::LetStmtTarget::Simple {
+      id,
+      r#type: target_type
+    },
+    value: ast::expressions::Expression::EnumInit(value),
+    span: Span::new(lo, hi),
+  },
 }
 
 AssignStmt: ast::statements::AssignStmt = {
@@ -718,6 +754,12 @@ AssignStmt: ast::statements::AssignStmt = {
   <lo:@L> <derefs:"*"*> <lvalue:PathOp> "=" <rvalue:AssocMethodCall> <hi:@R> => ast::statements::AssignStmt {
     lvalue,
     rvalue: ast::expressions::Expression::AssocMethodCall(rvalue),
+    derefs: derefs.len(),
+    span: Span::new(lo, hi),
+  },
+  <lo:@L> <derefs:"*"*> <lvalue:PathOp> "=" <rvalue:EnumInitExpr> <hi:@R> => ast::statements::AssignStmt {
+    lvalue,
+    rvalue: ast::expressions::Expression::EnumInit(rvalue),
     derefs: derefs.len(),
     span: Span::new(lo, hi),
   },
