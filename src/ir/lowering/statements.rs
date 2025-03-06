@@ -414,10 +414,9 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                 }
 
                 if let Some(Some(name)) = &is_enum_match {
-                    if name.name != enum_match_expr.name.name
-                        && name.generics != enum_match_expr.name.generics
+                    if name.name.name != enum_match_expr.name.name.name
                     {
-                        panic!("mismatched enum types")
+                        panic!("mismatched enum types \n{:?}, \n{:?}", name, enum_match_expr.name)
                     }
                 } else {
                     is_enum_match = Some(Some(enum_match_expr.name.clone()));
