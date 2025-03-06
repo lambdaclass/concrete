@@ -76,7 +76,7 @@ pub(crate) fn lower_type(
                     debug!(
                         "found in generics map: {} -> {}",
                         other,
-                        builder.get_type(ty).display(&builder.ir).unwrap()
+                        builder.display_typename(ty)
                     );
                     return Ok(ty);
                 }

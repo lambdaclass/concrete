@@ -1,0 +1,8 @@
+mod option {
+    enum Option<T> {
+        Some {
+            value: T,
+        },
+        None,
+    }
+}

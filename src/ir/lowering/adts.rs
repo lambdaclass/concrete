@@ -34,6 +34,7 @@ pub(crate) fn lower_struct(
     let poly_idx = *builder.symbols[&module_idx].aggregates.get(&sym).unwrap();
 
     let mut generic_types = Vec::new();
+    let mut generics_used = HashMap::new();
 
     for generic_param in &info.generics {
         let ty = *builder
@@ -41,6 +42,7 @@ pub(crate) fn lower_struct(
             .get(&generic_param.name.name)
             .unwrap_or_else(|| panic!("Missing generic type mapping {:?}", generic_param));
         generic_types.push(ty);
+        generics_used.insert(generic_param.name.name.clone(), ty);
     }
 
     // If struct is generic, get or create the id for this monomorphized struct.
@@ -87,6 +89,7 @@ pub(crate) fn lower_struct(
         variant_names: HashMap::new(),
         kind: AdtKind::Struct,
         span: info.span,
+        generics_used,
     };
 
     let mut struct_variant = VariantDef {
@@ -137,6 +140,7 @@ pub(crate) fn lower_enum(
     let poly_idx = *builder.symbols[&module_idx].aggregates.get(&sym).unwrap();
 
     let mut generic_types = Vec::new();
+    let mut generics_used = HashMap::new();
 
     for generic_param in &info.generics {
         let ty = *builder
@@ -144,6 +148,7 @@ pub(crate) fn lower_enum(
             .get(&generic_param.name.name)
             .unwrap_or_else(|| panic!("Missing generic type mapping {:?}", generic_param));
         generic_types.push(ty);
+        generics_used.insert(generic_param.name.name.clone(), ty);
     }
 
     // If struct is generic, get or create the id for this monomorphized struct.
@@ -190,6 +195,7 @@ pub(crate) fn lower_enum(
         variant_names: HashMap::new(),
         kind: AdtKind::Enum,
         span: info.span,
+        generics_used,
     };
 
     for (i, variant) in info.variants.iter().enumerate() {

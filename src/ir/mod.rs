@@ -360,6 +360,8 @@ pub struct AdtBody {
     pub kind: AdtKind,
     /// A mapping from name to variant.
     pub variant_names: HashMap<String, usize>,
+    /// This is used for displaying errors and info to the user.
+    pub generics_used: HashMap<String, TypeIndex>,
     pub span: Span,
 }
 
@@ -773,7 +775,6 @@ impl Type {
 
         Ok(f)
     }
-
 }
 
 impl Type {

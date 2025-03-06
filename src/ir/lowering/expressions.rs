@@ -177,11 +177,7 @@ pub(crate) fn lower_expression(
                             debug!(
                                 "Adding field type to generics mapping {} -> {}",
                                 name,
-                                builder
-                                    .builder
-                                    .get_type(map_ty)
-                                    .display(&builder.builder.ir)
-                                    .unwrap()
+                                builder.builder.display_typename(map_ty)
                             );
                             builder.builder.current_generics_map.insert(name, map_ty);
                         }
@@ -487,11 +483,7 @@ pub(crate) fn find_expression_type(
                                 debug!(
                                     "Adding field type to generics mapping {} -> {}",
                                     name,
-                                    fn_builder
-                                        .builder
-                                        .get_type(map_ty)
-                                        .display(&fn_builder.builder.ir)
-                                        .unwrap()
+                                    fn_builder.builder.display_typename(map_ty)
                                 );
                                 fn_builder.builder.current_generics_map.insert(name, map_ty);
                             }
@@ -897,11 +889,7 @@ pub(crate) fn lower_path(
                         debug!(
                             "Adding field type to generics mapping {} -> {}",
                             name,
-                            fn_builder
-                                .builder
-                                .get_type(map_ty)
-                                .display(&fn_builder.builder.ir)
-                                .unwrap()
+                            fn_builder.builder.display_typename(map_ty)
                         );
                         fn_builder.builder.current_generics_map.insert(name, map_ty);
                     }
@@ -1053,7 +1041,7 @@ pub(crate) fn lower_unary_op(
     if is_lhs_ptr {
         return Err(LoweringError::InvalidUnaryOp {
             found_span: lhs_span,
-            found: lhs_ty.display(&builder.builder.ir).unwrap(),
+            found: builder.builder.display_typename(lhs_type_idx),
             path: builder.get_file_path().clone(),
         });
     }
@@ -1136,8 +1124,8 @@ pub(crate) fn lower_binary_op(
     if !is_lhs_ptr && !lhs_ty.is_equal(rhs_ty, &builder.builder.ir) {
         return Err(LoweringError::UnexpectedType {
             found_span: rhs_span,
-            found: rhs_ty.display(&builder.builder.ir).unwrap(),
-            expected: lhs_ty.display(&builder.builder.ir).unwrap(),
+            found: builder.builder.display_typename(rhs_type_idx),
+            expected: builder.builder.display_typename(rhs_type_idx),
             expected_span: Some(lhs_span),
             path: builder.get_file_path().clone(),
         });

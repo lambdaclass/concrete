@@ -70,7 +70,7 @@ fn lower_let(builder: &mut FnIrBuilder, info: &LetStmt) -> Result<(), LoweringEr
 
             debug!(
                 "let target type: {}",
-                ty.display(&builder.builder.ir).unwrap()
+                builder.builder.display_typename(type_idx)
             );
             let (rvalue, rvalue_type_idx, rvalue_span) =
                 lower_expression(builder, &info.value, Some(type_idx))?;
@@ -78,14 +78,14 @@ fn lower_let(builder: &mut FnIrBuilder, info: &LetStmt) -> Result<(), LoweringEr
             let rvalue_ty = builder.builder.ir.types[rvalue_type_idx].clone().unwrap();
             debug!(
                 "let rvalue type: {}",
-                rvalue_ty.display(&builder.builder.ir).unwrap()
+                builder.builder.display_typename(rvalue_type_idx)
             );
 
             if !ty.is_equal(&rvalue_ty, &builder.builder.ir) {
                 return Err(LoweringError::UnexpectedType {
                     found_span: rvalue_span,
-                    found: rvalue_ty.display(&builder.builder.ir).unwrap(),
-                    expected: ty.display(&builder.builder.ir).unwrap(),
+                    found: builder.builder.display_typename(rvalue_type_idx),
+                    expected: builder.builder.display_typename(type_idx),
                     expected_span: Some(r#type.get_span()),
                     path: builder.get_file_path().clone(),
                 });
@@ -159,8 +159,8 @@ fn lower_assign(builder: &mut FnIrBuilder, info: &AssignStmt) -> Result<(), Lowe
     if !ty.is_equal(&rvalue_ty, &builder.builder.ir) {
         return Err(LoweringError::UnexpectedType {
             found_span: rvalue_span,
-            found: rvalue_ty.display(&builder.builder.ir).unwrap(),
-            expected: ty.display(&builder.builder.ir).unwrap(),
+            found: builder.builder.display_typename(rvalue_type_idx),
+            expected: builder.builder.display_typename(type_idx),
             expected_span: Some(path_span),
             path: builder.get_file_path().clone(),
         });
@@ -192,8 +192,8 @@ fn lower_return(
         if !ret_ty.is_equal(value_ty, &builder.builder.ir) {
             return Err(LoweringError::UnexpectedType {
                 found_span: exp_span,
-                found: value_ty.display(&builder.builder.ir).unwrap(),
-                expected: ret_ty.display(&builder.builder.ir).unwrap(),
+                found: builder.builder.display_typename(value_type_idx),
+                expected: builder.builder.display_typename(ret_type),
                 expected_span: Some(info.span), // todo: change this span to point to the "-> x" return type in fn
                 path: builder.get_file_path().clone(),
             });
@@ -429,7 +429,6 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                 // If generics where specified, lower them.
                 let mut generics = Vec::new();
                 for gen_ty in enum_match_expr.name.generics.iter() {
-                    dbg!(&gen_ty);
                     let ty = lower_type(
                         builder.builder,
                         &TypeDescriptor::Type {
@@ -444,8 +443,6 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                     method_of: None,
                     generics,
                 };
-
-                dbg!(&sym);
 
                 // Find the expected adt id with the given generics (if any).
                 let expected_adt_id_if_generics =
@@ -490,17 +487,12 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                 };
 
                 if !sym.generics.is_empty() {
-                    dbg!(&enum_ty);
-                    dbg!(&expected_adt_id_if_generics);
-                    dbg!(&adt_id);
                     if let Some(expected_adt_id_if_generics) = expected_adt_id_if_generics {
                         if expected_adt_id_if_generics != adt_id {
                             return Err(LoweringError::UnexpectedType {
                                 found_span: disc_span,
-                                found: Type::Adt(adt_id).display(&builder.builder.ir).unwrap(),
-                                expected: Type::Adt(expected_adt_id_if_generics)
-                                    .display(&builder.builder.ir)
-                                    .unwrap(),
+                                found: builder.builder.display_typename(enum_ty),
+                                expected: enum_match_expr.name.to_string(),
                                 expected_span: Some(enum_match_expr.span),
                                 path: builder.get_file_path().clone(),
                             });

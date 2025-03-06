@@ -260,6 +260,7 @@ impl IRBuilder {
         Ok(id)
     }
 
+    /// Format a type for displaying as a type name.
     pub fn display_typename(&self, id: TypeIndex) -> String {
         let ty = self.get_type(id);
 
@@ -323,10 +324,10 @@ impl IRBuilder {
                     result.push('<');
 
                     for (i, g) in generics.iter().enumerate() {
-                        let ty = self.current_generics_map.get(g).unwrap();
+                        let ty = adt_body.generics_used.get(g).unwrap();
                         result.push_str(&self.display_typename(*ty));
 
-                        if i != generics.len() {
+                        if i != generics.len() - 1 {
                             result.push_str(", ");
                         }
                     }
