@@ -294,47 +294,50 @@ impl IRBuilder {
                 format!("*{word} {}", self.display_typename(*index))
             }
             Type::Adt(index) => {
-                let adt_body = self.get_adt(*index);
-                let generics = match adt_body.kind {
-                    ir::AdtKind::Struct => self
-                        .bodies
-                        .structs
-                        .get(index)
-                        .unwrap()
-                        .generics
-                        .iter()
-                        .map(|x| x.name.name.clone())
-                        .collect_vec(),
-                    ir::AdtKind::Enum => self
-                        .bodies
-                        .enums
-                        .get(index)
-                        .unwrap()
-                        .generics
-                        .iter()
-                        .map(|x| x.name.name.clone())
-                        .collect_vec(),
-                    ir::AdtKind::Union => todo!(),
-                };
+                if let Some(Some(adt_body)) = self.ir.aggregates.get(*index) {
+                    let generics = match adt_body.kind {
+                        ir::AdtKind::Struct => self
+                            .bodies
+                            .structs
+                            .get(index)
+                            .unwrap()
+                            .generics
+                            .iter()
+                            .map(|x| x.name.name.clone())
+                            .collect_vec(),
+                        ir::AdtKind::Enum => self
+                            .bodies
+                            .enums
+                            .get(index)
+                            .unwrap()
+                            .generics
+                            .iter()
+                            .map(|x| x.name.name.clone())
+                            .collect_vec(),
+                        ir::AdtKind::Union => todo!(),
+                    };
 
-                let mut result = String::new();
-                result.push_str(&adt_body.name);
+                    let mut result = String::new();
+                    result.push_str(&adt_body.name);
 
-                if !generics.is_empty() {
-                    result.push('<');
+                    if !generics.is_empty() {
+                        result.push('<');
 
-                    for (i, g) in generics.iter().enumerate() {
-                        let ty = adt_body.generics_used.get(g).unwrap();
-                        result.push_str(&self.display_typename(*ty));
+                        for (i, g) in generics.iter().enumerate() {
+                            let ty = adt_body.generics_used.get(g).unwrap();
+                            result.push_str(&self.display_typename(*ty));
 
-                        if i != generics.len() - 1 {
-                            result.push_str(", ");
+                            if i != generics.len() - 1 {
+                                result.push_str(", ");
+                            }
                         }
+                        result.push('>');
                     }
-                    result.push('>');
-                }
 
-                result
+                    result
+                } else {
+                    "Unknown yet".to_string()
+                }
             }
             _ => ty.display(&self.ir).unwrap(),
         }

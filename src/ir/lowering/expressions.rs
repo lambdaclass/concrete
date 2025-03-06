@@ -895,16 +895,38 @@ pub(crate) fn lower_path(
                     }
                 }
             }
-        } else if let Some(_enum_body) = fn_builder.builder.bodies.enums.get(&poly_adt_idx).cloned()
+        } else if let Some(enum_body) = fn_builder.builder.bodies.enums.get(&poly_adt_idx).cloned()
         {
-            // Since you can't access an enum field without a match, this means that this path
-            // expression can only be used in a match, so we return the variant discriminant.
-            if info.extra.is_empty() {
-                projection.push(PlaceElem::GetVariant);
-                type_idx = fn_builder.builder.ir.get_u32_ty();
-                ty = fn_builder.builder.get_type(type_idx).clone();
+            let generics: HashSet<String> = enum_body
+                .generics
+                .iter()
+                .map(|x| x.name.name.clone())
+                .collect();
+
+            for (variant_idx, variant) in enum_body.variants.iter().enumerate() {
+                for field in &variant.fields {
+                    if let Some(name) = field.r#type.get_name() {
+                        if generics.contains(&name) {
+                            let variant_def =
+                                &fn_builder.builder.get_adt(adt_index).variants[variant_idx]; // borrowck
+                            let field_index =
+                                *variant_def.field_names.get(&field.name.name).unwrap();
+                            let field_ty = variant_def.fields[field_index].ty;
+                            let field_type = fn_builder.builder.get_type(field_ty);
+                            let mut map_ty = field_ty;
+                            if let Some(inner) = field_type.get_inner_type() {
+                                map_ty = inner;
+                            }
+                            debug!(
+                                "Adding field type to generics mapping {} -> {}",
+                                name,
+                                fn_builder.builder.display_typename(map_ty)
+                            );
+                            fn_builder.builder.current_generics_map.insert(name, map_ty);
+                        }
+                    }
+                }
             }
-            // if extra is not empty it means its a method call
         } else {
             panic!("adt not found, shouldn't be possible")
         }

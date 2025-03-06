@@ -238,6 +238,15 @@ impl Rvalue {
             _ => None,
         }
     }
+
+    pub fn get_place(&self) -> Option<Place> {
+        match self {
+            Rvalue::Use(op) => op.get_place(),
+            Rvalue::Ref(_, op) => Some(op.clone()),
+            Rvalue::Cast(op, _, _) => op.get_place(),
+            _ => None,
+        }
+    }
 }
 
 /// A operand is a value, either from a place in memory or constant data.
@@ -251,6 +260,13 @@ impl Operand {
     pub fn get_local(&self) -> Option<usize> {
         match self {
             Operand::Place(place) => Some(place.local),
+            Operand::Const(_) => None,
+        }
+    }
+
+    pub fn get_place(&self) -> Option<Place> {
+        match self {
+            Operand::Place(place) => Some(place.clone()),
             Operand::Const(_) => None,
         }
     }
@@ -501,7 +517,7 @@ impl Type {
     }
 
     pub fn is_int(&self) -> bool {
-        matches!(self, Type::Int(_) | Type::Uint(_) | Type::Char)
+        matches!(self, Type::Int(_) | Type::Uint(_) | Type::Char | Type::Bool)
     }
 
     pub fn has_tag(&self, ir: &IR) -> bool {
@@ -527,8 +543,8 @@ impl Type {
     /// Meant for use in casts.
     pub fn get_bit_width(&self, ir: &IR) -> usize {
         match self {
-            Type::Unit => 1,
-            Type::Bool => 1,
+            Type::Unit => 8,
+            Type::Bool => 8,
             Type::Char => 8,
             Type::Int(ty) => match ty {
                 IntTy::I8 => 8,

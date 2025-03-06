@@ -1,4 +1,4 @@
-mod option {
+mod opt {
     enum Option<T> {
         Some {
             value: T,
@@ -17,9 +17,13 @@ mod option {
                 }
             }
         }
+    }
 
-        pub fn is_none(&self) -> bool {
-            return !self.is_some();
-        }
+    fn main() -> i32 {
+        let x: Option<i32> = Option::<i32>#Some {
+            value: 4
+        };
+
+        return x.is_some() as i32;
     }
 }

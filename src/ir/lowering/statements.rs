@@ -8,9 +8,9 @@ use crate::{
         types::TypeDescriptor,
     },
     ir::{
-        BasicBlock, ConstData, ConstKind, ConstValue, Local, LocalKind, Mutability, Operand, Place,
-        PlaceElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
-        Type, ValueTree,
+        AdtKind, BasicBlock, ConstData, ConstKind, ConstValue, Local, LocalKind, Mutability,
+        Operand, Place, PlaceElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator,
+        TerminatorKind, Type, ValueTree,
         lowering::{
             Symbol, expressions::lower_expression, functions::get_locals, types::lower_type,
         },
@@ -327,8 +327,63 @@ fn lower_if_statement(builder: &mut FnIrBuilder, info: &IfExpr) -> Result<(), Lo
 fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), LoweringError> {
     debug!("begin lowering match");
 
-    let (discriminator, discriminator_type_idx, disc_span) =
+    let (mut discriminator, mut discriminator_type_idx, disc_span) =
         lower_expression(builder, &info.expr, None)?;
+
+    debug!(
+        "Discriminator type: {}",
+        builder.builder.display_typename(discriminator_type_idx)
+    );
+
+    let mut enum_place_ty = None;
+
+    let mut discriminator_type = builder.builder.get_type(discriminator_type_idx);
+    let mut discriminator_place = discriminator.get_place().unwrap();
+
+    // auto deref
+    while let Type::Ref(inner, _) = discriminator_type {
+        discriminator_place.projection.push(PlaceElem::Deref);
+        discriminator_type_idx = *inner;
+        discriminator_type = builder.builder.get_type(discriminator_type_idx);
+    }
+
+    discriminator = Rvalue::Use(Operand::Place(discriminator_place.clone()));
+
+    debug!(
+        "Discriminator type after auto deref: {}",
+        builder.builder.display_typename(discriminator_type_idx)
+    );
+
+    match discriminator_type {
+        Type::Adt(index) => {
+            let adt = builder.builder.get_adt(*index);
+
+            match adt.kind {
+                AdtKind::Struct => {
+                    // a struct in a match makes no sense
+                    return Err(LoweringError::UnexpectedType {
+                        found_span: disc_span,
+                        found: builder.builder.display_typename(discriminator_type_idx),
+                        expected: "Any integral or enum type.".to_string(),
+                        expected_span: Some(info.span),
+                        path: builder.get_file_path().clone(),
+                    });
+                }
+                AdtKind::Enum => {
+                    let enum_place = discriminator.get_place().unwrap();
+                    enum_place_ty =
+                        Some((discriminator.get_place().unwrap(), discriminator_type_idx));
+                    let mut tag_place = enum_place.clone();
+                    tag_place.projection.push(PlaceElem::GetVariant);
+                    discriminator = Rvalue::Use(Operand::Place(tag_place));
+                    discriminator_type_idx = builder.builder.ir.get_u32_ty();
+                }
+                AdtKind::Union => todo!(),
+            }
+        }
+        Type::Array(_, _) => todo!(),
+        _ => {}
+    }
 
     let local = builder.add_temp_local(discriminator_type_idx);
     let place = Place {
@@ -448,40 +503,9 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                 let expected_adt_id_if_generics =
                     builder.get_symbols_table().aggregates.get(&sym).cloned();
 
-                let (enum_place, enum_ty) = match &discriminator {
-                    Rvalue::Use(operand) => match operand {
-                        Operand::Place(place) => {
-                            let mut place = place.clone(); // this place should have the GetVariant projection, remove it.
-                            let popped = place.projection.pop();
-                            assert_eq!(popped, Some(PlaceElem::GetVariant));
-                            let ty = builder.body.locals[place.local].ty;
-                            (place, ty)
-                        }
-                        Operand::Const(_) => {
-                            return Err(LoweringError::Unimplemented {
-                                span: info.span,
-                                reason: "Const enums in match not yet implemented.".to_string(),
-                                path: builder.get_file_path().clone(),
-                            });
-                        }
-                    },
-                    Rvalue::Ref(_mutability, _place) => {
-                        return Err(LoweringError::Unimplemented {
-                            span: info.span,
-                            reason: "Match with references not yet implemented..".to_string(),
-                            path: builder.get_file_path().clone(),
-                        });
-                    }
-                    _ => {
-                        return Err(LoweringError::InvalidMatch {
-                            span: disc_span,
-                            reason: "Invalid match expression".to_string(),
-                            path: builder.get_file_path().clone(),
-                        });
-                    }
-                };
+                let (enum_place, enum_ty) = enum_place_ty.as_ref().unwrap();
 
-                let adt_id = match builder.builder.get_type(enum_ty) {
+                let adt_id = match builder.builder.get_type(*enum_ty) {
                     Type::Adt(index) => *index,
                     _ => unreachable!(),
                 };
@@ -491,7 +515,7 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                         if expected_adt_id_if_generics != adt_id {
                             return Err(LoweringError::UnexpectedType {
                                 found_span: disc_span,
-                                found: builder.builder.display_typename(enum_ty),
+                                found: builder.builder.display_typename(*enum_ty),
                                 expected: enum_match_expr.name.to_string(),
                                 expected_span: Some(enum_match_expr.span),
                                 path: builder.get_file_path().clone(),
@@ -503,7 +527,7 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                         return Err(LoweringError::UnexpectedType {
                             found_span: enum_match_expr.name.span,
                             found: enum_match_expr.name.to_string(),
-                            expected: builder.builder.display_typename(enum_ty),
+                            expected: builder.builder.display_typename(*enum_ty),
                             expected_span: Some(disc_span),
                             path: builder.get_file_path().clone(),
                         });

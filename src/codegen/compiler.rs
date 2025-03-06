@@ -1392,7 +1392,7 @@ fn compile_load_place<'c: 'b, 'b>(
                             AdtKind::Union => todo!(),
                         }
                     }
-                    _ => unreachable!(),
+                    _ => unreachable!("{:?}", local_ty),
                 };
                 local_ty = ctx.module.get_type(local_type_idx);
             }
