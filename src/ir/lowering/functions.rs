@@ -4,7 +4,7 @@ use tracing::{debug, instrument};
 
 use crate::{
     ast::{
-        expressions::{FnCallOp, MatchCaseExpr},
+        expressions::FnCallOp,
         functions::{FunctionDecl, FunctionDef},
         statements::{self, LetStmtTarget},
         types::TypeDescriptor,

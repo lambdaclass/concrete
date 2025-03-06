@@ -3,7 +3,7 @@ use tracing::{debug, instrument};
 use crate::{
     ast::{
         common::TypeName,
-        expressions::{Expression, IfExpr, MatchCaseExpr, MatchExpr, ValueExpr},
+        expressions::{IfExpr, MatchCaseExpr, MatchExpr, ValueExpr},
         statements::{self, AssignStmt, ForStmt, LetStmt, LetStmtTarget, ReturnStmt, WhileStmt},
         types::TypeDescriptor,
     },
@@ -12,10 +12,7 @@ use crate::{
         PlaceElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
         Type, ValueTree,
         lowering::{
-            Symbol,
-            expressions::{lower_expression, lower_value_expr},
-            functions::get_locals,
-            types::lower_type,
+            Symbol, expressions::lower_expression, functions::get_locals, types::lower_type,
         },
     },
 };
@@ -330,7 +327,7 @@ fn lower_if_statement(builder: &mut FnIrBuilder, info: &IfExpr) -> Result<(), Lo
 fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), LoweringError> {
     debug!("begin lowering match");
 
-    let (discriminator, discriminator_type_idx, _disc_span) =
+    let (discriminator, discriminator_type_idx, disc_span) =
         lower_expression(builder, &info.expr, None)?;
 
     let local = builder.add_temp_local(discriminator_type_idx);
@@ -376,9 +373,36 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                     ValueExpr::ConstBool(v, _) => (*v) as u32,
                     ValueExpr::ConstChar(v, _) => (*v) as u32,
                     ValueExpr::ConstInt(v, _) => (*v) as u32,
-                    ValueExpr::ConstFloat(_, _) => todo!(),
-                    ValueExpr::ConstStr(_, _) => todo!(),
-                    ValueExpr::Path(_) => todo!("todo: bind variable to other?"),
+                    ValueExpr::ConstFloat(_, _) => {
+                        return Err(LoweringError::InvalidMatch {
+                            span: info.span,
+                            reason: "Can't use match on floats".to_string(),
+                            path: builder.get_file_path().clone(),
+                        });
+                    }
+                    ValueExpr::ConstStr(_, _) => {
+                        return Err(LoweringError::Unimplemented {
+                            span: info.span,
+                            reason: "Match on strings is not yet implemented.".to_string(),
+                            path: builder.get_file_path().clone(),
+                        });
+                    }
+                    ValueExpr::Path(p) => {
+                        // We use path as a catch all variable binding, so it doesn't make sense if it has extras.
+                        if !p.extra.is_empty() {
+                            return Err(LoweringError::InvalidMatch {
+                                span: info.span,
+                                reason: "Unrecognized pattern.".to_string(),
+                                path: builder.get_file_path().clone(),
+                            });
+                        }
+
+                        return Err(LoweringError::Unimplemented {
+                            span: info.span,
+                            reason: "Match catch all not implemented yet.".to_string(),
+                            path: builder.get_file_path().clone(),
+                        });
+                    }
                 };
                 target_conds.push(ValueTree::Leaf(ConstValue::U32(idx)));
                 is_enum_match = Some(None);
@@ -433,8 +457,6 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
 
                 target_conds.push(variant_value);
 
-                // todo: add locals from destructure, on each enum match block add the value extraction on the start of block.
-
                 let enum_place = match &discriminator {
                     Rvalue::Use(operand) => match operand {
                         Operand::Place(place) => {
@@ -443,13 +465,28 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                             assert_eq!(popped, Some(PlaceElem::GetVariant));
                             place
                         }
-                        Operand::Const(_) => todo!(),
+                        Operand::Const(_) => {
+                            return Err(LoweringError::Unimplemented {
+                                span: info.span,
+                                reason: "Const enums in match not yet implemented.".to_string(),
+                                path: builder.get_file_path().clone(),
+                            });
+                        }
                     },
-                    Rvalue::LogicOp(_, _) => todo!(),
-                    Rvalue::BinaryOp(_, _) => todo!(),
-                    Rvalue::UnaryOp(_, _) => todo!(),
-                    Rvalue::Ref(mutability, place) => todo!(),
-                    Rvalue::Cast(operand, index, _span) => todo!(),
+                    Rvalue::Ref(_mutability, _place) => {
+                        return Err(LoweringError::Unimplemented {
+                            span: info.span,
+                            reason: "Match with references not yet implemented..".to_string(),
+                            path: builder.get_file_path().clone(),
+                        });
+                    }
+                    _ => {
+                        return Err(LoweringError::InvalidMatch {
+                            span: disc_span,
+                            reason: "Invalid match expression".to_string(),
+                            path: builder.get_file_path().clone(),
+                        });
+                    }
                 };
 
                 for field_value in &enum_match_expr.field_values {
