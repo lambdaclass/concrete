@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 bigdecimal.workspace = true
+concrete-lang-syntactic-proc.workspace = true
 itertools.workspace = true
 logos.workspace = true
 num-bigint.workspace = true

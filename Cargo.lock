@@ -28,6 +28,114 @@ dependencies = [
 ]
 
 [[package]]
+name = "bit-matrix"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1216dde2607f9479a3ea619c9e1c73449c28cfe787a40fcd6033ac7520f8f26"
+dependencies = [
+ "bit-vec 0.8.0",
+]
+
+[[package]]
+name = "bit-vec"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2c54ff287cfc0a34f38a6b832ea1bd8e448a330b3e40a50859e6488bee07f22"
+
+[[package]]
+name = "bit-vec"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
+
+[[package]]
+name = "cfg"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a8327e1fda66185d40ec4169b861ee3c79fc78162d25514f90d8b589ba300ba"
+dependencies = [
+ "bit-matrix",
+ "bit-vec 0.7.0",
+ "cfg-classify",
+ "cfg-earley",
+ "cfg-generate",
+ "cfg-grammar",
+ "cfg-predict",
+ "cfg-sequence",
+ "cfg-symbol",
+]
+
+[[package]]
+name = "cfg-classify"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42e3687abb27fd23d794e9b058ca7f12c807d0e362469f428e62e1043439cba9"
+dependencies = [
+ "bit-matrix",
+ "bit-vec 0.7.0",
+ "cfg-grammar",
+ "cfg-symbol",
+]
+
+[[package]]
+name = "cfg-earley"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4b4c4941ea6fe5edb52e7aaa922af3b05d6d3bb9ba11b4deaa54f5c0fb67334"
+dependencies = [
+ "bit-matrix",
+ "cfg-classify",
+ "cfg-grammar",
+ "cfg-sequence",
+ "cfg-symbol",
+]
+
+[[package]]
+name = "cfg-generate"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "430d3dc05b50b40775e02368e07e50e83e32b9f38fdfeee73ba7b5527e291c2b"
+dependencies = [
+ "cfg-symbol",
+]
+
+[[package]]
+name = "cfg-grammar"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "973a96188797a40399157b6f89f536dea6690304fa15b032655cb3e39411237f"
+dependencies = [
+ "bit-vec 0.7.0",
+ "cfg-symbol",
+]
+
+[[package]]
+name = "cfg-predict"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "120a96c6c1c78d28daf234d98c6b235698d1c9ba150758b7f577c06786c4e52e"
+dependencies = [
+ "cfg-grammar",
+ "cfg-symbol",
+]
+
+[[package]]
+name = "cfg-sequence"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83d725833a11fbece5aa6b8118cf0e69fbc024837abe8c571749f3113d017e77"
+dependencies = [
+ "cfg-grammar",
+ "cfg-symbol",
+]
+
+[[package]]
+name = "cfg-symbol"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97a00c99b50a3584312822b053283eea0dada2bb97a0e3178707f8c25afd5cd4"
+
+[[package]]
 name = "concrete-lang-compiler"
 version = "0.1.0"
 
@@ -36,11 +144,22 @@ name = "concrete-lang-syntactic"
 version = "0.1.0"
 dependencies = [
  "bigdecimal",
+ "concrete-lang-syntactic-proc",
  "itertools",
  "logos",
  "num-bigint",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "concrete-lang-syntactic-proc"
+version = "0.1.0"
+dependencies = [
+ "cfg",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -152,18 +271,18 @@ checksum = "3b3cff922bd51709b605d9ead9aa71031d81447142d828eb4a6eba76fe619f9b"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.93"
+version = "1.0.94"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60946a68e5f9d28b0dc1c21bb8a97ee7d018a8b322fa57838ba31cc878e22d99"
+checksum = "a31971752e70b8b2686d7e46ec17fb38dad4051d94024c88df49b667caea9c84"
 dependencies = [
  "unicode-ident",
 ]
 
 [[package]]
 name = "quote"
-version = "1.0.38"
+version = "1.0.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e4dccaaaf89514f546c693ddc140f729f958c247918a13380cccc6078391acc"
+checksum = "c1f1914ce909e1658d9907913b4b91947430c7d9be598b15a1912935b8c04801"
 dependencies = [
  "proc-macro2",
 ]
@@ -191,9 +310,9 @@ checksum = "f79dfe2d285b0488816f30e700a7438c5a73d816b5b7d3ac72fbc48b0d185e03"
 
 [[package]]
 name = "syn"
-version = "2.0.98"
+version = "2.0.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36147f1a48ae0ec2b5b3bc5b537d267457555a10dc06f3dbc8cb11ba3006d3b1"
+checksum = "e02e925281e18ffd9d640e234264753c43edc62d64b2d4cf898f1bc5e75f3fc2"
 dependencies = [
  "proc-macro2",
  "quote",

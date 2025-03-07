@@ -1,8 +1,8 @@
 use std::{fmt, ops::Range, path::PathBuf};
 
 pub mod buffer;
+pub mod cst;
 pub mod lexer;
-pub mod parser;
 
 #[derive(Clone, Debug)]
 pub struct Span {
