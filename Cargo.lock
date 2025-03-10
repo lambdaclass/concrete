@@ -329,6 +329,7 @@ dependencies = [
  "itertools 0.14.0",
  "lalrpop",
  "lalrpop-util",
+ "libloading",
  "llvm-sys",
  "logos",
  "logos-display",

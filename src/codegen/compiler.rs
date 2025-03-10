@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use crate::ir::{
     AdtKind, BinOp, ConcreteIntrinsic, ConstValue, FnIndex, Function, IR, LocalKind, Module,
-    ModuleIndex, Operand, Place, PlaceElem, Rvalue, Span, Type as IRType, TypeIndex, ValueTree,
+    ModuleIndex, Operand, Place, PlaceElem, Rvalue, Span, Type as IRType, TypeIndex, UnOp,
+    ValueTree,
 };
 use ariadne::Source;
 use melior::helpers::{ArithBlockExt, BuiltinBlockExt, GepIndex, LlvmBlockExt};
@@ -497,7 +498,7 @@ fn compile_rvalue<'c: 'b, 'b>(
         Rvalue::Use(info) => compile_load_operand(ctx, block, info, locals)?,
         Rvalue::LogicOp(_, _) => todo!(),
         Rvalue::BinaryOp(op, (lhs, rhs)) => compile_binop(ctx, block, op, lhs, rhs, locals)?,
-        Rvalue::UnaryOp(_, _) => todo!(),
+        Rvalue::UnaryOp(op, lhs) => compile_unop(ctx, block, op, lhs, locals)?,
         Rvalue::Ref(_mutability, place) => {
             let mut value = locals[&place.local];
             let mut local_type_idx = ctx.get_fn_body().locals[place.local].ty;
@@ -995,6 +996,55 @@ fn compile_binop<'c: 'b, 'b>(
                     .into()
             };
             (value, ctx.module.ctx.program.get_bool_ty())
+        }
+    })
+}
+
+/// Compiles a unary operation.
+fn compile_unop<'c: 'b, 'b>(
+    ctx: &'c FunctionCodegenCtx,
+    block: &'b Block<'c>,
+    op: &UnOp,
+    lhs: &Operand,
+    locals: &HashMap<usize, Value<'c, '_>>,
+) -> Result<(Value<'c, 'b>, TypeIndex), CodegenError> {
+    let (lhs, lhs_type_idx) = compile_load_operand(ctx, block, lhs, locals)?;
+    let location = Location::unknown(ctx.context());
+    let lhs_ty = ctx.module.get_type(lhs_type_idx);
+    let lhs_type = compile_type(ctx.module, &lhs_ty);
+
+    let is_float = matches!(lhs_ty, IRType::Float(_));
+
+    Ok(match op {
+        UnOp::Not => {
+            let k0 = block.const_int_from_type(ctx.context(), location, 0, lhs_type)?;
+            let value = if is_float {
+                block.append_op_result(arith::cmpf(
+                    ctx.context(),
+                    arith::CmpfPredicate::Ueq,
+                    lhs,
+                    k0,
+                    location,
+                ))?
+            } else {
+                block.append_op_result(arith::cmpi(
+                    ctx.context(),
+                    arith::CmpiPredicate::Eq,
+                    lhs,
+                    k0,
+                    location,
+                ))?
+            };
+            (value, lhs_type_idx)
+        }
+        UnOp::Neg => {
+            let value = if is_float {
+                block.append_op_result(arith::negf(lhs, location))?
+            } else {
+                let k1 = block.const_int_from_type(ctx.context(), location, -1, lhs_type)?;
+                block.append_op_result(arith::muli(lhs, k1, location))?
+            };
+            (value, lhs_type_idx)
         }
     })
 }

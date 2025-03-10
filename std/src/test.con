@@ -1,0 +1,20 @@
+mod test {
+    import std.io.{print};
+
+    pub fn assert(result: bool, message: String) {
+        if result == false {
+            std::io::print(&message);
+            std::libc::raise(10); // SIGUSR1
+        }
+    }
+
+    pub fn assert_eq<T>(expected: T, result: T, message: String) -> bool {
+        if expected != result {
+            let msg: String = "Assert error:";
+            print(&msg);
+            print(&message);
+            return false;
+        }
+        return true;
+    }
+}

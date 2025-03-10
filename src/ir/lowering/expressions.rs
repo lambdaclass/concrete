@@ -4,7 +4,8 @@ use tracing::{debug, instrument};
 
 use crate::{
     ast::expressions::{
-        ArithOp, BinaryOp, BitwiseOp, CmpOp, Expression, LogicOp, PathOp, PathSegment, ValueExpr,
+        ArithOp, BinaryOp, BitwiseOp, CmpOp, Expression, LogicOp, PathOp, PathSegment, UnaryOp,
+        ValueExpr,
     },
     ir::{
         ConstKind, ConstValue, FloatTy, IntTy, Local, Mutability, Operand, Place, PlaceElem, Span,
@@ -45,10 +46,7 @@ pub(crate) fn lower_expression(
             debug!("lowering if expression");
             todo!()
         }
-        Expression::UnaryOp(_, _) => {
-            debug!("lowering unary op");
-            todo!()
-        }
+        Expression::UnaryOp(op, expr) => lower_unary_op(builder, expr, *op, type_hint)?,
         Expression::BinaryOp(lhs, op, rhs) => lower_binary_op(builder, lhs, *op, rhs, type_hint)?,
         Expression::Deref(info, deref_span) => {
             debug!("lowering deref");
@@ -940,6 +938,79 @@ pub(crate) fn lower_path(
     fn_builder.builder.current_generics_map = old_generics;
 
     Ok((Place { local, projection }, type_idx, info.span))
+}
+
+pub(crate) fn lower_unary_op(
+    builder: &mut FnIrBuilder,
+    lhs: &Expression,
+    op: UnaryOp,
+    type_hint: Option<TypeIndex>,
+) -> Result<(Rvalue, TypeIndex, Span), LoweringError> {
+    let (lhs, lhs_type_idx, lhs_span) = if type_hint.is_none() {
+        let ty = find_expression_type(builder, lhs)?;
+
+        let ty = if let Some(ty) = ty {
+            ty
+        } else {
+            // Default to i32 if cant infer type.
+            // Should be ok because at other points if the i32 doesn't match the expected type
+            // a error will be thrown, forcing user to specify types.
+            debug!("can't infer type, defaulting to i32");
+            builder.builder.ir.get_i32_ty()
+        };
+        lower_expression(builder, lhs, Some(ty))?
+    } else {
+        lower_expression(builder, lhs, type_hint)?
+    };
+
+    let lhs_ty = builder.builder.get_type(lhs_type_idx).clone();
+
+    // We must handle the special case where you can do ptr + offset.
+    let is_lhs_ptr = matches!(lhs_ty, Type::Ptr(_, _));
+
+    if is_lhs_ptr {
+        return Err(LoweringError::InvalidUnaryOp {
+            found_span: lhs_span,
+            found: lhs_ty.display(&builder.builder.ir).unwrap(),
+            path: builder.get_file_path().clone(),
+        });
+    }
+
+    let lhs_local = builder.add_local(Local::temp(lhs_type_idx));
+    let lhs_place = Place {
+        local: lhs_local,
+        projection: vec![],
+    };
+
+    builder.statements.push(Statement {
+        span: None,
+        kind: StatementKind::StorageLive(lhs_local),
+    });
+
+    builder.statements.push(Statement {
+        span: None,
+        kind: StatementKind::Assign(lhs_place.clone(), lhs),
+    });
+
+    let lhs = Operand::Place(lhs_place);
+
+    Ok(match op {
+        UnaryOp::ArithNeg => (
+            Rvalue::UnaryOp(crate::ir::UnOp::Neg, lhs),
+            lhs_type_idx,
+            lhs_span,
+        ),
+        UnaryOp::LogicalNot => (
+            Rvalue::UnaryOp(crate::ir::UnOp::Not, lhs),
+            lhs_type_idx,
+            lhs_span,
+        ),
+        UnaryOp::BitwiseNot => (
+            Rvalue::UnaryOp(crate::ir::UnOp::Not, lhs),
+            lhs_type_idx,
+            lhs_span,
+        ),
+    })
 }
 
 pub(crate) fn lower_binary_op(
