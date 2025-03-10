@@ -1,0 +1,27 @@
+mod result {
+    enum Result<T, E> {
+        Ok {
+            value: T,
+        },
+        Err {
+            error: E
+        },
+    }
+
+    impl<T, E> Result<T, E> {
+        pub fn is_ok(&self) -> bool {
+            match self {
+                Result#Ok { value } => {
+                    return true;
+                },
+                Result#Err => {
+                    return false;
+                }
+            }
+        }
+
+        pub fn is_err(&self) -> bool {
+            return !self.is_ok();
+        }
+    }
+}
