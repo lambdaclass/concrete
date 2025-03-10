@@ -43,6 +43,8 @@ pub struct IR {
     /// Since the `modules` field is a flat structure holding all modules regardles of depth.
     pub top_level_modules: Vec<ModuleIndex>,
     pub builtin_types: HashMap<Type, TypeIndex>,
+    // Test functions.
+    pub tests: Vec<FnIndex>,
 }
 
 impl IR {
@@ -113,6 +115,7 @@ pub struct Module {
 pub struct Function {
     /// The name of this function
     pub name: String,
+    pub debug_name: Option<String>,
     pub args: Vec<TypeIndex>,
     pub ret_ty: TypeIndex,
     pub is_extern: bool,
@@ -486,7 +489,7 @@ impl Type {
     }
 
     pub fn is_int(&self) -> bool {
-        matches!(self, Type::Int(_) | Type::Uint(_))
+        matches!(self, Type::Int(_) | Type::Uint(_) | Type::Char)
     }
 
     pub fn is_signed(&self) -> bool {
