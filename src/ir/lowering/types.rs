@@ -65,7 +65,7 @@ pub(crate) fn lower_type(
                 .get(&Type::Float(FloatTy::F64))
                 .unwrap(),
             "bool" => *builder.ir.builtin_types.get(&Type::Bool).unwrap(),
-            "string" => *builder.ir.builtin_types.get(&Type::String).unwrap(),
+            "String" => *builder.ir.builtin_types.get(&Type::String).unwrap(),
             "char" => *builder.ir.builtin_types.get(&Type::Char).unwrap(),
             other => {
                 // Check if the type name exists in the generic map.

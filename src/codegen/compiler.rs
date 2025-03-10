@@ -5,7 +5,7 @@ use crate::ir::{
     ModuleIndex, Operand, Place, PlaceElem, Rvalue, Span, Type as IRType, TypeIndex, ValueTree,
 };
 use ariadne::Source;
-use melior::helpers::ArithBlockExt;
+use melior::helpers::{ArithBlockExt, BuiltinBlockExt, GepIndex, LlvmBlockExt};
 use melior::ir::{BlockLike, RegionLike};
 use melior::{
     Context as MeliorContext,
@@ -1310,6 +1310,7 @@ fn value_tree_to_int(value: &ValueTree) -> Option<i64> {
             crate::ir::ConstValue::U128(value) => Some((*value) as i64),
             crate::ir::ConstValue::F32(_) => None,
             crate::ir::ConstValue::F64(_) => None,
+            crate::ir::ConstValue::String(_) => None,
         },
         ValueTree::Branch(_) => None,
     }
@@ -1323,6 +1324,57 @@ fn compile_value_tree<'c: 'b, 'b>(
 ) -> Result<Value<'c, 'b>, CodegenError> {
     Ok(match value {
         ValueTree::Leaf(value) => match value {
+            crate::ir::ConstValue::String(data) => {
+                let location = Location::unknown(ctx.context());
+                let ty = compile_type(ctx.module, &IRType::String);
+                let len = data.len();
+                let u64_ty = IntegerType::new(ctx.context(), 64).into();
+                let u8_ty = IntegerType::new(ctx.context(), 8).into();
+                // + 1 for the null byte.
+                let len_value =
+                    block.const_int_from_type(ctx.context(), location, len + 1, u64_ty)?;
+
+                let arr_ty = llvm::r#type::array(u8_ty, len as u32);
+
+                let constant = block.append_op_result(
+                    ods::llvm::mlir_constant(
+                        ctx.context(),
+                        arr_ty,
+                        StringAttribute::new(ctx.context(), data).into(),
+                        location,
+                    )
+                    .into(),
+                )?;
+
+                let ptr = block.append_op_result(func::call(
+                    ctx.context(),
+                    FlatSymbolRefAttribute::new(ctx.context(), "malloc"),
+                    &[len_value],
+                    &[llvm::r#type::pointer(ctx.context(), 0)],
+                    location,
+                ))?;
+
+                block.store(ctx.context(), location, ptr, constant)?;
+                let ptr_off = block.gep(
+                    ctx.context(),
+                    location,
+                    ptr,
+                    &[GepIndex::Const(len as i32)],
+                    u8_ty,
+                )?;
+                // add the null byte.
+                let const_0 = block.const_int(ctx.context(), location, 0, 64)?;
+                block.store(ctx.context(), location, ptr_off, const_0)?;
+
+                let struct_value = block.append_op_result(llvm::undef(ty, location))?;
+
+                block.insert_values(
+                    ctx.context(),
+                    location,
+                    struct_value,
+                    &[ptr, len_value, len_value],
+                )?
+            }
             crate::ir::ConstValue::Bool(value) => block
                 .append_operation(arith::constant(
                     ctx.context(),
@@ -1473,7 +1525,16 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &IRType) -> Type<'c> {
             crate::ir::FloatTy::F32 => Type::float32(ctx.ctx.mlir_context),
             crate::ir::FloatTy::F64 => Type::float64(ctx.ctx.mlir_context),
         },
-        crate::ir::Type::String => todo!(),
+        crate::ir::Type::String => {
+            let ty = *ctx
+                .ctx
+                .program
+                .builtin_types
+                .get(&crate::ir::Type::String)
+                .unwrap();
+            let ty = ctx.get_type(ty);
+            compile_type(ctx, &ty)
+        }
         crate::ir::Type::Array(inner_type_idx, length) => {
             let inner_type = ctx.get_type(*inner_type_idx);
             let inner_type = compile_type(ctx, &inner_type);

@@ -306,5 +306,17 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
             }
             report.finish()
         }
+        LoweringError::UnknownLangItem { span, item, path } => {
+            let path = path.display().to_string();
+            let filespan = FileSpan::new(path.clone(), span.from..span.to);
+            let report = Report::build(ReportKind::Error, filespan.clone())
+                .with_code("UnknownLangItem")
+                .with_label(
+                    Label::new(filespan.clone())
+                        .with_message(format!("unknown lang item '{}'", item))
+                        .with_color(colors.next()),
+                );
+            report.finish()
+        }
     }
 }
