@@ -27,3 +27,5 @@ build/
 *.ast
 *.ll
 *.ir
+
+.vscode/
