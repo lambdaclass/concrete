@@ -1,0 +1,14 @@
+mod test {
+    import std.io.{print};
+
+    pub fn assert_eq<T>(expected: T, result: T, message: String) -> bool {
+        if expected != result {
+            let msg: String = "Assert error:";
+            print(&msg);
+            msg.drop();
+            print(&message);
+            return false;
+        }
+        return true;
+    }
+}

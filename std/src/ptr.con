@@ -1,0 +1,5 @@
+mod ptr {
+    pub fn offset<T>(ptr: *mut T, offset: u64) -> *mut T {
+        return self.ptr + offset;
+    }
+}

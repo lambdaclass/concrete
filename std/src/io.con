@@ -1,0 +1,31 @@
+mod io {
+    struct File {
+        ptr: *const u8,
+    }
+
+    impl File {
+        pub fn create(path: &String) -> File {
+            let mode: String = "w";
+
+            let handle: File = File {
+                ptr: std::libc::fopen(path.ptr, mode.ptr),
+            };
+
+            mode.drop();
+
+            return handle;
+        }
+
+        pub fn close(self) {
+            std::libc::fclose(self.ptr);
+        }
+
+        // TODO: write, read, flush
+    }
+
+    pub fn print(value: &String) {
+        if value.len > 0 {
+            std::libc::puts(value.ptr);
+        }
+    }
+}

@@ -14,6 +14,7 @@ use owo_colors::OwoColorize;
 use std::io::Read;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
+use std::sync::Arc;
 use std::{collections::HashMap, fs::File, path::PathBuf, time::Instant};
 use tracing::debug;
 
@@ -49,6 +50,8 @@ enum Commands {
     Build(BuildArgs),
     /// Run a project or file
     Run(BuildArgs),
+    /// Test a project or file.
+    Test(BuildArgs),
 }
 
 #[derive(Args, Debug)]
@@ -219,11 +222,11 @@ pub fn main() -> Result<()> {
                     path.join("src").join("main.con"),
                     format!(
                         r#"
-mod {} {{
-    pub fn main() -> i32 {{
-        return 0;
-    }}
-}}"#,
+        mod {} {{
+            pub fn main() -> i32 {{
+                return 0;
+            }}
+        }}"#,
                         name
                     ),
                 )?;
@@ -232,11 +235,11 @@ mod {} {{
                     path.join("src").join("lib.con"),
                     format!(
                         r#"
-mod {} {{
-    pub fn hello_world() -> i32 {{
-        return 0;
-    }}
-}}"#,
+        mod {} {{
+            pub fn hello_world() -> i32 {{
+                return 0;
+            }}
+        }}"#,
                         name
                     ),
                 )?;
@@ -272,13 +275,75 @@ mod {} {{
             handle_build(args)?;
         }
         Commands::Run(args) => {
-            let output = handle_build(args)?;
+            let output = handle_build(args)?.0;
             println!();
             Err(std::process::Command::new(output).exec())?;
+        }
+        Commands::Test(mut args) => {
+            args.lib = true;
+            let (output, tests) = handle_build(args)?;
+            println!();
+
+            let tests = Arc::new(tests);
+
+            println!("Running {} tests", tests.len());
+
+            let mut passed = 0;
+
+            let lib = unsafe { libloading::Library::new(output).expect("failed to load") };
+
+            for test in tests.iter() {
+                print!("test {} ... ", test.symbol);
+                let test_fn = unsafe {
+                    lib.get::<unsafe extern "C" fn() -> i32>(test.mangled_symbol.as_bytes())
+                };
+
+                if test_fn.is_err() {
+                    println!("{}", "err".red());
+                    eprintln!("Symbol not found: {:?}", test_fn);
+                    continue;
+                }
+
+                let test_fn = test_fn.unwrap();
+
+                let result = unsafe { (test_fn)() };
+
+                if result == 0 {
+                    passed += 1;
+                    println!("{}", "ok".green());
+                } else {
+                    println!("{}", "err".red());
+                }
+            }
+
+            lib.close().unwrap();
+
+            println!();
+            if !tests.is_empty() {
+                println!(
+                    "test result: {}. {} passed; {} failed; ({:.2}%)",
+                    if passed == tests.len() {
+                        "ok".green().to_string()
+                    } else {
+                        "err".red().to_string()
+                    },
+                    passed,
+                    tests.len() - passed,
+                    ((passed as f64 / tests.len() as f64) * 100.0).bold()
+                );
+            }
+
+            return Ok(());
         }
     }
 
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub struct TestInfo {
+    pub mangled_symbol: String,
+    pub symbol: String,
 }
 
 fn handle_build(
@@ -295,7 +360,7 @@ fn handle_build(
         lib,
         check,
     }: BuildArgs,
-) -> Result<PathBuf> {
+) -> Result<(PathBuf, Vec<TestInfo>)> {
     match path {
         // Single file compilation
         Some(input) => {
@@ -332,7 +397,7 @@ fn handle_build(
             );
 
             let start = Instant::now();
-            let object = compile(&compile_args)?;
+            let (object, tests) = compile(&compile_args)?;
 
             if lib {
                 link_shared_lib(&[object.clone()], &output)?;
@@ -352,7 +417,7 @@ fn handle_build(
                 if release { "release" } else { "dev" },
             );
 
-            Ok(output)
+            Ok((output, tests))
         }
         // Project compilation.
         None => {
@@ -393,7 +458,7 @@ fn handle_build(
             if !target_dir.exists() {
                 std::fs::create_dir_all(&target_dir)?;
             }
-            let output = target_dir.join(config.package.name);
+            let mut output = target_dir.join(config.package.name);
             let (profile, profile_name) = if let Some(profile) = profile {
                 (
                     config
@@ -425,6 +490,8 @@ fn handle_build(
 
             let start = Instant::now();
 
+            let mut tests = Vec::new();
+
             for file in [main_ed, lib_ed] {
                 if file.exists() {
                     let is_lib = file.file_stem().unwrap() == "lib";
@@ -452,12 +519,17 @@ fn handle_build(
                         mlir,
                         check,
                     };
-                    let object = compile(&compile_args)?;
+                    let (object, file_tests) = compile(&compile_args)?;
+                    tests.extend(file_tests);
 
                     if compile_args.library {
                         link_shared_lib(&[object], &compile_args.output)?;
                     } else {
                         link_binary(&[object], &compile_args.output)?;
+                    }
+
+                    if is_lib {
+                        output = compile_args.output;
                     }
                 }
             }
@@ -478,7 +550,7 @@ fn handle_build(
                 }
             );
 
-            Ok(output)
+            Ok((output, tests))
         }
     }
 }
@@ -560,7 +632,7 @@ pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<Compila
     Ok(compile_unit)
 }
 
-pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
+pub fn compile(args: &CompilerArgs) -> Result<(PathBuf, Vec<TestInfo>)> {
     let start_time = Instant::now();
 
     let db = crate::driver::db::DatabaseImpl::default();
@@ -632,5 +704,14 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     let elapsed = start_time.elapsed();
     tracing::debug!("Done in {:?}", elapsed);
 
-    Ok(object_path)
+    let mut test_names = Vec::new();
+    for t in &compile_unit_ir.tests {
+        let f = compile_unit_ir.functions[*t].as_ref().unwrap();
+        test_names.push(TestInfo {
+            mangled_symbol: f.name.clone(),
+            symbol: f.debug_name.clone().unwrap(),
+        });
+    }
+
+    Ok((object_path, test_names))
 }

@@ -192,6 +192,25 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 .with_message(format!("expected type {}", expected))
                 .finish()
         }
+        LoweringError::InvalidUnaryOp {
+            found_span: span,
+            found,
+            path,
+        } => {
+            let path = path.display().to_string();
+            let filespan = FileSpan::new(path.clone(), span.from..span.to);
+            let labels = vec![
+                Label::new(filespan.clone())
+                    .with_message(format!("Invalid binary operation type '{}'", found))
+                    .with_color(colors.next()),
+            ];
+
+            Report::build(ReportKind::Error, filespan.clone())
+                .with_code("InvalidUnaryOp")
+                .with_labels(labels)
+                .with_message(format!("invalid binary operation type {}", found))
+                .finish()
+        }
         LoweringError::UseOfUndeclaredVariable { span, name, path } => {
             let path = path.display().to_string();
             let filespan = FileSpan::new(path, span.from..span.to);

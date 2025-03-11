@@ -1,0 +1,15 @@
+mod alloc {
+    import std.mem.{sizeof};
+
+    pub fn alloc<T>() -> *mut T {
+        return std::libc::malloc(sizeof::<T>()) as *mut T;
+    }
+
+    pub fn realloc<T>(old_ptr: *mut T, size: u64) -> *mut T {
+        return std::libc::realloc(old_ptr as *mut u8, sizeof::<T>() * size) as *mut T;
+    }
+
+    pub fn free<T>(ptr: *mut T) {
+        std::libc::free(ptr as *mut u8);
+    }
+}

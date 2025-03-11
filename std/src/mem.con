@@ -1,0 +1,99 @@
+mod mem {
+    #[intrinsic = "sizeof"]
+    pub fn sizeof<T>() -> u64;
+
+    #[intrinsic = "alignof"]
+    pub fn alignof<T>() -> u64;
+
+    import std.test.{assert_eq};
+
+    #[test]
+    fn test_size() -> i32 {
+        if !assert_eq::<u64>(sizeof::<i8>(), 1, "Sizeof should be correct i8") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(sizeof::<i16>(), 2, "Sizeof should be correct i16") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(sizeof::<i32>(), 4, "Sizeof should be correct i32") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(sizeof::<i64>(), 8, "Sizeof should be correct i64") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(sizeof::<u8>(), 1, "Sizeof should be correct u8") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(sizeof::<u16>(), 2, "Sizeof should be correct u16") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(sizeof::<u32>(), 4, "Sizeof should be correct u32") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(sizeof::<u64>(), 8, "Sizeof should be correct u64") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(sizeof::<f32>(), 4, "Sizeof should be correct f32") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(sizeof::<f64>(), 8, "Sizeof should be correct f64") {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    #[test]
+    fn test_align() -> i32 {
+        if !assert_eq::<u64>(alignof::<i8>(), 1, "alignof should be correct i8") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(alignof::<i16>(), 2, "alignof should be correct i16") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(alignof::<i32>(), 4, "alignof should be correct i32") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(alignof::<i64>(), 8, "alignof should be correct i64") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(alignof::<u8>(), 1, "alignof should be correct u8") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(alignof::<u16>(), 2, "alignof should be correct u16") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(alignof::<u32>(), 4, "alignof should be correct u32") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(alignof::<u64>(), 8, "alignof should be correct u64") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(alignof::<f32>(), 4, "alignof should be correct f32") {
+            return 1;
+        }
+
+        if !assert_eq::<u64>(alignof::<f64>(), 8, "alignof should be correct f64") {
+            return 1;
+        }
+
+        return 0;
+    }
+}

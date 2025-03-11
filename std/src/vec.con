@@ -1,0 +1,60 @@
+mod vec {
+    import std.mem.{sizeof};
+    import std.alloc.{alloc,realloc,free};
+
+    pub struct Vec<T> {
+        ptr: *mut T,
+        len: u64,
+        cap: u64,
+    }
+
+    impl<T> Vec<T> {
+        pub fn new() -> Vec<T> {
+            let vec: Vec<T> = Vec::<T> {
+                ptr: 0 as *mut T,
+                len: 0,
+                cap: 0,
+            };
+            return vec;
+        }
+
+        pub fn push(&mut self, value: T) {
+            if self.len <= self.cap {
+                self.grow();
+            }
+
+            let target_ptr: *mut T = self.ptr + self.len;
+            *target_ptr = value;
+            self.len = self.len + 1;
+        }
+
+        pub fn get(&self, at: u64) -> &T {
+            // todo: bounds check
+            let target_ptr: *mut T = self.ptr + self.len;
+            return target_ptr as &T;
+        }
+
+        pub fn get_mut(&mut self, at: u64) -> &mut T {
+            // todo: bounds check
+            let target_ptr: *mut T = self.ptr + self.len;
+            return target_ptr as &mut T;
+        }
+
+        fn grow(&mut self) {
+            let new_cap: u64 = std::math::max::<u64>(self.cap, 4) * 2;
+            self.ptr = realloc::<T>(self.ptr, new_cap);
+            self.cap = new_cap;
+        }
+
+        pub fn clear(&mut self) {
+            self.len = 0;
+        }
+
+        /// TODO: drop should be a trait, and isn't really called yet automatically.
+        pub fn drop(self) {
+            free(self.ptr);
+        }
+
+        // TODO: insert, remove
+    }
+}

@@ -75,6 +75,12 @@ pub enum LoweringError {
         expected_span: Option<Span>,
         path: PathBuf,
     },
+    #[error("invalid unary op on given type")]
+    InvalidUnaryOp {
+        found_span: Span,
+        found: String,
+        path: PathBuf,
+    },
     #[error("extern function {name:?} has a body")]
     ExternFnWithBody {
         span: Span,

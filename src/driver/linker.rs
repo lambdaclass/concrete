@@ -19,10 +19,9 @@ pub fn link_shared_lib(objects: &[PathBuf], output_filename: &Path) -> std::io::
         #[cfg(target_os = "macos")]
         {
             let mut args = vec![
-                "-demangle",
-                "-no_deduplicate",
                 "-dynamic",
                 "-dylib",
+                "-mllvm",
                 "-L/usr/local/lib",
                 "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
             ];
