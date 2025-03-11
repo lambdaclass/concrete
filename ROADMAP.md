@@ -11,6 +11,7 @@ Builtin Features:
 - enums 🏗️
 - match 🏗️
 - stdlib support 🏗️
+- unit tests 🏗️
 
 Standard lib features:
 - arrays/vectors 🏗️
