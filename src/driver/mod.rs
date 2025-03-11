@@ -290,9 +290,7 @@ pub fn main() -> Result<()> {
 
             let mut passed = 0;
 
-            let lib = Arc::new(unsafe {
-                libloading::os::unix::Library::new(output).expect("failed to load")
-            });
+            let lib = unsafe { libloading::Library::new(output).expect("failed to load") };
 
             for test in tests.iter() {
                 print!("test {} ... ", test.symbol);
