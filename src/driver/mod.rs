@@ -290,12 +290,13 @@ pub fn main() -> Result<()> {
 
             let mut passed = 0;
 
-            let lib = unsafe { libloading::Library::new(output).expect("failed to load") };
+            let lib = unsafe { libloading::os::unix::Library::open(Some(output), libloading::os::unix::RTLD_GLOBAL).unwrap() };
+            //let lib = unsafe { libloading::Library::new(output).expect("failed to load") };
 
             for test in tests.iter() {
                 print!("test {} ... ", test.symbol);
                 let test_fn = unsafe {
-                    lib.get::<unsafe extern "C" fn() -> i32>(test.mangled_symbol.as_bytes())
+                    lib.get_singlethreaded::<unsafe extern "C" fn() -> i32>(test.mangled_symbol.as_bytes())
                 };
 
                 if test_fn.is_err() {

@@ -5,6 +5,7 @@ mod test {
         if expected != result {
             let msg: String = "Assert error:";
             print(&msg);
+            msg.drop();
             print(&message);
             return false;
         }
