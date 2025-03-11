@@ -70,10 +70,10 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
             let path = path.display().to_string();
             let filespan = FileSpan::new(path, span.from..span.to);
             Report::build(ReportKind::Error, filespan.clone())
-                .with_code("StructFieldNotFound")
+                .with_code("FieldNotFound")
                 .with_label(
                     Label::new(filespan)
-                        .with_message(format!("Struct field {name:?} not found."))
+                        .with_message(format!("field {name:?} not found."))
                         .with_color(colors.next()),
                 )
                 .finish()
