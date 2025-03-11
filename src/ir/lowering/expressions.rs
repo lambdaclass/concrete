@@ -379,10 +379,13 @@ pub(crate) fn lower_expression(
             let variant_body = &enum_body.variants[variant_idx];
 
             for (field, value) in info.fields.iter() {
-                let idx = *variant_body
-                    .field_names
-                    .get(&field.name)
-                    .expect("failed to find field");
+                let idx = *variant_body.field_names.get(&field.name).ok_or_else(|| {
+                    LoweringError::FieldNotFound {
+                        span: field.span,
+                        name: field.name.clone(),
+                        path: builder.get_file_path().clone(),
+                    }
+                })?;
                 let mut field_place = place.clone();
                 field_place.projection.push(PlaceElem::Field(idx + 1));
 
@@ -518,7 +521,7 @@ pub(crate) fn find_expression_type(
                                     fn_builder.builder.get_adt(id).variants.first().unwrap();
                                 let idx =
                                     *struct_body.field_names.get(&name.name).ok_or_else(|| {
-                                        LoweringError::StructFieldNotFound {
+                                        LoweringError::FieldNotFound {
                                             span: *field_span,
                                             name: name.name.clone(),
                                             path: fn_builder.get_file_path().clone(),
@@ -952,7 +955,7 @@ pub(crate) fn lower_path(
 
                     let struct_body = fn_builder.builder.get_adt(id).variants.first().unwrap();
                     let idx = *struct_body.field_names.get(&name.name).ok_or_else(|| {
-                        LoweringError::StructFieldNotFound {
+                        LoweringError::FieldNotFound {
                             span: *field_span,
                             name: name.name.clone(),
                             path: fn_builder.get_file_path().clone(),

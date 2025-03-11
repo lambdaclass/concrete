@@ -66,7 +66,7 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 )
                 .finish()
         }
-        LoweringError::StructFieldNotFound { span, name, path } => {
+        LoweringError::FieldNotFound { span, name, path } => {
             let path = path.display().to_string();
             let filespan = FileSpan::new(path, span.from..span.to);
             Report::build(ReportKind::Error, filespan.clone())

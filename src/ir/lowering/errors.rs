@@ -17,8 +17,8 @@ pub enum LoweringError {
         function: String,
         path: PathBuf,
     },
-    #[error("struct field {name:?} not found")]
-    StructFieldNotFound {
+    #[error("field {name:?} not found")]
+    FieldNotFound {
         span: Span,
         name: String,
         path: PathBuf,
