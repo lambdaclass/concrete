@@ -295,7 +295,7 @@ pub fn main() -> Result<()> {
             for test in tests.iter() {
                 print!("test {} ... ", test.symbol);
                 let test_fn = unsafe {
-                    lib.get_singlethreaded::<unsafe extern "C" fn() -> i32>(test.mangled_symbol.as_bytes())
+                    lib.get::<unsafe extern "C" fn() -> i32>(test.mangled_symbol.as_bytes())
                 };
 
                 if test_fn.is_err() {
