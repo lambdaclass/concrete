@@ -56,9 +56,8 @@ pub(crate) fn lower_statement(
     Ok(())
 }
 
-#[instrument(level = "debug", skip_all, fields(name, variant))]
+#[instrument(level = "debug", skip_all, fields(name, variant, ty))]
 fn lower_let(builder: &mut FnIrBuilder, info: &LetStmt) -> Result<(), LoweringError> {
-    debug!("begin lowering let");
     match &info.target {
         LetStmtTarget::Simple { id: name, r#type } => {
             tracing::Span::current().record("name", &name.name);
@@ -67,19 +66,12 @@ fn lower_let(builder: &mut FnIrBuilder, info: &LetStmt) -> Result<(), LoweringEr
             let type_idx = lower_type(builder.builder, r#type)?;
 
             let ty = builder.builder.ir.types[type_idx].clone().unwrap();
-
-            debug!(
-                "let target type: {}",
-                builder.builder.display_typename(type_idx)
-            );
+            tracing::Span::current().record("ty", builder.builder.display_typename(type_idx));
+            debug!("lowering");
             let (rvalue, rvalue_type_idx, rvalue_span) =
                 lower_expression(builder, &info.value, Some(type_idx))?;
 
             let rvalue_ty = builder.builder.ir.types[rvalue_type_idx].clone().unwrap();
-            debug!(
-                "let rvalue type: {}",
-                builder.builder.display_typename(rvalue_type_idx)
-            );
 
             if !ty.is_equal(&rvalue_ty, &builder.builder.ir) {
                 return Err(LoweringError::UnexpectedType {
@@ -813,6 +805,10 @@ fn lower_for(builder: &mut FnIrBuilder, info: &ForStmt) -> Result<(), LoweringEr
 
     // keep idx for switch targets
     let first_then_block_idx = builder.body.basic_blocks.len();
+
+    for stmt in &info.block_stmts {
+        get_locals(builder, stmt)?;
+    }
 
     for stmt in &info.block_stmts {
         lower_statement(builder, stmt, builder.body.locals[builder.ret_local].ty)?;
