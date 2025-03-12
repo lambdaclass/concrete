@@ -30,7 +30,7 @@ pub(crate) fn lower_expression(
 ) -> Result<(Rvalue, TypeIndex, Span), LoweringError> {
     Ok(match info {
         Expression::Value(info, span) => {
-            debug!("lowering value");
+            debug!("lowering value expr");
             let value = lower_value_expr(builder, info, type_hint)?;
             (value.0, value.1, *span)
         }
@@ -410,7 +410,6 @@ pub(crate) fn find_expression_type(
     fn_builder: &mut FnIrBuilder,
     info: &Expression,
 ) -> Result<Option<TypeIndex>, LoweringError> {
-    debug!("finding expression type");
     Ok(match info {
         Expression::Value(value, _) => match value {
             ValueExpr::ConstBool(_, _) => Some(fn_builder.builder.ir.get_bool_ty()),
