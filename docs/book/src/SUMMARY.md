@@ -9,6 +9,7 @@
     - [Variables](./language/variables.md)
     - [Functions](./language/functions.md)
     - [Structs](./language/structs.md)
+    - [Enums](./language/enums.md)
     - [Control flow](./language/control_flow.md)
 - [Internal Details](./internal/index.md)
     - [The IR](./internal/ir.md)

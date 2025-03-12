@@ -149,16 +149,22 @@ mod StructExample {
     }
 
     impl Foo {
+        pub fn new(bar: i32, baz: i64) -> Foo {
+            let value: Foo = foo {
+                bar: bar,
+                baz: baz,
+            };
+
+            return value;
+        }
+
         pub fn mul_bar(&mut self, value: i32) {
             self.bar = self.bar * 2;
         }
     }
 
     fn main() -> i32 {
-        let mut foo: Foo = Foo {
-            bar: 2,
-            baz: 3,
-        };
+        let mut foo: Foo = Foo#new(2, 3);
 
         foo.mul_bar(2);
         foo.baz = foo.baz * 5;
@@ -173,32 +179,84 @@ mod StructExample {
 ```
 
 ```rust
-mod Option {
-    pub enum Option<T> {
+mod option {
+    enum Option<T> {
+        Some {
+            value: T,
+        },
         None,
-        Some(T),
     }
 
-    impl<A> Option<A> {
-        pub fn map<A, B>(self, f: A -> B) -> Option<B> {
+    impl<T> Option<T> {
+        pub fn is_some(&self) -> bool {
             match self {
-                None -> None,
-                Some(x) -> Some(f(x)),
+                Option#Some { value } => {
+                    return true;
+                },
+                Option#None => {
+                    return false;
+                }
             }
+        }
+
+        pub fn is_none(&self) -> bool {
+            return !self.is_some();
         }
     }
 }
+```
 
-mod UsesOption {
-    import MyOption.{Option, map};
+Example pseudo allocator using libc:
 
-    pub fn headOfVectorPlus1(x: [u8]) -> Option<u8> {
-        // head returns an option
-        x.head().map((x: u8) -> x + 1)
+```rust
+mod alloc {
+    import std.mem.{sizeof};
+
+    pub fn alloc<T>() -> *mut T {
+        return std::libc::malloc(sizeof::<T>()) as *mut T;
     }
 
+    pub fn realloc<T>(old_ptr: *mut T, size: u64) -> *mut T {
+        return std::libc::realloc(old_ptr as *mut u8, sizeof::<T>() * size) as *mut T;
+    }
+
+    pub fn free<T>(ptr: *mut T) {
+        std::libc::free(ptr as *mut u8);
+    }
 }
 ```
+
+A basic for loop:
+
+```rust
+fn sum_to(limit: i64) -> i64 {
+    let mut result: i64 = 0;
+
+    for (let mut n: i64 = 1; n <= limit; n = n + 1) {
+        result = result + n;
+    }
+
+    return result;
+}
+```
+
+Or using a `while`:
+
+```rust
+fn sum_to(limit: i64) -> i64 {
+    let mut result: i64 = 0;
+
+    let mut n: i64 = 1;
+    while n <= limit {
+        result = result + n;
+        n = n + 1;
+    }
+
+    return result;
+}
+```
+
+Check out the [book](https://lambdaclass.github.io/concrete/) for more examples.
 
 ## Inspiration
 The design was very heavily influenced by all these programming languages:
