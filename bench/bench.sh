@@ -32,7 +32,7 @@ function bench_program_linux() {
     local num_iters=$2
     local input=$3
 
-    echo -e "### ${RED}Benchmarking $name ${NC}"
+    echo -e "### ${RED}Benchmarking (Linux) $name ${NC}"
 
     rustc --crate-type=cdylib "$name.rs" -C target-cpu=native -C opt-level=3 -o "${name}_rs.so" > /dev/null 2>&1
     cargo r -- build "$name.con" --lib --release
@@ -48,7 +48,7 @@ function bench_program_macos() {
     local num_iters=$2
     local input=$3
 
-    echo -e "### ${RED}Benchmarking $name ${NC}"
+    echo -e "### ${RED}Benchmarking (macOS) $name ${NC}"
 
     rustc --crate-type=cdylib "$name.rs" -C target-cpu=native -C opt-level=3 -o "${name}_rs.${libext}" > /dev/null 2>&1
     cargo r -- build "$name.con" --lib --release
