@@ -25,7 +25,6 @@ pub fn link_shared_lib(objects: &[PathBuf], output_filename: &Path) -> std::io::
             ];
 
             args.extend(objects.iter().map(|x| x.as_str()));
-            dbg!(&output_filename);
             args.extend(&["-o", &output_filename, "-lSystem"]);
 
             args
