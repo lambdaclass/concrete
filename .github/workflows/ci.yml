@@ -198,7 +198,6 @@ jobs:
         MLIR_SYS_190_PREFIX: /opt/homebrew/opt/llvm@19
         LLVM_SYS_191_PREFIX: /opt/homebrew/opt/llvm@19
         TABLEGEN_190_PREFIX: /opt/homebrew/opt/llvm@19
-        RUST_LOG: debug
       steps:
         - uses: actions/checkout@v4
         - name: Rustup toolchain install
