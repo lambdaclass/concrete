@@ -12,7 +12,6 @@ pub fn link_shared_lib(objects: &[PathBuf], output_filename: &Path) -> std::io::
         output_filename =
             output_filename.with_extension(CompileUnitInfo::get_platform_library_ext());
     }
-
     let output_filename = output_filename.to_string_lossy().to_string();
 
     let args: Vec<_> = {
@@ -21,13 +20,12 @@ pub fn link_shared_lib(objects: &[PathBuf], output_filename: &Path) -> std::io::
             let mut args = vec![
                 "-dynamic",
                 "-dylib",
-                "-mllvm",
                 "-L/usr/local/lib",
                 "-L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib",
             ];
 
             args.extend(objects.iter().map(|x| x.as_str()));
-
+            dbg!(&output_filename);
             args.extend(&["-o", &output_filename, "-lSystem"]);
 
             args

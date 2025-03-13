@@ -53,7 +53,7 @@ int main(int argc, const char **argv) {
       result_concrete = Bench_concrete_function_0(input);
     }
     long time_elapsed_nanos = timer_end(vartime);
-    printf("Concrete Result =\t%lu\t\tTime taken : %.2Lf ms\n", result_concrete,
+    printf("Concrete Result =\t%llu\t\tTime taken : %.2Lf ms\n", result_concrete,
            (long double)time_elapsed_nanos / 1000000.0L);
   }
 
@@ -63,7 +63,7 @@ int main(int argc, const char **argv) {
       result_rust = rust_function(input);
     }
     long time_elapsed_nanos = timer_end(vartime);
-    printf("Rust Result =\t\t%lu\t\tTime taken : %.2Lf ms\n", result_rust,
+    printf("Rust Result =\t\t%llu\t\tTime taken : %.2Lf ms\n", result_rust,
            (long double)time_elapsed_nanos / 1000000.0L);
   }
 

@@ -18,8 +18,32 @@ case "${unameOut}" in
     *)          libext="so"
 esac
 
-# name without extension, num_iters, input number
 function bench_program() {
+    case "${unameOut}" in
+        Linux*)     bench_program_linux $@;;
+        Darwin*)    bench_program_macos $@;;
+        *) ;;
+    esac
+}
+
+# name without extension, num_iters, input number
+function bench_program_linux() {
+    local name=$1
+    local num_iters=$2
+    local input=$3
+
+    echo -e "### ${RED}Benchmarking $name ${NC}"
+
+    rustc --crate-type=cdylib "$name.rs" -C target-cpu=native -C opt-level=3 -o "${name}_rs.so" > /dev/null 2>&1
+    cargo r -- build "$name.con" --lib --release
+    cp "$name.so" "${name}_con.so"
+
+    cc -march=native -mtune=native bench.c -L . -l:./"${name}"_rs.so -l:./"${name}"_con.so -o bench_"${name}"
+
+    ./bench_"${name}" "$num_iters" "$input"
+}
+
+function bench_program_macos() {
     local name=$1
     local num_iters=$2
     local input=$3
@@ -28,9 +52,10 @@ function bench_program() {
 
     rustc --crate-type=cdylib "$name.rs" -C target-cpu=native -C opt-level=3 -o "${name}_rs.${libext}" > /dev/null 2>&1
     cargo r -- build "$name.con" --lib --release
-    cp "$name.${libext}" "${name}_con.${libext}"
+    cp "$name.${libext}" "lib${name}_con.${libext}"
+    cp "${name}_rs.${libext}" "lib${name}_rs.${libext}"
 
-    cc -march=native -mtune=native bench.c -L . -l:./"${name}"_rs.${libext} -l:./"${name}"_con.${libext} -o bench_"${name}"
+    cc -march=native -mtune=native bench.c -L . -l"${name}_con" -l"${name}"_rs -rpath . -o bench_"${name}"
 
     ./bench_"${name}" "$num_iters" "$input"
 }
@@ -56,4 +81,4 @@ bench_program "factorial" 5000000 20
 bench_program "fib" 5000 20
 
 # Cleanup
-rm ./*.so
+rm -rf ./*.{so,dylib}
