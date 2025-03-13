@@ -7,6 +7,17 @@ cd "$(dirname "$0")"
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+unameOut="$(uname -s)"
+
+case "${unameOut}" in
+    Linux*)     libext=so;;
+    Darwin*)    libext=dylib;;
+    CYGWIN*)    libext=dll;;
+    MINGW*)     libext=dll;;
+    MSYS_NT*)   libext=dll;;
+    *)          libext="so"
+esac
+
 # name without extension, num_iters, input number
 function bench_program() {
     local name=$1
@@ -15,11 +26,11 @@ function bench_program() {
 
     echo -e "### ${RED}Benchmarking $name ${NC}"
 
-    rustc --crate-type=cdylib "$name.rs" -C target-cpu=native -C opt-level=3 -o "${name}_rs.so" > /dev/null 2>&1
+    rustc --crate-type=cdylib "$name.rs" -C target-cpu=native -C opt-level=3 -o "${name}_rs.${libext}" > /dev/null 2>&1
     cargo r -- build "$name.con" --lib --release
-    cp "$name.so" "${name}_con.so"
+    cp "$name.${libext}" "${name}_con.${libext}"
 
-    cc -march=native -mtune=native bench.c -L . -l:./"${name}"_rs.so -l:./"${name}"_con.so -Wl,-rpath -o bench_"${name}"
+    cc -march=native -mtune=native bench.c -L . -l:./"${name}"_rs.${libext} -l:./"${name}"_con.${libext} -Wl,-rpath -o bench_"${name}"
 
     ./bench_"${name}" "$num_iters" "$input"
 }
