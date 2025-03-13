@@ -20,8 +20,8 @@ esac
 
 function bench_program() {
     case "${unameOut}" in
-        Linux*)     bench_program_linux $@;;
-        Darwin*)    bench_program_macos $@;;
+        Linux*)     bench_program_linux "$@";;
+        Darwin*)    bench_program_macos "$@";;
         *) ;;
     esac
 }
