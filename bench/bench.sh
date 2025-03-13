@@ -30,7 +30,7 @@ function bench_program() {
     cargo r -- build "$name.con" --lib --release
     cp "$name.${libext}" "${name}_con.${libext}"
 
-    cc -march=native -mtune=native bench.c -L . -l:./"${name}"_rs.${libext} -l:./"${name}"_con.${libext} -Wl,-rpath -o bench_"${name}"
+    cc -march=native -mtune=native bench.c -L . -l:./"${name}"_rs.${libext} -l:./"${name}"_con.${libext} -o bench_"${name}"
 
     ./bench_"${name}" "$num_iters" "$input"
 }
