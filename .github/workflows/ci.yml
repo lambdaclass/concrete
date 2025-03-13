@@ -171,6 +171,41 @@ jobs:
         - name: Install Link deps
           run: sudo apt-get install libc-dev build-essential
         - name: Run bench
+          run: ./bench/bench.sh | sed 's/\x1B\[[0-9;]\{1,\}[A-Za-z]//g' >> bench.md
+
+        - name: Find Bench Comment
+          continue-on-error: true
+          uses: peter-evans/find-comment@v3
+          id: fc
+          with:
+            issue-number: ${{ github.event.pull_request.number }}
+            comment-author: 'github-actions[bot]'
+            body-includes: Benchmarking (Linux)
+        - name: Create or update bench comment
+          continue-on-error: true
+          uses: peter-evans/create-or-update-comment@v4
+          with:
+            comment-id: ${{ steps.fc.outputs.comment-id }}
+            issue-number: ${{ github.event.pull_request.number }}
+            body-path: bench.md
+            edit-mode: replace
+    bench-macos:
+      name: Bench macOS
+      runs-on: macos-14
+      env:
+        CARGO_TERM_COLOR: always
+        LIBRARY_PATH: /opt/homebrew/lib
+        MLIR_SYS_190_PREFIX: /opt/homebrew/opt/llvm@19
+        LLVM_SYS_191_PREFIX: /opt/homebrew/opt/llvm@19
+        TABLEGEN_190_PREFIX: /opt/homebrew/opt/llvm@19
+      steps:
+        - uses: actions/checkout@v4
+        - name: Rustup toolchain install
+          uses: dtolnay/rust-toolchain@1.85.0
+        - uses: homebrew/actions/setup-homebrew@master
+        - name: install llvm
+          run: brew install llvm@19
+        - name: Run bench
           run: ./bench/bench.sh | sed 's/\x1B\[[0-9;]\{1,\}[A-Za-z]//g' > bench.md
 
         - name: Find Bench Comment
@@ -180,7 +215,7 @@ jobs:
           with:
             issue-number: ${{ github.event.pull_request.number }}
             comment-author: 'github-actions[bot]'
-            body-includes: Benchmarking
+            body-includes: Benchmarking (macOS)
         - name: Create or update bench comment
           continue-on-error: true
           uses: peter-evans/create-or-update-comment@v4
