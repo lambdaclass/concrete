@@ -10,7 +10,7 @@ use crate::{
     ir::{
         ConstKind, ConstValue, FloatTy, IntTy, Local, Mutability, Operand, Place, PlaceElem, Span,
         Statement, StatementKind, Type, UintTy, ValueTree,
-        lowering::{functions::lower_fn_call, structs::lower_struct},
+        lowering::{adts::lower_struct, functions::lower_fn_call},
     },
 };
 
@@ -164,7 +164,7 @@ pub(crate) fn lower_expression(
                 for field in &struct_body.fields {
                     if let Some(name) = field.r#type.get_name() {
                         if generics.contains(&name) {
-                            let struct_adt = builder.builder.get_struct(struct_index); // borrowck
+                            let struct_adt = builder.builder.get_adt(struct_index); // borrowck
                             let struct_variant = struct_adt.variants.first().unwrap();
                             let field_index =
                                 *struct_variant.field_names.get(&field.name.name).unwrap();
@@ -177,11 +177,7 @@ pub(crate) fn lower_expression(
                             debug!(
                                 "Adding field type to generics mapping {} -> {}",
                                 name,
-                                builder
-                                    .builder
-                                    .get_type(map_ty)
-                                    .display(&builder.builder.ir)
-                                    .unwrap()
+                                builder.builder.display_typename(map_ty)
                             );
                             builder.builder.current_generics_map.insert(name, map_ty);
                         }
@@ -202,7 +198,7 @@ pub(crate) fn lower_expression(
             let struct_idx = builder.builder.get_or_lower_for_struct_init(info)?;
             let struct_body = builder
                 .builder
-                .get_struct(struct_idx)
+                .get_adt(struct_idx)
                 .variants
                 .first()
                 .unwrap()
@@ -336,6 +332,76 @@ pub(crate) fn lower_expression(
 
             (Rvalue::Use(Operand::Place(place)), ty, info.span)
         }
+        Expression::EnumInit(info) => {
+            debug!("lowering enum init for struct {}", info.name);
+
+            let enum_idx = builder.builder.get_or_lower_for_enum_init(info)?;
+            let enum_body = builder.builder.get_adt(enum_idx).clone();
+
+            let enum_ty = builder.builder.ir.types.insert(Some(Type::Adt(enum_idx)));
+            let enum_local = builder.add_local(Local::temp(enum_ty));
+
+            let place = Place {
+                local: enum_local,
+                projection: Default::default(),
+            };
+
+            builder.statements.push(Statement {
+                span: None,
+                kind: StatementKind::StorageLive(enum_local),
+            });
+
+            let variant_idx = *enum_body
+                .variant_names
+                .get(&info.variant.name)
+                .expect("variant not found");
+
+            // add tag at start.
+            {
+                let mut tag_place = place.clone();
+                tag_place.projection.push(PlaceElem::Variant(variant_idx));
+
+                builder.statements.push(Statement {
+                    span: Some(info.span),
+                    kind: StatementKind::Assign(
+                        tag_place,
+                        Rvalue::Use(Operand::Const(ConstData {
+                            ty: builder.builder.ir.get_u64_ty(),
+                            span: info.span,
+                            data: ConstKind::Value(ValueTree::Leaf(ConstValue::U64(
+                                variant_idx as u64,
+                            ))),
+                        })),
+                    ),
+                });
+            }
+
+            let variant_body = &enum_body.variants[variant_idx];
+
+            for (field, value) in info.fields.iter() {
+                let idx = *variant_body.field_names.get(&field.name).ok_or_else(|| {
+                    LoweringError::FieldNotFound {
+                        span: field.span,
+                        name: field.name.clone(),
+                        path: builder.get_file_path().clone(),
+                    }
+                })?;
+                let mut field_place = place.clone();
+                field_place.projection.push(PlaceElem::Field(idx + 1));
+
+                let field_ty = variant_body.fields[idx].ty;
+
+                let (value, _value_ty, _field_span) =
+                    lower_expression(builder, &value.value, Some(field_ty))?;
+
+                builder.statements.push(Statement {
+                    span: Some(info.span),
+                    kind: StatementKind::Assign(field_place, value),
+                });
+            }
+
+            (Rvalue::Use(Operand::Place(place)), enum_ty, info.span)
+        }
     })
 }
 
@@ -405,7 +471,7 @@ pub(crate) fn find_expression_type(
                             if generics.contains(&name) {
                                 let struct_adt = fn_builder
                                     .builder
-                                    .get_struct(struct_index)
+                                    .get_adt(struct_index)
                                     .variants
                                     .first()
                                     .unwrap(); // borrowck
@@ -420,11 +486,7 @@ pub(crate) fn find_expression_type(
                                 debug!(
                                     "Adding field type to generics mapping {} -> {}",
                                     name,
-                                    fn_builder
-                                        .builder
-                                        .get_type(map_ty)
-                                        .display(&fn_builder.builder.ir)
-                                        .unwrap()
+                                    fn_builder.builder.display_typename(map_ty)
                                 );
                                 fn_builder.builder.current_generics_map.insert(name, map_ty);
                             }
@@ -456,10 +518,10 @@ pub(crate) fn find_expression_type(
                                 }
 
                                 let struct_body =
-                                    fn_builder.builder.get_struct(id).variants.first().unwrap();
+                                    fn_builder.builder.get_adt(id).variants.first().unwrap();
                                 let idx =
                                     *struct_body.field_names.get(&name.name).ok_or_else(|| {
-                                        LoweringError::StructFieldNotFound {
+                                        LoweringError::FieldNotFound {
                                             span: *field_span,
                                             name: name.name.clone(),
                                             path: fn_builder.get_file_path().clone(),
@@ -551,7 +613,7 @@ pub(crate) fn find_expression_type(
 
             let struct_idx = fn_builder.builder.get_or_lower_for_struct_init(info)?;
 
-            fn_builder.builder.get_struct(struct_idx);
+            fn_builder.builder.get_adt(struct_idx);
 
             let struct_ty = fn_builder
                 .builder
@@ -607,6 +669,9 @@ pub(crate) fn find_expression_type(
             let ty = fn_builder.builder.ir.types.insert(Some(tykind));
 
             Some(ty)
+        }
+        Expression::EnumInit(_enum_init) => {
+            todo!()
         }
     })
 }
@@ -783,60 +848,90 @@ pub(crate) fn lower_path(
     let mut projection = Vec::new();
     let old_generics = fn_builder.builder.current_generics_map.clone();
 
-    if let Type::Adt(struct_index) = ty {
+    if let Type::Adt(adt_index) = ty {
         let poly_idx = fn_builder
             .builder
             .mono_type_to_poly
             .get(&type_idx)
             .copied()
             .unwrap_or(type_idx);
-        let poly_struct_idx = if let Type::Adt(id) = fn_builder.builder.get_type(poly_idx) {
+        let poly_adt_idx = if let Type::Adt(id) = fn_builder.builder.get_type(poly_idx) {
             *id
         } else {
-            panic!("poly struct not found")
+            panic!("poly adt not found")
         };
-        let struct_body = fn_builder
+        if let Some(struct_body) = fn_builder
             .builder
             .bodies
             .structs
-            .get(&poly_struct_idx)
-            .unwrap()
-            .clone();
+            .get(&poly_adt_idx)
+            .cloned()
+        {
+            let generics: HashSet<String> = struct_body
+                .generics
+                .iter()
+                .map(|x| x.name.name.clone())
+                .collect();
 
-        let generics: HashSet<String> = struct_body
-            .generics
-            .iter()
-            .map(|x| x.name.name.clone())
-            .collect();
-
-        for field in &struct_body.fields {
-            if let Some(name) = field.r#type.get_name() {
-                if generics.contains(&name) {
-                    let struct_adt = fn_builder
-                        .builder
-                        .get_struct(struct_index)
-                        .variants
-                        .first()
-                        .unwrap(); // borrowck
-                    let field_index = *struct_adt.field_names.get(&field.name.name).unwrap();
-                    let field_ty = struct_adt.fields[field_index].ty;
-                    let field_type = fn_builder.builder.get_type(field_ty);
-                    let mut map_ty = field_ty;
-                    if let Some(inner) = field_type.get_inner_type() {
-                        map_ty = inner;
-                    }
-                    debug!(
-                        "Adding field type to generics mapping {} -> {}",
-                        name,
-                        fn_builder
+            for field in &struct_body.fields {
+                if let Some(name) = field.r#type.get_name() {
+                    if generics.contains(&name) {
+                        let struct_adt = fn_builder
                             .builder
-                            .get_type(map_ty)
-                            .display(&fn_builder.builder.ir)
-                            .unwrap()
-                    );
-                    fn_builder.builder.current_generics_map.insert(name, map_ty);
+                            .get_adt(adt_index)
+                            .variants
+                            .first()
+                            .unwrap(); // borrowck
+                        let field_index = *struct_adt.field_names.get(&field.name.name).unwrap();
+                        let field_ty = struct_adt.fields[field_index].ty;
+                        let field_type = fn_builder.builder.get_type(field_ty);
+                        let mut map_ty = field_ty;
+                        if let Some(inner) = field_type.get_inner_type() {
+                            map_ty = inner;
+                        }
+                        debug!(
+                            "Adding field type to generics mapping {} -> {}",
+                            name,
+                            fn_builder.builder.display_typename(map_ty)
+                        );
+                        fn_builder.builder.current_generics_map.insert(name, map_ty);
+                    }
                 }
             }
+        } else if let Some(enum_body) = fn_builder.builder.bodies.enums.get(&poly_adt_idx).cloned()
+        {
+            let generics: HashSet<String> = enum_body
+                .generics
+                .iter()
+                .map(|x| x.name.name.clone())
+                .collect();
+
+            for (variant_idx, variant) in enum_body.variants.iter().enumerate() {
+                for field in &variant.fields {
+                    if let Some(name) = field.r#type.get_name() {
+                        if generics.contains(&name) {
+                            let variant_def =
+                                &fn_builder.builder.get_adt(adt_index).variants[variant_idx]; // borrowck
+                            let field_index =
+                                *variant_def.field_names.get(&field.name.name).unwrap();
+                            let field_ty = variant_def.fields[field_index].ty;
+                            let field_type = fn_builder.builder.get_type(field_ty);
+                            let mut map_ty = field_ty;
+                            if let Some(inner) = field_type.get_inner_type() {
+                                map_ty = inner;
+                            }
+                            debug!(
+                                "Adding field type to generics mapping {} -> {}",
+                                name,
+                                fn_builder.builder.display_typename(map_ty)
+                            );
+                            fn_builder.builder.current_generics_map.insert(name, map_ty);
+                        }
+                    }
+                }
+            }
+        } else {
+            panic!("adt not found, shouldn't be possible")
         }
     }
 
@@ -858,9 +953,9 @@ pub(crate) fn lower_path(
                         )?;
                     }
 
-                    let struct_body = fn_builder.builder.get_struct(id).variants.first().unwrap();
+                    let struct_body = fn_builder.builder.get_adt(id).variants.first().unwrap();
                     let idx = *struct_body.field_names.get(&name.name).ok_or_else(|| {
-                        LoweringError::StructFieldNotFound {
+                        LoweringError::FieldNotFound {
                             span: *field_span,
                             name: name.name.clone(),
                             path: fn_builder.get_file_path().clone(),
@@ -971,7 +1066,7 @@ pub(crate) fn lower_unary_op(
     if is_lhs_ptr {
         return Err(LoweringError::InvalidUnaryOp {
             found_span: lhs_span,
-            found: lhs_ty.display(&builder.builder.ir).unwrap(),
+            found: builder.builder.display_typename(lhs_type_idx),
             path: builder.get_file_path().clone(),
         });
     }
@@ -1054,8 +1149,8 @@ pub(crate) fn lower_binary_op(
     if !is_lhs_ptr && !lhs_ty.is_equal(rhs_ty, &builder.builder.ir) {
         return Err(LoweringError::UnexpectedType {
             found_span: rhs_span,
-            found: rhs_ty.display(&builder.builder.ir).unwrap(),
-            expected: lhs_ty.display(&builder.builder.ir).unwrap(),
+            found: builder.builder.display_typename(rhs_type_idx),
+            expected: builder.builder.display_typename(rhs_type_idx),
             expected_span: Some(lhs_span),
             path: builder.get_file_path().clone(),
         });

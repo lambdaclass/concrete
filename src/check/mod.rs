@@ -66,14 +66,14 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 )
                 .finish()
         }
-        LoweringError::StructFieldNotFound { span, name, path } => {
+        LoweringError::FieldNotFound { span, name, path } => {
             let path = path.display().to_string();
             let filespan = FileSpan::new(path, span.from..span.to);
             Report::build(ReportKind::Error, filespan.clone())
-                .with_code("StructFieldNotFound")
+                .with_code("FieldNotFound")
                 .with_label(
                     Label::new(filespan)
-                        .with_message(format!("Struct field {name:?} not found."))
+                        .with_message(format!("field {name:?} not found."))
                         .with_color(colors.next()),
                 )
                 .finish()
@@ -308,12 +308,12 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
             let path = path.display().to_string();
             let filespan = FileSpan::new(path.clone(), span.from..span.to);
             let mut report = Report::build(ReportKind::Error, filespan.clone())
-                .with_code("CantTakeMutableBorrow")
-                .with_label(
-                    Label::new(filespan.clone())
-                        .with_message("can't take a mutate borrow to this variable because it's not declared mutable")
-                        .with_color(colors.next()),
-                );
+                    .with_code("CantTakeMutableBorrow")
+                    .with_label(
+                        Label::new(filespan.clone())
+                            .with_message("can't take a mutate borrow to this variable because it's not declared mutable")
+                            .with_color(colors.next()),
+                    );
 
             if let Some(declare_span) = declare_span {
                 let declare_span = FileSpan::new(path, declare_span.into());
@@ -333,6 +333,30 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 .with_label(
                     Label::new(filespan.clone())
                         .with_message(format!("unknown lang item '{}'", item))
+                        .with_color(colors.next()),
+                );
+            report.finish()
+        }
+        LoweringError::InvalidMatch { span, reason, path } => {
+            let path = path.display().to_string();
+            let filespan = FileSpan::new(path.clone(), span.from..span.to);
+            let report = Report::build(ReportKind::Error, filespan.clone())
+                .with_code("InvalidMatch")
+                .with_label(
+                    Label::new(filespan.clone())
+                        .with_message(format!("invalid match: '{}'", reason))
+                        .with_color(colors.next()),
+                );
+            report.finish()
+        }
+        LoweringError::Unimplemented { span, reason, path } => {
+            let path = path.display().to_string();
+            let filespan = FileSpan::new(path.clone(), span.from..span.to);
+            let report = Report::build(ReportKind::Error, filespan.clone())
+                .with_code("Unimplemented")
+                .with_label(
+                    Label::new(filespan.clone())
+                        .with_message(format!("unimplemented: '{}'", reason))
                         .with_color(colors.next()),
                 );
             report.finish()

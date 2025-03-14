@@ -1,0 +1,28 @@
+mod test {
+
+    enum Example {
+        A {
+            x: u32
+        },
+        B {
+            y: u64,
+        }
+    }
+
+    fn main() -> u64 {
+        let x: Example = Example#B {
+            x: 2,
+        };
+
+        match x {
+            Example#A { x } => {
+                return x as u64;
+            },
+            Example#B { y } => {
+                return y;
+            }
+        }
+
+        return 0;
+    }
+}

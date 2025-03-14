@@ -1,0 +1,25 @@
+mod option {
+    enum Option<T> {
+        Some {
+            value: T,
+        },
+        None,
+    }
+
+    impl<T> Option<T> {
+        pub fn is_some(&self) -> bool {
+            match self {
+                Option#Some { value } => {
+                    return true;
+                },
+                Option#None => {
+                    return false;
+                }
+            }
+        }
+
+        pub fn is_none(&self) -> bool {
+            return !self.is_some();
+        }
+    }
+}
