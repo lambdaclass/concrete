@@ -119,4 +119,17 @@ pub enum LoweringError {
         reason: String,
         path: PathBuf,
     },
+    #[error("missing variant")]
+    MissingVariant(Box<MissingVariantError>),
+}
+
+#[derive(Debug, Clone)]
+pub struct MissingVariantError {
+    pub match_span: Span,
+    pub variant_span: Span,
+    pub variant_name: String,
+    pub type_name: String,
+    pub type_span: Span,
+    pub type_path: PathBuf,
+    pub path: PathBuf,
 }

@@ -1,0 +1,22 @@
+mod opt {
+    enum Option<T> {
+        Some {
+            value: T,
+        },
+        None,
+    }
+
+    fn main() -> i32 {
+        let x: Option<i32> = Option::<i32>#Some {
+            value: 4
+        };
+
+        let mut result: i32 = 0;
+
+        match x {
+            Option#Some { value } => {
+                return value;
+            }
+        }
+    }
+}

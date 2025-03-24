@@ -247,3 +247,18 @@ fn undef_var_in_for() {
         error
     );
 }
+
+#[test]
+fn missing_variant() {
+    let (source, name) = (
+        include_str!("invalid_programs/missing_variant.con"),
+        "invalid_programs/missing_variant.con",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::MissingVariant { .. }),
+        "{:#?}",
+        error
+    );
+}

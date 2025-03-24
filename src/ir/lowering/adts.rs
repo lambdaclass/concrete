@@ -97,6 +97,7 @@ pub(crate) fn lower_struct(
         field_names: HashMap::default(),
         fields: Vec::new(),
         discriminant: crate::ir::VariantDiscr::Relative(0),
+        span: info.span,
     };
 
     for field in info.fields.iter() {
@@ -204,6 +205,7 @@ pub(crate) fn lower_enum(
             field_names: HashMap::default(),
             fields: Vec::new(),
             discriminant: crate::ir::VariantDiscr::Relative(i as u32),
+            span: variant.span,
         };
 
         for (field_idx, field) in variant.fields.iter().enumerate() {
