@@ -34,6 +34,7 @@ mod common;
 #[test_case(include_str!("../examples/malloc.con"), "malloc", false, 5 ; "malloc.con")]
 #[test_case(include_str!("../examples/while_if_false.con"), "while_if_false", false, 7 ; "while_if_false.con")]
 #[test_case(include_str!("../examples/if_if_false.con"), "if_if_false", false, 7 ; "if_if_false.con")]
+#[test_case(include_str!("../examples/for_loop_var.con"), "for", false, 0 ; "for_loop_var.con")]
 #[test_case(include_str!("../examples/for.con"), "for", false, 10 ; "for.con")]
 #[test_case(include_str!("../examples/for_while.con"), "for_while", false, 10 ; "for_while.con")]
 #[test_case(include_str!("../examples/arrays.con"), "arrays", false, 5 ; "arrays.con")]

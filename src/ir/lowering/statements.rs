@@ -56,9 +56,8 @@ pub(crate) fn lower_statement(
     Ok(())
 }
 
-#[instrument(level = "debug", skip_all, fields(name, variant))]
+#[instrument(level = "debug", skip_all, fields(name, variant, ty))]
 fn lower_let(builder: &mut FnIrBuilder, info: &LetStmt) -> Result<(), LoweringError> {
-    debug!("begin lowering let");
     match &info.target {
         LetStmtTarget::Simple { id: name, r#type } => {
             tracing::Span::current().record("name", &name.name);
@@ -813,6 +812,10 @@ fn lower_for(builder: &mut FnIrBuilder, info: &ForStmt) -> Result<(), LoweringEr
 
     // keep idx for switch targets
     let first_then_block_idx = builder.body.basic_blocks.len();
+
+    for stmt in &info.block_stmts {
+        get_locals(builder, stmt)?;
+    }
 
     for stmt in &info.block_stmts {
         lower_statement(builder, stmt, builder.body.locals[builder.ret_local].ty)?;
