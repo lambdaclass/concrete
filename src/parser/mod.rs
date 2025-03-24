@@ -1,9 +1,8 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::ast::CompilationUnit;
-use error::Diagnostics;
+use error::Diagnostic;
 use lexer::Lexer;
-use salsa::Accumulator;
 
 pub mod error;
 mod lexer;
@@ -18,29 +17,28 @@ pub mod grammar {
     lalrpop_mod!(pub grammar);
 }
 
-#[salsa::interned]
-pub struct ProgramSource<'db> {
-    #[return_ref]
+pub struct ProgramSource {
     pub input: String,
-    #[return_ref]
     pub path: PathBuf,
 }
 
+impl ProgramSource {
+    pub fn new(input: String, path: &Path) -> Self {
+        Self {
+            input,
+            path: path.to_path_buf(),
+        }
+    }
+}
+
 // Todo: better error handling
-#[salsa::tracked]
-pub fn parse_ast<'db>(
-    db: &'db dyn salsa::Database,
-    source: ProgramSource<'db>,
-) -> Option<CompilationUnit> {
-    let lexer = Lexer::new(source.input(db));
+pub fn parse_ast(source: &ProgramSource) -> Result<CompilationUnit, Diagnostic> {
+    let lexer = Lexer::new(&source.input);
     let parser = grammar::CompilationUnitParser::new();
 
-    match parser.parse(source.path(db), lexer) {
-        Ok(ast) => Some(ast),
-        Err(e) => {
-            Diagnostics(e).accumulate(db);
-            None
-        }
+    match parser.parse(&source.path, lexer) {
+        Ok(ast) => Ok(ast),
+        Err(e) => Err(Diagnostic(e)),
     }
 }
 

@@ -41,7 +41,13 @@ mod types;
 pub use errors::LoweringError;
 pub use lower::lower_compile_units;
 
-/// Monomorphized symbol (currently either a struct/adt or function).
+/// A symbol (currently either a struct/adt or function).
+///
+/// Symbols are used when lowering, to find the correct IR if it's already lowered
+/// or to find the polymorphic AST body, which can be done by using the name without specifying any generic types
+/// within this struct.
+///
+/// This is used mostly with the SymbolTable struct, which itself is used to find the AST body.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Symbol {
     pub name: String,
@@ -76,23 +82,36 @@ pub struct Bodies {
 /// Context to help build the IR.
 #[derive(Debug, Clone)]
 pub struct IRBuilder {
+    /// The IR the builder is building.
     pub ir: IR,
+    /// A map from module id to symbol table for the given module.
     pub symbols: HashMap<ModuleIndex, SymbolTable>,
+    /// The top level module names, used in imports.
     pub top_level_modules_names: HashMap<String, ModuleIndex>,
-    pub current_generics_map: HashMap<String, TypeIndex>,
-    pub self_ty: Option<TypeIndex>,
     pub bodies: Bodies,
     /// Needed to not duplicate TypeIndexes for structs.
     pub adt_to_type_idx: HashMap<AdtIndex, TypeIndex>,
     /// Type to module id where it resides, needed to find methods for the given types.
     pub type_to_module: HashMap<TypeIndex, ModuleIndex>,
+    /// A map to find the polymorphic type id of the given monomorphized type.
     pub mono_type_to_poly: HashMap<TypeIndex, TypeIndex>,
+    /// A helper context to resolve context dependent information.
+    /// Like the current generic mappings or the current module id.
+    pub context: IRBuilderContext,
+}
+
+#[derive(Debug, Clone)]
+pub struct IRBuilderContext {
+    /// The type used to resolve "self".
+    pub self_ty: Option<TypeIndex>,
+    /// The current name to type index mapping to resolve generic type names in the current context.
+    pub generics_mapping: HashMap<String, TypeIndex>,
     /// A stack for the current module id.
     ///
     /// Sometimes we need to temporarely enter the "context" of another module, e.g when handling
     /// a generic function from a import that needs to be lowered at the time of a function call
     /// from another module.
-    pub current_module_context: Vec<ModuleIndex>,
+    pub module_stack: Vec<ModuleIndex>,
 }
 
 #[derive(Debug)]
@@ -116,17 +135,18 @@ impl IRBuilder {
     /// Gets the module id in the current context.
     pub fn get_current_module_idx(&self) -> ModuleIndex {
         *self
-            .current_module_context
+            .context
+            .module_stack
             .last()
             .expect("There should always be a module in context")
     }
 
     pub fn enter_module_context(&mut self, module_id: ModuleIndex) {
-        self.current_module_context.push(module_id);
+        self.context.module_stack.push(module_id);
     }
 
     pub fn leave_module_context(&mut self) {
-        self.current_module_context.pop();
+        self.context.module_stack.pop();
     }
 
     pub fn get_type(&self, idx: TypeIndex) -> &Type {
@@ -201,7 +221,7 @@ impl IRBuilder {
         let poly_idx = *self.symbols[&module_idx].aggregates.get(&sym).unwrap();
         let struct_decl = self.bodies.structs.get(&poly_idx).unwrap().clone();
 
-        let old_generic_params = self.current_generics_map.clone();
+        let old_generic_params = self.context.generics_mapping.clone();
 
         for (gen_ty, gen_param) in info.name.generics.iter().zip(struct_decl.generics.iter()) {
             let ty = lower_type(
@@ -211,13 +231,14 @@ impl IRBuilder {
                     span: gen_ty.span,
                 },
             )?;
-            self.current_generics_map
+            self.context
+                .generics_mapping
                 .insert(gen_param.name.name.clone(), ty);
         }
 
         let id = lower_struct(self, &struct_decl)?;
 
-        self.current_generics_map = old_generic_params;
+        self.context.generics_mapping = old_generic_params;
 
         Ok(id)
     }
@@ -239,7 +260,7 @@ impl IRBuilder {
         let poly_idx = *self.symbols[&module_idx].aggregates.get(&sym).unwrap();
         let enum_decl = self.bodies.enums.get(&poly_idx).unwrap().clone();
 
-        let old_generic_params = self.current_generics_map.clone();
+        let old_generic_params = self.context.generics_mapping.clone();
 
         for (gen_ty, gen_param) in info.name.generics.iter().zip(enum_decl.generics.iter()) {
             let ty = lower_type(
@@ -249,13 +270,14 @@ impl IRBuilder {
                     span: gen_ty.span,
                 },
             )?;
-            self.current_generics_map
+            self.context
+                .generics_mapping
                 .insert(gen_param.name.name.clone(), ty);
         }
 
         let id = lower_enum(self, &enum_decl)?;
 
-        self.current_generics_map = old_generic_params;
+        self.context.generics_mapping = old_generic_params;
 
         Ok(id)
     }
@@ -355,11 +377,11 @@ impl FnIrBuilder<'_> {
     }
 
     pub fn enter_module_context(&mut self, module_id: ModuleIndex) {
-        self.builder.current_module_context.push(module_id);
+        self.builder.context.module_stack.push(module_id);
     }
 
     pub fn leave_module_context(&mut self) {
-        self.builder.current_module_context.pop();
+        self.builder.context.module_stack.pop();
     }
 
     /// Gets the local module sym table.
@@ -429,7 +451,7 @@ impl FnIrBuilder<'_> {
                 // If function is generic or the self type is generic, monomorphize here.
                 if !info.generics.is_empty() || polymorphic_method_of_type_idx != method_of_type_idx
                 {
-                    let old_generics = self.builder.current_generics_map.clone();
+                    let old_generics = self.builder.context.generics_mapping.clone();
                     let fn_decl = self
                         .builder
                         .bodies
@@ -454,7 +476,8 @@ impl FnIrBuilder<'_> {
                         )?;
                         generic_types.push(ty);
                         self.builder
-                            .current_generics_map
+                            .context
+                            .generics_mapping
                             .insert(gen_param.name.name.clone(), ty);
                     }
 
@@ -519,7 +542,7 @@ impl FnIrBuilder<'_> {
                         }
                     };
 
-                    self.builder.current_generics_map = old_generics;
+                    self.builder.context.generics_mapping = old_generics;
                     (poly_id, Some(id))
                 } else {
                     (poly_id, None)

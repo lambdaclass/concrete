@@ -133,7 +133,7 @@ pub(crate) fn lower_expression(
             let type_idx = lower_type(builder.builder, &info.assoc_type.clone().into())?;
             let ty = builder.builder.get_type(type_idx).clone();
 
-            let old_generic_params = builder.builder.current_generics_map.clone();
+            let old_generic_params = builder.builder.context.generics_mapping.clone();
 
             if let Type::Adt(struct_index) = ty {
                 let poly_idx = builder
@@ -179,7 +179,11 @@ pub(crate) fn lower_expression(
                                 name,
                                 builder.builder.display_typename(map_ty)
                             );
-                            builder.builder.current_generics_map.insert(name, map_ty);
+                            builder
+                                .builder
+                                .context
+                                .generics_mapping
+                                .insert(name, map_ty);
                         }
                     }
                 }
@@ -188,7 +192,7 @@ pub(crate) fn lower_expression(
             let (value, return_type_idx, _span) =
                 lower_fn_call(builder, &info.fn_call, None, Some(type_idx))?;
 
-            builder.builder.current_generics_map = old_generic_params;
+            builder.builder.context.generics_mapping = old_generic_params;
 
             (value, return_type_idx, info.span)
         }
@@ -436,7 +440,7 @@ pub(crate) fn find_expression_type(
 
                 let mut type_idx = fn_builder.body.locals[local].ty;
                 let mut ty = fn_builder.builder.get_type(type_idx).clone();
-                let old_generics = fn_builder.builder.current_generics_map.clone();
+                let old_generics = fn_builder.builder.context.generics_mapping.clone();
 
                 if let Type::Adt(struct_index) = ty {
                     let poly_idx = fn_builder
@@ -487,7 +491,11 @@ pub(crate) fn find_expression_type(
                                     name,
                                     fn_builder.builder.display_typename(map_ty)
                                 );
-                                fn_builder.builder.current_generics_map.insert(name, map_ty);
+                                fn_builder
+                                    .builder
+                                    .context
+                                    .generics_mapping
+                                    .insert(name, map_ty);
                             }
                         }
                     }
@@ -552,7 +560,7 @@ pub(crate) fn find_expression_type(
                     }
                 }
 
-                fn_builder.builder.current_generics_map = old_generics;
+                fn_builder.builder.context.generics_mapping = old_generics;
 
                 Some(type_idx)
             }
@@ -845,7 +853,7 @@ pub(crate) fn lower_path(
     let mut type_idx = fn_builder.body.locals[local].ty;
     let mut ty = fn_builder.builder.get_type(type_idx).clone();
     let mut projection = Vec::new();
-    let old_generics = fn_builder.builder.current_generics_map.clone();
+    let old_generics = fn_builder.builder.context.generics_mapping.clone();
 
     if let Type::Adt(adt_index) = ty {
         let poly_idx = fn_builder
@@ -893,7 +901,11 @@ pub(crate) fn lower_path(
                             name,
                             fn_builder.builder.display_typename(map_ty)
                         );
-                        fn_builder.builder.current_generics_map.insert(name, map_ty);
+                        fn_builder
+                            .builder
+                            .context
+                            .generics_mapping
+                            .insert(name, map_ty);
                     }
                 }
             }
@@ -924,7 +936,11 @@ pub(crate) fn lower_path(
                                 name,
                                 fn_builder.builder.display_typename(map_ty)
                             );
-                            fn_builder.builder.current_generics_map.insert(name, map_ty);
+                            fn_builder
+                                .builder
+                                .context
+                                .generics_mapping
+                                .insert(name, map_ty);
                         }
                     }
                 }
@@ -1029,7 +1045,7 @@ pub(crate) fn lower_path(
         }
     }
 
-    fn_builder.builder.current_generics_map = old_generics;
+    fn_builder.builder.context.generics_mapping = old_generics;
 
     Ok((Place { local, projection }, type_idx, info.span))
 }

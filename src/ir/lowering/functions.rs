@@ -25,7 +25,7 @@ use super::{
 
 /// Lowers a function or method if its not yet lowered.
 ///
-/// If the function is generic, `builder.current_generics_map` should contain types for the generics.
+/// If the function is generic, `builder.context.generics_mapping` should contain types for the generics.
 #[instrument(level = "debug", skip_all, fields(name = ?func.decl.name.name, mod_id))]
 pub(crate) fn lower_func(
     builder: &mut IRBuilder,
@@ -41,9 +41,9 @@ pub(crate) fn lower_func(
     // bring them into the target module functions struct,
     // rather we have to get the module and find the method in the original module.
 
-    let old_self_ty = builder.self_ty;
+    let old_self_ty = builder.context.self_ty;
     let module_idx = if let Some(id) = method_of {
-        builder.self_ty = Some(id);
+        builder.context.self_ty = Some(id);
         builder
             .type_to_module
             .get(&id)
@@ -77,7 +77,11 @@ pub(crate) fn lower_func(
                 );
 
                 for generic_param in &func.decl.generic_params {
-                    if let Some(ty) = builder.current_generics_map.get(&generic_param.name.name) {
+                    if let Some(ty) = builder
+                        .context
+                        .generics_mapping
+                        .get(&generic_param.name.name)
+                    {
                         generic_types.push(*ty);
                     } else {
                         panic!()
@@ -216,7 +220,7 @@ pub(crate) fn lower_func(
     fn_builder.builder.ir.functions[fn_id] = Some(fn_builder.body);
     builder.ir.modules[module_idx].functions.insert(fn_id);
 
-    builder.self_ty = old_self_ty;
+    builder.context.self_ty = old_self_ty;
 
     for attr in &func.decl.attributes {
         if attr.name.as_str() == "test" {
@@ -292,7 +296,7 @@ pub(crate) fn lower_fn_call(
         .clone();
 
     // Enter a new scope for generics.
-    let old_generic_map = fn_builder.builder.current_generics_map.clone();
+    let old_generic_map = fn_builder.builder.context.generics_mapping.clone();
 
     // Save the generics info.
     for (generic_ty, generic_param) in info
@@ -309,7 +313,8 @@ pub(crate) fn lower_fn_call(
         )?;
         fn_builder
             .builder
-            .current_generics_map
+            .context
+            .generics_mapping
             .insert(generic_param.name.name.clone(), ty);
     }
 
@@ -328,7 +333,7 @@ pub(crate) fn lower_fn_call(
     // Set self_ty if there is one.
     // Used in lower_type.
     if let Some((_, self_ty)) = self_value {
-        fn_builder.builder.self_ty = Some(self_ty);
+        fn_builder.builder.context.self_ty = Some(self_ty);
     }
 
     // Lower the param types.
@@ -420,9 +425,9 @@ pub(crate) fn lower_fn_call(
         }),
     });
 
-    fn_builder.builder.self_ty = None;
+    fn_builder.builder.context.self_ty = None;
 
-    fn_builder.builder.current_generics_map = old_generic_map;
+    fn_builder.builder.context.generics_mapping = old_generic_map;
 
     Ok((
         Rvalue::Use(Operand::Place(dest_place)),
@@ -443,7 +448,11 @@ pub(crate) fn lower_func_decl(
     let mut generic_types = Vec::new();
 
     for generic_param in &func.generic_params {
-        if let Some(ty) = builder.current_generics_map.get(&generic_param.name.name) {
+        if let Some(ty) = builder
+            .context
+            .generics_mapping
+            .get(&generic_param.name.name)
+        {
             generic_types.push(*ty);
         } else {
             panic!()

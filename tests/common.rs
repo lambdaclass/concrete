@@ -37,15 +37,11 @@ pub fn compile_program(
     library: bool,
     optlevel: OptLevel,
 ) -> Result<CompileResult, Box<dyn std::error::Error>> {
-    let db = concrete::driver::db::DatabaseImpl::default();
-    let source = ProgramSource::new(&db, source.to_string(), Path::new(""));
-    tracing::debug!("source code:\n{}", source.input(&db));
-    let mut program = match concrete::parser::parse_ast(&db, source) {
-        Some(x) => x,
-        None => {
-            concrete::parser::parse_ast::accumulated::<concrete::parser::error::Diagnostics>(
-                &db, source,
-            );
+    let source = ProgramSource::new(source.to_string(), Path::new(""));
+    tracing::debug!("source code:\n{}", &source.input);
+    let mut program = match concrete::parser::parse_ast(&source) {
+        Ok(x) => x,
+        Err(_) => {
             return Err(Box::new(TestError("error compiling".into())));
         }
     };
@@ -54,7 +50,7 @@ pub fn compile_program(
     let test_dir_path = test_dir.path();
 
     let input_file = test_dir_path.join(name).with_extension(".con");
-    std::fs::write(&input_file, source.input(&db))?;
+    std::fs::write(&input_file, &source.input)?;
     program.file_path = input_file.clone();
 
     let output_file = test_dir_path.join(name);
