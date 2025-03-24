@@ -522,6 +522,8 @@ fn compile_rvalue<'c: 'b, 'b>(
                             .result(0)?
                             .into();
                     }
+                    PlaceElem::GetVariant => todo!(),
+                    PlaceElem::Variant(_) => todo!(),
                     PlaceElem::Field(_) => todo!(),
                     PlaceElem::Index(_) => todo!(),
                     PlaceElem::ConstantIndex(_) => todo!(),
@@ -1076,6 +1078,7 @@ fn compile_store_place<'c: 'b, 'b>(
     let local = &ctx.get_fn_body().locals[info.local];
     let mut local_type_idx = local.ty;
     let mut local_ty = ctx.module.get_type(local_type_idx);
+    let mut variant_idx = 0;
 
     for proj in &info.projection {
         match proj {
@@ -1093,6 +1096,28 @@ fn compile_store_place<'c: 'b, 'b>(
 
                 local_type_idx = local_ty.get_inner_type().expect("should have inner");
                 local_ty = ctx.module.get_type(local_type_idx);
+            }
+            PlaceElem::GetVariant => {
+                unreachable!()
+            }
+            PlaceElem::Variant(target_variant_idx) => {
+                match local_ty {
+                    IRType::Adt(id) => {
+                        let adt = ctx.module.ctx.program.aggregates[id].as_ref().unwrap();
+                        match adt.kind {
+                            AdtKind::Struct => {
+                                unreachable!();
+                            }
+                            AdtKind::Enum => {
+                                variant_idx = *target_variant_idx;
+                            }
+                            AdtKind::Union => {
+                                variant_idx = *target_variant_idx;
+                            }
+                        }
+                    }
+                    _ => unreachable!(),
+                };
             }
             PlaceElem::Field(field_idx) => {
                 ptr = block
@@ -1113,8 +1138,10 @@ fn compile_store_place<'c: 'b, 'b>(
                     IRType::Adt(id) => {
                         let adt = ctx.module.ctx.program.aggregates[id].as_ref().unwrap();
                         match adt.kind {
-                            AdtKind::Struct => adt.variants.first().unwrap().fields[*field_idx].ty,
-                            AdtKind::Enum => todo!(),
+                            // On structs the variant idx should always be 0.
+                            AdtKind::Struct => adt.variants[variant_idx].fields[*field_idx].ty,
+                            // Substract the first tag index, because the fields vec doesnt have it.
+                            AdtKind::Enum => adt.variants[variant_idx].fields[(*field_idx) - 1].ty,
                             AdtKind::Union => todo!(),
                         }
                     }
@@ -1206,6 +1233,7 @@ fn compile_load_place<'c: 'b, 'b>(
 
     let mut local_type_idx = body.locals[info.local].ty;
     let mut local_ty = ctx.module.get_type(local_type_idx);
+    let mut variant_idx = 0;
 
     for projection in &info.projection {
         match projection {
@@ -1226,6 +1254,9 @@ fn compile_load_place<'c: 'b, 'b>(
                     .expect("should always have inner type");
                 local_ty = ctx.module.get_type(local_type_idx);
             }
+            PlaceElem::Variant(target_variant_idx) => {
+                variant_idx = *target_variant_idx;
+            }
             PlaceElem::Field(field_idx) => {
                 local_type_idx = match local_ty {
                     IRType::Adt(id) => {
@@ -1233,7 +1264,7 @@ fn compile_load_place<'c: 'b, 'b>(
                         match adt_body.kind {
                             AdtKind::Struct => {
                                 let field_type_idx =
-                                    adt_body.variants.first().unwrap().fields[*field_idx].ty;
+                                    adt_body.variants[variant_idx].fields[*field_idx].ty;
                                 ptr = block
                                     .append_operation(llvm::get_element_ptr(
                                         ctx.context(),
@@ -1250,7 +1281,26 @@ fn compile_load_place<'c: 'b, 'b>(
                                     .into();
                                 field_type_idx
                             }
-                            AdtKind::Enum => todo!(),
+                            AdtKind::Enum => {
+                                let field_type_idx =
+                                    adt_body.variants[variant_idx].fields[*field_idx].ty;
+                                ptr = block
+                                    .append_operation(llvm::get_element_ptr(
+                                        ctx.context(),
+                                        ptr,
+                                        // enums have the first field offseted by 1, the tag.
+                                        DenseI32ArrayAttribute::new(
+                                            ctx.context(),
+                                            &[0, (1 + field_idx) as i32],
+                                        ),
+                                        compile_type(ctx.module, &local_ty),
+                                        pointer(ctx.context(), 0),
+                                        Location::unknown(ctx.context()),
+                                    ))
+                                    .result(0)?
+                                    .into();
+                                field_type_idx
+                            }
                             AdtKind::Union => todo!(),
                         }
                     }
@@ -1314,6 +1364,36 @@ fn compile_load_place<'c: 'b, 'b>(
                     .into();
 
                 local_type_idx = local_ty.get_inner_type().expect("should have inner");
+                local_ty = ctx.module.get_type(local_type_idx);
+            }
+            PlaceElem::GetVariant => {
+                local_type_idx = match local_ty {
+                    IRType::Adt(id) => {
+                        let adt_body = ctx.module.ctx.program.aggregates[id].as_ref().unwrap();
+                        match adt_body.kind {
+                            AdtKind::Struct => {
+                                unreachable!()
+                            }
+                            AdtKind::Enum => {
+                                let variant_type_idx = ctx.module.ctx.program.get_i32_ty();
+                                ptr = block
+                                    .append_operation(llvm::get_element_ptr(
+                                        ctx.context(),
+                                        ptr,
+                                        DenseI32ArrayAttribute::new(ctx.context(), &[0, 0]),
+                                        compile_type(ctx.module, &local_ty),
+                                        pointer(ctx.context(), 0),
+                                        Location::unknown(ctx.context()),
+                                    ))
+                                    .result(0)?
+                                    .into();
+                                variant_type_idx
+                            }
+                            AdtKind::Union => todo!(),
+                        }
+                    }
+                    _ => unreachable!("{:?}", local_ty),
+                };
                 local_ty = ctx.module.get_type(local_type_idx);
             }
         }
@@ -1603,14 +1683,27 @@ fn compile_type<'c>(ctx: ModuleCodegenCtx<'c>, ty: &IRType) -> Type<'c> {
                         let ty = compile_type(ctx, &field_ty);
                         fields.push(ty);
                     }
+                    let ty = melior::dialect::llvm::r#type::r#struct(
+                        ctx.ctx.mlir_context,
+                        &fields,
+                        false,
+                    );
+
+                    ty
                 }
-                AdtKind::Enum => todo!(),
+                AdtKind::Enum => {
+                    let tag_type = ctx.get_type(ctx.ctx.program.get_u32_ty());
+                    let tag_ty = compile_type(ctx, &tag_type);
+                    let payload_size = ty.get_bit_width(ctx.ctx.program) - 32;
+                    let u8_ty = IntegerType::new(ctx.ctx.mlir_context, 8).into();
+                    let arr_ty =
+                        melior::dialect::llvm::r#type::array(u8_ty, (payload_size / 8) as u32);
+                    let enum_ty =
+                        llvm::r#type::r#struct(ctx.ctx.mlir_context, &[tag_ty, arr_ty], false);
+                    enum_ty
+                }
                 AdtKind::Union => todo!(),
             }
-
-            let ty = melior::dialect::llvm::r#type::r#struct(ctx.ctx.mlir_context, &fields, false);
-
-            ty
         }
     }
 }

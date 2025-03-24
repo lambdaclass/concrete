@@ -8,4 +8,6 @@ mod std {
     mod vec;
     mod io;
     mod test;
+    mod option;
+    mod result;
 }
