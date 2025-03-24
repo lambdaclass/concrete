@@ -68,10 +68,10 @@ mod ModuleName {
         x = x % 2;
 
         match x {
-            0 -> {
+            0 => {
                 return 2;
             },
-            1 -> {
+            1 => {
                 let y: u64 = x * 2;
                 return y * 10;
             },
@@ -108,10 +108,10 @@ mod ModuleName {
         let source = r##"mod FactorialModule {
     pub fn factorial(x: u64) -> u64  {
         return match x {
-            0 -> {
+            0 => {
                 return 1;
             },
-            n -> {
+            n => {
                 return n * factorial(n-1);
             },
         };

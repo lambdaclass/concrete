@@ -17,8 +17,8 @@ pub enum LoweringError {
         function: String,
         path: PathBuf,
     },
-    #[error("struct field {name:?} not found")]
-    StructFieldNotFound {
+    #[error("field {name:?} not found")]
+    FieldNotFound {
         span: Span,
         name: String,
         path: PathBuf,
@@ -105,6 +105,18 @@ pub enum LoweringError {
     UnknownLangItem {
         span: Span,
         item: String,
+        path: PathBuf,
+    },
+    #[error("invalid match, reason: {reason}")]
+    InvalidMatch {
+        span: Span,
+        reason: String,
+        path: PathBuf,
+    },
+    #[error("unimplemented: {reason}")]
+    Unimplemented {
+        span: Span,
+        reason: String,
         path: PathBuf,
     },
 }

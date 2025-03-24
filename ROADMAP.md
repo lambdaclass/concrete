@@ -8,35 +8,40 @@ Legend:
 
 ## In Progress
 Builtin Features:
-- generics 🏗️
+- enums 🏗️
+- match 🏗️
 - stdlib support 🏗️
+- unit tests 🏗️
 
 Standard lib features:
 - arrays/vectors 🏗️
+- option 🏗️
+- strings 🏗️
 
 ## Done
 Builtin Features:
-- if/else ✔️
-- while ✔️
-- modules ✔️
-- imports ✔️
-- floats ✔️
 - borrowing ✔️
-- structs ✔️
 - casts ✔️
+- ffi (extern fns) ✔️
+- floats ✔️
+- for ✔️
+- generics ✔️
+- if/else ✔️
+- impl block ✔️
+- imports ✔️
+- modules ✔️
+- strings ✔️
+- structs ✔️
+- while ✔️
 
 ## Planned
-- enums :x:
-- match :x:
-- for :x:
-- ffi :x:
+- for with `in` keyword :x:
+- better ffi :x:
 - linear type checker :x:
-- impl block :x:
 - borrow checker :x:
 - traits :x:
 - unsafe :x:
 - iterators :x:
-- option :x:
 - box :x:
 - rc (for cyclical data structures like graphs) :x:
 - operating system threads with move only semantics :x:

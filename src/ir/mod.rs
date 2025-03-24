@@ -9,6 +9,7 @@ pub mod lowering;
 
 pub type LocalIndex = usize;
 pub type BlockIndex = usize;
+pub type VariantIndex = usize;
 pub type FieldIndex = usize;
 
 pub type ModuleIndex = SmallSlabIndex<Module>;
@@ -61,6 +62,11 @@ impl IR {
     /// Get the builtin `i32` type.
     pub fn get_i32_ty(&self) -> TypeIndex {
         *self.builtin_types.get(&Type::Int(IntTy::I32)).unwrap()
+    }
+
+    /// Get the builtin `u32` type.
+    pub fn get_u32_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&Type::Uint(UintTy::U32)).unwrap()
     }
 
     /// Get the builtin `i64` type.
@@ -232,6 +238,15 @@ impl Rvalue {
             _ => None,
         }
     }
+
+    pub fn get_place(&self) -> Option<Place> {
+        match self {
+            Rvalue::Use(op) => op.get_place(),
+            Rvalue::Ref(_, op) => Some(op.clone()),
+            Rvalue::Cast(op, _, _) => op.get_place(),
+            _ => None,
+        }
+    }
 }
 
 /// A operand is a value, either from a place in memory or constant data.
@@ -248,6 +263,13 @@ impl Operand {
             Operand::Const(_) => None,
         }
     }
+
+    pub fn get_place(&self) -> Option<Place> {
+        match self {
+            Operand::Place(place) => Some(place.clone()),
+            Operand::Const(_) => None,
+        }
+    }
 }
 
 /// A place in memory, defined by the given local and it's projection (deref, field, index, etc).
@@ -258,10 +280,14 @@ pub struct Place {
 }
 
 /// A element of the place projection.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PlaceElem {
     /// Dereference
     Deref,
+    /// Get the variant discrimantor.
+    GetVariant,
+    /// Use the given variant
+    Variant(VariantIndex),
     /// Get a field
     Field(FieldIndex),
     /// array index
@@ -350,6 +376,8 @@ pub struct AdtBody {
     pub kind: AdtKind,
     /// A mapping from name to variant.
     pub variant_names: HashMap<String, usize>,
+    /// This is used for displaying errors and info to the user.
+    pub generics_used: HashMap<String, TypeIndex>,
     pub span: Span,
 }
 
@@ -489,7 +517,17 @@ impl Type {
     }
 
     pub fn is_int(&self) -> bool {
-        matches!(self, Type::Int(_) | Type::Uint(_) | Type::Char)
+        matches!(self, Type::Int(_) | Type::Uint(_) | Type::Char | Type::Bool)
+    }
+
+    pub fn has_tag(&self, ir: &IR) -> bool {
+        match self {
+            Type::Adt(index) => {
+                let body = ir.aggregates[*index].as_ref().unwrap().kind;
+                matches!(body, AdtKind::Enum | AdtKind::Union)
+            }
+            _ => false,
+        }
     }
 
     pub fn is_signed(&self) -> bool {
@@ -505,8 +543,8 @@ impl Type {
     /// Meant for use in casts.
     pub fn get_bit_width(&self, ir: &IR) -> usize {
         match self {
-            Type::Unit => 1,
-            Type::Bool => 1,
+            Type::Unit => 8,
+            Type::Bool => 8,
             Type::Char => 8,
             Type::Int(ty) => match ty {
                 IntTy::I8 => 8,
@@ -548,22 +586,46 @@ impl Type {
             Type::Ptr(_, _) => 64,
             Type::Adt(idx) => {
                 let adt = ir.aggregates[*idx].as_ref().unwrap();
-                let mut total_size = 0;
+
+                let mut max_size = 0;
+                let adt_align = self.get_align(ir);
 
                 for variant in &adt.variants {
-                    let mut variant_size = 0;
-                    for field in &variant.fields {
-                        let ty = ir.types[field.ty].as_ref().unwrap();
-                        let size = ty.get_bit_width(ir);
+                    let mut size = match adt.kind {
+                        AdtKind::Struct => 0,
+                        AdtKind::Enum => 32, // u32 tag
+                        AdtKind::Union => todo!(),
+                    };
+                    let mut align = match adt.kind {
+                        AdtKind::Struct => 8,
+                        AdtKind::Enum => 32, // u32 tag
+                        AdtKind::Union => todo!(),
+                    };
 
-                        variant_size += size;
+                    for field in &variant.fields {
+                        let field_align = ir.types[field.ty].as_ref().unwrap().get_align(ir);
+                        let field_size = ir.types[field.ty].as_ref().unwrap().get_bit_width(ir);
+                        align = align.max(field_align);
+
+                        if size % field_align != 0 {
+                            let padding = (field_align - (size % field_align)) % field_align;
+                            size += padding;
+                        }
+
+                        size += field_size;
                     }
-                    total_size = total_size.max(variant_size);
+
+                    max_size = if size % adt_align == 0 {
+                        size
+                    } else {
+                        let padding = (adt_align - (size % adt_align)) % adt_align;
+                        size += padding;
+                        size
+                    }
+                    .max(max_size)
                 }
 
-                // todo: check if padding/ align is needed.
-
-                total_size
+                max_size
             }
         }
     }
@@ -571,8 +633,8 @@ impl Type {
     /// In bits
     pub fn get_align(&self, ir: &IR) -> usize {
         match self {
-            Type::Unit => 1,
-            Type::Bool => 1,
+            Type::Unit => 0,
+            Type::Bool => 8,
             Type::Char => 8,
             Type::Int(ty) => match ty {
                 IntTy::I8 => 8,
@@ -603,10 +665,14 @@ impl Type {
             Type::Adt(idx) => {
                 let adt = ir.aggregates[*idx].as_ref().unwrap();
 
-                let mut max_align = 0;
+                let mut max_align = match adt.kind {
+                    AdtKind::Struct => 8,
+                    AdtKind::Enum => 32, // u32 tag
+                    AdtKind::Union => todo!(),
+                };
 
                 for variant in &adt.variants {
-                    let mut max_variant_align = 0;
+                    let mut max_variant_align = 8;
                     for field in &variant.fields {
                         let align = ir.types[field.ty].as_ref().unwrap().get_align(ir);
                         max_variant_align = max_variant_align.max(align);
@@ -696,11 +762,23 @@ impl Type {
 
                             for field in &variant.fields {
                                 let ty = ir.types[field.ty].as_ref().unwrap().display(ir)?;
-                                writeln!(f, "\t{}: {},", field.name, ty)?;
+                                writeln!(f, " {}: {},", field.name, ty)?;
                             }
                             write!(f, "}}")?;
                         }
-                        AdtKind::Enum => todo!(),
+                        AdtKind::Enum => {
+                            writeln!(f, "{} {{", body.name)?;
+
+                            for variant in &body.variants {
+                                writeln!(f, " {} {{", variant.name)?;
+                                for field in &variant.fields {
+                                    let ty = ir.types[field.ty].as_ref().unwrap().display(ir)?;
+                                    writeln!(f, "  {}: {},", field.name, ty)?;
+                                }
+                                writeln!(f, " }},")?;
+                            }
+                            write!(f, "}}")?;
+                        }
                         AdtKind::Union => todo!(),
                     }
                 } else {

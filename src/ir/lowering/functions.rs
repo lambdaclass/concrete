@@ -383,8 +383,8 @@ pub(crate) fn lower_fn_call(
         if !rvalue_ty.is_equal(arg_ty, &fn_builder.builder.ir) {
             return Err(LoweringError::UnexpectedType {
                 found_span: rvalue_span,
-                found: rvalue_ty.display(&fn_builder.builder.ir).unwrap(),
-                expected: arg_ty.display(&fn_builder.builder.ir).unwrap(),
+                found: fn_builder.builder.display_typename(rvalue_type_idx),
+                expected: fn_builder.builder.display_typename(arg_type_idx),
                 expected_span: Some(rvalue_span),
                 path: fn_builder.get_file_path().clone(),
             });
@@ -585,7 +585,7 @@ pub(crate) fn get_locals(
 ) -> Result<(), LoweringError> {
     match stmt {
         statements::Statement::Assign(_assign_stmt) => {}
-        statements::Statement::Match(_match_expr) => todo!(),
+        statements::Statement::Match(_match_expr) => {}
         statements::Statement::For(info) => {
             if let Some(info) = &info.init {
                 match &info.target {

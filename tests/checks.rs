@@ -90,6 +90,24 @@ fn unrecorgnized_type() {
 }
 
 #[test]
+fn field_not_found() {
+    let (source, name) = (
+        include_str!("invalid_programs/field_not_found.con"),
+        "invalid_programs/field_not_found.con",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(
+            &error,
+            LoweringError::FieldNotFound { name, .. } if name == "x"
+        ),
+        "{:#?}",
+        error
+    );
+}
+
+#[test]
 fn undeclared_var() {
     let (source, name) = (
         include_str!("invalid_programs/undeclared_var.con"),
@@ -145,6 +163,21 @@ fn invalid_assign() {
     let (source, name) = (
         include_str!("invalid_programs/invalid_assign.con"),
         "invalid_programs/invalid_assign.con",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::UnexpectedType { .. }),
+        "{:#?}",
+        error
+    );
+}
+
+#[test]
+fn invalid_match_generic() {
+    let (source, name) = (
+        include_str!("invalid_programs/invalid_match_generic.con"),
+        "invalid_programs/invalid_match_generic.con",
     );
     let error = check_invalid_program(source, name);
 

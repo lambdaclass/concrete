@@ -17,6 +17,7 @@ pub struct EnumDecl {
     pub name: Ident,
     pub generics: Vec<GenericParam>,
     pub variants: Vec<EnumVariant>,
+    pub is_pub: bool,
     pub span: Span,
 }
 

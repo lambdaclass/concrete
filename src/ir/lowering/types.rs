@@ -2,13 +2,16 @@ use std::sync::Arc;
 
 use tracing::{debug, instrument};
 
-use crate::{ast::types::TypeDescriptor, ir::lowering::Symbol};
+use crate::{
+    ast::types::TypeDescriptor,
+    ir::lowering::{Symbol, adts::lower_enum},
+};
 
 use super::{
     IRBuilder,
+    adts::lower_struct,
     errors::LoweringError,
     ir::{self, ConstData, ConstKind, ConstValue, FloatTy, Mutability, Type, TypeIndex, ValueTree},
-    structs::lower_struct,
 };
 
 #[instrument(skip_all, fields(name = ?ty.get_name()))]
@@ -73,7 +76,7 @@ pub(crate) fn lower_type(
                     debug!(
                         "found in generics map: {} -> {}",
                         other,
-                        builder.get_type(ty).display(&builder.ir).unwrap()
+                        builder.display_typename(ty)
                     );
                     return Ok(ty);
                 }
@@ -83,7 +86,7 @@ pub(crate) fn lower_type(
                 let symbols = builder
                     .symbols
                     .get(&module_idx)
-                    .expect("failed to get symbols struct for module");
+                    .expect("failed to get symbols adt for module");
 
                 let mut sym = Symbol {
                     name: other.to_string(),
@@ -91,16 +94,27 @@ pub(crate) fn lower_type(
                     generics: Vec::new(),
                 };
 
-                if let Some(struct_idx) = symbols.aggregates.get(&sym).copied() {
-                    let struct_type_idx = *builder.struct_to_type_idx.get(&struct_idx).unwrap();
-                    let body = builder.bodies.structs.get(&struct_idx).unwrap().clone();
+                if let Some(adt_idx) = symbols.aggregates.get(&sym).copied() {
+                    debug!("Found adt with symbol {:?}", sym);
+                    let adt_type_idx = *builder.adt_to_type_idx.get(&adt_idx).unwrap();
+                    let mut kind = ir::AdtKind::Struct;
 
-                    if !body.generics.is_empty() {
+                    let body_generics =
+                        if let Some(body) = builder.bodies.structs.get(&adt_idx).as_ref() {
+                            body.generics.clone()
+                        } else if let Some(body) = builder.bodies.enums.get(&adt_idx).as_ref() {
+                            kind = ir::AdtKind::Enum;
+                            body.generics.clone()
+                        } else {
+                            panic!("adt should be found")
+                        };
+
+                    if !body_generics.is_empty() {
                         let type_name_generics = name.generics.clone();
                         let mut type_name_generics = type_name_generics.iter().peekable();
                         let mut generics = Vec::new();
 
-                        for generic_param in body.generics.clone().iter() {
+                        for generic_param in body_generics.clone().iter() {
                             if type_name_generics.peek().is_some() {
                                 let tyname = type_name_generics.next().unwrap();
                                 let ty = lower_type(builder, &tyname.clone().into())?;
@@ -119,55 +133,79 @@ pub(crate) fn lower_type(
                         // for borrowck
                         let symbols = builder.symbols.get(&module_idx).unwrap();
 
-                        let mono_struct_idx = if let Some(mono_struct_idx) =
+                        let mono_adt_idx = if let Some(mono_struct_idx) =
                             symbols.aggregates.get(&sym).copied()
                         {
                             mono_struct_idx
                         } else {
-                            let mono_struct_idx = builder.ir.aggregates.insert(None);
-                            let type_id = builder.ir.types.insert(Some(Type::Adt(mono_struct_idx)));
-                            builder.struct_to_type_idx.insert(mono_struct_idx, type_id);
+                            let mono_adt_idx = builder.ir.aggregates.insert(None);
+                            let type_id = builder.ir.types.insert(Some(Type::Adt(mono_adt_idx)));
+                            builder.adt_to_type_idx.insert(mono_adt_idx, type_id);
                             builder.type_to_module.insert(type_id, module_idx);
                             builder
                                 .symbols
                                 .get_mut(&builder.get_current_module_idx())
                                 .unwrap()
                                 .aggregates
-                                .insert(sym.clone(), mono_struct_idx);
-                            builder.bodies.structs.insert(mono_struct_idx, body.clone());
+                                .insert(sym.clone(), mono_adt_idx);
 
-                            mono_struct_idx
+                            match kind {
+                                ir::AdtKind::Struct => {
+                                    builder.bodies.structs.insert(
+                                        mono_adt_idx,
+                                        builder.bodies.structs.get(&adt_idx).unwrap().clone(),
+                                    );
+                                }
+                                ir::AdtKind::Enum => {
+                                    builder.bodies.enums.insert(
+                                        mono_adt_idx,
+                                        builder.bodies.enums.get(&adt_idx).unwrap().clone(),
+                                    );
+                                }
+                                ir::AdtKind::Union => todo!(),
+                            }
+
+                            mono_adt_idx
                         };
 
-                        let body = builder.bodies.structs.get(&struct_idx).unwrap().clone();
-                        if builder.ir.aggregates[mono_struct_idx].is_none() {
+                        if builder.ir.aggregates[mono_adt_idx].is_none() {
                             let generics_mapping = builder.current_generics_map.clone();
-                            for (gen_ty, gen_param) in generics.iter().zip(body.generics.iter()) {
+                            for (gen_ty, gen_param) in generics.iter().zip(body_generics.iter()) {
                                 builder
                                     .current_generics_map
                                     .insert(gen_param.name.name.clone(), *gen_ty);
                             }
 
-                            let id = lower_struct(builder, &body)?;
+                            let id = match kind {
+                                ir::AdtKind::Struct => lower_struct(
+                                    builder,
+                                    &builder.bodies.structs.get(&adt_idx).unwrap().clone(),
+                                )?,
+                                ir::AdtKind::Enum => lower_enum(
+                                    builder,
+                                    &builder.bodies.enums.get(&adt_idx).unwrap().clone(),
+                                )?,
+                                ir::AdtKind::Union => todo!(),
+                            };
                             assert_eq!(
-                                id, mono_struct_idx,
-                                "struct was already inserted so id should match"
+                                id, mono_adt_idx,
+                                "adt was already inserted so id should match"
                             );
 
                             builder.mono_type_to_poly.insert(
-                                *builder.struct_to_type_idx.get(&mono_struct_idx).unwrap(),
-                                struct_type_idx,
+                                *builder.adt_to_type_idx.get(&mono_adt_idx).unwrap(),
+                                adt_type_idx,
                             );
 
                             builder.current_generics_map = generics_mapping;
                         }
 
                         *builder
-                            .struct_to_type_idx
-                            .get(&mono_struct_idx)
+                            .adt_to_type_idx
+                            .get(&mono_adt_idx)
                             .expect("should have a type idx")
                     } else {
-                        struct_type_idx
+                        adt_type_idx
                     }
                 } else {
                     Err(LoweringError::UnrecognizedType {

@@ -316,8 +316,6 @@ pub fn main() -> Result<()> {
                 }
             }
 
-            lib.close().unwrap();
-
             println!();
             if !tests.is_empty() {
                 println!(
