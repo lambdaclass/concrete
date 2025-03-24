@@ -399,6 +399,7 @@ pub struct VariantDef {
     /// A mapping from field name to to field index.
     pub field_names: HashMap<String, usize>,
     pub discriminant: VariantDiscr,
+    pub span: Span,
 }
 
 /// A struct field.

@@ -361,5 +361,42 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 );
             report.finish()
         }
+        LoweringError::MissingVariant(error) => {
+            let path = error.path.display().to_string();
+            let filespan = FileSpan::new(path.clone(), error.match_span.from..error.match_span.to);
+            let variant_filespan = FileSpan::new(
+                error.type_path.display().to_string(),
+                error.variant_span.from..error.variant_span.to,
+            );
+            let ty_filespan = FileSpan::new(
+                error.type_path.display().to_string(),
+                error.type_span.from..error.type_span.to,
+            );
+            let report = Report::build(ReportKind::Error, filespan.clone())
+                .with_code("MissingVariant")
+                .with_label(
+                    Label::new(filespan.clone())
+                        .with_order(0)
+                        .with_message(format!(
+                            "missing variant: '{}' for match with type '{}'",
+                            error.variant_name, error.type_name
+                        ))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(variant_filespan)
+                        .with_order(1)
+                        .with_message("With the missing variant defined here")
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(ty_filespan)
+                        .with_order(2)
+                        .with_message("For the type defined here")
+                        .with_color(colors.next()),
+                )
+                .with_note("Add the missing variant to fix the issue.");
+            report.finish()
+        }
     }
 }

@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use tracing::{debug, instrument};
 
 use crate::{
@@ -12,7 +14,8 @@ use crate::{
         Operand, Place, PlaceElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator,
         TerminatorKind, Type, ValueTree,
         lowering::{
-            Symbol, expressions::lower_expression, functions::get_locals, types::lower_type,
+            Symbol, errors::MissingVariantError, expressions::lower_expression,
+            functions::get_locals, types::lower_type,
         },
     },
 };
@@ -66,19 +69,12 @@ fn lower_let(builder: &mut FnIrBuilder, info: &LetStmt) -> Result<(), LoweringEr
             let type_idx = lower_type(builder.builder, r#type)?;
 
             let ty = builder.builder.ir.types[type_idx].clone().unwrap();
-
-            debug!(
-                "let target type: {}",
-                builder.builder.display_typename(type_idx)
-            );
+            tracing::Span::current().record("ty", builder.builder.display_typename(type_idx));
+            debug!("lowering");
             let (rvalue, rvalue_type_idx, rvalue_span) =
                 lower_expression(builder, &info.value, Some(type_idx))?;
 
             let rvalue_ty = builder.builder.ir.types[rvalue_type_idx].clone().unwrap();
-            debug!(
-                "let rvalue type: {}",
-                builder.builder.display_typename(rvalue_type_idx)
-            );
 
             if !ty.is_equal(&rvalue_ty, &builder.builder.ir) {
                 return Err(LoweringError::UnexpectedType {
@@ -415,6 +411,10 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
     let outer_scope_locals = builder.name_to_local.clone();
     let outer_scope_local_exists = builder.local_exists.clone();
 
+    let mut covered_variants = HashSet::new();
+    let mut all_type_variants = None;
+    let mut adt_ty_for_debug = None;
+
     for variant in info.variants.iter() {
         debug!("lowering variant");
         // keep idx for switch targets
@@ -535,10 +535,22 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
 
                 let adt_body = builder.builder.get_adt(adt_id);
 
+                adt_ty_for_debug = Some((*enum_ty, adt_body.span));
+
+                if all_type_variants.is_none() {
+                    let mut map = HashMap::new();
+                    for (name, idx) in adt_body.variant_names.iter() {
+                        map.insert(name.clone(), (*idx, adt_body.variants[*idx].span));
+                    }
+                    all_type_variants = Some(map);
+                }
+
                 let variant_idx = *adt_body
                     .variant_names
                     .get(&enum_match_expr.variant.name)
                     .expect("variant not found");
+
+                covered_variants.insert(variant_idx);
 
                 let variant_value = ValueTree::Leaf(ConstValue::U32(variant_idx as u32));
 
@@ -621,6 +633,28 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
 
         builder.name_to_local = outer_scope_locals.clone();
         builder.local_exists = outer_scope_local_exists.clone();
+    }
+
+    if let Some(type_variants) = &all_type_variants {
+        for (variant, (variant_idx, variant_span)) in type_variants.iter() {
+            if !covered_variants.contains(variant_idx) {
+                let (ty, type_span) = adt_ty_for_debug.unwrap();
+                let module_id = *builder.builder.type_to_module.get(&ty).unwrap();
+
+                let type_definition_file = builder.builder.ir.modules[module_id].file_path.clone();
+                return Err(LoweringError::MissingVariant(Box::new(
+                    MissingVariantError {
+                        match_span: info.span,
+                        variant_span: *variant_span,
+                        variant_name: (*variant).clone(),
+                        type_span,
+                        type_name: builder.builder.display_typename(ty),
+                        type_path: type_definition_file,
+                        path: builder.get_file_path().clone(),
+                    },
+                )));
+            }
+        }
     }
 
     // todo: add otherwise block
