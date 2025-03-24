@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    Symbol,
+    IRBuilderContext, Symbol,
     adts::{lower_enum, lower_struct},
     constants::lower_constant,
     functions::{lower_func, lower_func_decl},
@@ -33,13 +33,15 @@ pub fn lower_compile_units(compile_units: &[ast::CompilationUnit]) -> Result<IR,
         },
         symbols: Default::default(),
         top_level_modules_names: Default::default(),
-        current_generics_map: Default::default(),
         adt_to_type_idx: Default::default(),
         type_to_module: Default::default(),
         bodies: Bodies::default(),
-        self_ty: None,
-        current_module_context: Vec::with_capacity(8),
         mono_type_to_poly: Default::default(),
+        context: IRBuilderContext {
+            self_ty: None,
+            generics_mapping: Default::default(),
+            module_stack: Vec::with_capacity(8),
+        },
     };
 
     // Prepass to fill some symbols.
@@ -566,13 +568,13 @@ pub fn lower_module(
             ast::modules::ModuleDefItem::Impl(impl_block) => {
                 if impl_block.generic_params.is_empty() {
                     let target_ty = lower_type(builder, &impl_block.target)?;
-                    builder.self_ty = Some(target_ty);
+                    builder.context.self_ty = Some(target_ty);
                     for method in &impl_block.methods {
                         if method.decl.generic_params.is_empty() {
                             lower_func(builder, method, Some(target_ty))?;
                         }
                     }
-                    builder.self_ty = None;
+                    builder.context.self_ty = None;
                 }
             }
             ast::modules::ModuleDefItem::Union(_union_decl) => todo!(),

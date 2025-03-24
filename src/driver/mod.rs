@@ -22,7 +22,6 @@ use config::Config;
 use linker::{link_binary, link_shared_lib};
 
 pub mod config;
-pub mod db;
 pub mod linker;
 
 #[derive(Parser, Debug)]
@@ -553,24 +552,18 @@ fn handle_build(
     }
 }
 
-pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<CompilationUnit> {
+pub fn parse_file(mut path: PathBuf) -> Result<CompilationUnit> {
     if path.is_dir() {
         path = path.join("mod.ed");
     }
 
     let real_source = std::fs::read_to_string(&path)?;
-    let source = ProgramSource::new(db, real_source.clone(), &path);
+    let source = ProgramSource::new(real_source.clone(), &path);
 
-    let mut compile_unit = match crate::parser::parse_ast(db, source) {
-        Some(x) => x,
-        None => {
-            let diagnostics = crate::parser::parse_ast::accumulated::<
-                crate::parser::error::Diagnostics,
-            >(db, source);
-
-            for diag in &diagnostics {
-                diag.render(db, source);
-            }
+    let mut compile_unit = match crate::parser::parse_ast(&source) {
+        Ok(x) => x,
+        Err(diagnostic) => {
+            diagnostic.render(&source);
 
             std::process::exit(1);
         }
@@ -605,7 +598,7 @@ pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<Compila
                     "Parsing externally declared module '{}'",
                     module_path.display()
                 );
-                let parsed_unit = parse_file(module_path.clone(), db)?;
+                let parsed_unit = parse_file(module_path.clone())?;
                 list.push(parsed_unit);
             }
         }
@@ -633,8 +626,7 @@ pub fn parse_file(mut path: PathBuf, db: &dyn salsa::Database) -> Result<Compila
 pub fn compile(args: &CompilerArgs) -> Result<(PathBuf, Vec<TestInfo>)> {
     let start_time = Instant::now();
 
-    let db = crate::driver::db::DatabaseImpl::default();
-    let compile_units = parse_file(args.input.clone(), &db)?;
+    let compile_units = parse_file(args.input.clone())?;
 
     let session = CompileUnitInfo {
         debug_info: if let Some(debug_info) = args.debug_info {
@@ -683,7 +675,7 @@ pub fn compile(args: &CompilerArgs) -> Result<(PathBuf, Vec<TestInfo>)> {
         Err(error) => {
             let report = crate::check::lowering_error_to_report(error);
             report.eprint(ariadne::FnCache::new(|x: &String| {
-                Ok(std::fs::read_to_string(Path::new(x.as_str())).unwrap())
+                std::fs::read_to_string(Path::new(x.as_str()))
             }))?;
             //report.eprint(ariadne::sources(path_cache))?;
             std::process::exit(1);

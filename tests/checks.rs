@@ -4,15 +4,11 @@ use concrete::ir::lowering::{LoweringError, lower_compile_units};
 use concrete::parser::ProgramSource;
 
 pub fn check_invalid_program(source: &str, path: &str) -> LoweringError {
-    let db = concrete::driver::db::DatabaseImpl::default();
-    let source = ProgramSource::new(&db, source.to_string(), Path::new(path));
+    let source = ProgramSource::new(source.to_string(), Path::new(path));
 
-    let program = match concrete::parser::parse_ast(&db, source) {
-        Some(x) => x,
-        None => {
-            concrete::parser::parse_ast::accumulated::<concrete::parser::error::Diagnostics>(
-                &db, source,
-            );
+    let program = match concrete::parser::parse_ast(&source) {
+        Ok(x) => x,
+        Err(_) => {
             panic!("error parsing ast");
         }
     };

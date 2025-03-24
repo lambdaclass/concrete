@@ -16,7 +16,7 @@ use super::{
 
 /// Lowers a struct.
 ///
-/// If the struct is generic, `builder.current_generics_map` should contain the generic specific types already.
+/// If the struct is generic, `builder.context.generics_mapping` should contain the generic specific types already.
 #[instrument(level = "debug", skip_all, fields(name = ?info.name.name))]
 pub(crate) fn lower_struct(
     builder: &mut IRBuilder,
@@ -31,14 +31,15 @@ pub(crate) fn lower_struct(
 
     let module_idx = builder.get_current_module_idx();
 
-    let poly_idx = *builder.symbols[&module_idx].aggregates.get(&sym).unwrap();
+    let polymorphic_idx = *builder.symbols[&module_idx].aggregates.get(&sym).unwrap();
 
     let mut generic_types = Vec::new();
     let mut generics_used = HashMap::new();
 
     for generic_param in &info.generics {
         let ty = *builder
-            .current_generics_map
+            .context
+            .generics_mapping
             .get(&generic_param.name.name)
             .unwrap_or_else(|| panic!("Missing generic type mapping {:?}", generic_param));
         generic_types.push(ty);
@@ -75,7 +76,7 @@ pub(crate) fn lower_struct(
     };
 
     // If struct is generic, use the monomorphized id, else its not generic.
-    let idx = mono_idx.unwrap_or(poly_idx);
+    let idx = mono_idx.unwrap_or(polymorphic_idx);
 
     // Check if its already lowered.
     if builder.ir.aggregates[idx].is_some() {
@@ -123,7 +124,7 @@ pub(crate) fn lower_struct(
 
 /// Lowers a enum.
 ///
-/// If the enum is generic, `builder.current_generics_map` should contain the generic specific types already.
+/// If the enum is generic, `builder.context.generics_mapping` should contain the generic specific types already.
 #[instrument(level = "debug", skip_all, fields(name = ?info.name.name))]
 pub(crate) fn lower_enum(
     builder: &mut IRBuilder,
@@ -145,7 +146,8 @@ pub(crate) fn lower_enum(
 
     for generic_param in &info.generics {
         let ty = *builder
-            .current_generics_map
+            .context
+            .generics_mapping
             .get(&generic_param.name.name)
             .unwrap_or_else(|| panic!("Missing generic type mapping {:?}", generic_param));
         generic_types.push(ty);

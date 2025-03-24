@@ -13,12 +13,11 @@ use lalrpop_util::ParseError;
 
 pub type Error = ParseError<usize, Token, LexicalError>;
 
-#[salsa::accumulator]
-pub struct Diagnostics(pub Error);
+pub struct Diagnostic(pub Error);
 
-impl Diagnostics {
-    pub fn render<'db>(&self, db: &'db dyn salsa::Database, source: ProgramSource<'db>) {
-        let path = source.path(db).display().to_string();
+impl Diagnostic {
+    pub fn render(&self, source: &ProgramSource) {
+        let path = source.path.display().to_string();
         let error = &self.0;
 
         let mut colors = ColorGenerator::new();
@@ -131,7 +130,7 @@ impl Diagnostics {
 
         report
             .eprint(ariadne::FnCache::new(|x: &String| {
-                Ok(std::fs::read_to_string(Path::new(x.as_str())).unwrap())
+                std::fs::read_to_string(Path::new(x.as_str()))
             }))
             .expect("failed to print to stderr");
     }

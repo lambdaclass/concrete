@@ -14,6 +14,7 @@ use super::{
     ir::{self, ConstData, ConstKind, ConstValue, FloatTy, Mutability, Type, TypeIndex, ValueTree},
 };
 
+/// Lowers a type.
 #[instrument(skip_all, fields(name = ?ty.get_name()))]
 pub(crate) fn lower_type(
     builder: &mut IRBuilder,
@@ -72,7 +73,7 @@ pub(crate) fn lower_type(
             "char" => *builder.ir.builtin_types.get(&Type::Char).unwrap(),
             other => {
                 // Check if the type name exists in the generic map.
-                if let Some(ty) = builder.current_generics_map.get(other).copied() {
+                if let Some(ty) = builder.context.generics_mapping.get(other).copied() {
                     debug!(
                         "found in generics map: {} -> {}",
                         other,
@@ -86,17 +87,25 @@ pub(crate) fn lower_type(
                 let symbols = builder
                     .symbols
                     .get(&module_idx)
-                    .expect("failed to get symbols adt for module");
+                    .expect("failed to get symbols for module");
 
+                // Find using the polymorphic symbol.
                 let mut sym = Symbol {
                     name: other.to_string(),
                     method_of: None,
                     generics: Vec::new(),
                 };
 
+                // check if its a aggregate type.
                 if let Some(adt_idx) = symbols.aggregates.get(&sym).copied() {
                     debug!("Found adt with symbol {:?}", sym);
+
+                    // Get the type id of this adt id.
                     let adt_type_idx = *builder.adt_to_type_idx.get(&adt_idx).unwrap();
+
+                    // Find the generic types needed.
+
+                    // If it's not a struct, it will be changed once a body is found.
                     let mut kind = ir::AdtKind::Struct;
 
                     let body_generics =
@@ -109,18 +118,21 @@ pub(crate) fn lower_type(
                             panic!("adt should be found")
                         };
 
+                    // If the type is generic.
                     if !body_generics.is_empty() {
                         let type_name_generics = name.generics.clone();
                         let mut type_name_generics = type_name_generics.iter().peekable();
                         let mut generics = Vec::new();
 
+                        // Lower the generic types.
                         for generic_param in body_generics.clone().iter() {
                             if type_name_generics.peek().is_some() {
                                 let tyname = type_name_generics.next().unwrap();
                                 let ty = lower_type(builder, &tyname.clone().into())?;
                                 generics.push(ty);
                             } else if let Some(ty) = builder
-                                .current_generics_map
+                                .context
+                                .generics_mapping
                                 .get(&generic_param.name.name)
                                 .copied()
                             {
@@ -133,13 +145,18 @@ pub(crate) fn lower_type(
                         // for borrowck
                         let symbols = builder.symbols.get(&module_idx).unwrap();
 
+                        // Get the monomorphized adt id or lower it.
                         let mono_adt_idx = if let Some(mono_struct_idx) =
                             symbols.aggregates.get(&sym).copied()
                         {
                             mono_struct_idx
                         } else {
+                            // First get the new id.
                             let mono_adt_idx = builder.ir.aggregates.insert(None);
+                            // And the type id for this new adt id.
                             let type_id = builder.ir.types.insert(Some(Type::Adt(mono_adt_idx)));
+
+                            // Store them.
                             builder.adt_to_type_idx.insert(mono_adt_idx, type_id);
                             builder.type_to_module.insert(type_id, module_idx);
                             builder
@@ -149,6 +166,7 @@ pub(crate) fn lower_type(
                                 .aggregates
                                 .insert(sym.clone(), mono_adt_idx);
 
+                            // Save the id to ast body mapping.
                             match kind {
                                 ir::AdtKind::Struct => {
                                     builder.bodies.structs.insert(
@@ -168,11 +186,13 @@ pub(crate) fn lower_type(
                             mono_adt_idx
                         };
 
+                        // In case we have a id but not yet lowered
                         if builder.ir.aggregates[mono_adt_idx].is_none() {
-                            let generics_mapping = builder.current_generics_map.clone();
+                            let generics_mapping = builder.context.generics_mapping.clone();
                             for (gen_ty, gen_param) in generics.iter().zip(body_generics.iter()) {
                                 builder
-                                    .current_generics_map
+                                    .context
+                                    .generics_mapping
                                     .insert(gen_param.name.name.clone(), *gen_ty);
                             }
 
@@ -197,7 +217,7 @@ pub(crate) fn lower_type(
                                 adt_type_idx,
                             );
 
-                            builder.current_generics_map = generics_mapping;
+                            builder.context.generics_mapping = generics_mapping;
                         }
 
                         *builder
@@ -246,7 +266,7 @@ pub(crate) fn lower_type(
             builder.ir.types.insert(Some(tykind))
         }
         TypeDescriptor::SelfType { is_ref, is_mut, .. } => {
-            let ty = builder.self_ty.expect("should have self type");
+            let ty = builder.context.self_ty.expect("should have self type");
 
             if *is_ref {
                 let tykind = Type::Ref(
