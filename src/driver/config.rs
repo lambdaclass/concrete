@@ -34,10 +34,14 @@ pub struct Profile {
 }
 
 /// Defines a package dependency
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Dependency {
-    /// The (relative or absolute) path to the dependency. (Currently only supports paths)
-    pub path: PathBuf,
+    /// The (relative or absolute) path to the dependency.
+    pub path: Option<PathBuf>,
+    /// The git repository to the dependency
+    pub git: Option<String>,
+    /// The git commit to use.
+    pub r#ref: Option<String>,
     /// The version of the dependency.
-    pub version: String,
+    pub version: Option<String>,
 }

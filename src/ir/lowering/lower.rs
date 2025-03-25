@@ -19,6 +19,7 @@ use super::{
     types::lower_type,
 };
 
+/// Lowers the ast compile units, the last should be the "main" unit whose unit tests are saved.
 pub fn lower_compile_units(compile_units: &[ast::CompilationUnit]) -> Result<IR, LoweringError> {
     let mut builder = IRBuilder {
         ir: IR {
@@ -38,6 +39,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompilationUnit]) -> Result<IR,
         bodies: Bodies::default(),
         mono_type_to_poly: Default::default(),
         context: IRBuilderContext {
+            add_tests: false,
             self_ty: None,
             generics_mapping: Default::default(),
             module_stack: Vec::with_capacity(8),
@@ -45,7 +47,9 @@ pub fn lower_compile_units(compile_units: &[ast::CompilationUnit]) -> Result<IR,
     };
 
     // Prepass to fill some symbols.
-    for compile_unit in compile_units {
+    let last_i = compile_units.len() - 1;
+    for (i, compile_unit) in compile_units.iter().enumerate() {
+        builder.context.add_tests = i == last_i;
         for module in &compile_unit.modules {
             debug!("Lowering symbols for module {:?}", module.name.name);
             lower_module_symbols(&mut builder, module, &[])?;
@@ -53,7 +57,8 @@ pub fn lower_compile_units(compile_units: &[ast::CompilationUnit]) -> Result<IR,
     }
 
     // Handle imports so they are transparent afterwards.
-    for compile_unit in compile_units {
+    for (i, compile_unit) in compile_units.iter().enumerate() {
+        builder.context.add_tests = i == last_i;
         for module in &compile_unit.modules {
             debug!("lowering imports for module: {:?}", &module.name.name);
             let module_idx = *builder
@@ -65,7 +70,8 @@ pub fn lower_compile_units(compile_units: &[ast::CompilationUnit]) -> Result<IR,
         }
     }
 
-    for compile_unit in compile_units {
+    for (i, compile_unit) in compile_units.iter().enumerate() {
+        builder.context.add_tests = i == last_i;
         for module in &compile_unit.modules {
             let module_idx = *builder
                 .top_level_modules_names

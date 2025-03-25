@@ -224,8 +224,10 @@ pub(crate) fn lower_func(
 
     for attr in &func.decl.attributes {
         if attr.name.as_str() == "test" {
-            builder.ir.tests.push(fn_id);
             // TODO: check its a valid test function, i.e: no arguments, returns a i32.
+            if builder.context.add_tests {
+                builder.ir.tests.push(fn_id);
+            }
             break;
         }
     }

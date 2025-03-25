@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use modules::Module;
 
 pub mod common;
@@ -16,6 +14,5 @@ pub mod types;
 /// A compile represents a whole package, made up of various modules.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CompilationUnit {
-    pub file_path: PathBuf,
     pub modules: Vec<Module>,
 }

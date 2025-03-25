@@ -102,6 +102,8 @@ pub struct IRBuilder {
 
 #[derive(Debug, Clone)]
 pub struct IRBuilderContext {
+    /// Whether to save the test functions found.
+    pub add_tests: bool,
     /// The type used to resolve "self".
     pub self_ty: Option<TypeIndex>,
     /// The current name to type index mapping to resolve generic type names in the current context.
