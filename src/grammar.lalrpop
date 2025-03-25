@@ -33,6 +33,8 @@ extern {
     "extern" => Token::KeywordExtern,
     "as" => Token::KeywordAs,
     "self" => Token::KeywordSelf,
+    "trait" => Token::KeywordTrait,
+    "type" => Token::KeywordType,
 
     // literals
     "identifier" => Token::Identifier(<String>),
@@ -267,8 +269,17 @@ ModuleDefItem: ast::modules::ModuleDefItem = {
   <FunctionDecl> ";" => {
     ast::modules::ModuleDefItem::FunctionDecl(Arc::new(<>))
   },
+  <TraitDecl> => {
+    ast::modules::ModuleDefItem::Trait(Arc::new(<>))
+  },
+  <TypeDecl> => {
+    ast::modules::ModuleDefItem::Type(Arc::new(<>))
+  },
   <ImplBlock> => {
     ast::modules::ModuleDefItem::Impl(Arc::new(<>))
+  },
+  <ImplTraitBlock> => {
+    ast::modules::ModuleDefItem::ImplTrait(Arc::new(<>))
   },
   <Module> => {
     ast::modules::ModuleDefItem::Module(Arc::new(<>))
@@ -379,6 +390,17 @@ FunctionDef: ast::functions::FunctionDef = {
   }
 }
 
+TypeDecl: ast::types::TypeDecl = {
+  <lo:@L> <doc_string:DocString?> <is_pub:"pub"?> "type" <name:Ident> "=" <value:TypeDescriptor> <hi:@R> => {
+    ast::types::TypeDecl {
+      doc_string,
+      name,
+      value,
+      span: Span::new(lo, hi),
+    }
+  }
+}
+
 ImplBlock: ast::functions::ImplBlock = {
   <lo:@L> "impl" <generic_params:GenericParams?> <target:TypeDescriptor> "{" <methods:FunctionDef*> "}" <hi:@R> => {
     ast::functions::ImplBlock {
@@ -387,6 +409,33 @@ ImplBlock: ast::functions::ImplBlock = {
       generic_params: generic_params.unwrap_or(vec![]),
       span: Span::new(lo, hi),
     }
+  }
+}
+
+ImplTraitBlock: ast::functions::ImplTraitBlock = {
+  <lo:@L> "impl" <generic_params:GenericParams?> <target_trait:TypeName> "for" <target:TypeDescriptor> "{" <assoc_types:TypeDecl*> <methods:FunctionDef*> "}" <hi:@R> => {
+    ast::functions::ImplTraitBlock {
+      target_trait,
+      target,
+      associated_types: assoc_types.into_iter().map(Arc::new).collect(),
+      methods: methods.into_iter().map(Arc::new).collect(),
+      generic_params: generic_params.unwrap_or(vec![]),
+      span: Span::new(lo, hi),
+    }
+  }
+}
+
+TraitDecl: ast::traits::TraitDecl = {
+  <lo:@L> <doc_string:DocString?> <is_pub:"pub"?> "trait" <name:Ident> <generic_params:GenericParams?> "{" <assoc_types:TypeDecl*> <methods:(<FunctionDecl> ";")*> "}"  <hi:@R> => {
+      ast::traits::TraitDecl {
+        doc_string,
+        name,
+        generic_params: generic_params.unwrap_or_default(),
+        is_pub: is_pub.is_some(),
+        span: Span::new(lo, hi),
+        associated_types: assoc_types.into_iter().map(Arc::new).collect(),
+        methods: methods.into_iter().map(Arc::new).collect(),
+      }
   }
 }
 

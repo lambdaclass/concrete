@@ -11,6 +11,12 @@ pub enum LoweringError {
         module: String,
         path: PathBuf,
     },
+    #[error("trait {name:?} not found")]
+    TraitNotFound {
+        span: Span,
+        name: String,
+        path: PathBuf,
+    },
     #[error("function {function:?} not found")]
     FunctionNotFound {
         span: Span,

@@ -7,6 +7,7 @@ use std::{
 use adts::{lower_enum, lower_struct};
 use functions::{lower_func, lower_func_decl};
 use itertools::Itertools;
+use traits::TraitDatabase;
 
 use crate::{
     ast::enums::EnumDecl,
@@ -36,6 +37,7 @@ mod expressions;
 mod functions;
 mod lower;
 mod statements;
+mod traits;
 mod types;
 
 pub use errors::LoweringError;
@@ -95,6 +97,7 @@ pub struct IRBuilder {
     pub type_to_module: HashMap<TypeIndex, ModuleIndex>,
     /// A map to find the polymorphic type id of the given monomorphized type.
     pub mono_type_to_poly: HashMap<TypeIndex, TypeIndex>,
+    pub trait_db: TraitDatabase,
     /// A helper context to resolve context dependent information.
     /// Like the current generic mappings or the current module id.
     pub context: IRBuilderContext,

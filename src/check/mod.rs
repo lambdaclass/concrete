@@ -37,6 +37,19 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
     let mut colors = ColorGenerator::new();
     colors.next();
     match error {
+        LoweringError::TraitNotFound { span, name, path } => {
+            let path = path.display().to_string();
+            let filespan = FileSpan::new(path, span.from..span.to);
+            Report::build(ReportKind::Error, filespan.clone())
+                .with_code("TraitNotFound")
+                .with_label(
+                    Label::new(filespan)
+                        .with_message(format!("Trait {name:?} not found."))
+                        .with_color(colors.next()),
+                )
+                .with_message("Unresolved trait.")
+                .finish()
+        }
         LoweringError::ModuleNotFound { span, module, path } => {
             let path = path.display().to_string();
             let filespan = FileSpan::new(path, span.from..span.to);
