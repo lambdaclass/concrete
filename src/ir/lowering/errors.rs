@@ -17,6 +17,14 @@ pub enum LoweringError {
         name: String,
         path: PathBuf,
     },
+    #[error("missing trait associated type in trait impl")]
+    MissingTraitType(Box<MissingTraitType>),
+    #[error("missing trait associated type in trait impl")]
+    UnexpectedTraitType(Box<UnexpectedTraitType>),
+    #[error("missing trait function in trait impl")]
+    MissingTraitFunction(Box<MissingTraitFunction>),
+    #[error("unexpected trait function in trait impl")]
+    UnexpectedTraitFunction(Box<UnexpectedTraitFunction>),
     #[error("function {function:?} not found")]
     FunctionNotFound {
         span: Span,
@@ -139,3 +147,44 @@ pub struct MissingVariantError {
     pub type_path: PathBuf,
     pub path: PathBuf,
 }
+
+#[derive(Debug, Clone)]
+pub struct MissingTraitType {
+    pub trait_name: String,
+    pub trait_span: Span,
+    pub type_name: String,
+    pub type_name_span: Span,
+    pub assoc_type_name: String,
+    pub assoc_type_name_span_def: Span,
+    pub impl_trait_span: Span,
+    pub path: PathBuf,
+    pub trait_path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnexpectedTraitType {
+    pub trait_name: String,
+    pub trait_span: Span,
+    pub type_name: String,
+    pub type_name_span: Span,
+    pub assoc_type_name: String,
+    pub assoc_type_name_span_def: Span,
+    pub impl_trait_span: Span,
+    pub path: PathBuf,
+    pub trait_path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct MissingTraitFunction {
+    pub trait_name: String,
+    pub trait_span: Span,
+    pub type_name: String,
+    pub type_name_span: Span,
+    pub func_name: String,
+    pub func_name_span_def: Span,
+    pub impl_trait_span: Span,
+    pub path: PathBuf,
+    pub trait_path: PathBuf,
+}
+
+pub type UnexpectedTraitFunction = MissingTraitFunction;

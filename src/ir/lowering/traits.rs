@@ -17,6 +17,8 @@ pub type TraitImpls = HashMap<usize, Vec<TraitImpl>>;
 #[derive(Debug, Clone)]
 pub struct TraitDatabase {
     pub traits: StandardSlab<Arc<TraitDecl>>,
+    // Traitidx to module.
+    pub trait_to_module: HashMap<usize, ModuleIndex>,
     // usize = module idx
     pub name_to_trait: HashMap<(usize, String), TraitIdx>,
     // usize = TraitIdx::to_idx
@@ -46,6 +48,7 @@ impl TraitDatabase {
     pub fn new() -> Self {
         Self {
             implementors: HashMap::new(),
+            trait_to_module: HashMap::new(),
             name_to_trait: HashMap::new(),
             traits: StandardSlab::new(),
         }
@@ -60,8 +63,13 @@ impl TraitDatabase {
         let name = tr.name.name.clone();
         let idx = self.traits.insert(tr);
         self.name_to_trait.insert((module_idx.to_idx(), name), idx);
+        self.trait_to_module.insert(idx.to_idx(), module_idx);
 
         idx
+    }
+
+    pub fn get_trait_module_idx(&self, id: TraitIdx) -> ModuleIndex {
+        *self.trait_to_module.get(&id.to_idx()).unwrap()
     }
 
     pub fn get_trait_by_name(&self, name: &str, module_id: ModuleIndex) -> Option<TraitIdx> {

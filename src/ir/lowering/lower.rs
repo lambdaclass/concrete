@@ -6,7 +6,10 @@ use crate::{
     ast::{self, modules::ModuleDefItem},
     ir::{
         Adts, Constants, Functions, Module, Modules, Types,
-        lowering::{Bodies, IRBuilder, errors::LoweringError},
+        lowering::{
+            Bodies, IRBuilder,
+            errors::{LoweringError, MissingTraitType, UnexpectedTraitType},
+        },
     },
 };
 
@@ -14,6 +17,7 @@ use super::{
     IRBuilderContext, Symbol,
     adts::{lower_enum, lower_struct},
     constants::lower_constant,
+    errors::{MissingTraitFunction, UnexpectedTraitFunction},
     functions::{lower_func, lower_func_decl},
     ir::{IR, ModuleIndex, Type},
     traits::{TraitDatabase, TraitGeneric, TraitImpl},
@@ -381,8 +385,13 @@ fn lower_module_symbols(
 
                 // TODO: verify signature and types.
 
-                for _assoc_type in &impl_trait.associated_types {
-                    todo!("associated types not yet done")
+                #[allow(clippy::never_loop)] // remove once implemented
+                for assoc_type in &impl_trait.associated_types {
+                    Err(LoweringError::Unimplemented {
+                        span: assoc_type.span,
+                        reason: "Associated types not yet implemented".to_string(),
+                        path: builder.get_current_module().file_path.clone(),
+                    })?;
                 }
 
                 for function_def in &impl_trait.methods {
@@ -662,6 +671,113 @@ pub fn lower_module(
                 } else {
                     lower_type(builder, &impl_trait.target)?
                 };
+
+                {
+                    let tr = &builder.trait_db.traits[trait_id];
+
+                    let assoc_types: HashMap<_, _> = tr
+                        .associated_types
+                        .iter()
+                        .map(|x| (x.name.name.clone(), x.clone()))
+                        .collect();
+                    let assoc_types_found: HashMap<_, _> = impl_trait
+                        .associated_types
+                        .iter()
+                        .map(|x| (x.name.name.clone(), x.clone()))
+                        .collect();
+
+                    let trait_module_id = builder.trait_db.get_trait_module_idx(trait_id);
+                    for trait_assoc_ty in &tr.associated_types {
+                        if !assoc_types_found.contains_key(&trait_assoc_ty.name.name) {
+                            return Err(LoweringError::MissingTraitType(Box::new(
+                                MissingTraitType {
+                                    trait_name: impl_trait.target_trait.name.name.clone(),
+                                    trait_span: tr.span,
+                                    type_name: impl_trait.target.get_name().unwrap(),
+                                    type_name_span: impl_trait.target.get_span(),
+                                    assoc_type_name: trait_assoc_ty.name.name.clone(),
+                                    assoc_type_name_span_def: trait_assoc_ty.span,
+                                    impl_trait_span: impl_trait.span,
+                                    path: builder.get_current_module().file_path.clone(),
+                                    trait_path: builder.ir.modules[trait_module_id]
+                                        .file_path
+                                        .clone(),
+                                },
+                            )));
+                        }
+                    }
+
+                    for assoc_ty in &impl_trait.associated_types {
+                        if !assoc_types.contains_key(&assoc_ty.name.name) {
+                            return Err(LoweringError::UnexpectedTraitType(Box::new(
+                                UnexpectedTraitType {
+                                    trait_name: impl_trait.target_trait.name.name.clone(),
+                                    trait_span: tr.span,
+                                    type_name: impl_trait.target.get_name().unwrap(),
+                                    type_name_span: impl_trait.target.get_span(),
+                                    assoc_type_name: assoc_ty.name.name.clone(),
+                                    assoc_type_name_span_def: assoc_ty.span,
+                                    impl_trait_span: impl_trait.span,
+                                    path: builder.get_current_module().file_path.clone(),
+                                    trait_path: builder.ir.modules[trait_module_id]
+                                        .file_path
+                                        .clone(),
+                                },
+                            )));
+                        }
+                    }
+
+                    let trait_functions: HashMap<_, _> = tr
+                        .methods
+                        .iter()
+                        .map(|x| (x.name.name.clone(), x.clone()))
+                        .collect();
+                    let functions_found: HashMap<_, _> = impl_trait
+                        .methods
+                        .iter()
+                        .map(|x| (x.decl.name.name.clone(), x.clone()))
+                        .collect();
+
+                    for trait_method in &tr.methods {
+                        if !functions_found.contains_key(&trait_method.name.name) {
+                            return Err(LoweringError::MissingTraitFunction(Box::new(
+                                MissingTraitFunction {
+                                    trait_name: impl_trait.target_trait.name.name.clone(),
+                                    trait_span: tr.span,
+                                    type_name: impl_trait.target.get_name().unwrap(),
+                                    type_name_span: impl_trait.target.get_span(),
+                                    func_name: trait_method.name.name.clone(),
+                                    func_name_span_def: trait_method.span,
+                                    impl_trait_span: impl_trait.span,
+                                    path: builder.get_current_module().file_path.clone(),
+                                    trait_path: builder.ir.modules[trait_module_id]
+                                        .file_path
+                                        .clone(),
+                                },
+                            )));
+                        }
+                    }
+
+                    for method in &impl_trait.methods {
+                        if !trait_functions.contains_key(&method.decl.name.name) {
+                            return Err(LoweringError::UnexpectedTraitFunction(Box::new(
+                                UnexpectedTraitFunction {
+                                    trait_name: impl_trait.target_trait.name.name.clone(),
+                                    trait_span: tr.span,
+                                    type_name: impl_trait.target.get_name().unwrap(),
+                                    type_name_span: impl_trait.target.get_span(),
+                                    func_name: method.decl.name.name.clone(),
+                                    func_name_span_def: method.span,
+                                    impl_trait_span: impl_trait.span,
+                                    path: builder.get_current_module().file_path.clone(),
+                                    trait_path: builder.ir.modules[trait_module_id]
+                                        .file_path
+                                        .clone(),
+                                },
+                            )));
+                        }
+                    }
+                }
 
                 builder.trait_db.add_trait_impl(
                     trait_id,

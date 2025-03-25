@@ -321,12 +321,12 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
             let path = path.display().to_string();
             let filespan = FileSpan::new(path.clone(), span.from..span.to);
             let mut report = Report::build(ReportKind::Error, filespan.clone())
-                    .with_code("CantTakeMutableBorrow")
-                    .with_label(
-                        Label::new(filespan.clone())
-                            .with_message("can't take a mutate borrow to this variable because it's not declared mutable")
-                            .with_color(colors.next()),
-                    );
+                        .with_code("CantTakeMutableBorrow")
+                        .with_label(
+                            Label::new(filespan.clone())
+                                .with_message("can't take a mutate borrow to this variable because it's not declared mutable")
+                                .with_color(colors.next()),
+                        );
 
             if let Some(declare_span) = declare_span {
                 let declare_span = FileSpan::new(path, declare_span.into());
@@ -409,6 +409,171 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                         .with_color(colors.next()),
                 )
                 .with_note("Add the missing variant to fix the issue.");
+            report.finish()
+        }
+        LoweringError::MissingTraitType(error) => {
+            let path = error.path.display().to_string();
+            let trait_path = error.trait_path.display().to_string();
+            let type_name_span = FileSpan::new(path.clone(), error.type_name_span.into());
+            let assoc_type_name_span =
+                FileSpan::new(trait_path.clone(), error.assoc_type_name_span_def.into());
+            let assoc_trait_span = FileSpan::new(trait_path.clone(), error.trait_span.into());
+            let impl_trait_span = FileSpan::new(path.clone(), error.impl_trait_span.into());
+            let report = Report::build(ReportKind::Error, impl_trait_span.clone())
+                .with_code("MissingTraitType")
+                .with_label(
+                    Label::new(impl_trait_span.clone())
+                        .with_message(format!(
+                            "in the trait implementation {:?}",
+                            error.trait_name
+                        ))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(type_name_span.clone())
+                        .with_message(format!("for type {}", error.type_name))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(assoc_trait_span.clone())
+                        .with_message(format!("for the trait {} defined here", error.trait_name))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(assoc_type_name_span.clone())
+                        .with_message(format!(
+                            "missing the following associated type: {}",
+                            error.assoc_type_name
+                        ))
+                        .with_color(colors.next()),
+                )
+                .with_message(format!(
+                    "missing trait type {:?} in implementation for type {:?}",
+                    error.assoc_type_name, error.type_name
+                ));
+            report.finish()
+        }
+        LoweringError::UnexpectedTraitType(error) => {
+            let path = error.path.display().to_string();
+            let trait_path = error.trait_path.display().to_string();
+            let type_name_span = FileSpan::new(path.clone(), error.type_name_span.into());
+            let assoc_type_name_span =
+                FileSpan::new(trait_path.clone(), error.assoc_type_name_span_def.into());
+            let assoc_trait_span = FileSpan::new(trait_path.clone(), error.trait_span.into());
+            let impl_trait_span = FileSpan::new(path.clone(), error.impl_trait_span.into());
+            let report = Report::build(ReportKind::Error, impl_trait_span.clone())
+                .with_code("UnexpectedTraitType")
+                .with_label(
+                    Label::new(impl_trait_span.clone())
+                        .with_message(format!(
+                            "in the trait implementation {:?}",
+                            error.trait_name
+                        ))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(type_name_span.clone())
+                        .with_message(format!("for type {}", error.type_name))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(assoc_trait_span.clone())
+                        .with_message(format!("for the trait {} defined here", error.trait_name))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(assoc_type_name_span.clone())
+                        .with_message(format!(
+                            "unexpected associated type: {}",
+                            error.assoc_type_name
+                        ))
+                        .with_color(colors.next()),
+                )
+                .with_message(format!(
+                    "unexpected trait type {:?} in implementation for type {:?}",
+                    error.assoc_type_name, error.type_name
+                ));
+            report.finish()
+        }
+        LoweringError::MissingTraitFunction(error) => {
+            let path = error.path.display().to_string();
+            let trait_path = error.trait_path.display().to_string();
+            let type_name_span = FileSpan::new(path.clone(), error.type_name_span.into());
+            let assoc_type_name_span =
+                FileSpan::new(trait_path.clone(), error.func_name_span_def.into());
+            let assoc_trait_span = FileSpan::new(trait_path.clone(), error.trait_span.into());
+            let impl_trait_span = FileSpan::new(path.clone(), error.impl_trait_span.into());
+            let report = Report::build(ReportKind::Error, impl_trait_span.clone())
+                .with_code("MissingTraitFunction")
+                .with_label(
+                    Label::new(impl_trait_span.clone())
+                        .with_message(format!(
+                            "in the trait implementation {:?}",
+                            error.trait_name
+                        ))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(type_name_span.clone())
+                        .with_message(format!("for type {}", error.type_name))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(assoc_trait_span.clone())
+                        .with_message(format!("for the trait {} defined here", error.trait_name))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(assoc_type_name_span.clone())
+                        .with_message(format!(
+                            "missing the following function: {}",
+                            error.func_name
+                        ))
+                        .with_color(colors.next()),
+                )
+                .with_message(format!(
+                    "missing trait function {:?} in implementation for type {:?}",
+                    error.func_name, error.type_name
+                ));
+            report.finish()
+        }
+        LoweringError::UnexpectedTraitFunction(error) => {
+            let path = error.path.display().to_string();
+            let trait_path = error.trait_path.display().to_string();
+            let type_name_span = FileSpan::new(path.clone(), error.type_name_span.into());
+            let assoc_type_name_span =
+                FileSpan::new(trait_path.clone(), error.func_name_span_def.into());
+            let assoc_trait_span = FileSpan::new(trait_path.clone(), error.trait_span.into());
+            let impl_trait_span = FileSpan::new(path.clone(), error.impl_trait_span.into());
+            let report = Report::build(ReportKind::Error, impl_trait_span.clone())
+                .with_code("UnexpectedTraitFunction")
+                .with_label(
+                    Label::new(impl_trait_span.clone())
+                        .with_message(format!(
+                            "in the trait implementation {:?}",
+                            error.trait_name
+                        ))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(type_name_span.clone())
+                        .with_message(format!("for type {}", error.type_name))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(assoc_trait_span.clone())
+                        .with_message(format!("for the trait {} defined here", error.trait_name))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(assoc_type_name_span.clone())
+                        .with_message(format!("unexpected function: {}", error.func_name))
+                        .with_color(colors.next()),
+                )
+                .with_message(format!(
+                    "unexpected function {:?} in implementation for type {:?}",
+                    error.func_name, error.type_name
+                ));
             report.finish()
         }
     }
