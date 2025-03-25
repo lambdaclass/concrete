@@ -311,7 +311,7 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                         .with_color(colors.next()),
                 );
             }
-            report.finish()
+            report.with_help("Add the 'mut' keyword to the variable declaration to make the variable mutable.").finish()
         }
         LoweringError::CantTakeMutableBorrow {
             span,
@@ -408,7 +408,7 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                         .with_message("For the type defined here")
                         .with_color(colors.next()),
                 )
-                .with_note("Add the missing variant to fix the issue.");
+                .with_help("Add the missing variant to fix the issue.");
             report.finish()
         }
         LoweringError::MissingTraitType(error) => {
@@ -450,7 +450,8 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 .with_message(format!(
                     "missing trait type {:?} in implementation for type {:?}",
                     error.assoc_type_name, error.type_name
-                ));
+                ))
+                .with_help("Add the associated type to the trait implementation");
             report.finish()
         }
         LoweringError::UnexpectedTraitType(error) => {
@@ -492,7 +493,8 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 .with_message(format!(
                     "unexpected trait type {:?} in implementation for type {:?}",
                     error.assoc_type_name, error.type_name
-                ));
+                ))
+                .with_help("Remove the unexpected associated type from the trait implementation");
             report.finish()
         }
         LoweringError::MissingTraitFunction(error) => {
@@ -534,7 +536,8 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 .with_message(format!(
                     "missing trait function {:?} in implementation for type {:?}",
                     error.func_name, error.type_name
-                ));
+                ))
+                .with_help("Implemented the missing function in the trait implementation");
             report.finish()
         }
         LoweringError::UnexpectedTraitFunction(error) => {
@@ -573,7 +576,8 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 .with_message(format!(
                     "unexpected function {:?} in implementation for type {:?}",
                     error.func_name, error.type_name
-                ));
+                ))
+                .with_help("Remove the unexpected function from the trait implementation");
             report.finish()
         }
     }
