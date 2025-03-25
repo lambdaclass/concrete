@@ -18,6 +18,10 @@ mod string {
             return value;
         }
 
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
         pub fn get(&self, at: u64) -> char {
             // todo: bounds check
             let target_ptr: *mut u8 = self.ptr + self.len;

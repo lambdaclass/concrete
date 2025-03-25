@@ -12,3 +12,6 @@ debug_info = false
 release = false
 opt_level = 0
 debug_info = true
+
+[dependencies]
+std = { path = "../../std", version = "0.1.0" }

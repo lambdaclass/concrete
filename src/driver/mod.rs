@@ -8,8 +8,8 @@ use anyhow::Result;
 use anyhow::bail;
 use clap::Args;
 use clap::{Parser, Subcommand};
-use config::{Package, Profile};
-use git2::{IndexAddOption, Repository};
+use config::{Dependency, Package, Profile};
+use git2::{IndexAddOption, Oid, Repository};
 use owo_colors::OwoColorize;
 use std::io::Read;
 use std::os::unix::process::CommandExt;
@@ -208,7 +208,7 @@ pub fn main() -> Result<()> {
 
             std::fs::write(config_path, toml::to_string_pretty(&config)?)
                 .context("failed to write Concrete.toml")?;
-            std::fs::write(path.join(".gitignore"), "/build\n")
+            std::fs::write(path.join(".gitignore"), "/build\n.stones/\n")
                 .context("failed to write .gitignore")?;
             std::fs::write(
                 path.join(".gitattributes"),
@@ -289,29 +289,31 @@ pub fn main() -> Result<()> {
 
             let mut passed = 0;
 
-            let lib = unsafe { libloading::Library::new(output).expect("failed to load") };
+            if !tests.is_empty() {
+                let lib = unsafe { libloading::Library::new(output).expect("failed to load") };
 
-            for test in tests.iter() {
-                print!("test {} ... ", test.symbol);
-                let test_fn = unsafe {
-                    lib.get::<unsafe extern "C" fn() -> i32>(test.mangled_symbol.as_bytes())
-                };
+                for test in tests.iter() {
+                    print!("test {} ... ", test.symbol);
+                    let test_fn = unsafe {
+                        lib.get::<unsafe extern "C" fn() -> i32>(test.mangled_symbol.as_bytes())
+                    };
 
-                if test_fn.is_err() {
-                    println!("{}", "err".red());
-                    eprintln!("Symbol not found: {:?}", test_fn);
-                    continue;
-                }
+                    if test_fn.is_err() {
+                        println!("{}", "err".red());
+                        eprintln!("Symbol not found: {:?}", test_fn);
+                        continue;
+                    }
 
-                let test_fn = test_fn.unwrap();
+                    let test_fn = test_fn.unwrap();
 
-                let result = unsafe { (test_fn)() };
+                    let result = unsafe { (test_fn)() };
 
-                if result == 0 {
-                    passed += 1;
-                    println!("{}", "ok".green());
-                } else {
-                    println!("{}", "err".red());
+                    if result == 0 {
+                        passed += 1;
+                        println!("{}", "ok".green());
+                    } else {
+                        println!("{}", "err".red());
+                    }
                 }
             }
 
@@ -394,7 +396,8 @@ fn handle_build(
             );
 
             let start = Instant::now();
-            let (object, tests) = compile(&compile_args)?;
+            let ast_file = parse_file(input.clone())?;
+            let (object, tests) = compile(&compile_args, &[ast_file])?;
 
             if lib {
                 link_shared_lib(&[object.clone()], &output)?;
@@ -443,13 +446,6 @@ fn handle_build(
             let mut buf = String::new();
             config.read_to_string(&mut buf)?;
             let config: Config = toml::from_str(&buf).context("failed to parse Concrete.toml")?;
-            println!(
-                "   {} {} v{} ({})",
-                "Compiling".green().bold(),
-                config.package.name,
-                config.package.version,
-                base_dir.display()
-            );
             let src_dir = base_dir.join("src");
             let target_dir = base_dir.join("build");
             if !target_dir.exists() {
@@ -489,6 +485,9 @@ fn handle_build(
 
             let mut tests = Vec::new();
 
+            let mut added_deps = HashMap::new();
+            let compile_units_ast = compile_project(base_dir, false, &mut added_deps)?;
+
             for file in [main_ed, lib_ed] {
                 if file.exists() {
                     let is_lib = file.file_stem().unwrap() == "lib";
@@ -516,7 +515,7 @@ fn handle_build(
                         mlir,
                         check,
                     };
-                    let (object, file_tests) = compile(&compile_args)?;
+                    let (object, file_tests) = compile(&compile_args, &compile_units_ast)?;
                     tests.extend(file_tests);
 
                     if compile_args.library {
@@ -549,6 +548,103 @@ fn handle_build(
 
             Ok((output, tests))
         }
+    }
+}
+
+pub fn compile_project(
+    project_dir: &Path,
+    is_dep: bool,
+    added_deps: &mut HashMap<String, Dependency>,
+) -> Result<Vec<CompilationUnit>> {
+    let config_path = project_dir.join("Concrete.toml");
+    let mut config = File::open(&config_path).context("failed to open Concrete.toml")?;
+    let mut buf = String::new();
+    config.read_to_string(&mut buf)?;
+    let config: Config = toml::from_str(&buf).context("failed to parse Concrete.toml")?;
+
+    let mut deps = Vec::new();
+
+    for (name, info) in config.dependencies.iter() {
+        if added_deps.contains_key(name) {
+            // TODO: better dependency unification.
+            // Maybe allow duplicate dependencies, however we can't allow duplicate stds due to lang items.
+            continue;
+        }
+
+        let path = checkout_dependency(project_dir, name, info)?;
+
+        added_deps.insert(name.clone(), info.clone());
+
+        let compile_units = compile_project(&path, true, added_deps)?;
+
+        deps.extend(compile_units);
+    }
+
+    println!(
+        "   {} {} v{} ({})",
+        "Compiling".green().bold(),
+        config.package.name,
+        config.package.version,
+        project_dir.display()
+    );
+
+    let src_dir = project_dir.join("src");
+
+    let lib_ed = src_dir.join("lib.con");
+    let main_ed = src_dir.join("main.con");
+
+    for file in [main_ed, lib_ed] {
+        if file.exists() {
+            let is_lib = file.file_stem().unwrap() == "lib";
+
+            if !is_lib && is_dep {
+                continue;
+            }
+
+            let compile_unit_ir = parse_file(file)?;
+
+            deps.push(compile_unit_ir);
+        }
+    }
+
+    Ok(deps)
+}
+
+pub fn checkout_dependency(base_dir: &Path, name: &str, dep: &Dependency) -> Result<PathBuf> {
+    if let Some(path) = &dep.path {
+        return Ok(path.clone());
+    }
+
+    if let Some(git) = &dep.git {
+        let bricks_folder = base_dir.join(".bricks");
+
+        if !bricks_folder.exists() {
+            std::fs::create_dir_all(&bricks_folder)?;
+        }
+
+        let dir = bricks_folder.join(name);
+
+        if dir.exists() {
+            return Ok(dir);
+        }
+
+        println!(
+            "   {} {} ({})",
+            "Downloading".green().bold(),
+            name,
+            dep.r#ref.clone().unwrap_or("head".to_string()),
+        );
+
+        let repo = Repository::clone_recurse(git, &dir).context("Failed to clone dependency")?;
+
+        if let Some(commit) = &dep.r#ref {
+            let comm = repo.find_commit(Oid::from_str(commit)?)?;
+            repo.checkout_tree(comm.as_object(), None)?;
+        }
+
+        Ok(dir)
+    } else {
+        anyhow::bail!("No path or git specified for dependency.")
     }
 }
 
@@ -623,10 +719,8 @@ pub fn parse_file(mut path: PathBuf) -> Result<CompilationUnit> {
     Ok(compile_unit)
 }
 
-pub fn compile(args: &CompilerArgs) -> Result<(PathBuf, Vec<TestInfo>)> {
+pub fn compile(args: &CompilerArgs, ir: &[CompilationUnit]) -> Result<(PathBuf, Vec<TestInfo>)> {
     let start_time = Instant::now();
-
-    let compile_units = parse_file(args.input.clone())?;
 
     let session = CompileUnitInfo {
         debug_info: if let Some(debug_info) = args.debug_info {
@@ -666,11 +760,11 @@ pub fn compile(args: &CompilerArgs) -> Result<(PathBuf, Vec<TestInfo>)> {
     if args.ast {
         std::fs::write(
             session.output_file.with_extension("ast"),
-            format!("{:#?}", compile_units),
+            format!("{:#?}", ir),
         )?;
     }
 
-    let compile_unit_ir = match lower_compile_units(&[compile_units]) {
+    let compile_unit_ir = match lower_compile_units(ir) {
         Ok(ir) => ir,
         Err(error) => {
             let report = crate::check::lowering_error_to_report(error);

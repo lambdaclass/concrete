@@ -225,7 +225,6 @@ GenericParams: Vec<ast::common::GenericParam> = {
 pub CompilationUnit: ast::CompilationUnit = {
   <Module> => {
     ast::CompilationUnit {
-      file_path: file_path.to_path_buf(),
       modules: vec![<>],
     }
   },
