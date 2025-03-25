@@ -1,19 +1,15 @@
 use self::error::Result;
-pub use self::tokens::Token;
+pub use self::tokens::{Token, TokenKind};
 use crate::{UpdateResult, buffer::InputBuffer};
 use logos::Logos;
-use std::{cmp::Ordering, ops::Range, path::PathBuf};
+use std::{cmp::Ordering, ops::Range};
 
 pub mod error;
 mod tokens;
 
 /// A token stream.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TokenStream {
-    /// Path to the source, relative to the project root.
-    path: PathBuf,
-
-    /// The stream's tokens.
     tokens: Vec<(Result<Token>, Range<usize>)>,
 }
 

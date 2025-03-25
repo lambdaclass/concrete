@@ -1,11 +1,12 @@
 use super::error::{Error, Result};
 use bigdecimal::BigDecimal;
 use itertools::Itertools;
+use kinded::Kinded;
 use logos::{Lexer, Logos};
 use num_bigint::{BigInt, BigUint, Sign};
 use std::iter::zip;
 
-#[derive(Clone, Debug, Eq, Logos, PartialEq)]
+#[derive(Clone, Debug, Kinded, Eq, Logos, PartialEq)]
 #[logos(
     error = Error,
     skip r"\s+"
@@ -83,6 +84,10 @@ pub enum Token {
     KwSelf,
     #[token("struct")]
     KwStruct,
+    #[token("trait")]
+    KwTrait,
+    #[token("type")]
+    KwType,
     #[token("union")]
     KwUnion,
     #[token("while")]

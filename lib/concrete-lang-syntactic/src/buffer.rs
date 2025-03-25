@@ -1,16 +1,9 @@
 use crate::UpdateResult;
-use std::{
-    ops::{Bound, Deref, Range, RangeBounds},
-    path::PathBuf,
-};
+use std::ops::{Bound, Deref, Range, RangeBounds};
 
 /// An input buffer.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct InputBuffer {
-    /// Path to the source, relative to the project root.
-    path: PathBuf,
-
-    /// Buffer contents.
     data: String,
 }
 
