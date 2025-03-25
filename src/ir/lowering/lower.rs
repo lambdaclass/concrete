@@ -11,7 +11,13 @@ use crate::{
 };
 
 use super::{
-    adts::{lower_enum, lower_struct}, constants::lower_constant, functions::{lower_func, lower_func_decl}, ir::{ModuleIndex, Type, IR}, traits::{TraitDatabase, TraitGeneric, TraitImpl}, types::lower_type, IRBuilderContext, Symbol
+    IRBuilderContext, Symbol,
+    adts::{lower_enum, lower_struct},
+    constants::lower_constant,
+    functions::{lower_func, lower_func_decl},
+    ir::{IR, ModuleIndex, Type},
+    traits::{TraitDatabase, TraitGeneric, TraitImpl},
+    types::lower_type,
 };
 
 /// Lowers the ast compile units, the last should be the "main" unit whose unit tests are saved.
