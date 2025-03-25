@@ -39,7 +39,10 @@
 use self::{mods::ModuleItem, utils::Seq};
 use crate::{
     lexer::TokenKind,
-    parser::parse::{CheckResult, ParseContext, ParseNode},
+    parser::{
+        error::Result,
+        parse::{CheckResult, ParseContext, ParseNode},
+    },
 };
 
 mod decls;
@@ -54,10 +57,12 @@ impl ParseNode for SourceFile {
         Seq::<ModuleItem>::check(kind)
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        context.parse::<Seq<ModuleItem>>();
-        assert!(context.is_end());
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.parse::<Seq<ModuleItem>>()?;
+        if !context.is_end() {
+            todo!();
+        }
 
-        0
+        Ok(0)
     }
 }

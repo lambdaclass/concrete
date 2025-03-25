@@ -5,7 +5,7 @@ fn main() {
     let mut stream = TokenStream::default();
     let mut parser = Parser::default();
 
-    let result = buffer.update(.., "import a.{b, c};");
+    let result = buffer.update(.., "");
     let result = stream.update(result.range, result.length, &buffer);
     parser.update(result.range, result.length, &stream);
     dbg!(parser);

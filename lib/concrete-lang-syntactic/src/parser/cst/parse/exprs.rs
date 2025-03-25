@@ -4,7 +4,10 @@ use super::{
 };
 use crate::{
     lexer::TokenKind,
-    parser::parse::{CheckResult, ParseContext, ParseNode},
+    parser::{
+        error::Result,
+        parse::{CheckResult, ParseContext, ParseNode},
+    },
 };
 
 pub struct BlockExpr;
@@ -16,13 +19,13 @@ impl ParseNode for BlockExpr {
             .unwrap_or_default()
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        context.next_of(TokenKind::LBrace);
-        context.parse::<Seq<Statement>>();
-        context.parse::<Expression>();
-        context.next_of(TokenKind::RBrace);
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::LBrace)?;
+        context.parse::<Seq<Statement>>()?;
+        context.parse::<Expression>()?;
+        context.next_of(TokenKind::RBrace)?;
 
-        0
+        Ok(0)
     }
 }
 
@@ -35,12 +38,12 @@ impl ParseNode for GroupExpr {
             .unwrap_or_default()
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        context.next_of(TokenKind::LParen);
-        context.parse::<Expression>();
-        context.next_of(TokenKind::RParen);
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::LParen)?;
+        context.parse::<Expression>()?;
+        context.next_of(TokenKind::RParen)?;
 
-        0
+        Ok(0)
     }
 }
 
@@ -81,43 +84,43 @@ impl ParseNode for Expression<0> {
         ])
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        match Self::check(context.peek()) {
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        Ok(match Self::check(context.peek()) {
             CheckResult::Always(0) => {
-                context.next_of(TokenKind::Ident);
+                context.next_of(TokenKind::Ident)?;
                 0
             }
             CheckResult::Always(1) => {
-                context.next_of(TokenKind::LitBool);
+                context.next_of(TokenKind::LitBool)?;
                 1
             }
             CheckResult::Always(2) => {
-                context.next_of(TokenKind::LitChar);
+                context.next_of(TokenKind::LitChar)?;
                 2
             }
             CheckResult::Always(3) => {
-                context.next_of(TokenKind::LitFloat);
+                context.next_of(TokenKind::LitFloat)?;
                 3
             }
             CheckResult::Always(4) => {
-                context.next_of(TokenKind::LitInt);
+                context.next_of(TokenKind::LitInt)?;
                 4
             }
             CheckResult::Always(5) => {
-                context.next_of(TokenKind::LitString);
+                context.next_of(TokenKind::LitString)?;
                 5
             }
             CheckResult::Always(6) => {
-                context.parse::<BlockExpr>();
+                context.parse::<BlockExpr>()?;
                 6
             }
             CheckResult::Always(7) => {
-                context.parse::<GroupExpr>();
+                context.parse::<GroupExpr>()?;
                 7
             }
             CheckResult::Always(_) | CheckResult::Empty(_) => unreachable!(),
             CheckResult::Never => todo!(),
-        }
+        })
     }
 }
 
@@ -126,16 +129,16 @@ impl ParseNode for Expression<1> {
         Expression::<0>::check(kind)
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        context.parse::<Expression<0>>();
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.parse::<Expression<0>>()?;
         while context.next_if(TokenKind::SymOpMul)
             || context.next_if(TokenKind::SymOpDiv)
             || context.next_if(TokenKind::SymOpRem)
         {
-            context.parse::<Expression<0>>();
+            context.parse::<Expression<0>>()?;
         }
 
-        0
+        Ok(0)
     }
 }
 
@@ -144,12 +147,12 @@ impl ParseNode for Expression<2> {
         Expression::<1>::check(kind)
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        context.parse::<Expression<1>>();
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.parse::<Expression<1>>()?;
         while context.next_if(TokenKind::SymOpAdd) || context.next_if(TokenKind::SymOpSub) {
-            context.parse::<Expression<1>>();
+            context.parse::<Expression<1>>()?;
         }
 
-        0
+        Ok(0)
     }
 }

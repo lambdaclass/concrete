@@ -1,8 +1,33 @@
 use crate::{
     lexer::TokenKind,
-    parser::parse::{CheckResult, ParseContext, ParseNode},
+    parser::{
+        error::Result,
+        parse::{CheckResult, ParseContext, ParseNode},
+    },
 };
 use std::marker::PhantomData;
+
+pub struct WithAbi<T>(PhantomData<T>);
+
+impl<T> ParseNode for WithAbi<T>
+where
+    T: ParseNode,
+{
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        match kind {
+            Some(TokenKind::KwExtern) => CheckResult::Always(0),
+            _ => T::check(kind),
+        }
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_if(TokenKind::KwExtern);
+        context.next_if(TokenKind::LitString);
+        context.parse::<T>()?;
+
+        Ok(0)
+    }
+}
 
 pub struct WithDoc<T>(PhantomData<T>);
 
@@ -17,11 +42,11 @@ where
         }
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
+    fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_if(TokenKind::DocString);
-        context.parse::<T>();
+        context.parse::<T>()?;
 
-        0
+        Ok(0)
     }
 }
 
@@ -38,11 +63,11 @@ where
         }
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
+    fn parse(context: &mut ParseContext) -> Result<usize> {
         let is_pub = context.next_if(TokenKind::KwPub);
-        context.parse::<T>();
+        context.parse::<T>()?;
 
-        0
+        Ok(is_pub as usize)
     }
 }
 
@@ -58,12 +83,12 @@ where
             .unwrap_or_default()
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        context.next_of(TokenKind::LBrace);
-        context.parse::<T>();
-        context.next_of(TokenKind::RBrace);
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::LBrace)?;
+        context.parse::<T>()?;
+        context.next_of(TokenKind::RBrace)?;
 
-        0
+        Ok(0)
     }
 }
 
@@ -79,12 +104,12 @@ where
             .unwrap_or_default()
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        context.next_of(TokenKind::LBracket);
-        context.parse::<T>();
-        context.next_of(TokenKind::RBracket);
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::LBracket)?;
+        context.parse::<T>()?;
+        context.next_of(TokenKind::RBracket)?;
 
-        0
+        Ok(0)
     }
 }
 
@@ -100,12 +125,12 @@ where
             .unwrap_or_default()
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        context.next_of(TokenKind::LParen);
-        context.parse::<T>();
-        context.next_of(TokenKind::RParen);
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::LParen)?;
+        context.parse::<T>()?;
+        context.next_of(TokenKind::RParen)?;
 
-        0
+        Ok(0)
     }
 }
 
@@ -125,24 +150,24 @@ where
         }
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
+    fn parse(context: &mut ParseContext) -> Result<usize> {
         const {
             assert!(MAX >= MIN);
         }
 
         for _ in 0..MIN {
-            context.parse::<T>();
+            context.parse::<T>()?;
         }
 
         for _ in MIN..MAX {
             match T::check(context.peek()) {
-                CheckResult::Always(_) => context.parse::<T>(),
+                CheckResult::Always(_) => context.parse::<T>()?,
                 CheckResult::Empty(_) => unreachable!(),
                 CheckResult::Never => break,
             };
         }
 
-        0
+        Ok(0)
     }
 }
 
@@ -163,18 +188,18 @@ where
         Seq::<T, MIN, MAX>::check(kind)
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
+    fn parse(context: &mut ParseContext) -> Result<usize> {
         // TODO: Support MIN and MAX bounds.
 
         while T::check(context.peek()).is_always() {
-            context.parse::<T>();
+            context.parse::<T>()?;
 
             if !context.next_if(TokenKind::SymComma) || !ALLOW_TRAILING {
                 break;
             }
         }
 
-        0
+        Ok(0)
     }
 }
 

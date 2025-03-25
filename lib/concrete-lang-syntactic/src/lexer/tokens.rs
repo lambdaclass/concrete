@@ -7,6 +7,7 @@ use num_bigint::{BigInt, BigUint, Sign};
 use std::iter::zip;
 
 #[derive(Clone, Debug, Kinded, Logos, PartialEq)]
+#[kinded(derive(Ord, PartialOrd))]
 #[logos(
     error = Error,
     skip r"\s+"
@@ -90,6 +91,8 @@ pub enum Token {
     KwType,
     #[token("union")]
     KwUnion,
+    #[token("where")]
+    KwWhere,
     #[token("while")]
     KwWhile,
 

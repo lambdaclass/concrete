@@ -1,13 +1,18 @@
 use super::ParseNode;
 use crate::{
     lexer::{Token, TokenKind},
-    parser::storage::TreeNodeParse,
+    parser::{
+        error::{Error, Result},
+        storage::TreeNodeParse,
+    },
 };
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug)]
 pub struct ParseContext<'stream, 'storage> {
     buffer: &'stream [Token],
     storage: TreeNodeParse<'storage>,
+    // TODO: Add an error field that gets updated or cleared automatically when parsing.
 }
 
 impl<'stream, 'storage> ParseContext<'stream, 'storage> {
@@ -32,15 +37,24 @@ impl<'stream, 'storage> ParseContext<'stream, 'storage> {
     }
 
     #[track_caller]
-    pub fn next_of(&mut self, kind: TokenKind) {
-        assert!(self.next_if(kind));
+    pub fn next_of(&mut self, kind: TokenKind) -> Result<()> {
+        if !self.next_if(kind) {
+            return Err(Error {
+                offset: self.storage.range().end,
+                expected_nodes: BTreeMap::new(),
+                altern_symbols: BTreeSet::from([kind]),
+                at_end: false,
+            });
+        }
+
+        Ok(())
     }
 
     pub fn is_end(&self) -> bool {
         self.buffer.is_empty()
     }
 
-    pub fn parse<T>(&mut self) -> usize
+    pub fn parse<T>(&mut self) -> Result<usize>
     where
         T: ParseNode,
     {
@@ -48,8 +62,10 @@ impl<'stream, 'storage> ParseContext<'stream, 'storage> {
             buffer: self.buffer,
             storage: self.storage.push_child::<T>(),
         };
-        let extra = T::parse(&mut context);
-        context.storage.set_extra(extra);
+        let result = T::parse(&mut context);
+        if let Ok(extra) = result {
+            context.storage.set_extra(extra);
+        }
 
         self.buffer = context.buffer;
 
@@ -57,6 +73,6 @@ impl<'stream, 'storage> ParseContext<'stream, 'storage> {
         let len = context.storage.len();
         self.storage.finish_child(range, len);
 
-        extra
+        result
     }
 }

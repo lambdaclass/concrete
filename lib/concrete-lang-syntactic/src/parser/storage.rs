@@ -1,5 +1,5 @@
 pub use self::{parse::TreeNodeParse, visit::TreeNodeVisit};
-use super::parse::ParseContext;
+use super::{error::Result, parse::ParseContext};
 use std::ops::Range;
 
 mod parse;
@@ -11,12 +11,12 @@ pub struct TreeNode {
     extra: usize,
     len: usize,
 
-    update: fn(&mut ParseContext) -> usize,
+    update: fn(&mut ParseContext) -> Result<usize>,
 }
 
 impl TreeNode {
     #[doc(hidden)]
-    pub(crate) fn new_at(offset: usize, update: fn(&mut ParseContext) -> usize) -> Self {
+    pub(crate) fn new_at(offset: usize, update: fn(&mut ParseContext) -> Result<usize>) -> Self {
         Self {
             range: offset..offset,
             extra: 0,
@@ -33,7 +33,7 @@ impl TreeNode {
         self.len
     }
 
-    pub fn update(&self) -> fn(&mut ParseContext) -> usize {
+    pub fn update(&self) -> fn(&mut ParseContext) -> Result<usize> {
         self.update
     }
 }

@@ -4,9 +4,10 @@ use self::{
     storage::{TreeNode, TreeNodeParse},
 };
 use crate::{UpdateResult, lexer::TokenStream};
-use std::{mem, ops::Range};
+use std::ops::Range;
 
 mod cst;
+pub mod error;
 mod parse;
 mod storage;
 
@@ -40,7 +41,9 @@ impl Parser {
 
             let mut context =
                 ParseContext::new(stream, TreeNodeParse::new(&mut self.nodes, offset));
-            update(&mut context);
+            update(&mut context).unwrap();
+
+            // TODO: Update remaining nodes' offsets.
 
             break;
         }

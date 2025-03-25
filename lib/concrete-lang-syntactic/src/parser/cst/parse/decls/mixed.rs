@@ -8,11 +8,15 @@
 //! The `Decl` parsers are used for declarations, and may or may not have a default value. The `Def`
 //! variants must always have a value.
 
-use super::{GenericsDecl, TypeRef, WhereClause};
+use super::{FieldDecl, GenericsDecl, TypeRef, WhereClause};
 use crate::{
     lexer::TokenKind,
     parser::{
-        cst::parse::exprs::{BlockExpr, Expression},
+        cst::parse::{
+            exprs::{BlockExpr, Expression},
+            utils::{CommaSep, Parens},
+        },
+        error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
     },
 };
@@ -26,18 +30,18 @@ impl ParseNode for AliasDecl {
             .unwrap_or_default()
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        context.next_of(TokenKind::KwType);
-        context.next_of(TokenKind::Ident);
-        context.parse::<GenericsDecl>();
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::KwType)?;
+        context.next_of(TokenKind::Ident)?;
+        context.parse::<GenericsDecl>()?;
         let has_value = context.next_if(TokenKind::SymAssign);
         if has_value {
-            context.parse::<TypeRef>();
+            context.parse::<TypeRef>()?;
         }
-        context.parse::<WhereClause>();
-        context.next_of(TokenKind::SymSemi);
+        context.parse::<WhereClause>()?;
+        context.next_of(TokenKind::SymSemi)?;
 
-        has_value as usize
+        Ok(has_value as usize)
     }
 }
 
@@ -50,15 +54,15 @@ impl ParseNode for AliasDef {
             .unwrap_or_default()
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        context.next_of(TokenKind::KwType);
-        context.next_of(TokenKind::Ident);
-        context.parse::<GenericsDecl>();
-        context.next_of(TokenKind::SymAssign);
-        context.parse::<TypeRef>();
-        context.next_of(TokenKind::SymSemi);
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::KwType)?;
+        context.next_of(TokenKind::Ident)?;
+        context.parse::<GenericsDecl>()?;
+        context.next_of(TokenKind::SymAssign)?;
+        context.parse::<TypeRef>()?;
+        context.next_of(TokenKind::SymSemi)?;
 
-        0
+        Ok(0)
     }
 }
 
@@ -71,18 +75,18 @@ impl ParseNode for ConstDecl {
             .unwrap_or_default()
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        context.next_of(TokenKind::KwConst);
-        context.next_of(TokenKind::Ident);
-        context.next_of(TokenKind::SymColon);
-        context.parse::<TypeRef>();
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::KwConst)?;
+        context.next_of(TokenKind::Ident)?;
+        context.next_of(TokenKind::SymColon)?;
+        context.parse::<TypeRef>()?;
         let has_value = context.next_if(TokenKind::SymAssign);
         if has_value {
-            context.parse::<Expression>();
+            context.parse::<Expression>()?;
         }
-        context.next_of(TokenKind::SymSemi);
+        context.next_of(TokenKind::SymSemi)?;
 
-        has_value as usize
+        Ok(has_value as usize)
     }
 }
 
@@ -95,16 +99,16 @@ impl ParseNode for ConstDef {
             .unwrap_or_default()
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        context.next_of(TokenKind::KwConst);
-        context.next_of(TokenKind::Ident);
-        context.next_of(TokenKind::SymColon);
-        context.parse::<TypeRef>();
-        context.next_of(TokenKind::SymAssign);
-        context.parse::<Expression>();
-        context.next_of(TokenKind::SymSemi);
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::KwConst)?;
+        context.next_of(TokenKind::Ident)?;
+        context.next_of(TokenKind::SymColon)?;
+        context.parse::<TypeRef>()?;
+        context.next_of(TokenKind::SymAssign)?;
+        context.parse::<Expression>()?;
+        context.next_of(TokenKind::SymSemi)?;
 
-        0
+        Ok(0)
     }
 }
 
@@ -124,26 +128,22 @@ impl ParseNode for FuncDecl {
         })
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        let has_abi = context.next_if(TokenKind::KwExtern);
-        if has_abi {
-            context.next_of(TokenKind::LitString);
-        }
-        context.next_of(TokenKind::KwFn);
-        context.next_of(TokenKind::Ident);
-        context.parse::<GenericsDecl>();
-        // TODO: context.parse::<Parens<CommaSep<FieldDecl>>>();
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::KwFn)?;
+        context.next_of(TokenKind::Ident)?;
+        context.parse::<GenericsDecl>()?;
+        context.parse::<Parens<CommaSep<FieldDecl>>>()?;
         let has_return_type = context.next_if(TokenKind::SymArrow);
         if has_return_type {
-            context.parse::<TypeRef>();
+            context.parse::<TypeRef>()?;
         }
-        context.parse::<WhereClause>();
+        context.parse::<WhereClause>()?;
         let has_body = BlockExpr::check(context.peek()).is_always();
         if has_body {
-            context.parse::<BlockExpr>();
+            context.parse::<BlockExpr>()?;
         }
 
-        has_abi as usize | ((has_return_type as usize) << 1) | ((has_body as usize) << 2)
+        Ok((has_return_type as usize) | ((has_body as usize) << 1))
     }
 }
 
@@ -163,22 +163,18 @@ impl ParseNode for FuncDef {
         })
     }
 
-    fn parse(context: &mut ParseContext) -> usize {
-        let has_abi = context.next_if(TokenKind::KwExtern);
-        if has_abi {
-            context.next_of(TokenKind::LitString);
-        }
-        context.next_of(TokenKind::KwFn);
-        context.next_of(TokenKind::Ident);
-        context.parse::<GenericsDecl>();
-        // TODO: context.parse::<Parens<CommaSep<FieldDecl>>>();
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::KwFn)?;
+        context.next_of(TokenKind::Ident)?;
+        context.parse::<GenericsDecl>()?;
+        context.parse::<Parens<CommaSep<FieldDecl>>>()?;
         let has_return_type = context.next_if(TokenKind::SymArrow);
         if has_return_type {
-            context.parse::<TypeRef>();
+            context.parse::<TypeRef>()?;
         }
-        context.parse::<WhereClause>();
-        context.parse::<BlockExpr>();
+        context.parse::<WhereClause>()?;
+        context.parse::<BlockExpr>()?;
 
-        has_abi as usize | ((has_return_type as usize) << 1)
+        Ok(has_return_type as usize)
     }
 }

@@ -1,11 +1,12 @@
 pub use self::context::ParseContext;
+use super::error::Result;
 use crate::lexer::TokenKind;
 
 mod context;
 
 pub trait ParseNode {
     fn check(kind: Option<TokenKind>) -> CheckResult;
-    fn parse(context: &mut ParseContext) -> usize;
+    fn parse(context: &mut ParseContext) -> Result<usize>;
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
