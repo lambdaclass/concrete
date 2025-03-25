@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use tracing::debug;
 use typed_generational_arena::{StandardSlab, StandardSlabIndex};
 
 use crate::{
@@ -55,6 +56,7 @@ impl TraitDatabase {
     }
 
     pub fn add_trait(&mut self, tr: Arc<TraitDecl>, module_idx: ModuleIndex) -> TraitIdx {
+        debug!("Adding trait: {:?}", tr.name.name);
         let name = tr.name.name.clone();
         let idx = self.traits.insert(tr);
         self.name_to_trait.insert((module_idx.to_idx(), name), idx);
@@ -69,6 +71,11 @@ impl TraitDatabase {
     }
 
     pub fn add_trait_impl(&mut self, idx: TraitIdx, im: TraitImpl) {
+        let tr = &self.traits[idx];
+        debug!(
+            "Adding trait impl: name={} generics={:?}",
+            &tr.name.name, im.generics
+        );
         let implementors = self.implementors.entry(idx.to_idx()).or_default();
         let entry = implementors.entry(im.implementor.to_idx()).or_default();
         entry.push(im);
