@@ -537,7 +537,7 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                     "missing trait function {:?} in implementation for type {:?}",
                     error.func_name, error.type_name
                 ))
-                .with_help("Implemented the missing function in the trait implementation");
+                .with_help("Implement the missing function in the trait implementation");
             report.finish()
         }
         LoweringError::UnexpectedTraitFunction(error) => {
