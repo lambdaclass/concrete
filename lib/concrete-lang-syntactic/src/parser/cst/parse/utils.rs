@@ -135,7 +135,7 @@ where
         }
 
         for _ in MIN..MAX {
-            match Self::check(context.peek()) {
+            match T::check(context.peek()) {
                 CheckResult::Always(_) => context.parse::<T>(),
                 CheckResult::Empty(_) => unreachable!(),
                 CheckResult::Never => break,
@@ -166,10 +166,10 @@ where
     fn parse(context: &mut ParseContext) -> usize {
         // TODO: Support MIN and MAX bounds.
 
-        while Self::check(context.peek()).is_always() {
+        while T::check(context.peek()).is_always() {
             context.parse::<T>();
 
-            if !context.next_if(TokenKind::SymComma) || ALLOW_TRAILING {
+            if !context.next_if(TokenKind::SymComma) || !ALLOW_TRAILING {
                 break;
             }
         }

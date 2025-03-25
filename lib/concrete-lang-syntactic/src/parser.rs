@@ -28,6 +28,7 @@ impl Parser {
         }
 
         let original_cst = self.nodes.clone();
+        #[allow(clippy::never_loop)]
         while let Some(offset) = offset_stack.pop() {
             self.nodes.truncate(offset);
 
@@ -39,14 +40,12 @@ impl Parser {
 
             let mut context =
                 ParseContext::new(stream, TreeNodeParse::new(&mut self.nodes, offset));
-            let extra = update(&mut context);
-            context.node.set_extra(extra);
+            update(&mut context);
 
-            todo!()
+            break;
         }
 
-        // TODO:
-        todo!()
+        UpdateResult { range, length }
     }
 }
 

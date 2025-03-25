@@ -56,6 +56,7 @@ impl ParseNode for SourceFile {
 
     fn parse(context: &mut ParseContext) -> usize {
         context.parse::<Seq<ModuleItem>>();
+        assert!(context.is_end());
 
         0
     }

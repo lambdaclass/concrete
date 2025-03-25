@@ -6,7 +6,7 @@ use logos::{Lexer, Logos};
 use num_bigint::{BigInt, BigUint, Sign};
 use std::iter::zip;
 
-#[derive(Clone, Debug, Kinded, Eq, Logos, PartialEq)]
+#[derive(Clone, Debug, Kinded, Logos, PartialEq)]
 #[logos(
     error = Error,
     skip r"\s+"
@@ -164,6 +164,11 @@ pub enum Token {
     LParen,
     #[token(")")]
     RParen,
+
+    //
+    // Other.
+    //
+    Error(Error),
 }
 
 fn lex_ident(lex: &mut Lexer<Token>) -> String {

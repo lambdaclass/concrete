@@ -179,7 +179,7 @@ impl ParseNode for ImportItem {
                 }
             }
             CheckResult::Always(2) => {
-                context.parse::<CommaSep<ImportItem>>();
+                context.parse::<Braces<CommaSep<ImportItem>>>();
                 2
             }
             CheckResult::Always(_) | CheckResult::Empty(_) => unreachable!(),

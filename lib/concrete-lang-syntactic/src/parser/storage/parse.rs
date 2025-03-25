@@ -2,6 +2,7 @@ use super::TreeNode;
 use crate::parser::parse::ParseNode;
 use std::ops::Range;
 
+#[derive(Debug)]
 pub struct TreeNodeParse<'storage> {
     values: &'storage mut Vec<TreeNode>,
     current: usize,

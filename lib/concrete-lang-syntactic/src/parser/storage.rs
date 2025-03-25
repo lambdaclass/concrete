@@ -19,8 +19,8 @@ impl TreeNode {
     pub(crate) fn new_at(offset: usize, update: fn(&mut ParseContext) -> usize) -> Self {
         Self {
             range: offset..offset,
-            extra: (),
-            len: (),
+            extra: 0,
+            len: 0,
             update,
         }
     }

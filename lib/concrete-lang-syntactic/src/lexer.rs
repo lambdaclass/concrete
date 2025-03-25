@@ -1,8 +1,10 @@
-use self::error::Result;
 pub use self::tokens::{Token, TokenKind};
 use crate::{UpdateResult, buffer::InputBuffer};
 use logos::Logos;
-use std::{cmp::Ordering, ops::Range};
+use std::{
+    cmp::Ordering,
+    ops::{Deref, Range},
+};
 
 pub mod error;
 mod tokens;
@@ -10,7 +12,8 @@ mod tokens;
 /// A token stream.
 #[derive(Debug, Default)]
 pub struct TokenStream {
-    tokens: Vec<(Result<Token>, Range<usize>)>,
+    tokens: Vec<Token>,
+    ranges: Vec<Range<usize>>,
 }
 
 impl TokenStream {
@@ -22,25 +25,36 @@ impl TokenStream {
         buffer: &InputBuffer,
     ) -> UpdateResult {
         // Find token range to update.
-        let token_range = find_update_token_range(self.tokens.as_slice(), range.clone());
+        let token_range = find_update_token_range(&self.ranges, range.clone());
 
         // Update the span of all remaining tokens.
         let offset_delta = length as isize - range.len() as isize;
-        for (_, span) in &mut self.tokens[token_range.end..] {
+        for span in &mut self.ranges[token_range.end..] {
             span.start = span.start.wrapping_add_signed(offset_delta);
             span.end = span.end.wrapping_add_signed(offset_delta);
         }
 
         // Splice and reparse affected tokens.
         let splice_range = Range {
-            start: self.tokens[token_range.start].1.start,
-            end: self.tokens[token_range.end].1.end,
+            start: self
+                .ranges
+                .get(token_range.start)
+                .map(|range| range.start)
+                .unwrap_or(0),
+            end: self
+                .ranges
+                .get(token_range.end)
+                .map(|range| range.end)
+                .unwrap_or(buffer.len()),
         };
         let num_tokens = self.tokens.len() - token_range.len();
-        self.tokens.splice(
-            token_range.clone(),
-            Token::lexer(&buffer[splice_range]).spanned(),
-        );
+
+        let (new_tokens, new_ranges): (Vec<_>, Vec<_>) = Token::lexer(&buffer[splice_range])
+            .spanned()
+            .map(|(token, range)| (token.unwrap_or_else(Token::Error), range))
+            .unzip();
+        self.tokens.splice(token_range.clone(), new_tokens);
+        self.ranges.splice(token_range.clone(), new_ranges);
 
         UpdateResult {
             range: token_range,
@@ -49,11 +63,16 @@ impl TokenStream {
     }
 }
 
-fn find_update_token_range(
-    items: &[(Result<Token>, Range<usize>)],
-    range: Range<usize>,
-) -> Range<usize> {
-    let lhs_search_fn = |(_, span): &(_, Range<usize>)| {
+impl Deref for TokenStream {
+    type Target = [Token];
+
+    fn deref(&self) -> &Self::Target {
+        &self.tokens
+    }
+}
+
+fn find_update_token_range(items: &[Range<usize>], range: Range<usize>) -> Range<usize> {
+    let lhs_search_fn = |span: &Range<usize>| {
         let value = range.start;
         if value <= span.start {
             Ordering::Greater
@@ -63,7 +82,7 @@ fn find_update_token_range(
             Ordering::Less
         }
     };
-    let rhs_search_fn = |(_, span): &(_, Range<usize>)| {
+    let rhs_search_fn = |span: &Range<usize>| {
         let value = range.end;
         if value < span.start {
             Ordering::Greater

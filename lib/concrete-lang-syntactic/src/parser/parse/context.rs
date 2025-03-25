@@ -4,6 +4,7 @@ use crate::{
     parser::storage::TreeNodeParse,
 };
 
+#[derive(Debug)]
 pub struct ParseContext<'stream, 'storage> {
     buffer: &'stream [Token],
     storage: TreeNodeParse<'storage>,
@@ -30,8 +31,13 @@ impl<'stream, 'storage> ParseContext<'stream, 'storage> {
         }
     }
 
+    #[track_caller]
     pub fn next_of(&mut self, kind: TokenKind) {
         assert!(self.next_if(kind));
+    }
+
+    pub fn is_end(&self) -> bool {
+        self.buffer.is_empty()
     }
 
     pub fn parse<T>(&mut self) -> usize
