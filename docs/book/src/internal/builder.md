@@ -1,6 +1,6 @@
 # The IR builder
 
-This struct is used during the building of the IR, it holds structures needed only temporarely while building.
+This struct is used during the building of the IR, it holds structures needed only temporarily while building.
 
 Some of these structures are:
 
