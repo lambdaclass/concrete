@@ -1,10 +1,14 @@
 use super::{
-    AliasDecl, AliasDef, ConstDecl, ConstDef, FuncDecl, FuncDef, GenericsDecl, WhereClause,
+    AliasDecl, AliasDef, ConstDecl, ConstDef, FuncDecl, FuncDef, GenericsDecl, TypeRef, WhereClause,
 };
 use crate::{
     lexer::TokenKind,
     parser::{
-        cst::parse::utils::{Braces, check_enum},
+        cst::parse::{
+            exprs::Expression,
+            mods::ModuleItem,
+            utils::{Braces, Seq, check_enum},
+        },
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
     },
@@ -24,9 +28,7 @@ impl ParseNode for TraitDef {
         context.next_of(TokenKind::Ident)?;
         context.parse::<GenericsDecl>()?;
         context.parse::<WhereClause>()?;
-        context.next_of(TokenKind::LBrace)?;
-        // TODO: Seq<TraitItemDecl>.
-        context.next_of(TokenKind::RBrace)?;
+        context.parse::<Braces<Seq<ImplItemDecl>>>()?;
 
         Ok(0)
     }
@@ -44,19 +46,11 @@ impl ParseNode for ImplBlock {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwImpl)?;
         context.parse::<GenericsDecl>()?;
-
-        // context.parse::<TypeRef>();
-        // if context.next_if(TokenKind::KwFor) {
-        //     // TODO: TypeRef
-        // }
-        //
-        // Trait: PathTypeRef 'for' TypeRef
-        // Type : TypeRef (incl. PathTypeRef)
-
+        if context.parse::<TypeRef>()? == 0 && context.next_if(TokenKind::KwFor) {
+            context.parse::<TypeRef>()?;
+        }
         context.parse::<WhereClause>()?;
-        context.next_of(TokenKind::LBrace)?;
-        // TODO: TraitItemDef.
-        context.next_of(TokenKind::RBrace)?;
+        context.parse::<Braces<Seq<ImplItemDef>>>()?;
 
         Ok(0)
     }
@@ -128,17 +122,60 @@ pub struct Statement;
 
 impl ParseNode for Statement {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        // TODO: Let binding.
-        // TODO: Let destructure.
-        // TODO: Expression.
-
-        todo!()
+        check_enum([
+            ModuleItem::check(kind),
+            LetStmt::check(kind),
+            <Expression>::check(kind),
+            // TODO: IfStmt, ForStmt, WhileStmt, LoopStmt...
+        ])
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        todo!()
+        Ok(match Self::check(context.peek()) {
+            CheckResult::Always(0) => {
+                context.parse::<ModuleItem>()?;
+                0
+            }
+            CheckResult::Always(1) => {
+                context.parse::<LetStmt>()?;
+                1
+            }
+            CheckResult::Always(2) => {
+                context.parse::<Expression>()?;
+                2
+            }
+            CheckResult::Always(_) | CheckResult::Empty(_) => unreachable!(),
+            CheckResult::Never => todo!(),
+        })
     }
 }
+
+pub struct LetStmt;
+
+impl ParseNode for LetStmt {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        (kind == Some(TokenKind::KwLet))
+            .then_some(CheckResult::Always(0))
+            .unwrap_or_default()
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::KwLet)?;
+        context.next_of(TokenKind::Ident)?;
+        // TODO: FieldsRef (for destructures).
+        context.next_of(TokenKind::SymAssign)?;
+        context.parse::<Expression>()?;
+
+        Ok(0)
+    }
+}
+
+// TODO: Node for LetStmt l-values:
+//   - Ident for simple assigns.
+//   - Ident + Parens<CommaSep<Self>> for tuple destructuring.
+//   - Ident + Braces<CommaSep<FieldRef>> for struct destructuring.
+//
+// Also, move FieldsDef, FieldDef, FieldsRef, FieldDef to here (behavior).
 
 pub struct FfiBlock;
 
