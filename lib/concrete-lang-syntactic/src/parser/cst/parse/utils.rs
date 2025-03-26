@@ -7,6 +7,7 @@ use crate::{
 };
 use std::marker::PhantomData;
 
+/// Parser for items that may have ABI specifications, like functions or FFI blocks.
 pub struct WithAbi<T>(PhantomData<T>);
 
 impl<T> ParseNode for WithAbi<T>
@@ -29,6 +30,7 @@ where
     }
 }
 
+/// Parser for items that may have documentation.
 pub struct WithDoc<T>(PhantomData<T>);
 
 impl<T> ParseNode for WithDoc<T>
@@ -50,6 +52,7 @@ where
     }
 }
 
+/// Parser for items that may have an associated visibility modifier.
 pub struct WithVis<T>(PhantomData<T>);
 
 impl<T> ParseNode for WithVis<T>
@@ -71,6 +74,7 @@ where
     }
 }
 
+/// Parser for items wrapped between `{` and `}`.
 pub struct Braces<T>(PhantomData<T>);
 
 impl<T> ParseNode for Braces<T>
@@ -92,6 +96,7 @@ where
     }
 }
 
+/// Parser for items wrapped between `[` and `]`.
 pub struct Brackets<T>(PhantomData<T>);
 
 impl<T> ParseNode for Brackets<T>
@@ -113,6 +118,7 @@ where
     }
 }
 
+/// Parser for items wrapped between `(` and `)`.
 pub struct Parens<T>(PhantomData<T>);
 
 impl<T> ParseNode for Parens<T>
@@ -134,6 +140,7 @@ where
     }
 }
 
+/// Parser for contiguous sequences of items, with optional minimum and maximum lengths.
 pub struct Seq<T, const MIN: usize = { usize::MIN }, const MAX: usize = { usize::MAX }>(
     PhantomData<T>,
 );
@@ -171,6 +178,8 @@ where
     }
 }
 
+/// Parser for comma-separated sequences of items, with optional trailing separator, minimum and
+/// maximum lengths.
 // TODO: Abstract `CommaSep` into `Sep` with generic separator.
 pub struct CommaSep<
     T,
@@ -203,6 +212,11 @@ where
     }
 }
 
+/// Utility to check if an enum is valid.
+///
+/// Will detect ambiguities in the following cases:
+///   - Two `CheckResult::Empty(_)` are detected before a `CheckResult::Always` is seen.
+///   - Two `CheckResult::Always(_)` are detected.
 pub fn check_enum<const N: usize>(variants: [CheckResult; N]) -> CheckResult {
     let mut result = CheckResult::Never;
     for (index, variant) in variants.into_iter().enumerate() {

@@ -32,9 +32,15 @@ impl ParseNode for TypeRef {
     }
 }
 
-pub struct GenericsDecl;
+/// A generics declaration, optionally supporting defaults.
+///
+/// Declares available generics for an item, with optional defaults.
+///
+/// > Note: Not to be confused with `GenericsDef`.
+// TODO: Make it always parse `<>` and use `Option<GenericsDecl>` where approipate.
+pub struct GenericsDecl<const WITH_DEFAULTS: bool = false>;
 
-impl ParseNode for GenericsDecl {
+impl<const WITH_DEFAULTS: bool> ParseNode for GenericsDecl<WITH_DEFAULTS> {
     fn check(kind: Option<TokenKind>) -> CheckResult {
         if kind == Some(TokenKind::SymCmpLt) {
             CheckResult::Always(1)
@@ -55,6 +61,7 @@ impl ParseNode for GenericsDecl {
     }
 }
 
+/// A generic declaration item.
 pub struct GenericDecl<const WITH_DEFAULTS: bool = false>;
 
 impl<const WITH_DEFAULTS: bool> ParseNode for GenericDecl<WITH_DEFAULTS> {
@@ -97,6 +104,12 @@ impl<const WITH_DEFAULTS: bool> ParseNode for GenericDecl<WITH_DEFAULTS> {
     }
 }
 
+/// A generics definition.
+///
+/// Defines the value of available generics for an item.
+///
+/// > Note: Not to be confused with `GenericsDecl`.
+// TODO: Make it always parse `<>` and use `Option<GenericsDef>` where approipate.
 pub struct GenericsDef;
 
 impl ParseNode for GenericsDef {
@@ -120,6 +133,7 @@ impl ParseNode for GenericsDef {
     }
 }
 
+/// A generic definition item.
 pub struct GenericDef;
 
 impl ParseNode for GenericDef {

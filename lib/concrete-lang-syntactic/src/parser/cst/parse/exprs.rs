@@ -1,6 +1,6 @@
 use super::{
     decls::Statement,
-    utils::{Seq, check_enum},
+    utils::{Parens, Seq, check_enum},
 };
 use crate::{
     lexer::TokenKind,
@@ -10,6 +10,16 @@ use crate::{
     },
 };
 
+/// A block expression.
+///
+/// # Example
+///
+/// ```text
+/// {
+///     // Zero or more statements.
+///     // Optionally, an expression to return.
+/// }
+/// ```
 pub struct BlockExpr;
 
 impl ParseNode for BlockExpr {
@@ -24,24 +34,6 @@ impl ParseNode for BlockExpr {
         context.parse::<Seq<Statement>>()?;
         context.parse::<Expression>()?;
         context.next_of(TokenKind::RBrace)?;
-
-        Ok(0)
-    }
-}
-
-pub struct GroupExpr;
-
-impl ParseNode for GroupExpr {
-    fn check(kind: Option<TokenKind>) -> CheckResult {
-        (kind == Some(TokenKind::LBrace))
-            .then_some(CheckResult::Always(0))
-            .unwrap_or_default()
-    }
-
-    fn parse(context: &mut ParseContext) -> Result<usize> {
-        context.next_of(TokenKind::LParen)?;
-        context.parse::<Expression>()?;
-        context.next_of(TokenKind::RParen)?;
 
         Ok(0)
     }
@@ -80,7 +72,7 @@ impl ParseNode for Expression<0> {
                 .then_some(CheckResult::Always(0))
                 .unwrap_or_default(),
             BlockExpr::check(kind),
-            GroupExpr::check(kind),
+            Parens::<Expression>::check(kind),
         ])
     }
 
@@ -115,7 +107,7 @@ impl ParseNode for Expression<0> {
                 6
             }
             CheckResult::Always(7) => {
-                context.parse::<GroupExpr>()?;
+                context.parse::<Parens<Expression>>()?;
                 7
             }
             CheckResult::Always(_) | CheckResult::Empty(_) => unreachable!(),

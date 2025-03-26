@@ -50,6 +50,7 @@ mod exprs;
 mod mods;
 mod utils;
 
+/// Parser for an entire source file.
 pub struct SourceFile;
 
 impl ParseNode for SourceFile {

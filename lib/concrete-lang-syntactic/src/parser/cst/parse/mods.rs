@@ -12,6 +12,14 @@ use crate::{
     },
 };
 
+/// A module declaration.
+///
+/// # Example
+///
+/// ```text
+/// mod external_module;
+/// mod inline_module {}
+/// ```
 pub struct ModuleDecl;
 
 impl ParseNode for ModuleDecl {
@@ -46,6 +54,12 @@ impl ParseNode for ModuleDecl {
     }
 }
 
+/// A module item.
+///
+/// May be one of the following:
+///   - `WithDoc<ModuleDocItem>`, which contains `AliasDef`, `ConstDef`, `EnumDef`, `FfiBlock`,
+///     `FuncDef`, `ImplBlock`, `StructDef, `TraitDef` and `UnionDef`.
+///   - `WithVis<ModuleVisItem>`, which contains `ImportStmt`.
 pub struct ModuleItem;
 
 impl ParseNode for ModuleItem {
@@ -88,6 +102,13 @@ impl ParseNode for ModuleItem {
     }
 }
 
+/// A module item that can be documented.
+///
+/// May be one of the following:
+///   - `WithVis<ModuleDocVisItem>`, which contains `AliasDef`, `ConstDef`, `EnumDef`, `FuncDef`,
+///     `StructDef`, `TraitDef`, `UnionDef`.
+///   - `WithAbi<FfiBlock>`
+///   - `ImplBlock`
 pub struct ModuleDocItem;
 
 impl ParseNode for ModuleDocItem {
@@ -119,6 +140,16 @@ impl ParseNode for ModuleDocItem {
     }
 }
 
+/// A module item that can be documented and have a visibility modifier.
+///
+/// May be one of the following:
+///   - `WithVis<FuncDef>`
+///   - `AliasDef`
+///   - `ConstDef`
+///   - `EnumDef`
+///   - `StructDef`
+///   - `TraitDef`
+///   - `UnionDef`
 pub struct ModuleDocVisItem;
 
 impl ParseNode for ModuleDocVisItem {
@@ -170,6 +201,16 @@ impl ParseNode for ModuleDocVisItem {
     }
 }
 
+/// An import statement.
+///
+/// # Example
+///
+/// ```text
+/// import a;
+/// import a.b;
+/// import a.{b, c};
+/// import {a, b};
+/// ```
 pub struct ImportStmt;
 
 impl ParseNode for ImportStmt {
@@ -188,6 +229,9 @@ impl ParseNode for ImportStmt {
     }
 }
 
+/// An import item.
+///
+/// It corresponds to the `a`, `a.b`, `a.{b, c}` and `{a, b}` in the `ImportStmt`'s example.
 pub struct ImportItem;
 
 impl ParseNode for ImportItem {
