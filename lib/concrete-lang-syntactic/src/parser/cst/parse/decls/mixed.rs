@@ -138,11 +138,12 @@ impl ParseNode for FuncDecl {
             context.parse::<TypeRef>()?;
         }
         context.parse::<Option<WhereClause>>()?;
-        // TODO: Disable optional body for FfiBlock functions.
         // TODO: Maybe merge with `FuncDef` by making the body mandatory.
         let has_body = BlockExpr::check(context.peek()).is_always();
         if has_body {
             context.parse::<BlockExpr>()?;
+        } else {
+            context.next_of(TokenKind::SymSemi)?;
         }
 
         Ok((has_return_type as usize) | ((has_body as usize) << 1))

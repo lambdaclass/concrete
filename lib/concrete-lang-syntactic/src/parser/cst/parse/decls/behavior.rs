@@ -1,5 +1,5 @@
 use super::{
-    AliasDecl, AliasDef, ConstDecl, ConstDef, FuncDecl, FuncDef, GenericsDecl, NamedFields,
+    AliasDecl, AliasDef, ConstDecl, ConstDef, Field, FuncDecl, FuncDef, GenericsDecl, NamedFields,
     TypeRef, WhereClause,
 };
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
         cst::parse::{
             exprs::Expression,
             mods::ModuleItem,
-            utils::{Braces, Seq, check_enum},
+            utils::{Braces, Parens, Seq, WithVis, check_enum},
         },
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
@@ -27,7 +27,7 @@ impl ParseNode for TraitDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwTrait)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<Option<GenericsDecl>>()?;
+        context.parse::<Option<GenericsDecl<true>>>()?;
         context.parse::<Option<WhereClause>>()?;
         context.parse::<Braces<Seq<ImplItemDecl>>>()?;
 
@@ -47,13 +47,21 @@ impl ParseNode for ImplBlock {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwImpl)?;
         context.parse::<Option<GenericsDecl>>()?;
-        if context.parse::<TypeRef>()? == 0 && context.next_if(TokenKind::KwFor) {
+        let is_trait_impl = if context.parse::<TypeRef>()? == 0 && context.next_if(TokenKind::KwFor)
+        {
             context.parse::<TypeRef>()?;
-        }
+            true
+        } else {
+            false
+        };
         context.parse::<Option<WhereClause>>()?;
-        context.parse::<Braces<Seq<ImplItemDef>>>()?;
+        if is_trait_impl {
+            context.parse::<Braces<Seq<ImplItemDef<false>>>>()?;
+        } else {
+            context.parse::<Braces<Seq<ImplItemDef>>>()?;
+        }
 
-        Ok(0)
+        Ok(is_trait_impl as usize)
     }
 }
 
@@ -88,15 +96,24 @@ impl ParseNode for ImplItemDecl {
     }
 }
 
-pub struct ImplItemDef;
+pub struct ImplItemDef<const WITH_VIS: bool = true>;
 
-impl ParseNode for ImplItemDef {
+impl<const WITH_VIS: bool> ParseNode for ImplItemDef<WITH_VIS> {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        check_enum([
-            AliasDef::check(kind),
-            ConstDef::check(kind),
-            FuncDef::check(kind),
-        ])
+        if WITH_VIS {
+            check_enum([
+                AliasDef::check(kind),
+                ConstDef::check(kind),
+                FuncDef::check(kind),
+                WithVis::<ImplItemDef<false>>::check(kind),
+            ])
+        } else {
+            check_enum([
+                AliasDef::check(kind),
+                ConstDef::check(kind),
+                FuncDef::check(kind),
+            ])
+        }
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
@@ -112,6 +129,10 @@ impl ParseNode for ImplItemDef {
             CheckResult::Always(2) => {
                 context.parse::<FuncDef>()?;
                 2
+            }
+            CheckResult::Always(3) if WITH_VIS => {
+                context.parse::<WithVis<ImplItemDef<false>>>()?;
+                3
             }
             CheckResult::Always(_) | CheckResult::Empty(_) => unreachable!(),
             CheckResult::Never => todo!(),
@@ -192,26 +213,33 @@ impl ParseNode for AssignTarget {
     }
 }
 
-pub struct FfiBlock;
-
-impl ParseNode for FfiBlock {
-    fn check(kind: Option<TokenKind>) -> CheckResult {
-        Braces::<FfiDecl>::check(kind)
-    }
-
-    fn parse(context: &mut ParseContext) -> Result<usize> {
-        todo!()
-    }
-}
-
 pub struct FfiDecl;
 
 impl ParseNode for FfiDecl {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        todo!()
+        if kind == Some(TokenKind::KwPub) {
+            CheckResult::Always(0)
+        } else {
+            CheckResult::Empty(0)
+        }
+        .followed_by(|| {
+            (kind == Some(TokenKind::KwFn))
+                .then_some(CheckResult::Always(0))
+                .unwrap_or_default()
+        })
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        todo!()
+        context.next_if(TokenKind::KwPub);
+        context.next_of(TokenKind::KwFn)?;
+        context.next_of(TokenKind::Ident)?;
+        context.parse::<Parens<Field<TypeRef>>>()?;
+        let has_return_type = context.next_if(TokenKind::SymArrow);
+        if has_return_type {
+            context.parse::<TypeRef>()?;
+        }
+        context.next_of(TokenKind::SymSemi)?;
+
+        Ok(0)
     }
 }

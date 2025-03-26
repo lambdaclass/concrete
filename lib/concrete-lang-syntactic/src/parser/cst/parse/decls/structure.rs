@@ -2,7 +2,10 @@ use super::{GenericsDecl, TypeRef, WhereClause};
 use crate::{
     lexer::TokenKind,
     parser::{
-        cst::parse::utils::{Braces, CommaSep, Parens, check_enum},
+        cst::parse::{
+            exprs::Expression,
+            utils::{Braces, CommaSep, Parens, check_enum},
+        },
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
     },
@@ -21,7 +24,7 @@ impl ParseNode for EnumDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwEnum)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<Option<GenericsDecl>>()?;
+        context.parse::<Option<GenericsDecl<true>>>()?;
         context.parse::<Option<WhereClause>>()?;
         context.parse::<Braces<CommaSep<NamedFields<TypeRef>>>>()?;
 
@@ -41,7 +44,7 @@ impl ParseNode for StructDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwStruct)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<Option<GenericsDecl>>()?;
+        context.parse::<Option<GenericsDecl<true>>>()?;
         context.parse::<Option<WhereClause>>()?;
         if context.parse::<Fields<TypeRef>>()? != 0 {
             context.next_of(TokenKind::SymSemi)?;
@@ -63,7 +66,7 @@ impl ParseNode for UnionDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwUnion)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<Option<GenericsDecl>>()?;
+        context.parse::<Option<GenericsDecl<true>>>()?;
         context.parse::<Option<WhereClause>>()?;
         if context.parse::<Fields<TypeRef>>()? != 0 {
             context.next_of(TokenKind::SymSemi)?;
@@ -143,14 +146,18 @@ where
     }
 }
 
-pub struct ArrayDecl;
+pub struct ArrayDef;
 
-impl ParseNode for ArrayDecl {
+impl ParseNode for ArrayDef {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        todo!()
+        TypeRef::check(kind).map(0)
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        todo!()
+        context.parse::<TypeRef>()?;
+        context.next_of(TokenKind::SymSemi)?;
+        context.parse::<Expression>()?;
+
+        Ok(0)
     }
 }

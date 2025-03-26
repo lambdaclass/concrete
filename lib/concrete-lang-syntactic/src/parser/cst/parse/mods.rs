@@ -1,6 +1,6 @@
 use super::{
     decls::{
-        AliasDef, ConstDef, EnumDef, FfiBlock, FuncDef, ImplBlock, StructDef, TraitDef, UnionDef,
+        AliasDef, ConstDef, EnumDef, FfiDecl, FuncDef, ImplBlock, StructDef, TraitDef, UnionDef,
     },
     utils::{Braces, CommaSep, Seq, WithAbi, WithDoc, WithVis, check_enum},
 };
@@ -150,13 +150,13 @@ pub struct ModuleAbiItem;
 
 impl ParseNode for ModuleAbiItem {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        check_enum([FfiBlock::check(kind), FuncDef::check(kind)])
+        check_enum([Braces::<FfiDecl>::check(kind), FuncDef::check(kind)])
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
         Ok(match Self::check(context.peek()).value() {
             Some(0) => {
-                context.parse::<FfiBlock>()?;
+                context.parse::<Braces<FfiDecl>>()?;
                 0
             }
             Some(1) => {

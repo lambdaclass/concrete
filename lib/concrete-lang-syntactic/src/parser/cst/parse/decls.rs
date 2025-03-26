@@ -118,11 +118,11 @@ pub struct ArrayType;
 
 impl ParseNode for ArrayType {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        Brackets::<ArrayDecl>::check(kind)
+        Brackets::<ArrayDef>::check(kind)
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        context.parse::<Brackets<ArrayDecl>>()?;
+        context.parse::<Brackets<ArrayDef>>()?;
         Ok(0)
     }
 }
@@ -169,7 +169,7 @@ impl ParseNode for PtrType {
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        context.next_of(TokenKind::SymOpBitAnd)?;
+        context.next_of(TokenKind::SymOpMul)?;
         let is_mut = if context.next_if(TokenKind::KwConst) {
             0
         } else if context.next_if(TokenKind::KwMut) {
@@ -188,7 +188,6 @@ impl ParseNode for PtrType {
 /// Declares available generics for an item, with optional defaults.
 ///
 /// > Note: Not to be confused with `GenericsDef`.
-// TODO: Check proper WITH_DEFAULTS setting.
 pub struct GenericsDecl<const WITH_DEFAULTS: bool = false>;
 
 impl<const WITH_DEFAULTS: bool> ParseNode for GenericsDecl<WITH_DEFAULTS> {
