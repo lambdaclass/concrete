@@ -15,14 +15,13 @@ where
     T: ParseNode,
 {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        match kind {
-            Some(TokenKind::KwExtern) => CheckResult::Always(0),
-            _ => T::check(kind),
-        }
+        (kind == Some(TokenKind::KwExtern))
+            .then_some(CheckResult::Always(0))
+            .unwrap_or_default()
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        context.next_if(TokenKind::KwExtern);
+        context.next_of(TokenKind::KwExtern)?;
         context.next_if(TokenKind::LitString);
         context.parse::<T>()?;
 
@@ -38,14 +37,13 @@ where
     T: ParseNode,
 {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        match kind {
-            Some(TokenKind::DocString) => CheckResult::Always(0),
-            _ => T::check(kind),
-        }
+        (kind == Some(TokenKind::DocString))
+            .then_some(CheckResult::Always(0))
+            .unwrap_or_default()
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        context.next_if(TokenKind::DocString);
+        context.next_of(TokenKind::DocString)?;
         context.parse::<T>()?;
 
         Ok(0)
@@ -60,17 +58,16 @@ where
     T: ParseNode,
 {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        match kind {
-            Some(TokenKind::KwPub) => CheckResult::Always(0),
-            _ => T::check(kind),
-        }
+        (kind == Some(TokenKind::KwPub))
+            .then_some(CheckResult::Always(0))
+            .unwrap_or_default()
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        let is_pub = context.next_if(TokenKind::KwPub);
+        context.next_of(TokenKind::KwPub)?;
         context.parse::<T>()?;
 
-        Ok(is_pub as usize)
+        Ok(0)
     }
 }
 

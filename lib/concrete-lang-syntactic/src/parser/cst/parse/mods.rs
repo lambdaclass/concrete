@@ -55,11 +55,6 @@ impl ParseNode for ModuleDecl {
 }
 
 /// A module item.
-///
-/// May be one of the following:
-///   - `WithDoc<ModuleDocItem>`, which contains `AliasDef`, `ConstDef`, `EnumDef`, `FfiBlock`,
-///     `FuncDef`, `ImplBlock`, `StructDef, `TraitDef` and `UnionDef`.
-///   - `WithVis<ModuleVisItem>`, which contains `ImportStmt`.
 pub struct ModuleItem;
 
 impl ParseNode for ModuleItem {
@@ -81,122 +76,202 @@ impl ParseNode for ModuleItem {
 
     fn check(kind: Option<TokenKind>) -> CheckResult {
         check_enum([
+            AliasDef::check(kind),
+            ConstDef::check(kind),
+            EnumDef::check(kind),
+            FfiBlock::check(kind),
+            FuncDef::check(kind),
+            ImplBlock::check(kind),
+            ImportStmt::check(kind),
+            StructDef::check(kind),
+            TraitDef::check(kind),
+            UnionDef::check(kind),
             WithDoc::<ModuleDocItem>::check(kind),
             WithVis::<ImportStmt>::check(kind),
         ])
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        Ok(match Self::check(context.peek()) {
-            CheckResult::Always(0) => {
-                context.parse::<WithDoc<ModuleDocItem>>()?;
+        Ok(match Self::check(context.peek()).value() {
+            Some(0) => {
+                context.parse::<AliasDef>()?;
                 0
             }
-            CheckResult::Always(1) => {
-                context.parse::<WithVis<ImportStmt>>()?;
+            Some(1) => {
+                context.parse::<ConstDef>()?;
                 1
             }
-            CheckResult::Always(_) | CheckResult::Empty(_) => unreachable!(),
-            CheckResult::Never => todo!(),
+            Some(2) => {
+                context.parse::<EnumDef>()?;
+                2
+            }
+            Some(3) => {
+                context.parse::<FfiBlock>()?;
+                3
+            }
+            Some(4) => {
+                context.parse::<FuncDef>()?;
+                4
+            }
+            Some(5) => {
+                context.parse::<ImplBlock>()?;
+                5
+            }
+            Some(6) => {
+                context.parse::<ImportStmt>()?;
+                6
+            }
+            Some(7) => {
+                context.parse::<StructDef>()?;
+                7
+            }
+            Some(8) => {
+                context.parse::<TraitDef>()?;
+                8
+            }
+            Some(9) => {
+                context.parse::<UnionDef>()?;
+                9
+            }
+            Some(10) => {
+                context.parse::<WithDoc<ModuleDocItem>>()?;
+                10
+            }
+            Some(11) => {
+                context.parse::<WithVis<ImportStmt>>()?;
+                11
+            }
+            Some(_) => unreachable!(),
+            None => todo!(),
         })
     }
 }
 
 /// A module item that can be documented.
-///
-/// May be one of the following:
-///   - `WithVis<ModuleDocVisItem>`, which contains `AliasDef`, `ConstDef`, `EnumDef`, `FuncDef`,
-///     `StructDef`, `TraitDef`, `UnionDef`.
-///   - `WithAbi<FfiBlock>`
-///   - `ImplBlock`
 pub struct ModuleDocItem;
 
 impl ParseNode for ModuleDocItem {
     fn check(kind: Option<TokenKind>) -> CheckResult {
         check_enum([
-            WithVis::<ModuleDocVisItem>::check(kind),
-            WithAbi::<FfiBlock>::check(kind),
+            AliasDef::check(kind),
+            ConstDef::check(kind),
+            EnumDef::check(kind),
+            FfiBlock::check(kind),
+            FuncDef::check(kind),
             ImplBlock::check(kind),
+            StructDef::check(kind),
+            TraitDef::check(kind),
+            UnionDef::check(kind),
+            WithAbi::<FfiBlock>::check(kind),
+            WithVis::<ModuleDocVisItem>::check(kind),
         ])
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        Ok(match Self::check(context.peek()) {
-            CheckResult::Always(0) => {
-                context.parse::<WithVis<ModuleDocVisItem>>()?;
+        Ok(match Self::check(context.peek()).value() {
+            Some(0) => {
+                context.parse::<AliasDef>()?;
                 0
             }
-            CheckResult::Always(1) => {
-                context.parse::<WithAbi<FfiBlock>>()?;
+            Some(1) => {
+                context.parse::<ConstDef>()?;
                 1
             }
-            CheckResult::Always(2) => {
-                context.parse::<ImplBlock>()?;
+            Some(2) => {
+                context.parse::<EnumDef>()?;
                 2
             }
-            CheckResult::Always(_) | CheckResult::Empty(_) => unreachable!(),
-            CheckResult::Never => todo!(),
+            Some(3) => {
+                context.parse::<FfiBlock>()?;
+                3
+            }
+            Some(4) => {
+                context.parse::<FuncDef>()?;
+                4
+            }
+            Some(5) => {
+                context.parse::<ImplBlock>()?;
+                5
+            }
+            Some(6) => {
+                context.parse::<StructDef>()?;
+                6
+            }
+            Some(7) => {
+                context.parse::<TraitDef>()?;
+                7
+            }
+            Some(8) => {
+                context.parse::<UnionDef>()?;
+                8
+            }
+            Some(9) => {
+                context.parse::<WithAbi<FfiBlock>>()?;
+                9
+            }
+            Some(10) => {
+                context.parse::<WithVis<ModuleDocVisItem>>()?;
+                10
+            }
+            Some(_) => unreachable!(),
+            None => todo!(),
         })
     }
 }
 
 /// A module item that can be documented and have a visibility modifier.
-///
-/// May be one of the following:
-///   - `WithVis<FuncDef>`
-///   - `AliasDef`
-///   - `ConstDef`
-///   - `EnumDef`
-///   - `StructDef`
-///   - `TraitDef`
-///   - `UnionDef`
 pub struct ModuleDocVisItem;
 
 impl ParseNode for ModuleDocVisItem {
     fn check(kind: Option<TokenKind>) -> CheckResult {
         check_enum([
-            WithAbi::<FuncDef>::check(kind),
             AliasDef::check(kind),
             ConstDef::check(kind),
             EnumDef::check(kind),
+            FuncDef::check(kind),
             StructDef::check(kind),
             TraitDef::check(kind),
             UnionDef::check(kind),
+            WithAbi::<FuncDef>::check(kind),
         ])
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        Ok(match Self::check(context.peek()) {
-            CheckResult::Always(0) => {
-                context.parse::<WithAbi<FuncDef>>()?;
+        Ok(match Self::check(context.peek()).value() {
+            Some(0) => {
+                context.parse::<AliasDef>()?;
                 0
             }
-            CheckResult::Always(1) => {
-                context.parse::<AliasDef>()?;
+            Some(1) => {
+                context.parse::<ConstDef>()?;
                 1
             }
-            CheckResult::Always(2) => {
-                context.parse::<ConstDef>()?;
+            Some(2) => {
+                context.parse::<EnumDef>()?;
                 2
             }
-            CheckResult::Always(3) => {
-                context.parse::<EnumDef>()?;
+            Some(3) => {
+                context.parse::<FuncDef>()?;
                 3
             }
-            CheckResult::Always(4) => {
+            Some(4) => {
                 context.parse::<StructDef>()?;
                 4
             }
-            CheckResult::Always(5) => {
+            Some(5) => {
                 context.parse::<TraitDef>()?;
                 5
             }
-            CheckResult::Always(6) => {
+            Some(6) => {
                 context.parse::<UnionDef>()?;
                 6
             }
-            CheckResult::Always(_) | CheckResult::Empty(_) => todo!(),
-            CheckResult::Never => todo!(),
+            Some(7) => {
+                context.parse::<WithAbi<FuncDef>>()?;
+                7
+            }
+            Some(_) => unreachable!(),
+            None => todo!(),
         })
     }
 }
