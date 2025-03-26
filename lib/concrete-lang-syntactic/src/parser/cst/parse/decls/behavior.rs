@@ -7,7 +7,7 @@ use crate::{
         cst::parse::{
             exprs::Expression,
             mods::ModuleItem,
-            utils::{Braces, Seq, check_enum},
+            utils::{Braces, CommaSep, Parens, Seq, check_enum},
         },
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
@@ -162,7 +162,7 @@ impl ParseNode for LetStmt {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwLet)?;
         context.next_of(TokenKind::Ident)?;
-        // TODO: FieldsRef (for destructures).
+        context.parse::<FieldsRef>()?;
         context.next_of(TokenKind::SymAssign)?;
         context.parse::<Expression>()?;
 
@@ -170,12 +170,117 @@ impl ParseNode for LetStmt {
     }
 }
 
-// TODO: Node for LetStmt l-values:
-//   - Ident for simple assigns.
-//   - Ident + Parens<CommaSep<Self>> for tuple destructuring.
-//   - Ident + Braces<CommaSep<FieldRef>> for struct destructuring.
+// let <AssignTarget> = ...;
 //
-// Also, move FieldsDef, FieldDef, FieldsRef, FieldDef to here (behavior).
+// Contains:
+//   - Ident
+//   - Destruct for tuples
+//   - Destruct for arrays
+//   - Destruct for structs (struct & tuple, but not unit since those are idents).
+//   - Later on: Enums? `let X::X(x) = x else ...;`
+pub struct AssignTarget;
+
+impl ParseNode for AssignTarget {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        // TODO: Destruct for arrays and tuples.
+        (kind == Some(TokenKind::Ident))
+            .then_some(CheckResult::Always(0))
+            .unwrap_or_default()
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::Ident)?;
+        match context.peek() {
+            Some(TokenKind::LBrace) => {
+                context.parse::<Parens<AssignTarget>>()?;
+                Ok(1)
+            }
+            Some(TokenKind::LBracket) => todo!(),
+            Some(TokenKind::LParen) => {
+                context.parse::<Braces<AssignTarget>>()?;
+                Ok(2)
+            }
+            _ => Ok(0),
+        }
+    }
+}
+
+// TODO: I think this can be collapsed into `Fields<T>`.
+pub struct FieldsDef;
+
+impl ParseNode for FieldsDef {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        check_enum([
+            CheckResult::Empty(0),
+            Parens::<CommaSep<Expression>>::check(kind),
+            Braces::<CommaSep<FieldDef>>::check(kind),
+        ])
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        Ok(match Self::check(context.peek()) {
+            CheckResult::Empty(0) => 0,
+            CheckResult::Always(1) => {
+                context.parse::<CommaSep<Expression>>()?;
+                1
+            }
+            CheckResult::Always(2) => {
+                context.parse::<CommaSep<FieldDef>>()?;
+                2
+            }
+            CheckResult::Always(_) | CheckResult::Empty(_) => unreachable!(),
+            CheckResult::Never => todo!(),
+        })
+    }
+}
+
+pub struct FieldDef;
+
+impl ParseNode for FieldDef {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        (kind == Some(TokenKind::Ident))
+            .then_some(CheckResult::Always(0))
+            .unwrap_or_default()
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::Ident)?;
+        if context.next_if(TokenKind::SymColon) {
+            context.parse::<Expression>()?;
+        }
+
+        Ok(0)
+    }
+}
+
+pub struct FieldsRef;
+
+impl ParseNode for FieldsRef {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        // (kind == Some(TokenKind::Ident)).then_some(CheckResult::Always(()))
+        todo!()
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        todo!()
+    }
+}
+
+pub struct FieldRef;
+
+impl ParseNode for FieldRef {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        check_enum([
+            CheckResult::Empty(0),
+            Parens::<CommaSep<FieldsRef>>::check(kind),
+            Braces::<CommaSep<FieldDecl>>::check(kind),
+        ])
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        todo!()
+    }
+}
 
 pub struct FfiBlock;
 
