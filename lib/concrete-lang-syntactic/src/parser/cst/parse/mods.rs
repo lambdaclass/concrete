@@ -58,36 +58,35 @@ impl ParseNode for ModuleDecl {
 pub struct ModuleItem;
 
 impl ParseNode for ModuleItem {
-    // WithDoc
-    //   WithVis
-    //     WithAbi
-    //       FuncDef
-    //     AliasDef
-    //     ConstDef
-    //     EnumDef
-    //     StructDef
-    //     TraitDef
-    //     UnionDef
-    //   WithAbi
-    //     FfiBlock
-    //   ImplBlock
-    // WithVis
-    //   ImportStmt
+    //     WithDoc
+    //       WithVis
+    //         WithAbi
+    // [x]       FuncDef
+    // [x]     AliasDef
+    // [x]     ConstDef
+    // [x]     EnumDef
+    // [x]     StructDef
+    // [x]     TraitDef
+    // [x]     UnionDef
+    // [ ]   WithAbi<FfiBlock>
+    // [ ]   ImplBlock
+    //     WithVis
+    // [x]   ImportStmt
 
     fn check(kind: Option<TokenKind>) -> CheckResult {
         check_enum([
             AliasDef::check(kind),
             ConstDef::check(kind),
             EnumDef::check(kind),
-            FfiBlock::check(kind),
             FuncDef::check(kind),
             ImplBlock::check(kind),
             ImportStmt::check(kind),
             StructDef::check(kind),
             TraitDef::check(kind),
             UnionDef::check(kind),
+            WithAbi::<ModuleAbiItem>::check(kind),
             WithDoc::<ModuleDocItem>::check(kind),
-            WithVis::<ImportStmt>::check(kind),
+            WithVis::<ModuleVisItem>::check(kind),
         ])
     }
 
@@ -106,31 +105,31 @@ impl ParseNode for ModuleItem {
                 2
             }
             Some(3) => {
-                context.parse::<FfiBlock>()?;
+                context.parse::<FuncDef>()?;
                 3
             }
             Some(4) => {
-                context.parse::<FuncDef>()?;
+                context.parse::<ImplBlock>()?;
                 4
             }
             Some(5) => {
-                context.parse::<ImplBlock>()?;
+                context.parse::<ImportStmt>()?;
                 5
             }
             Some(6) => {
-                context.parse::<ImportStmt>()?;
+                context.parse::<StructDef>()?;
                 6
             }
             Some(7) => {
-                context.parse::<StructDef>()?;
+                context.parse::<TraitDef>()?;
                 7
             }
             Some(8) => {
-                context.parse::<TraitDef>()?;
+                context.parse::<UnionDef>()?;
                 8
             }
             Some(9) => {
-                context.parse::<UnionDef>()?;
+                context.parse::<WithAbi<ModuleAbiItem>>()?;
                 9
             }
             Some(10) => {
@@ -138,8 +137,31 @@ impl ParseNode for ModuleItem {
                 10
             }
             Some(11) => {
-                context.parse::<WithVis<ImportStmt>>()?;
+                context.parse::<WithVis<ModuleVisItem>>()?;
                 11
+            }
+            Some(_) => unreachable!(),
+            None => todo!(),
+        })
+    }
+}
+
+pub struct ModuleAbiItem;
+
+impl ParseNode for ModuleAbiItem {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        check_enum([FfiBlock::check(kind), FuncDef::check(kind)])
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        Ok(match Self::check(context.peek()).value() {
+            Some(0) => {
+                context.parse::<FfiBlock>()?;
+                0
+            }
+            Some(1) => {
+                context.parse::<FuncDef>()?;
+                1
             }
             Some(_) => unreachable!(),
             None => todo!(),
@@ -156,13 +178,12 @@ impl ParseNode for ModuleDocItem {
             AliasDef::check(kind),
             ConstDef::check(kind),
             EnumDef::check(kind),
-            FfiBlock::check(kind),
             FuncDef::check(kind),
             ImplBlock::check(kind),
             StructDef::check(kind),
             TraitDef::check(kind),
             UnionDef::check(kind),
-            WithAbi::<FfiBlock>::check(kind),
+            WithAbi::<ModuleAbiItem>::check(kind),
             WithVis::<ModuleDocVisItem>::check(kind),
         ])
     }
@@ -182,36 +203,32 @@ impl ParseNode for ModuleDocItem {
                 2
             }
             Some(3) => {
-                context.parse::<FfiBlock>()?;
+                context.parse::<FuncDef>()?;
                 3
             }
             Some(4) => {
-                context.parse::<FuncDef>()?;
+                context.parse::<ImplBlock>()?;
                 4
             }
             Some(5) => {
-                context.parse::<ImplBlock>()?;
+                context.parse::<StructDef>()?;
                 5
             }
             Some(6) => {
-                context.parse::<StructDef>()?;
+                context.parse::<TraitDef>()?;
                 6
             }
             Some(7) => {
-                context.parse::<TraitDef>()?;
+                context.parse::<UnionDef>()?;
                 7
             }
             Some(8) => {
-                context.parse::<UnionDef>()?;
+                context.parse::<WithAbi<ModuleAbiItem>>()?;
                 8
             }
             Some(9) => {
-                context.parse::<WithAbi<FfiBlock>>()?;
-                9
-            }
-            Some(10) => {
                 context.parse::<WithVis<ModuleDocVisItem>>()?;
-                10
+                9
             }
             Some(_) => unreachable!(),
             None => todo!(),
@@ -269,6 +286,67 @@ impl ParseNode for ModuleDocVisItem {
             Some(7) => {
                 context.parse::<WithAbi<FuncDef>>()?;
                 7
+            }
+            Some(_) => unreachable!(),
+            None => todo!(),
+        })
+    }
+}
+
+pub struct ModuleVisItem;
+
+impl ParseNode for ModuleVisItem {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        check_enum([
+            AliasDef::check(kind),
+            ConstDef::check(kind),
+            EnumDef::check(kind),
+            FuncDef::check(kind),
+            ImportStmt::check(kind),
+            StructDef::check(kind),
+            TraitDef::check(kind),
+            UnionDef::check(kind),
+            WithAbi::<FuncDef>::check(kind),
+        ])
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        Ok(match Self::check(context.peek()).value() {
+            Some(0) => {
+                context.parse::<AliasDef>()?;
+                0
+            }
+            Some(1) => {
+                context.parse::<ConstDef>()?;
+                1
+            }
+            Some(2) => {
+                context.parse::<EnumDef>()?;
+                2
+            }
+            Some(3) => {
+                context.parse::<FuncDef>()?;
+                3
+            }
+            Some(4) => {
+                context.parse::<ImportStmt>()?;
+                4
+            }
+            Some(5) => {
+                context.parse::<StructDef>()?;
+                5
+            }
+            Some(6) => {
+                context.parse::<TraitDef>()?;
+                6
+            }
+            Some(7) => {
+                context.parse::<UnionDef>()?;
+                7
+            }
+            Some(8) => {
+                context.parse::<WithAbi<FuncDef>>()?;
+                8
             }
             Some(_) => unreachable!(),
             None => todo!(),

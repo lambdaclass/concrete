@@ -43,7 +43,7 @@ impl ParseNode for StructDef {
         context.next_of(TokenKind::Ident)?;
         context.parse::<Option<GenericsDecl>>()?;
         context.parse::<Option<WhereClause>>()?;
-        if context.parse::<Fields<TypeRef>>()? != 2 {
+        if context.parse::<Fields<TypeRef>>()? != 0 {
             context.next_of(TokenKind::SymSemi)?;
         }
 
@@ -61,7 +61,7 @@ impl ParseNode for UnionDef {
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        context.next_of(TokenKind::KwStruct)?;
+        context.next_of(TokenKind::KwUnion)?;
         context.next_of(TokenKind::Ident)?;
         context.parse::<Option<GenericsDecl>>()?;
         context.parse::<Option<WhereClause>>()?;
@@ -100,17 +100,20 @@ where
     T: ParseNode,
 {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        check_enum([Braces::<T>::check(kind), Parens::<Field<T>>::check(kind)])
+        check_enum([
+            Braces::<CommaSep<Field<T>>>::check(kind),
+            Parens::<CommaSep<T>>::check(kind),
+        ])
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
         Ok(match Self::check(context.peek()).value() {
             Some(0) => {
-                context.parse::<Braces<T>>()?;
+                context.parse::<Braces<CommaSep<Field<T>>>>()?;
                 0
             }
             Some(1) => {
-                context.parse::<Parens<Field<T>>>()?;
+                context.parse::<Parens<CommaSep<T>>>()?;
                 1
             }
             Some(_) => unreachable!(),
@@ -137,5 +140,17 @@ where
         context.parse::<T>()?;
 
         Ok(0)
+    }
+}
+
+pub struct ArrayDecl;
+
+impl ParseNode for ArrayDecl {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        todo!()
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        todo!()
     }
 }

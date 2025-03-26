@@ -6,7 +6,7 @@
 pub use self::{behavior::*, mixed::*, structure::*};
 use super::{
     exprs::Expression,
-    utils::{Angles, Braces, CommaSep, check_enum},
+    utils::{Angles, Braces, Brackets, CommaSep, Parens, check_enum},
 };
 use crate::{
     lexer::TokenKind,
@@ -24,11 +24,162 @@ pub struct TypeRef;
 
 impl ParseNode for TypeRef {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        todo!()
+        check_enum([
+            ArrayType::check(kind),
+            PathType::check(kind),
+            PtrType::check(kind),
+            RefType::check(kind),
+            TupleType::check(kind),
+        ])
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        todo!()
+        Ok(match Self::check(context.peek()).value() {
+            Some(0) => {
+                context.parse::<ArrayType>()?;
+                0
+            }
+            Some(1) => {
+                context.parse::<PathType>()?;
+                1
+            }
+            Some(2) => {
+                context.parse::<PtrType>()?;
+                2
+            }
+            Some(3) => {
+                context.parse::<RefType>()?;
+                3
+            }
+            Some(4) => {
+                context.parse::<TupleType>()?;
+                4
+            }
+            Some(_) => unreachable!(),
+            None => todo!(),
+        })
+    }
+}
+
+pub struct PathType;
+
+impl ParseNode for PathType {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        if kind == Some(TokenKind::SymScope) {
+            CheckResult::Always(0)
+        } else {
+            CheckResult::Empty(0)
+        }
+        .followed_by(|| PathSegment::check(kind))
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_if(TokenKind::SymScope);
+        loop {
+            context.parse::<PathSegment>()?;
+            if !context.next_if(TokenKind::SymScope) {
+                break;
+            }
+        }
+
+        Ok(0)
+    }
+}
+
+pub struct PathSegment;
+
+impl ParseNode for PathSegment {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        check_enum([
+            (kind == Some(TokenKind::Ident))
+                .then_some(CheckResult::Always(0))
+                .unwrap_or_default(),
+            GenericsDef::check(kind),
+        ])
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        Ok(match Self::check(context.peek()).value() {
+            Some(0) => {
+                context.next_of(TokenKind::Ident)?;
+                0
+            }
+            Some(1) => {
+                context.parse::<GenericsDef>()?;
+                1
+            }
+            Some(_) => unreachable!(),
+            None => todo!(),
+        })
+    }
+}
+
+pub struct ArrayType;
+
+impl ParseNode for ArrayType {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        Brackets::<ArrayDecl>::check(kind)
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.parse::<Brackets<ArrayDecl>>()?;
+        Ok(0)
+    }
+}
+
+pub struct TupleType;
+
+impl ParseNode for TupleType {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        Parens::<CommaSep<TypeRef>>::check(kind).map(0)
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.parse::<Parens<CommaSep<TypeRef>>>()?;
+        Ok(0)
+    }
+}
+
+pub struct RefType;
+
+impl ParseNode for RefType {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        (kind == Some(TokenKind::SymOpBitAnd))
+            .then_some(CheckResult::Always(0))
+            .unwrap_or_default()
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::SymOpBitAnd)?;
+        // TODO: Lifetime.
+        let is_mut = context.next_if(TokenKind::KwMut);
+        context.parse::<TypeRef>()?;
+
+        Ok(is_mut as usize)
+    }
+}
+
+pub struct PtrType;
+
+impl ParseNode for PtrType {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        (kind == Some(TokenKind::SymOpMul))
+            .then_some(CheckResult::Always(0))
+            .unwrap_or_default()
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::SymOpBitAnd)?;
+        let is_mut = if context.next_if(TokenKind::KwConst) {
+            0
+        } else if context.next_if(TokenKind::KwMut) {
+            1
+        } else {
+            todo!()
+        };
+        context.parse::<TypeRef>()?;
+
+        Ok(is_mut as usize)
     }
 }
 

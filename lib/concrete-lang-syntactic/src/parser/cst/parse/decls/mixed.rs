@@ -153,16 +153,9 @@ pub struct FuncDef;
 
 impl ParseNode for FuncDef {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        if kind == Some(TokenKind::KwExtern) {
-            CheckResult::Always(0)
-        } else {
-            CheckResult::Empty(0)
-        }
-        .followed_by(|| {
-            (kind == Some(TokenKind::KwFn))
-                .then_some(CheckResult::Always(0))
-                .unwrap_or_default()
-        })
+        (kind == Some(TokenKind::KwFn))
+            .then_some(CheckResult::Always(0))
+            .unwrap_or_default()
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {

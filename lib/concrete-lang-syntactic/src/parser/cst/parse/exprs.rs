@@ -32,7 +32,7 @@ impl ParseNode for BlockExpr {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::LBrace)?;
         context.parse::<Seq<Statement>>()?;
-        context.parse::<Expression>()?;
+        context.parse::<Option<Expression>>()?;
         context.next_of(TokenKind::RBrace)?;
 
         Ok(0)

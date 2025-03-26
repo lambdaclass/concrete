@@ -145,10 +145,10 @@ pub enum Token {
     SymOpRem,
     #[token("-")]
     SymOpSub,
-    #[token("::")]
-    SymPathSep,
     #[token(".")]
     SymPeriod,
+    #[token("::")]
+    SymScope,
     #[token(";")]
     SymSemi,
 

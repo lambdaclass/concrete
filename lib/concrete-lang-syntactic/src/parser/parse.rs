@@ -23,11 +23,12 @@ where
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
         Ok(match Self::check(context.peek()).value() {
-            Some(_) => {
+            Some(0) => 0,
+            Some(1) => {
                 context.parse::<T>()?;
                 1
             }
-            None => 0,
+            _ => unreachable!(),
         })
     }
 }

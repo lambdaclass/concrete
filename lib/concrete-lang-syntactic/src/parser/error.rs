@@ -1,4 +1,4 @@
-use crate::lexer::{Token, TokenKind};
+use crate::lexer::TokenKind;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,

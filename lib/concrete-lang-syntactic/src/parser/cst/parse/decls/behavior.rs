@@ -175,8 +175,8 @@ impl ParseNode for AssignTarget {
     fn check(kind: Option<TokenKind>) -> CheckResult {
         check_enum([
             NamedFields::<AssignTarget>::check(kind),
-            // TODO: Destruct of arrays and tuples.
-            // TODO: Destruct of enums (with else guard if may conflict).
+            // TODO: Destructure arrays and tuples.
+            // TODO: Destructure enums (with else guard if may conflict).
         ])
     }
 
@@ -196,12 +196,7 @@ pub struct FfiBlock;
 
 impl ParseNode for FfiBlock {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        if kind == Some(TokenKind::KwExtern) {
-            CheckResult::Always(0)
-        } else {
-            CheckResult::Empty(0)
-        }
-        .followed_by(|| Braces::<FfiDecl>::check(kind))
+        Braces::<FfiDecl>::check(kind)
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
