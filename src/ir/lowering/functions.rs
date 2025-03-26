@@ -7,7 +7,6 @@ use crate::{
         expressions::FnCallOp,
         functions::{FunctionDecl, FunctionDef},
         statements::{self, LetStmtTarget},
-        types::TypeDescriptor,
     },
     ir::{
         BasicBlock, ConcreteIntrinsic, Function, Local, LocalKind, Operand, Place, Span,
@@ -55,8 +54,6 @@ pub(crate) fn lower_func(
 
     tracing::span::Span::current().record("mod_id", module_idx.to_idx());
 
-    let mut generic_types = Vec::new();
-
     // Initially, this is the polymorphic symbol, if its a generic function, the symbol changes to the monomorphic version after
     // id resolution
     let mut symbol = Symbol {
@@ -76,17 +73,7 @@ pub(crate) fn lower_func(
                     func.decl.generic_params.len()
                 );
 
-                for generic_param in &func.decl.generic_params {
-                    if let Some(ty) = builder
-                        .context
-                        .generics_mapping
-                        .get(&generic_param.name.name)
-                    {
-                        generic_types.push(*ty);
-                    } else {
-                        panic!()
-                    }
-                }
+                let generic_types = builder.lower_generic_params(&func.decl.generic_params)?;
 
                 // Construct the monomorphized function symbol.
                 symbol = Symbol {
@@ -301,24 +288,9 @@ pub(crate) fn lower_fn_call(
     let old_generic_map = fn_builder.builder.context.generics_mapping.clone();
 
     // Save the generics info.
-    for (generic_ty, generic_param) in info
-        .generics
-        .iter()
-        .zip(target_fn_decl.generic_params.iter())
-    {
-        let ty = lower_type(
-            fn_builder.builder,
-            &TypeDescriptor::Type {
-                name: generic_ty.clone(),
-                span: generic_ty.span,
-            },
-        )?;
-        fn_builder
-            .builder
-            .context
-            .generics_mapping
-            .insert(generic_param.name.name.clone(), ty);
-    }
+    fn_builder
+        .builder
+        .add_generic_params(&info.generics, &target_fn_decl.generic_params)?;
 
     if info.generics.len() != target_fn_decl.generic_params.len() {
         // todo: this check will be removed/refactored when we have inference for generics from the arguments used.
@@ -447,19 +419,7 @@ pub(crate) fn lower_func_decl(
 
     let module_idx = builder.get_current_module_idx();
 
-    let mut generic_types = Vec::new();
-
-    for generic_param in &func.generic_params {
-        if let Some(ty) = builder
-            .context
-            .generics_mapping
-            .get(&generic_param.name.name)
-        {
-            generic_types.push(*ty);
-        } else {
-            panic!()
-        }
-    }
+    let generic_types = builder.lower_generic_params(&func.generic_params)?;
 
     for attr in &func.attributes {
         match attr.name.as_str() {

@@ -7,18 +7,23 @@ use std::{
 use adts::{lower_enum, lower_struct};
 use functions::{lower_func, lower_func_decl};
 use itertools::Itertools;
+use tracing::debug;
 use traits::TraitDatabase;
 
-use crate::{
-    ast::enums::EnumDecl,
-    ir::{self, ConstKind, ConstValue, Mutability, ValueTree},
-};
 use crate::{
     ast::expressions::EnumInitExpr,
     ir::{
         AdtBody, AdtIndex, ConstBody, ConstIndex, FnIndex, Function, IR, Local, LocalIndex, Module,
         ModuleIndex, Statement, Type, TypeIndex,
     },
+};
+use crate::{
+    ast::{
+        common::{GenericParam, TypeName},
+        enums::EnumDecl,
+        structs::Field,
+    },
+    ir::{self, ConstKind, ConstValue, Mutability, ValueTree},
 };
 use types::lower_type;
 
@@ -209,6 +214,101 @@ impl IRBuilder {
         Some(name_path.join("::"))
     }
 
+    /// Lowers the given generics to their final type.
+    pub fn lower_generic_params(
+        &self,
+        generics: &[GenericParam],
+    ) -> Result<Vec<TypeIndex>, LoweringError> {
+        let mut lowered = Vec::new();
+
+        for generic_param in generics {
+            let ty = self.get_generic_param_ty(generic_param)?;
+            lowered.push(ty);
+        }
+
+        Ok(lowered)
+    }
+
+    /// Lowers the given generic param to their final type.
+    pub fn get_generic_param_ty(&self, param: &GenericParam) -> Result<TypeIndex, LoweringError> {
+        let ty = *self
+            .context
+            .generics_mapping
+            .get(&param.name.name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Missing generic type mapping {:?} from {:#?}",
+                    param.name.name, self.context.generics_mapping
+                )
+            });
+
+        Ok(ty)
+    }
+
+    /// Adds the generic params to the current context mapping.
+    pub fn add_generic_params(
+        &mut self,
+        types: &[TypeName],
+        generics: &[GenericParam],
+    ) -> Result<Vec<TypeIndex>, LoweringError> {
+        let mut lowered_types: Vec<TypeIndex> = Vec::new();
+
+        for (gen_ty, gen_param) in types.iter().zip(generics.iter()) {
+            let ty = lower_type(
+                self,
+                &TypeDescriptor::Type {
+                    name: gen_ty.clone(),
+                    span: gen_ty.span,
+                },
+            )?;
+            self.context
+                .generics_mapping
+                .insert(gen_param.name.name.clone(), ty);
+            lowered_types.push(ty);
+        }
+
+        Ok(lowered_types)
+    }
+
+    /// Adds the generic params to the current context mapping
+    /// for the given adt.
+    ///
+    /// This resolves the generic types by looking at the field types.
+    pub fn add_generic_params_for_adt(
+        &mut self,
+        fields: &[Field],
+        generics: &[GenericParam],
+        adt_index: AdtIndex,
+        variant_idx: usize,
+    ) -> Result<(), LoweringError> {
+        let generics: HashSet<String> = generics.iter().map(|x| x.name.name.clone()).collect();
+
+        for field in fields {
+            if let Some(name) = field.r#type.get_name() {
+                if generics.contains(&name) {
+                    let variant_def = &self.get_adt(adt_index).variants[variant_idx]; // borrowck
+                    let field_index = *variant_def.field_names.get(&field.name.name).unwrap();
+                    let field_ty = variant_def.fields[field_index].ty;
+                    let field_type = self.get_type(field_ty);
+                    let mut map_ty = field_ty;
+                    if let Some(inner) = field_type.get_inner_type() {
+                        map_ty = inner;
+                    }
+                    debug!(
+                        "Adding field type to generics mapping {} -> {}",
+                        name,
+                        self.display_typename(map_ty)
+                    );
+                    self.context.generics_mapping.insert(name, map_ty);
+
+                    // TODO: Add trait bound check here where map_ty must satisfy the trait bounds of the generic.
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Gets the struct index for the given StructInitExpr (+ using the current generics map in builder).
     /// If the given struct isn't lowered yet its gets lowered (generics).
     pub fn get_or_lower_for_struct_init(
@@ -228,18 +328,7 @@ impl IRBuilder {
 
         let old_generic_params = self.context.generics_mapping.clone();
 
-        for (gen_ty, gen_param) in info.name.generics.iter().zip(struct_decl.generics.iter()) {
-            let ty = lower_type(
-                self,
-                &TypeDescriptor::Type {
-                    name: gen_ty.clone(),
-                    span: gen_ty.span,
-                },
-            )?;
-            self.context
-                .generics_mapping
-                .insert(gen_param.name.name.clone(), ty);
-        }
+        self.add_generic_params(&info.name.generics, &struct_decl.generics)?;
 
         let id = lower_struct(self, &struct_decl)?;
 
@@ -267,18 +356,7 @@ impl IRBuilder {
 
         let old_generic_params = self.context.generics_mapping.clone();
 
-        for (gen_ty, gen_param) in info.name.generics.iter().zip(enum_decl.generics.iter()) {
-            let ty = lower_type(
-                self,
-                &TypeDescriptor::Type {
-                    name: gen_ty.clone(),
-                    span: gen_ty.span,
-                },
-            )?;
-            self.context
-                .generics_mapping
-                .insert(gen_param.name.name.clone(), ty);
-        }
+        self.add_generic_params(&info.name.generics, &enum_decl.generics)?;
 
         let id = lower_enum(self, &enum_decl)?;
 
@@ -450,8 +528,6 @@ impl FnIrBuilder<'_> {
         let fn_id = {
             let symbols = self.builder.symbols.get(&module_id).unwrap();
 
-            let mut generic_types = Vec::new();
-
             if let Some((poly_id, fn_module_id)) = symbols.functions.get(&poly_symbol).copied() {
                 // If function is generic or the self type is generic, monomorphize here.
                 if !info.generics.is_empty() || polymorphic_method_of_type_idx != method_of_type_idx
@@ -469,22 +545,9 @@ impl FnIrBuilder<'_> {
 
                     // TODO: Generic param type inference should be added around here.
 
-                    for (gen_ty, gen_param) in
-                        info.generics.iter().zip(fn_decl.generic_params.iter())
-                    {
-                        let ty = lower_type(
-                            self.builder,
-                            &TypeDescriptor::Type {
-                                name: gen_ty.clone(),
-                                span: gen_ty.span,
-                            },
-                        )?;
-                        generic_types.push(ty);
-                        self.builder
-                            .context
-                            .generics_mapping
-                            .insert(gen_param.name.name.clone(), ty);
-                    }
+                    let generic_types = self
+                        .builder
+                        .add_generic_params(&info.generics, &fn_decl.generic_params)?;
 
                     assert_eq!(
                         generic_types.len(),
