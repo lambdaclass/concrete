@@ -6,7 +6,7 @@
 pub use self::{behavior::*, mixed::*, structure::*};
 use super::{
     exprs::Expression,
-    utils::{Braces, CommaSep, check_enum},
+    utils::{Angles, Braces, CommaSep, check_enum},
 };
 use crate::{
     lexer::TokenKind,
@@ -37,27 +37,17 @@ impl ParseNode for TypeRef {
 /// Declares available generics for an item, with optional defaults.
 ///
 /// > Note: Not to be confused with `GenericsDef`.
-// TODO: Make it always parse `<>` and use `Option<GenericsDecl>` where approipate.
+// TODO: Check proper WITH_DEFAULTS setting.
 pub struct GenericsDecl<const WITH_DEFAULTS: bool = false>;
 
 impl<const WITH_DEFAULTS: bool> ParseNode for GenericsDecl<WITH_DEFAULTS> {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        if kind == Some(TokenKind::SymCmpLt) {
-            CheckResult::Always(1)
-        } else {
-            CheckResult::Empty(0)
-        }
+        Angles::<CommaSep<GenericDecl>>::check(kind)
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        if context.next_if(TokenKind::SymCmpLt) {
-            context.parse::<CommaSep<GenericDecl>>()?;
-            context.next_of(TokenKind::SymCmpGt)?;
-
-            Ok(1)
-        } else {
-            Ok(0)
-        }
+        context.parse::<Angles<CommaSep<GenericDecl>>>()?;
+        Ok(0)
     }
 }
 
@@ -109,27 +99,16 @@ impl<const WITH_DEFAULTS: bool> ParseNode for GenericDecl<WITH_DEFAULTS> {
 /// Defines the value of available generics for an item.
 ///
 /// > Note: Not to be confused with `GenericsDecl`.
-// TODO: Make it always parse `<>` and use `Option<GenericsDef>` where approipate.
 pub struct GenericsDef;
 
 impl ParseNode for GenericsDef {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        if kind == Some(TokenKind::SymCmpLt) {
-            CheckResult::Always(1)
-        } else {
-            CheckResult::Empty(0)
-        }
+        Angles::<CommaSep<GenericDef>>::check(kind)
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        if context.next_if(TokenKind::SymCmpLt) {
-            context.parse::<CommaSep<GenericDef>>()?;
-            context.next_of(TokenKind::SymCmpGt)?;
-
-            Ok(1)
-        } else {
-            Ok(0)
-        }
+        context.parse::<Angles<CommaSep<GenericDef>>>()?;
+        Ok(0)
     }
 }
 
@@ -169,18 +148,13 @@ pub struct WhereClause;
 
 impl ParseNode for WhereClause {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        if kind == Some(TokenKind::KwWhere) {
-            CheckResult::Always(0)
-        } else {
-            CheckResult::Empty(0)
-        }
+        (kind == Some(TokenKind::KwWhere))
+            .then_some(CheckResult::Always(0))
+            .unwrap_or_default()
     }
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
-        if context.next_if(TokenKind::KwWhere) {
-            todo!()
-        } else {
-            Ok(0)
-        }
+        context.next_of(TokenKind::KwWhere)?;
+        todo!()
     }
 }

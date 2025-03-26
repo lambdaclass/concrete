@@ -26,8 +26,8 @@ impl ParseNode for TraitDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwTrait)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<GenericsDecl>()?;
-        context.parse::<WhereClause>()?;
+        context.parse::<Option<GenericsDecl>>()?;
+        context.parse::<Option<WhereClause>>()?;
         context.parse::<Braces<Seq<ImplItemDecl>>>()?;
 
         Ok(0)
@@ -45,11 +45,11 @@ impl ParseNode for ImplBlock {
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwImpl)?;
-        context.parse::<GenericsDecl>()?;
+        context.parse::<Option<GenericsDecl>>()?;
         if context.parse::<TypeRef>()? == 0 && context.next_if(TokenKind::KwFor) {
             context.parse::<TypeRef>()?;
         }
-        context.parse::<WhereClause>()?;
+        context.parse::<Option<WhereClause>>()?;
         context.parse::<Braces<Seq<ImplItemDef>>>()?;
 
         Ok(0)

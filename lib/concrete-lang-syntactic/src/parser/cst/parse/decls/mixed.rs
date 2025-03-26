@@ -8,7 +8,7 @@
 //! The `Decl` parsers are used for declarations, and may or may not have a default value. The `Def`
 //! variants must always have a value.
 
-use super::{FieldDecl, GenericsDecl, TypeRef, WhereClause};
+use super::{Field, GenericsDecl, TypeRef, WhereClause};
 use crate::{
     lexer::TokenKind,
     parser::{
@@ -33,12 +33,12 @@ impl ParseNode for AliasDecl {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwType)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<GenericsDecl>()?;
+        context.parse::<Option<GenericsDecl>>()?;
         let has_value = context.next_if(TokenKind::SymAssign);
         if has_value {
             context.parse::<TypeRef>()?;
         }
-        context.parse::<WhereClause>()?;
+        context.parse::<Option<WhereClause>>()?;
         context.next_of(TokenKind::SymSemi)?;
 
         Ok(has_value as usize)
@@ -57,7 +57,7 @@ impl ParseNode for AliasDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwType)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<GenericsDecl>()?;
+        context.parse::<Option<GenericsDecl>>()?;
         context.next_of(TokenKind::SymAssign)?;
         context.parse::<TypeRef>()?;
         context.next_of(TokenKind::SymSemi)?;
@@ -131,13 +131,15 @@ impl ParseNode for FuncDecl {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwFn)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<GenericsDecl>()?;
-        context.parse::<Parens<CommaSep<FieldDecl>>>()?;
+        context.parse::<Option<GenericsDecl>>()?;
+        context.parse::<Parens<CommaSep<Field<TypeRef>>>>()?;
         let has_return_type = context.next_if(TokenKind::SymArrow);
         if has_return_type {
             context.parse::<TypeRef>()?;
         }
-        context.parse::<WhereClause>()?;
+        context.parse::<Option<WhereClause>>()?;
+        // TODO: Disable optional body for FfiBlock functions.
+        // TODO: Maybe merge with `FuncDef` by making the body mandatory.
         let has_body = BlockExpr::check(context.peek()).is_always();
         if has_body {
             context.parse::<BlockExpr>()?;
@@ -166,13 +168,13 @@ impl ParseNode for FuncDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwFn)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<GenericsDecl>()?;
-        context.parse::<Parens<CommaSep<FieldDecl>>>()?;
+        context.parse::<Option<GenericsDecl>>()?;
+        context.parse::<Parens<CommaSep<Field<TypeRef>>>>()?;
         let has_return_type = context.next_if(TokenKind::SymArrow);
         if has_return_type {
             context.parse::<TypeRef>()?;
         }
-        context.parse::<WhereClause>()?;
+        context.parse::<Option<WhereClause>>()?;
         context.parse::<BlockExpr>()?;
 
         Ok(has_return_type as usize)

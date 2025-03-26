@@ -74,6 +74,28 @@ where
     }
 }
 
+/// Parser for items wrapped between `<` and `>`.
+pub struct Angles<T>(PhantomData<T>);
+
+impl<T> ParseNode for Angles<T>
+where
+    T: ParseNode,
+{
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        (kind == Some(TokenKind::SymCmpLt))
+            .then_some(CheckResult::Always(0))
+            .unwrap_or_default()
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::SymCmpLt)?;
+        context.parse::<T>()?;
+        context.next_of(TokenKind::SymCmpGt)?;
+
+        Ok(0)
+    }
+}
+
 /// Parser for items wrapped between `{` and `}`.
 pub struct Braces<T>(PhantomData<T>);
 

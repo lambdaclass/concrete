@@ -9,6 +9,29 @@ pub trait ParseNode {
     fn parse(context: &mut ParseContext) -> Result<usize>;
 }
 
+impl<T> ParseNode for Option<T>
+where
+    T: ParseNode,
+{
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        match T::check(kind) {
+            CheckResult::Always(_) => CheckResult::Always(1),
+            CheckResult::Empty(_) => unreachable!(),
+            CheckResult::Never => CheckResult::Empty(0),
+        }
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        Ok(match Self::check(context.peek()).value() {
+            Some(_) => {
+                context.parse::<T>()?;
+                1
+            }
+            None => 0,
+        })
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum CheckResult {
     Always(usize),
