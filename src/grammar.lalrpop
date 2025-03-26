@@ -212,8 +212,9 @@ TypeDescriptor: ast::types::TypeDescriptor = {
 }
 
 GenericParam: ast::common::GenericParam = {
-  <lo:@L> <name:Ident> <hi:@R> => ast::common::GenericParam {
+  <lo:@L> <name:Ident> <bounds:(":" <PlusSeparated<TypeName>>)?> <hi:@R> => ast::common::GenericParam {
     name,
+    bounds: bounds.unwrap_or_default(),
     span: Span::new(lo, hi),
   },
 }
