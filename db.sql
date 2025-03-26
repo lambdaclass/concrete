@@ -4,7 +4,7 @@ CREATE TABLE Item (
     name STRING NOT NULL,
 
     PRIMARY KEY (path, name)
-);
+) WITHOUT ROWID;
 -- CREATE INDEX ItemByName ON Item (name);
 
 -- Alias items.
@@ -16,7 +16,7 @@ CREATE TABLE AliasItem (
     FOREIGN KEY (path, name) REFERENCES Item (path, name)
         ON UPDATE CASCADE
         ON DELETE CASCADE
-);
+) WITHOUT ROWID;
 
 -- Const items.
 CREATE TABLE ConstItem (
@@ -29,7 +29,7 @@ CREATE TABLE ConstItem (
     FOREIGN KEY (path, name) REFERENCES Item (path, name)
         ON UPDATE CASCADE
         ON DELETE CASCADE
-);
+) WITHOUT ROWID;
 
 -- -- Function items.
 -- CREATE TABLE FuncItem ();

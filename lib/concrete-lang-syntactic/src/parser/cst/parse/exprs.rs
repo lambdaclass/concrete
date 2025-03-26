@@ -1,6 +1,6 @@
 use super::{
     decls::Statement,
-    utils::{Parens, Seq, check_enum},
+    utils::{CommaSep, Parens, Seq, check_enum},
 };
 use crate::{
     lexer::TokenKind,
@@ -32,7 +32,9 @@ impl ParseNode for BlockExpr {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::LBrace)?;
         context.parse::<Seq<Statement>>()?;
-        context.parse::<Option<Expression>>()?;
+        // TODO: Check if there's no way to make a block have a return expression while keeping the
+        //   grammar LL(1).
+        // context.parse::<Option<Expression>>()?;
         context.next_of(TokenKind::RBrace)?;
 
         Ok(0)
@@ -41,7 +43,6 @@ impl ParseNode for BlockExpr {
 
 // TODO: Support for:
 //   - Casts
-//   - Function calls
 //   - Indexing
 //   - Logic operations
 //   - Unary operators
@@ -80,6 +81,10 @@ impl ParseNode for Expression<0> {
         Ok(match Self::check(context.peek()) {
             CheckResult::Always(0) => {
                 context.next_of(TokenKind::Ident)?;
+                if Parens::<CommaSep<Expression>>::check(context.peek()).is_always() {
+                    context.parse::<Parens<CommaSep<Expression>>>()?;
+                }
+
                 0
             }
             CheckResult::Always(1) => {

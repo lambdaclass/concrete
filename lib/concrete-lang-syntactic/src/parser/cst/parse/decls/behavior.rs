@@ -147,6 +147,9 @@ impl ParseNode for Statement {
         check_enum([
             ModuleItem::check(kind),
             LetStmt::check(kind),
+            (kind == Some(TokenKind::KwReturn))
+                .then_some(CheckResult::Always(0))
+                .unwrap_or_default(),
             <Expression>::check(kind),
         ])
     }
@@ -162,8 +165,15 @@ impl ParseNode for Statement {
                 1
             }
             CheckResult::Always(2) => {
+                context.next_of(TokenKind::KwReturn)?;
                 context.parse::<Expression>()?;
+                context.next_of(TokenKind::SymSemi)?;
                 2
+            }
+            CheckResult::Always(3) => {
+                context.parse::<Expression>()?;
+                context.next_of(TokenKind::SymSemi)?;
+                3
             }
             CheckResult::Always(_) | CheckResult::Empty(_) => unreachable!(),
             CheckResult::Never => todo!(),

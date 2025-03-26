@@ -1,1 +1,11 @@
+extern "C" {
+    fn puts(s: *const char) -> i32;
+}
 
+pub fn get_answer() -> i32 {
+    return 20 * 2 + 2;
+}
+
+fn main() {
+    puts("Hello, world!");
+}
