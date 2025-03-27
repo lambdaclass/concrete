@@ -6,7 +6,10 @@ use crate::{
     ast::{self, modules::ModuleDefItem},
     ir::{
         Adts, Constants, Functions, Module, Modules, Types,
-        lowering::{Bodies, IRBuilder, errors::LoweringError},
+        lowering::{
+            Bodies, IRBuilder,
+            errors::{LoweringError, MissingTraitType, UnexpectedTraitType},
+        },
     },
 };
 
@@ -14,8 +17,10 @@ use super::{
     IRBuilderContext, Symbol,
     adts::{lower_enum, lower_struct},
     constants::lower_constant,
+    errors::{MissingTraitFunction, UnexpectedTraitFunction},
     functions::{lower_func, lower_func_decl},
     ir::{IR, ModuleIndex, Type},
+    traits::{TraitDatabase, TraitGeneric, TraitImpl},
     types::lower_type,
 };
 
@@ -38,6 +43,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompilationUnit]) -> Result<IR,
         type_to_module: Default::default(),
         bodies: Bodies::default(),
         mono_type_to_poly: Default::default(),
+        trait_db: TraitDatabase::new(),
         context: IRBuilderContext {
             add_tests: false,
             self_ty: None,
@@ -136,6 +142,11 @@ fn lower_module_symbols(
 
     for item in &module.contents {
         match item {
+            ast::modules::ModuleDefItem::Trait(trait_decl) => {
+                builder.trait_db.add_trait(trait_decl.clone(), module_idx);
+                // Here we don't have any function, we do this on the impl trait block.
+            }
+            ast::modules::ModuleDefItem::ImplTrait(_impl_trait) => { /* Done in second pass */ }
             ast::modules::ModuleDefItem::Constant(constant_def) => {
                 let idx = builder.ir.constants.insert(None);
                 builder.bodies.constants.insert(idx, constant_def.clone());
@@ -296,48 +307,115 @@ fn lower_module_symbols(
 
     // Second pass
     for item in &module.contents {
-        if let ast::modules::ModuleDefItem::Impl(impl_block) = item {
-            let ty = if !impl_block.generic_params.is_empty() {
-                let struct_sym = Symbol {
-                    name: impl_block.target.get_name().unwrap(),
-                    method_of: None,
-                    generics: Vec::new(),
+        match item {
+            ast::modules::ModuleDefItem::Impl(impl_block) => {
+                let ty = if !impl_block.generic_params.is_empty() {
+                    let adt_symbol = Symbol {
+                        name: impl_block.target.get_name().unwrap(),
+                        method_of: None,
+                        generics: Vec::new(),
+                    };
+
+                    let id = *builder
+                        .symbols
+                        .get(&builder.get_current_module_idx())
+                        .unwrap()
+                        .aggregates
+                        .get(&adt_symbol)
+                        .unwrap();
+
+                    let type_id = *builder.adt_to_type_idx.get(&id).unwrap();
+                    type_id
+                } else {
+                    lower_type(builder, &impl_block.target)?
                 };
 
-                let id = *builder
-                    .symbols
-                    .get(&builder.get_current_module_idx())
-                    .unwrap()
-                    .aggregates
-                    .get(&struct_sym)
-                    .unwrap();
-
-                let type_id = *builder.adt_to_type_idx.get(&id).unwrap();
-                type_id
-            } else {
-                lower_type(builder, &impl_block.target)?
-            };
-
-            for function_def in &impl_block.methods {
-                debug!(
-                    "Adding method {}::{} to module {:?}",
-                    impl_block.target, function_def.decl.name.name, module.name.name
-                );
-                let idx = builder.ir.functions.insert(None);
-                builder.bodies.functions.insert(idx, function_def.clone());
-                let sym = Symbol {
-                    name: function_def.decl.name.name.clone(),
-                    method_of: Some(ty),
-                    generics: Vec::new(),
-                };
-                builder
-                    .symbols
-                    .get_mut(&module_idx)
-                    .unwrap()
-                    .functions
-                    .insert(sym.clone(), (idx, module_idx));
-                builder.ir.modules[module_idx].functions.insert(idx);
+                for function_def in &impl_block.methods {
+                    debug!(
+                        "Adding method {}::{} to module {:?}",
+                        impl_block.target, function_def.decl.name.name, module.name.name
+                    );
+                    let idx = builder.ir.functions.insert(None);
+                    builder.bodies.functions.insert(idx, function_def.clone());
+                    let sym = Symbol {
+                        name: function_def.decl.name.name.clone(),
+                        method_of: Some(ty),
+                        generics: Vec::new(),
+                    };
+                    builder
+                        .symbols
+                        .get_mut(&module_idx)
+                        .unwrap()
+                        .functions
+                        .insert(sym.clone(), (idx, module_idx));
+                    builder.ir.modules[module_idx].functions.insert(idx);
+                }
             }
+            ast::modules::ModuleDefItem::ImplTrait(impl_trait) => {
+                // Get trait id and verify it exists.
+                let _trait_id = builder
+                    .trait_db
+                    .get_trait_by_name(&impl_trait.target_trait.name.name, module_idx)
+                    .ok_or_else(|| LoweringError::TraitNotFound {
+                        span: impl_trait.target_trait.span,
+                        name: impl_trait.target_trait.name.name.clone(),
+                        path: builder.get_current_module().file_path.clone(),
+                    })?;
+
+                let ty = if !impl_trait.generic_params.is_empty() {
+                    let adt_symbol = Symbol {
+                        name: impl_trait.target.get_name().unwrap(),
+                        method_of: None,
+                        generics: Vec::new(),
+                    };
+
+                    let id = *builder
+                        .symbols
+                        .get(&builder.get_current_module_idx())
+                        .unwrap()
+                        .aggregates
+                        .get(&adt_symbol)
+                        .unwrap();
+
+                    let type_id = *builder.adt_to_type_idx.get(&id).unwrap();
+                    type_id
+                } else {
+                    lower_type(builder, &impl_trait.target)?
+                };
+
+                // TODO: verify signature and types.
+
+                #[allow(clippy::never_loop)] // remove once implemented
+                for assoc_type in &impl_trait.associated_types {
+                    Err(LoweringError::Unimplemented {
+                        span: assoc_type.span,
+                        reason: "Associated types not yet implemented".to_string(),
+                        path: builder.get_current_module().file_path.clone(),
+                    })?;
+                }
+
+                for function_def in &impl_trait.methods {
+                    debug!(
+                        "Adding trait method impl {}::{} to module {:?}",
+                        impl_trait.target, function_def.decl.name.name, module.name.name
+                    );
+                    let idx = builder.ir.functions.insert(None);
+                    builder.bodies.functions.insert(idx, function_def.clone());
+                    let sym = Symbol {
+                        name: function_def.decl.name.name.clone(),
+                        method_of: Some(ty),
+                        generics: Vec::new(),
+                    };
+                    builder
+                        .symbols
+                        .get_mut(&module_idx)
+                        .unwrap()
+                        .functions
+                        .insert(sym.clone(), (idx, module_idx));
+                    builder.ir.modules[module_idx].functions.insert(idx);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -552,6 +630,173 @@ pub fn lower_module(
 
     for item in &module.contents {
         match item {
+            ast::modules::ModuleDefItem::Trait(_) => {}
+            ast::modules::ModuleDefItem::ImplTrait(impl_trait) => {
+                let trait_id = builder
+                    .trait_db
+                    .get_trait_by_name(&impl_trait.target_trait.name.name, module_idx)
+                    .ok_or_else(|| LoweringError::TraitNotFound {
+                        span: impl_trait.target_trait.span,
+                        name: impl_trait.target_trait.name.name.clone(),
+                        path: builder.get_current_module().file_path.clone(),
+                    })?;
+
+                let mut trait_generics = Vec::new();
+
+                for g in &impl_trait.generic_params {
+                    if let Some(ty) = builder.context.generics_mapping.get(&g.name.name) {
+                        trait_generics.push(TraitGeneric::Type(*ty));
+                    } else {
+                        trait_generics.push(TraitGeneric::Generic);
+                    }
+                }
+
+                let target_ty = if !impl_trait.generic_params.is_empty() {
+                    let adt_symbol = Symbol {
+                        name: impl_trait.target.get_name().unwrap(),
+                        method_of: None,
+                        generics: Vec::new(),
+                    };
+
+                    let id = *builder
+                        .symbols
+                        .get(&builder.get_current_module_idx())
+                        .unwrap()
+                        .aggregates
+                        .get(&adt_symbol)
+                        .unwrap();
+
+                    let type_id = *builder.adt_to_type_idx.get(&id).unwrap();
+                    type_id
+                } else {
+                    lower_type(builder, &impl_trait.target)?
+                };
+
+                {
+                    let tr = &builder.trait_db.traits[trait_id];
+
+                    let assoc_types: HashMap<_, _> = tr
+                        .associated_types
+                        .iter()
+                        .map(|x| (x.name.name.clone(), x.clone()))
+                        .collect();
+                    let assoc_types_found: HashMap<_, _> = impl_trait
+                        .associated_types
+                        .iter()
+                        .map(|x| (x.name.name.clone(), x.clone()))
+                        .collect();
+
+                    let trait_module_id = builder.trait_db.get_trait_module_idx(trait_id);
+                    for trait_assoc_ty in &tr.associated_types {
+                        if !assoc_types_found.contains_key(&trait_assoc_ty.name.name) {
+                            return Err(LoweringError::MissingTraitType(Box::new(
+                                MissingTraitType {
+                                    trait_name: impl_trait.target_trait.name.name.clone(),
+                                    trait_span: tr.span,
+                                    type_name: impl_trait.target.get_name().unwrap(),
+                                    type_name_span: impl_trait.target.get_span(),
+                                    assoc_type_name: trait_assoc_ty.name.name.clone(),
+                                    assoc_type_name_span_def: trait_assoc_ty.span,
+                                    impl_trait_span: impl_trait.span,
+                                    path: builder.get_current_module().file_path.clone(),
+                                    trait_path: builder.ir.modules[trait_module_id]
+                                        .file_path
+                                        .clone(),
+                                },
+                            )));
+                        }
+                    }
+
+                    for assoc_ty in &impl_trait.associated_types {
+                        if !assoc_types.contains_key(&assoc_ty.name.name) {
+                            return Err(LoweringError::UnexpectedTraitType(Box::new(
+                                UnexpectedTraitType {
+                                    trait_name: impl_trait.target_trait.name.name.clone(),
+                                    trait_span: tr.span,
+                                    type_name: impl_trait.target.get_name().unwrap(),
+                                    type_name_span: impl_trait.target.get_span(),
+                                    assoc_type_name: assoc_ty.name.name.clone(),
+                                    assoc_type_name_span_def: assoc_ty.span,
+                                    impl_trait_span: impl_trait.span,
+                                    path: builder.get_current_module().file_path.clone(),
+                                    trait_path: builder.ir.modules[trait_module_id]
+                                        .file_path
+                                        .clone(),
+                                },
+                            )));
+                        }
+                    }
+
+                    let trait_functions: HashMap<_, _> = tr
+                        .methods
+                        .iter()
+                        .map(|x| (x.name.name.clone(), x.clone()))
+                        .collect();
+                    let functions_found: HashMap<_, _> = impl_trait
+                        .methods
+                        .iter()
+                        .map(|x| (x.decl.name.name.clone(), x.clone()))
+                        .collect();
+
+                    for trait_method in &tr.methods {
+                        if !functions_found.contains_key(&trait_method.name.name) {
+                            return Err(LoweringError::MissingTraitFunction(Box::new(
+                                MissingTraitFunction {
+                                    trait_name: impl_trait.target_trait.name.name.clone(),
+                                    trait_span: tr.span,
+                                    type_name: impl_trait.target.get_name().unwrap(),
+                                    type_name_span: impl_trait.target.get_span(),
+                                    func_name: trait_method.name.name.clone(),
+                                    func_name_span_def: trait_method.span,
+                                    impl_trait_span: impl_trait.span,
+                                    path: builder.get_current_module().file_path.clone(),
+                                    trait_path: builder.ir.modules[trait_module_id]
+                                        .file_path
+                                        .clone(),
+                                },
+                            )));
+                        }
+                    }
+
+                    for method in &impl_trait.methods {
+                        if !trait_functions.contains_key(&method.decl.name.name) {
+                            return Err(LoweringError::UnexpectedTraitFunction(Box::new(
+                                UnexpectedTraitFunction {
+                                    trait_name: impl_trait.target_trait.name.name.clone(),
+                                    trait_span: tr.span,
+                                    type_name: impl_trait.target.get_name().unwrap(),
+                                    type_name_span: impl_trait.target.get_span(),
+                                    func_name: method.decl.name.name.clone(),
+                                    func_name_span_def: method.span,
+                                    impl_trait_span: impl_trait.span,
+                                    path: builder.get_current_module().file_path.clone(),
+                                    trait_path: builder.ir.modules[trait_module_id]
+                                        .file_path
+                                        .clone(),
+                                },
+                            )));
+                        }
+                    }
+                }
+
+                builder.trait_db.add_trait_impl(
+                    trait_id,
+                    TraitImpl {
+                        implementor: target_ty,
+                        generics: trait_generics,
+                    },
+                );
+
+                if impl_trait.generic_params.is_empty() {
+                    builder.context.self_ty = Some(target_ty);
+                    for method in &impl_trait.methods {
+                        if method.decl.generic_params.is_empty() {
+                            lower_func(builder, method, Some(target_ty))?;
+                        }
+                    }
+                    builder.context.self_ty = None;
+                }
+            }
             ast::modules::ModuleDefItem::Constant(constant_def) => {
                 lower_constant(builder, constant_def)?;
             }

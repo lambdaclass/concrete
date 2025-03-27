@@ -113,4 +113,13 @@ pub struct TypeDecl {
     pub doc_string: Option<DocString>,
     pub name: Ident,
     pub value: TypeDescriptor,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct AssociatedType {
+    pub doc_string: Option<DocString>,
+    pub name: Ident,
+    pub value: Option<TypeDescriptor>,
+    pub span: Span,
 }

@@ -39,6 +39,10 @@ pub enum Token {
     KeywordEnum,
     #[token("impl")]
     KeywordImpl,
+    #[token("trait")]
+    KeywordTrait,
+    #[token("type")]
+    KeywordType,
     #[token("if")]
     KeywordIf,
     #[token("else")]

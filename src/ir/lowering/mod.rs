@@ -5,19 +5,27 @@ use std::{
 };
 
 use adts::{lower_enum, lower_struct};
+use errors::CantInferType;
+use expressions::find_expression_type;
 use functions::{lower_func, lower_func_decl};
 use itertools::Itertools;
+use tracing::debug;
+use traits::TraitDatabase;
 
 use crate::{
-    ast::enums::EnumDecl,
-    ir::{self, ConstKind, ConstValue, Mutability, ValueTree},
-};
-use crate::{
-    ast::expressions::EnumInitExpr,
+    ast::{common::Ident, expressions::EnumInitExpr},
     ir::{
         AdtBody, AdtIndex, ConstBody, ConstIndex, FnIndex, Function, IR, Local, LocalIndex, Module,
         ModuleIndex, Statement, Type, TypeIndex,
     },
+};
+use crate::{
+    ast::{
+        common::{GenericParam, TypeName},
+        enums::EnumDecl,
+        structs::Field,
+    },
+    ir::{self, ConstKind, ConstValue, Mutability, ValueTree},
 };
 use types::lower_type;
 
@@ -36,6 +44,7 @@ mod expressions;
 mod functions;
 mod lower;
 mod statements;
+mod traits;
 mod types;
 
 pub use errors::LoweringError;
@@ -95,6 +104,7 @@ pub struct IRBuilder {
     pub type_to_module: HashMap<TypeIndex, ModuleIndex>,
     /// A map to find the polymorphic type id of the given monomorphized type.
     pub mono_type_to_poly: HashMap<TypeIndex, TypeIndex>,
+    pub trait_db: TraitDatabase,
     /// A helper context to resolve context dependent information.
     /// Like the current generic mappings or the current module id.
     pub context: IRBuilderContext,
@@ -141,6 +151,18 @@ impl IRBuilder {
             .module_stack
             .last()
             .expect("There should always be a module in context")
+    }
+
+    pub fn get_current_symbols(&self) -> &SymbolTable {
+        self.symbols
+            .get(&self.get_current_module_idx())
+            .expect("should find symbols")
+    }
+
+    pub fn get_current_symbols_mut(&mut self) -> &mut SymbolTable {
+        self.symbols
+            .get_mut(&self.get_current_module_idx())
+            .expect("should find symbols")
     }
 
     pub fn enter_module_context(&mut self, module_id: ModuleIndex) {
@@ -206,6 +228,138 @@ impl IRBuilder {
         Some(name_path.join("::"))
     }
 
+    /// Lowers the given generics to their final type.
+    pub fn lower_generic_params(
+        &self,
+        generics: &[GenericParam],
+    ) -> Result<Vec<TypeIndex>, LoweringError> {
+        let mut lowered = Vec::new();
+
+        for generic_param in generics {
+            let ty = self.get_generic_param_ty(generic_param)?;
+            lowered.push(ty);
+        }
+
+        Ok(lowered)
+    }
+
+    /// Lowers the given generic param to their final type.
+    pub fn get_generic_param_ty(&self, param: &GenericParam) -> Result<TypeIndex, LoweringError> {
+        let ty = *self
+            .context
+            .generics_mapping
+            .get(&param.name.name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Missing generic type mapping {:?} from {:#?}",
+                    param.name.name, self.context.generics_mapping
+                )
+            });
+
+        Ok(ty)
+    }
+
+    /// Adds the generic params to the current context mapping.
+    pub fn add_generic_params(
+        &mut self,
+        types: &[TypeName],
+        generics: &[GenericParam],
+    ) -> Result<Vec<TypeIndex>, LoweringError> {
+        let mut lowered_types: Vec<TypeIndex> = Vec::new();
+
+        for (gen_ty, gen_param) in types.iter().zip(generics.iter()) {
+            let ty = lower_type(
+                self,
+                &TypeDescriptor::Type {
+                    name: gen_ty.clone(),
+                    span: gen_ty.span,
+                },
+            )?;
+            self.context
+                .generics_mapping
+                .insert(gen_param.name.name.clone(), ty);
+            lowered_types.push(ty);
+        }
+
+        Ok(lowered_types)
+    }
+
+    /// Adds the generic params to the current context mapping
+    /// for the given adt.
+    ///
+    /// This resolves the generic types by looking at the field types.
+    pub fn add_generic_params_for_adt(
+        &mut self,
+        fields: &[Field],
+        generics: &[GenericParam],
+        adt_index: AdtIndex,
+        variant_idx: usize,
+    ) -> Result<(), LoweringError> {
+        let generics: HashSet<String> = generics.iter().map(|x| x.name.name.clone()).collect();
+
+        for field in fields {
+            if let Some(name) = field.r#type.get_name() {
+                if generics.contains(&name) {
+                    let variant_def = &self.get_adt(adt_index).variants[variant_idx]; // borrowck
+                    let field_index = *variant_def.field_names.get(&field.name.name).unwrap();
+                    let field_ty = variant_def.fields[field_index].ty;
+                    let field_type = self.get_type(field_ty);
+                    let mut map_ty = field_ty;
+                    if let Some(inner) = field_type.get_inner_type() {
+                        map_ty = inner;
+                    }
+                    debug!(
+                        "Adding field type to generics mapping {} -> {}",
+                        name,
+                        self.display_typename(map_ty)
+                    );
+                    self.context.generics_mapping.insert(name, map_ty);
+
+                    // TODO: Add trait bound check here where map_ty must satisfy the trait bounds of the generic.
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get the module idx of the given iden path, using the current module as reference.
+    pub fn get_path_module_idx(&self, path: &[Ident]) -> Result<ModuleIndex, LoweringError> {
+        let mut type_module_idx = self.get_current_module_idx();
+
+        if !path.is_empty() {
+            let mut it = path.iter();
+            let first = it.next().unwrap();
+
+            if let Some(first) = self.ir.modules[type_module_idx].modules.get(&first.name) {
+                type_module_idx = *first;
+            } else {
+                type_module_idx =
+                    *self
+                        .top_level_modules_names
+                        .get(&first.name)
+                        .ok_or_else(|| LoweringError::ModuleNotFound {
+                            span: first.span,
+                            module: first.name.clone(),
+                            path: self.get_current_module().file_path.clone(),
+                        })?;
+            }
+
+            for next in it {
+                type_module_idx = *self.ir.modules[type_module_idx]
+                    .modules
+                    .get(&next.name)
+                    .ok_or_else(|| LoweringError::ModuleNotFound {
+                        span: first.span,
+                        module: first.name.clone(),
+                        path: self.get_current_module().file_path.clone(),
+                    })?;
+            }
+        }
+
+        Ok(type_module_idx)
+    }
+
     /// Gets the struct index for the given StructInitExpr (+ using the current generics map in builder).
     /// If the given struct isn't lowered yet its gets lowered (generics).
     pub fn get_or_lower_for_struct_init(
@@ -218,27 +372,22 @@ impl IRBuilder {
             generics: Vec::new(),
         };
 
-        let module_idx = self.get_current_module_idx();
+        let type_module_idx = self.get_path_module_idx(&info.name.path)?;
+        self.enter_module_context(type_module_idx);
 
-        let poly_idx = *self.symbols[&module_idx].aggregates.get(&sym).unwrap();
+        let poly_idx = *self.symbols[&self.get_current_module_idx()]
+            .aggregates
+            .get(&sym)
+            .unwrap();
         let struct_decl = self.bodies.structs.get(&poly_idx).unwrap().clone();
 
         let old_generic_params = self.context.generics_mapping.clone();
 
-        for (gen_ty, gen_param) in info.name.generics.iter().zip(struct_decl.generics.iter()) {
-            let ty = lower_type(
-                self,
-                &TypeDescriptor::Type {
-                    name: gen_ty.clone(),
-                    span: gen_ty.span,
-                },
-            )?;
-            self.context
-                .generics_mapping
-                .insert(gen_param.name.name.clone(), ty);
-        }
+        self.add_generic_params(&info.name.generics, &struct_decl.generics)?;
 
         let id = lower_struct(self, &struct_decl)?;
+
+        self.leave_module_context();
 
         self.context.generics_mapping = old_generic_params;
 
@@ -257,27 +406,19 @@ impl IRBuilder {
             generics: Vec::new(),
         };
 
-        let module_idx = self.get_current_module_idx();
+        let type_module_idx = self.get_path_module_idx(&info.name.path)?;
+        self.enter_module_context(type_module_idx);
 
-        let poly_idx = *self.symbols[&module_idx].aggregates.get(&sym).unwrap();
+        let poly_idx = *self.get_current_symbols().aggregates.get(&sym).unwrap();
         let enum_decl = self.bodies.enums.get(&poly_idx).unwrap().clone();
 
         let old_generic_params = self.context.generics_mapping.clone();
 
-        for (gen_ty, gen_param) in info.name.generics.iter().zip(enum_decl.generics.iter()) {
-            let ty = lower_type(
-                self,
-                &TypeDescriptor::Type {
-                    name: gen_ty.clone(),
-                    span: gen_ty.span,
-                },
-            )?;
-            self.context
-                .generics_mapping
-                .insert(gen_param.name.name.clone(), ty);
-        }
+        self.add_generic_params(&info.name.generics, &enum_decl.generics)?;
 
         let id = lower_enum(self, &enum_decl)?;
+
+        self.leave_module_context();
 
         self.context.generics_mapping = old_generic_params;
 
@@ -447,47 +588,89 @@ impl FnIrBuilder<'_> {
         let fn_id = {
             let symbols = self.builder.symbols.get(&module_id).unwrap();
 
-            let mut generic_types = Vec::new();
-
             if let Some((poly_id, fn_module_id)) = symbols.functions.get(&poly_symbol).copied() {
+                let fn_decl = self
+                    .builder
+                    .bodies
+                    .functions
+                    .get(&poly_id)
+                    .map(|x| x.decl.clone())
+                    .or_else(|| self.builder.bodies.functions_decls.get(&poly_id).cloned())
+                    .clone()
+                    .unwrap();
+
                 // If function is generic or the self type is generic, monomorphize here.
-                if !info.generics.is_empty() || polymorphic_method_of_type_idx != method_of_type_idx
+                if !fn_decl.generic_params.is_empty()
+                    || polymorphic_method_of_type_idx != method_of_type_idx
                 {
                     let old_generics = self.builder.context.generics_mapping.clone();
-                    let fn_decl = self
-                        .builder
-                        .bodies
-                        .functions
-                        .get(&poly_id)
-                        .map(|x| x.decl.clone())
-                        .or_else(|| self.builder.bodies.functions_decls.get(&poly_id).cloned())
-                        .clone()
-                        .unwrap();
 
-                    // TODO: Generic param type inference should be added around here.
+                    let mut generic_types = Vec::new();
 
-                    for (gen_ty, gen_param) in
-                        info.generics.iter().zip(fn_decl.generic_params.iter())
-                    {
-                        let ty = lower_type(
-                            self.builder,
-                            &TypeDescriptor::Type {
-                                name: gen_ty.clone(),
-                                span: gen_ty.span,
-                            },
-                        )?;
-                        generic_types.push(ty);
-                        self.builder
-                            .context
-                            .generics_mapping
-                            .insert(gen_param.name.name.clone(), ty);
+                    if info.generics.is_empty() {
+                        // Generic parameter type inference
+                        let generics: HashMap<String, GenericParam> = fn_decl
+                            .generic_params
+                            .iter()
+                            .map(|x| (x.name.name.clone(), x.clone()))
+                            .collect();
+                        for (i, param) in info.args.iter().enumerate() {
+                            if let Some(name) = fn_decl.params[i].r#type.get_name() {
+                                if generics.contains_key(&name) {
+                                    let infer_ty =
+                                        find_expression_type(self, param)?.ok_or_else(|| {
+                                            LoweringError::CantInferType(
+                                                CantInferType {
+                                                    message:
+                                                        "Can't infer generic argument type for this function call."
+                                                            .to_string(),
+                                                    span: info.target.span,
+                                                    path: self.get_file_path().clone(),
+                                                }
+                                                .into(),
+                                            )
+                                        })?;
+                                    self.builder
+                                        .context
+                                        .generics_mapping
+                                        .insert(name.clone(), infer_ty);
+                                    generic_types.push(infer_ty);
+                                }
+                            }
+                        }
+
+                        if let Some(ret_type) = &fn_decl.ret_type {
+                            if let Some(name) = ret_type.get_name() {
+                                if generics.contains_key(&name) {
+                                    // we can't infer return types yet.
+                                    Err(LoweringError::CantInferType(
+                                        CantInferType {
+                                            message:
+                                                "Can't infer return type for this generic function call."
+                                                    .to_string(),
+                                            span: info.target.span,
+                                            path: self.get_file_path().clone(),
+                                        }
+                                        .into(),
+                                    ))?;
+                                }
+                            }
+                        }
+                    } else {
+                        // Generic parameter info was given explicitly.
+                        generic_types = self
+                            .builder
+                            .add_generic_params(&info.generics, &fn_decl.generic_params)?;
                     }
 
-                    assert_eq!(
-                        generic_types.len(),
-                        fn_decl.generic_params.len(),
-                        "generic param mismatch"
-                    );
+                    if generic_types.len() != fn_decl.generic_params.len() {
+                        return Err(LoweringError::GenericCountMismatch {
+                            span: info.span,
+                            found: info.generics.len(),
+                            needs: fn_decl.generic_params.len(),
+                            path: self.get_file_path().clone(),
+                        });
+                    }
 
                     let mono_symbol = Symbol {
                         name: info.target.name.clone(),

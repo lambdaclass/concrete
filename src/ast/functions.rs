@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use super::{
-    common::{Attribute, DocString, GenericParam, Ident, Span},
+    common::{Attribute, DocString, GenericParam, Ident, Span, TypeName},
     statements::Statement,
-    types::TypeDescriptor,
+    types::{TypeDecl, TypeDescriptor},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -36,6 +36,16 @@ pub struct Param {
 pub struct ImplBlock {
     pub target: TypeDescriptor,
     pub generic_params: Vec<GenericParam>,
+    pub methods: Vec<Arc<FunctionDef>>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImplTraitBlock {
+    pub target_trait: TypeName,
+    pub target: TypeDescriptor,
+    pub generic_params: Vec<GenericParam>,
+    pub associated_types: Vec<Arc<TypeDecl>>,
     pub methods: Vec<Arc<FunctionDef>>,
     pub span: Span,
 }
