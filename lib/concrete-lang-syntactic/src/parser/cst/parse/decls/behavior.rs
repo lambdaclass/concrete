@@ -8,7 +8,7 @@ use crate::{
         cst::parse::{
             exprs::Expression,
             mods::ModuleItem,
-            utils::{Braces, Parens, Seq, WithVis, check_enum},
+            utils::{Angles, Braces, Brackets, Parens, Seq, WithVis, check_enum},
         },
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
@@ -27,7 +27,7 @@ impl ParseNode for TraitDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwTrait)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<Option<GenericsDecl<true>>>()?;
+        context.parse::<Option<Angles<GenericsDecl<true>>>>()?;
         context.parse::<Option<WhereClause>>()?;
         context.parse::<Braces<Seq<ImplItemDecl>>>()?;
 
@@ -46,7 +46,7 @@ impl ParseNode for ImplBlock {
 
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwImpl)?;
-        context.parse::<Option<GenericsDecl>>()?;
+        context.parse::<Option<Angles<GenericsDecl>>>()?;
         let is_trait_impl = if context.parse::<TypeRef>()? == 0 && context.next_if(TokenKind::KwFor)
         {
             context.parse::<TypeRef>()?;
@@ -205,8 +205,9 @@ pub struct AssignTarget;
 impl ParseNode for AssignTarget {
     fn check(kind: Option<TokenKind>) -> CheckResult {
         check_enum([
+            Brackets::<AssignTarget>::check(kind),
             NamedFields::<AssignTarget>::check(kind),
-            // TODO: Destructure arrays and tuples.
+            Parens::<AssignTarget>::check(kind),
             // TODO: Destructure enums (with else guard if may conflict).
         ])
     }
@@ -214,8 +215,16 @@ impl ParseNode for AssignTarget {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         Ok(match Self::check(context.peek()).value() {
             Some(0) => {
-                context.parse::<NamedFields<AssignTarget>>()?;
+                context.parse::<Brackets<AssignTarget>>()?;
                 0
+            }
+            Some(1) => {
+                context.parse::<NamedFields<AssignTarget>>()?;
+                1
+            }
+            Some(2) => {
+                context.parse::<Parens<AssignTarget>>()?;
+                2
             }
             Some(_) => unreachable!(),
             None => todo!(),

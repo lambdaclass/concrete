@@ -4,7 +4,7 @@ use crate::{
     parser::{
         cst::parse::{
             exprs::Expression,
-            utils::{Braces, CommaSep, Parens, check_enum},
+            utils::{Angles, Braces, CommaSep, Parens, check_enum},
         },
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
@@ -24,7 +24,7 @@ impl ParseNode for EnumDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwEnum)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<Option<GenericsDecl<true>>>()?;
+        context.parse::<Option<Angles<GenericsDecl<true>>>>()?;
         context.parse::<Option<WhereClause>>()?;
         context.parse::<Braces<CommaSep<NamedFields<TypeRef>>>>()?;
 
@@ -44,7 +44,7 @@ impl ParseNode for StructDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwStruct)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<Option<GenericsDecl<true>>>()?;
+        context.parse::<Option<Angles<GenericsDecl<true>>>>()?;
         context.parse::<Option<WhereClause>>()?;
         if context.parse::<Fields<TypeRef>>()? != 0 {
             context.next_of(TokenKind::SymSemi)?;
@@ -66,7 +66,7 @@ impl ParseNode for UnionDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwUnion)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<Option<GenericsDecl<true>>>()?;
+        context.parse::<Option<Angles<GenericsDecl<true>>>>()?;
         context.parse::<Option<WhereClause>>()?;
         if context.parse::<Fields<TypeRef>>()? != 0 {
             context.next_of(TokenKind::SymSemi)?;

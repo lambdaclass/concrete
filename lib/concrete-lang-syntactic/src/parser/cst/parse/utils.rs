@@ -7,6 +7,21 @@ use crate::{
 };
 use std::marker::PhantomData;
 
+pub struct Ident;
+
+impl ParseNode for Ident {
+    fn check(kind: Option<TokenKind>) -> CheckResult {
+        (kind == Some(TokenKind::Ident))
+            .then_some(CheckResult::Always(0))
+            .unwrap_or_default()
+    }
+
+    fn parse(context: &mut ParseContext) -> Result<usize> {
+        context.next_of(TokenKind::Ident)?;
+        Ok(0)
+    }
+}
+
 /// Parser for items that may have ABI specifications, like functions or FFI blocks.
 pub struct WithAbi<T>(PhantomData<T>);
 

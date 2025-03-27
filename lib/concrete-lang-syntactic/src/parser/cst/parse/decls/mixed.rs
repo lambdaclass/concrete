@@ -14,7 +14,7 @@ use crate::{
     parser::{
         cst::parse::{
             exprs::{BlockExpr, Expression},
-            utils::{CommaSep, Parens},
+            utils::{Angles, CommaSep, Parens},
         },
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
@@ -33,7 +33,7 @@ impl ParseNode for AliasDecl {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwType)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<Option<GenericsDecl>>()?;
+        context.parse::<Option<Angles<GenericsDecl>>>()?;
         let has_value = context.next_if(TokenKind::SymAssign);
         if has_value {
             context.parse::<TypeRef>()?;
@@ -57,7 +57,7 @@ impl ParseNode for AliasDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwType)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<Option<GenericsDecl>>()?;
+        context.parse::<Option<Angles<GenericsDecl>>>()?;
         context.next_of(TokenKind::SymAssign)?;
         context.parse::<TypeRef>()?;
         context.next_of(TokenKind::SymSemi)?;
@@ -124,7 +124,7 @@ impl ParseNode for FuncDecl {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwFn)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<Option<GenericsDecl>>()?;
+        context.parse::<Option<Angles<GenericsDecl>>>()?;
         context.parse::<Parens<CommaSep<Field<TypeRef>>>>()?;
         let has_return_type = context.next_if(TokenKind::SymArrow);
         if has_return_type {
@@ -155,7 +155,7 @@ impl ParseNode for FuncDef {
     fn parse(context: &mut ParseContext) -> Result<usize> {
         context.next_of(TokenKind::KwFn)?;
         context.next_of(TokenKind::Ident)?;
-        context.parse::<Option<GenericsDecl>>()?;
+        context.parse::<Option<Angles<GenericsDecl>>>()?;
         context.parse::<Parens<CommaSep<Field<TypeRef>>>>()?;
         let has_return_type = context.next_if(TokenKind::SymArrow);
         if has_return_type {
