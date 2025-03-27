@@ -5,6 +5,8 @@ use std::{
 };
 
 use adts::{lower_enum, lower_struct};
+use errors::CantInferType;
+use expressions::find_expression_type;
 use functions::{lower_func, lower_func_decl};
 use itertools::Itertools;
 use tracing::debug;
@@ -529,31 +531,88 @@ impl FnIrBuilder<'_> {
             let symbols = self.builder.symbols.get(&module_id).unwrap();
 
             if let Some((poly_id, fn_module_id)) = symbols.functions.get(&poly_symbol).copied() {
+                let fn_decl = self
+                    .builder
+                    .bodies
+                    .functions
+                    .get(&poly_id)
+                    .map(|x| x.decl.clone())
+                    .or_else(|| self.builder.bodies.functions_decls.get(&poly_id).cloned())
+                    .clone()
+                    .unwrap();
+
                 // If function is generic or the self type is generic, monomorphize here.
-                if !info.generics.is_empty() || polymorphic_method_of_type_idx != method_of_type_idx
+                if !fn_decl.generic_params.is_empty()
+                    || polymorphic_method_of_type_idx != method_of_type_idx
                 {
                     let old_generics = self.builder.context.generics_mapping.clone();
-                    let fn_decl = self
-                        .builder
-                        .bodies
-                        .functions
-                        .get(&poly_id)
-                        .map(|x| x.decl.clone())
-                        .or_else(|| self.builder.bodies.functions_decls.get(&poly_id).cloned())
-                        .clone()
-                        .unwrap();
 
-                    // TODO: Generic param type inference should be added around here.
+                    let mut generic_types = Vec::new();
 
-                    let generic_types = self
-                        .builder
-                        .add_generic_params(&info.generics, &fn_decl.generic_params)?;
+                    if info.generics.is_empty() {
+                        // Generic parameter type inference
+                        let generics: HashMap<String, GenericParam> = fn_decl
+                            .generic_params
+                            .iter()
+                            .map(|x| (x.name.name.clone(), x.clone()))
+                            .collect();
+                        for (i, param) in info.args.iter().enumerate() {
+                            if let Some(name) = fn_decl.params[i].r#type.get_name() {
+                                if generics.contains_key(&name) {
+                                    let infer_ty =
+                                        find_expression_type(self, param)?.ok_or_else(|| {
+                                            LoweringError::CantInferType(
+                                                CantInferType {
+                                                    message:
+                                                        "Can't infer generic argument type for this function call."
+                                                            .to_string(),
+                                                    span: info.target.span,
+                                                    path: self.get_file_path().clone(),
+                                                }
+                                                .into(),
+                                            )
+                                        })?;
+                                    self.builder
+                                        .context
+                                        .generics_mapping
+                                        .insert(name.clone(), infer_ty);
+                                    generic_types.push(infer_ty);
+                                }
+                            }
+                        }
 
-                    assert_eq!(
-                        generic_types.len(),
-                        fn_decl.generic_params.len(),
-                        "generic param mismatch"
-                    );
+                        if let Some(ret_type) = &fn_decl.ret_type {
+                            if let Some(name) = ret_type.get_name() {
+                                if generics.contains_key(&name) {
+                                    // we can't infer return types yet.
+                                    Err(LoweringError::CantInferType(
+                                        CantInferType {
+                                            message:
+                                                "Can't infer return type for this generic function call."
+                                                    .to_string(),
+                                            span: info.target.span,
+                                            path: self.get_file_path().clone(),
+                                        }
+                                        .into(),
+                                    ))?;
+                                }
+                            }
+                        }
+                    } else {
+                        // Generic parameter info was given explicitly.
+                        generic_types = self
+                            .builder
+                            .add_generic_params(&info.generics, &fn_decl.generic_params)?;
+                    }
+
+                    if generic_types.len() != fn_decl.generic_params.len() {
+                        return Err(LoweringError::GenericCountMismatch {
+                            span: info.span,
+                            found: info.generics.len(),
+                            needs: fn_decl.generic_params.len(),
+                            path: self.get_file_path().clone(),
+                        });
+                    }
 
                     let mono_symbol = Symbol {
                         name: info.target.name.clone(),

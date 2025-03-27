@@ -4,6 +4,7 @@ use tracing::{debug, instrument};
 
 use crate::{
     ast::{
+        common::GenericParam,
         expressions::FnCallOp,
         functions::{FunctionDecl, FunctionDef},
         statements::{self, LetStmtTarget},
@@ -11,7 +12,11 @@ use crate::{
     ir::{
         BasicBlock, ConcreteIntrinsic, Function, Local, LocalKind, Operand, Place, Span,
         Terminator, TerminatorKind, Type,
-        lowering::{Symbol, expressions::lower_expression, types::lower_type},
+        lowering::{
+            Symbol,
+            expressions::{find_expression_type, lower_expression},
+            types::lower_type,
+        },
     },
 };
 
@@ -287,20 +292,34 @@ pub(crate) fn lower_fn_call(
     // Enter a new scope for generics.
     let old_generic_map = fn_builder.builder.context.generics_mapping.clone();
 
-    // Save the generics info.
-    fn_builder
-        .builder
-        .add_generic_params(&info.generics, &target_fn_decl.generic_params)?;
-
-    if info.generics.len() != target_fn_decl.generic_params.len() {
-        // todo: this check will be removed/refactored when we have inference for generics from the arguments used.
-        return Err(LoweringError::GenericCountMismatch {
+    // Check parameter count is correct first, makes things simpler.
+    if target_fn_decl.params.len() != info.args.len() + { if self_value.is_some() { 1 } else { 0 } }
+    {
+        return Err(LoweringError::CallParamCountMismatch {
             span: info.span,
-            found: info.generics.len(),
-            needs: target_fn_decl.generic_params.len(),
+            found: info.args.len(),
+            needs: target_fn_decl.params.len() - if self_value.is_some() { 1 } else { 0 },
             path: fn_builder.get_file_path().clone(),
         });
     }
+
+    // Save the generics info.
+    if !info.generics.is_empty() {
+        fn_builder
+            .builder
+            .add_generic_params(&info.generics, &target_fn_decl.generic_params)?;
+
+        if info.generics.len() != target_fn_decl.generic_params.len() {
+            return Err(LoweringError::GenericCountMismatch {
+                span: info.span,
+                found: info.generics.len(),
+                needs: target_fn_decl.generic_params.len(),
+                path: fn_builder.get_file_path().clone(),
+            });
+        }
+    }
+
+    // TODO: bounds checks
 
     let mut args_ty = Vec::new();
 
@@ -310,10 +329,48 @@ pub(crate) fn lower_fn_call(
         fn_builder.builder.context.self_ty = Some(self_ty);
     }
 
-    // Lower the param types.
-    for param in &target_fn_decl.params {
-        let ty = lower_type(fn_builder.builder, &param.r#type)?;
-        args_ty.push(ty);
+    if info.generics.is_empty() {
+        // Guess the generic parameter types based on the arguments
+        // We already know args count match with the target declaration.
+
+        let generics: HashMap<String, GenericParam> = target_fn_decl
+            .generic_params
+            .iter()
+            .map(|x| (x.name.name.clone(), x.clone()))
+            .collect();
+
+        let target_fn_param_start_idx = if self_value.is_some() { 1 } else { 0 };
+
+        for (i, param) in info.args.iter().enumerate() {
+            if let Some(name) = target_fn_decl.params[target_fn_param_start_idx + i]
+                .r#type
+                .get_name()
+            {
+                if generics.contains_key(&name) {
+                    let infer_ty = find_expression_type(fn_builder, param)?.expect("need to infer");
+                    fn_builder
+                        .builder
+                        .context
+                        .generics_mapping
+                        .insert(name.clone(), infer_ty);
+                }
+            }
+            let ty = lower_type(
+                fn_builder.builder,
+                &target_fn_decl.params[target_fn_param_start_idx + i].r#type,
+            )?;
+            args_ty.push(ty);
+        }
+    } else {
+        // Lower the param types, skipping self.
+        for param in target_fn_decl
+            .params
+            .iter()
+            .skip(if self_value.is_some() { 1 } else { 0 })
+        {
+            let ty = lower_type(fn_builder.builder, &param.r#type)?;
+            args_ty.push(ty);
+        }
     }
 
     // Lower the return type.
@@ -323,25 +380,15 @@ pub(crate) fn lower_fn_call(
         fn_builder.builder.ir.get_unit_ty()
     };
 
-    if args_ty.len() != info.args.len() + { if self_value.is_some() { 1 } else { 0 } } {
-        return Err(LoweringError::CallParamCountMismatch {
-            span: info.span,
-            found: info.args.len(),
-            needs: args_ty.len() - if self_value.is_some() { 1 } else { 0 },
-            path: fn_builder.get_file_path().clone(),
-        });
-    }
-
     let mut args = Vec::new();
 
-    let mut args_ty_iter = args_ty.into_iter();
-
     // Add the self value if there is one.
-    if let Some((arg, _arg_ty)) = self_value {
-        // Here arg_ty is the type without references.
+    if let Some((arg, _self_arg_ty)) = self_value {
+        // Here self_arg_ty is the type without references.
         // We should use the type from the fn sig to know if it needs a reference.
-        let expected_type_idx = args_ty_iter.next().expect("self ty should be there");
-        let expected_ty = fn_builder.builder.get_type(expected_type_idx);
+        let expected_self_arg_ty_idx =
+            lower_type(fn_builder.builder, &target_fn_decl.params[0].r#type)?;
+        let expected_ty = fn_builder.builder.get_type(expected_self_arg_ty_idx);
         match expected_ty {
             Type::Ref(_, mutability) => {
                 args.push(Rvalue::Ref(*mutability, arg.clone()));
@@ -353,7 +400,7 @@ pub(crate) fn lower_fn_call(
     }
 
     // Lower the argument expressions.
-    for (arg, arg_type_idx) in info.args.iter().zip(args_ty_iter) {
+    for (arg, arg_type_idx) in info.args.iter().zip(args_ty.into_iter()) {
         let (rvalue, rvalue_type_idx, rvalue_span) =
             lower_expression(fn_builder, arg, Some(arg_type_idx))?;
         let arg_ty = fn_builder.builder.get_type(arg_type_idx);

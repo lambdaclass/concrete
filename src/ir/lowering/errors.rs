@@ -25,6 +25,8 @@ pub enum LoweringError {
     MissingTraitFunction(Box<MissingTraitFunction>),
     #[error("unexpected trait function in trait impl")]
     UnexpectedTraitFunction(Box<UnexpectedTraitFunction>),
+    #[error("can't infer type")]
+    CantInferType(Box<CantInferType>),
     #[error("function {function:?} not found")]
     FunctionNotFound {
         span: Span,
@@ -188,3 +190,10 @@ pub struct MissingTraitFunction {
 }
 
 pub type UnexpectedTraitFunction = MissingTraitFunction;
+
+#[derive(Debug, Clone)]
+pub struct CantInferType {
+    pub message: String,
+    pub span: Span,
+    pub path: PathBuf,
+}

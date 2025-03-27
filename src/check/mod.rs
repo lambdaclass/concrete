@@ -580,5 +580,18 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 .with_help("Remove the unexpected function from the trait implementation");
             report.finish()
         }
+        LoweringError::CantInferType(error) => {
+            let path = error.path.display().to_string();
+            let filespan = FileSpan::new(path.clone(), error.span.into());
+            let report = Report::build(ReportKind::Error, filespan.clone())
+                .with_code("CantInferType")
+                .with_label(
+                    Label::new(filespan.clone())
+                        .with_message(error.message)
+                        .with_color(colors.next()),
+                )
+                .with_help("Specify the generic type at the function call.");
+            report.finish()
+        }
     }
 }
