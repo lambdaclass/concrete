@@ -143,6 +143,10 @@ pub enum Token {
     SymOpOr,
     #[token("%")]
     SymOpRem,
+    #[token("<<")]
+    SymOpShl,
+    #[token(">>")]
+    SymOpShr,
     #[token("-")]
     SymOpSub,
     #[token(".")]
