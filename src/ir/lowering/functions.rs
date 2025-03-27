@@ -239,29 +239,7 @@ pub(crate) fn lower_fn_call(
 ) -> Result<(Rvalue, TypeIndex, Span), LoweringError> {
     debug!("lowering fn call");
 
-    let mut module_idx = fn_builder.get_current_module_idx();
-
-    for target in &info.path {
-        // first search on local modules
-        if let Some(target_module) = fn_builder.builder.ir.modules[module_idx]
-            .modules
-            .get(&target.name)
-        {
-            module_idx = *target_module;
-        }
-        // Then search on top level modules
-        else if let Some(target_module) =
-            fn_builder.builder.top_level_modules_names.get(&target.name)
-        {
-            module_idx = *target_module;
-        } else {
-            Err(LoweringError::ModuleNotFound {
-                span: target.span,
-                module: target.name.clone(),
-                path: fn_builder.get_file_path().clone(),
-            })?;
-        }
-    }
+    let module_idx = fn_builder.builder.get_path_module_idx(&info.path)?;
 
     // Temporarly set the local module to the import module in case the function is not yet
     // lowered and needs to be.

@@ -13,7 +13,7 @@ use tracing::debug;
 use traits::TraitDatabase;
 
 use crate::{
-    ast::expressions::EnumInitExpr,
+    ast::{common::Ident, expressions::EnumInitExpr},
     ir::{
         AdtBody, AdtIndex, ConstBody, ConstIndex, FnIndex, Function, IR, Local, LocalIndex, Module,
         ModuleIndex, Statement, Type, TypeIndex,
@@ -151,6 +151,18 @@ impl IRBuilder {
             .module_stack
             .last()
             .expect("There should always be a module in context")
+    }
+
+    pub fn get_current_symbols(&self) -> &SymbolTable {
+        self.symbols
+            .get(&self.get_current_module_idx())
+            .expect("should find symbols")
+    }
+
+    pub fn get_current_symbols_mut(&mut self) -> &mut SymbolTable {
+        self.symbols
+            .get_mut(&self.get_current_module_idx())
+            .expect("should find symbols")
     }
 
     pub fn enter_module_context(&mut self, module_id: ModuleIndex) {
@@ -311,6 +323,43 @@ impl IRBuilder {
         Ok(())
     }
 
+    /// Get the module idx of the given iden path, using the current module as reference.
+    pub fn get_path_module_idx(&self, path: &[Ident]) -> Result<ModuleIndex, LoweringError> {
+        let mut type_module_idx = self.get_current_module_idx();
+
+        if !path.is_empty() {
+            let mut it = path.iter();
+            let first = it.next().unwrap();
+
+            if let Some(first) = self.ir.modules[type_module_idx].modules.get(&first.name) {
+                type_module_idx = *first;
+            } else {
+                type_module_idx =
+                    *self
+                        .top_level_modules_names
+                        .get(&first.name)
+                        .ok_or_else(|| LoweringError::ModuleNotFound {
+                            span: first.span,
+                            module: first.name.clone(),
+                            path: self.get_current_module().file_path.clone(),
+                        })?;
+            }
+
+            for next in it {
+                type_module_idx = *self.ir.modules[type_module_idx]
+                    .modules
+                    .get(&next.name)
+                    .ok_or_else(|| LoweringError::ModuleNotFound {
+                        span: first.span,
+                        module: first.name.clone(),
+                        path: self.get_current_module().file_path.clone(),
+                    })?;
+            }
+        }
+
+        Ok(type_module_idx)
+    }
+
     /// Gets the struct index for the given StructInitExpr (+ using the current generics map in builder).
     /// If the given struct isn't lowered yet its gets lowered (generics).
     pub fn get_or_lower_for_struct_init(
@@ -323,9 +372,13 @@ impl IRBuilder {
             generics: Vec::new(),
         };
 
-        let module_idx = self.get_current_module_idx();
+        let type_module_idx = self.get_path_module_idx(&info.name.path)?;
+        self.enter_module_context(type_module_idx);
 
-        let poly_idx = *self.symbols[&module_idx].aggregates.get(&sym).unwrap();
+        let poly_idx = *self.symbols[&self.get_current_module_idx()]
+            .aggregates
+            .get(&sym)
+            .unwrap();
         let struct_decl = self.bodies.structs.get(&poly_idx).unwrap().clone();
 
         let old_generic_params = self.context.generics_mapping.clone();
@@ -333,6 +386,8 @@ impl IRBuilder {
         self.add_generic_params(&info.name.generics, &struct_decl.generics)?;
 
         let id = lower_struct(self, &struct_decl)?;
+
+        self.leave_module_context();
 
         self.context.generics_mapping = old_generic_params;
 
@@ -351,9 +406,10 @@ impl IRBuilder {
             generics: Vec::new(),
         };
 
-        let module_idx = self.get_current_module_idx();
+        let type_module_idx = self.get_path_module_idx(&info.name.path)?;
+        self.enter_module_context(type_module_idx);
 
-        let poly_idx = *self.symbols[&module_idx].aggregates.get(&sym).unwrap();
+        let poly_idx = *self.get_current_symbols().aggregates.get(&sym).unwrap();
         let enum_decl = self.bodies.enums.get(&poly_idx).unwrap().clone();
 
         let old_generic_params = self.context.generics_mapping.clone();
@@ -361,6 +417,8 @@ impl IRBuilder {
         self.add_generic_params(&info.name.generics, &enum_decl.generics)?;
 
         let id = lower_enum(self, &enum_decl)?;
+
+        self.leave_module_context();
 
         self.context.generics_mapping = old_generic_params;
 
