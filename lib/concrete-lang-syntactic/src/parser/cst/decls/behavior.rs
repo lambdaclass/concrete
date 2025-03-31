@@ -5,7 +5,7 @@ use super::{
 use crate::{
     lexer::TokenKind,
     parser::{
-        cst::parse::{
+        cst::{
             exprs::Expression,
             mods::ModuleItem,
             utils::{Angles, Braces, Brackets, Parens, Seq, WithVis, check_enum},

@@ -2,7 +2,7 @@ use super::{GenericsDecl, TypeRef, WhereClause};
 use crate::{
     lexer::TokenKind,
     parser::{
-        cst::parse::{
+        cst::{
             exprs::Expression,
             utils::{Angles, Braces, CommaSep, Parens, check_enum},
         },

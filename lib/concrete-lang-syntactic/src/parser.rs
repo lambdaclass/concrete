@@ -1,5 +1,5 @@
 use self::{
-    cst::parse::SourceFile,
+    cst::SourceFile,
     parse::{ParseContext, ParseNode},
     storage::{TreeNode, TreeNodeParse},
 };

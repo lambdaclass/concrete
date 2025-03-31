@@ -12,7 +12,7 @@ use super::{Field, GenericsDecl, TypeRef, WhereClause};
 use crate::{
     lexer::TokenKind,
     parser::{
-        cst::parse::{
+        cst::{
             exprs::{BlockExpr, Expression},
             utils::{Angles, CommaSep, Parens},
         },
