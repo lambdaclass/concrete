@@ -21,7 +21,7 @@ use super::{
     functions::{lower_func, lower_func_decl},
     ir::{IR, ModuleIndex, Type},
     traits::{TraitDatabase, TraitGeneric, TraitImpl},
-    types::lower_type,
+    types::{lower_type, lower_type_decl},
 };
 
 /// Lowers the ast compile units, the last should be the "main" unit whose unit tests are saved.
@@ -805,7 +805,9 @@ pub fn lower_module(
                     lower_struct(builder, info)?;
                 }
             }
-            ast::modules::ModuleDefItem::Type(_) => todo!(),
+            ast::modules::ModuleDefItem::Type(info) => {
+                lower_type_decl(builder, info)?;
+            }
             ast::modules::ModuleDefItem::Function(function_def) => {
                 if function_def.decl.generic_params.is_empty() {
                     lower_func(builder, function_def, None)?;

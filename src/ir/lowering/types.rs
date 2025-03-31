@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tracing::{debug, instrument};
 
 use crate::{
-    ast::types::TypeDescriptor,
+    ast::types::{TypeDecl, TypeDescriptor},
     ir::lowering::{Symbol, adts::lower_enum},
 };
 
@@ -72,6 +72,11 @@ pub(crate) fn lower_type(
             "String" => *builder.ir.builtin_types.get(&Type::String).unwrap(),
             "char" => *builder.ir.builtin_types.get(&Type::Char).unwrap(),
             other => {
+                // Check if it exists in the type aliases
+                if let Some(ty) = builder.get_current_symbols().types.get(other) {
+                    return Ok(*ty);
+                }
+
                 // Check if the type name exists in the generic map.
                 if let Some(ty) = builder.context.generics_mapping.get(other).copied() {
                     debug!(
@@ -290,4 +295,24 @@ pub(crate) fn lower_type(
             }
         }
     })
+}
+
+/// Lowers a type alias.
+#[instrument(skip_all)]
+pub(crate) fn lower_type_decl(
+    builder: &mut IRBuilder,
+    type_decl: &TypeDecl,
+) -> Result<TypeIndex, LoweringError> {
+    let result_ty = lower_type(builder, &type_decl.value)?;
+    debug!(
+        "Added type alias {} -> {}",
+        type_decl.name.name,
+        result_ty.to_idx()
+    );
+
+    let sym = builder.get_current_symbols_mut();
+
+    sym.types.insert(type_decl.name.name.clone(), result_ty);
+
+    Ok(result_ty)
 }

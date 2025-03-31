@@ -273,7 +273,7 @@ ModuleDefItem: ast::modules::ModuleDefItem = {
   <TraitDecl> => {
     ast::modules::ModuleDefItem::Trait(Arc::new(<>))
   },
-  <TypeDecl> => {
+  <TypeDecl> ";" => {
     ast::modules::ModuleDefItem::Type(Arc::new(<>))
   },
   <ImplBlock> => {
