@@ -12,9 +12,9 @@ jobs:
         name: clippy
         runs-on: ubuntu-latest
         env:
-            MLIR_SYS_190_PREFIX: /usr/lib/llvm-19/
-            LLVM_SYS_191_PREFIX: /usr/lib/llvm-19/
-            TABLEGEN_190_PREFIX: /usr/lib/llvm-19/
+            MLIR_SYS_200_PREFIX: /usr/lib/llvm-20/
+            LLVM_SYS_201_PREFIX: /usr/lib/llvm-20/
+            TABLEGEN_200_PREFIX: /usr/lib/llvm-20/
         steps:
         - uses: actions/checkout@v3
         - uses: dtolnay/rust-toolchain@1.85.0
@@ -24,11 +24,11 @@ jobs:
         - name: add llvm deb repository
           uses: myci-actions/add-deb-repo@10
           with:
-                repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main
+                repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main
                 repo-name: llvm-repo
                 keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
         - name: Install LLVM
-          run: sudo apt-get install llvm-19 llvm-19-dev llvm-19-runtime clang-19 clang-tools-19 lld-19 libpolly-19-dev libmlir-19-dev mlir-19-tools
+          run: sudo apt-get install llvm-20 llvm-20-dev llvm-20-runtime clang-20 clang-tools-20 lld-20 libpolly-20-dev libmlir-20-dev mlir-20-tools
         - name: Clippy
           run: make check
 
@@ -46,9 +46,9 @@ jobs:
         name: test (linux, amd64)
         runs-on: ubuntu-latest
         env:
-            MLIR_SYS_190_PREFIX: /usr/lib/llvm-19/
-            LLVM_SYS_191_PREFIX: /usr/lib/llvm-19/
-            TABLEGEN_190_PREFIX: /usr/lib/llvm-19/
+            MLIR_SYS_200_PREFIX: /usr/lib/llvm-20/
+            LLVM_SYS_201_PREFIX: /usr/lib/llvm-20/
+            TABLEGEN_200_PREFIX: /usr/lib/llvm-20/
             RUST_LOG: debug
         steps:
         - uses: actions/checkout@v3
@@ -59,11 +59,11 @@ jobs:
         - name: add llvm deb repository
           uses: myci-actions/add-deb-repo@10
           with:
-            repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main
+            repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main
             repo-name: llvm-repo
             keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
         - name: Install LLVM
-          run: sudo apt-get install llvm-19 llvm-19-dev llvm-19-runtime clang-19 clang-tools-19 lld-19 libpolly-19-dev libmlir-19-dev mlir-19-tools
+          run: sudo apt-get install llvm-20 llvm-20-dev llvm-20-runtime clang-20 clang-tools-20 lld-20 libpolly-20-dev libmlir-20-dev mlir-20-tools
         - name: Install Link deps
           run: sudo apt-get install libc-dev build-essential
         - name: test
@@ -74,9 +74,9 @@ jobs:
       env:
         CARGO_TERM_COLOR: always
         LIBRARY_PATH: /opt/homebrew/lib
-        MLIR_SYS_190_PREFIX: /opt/homebrew/opt/llvm@19
-        LLVM_SYS_191_PREFIX: /opt/homebrew/opt/llvm@19
-        TABLEGEN_190_PREFIX: /opt/homebrew/opt/llvm@19
+        MLIR_SYS_200_PREFIX: /opt/homebrew/opt/llvm@20
+        LLVM_SYS_201_PREFIX: /opt/homebrew/opt/llvm@20
+        TABLEGEN_200_PREFIX: /opt/homebrew/opt/llvm@20
         RUST_LOG: debug
       steps:
         - uses: actions/checkout@v4
@@ -87,7 +87,7 @@ jobs:
         #- name: Retreive cached dependecies
           #uses: Swatinem/rust-cache@v2
         - name: install llvm
-          run: brew install llvm@19
+          run: brew install llvm@20
         - name: Run tests
           run: make test
     coverage:
@@ -95,9 +95,9 @@ jobs:
         runs-on: ubuntu-latest
         env:
             CARGO_TERM_COLOR: always
-            MLIR_SYS_190_PREFIX: /usr/lib/llvm-19/
-            LLVM_SYS_191_PREFIX: /usr/lib/llvm-19/
-            TABLEGEN_190_PREFIX: /usr/lib/llvm-19/
+            MLIR_SYS_200_PREFIX: /usr/lib/llvm-20/
+            LLVM_SYS_201_PREFIX: /usr/lib/llvm-20/
+            TABLEGEN_200_PREFIX: /usr/lib/llvm-20/
             RUST_LOG: debug
         steps:
             - uses: actions/checkout@v3
@@ -108,11 +108,11 @@ jobs:
             - name: add llvm deb repository
               uses: myci-actions/add-deb-repo@10
               with:
-                    repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main
+                    repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main
                     repo-name: llvm-repo
                     keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
             - name: Install LLVM
-              run: sudo apt-get install llvm-19 llvm-19-dev llvm-19-runtime clang-19 clang-tools-19 lld-19 libpolly-19-dev libmlir-19-dev mlir-19-tools
+              run: sudo apt-get install llvm-20 llvm-20-dev llvm-20-runtime clang-20 clang-tools-20 lld-20 libpolly-20-dev libmlir-20-dev mlir-20-tools
             - name: Install Link deps
               run: sudo apt-get install libc-dev build-essential
             - name: Install cargo-llvm-cov
@@ -147,9 +147,9 @@ jobs:
       name: Bench
       runs-on: ubuntu-latest
       env:
-        MLIR_SYS_190_PREFIX: /usr/lib/llvm-19/
-        LLVM_SYS_191_PREFIX: /usr/lib/llvm-19/
-        TABLEGEN_190_PREFIX: /usr/lib/llvm-19/
+        MLIR_SYS_200_PREFIX: /usr/lib/llvm-20/
+        LLVM_SYS_201_PREFIX: /usr/lib/llvm-20/
+        TABLEGEN_200_PREFIX: /usr/lib/llvm-20/
       steps:
         - uses: actions/checkout@v4
         - uses: dtolnay/rust-toolchain@1.85.0
@@ -163,11 +163,11 @@ jobs:
         - name: add llvm deb repository
           uses: myci-actions/add-deb-repo@11
           with:
-                repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-19 main
+                repo: deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main
                 repo-name: llvm-repo
                 keys-asc: https://apt.llvm.org/llvm-snapshot.gpg.key
         - name: Install LLVM
-          run: sudo apt-get install llvm-19 llvm-19-dev llvm-19-runtime clang-19 clang-tools-19 lld-19 libpolly-19-dev libmlir-19-dev mlir-19-tools
+          run: sudo apt-get install llvm-20 llvm-20-dev llvm-20-runtime clang-20 clang-tools-20 lld-20 libpolly-20-dev libmlir-20-dev mlir-20-tools
         - name: Install Link deps
           run: sudo apt-get install libc-dev build-essential
         - name: Run bench
@@ -195,16 +195,16 @@ jobs:
       env:
         CARGO_TERM_COLOR: always
         LIBRARY_PATH: /opt/homebrew/lib
-        MLIR_SYS_190_PREFIX: /opt/homebrew/opt/llvm@19
-        LLVM_SYS_191_PREFIX: /opt/homebrew/opt/llvm@19
-        TABLEGEN_190_PREFIX: /opt/homebrew/opt/llvm@19
+        MLIR_SYS_200_PREFIX: /opt/homebrew/opt/llvm@20
+        LLVM_SYS_201_PREFIX: /opt/homebrew/opt/llvm@20
+        TABLEGEN_200_PREFIX: /opt/homebrew/opt/llvm@20
       steps:
         - uses: actions/checkout@v4
         - name: Rustup toolchain install
           uses: dtolnay/rust-toolchain@1.85.0
         - uses: homebrew/actions/setup-homebrew@master
         - name: install llvm
-          run: brew install llvm@19
+          run: brew install llvm@20
         - name: Run bench
           run: ./bench/bench.sh | sed 's/\x1B\[[0-9;]\{1,\}[A-Za-z]//g' > bench.md
 
