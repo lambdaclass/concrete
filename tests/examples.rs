@@ -4,6 +4,7 @@ use test_case::test_case;
 
 mod common;
 
+#[test_case(include_str!("../examples/type_alias.con"), "type_alias", false, 4 ; "type_alias.con")]
 #[test_case(include_str!("../examples/simple_trait.con"), "simple_trait", false, 2 ; "simple_trait.con")]
 #[test_case(include_str!("../examples/generic_enum_impl.con"), "generic_enum_impl", false, 1 ; "generic_enum_impl.con")]
 #[test_case(include_str!("../examples/enum_match.con"), "enum_match", false, 2 ; "enum_match.con")]

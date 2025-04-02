@@ -1,0 +1,13 @@
+mod test {
+    type Alias = u32;
+
+    pub fn example(a: Alias) -> Alias {
+        return a * 2;
+    }
+
+    fn main() -> Alias {
+        let ex: Alias = 2;
+
+        return example(ex);
+    }
+}
