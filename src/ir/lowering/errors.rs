@@ -27,6 +27,8 @@ pub enum LoweringError {
     UnexpectedTraitFunction(Box<UnexpectedTraitFunction>),
     #[error("can't infer type")]
     CantInferType(Box<CantInferType>),
+    #[error("trait bound not met")]
+    TraitBoundNotMet(Box<TraitBoundNotMet>),
     #[error("function {function:?} not found")]
     FunctionNotFound {
         span: Span,
@@ -195,5 +197,16 @@ pub type UnexpectedTraitFunction = MissingTraitFunction;
 pub struct CantInferType {
     pub message: String,
     pub span: Span,
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct TraitBoundNotMet {
+    pub trait_name: String,
+    pub trait_span: Span,
+    pub func_name: String,
+    pub func_name_span: Span,
+    pub param_name: String,
+    pub param_span: Span,
     pub path: PathBuf,
 }

@@ -391,6 +391,28 @@ pub(crate) fn lower_expression(
     })
 }
 
+pub(crate) fn find_expression_span(info: &Expression) -> Span {
+    match info {
+        Expression::Value(_, span) => *span,
+        Expression::AssocMethodCall(assoc_method_call) => assoc_method_call.span,
+        Expression::FnCall(fn_call_op) => fn_call_op.span,
+        Expression::Match(match_expr) => match_expr.span,
+        Expression::If(if_expr) => if_expr.span,
+        Expression::UnaryOp(_, expression) => find_expression_span(expression),
+        Expression::BinaryOp(lhs, _, rhs) => {
+            let first = find_expression_span(lhs);
+            let second = find_expression_span(rhs);
+            Span::new(first.from.min(second.from), first.to.max(second.to))
+        }
+        Expression::StructInit(struct_init_expr) => struct_init_expr.span,
+        Expression::EnumInit(enum_init_expr) => enum_init_expr.span,
+        Expression::ArrayInit(array_init_expr) => array_init_expr.span,
+        Expression::Deref(_, span) => *span,
+        Expression::AsRef(_, _, span) => *span,
+        Expression::Cast(_, _, span) => *span,
+    }
+}
+
 #[instrument(level = "debug", skip_all)]
 pub(crate) fn find_expression_type(
     fn_builder: &mut FnIrBuilder,

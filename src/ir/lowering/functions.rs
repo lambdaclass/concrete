@@ -324,13 +324,32 @@ pub(crate) fn lower_fn_call(
                 .r#type
                 .get_name()
             {
-                if generics.contains_key(&name) {
+                if let Some(generic) = generics.get(&name) {
                     let infer_ty = find_expression_type(fn_builder, param)?.expect("need to infer");
                     fn_builder
                         .builder
                         .context
                         .generics_mapping
                         .insert(name.clone(), infer_ty);
+
+                    for bound in &generic.bounds {
+                        if let Some(check_trait) = fn_builder
+                            .builder
+                            .trait_db
+                            .get_trait_by_name(&bound.name.name, module_idx)
+                        {
+                            let trait_generics = Vec::new(); // TODO: implement trait generics here
+                            if !fn_builder.builder.trait_db.type_implements_trait(
+                                infer_ty,
+                                check_trait,
+                                &trait_generics,
+                            ) {
+                                todo!("type doesnt implement trait error here")
+                            }
+                        } else {
+                            todo!("trait not found error here")
+                        }
+                    }
                 }
             }
             let ty = lower_type(

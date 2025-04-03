@@ -5,8 +5,8 @@ use std::{
 };
 
 use adts::{lower_enum, lower_struct};
-use errors::CantInferType;
-use expressions::find_expression_type;
+use errors::{CantInferType, TraitBoundNotMet};
+use expressions::{find_expression_span, find_expression_type};
 use functions::{lower_func, lower_func_decl};
 use itertools::Itertools;
 use tracing::debug;
@@ -616,7 +616,7 @@ impl FnIrBuilder<'_> {
                             .collect();
                         for (i, param) in info.args.iter().enumerate() {
                             if let Some(name) = fn_decl.params[i].r#type.get_name() {
-                                if generics.contains_key(&name) {
+                                if let Some(generic) = generics.get(&name) {
                                     let infer_ty =
                                         find_expression_type(self, param)?.ok_or_else(|| {
                                             LoweringError::CantInferType(
@@ -635,6 +635,44 @@ impl FnIrBuilder<'_> {
                                         .generics_mapping
                                         .insert(name.clone(), infer_ty);
                                     generic_types.push(infer_ty);
+
+                                    // Check trait bounds
+                                    for bound in &generic.bounds {
+                                        if let Some(check_trait) =
+                                            self.builder.trait_db.get_trait_by_name(
+                                                &bound.name.name,
+                                                self.get_current_module_idx(),
+                                            )
+                                        {
+                                            let trait_generics = Vec::new(); // TODO: implement trait generics here
+                                            if !self.builder.trait_db.type_implements_trait(
+                                                infer_ty,
+                                                check_trait,
+                                                &trait_generics,
+                                            ) {
+                                                return Err(LoweringError::TraitBoundNotMet(
+                                                    Box::new(TraitBoundNotMet {
+                                                        trait_name: bound.name.name.clone(),
+                                                        trait_span: bound.span,
+                                                        func_name: info.target.name.clone(),
+                                                        func_name_span: info.target.span,
+                                                        param_name: fn_decl.params[i]
+                                                            .name
+                                                            .name
+                                                            .clone(),
+                                                        param_span: find_expression_span(param),
+                                                        path: self.get_file_path().clone(),
+                                                    }),
+                                                ));
+                                            }
+                                        } else {
+                                            Err(LoweringError::TraitNotFound {
+                                                span: bound.name.span,
+                                                name: bound.name.name.clone(),
+                                                path: self.get_file_path().clone(),
+                                            })?;
+                                        }
+                                    }
                                 }
                             }
                         }
