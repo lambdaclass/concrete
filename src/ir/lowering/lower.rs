@@ -49,6 +49,7 @@ pub fn lower_compile_units(compile_units: &[ast::CompilationUnit]) -> Result<IR,
             self_ty: None,
             generics_mapping: Default::default(),
             module_stack: Vec::with_capacity(8),
+            impl_generics: Default::default(),
         },
     };
 
@@ -309,6 +310,15 @@ fn lower_module_symbols(
     for item in &module.contents {
         match item {
             ast::modules::ModuleDefItem::Impl(impl_block) => {
+                builder.context.impl_generics.clear();
+
+                for g in &impl_block.generic_params {
+                    builder
+                        .context
+                        .impl_generics
+                        .insert(g.name.name.clone(), g.clone());
+                }
+
                 let ty = if !impl_block.generic_params.is_empty() {
                     let adt_symbol = Symbol {
                         name: impl_block.target.get_name().unwrap(),

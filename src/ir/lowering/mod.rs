@@ -118,6 +118,7 @@ pub struct IRBuilderContext {
     pub self_ty: Option<TypeIndex>,
     /// The current name to type index mapping to resolve generic type names in the current context.
     pub generics_mapping: HashMap<String, TypeIndex>,
+    pub impl_generics: HashMap<String, GenericParam>,
     /// A stack for the current module id.
     ///
     /// Sometimes we need to temporarely enter the "context" of another module, e.g when handling
@@ -602,11 +603,13 @@ impl FnIrBuilder<'_> {
                 // If function is generic or the self type is generic, monomorphize here.
                 if !fn_decl.generic_params.is_empty()
                     || polymorphic_method_of_type_idx != method_of_type_idx
+                    || !self.builder.context.impl_generics.is_empty()
                 {
                     let old_generics = self.builder.context.generics_mapping.clone();
 
                     let mut generic_types = Vec::new();
 
+                    let mut impl_generics_used = 0;
                     if info.generics.is_empty() {
                         // Generic parameter type inference
                         let generics: HashMap<String, GenericParam> = fn_decl
@@ -614,27 +617,54 @@ impl FnIrBuilder<'_> {
                             .iter()
                             .map(|x| (x.name.name.clone(), x.clone()))
                             .collect();
+
                         for (i, param) in info.args.iter().enumerate() {
                             if let Some(name) = fn_decl.params[i].r#type.get_name() {
-                                if let Some(generic) = generics.get(&name) {
-                                    let infer_ty =
-                                        find_expression_type(self, param)?.ok_or_else(|| {
-                                            LoweringError::CantInferType(
-                                                CantInferType {
-                                                    message:
-                                                        "Can't infer generic argument type for this function call."
-                                                            .to_string(),
-                                                    span: info.target.span,
-                                                    path: self.get_file_path().clone(),
-                                                }
-                                                .into(),
-                                            )
-                                        })?;
+                                if let Some(generic) = generics.get(&name).cloned().or_else(|| {
+                                    self.builder.context.impl_generics.get(&name).cloned()
+                                }) {
+                                    let infer_ty = if let Some(ty) =
+                                        find_expression_type(self, param)?
+                                    {
+                                        ty
+                                    } else {
+                                        match param {
+                                            crate::ast::expressions::Expression::Value(
+                                                value_expr,
+                                                _,
+                                            ) => match value_expr {
+                                                crate::ast::expressions::ValueExpr::ConstInt(
+                                                    _,
+                                                    _,
+                                                ) => self.builder.ir.get_i32_ty(),
+                                                crate::ast::expressions::ValueExpr::ConstFloat(
+                                                    _,
+                                                    _,
+                                                ) => self.builder.ir.get_f32_ty(),
+                                                _ => unreachable!(),
+                                            },
+                                            _ => {
+                                                return Err(LoweringError::CantInferType(
+                                                    CantInferType {
+                                                        message:
+                                                            "Can't infer generic argument type for this function call."
+                                                                .to_string(),
+                                                        span: info.target.span,
+                                                        path: self.get_file_path().clone(),
+                                                    }
+                                                    .into(),
+                                                ));
+                                            }
+                                        }
+                                    };
                                     self.builder
                                         .context
                                         .generics_mapping
                                         .insert(name.clone(), infer_ty);
                                     generic_types.push(infer_ty);
+                                    impl_generics_used +=
+                                        self.builder.context.impl_generics.contains_key(&name)
+                                            as usize;
 
                                     // Check trait bounds
                                     for bound in &generic.bounds {
@@ -701,7 +731,7 @@ impl FnIrBuilder<'_> {
                             .add_generic_params(&info.generics, &fn_decl.generic_params)?;
                     }
 
-                    if generic_types.len() != fn_decl.generic_params.len() {
+                    if generic_types.len() != fn_decl.generic_params.len() + impl_generics_used {
                         return Err(LoweringError::GenericCountMismatch {
                             span: info.span,
                             found: info.generics.len(),
@@ -748,7 +778,7 @@ impl FnIrBuilder<'_> {
 
                                 self.builder.leave_module_context();
 
-                                assert_eq!(id, lowered_id);
+                                lowered_id
                             } else if let Some(fn_decl) =
                                 self.builder.bodies.functions_decls.get(&poly_id).cloned()
                             {
@@ -759,9 +789,10 @@ impl FnIrBuilder<'_> {
 
                                 self.leave_module_context();
 
-                                assert_eq!(id, lowered_id);
+                                lowered_id
+                            } else {
+                                id
                             }
-                            id
                         }
                     };
 

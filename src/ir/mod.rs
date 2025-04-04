@@ -79,6 +79,11 @@ impl IR {
         *self.builtin_types.get(&Type::Uint(UintTy::U64)).unwrap()
     }
 
+    /// Get the builtin `f32` type.
+    pub fn get_f32_ty(&self) -> TypeIndex {
+        *self.builtin_types.get(&Type::Float(FloatTy::F32)).unwrap()
+    }
+
     /// Get the builtin `f64` type.
     pub fn get_f64_ty(&self) -> TypeIndex {
         *self.builtin_types.get(&Type::Float(FloatTy::F64)).unwrap()

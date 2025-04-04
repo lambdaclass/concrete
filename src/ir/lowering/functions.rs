@@ -14,6 +14,7 @@ use crate::{
         Terminator, TerminatorKind, Type,
         lowering::{
             Symbol,
+            errors::CantInferType,
             expressions::{find_expression_type, lower_expression},
             types::lower_type,
         },
@@ -324,8 +325,41 @@ pub(crate) fn lower_fn_call(
                 .r#type
                 .get_name()
             {
-                if let Some(generic) = generics.get(&name) {
-                    let infer_ty = find_expression_type(fn_builder, param)?.expect("need to infer");
+                if let Some(generic) = generics
+                    .get(&name)
+                    .cloned()
+                    .or_else(|| fn_builder.builder.context.impl_generics.get(&name).cloned())
+                {
+                    dbg!(&param);
+                    let infer_ty = if let Some(ty) = find_expression_type(fn_builder, param)? {
+                        ty
+                    } else {
+                        match param {
+                            crate::ast::expressions::Expression::Value(value_expr, _) => {
+                                match value_expr {
+                                    crate::ast::expressions::ValueExpr::ConstInt(_, _) => {
+                                        fn_builder.builder.ir.get_i32_ty()
+                                    }
+                                    crate::ast::expressions::ValueExpr::ConstFloat(_, _) => {
+                                        fn_builder.builder.ir.get_f32_ty()
+                                    }
+                                    _ => unreachable!(),
+                                }
+                            }
+                            _ => {
+                                return Err(LoweringError::CantInferType(
+                                        CantInferType {
+                                            message:
+                                                "Can't infer generic argument type for this function call."
+                                                    .to_string(),
+                                            span: info.target.span,
+                                            path: fn_builder.get_file_path().clone(),
+                                        }
+                                        .into(),
+                                    ));
+                            }
+                        }
+                    };
                     fn_builder
                         .builder
                         .context
@@ -426,6 +460,7 @@ pub(crate) fn lower_fn_call(
 
     let target_block = fn_builder.body.basic_blocks.len() + 1;
 
+    dbg!(mono_fn_id);
     // todo: check if function is diverging such as exit().
     let kind = TerminatorKind::Call {
         func: mono_fn_id.unwrap_or(poly_fn_id),

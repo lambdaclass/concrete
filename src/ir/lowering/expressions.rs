@@ -15,7 +15,7 @@ use crate::{
 };
 
 use super::{
-    FnIrBuilder,
+    FnIrBuilder, Symbol,
     constants::lower_constant_ref,
     errors::LoweringError,
     ir::{BinOp, ConstData, LogOp, Rvalue, TypeIndex},
@@ -130,51 +130,23 @@ pub(crate) fn lower_expression(
             (rvalue, ref_ty, *asref_span)
         }
         Expression::AssocMethodCall(info) => {
-            let type_idx = lower_type(builder.builder, &info.assoc_type.clone().into())?;
-            let ty = builder.builder.get_type(type_idx).clone();
+            let sym = Symbol {
+                name: info.assoc_type.name.name.clone(),
+                method_of: None,
+                generics: Vec::new(),
+            };
 
-            let old_generic_params = builder.builder.context.generics_mapping.clone();
+            //let type_module_idx = builder.builder.get_path_module_idx(&info.assoc_type.path)?;
+            //builder.builder.enter_module_context(type_module_idx);
 
-            if let Type::Adt(adt_index) = ty {
-                let poly_idx = builder
-                    .builder
-                    .mono_type_to_poly
-                    .get(&type_idx)
-                    .copied()
-                    .unwrap_or(type_idx);
-                let poly_adt_idx = if let Type::Adt(id) = builder.builder.get_type(poly_idx) {
-                    *id
-                } else {
-                    panic!("poly struct not found")
-                };
-
-                if let Some(struct_body) =
-                    builder.builder.bodies.structs.get(&poly_adt_idx).cloned()
-                {
-                    builder.builder.add_generic_params_for_adt(
-                        &struct_body.fields,
-                        &struct_body.generics,
-                        adt_index,
-                        0,
-                    )?;
-                } else if let Some(enum_body) =
-                    builder.builder.bodies.enums.get(&poly_adt_idx).cloned()
-                {
-                    for (i, var) in enum_body.variants.iter().enumerate() {
-                        builder.builder.add_generic_params_for_adt(
-                            &var.fields,
-                            &enum_body.generics,
-                            adt_index,
-                            i,
-                        )?;
-                    }
-                }
-            }
+            let poly_idx = *builder.builder.symbols[&builder.get_current_module_idx()]
+                .aggregates
+                .get(&sym)
+                .unwrap();
+            let poly_ty_idx = builder.builder.adt_to_type_idx.get(&poly_idx).unwrap();
 
             let (value, return_type_idx, _span) =
-                lower_fn_call(builder, &info.fn_call, None, Some(type_idx))?;
-
-            builder.builder.context.generics_mapping = old_generic_params;
+                lower_fn_call(builder, &info.fn_call, None, Some(*poly_ty_idx))?;
 
             (value, return_type_idx, info.span)
         }
