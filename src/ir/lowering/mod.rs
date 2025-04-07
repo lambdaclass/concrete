@@ -733,7 +733,7 @@ impl FnIrBuilder<'_> {
 
                                 self.builder.leave_module_context();
 
-                                assert_eq!(id, lowered_id);
+                                lowered_id
                             } else if let Some(fn_decl) =
                                 self.builder.bodies.functions_decls.get(&poly_id).cloned()
                             {
@@ -744,9 +744,10 @@ impl FnIrBuilder<'_> {
 
                                 self.leave_module_context();
 
-                                assert_eq!(id, lowered_id);
+                                lowered_id
+                            } else {
+                                id
                             }
-                            id
                         }
                     };
 
