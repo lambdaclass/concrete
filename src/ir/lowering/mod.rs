@@ -9,8 +9,9 @@ use errors::{CantInferType, TraitBoundNotMet};
 use expressions::{find_expression_span, find_expression_type};
 use functions::{lower_func, lower_func_decl};
 use itertools::Itertools;
+use symbols::{FnSymbol, MonoFnSymbol, SymbolTable};
 use tracing::debug;
-use traits::TraitDatabase;
+use traits::{TraitDatabase, TraitIdx};
 
 use crate::{
     ast::{common::Ident, expressions::EnumInitExpr},
@@ -46,35 +47,12 @@ mod lower;
 mod statements;
 mod traits;
 mod types;
+mod symbols;
 
 pub use errors::LoweringError;
 pub use lower::lower_compile_units;
 
-/// A symbol (currently either a struct/adt or function).
-///
-/// Symbols are used when lowering, to find the correct IR if it's already lowered
-/// or to find the polymorphic AST body, which can be done by using the name without specifying any generic types
-/// within this struct.
-///
-/// This is used mostly with the SymbolTable struct, which itself is used to find the AST body.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Symbol {
-    pub name: String,
-    /// Whether this symbol is a method of the given type.
-    pub method_of: Option<TypeIndex>,
-    /// This vec contains the specific types of the generics used.
-    pub generics: Vec<TypeIndex>,
-}
 
-/// A symbol table to map names to indexes.
-#[derive(Debug, Clone, Default)]
-pub struct SymbolTable {
-    pub modules: HashMap<String, ModuleIndex>,
-    pub functions: HashMap<Symbol, (FnIndex, ModuleIndex)>,
-    pub constants: HashMap<String, ConstIndex>,
-    pub aggregates: HashMap<Symbol, AdtIndex>,
-    pub types: HashMap<String, TypeIndex>,
-}
 
 /// A Struct holding the AST bodies of the given structures.
 /// Needed to make lowering overall easier and for generics.
@@ -552,16 +530,18 @@ impl FnIrBuilder<'_> {
         &self.get_current_module().file_path
     }
 
-    /// Returns the polymorphic id and optionally the monomorphized id.
+    /// Returns the monomorphized id if generic or polymorphic id if not.
     ///
     /// If the function/method is generic and hasn't been lowered, it gets lowered.
     pub fn get_id_for_fn_call(
         &mut self,
         info: &FnCallOp,
         method_of_type_idx: Option<TypeIndex>,
-    ) -> Result<(FnIndex, Option<FnIndex>), LoweringError> {
-        // If the function call is a method of the given type,
-        // we need to handle the case were the given type is polymorphic.
+        // TODO: maybe this should be found by this function using method of type idx.
+        trait_method_of: Option<TraitIdx>,
+    ) -> Result<FnIndex, LoweringError> {
+        // If the function call is a method of the given type `method_of_type_idx`,
+        // we need to handle the case were the given type is generic.
         // The passed id here will be the monomorphic version in that case, so
         // we need to get the polymorphic type id of this type
         // to be able to get the function.
@@ -579,10 +559,14 @@ impl FnIrBuilder<'_> {
             self.builder.get_current_module_idx()
         };
 
-        let poly_symbol = Symbol {
+        if let Some(id) = polymorphic_method_of_type_idx {
+            self.builder.trait_db;
+
+
+        let poly_symbol = FnSymbol {
             name: info.target.name.clone(),
             method_of: polymorphic_method_of_type_idx,
-            generics: Vec::new(),
+            trait_method_of,
         };
 
         let fn_id = {
@@ -710,15 +694,16 @@ impl FnIrBuilder<'_> {
                         });
                     }
 
-                    let mono_symbol = Symbol {
+                    let mono_symbol = MonoFnSymbol {
                         name: info.target.name.clone(),
                         method_of: method_of_type_idx,
+                        trait_method_of,
                         generics: generic_types,
                     };
 
                     let symbols = self.builder.symbols.get(&module_id).unwrap(); // needed for borrowck
                     let id = {
-                        if let Some(id) = symbols.functions.get(&mono_symbol).copied() {
+                        if let Some(id) = symbols.monomorphized_functions.get(&mono_symbol).copied() {
                             id.0
                         } else {
                             // Add the id from here to avoid infinite recursion on recursive functions.
@@ -727,14 +712,14 @@ impl FnIrBuilder<'_> {
                                 .symbols
                                 .get_mut(&module_id)
                                 .unwrap()
-                                .functions
+                                .monomorphized_functions
                                 .insert(mono_symbol.clone(), (id, fn_module_id));
 
                             self.builder
                                 .symbols
                                 .get_mut(&fn_module_id)
                                 .unwrap()
-                                .functions
+                                .monomorphized_functions
                                 .insert(mono_symbol, (id, fn_module_id));
 
                             if let Some(fn_def) =
@@ -744,7 +729,7 @@ impl FnIrBuilder<'_> {
                                 self.enter_module_context(fn_module_id);
 
                                 let lowered_id =
-                                    lower_func(self.builder, &fn_def, method_of_type_idx)?;
+                                    lower_func(self.builder, &fn_def, method_of_type_idx, trait_method_of)?;
 
                                 self.builder.leave_module_context();
 
@@ -766,9 +751,9 @@ impl FnIrBuilder<'_> {
                     };
 
                     self.builder.context.generics_mapping = old_generics;
-                    (poly_id, Some(id))
+                    id
                 } else {
-                    (poly_id, None)
+                    poly_id
                 }
             } else {
                 return Err(LoweringError::FunctionNotFound {
