@@ -10,6 +10,7 @@
   - [Functions](./language/functions.md)
   - [Types](./language/types.md)
   - [Structs](./language/structs.md)
+  - [Arrays](./language/arrays.md)
   - [Enums](./language/enums.md)
   - [Control flow](./language/control_flow.md)
 - [Internal Details](./internal/index.md)
