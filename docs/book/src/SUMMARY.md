@@ -14,6 +14,7 @@
   - [Arrays](./language/arrays.md)
   - [Enums](./language/enums.md)
   - [Control flow](./language/control_flow.md)
+  - [Extern Functions](./language/extern.md)
 - [Internal Details](./internal/index.md)
   - [The IR](./internal/ir.md)
   - [The IR builder](./internal/builder.md)
