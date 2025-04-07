@@ -4,7 +4,7 @@ use tracing::{debug, instrument};
 
 use crate::{
     ast::types::{TypeDecl, TypeDescriptor},
-    ir::lowering::{Symbol, adts::lower_enum},
+    ir::lowering::adts::lower_enum,
 };
 
 use super::{
@@ -12,6 +12,7 @@ use super::{
     adts::lower_struct,
     errors::LoweringError,
     ir::{self, ConstData, ConstKind, ConstValue, FloatTy, Mutability, Type, TypeIndex, ValueTree},
+    symbols::AdtSymbol,
 };
 
 /// Lowers a type.
@@ -98,10 +99,8 @@ pub(crate) fn lower_type(
                     .expect("failed to get symbols for module");
 
                 // Find using the polymorphic symbol.
-                let mut sym = Symbol {
+                let sym = AdtSymbol {
                     name: other.to_string(),
-                    method_of: None,
-                    generics: Vec::new(),
                 };
 
                 // check if its a aggregate type.
@@ -148,14 +147,14 @@ pub(crate) fn lower_type(
                             }
                         }
 
-                        sym.generics = generics.clone();
+                        let sym = sym.monomorphize(&generics);
 
                         // for borrowck
                         let symbols = builder.get_current_symbols();
 
                         // Get the monomorphized adt id or lower it.
                         let mono_adt_idx = if let Some(mono_struct_idx) =
-                            symbols.aggregates.get(&sym).copied()
+                            symbols.monomorphized_aggregates.get(&sym).copied()
                         {
                             mono_struct_idx
                         } else {
@@ -171,7 +170,7 @@ pub(crate) fn lower_type(
                                 .insert(type_id, builder.get_current_module_idx());
                             builder
                                 .get_current_symbols_mut()
-                                .aggregates
+                                .monomorphized_aggregates
                                 .insert(sym.clone(), mono_adt_idx);
 
                             // Save the id to ast body mapping.

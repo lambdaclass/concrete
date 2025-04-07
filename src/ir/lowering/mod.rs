@@ -7,11 +7,11 @@ use std::{
 use adts::{lower_enum, lower_struct};
 use errors::{CantInferType, TraitBoundNotMet};
 use expressions::{find_expression_span, find_expression_type};
-use functions::{lower_func, lower_func_decl};
+use functions::{get_or_create_function_mono_idx, lower_func, lower_func_decl};
 use itertools::Itertools;
-use symbols::{FnSymbol, MonoFnSymbol, SymbolTable};
+use symbols::{AdtSymbol, FnSymbol, MonoFnSymbol, SymbolTable};
 use tracing::debug;
-use traits::{TraitDatabase, TraitIdx};
+use traits::TraitDatabase;
 
 use crate::{
     ast::{common::Ident, expressions::EnumInitExpr},
@@ -45,14 +45,12 @@ mod expressions;
 mod functions;
 mod lower;
 mod statements;
+mod symbols;
 mod traits;
 mod types;
-mod symbols;
 
 pub use errors::LoweringError;
 pub use lower::lower_compile_units;
-
-
 
 /// A Struct holding the AST bodies of the given structures.
 /// Needed to make lowering overall easier and for generics.
@@ -344,10 +342,8 @@ impl IRBuilder {
         &mut self,
         info: &StructInitExpr,
     ) -> Result<AdtIndex, LoweringError> {
-        let sym = Symbol {
+        let sym = AdtSymbol {
             name: info.name.name.name.clone(),
-            method_of: None,
-            generics: Vec::new(),
         };
 
         let type_module_idx = self.get_path_module_idx(&info.name.path)?;
@@ -378,10 +374,8 @@ impl IRBuilder {
         &mut self,
         info: &EnumInitExpr,
     ) -> Result<AdtIndex, LoweringError> {
-        let sym = Symbol {
+        let sym = AdtSymbol {
             name: info.name.name.name.clone(),
-            method_of: None,
-            generics: Vec::new(),
         };
 
         let type_module_idx = self.get_path_module_idx(&info.name.path)?;
@@ -537,8 +531,6 @@ impl FnIrBuilder<'_> {
         &mut self,
         info: &FnCallOp,
         method_of_type_idx: Option<TypeIndex>,
-        // TODO: maybe this should be found by this function using method of type idx.
-        trait_method_of: Option<TraitIdx>,
     ) -> Result<FnIndex, LoweringError> {
         // If the function call is a method of the given type `method_of_type_idx`,
         // we need to handle the case were the given type is generic.
@@ -559,9 +551,10 @@ impl FnIrBuilder<'_> {
             self.builder.get_current_module_idx()
         };
 
-        if let Some(id) = polymorphic_method_of_type_idx {
-            self.builder.trait_db;
-
+        let trait_method_of = None;
+        if let Some(_id) = polymorphic_method_of_type_idx {
+            // TODO: find if its a trait method
+        }
 
         let poly_symbol = FnSymbol {
             name: info.target.name.clone(),
@@ -698,16 +691,26 @@ impl FnIrBuilder<'_> {
                         name: info.target.name.clone(),
                         method_of: method_of_type_idx,
                         trait_method_of,
-                        generics: generic_types,
+                        generics: generic_types.clone(),
                     };
 
                     let symbols = self.builder.symbols.get(&module_id).unwrap(); // needed for borrowck
                     let id = {
-                        if let Some(id) = symbols.monomorphized_functions.get(&mono_symbol).copied() {
+                        if let Some(id) = symbols.monomorphized_functions.get(&mono_symbol).copied()
+                        {
                             id.0
                         } else {
                             // Add the id from here to avoid infinite recursion on recursive functions.
-                            let id = self.builder.ir.functions.insert(None);
+                            let (id, _) = get_or_create_function_mono_idx(
+                                self.builder,
+                                &mono_symbol.name,
+                                &fn_decl.generic_params,
+                                mono_symbol.method_of,
+                                mono_symbol.trait_method_of,
+                                fn_module_id,
+                                Some(generic_types.clone()),
+                            )?;
+                            // Add it to this module id too.
                             self.builder
                                 .symbols
                                 .get_mut(&module_id)
@@ -715,21 +718,18 @@ impl FnIrBuilder<'_> {
                                 .monomorphized_functions
                                 .insert(mono_symbol.clone(), (id, fn_module_id));
 
-                            self.builder
-                                .symbols
-                                .get_mut(&fn_module_id)
-                                .unwrap()
-                                .monomorphized_functions
-                                .insert(mono_symbol, (id, fn_module_id));
-
                             if let Some(fn_def) =
                                 self.builder.bodies.functions.get(&poly_id).cloned()
                             {
                                 // Temporarly set the local module to the module where the function is defined to lower it in the correct context.
                                 self.enter_module_context(fn_module_id);
 
-                                let lowered_id =
-                                    lower_func(self.builder, &fn_def, method_of_type_idx, trait_method_of)?;
+                                let lowered_id = lower_func(
+                                    self.builder,
+                                    &fn_def,
+                                    method_of_type_idx,
+                                    trait_method_of,
+                                )?;
 
                                 self.builder.leave_module_context();
 

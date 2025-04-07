@@ -59,7 +59,7 @@ impl AdtSymbol {
     pub fn monomorphize(&self, generics: &[TypeIndex]) -> MonoAdtSymbol {
         MonoAdtSymbol {
             name: self.name.clone(),
-            generics: generics.to_vec()
+            generics: generics.to_vec(),
         }
     }
 }
@@ -70,7 +70,7 @@ impl FnSymbol {
             name: self.name.clone(),
             method_of: self.method_of,
             trait_method_of: self.trait_method_of,
-            generics: generics.to_vec()
+            generics: generics.to_vec(),
         }
     }
 }

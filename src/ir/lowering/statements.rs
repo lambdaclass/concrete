@@ -14,8 +14,11 @@ use crate::{
         Operand, Place, PlaceElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator,
         TerminatorKind, Type, ValueTree,
         lowering::{
-            Symbol, errors::MissingVariantError, expressions::lower_expression,
-            functions::get_locals, types::lower_type,
+            errors::MissingVariantError,
+            expressions::lower_expression,
+            functions::get_locals,
+            symbols::{AdtSymbol, MonoAdtSymbol},
+            types::lower_type,
         },
     },
 };
@@ -492,15 +495,24 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                     )?;
                     generics.push(ty);
                 }
-                let sym = Symbol {
-                    name: enum_match_expr.name.name.name.clone(),
-                    method_of: None,
-                    generics,
-                };
 
                 // Find the expected adt id with the given generics (if any).
-                let expected_adt_id_if_generics =
-                    builder.get_symbols_table().aggregates.get(&sym).cloned();
+                let expected_adt_id_if_generics = if generics.is_empty() {
+                    let sym = AdtSymbol {
+                        name: enum_match_expr.name.name.name.clone(),
+                    };
+                    builder.get_symbols_table().aggregates.get(&sym).cloned()
+                } else {
+                    let sym = MonoAdtSymbol {
+                        name: enum_match_expr.name.name.name.clone(),
+                        generics: generics.clone(),
+                    };
+                    builder
+                        .get_symbols_table()
+                        .monomorphized_aggregates
+                        .get(&sym)
+                        .cloned()
+                };
 
                 let (enum_place, enum_ty) = enum_place_ty.as_ref().unwrap();
 
@@ -509,7 +521,7 @@ fn lower_match(builder: &mut FnIrBuilder, info: &MatchExpr) -> Result<(), Loweri
                     _ => unreachable!(),
                 };
 
-                if !sym.generics.is_empty() {
+                if !generics.is_empty() {
                     if let Some(expected_adt_id_if_generics) = expected_adt_id_if_generics {
                         if expected_adt_id_if_generics != adt_id {
                             return Err(LoweringError::UnexpectedType {

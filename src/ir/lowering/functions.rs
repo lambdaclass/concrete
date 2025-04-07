@@ -14,7 +14,6 @@ use crate::{
         Span, Terminator, TerminatorKind, Type,
         lowering::{
             expressions::{find_expression_type, lower_expression},
-            symbols::MonoFnSymbol,
             types::lower_type,
         },
     },
@@ -128,6 +127,7 @@ pub(crate) fn lower_generic_func(
         method_of,
         trait_method_of,
         module_idx,
+        None,
     )?;
 
     if builder.ir.functions[mono_id].is_some() {
@@ -278,6 +278,8 @@ pub(crate) fn get_or_create_function_mono_idx(
     method_of: Option<TypeIndex>,
     trait_method_of: Option<TraitIdx>,
     module_idx: ModuleIndex,
+    // In case its already lowered (needed for fn calls)
+    generic_types: Option<Vec<TypeIndex>>,
 ) -> Result<(FnIndex, ModuleIndex), LoweringError> {
     let sym = FnSymbol {
         name: name.to_string(),
@@ -285,7 +287,11 @@ pub(crate) fn get_or_create_function_mono_idx(
         trait_method_of,
     };
 
-    let generic_types = builder.lower_generic_params(&generics)?;
+    let generic_types = if let Some(generic_types) = generic_types {
+        generic_types
+    } else {
+        builder.lower_generic_params(generics)?
+    };
     let mono_sym = sym.monomorphize(&generic_types);
 
     // Already lowered.
@@ -339,7 +345,7 @@ pub(crate) fn lower_fn_call(
     // lowered and needs to be.
     fn_builder.enter_module_context(module_idx);
 
-    let (poly_fn_id, mono_fn_id) = fn_builder.get_id_for_fn_call(info, method_idx)?;
+    let fn_id = fn_builder.get_id_for_fn_call(info, method_idx)?;
 
     fn_builder.leave_module_context();
 
@@ -348,14 +354,14 @@ pub(crate) fn lower_fn_call(
         .builder
         .bodies
         .functions
-        .get(&poly_fn_id)
+        .get(&fn_id)
         .map(|x| x.decl.clone())
         .or_else(|| {
             fn_builder
                 .builder
                 .bodies
                 .functions_decls
-                .get(&poly_fn_id)
+                .get(&fn_id)
                 .cloned()
         })
         .unwrap()
@@ -522,7 +528,7 @@ pub(crate) fn lower_fn_call(
 
     // todo: check if function is diverging such as exit().
     let kind = TerminatorKind::Call {
-        func: mono_fn_id.unwrap_or(poly_fn_id),
+        func: fn_id,
         args,
         destination: dest_place.clone(),
         target: Some(target_block),
@@ -590,7 +596,14 @@ pub(crate) fn lower_func_decl(
             trait_method_of: None,
         };
 
-        builder.symbols.get(&module_idx).unwrap().functions.get(&symbol).unwrap().0
+        builder
+            .symbols
+            .get(&module_idx)
+            .unwrap()
+            .functions
+            .get(&symbol)
+            .unwrap()
+            .0
     } else {
         let (mono_id, _) = get_or_create_function_mono_idx(
             builder,
@@ -599,6 +612,7 @@ pub(crate) fn lower_func_decl(
             None,
             None,
             module_idx,
+            None,
         )?;
 
         mono_id
