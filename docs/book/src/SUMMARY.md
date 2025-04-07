@@ -9,6 +9,7 @@
   - [Variables](./language/variables.md)
   - [Functions](./language/functions.md)
   - [Types](./language/types.md)
+  - [References](./languages/references.md)
   - [Structs](./language/structs.md)
   - [Arrays](./language/arrays.md)
   - [Enums](./language/enums.md)
