@@ -14,9 +14,31 @@ fn factorial(n: i64) -> i64 {
 }
 ```
 
+## While
+
+The `while` keyword allows looping.
+
+```rust
+fn sum_to(limit: i64) -> i64 {
+    let mut result: i64 = 0;
+
+    let mut n: i64 = 1;
+    while (n <= limit) {
+        result = result + n;
+        n = n + 1;
+    }
+
+    return result;
+}
+```
+
 ## For
 
-A basic for loop:
+The `for` keyword is used to define a C-like for loop. Its composed of three elements:
+
+- Definition
+- Condition
+- Increment
 
 ```rust
 fn sum_to(limit: i64) -> i64 {
@@ -30,20 +52,6 @@ fn sum_to(limit: i64) -> i64 {
 }
 ```
 
-## While
+## Match
 
-The `for` keyword can be used as a while
-
-```rust
-fn sum_to(limit: i64) -> i64 {
-    let mut result: i64 = 0;
-
-    let mut n: i64 = 1;
-    for (n <= limit) {
-        result = result + n;
-        n = n + 1;
-    }
-
-    return result;
-}
-```
+<!-- TODO -->
