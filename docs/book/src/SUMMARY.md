@@ -8,6 +8,7 @@
     - [Modules](./language/modules.md)
     - [Variables](./language/variables.md)
     - [Functions](./language/functions.md)
+    - [Types](./language/types.md)
     - [Structs](./language/structs.md)
     - [Enums](./language/enums.md)
     - [Control flow](./language/control_flow.md)
