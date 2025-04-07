@@ -224,3 +224,34 @@ jobs:
             issue-number: ${{ github.event.pull_request.number }}
             body-path: bench.md
             edit-mode: replace
+
+    compile-examples:
+      name: Compile Examples
+      runs-on: macos-14
+      env:
+        CARGO_TERM_COLOR: always
+        LIBRARY_PATH: /opt/homebrew/lib
+        MLIR_SYS_190_PREFIX: /opt/homebrew/opt/llvm@19
+        LLVM_SYS_191_PREFIX: /opt/homebrew/opt/llvm@19
+        TABLEGEN_190_PREFIX: /opt/homebrew/opt/llvm@19
+
+      steps:
+        - uses: actions/checkout@v4
+        - name: Rustup toolchain install
+          uses: dtolnay/rust-toolchain@1.85.0
+        - uses: homebrew/actions/setup-homebrew@master
+        - name: Install llvm
+          run: brew install llvm@19
+        - name: Compile Examples
+          run: |
+            > failing-examples.txt
+            for example in examples/*.con ; do
+              cargo run -- run "$example" && {
+                echo "- $example" >> failing-examples.txt
+              }
+            done
+
+            echo "Failing Examples:"
+            cat failing-examples.txt
+
+            [ ! -s failing-examples.txt ]
