@@ -35,18 +35,10 @@ use super::{
 pub(crate) fn lower_func(
     builder: &mut IRBuilder,
     func: &FunctionDef,
-    mut method_of: Option<TypeIndex>,
+    method_of: Option<TypeIndex>,
     trait_method_of: Option<TraitIdx>,
 ) -> Result<FnIndex, LoweringError> {
-
-    // If the method of type is generic this may be the mono id, so we need the poly id to find the methods.
-    if let Some(inner_method_of) = method_of {
-        if let Some(x) = builder.mono_type_to_poly.get(&inner_method_of) {
-            method_of = Some(*x);
-        }
-    }
-
-    if !func.decl.generic_params.is_empty() {
+    if !func.decl.generic_params.is_empty() || !builder.context.generics_mapping.is_empty() {
         return lower_generic_func(builder, func, method_of, trait_method_of);
     }
 
@@ -76,8 +68,6 @@ pub(crate) fn lower_func(
         method_of,
         trait_method_of,
     };
-
-    dbg!(&method_of);
 
     let (fn_id, fn_module_idx) = builder
         .symbols
@@ -115,7 +105,10 @@ pub(crate) fn lower_generic_func(
     method_of: Option<TypeIndex>,
     trait_method_of: Option<TraitIdx>,
 ) -> Result<FnIndex, LoweringError> {
-    debug!("lowering generic function {:?}", func.decl.name.name);
+    debug!(
+        "lowering generic function {:?}, generic map: {:?}",
+        func.decl.name.name, builder.context.generics_mapping
+    );
 
     let old_self_ty = builder.context.self_ty;
 
@@ -285,23 +278,23 @@ pub(crate) fn get_or_create_function_mono_idx(
     builder: &mut IRBuilder,
     name: &str,
     generics: &[GenericParam],
-    mut method_of: Option<TypeIndex>,
+    method_of: Option<TypeIndex>,
     trait_method_of: Option<TraitIdx>,
     module_idx: ModuleIndex,
     // In case its already lowered (needed for fn calls)
     generic_types: Option<Vec<TypeIndex>>,
 ) -> Result<(FnIndex, ModuleIndex), LoweringError> {
-
     // If the method of type is generic this may be the mono id, so we need the poly id to find the methods.
+    let mut poly_method_of = method_of;
     if let Some(inner_method_of) = method_of {
         if let Some(x) = builder.mono_type_to_poly.get(&inner_method_of) {
-            method_of = Some(*x);
+            poly_method_of = Some(*x)
         }
     }
 
     let sym = FnSymbol {
         name: name.to_string(),
-        method_of,
+        method_of: poly_method_of,
         trait_method_of,
     };
 
@@ -310,7 +303,8 @@ pub(crate) fn get_or_create_function_mono_idx(
     } else {
         builder.lower_generic_params(generics)?
     };
-    let mono_sym = sym.monomorphize(&generic_types);
+    let mut mono_sym = sym.monomorphize(&generic_types);
+    mono_sym.method_of = method_of;
 
     // Already lowered.
     if let Some(id) = builder.symbols[&module_idx]
@@ -320,8 +314,6 @@ pub(crate) fn get_or_create_function_mono_idx(
         return Ok(*id);
     }
 
-    dbg!(&sym);
-    dbg!(&builder.symbols[&module_idx].functions);
     let (poly_id, fn_module_idx) = *builder.symbols[&module_idx]
         .functions
         .get(&sym)

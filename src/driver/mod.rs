@@ -17,6 +17,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File, path::PathBuf, time::Instant};
 use tracing::debug;
+use tracing_subscriber::EnvFilter;
 
 use config::Config;
 use linker::{link_binary, link_shared_lib};
@@ -155,7 +156,12 @@ pub struct CompilerArgs {
 }
 
 pub fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .pretty()
+        .with_line_number(true)
+        .with_file(true)
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     let cli = Cli::parse();
 

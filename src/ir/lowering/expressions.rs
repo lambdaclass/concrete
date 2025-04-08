@@ -814,12 +814,29 @@ pub(crate) fn lower_value_expr(
     })
 }
 
-#[instrument(level = "debug", skip_all, fields(first = ?info.first.name))]
+#[instrument(level = "debug", skip_all, fields(path))]
 pub(crate) fn lower_path(
     fn_builder: &mut FnIrBuilder,
     info: &PathOp,
 ) -> Result<(Place, TypeIndex, Span), LoweringError> {
     debug!("lowering path");
+
+    tracing::Span::current().record("path", {
+        let mut name = info.first.name.clone();
+
+        for extra in &info.extra {
+            match extra {
+                PathSegment::FieldAccess(ident, _) => name.push_str(&format!(".{}", ident.name)),
+                PathSegment::ArrayIndex(_, _) => name.push_str("[value expr]"),
+                PathSegment::MethodCall(fn_call_op, _) => {
+                    name.push_str(&format!(".{}(..)", fn_call_op.target.name))
+                }
+            }
+        }
+
+        name
+    });
+
     let mut local = *fn_builder.name_to_local.get(&info.first.name).ok_or(
         LoweringError::UseOfUndeclaredVariable {
             span: info.span,
