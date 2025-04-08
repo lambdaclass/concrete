@@ -1,4 +1,0 @@
-problem:
-
-fn call thinks function is not generic because it's not aware
-of the impl generics and it doesnt have generics in the name itself.
