@@ -12,6 +12,7 @@ use crate::{
         },
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
+        storage::TreeNodeVisit,
     },
 };
 
@@ -34,6 +35,8 @@ impl ParseNode for TraitDef {
         Ok(0)
     }
 }
+
+pub struct TraitDefVisit<'storage>(TreeNodeVisit<'storage>);
 
 pub struct ImplBlock;
 
@@ -65,6 +68,8 @@ impl ParseNode for ImplBlock {
     }
 }
 
+pub struct ImplBlockVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct ImplItemDecl;
 
 impl ParseNode for ImplItemDecl {
@@ -95,6 +100,8 @@ impl ParseNode for ImplItemDecl {
         })
     }
 }
+
+pub struct ImplItemVisit<'storage>(TreeNodeVisit<'storage>);
 
 pub struct ImplItemDef<const WITH_VIS: bool = true>;
 
@@ -140,6 +147,8 @@ impl<const WITH_VIS: bool> ParseNode for ImplItemDef<WITH_VIS> {
     }
 }
 
+pub struct ImplItemDefVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct Statement;
 
 impl ParseNode for Statement {
@@ -181,6 +190,8 @@ impl ParseNode for Statement {
     }
 }
 
+pub struct StatementVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct LetStmt;
 
 impl ParseNode for LetStmt {
@@ -199,6 +210,8 @@ impl ParseNode for LetStmt {
         Ok(0)
     }
 }
+
+pub struct LetStmtVisit<'storage>(TreeNodeVisit<'storage>);
 
 pub struct AssignTarget;
 
@@ -232,6 +245,8 @@ impl ParseNode for AssignTarget {
     }
 }
 
+pub struct AssignTargetVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct FfiDecl;
 
 impl ParseNode for FfiDecl {
@@ -262,3 +277,5 @@ impl ParseNode for FfiDecl {
         Ok(0)
     }
 }
+
+pub struct FfiDeclVisit<'storage>(TreeNodeVisit<'storage>);

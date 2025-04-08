@@ -18,6 +18,7 @@ use crate::{
         },
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
+        storage::TreeNodeVisit,
     },
 };
 
@@ -45,6 +46,8 @@ impl ParseNode for AliasDecl {
     }
 }
 
+pub struct AliasDeclVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct AliasDef;
 
 impl ParseNode for AliasDef {
@@ -65,6 +68,8 @@ impl ParseNode for AliasDef {
         Ok(0)
     }
 }
+
+pub struct AliasDefVisit<'storage>(TreeNodeVisit<'storage>);
 
 pub struct ConstDecl;
 
@@ -90,6 +95,8 @@ impl ParseNode for ConstDecl {
     }
 }
 
+pub struct ConstDeclVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct ConstDef;
 
 impl ParseNode for ConstDef {
@@ -111,6 +118,8 @@ impl ParseNode for ConstDef {
         Ok(0)
     }
 }
+
+pub struct ConstDefVisit<'storage>(TreeNodeVisit<'storage>);
 
 pub struct FuncDecl;
 
@@ -143,6 +152,8 @@ impl ParseNode for FuncDecl {
     }
 }
 
+pub struct FuncDeclVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct FuncDef;
 
 impl ParseNode for FuncDef {
@@ -167,3 +178,5 @@ impl ParseNode for FuncDef {
         Ok(has_return_type as usize)
     }
 }
+
+pub struct FuncDefVisit<'storage>(TreeNodeVisit<'storage>);

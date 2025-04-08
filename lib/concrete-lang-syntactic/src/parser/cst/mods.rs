@@ -1,14 +1,20 @@
 use super::{
     decls::{
-        AliasDef, ConstDef, EnumDef, FfiDecl, FuncDef, ImplBlock, StructDef, TraitDef, UnionDef,
+        AliasDef, AliasDefVisit, ConstDef, ConstDefVisit, EnumDef, EnumDefVisit, FfiDecl,
+        FfiDeclVisit, FuncDef, FuncDefVisit, ImplBlock, ImplBlockVisit, StructDef, StructDefVisit,
+        TraitDef, TraitDefVisit, UnionDef, UnionDefVisit,
     },
-    utils::{Braces, CommaSep, Seq, WithAbi, WithDoc, WithVis, check_enum},
+    utils::{
+        Braces, BracesVisit, CommaSep, CommaSepVisit, Seq, SeqVisit, WithAbi, WithAbiVisit,
+        WithDoc, WithDocVisit, WithVis, WithVisVisit, check_enum,
+    },
 };
 use crate::{
     lexer::TokenKind,
     parser::{
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
+        storage::TreeNodeVisit,
     },
 };
 
@@ -51,6 +57,14 @@ impl ParseNode for ModuleDecl {
                 CheckResult::Never => todo!(),
             },
         )
+    }
+}
+
+pub struct ModuleDeclVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl<'storage> ModuleDeclVisit<'storage> {
+    pub fn items(&self) -> SeqVisit<ModuleItemVisit<'storage>> {
+        SeqVisit::new(self.0.iter_children().next().unwrap())
     }
 }
 
@@ -146,6 +160,21 @@ impl ParseNode for ModuleItem {
     }
 }
 
+pub enum ModuleItemVisit<'storage> {
+    AliasDef(AliasDefVisit<'storage>),
+    ConstDef(ConstDefVisit<'storage>),
+    EnumDef(EnumDefVisit<'storage>),
+    FuncDef(FuncDefVisit<'storage>),
+    ImplBlock(ImplBlockVisit<'storage>),
+    ImportStmt(ImportStmtVisit<'storage>),
+    StructDef(StructDefVisit<'storage>),
+    TraitDef(TraitDefVisit<'storage>),
+    UnionDef(UnionDefVisit<'storage>),
+    WithAbi(WithAbiVisit<'storage, ModuleAbiItemVisit<'storage>>),
+    WithDoc(WithDocVisit<'storage, ModuleDocItemVisit<'storage>>),
+    WithVis(WithVisVisit<'storage, ModuleVisItemVisit<'storage>>),
+}
+
 pub struct ModuleAbiItem;
 
 impl ParseNode for ModuleAbiItem {
@@ -167,6 +196,11 @@ impl ParseNode for ModuleAbiItem {
             None => todo!(),
         })
     }
+}
+
+pub enum ModuleAbiItemVisit<'storage> {
+    FfiDecl(BracesVisit<'storage, FfiDeclVisit<'storage>>),
+    FuncDef(FuncDefVisit<'storage>),
 }
 
 /// A module item that can be documented.
@@ -236,6 +270,19 @@ impl ParseNode for ModuleDocItem {
     }
 }
 
+pub enum ModuleDocItemVisit<'storage> {
+    AliasDef(AliasDefVisit<'storage>),
+    ConstDef(ConstDefVisit<'storage>),
+    EnumDef(EnumDefVisit<'storage>),
+    FuncDef(FuncDefVisit<'storage>),
+    ImplBlock(ImplBlockVisit<'storage>),
+    StructDef(StructDefVisit<'storage>),
+    TraitDef(TraitDefVisit<'storage>),
+    UnionDef(UnionDefVisit<'storage>),
+    WithAbi(WithAbiVisit<'storage, ModuleAbiItemVisit<'storage>>),
+    WithVis(WithVisVisit<'storage, ModuleDocVisItemVisit<'storage>>),
+}
+
 /// A module item that can be documented and have a visibility modifier.
 pub struct ModuleDocVisItem;
 
@@ -291,6 +338,17 @@ impl ParseNode for ModuleDocVisItem {
             None => todo!(),
         })
     }
+}
+
+pub enum ModuleDocVisItemVisit<'storage> {
+    AliasDef(AliasDefVisit<'storage>),
+    ConstDef(ConstDefVisit<'storage>),
+    EnumDef(EnumDefVisit<'storage>),
+    FuncDef(FuncDefVisit<'storage>),
+    StructDef(StructDefVisit<'storage>),
+    TraitDef(TraitDefVisit<'storage>),
+    UnionDef(UnionDefVisit<'storage>),
+    WithAbi(WithAbiVisit<'storage, FuncDefVisit<'storage>>),
 }
 
 pub struct ModuleVisItem;
@@ -354,6 +412,18 @@ impl ParseNode for ModuleVisItem {
     }
 }
 
+pub enum ModuleVisItemVisit<'storage> {
+    AliasDef(AliasDefVisit<'storage>),
+    ConstDef(ConstDefVisit<'storage>),
+    EnumDef(EnumDefVisit<'storage>),
+    FuncDef(FuncDefVisit<'storage>),
+    ImportStmt(ImportStmtVisit<'storage>),
+    StructDef(StructDefVisit<'storage>),
+    TraitDef(TraitDefVisit<'storage>),
+    UnionDef(UnionDefVisit<'storage>),
+    WithAbi(WithAbiVisit<'storage, FuncDefVisit<'storage>>),
+}
+
 /// An import statement.
 ///
 /// # Example
@@ -382,6 +452,8 @@ impl ParseNode for ImportStmt {
     }
 }
 
+pub struct ImportStmtVisit<'storage>(TreeNodeVisit<'storage>);
+
 /// An import item.
 ///
 /// It corresponds to the `a`, `a.b`, `a.{b, c}` and `{a, b}` in the `ImportStmt`'s example.
@@ -389,12 +461,10 @@ pub struct ImportItem;
 
 impl ParseNode for ImportItem {
     fn check(kind: Option<TokenKind>) -> CheckResult {
-        // The second variant is always `CheckResult::Never` because it's an extension of the first.
         check_enum([
             (kind == Some(TokenKind::Ident))
                 .then_some(CheckResult::Always(0))
                 .unwrap_or_default(),
-            CheckResult::Never,
             Braces::<CommaSep<ImportItem>>::check(kind),
         ])
     }
@@ -410,7 +480,7 @@ impl ParseNode for ImportItem {
                     0
                 }
             }
-            CheckResult::Always(2) => {
+            CheckResult::Always(1) => {
                 context.parse::<Braces<CommaSep<ImportItem>>>()?;
                 2
             }
@@ -418,4 +488,10 @@ impl ParseNode for ImportItem {
             CheckResult::Never => todo!(),
         })
     }
+}
+
+pub enum ImportItemVisit<'storage> {
+    Item,
+    Path,
+    Group(BracesVisit<'storage, CommaSepVisit<'storage, ImportItemVisit<'storage>>>),
 }

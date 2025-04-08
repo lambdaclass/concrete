@@ -8,6 +8,7 @@ use crate::{
         },
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
+        storage::TreeNodeVisit,
     },
 };
 use std::marker::PhantomData;
@@ -32,6 +33,8 @@ impl ParseNode for EnumDef {
     }
 }
 
+pub struct EnumDefVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct StructDef;
 
 impl ParseNode for StructDef {
@@ -53,6 +56,8 @@ impl ParseNode for StructDef {
         Ok(0)
     }
 }
+
+pub struct StructDefVisit<'storage>(TreeNodeVisit<'storage>);
 
 pub struct UnionDef;
 
@@ -76,6 +81,8 @@ impl ParseNode for UnionDef {
     }
 }
 
+pub struct UnionDefVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct NamedFields<T>(PhantomData<T>);
 
 impl<T> ParseNode for NamedFields<T>
@@ -95,6 +102,8 @@ where
         Ok(is_braced as usize)
     }
 }
+
+pub struct NamedFieldsVisit<'storage>(TreeNodeVisit<'storage>);
 
 pub struct Fields<T>(PhantomData<T>);
 
@@ -125,6 +134,8 @@ where
     }
 }
 
+pub struct FieldsVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct Field<T>(PhantomData<T>);
 
 impl<T> ParseNode for Field<T>
@@ -146,6 +157,8 @@ where
     }
 }
 
+pub struct FieldVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct ArrayDef;
 
 impl ParseNode for ArrayDef {
@@ -161,3 +174,5 @@ impl ParseNode for ArrayDef {
         Ok(0)
     }
 }
+
+pub struct ArrayDefVisit<'storage>(TreeNodeVisit<'storage>);

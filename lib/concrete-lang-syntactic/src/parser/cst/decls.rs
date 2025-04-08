@@ -13,6 +13,7 @@ use crate::{
     parser::{
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
+        storage::TreeNodeVisit,
     },
 };
 use std::marker::PhantomData;
@@ -62,6 +63,8 @@ impl ParseNode for TypeRef {
     }
 }
 
+pub struct TypeRefVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct PathType;
 
 impl ParseNode for PathType {
@@ -86,6 +89,8 @@ impl ParseNode for PathType {
         Ok(0)
     }
 }
+
+pub struct PathTypeVisit<'storage>(TreeNodeVisit<'storage>);
 
 pub struct PathSegment;
 
@@ -115,6 +120,8 @@ impl ParseNode for PathSegment {
     }
 }
 
+pub struct PathSegmentVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct ArrayType;
 
 impl ParseNode for ArrayType {
@@ -128,6 +135,8 @@ impl ParseNode for ArrayType {
     }
 }
 
+pub struct ArrayTypeVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct TupleType;
 
 impl ParseNode for TupleType {
@@ -140,6 +149,8 @@ impl ParseNode for TupleType {
         Ok(0)
     }
 }
+
+pub struct TupleTypeVisit<'storage>(TreeNodeVisit<'storage>);
 
 pub struct RefType;
 
@@ -159,6 +170,8 @@ impl ParseNode for RefType {
         Ok(is_mut as usize)
     }
 }
+
+pub struct RefTypeVisit<'storage>(TreeNodeVisit<'storage>);
 
 pub struct PtrType;
 
@@ -183,6 +196,8 @@ impl ParseNode for PtrType {
         Ok(is_mut as usize)
     }
 }
+
+pub struct PtrTypeVisit<'storage>(TreeNodeVisit<'storage>);
 
 pub type GenericsDecl<const ALLOW_DEFAULT: bool = false> = Generics<Ident, ALLOW_DEFAULT>;
 pub type GenericsDef = Generics<TypeRef, false>;
@@ -228,6 +243,8 @@ where
     }
 }
 
+pub struct GenericsVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct GenericType<T, const ALLOW_DEFAULTS: bool>(PhantomData<T>);
 
 impl<T, const ALLOW_DEFAULTS: bool> ParseNode for GenericType<T, ALLOW_DEFAULTS>
@@ -249,6 +266,8 @@ where
     }
 }
 
+pub struct GenericTypeVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct GenericConst<const ALLOW_DEFAULTS: bool>;
 
 impl<const ALLOW_DEFAULTS: bool> ParseNode for GenericConst<ALLOW_DEFAULTS> {
@@ -266,6 +285,8 @@ impl<const ALLOW_DEFAULTS: bool> ParseNode for GenericConst<ALLOW_DEFAULTS> {
     }
 }
 
+pub struct GenericConstVisit<'storage>(TreeNodeVisit<'storage>);
+
 pub struct WhereClause;
 
 impl ParseNode for WhereClause {
@@ -280,3 +301,5 @@ impl ParseNode for WhereClause {
         todo!()
     }
 }
+
+pub struct WhereClauseVisit<'storage>(TreeNodeVisit<'storage>);

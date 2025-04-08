@@ -2,7 +2,6 @@ use self::{mods::ModuleItem, utils::Seq};
 use super::{
     error::Result,
     parse::{CheckResult, ParseContext, ParseNode},
-    storage::TreeNodeVisit,
 };
 use crate::lexer::TokenKind;
 

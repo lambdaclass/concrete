@@ -3,6 +3,7 @@ use crate::{
     parser::{
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
+        storage::TreeNodeVisit,
     },
 };
 use std::marker::PhantomData;
@@ -44,6 +45,18 @@ where
     }
 }
 
+pub struct WithAbiVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
+
+impl<T> WithAbiVisit<'_, T> {
+    pub fn abi(&self) -> &str {
+        todo!()
+    }
+
+    pub fn inner(&self) -> T {
+        todo!()
+    }
+}
+
 /// Parser for items that may have documentation.
 pub struct WithDoc<T>(PhantomData<T>);
 
@@ -65,6 +78,18 @@ where
     }
 }
 
+pub struct WithDocVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
+
+impl<T> WithDocVisit<'_, T> {
+    pub fn doc(&self) -> &str {
+        todo!()
+    }
+
+    pub fn inner(&self) -> T {
+        todo!()
+    }
+}
+
 /// Parser for items that may have an associated visibility modifier.
 pub struct WithVis<T>(PhantomData<T>);
 
@@ -83,6 +108,14 @@ where
         context.parse::<T>()?;
 
         Ok(0)
+    }
+}
+
+pub struct WithVisVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
+
+impl<T> WithVisVisit<'_, T> {
+    pub fn inner(&self) -> T {
+        todo!()
     }
 }
 
@@ -108,6 +141,14 @@ where
     }
 }
 
+pub struct AnglesVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
+
+impl<T> AnglesVisit<'_, T> {
+    pub fn inner(&self) -> T {
+        todo!()
+    }
+}
+
 /// Parser for items wrapped between `{` and `}`.
 pub struct Braces<T>(PhantomData<T>);
 
@@ -127,6 +168,14 @@ where
         context.next_of(TokenKind::RBrace)?;
 
         Ok(0)
+    }
+}
+
+pub struct BracesVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
+
+impl<T> BracesVisit<'_, T> {
+    pub fn inner(&self) -> T {
+        todo!()
     }
 }
 
@@ -152,6 +201,14 @@ where
     }
 }
 
+pub struct BracketsVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
+
+impl<T> BracketsVisit<'_, T> {
+    pub fn inner(&self) -> T {
+        todo!()
+    }
+}
+
 /// Parser for items wrapped between `(` and `)`.
 pub struct Parens<T>(PhantomData<T>);
 
@@ -171,6 +228,14 @@ where
         context.next_of(TokenKind::RParen)?;
 
         Ok(0)
+    }
+}
+
+pub struct ParensVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
+
+impl<T> ParensVisit<'_, T> {
+    pub fn inner(&self) -> T {
+        todo!()
     }
 }
 
@@ -212,6 +277,19 @@ where
     }
 }
 
+pub struct SeqVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
+
+impl<'storage, T> SeqVisit<'storage, T> {
+    pub fn new(visit: TreeNodeVisit<'storage>) -> Self {
+        Self(visit, PhantomData)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = T> {
+        todo!();
+        std::iter::empty()
+    }
+}
+
 /// Parser for comma-separated sequences of items, with optional trailing separator, minimum and
 /// maximum lengths.
 // TODO: Abstract `CommaSep` into `Sep` with generic separator.
@@ -243,6 +321,15 @@ where
         }
 
         Ok(0)
+    }
+}
+
+pub struct CommaSepVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
+
+impl<T> CommaSepVisit<'_, T> {
+    pub fn iter(&self) -> impl Iterator<Item = T> {
+        todo!();
+        std::iter::empty()
     }
 }
 
