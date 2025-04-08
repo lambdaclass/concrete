@@ -8,13 +8,13 @@
 //! The `Decl` parsers are used for declarations, and may or may not have a default value. The `Def`
 //! variants must always have a value.
 
-use super::{Field, GenericsDecl, TypeRef, WhereClause};
+use super::{Field, FieldVisit, GenericsDecl, TypeRef, TypeRefVisit, WhereClause};
 use crate::{
     lexer::TokenKind,
     parser::{
         cst::{
-            exprs::{BlockExpr, Expression},
-            utils::{Angles, CommaSep, Parens},
+            exprs::{BlockExpr, BlockExprVisit, Expression, ExpressionVisit},
+            utils::{Angles, CommaSep, CommaSepVisit, Parens, ParensVisit},
         },
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
@@ -48,6 +48,20 @@ impl ParseNode for AliasDecl {
 
 pub struct AliasDeclVisit<'storage>(TreeNodeVisit<'storage>);
 
+impl<'storage> AliasDeclVisit<'storage> {
+    pub fn ident(&self) -> &str {
+        todo!()
+    }
+
+    // TODO: Generics.
+
+    pub fn target(&self) -> Option<TypeRefVisit<'storage>> {
+        todo!()
+    }
+
+    // TODO: WhereClause.
+}
+
 pub struct AliasDef;
 
 impl ParseNode for AliasDef {
@@ -70,6 +84,20 @@ impl ParseNode for AliasDef {
 }
 
 pub struct AliasDefVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl<'storage> AliasDefVisit<'storage> {
+    pub fn ident(&self) -> &str {
+        todo!()
+    }
+
+    // TODO: Generics.
+
+    pub fn target(&self) -> TypeRefVisit<'storage> {
+        todo!()
+    }
+
+    // TODO: WhereClause.
+}
 
 pub struct ConstDecl;
 
@@ -97,6 +125,24 @@ impl ParseNode for ConstDecl {
 
 pub struct ConstDeclVisit<'storage>(TreeNodeVisit<'storage>);
 
+impl<'storage> ConstDeclVisit<'storage> {
+    pub fn ident(&self) -> &str {
+        todo!()
+    }
+
+    // TODO: Generics.
+
+    pub fn r#type(&self) -> TypeRefVisit<'storage> {
+        todo!()
+    }
+
+    pub fn value(&self) -> Option<ExpressionVisit<'storage>> {
+        todo!()
+    }
+
+    // TODO: WhereClause.
+}
+
 pub struct ConstDef;
 
 impl ParseNode for ConstDef {
@@ -120,6 +166,24 @@ impl ParseNode for ConstDef {
 }
 
 pub struct ConstDefVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl<'storage> ConstDefVisit<'storage> {
+    pub fn ident(&self) -> &str {
+        todo!()
+    }
+
+    // TODO: Generics.
+
+    pub fn r#type(&self) -> TypeRefVisit<'storage> {
+        todo!()
+    }
+
+    pub fn value(&self) -> ExpressionVisit<'storage> {
+        todo!()
+    }
+
+    // TODO: WhereClause.
+}
 
 pub struct FuncDecl;
 
@@ -154,6 +218,31 @@ impl ParseNode for FuncDecl {
 
 pub struct FuncDeclVisit<'storage>(TreeNodeVisit<'storage>);
 
+impl<'storage> FuncDeclVisit<'storage> {
+    pub fn ident(&self) -> &str {
+        todo!()
+    }
+
+    // TODO: Generics.
+
+    pub fn args(
+        &self,
+    ) -> ParensVisit<'storage, CommaSepVisit<'storage, FieldVisit<'storage, TypeRefVisit<'storage>>>>
+    {
+        todo!()
+    }
+
+    pub fn return_type(&self) -> Option<TypeRefVisit<'storage>> {
+        todo!()
+    }
+
+    // TODO: WhereClause.
+
+    pub fn body(&self) -> Option<BlockExprVisit<'storage>> {
+        todo!()
+    }
+}
+
 pub struct FuncDef;
 
 impl ParseNode for FuncDef {
@@ -180,3 +269,28 @@ impl ParseNode for FuncDef {
 }
 
 pub struct FuncDefVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl<'storage> FuncDefVisit<'storage> {
+    pub fn ident(&self) -> &str {
+        todo!()
+    }
+
+    // TODO: Generics.
+
+    pub fn args(
+        &self,
+    ) -> ParensVisit<'storage, CommaSepVisit<'storage, FieldVisit<'storage, TypeRefVisit<'storage>>>>
+    {
+        todo!()
+    }
+
+    pub fn return_type(&self) -> Option<TypeRefVisit<'storage>> {
+        todo!()
+    }
+
+    // TODO: WhereClause.
+
+    pub fn body(&self) -> BlockExprVisit<'storage> {
+        todo!()
+    }
+}

@@ -103,7 +103,7 @@ where
     }
 }
 
-pub struct NamedFieldsVisit<'storage>(TreeNodeVisit<'storage>);
+pub struct NamedFieldsVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
 
 pub struct Fields<T>(PhantomData<T>);
 
@@ -157,7 +157,7 @@ where
     }
 }
 
-pub struct FieldVisit<'storage>(TreeNodeVisit<'storage>);
+pub struct FieldVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
 
 pub struct ArrayDef;
 

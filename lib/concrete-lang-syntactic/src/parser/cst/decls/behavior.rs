@@ -1,14 +1,18 @@
 use super::{
-    AliasDecl, AliasDef, ConstDecl, ConstDef, Field, FuncDecl, FuncDef, GenericsDecl, NamedFields,
-    TypeRef, WhereClause,
+    AliasDecl, AliasDeclVisit, AliasDef, AliasDefVisit, ConstDecl, ConstDeclVisit, ConstDef,
+    ConstDefVisit, Field, FieldVisit, FuncDecl, FuncDeclVisit, FuncDef, FuncDefVisit, GenericsDecl,
+    NamedFields, NamedFieldsVisit, TypeRef, TypeRefVisit, WhereClause,
 };
 use crate::{
     lexer::TokenKind,
     parser::{
         cst::{
-            exprs::Expression,
-            mods::ModuleItem,
-            utils::{Angles, Braces, Brackets, Parens, Seq, WithVis, check_enum},
+            exprs::{Expression, ExpressionVisit},
+            mods::{ModuleItem, ModuleItemVisit},
+            utils::{
+                Angles, Braces, Brackets, BracketsVisit, Parens, ParensVisit, Seq, WithVis,
+                WithVisVisit, check_enum,
+            },
         },
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
@@ -37,6 +41,7 @@ impl ParseNode for TraitDef {
 }
 
 pub struct TraitDefVisit<'storage>(TreeNodeVisit<'storage>);
+// TODO: TraitDefVisit methods.
 
 pub struct ImplBlock;
 
@@ -69,6 +74,7 @@ impl ParseNode for ImplBlock {
 }
 
 pub struct ImplBlockVisit<'storage>(TreeNodeVisit<'storage>);
+// TODO: ImplBlockVisit methods.
 
 pub struct ImplItemDecl;
 
@@ -101,7 +107,11 @@ impl ParseNode for ImplItemDecl {
     }
 }
 
-pub struct ImplItemVisit<'storage>(TreeNodeVisit<'storage>);
+pub enum ImplItemVisit<'storage> {
+    Alias(AliasDeclVisit<'storage>),
+    Const(ConstDeclVisit<'storage>),
+    FuncDecl(FuncDeclVisit<'storage>),
+}
 
 pub struct ImplItemDef<const WITH_VIS: bool = true>;
 
@@ -147,7 +157,12 @@ impl<const WITH_VIS: bool> ParseNode for ImplItemDef<WITH_VIS> {
     }
 }
 
-pub struct ImplItemDefVisit<'storage>(TreeNodeVisit<'storage>);
+pub enum ImplItemDefVisit<'storage> {
+    Alias(AliasDefVisit<'storage>),
+    Const(ConstDefVisit<'storage>),
+    FuncDef(FuncDefVisit<'storage>),
+    ImplItem(WithVisVisit<'storage, ImplItemDefVisit<'storage>>),
+}
 
 pub struct Statement;
 
@@ -190,7 +205,12 @@ impl ParseNode for Statement {
     }
 }
 
-pub struct StatementVisit<'storage>(TreeNodeVisit<'storage>);
+pub enum StatementVisit<'storage> {
+    ModuleItem(ModuleItemVisit<'storage>),
+    LetStmt(LetStmtVisit<'storage>),
+    Return(ExpressionVisit<'storage>),
+    Expression(ExpressionVisit<'storage>),
+}
 
 pub struct LetStmt;
 
@@ -212,6 +232,16 @@ impl ParseNode for LetStmt {
 }
 
 pub struct LetStmtVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl<'storage> LetStmtVisit<'storage> {
+    pub fn target(&self) -> AssignTargetVisit<'storage> {
+        todo!()
+    }
+
+    pub fn value(&self) -> ExpressionVisit<'storage> {
+        todo!()
+    }
+}
 
 pub struct AssignTarget;
 
@@ -245,7 +275,11 @@ impl ParseNode for AssignTarget {
     }
 }
 
-pub struct AssignTargetVisit<'storage>(TreeNodeVisit<'storage>);
+pub enum AssignTargetVisit<'storage> {
+    Array(BracketsVisit<'storage, AssignTargetVisit<'storage>>),
+    Struct(NamedFieldsVisit<'storage, AssignTargetVisit<'storage>>),
+    Tuple(ParensVisit<'storage, AssignTargetVisit<'storage>>),
+}
 
 pub struct FfiDecl;
 
@@ -279,3 +313,21 @@ impl ParseNode for FfiDecl {
 }
 
 pub struct FfiDeclVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl<'storage> FfiDeclVisit<'storage> {
+    pub fn is_pub(&self) -> bool {
+        todo!()
+    }
+
+    pub fn ident(&self) -> &str {
+        todo!()
+    }
+
+    pub fn args(&self) -> ParensVisit<'storage, FieldVisit<'storage, TypeRefVisit<'storage>>> {
+        todo!()
+    }
+
+    pub fn return_type(&self) -> Option<TypeRefVisit<'storage>> {
+        todo!()
+    }
+}
