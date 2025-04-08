@@ -551,9 +551,46 @@ impl FnIrBuilder<'_> {
             self.builder.get_current_module_idx()
         };
 
-        let trait_method_of = None;
-        if let Some(_id) = polymorphic_method_of_type_idx {
-            // TODO: find if its a trait method
+        let mut trait_method_of = None;
+
+        if let Some(id) = method_of_type_idx {
+            let traits = self
+                .builder
+                .trait_db
+                .get_traits_for_function(id, &info.target.name);
+
+            'outer: for tr in traits.iter() {
+                for m in &self.builder.trait_db.traits[*tr].methods {
+                    if m.name.name == info.target.name {
+                        // found
+                        // todo: check signature matches?
+                        debug!("found trait method on monomorphized type");
+                        trait_method_of = Some(*tr);
+                        break 'outer;
+                    }
+                }
+            }
+        }
+
+        if trait_method_of.is_none() {
+            if let Some(id) = polymorphic_method_of_type_idx {
+                let traits = self
+                    .builder
+                    .trait_db
+                    .get_traits_for_function(id, &info.target.name);
+
+                'outer: for tr in traits.iter() {
+                    for m in &self.builder.trait_db.traits[*tr].methods {
+                        if m.name.name == info.target.name {
+                            // found
+                            // todo: check signature matches?
+                            debug!("found trait method on poly type");
+                            trait_method_of = Some(*tr);
+                            break 'outer;
+                        }
+                    }
+                }
+            }
         }
 
         let poly_symbol = FnSymbol {
