@@ -246,7 +246,7 @@ jobs:
           run: |
             > failing-examples.txt
             for example in examples/*.con ; do
-              cargo run -- run "$example" && {
+              cargo run -- build "$example" || {
                 echo "- $example" >> failing-examples.txt
               }
             done
