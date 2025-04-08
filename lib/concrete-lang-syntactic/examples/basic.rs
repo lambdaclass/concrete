@@ -12,5 +12,6 @@ fn main() {
     );
     let result = stream.update(result.range, result.length, &buffer);
     parser.update(result.range, result.length, &stream);
-    dbg!(parser);
+
+    println!("{:#}", parser.visit(&stream));
 }

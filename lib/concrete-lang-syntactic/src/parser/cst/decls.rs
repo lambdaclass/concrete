@@ -16,7 +16,7 @@ use crate::{
         storage::TreeNodeVisit,
     },
 };
-use std::marker::PhantomData;
+use std::{fmt, marker::PhantomData};
 
 mod behavior;
 mod mixed;
@@ -63,7 +63,31 @@ impl ParseNode for TypeRef {
     }
 }
 
-pub struct TypeRefVisit<'storage>(TreeNodeVisit<'storage>);
+pub enum TypeRefVisit<'storage> {
+    Array(ArrayTypeVisit<'storage>),
+    Path(PathTypeVisit<'storage>),
+    Ptr(PtrTypeVisit<'storage>),
+    Ref(RefTypeVisit<'storage>),
+    Tuple(TupleTypeVisit<'storage>),
+}
+
+impl<'storage> From<TreeNodeVisit<'storage>> for TypeRefVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        todo!()
+    }
+}
+
+impl fmt::Display for TypeRefVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TypeRefVisit::Array(x) => fmt::Display::fmt(x, f),
+            TypeRefVisit::Path(x) => fmt::Display::fmt(x, f),
+            TypeRefVisit::Ptr(x) => fmt::Display::fmt(x, f),
+            TypeRefVisit::Ref(x) => fmt::Display::fmt(x, f),
+            TypeRefVisit::Tuple(x) => fmt::Display::fmt(x, f),
+        }
+    }
+}
 
 pub struct PathType;
 
@@ -91,6 +115,12 @@ impl ParseNode for PathType {
 }
 
 pub struct PathTypeVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl fmt::Display for PathTypeVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
 
 pub struct PathSegment;
 
@@ -137,6 +167,12 @@ impl ParseNode for ArrayType {
 
 pub struct ArrayTypeVisit<'storage>(TreeNodeVisit<'storage>);
 
+impl fmt::Display for ArrayTypeVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
+
 pub struct TupleType;
 
 impl ParseNode for TupleType {
@@ -151,6 +187,12 @@ impl ParseNode for TupleType {
 }
 
 pub struct TupleTypeVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl fmt::Display for TupleTypeVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
 
 pub struct RefType;
 
@@ -172,6 +214,12 @@ impl ParseNode for RefType {
 }
 
 pub struct RefTypeVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl fmt::Display for RefTypeVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
 
 pub struct PtrType;
 
@@ -198,6 +246,12 @@ impl ParseNode for PtrType {
 }
 
 pub struct PtrTypeVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl fmt::Display for PtrTypeVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
 
 pub type GenericsDecl<const ALLOW_DEFAULT: bool = false> = Generics<Ident, ALLOW_DEFAULT>;
 pub type GenericsDef = Generics<TypeRef, false>;

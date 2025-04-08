@@ -4,9 +4,10 @@ use super::{
     NamedFields, NamedFieldsVisit, TypeRef, TypeRefVisit, WhereClause,
 };
 use crate::{
-    lexer::TokenKind,
+    lexer::{Token, TokenKind},
     parser::{
         cst::{
+            DebugWithDisplay,
             exprs::{Expression, ExpressionVisit},
             mods::{ModuleItem, ModuleItemVisit},
             utils::{
@@ -19,6 +20,7 @@ use crate::{
         storage::TreeNodeVisit,
     },
 };
+use std::fmt;
 
 pub struct TraitDef;
 
@@ -42,6 +44,18 @@ impl ParseNode for TraitDef {
 
 pub struct TraitDefVisit<'storage>(TreeNodeVisit<'storage>);
 // TODO: TraitDefVisit methods.
+
+impl<'storage> From<TreeNodeVisit<'storage>> for TraitDefVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        todo!()
+    }
+}
+
+impl fmt::Display for TraitDefVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
 
 pub struct ImplBlock;
 
@@ -75,6 +89,18 @@ impl ParseNode for ImplBlock {
 
 pub struct ImplBlockVisit<'storage>(TreeNodeVisit<'storage>);
 // TODO: ImplBlockVisit methods.
+
+impl<'storage> From<TreeNodeVisit<'storage>> for ImplBlockVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        todo!()
+    }
+}
+
+impl fmt::Display for ImplBlockVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
 
 pub struct ImplItemDecl;
 
@@ -281,6 +307,7 @@ pub enum AssignTargetVisit<'storage> {
     Tuple(ParensVisit<'storage, AssignTargetVisit<'storage>>),
 }
 
+// TODO: FfiBlock.
 pub struct FfiDecl;
 
 impl ParseNode for FfiDecl {
@@ -316,18 +343,38 @@ pub struct FfiDeclVisit<'storage>(TreeNodeVisit<'storage>);
 
 impl<'storage> FfiDeclVisit<'storage> {
     pub fn is_pub(&self) -> bool {
-        todo!()
+        matches!(self.0.token(0), Token::KwPub)
     }
 
     pub fn ident(&self) -> &str {
-        todo!()
+        match self.0.token(1 + self.is_pub() as usize) {
+            Token::Ident(x) => x,
+            _ => unreachable!(),
+        }
     }
 
     pub fn args(&self) -> ParensVisit<'storage, FieldVisit<'storage, TypeRefVisit<'storage>>> {
-        todo!()
+        self.0.iter_children().next().unwrap().into()
     }
 
     pub fn return_type(&self) -> Option<TypeRefVisit<'storage>> {
-        todo!()
+        self.0.iter_children().nth(1).map(Into::into)
+    }
+}
+
+impl<'storage> From<TreeNodeVisit<'storage>> for FfiDeclVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        FfiDeclVisit(value)
+    }
+}
+
+impl fmt::Display for FfiDeclVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FfiDecl")
+            .field("is_pub", &self.is_pub())
+            .field("ident", &self.ident())
+            .field("args", &DebugWithDisplay(self.args()))
+            .field("return_type", &self.return_type().map(DebugWithDisplay))
+            .finish()
     }
 }

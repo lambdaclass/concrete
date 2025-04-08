@@ -1,12 +1,13 @@
+use super::DebugWithDisplay;
 use crate::{
-    lexer::TokenKind,
+    lexer::{Token, TokenKind},
     parser::{
         error::Result,
         parse::{CheckResult, ParseContext, ParseNode},
         storage::TreeNodeVisit,
     },
 };
-use std::marker::PhantomData;
+use std::{fmt, marker::PhantomData};
 
 pub struct Ident;
 
@@ -47,13 +48,37 @@ where
 
 pub struct WithAbiVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
 
-impl<T> WithAbiVisit<'_, T> {
+impl<'storage, T> WithAbiVisit<'storage, T> {
     pub fn abi(&self) -> &str {
-        todo!()
+        match self.0.token(1) {
+            Token::LitString(x) => x,
+            _ => unreachable!(),
+        }
     }
 
-    pub fn inner(&self) -> T {
-        todo!()
+    pub fn inner(&self) -> T
+    where
+        T: From<TreeNodeVisit<'storage>>,
+    {
+        self.0.iter_children().next().unwrap().into()
+    }
+}
+
+impl<'storage, T> From<TreeNodeVisit<'storage>> for WithAbiVisit<'storage, T> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        Self(value, PhantomData)
+    }
+}
+
+impl<'storage, T> fmt::Display for WithAbiVisit<'storage, T>
+where
+    T: fmt::Display + From<TreeNodeVisit<'storage>>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("WithAbi")
+            .field("abi", &self.abi())
+            .field("inner", &DebugWithDisplay(self.inner()))
+            .finish()
     }
 }
 
@@ -90,6 +115,21 @@ impl<T> WithDocVisit<'_, T> {
     }
 }
 
+impl<'storage, T> From<TreeNodeVisit<'storage>> for WithDocVisit<'storage, T> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        todo!()
+    }
+}
+
+impl<T> fmt::Display for WithDocVisit<'_, T>
+where
+    T: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
+
 /// Parser for items that may have an associated visibility modifier.
 pub struct WithVis<T>(PhantomData<T>);
 
@@ -115,6 +155,21 @@ pub struct WithVisVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
 
 impl<T> WithVisVisit<'_, T> {
     pub fn inner(&self) -> T {
+        todo!()
+    }
+}
+
+impl<'storage, T> From<TreeNodeVisit<'storage>> for WithVisVisit<'storage, T> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        Self(value, PhantomData)
+    }
+}
+
+impl<T> fmt::Display for WithVisVisit<'_, T>
+where
+    T: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         todo!()
     }
 }
@@ -173,9 +228,29 @@ where
 
 pub struct BracesVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
 
-impl<T> BracesVisit<'_, T> {
-    pub fn inner(&self) -> T {
-        todo!()
+impl<'storage, T> BracesVisit<'storage, T> {
+    pub fn inner(&self) -> T
+    where
+        T: From<TreeNodeVisit<'storage>>,
+    {
+        self.0.iter_children().next().unwrap().into()
+    }
+}
+
+impl<'storage, T> From<TreeNodeVisit<'storage>> for BracesVisit<'storage, T> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        Self(value, PhantomData)
+    }
+}
+
+impl<'storage, T> fmt::Display for BracesVisit<'storage, T>
+where
+    T: fmt::Display + From<TreeNodeVisit<'storage>>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("WithBraces")
+            .field(&DebugWithDisplay(self.inner()))
+            .finish()
     }
 }
 
@@ -239,6 +314,18 @@ impl<T> ParensVisit<'_, T> {
     }
 }
 
+impl<'storage, T> From<TreeNodeVisit<'storage>> for ParensVisit<'storage, T> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        Self(value, PhantomData)
+    }
+}
+
+impl<T> fmt::Display for ParensVisit<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
+
 /// Parser for contiguous sequences of items, with optional minimum and maximum lengths.
 pub struct Seq<T, const MIN: usize = { usize::MIN }, const MAX: usize = { usize::MAX }>(
     PhantomData<T>,
@@ -280,13 +367,33 @@ where
 pub struct SeqVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
 
 impl<'storage, T> SeqVisit<'storage, T> {
-    pub fn new(visit: TreeNodeVisit<'storage>) -> Self {
-        Self(visit, PhantomData)
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = T> {
         todo!();
         std::iter::empty()
+    }
+}
+
+impl<'storage, T> From<TreeNodeVisit<'storage>> for SeqVisit<'storage, T> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        Self(value, PhantomData)
+    }
+}
+
+impl<'storage, T> fmt::Display for SeqVisit<'storage, T>
+where
+    T: fmt::Display + From<TreeNodeVisit<'storage>>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("Seq")
+            .field(
+                &self
+                    .0
+                    .iter_children()
+                    .map(T::from)
+                    .map(DebugWithDisplay)
+                    .collect::<Vec<_>>(),
+            )
+            .finish()
     }
 }
 

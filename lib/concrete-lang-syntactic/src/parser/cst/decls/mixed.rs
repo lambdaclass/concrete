@@ -21,6 +21,7 @@ use crate::{
         storage::TreeNodeVisit,
     },
 };
+use std::fmt;
 
 pub struct AliasDecl;
 
@@ -97,6 +98,18 @@ impl<'storage> AliasDefVisit<'storage> {
     }
 
     // TODO: WhereClause.
+}
+
+impl<'storage> From<TreeNodeVisit<'storage>> for AliasDefVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        todo!()
+    }
+}
+
+impl fmt::Display for AliasDefVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
 }
 
 pub struct ConstDecl;
@@ -183,6 +196,18 @@ impl<'storage> ConstDefVisit<'storage> {
     }
 
     // TODO: WhereClause.
+}
+
+impl<'storage> From<TreeNodeVisit<'storage>> for ConstDefVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        todo!()
+    }
+}
+
+impl fmt::Display for ConstDefVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
 }
 
 pub struct FuncDecl;
@@ -291,6 +316,18 @@ impl<'storage> FuncDefVisit<'storage> {
     // TODO: WhereClause.
 
     pub fn body(&self) -> BlockExprVisit<'storage> {
+        todo!()
+    }
+}
+
+impl<'storage> From<TreeNodeVisit<'storage>> for FuncDefVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        Self(value)
+    }
+}
+
+impl fmt::Display for FuncDefVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         todo!()
     }
 }

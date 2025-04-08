@@ -4,7 +4,9 @@ use self::{
     storage::{TreeNode, TreeNodeParse},
 };
 use crate::{UpdateResult, lexer::TokenStream};
+use cst::SourceFileVisit;
 use std::ops::Range;
+use storage::TreeNodeVisit;
 
 mod cst;
 pub mod error;
@@ -49,6 +51,13 @@ impl Parser {
         }
 
         UpdateResult { range, length }
+    }
+
+    pub fn visit<'storage>(
+        &'storage self,
+        stream: &'storage TokenStream,
+    ) -> SourceFileVisit<'storage> {
+        TreeNodeVisit::new(&self.nodes, stream).into()
     }
 }
 

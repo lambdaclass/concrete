@@ -11,7 +11,7 @@ use crate::{
         storage::TreeNodeVisit,
     },
 };
-use std::marker::PhantomData;
+use std::{fmt, marker::PhantomData};
 
 pub struct EnumDef;
 
@@ -34,6 +34,18 @@ impl ParseNode for EnumDef {
 }
 
 pub struct EnumDefVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl<'storage> From<TreeNodeVisit<'storage>> for EnumDefVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        todo!()
+    }
+}
+
+impl fmt::Display for EnumDefVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
 
 pub struct StructDef;
 
@@ -59,6 +71,18 @@ impl ParseNode for StructDef {
 
 pub struct StructDefVisit<'storage>(TreeNodeVisit<'storage>);
 
+impl<'storage> From<TreeNodeVisit<'storage>> for StructDefVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        todo!()
+    }
+}
+
+impl fmt::Display for StructDefVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
+
 pub struct UnionDef;
 
 impl ParseNode for UnionDef {
@@ -82,6 +106,18 @@ impl ParseNode for UnionDef {
 }
 
 pub struct UnionDefVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl<'storage> From<TreeNodeVisit<'storage>> for UnionDefVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        todo!()
+    }
+}
+
+impl fmt::Display for UnionDefVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
 
 pub struct NamedFields<T>(PhantomData<T>);
 
@@ -158,6 +194,12 @@ where
 }
 
 pub struct FieldVisit<'storage, T>(TreeNodeVisit<'storage>, PhantomData<T>);
+
+impl<'storage, T> From<TreeNodeVisit<'storage>> for FieldVisit<'storage, T> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        Self(value, PhantomData)
+    }
+}
 
 pub struct ArrayDef;
 

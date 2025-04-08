@@ -17,6 +17,7 @@ use crate::{
         storage::TreeNodeVisit,
     },
 };
+use std::fmt;
 
 /// A module declaration.
 ///
@@ -64,7 +65,7 @@ pub struct ModuleDeclVisit<'storage>(TreeNodeVisit<'storage>);
 
 impl<'storage> ModuleDeclVisit<'storage> {
     pub fn items(&self) -> SeqVisit<ModuleItemVisit<'storage>> {
-        SeqVisit::new(self.0.iter_children().next().unwrap())
+        self.0.iter_children().next().unwrap().into()
     }
 }
 
@@ -175,6 +176,45 @@ pub enum ModuleItemVisit<'storage> {
     WithVis(WithVisVisit<'storage, ModuleVisItemVisit<'storage>>),
 }
 
+impl<'storage> From<TreeNodeVisit<'storage>> for ModuleItemVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        match value.extra() {
+            0 => Self::AliasDef(value.into()),
+            1 => Self::ConstDef(value.into()),
+            2 => Self::EnumDef(value.into()),
+            3 => Self::FuncDef(value.into()),
+            4 => Self::ImplBlock(value.into()),
+            5 => Self::ImportStmt(value.into()),
+            6 => Self::StructDef(value.into()),
+            7 => Self::TraitDef(value.into()),
+            8 => Self::UnionDef(value.into()),
+            9 => Self::WithAbi(value.into()),
+            10 => Self::WithDoc(value.into()),
+            11 => Self::WithVis(value.into()),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl fmt::Display for ModuleItemVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::AliasDef(x) => fmt::Display::fmt(x, f),
+            Self::ConstDef(x) => fmt::Display::fmt(x, f),
+            Self::EnumDef(x) => fmt::Display::fmt(x, f),
+            Self::FuncDef(x) => fmt::Display::fmt(x, f),
+            Self::ImplBlock(x) => fmt::Display::fmt(x, f),
+            Self::ImportStmt(x) => fmt::Display::fmt(x, f),
+            Self::StructDef(x) => fmt::Display::fmt(x, f),
+            Self::TraitDef(x) => fmt::Display::fmt(x, f),
+            Self::UnionDef(x) => fmt::Display::fmt(x, f),
+            Self::WithAbi(x) => fmt::Display::fmt(x, f),
+            Self::WithDoc(x) => fmt::Display::fmt(x, f),
+            Self::WithVis(x) => fmt::Display::fmt(x, f),
+        }
+    }
+}
+
 pub struct ModuleAbiItem;
 
 impl ParseNode for ModuleAbiItem {
@@ -201,6 +241,25 @@ impl ParseNode for ModuleAbiItem {
 pub enum ModuleAbiItemVisit<'storage> {
     FfiDecl(BracesVisit<'storage, FfiDeclVisit<'storage>>),
     FuncDef(FuncDefVisit<'storage>),
+}
+
+impl fmt::Display for ModuleAbiItemVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ModuleAbiItemVisit::FfiDecl(x) => fmt::Display::fmt(x, f),
+            ModuleAbiItemVisit::FuncDef(x) => fmt::Display::fmt(x, f),
+        }
+    }
+}
+
+impl<'storage> From<TreeNodeVisit<'storage>> for ModuleAbiItemVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        match value.extra() {
+            0 => Self::FfiDecl(value.iter_children().next().unwrap().into()),
+            1 => todo!(),
+            _ => unreachable!(),
+        }
+    }
 }
 
 /// A module item that can be documented.
@@ -281,6 +340,12 @@ pub enum ModuleDocItemVisit<'storage> {
     UnionDef(UnionDefVisit<'storage>),
     WithAbi(WithAbiVisit<'storage, ModuleAbiItemVisit<'storage>>),
     WithVis(WithVisVisit<'storage, ModuleDocVisItemVisit<'storage>>),
+}
+
+impl fmt::Display for ModuleDocItemVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
 }
 
 /// A module item that can be documented and have a visibility modifier.
@@ -424,6 +489,12 @@ pub enum ModuleVisItemVisit<'storage> {
     WithAbi(WithAbiVisit<'storage, FuncDefVisit<'storage>>),
 }
 
+impl fmt::Display for ModuleVisItemVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
+
 /// An import statement.
 ///
 /// # Example
@@ -453,6 +524,18 @@ impl ParseNode for ImportStmt {
 }
 
 pub struct ImportStmtVisit<'storage>(TreeNodeVisit<'storage>);
+
+impl<'storage> From<TreeNodeVisit<'storage>> for ImportStmtVisit<'storage> {
+    fn from(value: TreeNodeVisit<'storage>) -> Self {
+        todo!()
+    }
+}
+
+impl fmt::Display for ImportStmtVisit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
+}
 
 /// An import item.
 ///
