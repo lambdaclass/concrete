@@ -7,6 +7,7 @@ CREATE TABLE Item (
 ) WITHOUT ROWID;
 -- CREATE INDEX ItemByName ON Item (name);
 
+
 -- Alias items.
 CREATE TABLE AliasItem (
     path STRING NOT NULL,
@@ -18,12 +19,13 @@ CREATE TABLE AliasItem (
         ON DELETE CASCADE
 ) WITHOUT ROWID;
 
+
 -- Const items.
 CREATE TABLE ConstItem (
     path STRING NOT NULL,
     name STRING NOT NULL,
 
-    -- expr BLOB,
+    expr BLOB,
 
     PRIMARY KEY (path, name),
     FOREIGN KEY (path, name) REFERENCES Item (path, name)
@@ -31,28 +33,23 @@ CREATE TABLE ConstItem (
         ON DELETE CASCADE
 ) WITHOUT ROWID;
 
--- -- Function items.
--- CREATE TABLE FuncItem ();
 
--- -- Enum items.
--- CREATE TABLE EnumItem (
---     path STRING NOT NULL,
---     PRIMARY KEY (path),
---     FOREIGN KEY (path) REFERENCES Item (path)
--- ) WITHOUT ROWID;
+-- Function items.
+CREATE TABLE FuncItem ();
 
--- CREATE TABLE EnumVariants (
---     path STRING NOT NULL,
---     name STRING NOT NULL,
---     PRIMARY KEY (path, name),
---     FOREIGN KEY (path) REFERENCES EnumItem (path)
--- ) WITHOUT ROWID;
 
---
--- Test code
---
-INSERT INTO AliasItem (path, name)
-VALUES ("my_crate::");
+-- Enum items.
+CREATE TABLE EnumItem (
+    path STRING NOT NULL,
 
-INSERT INTO AliasItem (path, name)
-VALUES ("my_crate::");
+    PRIMARY KEY (path),
+    FOREIGN KEY (path) REFERENCES Item (path)
+) WITHOUT ROWID;
+
+CREATE TABLE EnumVariants (
+    path STRING NOT NULL,
+    name STRING NOT NULL,
+
+    PRIMARY KEY (path, name),
+    FOREIGN KEY (path) REFERENCES EnumItem (path)
+) WITHOUT ROWID;

@@ -38,3 +38,38 @@
 //! Type checker:
 //!   - IR: Actual code.
 //!   - DB: Traits, cycles...
+
+use self::queries::DbQuery;
+use rusqlite::{Connection, Transaction};
+
+pub mod queries;
+
+pub struct Database {
+    conn: Connection,
+}
+
+impl Database {
+    pub fn query<Q>(&self, query: Q) -> <Q as DbQuery>::Output
+    where
+        Q: DbQuery,
+    {
+        todo!()
+    }
+
+    pub fn mutate(&mut self, f: impl FnOnce(&Transaction)) {
+        let tx = self.conn.transaction().unwrap();
+        f(&tx);
+
+        tx.commit().unwrap();
+    }
+}
+
+impl Default for Database {
+    fn default() -> Self {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!("scripts/init.sql"))
+            .unwrap();
+
+        Self { conn }
+    }
+}
