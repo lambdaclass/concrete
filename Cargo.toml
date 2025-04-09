@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["lib/concrete-lang-compiler", "lib/concrete-lang-syntactic"]
+members = [
+    "lib/concrete-lang-compiler",
+    "lib/concrete-lang-database",
+    "lib/concrete-lang-ir",
+    "lib/concrete-lang-syntactic",
+]
 
 [workspace.package]
 version = "0.1.0"

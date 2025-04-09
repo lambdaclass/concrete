@@ -1,0 +1,6 @@
+[package]
+name = "concrete-lang-ir"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

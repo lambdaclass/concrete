@@ -32,6 +32,14 @@ name = "concrete-lang-compiler"
 version = "0.1.0"
 
 [[package]]
+name = "concrete-lang-database"
+version = "0.1.0"
+
+[[package]]
+name = "concrete-lang-ir"
+version = "0.1.0"
+
+[[package]]
 name = "concrete-lang-syntactic"
 version = "0.1.0"
 dependencies = [
