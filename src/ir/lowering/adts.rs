@@ -37,11 +37,7 @@ pub(crate) fn lower_struct(
     let mut generics_used = HashMap::new();
 
     for generic_param in &info.generics {
-        let ty = *builder
-            .context
-            .generics_mapping
-            .get(&generic_param.name.name)
-            .unwrap_or_else(|| panic!("Missing generic type mapping {:?}", generic_param));
+        let ty = builder.get_generic_param_ty(generic_param)?;
         generic_types.push(ty);
         generics_used.insert(generic_param.name.name.clone(), ty);
     }

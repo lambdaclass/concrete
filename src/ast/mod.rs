@@ -9,6 +9,7 @@ pub mod imports;
 pub mod modules;
 pub mod statements;
 pub mod structs;
+pub mod traits;
 pub mod types;
 
 /// A compile represents a whole package, made up of various modules.
