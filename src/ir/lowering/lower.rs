@@ -9,12 +9,13 @@ use crate::{
         lowering::{
             Bodies, IRBuilder,
             errors::{LoweringError, MissingTraitType, UnexpectedTraitType},
+            symbols::{AdtSymbol, FnSymbol},
         },
     },
 };
 
 use super::{
-    IRBuilderContext, Symbol,
+    IRBuilderContext,
     adts::{lower_enum, lower_struct},
     constants::lower_constant,
     errors::{MissingTraitFunction, UnexpectedTraitFunction},
@@ -166,10 +167,10 @@ fn lower_module_symbols(
                     .unwrap()
                     .functions
                     .insert(
-                        Symbol {
+                        FnSymbol {
                             name: function_def.decl.name.name.clone(),
                             method_of: None,
-                            generics: Vec::new(),
+                            trait_method_of: None,
                         },
                         (idx, module_idx),
                     );
@@ -193,10 +194,10 @@ fn lower_module_symbols(
                     .unwrap()
                     .functions
                     .insert(
-                        Symbol {
+                        FnSymbol {
                             name: function_decl.name.name.clone(),
                             method_of: None,
-                            generics: Vec::new(),
+                            trait_method_of: None,
                         },
                         (idx, module_idx),
                     );
@@ -218,10 +219,8 @@ fn lower_module_symbols(
                     .unwrap()
                     .aggregates
                     .insert(
-                        Symbol {
+                        AdtSymbol {
                             name: struct_decl.name.name.clone(),
-                            method_of: None,
-                            generics: Vec::new(),
                         },
                         idx,
                     );
@@ -265,10 +264,8 @@ fn lower_module_symbols(
                     .unwrap()
                     .aggregates
                     .insert(
-                        Symbol {
+                        AdtSymbol {
                             name: enum_decl.name.name.clone(),
-                            method_of: None,
-                            generics: Vec::new(),
                         },
                         idx,
                     );
@@ -310,10 +307,8 @@ fn lower_module_symbols(
         match item {
             ast::modules::ModuleDefItem::Impl(impl_block) => {
                 let ty = if !impl_block.generic_params.is_empty() {
-                    let adt_symbol = Symbol {
+                    let adt_symbol = AdtSymbol {
                         name: impl_block.target.get_name().unwrap(),
-                        method_of: None,
-                        generics: Vec::new(),
                     };
 
                     let id = *builder
@@ -337,10 +332,10 @@ fn lower_module_symbols(
                     );
                     let idx = builder.ir.functions.insert(None);
                     builder.bodies.functions.insert(idx, function_def.clone());
-                    let sym = Symbol {
+                    let sym = FnSymbol {
                         name: function_def.decl.name.name.clone(),
                         method_of: Some(ty),
-                        generics: Vec::new(),
+                        trait_method_of: None,
                     };
                     builder
                         .symbols
@@ -353,7 +348,7 @@ fn lower_module_symbols(
             }
             ast::modules::ModuleDefItem::ImplTrait(impl_trait) => {
                 // Get trait id and verify it exists.
-                let _trait_id = builder
+                let trait_id = builder
                     .trait_db
                     .get_trait_by_name(&impl_trait.target_trait.name.name, module_idx)
                     .ok_or_else(|| LoweringError::TraitNotFound {
@@ -363,16 +358,12 @@ fn lower_module_symbols(
                     })?;
 
                 let ty = if !impl_trait.generic_params.is_empty() {
-                    let adt_symbol = Symbol {
+                    let adt_symbol = AdtSymbol {
                         name: impl_trait.target.get_name().unwrap(),
-                        method_of: None,
-                        generics: Vec::new(),
                     };
 
                     let id = *builder
-                        .symbols
-                        .get(&builder.get_current_module_idx())
-                        .unwrap()
+                        .get_current_symbols()
                         .aggregates
                         .get(&adt_symbol)
                         .unwrap();
@@ -401,10 +392,10 @@ fn lower_module_symbols(
                     );
                     let idx = builder.ir.functions.insert(None);
                     builder.bodies.functions.insert(idx, function_def.clone());
-                    let sym = Symbol {
+                    let sym = FnSymbol {
                         name: function_def.decl.name.name.clone(),
                         method_of: Some(ty),
-                        generics: Vec::new(),
+                        trait_method_of: Some(trait_id),
                     };
                     builder
                         .symbols
@@ -497,15 +488,15 @@ fn lower_imports(
             for sym in &import.symbols {
                 let target_symbols = builder.symbols.get(&target_module).unwrap();
 
-                let symbol = Symbol {
+                let fn_symbol = FnSymbol {
                     name: sym.name.clone(),
                     method_of: None,
-                    generics: Vec::new(),
+                    trait_method_of: None,
                 };
-                if let Some((id, mod_id)) = target_symbols.functions.get(&symbol).cloned() {
+                if let Some((id, mod_id)) = target_symbols.functions.get(&fn_symbol).cloned() {
                     debug!(
                         "Imported function symbol {:?} ({}) to module {} ({})",
-                        symbol.name,
+                        fn_symbol.name,
                         mod_id.to_idx(),
                         builder.ir.modules[module_idx].name,
                         module_idx.to_idx()
@@ -516,15 +507,18 @@ fn lower_imports(
                         .get_mut(&module_idx)
                         .unwrap()
                         .functions
-                        .insert(symbol.clone(), (id, mod_id));
+                        .insert(fn_symbol.clone(), (id, mod_id));
                     continue;
                 }
 
+                let adt_symbol = AdtSymbol {
+                    name: sym.name.clone(),
+                };
                 let target_symbols = builder.symbols.get(&target_module).unwrap();
-                if let Some(adt_idx) = target_symbols.aggregates.get(&symbol).cloned() {
+                if let Some(adt_idx) = target_symbols.aggregates.get(&adt_symbol).cloned() {
                     debug!(
                         "Imported adt symbol {:?} to module {}",
-                        symbol, builder.ir.modules[module_idx].name
+                        adt_symbol, builder.ir.modules[module_idx].name
                     );
                     builder.ir.modules[module_idx].aggregates.insert(adt_idx);
                     builder
@@ -532,7 +526,7 @@ fn lower_imports(
                         .get_mut(&module_idx)
                         .unwrap()
                         .aggregates
-                        .insert(symbol.clone(), adt_idx);
+                        .insert(adt_symbol.clone(), adt_idx);
 
                     continue;
                 }
@@ -541,7 +535,7 @@ fn lower_imports(
                 if let Some(id) = target_symbols.types.get(&sym.name).cloned() {
                     debug!(
                         "Imported type symbol {:?} to module {}",
-                        symbol, builder.ir.modules[module_idx].name
+                        &sym.name, builder.ir.modules[module_idx].name
                     );
                     builder.ir.modules[module_idx].types.insert(id);
                     builder
@@ -557,7 +551,7 @@ fn lower_imports(
                 if let Some(id) = target_symbols.constants.get(&sym.name).cloned() {
                     debug!(
                         "Imported constant symbol {:?} to module {}",
-                        symbol, builder.ir.modules[module_idx].name
+                        &sym.name, builder.ir.modules[module_idx].name
                     );
                     builder.ir.modules[module_idx].constants.insert(id);
                     builder
@@ -652,10 +646,8 @@ pub fn lower_module(
                 }
 
                 let target_ty = if !impl_trait.generic_params.is_empty() {
-                    let adt_symbol = Symbol {
+                    let adt_symbol = AdtSymbol {
                         name: impl_trait.target.get_name().unwrap(),
-                        method_of: None,
-                        generics: Vec::new(),
                     };
 
                     let id = *builder
@@ -791,7 +783,7 @@ pub fn lower_module(
                     builder.context.self_ty = Some(target_ty);
                     for method in &impl_trait.methods {
                         if method.decl.generic_params.is_empty() {
-                            lower_func(builder, method, Some(target_ty))?;
+                            lower_func(builder, method, Some(target_ty), Some(trait_id))?;
                         }
                     }
                     builder.context.self_ty = None;
@@ -810,7 +802,7 @@ pub fn lower_module(
             }
             ast::modules::ModuleDefItem::Function(function_def) => {
                 if function_def.decl.generic_params.is_empty() {
-                    lower_func(builder, function_def, None)?;
+                    lower_func(builder, function_def, None, None)?;
                 }
             }
             ast::modules::ModuleDefItem::FunctionDecl(function_decl) => {
@@ -824,7 +816,7 @@ pub fn lower_module(
                     builder.context.self_ty = Some(target_ty);
                     for method in &impl_block.methods {
                         if method.decl.generic_params.is_empty() {
-                            lower_func(builder, method, Some(target_ty))?;
+                            lower_func(builder, method, Some(target_ty), None)?;
                         }
                     }
                     builder.context.self_ty = None;

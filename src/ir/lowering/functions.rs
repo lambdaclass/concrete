@@ -10,10 +10,9 @@ use crate::{
         statements::{self, LetStmtTarget},
     },
     ir::{
-        BasicBlock, ConcreteIntrinsic, Function, Local, LocalKind, Operand, Place, Span,
-        Terminator, TerminatorKind, Type,
+        BasicBlock, ConcreteIntrinsic, Function, Local, LocalKind, ModuleIndex, Operand, Place,
+        Span, Terminator, TerminatorKind, Type,
         lowering::{
-            Symbol,
             expressions::{find_expression_type, lower_expression},
             types::lower_type,
         },
@@ -25,6 +24,8 @@ use super::{
     errors::LoweringError,
     ir::{FnIndex, Rvalue, TypeIndex},
     statements::lower_statement,
+    symbols::FnSymbol,
+    traits::TraitIdx,
 };
 
 /// Lowers a function or method if its not yet lowered.
@@ -35,10 +36,13 @@ pub(crate) fn lower_func(
     builder: &mut IRBuilder,
     func: &FunctionDef,
     method_of: Option<TypeIndex>,
+    trait_method_of: Option<TraitIdx>,
 ) -> Result<FnIndex, LoweringError> {
-    debug!("lowering function {:?}", func.decl.name.name);
+    if !func.decl.generic_params.is_empty() || !builder.context.generics_mapping.is_empty() {
+        return lower_generic_func(builder, func, method_of, trait_method_of);
+    }
 
-    let is_intrinsic: Option<ConcreteIntrinsic> = None;
+    debug!("lowering function {:?}", func.decl.name.name);
 
     // Get the module id of this function/method
     // This is needed incase this is a method in a impl block, if its imported the `lower_import` doesn't
@@ -59,60 +63,104 @@ pub(crate) fn lower_func(
 
     tracing::span::Span::current().record("mod_id", module_idx.to_idx());
 
-    // Initially, this is the polymorphic symbol, if its a generic function, the symbol changes to the monomorphic version after
-    // id resolution
-    let mut symbol = Symbol {
+    let symbol = FnSymbol {
         name: func.decl.name.name.clone(),
         method_of,
-        generics: Vec::new(),
+        trait_method_of,
     };
 
-    // Find the function id, and if its generic, the monormorphic function id.
-    let ((poly_fn_id, _fn_mod_id), mono_fn_id) = {
-        let symbols = builder.symbols.get(&module_idx).unwrap();
+    let (fn_id, fn_module_idx) = builder
+        .symbols
+        .get(&module_idx)
+        .unwrap()
+        .functions
+        .get(&symbol)
+        .copied()
+        .unwrap();
 
-        if let Some(poly_id) = symbols.functions.get(&symbol).copied() {
-            if !func.decl.generic_params.is_empty() {
-                debug!(
-                    "function is generic over {} parameters",
-                    func.decl.generic_params.len()
-                );
-
-                let generic_types = builder.lower_generic_params(&func.decl.generic_params)?;
-
-                // Construct the monomorphized function symbol.
-                symbol = Symbol {
-                    name: func.decl.name.name.clone(),
-                    method_of,
-                    generics: generic_types,
-                };
-
-                let symbols = builder.symbols.get(&module_idx).unwrap(); // needed for borrowck
-
-                let mono_id = if let Some(id) = symbols.functions.get(&symbol) {
-                    id.0
-                } else {
-                    builder.ir.functions.insert(None)
-                };
-                (poly_id, Some(mono_id))
-            } else {
-                (poly_id, None)
-            }
-        } else {
-            panic!("fn not found")
-        }
-    };
-
-    let fn_id = mono_fn_id.unwrap_or(poly_fn_id);
-
-    // Check if this function is already lowered.
+    // Check it it's already lowered.
     if builder.ir.functions[fn_id].is_some() {
         debug!(
             "function '{}' already lowered",
             &builder.ir.functions[fn_id].as_ref().unwrap().name
         );
+        builder.context.self_ty = old_self_ty;
         return Ok(fn_id);
     }
+
+    builder.enter_module_context(fn_module_idx);
+
+    lower_func_body(builder, fn_id, func)?;
+
+    builder.leave_module_context();
+
+    builder.context.self_ty = old_self_ty;
+
+    Ok(fn_id)
+}
+
+pub(crate) fn lower_generic_func(
+    builder: &mut IRBuilder,
+    func: &FunctionDef,
+    method_of: Option<TypeIndex>,
+    trait_method_of: Option<TraitIdx>,
+) -> Result<FnIndex, LoweringError> {
+    debug!(
+        "lowering generic function {:?}, generic map: {:?}",
+        func.decl.name.name, builder.context.generics_mapping
+    );
+
+    let old_self_ty = builder.context.self_ty;
+
+    let module_idx = if let Some(id) = method_of {
+        builder.context.self_ty = Some(id);
+        builder
+            .type_to_module
+            .get(&id)
+            .copied()
+            .expect("should exist")
+    } else {
+        builder.get_current_module_idx()
+    };
+
+    let (mono_id, fn_module_idx) = get_or_create_function_mono_idx(
+        builder,
+        &func.decl.name.name,
+        &func.decl.generic_params,
+        method_of,
+        trait_method_of,
+        module_idx,
+        None,
+    )?;
+
+    if builder.ir.functions[mono_id].is_some() {
+        debug!(
+            "function '{}' already lowered",
+            &builder.ir.functions[mono_id].as_ref().unwrap().name
+        );
+        builder.context.self_ty = old_self_ty;
+        return Ok(mono_id);
+    }
+
+    builder.enter_module_context(fn_module_idx);
+
+    lower_func_body(builder, mono_id, func)?;
+
+    builder.leave_module_context();
+
+    builder.context.self_ty = old_self_ty;
+
+    Ok(mono_id)
+}
+
+pub(crate) fn lower_func_body(
+    builder: &mut IRBuilder,
+    fn_id: FnIndex,
+    func: &FunctionDef,
+) -> Result<(), LoweringError> {
+    let is_intrinsic: Option<ConcreteIntrinsic> = None;
+
+    let module_idx = builder.get_current_module_idx();
 
     let mut args_ty = Vec::new();
 
@@ -212,8 +260,6 @@ pub(crate) fn lower_func(
     fn_builder.builder.ir.functions[fn_id] = Some(fn_builder.body);
     builder.ir.modules[module_idx].functions.insert(fn_id);
 
-    builder.context.self_ty = old_self_ty;
-
     for attr in &func.decl.attributes {
         if attr.name.as_str() == "test" {
             // TODO: check its a valid test function, i.e: no arguments, returns a i32.
@@ -224,7 +270,73 @@ pub(crate) fn lower_func(
         }
     }
 
-    Ok(fn_id)
+    Ok(())
+}
+
+/// Gets or creates a monomorphized function id for the given adt.
+pub(crate) fn get_or_create_function_mono_idx(
+    builder: &mut IRBuilder,
+    name: &str,
+    generics: &[GenericParam],
+    method_of: Option<TypeIndex>,
+    trait_method_of: Option<TraitIdx>,
+    module_idx: ModuleIndex,
+    // In case its already lowered (needed for fn calls)
+    generic_types: Option<Vec<TypeIndex>>,
+) -> Result<(FnIndex, ModuleIndex), LoweringError> {
+    // If the method of type is generic this may be the mono id, so we need the poly id to find the methods.
+    let mut poly_method_of = method_of;
+    if let Some(inner_method_of) = method_of {
+        if let Some(x) = builder.mono_type_to_poly.get(&inner_method_of) {
+            poly_method_of = Some(*x)
+        }
+    }
+
+    let sym = FnSymbol {
+        name: name.to_string(),
+        method_of: poly_method_of,
+        trait_method_of,
+    };
+
+    let generic_types = if let Some(generic_types) = generic_types {
+        generic_types
+    } else {
+        builder.lower_generic_params(generics)?
+    };
+    let mut mono_sym = sym.monomorphize(&generic_types);
+    mono_sym.method_of = method_of;
+
+    // Already lowered.
+    if let Some(id) = builder.symbols[&module_idx]
+        .monomorphized_functions
+        .get(&mono_sym)
+    {
+        return Ok(*id);
+    }
+
+    let (poly_id, fn_module_idx) = *builder.symbols[&module_idx]
+        .functions
+        .get(&sym)
+        .expect("function not found");
+
+    let id = builder.ir.functions.insert(None);
+
+    if let Some(func_decl) = builder.bodies.functions_decls.get(&poly_id).cloned() {
+        builder.bodies.functions_decls.insert(id, func_decl);
+    }
+
+    if let Some(func_def) = builder.bodies.functions.get(&poly_id).cloned() {
+        builder.bodies.functions.insert(id, func_def);
+    }
+
+    builder
+        .symbols
+        .get_mut(&fn_module_idx)
+        .unwrap()
+        .monomorphized_functions
+        .insert(mono_sym, (id, fn_module_idx));
+
+    Ok((id, fn_module_idx))
 }
 
 /// Lowers a function or method call.
@@ -245,7 +357,7 @@ pub(crate) fn lower_fn_call(
     // lowered and needs to be.
     fn_builder.enter_module_context(module_idx);
 
-    let (poly_fn_id, mono_fn_id) = fn_builder.get_id_for_fn_call(info, method_idx)?;
+    let fn_id = fn_builder.get_id_for_fn_call(info, method_idx)?;
 
     fn_builder.leave_module_context();
 
@@ -254,14 +366,14 @@ pub(crate) fn lower_fn_call(
         .builder
         .bodies
         .functions
-        .get(&poly_fn_id)
+        .get(&fn_id)
         .map(|x| x.decl.clone())
         .or_else(|| {
             fn_builder
                 .builder
                 .bodies
                 .functions_decls
-                .get(&poly_fn_id)
+                .get(&fn_id)
                 .cloned()
         })
         .unwrap()
@@ -428,7 +540,7 @@ pub(crate) fn lower_fn_call(
 
     // todo: check if function is diverging such as exit().
     let kind = TerminatorKind::Call {
-        func: mono_fn_id.unwrap_or(poly_fn_id),
+        func: fn_id,
         args,
         destination: dest_place.clone(),
         target: Some(target_block),
@@ -489,49 +601,34 @@ pub(crate) fn lower_func_decl(
         }
     }
 
-    // Initially, this is the polymorphic symbol, if its a generic function, the symbol changes to the monomorphic version after
-    // id resolution
-    let mut symbol = Symbol {
-        name: func.name.name.clone(),
-        method_of: None,
-        generics: Vec::new(),
+    let fn_id = if func.generic_params.is_empty() {
+        let symbol = FnSymbol {
+            name: func.name.name.clone(),
+            method_of: None,
+            trait_method_of: None,
+        };
+
+        builder
+            .symbols
+            .get(&module_idx)
+            .unwrap()
+            .functions
+            .get(&symbol)
+            .unwrap()
+            .0
+    } else {
+        let (mono_id, _) = get_or_create_function_mono_idx(
+            builder,
+            &func.name.name,
+            &func.generic_params,
+            None,
+            None,
+            module_idx,
+            None,
+        )?;
+
+        mono_id
     };
-
-    // Find the function id, and if its generic, the monormorphic function id.
-    let ((poly_fn_id, _fn_mod_id), mono_fn_id) = {
-        let symbols = builder.symbols.get(&module_idx).unwrap();
-
-        if let Some(poly_id) = symbols.functions.get(&symbol).copied() {
-            if !func.generic_params.is_empty() {
-                debug!(
-                    "function is generic over {} parameters",
-                    func.generic_params.len()
-                );
-
-                // Construct the monomorphized function symbol.
-                symbol = Symbol {
-                    name: func.name.name.clone(),
-                    method_of: None,
-                    generics: generic_types,
-                };
-
-                let symbols = builder.symbols.get(&module_idx).unwrap(); // needed for borrowck
-
-                let mono_id = if let Some(id) = symbols.functions.get(&symbol) {
-                    id.0
-                } else {
-                    builder.ir.functions.insert(None)
-                };
-                (poly_id, Some(mono_id))
-            } else {
-                (poly_id, None)
-            }
-        } else {
-            panic!("fn not found")
-        }
-    };
-
-    let fn_id = mono_fn_id.unwrap_or(poly_fn_id);
 
     // Check if this function is already lowered.
     if builder.ir.functions[fn_id].is_some() {
@@ -555,37 +652,29 @@ pub(crate) fn lower_func_decl(
         .map(|x| lower_type(builder, x))
         .unwrap_or(Ok(builder.ir.get_unit_ty()))?;
 
-    let fn_builder = FnIrBuilder {
-        body: Function {
-            name: if !func.is_extern && func.name.name != "main" {
-                builder
-                    .get_mangled_name(module_idx, &func.name.name, fn_id)
-                    .expect("should get mangled name")
-            } else {
-                func.name.name.clone()
-            },
-            debug_name: if !func.is_extern && func.name.name != "main" {
-                builder.get_debug_name(module_idx, &func.name.name)
-            } else {
-                Some(func.name.name.clone())
-            },
-            args: args_ty.clone(),
-            ret_ty,
-            is_extern: func.is_extern,
-            is_intrinsic,
-            basic_blocks: Vec::new(),
-            module_idx,
-            locals: Vec::new(),
+    let function = Function {
+        name: if !func.is_extern && func.name.name != "main" {
+            builder
+                .get_mangled_name(module_idx, &func.name.name, fn_id)
+                .expect("should get mangled name")
+        } else {
+            func.name.name.clone()
         },
-        name_to_local: HashMap::new(),
-        statements: Vec::new(),
-        ret_local: 0,
-        builder,
-        fn_id,
-        local_exists: Default::default(),
+        debug_name: if !func.is_extern && func.name.name != "main" {
+            builder.get_debug_name(module_idx, &func.name.name)
+        } else {
+            Some(func.name.name.clone())
+        },
+        args: args_ty.clone(),
+        ret_ty,
+        is_extern: func.is_extern,
+        is_intrinsic,
+        basic_blocks: Vec::new(),
+        module_idx,
+        locals: Vec::new(),
     };
 
-    fn_builder.builder.ir.functions[fn_id] = Some(fn_builder.body);
+    builder.ir.functions[fn_id] = Some(function);
     builder.ir.modules[module_idx].functions.insert(fn_id);
 
     Ok(fn_id)

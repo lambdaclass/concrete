@@ -258,3 +258,18 @@ fn missing_variant() {
         error
     );
 }
+
+#[test]
+fn trait_bounds() {
+    let (source, name) = (
+        include_str!("invalid_programs/trait_bounds.con"),
+        "invalid_programs/trait_bounds.con",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::TraitBoundNotMet(..)),
+        "{:#?}",
+        error
+    );
+}

@@ -536,9 +536,9 @@ pub(crate) fn find_expression_type(
                             }
                         }
                         PathSegment::MethodCall(fn_call_op, _span) => {
-                            let (poly_id, mono_id) =
+                            let fn_id =
                                 fn_builder.get_id_for_fn_call(fn_call_op, Some(type_idx))?;
-                            let body = fn_builder.builder.get_function(mono_id.unwrap_or(poly_id));
+                            let body = fn_builder.builder.get_function(fn_id);
 
                             type_idx = body.ret_ty;
                             ty = fn_builder.builder.get_type(type_idx).clone();
@@ -552,8 +552,8 @@ pub(crate) fn find_expression_type(
             }
         },
         Expression::FnCall(info) => {
-            let (poly_fn_id, mono_fn_id) = fn_builder.get_id_for_fn_call(info, None)?;
-            let ret_ty = fn_builder.builder.ir.functions[mono_fn_id.unwrap_or(poly_fn_id)]
+            let fn_id = fn_builder.get_id_for_fn_call(info, None)?;
+            let ret_ty = fn_builder.builder.ir.functions[fn_id]
                 .as_ref()
                 .unwrap()
                 .ret_ty;
@@ -618,9 +618,8 @@ pub(crate) fn find_expression_type(
         }
         Expression::AssocMethodCall(info) => {
             let type_idx = lower_type(fn_builder.builder, &info.assoc_type.clone().into())?;
-            let (poly_fn_id, mono_fn_id) =
-                fn_builder.get_id_for_fn_call(&info.fn_call, Some(type_idx))?;
-            let ret_ty = fn_builder.builder.ir.functions[mono_fn_id.unwrap_or(poly_fn_id)]
+            let fn_id = fn_builder.get_id_for_fn_call(&info.fn_call, Some(type_idx))?;
+            let ret_ty = fn_builder.builder.ir.functions[fn_id]
                 .as_ref()
                 .unwrap()
                 .ret_ty;
@@ -814,12 +813,29 @@ pub(crate) fn lower_value_expr(
     })
 }
 
-#[instrument(level = "debug", skip_all, fields(first = ?info.first.name))]
+#[instrument(level = "debug", skip_all, fields(path))]
 pub(crate) fn lower_path(
     fn_builder: &mut FnIrBuilder,
     info: &PathOp,
 ) -> Result<(Place, TypeIndex, Span), LoweringError> {
     debug!("lowering path");
+
+    tracing::Span::current().record("path", {
+        let mut name = info.first.name.clone();
+
+        for extra in &info.extra {
+            match extra {
+                PathSegment::FieldAccess(ident, _) => name.push_str(&format!(".{}", ident.name)),
+                PathSegment::ArrayIndex(_, _) => name.push_str("[value expr]"),
+                PathSegment::MethodCall(fn_call_op, _) => {
+                    name.push_str(&format!(".{}(..)", fn_call_op.target.name))
+                }
+            }
+        }
+
+        name
+    });
+
     let mut local = *fn_builder.name_to_local.get(&info.first.name).ok_or(
         LoweringError::UseOfUndeclaredVariable {
             span: info.span,

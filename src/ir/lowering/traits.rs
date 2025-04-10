@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use tracing::debug;
 use typed_generational_arena::{StandardSlab, StandardSlabIndex};
@@ -19,6 +22,8 @@ pub struct TraitDatabase {
     pub trait_to_module: HashMap<TraitIdx, ModuleIndex>,
     pub name_to_trait: HashMap<(ModuleIndex, String), TraitIdx>,
     pub implementors: HashMap<TraitIdx, TraitImpls>,
+    // A map to do a reverse search from type and function name to trait that contains a function with that name.
+    pub type_trait_functions: HashMap<(TypeIndex, String), HashSet<TraitIdx>>,
 }
 
 /// An implementation of a given trait.
@@ -47,6 +52,7 @@ impl TraitDatabase {
             trait_to_module: HashMap::new(),
             name_to_trait: HashMap::new(),
             traits: StandardSlab::new(),
+            type_trait_functions: Default::default(),
         }
     }
 
@@ -62,6 +68,35 @@ impl TraitDatabase {
         self.trait_to_module.insert(idx, module_idx);
 
         idx
+    }
+
+    pub fn add_function_to_type(
+        &mut self,
+        type_idx: TypeIndex,
+        func_name: &str,
+        trait_idx: TraitIdx,
+    ) {
+        let traits = self
+            .type_trait_functions
+            .entry((type_idx, func_name.to_string()))
+            .or_default();
+        traits.insert(trait_idx);
+    }
+
+    /// Returns the traits that contain a function by the given name for the type.
+    pub fn get_traits_for_function(
+        &self,
+        type_idx: TypeIndex,
+        func_name: &str,
+    ) -> HashSet<TraitIdx> {
+        if let Some(x) = self
+            .type_trait_functions
+            .get(&(type_idx, func_name.to_string()))
+        {
+            x.clone()
+        } else {
+            Default::default()
+        }
     }
 
     pub fn get_trait_module_idx(&self, id: TraitIdx) -> ModuleIndex {
@@ -81,8 +116,13 @@ impl TraitDatabase {
             &tr.name.name, im.generics
         );
         let implementors = self.implementors.entry(idx).or_default();
-        let entry = implementors.entry(im.implementor).or_default();
+        let type_id = im.implementor;
+        let entry = implementors.entry(type_id).or_default();
         entry.push(im);
+
+        for method in tr.methods.clone().into_iter() {
+            self.add_function_to_type(type_id, &method.name.name, idx);
+        }
     }
 
     pub fn type_implements_trait(

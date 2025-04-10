@@ -1,0 +1,23 @@
+mod test {
+    pub trait ExampleTrait {
+        fn example(&self) -> u32;
+    }
+
+    struct ExampleStruct {
+        x: u32,
+    }
+
+    fn run<T: ExampleTrait>(value: T) -> u32 {
+        return value.example();
+    }
+
+    fn main() -> u32 {
+        let ex: ExampleStruct = ExampleStruct {
+            x: 2,
+        };
+
+        let result: u32 = run(ex);
+
+        return result;
+    }
+}
