@@ -58,10 +58,13 @@ impl fmt::Display for TypeName {
     }
 }
 
-/// Used as a generic param in function and struct declarations.
+/// Used as a generic parameter definition in function / adt declarations.
+///
+/// Note: When initializing a type with generics, we use a TypeName, not a GenericParam.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct GenericParam {
     pub name: Ident,
+    pub bounds: Vec<TypeName>,
     pub span: Span,
 }
 

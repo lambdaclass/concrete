@@ -49,7 +49,15 @@ pub fn link_shared_lib(objects: &[PathBuf], output_filename: &Path) -> std::io::
 
     let mut linker = std::process::Command::new("ld");
     let proc = linker.args(args.iter()).spawn()?;
-    proc.wait_with_output()?;
+    let output = proc.wait_with_output()?;
+    tracing::debug!("Linker result ok: {}", output.status.success());
+
+    if !output.status.success() {
+        tracing::error!(
+            "Linker error:\n{}",
+            String::from_utf8_lossy(&output.stderr).to_string()
+        );
+    }
     Ok(())
 }
 
@@ -128,7 +136,14 @@ pub fn link_binary(objects: &[PathBuf], output_filename: &Path) -> std::io::Resu
     let mut linker = std::process::Command::new("ld");
     let proc = linker.args(args.iter()).spawn()?;
     let output = proc.wait_with_output()?;
-    tracing::debug!("Linker result: {:#?}", output);
+    tracing::debug!("Linker result ok: {}", output.status.success());
+
+    if !output.status.success() {
+        tracing::error!(
+            "Linker error:\n{}",
+            String::from_utf8_lossy(&output.stderr).to_string()
+        );
+    }
     Ok(())
 }
 

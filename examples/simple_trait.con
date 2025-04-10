@@ -1,0 +1,23 @@
+mod simple_trait {
+    pub trait Hello {
+        fn hello(&self) -> u32;
+    }
+
+    struct Test {
+        a: u32,
+    }
+
+    impl Hello for Test {
+        fn hello(&self) -> u32 {
+            return self.a;
+        }
+    }
+
+    fn main() -> u32 {
+        let x: Test = Test {
+            a: 2
+        };
+
+        return x.hello();
+    }
+}
