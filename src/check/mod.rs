@@ -593,5 +593,33 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 .with_help("Specify the generic type at the function call.");
             report.finish()
         }
+        LoweringError::TraitBoundNotMet(error) => {
+            let path = error.path.display().to_string();
+            let func_span = FileSpan::new(path.clone(), error.func_name_span.into());
+            let param_span = FileSpan::new(path.clone(), error.param_span.into());
+            let trait_span = FileSpan::new(path.clone(), error.trait_span.into());
+            let report = Report::build(ReportKind::Error, func_span.clone())
+                .with_code("TraitBoundNotMet")
+                .with_label(
+                    Label::new(func_span.clone())
+                        .with_message(format!(
+                            "in the following function call {:?}",
+                            error.func_name
+                        ))
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(param_span.clone())
+                        .with_message("this parameter type doesn't implement the required trait bounds")
+                        .with_color(colors.next()),
+                )
+                .with_label(
+                    Label::new(trait_span.clone())
+                        .with_message("This trait bound is not implemented for the given parameter type at the function call")
+                        .with_color(colors.next()),
+                )
+                .with_help(format!("Implement the trait {:?} for the passed parameter type.", error.trait_name));
+            report.finish()
+        }
     }
 }
