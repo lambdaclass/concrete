@@ -127,7 +127,7 @@ But we want to take a different path with respect to:
 ## Syntax
 ```rust
 mod Fibonacci {
-    fn main() -> i64 {
+    fn main() -> u64 {
         return fib(10);
     }
 
