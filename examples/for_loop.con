@@ -6,12 +6,14 @@ mod Example {
     fn sum_to(limit: i64) -> i64 {
         let mut result: i64 = 0;
 
-        let n: i64 = 1;
+        let mut n: i64 = 1;
         for {
+            if n > 10 {
+                // there is no break yet
+                return result;
+            }
             result = result + n;
             n = n + 1;
         }
-
-        return result;
     }
 }

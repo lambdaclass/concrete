@@ -6,12 +6,18 @@ mod EnumExample {
     }
 
     fn main() -> i32 {
-        let mut foo: Foo = Foo.Bar;
+        let mut foo: Foo = Foo#Bar;
 
 		match foo {
-			Foo.Bar -> return 1;,
-			Foo.Baz -> return 2;,
-			Foo.Qux -> return 3;,
+			Foo#Bar => {
+			    return 1;
+			},
+			Foo#Baz => {
+			    return 2;
+			},
+			Foo#Qux => {
+			    return 3;
+			},
 		}
     }
 }
