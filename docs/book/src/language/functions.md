@@ -1,30 +1,41 @@
 # Functions
 
-A function can be defined the following way:
+The `fn` keyword is used to declare functions.
+
+- You must specify the type of the parameters, and the return value.
 
 ```rust
-
-pub fn name(arg1: i32) -> i32 {
-    return arg1 * 2;
+fn add(x: i32, y: i32) -> i32 {
+    return x + y;
 }
-
 ```
 
-- `pub`: An optional keyword to make the function public outside the module.
+The function is called with the classic parenthesis syntax.
 
-The return type can be omited.
+```rust
+let z: i32 = add(x, y);
+```
 
+To make a function available outside of the module, use the `pub` modifier.
+
+```rust
+pub fn public(x: i32) {
+    ...
+}
+```
+
+## Generics
 
 Functions can be generic:
 
 ```rust
-
-fn name<T>(arg: T) -> T {
-    // ...
+fn generic<T>(arg: T) -> T {
+    ...
 }
+```
 
+We must specify the generic argument type when calling it:
 
-// call it
-let x: i32 = name::<i32>(2);
-
+```rust
+let x: i32 = generic::<i32>(2);
 ```
