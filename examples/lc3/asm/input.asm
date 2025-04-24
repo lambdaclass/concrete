@@ -1,0 +1,39 @@
+.ORIG   x3000
+
+LEA R0,USER
+TRAP x22
+
+LOOP_USER_CHECK
+        TRAP x23
+        ADD R1,R0,#-10
+        BRz LOOP_USER_END
+        LEA R2,LOOP_USER_CHECK
+        JMP R2
+LOOP_USER_END
+
+LEA R0,PASS
+TRAP x22
+
+LOOP_PASS_CHECK
+        TRAP x20
+        ADD R1,R0,#-10
+        BRz LOOP_PASS_END
+        LEA R2,LOOP_PASS_CHECK
+        JMP R2
+LOOP_PASS_END
+
+AND R0,R0,#0
+ADD R0,R0,#10
+TRAP x21
+
+LEA R0,OKNP
+TRAP x24
+HALT
+
+USER .STRINGZ "Username: "
+PASS .STRINGZ "Password: "
+OKNP .FILL #19279
+     .FILL #10
+     .FILL #0
+
+.END

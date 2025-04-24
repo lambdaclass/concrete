@@ -1,0 +1,317 @@
+mod vm {
+    import std.libc.{exit, putchar, getchar};
+    import std.io.{print};
+    import builtins.{lsr, lsl, asr, and, not};
+    import debug.{debug_string, dump_memory, truncate_file};
+    import lc3.memory.{Memory};
+
+    const MEMORY_SIZE: u64 = 65536;
+    const REGISTER_SIZE: u64 = 10;
+
+    // FIX: It would be great to use an Enum here
+    const REGISTER_R0: u64 = 0;
+    const REGISTER_R1: u64 = 1;
+    const REGISTER_R2: u64 = 2;
+    const REGISTER_R3: u64 = 3;
+    const REGISTER_R4: u64 = 4;
+    const REGISTER_R5: u64 = 5;
+    const REGISTER_R6: u64 = 6;
+    const REGISTER_R7: u64 = 7;
+    const REGISTER_PC: u64 = 8;
+    const REGISTER_COND: u64 = 9;
+
+    // FIX: It would be great to use an Enum here
+    const OPCODE_BR: u16 = 0;
+    const OPCODE_ADD: u16 = 1;
+    const OPCODE_LD: u16 = 2;
+    const OPCODE_ST: u16 = 3;
+    const OPCODE_JSR: u16 = 4;
+    const OPCODE_AND: u16 = 5;
+    const OPCODE_LDR: u16 = 6;
+    const OPCODE_STR: u16 = 7;
+    const OPCODE_RTI: u16 = 8;
+    const OPCODE_NOT: u16 = 9;
+    const OPCODE_LDI: u16 = 10;
+    const OPCODE_STI: u16 = 11;
+    const OPCODE_JMP: u16 = 12;
+    const OPCODE_RES: u16 = 13;
+    const OPCODE_LEA: u16 = 14;
+    const OPCODE_TRA: u16 = 15;
+
+    // FIX: It would be great to use an Enum here
+    const CONDITION_FLAG_POS: u16 = 1;
+    const CONDITION_FLAG_ZERO: u16 = 2;
+    const CONDITION_FLAG_NEG: u16 = 4;
+
+    // FIX: It would be great to use an Enum here
+    const TRAP_GETC: u16 = 32;
+    const TRAP_OUT: u16 = 33;
+    const TRAP_PUTS: u16 = 34;
+    const TRAP_IN: u16 = 35;
+    const TRAP_PUTSP: u16 = 36;
+    const TRAP_HALT: u16 = 37;
+
+    const INITIAL_PC: u16 = 12288;
+
+    pub struct VirtualMachine {
+        memory: Memory,
+        // FIX: Cannot use `REGISTER_SIZE` constant here
+        registers: [u16; 10],
+    }
+
+    impl VirtualMachine {
+        pub fn new() -> VirtualMachine {
+            let memory: Memory = Memory#new(MEMORY_SIZE);
+            // FIX: Cannot use `REGISTER_SIZE` constant here
+            let registers: [u16; 10] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+            let vm: VirtualMachine = VirtualMachine {
+                memory: memory,
+                registers: registers,
+            };
+
+            return vm;
+        }
+
+        pub fn load(&mut self, image_path: String) {
+            // FIX: Cannot inline memory. The workaround only works
+            // because the memory is heap allocated.
+            let memory: Memory = self.memory;
+            memory.load(image_path);
+        }
+
+        pub fn run(&mut self) {
+            // FIX: Cannot inline memory. The workaround only works
+            // because the memory is heap allocated.
+            let mut memory: Memory = self.memory;
+            let mut registers: [u16; 10] = self.registers;
+
+            registers[REGISTER_PC] = INITIAL_PC;
+            registers[REGISTER_COND] = CONDITION_FLAG_ZERO;
+
+            // HACK: Only for debugging.
+            truncate_file("instructions");
+            truncate_file("registers");
+
+            while true {
+                let instruction: u16 = memory.get(registers[REGISTER_PC]);
+                let opcode: u16 = lsr(instruction, 12);
+
+                // HACK: Only for debugging.
+                dump_memory::<u16>("instructions", &instruction as *const u16, 1);
+                dump_memory::<u16>("registers", &registers as *const u16, 10);
+
+                // Increase PC before execution - this is a requirement.
+                registers[REGISTER_PC] = registers[REGISTER_PC] + 1;
+
+                // FIX: Cannot use match here (or if else)
+                // FIX: Cannot use const in binary expression
+                let opcode_br: u16 = OPCODE_BR as u16;
+                if opcode == opcode_br {
+                    let pc_offset: u16 = sign_extend(and(instruction, 511), 9);
+                    let cond_flag: u16 = and(lsr(instruction, 9), 7);
+
+                    let should_jump: u16 = and(cond_flag, registers[REGISTER_COND]);
+                    if should_jump > 0 {
+                        registers[REGISTER_PC] = registers[REGISTER_PC] + pc_offset;
+                    }
+                };
+                let opcode_add: u16 = OPCODE_ADD as u16;
+                if opcode == opcode_add {
+                    let r0: u16 = and(lsr(instruction, 9), 7);
+                    let r1: u16 = and(lsr(instruction, 6), 7);
+                    let imm_flag: u16 = and(lsr(instruction, 5), 1);
+
+                    if imm_flag > 0 {
+                        let imm5: u16 = sign_extend(and(instruction, 31), 5);
+                        registers[r0] = registers[r1] + imm5;
+                    } else {
+                        let r2: u16 = and(instruction, 7);
+                        registers[r0] = registers[r1] + registers[r2];
+                    }
+                    registers[REGISTER_COND] = update_flags(registers[r0]);
+                };
+                let opcode_ld: u16 = OPCODE_LD as u16;
+                if opcode == opcode_ld {
+                    let r0: u16 = and(lsr(instruction, 9), 7);
+                    let pc_offset: u16 = sign_extend(and(instruction, 511), 9);
+
+                    registers[r0] = memory.get(registers[REGISTER_PC] + pc_offset);
+
+                    registers[REGISTER_COND] = update_flags(registers[r0]);
+                };
+                let opcode_st: u16 = OPCODE_ST as u16;
+                if opcode == opcode_st {
+                    let r0: u16 = and(lsr(instruction, 9), 7);
+                    let pc_offset: u16 = sign_extend(and(instruction, 511), 9);
+                    memory.set(registers[REGISTER_PC] + pc_offset, registers[r0]);
+                };
+                let opcode_jsr: u16 = OPCODE_JSR as u16;
+                if opcode == opcode_jsr {
+                    let offset_flag: u16 = and(lsr(instruction, 11), 1);
+                    registers[REGISTER_R7] = registers[REGISTER_PC];
+
+                    if offset_flag > 0 {
+                        let pc_offset: u16 = sign_extend(and(instruction, 2047), 11);
+                        registers[REGISTER_PC] = registers[REGISTER_PC] + pc_offset;
+                    } else {
+                        let r1: u16 = and(lsr(instruction, 6), 7);
+                        registers[REGISTER_PC] = registers[r1];
+                    }
+                };
+                let opcode_and: u16 = OPCODE_AND as u16;
+                if opcode == opcode_and {
+                    let r0: u16 = and(lsr(instruction, 9), 7);
+                    let r1: u16 = and(lsr(instruction, 6), 7);
+                    let imm_flag: u16 = and(lsr(instruction, 5), 1);
+
+                    if imm_flag > 0 {
+                        let imm5: u16 = sign_extend(and(instruction, 31), 5);
+                        registers[r0] = and(registers[r1], imm5);
+                    } else {
+                        let r2: u16 = and(instruction, 7);
+                        registers[r0] = and(registers[r1], registers[r2]);
+                    }
+                    registers[REGISTER_COND] = update_flags(registers[r0]);
+                } 
+                let opcode_ldr: u16 = OPCODE_LDR as u16;
+                if opcode == opcode_ldr {
+                    let r0: u16 = and(lsr(instruction, 9), 7);
+                    let r1: u16 = and(lsr(instruction, 6), 7);
+                    let offset: u16 = sign_extend(and(instruction, 63), 6);
+                    registers[r0] = memory.get(registers[r1] + offset);
+                    registers[REGISTER_COND] = update_flags(registers[r0]);
+                };
+                let opcode_str: u16 = OPCODE_STR as u16;
+                if opcode == opcode_str {
+                    let r0: u16 = and(lsr(instruction, 9), 7);
+                    let r1: u16 = and(lsr(instruction, 6), 7);
+                    let offset: u16 = sign_extend(and(instruction, 63), 6);
+                    memory.set(registers[r1] + offset, registers[r0]);
+                };
+                let opcode_rti: u16 = OPCODE_RTI as u16;
+                if opcode == opcode_rti {
+                    debug_string("opcode_rti");
+                    exit(opcode as i32);
+                };
+                let opcode_not: u16 = OPCODE_NOT as u16;
+                if opcode == opcode_not {
+                    let r0: u16 = and(lsr(instruction, 9), 7);
+                    let r1: u16 = and(lsr(instruction, 6), 7);
+
+                    registers[r0] = not(registers[r1]);
+
+                    registers[REGISTER_COND] = update_flags(registers[r0]);
+                }
+                let opcode_ldi: u16 = OPCODE_LDI as u16;
+                if opcode == opcode_ldi {
+                    let r0: u16 = and(lsr(instruction, 9), 7);
+                    let pc_offset: u16 = sign_extend(and(instruction, 511), 9);
+
+                    registers[r0] = memory.get(memory.get(registers[REGISTER_PC] + pc_offset));
+                    registers[REGISTER_COND] = update_flags(registers[r0]);
+                };
+                let opcode_sti: u16 = OPCODE_STI as u16;
+                if opcode == opcode_sti {
+                    let r0: u16 = and(lsr(instruction, 9), 7);
+                    let pc_offset: u16 = sign_extend(and(instruction, 511), 9);
+                    memory.set(memory.get(registers[REGISTER_PC] + pc_offset), registers[r0]);
+                };
+                let opcode_jmp: u16 = OPCODE_JMP as u16;
+                if opcode == opcode_jmp {
+                    let r1: u16 = and(lsr(instruction, 6), 7);
+                    registers[REGISTER_PC] = registers[r1];
+                };
+                let opcode_res: u16 = OPCODE_RES as u16;
+                if opcode == opcode_res {
+                    debug_string("opcode_res");
+                    exit(opcode as i32);
+                };
+                let opcode_lea: u16 = OPCODE_LEA as u16;
+                if opcode == opcode_lea {
+                    let r0: u16 = and(lsr(instruction, 9), 7);
+                    let pc_offset: u16 = sign_extend(and(instruction, 511), 9);
+                    registers[r0] = registers[REGISTER_PC] + pc_offset;
+
+                    registers[REGISTER_COND] = update_flags(registers[r0]);
+                };
+                let opcode_tra: u16 = OPCODE_TRA as u16;
+                if opcode == opcode_tra {
+                    registers[REGISTER_R7] = registers[REGISTER_PC];
+                    let trap_code: u16 = and(instruction, 255);
+
+                    let trap_getc: u16 = TRAP_GETC;
+                    if trap_code == trap_getc {
+                        registers[REGISTER_R0] = getchar() as u16;
+                        registers[REGISTER_COND] = update_flags(registers[REGISTER_R0]);
+                    }
+                    let trap_out: u16 = TRAP_OUT;
+                    if trap_code == trap_out {
+                        let mut c: u16 = registers[REGISTER_R0];
+                        putchar(c as u8);
+                    }
+                    let trap_puts: u16 = TRAP_PUTS;
+                    if trap_code == trap_puts {
+                        let mut i: u16 = registers[REGISTER_R0];
+                        // FIX: Inline this variable
+                        let mut c: u16 = memory.get(i);
+                        while c > 0 {
+                            putchar(c as u8);
+                            i = i + 1;
+                            c = memory.get(i);
+                        }
+                    }
+                    let trap_in: u16 = TRAP_IN;
+                    if trap_code == trap_in {
+                        let c: u32 = getchar();
+                        putchar(c as u8);
+                        registers[REGISTER_R0] = c as u16;
+                        registers[REGISTER_COND] = update_flags(registers[REGISTER_R0]);
+                    }
+                    let trap_putsp: u16 = TRAP_PUTSP;
+                    if trap_code == trap_putsp {
+                        let mut i: u16 = registers[REGISTER_R0];
+                        // FIX: Inline this variable
+                        let mut c: u16 = memory.get(i);
+                        while c > 0 {
+                            let c1: u8 = and(c,255) as u8;
+                            putchar(c1);
+                            let c2: u8 = lsr(c,8) as u8;
+                            if c2 > 0 {
+                                putchar(c2);
+                            }
+                            i = i + 1;
+                            c = memory.get(i);
+                        }
+                    }
+                    let trap_halt: u16 = TRAP_HALT;
+                    if trap_code == trap_halt {
+                        let msg: String = "HALT";
+                        print(&msg);
+                        return;
+                    }
+                    // FIX: Add else clause
+                }
+                // FIX: Add else clause
+            }
+        }
+    }
+
+    fn sign_extend(x: u16, n: u16) -> u16 {
+        return asr(lsl(x, 16-n) as i16, 16-n) as u16;
+    }
+
+    fn update_flags(x: u16) -> u16 {
+        if x == 0 {
+            return CONDITION_FLAG_ZERO;
+        }
+
+        // FIX: Inline this variable
+        let last_bit: u16 = lsr(x, 15);
+        if last_bit == 1 {
+            return CONDITION_FLAG_NEG;
+        }
+
+        return CONDITION_FLAG_POS;
+    }
+}

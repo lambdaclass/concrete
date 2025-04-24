@@ -1,0 +1,21 @@
+image:
+    @hexdump -ve '/2 "%u\n"' image | perl -ne 'printf "%016b\n", $_'
+
+instructions:
+    @hexdump -ve '/2 "%u\n"' instructions | perl -ne 'printf "%016b\n", $_'
+
+format := (
+    '/2 "r0 %04X "' +
+    '/2 "r1 %04X "' +
+    '/2 "r2 %04X "' +
+    '/2 "r3 %04X "' +
+    '/2 "r4 %04X "' +
+    '/2 "r5 %04X "' +
+    '/2 "r6 %04X "' +
+    '/2 "r7 %04X "' +
+    '/2 "pc %04X "' +
+    '/2 "cd %04X "' +
+    '"\n"'
+)
+registers:
+    @hexdump -e '{{format}}' registers

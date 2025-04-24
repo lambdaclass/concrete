@@ -1,0 +1,34 @@
+.ORIG x3000
+
+AND R1,R1,#0
+START
+        ADD R1,R1,#1
+        BRz DONE
+
+        LDI R2,KBSR
+        BRz KEEP
+        LEA R2,PRINT
+        JMP R2
+KEEP
+
+        LEA R2,START
+        JMP R2
+PRINT
+
+LDI R0,KBDR
+TRAP    x21
+
+DONE
+
+;; NEWLINE
+AND     R0,R0,#0      ; R0 == 0
+ADD     R0,R0,#10     ; R0 == 10
+TRAP    x21
+
+HALT
+KBSR .FILL xFE00
+KBDR .FILL xFE02
+
+KBON .FILL x8000
+CH_A .FILL #65
+.END

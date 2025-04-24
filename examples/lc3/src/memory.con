@@ -1,0 +1,85 @@
+mod memory {
+    import std.alloc.{realloc, free};
+    import std.libc.{fopen, fread, fclose, getchar};
+    import builtins.{lsl, lsr};
+    import debug.{dump_memory, truncate_file};
+    import lc3.input.{check_key};
+
+    const MR_KBSR: u16 = 65024;
+    const MR_KBDR: u16 = 65026;
+
+    pub struct Memory {
+        // FIX: Use static array
+        pub data: *mut u16,
+        pub size: u64,
+    }
+
+    impl Memory {
+        pub fn new(size: u64) -> Memory {
+            let memory: Memory = Memory {
+                data: realloc::<u16>(0 as *mut u16, size),
+                size: size,
+            };
+            return memory;
+        }
+
+        // FIX: This function does not work
+        pub fn at(&self, addr: u16) -> *mut u16 {
+            return self.data + addr;
+        }
+
+        pub fn get(&self, addr: u16) -> u16 {
+            let mr_kbsr: u16 = MR_KBSR;
+            if addr == mr_kbsr {
+                let sr_ptr: *mut u16 = self.data + MR_KBSR;
+                let pressed: u32 = check_key();
+                if pressed > 0 {
+                    let dr_ptr: *mut u16 = self.data + MR_KBDR;
+                    *sr_ptr = lsl(1, 15);
+                    *dr_ptr = getchar() as u16;
+                } else {
+                    *sr_ptr = 0;
+                }
+            }
+
+            let ptr: *mut u16 = self.data + addr;
+            return *ptr;
+        }
+
+        pub fn set(&self, addr: u16, value: u16) {
+            let ptr: *mut u16 = self.data + addr;
+            *ptr = value;
+        }
+
+        // FIX: This whole function is very unsafe.
+        pub fn load(&mut self, image_path: String) {
+            let mode: String = "rb";
+            let file: *mut u8 = fopen(image_path.ptr as *const u8, mode.ptr as *const u8);
+
+            let mut origin: u16 = 0;
+            fread(&origin as *mut u8, 2, 1, file);
+            origin = swap16(origin);
+
+            let max_read: u64 = self.size - (origin as u64);
+            let origin_ptr: *mut u16 = self.data + origin;
+            let read: u64 = fread(origin_ptr as *mut u8, 2, max_read, file);
+            fclose(file);
+
+            let mut current_ptr: *mut u16 = origin_ptr;
+            let mut remaining_to_swap: u64 = read;
+            while (remaining_to_swap > 0) {
+                *current_ptr = swap16(*current_ptr);
+                current_ptr = current_ptr + 1;
+                remaining_to_swap = remaining_to_swap - 1;
+            }
+
+            // HACK: Only for debugging.
+            truncate_file("image");
+            dump_memory::<u16>("image", origin_ptr as *const u16, read);
+        }
+    }
+
+    fn swap16(x: u16) -> u16 {
+        return lsl(x, 8) + lsr(x, 8);
+    }
+}

@@ -1,0 +1,172 @@
+// This implementation of the LC3 virtual machine has been based of Justin
+// Meiners tutorial: https://www.jmeiners.com/lc3-vm/.
+
+mod lc3 {
+    mod input;
+    mod memory;
+    mod vm;
+
+    import memory.{Memory};
+    import vm.{VirtualMachine};
+    import std.io.{print};
+    import std.libc.{exit};
+    import std.string.{String};
+    import input.{disable_input_buffering};
+
+
+    pub fn main(argc: u32, argv: *const *const u8) -> i32 {
+        if (argc < 2) {
+            let message: String = "lc3 [image-file1] ...";
+            print(&message);
+            exit(1);
+        }
+
+        disable_input_buffering();
+
+        let vm: VirtualMachine = VirtualMachine#new();
+
+        for (let mut i: u32 = 1; i < argc; i = i + 1) {
+            let input_ptr_ptr: *const *const u8 = argv + i;
+            let input_ptr: *const u8 = *input_ptr_ptr;
+            let input: String = String {
+                ptr: input_ptr as *mut u8,
+                len: 0,
+                cap: 0,
+            };
+            vm.load(input);
+        }
+
+        vm.run();
+        return 0;
+    }
+}
+
+// This module contains operation that should be builtin into the language.
+mod builtins {
+    fn lsl(x: u16, n: u16) -> u16 {
+        let mut x_mut: u16 = x;
+        let mut n_mut: u16 = n;
+        while n_mut > 0 {
+            x_mut = x_mut * 2;
+            n_mut = n_mut - 1;
+        }
+        return x_mut;
+    }
+    fn lsr(x: u16, n: u16) -> u16 {
+        let mut x_mut: u16 = x;
+        let mut n_mut: u16 = n;
+        while n_mut > 0 {
+            x_mut = x_mut / 2;
+            n_mut = n_mut - 1;
+        }
+        return x_mut;
+    }
+    fn asr(x: i16, n: u16) -> i16 {
+        let mut x_mut: i16 = x;
+        let mut n_mut: u16 = n;
+        while n_mut > 0 {
+            x_mut = x_mut / 2;
+            n_mut = n_mut - 1;
+        }
+        return x_mut;
+    }
+    fn and(x: u16, y: u16) -> u16 {
+        let mut i: u16 = 0;
+        let mut z: u16 = 0;
+        while i < 16 {
+            // keep bit at index i
+            let xi: u16 = lsr(lsl(x, 15 - i), 15);
+            let yi: u16 = lsr(lsl(y, 15 - i), 15);
+            // cannot use and gates in conditional
+            if xi > 0 {
+                if yi > 0 {
+                    // set bit at index i on z
+                    z = z + lsl(1, i);
+                }
+            }
+            i = i + 1;
+        }
+        return z;
+    }
+    fn not(x: u16) -> u16 {
+        return -x - 1;
+    }
+    fn lsl64(x: u64, n: u64) -> u64 {
+        let mut x_mut: u64 = x;
+        let mut n_mut: u64 = n;
+        while n_mut > 0 {
+            x_mut = x_mut * 2;
+            n_mut = n_mut - 1;
+        }
+        return x_mut;
+    }
+    fn lsr64(x: u64, n: u64) -> u64 {
+        let mut x_mut: u64 = x;
+        let mut n_mut: u64 = n;
+        while n_mut > 0 {
+            x_mut = x_mut / 2;
+            n_mut = n_mut - 1;
+        }
+        return x_mut;
+    }
+    fn asr64(x: i64, n: u64) -> i64 {
+        let mut x_mut: i64 = x;
+        let mut n_mut: u64 = n;
+        while n_mut > 0 {
+            x_mut = x_mut / 2;
+            n_mut = n_mut - 1;
+        }
+        return x_mut;
+    }
+    fn and64(x: u64, y: u64) -> u64 {
+        let mut i: u64 = 0;
+        let mut z: u64 = 0;
+        while i < 64 {
+            // keep bit at index i
+            let xi: u64 = lsr64(lsl64(x, 63 - i), 64);
+            let yi: u64 = lsr64(lsl64(y, 63 - i), 64);
+            // cannot use and gates in conditional
+            if xi > 0 {
+                if yi > 0 {
+                    // set bit at index i on z
+                    z = z + lsl64(1, i);
+                }
+            }
+            i = i + 1;
+        }
+        return z;
+    }
+    fn not64(x: u64) -> u64 {
+        return -x - 1;
+    }
+}
+
+// This module contains debugging functions.
+mod debug {
+    import std.libc.{puts, fopen, fclose, fwrite, exit};
+    import std.string.{String};
+    import std.mem.{sizeof};
+
+    pub fn debug_string(value: String) {
+        puts(value.ptr as *const u8);
+    }
+
+    pub fn truncate_file(path: String) {
+        let mode: String = "wb";
+        let file: *mut u8 = fopen(path.ptr as *const u8, mode.ptr as *const u8);
+        if (file as u64) == 0 {
+            exit(1);
+        }
+        fclose(file);
+    }
+
+    pub fn dump_memory<T>(path: String, ptr: *const T, length: u64) {
+        let mode: String = "ab";
+        let file: *mut u8 = fopen(path.ptr as *const u8, mode.ptr as *const u8);
+        if (file as u64) == 0 {
+            exit(1);
+        }
+        fwrite(ptr as *const u8, sizeof::<T>(), length, file);
+        fclose(file);
+    }
+}

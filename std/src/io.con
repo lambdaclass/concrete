@@ -1,6 +1,6 @@
 mod io {
     struct File {
-        ptr: *const u8,
+        ptr: *mut u8,
     }
 
     impl File {
@@ -8,7 +8,7 @@ mod io {
             let mode: String = "w";
 
             let handle: File = File {
-                ptr: std::libc::fopen(path.ptr, mode.ptr),
+                ptr: std::libc::fopen(path.ptr as *const u8, mode.ptr as *const u8),
             };
 
             mode.drop();
@@ -25,7 +25,7 @@ mod io {
 
     pub fn print(value: &String) {
         if value.len > 0 {
-            std::libc::puts(value.ptr);
+            std::libc::puts(value.ptr as *const u8);
         }
     }
 }

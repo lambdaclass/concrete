@@ -1,0 +1,17 @@
+[package]
+name = "lc3"
+version = "0.1.0"
+license = "MIT"
+
+[profile.dev]
+release = false
+opt_level = 0
+debug_info = true
+
+[profile.release]
+release = true
+opt_level = 3
+debug_info = false
+
+[dependencies]
+std = { path = "../../std", version = "0.1.0" }

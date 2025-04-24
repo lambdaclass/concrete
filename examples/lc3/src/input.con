@@ -1,0 +1,63 @@
+mod input {
+    import std.alloc.{alloc, realloc, free};
+    import builtins.{and64, not64};
+    import std.mem.{sizeof};
+    import debug.{truncate_file, dump_memory};
+
+    pub struct termios {
+		c_iflag: u64,    /* input flags */
+		c_oflag: u64,    /* output flags */
+		c_cflag: u64,    /* control flags */
+		c_lflag: u64,    /* local flags */
+		c_cc: [u8; 20],  /* control chars */
+		c_ispeed: u64,   /* input speed */
+		c_ospeed: u64,   /* output speed */
+    }
+
+    extern fn tcgetattr(fildes: u32, termios_p: *mut termios) -> u32;
+    extern fn tcsetattr(fildes: u32, optional_actions: u32, termios_p: *mut termios) -> u32;
+
+    pub struct timeval {
+        tv_sec: u64,
+        tv_usec: u64,
+    }
+
+    extern fn select(
+        nfds: u32,
+        readfds: *mut u32,
+        writefds: *mut u32,
+        errorfds: *mut u32,
+        timeout: *mut timeval
+    ) -> u32;
+
+    pub fn disable_input_buffering() {
+        let original_tio_p: *mut termios = alloc::<termios>();
+        let original_tio: termios = *original_tio_p;
+        free::<termios>(original_tio_p);
+
+        tcgetattr(0, &original_tio as *mut termios);
+        let mut new_tio: termios = original_tio;
+        new_tio.c_lflag = and64(new_tio.c_lflag, and64(not64(256), not64(8)));
+        tcsetattr(0, 0, &new_tio as *mut termios);
+    }
+
+    pub fn check_key() -> u32 {
+        let fd_set: *mut u32 = realloc::<u32>(0 as *mut u32, 64);
+
+        // FD_ZERO
+        for (let mut i: u32 = 0; i < 64; i = i + 1) {
+            let ptr: *mut u32 = fd_set + i;
+            *ptr = 0;
+        }
+        // FD_SET
+        *fd_set = 1;
+
+        let timeout: timeval = timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        };
+        let null_fd_set: *mut u32 = 0 as *mut u32;
+        let timeout_p: *mut timeval = &timeout as *mut timeval;
+        return select(1, fd_set, null_fd_set, null_fd_set, timeout_p);
+    }
+}
