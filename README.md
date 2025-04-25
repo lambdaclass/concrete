@@ -74,7 +74,7 @@ But we want to take a different path with respect to:
 - Simpler borrow checker
 - Concurrency model. We provide a default runtime with green threads. There is no support for low-level primitives like atomics, mutex and OS threads.
 - There is no Sync and Send traits. This implies that mutability can only happen inside the same process.
-- No relationsihp between modules and files
+- No relationship between modules and files
 - No circular dependencies in modules
 - No macros
 - At the beginning we won't support local type inference at function level. We might add it in the future.
