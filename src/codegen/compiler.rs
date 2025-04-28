@@ -1067,6 +1067,7 @@ fn compile_unop<'c: 'b, 'b>(
             if is_float {
                 unimplemented!("bitwise not for float");
             }
+            // There is no bitwise not operation in MLIR. We use xor instead as `not A == A xor -1`.
             let kminus1 = block.const_int_from_type(ctx.context(), location, -1, lhs_type)?;
             let value = block.xori(lhs, kminus1, location)?;
             (value, lhs_type_idx)
