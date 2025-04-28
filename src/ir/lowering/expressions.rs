@@ -1042,12 +1042,12 @@ pub(crate) fn lower_unary_op(
             lhs_span,
         ),
         UnaryOp::LogicalNot => (
-            Rvalue::UnaryOp(crate::ir::UnOp::Not, lhs),
+            Rvalue::UnaryOp(crate::ir::UnOp::LogicalNot, lhs),
             lhs_type_idx,
             lhs_span,
         ),
         UnaryOp::BitwiseNot => (
-            Rvalue::UnaryOp(crate::ir::UnOp::Not, lhs),
+            Rvalue::UnaryOp(crate::ir::UnOp::BitwiseNot, lhs),
             lhs_type_idx,
             lhs_span,
         ),

@@ -1027,7 +1027,7 @@ fn compile_unop<'c: 'b, 'b>(
     let is_float = matches!(lhs_ty, IRType::Float(_));
 
     Ok(match op {
-        UnOp::Not => {
+        UnOp::LogicalNot => {
             let k0 = block.const_int_from_type(ctx.context(), location, 0, lhs_type)?;
             let value = if is_float {
                 block.append_op_result(arith::cmpf(
@@ -1055,6 +1055,14 @@ fn compile_unop<'c: 'b, 'b>(
                 let k1 = block.const_int_from_type(ctx.context(), location, -1, lhs_type)?;
                 block.append_op_result(arith::muli(lhs, k1, location))?
             };
+            (value, lhs_type_idx)
+        }
+        UnOp::BitwiseNot => {
+            if is_float {
+                unimplemented!("bitwise not for float");
+            }
+            let kminus1 = block.const_int_from_type(ctx.context(), location, -1, lhs_type)?;
+            let value = block.xori(lhs, kminus1, location)?;
             (value, lhs_type_idx)
         }
     })

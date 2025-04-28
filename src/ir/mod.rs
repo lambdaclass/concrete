@@ -915,7 +915,8 @@ pub enum BinOp {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum UnOp {
-    Not,
+    LogicalNot,
+    BitwiseNot,
     Neg,
 }
 

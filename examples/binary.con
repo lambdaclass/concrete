@@ -3,6 +3,7 @@ mod Binary {
         let and: u8 = 14 & 7; // 1110 & 0111 == 0110 (6)
         let ior: u8 = 10 | 6; // 1010 | 0110 == 1110 (14)
         let xor: u8 = 10 ^ 6; // 1010 | 0110 == 1100 (12)
-        return and + ior + xor;
+        let not: u8 = ~250;   // ~11111010 == 00000101 (5)
+        return and + ior + xor + not;
     }
 }
