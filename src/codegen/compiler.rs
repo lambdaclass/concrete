@@ -806,8 +806,14 @@ fn compile_binop<'c: 'b, 'b>(
             let value = block.ori(lhs, rhs, location)?;
             (value, lhs_type_idx)
         }
-        BinOp::Shl => todo!(),
-        BinOp::Shr => todo!(),
+        BinOp::Shl => {
+            let value = block.append_op_result(arith::shli(lhs, rhs, location))?;
+            (value, lhs_type_idx)
+        }
+        BinOp::Shr => {
+            let value = block.append_op_result(arith::shrui(lhs, rhs, location))?;
+            (value, lhs_type_idx)
+        }
         BinOp::Eq => {
             let value = if is_float {
                 block

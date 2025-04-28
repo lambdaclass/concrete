@@ -1175,6 +1175,8 @@ pub(crate) fn lower_binary_op(
                 BitwiseOp::And => Rvalue::BinaryOp(BinOp::BitAnd, (lhs, rhs)),
                 BitwiseOp::Or => Rvalue::BinaryOp(BinOp::BitOr, (lhs, rhs)),
                 BitwiseOp::Xor => Rvalue::BinaryOp(BinOp::BitXor, (lhs, rhs)),
+                BitwiseOp::ShiftLeft => Rvalue::BinaryOp(BinOp::Shl, (lhs, rhs)),
+                BitwiseOp::ShiftRight => Rvalue::BinaryOp(BinOp::Shr, (lhs, rhs)),
             },
             lhs_type_idx,
             full_span,

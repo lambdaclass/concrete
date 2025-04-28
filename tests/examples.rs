@@ -44,7 +44,7 @@ mod common;
 #[test_case(include_str!("../examples/linearExample01.con"), "linearity", false, 2 ; "linearExample01.con")]
 #[test_case(include_str!("../examples/linearExample02.con"), "linearity", false, 2 ; "linearExample02.con")]
 #[test_case(include_str!("../examples/linearExample03if.con"), "linearity", false, 0 ; "linearExample03if.con")]
-#[test_case(include_str!("../examples/binary.con"), "binary", false, 32 ; "binary.con")]
+#[test_case(include_str!("../examples/binary.con"), "binary", false, 46 ; "binary.con")]
 fn example_tests(source: &str, name: &str, is_library: bool, status_code: i32) {
     assert_eq!(
         status_code,

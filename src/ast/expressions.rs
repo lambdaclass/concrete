@@ -121,6 +121,8 @@ pub enum BitwiseOp {
     And,
     Or,
     Xor,
+    ShiftLeft,
+    ShiftRight,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
