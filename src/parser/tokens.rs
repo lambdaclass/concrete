@@ -160,6 +160,10 @@ pub enum Token {
     Ampersand,
     #[token("|")]
     OperatorBitwiseOr,
+    #[token("<<")]
+    OperatorShiftLeft,
+    #[token(">>")]
+    OperatorShiftRight,
 
     #[regex("///[^\n]*", |lex| lex.slice().strip_prefix("///").unwrap().to_string())]
     DocString(String),

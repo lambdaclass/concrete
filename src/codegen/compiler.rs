@@ -794,11 +794,26 @@ fn compile_binop<'c: 'b, 'b>(
             };
             (value, lhs_type_idx)
         }
-        BinOp::BitXor => todo!(),
-        BinOp::BitAnd => todo!(),
-        BinOp::BitOr => todo!(),
-        BinOp::Shl => todo!(),
-        BinOp::Shr => todo!(),
+        BinOp::BitXor => {
+            let value = block.xori(lhs, rhs, location)?;
+            (value, lhs_type_idx)
+        }
+        BinOp::BitAnd => {
+            let value = block.andi(lhs, rhs, location)?;
+            (value, lhs_type_idx)
+        }
+        BinOp::BitOr => {
+            let value = block.ori(lhs, rhs, location)?;
+            (value, lhs_type_idx)
+        }
+        BinOp::Shl => {
+            let value = block.append_op_result(arith::shli(lhs, rhs, location))?;
+            (value, lhs_type_idx)
+        }
+        BinOp::Shr => {
+            let value = block.append_op_result(arith::shrui(lhs, rhs, location))?;
+            (value, lhs_type_idx)
+        }
         BinOp::Eq => {
             let value = if is_float {
                 block
@@ -1018,7 +1033,7 @@ fn compile_unop<'c: 'b, 'b>(
     let is_float = matches!(lhs_ty, IRType::Float(_));
 
     Ok(match op {
-        UnOp::Not => {
+        UnOp::LogicalNot => {
             let k0 = block.const_int_from_type(ctx.context(), location, 0, lhs_type)?;
             let value = if is_float {
                 block.append_op_result(arith::cmpf(
@@ -1046,6 +1061,15 @@ fn compile_unop<'c: 'b, 'b>(
                 let k1 = block.const_int_from_type(ctx.context(), location, -1, lhs_type)?;
                 block.append_op_result(arith::muli(lhs, k1, location))?
             };
+            (value, lhs_type_idx)
+        }
+        UnOp::BitwiseNot => {
+            if is_float {
+                unimplemented!("bitwise not for float");
+            }
+            // There is no bitwise not operation in MLIR. We use xor instead as `not A == A xor -1`.
+            let kminus1 = block.const_int_from_type(ctx.context(), location, -1, lhs_type)?;
+            let value = block.xori(lhs, kminus1, location)?;
             (value, lhs_type_idx)
         }
     })

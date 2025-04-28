@@ -80,6 +80,8 @@ extern {
     "!" => Token::OperatorNot,
     "~" => Token::OperatorBitwiseNot,
     "^" => Token::OperatorBitwiseXor,
+    "<<" => Token::OperatorShiftLeft,
+    ">>" => Token::OperatorShiftRight,
     "&" => Token::Ampersand,
     "|" => Token::OperatorBitwiseOr,
   }
@@ -616,6 +618,8 @@ BinarySecondLvlOp: ast::expressions::BinaryOp = {
 }
 
 BinaryThirdLvlOp: ast::expressions::BinaryOp = {
+  "<<" => ast::expressions::BinaryOp::Bitwise(ast::expressions::BitwiseOp::ShiftLeft),
+  ">>" => ast::expressions::BinaryOp::Bitwise(ast::expressions::BitwiseOp::ShiftRight),
   "+" => ast::expressions::BinaryOp::Arith(ast::expressions::ArithOp::Add),
   "-" => ast::expressions::BinaryOp::Arith(ast::expressions::ArithOp::Sub),
   "&" => ast::expressions::BinaryOp::Bitwise(ast::expressions::BitwiseOp::And),
