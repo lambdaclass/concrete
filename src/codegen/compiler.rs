@@ -794,9 +794,18 @@ fn compile_binop<'c: 'b, 'b>(
             };
             (value, lhs_type_idx)
         }
-        BinOp::BitXor => todo!(),
-        BinOp::BitAnd => todo!(),
-        BinOp::BitOr => todo!(),
+        BinOp::BitXor => {
+            let value = block.xori(lhs, rhs, location)?;
+            (value, lhs_type_idx)
+        }
+        BinOp::BitAnd => {
+            let value = block.andi(lhs, rhs, location)?;
+            (value, lhs_type_idx)
+        }
+        BinOp::BitOr => {
+            let value = block.ori(lhs, rhs, location)?;
+            (value, lhs_type_idx)
+        }
         BinOp::Shl => todo!(),
         BinOp::Shr => todo!(),
         BinOp::Eq => {

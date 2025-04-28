@@ -1,0 +1,8 @@
+mod Binary {
+    fn main() -> u8 {
+        let and: u8 = 14 & 7; // 1110 & 0111 == 0110 (6)
+        let ior: u8 = 10 | 6; // 1010 | 0110 == 1110 (14)
+        let xor: u8 = 10 ^ 6; // 1010 | 0110 == 1100 (12)
+        return and + ior + xor;
+    }
+}
