@@ -14,7 +14,7 @@ ifeq (, $(shell which cargo))
 	$(error "The cargo command could not be found in your PATH, please install Rust: https://www.rust-lang.org/tools/install")
 endif
 ifndef LLVM_SYS_201_PREFIX
-	$(error Could not find a suitable LLVM 20 toolchain, please set LLVM_SYS_200_PREFIX env pointing to the LLVM 20 dir)
+	$(error Could not find a suitable LLVM 20 toolchain, please set LLVM_SYS_201_PREFIX env pointing to the LLVM 20 dir)
 endif
 ifndef MLIR_SYS_200_PREFIX
 	$(error Could not find a suitable LLVM 20 toolchain (mlir), please set MLIR_SYS_200_PREFIX env pointing to the LLVM 20 dir)
