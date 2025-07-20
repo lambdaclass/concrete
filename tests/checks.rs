@@ -258,3 +258,18 @@ fn missing_variant() {
         error
     );
 }
+
+#[test]
+fn invalid_self_arg() {
+    let (source, name) = (
+        include_str!("invalid_programs/invalid_self_arg.con"),
+        "invalid_programs/invalid_self_arg.con",
+    );
+    let error = check_invalid_program(source, name);
+
+    assert!(
+        matches!(&error, LoweringError::InvalidSelfArgument { .. }),
+        "{:#?}",
+        error
+    );
+}

@@ -1,0 +1,7 @@
+mod Test {
+    struct A {}
+
+    impl A {
+       fn x(a: u32, &self) {}
+    }
+}

@@ -8,6 +8,7 @@ use crate::{
         expressions::FnCallOp,
         functions::{FunctionDecl, FunctionDef},
         statements::{self, LetStmtTarget},
+        types::TypeDescriptor,
     },
     ir::{
         BasicBlock, ConcreteIntrinsic, Function, Local, LocalKind, Operand, Place, Span,
@@ -165,6 +166,18 @@ pub(crate) fn lower_func(
             name: func.decl.name.name.clone(),
             path: fn_builder.get_file_path().clone(),
         });
+    }
+
+    // If this is a method then validate that `self` is the first parameter
+    if method_of.is_some() {
+        for param in func.decl.params.iter().skip(1) {
+            if let TypeDescriptor::SelfType { span, .. } = param.r#type {
+                return Err(LoweringError::InvalidSelfArgument {
+                    span,
+                    path: fn_builder.get_file_path().clone(),
+                });
+            }
+        }
     }
 
     fn_builder.ret_local = fn_builder.body.locals.len();
