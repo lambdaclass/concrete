@@ -139,6 +139,8 @@ pub enum LoweringError {
     },
     #[error("missing variant")]
     MissingVariant(Box<MissingVariantError>),
+    #[error("`self` parameter must be the first parameter in method")]
+    InvalidSelfArgument { span: Span, path: PathBuf },
 }
 
 #[derive(Debug, Clone)]

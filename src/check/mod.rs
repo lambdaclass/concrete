@@ -621,5 +621,18 @@ pub fn lowering_error_to_report(error: LoweringError) -> Report<'static, FileSpa
                 .with_help(format!("Implement the trait {:?} for the passed parameter type.", error.trait_name));
             report.finish()
         }
+        LoweringError::InvalidSelfArgument { span, path } => {
+            let path = path.display().to_string();
+            let filespan = FileSpan::new(path, span.from..span.to);
+            Report::build(ReportKind::Error, filespan.clone())
+                .with_code("InvalidSelfArgument")
+                .with_label(
+                    Label::new(filespan)
+                        .with_message("`self` parameter must be the first parameter in method")
+                        .with_color(colors.next()),
+                )
+                .with_message("`self` parameter must be the first parameter in method")
+                .finish()
+        }
     }
 }
