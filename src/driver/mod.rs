@@ -1,6 +1,6 @@
 use crate::ast::modules::ModuleDefItem;
 use crate::ast::CompileUnit;
-use crate::compile_unit_info::{CompileUnitInfo, DebugInfo, OptLevel};
+use crate::compile_unit_info::{Backend, CompileUnitInfo, DebugInfo, OptLevel};
 use crate::ir::lowering::lower_compile_units;
 use crate::parser::ProgramSource;
 use anyhow::bail;
@@ -96,6 +96,14 @@ pub struct BuildArgs {
     /// This option is for checking the program for linearity.
     #[arg(long, default_value_t = false)]
     check: bool,
+
+    /// Backend to use for code generation (llvm or c).
+    #[arg(long, default_value = "llvm")]
+    backend: String,
+
+    /// Also output the generated C file (C backend only).
+    #[arg(long, default_value_t = false)]
+    output_c: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -150,6 +158,14 @@ pub struct CompilerArgs {
     /// This option is for checking the program for linearity.
     #[arg(long, default_value_t = false)]
     check: bool,
+
+    /// Backend to use for code generation (llvm or c).
+    #[arg(long, default_value = "llvm")]
+    backend: String,
+
+    /// Also output the generated C file (C backend only).
+    #[arg(long, default_value_t = false)]
+    output_c: bool,
 }
 
 pub fn main() -> Result<()> {
@@ -294,6 +310,8 @@ fn handle_build(
         object,
         lib,
         check,
+        backend,
+        output_c,
     }: BuildArgs,
 ) -> Result<PathBuf> {
     match path {
@@ -322,6 +340,8 @@ fn handle_build(
                 object,
                 mlir,
                 check,
+                backend: backend.clone(),
+                output_c,
             };
 
             println!(
@@ -451,6 +471,8 @@ fn handle_build(
                         object,
                         mlir,
                         check,
+                        backend: backend.clone(),
+                        output_c,
                     };
                     let object = compile(&compile_args)?;
 
@@ -566,6 +588,11 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
     let db = crate::driver::db::DatabaseImpl::default();
     let compile_units = parse_file(args.input.clone(), &db)?;
 
+    let backend = match args.backend.to_lowercase().as_str() {
+        "c" => Backend::C,
+        "llvm" | _ => Backend::Llvm,
+    };
+
     let session = CompileUnitInfo {
         debug_info: if let Some(debug_info) = args.debug_info {
             if debug_info {
@@ -595,6 +622,8 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
         output_asm: args.asm,
         output_ll: args.llvm,
         output_mlir: args.mlir,
+        output_c: args.output_c,
+        backend,
     };
     tracing::debug!("Output file: {:#?}", session.output_file);
     tracing::debug!("Is library: {:#?}", session.library);
@@ -627,7 +656,10 @@ pub fn compile(args: &CompilerArgs) -> Result<PathBuf> {
         )?;
     }
 
-    let object_path = crate::codegen::compile(&session, &compile_unit_ir).unwrap();
+    let object_path = match session.backend {
+        Backend::Llvm => crate::codegen::compile(&session, &compile_unit_ir).unwrap(),
+        Backend::C => crate::codegen::c_backend::compile(&session, &compile_unit_ir).unwrap(),
+    };
 
     let elapsed = start_time.elapsed();
     tracing::debug!("Done in {:?}", elapsed);

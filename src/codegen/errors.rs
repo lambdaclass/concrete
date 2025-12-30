@@ -10,4 +10,8 @@ pub enum CodegenError {
     MeliorError(#[from] melior::Error),
     #[error("not yet implemented: {0}")]
     NotImplemented(String),
+    #[error("C compiler error: {0}")]
+    CCompilerError(String),
+    #[error("IO error: {0}")]
+    IOError(String),
 }

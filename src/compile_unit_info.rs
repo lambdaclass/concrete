@@ -20,6 +20,10 @@ pub struct CompileUnitInfo {
     pub output_ll: bool,
     /// Whether to output the generated assembly file for this compile unit.
     pub output_asm: bool,
+    /// Whether to output the generated C file for this compile unit (C backend only).
+    pub output_c: bool,
+    /// Which backend to use for code generation.
+    pub backend: Backend,
     // todo: include target, host, etc
 }
 
@@ -47,4 +51,14 @@ pub enum OptLevel {
 pub enum DebugInfo {
     None,
     Full,
+}
+
+/// The code generation backend to use.
+#[derive(Clone, Copy, Debug, PartialEq, Hash, Default)]
+pub enum Backend {
+    /// MLIR/LLVM backend (default).
+    #[default]
+    Llvm,
+    /// C code generation backend.
+    C,
 }

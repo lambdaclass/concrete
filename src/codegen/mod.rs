@@ -36,6 +36,7 @@ use llvm_sys::{
 use mlir_sys::mlirTranslateModuleToLLVMIR;
 use module::MLIRModule;
 
+pub mod c_backend;
 mod compiler;
 mod context;
 pub mod errors;
