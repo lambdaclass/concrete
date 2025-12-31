@@ -5,7 +5,7 @@ use std::{
     process::{Output, Stdio},
 };
 
-use concrete::compile_unit_info::{CompileUnitInfo, DebugInfo, OptLevel};
+use concrete::compile_unit_info::{Backend, CompileUnitInfo, DebugInfo, OptLevel};
 use concrete::driver::linker::{link_binary, link_shared_lib};
 use concrete::ir::lowering::lower_compile_units;
 use concrete::parser::ProgramSource;
@@ -74,6 +74,8 @@ pub fn compile_program(
         output_mlir: false,
         output_ll: false,
         output_asm: false,
+        output_c: false,
+        backend: Backend::Llvm,
     };
 
     let program_ir = lower_compile_units(&[program])?;
