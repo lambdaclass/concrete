@@ -37,7 +37,15 @@ pub fn type_to_c(ty: &Type, ir: &IR) -> String {
         }
         Type::Ref(inner_idx, _mutability) | Type::Ptr(inner_idx, _mutability) => {
             let inner_ty = ir.types[*inner_idx].as_ref().unwrap();
-            format!("{}*", type_to_c(inner_ty, ir))
+            // For references/pointers to arrays, C uses a special syntax
+            // &[i32; 8] becomes int32_t* (arrays decay to pointers when passed)
+            if matches!(inner_ty, Type::Array(_, _)) {
+                // For array references, just use pointer to element type
+                let elem_ty = get_array_element_type(inner_ty, ir);
+                format!("{}*", elem_ty)
+            } else {
+                format!("{}*", type_to_c(inner_ty, ir))
+            }
         }
         Type::Adt(adt_idx) => {
             let adt = ir.aggregates[*adt_idx].as_ref().unwrap();
@@ -67,6 +75,17 @@ pub fn extract_array_size(size_data: &std::sync::Arc<crate::ir::ConstData>) -> u
         *size
     } else {
         panic!("Array size must be a u64 constant")
+    }
+}
+
+/// Gets the innermost element type of an array (handles nested arrays).
+fn get_array_element_type(ty: &Type, ir: &IR) -> String {
+    match ty {
+        Type::Array(inner_idx, _) => {
+            let inner_ty = ir.types[*inner_idx].as_ref().unwrap();
+            get_array_element_type(inner_ty, ir)
+        }
+        _ => type_to_c(ty, ir),
     }
 }
 

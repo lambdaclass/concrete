@@ -1,0 +1,71 @@
+mod HeapAllocTree {
+    extern fn malloc(size: u64) -> *mut u8;
+    extern fn free(ptr: *mut u8);
+
+    struct TreeNode {
+        value: i32,
+        left: *mut TreeNode,
+        right: *mut TreeNode,
+    }
+
+    fn create_node(value: i32) -> *mut TreeNode {
+        let node: *mut TreeNode = malloc(24) as *mut TreeNode;
+        (*node).value = value;
+        (*node).left = 0 as *mut TreeNode;
+        (*node).right = 0 as *mut TreeNode;
+        return node;
+    }
+
+    fn insert(root: *mut TreeNode, value: i32) -> *mut TreeNode {
+        let null: *mut TreeNode = 0 as *mut TreeNode;
+
+        if root == null {
+            return create_node(value);
+        }
+
+        if value < (*root).value {
+            (*root).left = insert((*root).left, value);
+        } else {
+            (*root).right = insert((*root).right, value);
+        }
+
+        return root;
+    }
+
+    fn sum_tree(root: *mut TreeNode) -> i32 {
+        let null: *mut TreeNode = 0 as *mut TreeNode;
+
+        if root == null {
+            return 0;
+        }
+
+        return (*root).value + sum_tree((*root).left) + sum_tree((*root).right);
+    }
+
+    fn free_tree(root: *mut TreeNode) {
+        let null: *mut TreeNode = 0 as *mut TreeNode;
+
+        if root != null {
+            free_tree((*root).left);
+            free_tree((*root).right);
+            free(root as *mut u8);
+        }
+    }
+
+    fn main() -> i32 {
+        let null: *mut TreeNode = 0 as *mut TreeNode;
+        let mut root: *mut TreeNode = null;
+
+        root = insert(root, 50);
+        root = insert(root, 30);
+        root = insert(root, 70);
+        root = insert(root, 20);
+        root = insert(root, 40);
+
+        let total: i32 = sum_tree(root);  // 50 + 30 + 70 + 20 + 40 = 210
+
+        free_tree(root);
+
+        return total;
+    }
+}

@@ -1,0 +1,17 @@
+mod NestedLoops {
+    fn main() -> i32 {
+        let mut sum: i32 = 0;
+        let mut i: i32 = 0;
+
+        while i < 3 {
+            let mut j: i32 = 0;
+            while j < 4 {
+                sum = sum + 1;
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+
+        return sum;  // 3 * 4 = 12
+    }
+}

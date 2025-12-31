@@ -1,0 +1,42 @@
+mod Quicksort {
+    fn swap(arr: &mut [i32; 8], i: i64, j: i64) {
+        let temp: i32 = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
+    }
+
+    fn partition(arr: &mut [i32; 8], low: i64, high: i64) -> i64 {
+        let pivot: i32 = arr[high];
+        let mut i: i64 = low - 1;
+        let mut j: i64 = low;
+
+        while j < high {
+            if arr[j] < pivot {
+                i = i + 1;
+                swap(arr, i, j);
+            }
+            j = j + 1;
+        }
+
+        swap(arr, i + 1, high);
+        return i + 1;
+    }
+
+    fn quicksort(arr: &mut [i32; 8], low: i64, high: i64) {
+        if low < high {
+            let pi: i64 = partition(arr, low, high);
+            quicksort(arr, low, pi - 1);
+            quicksort(arr, pi + 1, high);
+        }
+    }
+
+    fn main() -> i32 {
+        let mut arr: [i32; 8] = [64, 34, 25, 12, 22, 11, 90, 5];
+
+        quicksort(&mut arr, 0, 7);
+
+        // After sorting: [5, 11, 12, 22, 25, 34, 64, 90]
+        // Return first three elements sum: 5 + 11 + 12 = 28
+        return arr[0] + arr[1] + arr[2];
+    }
+}

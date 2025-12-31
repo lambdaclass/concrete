@@ -1,0 +1,14 @@
+mod BitwiseOps {
+    fn main() -> i32 {
+        let a: i32 = 0b1010;
+        let b: i32 = 0b1100;
+
+        let and_result: i32 = a & b;  // 0b1000 = 8
+        let or_result: i32 = a | b;   // 0b1110 = 14
+        let xor_result: i32 = a ^ b;  // 0b0110 = 6
+        let shl_result: i32 = a << 1; // 0b10100 = 20
+        let shr_result: i32 = b >> 2; // 0b0011 = 3
+
+        return and_result + or_result + xor_result + shl_result + shr_result;
+    }
+}

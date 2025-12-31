@@ -1,0 +1,21 @@
+mod Array2D {
+    fn main() -> i32 {
+        let matrix: [[i32; 3]; 2] = [
+            [1, 2, 3],
+            [4, 5, 6]
+        ];
+
+        let mut sum: i32 = 0;
+        let mut i: i64 = 0;
+        while i < 2 {
+            let mut j: i64 = 0;
+            while j < 3 {
+                sum = sum + matrix[i][j];
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+
+        return sum;  // 1+2+3+4+5+6 = 21
+    }
+}

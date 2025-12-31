@@ -1,0 +1,51 @@
+mod ComplexStructs {
+    struct Point {
+        x: f64,
+        y: f64,
+    }
+
+    struct Rectangle {
+        top_left: Point,
+        bottom_right: Point,
+    }
+
+    impl Point {
+        pub fn distance_squared(&self, other: &Point) -> f64 {
+            let dx: f64 = self.x - other.x;
+            let dy: f64 = self.y - other.y;
+            return dx * dx + dy * dy;
+        }
+    }
+
+    impl Rectangle {
+        pub fn area(&self) -> f64 {
+            let width: f64 = self.bottom_right.x - self.top_left.x;
+            let height: f64 = self.top_left.y - self.bottom_right.y;
+            return width * height;
+        }
+
+        pub fn contains(&self, p: &Point) -> bool {
+            return p.x >= self.top_left.x &&
+                   p.x <= self.bottom_right.x &&
+                   p.y <= self.top_left.y &&
+                   p.y >= self.bottom_right.y;
+        }
+    }
+
+    fn main() -> i32 {
+        let rect: Rectangle = Rectangle {
+            top_left: Point { x: 0.0, y: 10.0 },
+            bottom_right: Point { x: 5.0, y: 0.0 },
+        };
+
+        let area: f64 = rect.area();  // 5 * 10 = 50
+
+        let p1: Point = Point { x: 2.5, y: 5.0 };
+        let p2: Point = Point { x: 10.0, y: 10.0 };
+
+        let c1: i32 = if rect.contains(&p1) { 1 } else { 0 };  // 1 (inside)
+        let c2: i32 = if rect.contains(&p2) { 1 } else { 0 };  // 0 (outside)
+
+        return (area as i32) + c1 + c2;  // 50 + 1 + 0 = 51
+    }
+}

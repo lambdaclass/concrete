@@ -1,0 +1,14 @@
+mod FloatArithmetic {
+    fn main() -> i32 {
+        let a: f64 = 3.5;
+        let b: f64 = 2.5;
+
+        let sum: f64 = a + b;      // 6.0
+        let diff: f64 = a - b;     // 1.0
+        let prod: f64 = a * b;     // 8.75
+        let quot: f64 = a / b;     // 1.4
+
+        // Cast to int for return
+        return (sum as i32) + (diff as i32) + (prod as i32) + (quot as i32);
+    }
+}

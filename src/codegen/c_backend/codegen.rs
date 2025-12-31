@@ -399,10 +399,17 @@ fn generate_place(ir: &IR, func: &Function, place: &Place, as_address: bool) -> 
     for proj in &place.projection {
         match proj {
             PlaceElem::Deref => {
-                result = format!("(*{})", result);
                 let ty = ir.types[current_ty_idx].as_ref().unwrap();
-                if let Some(inner) = ty.get_inner_type() {
-                    current_ty_idx = inner;
+                if let Some(inner_idx) = ty.get_inner_type() {
+                    let inner_ty = ir.types[inner_idx].as_ref().unwrap();
+                    // If dereferencing a reference to an array, don't add (*) because
+                    // in C the array reference is already a pointer that can be indexed
+                    if !matches!(inner_ty, Type::Array(_, _)) {
+                        result = format!("(*{})", result);
+                    }
+                    current_ty_idx = inner_idx;
+                } else {
+                    result = format!("(*{})", result);
                 }
                 is_pointer = false;
             }

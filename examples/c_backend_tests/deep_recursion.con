@@ -1,0 +1,17 @@
+mod DeepRecursion {
+    fn ackermann(m: i64, n: i64) -> i64 {
+        if m == 0 {
+            return n + 1;
+        } else {
+            if n == 0 {
+                return ackermann(m - 1, 1);
+            } else {
+                return ackermann(m - 1, ackermann(m, n - 1));
+            }
+        }
+    }
+
+    fn main() -> i64 {
+        return ackermann(3, 3);  // 61
+    }
+}

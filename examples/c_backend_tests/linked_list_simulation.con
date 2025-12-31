@@ -1,0 +1,55 @@
+mod LinkedListSimulation {
+    extern fn malloc(size: u64) -> *mut u8;
+    extern fn free(ptr: *mut u8);
+
+    struct Node {
+        value: i32,
+        next: *mut Node,
+    }
+
+    fn create_node(value: i32) -> *mut Node {
+        let node: *mut Node = malloc(16) as *mut Node;
+        (*node).value = value;
+        (*node).next = 0 as *mut Node;
+        return node;
+    }
+
+    fn sum_list(head: *mut Node) -> i32 {
+        let mut sum: i32 = 0;
+        let mut current: *mut Node = head;
+        let null: *mut Node = 0 as *mut Node;
+
+        while current != null {
+            sum = sum + (*current).value;
+            current = (*current).next;
+        }
+
+        return sum;
+    }
+
+    fn free_list(head: *mut Node) {
+        let mut current: *mut Node = head;
+        let null: *mut Node = 0 as *mut Node;
+
+        while current != null {
+            let next: *mut Node = (*current).next;
+            free(current as *mut u8);
+            current = next;
+        }
+    }
+
+    fn main() -> i32 {
+        let n1: *mut Node = create_node(10);
+        let n2: *mut Node = create_node(20);
+        let n3: *mut Node = create_node(30);
+
+        (*n1).next = n2;
+        (*n2).next = n3;
+
+        let total: i32 = sum_list(n1);
+
+        free_list(n1);
+
+        return total;  // 10 + 20 + 30 = 60
+    }
+}

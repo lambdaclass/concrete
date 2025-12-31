@@ -1,0 +1,12 @@
+mod PointerArithmetic {
+    extern fn malloc(size: u64) -> *mut u8;
+    extern fn free(ptr: *mut u8);
+
+    fn main() -> i32 {
+        let ptr: *mut i32 = malloc(16) as *mut i32;
+        *ptr = 100;
+        let result: i32 = *ptr;
+        free(ptr as *mut u8);
+        return result;
+    }
+}

@@ -1,0 +1,19 @@
+mod LogicOps {
+    fn main() -> i32 {
+        let a: bool = true;
+        let b: bool = false;
+
+        let and_result: i32 = if a && b { 1 } else { 0 };
+        let or_result: i32 = if a || b { 1 } else { 0 };
+        let not_result: i32 = if !b { 1 } else { 0 };
+
+        // Short-circuit evaluation test
+        let c: bool = false && true;  // Should not evaluate true
+        let d: bool = true || false;  // Should not evaluate false
+
+        let c_int: i32 = if c { 1 } else { 0 };
+        let d_int: i32 = if d { 1 } else { 0 };
+
+        return and_result + or_result + not_result + c_int + d_int;  // 0 + 1 + 1 + 0 + 1 = 3
+    }
+}

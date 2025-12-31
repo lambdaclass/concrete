@@ -1,0 +1,19 @@
+mod NestedStructs {
+    struct Inner {
+        x: i32,
+        y: i32,
+    }
+
+    struct Outer {
+        inner: Inner,
+        z: i32,
+    }
+
+    fn main() -> i32 {
+        let outer: Outer = Outer {
+            inner: Inner { x: 10, y: 20 },
+            z: 5,
+        };
+        return outer.inner.x + outer.inner.y + outer.z;
+    }
+}

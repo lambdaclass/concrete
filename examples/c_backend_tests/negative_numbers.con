@@ -1,0 +1,11 @@
+mod NegativeNumbers {
+    fn main() -> i32 {
+        let a: i32 = -10;
+        let b: i32 = 15;
+        let c: i32 = a + b;        // 5
+        let d: i32 = -a;           // 10
+        let e: i32 = a * -2;       // 20
+
+        return c + d + e;          // 5 + 10 + 20 = 35
+    }
+}
