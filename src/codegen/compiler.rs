@@ -54,7 +54,7 @@ impl ModuleCodegenCtx<'_> {
     }
 
     /// Gets a MLIR location from the given span, or unknown if the span is `None`.
-    pub fn get_location(&self, span: Option<Span>) -> Location {
+    pub fn get_location(&self, span: Option<Span>) -> Location<'_> {
         if let Some(span) = span {
             let source = std::fs::read_to_string(&self.get_module_body().file_path).unwrap();
             let (_, line, col) = Source::from(source).get_offset_line(span.from).unwrap();

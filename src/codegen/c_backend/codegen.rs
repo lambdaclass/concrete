@@ -4,7 +4,7 @@
 //! basic-block to label+goto approach.
 
 use crate::ir::{
-    AdtKind, BasicBlock, BinOp, ConstKind, ConstValue, Function, Local, LocalKind, LogOp, Operand,
+    BasicBlock, BinOp, ConstKind, ConstValue, Function, Local, LocalKind, LogOp, Operand,
     Place, PlaceElem, Rvalue, StatementKind, TerminatorKind, Type, UnOp, ValueTree, IR,
 };
 

@@ -38,7 +38,7 @@ impl Context {
         &self,
         compile_unit_info: &CompileUnitInfo,
         program: &IR,
-    ) -> Result<MLIRModule, CodegenError> {
+    ) -> Result<MLIRModule<'_>, CodegenError> {
         let location = Location::unknown(&self.melior_context);
         let target_triple = get_target_triple(compile_unit_info);
 

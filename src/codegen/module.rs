@@ -13,7 +13,7 @@ impl<'m> MLIRModule<'m> {
         }
     }
 
-    pub fn module(&self) -> &MeliorModule {
+    pub fn module(&self) -> &MeliorModule<'_> {
         &self.melior_module
     }
 }
