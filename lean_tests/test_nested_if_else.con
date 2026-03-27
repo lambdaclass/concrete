@@ -1,0 +1,31 @@
+// Test: 5 levels of nested if/else — tests phi nodes at merge points
+fn main() -> Int {
+    let a: Int = 1;
+    let b: Int = 2;
+    let c: Int = 3;
+    let d: Int = 4;
+    let e: Int = 5;
+    let mut result: Int = 0;
+    if a == 1 {
+        if b == 2 {
+            if c == 3 {
+                if d == 4 {
+                    if e == 5 {
+                        result = 42;
+                    } else {
+                        result = 1;
+                    }
+                } else {
+                    result = 2;
+                }
+            } else {
+                result = 3;
+            }
+        } else {
+            result = 4;
+        }
+    } else {
+        result = 5;
+    }
+    return result;
+}

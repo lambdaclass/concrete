@@ -1,0 +1,9 @@
+// Error: packed and align(N) conflict
+#[repr(C, packed, align(16))]
+struct Bad {
+    x: i32,
+}
+
+fn main() -> Int {
+    return 0;
+}

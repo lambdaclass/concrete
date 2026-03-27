@@ -1,0 +1,34 @@
+trait Describe {
+    fn describe(&self) -> Int;
+}
+
+trait Measure {
+    fn measure(&self) -> Int;
+}
+
+struct Box { width: Int, height: Int }
+
+impl Describe for Box {
+    fn describe(&self) -> Int {
+        return self.width;
+    }
+}
+
+impl Measure for Box {
+    fn measure(&self) -> Int {
+        return self.width + self.height;
+    }
+}
+
+fn inspect<T: Describe + Measure>(x: Int) -> Int {
+    return x;
+}
+
+fn consume_box(b: Box) -> Int {
+    return b.width;
+}
+
+fn main() -> Int {
+    let result: Int = inspect::<Box>(50);
+    return result;
+}

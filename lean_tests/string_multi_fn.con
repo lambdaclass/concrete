@@ -1,0 +1,18 @@
+// Test: two functions with string literals don't collide on global names
+fn greet() -> Int {
+    let s: String = "hello";
+    let len: Int = string_length(&s);
+    drop_string(s);
+    return len;
+}
+
+fn farewell() -> Int {
+    let s: String = "bye";
+    let len: Int = string_length(&s);
+    drop_string(s);
+    return len;
+}
+
+fn main() -> Int {
+    return greet() + farewell();
+}

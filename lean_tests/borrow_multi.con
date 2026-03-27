@@ -1,0 +1,15 @@
+// Nested borrow blocks with different regions
+struct Copy Point { x: Int, y: Int }
+
+fn main() -> Int {
+    let p: Point = Point { x: 5, y: 10 };
+    let mut q: Int = 20;
+    let mut result: Int = 0;
+    borrow p as rp in R1 {
+        result = rp.x + rp.y;
+    }
+    borrow mut q as rq in R2 {
+        *rq = *rq + result;
+    }
+    return q;
+}

@@ -1,0 +1,13 @@
+// Test repr(packed) struct — sizeof should have no padding
+#[repr(C, packed)]
+struct PackedHeader {
+    version: u8,
+    flags: u16,
+    length: u32,
+}
+
+fn main() -> Int {
+    // packed: 1 + 2 + 4 = 7 (no padding)
+    let sz: Uint = sizeof::<PackedHeader>();
+    return sz as Int;
+}

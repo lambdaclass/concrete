@@ -1,0 +1,5 @@
+fn main() -> Int {
+    let a: Int = 1 << 10;
+    let b: Int = 1024 >> 5;
+    return a + b;
+}

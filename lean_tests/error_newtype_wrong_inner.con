@@ -1,0 +1,7 @@
+// Error: wrapping wrong type into newtype
+newtype UserId = Int;
+
+fn main() -> Int {
+    let id: UserId = UserId(true);
+    return id.0;
+}

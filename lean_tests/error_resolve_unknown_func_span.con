@@ -1,0 +1,5 @@
+// Tests that Resolve emits span-bearing diagnostic for unknown function
+fn main() -> Int {
+    let x: Int = compute(42);
+    return x;
+}

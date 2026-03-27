@@ -1,0 +1,11 @@
+fn add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+fn mul(a: Int, b: Int) -> Int {
+    return a * b;
+}
+
+fn main() -> Int {
+    return add(mul(3, 4), mul(5, 6));
+}

@@ -1,0 +1,13 @@
+// A function with(File) can call another function with(File)
+fn fetch_data() with(File) -> Int {
+    return 42;
+}
+
+fn read_all() with(File) -> Int {
+    let x: Int = fetch_data();
+    return x;
+}
+
+fn main() -> Int {
+    return 0;
+}

@@ -1,0 +1,23 @@
+// Regression: while-loop body variables must not leak past the exit block.
+// Two sequential while loops with body-local variables.
+// Previously caused SSA domination error: registers from the first loop's
+// body appeared in the second loop's header phis.
+fn main() -> Int {
+    let mut total: Int = 0;
+
+    let mut i: Int = 0;
+    while i < 5 {
+        let x: Int = i * 10;
+        total = total + x;
+        i = i + 1;
+    }
+
+    let mut j: Int = 0;
+    while j < 3 {
+        let y: Int = j * 100;
+        total = total + y;
+        j = j + 1;
+    }
+
+    return total;
+}

@@ -1,0 +1,7 @@
+// Error: dereferencing raw pointer without Unsafe capability
+fn main() -> i32 {
+    let x: i32 = 42;
+    let p: *const i32 = &x as *const i32;
+    let val: i32 = *p;
+    return val;
+}

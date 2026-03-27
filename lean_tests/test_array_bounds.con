@@ -1,0 +1,14 @@
+// Test: array creation, assignment, and read-back with literal indices
+fn main() -> Int {
+    let mut arr: [Int; 5] = [1, 2, 3, 4, 5];
+    // Overwrite each element
+    arr[0] = 2;
+    arr[1] = 4;
+    arr[2] = 6;
+    arr[3] = 8;
+    arr[4] = 10;
+    // arr = [2, 4, 6, 8, 10]
+    let sum: Int = arr[0] + arr[1] + arr[2] + arr[3] + arr[4];
+    // sum = 2 + 4 + 6 + 8 + 10 = 30
+    return sum + 12;
+}

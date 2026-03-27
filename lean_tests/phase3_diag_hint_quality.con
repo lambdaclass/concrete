@@ -1,0 +1,15 @@
+// Test: capability errors should include actionable hints.
+// Calling a function that needs File capability from a pure function
+// should produce a "hint:" in the diagnostic.
+fn read_data() with(File) -> Int {
+    return 42;
+}
+
+fn process() -> Int {
+    let val: Int = read_data();
+    return val;
+}
+
+fn main() -> Int {
+    return 0;
+}

@@ -1,0 +1,25 @@
+// Test: defer inside a function called within a loop that breaks
+struct Guard { value: Int }
+
+impl Destroy for Guard {
+    fn destroy(&self) { }
+}
+
+fn guarded_value(v: Int) -> Int {
+    let mut g: Guard = Guard { value: v };
+    defer destroy(g);
+    return g.value;
+}
+
+fn main() -> Int {
+    let mut result: Int = 0;
+    let mut i: Int = 0;
+    while i < 10 {
+        result = guarded_value(i);
+        if i == 6 {
+            break;
+        }
+        i = i + 1;
+    }
+    return result + 36;
+}

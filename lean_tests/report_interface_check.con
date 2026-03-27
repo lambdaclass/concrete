@@ -1,0 +1,19 @@
+// Test: --report interface should show public API and hide private functions
+mod Api {
+    pub struct Point {
+        x: i32,
+        y: i32,
+    }
+
+    pub fn add_points(a: Point, b: Point) with(Alloc) -> Point {
+        return Point { x: a.x + b.x, y: a.y + b.y };
+    }
+
+    pub const MAX_POINTS: i32 = 100;
+
+    fn private_helper() -> i32 { return 0; }
+}
+
+mod Main {
+    fn main() -> i32 { return 0; }
+}

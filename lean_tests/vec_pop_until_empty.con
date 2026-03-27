@@ -1,0 +1,24 @@
+// Test: pop all elements, verify None on empty vec
+enum Option<T> {
+    Some { value: T },
+    None
+}
+
+fn extract_or(opt: Option<Int>, default: Int) -> Int {
+    match opt {
+        Option#Some { value } => { return value; },
+        Option#None {} => { return default; },
+    }
+}
+
+fn main() with(Alloc) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    vec_push(&mut v, 10);
+    vec_push(&mut v, 20);
+    let a: Option<Int> = vec_pop(&mut v);
+    let b: Option<Int> = vec_pop(&mut v);
+    let c: Option<Int> = vec_pop(&mut v);
+    let result: Int = extract_or(a, 0) + extract_or(b, 0) + extract_or(c, -1);
+    vec_free(v);
+    return result;
+}

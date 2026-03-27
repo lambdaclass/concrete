@@ -1,0 +1,32 @@
+// Complex test: binary tree via Heap pointers
+// Tree:     10
+//          /  \
+//         20   12
+// Sum = 42
+struct Leaf { value: Int }
+
+struct Branch {
+    value: Int,
+    left: Heap<Leaf>,
+    right: Heap<Leaf>
+}
+
+fn tree_sum(root: Heap<Branch>) with(Alloc) -> Int {
+    let v: Int = root->value;
+    let l: Heap<Leaf> = root->left;
+    let r: Heap<Leaf> = root->right;
+    let lv: Int = l->value;
+    let rv: Int = r->value;
+    free(l);
+    free(r);
+    free(root);
+    return v + lv + rv;
+}
+
+fn main() with(Std) -> Int {
+    let left: Heap<Leaf> = alloc(Leaf { value: 20 });
+    let right: Heap<Leaf> = alloc(Leaf { value: 12 });
+    let root: Heap<Branch> = alloc(Branch { value: 10, left: left, right: right });
+    let result: Int = tree_sum(root);
+    return result;
+}

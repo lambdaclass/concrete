@@ -1,0 +1,15 @@
+// Test: qualified submodule fn coexists with local fn (different leaf names)
+// Note: same leaf name in parent + submodule is a pre-existing LLVM symbol
+// collision (both emit @name). This test verifies the qualified path works
+// alongside local definitions.
+mod math;
+
+fn double(x: Int) -> Int {
+    return x * 2;
+}
+
+fn main() -> Int {
+    let a: Int = double(6);
+    let b: Int = math::compute(20, 10);
+    return a + b;
+}

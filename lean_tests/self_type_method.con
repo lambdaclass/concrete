@@ -1,0 +1,22 @@
+struct Counter { value: Int }
+
+impl Counter {
+    fn new(v: Int) -> Self {
+        return Counter { value: v };
+    }
+
+    fn get(&self) -> Int {
+        return self.value;
+    }
+}
+
+fn consume_counter(c: Counter) -> Int {
+    return c.value;
+}
+
+fn main() -> Int {
+    let c: Counter = Counter#new(42);
+    let v: Int = c.get();
+    let dummy: Int = consume_counter(c);
+    return v;
+}

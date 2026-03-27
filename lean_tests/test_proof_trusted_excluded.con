@@ -1,0 +1,19 @@
+// Test: a trusted fn with no pointer ops and no capabilities
+// is still excluded from proof eligibility because it's marked trusted.
+// The report should show ✗ with "trusted boundary".
+
+trusted fn safe_transform(x: i32) -> i32 {
+    let y: i32 = x + 1;
+    let z: i32 = y * 2;
+    return z;
+}
+
+fn pure_helper(a: i32) -> i32 {
+    return a + 10;
+}
+
+fn main() -> i32 {
+    let a: i32 = safe_transform(5);
+    let b: i32 = pure_helper(a);
+    return b;
+}

@@ -1,0 +1,12 @@
+// Test: parent defines same leaf name as submodule, both accessible
+mod math;
+
+fn add(a: Int, b: Int) -> Int {
+    return a * b;
+}
+
+fn main() -> Int {
+    let a: Int = add(3, 4);
+    let b: Int = math::add(20, 10);
+    return a + b;
+}

@@ -1,0 +1,15 @@
+// Bug 004: arr[i] = val with variable index writes to wrong location.
+// Fixed: Lower.lean arrayIndexAssign now uses array element type for GEP/store.
+// Expected: 42
+
+fn main() -> i32 {
+    let arr: [i32; 3] = [0, 0, 0];
+    let i: i32 = 1;
+    arr[i] = 99;
+    // arr[1] should be 99 after the assignment
+    let val: i32 = arr[1];
+    if val == 99 {
+        return 42;
+    }
+    return 1;
+}

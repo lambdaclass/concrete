@@ -1,0 +1,27 @@
+// Monomorphized trait dispatch: chained generic calls
+trait Summable {
+    fn total(&self) -> Int;
+}
+
+struct Copy Pair { a: Int, b: Int }
+
+impl Summable for Pair {
+    fn total(&self) -> Int {
+        return self.a + self.b;
+    }
+}
+
+fn get_total<T: Summable>(x: T) -> Int {
+    return x.total();
+}
+
+fn double_total<T: Summable>(x: T) -> Int {
+    let t: Int = get_total(x);
+    return t * 2;
+}
+
+fn main() -> Int {
+    let p: Pair = Pair { a: 10, b: 11 };
+    let result: Int = double_total(p);
+    return result;
+}

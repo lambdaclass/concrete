@@ -1,0 +1,448 @@
+mod string {
+    import std.alloc.{grow,dealloc};
+    import std.libc.{memcmp, memcpy};
+    import std.math.{max};
+    import std.option.{Option};
+
+    #[langitem = "String"]
+    pub struct String {
+        ptr: *mut u8,
+        len: u64,
+        cap: u64,
+    }
+
+    trusted impl String {
+        pub fn new() -> String {
+            let value: String = String {
+                ptr: 0 as *mut u8,
+                len: 0,
+                cap: 0,
+            };
+            return value;
+        }
+
+        pub fn from_raw(ptr: *mut u8, len: u64, cap: u64) -> String {
+            let value: String = String {
+                ptr: ptr,
+                len: len,
+                cap: cap,
+            };
+            return value;
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        pub fn cap(&self) -> u64 {
+            return self.cap;
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.len == 0;
+        }
+
+        /// Bounds-checked access. Returns None if index is out of bounds.
+        pub fn get(&self, at: u64) -> Option<char> {
+            if at >= self.len {
+                return Option::<char>#None;
+            }
+            let target_ptr: *mut u8 = self.ptr + at;
+            return Option::<char>#Some { value: (*target_ptr) as char };
+        }
+
+        /// Unchecked access. Caller must ensure index is within bounds.
+        pub fn get_unchecked(&self, at: u64) -> char {
+            let target_ptr: *mut u8 = self.ptr + at;
+            return (*target_ptr) as char;
+        }
+
+        pub fn push_char(&mut self, c: char) with(Alloc) {
+            if self.len >= self.cap {
+                self.grow();
+            }
+
+            let target_ptr: *mut u8 = self.ptr + self.len;
+            *target_ptr = c as u8;
+            self.len = self.len + 1;
+        }
+
+        /// Append another string's contents to this string.
+        pub fn append(&mut self, other: &String) with(Alloc) {
+            if other.len == 0 {
+                return;
+            }
+            let needed: u64 = self.len + other.len;
+            while self.cap < needed {
+                self.grow();
+            }
+            let dst: *mut u8 = self.ptr + self.len;
+            memcpy(dst, other.ptr as *const u8, other.len);
+            self.len = needed;
+        }
+
+        /// Append an integer formatted as decimal to this string.
+        pub fn append_int(&mut self, n: Int) with(Alloc) {
+            // Use the builtin string_append_int
+            string_append_int(self, n);
+        }
+
+        fn grow(&mut self) with(Alloc) {
+            let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
+            self.ptr = grow::<u8>(self.ptr, new_cap);
+            self.cap = new_cap;
+        }
+
+        pub fn clear(&mut self) {
+            self.len = 0;
+            if self.cap > 0 {
+                // c-str, set first to null just in case.
+                let p: *mut u8 = self.ptr;
+                *p = 0;
+            }
+        }
+
+        pub fn eq(&self, other: &String) -> bool {
+            if self.len != other.len {
+                return false;
+            }
+            if self.len == 0 {
+                return true;
+            }
+            let result: i32 = memcmp(self.ptr as *const u8, other.ptr as *const u8, self.len);
+            return result == 0;
+        }
+
+        pub fn clone(&self) with(Alloc) -> String {
+            let new_ptr: *mut u8 = grow::<u8>(0 as *mut u8, self.len);
+            memcpy(new_ptr, self.ptr as *const u8, self.len);
+            return String::from_raw(new_ptr, self.len, self.len);
+        }
+
+        /// TODO: drop should be a trait, and isn't really called yet automatically.
+        pub fn drop(self) with(Alloc) {
+            dealloc::<u8>(self.ptr);
+        }
+
+        /// Check if this string starts with the given prefix.
+        pub fn starts_with(&self, prefix: &String) -> bool {
+            if prefix.len > self.len {
+                return false;
+            }
+            if prefix.len == 0 {
+                return true;
+            }
+            let result: i32 = memcmp(self.ptr as *const u8, prefix.ptr as *const u8, prefix.len);
+            return result == 0;
+        }
+
+        /// Check if this string ends with the given suffix.
+        pub fn ends_with(&self, suffix: &String) -> bool {
+            if suffix.len > self.len {
+                return false;
+            }
+            if suffix.len == 0 {
+                return true;
+            }
+            let offset: u64 = self.len - suffix.len;
+            let start: *mut u8 = self.ptr + offset;
+            let result: i32 = memcmp(start as *const u8, suffix.ptr as *const u8, suffix.len);
+            return result == 0;
+        }
+
+        /// Check if this string contains the given needle as a substring.
+        pub fn contains(&self, needle: &String) -> bool {
+            if needle.len > self.len {
+                return false;
+            }
+            if needle.len == 0 {
+                return true;
+            }
+            let limit: u64 = self.len - needle.len;
+            let i: u64 = 0;
+            while i <= limit {
+                let start: *mut u8 = self.ptr + i;
+                let result: i32 = memcmp(start as *const u8, needle.ptr as *const u8, needle.len);
+                if result == 0 {
+                    return true;
+                }
+                i = i + 1;
+            }
+            return false;
+        }
+
+        /// Return a new string with all ASCII uppercase letters converted to lowercase.
+        pub fn to_lower(&self) with(Alloc) -> String {
+            let out: String = String::new();
+            let i: u64 = 0;
+            while i < self.len {
+                let c: u8 = (self.get_unchecked(i)) as u8;
+                if c >= 65 && c <= 90 {
+                    out.push_char((c + 32) as char);
+                } else {
+                    out.push_char(c as char);
+                }
+                i = i + 1;
+            }
+            return out;
+        }
+
+        /// Return a new string with all ASCII lowercase letters converted to uppercase.
+        pub fn to_upper(&self) with(Alloc) -> String {
+            let out: String = String::new();
+            let i: u64 = 0;
+            while i < self.len {
+                let c: u8 = (self.get_unchecked(i)) as u8;
+                if c >= 97 && c <= 122 {
+                    out.push_char((c - 32) as char);
+                } else {
+                    out.push_char(c as char);
+                }
+                i = i + 1;
+            }
+            return out;
+        }
+
+        // TODO: insert, remove
+    }
+
+    #[test]
+    fn test_str_get_in_bounds() with(Alloc) -> i32 {
+        let s: String = "hello";
+        let result: Option<char> = s.get(0);
+        match result {
+            Option#Some { value } => {
+                if value != 'h' {
+                    s.drop();
+                    return 1;
+                }
+            },
+            Option#None => {
+                s.drop();
+                return 1;
+            }
+        }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_str_get_out_of_bounds() with(Alloc) -> i32 {
+        let s: String = "hi";
+        let result: Option<char> = s.get(10);
+        match result {
+            Option#Some { value } => {
+                s.drop();
+                return 1;
+            },
+            Option#None => {
+                s.drop();
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_str_get_empty() with(Alloc) -> i32 {
+        let s: String = String::new();
+        let result: Option<char> = s.get(0);
+        match result {
+            Option#Some { value } => {
+                s.drop();
+                return 1;
+            },
+            Option#None => {
+                s.drop();
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_str_eq_same() with(Alloc) -> i32 {
+        let a: String = "hello";
+        let b: String = "hello";
+        let equal: bool = a.eq(&b);
+        a.drop();
+        b.drop();
+        if equal { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_str_eq_different() with(Alloc) -> i32 {
+        let a: String = "hello";
+        let b: String = "world";
+        if a.eq(&b) {
+            a.drop();
+            b.drop();
+            return 1;
+        }
+        a.drop();
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_str_eq_different_lengths() with(Alloc) -> i32 {
+        let a: String = "hi";
+        let b: String = "hello";
+        let equal: bool = a.eq(&b);
+        a.drop();
+        b.drop();
+        if equal { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_str_eq_both_empty() with(Alloc) -> i32 {
+        let a: String = "";
+        let b: String = "";
+        let equal: bool = a.eq(&b);
+        a.drop();
+        b.drop();
+        if equal { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_str_clone() with(Alloc) -> i32 {
+        let original: String = "hello";
+        let copy: String = original.clone();
+        let equal: bool = original.eq(&copy);
+        original.drop();
+        copy.drop();
+        if equal { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_str_clone_empty() with(Alloc) -> i32 {
+        let original: String = "";
+        let copy: String = original.clone();
+        let equal: bool = original.eq(&copy);
+        original.drop();
+        copy.drop();
+        if equal { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_str_append() with(Alloc) -> i32 {
+        let mut s: String = "hello";
+        s.append(&" world");
+        let expected: String = "hello world";
+        let ok: bool = s.eq(&expected);
+        s.drop();
+        expected.drop();
+        if ok { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_str_append_empty() with(Alloc) -> i32 {
+        let mut s: String = "hello";
+        s.append(&"");
+        let expected: String = "hello";
+        let ok: bool = s.eq(&expected);
+        s.drop();
+        expected.drop();
+        if ok { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_str_append_int() with(Alloc) -> i32 {
+        let mut s: String = "count: ";
+        s.append_int(42);
+        let expected: String = "count: 42";
+        let ok: bool = s.eq(&expected);
+        s.drop();
+        expected.drop();
+        if ok { return 0; }
+        return 1;
+    }
+
+    pub fn digit_to_int<T>(value: char) -> T {
+        return (value as T) - 48;
+    }
+
+    pub fn int_to_digit<T>(value: T) -> char {
+        return (value + 48) as char;
+    }
+
+    #[test]
+    fn test_starts_with() with(Alloc) -> i32 {
+        let s: String = "hello world";
+        let prefix: String = "hello";
+        let bad: String = "world";
+        let empty: String = "";
+        let r1: bool = s.starts_with(&prefix);
+        if r1 == false { s.drop(); prefix.drop(); bad.drop(); empty.drop(); return 1; }
+        let r2: bool = s.starts_with(&bad);
+        if r2 { s.drop(); prefix.drop(); bad.drop(); empty.drop(); return 1; }
+        let r3: bool = s.starts_with(&empty);
+        if r3 == false { s.drop(); prefix.drop(); bad.drop(); empty.drop(); return 1; }
+        s.drop();
+        prefix.drop();
+        bad.drop();
+        empty.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_ends_with() with(Alloc) -> i32 {
+        let s: String = "hello world";
+        let suffix: String = "world";
+        let bad: String = "hello";
+        let r1: bool = s.ends_with(&suffix);
+        if r1 == false { s.drop(); suffix.drop(); bad.drop(); return 1; }
+        let r2: bool = s.ends_with(&bad);
+        if r2 { s.drop(); suffix.drop(); bad.drop(); return 1; }
+        s.drop();
+        suffix.drop();
+        bad.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_contains() with(Alloc) -> i32 {
+        let s: String = "hello world";
+        let needle: String = "lo wo";
+        let bad: String = "xyz";
+        let r1: bool = s.contains(&needle);
+        if r1 == false { s.drop(); needle.drop(); bad.drop(); return 1; }
+        let r2: bool = s.contains(&bad);
+        if r2 { s.drop(); needle.drop(); bad.drop(); return 1; }
+        s.drop();
+        needle.drop();
+        bad.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_to_lower() with(Alloc) -> i32 {
+        let s: String = "Hello World 123";
+        let lower: String = s.to_lower();
+        let expected: String = "hello world 123";
+        let ok: bool = lower.eq(&expected);
+        s.drop();
+        lower.drop();
+        expected.drop();
+        if ok { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_to_upper() with(Alloc) -> i32 {
+        let s: String = "Hello World 123";
+        let upper: String = s.to_upper();
+        let expected: String = "HELLO WORLD 123";
+        let ok: bool = upper.eq(&expected);
+        s.drop();
+        upper.drop();
+        expected.drop();
+        if ok { return 0; }
+        return 1;
+    }
+}

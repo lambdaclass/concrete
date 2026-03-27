@@ -1,0 +1,7 @@
+fn main() -> Int {
+    let mut arr: [Int; 4] = [1, 9, 3, 4];
+    arr[1] = 2;
+    let a: Int = arr[1];
+    let b: Int = arr[2];
+    return a + b;
+}

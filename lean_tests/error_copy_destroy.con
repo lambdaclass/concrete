@@ -1,0 +1,11 @@
+// Error: Copy type cannot implement Destroy
+struct Copy Widget { id: Int }
+
+impl Destroy for Widget {
+    fn destroy(&self) { }
+}
+
+fn main() -> Int {
+    let w: Widget = Widget { id: 1 };
+    return w.id;
+}

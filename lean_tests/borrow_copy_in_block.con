@@ -1,0 +1,11 @@
+// Test: read Copy value through borrow ref
+// Expected: 42
+struct Copy Data {
+    value: Int,
+}
+
+fn main() -> Int {
+    let d: Data = Data { value: 42 };
+    let result: Int = d.value;
+    return result;
+}

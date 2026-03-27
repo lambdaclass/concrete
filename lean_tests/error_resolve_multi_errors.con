@@ -1,0 +1,6 @@
+// Tests that Resolve emits multiple span-bearing diagnostics
+fn main() -> Int {
+    let a: Int = unknown1();
+    let b: Int = unknown2();
+    return a + b;
+}

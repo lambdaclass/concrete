@@ -1,0 +1,23 @@
+// Test: enum Copy Direction can be used multiple times
+enum Copy Direction {
+    North,
+    South,
+    East,
+    West
+}
+
+fn to_int(d: Direction) -> Int {
+    match d {
+        Direction#North => { return 1; }
+        Direction#South => { return 2; }
+        Direction#East => { return 3; }
+        Direction#West => { return 4; }
+    }
+}
+
+fn main() -> Int {
+    let d: Direction = Direction#East;
+    let a: Int = to_int(d);
+    let b: Int = to_int(d);
+    return a + b + 36;
+}

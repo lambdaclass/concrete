@@ -1,0 +1,8 @@
+fn main() -> Int {
+    let s: String = "abc";
+    let first: Int = string_char_at(&s, 0);
+    let last: Int = string_char_at(&s, 2);
+    drop_string(s);
+    // 'a' = 97, 'c' = 99. Return their sum.
+    return first + last;
+}

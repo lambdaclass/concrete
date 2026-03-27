@@ -1,0 +1,8 @@
+// Test basic newtype wrap/unwrap round-trip
+newtype UserId = Int;
+
+fn main() -> Int {
+    let id: UserId = UserId(42);
+    let raw: Int = id.0;
+    return raw;
+}

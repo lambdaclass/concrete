@@ -1,0 +1,10 @@
+// Regression test: print builtins (Bug 007).
+// Tests print_string, print_int, print_char.
+// Expected output: hello 42\n (then 0)
+
+fn main() with(Console) -> Int {
+    print_string(&"hello ");
+    print_int(42);
+    print_char(10);
+    return 0;
+}

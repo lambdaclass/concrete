@@ -1,0 +1,13 @@
+// Test: struct Copy Point can be used multiple times
+struct Copy Point { x: Int, y: Int }
+
+fn sum(p: Point) -> Int {
+    return p.x + p.y;
+}
+
+fn main() -> Int {
+    let p: Point = Point { x: 10, y: 20 };
+    let a: Int = sum(p);
+    let b: Int = sum(p);
+    return a + b - 18;
+}

@@ -1,0 +1,16 @@
+// Test: string_reserve pre-allocates capacity to avoid repeated reallocs.
+fn main() with(Std) -> Int {
+    let mut s: String = "";
+    string_reserve(&mut s, 100);
+    // Push 50 chars — should not trigger any realloc
+    let mut i: Int = 0;
+    while i < 50 {
+        string_push_char(&mut s, 65);
+        i = i + 1;
+    }
+    let len: Int = string_length(&s);
+    print_string(&s);
+    print_char(10);
+    drop_string(s);
+    return len;
+}

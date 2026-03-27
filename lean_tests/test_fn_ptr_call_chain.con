@@ -1,0 +1,16 @@
+// Test: function pointer passed through multiple call layers
+fn add_one(x: Int) -> Int {
+    return x + 1;
+}
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+    return f(x);
+}
+
+fn relay(f: fn(Int) -> Int, x: Int) -> Int {
+    return apply(f, x);
+}
+
+fn main() -> Int {
+    return relay(add_one, 41);
+}

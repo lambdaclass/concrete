@@ -1,0 +1,53 @@
+// String processing example: demonstrates string builtins
+// Parses a comma-separated list of numbers, sums them, prints the result
+
+fn parse_and_sum(input: String) with(Std) -> Int {
+    let len: Int = string_length(&input);
+    let mut sum: Int = 0;
+    let mut start: Int = 0;
+    let mut i: Int = 0;
+
+    while i < len {
+        let ch: Int = string_char_at(&input, i);
+        // comma = 44 in ASCII
+        if ch == 44 {
+            let part: String = string_slice(&input, start, i);
+            let parsed: Result<Int, Int> = string_to_int(&part);
+            match parsed {
+                Result#Ok { value } => { sum = sum + value; },
+                Result#Err { value } => {},
+            }
+            part.drop();
+            start = i + 1;
+        }
+        i = i + 1;
+    }
+
+    // Parse the last segment
+    if start < len {
+        let last: String = string_slice(&input, start, len);
+        let parsed: Result<Int, Int> = string_to_int(&last);
+        match parsed {
+            Result#Ok { value } => { sum = sum + value; },
+            Result#Err { value } => {},
+        }
+        last.drop();
+    }
+
+    input.drop();
+    return sum;
+}
+
+fn main() with(Std) -> Int {
+    let input: String = "10,20,30,40";
+    let result: Int = parse_and_sum(input);
+    // Print: "Sum: 100"
+    let num_str: String = int_to_string(result);
+    let mut msg: String = "Sum: ";
+    msg.append(&num_str);
+    num_str.drop();
+    print_string(&msg);
+    print_char(10);
+    msg.drop();
+    return result;
+}

@@ -1,0 +1,29 @@
+// Regression test: void phi node in if-expression inside while loop.
+// Bug: when an if-branch calls a void function inside a while loop,
+// the compiler generated `phi ptr [void, ...]` in LLVM IR, which is
+// invalid. The void call result was incorrectly propagated through
+// the while-loop phi node.
+//
+// This pattern appears in HashMap.grow() where insert_for_grow()
+// (void return) is called conditionally inside a rehash loop.
+
+fn void_fn() {
+    return;
+}
+
+fn main() -> i32 {
+    let mut total: i32 = 0;
+    let mut i: i32 = 0;
+    while i < 5 {
+        if i > 2 {
+            void_fn();
+        }
+        total = total + i;
+        i = i + 1;
+    }
+    // 0+1+2+3+4 = 10
+    if total == 10 {
+        return 0;
+    }
+    return 1;
+}

@@ -1,0 +1,10 @@
+// Test: deeply nested arithmetic expressions — parser stress
+fn main() -> Int {
+    let a: Int = ((((1 + 2) * 3) - 4) + 5);
+    let b: Int = (((a * 2) - 3) + 1);
+    let c: Int = ((b + 7) * 1);
+    let d: Int = (((c - 10) + 2) * 1);
+    // a=10, b=18, c=25, d=17
+    // need 42, so add 25
+    return d + c;
+}

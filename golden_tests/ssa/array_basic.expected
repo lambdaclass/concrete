@@ -1,0 +1,15 @@
+; module main
+define i64 @main() {
+entry:
+  %t0 = alloca [3 x i64]
+  store i64 10, %t0
+  %t2 = gep i64 %t0, i64 1
+  store i64 20, %t2
+  %t3 = gep i64 %t0, i64 2
+  store i64 30, %t3
+  %t5 = load i64, %t0
+  %t6 = gep i64 %t0, i64 2
+  %t7 = load i64, %t6
+  %t8 = add i64 %t5, %t7
+  ret i64 %t8
+}

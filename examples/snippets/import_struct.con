@@ -1,0 +1,21 @@
+mod A {
+    struct X {
+        a: i32
+    }
+
+    fn hello(x: X) -> i32 {
+        return x.a;
+    }
+}
+
+mod ImportStruct {
+    import A.{X, hello};
+
+    pub fn main() -> i32 {
+        let x: X = X {
+            a: 2,
+        };
+
+        return hello(x);
+    }
+}

@@ -1,0 +1,7 @@
+// Test: type error inside nested expressions
+fn add(a: Int, b: Int) -> Int { return a + b; }
+
+fn main() -> Int {
+    let x: Int = add(1, true);
+    return x;
+}

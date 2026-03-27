@@ -1,0 +1,5 @@
+mod libc;
+
+fn main() with(Unsafe) -> Int {
+    return libc::abs(-42);
+}

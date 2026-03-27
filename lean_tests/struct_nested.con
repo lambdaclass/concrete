@@ -1,0 +1,14 @@
+// Nested struct with field access through two levels
+struct Copy Inner { value: Int }
+struct Copy Outer { inner: Inner, extra: Int }
+
+impl Outer {
+    fn total(&self) -> Int {
+        return self.inner.value + self.extra;
+    }
+}
+
+fn main() -> Int {
+    let o: Outer = Outer { inner: Inner { value: 30 }, extra: 12 };
+    return o.total();
+}

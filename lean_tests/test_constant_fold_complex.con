@@ -1,0 +1,7 @@
+// Test: complex constant folding with identity operations
+// (10 * 4 + 2) * 1 + 0 = 42
+// Expected: 42
+fn main() -> Int {
+    let x: Int = (10 * 4 + 2) * 1 + 0;
+    return x;
+}

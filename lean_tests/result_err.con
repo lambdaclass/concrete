@@ -1,0 +1,15 @@
+enum Result { Ok { value: Int }, Err { error: Int } }
+
+fn try_stuff() -> Result {
+    let r: Result = Result#Err { error: 99 };
+    let v: Int = r?;
+    return Result#Ok { value: v };
+}
+
+fn main() -> Int {
+    let r: Result = try_stuff();
+    match r {
+        Result#Ok { value } => { return value; },
+        Result#Err { error } => { return error; },
+    }
+}

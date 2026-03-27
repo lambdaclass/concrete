@@ -1,0 +1,21 @@
+// Test: defer in nested inner scope, verify LIFO order
+// Expected: 42
+struct Resource { value: Int }
+
+impl Destroy for Resource {
+    fn destroy(&self) {
+        // cleanup
+    }
+}
+
+fn do_work() -> Int {
+    let mut r1: Resource = Resource { value: 10 };
+    defer destroy(r1);
+    let mut r2: Resource = Resource { value: 32 };
+    defer destroy(r2);
+    return r1.value + r2.value;
+}
+
+fn main() -> Int {
+    return do_work();
+}

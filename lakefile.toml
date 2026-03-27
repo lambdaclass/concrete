@@ -1,0 +1,14 @@
+name = "concrete"
+version = "0.1.0"
+defaultTargets = ["concrete"]
+
+[[lean_lib]]
+name = "Concrete"
+
+[[lean_exe]]
+name = "concrete"
+root = "Main"
+
+[[lean_exe]]
+name = "pipeline-test"
+root = "PipelineTest"

@@ -1,0 +1,7 @@
+mod Lib {
+    pub extern fn abs(x: Int) -> Int;
+}
+mod Main {
+    import Lib.{ abs };
+    fn main() with(Unsafe) -> Int { return abs(-42); }
+}

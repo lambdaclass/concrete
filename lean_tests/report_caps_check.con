@@ -1,0 +1,5 @@
+// Test: --report caps should show capability annotations for each function
+fn pure_fn(x: Int) -> Int { return x + 1; }
+fn alloc_fn() with(Alloc) -> Int { return 0; }
+fn multi_fn() with(File, Network) -> Int { return 0; }
+fn main() -> Int { return 0; }

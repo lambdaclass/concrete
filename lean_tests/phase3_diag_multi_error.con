@@ -1,0 +1,9 @@
+// Test: multiple independent errors in one function body.
+// The compiler should report all of them, not just the first.
+// Each error is on a separate statement with no dependency.
+fn main() -> Int {
+    let a: Bool = 42;
+    let b: Int = true;
+    let c: Bool = "hello";
+    return 0;
+}

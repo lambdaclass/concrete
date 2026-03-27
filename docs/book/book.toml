@@ -1,0 +1,8 @@
+[book]
+authors = ["Lambda Class"]
+language = "en"
+src = "src"
+title = "The Concrete Programming Language"
+
+[output.html]
+additional-css = ["theme/custom.css"]

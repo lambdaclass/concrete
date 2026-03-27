@@ -1,0 +1,11 @@
+mod Lib {
+    pub struct Pair { a: Int, b: Int }
+    pub trait Addable {
+        fn add_up(&self) -> Int;
+    }
+    impl Addable for Pair {
+    }
+}
+mod Main {
+    fn main() -> Int { return 0; }
+}

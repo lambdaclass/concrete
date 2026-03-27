@@ -1,0 +1,13 @@
+fn abs(x: Int) -> Int {
+    if x < 0 {
+        return 0 - x;
+    } else {
+        return x;
+    }
+}
+
+fn main() -> Int {
+    let a: Int = abs(-42);
+    let b: Int = abs(17);
+    return a + b;
+}

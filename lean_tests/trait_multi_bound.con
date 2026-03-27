@@ -1,0 +1,31 @@
+// Generic function with multiple trait bounds
+trait HasValue {
+    fn value(&self) -> Int;
+}
+
+trait HasLabel {
+    fn label(&self) -> Int;
+}
+
+struct Copy TaggedInt { val: Int, tag: Int }
+
+impl HasValue for TaggedInt {
+    fn value(&self) -> Int {
+        return self.val;
+    }
+}
+
+impl HasLabel for TaggedInt {
+    fn label(&self) -> Int {
+        return self.tag;
+    }
+}
+
+fn combined<T: HasValue + HasLabel>(item: T) -> Int {
+    return item.value() + item.label();
+}
+
+fn main() -> Int {
+    let t: TaggedInt = TaggedInt { val: 30, tag: 12 };
+    return combined(t);
+}

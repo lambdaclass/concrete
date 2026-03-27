@@ -1,0 +1,6 @@
+fn main() -> Int {
+    let s: String = "hello";
+    let x: Int = s as Int;
+    drop_string(s);
+    return x;
+}

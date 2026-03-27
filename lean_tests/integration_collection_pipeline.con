@@ -1,0 +1,132 @@
+// Integration test: collection-heavy pipeline exercising Vec + generics + enums + structs.
+// Tests multi-allocation patterns, generic instantiation across types,
+// and capability flow through a realistic data-processing pipeline.
+
+pub struct Copy Stats {
+    count: i32,
+    sum: i32,
+    min: i32,
+    max: i32,
+}
+
+pub enum Copy Classification {
+    Small {},
+    Medium {},
+    Large {},
+}
+
+// Pure: classify a value into a bucket
+pub fn classify(val: i32) -> Classification {
+    if val < 10 {
+        return Classification#Small {};
+    }
+    if val < 100 {
+        return Classification#Medium {};
+    }
+    return Classification#Large {};
+}
+
+// Generic: apply a function pointer to each element, collecting results
+fn map_vec(src: &Vec<i32>, f: fn(i32) -> i32) with(Alloc) -> Vec<i32> {
+    let mut result: Vec<i32> = vec_new::<i32>();
+    let len: i32 = vec_len::<i32>(src) as i32;
+    let mut i: i32 = 0;
+    while i < len {
+        let val: i32 = vec_get::<i32>(src, i as Int);
+        vec_push::<i32>(&mut result, f(val));
+        i = i + 1;
+    }
+    return result;
+}
+
+// Pure helper for map_vec
+fn double(x: i32) -> i32 {
+    return x * 2;
+}
+
+// Allocates two vecs, processes, frees both — clean allocation discipline
+pub fn build_and_summarize(n: i32) with(Alloc) -> Stats {
+    // Build input vector
+    let mut input: Vec<i32> = vec_new::<i32>();
+    let mut i: i32 = 0;
+    while i < n {
+        vec_push::<i32>(&mut input, i * 7 + 3);
+        i = i + 1;
+    }
+
+    // Map through doubling
+    let doubled: Vec<i32> = map_vec(&input, double);
+
+    // Compute stats from doubled
+    let len: i32 = vec_len::<i32>(&doubled) as i32;
+    let mut sum: i32 = 0;
+    let mut min: i32 = 2147483647;
+    let mut max: i32 = 0;
+    i = 0;
+    while i < len {
+        let val: i32 = vec_get::<i32>(&doubled, i as Int);
+        sum = sum + val;
+        if val < min { min = val; }
+        if val > max { max = val; }
+        i = i + 1;
+    }
+
+    vec_free::<i32>(input);
+    vec_free::<i32>(doubled);
+
+    return Stats { count: len, sum: sum, min: min, max: max };
+}
+
+// Allocates and returns — caller must free (tests alloc report detection)
+fn collect_classified(n: i32) with(Alloc) -> Vec<i32> {
+    let mut smalls: Vec<i32> = vec_new::<i32>();
+    let mut i: i32 = 0;
+    while i < n {
+        let val: i32 = i * 7 + 3;
+        match classify(val) {
+            Classification#Small {} => {
+                vec_push::<i32>(&mut smalls, val);
+            },
+            Classification#Medium {} => {},
+            Classification#Large {} => {},
+        }
+        i = i + 1;
+    }
+    return smalls;
+}
+
+// Uses alloc+defer for cleanup
+fn count_with_defer(n: i32) with(Alloc) -> i32 {
+    let zero: i32 = 0;
+    let h: Heap<i32> = alloc(zero);
+    defer free(h);
+    let mut v: Vec<i32> = vec_new::<i32>();
+    let mut i: i32 = 0;
+    while i < n {
+        vec_push::<i32>(&mut v, i);
+        i = i + 1;
+    }
+    let result: i32 = vec_len::<i32>(&v) as i32;
+    vec_free::<i32>(v);
+    return result;
+}
+
+fn main() with(Std) -> i32 {
+    let stats: Stats = build_and_summarize(5);
+    // doubled values: 6, 20, 34, 48, 62 => sum=170, count=5, min=6, max=62
+    if stats.count != 5 { return 1; }
+    if stats.sum != 170 { return 2; }
+    if stats.min != 6 { return 3; }
+    if stats.max != 62 { return 4; }
+
+    let smalls: Vec<i32> = collect_classified(5);
+    // values: 3,10,17,24,31 -> only 3 is <10
+    let small_count: i32 = vec_len::<i32>(&smalls) as i32;
+    vec_free::<i32>(smalls);
+    if small_count != 1 { return 5; }
+
+    let cnt: i32 = count_with_defer(10);
+    if cnt != 10 { return 6; }
+
+    return 0;
+}

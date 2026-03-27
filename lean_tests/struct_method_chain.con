@@ -1,0 +1,23 @@
+// Method chaining: multiple method calls on same struct
+struct Copy Vec2 { x: Int, y: Int }
+
+impl Vec2 {
+    fn length_sq(&self) -> Int {
+        return self.x * self.x + self.y * self.y;
+    }
+    fn dot(&self, other: Vec2) -> Int {
+        return self.x * other.x + self.y * other.y;
+    }
+    fn sum(&self) -> Int {
+        return self.x + self.y;
+    }
+}
+
+fn main() -> Int {
+    let a: Vec2 = Vec2 { x: 3, y: 4 };
+    let b: Vec2 = Vec2 { x: 1, y: 2 };
+    let lsq: Int = a.length_sq();
+    let d: Int = a.dot(b);
+    let s: Int = b.sum();
+    return lsq + d + s;
+}

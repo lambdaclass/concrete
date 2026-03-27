@@ -1,0 +1,16 @@
+// Trusted impl block with a method that does pointer arithmetic
+// Called from a non-trusted function
+struct PtrHelper {
+    dummy: i32,
+}
+
+trusted impl PtrHelper {
+    fn add_offset(p: *mut u8, n: u64) -> *mut u8 {
+        let q: *mut u8 = p + n;
+        return q;
+    }
+}
+
+fn main() -> Int {
+    return 42;
+}

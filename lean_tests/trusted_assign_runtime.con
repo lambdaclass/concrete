@@ -1,0 +1,12 @@
+// Trusted fn writes through raw pointer and reads back through the pointer
+trusted fn write_and_read(p: *mut i32, val: i32) -> i32 {
+    *p = val;
+    return *p;
+}
+
+fn main() with(Unsafe) -> i32 {
+    let mut x: i32 = 0;
+    let p: *mut i32 = &mut x as *mut i32;
+    let result: i32 = write_and_read(p, 77);
+    return result;
+}

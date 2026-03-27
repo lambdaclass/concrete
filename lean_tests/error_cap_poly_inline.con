@@ -1,0 +1,28 @@
+// Error: polymorphic capability propagation fails without capability
+trusted extern fn putchar(c: i32) -> i32;
+
+trusted fn print_int(x: i64) with(Console) {
+    let s: String = int_to_string(x);
+    let len: Int = string_length(&s);
+    let mut i: Int = 0;
+    while i < len {
+        let ch: Int = string_char_at(&s, i);
+        putchar(ch as i32);
+        i = i + 1;
+    }
+    putchar(10);
+    drop_string(s);
+}
+
+fn apply<T, U, cap C>(f: fn(T) with(C) -> U, x: T) with(C) -> U {
+    return f(x);
+}
+
+fn log_int(x: Int) with(Console) -> Int {
+    print_int(x);
+    return 0;
+}
+
+fn main() -> Int {
+    return apply((log_int), 41);
+}

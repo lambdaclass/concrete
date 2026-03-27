@@ -1,0 +1,7 @@
+// Error: pointer-to-pointer cast without Unsafe capability
+fn main() -> i32 {
+    let x: i32 = 42;
+    let p: *const i32 = &x as *const i32;
+    let q: *const u8 = p as *const u8;
+    return 0;
+}

@@ -1,0 +1,15 @@
+// Test: push enough elements to force reallocation (>8), verify integrity
+fn main() with(Alloc) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    let mut i: Int = 0;
+    while i < 100 {
+        vec_push(&mut v, i);
+        i = i + 1;
+    }
+    let first: Int = vec_get(&v, 0);
+    let mid: Int = vec_get(&v, 50);
+    let last: Int = vec_get(&v, 99);
+    let len: Int = vec_len(&v);
+    vec_free(v);
+    return first + mid + last + len;
+}

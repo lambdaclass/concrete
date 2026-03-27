@@ -1,0 +1,22 @@
+// Test: defer in a function called in a loop
+struct Item { value: Int }
+
+impl Destroy for Item {
+    fn destroy(&self) { }
+}
+
+fn process_item(v: Int) -> Int {
+    let mut item: Item = Item { value: v };
+    defer destroy(item);
+    return item.value;
+}
+
+fn main() -> Int {
+    let mut sum: Int = 0;
+    let mut i: Int = 0;
+    while i < 5 {
+        sum = sum + process_item(i);
+        i = i + 1;
+    }
+    return sum + 32;
+}

@@ -1,0 +1,12 @@
+struct Resource {
+    value: Int,
+}
+
+fn consume_resource(r: Resource) -> Int {
+    return r.value;
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { value: 42 };
+    return consume_resource(r);
+}

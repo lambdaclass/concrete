@@ -1,0 +1,55 @@
+mod math {
+    pub trusted extern fn sqrt(x: Float64) -> Float64;
+    pub trusted extern fn sin(x: Float64) -> Float64;
+    pub trusted extern fn cos(x: Float64) -> Float64;
+    pub trusted extern fn tan(x: Float64) -> Float64;
+    pub trusted extern fn pow(x: Float64, y: Float64) -> Float64;
+    pub trusted extern fn log(x: Float64) -> Float64;
+    pub trusted extern fn exp(x: Float64) -> Float64;
+    pub trusted extern fn floor(x: Float64) -> Float64;
+    pub trusted extern fn ceil(x: Float64) -> Float64;
+
+    pub fn max<T>(a: T, b: T) -> T {
+        if a >= b {
+            return a;
+        }
+        else {
+            return b;
+        }
+    }
+
+    pub fn min<T>(a: T, b: T) -> T {
+        if a < b {
+            return a;
+        }
+        else {
+            return b;
+        }
+    }
+
+    pub fn clamp<T>(value: T, lo: T, hi: T) -> T {
+        if value < lo {
+            return lo;
+        }
+        if value > hi {
+            return hi;
+        }
+        return value;
+    }
+
+    #[test]
+    fn test_min() -> i32 {
+        if min::<i32>(4, 2) != 2 { return 1; }
+        if min::<i32>(2, 2) != 2 { return 1; }
+        if min::<i32>(2, 4) != 2 { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_max() -> i32 {
+        if max::<i32>(4, 2) != 4 { return 1; }
+        if max::<i32>(4, 4) != 4 { return 1; }
+        if max::<i32>(4, 5) != 5 { return 1; }
+        return 0;
+    }
+}

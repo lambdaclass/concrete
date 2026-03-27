@@ -1,0 +1,29 @@
+// Option<Int> and Option<String> in the same program
+// Tests that the single %enum.Option type (largest payload wins) works for both
+// Expected output: 44
+fn extract_int(opt: Option<Int>, default: Int) -> Int {
+    match opt {
+        Option#Some { value } => { return value; },
+        Option#None {} => { return default; },
+    }
+}
+
+fn extract_len(opt: Option<String>) -> Int {
+    match opt {
+        Option#Some { value } => {
+            let len: Int = string_length(&value);
+            drop_string(value);
+            return len;
+        },
+        Option#None {} => { return 0; },
+    }
+}
+
+fn main() -> Int {
+    let s: String = "hi";
+    let opt_str: Option<String> = Option#Some { value: s };
+    let opt_int: Option<Int> = Option#Some { value: 42 };
+    let str_len: Int = extract_len(opt_str);
+    let int_val: Int = extract_int(opt_int, 0);
+    return str_len + int_val;
+}

@@ -1,0 +1,17 @@
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { value: 42 };
+    let mut i: Int = 0;
+    while i < 1 {
+        let x: Int = consume(r);
+        i = i + 1;
+    }
+    return 0;
+}

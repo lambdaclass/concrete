@@ -1,0 +1,13 @@
+// Test: chained capability polymorphism — apply a function pointer multiple times
+fn apply<T, U, cap C>(f: fn(T) with(C) -> U, x: T) with(C) -> U {
+    return f(x);
+}
+
+fn add_21(x: Int) -> Int {
+    return x + 21;
+}
+
+fn main() -> Int {
+    let step1: Int = apply(add_21, 21);
+    return step1;
+}

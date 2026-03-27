@@ -1,0 +1,11 @@
+// Error: non-trusted fn cannot assign through raw pointer
+fn bad_assign() -> i32 {
+    let mut x: i32 = 0;
+    let p: *mut i32 = &mut x as *mut i32;
+    *p = 42;
+    return x;
+}
+
+fn main() -> i32 {
+    return 0;
+}

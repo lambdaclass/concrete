@@ -1,0 +1,18 @@
+// Test: defer is block-scoped, not function-scoped.
+// The deferred drop_string(s) runs at the end of the if block,
+// not at function return. This verifies scope-aware defer semantics.
+fn work(flag: bool) with(Console, Alloc) -> i32 {
+    if flag {
+        let s: String = "inner";
+        defer drop_string(s);
+        print_string(&s);
+        print_char(10);
+    }
+    // s is already freed here — if defer were function-scoped,
+    // the drop would run too late.
+    return 1;
+}
+
+fn main() with(Std) -> Int {
+    return work(true) as Int;
+}

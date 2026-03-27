@@ -1,0 +1,14 @@
+// Cap alias used in a function that calls another function with a subset
+cap IO = File + Console;
+
+fn b() with(File) -> Int {
+    return 42;
+}
+
+fn a() with(IO) -> Int {
+    return b();
+}
+
+fn main() with(Std) -> Int {
+    return a();
+}

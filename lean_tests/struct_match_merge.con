@@ -1,0 +1,35 @@
+struct Pair {
+    x: Int,
+    y: Int,
+}
+
+fn sum(p: Pair) -> Int {
+    return p.x + p.y;
+}
+
+fn main() -> Int {
+    // Match expression that returns a struct from each arm.
+    // Tests that aggregate values merge without phi %Pair.
+    let mut p: Pair = Pair { x: 0, y: 0 };
+    let tag: Int = 2;
+    match tag {
+        1 => {
+            p.x = 10;
+            p.y = 20;
+        },
+        2 => {
+            p.x = 100;
+            p.y = 200;
+        },
+        _ => {
+            p.x = 0;
+            p.y = 0;
+        },
+    }
+    // Should be 100 + 200 = 300
+    let result: Int = sum(p);
+    if result == 300 {
+        return 42;
+    }
+    return 1;
+}

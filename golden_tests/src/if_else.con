@@ -1,0 +1,11 @@
+fn max(a: Int, b: Int) -> Int {
+    if a > b {
+        return a;
+    } else {
+        return b;
+    }
+}
+
+fn main() -> Int {
+    return max(5, 10);
+}

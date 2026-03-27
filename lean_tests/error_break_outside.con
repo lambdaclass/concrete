@@ -1,0 +1,7 @@
+// Test that break outside of loop is an error
+// Expected error: break outside of loop
+
+fn main() with(Std) -> Int {
+    break;
+    return 0;
+}

@@ -1,0 +1,8 @@
+// Test: returning a dereferenced value from borrow block is OK
+fn main() -> Int {
+    let mut x: Int = 10;
+    borrow x as r in R {
+        let val: Int = *r;
+    }
+    return x;
+}

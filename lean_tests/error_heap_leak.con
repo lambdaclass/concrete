@@ -1,0 +1,7 @@
+// Error: Heap<T> is linear and must be freed
+struct Thing { val: Int }
+
+fn main() with(Std) -> Int {
+    let p: Heap<Thing> = alloc(Thing { val: 42 });
+    return 0;
+}

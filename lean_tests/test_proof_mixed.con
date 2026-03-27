@@ -1,0 +1,32 @@
+// Test: mix of proof-eligible and ineligible functions.
+// add, max -> eligible (pure, no caps, not trusted)
+// read_data -> excluded (requires File capability)
+// ptr_op -> excluded (trusted boundary)
+// main -> excluded (requires Std capabilities)
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+fn max(a: i32, b: i32) -> i32 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+fn read_data(path: i32) with(File) -> i32 {
+    return path + 1;
+}
+
+trusted fn ptr_op(x: i32) -> i32 {
+    return x;
+}
+
+fn main() with(Std) -> i32 {
+    let a: i32 = add(1, 2);
+    let b: i32 = max(a, 5);
+    let c: i32 = read_data(b);
+    let d: i32 = ptr_op(c);
+    return d;
+}

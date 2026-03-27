@@ -1,0 +1,12 @@
+// Test: loop-invariant computation inside a loop
+// The multiplication 6 * 7 doesn't depend on the loop variable
+// Expected: 42
+fn main() -> Int {
+    let mut result: Int = 0;
+    let mut i: Int = 0;
+    while i < 10 {
+        result = 6 * 7;
+        i = i + 1;
+    }
+    return result;
+}

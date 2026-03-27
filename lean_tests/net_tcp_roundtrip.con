@@ -1,0 +1,182 @@
+// Integration test: real TCP listener/client pair via fork
+trusted extern fn socket(domain: i32, typ: i32, protocol: i32) -> i32;
+trusted extern fn bind(sockfd: i32, addr: *const u8, addrlen: u32) -> i32;
+trusted extern fn listen(sockfd: i32, backlog: i32) -> i32;
+trusted extern fn accept(sockfd: i32, addr: *mut u8, addrlen: *mut u32) -> i32;
+trusted extern fn connect(sockfd: i32, addr: *const u8, addrlen: u32) -> i32;
+trusted extern fn close(fd: i32) -> i32;
+trusted extern fn send(sockfd: i32, buf: *const u8, len: u64, flags: i32) -> i64;
+trusted extern fn recv(sockfd: i32, buf: *mut u8, len: u64, flags: i32) -> i64;
+trusted extern fn htons(hostshort: u16) -> u16;
+trusted extern fn inet_pton(af: i32, src: *const u8, dst: *mut u8) -> i32;
+trusted extern fn setsockopt(sockfd: i32, level: i32, optname: i32, optval: *const u8, optlen: u32) -> i32;
+trusted extern fn malloc(size: u64) -> *mut u8;
+trusted extern fn free(ptr: *mut u8);
+
+extern fn fork() -> i32;
+extern fn _exit(status: i32);
+extern fn waitpid(pid: i32, status: *mut i32, options: i32) -> i32;
+
+trusted fn string_to_cstr(s: &String) -> *mut u8 {
+    let len: Int = string_length(s);
+    let buf: *mut u8 = malloc((len + 1) as u64);
+    let mut i: Int = 0;
+    while i < len {
+        let ch: Int = string_char_at(s, i);
+        let dst: *mut u8 = buf + (i as u64);
+        *dst = ch as u8;
+        i = i + 1;
+    }
+    let null_pos: *mut u8 = buf + (len as u64);
+    *null_pos = 0;
+    return buf;
+}
+
+trusted fn string_to_buf(s: &String) -> *mut u8 {
+    let len: Int = string_length(s);
+    let buf: *mut u8 = malloc(len as u64);
+    let mut i: Int = 0;
+    while i < len {
+        let ch: Int = string_char_at(s, i);
+        let dst: *mut u8 = buf + (i as u64);
+        *dst = ch as u8;
+        i = i + 1;
+    }
+    return buf;
+}
+
+trusted fn tcp_listen(port: i64, backlog: i64) with(Network) -> Int {
+    let lsock: i32 = socket(2, 1, 0);
+    let reuse_buf: *mut u8 = malloc(4);
+    let reuse_ptr: *mut i32 = reuse_buf as *mut i32;
+    *reuse_ptr = 1;
+    setsockopt(lsock, 65535, 4, reuse_buf as *const u8, 4);
+    free(reuse_buf);
+    let saddr: *mut u8 = malloc(16);
+    let mut i: u64 = 0;
+    while i < 16 {
+        let p: *mut u8 = saddr + i;
+        *p = 0;
+        i = i + 1;
+    }
+    *saddr = 16;
+    let sf: *mut u8 = saddr + 1;
+    *sf = 2;
+    let port16: u16 = port as u16;
+    let port_n: u16 = htons(port16);
+    let sp: *mut u16 = (saddr + 2) as *mut u16;
+    *sp = port_n;
+    let bind_ret: i32 = bind(lsock, saddr as *const u8, 16);
+    free(saddr);
+    if bind_ret < 0 {
+        close(lsock);
+        return -1;
+    }
+    let listen_ret: i32 = listen(lsock, backlog as i32);
+    if listen_ret < 0 {
+        close(lsock);
+        return -1;
+    }
+    return lsock as Int;
+}
+
+trusted fn tcp_connect_addr(addr: &String, port: i64) with(Network) -> Int {
+    let sockfd: i32 = socket(2, 1, 0);
+    let saddr: *mut u8 = malloc(16);
+    let mut i: u64 = 0;
+    while i < 16 {
+        let p: *mut u8 = saddr + i;
+        *p = 0;
+        i = i + 1;
+    }
+    *saddr = 16;
+    let sf: *mut u8 = saddr + 1;
+    *sf = 2;
+    let port16: u16 = port as u16;
+    let port_n: u16 = htons(port16);
+    let sp: *mut u16 = (saddr + 2) as *mut u16;
+    *sp = port_n;
+    let addr_buf: *mut u8 = string_to_cstr(addr);
+    inet_pton(2, addr_buf as *const u8, saddr + 4);
+    free(addr_buf);
+    let conn_ret: i32 = connect(sockfd, saddr as *const u8, 16);
+    free(saddr);
+    if conn_ret < 0 {
+        close(sockfd);
+        return -1;
+    }
+    return sockfd as Int;
+}
+
+trusted fn socket_send_str(fd: Int, data: &String) with(Network) -> Int {
+    let len: Int = string_length(data);
+    let buf: *mut u8 = string_to_buf(data);
+    let sent: i64 = send(fd as i32, buf as *const u8, len as u64, 0);
+    free(buf);
+    return sent as Int;
+}
+
+trusted fn socket_close(fd: Int) with(Network) {
+    close(fd as i32);
+}
+
+trusted fn tcp_accept(fd: Int) with(Network) -> Int {
+    let newfd: i32 = accept(fd as i32, 0 as *mut u8, 0 as *mut u32);
+    return newfd as Int;
+}
+
+fn main() with(Network, Unsafe, Process) -> Int {
+    let server_fd: Int = tcp_listen(39878, 1);
+    if server_fd < 0 { return 1; }
+
+    let pid: i32 = fork();
+    if pid < 0 { socket_close(server_fd); return 2; }
+
+    if pid == 0 {
+        // Child: connect, send "Hi", close, exit
+        socket_close(server_fd);
+        let addr: String = "127.0.0.1";
+        let client_fd: Int = tcp_connect_addr(&addr, 39878);
+        drop_string(addr);
+        if client_fd >= 0 {
+            let msg: String = "Hi";
+            socket_send_str(client_fd, &msg);
+            drop_string(msg);
+            socket_close(client_fd);
+        }
+        _exit(0);
+        return 0;
+    }
+
+    // Parent: accept, recv into raw buffer, verify bytes
+    let client_fd: Int = tcp_accept(server_fd);
+    socket_close(server_fd);
+    if client_fd < 0 {
+        let status: i32 = 0;
+        waitpid(pid, &status as *mut i32, 0);
+        return 3;
+    }
+
+    let buf: *mut u8 = malloc(256);
+    let recvd: i64 = recv(client_fd as i32, buf, 256, 0);
+    socket_close(client_fd);
+
+    let status: i32 = 0;
+    waitpid(pid, &status as *mut i32, 0);
+
+    // Verify we got "Hi" (H=72, i=105)
+    if recvd != 2 {
+        free(buf);
+        return 4;
+    }
+    let b0: *mut u8 = buf;
+    let b1: *mut u8 = buf + 1;
+    let ch0: u8 = *b0;
+    let ch1: u8 = *b1;
+    free(buf);
+
+    if ch0 != 72 { return 5; }
+    if ch1 != 105 { return 6; }
+
+    return 42;
+}

@@ -1,0 +1,5 @@
+mod other {
+    pub fn hello(x: u32) -> u32 {
+        return 2 * x;
+    }
+}

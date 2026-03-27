@@ -1,0 +1,394 @@
+// http_server — a minimal blocking HTTP/1.1 server in Concrete
+//
+// Usage: http_server [port] [root_dir]
+//   port     — TCP port to listen on (default: 8080)
+//   root_dir — directory to serve files from (default: ".")
+//
+// Demonstrates capability separation:
+//   parse_request()  — with(Alloc)           — pure parsing, no I/O
+//   read_file_body() — with(Alloc)           — file I/O only, no network
+//   build_response() — with(Alloc)           — pure string construction
+//   handle_client()  — with(Std)             — bridges network + file I/O
+//   main()           — with(Std)             — entry point
+
+mod http_server {
+    import std.net.{TcpListener, TcpStream, NetError};
+    import std.fs.{read_to_string, file_exists, FsError};
+    import std.result.{Result};
+    import std.args.{count, get};
+    import std.parse.{parse_uint};
+    import std.option.{Option};
+    trusted extern fn malloc(size: u64) -> *mut u8;
+    trusted extern fn free(ptr: *mut u8);
+
+    // --- Helpers for consuming linear types ---
+
+    fn drop_net_error(err: NetError) {
+        // NetError is a fieldless enum; consuming it satisfies linearity.
+        match err {
+            NetError#SocketFailed => {},
+            NetError#SetsockoptFailed => {},
+            NetError#AddressFailed => {},
+            NetError#BindFailed => {},
+            NetError#ConnectFailed => {},
+            NetError#AcceptFailed => {}
+        }
+    }
+
+    // --- Request parsing: with(Alloc) — pure, no I/O ---
+    // Returns method, path, and valid flag packed into three out-params
+    // to avoid struct field access issues.
+
+    fn find_space(s: &String, start: Int) with(Alloc) -> Int {
+        let len: Int = string_length(s);
+        let mut i: Int = start;
+        while i < len {
+            let ch: Int = string_char_at(s, i);
+            if ch == 32 {
+                return i;
+            }
+            i = i + 1;
+        }
+        return -1;
+    }
+
+    fn parse_method(raw: &String) with(Alloc) -> String {
+        let sp: Int = find_space(raw, 0);
+        if sp <= 0 {
+            return "";
+        }
+        return string_slice(raw, 0, sp);
+    }
+
+    fn parse_path(raw: &String) with(Alloc) -> String {
+        let first_sp: Int = find_space(raw, 0);
+        if first_sp < 0 {
+            return "";
+        }
+        let second_sp: Int = find_space(raw, first_sp + 1);
+        if second_sp < 0 {
+            return "";
+        }
+        return string_slice(raw, first_sp + 1, second_sp);
+    }
+
+    fn is_valid_request(raw: &String) with(Alloc) -> bool {
+        let first_sp: Int = find_space(raw, 0);
+        if first_sp <= 0 { return false; }
+        let second_sp: Int = find_space(raw, first_sp + 1);
+        if second_sp <= first_sp + 1 { return false; }
+        return true;
+    }
+
+    // --- Path resolution: with(Alloc) — pure string manipulation ---
+
+    fn resolve_path(root: &String, url_path: &String) with(Alloc) -> String {
+        let mut full_path: String = "";
+        full_path.append(root);
+
+        let path_len: Int = string_length(url_path);
+
+        // If path is "/" serve index.html
+        if path_len == 1 {
+            let ch: Int = string_char_at(url_path, 0);
+            if ch == 47 { // '/'
+                full_path.append(&"/index.html");
+                return full_path;
+            }
+        }
+
+        // Otherwise append the URL path directly
+        full_path.append(url_path);
+        return full_path;
+    }
+
+    // --- Check for path traversal: with(Alloc) — pure security check ---
+
+    fn is_path_safe(url_path: &String) -> bool {
+        // Reject paths containing ".."
+        let len: Int = string_length(url_path);
+        if len < 2 { return true; }
+        let mut i: Int = 0;
+        while i < len - 1 {
+            let c1: Int = string_char_at(url_path, i);
+            let c2: Int = string_char_at(url_path, i + 1);
+            if c1 == 46 && c2 == 46 { // ".."
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    // --- File reading: with(Alloc) — file I/O, no network ---
+
+    fn read_file_body(file_path: &String) with(Alloc) -> String {
+        let result: Result<String, FsError> = read_to_string(file_path);
+        match result {
+            Result#Ok { value } => {
+                return value;
+            },
+            Result#Err { error } => {
+                return "";
+            }
+        }
+    }
+
+    // --- Response building: with(Alloc) — pure string construction ---
+
+    fn build_200_response(body: &String) with(Alloc) -> String {
+        let body_len: Int = string_length(body);
+        let mut resp: String = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: ";
+        resp.append_int(body_len);
+        resp.append(&"\r\nConnection: close\r\n\r\n");
+        resp.append(body);
+        return resp;
+    }
+
+    fn build_404_response() with(Alloc) -> String {
+        let body: String = "<html><body><h1>404 Not Found</h1></body></html>";
+        let body_len: Int = string_length(&body);
+        let mut resp: String = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nContent-Length: ";
+        resp.append_int(body_len);
+        resp.append(&"\r\nConnection: close\r\n\r\n");
+        resp.append(&body);
+        body.drop();
+        return resp;
+    }
+
+    fn build_405_response() with(Alloc) -> String {
+        let body: String = "<html><body><h1>405 Method Not Allowed</h1></body></html>";
+        let body_len: Int = string_length(&body);
+        let mut resp: String = "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: text/html\r\nContent-Length: ";
+        resp.append_int(body_len);
+        resp.append(&"\r\nAllow: GET\r\nConnection: close\r\n\r\n");
+        resp.append(&body);
+        body.drop();
+        return resp;
+    }
+
+    fn build_400_response() with(Alloc) -> String {
+        let body: String = "<html><body><h1>400 Bad Request</h1></body></html>";
+        let body_len: Int = string_length(&body);
+        let mut resp: String = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\nContent-Length: ";
+        resp.append_int(body_len);
+        resp.append(&"\r\nConnection: close\r\n\r\n");
+        resp.append(&body);
+        body.drop();
+        return resp;
+    }
+
+    fn build_403_response() with(Alloc) -> String {
+        let body: String = "<html><body><h1>403 Forbidden</h1></body></html>";
+        let body_len: Int = string_length(&body);
+        let mut resp: String = "HTTP/1.1 403 Forbidden\r\nContent-Type: text/html\r\nContent-Length: ";
+        resp.append_int(body_len);
+        resp.append(&"\r\nConnection: close\r\n\r\n");
+        resp.append(&body);
+        body.drop();
+        return resp;
+    }
+
+    // --- Check if method is GET ---
+
+    fn is_get(method: &String) -> bool {
+        let len: Int = string_length(method);
+        if len != 3 { return false; }
+        if string_char_at(method, 0) != 71 { return false; } // 'G'
+        if string_char_at(method, 1) != 69 { return false; } // 'E'
+        if string_char_at(method, 2) != 84 { return false; } // 'T'
+        return true;
+    }
+
+    // --- Send a String over a TcpStream ---
+    // We cannot access String.ptr directly from outside the string module,
+    // so we copy character-by-character into a buffer and use stream.write.
+
+    trusted fn send_string(stream: &TcpStream, s: &String) with(Alloc, Network) {
+        let len: Int = string_length(s);
+        if len <= 0 { return; }
+        let buf: *mut u8 = malloc(len as u64);
+        let mut i: Int = 0;
+        while i < len {
+            let ch: Int = string_char_at(s, i);
+            let dst: *mut u8 = buf + (i as u64);
+            *dst = ch as u8;
+            i = i + 1;
+        }
+        stream.write_all(buf as *const u8, len as u64);
+        free(buf);
+    }
+
+    // --- Convert raw bytes buffer to String ---
+
+    trusted fn buf_to_string(buf: *const u8, n: i64) with(Alloc) -> String {
+        let mut s: String = "";
+        string_reserve(&mut s, n as Int);
+        let mut i: i64 = 0;
+        while i < n {
+            let p: *const u8 = buf + (i as u64);
+            let byte_val: Int = (*(p as *mut u8)) as Int;
+            string_push_char(&mut s, byte_val);
+            i = i + 1;
+        }
+        return s;
+    }
+
+    // --- Client handler: bridges network + file I/O ---
+
+    trusted fn handle_client(stream: TcpStream, root: &String) with(Std) {
+        // Read request data (single recv, up to 4096 bytes)
+        let buf: [u8; 4096] = [0; 4096];
+        let n: i64 = stream.read(&buf as *mut u8, 4096);
+
+        if n <= 0 {
+            stream.close();
+            return;
+        }
+
+        // Convert buffer to string for parsing
+        let raw: String = buf_to_string(&buf as *const u8, n);
+
+        // Parse the HTTP request line
+        let valid: bool = is_valid_request(&raw);
+
+        if !valid {
+            let resp: String = build_400_response();
+            send_string(&stream, &resp);
+            resp.drop();
+            raw.drop();
+            stream.close();
+            return;
+        }
+
+        let method: String = parse_method(&raw);
+        let path: String = parse_path(&raw);
+        raw.drop();
+
+        // Log the request
+        println("  ", method, " ", path);
+
+        // Only allow GET
+        if !is_get(&method) {
+            let resp: String = build_405_response();
+            send_string(&stream, &resp);
+            resp.drop();
+            method.drop();
+            path.drop();
+            stream.close();
+            return;
+        }
+        method.drop();
+
+        // Check for path traversal
+        if !is_path_safe(&path) {
+            let resp: String = build_403_response();
+            send_string(&stream, &resp);
+            resp.drop();
+            path.drop();
+            stream.close();
+            return;
+        }
+
+        // Resolve file path
+        let file_path: String = resolve_path(root, &path);
+        path.drop();
+
+        // Check if file exists and read it
+        let exists: bool = file_exists(&file_path);
+        if exists {
+            let body: String = read_file_body(&file_path);
+            let body_len: Int = string_length(&body);
+            if body_len == 0 {
+                body.drop();
+                let resp: String = build_404_response();
+                send_string(&stream, &resp);
+                resp.drop();
+            } else {
+                let resp: String = build_200_response(&body);
+                body.drop();
+                send_string(&stream, &resp);
+                resp.drop();
+            }
+        } else {
+            let resp: String = build_404_response();
+            send_string(&stream, &resp);
+            resp.drop();
+        }
+
+        file_path.drop();
+        stream.close();
+    }
+
+    // --- Main: entry point ---
+
+    pub fn main() with(Std) -> Int {
+        let argc: Int = count();
+
+        // Parse port from first argument (default 8080)
+        let mut port: u16 = 8080;
+        if argc >= 2 {
+            let port_arg: String = get(1);
+            let parsed: Option<u64> = parse_uint(&port_arg);
+            match parsed {
+                Option#Some { value } => {
+                    port = value as u16;
+                },
+                Option#None => {
+                    println("Invalid port, using default 8080");
+                }
+            }
+            port_arg.drop();
+        }
+
+        // Parse root directory from second argument (default ".")
+        let root: String = get_root_dir(argc);
+
+        // Bind to 127.0.0.1
+        let addr: String = "127.0.0.1";
+        println("Listening on 127.0.0.1:", port);
+
+        let bind_result: Result<TcpListener, NetError> = TcpListener::bind(&addr, port);
+        addr.drop();
+
+        match bind_result {
+            Result#Ok { value } => {
+                let listener: TcpListener = value;
+
+                // Accept loop
+                let running: bool = true;
+                while running {
+                    let accept_result: Result<TcpStream, NetError> = listener.accept();
+                    match accept_result {
+                        Result#Ok { value } => {
+                            let client: TcpStream = value;
+                            handle_client(client, &root);
+                        },
+                        Result#Err { error } => {
+                            drop_net_error(error);
+                            println("Accept error, continuing...");
+                        }
+                    }
+                }
+
+                listener.close();
+                root.drop();
+            },
+            Result#Err { error } => {
+                drop_net_error(error);
+                println("Failed to bind to port. Is it already in use?");
+                root.drop();
+                return 1;
+            }
+        }
+
+        return 0;
+    }
+
+    fn get_root_dir(argc: Int) with(Alloc) -> String {
+        if argc >= 3 {
+            return get(2);
+        }
+        return ".";
+    }
+}

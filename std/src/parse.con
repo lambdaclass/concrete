@@ -1,0 +1,849 @@
+mod parse {
+    import std.option.{Option};
+    import std.string.{digit_to_int};
+
+    pub fn parse_uint(s: &String) -> Option<u64> {
+        if s.len == 0 {
+            return Option::<u64>#None;
+        }
+
+        let result: u64 = 0;
+        let i: u64 = 0;
+        while i < s.len {
+            let c: char = s.get_unchecked(i);
+            if c < '0' {
+                return Option::<u64>#None;
+            }
+            if c > '9' {
+                return Option::<u64>#None;
+            }
+            result = result * 10 + digit_to_int::<u64>(c);
+            i = i + 1;
+        }
+        return Option::<u64>#Some { value: result };
+    }
+
+    pub fn parse_int(s: &String) -> Option<i64> {
+        if s.len == 0 {
+            return Option::<i64>#None;
+        }
+
+        let negative: bool = false;
+        let start: u64 = 0;
+        let first: char = s.get_unchecked(0);
+        if first == '-' {
+            negative = true;
+            start = 1;
+            if s.len == 1 {
+                return Option::<i64>#None;
+            }
+        }
+
+        let result: i64 = 0;
+        let i: u64 = start;
+        while i < s.len {
+            let c: char = s.get_unchecked(i);
+            if c < '0' {
+                return Option::<i64>#None;
+            }
+            if c > '9' {
+                return Option::<i64>#None;
+            }
+            result = result * 10 + digit_to_int::<i64>(c);
+            i = i + 1;
+        }
+
+        if negative {
+            result = 0 - result;
+        }
+        return Option::<i64>#Some { value: result };
+    }
+
+    fn hex_char_value(c: char) -> i64 {
+        if c >= '0' {
+            if c <= '9' {
+                return (c as i64) - 48;
+            }
+        }
+        if c >= 'a' {
+            if c <= 'f' {
+                return (c as i64) - 87;
+            }
+        }
+        if c >= 'A' {
+            if c <= 'F' {
+                return (c as i64) - 55;
+            }
+        }
+        return -1;
+    }
+
+    pub fn parse_hex(s: &String) -> Option<u64> {
+        if s.len == 0 {
+            return Option::<u64>#None;
+        }
+
+        let start: u64 = 0;
+        // Skip optional 0x prefix
+        if s.len >= 2 {
+            if s.get_unchecked(0) == '0' {
+                let second: char = s.get_unchecked(1);
+                if second == 'x' {
+                    start = 2;
+                }
+                if second == 'X' {
+                    start = 2;
+                }
+            }
+        }
+
+        if start >= s.len {
+            return Option::<u64>#None;
+        }
+
+        let result: u64 = 0;
+        let i: u64 = start;
+        while i < s.len {
+            let val: i64 = hex_char_value(s.get_unchecked(i));
+            if val < 0 {
+                return Option::<u64>#None;
+            }
+            result = (result << 4) + (val as u64);
+            i = i + 1;
+        }
+        return Option::<u64>#Some { value: result };
+    }
+
+    pub fn parse_bin(s: &String) -> Option<u64> {
+        if s.len == 0 {
+            return Option::<u64>#None;
+        }
+
+        let start: u64 = 0;
+        // Skip optional 0b prefix
+        if s.len >= 2 {
+            if s.get_unchecked(0) == '0' {
+                let second: char = s.get_unchecked(1);
+                if second == 'b' {
+                    start = 2;
+                }
+                if second == 'B' {
+                    start = 2;
+                }
+            }
+        }
+
+        if start >= s.len {
+            return Option::<u64>#None;
+        }
+
+        let result: u64 = 0;
+        let i: u64 = start;
+        while i < s.len {
+            let c: char = s.get_unchecked(i);
+            if c == '0' {
+                result = result << 1;
+            } else {
+                if c == '1' {
+                    result = (result << 1) + 1;
+                } else {
+                    return Option::<u64>#None;
+                }
+            }
+            i = i + 1;
+        }
+        return Option::<u64>#Some { value: result };
+    }
+
+    pub fn parse_oct(s: &String) -> Option<u64> {
+        if s.len == 0 {
+            return Option::<u64>#None;
+        }
+
+        let start: u64 = 0;
+        // Skip optional 0o prefix
+        if s.len >= 2 {
+            if s.get_unchecked(0) == '0' {
+                let second: char = s.get_unchecked(1);
+                if second == 'o' {
+                    start = 2;
+                }
+                if second == 'O' {
+                    start = 2;
+                }
+            }
+        }
+
+        if start >= s.len {
+            return Option::<u64>#None;
+        }
+
+        let result: u64 = 0;
+        let i: u64 = start;
+        while i < s.len {
+            let c: char = s.get_unchecked(i);
+            if c < '0' {
+                return Option::<u64>#None;
+            }
+            if c > '7' {
+                return Option::<u64>#None;
+            }
+            result = (result << 3) + digit_to_int::<u64>(c);
+            i = i + 1;
+        }
+        return Option::<u64>#Some { value: result };
+    }
+
+    pub fn parse_bool(s: &String) -> Option<bool> {
+        if s.len == 4 {
+            if s.get_unchecked(0) == 't' {
+                if s.get_unchecked(1) == 'r' {
+                    if s.get_unchecked(2) == 'u' {
+                        if s.get_unchecked(3) == 'e' {
+                            return Option::<bool>#Some { value: true };
+                        }
+                    }
+                }
+            }
+        }
+        if s.len == 5 {
+            if s.get_unchecked(0) == 'f' {
+                if s.get_unchecked(1) == 'a' {
+                    if s.get_unchecked(2) == 'l' {
+                        if s.get_unchecked(3) == 's' {
+                            if s.get_unchecked(4) == 'e' {
+                                return Option::<bool>#Some { value: false };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return Option::<bool>#None;
+    }
+
+    // Cursor for structured parsing
+    pub struct Cursor {
+        data: *const u8,
+        len: u64,
+        pos: u64,
+    }
+
+    trusted impl Cursor {
+        pub fn new(s: &String) -> Cursor {
+            let c: Cursor = Cursor {
+                data: s.ptr as *const u8,
+                len: s.len,
+                pos: 0,
+            };
+            return c;
+        }
+
+        pub fn pos(&self) -> u64 {
+            return self.pos;
+        }
+
+        pub fn remaining(&self) -> u64 {
+            return self.len - self.pos;
+        }
+
+        pub fn is_eof(&self) -> bool {
+            return self.pos >= self.len;
+        }
+
+        pub fn peek(&self) -> Option<char> {
+            if self.pos >= self.len {
+                return Option::<char>#None;
+            }
+            let p: *const u8 = self.data + self.pos;
+            return Option::<char>#Some { value: (*(p as *mut u8)) as char };
+        }
+
+        pub fn advance(&mut self) -> Option<char> {
+            if self.pos >= self.len {
+                return Option::<char>#None;
+            }
+            let p: *const u8 = self.data + self.pos;
+            let c: char = (*(p as *mut u8)) as char;
+            self.pos = self.pos + 1;
+            return Option::<char>#Some { value: c };
+        }
+
+        pub fn skip_whitespace(&mut self) {
+            while self.pos < self.len {
+                let p: *const u8 = self.data + self.pos;
+                let c: char = (*(p as *mut u8)) as char;
+                if c == ' ' {
+                    self.pos = self.pos + 1;
+                } else {
+                    if c == '\t' {
+                        self.pos = self.pos + 1;
+                    } else {
+                        if c == '\n' {
+                            self.pos = self.pos + 1;
+                        } else {
+                            if c == '\r' {
+                                self.pos = self.pos + 1;
+                            } else {
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        pub fn expect_char(&mut self, expected: char) -> bool {
+            if self.pos >= self.len {
+                return false;
+            }
+            let p: *const u8 = self.data + self.pos;
+            let c: char = (*(p as *mut u8)) as char;
+            if c == expected {
+                self.pos = self.pos + 1;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    // Tests
+
+    import std.test.{assert_eq, assert_true};
+
+    #[test]
+    fn test_parse_int_positive() -> i32 {
+        let s: String = "12345";
+        let result: Option<i64> = parse_int(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                if value != 12345 {
+                    return 1;
+                }
+                return 0;
+            },
+            Option#None => {
+                return 1;
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_int_negative() -> i32 {
+        let s: String = "-42";
+        let result: Option<i64> = parse_int(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                if value != -42 {
+                    return 1;
+                }
+                return 0;
+            },
+            Option#None => {
+                return 1;
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_int_zero() -> i32 {
+        let s: String = "0";
+        let result: Option<i64> = parse_int(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                if value != 0 {
+                    return 1;
+                }
+                return 0;
+            },
+            Option#None => {
+                return 1;
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_int_invalid() -> i32 {
+        let s: String = "abc";
+        let result: Option<i64> = parse_int(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                return 1;
+            },
+            Option#None => {
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_int_empty() -> i32 {
+        let s: String = String::new();
+        let result: Option<i64> = parse_int(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                return 1;
+            },
+            Option#None => {
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_uint() -> i32 {
+        let s: String = "999";
+        let result: Option<u64> = parse_uint(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                if value != 999 {
+                    return 1;
+                }
+                return 0;
+            },
+            Option#None => {
+                return 1;
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_hex_with_prefix() -> i32 {
+        let s: String = "0xff";
+        let result: Option<u64> = parse_hex(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                if value != 255 {
+                    return 1;
+                }
+                return 0;
+            },
+            Option#None => {
+                return 1;
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_hex_without_prefix() -> i32 {
+        let s: String = "ff";
+        let result: Option<u64> = parse_hex(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                if value != 255 {
+                    return 1;
+                }
+                return 0;
+            },
+            Option#None => {
+                return 1;
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_bin() -> i32 {
+        let s: String = "0b1010";
+        let result: Option<u64> = parse_bin(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                if value != 10 {
+                    return 1;
+                }
+                return 0;
+            },
+            Option#None => {
+                return 1;
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_oct() -> i32 {
+        let s: String = "0o17";
+        let result: Option<u64> = parse_oct(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                if value != 15 {
+                    return 1;
+                }
+                return 0;
+            },
+            Option#None => {
+                return 1;
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_bool_true() -> i32 {
+        let s: String = "true";
+        let result: Option<bool> = parse_bool(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                if !value {
+                    return 1;
+                }
+                return 0;
+            },
+            Option#None => {
+                return 1;
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_bool_false() -> i32 {
+        let s: String = "false";
+        let result: Option<bool> = parse_bool(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                if value {
+                    return 1;
+                }
+                return 0;
+            },
+            Option#None => {
+                return 1;
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_bool_invalid() -> i32 {
+        let s: String = "yes";
+        let result: Option<bool> = parse_bool(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                return 1;
+            },
+            Option#None => {
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_cursor_basic() -> i32 {
+        let s: String = "hello";
+        let mut cur: Cursor = Cursor::new(&s);
+        if cur.is_eof() {
+            s.drop();
+            return 1;
+        }
+        if !assert_eq::<u64>(cur.remaining(), 5, "remaining should be 5") {
+            s.drop();
+            return 1;
+        }
+        let ch: Option<char> = cur.advance();
+        match ch {
+            Option#Some { value } => {
+                if value != 'h' {
+                    s.drop();
+                    return 1;
+                }
+            },
+            Option#None => {
+                s.drop();
+                return 1;
+            }
+        }
+        if !assert_eq::<u64>(cur.pos(), 1, "pos should be 1 after advance") {
+            s.drop();
+            return 1;
+        }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_cursor_skip_whitespace() -> i32 {
+        let s: String = "  hi";
+        let mut cur: Cursor = Cursor::new(&s);
+        cur.skip_whitespace();
+        if !assert_eq::<u64>(cur.pos(), 2, "pos should be 2 after skipping spaces") {
+            s.drop();
+            return 1;
+        }
+        let ch: Option<char> = cur.peek();
+        match ch {
+            Option#Some { value } => {
+                if value != 'h' {
+                    s.drop();
+                    return 1;
+                }
+            },
+            Option#None => {
+                s.drop();
+                return 1;
+            }
+        }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_cursor_expect_char() -> i32 {
+        let s: String = "ab";
+        let mut cur: Cursor = Cursor::new(&s);
+        if !(cur.expect_char('a')) {
+            s.drop();
+            return 1;
+        }
+        if cur.expect_char('c') {
+            s.drop();
+            return 1;
+        }
+        // pos should be 1 (only 'a' consumed)
+        if !assert_eq::<u64>(cur.pos(), 1, "pos should be 1") {
+            s.drop();
+            return 1;
+        }
+        s.drop();
+        return 0;
+    }
+
+    // --- Additional failure-path tests ---
+
+    #[test]
+    fn test_parse_int_just_minus() -> i32 {
+        let s: String = "-";
+        let result: Option<i64> = parse_int(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => { return 1; },
+            Option#None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_parse_int_mixed_chars() -> i32 {
+        let s: String = "12x4";
+        let result: Option<i64> = parse_int(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => { return 1; },
+            Option#None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_parse_uint_negative() -> i32 {
+        // parse_uint should reject leading minus
+        let s: String = "-5";
+        let result: Option<u64> = parse_uint(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => { return 1; },
+            Option#None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_parse_hex_invalid_chars() -> i32 {
+        let s: String = "0xGG";
+        let result: Option<u64> = parse_hex(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => { return 1; },
+            Option#None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_parse_hex_empty_after_prefix() -> i32 {
+        let s: String = "0x";
+        let result: Option<u64> = parse_hex(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => { return 1; },
+            Option#None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_parse_hex_uppercase() -> i32 {
+        let s: String = "0XAB";
+        let result: Option<u64> = parse_hex(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                if value != 171 {
+                    return 1;
+                }
+                return 0;
+            },
+            Option#None => { return 1; }
+        }
+    }
+
+    #[test]
+    fn test_parse_bin_invalid() -> i32 {
+        let s: String = "0b102";
+        let result: Option<u64> = parse_bin(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => { return 1; },
+            Option#None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_parse_oct_invalid() -> i32 {
+        let s: String = "0o89";
+        let result: Option<u64> = parse_oct(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => { return 1; },
+            Option#None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_parse_oct_without_prefix() -> i32 {
+        let s: String = "17";
+        let result: Option<u64> = parse_oct(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => {
+                if value != 15 {
+                    return 1;
+                }
+                return 0;
+            },
+            Option#None => { return 1; }
+        }
+    }
+
+    #[test]
+    fn test_parse_bool_empty() -> i32 {
+        let s: String = String::new();
+        let result: Option<bool> = parse_bool(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => { return 1; },
+            Option#None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_parse_bool_case_sensitive() -> i32 {
+        // "True" should fail — only "true" accepted
+        let s: String = "True";
+        let result: Option<bool> = parse_bool(&s);
+        s.drop();
+        match result {
+            Option#Some { value } => { return 1; },
+            Option#None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_cursor_eof() -> i32 {
+        let s: String = String::new();
+        let mut cur: Cursor = Cursor::new(&s);
+        if !(cur.is_eof()) {
+            s.drop();
+            return 1;
+        }
+        // peek at EOF should return None
+        let pk: Option<char> = cur.peek();
+        match pk {
+            Option#Some { value } => {
+                s.drop();
+                return 1;
+            },
+            Option#None => {}
+        }
+        // advance at EOF should return None
+        let adv: Option<char> = cur.advance();
+        match adv {
+            Option#Some { value } => {
+                s.drop();
+                return 1;
+            },
+            Option#None => {}
+        }
+        // expect_char at EOF should return false
+        if cur.expect_char('x') {
+            s.drop();
+            return 1;
+        }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_cursor_advance_all() -> i32 {
+        let s: String = "ab";
+        let mut cur: Cursor = Cursor::new(&s);
+        let c1: Option<char> = cur.advance();
+        let c2: Option<char> = cur.advance();
+        let c3: Option<char> = cur.advance();
+        match c1 {
+            Option#Some { value } => {
+                if value != 'a' {
+                    s.drop();
+                    return 1;
+                }
+            },
+            Option#None => {
+                s.drop();
+                return 1;
+            }
+        }
+        match c2 {
+            Option#Some { value } => {
+                if value != 'b' {
+                    s.drop();
+                    return 1;
+                }
+            },
+            Option#None => {
+                s.drop();
+                return 1;
+            }
+        }
+        // c3 should be None (past end)
+        match c3 {
+            Option#Some { value } => {
+                s.drop();
+                return 1;
+            },
+            Option#None => {}
+        }
+        if !(cur.is_eof()) {
+            s.drop();
+            return 1;
+        }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_cursor_skip_whitespace_all() -> i32 {
+        // All whitespace string
+        let s: String = "   ";
+        let mut cur: Cursor = Cursor::new(&s);
+        cur.skip_whitespace();
+        if !(cur.is_eof()) {
+            s.drop();
+            return 1;
+        }
+        s.drop();
+        return 0;
+    }
+}

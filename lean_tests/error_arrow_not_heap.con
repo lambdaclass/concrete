@@ -1,0 +1,7 @@
+// Tests that Check rejects arrow access on non-heap type
+struct Copy Point { x: Int, y: Int }
+
+fn main() -> Int {
+    let p: Point = Point { x: 1, y: 2 };
+    return p->x;
+}

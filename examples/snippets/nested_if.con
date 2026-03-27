@@ -1,0 +1,23 @@
+fn classify(n: Int) -> Int {
+    if n > 0 {
+        if n > 100 {
+            return 3;
+        } else {
+            return 2;
+        }
+    } else {
+        if n == 0 {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+}
+
+fn main() -> Int {
+    let a: Int = classify(200);
+    let b: Int = classify(50);
+    let c: Int = classify(0);
+    let d: Int = classify(-5);
+    return a * 1000 + b * 100 + c * 10 + d;
+}

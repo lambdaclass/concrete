@@ -1,0 +1,10 @@
+mod foo {
+    pub fn main() -> i64 {
+        for (let mut i: i32 = 0; i < 10; i = i + 1) {
+            let mut b: i8 = 0;
+            b = b + 1;
+        }
+
+        return 0;
+    }
+}

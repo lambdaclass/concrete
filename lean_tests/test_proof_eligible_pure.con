@@ -1,0 +1,42 @@
+// Test: all pure functions should be proof-eligible (✓)
+// main() with(Std) should be excluded (✗) due to capabilities.
+
+struct Copy Point {
+    x: i32,
+    y: i32,
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+fn multiply(a: i32, b: i32) -> i32 {
+    return a * b;
+}
+
+fn make_point(x: i32, y: i32) -> Point {
+    return Point { x: x, y: y };
+}
+
+fn color_value(c: Color) -> i32 {
+    match c {
+        Color#Red => { return 1; },
+        Color#Green => { return 2; },
+        Color#Blue => { return 3; },
+    }
+}
+
+fn main() with(Std) -> i32 {
+    let p: Point = make_point(3, 4);
+    let sum: i32 = add(p.x, p.y);
+    let prod: i32 = multiply(sum, 2);
+    let c: Color = Color#Green;
+    let cv: i32 = color_value(c);
+    return prod + cv;
+}

@@ -1,0 +1,25 @@
+// Test: sequential borrow blocks on same variable
+// Expected: 30
+struct Pair { x: Int, y: Int }
+
+impl Destroy for Pair {
+    fn destroy(&self) {}
+}
+
+fn main() -> Int {
+    let mut p: Pair = Pair { x: 10, y: 20 };
+
+    let mut a: Int = 0;
+    borrow p as pr in R {
+        a = pr.x;
+    }
+
+    let mut b: Int = 0;
+    borrow p as pr2 in R2 {
+        b = pr2.y;
+    }
+
+    let result: Int = a + b;
+    destroy(p);
+    return result;
+}

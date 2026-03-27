@@ -1,0 +1,11 @@
+// Test: empty struct (zero-sized type)
+struct Copy Unit { }
+
+fn take_unit(u: Unit) -> Int {
+    return 42;
+}
+
+fn main() -> Int {
+    let u: Unit = Unit { };
+    return take_unit(u);
+}

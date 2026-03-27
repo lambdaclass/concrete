@@ -1,0 +1,28 @@
+// Complex test: two structs referencing each other via Heap
+// Company has a Manager, Manager references Company data
+struct Company {
+    revenue: Int,
+    manager: Heap<Manager>
+}
+
+struct Manager {
+    salary: Int,
+    bonus: Int
+}
+
+fn total_cost(c: Heap<Company>) with(Alloc) -> Int {
+    let rev: Int = c->revenue;
+    let mgr: Heap<Manager> = c->manager;
+    let sal: Int = mgr->salary;
+    let bon: Int = mgr->bonus;
+    free(mgr);
+    free(c);
+    return rev - sal - bon;
+}
+
+fn main() with(Std) -> Int {
+    let mgr: Heap<Manager> = alloc(Manager { salary: 30, bonus: 12 });
+    let co: Heap<Company> = alloc(Company { revenue: 84, manager: mgr });
+    let result: Int = total_cost(co);
+    return result;
+}

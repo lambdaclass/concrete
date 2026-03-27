@@ -1,0 +1,18 @@
+; module main
+define i64 @main() {
+entry:
+
+  br label %while.hdr0
+while.hdr0:
+  %phi.0 = phi i64 [0, %entry], [%t4, %while.body1]
+  %phi.1 = phi i64 [0, %entry], [%t3, %while.body1]
+  %t2 = slt i1 %phi.0, 10
+  br i1 %t2, label %while.body1, label %while.exit2
+while.body1:
+  %t3 = add i64 %phi.1, %phi.0
+  %t4 = add i64 %phi.0, 1
+  br label %while.hdr0
+while.exit2:
+
+  ret i64 %phi.1
+}

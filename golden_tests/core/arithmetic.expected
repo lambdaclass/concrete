@@ -1,0 +1,20 @@
+// module main
+enum Option<T> {
+  Some { value: T },
+  None,
+}
+
+enum Result<T, E> {
+  Ok { value: T },
+  Err { value: E },
+}
+
+fn main() -> Int {
+  let a: Int = 10;
+  let b: Int = 3;
+  let sum: Int = (a + b);
+  let diff: Int = (a - b);
+  let prod: Int = (a * b);
+  let quot: Int = (a / b);
+  return (((sum + diff) + prod) + quot);
+}

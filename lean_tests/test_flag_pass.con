@@ -1,0 +1,19 @@
+mod test_flag_pass {
+    #[test]
+    fn test_add() -> i32 {
+        let x: i32 = 2 + 3;
+        if x == 5 {
+            return 0;
+        }
+        return 1;
+    }
+
+    #[test]
+    fn test_mul() -> i32 {
+        let x: i32 = 3 * 4;
+        if x == 12 {
+            return 0;
+        }
+        return 1;
+    }
+}

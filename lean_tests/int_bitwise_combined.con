@@ -1,0 +1,12 @@
+fn main() -> Int {
+    let a: Int = 0xFF;
+    let b: Int = 0x0F;
+    let and_result: Int = a & b;
+    let or_result: Int = a | b;
+    let xor_result: Int = a ^ b;
+    // 0xFF & 0x0F = 0x0F = 15
+    // 0xFF | 0x0F = 0xFF = 255
+    // 0xFF ^ 0x0F = 0xF0 = 240
+    // Return and_result since it fits nicely
+    return and_result;
+}

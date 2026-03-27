@@ -1,0 +1,8 @@
+fn main() -> Int {
+    let haystack: String = "hello";
+    let needle: String = "";
+    let found: Bool = string_contains(&haystack, &needle);
+    drop_string(haystack);
+    drop_string(needle);
+    if found { return 1; } else { return 0; }
+}

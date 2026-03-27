@@ -1,0 +1,139 @@
+mod io {
+    import std.result.{Result};
+    import std.libc.{fopen, fclose, fwrite, fread, fflush, write as libc_write, read as libc_read};
+
+    pub enum IoError {
+        OpenFailed,
+    }
+
+    pub struct TextFile {
+        ptr: *const u8,
+    }
+
+    trusted impl TextFile {
+        pub fn create(path: &String) with(Unsafe, Alloc) -> Result<TextFile, IoError> {
+            let mode: String = "w";
+            let h: *const u8 = fopen(path.ptr, mode.ptr);
+            mode.drop();
+            if h == (0 as *const u8) {
+                return Result::<TextFile, IoError>#Err { error: IoError#OpenFailed };
+            }
+            let handle: TextFile = TextFile { ptr: h };
+            return Result::<TextFile, IoError>#Ok { value: handle };
+        }
+
+        pub fn open(path: &String, mode: &String) with(Unsafe) -> Result<TextFile, IoError> {
+            let h: *const u8 = fopen(path.ptr, mode.ptr);
+            if h == (0 as *const u8) {
+                return Result::<TextFile, IoError>#Err { error: IoError#OpenFailed };
+            }
+            let handle: TextFile = TextFile { ptr: h };
+            return Result::<TextFile, IoError>#Ok { value: handle };
+        }
+
+        pub fn write(&self, data: &String) with(Unsafe) {
+            fwrite(data.ptr as *const u8, 1, data.len, self.ptr);
+        }
+
+        pub fn read_byte(&self) with(Unsafe) -> i32 {
+            let buf: u8 = 0;
+            let n: u64 = fread(&buf as *mut u8, 1, 1, self.ptr);
+            if n == 0 {
+                return -1;
+            }
+            return buf as i32;
+        }
+
+        pub fn flush(&self) with(Unsafe) {
+            fflush(self.ptr);
+        }
+
+        pub fn close(self) with(Unsafe) {
+            fclose(self.ptr);
+        }
+    }
+
+    /// Write a string to stdout without a trailing newline.
+    pub trusted fn print(value: &String) with(Console) {
+        if value.len > 0 {
+            libc_write(1, value.ptr as *const u8, value.len);
+        }
+    }
+
+    /// Write a string to stdout followed by a newline.
+    pub trusted fn println(value: &String) with(Console) {
+        if value.len > 0 {
+            libc_write(1, value.ptr as *const u8, value.len);
+        }
+        let nl: String = "\n";
+        libc_write(1, nl.ptr as *const u8, 1);
+        nl.drop();
+    }
+
+    /// Write a string to stderr without a trailing newline.
+    pub trusted fn eprint(value: &String) with(Console) {
+        if value.len > 0 {
+            libc_write(2, value.ptr as *const u8, value.len);
+        }
+    }
+
+    /// Write a string to stderr followed by a newline.
+    pub trusted fn eprintln(value: &String) with(Console) {
+        if value.len > 0 {
+            libc_write(2, value.ptr as *const u8, value.len);
+        }
+        let nl: String = "\n";
+        libc_write(2, nl.ptr as *const u8, 1);
+        nl.drop();
+    }
+
+    pub trusted fn read_line() with(Console, Alloc) -> String {
+        let buf: String = String::new();
+        while true {
+            let ch: u8 = 0;
+            let n: i64 = libc_read(0, &ch as *mut u8, 1);
+            if n <= 0 {
+                return buf;
+            }
+            if ch == 10 {
+                return buf;
+            }
+            buf.push_char(ch as char);
+        }
+        return buf;
+    }
+
+    #[test]
+    fn test_io_open_nonexistent() with(Unsafe, Alloc) -> i32 {
+        let path: String = "/nonexistent/path/no_such_file.txt";
+        let mode: String = "r";
+        let result: Result<TextFile, IoError> = TextFile::open(&path, &mode);
+        path.drop();
+        mode.drop();
+        match result {
+            Result#Ok { value } => {
+                value.close();
+                return 1;
+            },
+            Result#Err { error } => {
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_io_create_bad_path() with(Unsafe, Alloc) -> i32 {
+        let path: String = "/nonexistent/dir/file.txt";
+        let result: Result<TextFile, IoError> = TextFile::create(&path);
+        path.drop();
+        match result {
+            Result#Ok { value } => {
+                value.close();
+                return 1;
+            },
+            Result#Err { error } => {
+                return 0;
+            }
+        }
+    }
+}

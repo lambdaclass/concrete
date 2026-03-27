@@ -1,0 +1,17 @@
+mod test_flag_submodule {
+    #[test]
+    fn test_top() -> i32 {
+        return 0;
+    }
+
+    mod inner {
+        #[test]
+        fn test_nested() -> i32 {
+            let x: i32 = 7 * 6;
+            if x == 42 {
+                return 0;
+            }
+            return 1;
+        }
+    }
+}

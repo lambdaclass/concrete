@@ -1,0 +1,17 @@
+// Result<String, String> — tests that enum payload is large enough for String
+// Expected output: 5
+fn main() -> Int {
+    let s: String = "hello";
+    let ok_val: Result<String, String> = Result#Ok { value: s };
+    match ok_val {
+        Result#Ok { value } => {
+            let len: Int = string_length(&value);
+            drop_string(value);
+            return len;
+        },
+        Result#Err { value } => {
+            drop_string(value);
+            return 0;
+        },
+    }
+}

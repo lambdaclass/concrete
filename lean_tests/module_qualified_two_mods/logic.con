@@ -1,0 +1,3 @@
+pub fn negate(x: Int) -> Int {
+    return 0 - x;
+}

@@ -1,0 +1,28 @@
+// Test: 20+ local variables all used — tests register allocation / stack frame
+fn main() -> Int {
+    let v1: Int = 1;
+    let v2: Int = 2;
+    let v3: Int = 3;
+    let v4: Int = 4;
+    let v5: Int = 5;
+    let v6: Int = 6;
+    let v7: Int = 7;
+    let v8: Int = 8;
+    let v9: Int = 9;
+    let v10: Int = 10;
+    let v11: Int = 11;
+    let v12: Int = 12;
+    let v13: Int = 13;
+    let v14: Int = 14;
+    let v15: Int = 15;
+    let v16: Int = 16;
+    let v17: Int = 17;
+    let v18: Int = 18;
+    let v19: Int = 19;
+    let v20: Int = 20;
+    let v21: Int = 21;
+    let sum: Int = v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10
+                 + v11 + v12 + v13 + v14 + v15 + v16 + v17 + v18 + v19 + v20 + v21;
+    // sum = 21*22/2 = 231
+    return sum - 189;
+}

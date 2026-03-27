@@ -1,0 +1,18 @@
+// Test: transitive type visibility — A defines struct, B uses it, Main imports from B
+mod A {
+    pub struct Copy Pair { x: Int, y: Int }
+}
+
+mod B {
+    import A.{ Pair };
+    pub fn make_pair() -> Pair { return Pair { x: 20, y: 22 }; }
+    pub fn sum_pair(p: Pair) -> Int { return p.x + p.y; }
+}
+
+mod Main {
+    import B.{ make_pair, sum_pair };
+    fn main() -> Int {
+        let p = make_pair();
+        return sum_pair(p);
+    }
+}

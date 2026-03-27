@@ -1,0 +1,32 @@
+// Regression test: cross-module struct field access.
+// Bug: all fields of a struct defined in another module read as offset 0.
+// Expected output: 42
+
+mod Types {
+    pub struct Copy Point {
+        x: i32,
+        y: i32,
+        z: i32,
+    }
+
+    pub fn make_point(x: i32, y: i32, z: i32) -> Point {
+        return Point { x: x, y: y, z: z };
+    }
+}
+
+mod Main {
+    import Types.{ Point, make_point };
+
+    fn main() with(Std) -> Int {
+        let p: Point = make_point(10, 20, 12);
+
+        // Before the fix, p.y and p.z both returned 10 (offset 0)
+        if p.x != 10 { return 1; }
+        if p.y != 20 { return 2; }
+        if p.z != 12 { return 3; }
+
+        // x + y + z = 10 + 20 + 12 = 42
+        let result: i32 = p.x + p.y + p.z;
+        return result as Int;
+    }
+}

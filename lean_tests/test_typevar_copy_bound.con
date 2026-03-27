@@ -1,0 +1,14 @@
+// Test: typeVar with Copy bound should be treated as Copy
+
+fn identity<T: Copy>(x: T) -> T {
+    let y: T = x;
+    return y;
+}
+
+fn main() -> i32 {
+    let a: i32 = identity::<i32>(42);
+    if a == 42 {
+        return 0;
+    }
+    return 1;
+}

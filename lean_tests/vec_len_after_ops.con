@@ -1,0 +1,25 @@
+// Test: push, pop, check length before and after
+enum Option<T> {
+    Some { value: T },
+    None
+}
+
+fn extract_or(opt: Option<Int>, default: Int) -> Int {
+    match opt {
+        Option#Some { value } => { return value; },
+        Option#None {} => { return default; },
+    }
+}
+
+fn main() with(Alloc) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    vec_push(&mut v, 1);
+    vec_push(&mut v, 2);
+    vec_push(&mut v, 3);
+    let len_before: Int = vec_len(&v);
+    let popped: Option<Int> = vec_pop(&mut v);
+    let _val: Int = extract_or(popped, 0);
+    let len_after: Int = vec_len(&v);
+    vec_free(v);
+    return len_before * 10 + len_after;
+}

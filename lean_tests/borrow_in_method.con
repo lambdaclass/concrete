@@ -1,0 +1,23 @@
+// Borrowing within impl method: tests borrow semantics in methods
+struct Copy Pair { a: Int, b: Int }
+
+impl Pair {
+    fn sum(&self) -> Int {
+        return self.a + self.b;
+    }
+
+    fn max(&self) -> Int {
+        if self.a > self.b {
+            return self.a;
+        } else {
+            return self.b;
+        }
+    }
+}
+
+fn main() -> Int {
+    let p: Pair = Pair { a: 17, b: 25 };
+    let s: Int = p.sum();
+    let m: Int = p.max();
+    return s + m;
+}

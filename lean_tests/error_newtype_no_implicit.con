@@ -1,0 +1,10 @@
+// Error: passing Int where UserId expected — no implicit conversion
+newtype UserId = Int;
+
+fn takes_userid(id: UserId) -> Int {
+    return id.0;
+}
+
+fn main() -> Int {
+    return takes_userid(42);
+}

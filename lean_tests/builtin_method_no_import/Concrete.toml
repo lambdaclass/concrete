@@ -1,0 +1,3 @@
+[package]
+name = "builtin_method_no_import"
+version = "0.1.0"

@@ -1,0 +1,34 @@
+// module main
+enum Option<T> {
+  Some { value: T },
+  None,
+}
+
+enum Result<T, E> {
+  Ok { value: T },
+  Err { value: E },
+}
+
+enum MyResult {
+  Ok { value: Int },
+  Err { error: Int },
+}
+
+fn safe_div(a: Int, b: Int) -> MyResult {
+  if (b == 0) {
+    return MyResult::Err { error: 0 };
+  }
+  return MyResult::Ok { value: (a / b) };
+}
+
+fn main() -> Int {
+  let r: MyResult = safe_div(10, 2);
+  match r {
+  MyResult::Ok { value: Int } -> {
+      return value;
+  }
+  MyResult::Err { error: Int } -> {
+      return error;
+  }
+};
+}

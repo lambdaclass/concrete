@@ -1,0 +1,267 @@
+mod sha256 {
+    import std.libc.{malloc, free};
+    import std.vec.{Vec};
+
+    /// SHA-256 round constants.
+    fn k_val(i: i32) -> u32 {
+        if i == 0 { return 0x428a2f98; }
+        if i == 1 { return 0x71374491; }
+        if i == 2 { return 0xb5c0fbcf; }
+        if i == 3 { return 0xe9b5dba5; }
+        if i == 4 { return 0x3956c25b; }
+        if i == 5 { return 0x59f111f1; }
+        if i == 6 { return 0x923f82a4; }
+        if i == 7 { return 0xab1c5ed5; }
+        if i == 8 { return 0xd807aa98; }
+        if i == 9 { return 0x12835b01; }
+        if i == 10 { return 0x243185be; }
+        if i == 11 { return 0x550c7dc3; }
+        if i == 12 { return 0x72be5d74; }
+        if i == 13 { return 0x80deb1fe; }
+        if i == 14 { return 0x9bdc06a7; }
+        if i == 15 { return 0xc19bf174; }
+        if i == 16 { return 0xe49b69c1; }
+        if i == 17 { return 0xefbe4786; }
+        if i == 18 { return 0x0fc19dc6; }
+        if i == 19 { return 0x240ca1cc; }
+        if i == 20 { return 0x2de92c6f; }
+        if i == 21 { return 0x4a7484aa; }
+        if i == 22 { return 0x5cb0a9dc; }
+        if i == 23 { return 0x76f988da; }
+        if i == 24 { return 0x983e5152; }
+        if i == 25 { return 0xa831c66d; }
+        if i == 26 { return 0xb00327c8; }
+        if i == 27 { return 0xbf597fc7; }
+        if i == 28 { return 0xc6e00bf3; }
+        if i == 29 { return 0xd5a79147; }
+        if i == 30 { return 0x06ca6351; }
+        if i == 31 { return 0x14292967; }
+        if i == 32 { return 0x27b70a85; }
+        if i == 33 { return 0x2e1b2138; }
+        if i == 34 { return 0x4d2c6dfc; }
+        if i == 35 { return 0x53380d13; }
+        if i == 36 { return 0x650a7354; }
+        if i == 37 { return 0x766a0abb; }
+        if i == 38 { return 0x81c2c92e; }
+        if i == 39 { return 0x92722c85; }
+        if i == 40 { return 0xa2bfe8a1; }
+        if i == 41 { return 0xa81a664b; }
+        if i == 42 { return 0xc24b8b70; }
+        if i == 43 { return 0xc76c51a3; }
+        if i == 44 { return 0xd192e819; }
+        if i == 45 { return 0xd6990624; }
+        if i == 46 { return 0xf40e3585; }
+        if i == 47 { return 0x106aa070; }
+        if i == 48 { return 0x19a4c116; }
+        if i == 49 { return 0x1e376c08; }
+        if i == 50 { return 0x2748774c; }
+        if i == 51 { return 0x34b0bcb5; }
+        if i == 52 { return 0x391c0cb3; }
+        if i == 53 { return 0x4ed8aa4a; }
+        if i == 54 { return 0x5b9cca4f; }
+        if i == 55 { return 0x682e6ff3; }
+        if i == 56 { return 0x748f82ee; }
+        if i == 57 { return 0x78a5636f; }
+        if i == 58 { return 0x84c87814; }
+        if i == 59 { return 0x8cc70208; }
+        if i == 60 { return 0x90befffa; }
+        if i == 61 { return 0xa4506ceb; }
+        if i == 62 { return 0xbef9a3f7; }
+        return 0xc67178f2;
+    }
+
+    fn rotr(x: u32, n: u32) -> u32 {
+        return (x >> n) | (x << (32 - n));
+    }
+
+    fn ch(x: u32, y: u32, z: u32) -> u32 {
+        return (x & y) ^ ((~x) & z);
+    }
+
+    fn maj(x: u32, y: u32, z: u32) -> u32 {
+        return (x & y) ^ (x & z) ^ (y & z);
+    }
+
+    fn bsig0(x: u32) -> u32 {
+        return rotr(x, 2) ^ rotr(x, 13) ^ rotr(x, 22);
+    }
+
+    fn bsig1(x: u32) -> u32 {
+        return rotr(x, 6) ^ rotr(x, 11) ^ rotr(x, 25);
+    }
+
+    fn ssig0(x: u32) -> u32 {
+        return rotr(x, 7) ^ rotr(x, 18) ^ (x >> 3);
+    }
+
+    fn ssig1(x: u32) -> u32 {
+        return rotr(x, 17) ^ rotr(x, 19) ^ (x >> 10);
+    }
+
+    /// Compute SHA-256 hash of raw data.
+    /// Returns a Vec<u32> of 8 words (the 256-bit hash).
+    pub trusted fn hash_raw(data: *mut u8, data_len: u64) with(Alloc) -> Vec<u32> {
+        let mut h0: u32 = 0x6a09e667;
+        let mut h1: u32 = 0xbb67ae85;
+        let mut h2: u32 = 0x3c6ef372;
+        let mut h3: u32 = 0xa54ff53a;
+        let mut h4: u32 = 0x510e527f;
+        let mut h5: u32 = 0x9b05688c;
+        let mut h6: u32 = 0x1f83d9ab;
+        let mut h7: u32 = 0x5be0cd19;
+
+        let bit_len: u64 = data_len * 8;
+        let mut padded_len: u64 = data_len + 9;
+        let rem: u64 = padded_len % 64;
+        if rem != 0 {
+            padded_len = padded_len + (64 - rem);
+        }
+
+        let padded: *mut u8 = malloc(padded_len);
+        let mut ci: u64 = 0;
+        while ci < data_len {
+            let src: *mut u8 = data + ci;
+            let dst: *mut u8 = padded + ci;
+            *dst = *src;
+            ci = ci + 1;
+        }
+        let pad_byte: *mut u8 = padded + data_len;
+        *pad_byte = 0x80;
+        let mut zi: u64 = data_len + 1;
+        while zi < padded_len - 8 {
+            let zp: *mut u8 = padded + zi;
+            *zp = 0;
+            zi = zi + 1;
+        }
+        let mut li: u64 = 0;
+        while li < 8 {
+            let shift: u64 = (7 - li) * 8;
+            let lp: *mut u8 = padded + (padded_len - 8 + li);
+            *lp = ((bit_len >> shift) & 0xFF) as u8;
+            li = li + 1;
+        }
+
+        let num_blocks: u64 = padded_len / 64;
+        let mut block: u64 = 0;
+        let w_buf: *mut u8 = malloc(256);
+
+        while block < num_blocks {
+            let block_ptr: *mut u8 = padded + (block * 64);
+            let mut wi: u32 = 0;
+            while wi < 16 {
+                let bp: *mut u8 = block_ptr + ((wi * 4) as u64);
+                let b0: u32 = (*(bp)) as u32;
+                let b1: u32 = (*(bp + 1)) as u32;
+                let b2: u32 = (*(bp + 2)) as u32;
+                let b3: u32 = (*(bp + 3)) as u32;
+                let word: u32 = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+                let wp: *mut u32 = (w_buf + ((wi * 4) as u64)) as *mut u32;
+                *wp = word;
+                wi = wi + 1;
+            }
+            while wi < 64 {
+                let w2p: *mut u32 = (w_buf + (((wi - 2) * 4) as u64)) as *mut u32;
+                let w7p: *mut u32 = (w_buf + (((wi - 7) * 4) as u64)) as *mut u32;
+                let w15p: *mut u32 = (w_buf + (((wi - 15) * 4) as u64)) as *mut u32;
+                let w16p: *mut u32 = (w_buf + (((wi - 16) * 4) as u64)) as *mut u32;
+                let s0: u32 = ssig0(*w15p);
+                let s1: u32 = ssig1(*w2p);
+                let new_w: u32 = *w16p + s0 + *w7p + s1;
+                let nwp: *mut u32 = (w_buf + ((wi * 4) as u64)) as *mut u32;
+                *nwp = new_w;
+                wi = wi + 1;
+            }
+
+            let mut a: u32 = h0;
+            let mut b: u32 = h1;
+            let mut c: u32 = h2;
+            let mut d: u32 = h3;
+            let mut e: u32 = h4;
+            let mut f: u32 = h5;
+            let mut g: u32 = h6;
+            let mut h: u32 = h7;
+
+            let mut ri: i32 = 0;
+            while ri < 64 {
+                let rwp: *mut u32 = (w_buf + ((ri as u32 * 4) as u64)) as *mut u32;
+                let t1: u32 = h + bsig1(e) + ch(e, f, g) + k_val(ri) + *rwp;
+                let t2: u32 = bsig0(a) + maj(a, b, c);
+                h = g;
+                g = f;
+                f = e;
+                e = d + t1;
+                d = c;
+                c = b;
+                b = a;
+                a = t1 + t2;
+                ri = ri + 1;
+            }
+
+            h0 = h0 + a;
+            h1 = h1 + b;
+            h2 = h2 + c;
+            h3 = h3 + d;
+            h4 = h4 + e;
+            h5 = h5 + f;
+            h6 = h6 + g;
+            h7 = h7 + h;
+
+            block = block + 1;
+        }
+
+        free(w_buf);
+        free(padded);
+
+        let mut result: Vec<u32> = Vec::<u32>::new();
+        result.push(h0);
+        result.push(h1);
+        result.push(h2);
+        result.push(h3);
+        result.push(h4);
+        result.push(h5);
+        result.push(h6);
+        result.push(h7);
+        return result;
+    }
+
+    /// Compute SHA-256 hash of a string.
+    /// Returns a Vec<u32> of 8 words (the 256-bit hash).
+    pub trusted fn hash_string(s: &String) with(Alloc) -> Vec<u32> {
+        return hash_raw(s.ptr, s.len);
+    }
+
+    import std.hex.{encode_u32_vec};
+    import std.test.{assert_true};
+
+    #[test]
+    fn test_sha256_empty() with(Alloc) -> i32 {
+        // SHA-256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        let input: String = "";
+        let hash: Vec<u32> = hash_string(&input);
+        let hex: String = encode_u32_vec(&hash);
+        let expected: String = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        let ok: bool = hex.eq(&expected);
+        input.drop();
+        hash.drop();
+        hex.drop();
+        expected.drop();
+        if ok { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_sha256_abc() with(Alloc) -> i32 {
+        // SHA-256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+        let input: String = "abc";
+        let hash: Vec<u32> = hash_string(&input);
+        let hex: String = encode_u32_vec(&hash);
+        let expected: String = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+        let ok: bool = hex.eq(&expected);
+        input.drop();
+        hash.drop();
+        hex.drop();
+        expected.drop();
+        if ok { return 0; }
+        return 1;
+    }
+}

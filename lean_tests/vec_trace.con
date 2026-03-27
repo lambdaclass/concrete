@@ -1,0 +1,131 @@
+// Trace tests for Vec: operation sequences checking invariants.
+
+// Push N elements, verify all present, check length
+fn test_push_get_length(n: Int) with(Alloc) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    let mut i: Int = 0;
+    while i < n {
+        vec_push(&mut v, i * 10);
+        i = i + 1;
+    }
+    let len: Int = vec_len(&v);
+    // Verify all values
+    let mut ok: Int = 1;
+    i = 0;
+    while i < n {
+        if vec_get(&v, i) != i * 10 {
+            ok = 0;
+        }
+        i = i + 1;
+    }
+    vec_free(v);
+    if len != n { return 1; }
+    if ok != 1 { return 1; }
+    return 0;
+}
+
+// Push elements, verify growth preserves everything
+fn test_growth_preserves() with(Alloc) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    let mut i: Int = 0;
+    while i < 200 {
+        vec_push(&mut v, i * 7);
+        i = i + 1;
+    }
+    let mut ok: Int = 1;
+    i = 0;
+    while i < 200 {
+        if vec_get(&v, i) != i * 7 {
+            ok = 0;
+        }
+        i = i + 1;
+    }
+    vec_free(v);
+    if ok != 1 { return 1; }
+    return 0;
+}
+
+// Set overwrites and get reads back correctly
+fn test_set_get() with(Alloc) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    let mut i: Int = 0;
+    while i < 30 {
+        vec_push(&mut v, 0);
+        i = i + 1;
+    }
+    i = 0;
+    while i < 30 {
+        vec_set(&mut v, i, i * i);
+        i = i + 1;
+    }
+    let mut ok: Int = 1;
+    i = 0;
+    while i < 30 {
+        if vec_get(&v, i) != i * i {
+            ok = 0;
+        }
+        i = i + 1;
+    }
+    vec_free(v);
+    if ok != 1 { return 1; }
+    return 0;
+}
+
+// Interleaved push/set: push 10, overwrite first 5 via set, verify
+fn test_push_then_set() with(Alloc) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    let mut i: Int = 0;
+    while i < 10 {
+        vec_push(&mut v, i);
+        i = i + 1;
+    }
+    // Overwrite first 5 elements
+    i = 0;
+    while i < 5 {
+        vec_set(&mut v, i, 100 + i);
+        i = i + 1;
+    }
+    // Check: first 5 should be 100..104, rest should be 5..9
+    let mut ok: Int = 1;
+    i = 0;
+    while i < 5 {
+        if vec_get(&v, i) != 100 + i { ok = 0; }
+        i = i + 1;
+    }
+    while i < 10 {
+        if vec_get(&v, i) != i { ok = 0; }
+        i = i + 1;
+    }
+    vec_free(v);
+    if ok != 1 { return 1; }
+    return 0;
+}
+
+// Length tracks correctly through many pushes
+fn test_length_invariant() with(Alloc) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    let mut i: Int = 0;
+    let mut ok: Int = 1;
+    while i < 500 {
+        if vec_len(&v) != i { ok = 0; }
+        vec_push(&mut v, i);
+        i = i + 1;
+    }
+    if vec_len(&v) != 500 { ok = 0; }
+    vec_free(v);
+    if ok != 1 { return 1; }
+    return 0;
+}
+
+fn main() with(Std) -> Int {
+    let mut r: Int = 0;
+    r = r + test_push_get_length(0);
+    r = r + test_push_get_length(1);
+    r = r + test_push_get_length(10);
+    r = r + test_push_get_length(100);
+    r = r + test_growth_preserves();
+    r = r + test_set_get();
+    r = r + test_push_then_set();
+    r = r + test_length_invariant();
+    return r;
+}

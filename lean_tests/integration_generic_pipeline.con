@@ -1,0 +1,147 @@
+// Integration test: generic pipeline with trait bounds, deep borrow chains,
+// complex enum matching, and capability propagation through 5+ call layers.
+//
+// A data processing pipeline that:
+// 1. Builds a tagged dataset with enum payloads containing structs
+// 2. Filters and transforms through generic trait dispatch
+// 3. Passes borrows through 5+ nested function layers
+// 4. Aggregates results with complex pattern matching
+//
+// Expected output: 42
+
+// --- Enums with struct payloads ---
+
+pub struct Copy Measurement {
+    value: i32,
+    weight: i32,
+}
+
+pub struct Copy Bounds {
+    lo: i32,
+    hi: i32,
+}
+
+pub enum Copy DataPoint {
+    Numeric { m: Measurement },
+    Flagged { m: Measurement, flag: i32 },
+    Empty {},
+}
+
+pub enum Copy FilterResult {
+    Keep { score: i32 },
+    Discard { reason: i32 },
+}
+
+// --- Trait for scoring ---
+
+trait Scorable {
+    fn score(&self) -> i32;
+}
+
+impl Scorable for Measurement {
+    fn score(&self) -> i32 {
+        return self.value * self.weight;
+    }
+}
+
+// --- Generic function with trait bound ---
+
+fn compute_score<T: Scorable>(item: &T) -> i32 {
+    return item.score();
+}
+
+// --- Deep borrow chain: 5+ layers ---
+
+// Layer 5 (deepest): check if score is in bounds
+fn check_bounds(score: i32, bounds: &Bounds) -> bool {
+    if score >= bounds.lo {
+        if score <= bounds.hi {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Layer 4: apply filter using bounds
+fn apply_filter(m: &Measurement, bounds: &Bounds) -> FilterResult {
+    let s: i32 = compute_score::<Measurement>(m);
+    if check_bounds(s, bounds) {
+        return FilterResult#Keep { score: s };
+    }
+    return FilterResult#Discard { reason: s };
+}
+
+// Layer 3: process a single data point (deep nested match)
+fn process_point(dp: &DataPoint, bounds: &Bounds) -> i32 {
+    match *dp {
+        DataPoint#Numeric { m } => {
+            let fr: FilterResult = apply_filter(&m, bounds);
+            match fr {
+                FilterResult#Keep { score } => { return score; },
+                FilterResult#Discard { reason } => { return 0; }
+            }
+        },
+        DataPoint#Flagged { m, flag } => {
+            if flag > 0 {
+                let fr: FilterResult = apply_filter(&m, bounds);
+                match fr {
+                    FilterResult#Keep { score } => { return score * 2; },
+                    FilterResult#Discard { reason } => { return 0; }
+                }
+            }
+            return 0;
+        },
+        DataPoint#Empty {} => {
+            return 0;
+        }
+    }
+}
+
+// Layer 2: process multiple points, accumulate result
+fn process_five(d0: &DataPoint, d1: &DataPoint, d2: &DataPoint,
+                d3: &DataPoint, d4: &DataPoint, bounds: &Bounds) -> i32 {
+    let r0: i32 = process_point(d0, bounds);
+    let r1: i32 = process_point(d1, bounds);
+    let r2: i32 = process_point(d2, bounds);
+    let r3: i32 = process_point(d3, bounds);
+    let r4: i32 = process_point(d4, bounds);
+    return r0 + r1 + r2 + r3 + r4;
+}
+
+// Layer 1: orchestrate the pipeline
+fn run_pipeline(d0: &DataPoint, d1: &DataPoint, d2: &DataPoint,
+                d3: &DataPoint, d4: &DataPoint, lo: i32, hi: i32) -> i32 {
+    let bounds: Bounds = Bounds { lo: lo, hi: hi };
+    return process_five(d0, d1, d2, d3, d4, &bounds);
+}
+
+// --- Build dataset and run ---
+
+fn main() -> Int {
+    // Point 0: Numeric, value=3, weight=2 => score=6 (in range 1..20 => keep => 6)
+    let m0: Measurement = Measurement { value: 3, weight: 2 };
+    let d0: DataPoint = DataPoint#Numeric { m: m0 };
+
+    // Point 1: Flagged, value=4, weight=3, flag=1 => score=12 => keep => 12*2=24
+    let m1: Measurement = Measurement { value: 4, weight: 3 };
+    let d1: DataPoint = DataPoint#Flagged { m: m1, flag: 1 };
+
+    // Point 2: Numeric, value=100, weight=1 => score=100 (out of range => discard => 0)
+    let m2: Measurement = Measurement { value: 100, weight: 1 };
+    let d2: DataPoint = DataPoint#Numeric { m: m2 };
+
+    // Point 3: Empty => 0
+    let d3: DataPoint = DataPoint#Empty {};
+
+    // Point 4: Flagged, value=2, weight=3, flag=0 => flag=0 => 0
+    let m4: Measurement = Measurement { value: 2, weight: 3 };
+    let d4: DataPoint = DataPoint#Flagged { m: m4, flag: 0 };
+
+    // Pipeline: bounds [1, 20]
+    // Expected: 6 + 24 + 0 + 0 + 0 = 30
+    let result: i32 = run_pipeline(&d0, &d1, &d2, &d3, &d4, 1, 20);
+
+    // Add 12 to get 42
+    let final_result: Int = (result + 12) as Int;
+    return final_result;
+}

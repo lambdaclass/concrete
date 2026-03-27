@@ -1,0 +1,9 @@
+// string_slice: slice "hello world" from 0 to 5, check length is 5
+fn main() -> Int {
+    let s: String = "hello world";
+    let sliced: String = string_slice(&s, 0, 5);
+    let len: Int = string_length(&sliced);
+    drop_string(sliced);
+    drop_string(s);
+    return len;
+}

@@ -1,0 +1,7 @@
+// Error: Copy struct with non-copy field
+struct Linear { data: Int }
+struct Copy Container { inner: Linear }
+
+fn main() -> Int {
+    return 0;
+}

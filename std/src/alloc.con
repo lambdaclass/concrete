@@ -1,0 +1,24 @@
+mod alloc {
+    import std.mem.{sizeof};
+
+    extern fn malloc(size: u64) -> *mut u8;
+    extern fn realloc(ptr: *mut u8, size: u64) -> *mut u8;
+    extern fn free(ptr: *mut u8);
+    extern fn abort();
+
+    pub trusted fn heap_new<T>() with(Alloc, Unsafe) -> *mut T {
+        let p: *mut u8 = malloc(sizeof::<T>());
+        if p == (0 as *mut u8) { abort(); }
+        return p as *mut T;
+    }
+
+    pub trusted fn grow<T>(old_ptr: *mut T, size: u64) with(Alloc, Unsafe) -> *mut T {
+        let p: *mut u8 = realloc(old_ptr as *mut u8, sizeof::<T>() * size);
+        if p == (0 as *mut u8) { abort(); }
+        return p as *mut T;
+    }
+
+    pub trusted fn dealloc<T>(ptr: *mut T) with(Alloc, Unsafe) {
+        free(ptr as *mut u8);
+    }
+}

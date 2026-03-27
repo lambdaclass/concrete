@@ -1,0 +1,6 @@
+// Error: integer-to-pointer cast without Unsafe capability
+fn main() -> i32 {
+    let addr: Int = 12345;
+    let p: *mut i32 = addr as *mut i32;
+    return 0;
+}

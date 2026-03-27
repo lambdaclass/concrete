@@ -1,0 +1,30 @@
+// Test: defer inside a loop that contains an inner if with early return.
+// The loop-body defer and function-scope defer must both run on return.
+fn work() with(Console, Alloc) -> i32 {
+    let outer: String = "O";
+    defer drop_string(outer);
+    let mut i: i32 = 0;
+    while i < 5 {
+        let inner: String = "I";
+        defer drop_string(inner);
+        if i == 3 {
+            // Early return from inside if, inside loop body.
+            // Must run: drop_string(inner), then drop_string(outer).
+            print_string(&inner);
+            print_string(&outer);
+            print_char(10);
+            return i;
+        }
+        // Normal iteration: drop_string(inner) runs at end of loop body.
+        print_string(&inner);
+        i = i + 1;
+    }
+    // If loop completes normally (doesn't happen here with i==3 < 5).
+    print_string(&outer);
+    print_char(10);
+    return i;
+}
+
+fn main() with(Std) -> Int {
+    return work() as Int;
+}

@@ -1,0 +1,14 @@
+struct Point {
+    x: Int,
+    y: Int,
+}
+
+impl Point {
+    fn new(x: Int, y: Int) -> Point {
+        return Point { x: x, y: y };
+    }
+
+    fn sum(&self) -> Int {
+        return self.x + self.y;
+    }
+}

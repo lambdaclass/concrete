@@ -1,0 +1,5 @@
+// Tests that Resolve emits span-bearing diagnostic for undeclared variable
+fn main() -> Int {
+    let x: Int = 10;
+    return y;
+}

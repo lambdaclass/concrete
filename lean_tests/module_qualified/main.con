@@ -1,0 +1,5 @@
+mod math;
+
+fn main() -> Int {
+    return math::add(20, 22);
+}

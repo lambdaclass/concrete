@@ -1,0 +1,11 @@
+mod test_flag_mixed {
+    #[test]
+    fn test_ok() -> i32 {
+        return 0;
+    }
+
+    #[test]
+    fn test_fail() -> i32 {
+        return 1;
+    }
+}

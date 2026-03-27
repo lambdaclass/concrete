@@ -1,0 +1,6 @@
+fn main() -> Int {
+    let x: Int = 42;
+    let y: i32 = x as i32;
+    let z: Int = y as Int;
+    return z;
+}

@@ -1,0 +1,7 @@
+; module main
+define i64 @main() {
+entry:
+  %t0 = cast i64 42 to u64
+  %t1 = cast u64 %t0 to i64
+  ret i64 %t1
+}

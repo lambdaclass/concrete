@@ -1,0 +1,7 @@
+mod Example {
+    pub fn main() -> i64 {
+        let a: i32 = 2;
+        let b: i64 = a as i64;
+        return b;
+    }
+}

@@ -1,0 +1,18 @@
+// Test: defer to destroy a linear value, then return
+struct Handle { fd: Int }
+
+impl Destroy for Handle {
+    fn destroy(&self) {
+    }
+}
+
+fn use_handle() -> Int {
+    let h: Handle = Handle { fd: 42 };
+    defer destroy(h);
+    let val: Int = h.fd;
+    return val;
+}
+
+fn main() -> Int {
+    return use_handle();
+}

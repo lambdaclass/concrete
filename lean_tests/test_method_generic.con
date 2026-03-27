@@ -1,0 +1,24 @@
+// Test: method-level type parameters (fn map<U> inside impl<T>)
+struct Box<T> { val: T }
+
+impl<T> Box<T> {
+    pub fn get(self) -> T {
+        return self.val;
+    }
+
+    pub fn map<U>(self, f: fn(T) -> U) -> Box<U> {
+        return Box::<U> { val: f(self.val) };
+    }
+}
+
+fn double(x: i32) -> i64 {
+    return (x * 2) as i64;
+}
+
+fn main() -> Int {
+    let b: Box<i32> = Box::<i32> { val: 21 };
+    let b2: Box<i64> = b.map::<i64>(double);
+    let result: i64 = b2.get();
+    if result != 42 { return 1; }
+    return 42;
+}

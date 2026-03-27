@@ -1,0 +1,13 @@
+// Caller missing callee's capability
+fn needs_network() with(Network) -> Int {
+    return 1;
+}
+
+fn has_file() with(File) -> Int {
+    let x: Int = needs_network();
+    return x;
+}
+
+fn main() -> Int {
+    return 0;
+}

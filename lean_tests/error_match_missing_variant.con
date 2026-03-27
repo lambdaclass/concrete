@@ -1,0 +1,15 @@
+// Error: non-exhaustive match — missing a variant
+enum Dir { North {}, South {}, East {}, West {} }
+
+fn go(d: Dir) -> Int {
+    match d {
+        Dir#North {} => { return 1; },
+        Dir#South {} => { return 2; },
+        Dir#East {} => { return 3; },
+    }
+}
+
+fn main() -> Int {
+    let d: Dir = Dir#West {};
+    return go(d);
+}

@@ -1,0 +1,9 @@
+mod IfLit {
+    pub fn main() -> i32 {
+        if 5 > 1 {
+            return 1;
+        } else {
+            return 2;
+        }
+    }
+}

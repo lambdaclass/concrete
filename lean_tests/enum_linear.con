@@ -1,0 +1,13 @@
+enum Token { Num { value: Int }, Add { } }
+
+fn eval(t: Token) -> Int {
+    match t {
+        Token#Num { value } => { return value; },
+        Token#Add { } => { return 0; },
+    }
+}
+
+fn main() -> Int {
+    let t: Token = Token#Num { value: 42 };
+    return eval(t);
+}

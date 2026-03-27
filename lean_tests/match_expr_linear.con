@@ -1,0 +1,20 @@
+mod test {
+    enum Result {
+        Ok { value: String },
+        Err { code: i32 }
+    }
+
+    fn main() with(Alloc) -> i32 {
+        // Linear value returned from match arm
+        let r: Result = Result#Ok { value: "hello" };
+        let s: String = match r {
+            Result#Ok { value } => value,
+            Result#Err { code } => {
+                let msg: String = "error";
+                msg
+            }
+        };
+        drop_string(s);
+        return 0;
+    }
+}

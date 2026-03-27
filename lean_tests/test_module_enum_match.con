@@ -1,0 +1,18 @@
+// Test: module exports enum, main imports and pattern matches
+mod Types {
+    pub enum Answer { Yes { val: Int }, No { code: Int } }
+}
+
+mod Main {
+    import Types.{ Answer };
+    fn check(a: Answer) -> Int {
+        match a {
+            Answer#Yes { val } => { return val; },
+            Answer#No { code } => { return code; },
+        }
+    }
+    fn main() -> Int {
+        let a: Answer = Answer#Yes { val: 42 };
+        return check(a);
+    }
+}

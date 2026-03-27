@@ -1,0 +1,45 @@
+// Generic dispatch with multiple traits and multiple types
+trait Measurable {
+    fn measure(&self) -> Int;
+}
+
+trait Describable {
+    fn describe(&self) -> Int;
+}
+
+struct Copy Box { width: Int, height: Int }
+struct Copy Ball { radius: Int }
+
+impl Measurable for Box {
+    fn measure(&self) -> Int {
+        return self.width * self.height;
+    }
+}
+
+impl Describable for Box {
+    fn describe(&self) -> Int {
+        return self.width + self.height;
+    }
+}
+
+impl Measurable for Ball {
+    fn measure(&self) -> Int {
+        return self.radius * self.radius;
+    }
+}
+
+impl Describable for Ball {
+    fn describe(&self) -> Int {
+        return self.radius;
+    }
+}
+
+fn total<T: Measurable + Describable>(item: T) -> Int {
+    return item.measure() + item.describe();
+}
+
+fn main() -> Int {
+    let b: Box = Box { width: 3, height: 4 };
+    let ball: Ball = Ball { radius: 5 };
+    return total(b) + total(ball);
+}

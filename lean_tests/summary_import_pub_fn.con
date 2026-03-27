@@ -1,0 +1,7 @@
+mod Lib {
+    pub fn helper(x: Int) -> Int { return x + 1; }
+}
+mod Main {
+    import Lib.{ helper };
+    fn main() -> Int { return helper(41); }
+}

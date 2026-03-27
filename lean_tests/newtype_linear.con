@@ -1,0 +1,16 @@
+// Test that newtype over linear type is linear (must consume)
+struct Data {
+    value: Int,
+}
+
+newtype Wrapper = Data;
+
+fn consume(d: Data) -> Int {
+    return d.value;
+}
+
+fn main() -> Int {
+    let w: Wrapper = Wrapper(Data { value: 7 });
+    let inner: Data = w.0;
+    return consume(inner);
+}

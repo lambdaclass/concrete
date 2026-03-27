@@ -1,0 +1,8 @@
+// Test: --report unsafe should show functions with Unsafe cap and raw pointer signatures
+fn ptr_swap(a: *mut i32, b: *mut i32) with(Unsafe) -> i32 {
+    let tmp: i32 = *a;
+    *a = *b;
+    *b = tmp;
+    return 0;
+}
+fn main() -> i32 { return 0; }

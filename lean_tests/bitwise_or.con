@@ -1,0 +1,4 @@
+fn main() -> Int {
+    let x: Int = 240 | 15;
+    return x;
+}

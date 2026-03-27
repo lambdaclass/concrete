@@ -1,0 +1,339 @@
+// Phase 3 mixed-feature test: protocol state machine
+//
+// Combines: enums (5 states, 5 events, 3 actions), structs (connection context),
+//   match (transition function with nested match on state x event),
+//   while loops, capabilities, trusted (raw counter via pointer),
+//   modules.
+//
+// A simplified TCP-like protocol state machine:
+//   States: Listen, SynReceived, Established, Closing, Closed
+//   Events: Connect, Accept, Send(amount), Close, Timeout
+//   Actions: NoAction, Transmit(bytes), Reset
+//
+// Runs a scenario through the machine, accumulating transmitted bytes.
+//
+// Expected output: 42
+
+mod Protocol {
+    pub enum Copy State {
+        Listen {},
+        SynReceived { attempts: i32 },
+        Established { bytes_sent: i32 },
+        Closing { pending: i32 },
+        Closed {},
+    }
+
+    pub enum Copy Event {
+        Connect {},
+        Accept {},
+        Send { amount: i32 },
+        Close {},
+        Timeout {},
+    }
+
+    pub enum Copy Action {
+        NoAction {},
+        Transmit { bytes: i32 },
+        Reset {},
+    }
+
+    pub struct Copy TransResult {
+        new_state: State,
+        action: Action,
+    }
+
+    pub fn state_code(s: &State) -> i32 {
+        match *s {
+            State#Listen {} => { return 0; },
+            State#SynReceived { attempts } => { return 1; },
+            State#Established { bytes_sent } => { return 2; },
+            State#Closing { pending } => { return 3; },
+            State#Closed {} => { return 4; }
+        }
+    }
+
+    pub fn transition(state: &State, event: &Event) -> TransResult {
+        match *state {
+            State#Listen {} => {
+                match *event {
+                    Event#Connect {} => {
+                        return TransResult {
+                            new_state: State#SynReceived { attempts: 1 },
+                            action: Action#Transmit { bytes: 1 },
+                        };
+                    },
+                    Event#Accept {} => {
+                        return TransResult { new_state: State#Listen {}, action: Action#NoAction {} };
+                    },
+                    Event#Send { amount } => {
+                        return TransResult { new_state: State#Listen {}, action: Action#NoAction {} };
+                    },
+                    Event#Close {} => {
+                        return TransResult { new_state: State#Closed {}, action: Action#NoAction {} };
+                    },
+                    Event#Timeout {} => {
+                        return TransResult { new_state: State#Listen {}, action: Action#NoAction {} };
+                    }
+                }
+            },
+            State#SynReceived { attempts } => {
+                match *event {
+                    Event#Accept {} => {
+                        return TransResult {
+                            new_state: State#Established { bytes_sent: 0 },
+                            action: Action#Transmit { bytes: 1 },
+                        };
+                    },
+                    Event#Timeout {} => {
+                        if attempts < 3 {
+                            return TransResult {
+                                new_state: State#SynReceived { attempts: attempts + 1 },
+                                action: Action#Transmit { bytes: 1 },
+                            };
+                        }
+                        return TransResult {
+                            new_state: State#Closed {},
+                            action: Action#Reset {},
+                        };
+                    },
+                    Event#Close {} => {
+                        return TransResult { new_state: State#Closed {}, action: Action#Reset {} };
+                    },
+                    Event#Connect {} => {
+                        return TransResult { new_state: *state, action: Action#NoAction {} };
+                    },
+                    Event#Send { amount } => {
+                        return TransResult { new_state: *state, action: Action#NoAction {} };
+                    }
+                }
+            },
+            State#Established { bytes_sent } => {
+                match *event {
+                    Event#Send { amount } => {
+                        return TransResult {
+                            new_state: State#Established { bytes_sent: bytes_sent + amount },
+                            action: Action#Transmit { bytes: amount },
+                        };
+                    },
+                    Event#Close {} => {
+                        return TransResult {
+                            new_state: State#Closing { pending: bytes_sent },
+                            action: Action#Transmit { bytes: 1 },
+                        };
+                    },
+                    Event#Timeout {} => {
+                        return TransResult {
+                            new_state: State#Established { bytes_sent: bytes_sent },
+                            action: Action#NoAction {},
+                        };
+                    },
+                    Event#Connect {} => {
+                        return TransResult { new_state: *state, action: Action#NoAction {} };
+                    },
+                    Event#Accept {} => {
+                        return TransResult { new_state: *state, action: Action#NoAction {} };
+                    }
+                }
+            },
+            State#Closing { pending } => {
+                match *event {
+                    Event#Accept {} => {
+                        return TransResult {
+                            new_state: State#Closed {},
+                            action: Action#Transmit { bytes: 1 },
+                        };
+                    },
+                    Event#Timeout {} => {
+                        return TransResult {
+                            new_state: State#Closed {},
+                            action: Action#Reset {},
+                        };
+                    },
+                    Event#Connect {} => {
+                        return TransResult { new_state: *state, action: Action#NoAction {} };
+                    },
+                    Event#Send { amount } => {
+                        return TransResult { new_state: *state, action: Action#NoAction {} };
+                    },
+                    Event#Close {} => {
+                        return TransResult { new_state: *state, action: Action#NoAction {} };
+                    }
+                }
+            },
+            State#Closed {} => {
+                // Terminal state, ignore all events
+                return TransResult { new_state: State#Closed {}, action: Action#NoAction {} };
+            }
+        }
+    }
+
+    pub fn action_bytes(a: &Action) -> i32 {
+        match *a {
+            Action#Transmit { bytes } => { return bytes; },
+            Action#NoAction {} => { return 0; },
+            Action#Reset {} => { return 0; }
+        }
+    }
+
+    pub fn is_reset(a: &Action) -> bool {
+        match *a {
+            Action#Reset {} => { return true; },
+            Action#NoAction {} => { return false; },
+            Action#Transmit { bytes } => { return false; }
+        }
+    }
+}
+
+mod Counter {
+    pub struct Copy RawCounter {
+        value: i32,
+    }
+
+    pub fn counter_new() -> RawCounter {
+        return RawCounter { value: 0 };
+    }
+
+    pub fn counter_increment(c: &mut RawCounter, amount: i32) {
+        c.value = c.value + amount;
+    }
+
+    pub fn counter_get(c: &RawCounter) -> i32 {
+        return c.value;
+    }
+}
+
+mod Main {
+    import Protocol.{ State, Event, Action, TransResult, state_code, transition, action_bytes, is_reset };
+    import Counter.{ RawCounter, counter_new, counter_increment, counter_get };
+
+    fn main() -> Int {
+        // Initial state
+        let mut state: State = State#Listen {};
+        let mut total_bytes: i32 = 0;
+        let mut transitions: i32 = 0;
+        let mut resets: i32 = 0;
+
+        // Use raw counter to track state changes
+        let mut counter: RawCounter = counter_new();
+
+        // Verify initial state code
+        let code0: i32 = state_code(&state);
+        if code0 != 0 { return 1; }
+
+        // Scenario: Listen -> Connect -> SynReceived -> Accept -> Established
+        //   -> Send(10) -> Send(15) -> Send(12) -> Close -> Closing -> Accept -> Closed
+
+        // Event 1: Connect
+        let e1: Event = Event#Connect {};
+        let r1: TransResult = transition(&state, &e1);
+        state = r1.new_state;
+        total_bytes = total_bytes + action_bytes(&r1.action);
+        transitions = transitions + 1;
+        counter_increment(&mut counter, 1);
+        // state = SynReceived{1}, bytes += 1 (SYN)
+
+        let code1: i32 = state_code(&state);
+        if code1 != 1 { return 2; }
+
+        // Event 2: Accept
+        let e2: Event = Event#Accept {};
+        let r2: TransResult = transition(&state, &e2);
+        state = r2.new_state;
+        total_bytes = total_bytes + action_bytes(&r2.action);
+        transitions = transitions + 1;
+        counter_increment(&mut counter, 1);
+        // state = Established{0}, bytes += 1 (SYN-ACK)
+
+        let code2: i32 = state_code(&state);
+        if code2 != 2 { return 3; }
+
+        // Event 3: Send(10)
+        let e3: Event = Event#Send { amount: 10 };
+        let r3: TransResult = transition(&state, &e3);
+        state = r3.new_state;
+        total_bytes = total_bytes + action_bytes(&r3.action);
+        transitions = transitions + 1;
+        counter_increment(&mut counter, 1);
+        // state = Established{10}, bytes += 10
+
+        // Event 4: Send(15)
+        let e4: Event = Event#Send { amount: 15 };
+        let r4: TransResult = transition(&state, &e4);
+        state = r4.new_state;
+        total_bytes = total_bytes + action_bytes(&r4.action);
+        transitions = transitions + 1;
+        counter_increment(&mut counter, 1);
+        // state = Established{25}, bytes += 15
+
+        // Event 5: Send(12)
+        let e5: Event = Event#Send { amount: 12 };
+        let r5: TransResult = transition(&state, &e5);
+        state = r5.new_state;
+        total_bytes = total_bytes + action_bytes(&r5.action);
+        transitions = transitions + 1;
+        counter_increment(&mut counter, 1);
+        // state = Established{37}, bytes += 12
+
+        // Verify intermediate state
+        let code5: i32 = state_code(&state);
+        if code5 != 2 { return 4; }
+
+        // Event 6: Close
+        let e6: Event = Event#Close {};
+        let r6: TransResult = transition(&state, &e6);
+        state = r6.new_state;
+        total_bytes = total_bytes + action_bytes(&r6.action);
+        transitions = transitions + 1;
+        counter_increment(&mut counter, 1);
+        // state = Closing{37}, bytes += 1 (FIN)
+
+        let code6: i32 = state_code(&state);
+        if code6 != 3 { return 5; }
+
+        // Event 7: Accept (ACK of FIN)
+        let e7: Event = Event#Accept {};
+        let r7: TransResult = transition(&state, &e7);
+        state = r7.new_state;
+        total_bytes = total_bytes + action_bytes(&r7.action);
+        transitions = transitions + 1;
+        if is_reset(&r7.action) { resets = resets + 1; }
+        counter_increment(&mut counter, 1);
+        // state = Closed{}, bytes += 1 (FIN-ACK)
+
+        let code7: i32 = state_code(&state);
+        if code7 != 4 { return 6; }
+
+        // Event 8: Send in Closed state (should be ignored)
+        let e8: Event = Event#Send { amount: 999 };
+        let r8: TransResult = transition(&state, &e8);
+        state = r8.new_state;
+        total_bytes = total_bytes + action_bytes(&r8.action);
+        transitions = transitions + 1;
+        counter_increment(&mut counter, 1);
+        // state still Closed, no bytes added
+
+        // Verify counters
+        let counter_val: i32 = counter_get(&counter);
+        if counter_val != 8 { return 7; }
+        if transitions != 8 { return 8; }
+        if resets != 0 { return 9; }
+
+        // total_bytes = 1(SYN) + 1(SYN-ACK) + 10 + 15 + 12 + 1(FIN) + 1(FIN-ACK) + 0 = 41
+        if total_bytes != 41 { return 10; }
+
+        // Test a timeout-reset scenario separately
+        let syn_state: State = State#SynReceived { attempts: 3 };
+        let timeout_event: Event = Event#Timeout {};
+        let tr: TransResult = transition(&syn_state, &timeout_event);
+        if is_reset(&tr.action) { resets = resets + 1; }
+        let reset_code: i32 = state_code(&tr.new_state);
+        if reset_code != 4 { return 11; }  // should be Closed
+        if resets != 1 { return 12; }
+
+        // Final checksum: total_bytes(41) + resets(1) = 42
+        let checksum: i32 = total_bytes + resets;
+        if checksum != 42 { return 13; }
+
+        return checksum as Int;
+    }
+}

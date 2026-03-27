@@ -1,0 +1,339 @@
+(* ================================================================ *)
+(* Concrete Language Reference Grammar                              *)
+(* ================================================================ *)
+(*                                                                  *)
+(* This grammar is the single source of truth for the language's    *)
+(* syntactic shape.  The hand-written recursive-descent parser in   *)
+(* Concrete/Parser.lean must accept exactly this language.          *)
+(*                                                                  *)
+(* Notation:                                                        *)
+(*   A B       -- sequence                                          *)
+(*   A | B     -- alternation                                       *)
+(*   [ A ]     -- optional (zero or one)                            *)
+(*   { A }     -- repetition (zero or more)                         *)
+(*   ( A )     -- grouping                                          *)
+(*   'x'       -- terminal token                                    *)
+(*   UPPER     -- terminal token class (IDENT, INT, etc.)           *)
+(*   lower     -- nonterminal                                       *)
+(*                                                                  *)
+(* LL(1) discipline: every alternation must be resolvable with      *)
+(* one token of lookahead.  The checker in scripts/check_ll1.py     *)
+(* verifies this mechanically.  Common prefixes are factored out    *)
+(* so that each choice point branches on a distinct first token.    *)
+(* ================================================================ *)
+
+
+(* ---- Terminal token classes ---- *)
+(* IDENT    : [a-zA-Z_][a-zA-Z0-9_]*                               *)
+(* INT      : decimal | 0x hex | 0b bin | 0o oct                    *)
+(* FLOAT    : [0-9]+ '.' [0-9]+                                    *)
+(* STRING   : '"' ... '"'                                           *)
+(* CHAR     : '\'' ... '\''                                         *)
+(* LABEL    : '\'' IDENT   (e.g. 'outer)                            *)
+
+
+(* ================================================================ *)
+(* Top level                                                        *)
+(* ================================================================ *)
+
+program = { top_decl } ;
+
+(* The parser reads optional pub/trusted prefix, then dispatches    *)
+(* on the keyword that follows.  Factored so each alt has a         *)
+(* distinct first token.                                            *)
+top_decl = '#' '[' attr_body ']'
+         | 'pub' decl_after_pub
+         | 'trusted' decl_after_trusted
+         | decl_keyword
+         ;
+
+decl_after_pub = 'trusted' decl_after_trusted
+               | decl_keyword
+               ;
+
+decl_after_trusted = decl_keyword ;
+
+(* Each keyword-led declaration form starts with a unique keyword.  *)
+decl_keyword = 'fn' IDENT [ '!' ] [ type_params ] '(' [ param_list ] ')' [ cap_clause ] [ '->' type ] block
+             | 'struct' [ 'Copy' ] IDENT [ type_params ] '{' struct_fields '}'
+             | 'enum' [ 'Copy' ] IDENT [ type_params ] '{' enum_variants '}'
+             | 'newtype' IDENT [ type_params ] '=' type ';'
+             | 'impl' [ type_params ] IDENT impl_rest
+             | 'trait' IDENT [ type_params ] '{' { trait_method } '}'
+             | 'const' IDENT ':' type '=' expr ';'
+             | 'type' IDENT '=' type ';'
+             | 'import' IDENT { '.' IDENT } '{' import_sym { ',' import_sym } '}' ';'
+             | 'extern' 'fn' IDENT '(' [ param_list ] ')' [ '->' type ] ';'
+             | 'mod' IDENT '{' { top_decl } '}'
+             ;
+
+(* impl T { ... } vs impl T for Trait { ... }                      *)
+impl_rest = 'for' IDENT [ cap_clause ] '{' { impl_method } '}'
+          | '{' { impl_method } '}'
+          ;
+
+
+(* ================================================================ *)
+(* Attributes                                                       *)
+(* ================================================================ *)
+
+(* 'repr' is a keyword-like ident; dispatched first.                *)
+(* Remaining ident-led attrs: peek after IDENT for '=' or '(' .    *)
+attr_body = 'repr' '(' repr_option { ',' repr_option } ')'
+          | IDENT attr_tail
+          ;
+
+attr_tail = '=' STRING
+          | '(' IDENT ')'
+          |
+          ;
+
+repr_option = 'C'
+            | 'packed'
+            | 'align' '(' INT ')'
+            ;
+
+
+(* ================================================================ *)
+(* Imports                                                          *)
+(* ================================================================ *)
+
+import_sym = IDENT [ 'as' IDENT ] ;
+
+
+(* ================================================================ *)
+(* Types                                                            *)
+(* ================================================================ *)
+
+type = '&' [ 'mut' ] type
+     | '*' ( 'mut' | 'const' ) type
+     | 'fn' '(' [ type_list ] ')' [ cap_clause ] [ '->' type ]
+     | '[' type ';' INT ']'
+     | IDENT [ type_args ]
+     ;
+
+type_args = '<' type_list '>' ;    (* parser handles >> splitting *)
+type_list = type { ',' type } ;
+
+cap_clause = 'with' '(' cap_list ')' ;
+cap_list   = IDENT { ',' IDENT } ;
+
+
+(* ================================================================ *)
+(* Type parameters                                                  *)
+(* ================================================================ *)
+
+type_params = '<' type_param_def { ',' type_param_def } '>' ;
+
+type_param_def = 'cap' IDENT
+               | IDENT [ ':' bound ]
+               ;
+
+bound = IDENT { '+' IDENT } ;
+
+
+(* ================================================================ *)
+(* Parameters                                                       *)
+(* ================================================================ *)
+
+param_list = param { ',' param } ;
+param      = IDENT ':' type ;
+
+method_params = '&' self_ref_tail [ ',' param_list ]
+              | 'self' [ ',' param_list ]
+              | param_list
+              ;
+
+(* After '&': either 'mut self' or 'self' *)
+self_ref_tail = 'mut' 'self'
+              | 'self'
+              ;
+
+
+(* ================================================================ *)
+(* Struct fields                                                    *)
+(* ================================================================ *)
+
+struct_fields = struct_field { ',' struct_field } [ ',' ] ;
+struct_field  = IDENT ':' type ;
+
+
+(* ================================================================ *)
+(* Enum variants                                                    *)
+(* ================================================================ *)
+
+enum_variants = enum_variant { ',' enum_variant } [ ',' ] ;
+enum_variant  = IDENT [ '{' struct_fields '}' ] ;
+
+
+(* ================================================================ *)
+(* Traits                                                           *)
+(* ================================================================ *)
+
+trait_method = 'fn' IDENT [ type_params ] '(' [ method_params ] ')' [ cap_clause ] [ '->' type ] ';' ;
+
+
+(* ================================================================ *)
+(* Impl methods                                                     *)
+(* ================================================================ *)
+
+impl_method = [ 'pub' ] 'fn' IDENT [ type_params ] '(' [ method_params ] ')' [ cap_clause ] [ '->' type ] block ;
+
+
+(* ================================================================ *)
+(* Statements                                                       *)
+(* ================================================================ *)
+
+(* 'match' is consumed here; it may be a statement or expression.   *)
+(* The parser tries match-as-statement first; if followed by '='    *)
+(* or ';' it falls through to expr_or_assign handling.              *)
+stmt = 'let' [ 'mut' ] IDENT [ ':' type ] '=' expr ';'
+     | 'return' [ expr ] ';'
+     | 'if' expr block [ 'else' else_tail ]
+     | 'while' expr block
+     | 'for' for_tail
+     | 'match' expr '{' { match_arm } '}' [ match_stmt_tail ]
+     | 'break' [ LABEL | expr ] ';'
+     | 'continue' [ LABEL ] ';'
+     | 'defer' expr ';'
+     | 'borrow' [ 'mut' ] IDENT 'as' IDENT 'in' IDENT block
+     | LABEL ':' labeled_tail
+     | expr_or_assign ';'
+     ;
+
+(* After match expr { arms }: optional postfix/binop/assign then ';' *)
+match_stmt_tail = { postfix_op } { binop unary_expr } [ '=' expr ] ';' ;
+
+else_tail = 'if' expr block [ 'else' else_tail ]
+          | block
+          ;
+
+(* 'for' '(' ... ')' block  |  'for' block *)
+for_tail = '(' [ for_init ';' ] expr ';' [ for_step ] ')' block
+         | block
+         ;
+
+for_init = 'let' [ 'mut' ] IDENT [ ':' type ] '=' expr
+         | expr
+         ;
+
+for_step = expr_or_assign ;
+
+labeled_tail = 'while' expr block
+             | 'for' for_tail
+             ;
+
+expr_or_assign = expr [ '=' expr ] ;
+
+block = '{' { stmt } [ expr ] '}' ;
+
+
+(* ================================================================ *)
+(* Match                                                            *)
+(* ================================================================ *)
+
+match_arm = match_pattern '=>' match_body [ ',' ] ;
+
+(* INT and IDENT have distinct first tokens.                        *)
+(* After IDENT, peek for '#' or '{' to disambiguate.               *)
+match_pattern = INT
+              | IDENT [ match_pattern_tail ]
+              ;
+
+match_pattern_tail = '#' IDENT [ '{' binding_list '}' ]
+                   | '{' binding_list '}'
+                   ;
+
+binding_list = IDENT { ',' IDENT } ;
+
+match_body = block | stmt ;
+
+
+(* ================================================================ *)
+(* Expressions                                                      *)
+(* ================================================================ *)
+(* Precedence-climbing parser.  Levels (lowest to highest):         *)
+(*   1. ||                                                          *)
+(*   2. &&                                                          *)
+(*   3. == !=                                                       *)
+(*   4. < > <= >=                                                   *)
+(*   5. |                                                           *)
+(*   6. ^                                                           *)
+(*   7. &                                                           *)
+(*   8. << >>                                                       *)
+(*   9. + -                                                         *)
+(*  10. * / %                                                       *)
+
+expr = unary_expr { binop unary_expr } ;
+
+binop = '||' | '&&'
+      | '==' | '!='
+      | '<' | '>' | '<=' | '>='
+      | '|' | '^' | '&'
+      | '<<' | '>>'
+      | '+' | '-'
+      | '*' | '/' | '%'
+      ;
+
+unary_expr = '-' unary_expr
+           | '!' unary_expr
+           | '~' unary_expr
+           | '&' [ 'mut' ] unary_expr
+           | '*' unary_expr
+           | postfix_expr
+           ;
+
+postfix_expr = primary_expr { postfix_op } ;
+
+(* After '.': IDENT or INT have distinct first tokens.              *)
+(* After '. IDENT': peek for '::' (turbofish), '(' (call),         *)
+(* or neither (field access).                                       *)
+postfix_op = '.' postfix_dot
+           | '[' expr ']'
+           | '->' IDENT
+           | '?'
+           | 'as' type
+           ;
+
+postfix_dot = IDENT [ dot_ident_tail ]
+            | INT
+            ;
+
+dot_ident_tail = '::' type_args call_args
+               | call_args
+               ;
+
+(* 'match' as expression is parsed at stmt level to avoid          *)
+(* FIRST/FIRST conflict; the match_stmt_tail rule handles the      *)
+(* expression continuation case.                                    *)
+primary_expr = INT
+             | FLOAT
+             | STRING
+             | CHAR
+             | 'true'
+             | 'false'
+             | '(' expr ')'
+             | '[' array_body ']'
+             | IDENT ident_tail
+             ;
+
+(* After IDENT: dispatch on '::' '#' '(' '{' or nothing.           *)
+ident_tail = '::' type_args [ '::' IDENT call_args ]
+           | '#' IDENT [ '{' field_values '}' ]
+           | call_args
+           | '{' field_values '}'
+           |
+           ;
+
+call_args    = '(' [ expr { ',' expr } ] ')' ;
+field_values = field_value { ',' field_value } [ ',' ] ;
+field_value  = IDENT ':' expr ;
+
+(* After '[' expr: ';' means repeat, ',' means list, ']' means singleton/empty *)
+array_body = expr array_body_tail
+           |
+           ;
+
+array_body_tail = ';' INT
+                | { ',' expr }
+                ;

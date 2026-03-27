@@ -1,0 +1,18 @@
+// Trusted impl and trusted fn for --report unsafe verification
+struct Buffer {
+    len: i32,
+}
+
+trusted impl Buffer {
+    fn get_len(&self) -> i32 {
+        return self.len;
+    }
+}
+
+trusted fn raw_read(p: *const i32) -> i32 {
+    return *p;
+}
+
+fn main() -> i32 {
+    return 0;
+}

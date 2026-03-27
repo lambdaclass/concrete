@@ -1,0 +1,51 @@
+// Monomorphized trait dispatch: generic functions with trait bounds
+// No vtables, no dynamic dispatch — all resolved at compile time
+
+trait Shape {
+    fn area(&self) -> Int;
+    fn perimeter(&self) -> Int;
+}
+
+struct Copy Rectangle { width: Int, height: Int }
+struct Copy Circle { radius: Int }
+
+impl Shape for Rectangle {
+    fn area(&self) -> Int {
+        return self.width * self.height;
+    }
+    fn perimeter(&self) -> Int {
+        return 2 * (self.width + self.height);
+    }
+}
+
+impl Shape for Circle {
+    fn area(&self) -> Int {
+        // Approximate pi * r^2 as 3 * r * r
+        return 3 * self.radius * self.radius;
+    }
+    fn perimeter(&self) -> Int {
+        // Approximate 2 * pi * r as 6 * r
+        return 6 * self.radius;
+    }
+}
+
+fn total_area<T: Shape>(a: T, b: T) -> Int {
+    return a.area() + b.area();
+}
+
+fn describe_shape<T: Shape>(s: T) -> Int {
+    let a: Int = s.area();
+    let p: Int = s.perimeter();
+    return a + p;
+}
+
+fn main() -> Int {
+    let r1: Rectangle = Rectangle { width: 5, height: 4 };
+    let r2: Rectangle = Rectangle { width: 3, height: 2 };
+    let areas: Int = total_area(r1, r2);  // 20 + 6 = 26
+
+    let c: Circle = Circle { radius: 5 };
+    let desc: Int = describe_shape(c);  // 75 + 30 = 105
+
+    return areas;  // 26
+}

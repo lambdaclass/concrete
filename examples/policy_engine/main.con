@@ -1,0 +1,277 @@
+// Policy Engine: Command Gatekeeper
+//
+// A capability-aware policy engine that demonstrates why Concrete exists.
+//
+// The key insight is in the function signatures:
+//
+//   fn evaluate(rules: &mut Vec<Rule>, req: Request) -> i32
+//     -- PURE. No capabilities. Cannot log, allocate, read files, or touch
+//        the network. A security auditor verifies this by reading one line.
+//
+//   fn load_policy(rules: &mut Vec<Rule>)  with(Alloc)
+//     -- Modifying the store requires allocation. Visible in the signature.
+//
+//   fn gate(rules: &mut Vec<Rule>, ...) with(Console, Alloc)
+//     -- Evaluate + print the decision. Logging is an explicit side effect.
+//
+// Run:  concrete examples/policy_engine/main.con --report caps
+//
+// Expected output:
+//   [ALLOW] admin read source_code
+//   [ALLOW] developer exec prod_db
+//   [DENY] guest write prod_db
+//   [DENY] admin delete audit_log
+//   [ALLOW] auditor read audit_log
+//   0
+
+// ---- Domain model ----
+
+mod Domain {
+    pub struct Copy Rule {
+        principal: i32,   // -1 = any
+        resource: i32,    // -1 = any
+        action: i32,      // 0=read, 1=write, 2=exec, 3=delete
+        verdict: i32,     // 0=deny, 1=allow
+        specificity: i32, // 0=both wild, 1=one specific, 2=both specific
+    }
+
+    pub struct Copy Request {
+        principal: i32,
+        resource: i32,
+        action: i32,
+    }
+
+    pub fn make_rule(principal: i32, resource: i32, action: i32,
+                     verdict: i32) -> Rule {
+        let mut spec: i32 = 0;
+        if principal >= 0 { spec = spec + 1; }
+        if resource >= 0 { spec = spec + 1; }
+        return Rule {
+            principal: principal,
+            resource: resource,
+            action: action,
+            verdict: verdict,
+            specificity: spec,
+        };
+    }
+}
+
+// ---- Evaluator (PURE — zero capabilities) ----
+
+mod Evaluator {
+    import Domain.{ Rule, Request };
+
+    // ---------------------------------------------------------------
+    // evaluate: the core of the policy engine.
+    //
+    // PURE. Zero capabilities. Zero side effects.
+    // Takes rules and a request. Returns 1 (allow) or 0 (deny).
+    //
+    // Default-deny: no matching rule means deny.
+    // Specificity: more specific rules win.
+    // Among equal specificity, later rules win (last-writer-wins).
+    // ---------------------------------------------------------------
+    pub fn evaluate(rules: &mut Vec<Rule>, req: Request) -> i32 {
+        let count: Int = vec_len::<Rule>(rules) as Int;
+        let mut best_verdict: i32 = 0;  // default deny
+        let mut best_spec: i32 = 0 - 1;
+
+        let mut i: Int = 0;
+        while i < count {
+            let rule: Rule = vec_get::<Rule>(rules, i);
+
+            let p_ok: bool = rule.principal < 0 || rule.principal == req.principal;
+            let r_ok: bool = rule.resource < 0 || rule.resource == req.resource;
+            let a_ok: bool = rule.action == req.action;
+
+            if p_ok {
+                if r_ok {
+                    if a_ok {
+                        if rule.specificity >= best_spec {
+                            best_spec = rule.specificity;
+                            best_verdict = rule.verdict;
+                        }
+                    }
+                }
+            }
+
+            i = i + 1;
+        }
+
+        return best_verdict;
+    }
+
+    // can: convenience wrapper
+    pub fn can(rules: &mut Vec<Rule>, principal: i32, resource: i32,
+               action: i32) -> bool {
+        let req: Request = Request {
+            principal: principal,
+            resource: resource,
+            action: action,
+        };
+        return evaluate(rules, req) == 1;
+    }
+}
+
+// ---- Gate (evaluate + log decision) ----
+
+mod Gate {
+    import Domain.{ Rule, Request };
+    import Evaluator.{ evaluate };
+
+    // gate: evaluate a request and print a human-readable decision.
+    // Requires Console — printing is an explicit side effect.
+    // Requires Alloc — string building allocates.
+    pub fn gate(rules: &mut Vec<Rule>, req: Request,
+                p_name: String, r_name: String,
+                a_name: String) with(Console, Alloc) -> i32 {
+        let v: i32 = evaluate(rules, req);
+
+        // Print: [ALLOW] admin read source_code
+        let v_label: &String = if v == 1 { &"ALLOW" } else { &"DENY" };
+        let mut out: String = "[";
+        out.append(v_label);
+        out.append(&"] ");
+        out.append(&p_name);
+        out.append(&" ");
+        out.append(&a_name);
+        out.append(&" ");
+        out.append(&r_name);
+        print_string(&out);
+        print_char(10);
+        out.drop();
+        p_name.drop();
+        r_name.drop();
+        a_name.drop();
+        return v;
+    }
+}
+
+// ---- Main ----
+
+mod Main {
+    import Domain.{ Rule, Request, make_rule };
+    import Evaluator.{ can };
+    import Gate.{ gate };
+
+    // Action tags
+    fn READ() -> i32 { return 0; }
+    fn WRITE() -> i32 { return 1; }
+    fn EXEC() -> i32 { return 2; }
+    fn DELETE() -> i32 { return 3; }
+
+    fn load_policy(rules: &mut Vec<Rule>) with(Alloc) {
+        // Everyone can read audit logs
+        vec_push::<Rule>(rules, make_rule(0 - 1, 2, READ(), 1));
+
+        // Admin can do anything to any resource
+        vec_push::<Rule>(rules, make_rule(0, 0 - 1, READ(), 1));
+        vec_push::<Rule>(rules, make_rule(0, 0 - 1, WRITE(), 1));
+        vec_push::<Rule>(rules, make_rule(0, 0 - 1, EXEC(), 1));
+        vec_push::<Rule>(rules, make_rule(0, 0 - 1, DELETE(), 1));
+
+        // Developer: read/write source, deploy to prod
+        vec_push::<Rule>(rules, make_rule(1, 0, READ(), 1));
+        vec_push::<Rule>(rules, make_rule(1, 0, WRITE(), 1));
+        vec_push::<Rule>(rules, make_rule(1, 1, EXEC(), 1));
+
+        // Auditor: read everything
+        vec_push::<Rule>(rules, make_rule(2, 0 - 1, READ(), 1));
+
+        // Guest: read source code only
+        vec_push::<Rule>(rules, make_rule(3, 0, READ(), 1));
+
+        // Nobody deletes audit logs (specificity 2 beats admin's wildcard 1)
+        vec_push::<Rule>(rules, make_rule(0, 2, DELETE(), 0));
+    }
+
+    fn assert_allow(rules: &mut Vec<Rule>, p: i32, r: i32, a: i32,
+                    code: Int) -> Int {
+        if !can(rules, p, r, a) { return code; }
+        return 0;
+    }
+
+    fn assert_deny(rules: &mut Vec<Rule>, p: i32, r: i32, a: i32,
+                   code: Int) -> Int {
+        if can(rules, p, r, a) { return code; }
+        return 0;
+    }
+
+    fn main() with(Std) -> Int {
+        let mut rules: Vec<Rule> = vec_new::<Rule>();
+        load_policy(&mut rules);
+
+        let mut err: Int = 0;
+
+        // ---- Pure evaluation (no capabilities needed) ----
+
+        // Admin: full access except deleting audit logs
+        err = assert_allow(&mut rules, 0, 0, READ(), 10);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+        err = assert_allow(&mut rules, 0, 1, WRITE(), 11);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+        err = assert_allow(&mut rules, 0, 3, EXEC(), 12);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+        err = assert_deny(&mut rules, 0, 2, DELETE(), 13);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+
+        // Developer: source code + deploy, nothing else
+        err = assert_allow(&mut rules, 1, 0, READ(), 20);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+        err = assert_allow(&mut rules, 1, 0, WRITE(), 21);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+        err = assert_deny(&mut rules, 1, 0, DELETE(), 22);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+        err = assert_deny(&mut rules, 1, 1, WRITE(), 23);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+        err = assert_allow(&mut rules, 1, 1, EXEC(), 24);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+
+        // Auditor: read anything, write nothing
+        err = assert_allow(&mut rules, 2, 0, READ(), 30);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+        err = assert_allow(&mut rules, 2, 1, READ(), 31);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+        err = assert_deny(&mut rules, 2, 0, WRITE(), 32);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+
+        // Guest: source code read only
+        err = assert_allow(&mut rules, 3, 0, READ(), 40);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+        err = assert_deny(&mut rules, 3, 1, READ(), 41);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+        err = assert_deny(&mut rules, 3, 0, WRITE(), 42);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+
+        // Unknown principal: audit log read only, rest denied
+        err = assert_allow(&mut rules, 99, 2, READ(), 50);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+        err = assert_deny(&mut rules, 99, 0, READ(), 51);
+        if err != 0 { vec_free::<Rule>(rules); return err; }
+
+        // ---- Gate: human-readable decisions (requires Console) ----
+
+        let r1: Request = Request { principal: 0, resource: 0, action: READ() };
+        let v1: i32 = gate(&mut rules, r1, "admin", "source_code", "read");
+        if v1 != 1 { vec_free::<Rule>(rules); return 60; }
+
+        let r2: Request = Request { principal: 1, resource: 1, action: EXEC() };
+        let v2: i32 = gate(&mut rules, r2, "developer", "prod_db", "exec");
+        if v2 != 1 { vec_free::<Rule>(rules); return 61; }
+
+        let r3: Request = Request { principal: 3, resource: 1, action: WRITE() };
+        let v3: i32 = gate(&mut rules, r3, "guest", "prod_db", "write");
+        if v3 != 0 { vec_free::<Rule>(rules); return 62; }
+
+        let r4: Request = Request { principal: 0, resource: 2, action: DELETE() };
+        let v4: i32 = gate(&mut rules, r4, "admin", "audit_log", "delete");
+        if v4 != 0 { vec_free::<Rule>(rules); return 63; }
+
+        let r5: Request = Request { principal: 2, resource: 2, action: READ() };
+        let v5: i32 = gate(&mut rules, r5, "auditor", "audit_log", "read");
+        if v5 != 1 { vec_free::<Rule>(rules); return 64; }
+
+        vec_free::<Rule>(rules);
+        return 0;
+    }
+}

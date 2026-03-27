@@ -1,0 +1,22 @@
+// module main
+enum Option<T> {
+  Some { value: T },
+  None,
+}
+
+enum Result<T, E> {
+  Ok { value: T },
+  Err { value: E },
+}
+
+fn max(a: Int, b: Int) -> Int {
+  if (a > b) {
+    return a;
+  } else {
+    return b;
+  }
+}
+
+fn main() -> Int {
+  return max(5, 10);
+}

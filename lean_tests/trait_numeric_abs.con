@@ -1,0 +1,31 @@
+// Numeric trait with abs — polymorphic on primitive types
+trait Numeric {
+    fn abs(self) -> Self;
+}
+
+impl Numeric for Int {
+    fn abs(self) -> Int {
+        if self < 0 { return 0 - self; }
+        return self;
+    }
+}
+
+impl Numeric for Float64 {
+    fn abs(self) -> Float64 {
+        if self < 0.0 { return 0.0 - self; }
+        return self;
+    }
+}
+
+fn generic_abs<T: Numeric>(x: T) -> T {
+    return x.abs();
+}
+
+fn main() -> Int {
+    let x: Int = 0 - 42;
+    let y: Float64 = 0.0 - 10.0;
+    let a: Int = x.abs();
+    let b: Float64 = y.abs();
+    let c: Int = generic_abs(0 - 5);
+    return a + (b as Int) + c;
+}

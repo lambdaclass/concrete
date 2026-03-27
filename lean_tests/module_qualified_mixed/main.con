@@ -1,0 +1,8 @@
+mod math;
+import math.{add};
+
+fn main() -> Int {
+    let a: Int = add(10, 20);
+    let b: Int = math::multiply(3, 4);
+    return a + b;
+}

@@ -1,0 +1,21 @@
+// Test: defer at function scope + break inside loop
+// Deferred call should run once at return, NOT at break.
+// If drop_string ran twice we'd get a double-free crash.
+fn work() with(Console, Alloc) -> i32 {
+    let s: String = "ok";
+    defer drop_string(s);
+    let mut i: i32 = 0;
+    while i < 10 {
+        if i == 3 {
+            break;
+        }
+        i = i + 1;
+    }
+    print_string(&s);
+    print_char(10);
+    return i;
+}
+
+fn main() with(Std) -> Int {
+    return work() as Int;
+}

@@ -1,0 +1,5 @@
+fn identity(x: Int) -> Int { return x; }
+
+fn main() -> Int {
+    return identity(42);
+}

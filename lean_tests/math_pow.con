@@ -1,0 +1,8 @@
+trusted extern fn pow(x: Float64, y: Float64) -> Float64;
+
+fn main() -> Int {
+    let base: Float64 = 3.0;
+    let exp_: Float64 = 4.0;
+    let result: Float64 = pow(base, exp_);
+    return result as Int;
+}

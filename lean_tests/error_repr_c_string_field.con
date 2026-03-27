@@ -1,0 +1,10 @@
+// Error: repr(C) struct with non-FFI-safe String field
+#[repr(C)]
+struct BadStruct {
+    name: String,
+    value: i32,
+}
+
+fn main() -> Int {
+    return 0;
+}

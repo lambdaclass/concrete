@@ -1,0 +1,5 @@
+pub struct Copy Point { x: Int, y: Int }
+
+pub fn point_sum(p: Point) -> Int {
+    return p.x + p.y;
+}

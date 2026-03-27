@@ -1,0 +1,37 @@
+// Complex test: enums + structs + functions combined
+enum Token { Num { value: Int }, Add { }, Mul { } }
+
+struct Pair {
+    first: Int,
+    second: Int
+}
+
+fn eval(t: Token) -> Int {
+    match t {
+        Token#Num { value } => { return value; },
+        Token#Add { } => { return 0; },
+        Token#Mul { } => { return 1; },
+    }
+}
+
+fn make_pair(x: Int, y: Int) -> Pair {
+    return Pair { first: x, second: y };
+}
+
+fn sum_pair(p: Pair) -> Int {
+    return p.first + p.second;
+}
+
+fn main() -> Int {
+    let t1: Token = Token#Num { value: 30 };
+    let t2: Token = Token#Add {};
+    let v1: Int = eval(t1);
+    let v2: Int = eval(t2);
+    let p: Pair = make_pair(v1, v2);
+    // sum_pair(30, 0) = 30
+    let total: Int = sum_pair(p);
+
+    let t3: Token = Token#Num { value: 12 };
+    let v3: Int = eval(t3);
+    return total + v3;
+}

@@ -1,0 +1,15 @@
+// Test: module exports struct with impl, another module imports and calls method
+mod Shapes {
+    pub struct Copy Point { x: Int, y: Int }
+    impl Point {
+        pub fn sum(&self) -> Int { return self.x + self.y; }
+    }
+}
+
+mod Main {
+    import Shapes.{ Point };
+    fn main() -> Int {
+        let p: Point = Point { x: 20, y: 22 };
+        return p.sum();
+    }
+}

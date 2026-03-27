@@ -1,0 +1,34 @@
+// module main
+enum Option<T> {
+  Some { value: T },
+  None,
+}
+
+enum Result<T, E> {
+  Ok { value: T },
+  Err { value: E },
+}
+
+trusted extern fn putchar(c: i32) -> i32;
+
+trusted fn print_int(n: Int) -> () with(Console) {
+  let s: String = int_to_string(n);
+  let len: Int = string_length(&s);
+  let mut i: Int = 0;
+  while (i < len) {
+    let ch: Int = string_char_at(&s, i);
+    putchar(ch as i32);
+    i = (i + 1);
+  }
+  putchar(10);
+  drop_string(s);
+}
+
+fn greet() -> () with(Console) {
+  print_int(42);
+}
+
+fn main() -> Int with(File, Network, Clock, Env, Random, Process, Console, Alloc) {
+  greet();
+  return 0;
+}

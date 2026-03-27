@@ -1,0 +1,17 @@
+// Test: capability propagation through 3+ nested calls
+// Expected: 42
+fn inner() with(Console) -> Int {
+    return 42;
+}
+
+fn middle() with(Console) -> Int {
+    return inner();
+}
+
+fn outer() with(Console) -> Int {
+    return middle();
+}
+
+fn main() with(Std) -> Int {
+    return outer();
+}

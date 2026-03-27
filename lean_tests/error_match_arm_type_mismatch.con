@@ -1,0 +1,15 @@
+mod test {
+    enum AB {
+        A {},
+        B {}
+    }
+
+    fn main() -> i32 {
+        let x: AB = AB#A {};
+        let y: i32 = match x {
+            AB#A {} => 10,
+            AB#B {} => true
+        };
+        return 0;
+    }
+}

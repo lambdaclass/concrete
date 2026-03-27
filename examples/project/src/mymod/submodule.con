@@ -1,0 +1,5 @@
+mod submodule {
+    pub fn test() -> u32 {
+        return 2;
+    }
+}

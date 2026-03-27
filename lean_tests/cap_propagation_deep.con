@@ -1,0 +1,33 @@
+// Deep capability propagation: 4 levels deep
+// Tests that capabilities propagate correctly through call chains
+trusted extern fn putchar(c: i32) -> i32;
+
+trusted fn print_int(x: i64) with(Console) {
+    let s: String = int_to_string(x);
+    let len: Int = string_length(&s);
+    let mut i: Int = 0;
+    while i < len {
+        let ch: Int = string_char_at(&s, i);
+        putchar(ch as i32);
+        i = i + 1;
+    }
+    putchar(10);
+    drop_string(s);
+}
+
+fn level3() with(Console) -> Int {
+    print_int(1);
+    return 42;
+}
+
+fn level2() with(Console) -> Int {
+    return level3();
+}
+
+fn level1() with(Console) -> Int {
+    return level2();
+}
+
+fn main() with(Std) -> Int {
+    return level1();
+}

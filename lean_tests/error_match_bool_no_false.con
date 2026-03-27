@@ -1,0 +1,9 @@
+// Test: match on Bool missing the false arm should error
+fn main() -> Int {
+    let b: Bool = true;
+    let mut result: Int = 0;
+    match b {
+        true => { result = 42; },
+    }
+    return result;
+}

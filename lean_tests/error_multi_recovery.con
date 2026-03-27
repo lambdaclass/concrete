@@ -1,0 +1,10 @@
+// Error recovery: two type mismatches + capability error in separate statements
+fn do_io() with(File) -> Int {
+    return 1;
+}
+
+fn main() -> Int {
+    let x: Int = true;
+    let y: Bool = 42;
+    return 0;
+}

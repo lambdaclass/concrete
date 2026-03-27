@@ -1,0 +1,1300 @@
+// MAL (Make A Lisp) — Steps 0-4
+//
+// A Lisp interpreter showcasing Concrete's capability system.
+// Implements: integers, symbols, lists, def!, let*, fn*, if, +, -, *, /, =, <, >, list, count, empty?
+//
+// The key insight: eval is PURE. Parsing needs Alloc, printing needs Console,
+// but evaluation of Lisp expressions requires zero capabilities beyond what
+// the caller threads through explicitly.
+//
+// Run:  concrete examples/mal/main.con
+//
+// Expected output (exit code):
+//   0 (all tests pass)
+
+// ---- Value representation ----
+//
+// Every MAL value is (tag: i32, data: i32):
+//   tag 0 = nil           data = 0
+//   tag 1 = integer        data = the integer value
+//   tag 2 = symbol         data = index into symbol table
+//   tag 3 = list           data = index into cons pool (-1 = empty list)
+//   tag 4 = bool           data = 0 or 1
+//   tag 5 = closure        data = index into closure pool
+//   tag 6 = builtin fn     data = function id (0=+, 1=-, 2=*, 3=/, 4==, 5=<, 6=>, 7=list, 8=count, 9=empty?)
+//   tag 7 = error          data = 0
+
+mod Types {
+    pub struct Copy Val {
+        tag: i32,
+        data: i32,
+    }
+
+    pub fn mk_nil() -> Val { return Val { tag: 0, data: 0 }; }
+    pub fn mk_int(n: i32) -> Val { return Val { tag: 1, data: n }; }
+    pub fn mk_sym(id: i32) -> Val { return Val { tag: 2, data: id }; }
+    pub fn mk_list(idx: i32) -> Val { return Val { tag: 3, data: idx }; }
+    pub fn mk_bool(b: i32) -> Val { return Val { tag: 4, data: b }; }
+    pub fn mk_closure(idx: i32) -> Val { return Val { tag: 5, data: idx }; }
+    pub fn mk_builtin(id: i32) -> Val { return Val { tag: 6, data: id }; }
+    pub fn mk_error() -> Val { return Val { tag: 7, data: 0 }; }
+
+    pub fn is_nil(v: Val) -> bool { return v.tag == 0; }
+    pub fn is_int(v: Val) -> bool { return v.tag == 1; }
+    pub fn is_sym(v: Val) -> bool { return v.tag == 2; }
+    pub fn is_list(v: Val) -> bool { return v.tag == 3; }
+    pub fn is_bool(v: Val) -> bool { return v.tag == 4; }
+    pub fn is_closure(v: Val) -> bool { return v.tag == 5; }
+    pub fn is_builtin(v: Val) -> bool { return v.tag == 6; }
+    pub fn is_error(v: Val) -> bool { return v.tag == 7; }
+    pub fn is_truthy(v: Val) -> bool {
+        if v.tag == 0 { return false; }
+        if v.tag == 4 && v.data == 0 { return false; }
+        return true;
+    }
+
+    // Self-evaluating values: nil, int, bool, error
+    pub fn is_self_evaluating(v: Val) -> bool {
+        return v.tag == 0 || v.tag == 1 || v.tag == 4 || v.tag == 7;
+    }
+}
+
+// ---- IO (uses print builtins) ----
+
+mod IO {
+    pub fn put_char(c: i32) with(Console) {
+        print_char(c as Int);
+    }
+
+    pub fn put_str(s: &String) with(Console) {
+        print_string(s);
+    }
+
+    pub fn put_int(n: i32) with(Console) {
+        print_int(n as Int);
+    }
+
+    pub fn put_newline() with(Console) {
+        print_char(10);
+    }
+}
+
+// ---- Symbol table ----
+// Intern strings to integer ids. Stores symbols as a flat pool.
+
+mod SymTable {
+    pub struct Copy SymEntry {
+        hash: i32,
+        len: i32,
+    }
+
+    // Simple hash for symbol lookup
+    pub fn str_hash(s: &String) -> i32 {
+        let slen: Int = string_length(s);
+        let mut h: i32 = 0;
+        let mut i: Int = 0;
+        while i < slen {
+            let ch: Int = string_char_at(s, i);
+            h = h * 31 + (ch as i32);
+            i = i + 1;
+        }
+        return h;
+    }
+
+    // Find or insert a symbol by string. Returns symbol id.
+    pub fn intern(syms: &mut Vec<SymEntry>, names: &mut Vec<SymEntry>,
+                  s: &String) with(Alloc) -> i32 {
+        let h: i32 = str_hash(s);
+        let slen: i32 = string_length(s) as i32;
+        return intern_by_hash(syms, h, slen);
+    }
+
+    // Intern by hash+length directly (avoids building substring)
+    pub fn intern_by_hash(syms: &mut Vec<SymEntry>, h: i32, slen: i32) with(Alloc) -> i32 {
+        let count: Int = vec_len::<SymEntry>(syms) as Int;
+        let mut i: Int = 0;
+        while i < count {
+            let entry: SymEntry = vec_get::<SymEntry>(syms, i);
+            if entry.hash == h && entry.len == slen {
+                return i as i32;
+            }
+            i = i + 1;
+        }
+        // Not found — add new entry
+        let entry: SymEntry = SymEntry { hash: h, len: slen };
+        vec_push::<SymEntry>(syms, entry);
+        return count as i32;
+    }
+
+    // Compute hash from a slice of a string (start..end)
+    pub fn slice_hash(s: &String, start: i32, end: i32) -> i32 {
+        let mut h: i32 = 0;
+        let mut i: i32 = start;
+        while i < end {
+            let ch: Int = string_char_at(s, i as Int);
+            h = h * 31 + (ch as i32);
+            i = i + 1;
+        }
+        return h;
+    }
+
+    // Precomputed keyword hashes — pure functions, no string allocation needed
+    // hash = fold (h * 31 + ch) over each character code
+    pub fn hash_def() -> i32 { return ((100 * 31 + 101) * 31 + 102) * 31 + 33; }   // "def!"
+    pub fn hash_let() -> i32 { return ((108 * 31 + 101) * 31 + 116) * 31 + 42; }   // "let*"
+    pub fn hash_fn() -> i32 { return (102 * 31 + 110) * 31 + 42; }                  // "fn*"
+    pub fn hash_if() -> i32 { return 105 * 31 + 102; }                               // "if"
+    pub fn hash_do() -> i32 { return 100 * 31 + 111; }                               // "do"
+    pub fn hash_true() -> i32 { return ((116 * 31 + 114) * 31 + 117) * 31 + 101; }  // "true"
+    pub fn hash_false() -> i32 { return (((102 * 31 + 97) * 31 + 108) * 31 + 115) * 31 + 101; } // "false"
+    pub fn hash_nil() -> i32 { return (110 * 31 + 105) * 31 + 108; }                 // "nil"
+
+    // Pre-intern known symbols using precomputed hashes (no string allocation)
+    // def! = 0, let* = 1, fn* = 2, if = 3, do = 4
+    // true = 5, false = 6, nil = 7
+    pub fn init_keywords(syms: &mut Vec<SymEntry>) with(Alloc) -> i32 {
+        vec_push::<SymEntry>(syms, SymEntry { hash: hash_def(), len: 4 });
+        vec_push::<SymEntry>(syms, SymEntry { hash: hash_let(), len: 4 });
+        vec_push::<SymEntry>(syms, SymEntry { hash: hash_fn(), len: 3 });
+        vec_push::<SymEntry>(syms, SymEntry { hash: hash_if(), len: 2 });
+        vec_push::<SymEntry>(syms, SymEntry { hash: hash_do(), len: 2 });
+        vec_push::<SymEntry>(syms, SymEntry { hash: hash_true(), len: 4 });
+        vec_push::<SymEntry>(syms, SymEntry { hash: hash_false(), len: 5 });
+        vec_push::<SymEntry>(syms, SymEntry { hash: hash_nil(), len: 3 });
+        return 0;
+    }
+
+    // Keyword symbol id constants (as functions, workaround for Bug 009)
+    pub fn SYM_DEF() -> i32 { return 0; }
+    pub fn SYM_LET() -> i32 { return 1; }
+    pub fn SYM_FN() -> i32 { return 2; }
+    pub fn SYM_IF() -> i32 { return 3; }
+    pub fn SYM_DO() -> i32 { return 4; }
+    pub fn SYM_TRUE() -> i32 { return 5; }
+    pub fn SYM_FALSE() -> i32 { return 6; }
+    pub fn SYM_NIL() -> i32 { return 7; }
+
+    // Precomputed operator hashes — single-char strings hash to their char code
+    pub fn hash_plus() -> i32 { return 43; }   // "+"
+    pub fn hash_minus() -> i32 { return 45; }  // "-"
+    pub fn hash_star() -> i32 { return 42; }   // "*"
+    pub fn hash_slash() -> i32 { return 47; }  // "/"
+    pub fn hash_eq() -> i32 { return 61; }     // "="
+    pub fn hash_lt() -> i32 { return 60; }     // "<"
+    pub fn hash_gt() -> i32 { return 62; }     // ">"
+    // Multi-char builtins
+    pub fn hash_list() -> i32 { return ((108 * 31 + 105) * 31 + 115) * 31 + 116; }   // "list"
+    pub fn hash_count() -> i32 { return (((99 * 31 + 111) * 31 + 117) * 31 + 110) * 31 + 116; } // "count"
+    pub fn hash_empty() -> i32 { return ((((101 * 31 + 109) * 31 + 112) * 31 + 116) * 31 + 121) * 31 + 63; } // "empty?"
+}
+
+// ---- Cons pool (list storage) ----
+
+mod Pool {
+    import Types.{ Val };
+
+    pub struct Copy Cell {
+        car_tag: i32,
+        car_data: i32,
+        cdr_tag: i32,
+        cdr_data: i32,
+    }
+
+    pub fn alloc_cell(pool: &mut Vec<Cell>, car: Val, cdr: Val) with(Alloc) -> i32 {
+        let idx: Int = vec_len::<Cell>(pool) as Int;
+        let cell: Cell = Cell {
+            car_tag: car.tag,
+            car_data: car.data,
+            cdr_tag: cdr.tag,
+            cdr_data: cdr.data,
+        };
+        vec_push::<Cell>(pool, cell);
+        return idx as i32;
+    }
+
+    pub fn get_car(pool: &mut Vec<Cell>, idx: i32) -> Val {
+        let cell: Cell = vec_get::<Cell>(pool, idx as Int);
+        return Val { tag: cell.car_tag, data: cell.car_data };
+    }
+
+    pub fn get_cdr(pool: &mut Vec<Cell>, idx: i32) -> Val {
+        let cell: Cell = vec_get::<Cell>(pool, idx as Int);
+        return Val { tag: cell.cdr_tag, data: cell.cdr_data };
+    }
+
+    // List length
+    pub fn list_len(pool: &mut Vec<Cell>, v: Val) -> i32 {
+        if v.tag != 3 { return 0; }
+        if v.data < 0 { return 0; }
+        let mut count: i32 = 0;
+        let mut cur: Val = v;
+        while cur.tag == 3 && cur.data >= 0 {
+            count = count + 1;
+            cur = get_cdr(pool, cur.data);
+        }
+        return count;
+    }
+
+    // Get nth element of a list (0-indexed)
+    pub fn list_nth(pool: &mut Vec<Cell>, v: Val, n: i32) -> Val {
+        let mut cur: Val = v;
+        let mut i: i32 = 0;
+        while i < n {
+            if cur.tag != 3 || cur.data < 0 { return Val { tag: 7, data: 0 }; }
+            cur = get_cdr(pool, cur.data);
+            i = i + 1;
+        }
+        if cur.tag != 3 || cur.data < 0 { return Val { tag: 7, data: 0 }; }
+        return get_car(pool, cur.data);
+    }
+}
+
+// ---- Closure pool ----
+
+mod Closures {
+    pub struct Copy Closure {
+        params: i32,   // index into cons pool (list of param symbol ids)
+        body_tag: i32,
+        body_data: i32,
+        env_id: i32,   // environment id
+    }
+}
+
+// ---- Environments ----
+// Linked-list per env over a flat binding pool.
+// Each binding knows its predecessor in the same env (prev field).
+// Each env tracks its most recent binding (last field).
+// Lookup follows the per-env chain, then walks parent envs.
+// Cost: O(bindings_in_env * depth), not O(total_bindings).
+
+mod Env {
+    import Types.{ Val };
+
+    pub struct Copy EnvMeta {
+        parent: i32,   // parent env_id, -1 for none
+        last: i32,     // index of most recent binding in this env, -1 if empty
+    }
+
+    pub struct Copy Binding {
+        sym_id: i32,
+        val_tag: i32,
+        val_data: i32,
+        prev: i32,     // index of previous binding in same env, -1 if first
+    }
+
+    pub fn env_new(envs: &mut Vec<EnvMeta>, bindings: &mut Vec<Binding>,
+                   parent: i32) with(Alloc) -> i32 {
+        let eid: i32 = vec_len::<EnvMeta>(envs) as i32;
+        vec_push::<EnvMeta>(envs, EnvMeta { parent: parent, last: 0 - 1 });
+        return eid;
+    }
+
+    pub fn env_set(envs: &mut Vec<EnvMeta>, bindings: &mut Vec<Binding>,
+                   env_id: i32, sym_id: i32, v: Val) with(Alloc) {
+        let meta: EnvMeta = vec_get::<EnvMeta>(envs, env_id as Int);
+        let idx: i32 = vec_len::<Binding>(bindings) as i32;
+        vec_push::<Binding>(bindings, Binding {
+            sym_id: sym_id,
+            val_tag: v.tag,
+            val_data: v.data,
+            prev: meta.last,
+        });
+        vec_set::<EnvMeta>(envs, env_id as Int,
+                  EnvMeta { parent: meta.parent, last: idx });
+    }
+
+    pub fn env_get(envs: &mut Vec<EnvMeta>, bindings: &mut Vec<Binding>,
+                   env_id: i32, sym_id: i32) -> Val {
+        let mut cur_env: i32 = env_id;
+        let mut depth: i32 = 0;
+        while depth < 200 && cur_env >= 0 {
+            let meta: EnvMeta = vec_get::<EnvMeta>(envs, cur_env as Int);
+            // Walk this env's binding chain
+            let mut idx: i32 = meta.last;
+            while idx >= 0 {
+                let b: Binding = vec_get::<Binding>(bindings, idx as Int);
+                if b.sym_id == sym_id {
+                    return Val { tag: b.val_tag, data: b.val_data };
+                }
+                idx = b.prev;
+            }
+            cur_env = meta.parent;
+            depth = depth + 1;
+        }
+        return Val { tag: 7, data: 0 };
+    }
+}
+
+// ---- Reader (parser) ----
+// Parses a string into a Val AST.
+
+mod Reader {
+    import Types.{ Val, mk_nil, mk_int, mk_sym, mk_list, mk_bool, mk_error };
+    import Pool.{ Cell, alloc_cell };
+    import SymTable.{ SymEntry, intern, intern_by_hash, slice_hash, SYM_TRUE, SYM_FALSE, SYM_NIL };
+
+    // Skip whitespace, return new position
+    fn skip_ws(s: &String, pos: i32) -> i32 {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = pos;
+        while p < len {
+            let ch: i32 = string_char_at(s, p as Int) as i32;
+            if ch != 32 && ch != 10 && ch != 13 && ch != 9 {
+                return p;
+            }
+            p = p + 1;
+        }
+        return p;
+    }
+
+    fn is_digit(ch: i32) -> bool {
+        return ch >= 48 && ch <= 57;
+    }
+
+    fn is_sym_char(ch: i32) -> bool {
+        if ch >= 65 && ch <= 90 { return true; }  // A-Z
+        if ch >= 97 && ch <= 122 { return true; } // a-z
+        if ch >= 48 && ch <= 57 { return true; }  // 0-9
+        if ch == 33 { return true; }  // !
+        if ch == 42 { return true; }  // *
+        if ch == 43 { return true; }  // +
+        if ch == 45 { return true; }  // -
+        if ch == 47 { return true; }  // /
+        if ch == 60 { return true; }  // <
+        if ch == 61 { return true; }  // =
+        if ch == 62 { return true; }  // >
+        if ch == 63 { return true; }  // ?
+        return false;
+    }
+
+    // Read a number starting at pos, returns (value, new_pos) packed as Val + i32
+    // We return result through a struct
+    pub struct Copy ReadResult {
+        val: Val,
+        pos: i32,
+    }
+
+    // Pure: check if character starts a number literal
+    fn is_number_start(ch: i32, next_ch: i32, has_next: bool) -> bool {
+        if is_digit(ch) { return true; }
+        if ch == 45 && has_next && is_digit(next_ch) { return true; }
+        return false;
+    }
+
+    // Pure: parse digits from a string into an integer
+    fn parse_number(s: &String, pos: i32, len: i32, is_neg: bool) -> ReadResult {
+        let mut n: i32 = 0;
+        let mut p: i32 = pos;
+        while p < len && is_digit(string_char_at(s, p as Int) as i32) {
+            let d: i32 = (string_char_at(s, p as Int) as i32) - 48;
+            n = n * 10 + d;
+            p = p + 1;
+        }
+        if is_neg { n = 0 - n; }
+        return ReadResult { val: mk_int(n), pos: p };
+    }
+
+    // Pure: scan to end of symbol characters
+    fn scan_symbol(s: &String, pos: i32, len: i32) -> i32 {
+        let mut p: i32 = pos;
+        while p < len && is_sym_char(string_char_at(s, p as Int) as i32) {
+            p = p + 1;
+        }
+        return p;
+    }
+
+    // Pure: classify a symbol id as keyword value or symbol
+    fn classify_keyword(sym_id: i32) -> Val {
+        if sym_id == SYM_TRUE() { return mk_bool(1); }
+        if sym_id == SYM_FALSE() { return mk_bool(0); }
+        if sym_id == SYM_NIL() { return mk_nil(); }
+        return mk_sym(sym_id);
+    }
+
+    pub fn read_atom(s: &String, syms: &mut Vec<SymEntry>,
+                     pos: i32) with(Alloc) -> ReadResult {
+        let len: i32 = string_length(s) as i32;
+        let ch: i32 = string_char_at(s, pos as Int) as i32;
+
+        // Number (or negative number)
+        let mut next_ch: i32 = 0;
+        if pos + 1 < len {
+            next_ch = string_char_at(s, (pos + 1) as Int) as i32;
+        }
+        if is_number_start(ch, next_ch, pos + 1 < len) {
+            let is_neg: bool = ch == 45;
+            let mut start: i32 = pos;
+            if is_neg { start = pos + 1; }
+            return parse_number(s, start, len, is_neg);
+        }
+
+        // Symbol
+        if is_sym_char(ch) {
+            let p: i32 = scan_symbol(s, pos, len);
+            let h: i32 = slice_hash(s, pos, p);
+            let slen: i32 = p - pos;
+            let sym_id: i32 = intern_by_hash(syms, h, slen);
+            return ReadResult { val: classify_keyword(sym_id), pos: p };
+        }
+
+        return ReadResult { val: mk_error(), pos: pos + 1 };
+    }
+
+    // Read a form (atom or list)
+    pub fn read_form(s: &String, syms: &mut Vec<SymEntry>,
+                     pool: &mut Vec<Cell>,
+                     pos: i32) with(Alloc) -> ReadResult {
+        let p: i32 = skip_ws(s, pos);
+        let len: i32 = string_length(s) as i32;
+        if p >= len {
+            return ReadResult { val: mk_nil(), pos: p };
+        }
+
+        let ch: i32 = string_char_at(s, p as Int) as i32;
+
+        // List
+        if ch == 40 { // '('
+            return read_list(s, syms, pool, p + 1);
+        }
+
+        // Quote shorthand: 'x -> (quote x)
+        // Not implementing quote for now
+
+        return read_atom(s, syms, p);
+    }
+
+    // Read list elements until ')'
+    fn read_list(s: &String, syms: &mut Vec<SymEntry>,
+                 pool: &mut Vec<Cell>,
+                 pos: i32) with(Alloc) -> ReadResult {
+        let mut p: i32 = skip_ws(s, pos);
+        let len: i32 = string_length(s) as i32;
+
+        if p >= len {
+            return ReadResult { val: mk_error(), pos: p };
+        }
+
+        let ch: i32 = string_char_at(s, p as Int) as i32;
+        if ch == 41 { // ')'
+            return ReadResult { val: mk_list(0 - 1), pos: p + 1 };
+        }
+
+        // Read first element
+        let first: ReadResult = read_form(s, syms, pool, p);
+        if first.val.tag == 7 { return first; }
+
+        // Read rest as list
+        let rest: ReadResult = read_list(s, syms, pool, first.pos);
+        if rest.val.tag == 7 { return rest; }
+
+        // Cons first onto rest
+        let idx: i32 = alloc_cell(pool, first.val, rest.val);
+        return ReadResult { val: mk_list(idx), pos: rest.pos };
+    }
+
+    // Convenience: parse a complete string
+    pub fn read_str(s: &String, syms: &mut Vec<SymEntry>,
+                    pool: &mut Vec<Cell>) with(Alloc) -> Val {
+        let result: ReadResult = read_form(s, syms, pool, 0);
+        return result.val;
+    }
+}
+
+// ---- Printer ----
+
+mod Printer {
+    import Types.{ Val };
+    import Pool.{ Cell, get_car, get_cdr };
+    import IO.{ put_char, put_int, put_str };
+
+    // Pure: classify value tag for printing (avoids allocation in printer)
+    pub fn val_tag_id(tag: i32) -> i32 { return tag; }
+
+    pub fn pr_str(v: Val, pool: &mut Vec<Cell>) with(Console) {
+        if v.tag == 0 {
+            // "nil" via put_char — no allocation
+            put_char(110); put_char(105); put_char(108);
+            return;
+        }
+        if v.tag == 1 {
+            put_int(v.data);
+            return;
+        }
+        if v.tag == 2 {
+            // "<sym>"
+            put_char(60); put_char(115); put_char(121); put_char(109); put_char(62);
+            return;
+        }
+        if v.tag == 3 {
+            put_char(40); // '('
+            pr_list(v, pool);
+            put_char(41); // ')'
+            return;
+        }
+        if v.tag == 4 {
+            if v.data == 1 {
+                // "true"
+                put_char(116); put_char(114); put_char(117); put_char(101);
+            }
+            if v.data != 1 {
+                // "false"
+                put_char(102); put_char(97); put_char(108); put_char(115); put_char(101);
+            }
+            return;
+        }
+        if v.tag == 5 {
+            // "<fn>"
+            put_char(60); put_char(102); put_char(110); put_char(62);
+            return;
+        }
+        if v.tag == 6 {
+            // "<builtin>"
+            put_char(60); put_char(98); put_char(117); put_char(105); put_char(108);
+            put_char(116); put_char(105); put_char(110); put_char(62);
+            return;
+        }
+        if v.tag == 7 {
+            // "ERROR"
+            put_char(69); put_char(82); put_char(82); put_char(79); put_char(82);
+            return;
+        }
+    }
+
+    fn pr_list(v: Val, pool: &mut Vec<Cell>) with(Console) {
+        if v.tag != 3 || v.data < 0 { return; }
+        let car: Val = get_car(pool, v.data);
+        pr_str(car, pool);
+        let cdr: Val = get_cdr(pool, v.data);
+        if cdr.tag == 3 && cdr.data >= 0 {
+            put_char(32); // space
+            pr_list(cdr, pool);
+        }
+    }
+}
+
+// ---- Eval ----
+
+mod Eval {
+    import Types.{ Val, mk_nil, mk_int, mk_list, mk_bool, mk_error,
+                   mk_closure, is_nil, is_int, is_sym, is_list, is_builtin,
+                   is_closure, is_error, is_truthy, is_self_evaluating };
+    import Pool.{ Cell, alloc_cell, get_car, get_cdr, list_len, list_nth };
+    import Closures.{ Closure };
+    import Env.{ EnvMeta, Binding, env_new, env_set, env_get };
+    import SymTable.{ SYM_DEF, SYM_LET, SYM_FN, SYM_IF, SYM_DO };
+
+    // Evaluate a value in an environment
+    pub fn eval(v: Val, env_id: i32,
+                pool: &mut Vec<Cell>,
+                envs: &mut Vec<EnvMeta>,
+                bindings: &mut Vec<Binding>,
+                closures: &mut Vec<Closure>) with(Alloc) -> Val {
+
+        // nil, int, bool, error — self-evaluating
+        if is_self_evaluating(v) {
+            return v;
+        }
+
+        // Symbol — lookup
+        if v.tag == 2 {
+            return env_get(envs, bindings, env_id, v.data);
+        }
+
+        // Not a list — error
+        if v.tag != 3 { return mk_error(); }
+
+        // Empty list
+        if v.data < 0 { return v; }
+
+        let head: Val = get_car(pool, v.data);
+        let rest: Val = get_cdr(pool, v.data);
+
+        // Special forms
+        if head.tag == 2 {
+            // def!
+            if head.data == SYM_DEF() {
+                let sym: Val = list_nth(pool, rest, 0);
+                let val_expr: Val = list_nth(pool, rest, 1);
+                let val: Val = eval(val_expr, env_id, pool, envs, bindings, closures);
+                if is_error(val) { return val; }
+                env_set(envs, bindings, env_id, sym.data, val);
+                return val;
+            }
+
+            // let*
+            if head.data == SYM_LET() {
+                let bind_list: Val = list_nth(pool, rest, 0);
+                let body: Val = list_nth(pool, rest, 1);
+                let let_env: i32 = env_new(envs, bindings, env_id);
+                // Process bindings in pairs
+                let mut cur: Val = bind_list;
+                while cur.tag == 3 && cur.data >= 0 {
+                    let sym: Val = get_car(pool, cur.data);
+                    let next: Val = get_cdr(pool, cur.data);
+                    if next.tag != 3 || next.data < 0 { return mk_error(); }
+                    let val_expr: Val = get_car(pool, next.data);
+                    let val: Val = eval(val_expr, let_env, pool, envs, bindings, closures);
+                    if is_error(val) { return val; }
+                    env_set(envs, bindings, let_env, sym.data, val);
+                    cur = get_cdr(pool, next.data);
+                }
+                return eval(body, let_env, pool, envs, bindings, closures);
+            }
+
+            // fn*
+            if head.data == SYM_FN() {
+                let params: Val = list_nth(pool, rest, 0);
+                let body: Val = list_nth(pool, rest, 1);
+                let cl_idx: Int = vec_len::<Closure>(closures) as Int;
+                let cl: Closure = Closure {
+                    params: params.data,
+                    body_tag: body.tag,
+                    body_data: body.data,
+                    env_id: env_id,
+                };
+                vec_push::<Closure>(closures, cl);
+                return mk_closure(cl_idx as i32);
+            }
+
+            // if
+            if head.data == SYM_IF() {
+                let cond_expr: Val = list_nth(pool, rest, 0);
+                let cond: Val = eval(cond_expr, env_id, pool, envs, bindings, closures);
+                if is_error(cond) { return cond; }
+                if is_truthy(cond) {
+                    let then_expr: Val = list_nth(pool, rest, 1);
+                    return eval(then_expr, env_id, pool, envs, bindings, closures);
+                }
+                let nargs: i32 = list_len(pool, rest);
+                if nargs >= 3 {
+                    let else_expr: Val = list_nth(pool, rest, 2);
+                    return eval(else_expr, env_id, pool, envs, bindings, closures);
+                }
+                return mk_nil();
+            }
+
+            // do
+            if head.data == SYM_DO() {
+                let mut cur: Val = rest;
+                let mut result: Val = mk_nil();
+                while cur.tag == 3 && cur.data >= 0 {
+                    let expr: Val = get_car(pool, cur.data);
+                    result = eval(expr, env_id, pool, envs, bindings, closures);
+                    if is_error(result) { return result; }
+                    cur = get_cdr(pool, cur.data);
+                }
+                return result;
+            }
+        }
+
+        // Function application: eval head, eval args, apply
+        let func: Val = eval(head, env_id, pool, envs, bindings, closures);
+        if is_error(func) { return func; }
+
+        // Fast path: builtin with known arity — skip list allocation
+        if is_builtin(func) {
+            // Binary builtins (+, -, *, /, =, <, >): eval 2 args directly
+            if is_binary_builtin(func.data) && rest.tag == 3 && rest.data >= 0 {
+                let a1_expr: Val = get_car(pool, rest.data);
+                let a1_cdr: Val = get_cdr(pool, rest.data);
+                if a1_cdr.tag == 3 && a1_cdr.data >= 0 {
+                    let a2_expr: Val = get_car(pool, a1_cdr.data);
+                    let a1: Val = eval(a1_expr, env_id, pool, envs, bindings, closures);
+                    if is_error(a1) { return a1; }
+                    let a2: Val = eval(a2_expr, env_id, pool, envs, bindings, closures);
+                    if is_error(a2) { return a2; }
+                    return apply_builtin_2(func.data, a1, a2);
+                }
+            }
+            // Unary builtins (count, empty?): eval 1 arg directly
+            if is_unary_builtin(func.data) && rest.tag == 3 && rest.data >= 0 {
+                let a1_expr: Val = get_car(pool, rest.data);
+                let a1: Val = eval(a1_expr, env_id, pool, envs, bindings, closures);
+                if is_error(a1) { return a1; }
+                return apply_builtin_1(func.data, a1, pool);
+            }
+        }
+
+        // Slow path: eval args into a new list
+        let args: Val = eval_list(rest, env_id, pool, envs, bindings, closures);
+        if args.tag == 7 { return args; }
+
+        // Builtin function (list builtin or fallback)
+        if is_builtin(func) {
+            return apply_builtin(func.data, args, pool);
+        }
+
+        // Closure — fast path for 1-2 args (skip list allocation)
+        if is_closure(func) {
+            let cl: Closure = vec_get::<Closure>(closures, func.data as Int);
+
+            // Check for 1-arg fast path
+            if rest.tag == 3 && rest.data >= 0 {
+                let a1_expr: Val = get_car(pool, rest.data);
+                let a1_cdr: Val = get_cdr(pool, rest.data);
+                // Exactly 1 arg and 1 param
+                if (a1_cdr.tag != 3 || a1_cdr.data < 0) && cl.params >= 0 {
+                    let param_cell: Cell = vec_get::<Cell>(pool, cl.params as Int);
+                    if param_cell.cdr_tag != 3 || param_cell.cdr_data < 0 {
+                        let a1: Val = eval(a1_expr, env_id, pool, envs, bindings, closures);
+                        if is_error(a1) { return a1; }
+                        let fn_env: i32 = env_new(envs, bindings, cl.env_id);
+                        env_set(envs, bindings, fn_env, param_cell.car_data, a1);
+                        let body: Val = Val { tag: cl.body_tag, data: cl.body_data };
+                        return eval(body, fn_env, pool, envs, bindings, closures);
+                    }
+                }
+                // Check for 2-arg fast path
+                if a1_cdr.tag == 3 && a1_cdr.data >= 0 {
+                    let a2_expr: Val = get_car(pool, a1_cdr.data);
+                    let a2_cdr: Val = get_cdr(pool, a1_cdr.data);
+                    if (a2_cdr.tag != 3 || a2_cdr.data < 0) && cl.params >= 0 {
+                        let p1_cell: Cell = vec_get::<Cell>(pool, cl.params as Int);
+                        if p1_cell.cdr_tag == 3 && p1_cell.cdr_data >= 0 {
+                            let p2_cell: Cell = vec_get::<Cell>(pool, p1_cell.cdr_data as Int);
+                            if p2_cell.cdr_tag != 3 || p2_cell.cdr_data < 0 {
+                                let a1: Val = eval(a1_expr, env_id, pool, envs, bindings, closures);
+                                if is_error(a1) { return a1; }
+                                let a2: Val = eval(a2_expr, env_id, pool, envs, bindings, closures);
+                                if is_error(a2) { return a2; }
+                                let fn_env: i32 = env_new(envs, bindings, cl.env_id);
+                                env_set(envs, bindings, fn_env, p1_cell.car_data, a1);
+                                env_set(envs, bindings, fn_env, p2_cell.car_data, a2);
+                                let body: Val = Val { tag: cl.body_tag, data: cl.body_data };
+                                return eval(body, fn_env, pool, envs, bindings, closures);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // General path: eval all args into a list, bind to params
+            let fn_env: i32 = env_new(envs, bindings, cl.env_id);
+            let mut params_cur: i32 = cl.params;
+            let mut args_cur: Val = args;
+            while params_cur >= 0 && args_cur.tag == 3 && args_cur.data >= 0 {
+                let param_cell: Cell = vec_get::<Cell>(pool, params_cur as Int);
+                let param_sym_data: i32 = param_cell.car_data; // symbol id
+                let arg_val: Val = get_car(pool, args_cur.data);
+                env_set(envs, bindings, fn_env, param_sym_data, arg_val);
+                // next param
+                let param_cdr_data: i32 = param_cell.cdr_data;
+                if param_cell.cdr_tag == 3 {
+                    params_cur = param_cdr_data;
+                }
+                if param_cell.cdr_tag != 3 {
+                    params_cur = 0 - 1;
+                }
+                args_cur = get_cdr(pool, args_cur.data);
+            }
+            let body: Val = Val { tag: cl.body_tag, data: cl.body_data };
+            return eval(body, fn_env, pool, envs, bindings, closures);
+        }
+
+        return mk_error();
+    }
+
+    // Eval each element of a list, return new list of results
+    fn eval_list(v: Val, env_id: i32,
+                 pool: &mut Vec<Cell>,
+                 envs: &mut Vec<EnvMeta>,
+                 bindings: &mut Vec<Binding>,
+                 closures: &mut Vec<Closure>) with(Alloc) -> Val {
+        if v.tag != 3 || v.data < 0 {
+            return mk_list(0 - 1); // empty list
+        }
+        let car: Val = get_car(pool, v.data);
+        let cdr: Val = get_cdr(pool, v.data);
+        let eval_car: Val = eval(car, env_id, pool, envs, bindings, closures);
+        if eval_car.tag == 7 { return eval_car; }
+        let eval_cdr: Val = eval_list(cdr, env_id, pool, envs, bindings, closures);
+        if eval_cdr.tag == 7 { return eval_cdr; }
+        let idx: i32 = alloc_cell(pool, eval_car, eval_cdr);
+        return mk_list(idx);
+    }
+
+    // Pure: apply a 2-arg builtin directly (no list allocation needed)
+    fn apply_builtin_2(id: i32, a: Val, b: Val) -> Val {
+        if id >= 0 && id <= 3 {
+            if a.tag != 1 || b.tag != 1 { return mk_error(); }
+            if id == 0 { return mk_int(a.data + b.data); }
+            if id == 1 { return mk_int(a.data - b.data); }
+            if id == 2 { return mk_int(a.data * b.data); }
+            if b.data == 0 { return mk_error(); }
+            return mk_int(a.data / b.data);
+        }
+        if id == 4 {
+            if a.tag == b.tag && a.data == b.data { return mk_bool(1); }
+            return mk_bool(0);
+        }
+        if id == 5 {
+            if a.tag != 1 || b.tag != 1 { return mk_error(); }
+            if a.data < b.data { return mk_bool(1); }
+            return mk_bool(0);
+        }
+        if id == 6 {
+            if a.tag != 1 || b.tag != 1 { return mk_error(); }
+            if a.data > b.data { return mk_bool(1); }
+            return mk_bool(0);
+        }
+        return mk_error();
+    }
+
+    // Pure: apply a 1-arg builtin directly
+    fn apply_builtin_1(id: i32, a: Val, pool: &mut Vec<Cell>) -> Val {
+        if id == 8 {
+            if a.tag == 0 { return mk_int(0); }
+            if a.tag != 3 { return mk_error(); }
+            let n: i32 = list_len(pool, a);
+            return mk_int(n);
+        }
+        if id == 9 {
+            if a.tag == 0 { return mk_bool(1); }
+            if a.tag == 3 && a.data < 0 { return mk_bool(1); }
+            if a.tag == 3 {
+                let n: i32 = list_len(pool, a);
+                if n == 0 { return mk_bool(1); }
+            }
+            return mk_bool(0);
+        }
+        return mk_error();
+    }
+
+    // Check if a builtin takes exactly 2 args (arithmetic, comparison)
+    fn is_binary_builtin(id: i32) -> bool {
+        return id >= 0 && id <= 6;
+    }
+
+    // Check if a builtin takes exactly 1 arg (count, empty?)
+    fn is_unary_builtin(id: i32) -> bool {
+        return id == 8 || id == 9;
+    }
+
+    // Apply a builtin function (general path via list)
+    // 0=+, 1=-, 2=*, 3=/, 4==, 5=<, 6=>, 7=list, 8=count, 9=empty?
+    fn apply_builtin(id: i32, args: Val, pool: &mut Vec<Cell>) -> Val {
+        // Arithmetic: +, -, *, /
+        if id >= 0 && id <= 3 {
+            let a: Val = list_nth(pool, args, 0);
+            let b: Val = list_nth(pool, args, 1);
+            if a.tag != 1 || b.tag != 1 { return mk_error(); }
+            if id == 0 { return mk_int(a.data + b.data); }
+            if id == 1 { return mk_int(a.data - b.data); }
+            if id == 2 { return mk_int(a.data * b.data); }
+            if id == 3 {
+                if b.data == 0 { return mk_error(); }
+                return mk_int(a.data / b.data);
+            }
+        }
+
+        // Comparison: =, <, >
+        if id == 4 {
+            let a: Val = list_nth(pool, args, 0);
+            let b: Val = list_nth(pool, args, 1);
+            if a.tag == b.tag && a.data == b.data { return mk_bool(1); }
+            return mk_bool(0);
+        }
+        if id == 5 {
+            let a: Val = list_nth(pool, args, 0);
+            let b: Val = list_nth(pool, args, 1);
+            if a.tag != 1 || b.tag != 1 { return mk_error(); }
+            if a.data < b.data { return mk_bool(1); }
+            return mk_bool(0);
+        }
+        if id == 6 {
+            let a: Val = list_nth(pool, args, 0);
+            let b: Val = list_nth(pool, args, 1);
+            if a.tag != 1 || b.tag != 1 { return mk_error(); }
+            if a.data > b.data { return mk_bool(1); }
+            return mk_bool(0);
+        }
+
+        // list: return args as-is (already a list)
+        if id == 7 {
+            return args;
+        }
+
+        // count
+        if id == 8 {
+            let a: Val = list_nth(pool, args, 0);
+            if a.tag == 0 { return mk_int(0); }
+            if a.tag != 3 { return mk_error(); }
+            let n: i32 = list_len(pool, a);
+            return mk_int(n);
+        }
+
+        // empty?
+        if id == 9 {
+            let a: Val = list_nth(pool, args, 0);
+            if a.tag == 0 { return mk_bool(1); }
+            if a.tag == 3 && a.data < 0 { return mk_bool(1); }
+            if a.tag == 3 {
+                let n: i32 = list_len(pool, a);
+                if n == 0 { return mk_bool(1); }
+            }
+            return mk_bool(0);
+        }
+
+        return mk_error();
+    }
+}
+
+// ---- Main ----
+
+mod Main {
+    import Types.{ Val, mk_nil, mk_int, mk_list, mk_bool, mk_builtin, mk_error,
+                   is_error };
+    import Pool.{ Cell };
+    import Closures.{ Closure };
+    import Env.{ EnvMeta, Binding, env_new, env_set };
+    import SymTable.{ SymEntry, init_keywords, intern, intern_by_hash,
+                       hash_plus, hash_minus, hash_star, hash_slash,
+                       hash_eq, hash_lt, hash_gt, hash_list, hash_count, hash_empty };
+    import Reader.{ read_str };
+    import Eval.{ eval };
+    import IO.{ put_str, put_int, put_newline, put_char };
+    import Printer.{ pr_str };
+
+    // Register builtin functions using precomputed hashes (no string allocation)
+    fn register_builtins(syms: &mut Vec<SymEntry>,
+                         envs: &mut Vec<EnvMeta>,
+                         bindings: &mut Vec<Binding>,
+                         env_id: i32) with(Alloc) {
+        let id0: i32 = intern_by_hash(syms, hash_plus(), 1);
+        env_set(envs, bindings, env_id, id0, mk_builtin(0));
+        let id1: i32 = intern_by_hash(syms, hash_minus(), 1);
+        env_set(envs, bindings, env_id, id1, mk_builtin(1));
+        let id2: i32 = intern_by_hash(syms, hash_star(), 1);
+        env_set(envs, bindings, env_id, id2, mk_builtin(2));
+        let id3: i32 = intern_by_hash(syms, hash_slash(), 1);
+        env_set(envs, bindings, env_id, id3, mk_builtin(3));
+        let id4: i32 = intern_by_hash(syms, hash_eq(), 1);
+        env_set(envs, bindings, env_id, id4, mk_builtin(4));
+        let id5: i32 = intern_by_hash(syms, hash_lt(), 1);
+        env_set(envs, bindings, env_id, id5, mk_builtin(5));
+        let id6: i32 = intern_by_hash(syms, hash_gt(), 1);
+        env_set(envs, bindings, env_id, id6, mk_builtin(6));
+        let id7: i32 = intern_by_hash(syms, hash_list(), 4);
+        env_set(envs, bindings, env_id, id7, mk_builtin(7));
+        let id8: i32 = intern_by_hash(syms, hash_count(), 5);
+        env_set(envs, bindings, env_id, id8, mk_builtin(8));
+        let id9: i32 = intern_by_hash(syms, hash_empty(), 6);
+        env_set(envs, bindings, env_id, id9, mk_builtin(9));
+    }
+
+    // Test helper: parse, eval, check integer result
+    fn test_int(syms: &mut Vec<SymEntry>,
+                pool: &mut Vec<Cell>,
+                envs: &mut Vec<EnvMeta>,
+                bindings: &mut Vec<Binding>,
+                closures: &mut Vec<Closure>,
+                env_id: i32,
+                input: String,
+                expected: i32,
+                err_code: Int) with(Console, Alloc) -> Int {
+        let ast: Val = read_str(&input, syms, pool);
+        input.drop();
+        if is_error(ast) { return err_code; }
+        let result: Val = eval(ast, env_id, pool, envs, bindings, closures);
+        if is_error(result) { return err_code; }
+        if result.tag != 1 || result.data != expected {
+            // "FAIL: expected " via put_char — no allocation
+            put_char(70); put_char(65); put_char(73); put_char(76);
+            put_char(58); put_char(32); put_char(101); put_char(120);
+            put_char(112); put_char(101); put_char(99); put_char(116);
+            put_char(101); put_char(100); put_char(32);
+            put_int(expected);
+            // " got "
+            put_char(32); put_char(103); put_char(111); put_char(116); put_char(32);
+            pr_str(result, pool);
+            put_newline();
+            return err_code;
+        }
+        return 0;
+    }
+
+    fn test_bool(syms: &mut Vec<SymEntry>,
+                 pool: &mut Vec<Cell>,
+                 envs: &mut Vec<EnvMeta>,
+                 bindings: &mut Vec<Binding>,
+                 closures: &mut Vec<Closure>,
+                 env_id: i32,
+                 input: String,
+                 expected: i32,
+                 err_code: Int) with(Console, Alloc) -> Int {
+        let ast: Val = read_str(&input, syms, pool);
+        input.drop();
+        if is_error(ast) { return err_code; }
+        let result: Val = eval(ast, env_id, pool, envs, bindings, closures);
+        if is_error(result) { return err_code; }
+        if result.tag != 4 || result.data != expected {
+            // "FAIL bool" via put_char — no allocation
+            put_char(70); put_char(65); put_char(73); put_char(76);
+            put_char(32); put_char(98); put_char(111); put_char(111); put_char(108);
+            put_newline();
+            return err_code;
+        }
+        return 0;
+    }
+
+    // Run expression for side effect (def! returns closure, don't check type)
+    fn run(syms: &mut Vec<SymEntry>,
+           pool: &mut Vec<Cell>,
+           envs: &mut Vec<EnvMeta>,
+           bindings: &mut Vec<Binding>,
+           closures: &mut Vec<Closure>,
+           env_id: i32,
+           input: String,
+           err_code: Int) with(Alloc) -> Int {
+        let ast: Val = read_str(&input, syms, pool);
+        input.drop();
+        if is_error(ast) { return err_code; }
+        let result: Val = eval(ast, env_id, pool, envs, bindings, closures);
+        if is_error(result) { return err_code; }
+        return 0;
+    }
+
+    // Cleanup helper
+    fn cleanup(pool: Vec<Cell>, syms: Vec<SymEntry>,
+               envs: Vec<EnvMeta>, bindings: Vec<Binding>,
+               closures: Vec<Closure>) with(Alloc) {
+        vec_free::<Cell>(pool);
+        vec_free::<SymEntry>(syms);
+        vec_free::<EnvMeta>(envs);
+        vec_free::<Binding>(bindings);
+        vec_free::<Closure>(closures);
+    }
+
+    fn main() with(Std) -> Int {
+        let mut pool: Vec<Cell> = vec_new::<Cell>();
+        let mut syms: Vec<SymEntry> = vec_new::<SymEntry>();
+        let mut envs: Vec<EnvMeta> = vec_new::<EnvMeta>();
+        let mut bindings: Vec<Binding> = vec_new::<Binding>();
+        let mut closures: Vec<Closure> = vec_new::<Closure>();
+
+        init_keywords(&mut syms);
+        let root_env: i32 = env_new(&mut envs, &mut bindings, 0 - 1);
+        register_builtins(&mut syms, &mut envs, &mut bindings, root_env);
+
+        let mut err: Int = 0;
+
+        // ---- Step 1: Basic arithmetic ----
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(+ 1 2)", 3, 10);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(- 10 3)", 7, 11);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(* 4 5)", 20, 12);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(/ 15 3)", 5, 13);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(+ (* 2 3) (- 10 4))", 12, 14);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // ---- Step 2: def! ----
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(def! x 10)", 10, 20);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "x", 10, 21);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(+ x 5)", 15, 22);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // ---- Step 3: let* ----
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(let* (a 5) a)", 5, 30);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(let* (a 5 b 10) (+ a b))", 15, 31);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(let* (a 2 b (* a 3)) b)", 6, 32);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // ---- Step 4: if ----
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(if true 1 2)", 1, 40);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(if false 1 2)", 2, 41);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_bool(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                        root_env, "(= 1 1)", 1, 42);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_bool(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                        root_env, "(< 1 2)", 1, 43);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_bool(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                        root_env, "(> 3 1)", 1, 44);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // ---- Step 5: fn* ----
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "((fn* (a b) (+ a b)) 3 4)", 7, 50);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env, "(def! double (fn* (n) (* n 2)))", 50);
+
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(double 7)", 14, 51);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(let* (x 100) ((fn* (y) (+ x y)) 5))", 105, 52);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // Recursive factorial: (fact 5) => 120
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env,
+                  "(def! fact (fn* (n) (if (< n 2) 1 (* n (fact (- n 1))))))",
+                  53);
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(fact 5)", 120, 53);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // Recursive fibonacci: (fib 10) => 55
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env,
+                  "(def! fib (fn* (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))))",
+                  54);
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(fib 10)", 55, 54);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // ---- Benchmarks ----
+
+        // fib 30 = 832040 (~1.8M calls)
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(fib 30)", 832040, 60);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // sum-loop: iterative sum via accumulator (linear recursion, tests env depth)
+        // (def! sum-loop (fn* (n acc) (if (< n 1) acc (sum-loop (- n 1) (+ acc n)))))
+        // (sum-loop 10000 0) = 50005000
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env,
+                  "(def! sum-loop (fn* (n acc) (if (< n 1) acc (sum-loop (- n 1) (+ acc n)))))",
+                  70);
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(sum-loop 10000 0)", 50005000, 71);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // Higher-order: map via fold
+        // (def! fold (fn* (f init lst)
+        //   (if (empty? lst) init
+        //     (fold f (f init (count lst)) (list)))))
+        // Actually, let's use a simpler nested computation:
+        // (def! repeat-add (fn* (n x) (if (< n 1) x (repeat-add (- n 1) (+ x 1)))))
+        // (repeat-add 5000 0) = 5000
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env,
+                  "(def! repeat-add (fn* (n x) (if (< n 1) x (repeat-add (- n 1) (+ x 1)))))",
+                  72);
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(repeat-add 5000 0)", 5000, 73);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // Nested closures: currying
+        // (def! make-adder (fn* (x) (fn* (y) (+ x y))))
+        // ((make-adder 10) 20) = 30
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env,
+                  "(def! make-adder (fn* (x) (fn* (y) (+ x y))))",
+                  74);
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "((make-adder 10) 20)", 30, 75);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // Mutual-style computation via higher-order function
+        // (def! apply-n (fn* (f n x) (if (< n 1) x (apply-n f (- n 1) (f x)))))
+        // (apply-n (fn* (x) (+ x 3)) 1000 0) = 3000
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env,
+                  "(def! apply-n (fn* (f n x) (if (< n 1) x (apply-n f (- n 1) (f x)))))",
+                  76);
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(apply-n (fn* (x) (+ x 3)) 1000 0)", 3000, 77);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // Ackermann(3, 4) = 125 — deep recursion stress test
+        // (def! ack (fn* (m n) (if (= m 0) (+ n 1) (if (= n 0) (ack (- m 1) 1) (ack (- m 1) (ack m (- n 1)))))))
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env,
+                  "(def! ack (fn* (m n) (if (= m 0) (+ n 1) (if (= n 0) (ack (- m 1) 1) (ack (- m 1) (ack m (- n 1)))))))",
+                  78);
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(ack 3 4)", 125, 79);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // ---- List-heavy benchmark ----
+        // Build a list of N integers, then sum it
+        // (def! range (fn* (n) (if (< n 1) (list) (list n))))
+        // ^ too simple. Build list with cons:
+        // (def! build (fn* (n acc) (if (< n 1) acc (build (- n 1) (list n acc)))))
+        // We need a sum that walks nested lists — but our list builtin
+        // makes (list n acc) = a 2-element list, not cons.
+        // Instead: use the `list` builtin to build and `count`/`empty?` to walk.
+
+        // iota: build list (1 2 3 ... n) using list builtin for wrapping
+        // Since we only have (list ...) and not cons, use a different approach:
+        // Just test allocation pressure via many small closures
+        // (def! make-counter (fn* (n) (fn* (x) (+ n x))))
+        // Apply 1000 different closures
+        // (def! sum-closures (fn* (n) (if (< n 1) 0 (+ ((make-counter n) 0) (sum-closures (- n 1))))))
+        // (sum-closures 1000) = 1+2+...+1000 = 500500
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env,
+                  "(def! make-counter (fn* (n) (fn* (x) (+ n x))))",
+                  80);
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env,
+                  "(def! sum-closures (fn* (n) (if (< n 1) 0 (+ ((make-counter n) 0) (sum-closures (- n 1))))))",
+                  81);
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "(sum-closures 1000)", 500500, 82);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        // Church-style: compose functions N times
+        // (def! compose (fn* (f g) (fn* (x) (f (g x)))))
+        // (def! inc (fn* (x) (+ x 1)))
+        // (def! compose-n (fn* (f n) (if (< n 2) f (compose f (compose-n f (- n 1))))))
+        // ((compose-n inc 100) 0) = 100
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env,
+                  "(def! compose (fn* (f g) (fn* (x) (f (g x)))))",
+                  83);
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env,
+                  "(def! inc (fn* (x) (+ x 1)))",
+                  84);
+        err = run(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                  root_env,
+                  "(def! compose-n (fn* (f n) (if (< n 2) f (compose f (compose-n f (- n 1))))))",
+                  85);
+        err = test_int(&mut syms, &mut pool, &mut envs, &mut bindings, &mut closures,
+                       root_env, "((compose-n inc 100) 0)", 100, 86);
+        if err != 0 { cleanup(pool, syms, envs, bindings, closures); return err; }
+
+        cleanup(pool, syms, envs, bindings, closures);
+        return 0;
+    }
+}

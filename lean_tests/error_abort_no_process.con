@@ -1,0 +1,8 @@
+// Error: abort requires with(Process) capability
+fn helper() {
+    abort();
+}
+
+fn main() -> i32 {
+    return 0;
+}

@@ -1,0 +1,16 @@
+// Complex test: function pointer pipeline — chain multiple function pointers
+fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+    return f(x);
+}
+
+fn add10(x: Int) -> Int { return x + 10; }
+fn mul2(x: Int) -> Int { return x * 2; }
+fn sub3(x: Int) -> Int { return x - 3; }
+
+fn main() -> Int {
+    // Pipeline: 5 -> +10 = 15 -> *2 = 30 -> -3 = 27
+    let step1: Int = apply(add10, 5);
+    let step2: Int = apply(mul2, step1);
+    let step3: Int = apply(sub3, step2);
+    return step3;
+}

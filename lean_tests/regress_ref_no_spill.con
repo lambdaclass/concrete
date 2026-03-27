@@ -1,0 +1,16 @@
+// Regression: dereferencing a reference must not spill through ensurePtr.
+// Bug: ensurePtr treated ref types as pass-by-ptr structs, creating an
+// alloca and loading the wrong type (e.g., load i32 from a ptr alloca).
+fn read_ref(r: &i32) -> i32 {
+    return *r;
+}
+
+fn pass_through(r: &i32) -> i32 {
+    // Pass the reference through a helper to exercise the codegen path
+    return read_ref(r);
+}
+
+fn main() -> i32 {
+    let x: i32 = 42;
+    return pass_through(&x);
+}

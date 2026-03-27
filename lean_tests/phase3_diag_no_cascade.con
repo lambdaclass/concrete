@@ -1,0 +1,11 @@
+// Test: one root cause should not cascade into many errors.
+// We use a variable with an unknown type, then use it in several places.
+// The compiler should report the undeclared variable once (or a few times)
+// but NOT produce a separate error for every usage.
+fn main() -> Int {
+    let x: Int = bogus_undefined_var;
+    let y: Int = x + 1;
+    let z: Int = x + 2;
+    let w: Int = x + 3;
+    return y + z + w;
+}

@@ -1,0 +1,14 @@
+// Test: multiple modules with chained imports — A exports to B, B exports to Main
+mod A {
+    pub fn base() -> Int { return 21; }
+}
+
+mod B {
+    import A.{ base };
+    pub fn doubled() -> Int { return base() * 2; }
+}
+
+mod Main {
+    import B.{ doubled };
+    fn main() -> Int { return doubled(); }
+}

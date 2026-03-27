@@ -1,0 +1,21 @@
+// Test: a non-pub trait impl method should not be callable from another module
+mod Lib {
+    pub struct Copy Point { x: Int, y: Int }
+
+    pub trait Summable {
+        fn total(&self) -> Int;
+    }
+
+    impl Summable for Point {
+        fn total(&self) -> Int { return self.x + self.y; }
+    }
+}
+
+mod Main {
+    import Lib.{ Point };
+    fn main() -> Int {
+        let p: Point = Point { x: 3, y: 4 };
+        let r: Int = p.total();
+        return r;
+    }
+}

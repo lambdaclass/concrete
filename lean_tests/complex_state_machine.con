@@ -1,0 +1,14 @@
+// Test: state machine with counter
+// Expected: 42
+fn main() -> Int {
+    let mut state: Int = 0;
+    let mut count: Int = 0;
+    // state 0 = running, state 1 = done
+    while state == 0 {
+        count = count + 1;
+        if count >= 42 {
+            state = 1;
+        }
+    }
+    return count;
+}

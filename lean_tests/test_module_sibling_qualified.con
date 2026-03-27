@@ -1,0 +1,27 @@
+// Test: inline sibling modules can use :: syntax for qualified access
+mod math {
+  pub fn add(a: Int, b: Int) -> Int {
+    return a + b;
+  }
+  pub fn multiply(a: Int, b: Int) -> Int {
+    return a * b;
+  }
+}
+
+mod util {
+  pub fn double(x: Int) -> Int {
+    return math::add(x, x);
+  }
+  pub fn square(x: Int) -> Int {
+    return math::multiply(x, x);
+  }
+}
+
+mod Main {
+  fn main() -> Int {
+    let a: Int = util::double(10);
+    let b: Int = util::square(3);
+    let c: Int = math::add(a, b);
+    return c;
+  }
+}

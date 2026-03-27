@@ -1,0 +1,8 @@
+// Trusted fn can assign through raw pointer without with(Unsafe) — compiles successfully
+trusted fn write_ptr(p: *mut i32, val: i32) {
+    *p = val;
+}
+
+fn main() -> i32 {
+    return 0;
+}

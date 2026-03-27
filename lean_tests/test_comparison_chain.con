@@ -1,0 +1,22 @@
+// Test: chain of comparisons using nested ifs (simulating a < b && b < c && c < d)
+fn check_chain(a: Int, b: Int, c: Int, d: Int) -> Int {
+    if a < b {
+        if b < c {
+            if c < d {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+fn main() -> Int {
+    let r1: Int = check_chain(1, 2, 3, 4);
+    let r2: Int = check_chain(1, 2, 3, 3);
+    let r3: Int = check_chain(5, 2, 3, 4);
+    let r4: Int = check_chain(1, 10, 20, 30);
+    // r1=1, r2=0, r3=0, r4=1
+    // We need: result = 42
+    // Use: r1*20 + r2*10 + r3*5 + r4*22 = 20 + 0 + 0 + 22 = 42
+    return r1 * 20 + r2 * 10 + r3 * 5 + r4 * 22;
+}

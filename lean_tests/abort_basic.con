@@ -1,0 +1,5 @@
+// Test: abort() terminates with nonzero exit
+fn main() with(Process) -> Int {
+    abort();
+    return 0;
+}

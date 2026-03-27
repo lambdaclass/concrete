@@ -1,0 +1,261 @@
+mod bytes {
+    import std.alloc.{grow,dealloc};
+    import std.math.{max};
+    import std.option.{Option};
+
+    pub struct Bytes {
+        ptr: *mut u8,
+        len: u64,
+        cap: u64,
+    }
+
+    trusted impl Bytes {
+        pub fn new() -> Bytes {
+            let b: Bytes = Bytes {
+                ptr: 0 as *mut u8,
+                len: 0,
+                cap: 0,
+            };
+            return b;
+        }
+
+        pub fn with_capacity(cap: u64) with(Alloc) -> Bytes {
+            let b: Bytes = Bytes {
+                ptr: grow::<u8>(0 as *mut u8, cap),
+                len: 0,
+                cap: cap,
+            };
+            return b;
+        }
+
+        pub fn push(&mut self, byte: u8) with(Alloc) {
+            if self.len >= self.cap {
+                self.grow();
+            }
+
+            let target_ptr: *mut u8 = self.ptr + self.len;
+            *target_ptr = byte;
+            self.len = self.len + 1;
+        }
+
+        pub fn get(&self, at: u64) -> Option<u8> {
+            if at >= self.len {
+                return Option::<u8>#None;
+            }
+            let target_ptr: *mut u8 = self.ptr + at;
+            return Option::<u8>#Some { value: *target_ptr };
+        }
+
+        pub fn get_unchecked(&self, at: u64) -> u8 {
+            let target_ptr: *mut u8 = self.ptr + at;
+            return *target_ptr;
+        }
+
+        pub fn set(&mut self, at: u64, byte: u8) -> bool {
+            if at >= self.len {
+                return false;
+            }
+            let target_ptr: *mut u8 = self.ptr + at;
+            *target_ptr = byte;
+            return true;
+        }
+
+        pub fn set_unchecked(&mut self, at: u64, byte: u8) {
+            let target_ptr: *mut u8 = self.ptr + at;
+            *target_ptr = byte;
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        pub fn cap(&self) -> u64 {
+            return self.cap;
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.len == 0;
+        }
+
+        pub fn clear(&mut self) {
+            self.len = 0;
+        }
+
+        fn grow(&mut self) with(Alloc) {
+            let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
+            self.ptr = grow::<u8>(self.ptr, new_cap);
+            self.cap = new_cap;
+        }
+
+        pub fn append_bytes(&mut self, other: &Bytes) with(Alloc) {
+            let i: u64 = 0;
+            while i < other.len {
+                self.push(other.get_unchecked(i));
+                i = i + 1;
+            }
+        }
+
+        /// Convert Bytes to String by transferring ownership of the buffer.
+        /// The Bytes value is consumed; no copy is made.
+        /// The caller is responsible for ensuring the bytes are valid text.
+        pub fn to_string(self) -> String {
+            let s: String = String { ptr: self.ptr, len: self.len, cap: self.cap };
+            return s;
+        }
+
+        pub fn drop(self) with(Alloc) {
+            dealloc::<u8>(self.ptr);
+        }
+    }
+
+    import std.test.{assert_eq};
+
+    #[test]
+    fn test_bytes_push_get() with(Alloc) -> i32 {
+        let mut b: Bytes = Bytes::new();
+        b.push(10);
+        b.push(20);
+        b.push(30);
+
+        if !assert_eq::<u64>(b.len(), 3, "len should be 3 after 3 pushes") {
+            b.drop();
+            return 1;
+        }
+        if !assert_eq::<u8>(b.get_unchecked(0), 10, "first byte should be 10") {
+            b.drop();
+            return 1;
+        }
+        if !assert_eq::<u8>(b.get_unchecked(1), 20, "second byte should be 20") {
+            b.drop();
+            return 1;
+        }
+        if !assert_eq::<u8>(b.get_unchecked(2), 30, "third byte should be 30") {
+            b.drop();
+            return 1;
+        }
+
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_bytes_growth() with(Alloc) -> i32 {
+        let mut b: Bytes = Bytes::with_capacity(2);
+
+        if !assert_eq::<u64>(b.cap(), 2, "initial cap should be 2") {
+            b.drop();
+            return 1;
+        }
+
+        b.push(1);
+        b.push(2);
+        b.push(3);
+
+        if !assert_eq::<u64>(b.len(), 3, "len should be 3") {
+            b.drop();
+            return 1;
+        }
+
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_bytes_append() with(Alloc) -> i32 {
+        let mut a: Bytes = Bytes::new();
+        a.push(1);
+        a.push(2);
+
+        let mut b: Bytes = Bytes::new();
+        b.push(3);
+        b.push(4);
+
+        a.append_bytes(&b);
+
+        if !assert_eq::<u64>(a.len(), 4, "combined len should be 4") {
+            a.drop();
+            b.drop();
+            return 1;
+        }
+        if !assert_eq::<u8>(a.get_unchecked(2), 3, "third byte should be 3 from appended") {
+            a.drop();
+            b.drop();
+            return 1;
+        }
+        if !assert_eq::<u8>(a.get_unchecked(3), 4, "fourth byte should be 4 from appended") {
+            a.drop();
+            b.drop();
+            return 1;
+        }
+
+        a.drop();
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_bytes_get_in_bounds() with(Alloc) -> i32 {
+        let mut b: Bytes = Bytes::new();
+        b.push(42);
+        let result: Option<u8> = b.get(0);
+        match result {
+            Option#Some { value } => {
+                if value != 42 {
+                    b.drop();
+                    return 1;
+                }
+            },
+            Option#None => {
+                b.drop();
+                return 1;
+            }
+        }
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_bytes_get_out_of_bounds() with(Alloc) -> i32 {
+        let b: Bytes = Bytes::new();
+        let result: Option<u8> = b.get(0);
+        match result {
+            Option#Some { value } => {
+                b.drop();
+                return 1;
+            },
+            Option#None => {
+                b.drop();
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_set_in_bounds() with(Alloc) -> i32 {
+        let mut b: Bytes = Bytes::new();
+        b.push(0);
+        let ok: bool = b.set(0, 42);
+        if !ok {
+            b.drop();
+            return 1;
+        }
+        if !assert_eq::<u8>(b.get_unchecked(0), 42, "set should have written 42") {
+            b.drop();
+            return 1;
+        }
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_set_out_of_bounds() with(Alloc) -> i32 {
+        let mut b: Bytes = Bytes::new();
+        let ok: bool = b.set(0, 42);
+        if ok {
+            b.drop();
+            return 1;
+        }
+        b.drop();
+        return 0;
+    }
+}

@@ -1,0 +1,5 @@
+// Tests that Resolve catches references to non-existent enums
+fn main() -> Int {
+    let x: Phantom = Phantom#Ghost { value: 1 };
+    return 0;
+}

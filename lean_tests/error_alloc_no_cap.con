@@ -1,0 +1,10 @@
+// Error: calling alloc() without Alloc capability
+struct Thing { val: Int }
+
+fn try_alloc() -> Heap<Thing> {
+    return alloc(Thing { val: 1 });
+}
+
+fn main() -> Int {
+    return 0;
+}

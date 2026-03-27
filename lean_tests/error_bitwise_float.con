@@ -1,0 +1,6 @@
+fn main() -> Int {
+    let x: f64 = 1.0;
+    let y: f64 = 2.0;
+    let z: f64 = x & y;
+    return 0;
+}

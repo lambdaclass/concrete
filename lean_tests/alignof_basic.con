@@ -1,0 +1,7 @@
+// Test alignof intrinsic
+fn main() -> Int {
+    let a1: Uint = alignof::<i32>();
+    let a2: Uint = alignof::<Int>();
+    // i32 align = 4, Int align = 8, total = 12
+    return (a1 + a2) as Int;
+}

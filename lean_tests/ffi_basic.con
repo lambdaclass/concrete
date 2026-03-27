@@ -1,0 +1,7 @@
+// FFI: calling extern fn requires Unsafe capability
+extern fn abs(x: Int) -> Int;
+
+fn main() with(Unsafe) -> Int {
+    let result: Int = abs(-42);
+    return result;
+}

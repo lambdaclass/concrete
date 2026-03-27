@@ -1,0 +1,13 @@
+// Test: basic Vec<Int> — new, push 3 ints, get, check length
+fn main() with(Std) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    vec_push(&mut v, 10);
+    vec_push(&mut v, 7);
+    vec_push(&mut v, 3);
+    let a: Int = vec_get(&v, 0);
+    let b: Int = vec_get(&v, 1);
+    let c: Int = vec_get(&v, 2);
+    let len: Int = vec_len(&v);
+    vec_free(v);
+    return a + b + c + len;
+}

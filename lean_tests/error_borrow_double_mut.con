@@ -1,0 +1,11 @@
+// Error: two simultaneous mutable borrows of same variable
+fn main() -> Int {
+    let mut x: Int = 10;
+    borrow mut x as r1 in R1 {
+        borrow mut x as r2 in R2 {
+            *r2 = 20;
+        }
+        *r1 = 30;
+    }
+    return x;
+}

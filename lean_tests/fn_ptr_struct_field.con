@@ -1,0 +1,12 @@
+struct Copy Callback {
+    f: fn(Int) -> Int,
+}
+
+fn double(x: Int) -> Int { return x * 2; }
+
+fn main() -> Int {
+    let cb: Callback = Callback { f: double };
+    let func: fn(Int) -> Int = cb.f;
+    let result: Int = func(21);
+    return result;
+}

@@ -1,0 +1,8 @@
+fn main() -> Int {
+    let mut i: Int = 0;
+    while i < 10 {
+        i = i + 1;
+        break 'nonexistent;
+    }
+    return i;
+}

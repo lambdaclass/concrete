@@ -1,0 +1,19 @@
+// Test: three nested while loops computing a sum
+fn main() -> Int {
+    let mut sum: Int = 0;
+    let mut i: Int = 0;
+    while i < 3 {
+        let mut j: Int = 0;
+        while j < 7 {
+            let mut k: Int = 0;
+            while k < 2 {
+                sum = sum + 1;
+                k = k + 1;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    // sum = 3 * 7 * 2 = 42
+    return sum;
+}

@@ -1,0 +1,29 @@
+// Test: allocas inside loops must be hoisted to entry block.
+// Without hoisting, each iteration grows the stack.
+// 200k iterations * 24 bytes = 4.8MB → stack overflow on 8MB stack.
+fn make_str() with(Alloc) -> String {
+    let mut s: String = "";
+    string_push_char(&mut s, 104);
+    string_push_char(&mut s, 105);
+    return s;
+}
+
+fn main() with(Std) -> Int {
+    let mut strings: Vec<String> = vec_new::<String>();
+    let mut i: Int = 0;
+    while i < 200000 {
+        let s: String = make_str();
+        vec_push::<String>(&mut strings, s);
+        i = i + 1;
+    }
+    let slen: Int = vec_len::<String>(&mut strings) as Int;
+    let mut si: Int = 0;
+    while si < slen {
+        let s: String = vec_get::<String>(&mut strings, si);
+        drop_string(s);
+        si = si + 1;
+    }
+    vec_free::<String>(strings);
+    // Return element count to prove it ran
+    return slen;
+}

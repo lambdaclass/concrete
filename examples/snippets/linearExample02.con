@@ -1,0 +1,23 @@
+mod LinearExampleStub {
+
+	struct Linear {
+	    x: i32,
+	    y: i32,
+	}
+	
+	fn main() -> i32 {
+		let mut xy: Linear = 
+                    Linear {
+                        x: 1,
+                        y: 0,
+                    };
+		// linear value is written/consumed
+		consume_x(&mut xy);
+		return xy.x;
+	}
+	
+	fn consume_x(value: & mut Linear) {
+		value.x = value.x + 1;
+	}
+	
+}

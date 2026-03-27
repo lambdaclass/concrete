@@ -1,0 +1,31 @@
+// Monomorphized trait dispatch with multiple types
+trait Measure {
+    fn measure(&self) -> Int;
+}
+
+struct Copy Box { w: Int, h: Int }
+struct Copy Circle { radius: Int }
+
+impl Measure for Box {
+    fn measure(&self) -> Int {
+        return self.w * self.h;
+    }
+}
+
+impl Measure for Circle {
+    fn measure(&self) -> Int {
+        return self.radius * self.radius * 3;
+    }
+}
+
+fn get_measure<T: Measure>(x: T) -> Int {
+    return x.measure();
+}
+
+fn main() -> Int {
+    let b: Box = Box { w: 5, h: 4 };
+    let c: Circle = Circle { radius: 3 };
+    let area: Int = get_measure(b);
+    let approx: Int = get_measure(c);
+    return area + approx;
+}

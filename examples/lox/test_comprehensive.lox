@@ -1,0 +1,67 @@
+// Arithmetic
+print 1 + 2;
+print 10 - 3;
+print 4 * 5;
+print 20 / 4;
+
+// Comparison
+print 1 < 2;
+print 3 > 1;
+print 2 >= 2;
+print 5 <= 4;
+print 1 == 1;
+print 1 != 2;
+
+// Logical
+print true and false;
+print true or false;
+print !true;
+
+// Variables
+var x = 42;
+print x;
+x = 100;
+print x;
+
+// Strings
+print "hello";
+var greeting = "world";
+print greeting;
+
+// Nil and booleans
+print nil;
+print true;
+print false;
+
+// If/else
+if (true) { print "yes"; } else { print "no"; }
+if (false) { print "yes"; } else { print "no"; }
+
+// While
+var i = 3;
+while (i > 0) { print i; i = i - 1; }
+
+// For
+for (var j = 0; j < 5; j = j + 1) { print j; }
+
+// Block scoping
+var a = "outer";
+{ var a = "inner"; print a; }
+print a;
+
+// Functions
+fun greet(name) { print name; }
+greet("Alice");
+
+fun add(a, b) { return a + b; }
+print add(10, 20);
+
+// Recursive
+fun fib(n) {
+  if (n <= 1) return n;
+  return fib(n - 1) + fib(n - 2);
+}
+print fib(10);
+
+// String concatenation
+print "hello" + " " + "world";

@@ -1,0 +1,11 @@
+struct Point { x: Int, y: Int }
+
+fn consume(p: Point) -> Int { return p.x + p.y; }
+fn read_x(p: &Point) -> Int { return p.x; }
+
+fn main() -> Int {
+    let p: Point = Point { x: 10, y: 20 };
+    let x: Int = consume(p);
+    let y: Int = read_x(&p);
+    return x + y;
+}

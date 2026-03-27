@@ -1,0 +1,19 @@
+// Test: error location in deeply nested code.
+// The error should point to the exact line inside the nesting,
+// not to a parent construct or sibling.
+fn main() -> Int {
+    let mut i: Int = 0;
+    while i < 10 {
+        if i > 5 {
+            if i > 7 {
+                let bad: Bool = 99;
+                i = i + 1;
+            } else {
+                i = i + 1;
+            }
+        } else {
+            i = i + 1;
+        }
+    }
+    return i;
+}

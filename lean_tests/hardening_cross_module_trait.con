@@ -1,0 +1,74 @@
+// Hardening test: cross-module trait dispatch.
+// Verifies that traits defined and implemented in one module work correctly
+// when called through imported functions from another module.
+// Note: trait definitions themselves are not importable across modules —
+// this is a known language limitation documented in the roadmap.
+// Expected output: 42
+
+mod Geometry {
+    pub struct Copy Box {
+        width: i32,
+        height: i32,
+    }
+
+    pub struct Copy Circle {
+        radius: i32,
+    }
+
+    trait Measurable {
+        fn measure(&self) -> i32;
+    }
+
+    impl Measurable for Box {
+        fn measure(&self) -> i32 {
+            return self.width + self.height;
+        }
+    }
+
+    impl Measurable for Circle {
+        fn measure(&self) -> i32 {
+            return self.radius * 3;
+        }
+    }
+
+    pub fn measure_box(b: &Box) -> i32 {
+        return b.measure();
+    }
+
+    pub fn measure_circle(c: &Circle) -> i32 {
+        return c.measure();
+    }
+
+    pub fn double_box(b: &Box) -> i32 {
+        return b.measure() * 2;
+    }
+}
+
+mod Main {
+    import Geometry.{ Box, Circle, measure_box, measure_circle, double_box };
+
+    fn main() with(Std) -> Int {
+        let b: Box = Box { width: 5, height: 7 };
+        let c: Circle = Circle { radius: 4 };
+
+        // Trait dispatch through imported functions
+        let bm: i32 = measure_box(&b);    // 5 + 7 = 12
+        if bm != 12 { return 1; }
+
+        let cm: i32 = measure_circle(&c);  // 4 * 3 = 12
+        if cm != 12 { return 2; }
+
+        let bd: i32 = double_box(&b);      // 12 * 2 = 24
+        if bd != 24 { return 3; }
+
+        // Access struct fields from imported types
+        if b.width != 5 { return 4; }
+        if c.radius != 4 { return 5; }
+
+        // bm(12) + cm(12) - bd(24) + b.width(5) + c.radius(4) + 33 = 42
+        let result: i32 = bm + cm - bd + b.width + c.radius + 33;
+        if result != 42 { return 6; }
+
+        return result as Int;
+    }
+}

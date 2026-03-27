@@ -1,0 +1,16 @@
+// Basic capability alias: cap IO = File + Console
+cap IO = File + Console;
+
+fn do_io() with(File) -> Int {
+    return 1;
+}
+
+fn use_alias() with(IO) -> Int {
+    let x: Int = do_io();
+    return x;
+}
+
+fn main() with(Std) -> Int {
+    let r: Int = use_alias();
+    return r;
+}

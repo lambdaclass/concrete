@@ -1,0 +1,10 @@
+trusted extern fn sin(x: Float64) -> Float64;
+trusted extern fn cos(x: Float64) -> Float64;
+
+fn main() -> Int {
+    let zero: Float64 = 0.0;
+    let s: Float64 = sin(zero);
+    let c: Float64 = cos(zero);
+    let result: Int = (s as Int) + (c as Int) * 10;
+    return result;
+}

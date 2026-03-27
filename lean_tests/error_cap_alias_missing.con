@@ -1,0 +1,15 @@
+// Cap alias doesn't include Network, so calling a Network function should fail
+cap IO = File + Console;
+
+fn needs_net() with(Network) -> Int {
+    return 1;
+}
+
+fn use_alias() with(IO) -> Int {
+    let x: Int = needs_net();
+    return x;
+}
+
+fn main() -> Int {
+    return 0;
+}

@@ -1,0 +1,11 @@
+// Test: match on integer hits default arm
+fn main() -> Int {
+    let x: Int = 99;
+    let mut result: Int = 0;
+    match x {
+        1 => { result = 10; },
+        2 => { result = 20; },
+        _ => { result = 42; },
+    }
+    return result;
+}

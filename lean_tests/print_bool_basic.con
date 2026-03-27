@@ -1,0 +1,29 @@
+// print_bool: use trusted extern fn to print via putchar
+trusted extern fn putchar(c: i32) -> i32;
+
+trusted fn print_str(s: &String) with(Console) {
+    let len: Int = string_length(s);
+    let mut i: Int = 0;
+    while i < len {
+        let ch: Int = string_char_at(s, i);
+        putchar(ch as i32);
+        i = i + 1;
+    }
+}
+
+trusted fn print_bool(x: bool) with(Console) {
+    if x {
+        let s: String = "true";
+        print_str(&s);
+        drop_string(s);
+    } else {
+        let s: String = "false";
+        print_str(&s);
+        drop_string(s);
+    }
+    putchar(10);
+}
+
+fn main() with(Std) {
+    print_bool(true);
+}

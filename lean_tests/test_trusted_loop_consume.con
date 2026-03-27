@@ -1,0 +1,29 @@
+// Test: trusted impl with pointer ops inside a loop
+// (pointer arithmetic on Copy fields is always fine, not a linearity issue)
+
+extern fn malloc(size: u64) -> *mut u8;
+extern fn free(ptr: *mut u8);
+
+struct Buf {
+    ptr: *mut u8,
+    len: u64,
+}
+
+trusted impl Buf {
+    fn free_entries(self) with(Alloc, Unsafe) {
+        let mut i: u64 = 0;
+        while i < self.len {
+            let p: *mut u8 = self.ptr + i;
+            let val: u8 = *p;
+            i = i + 1;
+        }
+        free(self.ptr);
+    }
+}
+
+fn main() with(Alloc, Unsafe) -> i32 {
+    let p: *mut u8 = malloc(4);
+    let b: Buf = Buf { ptr: p, len: 4 };
+    b.free_entries();
+    return 0;
+}

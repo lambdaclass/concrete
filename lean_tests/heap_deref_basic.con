@@ -1,0 +1,8 @@
+// *heap_ptr loads value from Heap<T> and frees the allocation
+struct Copy Pair { x: Int, y: Int }
+
+fn main() with(Std) -> Int {
+    let hp: Heap<Pair> = alloc(Pair { x: 10, y: 20 });
+    let p: Pair = *hp;
+    return p.x + p.y;
+}

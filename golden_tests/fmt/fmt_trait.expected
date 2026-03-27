@@ -1,0 +1,13 @@
+struct Msg {
+    val: Int,
+}
+
+trait Printable {
+    fn to_int(&self) -> Int;
+}
+
+impl Printable for Msg {
+    fn to_int(&self) -> Int {
+        return self.val;
+    }
+}

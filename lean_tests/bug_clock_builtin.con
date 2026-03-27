@@ -1,0 +1,12 @@
+// Regression test: clock_monotonic_ns (Bug 012).
+// Tests that monotonic clock returns a positive value (non-zero timestamp).
+// We avoid timing-sensitive monotonicity checks since they can be flaky
+// when the work between two calls is optimized away or runs too fast.
+// Expected output: 0
+
+fn main() with(Std) -> Int {
+    let t: Int = clock_monotonic_ns();
+    // A monotonic clock timestamp should always be positive
+    if t > 0 { return 0; }
+    return 1;
+}

@@ -1,0 +1,6 @@
+fn main() -> Int {
+    let x: Int = 1;
+    let shifted: Int = x << 5;
+    let back: Int = shifted >> 3;
+    return back;
+}

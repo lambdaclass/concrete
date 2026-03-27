@@ -1,0 +1,13 @@
+// Error: attempt to consume a linear variable reserved by defer
+// The checker should reject this because s is reserved by defer.
+fn consume_string(s: String) with(Alloc) -> i32 {
+    drop_string(s);
+    return 0;
+}
+
+fn main() with(Alloc) -> Int {
+    let s: String = "hello";
+    defer drop_string(s);
+    let _x: i32 = consume_string(s);
+    return 0;
+}

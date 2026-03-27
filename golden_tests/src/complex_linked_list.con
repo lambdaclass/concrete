@@ -1,0 +1,13 @@
+enum IntList { Nil { }, Cons { head: Int } }
+
+fn value(l: IntList) -> Int {
+    match l {
+        IntList#Nil { } => { return 0; },
+        IntList#Cons { head } => { return head; },
+    }
+}
+
+fn main() -> Int {
+    let l: IntList = IntList#Cons { head: 42 };
+    return value(l);
+}

@@ -1,0 +1,206 @@
+// Integration test: text processing pipeline.
+// Exercises: String builtins, Vec<Int>, enums, pattern matching, traits,
+// impl methods, function composition, capability propagation, Copy types.
+//
+// A tokenizer that scans a string, classifies characters, and computes
+// statistics. Uses parallel Vec<Int> arrays to avoid the Vec<Struct> bug.
+
+pub enum Copy TokenKind {
+    Word {},
+    Number {},
+    Punct {},
+}
+
+trait HasLength {
+    fn length(&self) -> Int;
+}
+
+pub struct Copy Span {
+    start: Int,
+    len: Int,
+}
+
+impl HasLength for Span {
+    fn length(&self) -> Int {
+        return self.len;
+    }
+}
+
+// Pure: check if an ASCII code is a digit (48-57)
+fn is_digit(ch: Int) -> bool {
+    return ch >= 48 && ch <= 57;
+}
+
+// Pure: check if an ASCII code is a letter (a-z, A-Z)
+fn is_letter(ch: Int) -> bool {
+    return (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122);
+}
+
+// Pure: check if an ASCII code is whitespace
+fn is_space(ch: Int) -> bool {
+    return ch == 32 || ch == 9 || ch == 10;
+}
+
+// Tokenize into parallel arrays: starts, lengths, and kinds (as ints).
+// Kind encoding: 0=Word, 1=Number, 2=Punct
+fn tokenize(input: &String) with(Alloc) -> Vec<Int> {
+    // Encode each token as 3 consecutive ints: start, length, kind
+    let mut tokens: Vec<Int> = vec_new::<Int>();
+    let len: Int = string_length(input);
+    let mut i: Int = 0;
+
+    while i < len {
+        let ch: Int = string_char_at(input, i);
+
+        if is_space(ch) {
+            i = i + 1;
+        } else if is_letter(ch) {
+            let start: Int = i;
+            while i < len {
+                let c: Int = string_char_at(input, i);
+                if !is_letter(c) { break; }
+                i = i + 1;
+            }
+            vec_push::<Int>(&mut tokens, start);
+            vec_push::<Int>(&mut tokens, i - start);
+            vec_push::<Int>(&mut tokens, 0);
+        } else if is_digit(ch) {
+            let start: Int = i;
+            while i < len {
+                let c: Int = string_char_at(input, i);
+                if !is_digit(c) { break; }
+                i = i + 1;
+            }
+            vec_push::<Int>(&mut tokens, start);
+            vec_push::<Int>(&mut tokens, i - start);
+            vec_push::<Int>(&mut tokens, 1);
+        } else {
+            vec_push::<Int>(&mut tokens, i);
+            vec_push::<Int>(&mut tokens, 1);
+            vec_push::<Int>(&mut tokens, 2);
+            i = i + 1;
+        }
+    }
+    return tokens;
+}
+
+// Number of tokens (each token = 3 ints)
+fn token_count(tokens: &Vec<Int>) -> Int {
+    return vec_len::<Int>(tokens) / 3;
+}
+
+// Get kind of token at index
+fn token_kind(tokens: &Vec<Int>, idx: Int) -> Int {
+    return vec_get::<Int>(tokens, idx * 3 + 2);
+}
+
+// Get length of token at index
+fn token_len(tokens: &Vec<Int>, idx: Int) -> Int {
+    return vec_get::<Int>(tokens, idx * 3 + 1);
+}
+
+// Get start of token at index
+fn token_start(tokens: &Vec<Int>, idx: Int) -> Int {
+    return vec_get::<Int>(tokens, idx * 3);
+}
+
+// Count tokens matching a given kind
+fn count_by_kind(tokens: &Vec<Int>, kind: Int) -> Int {
+    let n: Int = token_count(tokens);
+    let mut count: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        if token_kind(tokens, i) == kind {
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+// Find the longest token
+fn longest_token(tokens: &Vec<Int>) -> Int {
+    let n: Int = token_count(tokens);
+    let mut best: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let l: Int = token_len(tokens, i);
+        if l > best { best = l; }
+        i = i + 1;
+    }
+    return best;
+}
+
+// Parse a number from the source string at given span
+fn parse_number_at(input: &String, start: Int, len: Int) -> Int {
+    let mut val: Int = 0;
+    let mut i: Int = 0;
+    while i < len {
+        let ch: Int = string_char_at(input, start + i);
+        val = val * 10 + (ch - 48);
+        i = i + 1;
+    }
+    return val;
+}
+
+// Sum all number tokens
+fn sum_numbers(input: &String, tokens: &Vec<Int>) -> Int {
+    let n: Int = token_count(tokens);
+    let mut total: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        if token_kind(tokens, i) == 1 {
+            total = total + parse_number_at(input, token_start(tokens, i), token_len(tokens, i));
+        }
+        i = i + 1;
+    }
+    return total;
+}
+
+// Use trait dispatch for span measurement
+fn measure_span<T: HasLength>(s: T) -> Int {
+    return s.length();
+}
+
+fn main() with(Std) -> Int {
+    let input: String = "hello 42 world 8 foo bar";
+
+    let tokens: Vec<Int> = tokenize(&input);
+    let total: Int = token_count(&tokens);
+
+    // 6 tokens: hello, 42, world, 8, foo, bar
+    if total != 6 { vec_free::<Int>(tokens); drop_string(input); return 1; }
+
+    // 4 words (kind=0), 2 numbers (kind=1), 0 punct (kind=2)
+    let words: Int = count_by_kind(&tokens, 0);
+    let nums: Int = count_by_kind(&tokens, 1);
+    let puncts: Int = count_by_kind(&tokens, 2);
+
+    if words != 4 { vec_free::<Int>(tokens); drop_string(input); return 2; }
+    if nums != 2 { vec_free::<Int>(tokens); drop_string(input); return 3; }
+    if puncts != 0 { vec_free::<Int>(tokens); drop_string(input); return 4; }
+
+    // Longest token: "hello" or "world" = 5
+    if longest_token(&tokens) != 5 { vec_free::<Int>(tokens); drop_string(input); return 5; }
+
+    // Sum numbers: 42 + 8 = 50
+    if sum_numbers(&input, &tokens) != 50 { vec_free::<Int>(tokens); drop_string(input); return 6; }
+
+    // Test trait dispatch on Span
+    let sp: Span = Span { start: 0, len: 5 };
+    if measure_span(sp) != 5 { vec_free::<Int>(tokens); drop_string(input); return 7; }
+
+    // Test with punctuation
+    let input2: String = "x+y=42";
+    let tokens2: Vec<Int> = tokenize(&input2);
+    // x, +, y, =, 42 => 5 tokens
+    if token_count(&tokens2) != 5 { vec_free::<Int>(tokens); drop_string(input); vec_free::<Int>(tokens2); drop_string(input2); return 8; }
+    // 2 words, 1 number, 2 punct
+    if count_by_kind(&tokens2, 2) != 2 { vec_free::<Int>(tokens); drop_string(input); vec_free::<Int>(tokens2); drop_string(input2); return 9; }
+
+    vec_free::<Int>(tokens);
+    drop_string(input);
+    vec_free::<Int>(tokens2);
+    drop_string(input2);
+    return 0;
+}

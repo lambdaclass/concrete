@@ -1,0 +1,11 @@
+// Test: pointer round-trip: ref -> *const -> deref
+trusted fn round_trip(p: *const i32) -> i32 {
+    return *p;
+}
+
+fn main() with(Unsafe) -> Int {
+    let x: i32 = 42;
+    let p: *const i32 = &x as *const i32;
+    let val: i32 = round_trip(p);
+    return val as Int;
+}

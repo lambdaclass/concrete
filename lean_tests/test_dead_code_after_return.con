@@ -1,0 +1,7 @@
+// Test: dead code after unconditional return should not affect result
+// Expected: 42
+fn main() -> Int {
+    return 42;
+    let x: Int = 999;
+    return x;
+}

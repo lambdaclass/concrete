@@ -1,0 +1,9 @@
+fn main() -> Int {
+    let mut sum: Int = 0;
+    let mut i: Int = 1;
+    while i <= 100 {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
+}

@@ -1,0 +1,13 @@
+struct Box { value: Int }
+
+fn set_value(b: &mut Box, v: Int) {
+    b.value = v;
+}
+
+fn consume(b: Box) -> Int { return b.value; }
+
+fn main() -> Int {
+    let mut b: Box = Box { value: 0 };
+    set_value(&mut b, 99);
+    return consume(b);
+}

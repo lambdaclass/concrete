@@ -1,0 +1,5 @@
+mod Simple {
+    fn main(a: invalid_type) -> i32 {
+        return 0;
+    }
+}

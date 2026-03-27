@@ -1,0 +1,23 @@
+// Methods can declare capabilities
+struct Logger { level: Int }
+
+impl Logger {
+    fn log(&self) with(Console) -> Int {
+        return self.level;
+    }
+}
+
+fn consume_logger(l: Logger) -> Int {
+    return l.level;
+}
+
+fn run() with(Console) -> Int {
+    let l: Logger = Logger { level: 5 };
+    let v: Int = l.log();
+    let dummy: Int = consume_logger(l);
+    return v;
+}
+
+fn main() -> Int {
+    return 0;
+}

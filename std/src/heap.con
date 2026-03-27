@@ -1,0 +1,380 @@
+mod heap {
+    import std.alloc.{grow,dealloc};
+    import std.math.{max};
+    import std.option.{Option};
+
+    pub struct BinaryHeap<T> {
+        data: *mut T,
+        len: u64,
+        cap: u64,
+        cmp_fn: fn(&T, &T) -> bool,
+    }
+
+    trusted impl<T> BinaryHeap<T> {
+        /// Create a new heap. cmp_fn returns true if a has higher priority than b.
+        /// For a max-heap of integers: fn(a, b) { return *a > *b; }
+        /// For a min-heap: fn(a, b) { return *a < *b; }
+        pub fn new(cmp_fn: fn(&T, &T) -> bool) -> BinaryHeap<T> {
+            let h: BinaryHeap<T> = BinaryHeap::<T> {
+                data: 0 as *mut T,
+                len: 0,
+                cap: 0,
+                cmp_fn: cmp_fn,
+            };
+            return h;
+        }
+
+        pub fn push(&mut self, value: T) with(Alloc) {
+            if self.len >= self.cap {
+                self.grow();
+            }
+            let target: *mut T = self.data + self.len;
+            *target = value;
+            self.len = self.len + 1;
+            self.sift_up(self.len - 1);
+        }
+
+        pub fn pop(&mut self) -> Option<T> {
+            if self.len == 0 {
+                return Option::<T>#None;
+            }
+            if self.len == 1 {
+                self.len = 0;
+                let only_ptr: *mut T = self.data;
+                return Option::<T>#Some { value: *only_ptr };
+            }
+            // Swap first and last
+            let root_ptr: *mut T = self.data;
+            let first: T = *root_ptr;
+            self.len = self.len - 1;
+            let last_ptr: *mut T = self.data + self.len;
+            *root_ptr = *last_ptr;
+            self.sift_down(0);
+            return Option::<T>#Some { value: first };
+        }
+
+        pub fn peek(&self) -> Option<&T> {
+            if self.len == 0 {
+                return Option::<&T>#None;
+            }
+            return Option::<&T>#Some { value: self.data as &T };
+        }
+
+        fn sift_up(&mut self, idx: u64) {
+            let cmp: fn(&T, &T) -> bool = self.cmp_fn;
+            let i: u64 = idx;
+            while i > 0 {
+                let parent: u64 = (i - 1) / 2;
+                let i_ptr: *mut T = self.data + i;
+                let p_ptr: *mut T = self.data + parent;
+                if cmp(i_ptr as &T, p_ptr as &T) {
+                    // Swap
+                    let tmp: T = *i_ptr;
+                    *i_ptr = *p_ptr;
+                    *p_ptr = tmp;
+                    i = parent;
+                } else {
+                    return;
+                }
+            }
+        }
+
+        fn sift_down(&mut self, idx: u64) {
+            let cmp: fn(&T, &T) -> bool = self.cmp_fn;
+            let i: u64 = idx;
+            while true {
+                let left: u64 = 2 * i + 1;
+                let right: u64 = 2 * i + 2;
+                let best: u64 = i;
+
+                if left < self.len {
+                    let best_ptr: *mut T = self.data + best;
+                    let left_ptr: *mut T = self.data + left;
+                    if cmp(left_ptr as &T, best_ptr as &T) {
+                        best = left;
+                    }
+                }
+                if right < self.len {
+                    let best_ptr: *mut T = self.data + best;
+                    let right_ptr: *mut T = self.data + right;
+                    if cmp(right_ptr as &T, best_ptr as &T) {
+                        best = right;
+                    }
+                }
+
+                if best == i {
+                    return;
+                }
+
+                // Swap
+                let i_ptr: *mut T = self.data + i;
+                let b_ptr: *mut T = self.data + best;
+                let tmp: T = *i_ptr;
+                *i_ptr = *b_ptr;
+                *b_ptr = tmp;
+                i = best;
+            }
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.len == 0;
+        }
+
+        pub fn clear(&mut self) {
+            self.len = 0;
+        }
+
+        fn grow(&mut self) with(Alloc) {
+            let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
+            self.data = grow::<T>(self.data, new_cap);
+            self.cap = new_cap;
+        }
+
+        pub fn drop(self) with(Alloc) {
+            if self.cap > 0 {
+                dealloc(self.data);
+            }
+        }
+    }
+
+    fn max_cmp(a: &i32, b: &i32) -> bool {
+        return *a > *b;
+    }
+
+    fn min_cmp(a: &i32, b: &i32) -> bool {
+        return *a < *b;
+    }
+
+    import std.test.{assert_eq};
+
+    #[test]
+    fn test_max_heap_basic() with(Alloc) -> i32 {
+        let mut h: BinaryHeap<i32> = BinaryHeap::<i32>::new(max_cmp);
+        h.push(10);
+        h.push(30);
+        h.push(20);
+
+        if !assert_eq::<u64>(h.len(), 3, "len should be 3") {
+            h.drop();
+            return 1;
+        }
+
+        // Peek should be max
+        let pk: Option<&i32> = h.peek();
+        match pk {
+            Option#Some { value } => {
+                if *value != 30 {
+                    h.drop();
+                    return 1;
+                }
+            },
+            Option#None => { h.drop(); return 1; }
+        }
+
+        // Pop in descending order
+        let r1: Option<i32> = h.pop();
+        match r1 {
+            Option#Some { value } => {
+                if value != 30 { h.drop(); return 1; }
+            },
+            Option#None => { h.drop(); return 1; }
+        }
+        let r2: Option<i32> = h.pop();
+        match r2 {
+            Option#Some { value } => {
+                if value != 20 { h.drop(); return 1; }
+            },
+            Option#None => { h.drop(); return 1; }
+        }
+        let r3: Option<i32> = h.pop();
+        match r3 {
+            Option#Some { value } => {
+                if value != 10 { h.drop(); return 1; }
+            },
+            Option#None => { h.drop(); return 1; }
+        }
+
+        h.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_min_heap_basic() with(Alloc) -> i32 {
+        let mut h: BinaryHeap<i32> = BinaryHeap::<i32>::new(min_cmp);
+        h.push(30);
+        h.push(10);
+        h.push(20);
+
+        let r1: Option<i32> = h.pop();
+        match r1 {
+            Option#Some { value } => {
+                if value != 10 { h.drop(); return 1; }
+            },
+            Option#None => { h.drop(); return 1; }
+        }
+        let r2: Option<i32> = h.pop();
+        match r2 {
+            Option#Some { value } => {
+                if value != 20 { h.drop(); return 1; }
+            },
+            Option#None => { h.drop(); return 1; }
+        }
+
+        h.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_heap_pop_empty() with(Alloc) -> i32 {
+        let mut h: BinaryHeap<i32> = BinaryHeap::<i32>::new(max_cmp);
+        let r: Option<i32> = h.pop();
+        match r {
+            Option#Some { value } => { h.drop(); return 1; },
+            Option#None => {}
+        }
+        h.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_heap_stress() with(Alloc) -> i32 {
+        let mut h: BinaryHeap<i32> = BinaryHeap::<i32>::new(max_cmp);
+
+        // Push 50 elements in scrambled order
+        let i: i32 = 0;
+        while i < 50 {
+            h.push((i * 37) & 127);
+            i = i + 1;
+        }
+
+        if !assert_eq::<u64>(h.len(), 50, "len should be 50") {
+            h.drop();
+            return 1;
+        }
+
+        // Pop all and verify we get 50 elements
+        let count: u64 = 0;
+        while h.len() > 0 {
+            h.pop();
+            count = count + 1;
+        }
+
+        h.drop();
+        if count != 50 { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_heap_sorted_output() with(Alloc) -> i32 {
+        // Verify max-heap: peek is max, and all 10 elements can be popped
+        let mut h: BinaryHeap<i32> = BinaryHeap::<i32>::new(max_cmp);
+        h.push(5);
+        h.push(1);
+        h.push(9);
+        h.push(3);
+        h.push(7);
+        h.push(2);
+        h.push(8);
+        h.push(4);
+        h.push(6);
+        h.push(10);
+
+        if !assert_eq::<u64>(h.len(), 10, "len should be 10") {
+            h.drop();
+            return 1;
+        }
+
+        // Pop all 10 and count
+        let count: u64 = 0;
+        while h.len() > 0 {
+            h.pop();
+            count = count + 1;
+        }
+
+        h.drop();
+        if count != 10 { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_heap_push_pop_interleaved() with(Alloc) -> i32 {
+        // Interleave push and pop, verify heap property holds
+        let mut h: BinaryHeap<i32> = BinaryHeap::<i32>::new(max_cmp);
+        h.push(10);
+        h.push(20);
+        // Pop max (should be 20)
+        let r1: Option<i32> = h.pop();
+        match r1 {
+            Option#Some { value } => {
+                if value != 20 { h.drop(); return 1; }
+            },
+            Option#None => { h.drop(); return 1; }
+        }
+        h.push(15);
+        h.push(25);
+        // Pop max (should be 25)
+        let r2: Option<i32> = h.pop();
+        match r2 {
+            Option#Some { value } => {
+                if value != 25 { h.drop(); return 1; }
+            },
+            Option#None => { h.drop(); return 1; }
+        }
+        // Remaining: 10, 15 — pop should give 15 then 10
+        let r3: Option<i32> = h.pop();
+        match r3 {
+            Option#Some { value } => {
+                if value != 15 { h.drop(); return 1; }
+            },
+            Option#None => { h.drop(); return 1; }
+        }
+        let r4: Option<i32> = h.pop();
+        match r4 {
+            Option#Some { value } => {
+                if value != 10 { h.drop(); return 1; }
+            },
+            Option#None => { h.drop(); return 1; }
+        }
+        h.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_heap_peek_empty() with(Alloc) -> i32 {
+        let h: BinaryHeap<i32> = BinaryHeap::<i32>::new(max_cmp);
+        let r: Option<&i32> = h.peek();
+        match r {
+            Option#Some { value } => { h.drop(); return 1; },
+            Option#None => {}
+        }
+        h.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_heap_clear_reuse() with(Alloc) -> i32 {
+        let mut h: BinaryHeap<i32> = BinaryHeap::<i32>::new(max_cmp);
+        h.push(10);
+        h.push(20);
+        h.push(30);
+        h.clear();
+        if h.len() != 0 { h.drop(); return 1; }
+        if h.is_empty() == false { h.drop(); return 1; }
+        // reuse after clear
+        h.push(99);
+        if h.len() != 1 { h.drop(); return 1; }
+        let r: Option<&i32> = h.peek();
+        match r {
+            Option#Some { value } => {
+                if *value != 99 { h.drop(); return 1; }
+            },
+            Option#None => { h.drop(); return 1; }
+        }
+        h.drop();
+        return 0;
+    }
+}

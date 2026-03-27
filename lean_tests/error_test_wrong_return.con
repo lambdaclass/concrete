@@ -1,0 +1,6 @@
+mod error_test_wrong_return {
+    #[test]
+    fn test_bad() -> bool {
+        return true;
+    }
+}

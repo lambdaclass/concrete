@@ -1,0 +1,51 @@
+// Regression test: string_push_char and string_append (Bug 011).
+// Tests in-place string mutation inside loops.
+// Expected output: 0
+
+fn main() with(Std) -> Int {
+    let mut s: String = "";
+    let mut i: Int = 0;
+    while i < 5 {
+        string_push_char(&mut s, 65 + i);
+        i = i + 1;
+    }
+    string_append(&mut s, &"!");
+    if !string_eq(&s, &"ABCDE!") {
+        drop_string(s);
+        return 1;
+    }
+
+    // Test string_substr(start, len) vs string_slice(start, end)
+    // string_substr(&s, 2, 3) should give "CDE" (3 chars starting at index 2)
+    let sub: String = string_substr(&s, 2, 3);
+    if !string_eq(&sub, &"CDE") {
+        drop_string(sub);
+        drop_string(s);
+        return 2;
+    }
+    drop_string(sub);
+
+    // string_slice(&s, 2, 5) should also give "CDE" (chars from index 2 to 5)
+    let slc: String = string_slice(&s, 2, 5);
+    if !string_eq(&slc, &"CDE") {
+        drop_string(slc);
+        drop_string(s);
+        return 3;
+    }
+    drop_string(slc);
+
+    // string_substr(&s, 0, 2) should give "AB" (2 chars from start)
+    // string_slice(&s, 0, 2) should also give "AB"
+    // These agree when start=0, but let's test a case that would differ
+    // if substr were still aliased: substr(&s, 3, 2) = "DE", slice(&s, 3, 2) = "" (end < start)
+    let sub2: String = string_substr(&s, 3, 2);
+    if !string_eq(&sub2, &"DE") {
+        drop_string(sub2);
+        drop_string(s);
+        return 4;
+    }
+    drop_string(sub2);
+
+    drop_string(s);
+    return 0;
+}

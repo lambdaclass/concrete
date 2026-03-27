@@ -1,0 +1,24 @@
+// Regression: char->Int and bool->Int casts must use zext, not alloca reinterpret.
+// Bug: isIntegerTy excluded char and bool, so casts fell through to an
+// alloca store/load hack that read garbage (store i8, load i64).
+fn char_to_int(c: char) -> i32 {
+    return c as i32;
+}
+
+fn bool_to_int(b: bool) -> i32 {
+    if b { return 1; }
+    return 0;
+}
+
+fn main() -> i32 {
+    // 'A' = 65, '0' = 48;  65 - 48 = 17
+    let a: i32 = char_to_int('A');
+    let z: i32 = char_to_int('0');
+    let diff: i32 = a - z;
+
+    // bool cast: true = 1
+    let t: i32 = bool_to_int(true);
+
+    // 17 + 1 = 18, plus 24 = 42
+    return diff + t + 24;
+}

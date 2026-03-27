@@ -1,0 +1,34 @@
+// Complex test: heap-based linked structure
+// Demonstrates Heap<T> fields in structs and chained traversal
+// 10 + 20 + 12 = 42
+struct Leaf { value: Int }
+
+struct Mid {
+    value: Int,
+    next: Heap<Leaf>
+}
+
+struct Head {
+    value: Int,
+    next: Heap<Mid>
+}
+
+fn sum_chain(h: Heap<Head>) with(Alloc) -> Int {
+    let v1: Int = h->value;
+    let mid: Heap<Mid> = h->next;
+    let v2: Int = mid->value;
+    let leaf: Heap<Leaf> = mid->next;
+    let v3: Int = leaf->value;
+    free(leaf);
+    free(mid);
+    free(h);
+    return v1 + v2 + v3;
+}
+
+fn main() with(Std) -> Int {
+    let leaf: Heap<Leaf> = alloc(Leaf { value: 12 });
+    let mid: Heap<Mid> = alloc(Mid { value: 20, next: leaf });
+    let head: Heap<Head> = alloc(Head { value: 10, next: mid });
+    let result: Int = sum_chain(head);
+    return result;
+}

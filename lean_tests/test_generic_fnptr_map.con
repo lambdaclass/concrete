@@ -1,0 +1,151 @@
+// Test: generic struct with fn pointer fields, linear values consumed in loops.
+// This exercises the same pattern as HashMap but avoids the builtin intercept.
+
+extern fn malloc(size: u64) -> *mut u8;
+extern fn free(ptr: *mut u8);
+extern fn memset(ptr: *mut u8, val: i32, size: u64) -> *mut u8;
+
+fn alloc_i32(cap: u64) with(Alloc, Unsafe) -> *mut i32 {
+    return malloc(cap * 4) as *mut i32;
+}
+
+fn alloc_u8(cap: u64) with(Alloc, Unsafe) -> *mut u8 {
+    return malloc(cap) as *mut u8;
+}
+
+trusted fn hash_i32(key: &i32) -> u64 {
+    let k: u64 = *key as u64;
+    let mut h: u64 = k * 0x9E3779B97F4A7C15;
+    h = h ^ (h >> 32);
+    return h;
+}
+
+trusted fn eq_i32(a: &i32, b: &i32) -> bool {
+    return *a == *b;
+}
+
+// Named "IntMap" to avoid HashMap builtin intercept
+struct IntMap {
+    keys:    *mut i32,
+    values:  *mut i32,
+    flags:   *mut u8,
+    len:     u64,
+    cap:     u64,
+    hash_fn: fn(&i32) -> u64,
+    eq_fn:   fn(&i32, &i32) -> bool,
+}
+
+trusted impl IntMap {
+    pub fn new(hash_fn: fn(&i32) -> u64, eq_fn: fn(&i32, &i32) -> bool) with(Alloc, Unsafe) -> IntMap {
+        let cap: u64 = 16;
+        let keys: *mut i32 = alloc_i32(cap);
+        let values: *mut i32 = alloc_i32(cap);
+        let flags: *mut u8 = alloc_u8(cap);
+        memset(flags as *mut u8, 0, cap);
+        let m: IntMap = IntMap {
+            keys: keys,
+            values: values,
+            flags: flags,
+            len: 0,
+            cap: cap,
+            hash_fn: hash_fn,
+            eq_fn: eq_fn,
+        };
+        return m;
+    }
+
+    pub fn len(&self) -> u64 {
+        return self.len;
+    }
+
+    pub fn contains(&self, key: &i32) with(Unsafe) -> bool {
+        let idx: u64 = self.find_slot(key);
+        let flag_ptr: *mut u8 = self.flags + idx;
+        let flag: u8 = *flag_ptr;
+        return flag == 1;
+    }
+
+    pub fn insert(&mut self, key: i32, value: i32) with(Alloc, Unsafe) {
+        let hash_f: fn(&i32) -> u64 = self.hash_fn;
+        let h: u64 = hash_f(&key);
+        let mask: u64 = self.cap - 1;
+        let mut idx: u64 = h & mask;
+
+        while true {
+            let flag_ptr: *mut u8 = self.flags + idx;
+            let flag: u8 = *flag_ptr;
+            if flag == 0 || flag == 2 {
+                let key_ptr: *mut i32 = self.keys + idx;
+                *key_ptr = key;
+                let val_ptr: *mut i32 = self.values + idx;
+                *val_ptr = value;
+                *flag_ptr = 1;
+                self.len = self.len + 1;
+                return;
+            }
+            if flag == 1 {
+                let key_ptr: *mut i32 = self.keys + idx;
+                let eq_f: fn(&i32, &i32) -> bool = self.eq_fn;
+                if eq_f(key_ptr as &i32, &key) {
+                    let val_ptr: *mut i32 = self.values + idx;
+                    *val_ptr = value;
+                    *key_ptr = key;
+                    return;
+                }
+            }
+            idx = (idx + 1) & mask;
+        }
+    }
+
+    fn find_slot(&self, key: &i32) with(Unsafe) -> u64 {
+        let hash_f: fn(&i32) -> u64 = self.hash_fn;
+        let h: u64 = hash_f(key);
+        let mask: u64 = self.cap - 1;
+        let mut idx: u64 = h & mask;
+
+        while true {
+            let flag_ptr: *mut u8 = self.flags + idx;
+            let flag: u8 = *flag_ptr;
+            if flag == 0 {
+                return idx;
+            }
+            if flag == 1 {
+                let key_ptr: *mut i32 = self.keys + idx;
+                let eq_f: fn(&i32, &i32) -> bool = self.eq_fn;
+                if eq_f(key_ptr as &i32, key) {
+                    return idx;
+                }
+            }
+            idx = (idx + 1) & mask;
+        }
+        return 0;
+    }
+
+    pub fn drop(self) with(Alloc, Unsafe) {
+        free(self.keys as *mut u8);
+        free(self.values as *mut u8);
+        free(self.flags as *mut u8);
+    }
+}
+
+fn main() with(Alloc, Unsafe) -> i32 {
+    let mut m: IntMap = IntMap::new(hash_i32, eq_i32);
+    let k1: i32 = 1;
+    let k2: i32 = 2;
+    let k3: i32 = 3;
+    m.insert(1, 10);
+    m.insert(2, 20);
+    m.insert(3, 30);
+
+    if m.len() != 3 { m.drop(); return 1; }
+    if !(m.contains(&k1)) { m.drop(); return 1; }
+    if !(m.contains(&k2)) { m.drop(); return 1; }
+    if !(m.contains(&k3)) { m.drop(); return 1; }
+
+    // Overwrite
+    m.insert(1, 99);
+    if m.len() != 3 { m.drop(); return 1; }
+
+    m.drop();
+    return 0;
+}

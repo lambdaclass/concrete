@@ -1,0 +1,379 @@
+// convm — a stack-based bytecode VM in Concrete
+//
+// Demonstrates: tight dispatch loop, stack manipulation, function calls,
+// conditional branching, and integer arithmetic under capability tracking.
+//
+// Opcodes (i32):
+//   0  HALT       — stop execution
+//   1  PUSH imm   — push immediate value
+//   2  POP        — discard top of stack
+//   3  DUP        — duplicate top of stack
+//   4  SWAP       — swap top two
+//   5  ADD        — pop two, push sum
+//   6  SUB        — pop two, push difference (second - first)
+//   7  MUL        — pop two, push product
+//   8  DIV        — pop two, push quotient
+//   9  MOD        — pop two, push remainder
+//  10  EQ         — pop two, push 1 if equal, else 0
+//  11  LT         — pop two, push 1 if second < first, else 0
+//  12  GT         — pop two, push 1 if second > first, else 0
+//  13  JMP addr   — unconditional jump
+//  14  JZ  addr   — jump if top is zero (pops)
+//  15  JNZ addr   — jump if top is nonzero (pops)
+//  16  CALL addr  — push return address, jump to addr
+//  17  RET        — pop return address, jump back
+//  18  PRINT      — print top of stack (does not pop)
+//  21  NEG        — negate top of stack
+
+// --- Opcodes ---
+
+fn op_halt() -> i32 { return 0; }
+fn op_push() -> i32 { return 1; }
+fn op_pop() -> i32 { return 2; }
+fn op_dup() -> i32 { return 3; }
+fn op_swap() -> i32 { return 4; }
+fn op_add() -> i32 { return 5; }
+fn op_sub() -> i32 { return 6; }
+fn op_mul() -> i32 { return 7; }
+fn op_div() -> i32 { return 8; }
+fn op_mod() -> i32 { return 9; }
+fn op_eq() -> i32 { return 10; }
+fn op_lt() -> i32 { return 11; }
+fn op_gt() -> i32 { return 12; }
+fn op_jmp() -> i32 { return 13; }
+fn op_jz() -> i32 { return 14; }
+fn op_jnz() -> i32 { return 15; }
+fn op_call() -> i32 { return 16; }
+fn op_ret() -> i32 { return 17; }
+fn op_print() -> i32 { return 18; }
+fn op_neg() -> i32 { return 21; }
+
+// --- VM State ---
+// Stack and call stack use Vec<i32>, program is Vec<i32>.
+
+fn vm_run(program: &mut Vec<i32>) with(Console, Alloc) -> i32 {
+    let mut stack: Vec<i32> = vec_new::<i32>();
+    let mut callstack: Vec<i32> = vec_new::<i32>();
+    let prog_len: i32 = vec_len::<i32>(program) as i32;
+    let mut ip: i32 = 0;
+    let mut running: i32 = 1;
+    let mut result: i32 = 0;
+
+    while running == 1 && ip < prog_len {
+        let instr: i32 = vec_get::<i32>(program, ip as Int);
+
+        if instr == 0 {
+            // HALT
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            if sp > 0 {
+                result = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            }
+            running = 0;
+        } else if instr == 1 {
+            // PUSH imm
+            ip = ip + 1;
+            let val: i32 = vec_get::<i32>(program, ip as Int);
+            vec_push::<i32>(&mut stack, val);
+            ip = ip + 1;
+        } else if instr == 2 {
+            // POP
+            vec_pop::<i32>(&mut stack);
+            ip = ip + 1;
+        } else if instr == 3 {
+            // DUP
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let top: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            vec_push::<i32>(&mut stack, top);
+            ip = ip + 1;
+        } else if instr == 4 {
+            // SWAP
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let a: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            let b: i32 = vec_get::<i32>(&mut stack, (sp - 2) as Int);
+            vec_set::<i32>(&mut stack, (sp - 1) as Int, b);
+            vec_set::<i32>(&mut stack, (sp - 2) as Int, a);
+            ip = ip + 1;
+        } else if instr == 5 {
+            // ADD
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let a: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            let b: i32 = vec_get::<i32>(&mut stack, (sp - 2) as Int);
+            vec_pop::<i32>(&mut stack);
+            vec_set::<i32>(&mut stack, (sp - 2) as Int, b + a);
+            ip = ip + 1;
+        } else if instr == 6 {
+            // SUB
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let a: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            let b: i32 = vec_get::<i32>(&mut stack, (sp - 2) as Int);
+            vec_pop::<i32>(&mut stack);
+            vec_set::<i32>(&mut stack, (sp - 2) as Int, b - a);
+            ip = ip + 1;
+        } else if instr == 7 {
+            // MUL
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let a: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            let b: i32 = vec_get::<i32>(&mut stack, (sp - 2) as Int);
+            vec_pop::<i32>(&mut stack);
+            vec_set::<i32>(&mut stack, (sp - 2) as Int, b * a);
+            ip = ip + 1;
+        } else if instr == 8 {
+            // DIV
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let a: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            let b: i32 = vec_get::<i32>(&mut stack, (sp - 2) as Int);
+            vec_pop::<i32>(&mut stack);
+            vec_set::<i32>(&mut stack, (sp - 2) as Int, b / a);
+            ip = ip + 1;
+        } else if instr == 9 {
+            // MOD
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let a: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            let b: i32 = vec_get::<i32>(&mut stack, (sp - 2) as Int);
+            vec_pop::<i32>(&mut stack);
+            vec_set::<i32>(&mut stack, (sp - 2) as Int, b % a);
+            ip = ip + 1;
+        } else if instr == 10 {
+            // EQ
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let a: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            let b: i32 = vec_get::<i32>(&mut stack, (sp - 2) as Int);
+            vec_pop::<i32>(&mut stack);
+            let mut eq_val: i32 = 0;
+            if b == a { eq_val = 1; }
+            vec_set::<i32>(&mut stack, (sp - 2) as Int, eq_val);
+            ip = ip + 1;
+        } else if instr == 11 {
+            // LT
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let a: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            let b: i32 = vec_get::<i32>(&mut stack, (sp - 2) as Int);
+            vec_pop::<i32>(&mut stack);
+            let mut lt_val: i32 = 0;
+            if b < a { lt_val = 1; }
+            vec_set::<i32>(&mut stack, (sp - 2) as Int, lt_val);
+            ip = ip + 1;
+        } else if instr == 12 {
+            // GT
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let a: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            let b: i32 = vec_get::<i32>(&mut stack, (sp - 2) as Int);
+            vec_pop::<i32>(&mut stack);
+            let mut gt_val: i32 = 0;
+            if b > a { gt_val = 1; }
+            vec_set::<i32>(&mut stack, (sp - 2) as Int, gt_val);
+            ip = ip + 1;
+        } else if instr == 13 {
+            // JMP addr
+            ip = ip + 1;
+            ip = vec_get::<i32>(program, ip as Int);
+        } else if instr == 14 {
+            // JZ addr
+            ip = ip + 1;
+            let addr: i32 = vec_get::<i32>(program, ip as Int);
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let top: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            vec_pop::<i32>(&mut stack);
+            if top == 0 { ip = addr; }
+            else { ip = ip + 1; }
+        } else if instr == 15 {
+            // JNZ addr
+            ip = ip + 1;
+            let addr: i32 = vec_get::<i32>(program, ip as Int);
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let top: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            vec_pop::<i32>(&mut stack);
+            if top != 0 { ip = addr; }
+            else { ip = ip + 1; }
+        } else if instr == 16 {
+            // CALL addr
+            ip = ip + 1;
+            let addr: i32 = vec_get::<i32>(program, ip as Int);
+            vec_push::<i32>(&mut callstack, ip + 1);
+            ip = addr;
+        } else if instr == 17 {
+            // RET
+            let csp: i32 = vec_len::<i32>(&mut callstack) as i32;
+            let ret_addr: i32 = vec_get::<i32>(&mut callstack, (csp - 1) as Int);
+            vec_pop::<i32>(&mut callstack);
+            ip = ret_addr;
+        } else if instr == 18 {
+            // PRINT
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let top: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            print_int(top as Int);
+            print_char(10);
+            ip = ip + 1;
+        } else if instr == 21 {
+            // NEG
+            let sp: i32 = vec_len::<i32>(&mut stack) as i32;
+            let top: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
+            vec_set::<i32>(&mut stack, (sp - 1) as Int, 0 - top);
+            ip = ip + 1;
+        } else {
+            // Unknown opcode
+            running = 0;
+            result = 0 - 1;
+        }
+    }
+
+    vec_free::<i32>(stack);
+    vec_free::<i32>(callstack);
+    return result;
+}
+
+// --- Helper to build programs ---
+
+fn emit(prog: &mut Vec<i32>, op: i32) with(Alloc) {
+    vec_push::<i32>(prog, op);
+}
+
+fn emit2(prog: &mut Vec<i32>, op: i32, arg: i32) with(Alloc) {
+    vec_push::<i32>(prog, op);
+    vec_push::<i32>(prog, arg);
+}
+
+// --- Fibonacci program ---
+// Computes fib(N) using the VM's own CALL/RET mechanism.
+//
+// fib(n):
+//   if n <= 1: return n
+//   return fib(n-1) + fib(n-2)
+//
+// Layout:
+//   0: PUSH N       — argument
+//   2: CALL fib     — call fib(N)
+//   4: PRINT        — print result
+//   5: HALT
+//
+//   fib (addr 6):
+//   6:  DUP          — [n, n]
+//   7:  PUSH 1       — [n, n, 1]
+//   9:  GT           — [n, n>1]
+//  10:  JZ base      — if n<=1, goto base case
+//
+//   recursive case:
+//  12:  DUP          — [n, n]
+//  13:  PUSH 1       — [n, n, 1]
+//  15:  SUB          — [n, n-1]
+//  16:  CALL fib     — [n, fib(n-1)]
+//  18:  SWAP         — [fib(n-1), n]
+//  19:  PUSH 2       — [fib(n-1), n, 2]
+//  21:  SUB          — [fib(n-1), n-2]
+//  22:  CALL fib     — [fib(n-1), fib(n-2)]
+//  24:  ADD          — [fib(n-1)+fib(n-2)]
+//  25:  RET
+//
+//   base (addr 26):
+//  26:  RET          — return n (already on stack)
+
+fn build_fib_program(n: i32) with(Alloc) -> Vec<i32> {
+    let mut prog: Vec<i32> = vec_new::<i32>();
+
+    // 0: PUSH N
+    emit2(&mut prog, 1, n);
+    // 2: CALL fib (addr 6)
+    emit2(&mut prog, 16, 6);
+    // 4: PRINT
+    emit(&mut prog, 18);
+    // 5: HALT
+    emit(&mut prog, 0);
+
+    // fib (addr 6):
+    // 6: DUP
+    emit(&mut prog, 3);
+    // 7: PUSH 1
+    emit2(&mut prog, 1, 1);
+    // 9: GT
+    emit(&mut prog, 12);
+    // 10: JZ 26 (base case)
+    emit2(&mut prog, 14, 26);
+
+    // recursive case:
+    // 12: DUP
+    emit(&mut prog, 3);
+    // 13: PUSH 1
+    emit2(&mut prog, 1, 1);
+    // 15: SUB
+    emit(&mut prog, 6);
+    // 16: CALL fib (addr 6)
+    emit2(&mut prog, 16, 6);
+    // 18: SWAP
+    emit(&mut prog, 4);
+    // 19: PUSH 2
+    emit2(&mut prog, 1, 2);
+    // 21: SUB
+    emit(&mut prog, 6);
+    // 22: CALL fib (addr 6)
+    emit2(&mut prog, 16, 6);
+    // 24: ADD
+    emit(&mut prog, 5);
+    // 25: RET
+    emit(&mut prog, 17);
+
+    // base (addr 26):
+    // 26: RET
+    emit(&mut prog, 17);
+
+    return prog;
+}
+
+// --- Arithmetic test program ---
+// Computes 3 + 4 * 5 - 2 = 21
+fn build_arith_test() with(Alloc) -> Vec<i32> {
+    let mut p: Vec<i32> = vec_new::<i32>();
+
+    // 3 + 4 * 5 - 2 = 21
+    // 0: PUSH 4
+    emit2(&mut p, 1, 4);
+    // 2: PUSH 5
+    emit2(&mut p, 1, 5);
+    // 4: MUL         -> [20]
+    emit(&mut p, 7);
+    // 5: PUSH 3
+    emit2(&mut p, 1, 3);
+    // 7: ADD         -> [23]
+    emit(&mut p, 5);
+    // 8: PUSH 2
+    emit2(&mut p, 1, 2);
+    // 10: SUB        -> [21]
+    emit(&mut p, 6);
+    // 11: HALT
+    emit(&mut p, 0);
+
+    return p;
+}
+
+// --- Main ---
+
+fn main() with(Std) -> Int {
+    // Correctness test: 3 + 4*5 - 2 = 21
+    let mut arith_prog: Vec<i32> = build_arith_test();
+    let arith_result: i32 = vm_run(&mut arith_prog);
+    vec_free::<i32>(arith_prog);
+
+    let mut m0: String = "arith test: ";
+    m0.append_int(arith_result as Int);
+    m0.append(&" (expected 21)\n");
+    print_string(&m0);
+    m0.drop();
+
+    // Benchmark: fib(35) via recursive VM calls
+    let mut fib_prog: Vec<i32> = build_fib_program(35);
+
+    let t0: Int = clock_monotonic_ns();
+    let fib_result: i32 = vm_run(&mut fib_prog);
+    let t1: Int = clock_monotonic_ns();
+    vec_free::<i32>(fib_prog);
+
+    let elapsed_ms: Int = (t1 - t0) / 1000000;
+    let mut m1: String = "fib(35) = ";
+    m1.append_int(fib_result as Int);
+    m1.append(&", vm time: ");
+    m1.append_int(elapsed_ms);
+    m1.append(&" ms\n");
+    print_string(&m1);
+    m1.drop();
+
+    return 0;
+}

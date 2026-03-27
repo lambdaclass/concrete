@@ -1,0 +1,13 @@
+// string_contains: check if "hello world" contains "world"
+fn main() -> Int {
+    let haystack: String = "hello world";
+    let needle: String = "world";
+    let found: Bool = string_contains(&haystack, &needle);
+    drop_string(haystack);
+    drop_string(needle);
+    if found {
+        return 1;
+    } else {
+        return 0;
+    }
+}

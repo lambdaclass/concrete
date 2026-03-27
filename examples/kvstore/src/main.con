@@ -1,0 +1,419 @@
+// kvstore — a persistent key-value store in Concrete
+//
+// Usage: kvstore set <key> <value>
+//        kvstore get <key>
+//        kvstore delete <key>
+//        kvstore list
+//        kvstore compact
+//
+// Persists data to an append-only log file (kvstore.log).
+// On startup, replays the log to rebuild in-memory state.
+// compact rewrites the log with only current live key-value pairs.
+//
+// Demonstrates: persistence, line-oriented parsing, HashMap-based storage,
+// capability separation, and crash recovery via append-only log.
+//
+// Note: We keep a parallel Vec<String> of keys for the `delete` command
+// (which needs swap-remove by key). The `list` and `compact` commands
+// use HashMap.fold to iterate all entries directly.
+
+mod kvstore {
+    import std.fs.{read_to_string, write_file, append_file, file_exists, FsError};
+    import std.result.{Result};
+    import std.option.{Option};
+    import std.args.{count, get};
+    import std.bytes.{Bytes};
+    import std.map.{HashMap};
+    import std.hash.{hash_string, eq_string};
+    import std.vec.{Vec};
+
+    // Consumes a linear String without freeing its backing memory.
+    fn forget_string(s: String) {
+    }
+
+    fn string_to_bytes(s: &String) with(Alloc) -> Bytes {
+        let len: Int = string_length(s);
+        let mut b: Bytes = Bytes::with_capacity(len as u64);
+        let mut i: Int = 0;
+        while i < len {
+            let ch: Int = string_char_at(s, i);
+            b.push(ch as u8);
+            i = i + 1;
+        }
+        return b;
+    }
+
+    fn clone_string(s: &String) with(Alloc) -> String {
+        let mut result: String = "";
+        result.append(s);
+        return result;
+    }
+
+    fn str_eq(a: &String, b: &String) -> bool {
+        let alen: Int = string_length(a);
+        let blen: Int = string_length(b);
+        if alen != blen {
+            return false;
+        }
+        let mut i: Int = 0;
+        while i < alen {
+            if string_char_at(a, i) != string_char_at(b, i) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    fn log_path() with(Alloc) -> String {
+        return "kvstore.log";
+    }
+
+    fn keys_find(keys: &mut Vec<String>, key: &String) -> Int {
+        let len: Int = keys.len() as Int;
+        let mut i: Int = 0;
+        while i < len {
+            let k: &String = keys.get_unchecked(i as u64);
+            let eq: bool = str_eq(k, key);
+            if eq {
+                return i;
+            }
+            i = i + 1;
+        }
+        return 0 - 1;
+    }
+
+    fn keys_remove(keys: &mut Vec<String>, key: &String) with(Alloc) {
+        let idx: Int = keys_find(keys, key);
+        if idx < 0 {
+            return;
+        }
+        let len: Int = keys.len() as Int;
+        let last: Int = len - 1;
+        if idx != last {
+            let last_key: String = vec_get::<String>(keys, last);
+            vec_set::<String>(keys, idx, last_key);
+        }
+        let pk: Option<String> = keys.pop();
+        match pk {
+            Option#Some { value } => {
+                forget_string(value);
+            },
+            Option#None => {}
+        }
+    }
+
+    trusted fn kv_set_tracked(map: &mut HashMap<String, String>, keys: &mut Vec<String>, key: String, val: String) with(Alloc) {
+        let existed: bool = map.contains(&key);
+        let key_for_vec: String = clone_string(&key);
+        let old: Option<String> = map.insert(key, val);
+        match old {
+            Option#Some { value } => {
+                value.drop();
+            },
+            Option#None => {}
+        }
+        if existed {
+            key_for_vec.drop();
+        } else {
+            keys.push(key_for_vec);
+        }
+    }
+
+    trusted fn kv_delete(map: &mut HashMap<String, String>, keys: &mut Vec<String>, key: &String) with(Alloc) -> bool {
+        let removed: Option<String> = map.remove(key);
+        match removed {
+            Option#Some { value } => {
+                value.drop();
+                keys_remove(keys, key);
+                return true;
+            },
+            Option#None => {
+                return false;
+            }
+        }
+    }
+
+    fn log_set(key: &String, val: &String) with(Std) {
+        let mut line: String = "";
+        line.append(&"SET ");
+        line.append(key);
+        string_push_char(&mut line, 32);  // space
+        line.append(val);
+        string_push_char(&mut line, 10);  // newline
+        let data: Bytes = string_to_bytes(&line);
+        let path: String = log_path();
+        let result: Result<u64, FsError> = append_file(&path, &data);
+        match result {
+            Result#Ok { value } => {},
+            Result#Err { error } => {
+                println("Error: could not write to log file");
+            }
+        }
+        path.drop();
+        data.drop();
+        line.drop();
+    }
+
+    fn log_del(key: &String) with(Std) {
+        let mut line: String = "";
+        line.append(&"DEL ");
+        line.append(key);
+        string_push_char(&mut line, 10);  // newline
+        let data: Bytes = string_to_bytes(&line);
+        let path: String = log_path();
+        let result: Result<u64, FsError> = append_file(&path, &data);
+        match result {
+            Result#Ok { value } => {},
+            Result#Err { error } => {
+                println("Error: could not write to log file");
+            }
+        }
+        path.drop();
+        data.drop();
+        line.drop();
+    }
+
+    fn find_space(s: &String, start: Int) -> Int {
+        let len: Int = string_length(s);
+        let mut i: Int = start;
+        while i < len {
+            if string_char_at(s, i) == 32 {
+                return i;
+            }
+            i = i + 1;
+        }
+        return 0 - 1;  // not found
+    }
+
+    fn parse_log_content(content: &String, map: &mut HashMap<String, String>, keys: &mut Vec<String>) with(Std) {
+        let len: Int = string_length(content);
+        let mut line_start: Int = 0;
+        let mut pos: Int = 0;
+
+        while pos <= len {
+            let at_end: bool = pos == len;
+            let mut is_newline: bool = false;
+            if !at_end {
+                is_newline = string_char_at(content, pos) == 10;
+            }
+
+            if is_newline || at_end {
+                if pos > line_start {
+                    let line: String = string_slice(content, line_start, pos);
+                    let line_len: Int = string_length(&line);
+
+                    if line_len >= 4 {
+                        let c0: Int = string_char_at(&line, 0);
+                        let c1: Int = string_char_at(&line, 1);
+                        let c2: Int = string_char_at(&line, 2);
+                        let c3: Int = string_char_at(&line, 3);
+
+                        if c0 == 83 && c1 == 69 && c2 == 84 && c3 == 32 {
+                            // "SET " — find the space between key and value
+                            let space_pos: Int = find_space(&line, 4);
+                            if space_pos > 4 {
+                                let skey: String = string_slice(&line, 4, space_pos);
+                                let sval: String = string_slice(&line, space_pos + 1, line_len);
+                                kv_set_tracked(map, keys, skey, sval);
+                            }
+                        }
+                        if c0 == 68 && c1 == 69 && c2 == 76 && c3 == 32 {
+                            // "DEL " — rest of line is key
+                            let dkey: String = string_slice(&line, 4, line_len);
+                            kv_delete(map, keys, &dkey);
+                            dkey.drop();
+                        }
+                    }
+                    line.drop();
+                }
+                line_start = pos + 1;
+            }
+            pos = pos + 1;
+        }
+    }
+
+    fn replay_log(map: &mut HashMap<String, String>, keys: &mut Vec<String>) with(Std) {
+        let path: String = log_path();
+        let exists: bool = file_exists(&path);
+        if !exists {
+            path.drop();
+            return;
+        }
+        let result: Result<String, FsError> = read_to_string(&path);
+        path.drop();
+        match result {
+            Result#Ok { value } => {
+                parse_log_content(&value, map, keys);
+                value.drop();
+            },
+            Result#Err { error } => {}
+        }
+    }
+
+    fn build_set_line(acc: String, k: &String, v: &String) -> String {
+        let mut out: String = acc;
+        out.append(&"SET ");
+        out.append(k);
+        string_push_char(&mut out, 32);
+        out.append(v);
+        string_push_char(&mut out, 10);
+        return out;
+    }
+
+    fn compact(map: &mut HashMap<String, String>, keys: &mut Vec<String>) with(Std) {
+        let mut init: String = "";
+        string_reserve(&mut init, 256);
+        let out: String = map.fold::<String>(init, build_set_line);
+
+        let data: Bytes = string_to_bytes(&out);
+        let path: String = log_path();
+        let result: Result<u64, FsError> = write_file(&path, &data);
+        match result {
+            Result#Ok { value } => {
+                println("Compacted log file");
+            },
+            Result#Err { error } => {
+                println("Error: could not write compacted log file");
+            }
+        }
+        path.drop();
+        data.drop();
+        out.drop();
+    }
+
+    fn cmd_set(map: &mut HashMap<String, String>, keys: &mut Vec<String>, key_arg: &String, val_arg: &String) with(Std) {
+        let key: String = clone_string(key_arg);
+        let val: String = clone_string(val_arg);
+        log_set(key_arg, val_arg);
+        kv_set_tracked(map, keys, key, val);
+        print("Set '");
+        print_string(key_arg);
+        print("' = '");
+        print_string(val_arg);
+        println("'");
+    }
+
+    fn cmd_get(map: &mut HashMap<String, String>, key_arg: &String) with(Std) {
+        let val_opt: Option<&String> = map.get(key_arg);
+        match val_opt {
+            Option#Some { value } => {
+                print_string(value);
+                print_char(10);
+            },
+            Option#None => {
+                print("Key '");
+                print_string(key_arg);
+                println("' not found");
+            }
+        }
+    }
+
+    fn cmd_delete(map: &mut HashMap<String, String>, keys: &mut Vec<String>, key_arg: &String) with(Std) {
+        let deleted: bool = kv_delete(map, keys, key_arg);
+        if deleted {
+            log_del(key_arg);
+            print("Deleted '");
+            print_string(key_arg);
+            println("'");
+        } else {
+            print("Key '");
+            print_string(key_arg);
+            println("' not found");
+        }
+    }
+
+    fn build_list_line(acc: String, k: &String, v: &String) -> String {
+        let mut out: String = acc;
+        out.append(k);
+        out.append(&" = ");
+        out.append(v);
+        string_push_char(&mut out, 10);
+        return out;
+    }
+
+    fn cmd_list(map: &mut HashMap<String, String>, keys: &mut Vec<String>) with(Std) {
+        let len: Int = keys.len() as Int;
+        if len == 0 {
+            println("(empty)");
+            return;
+        }
+
+        let mut init: String = "";
+        let out: String = map.fold::<String>(init, build_list_line);
+        print_string(&out);
+        out.drop();
+    }
+
+    fn print_usage() with(Console) {
+        println("Usage:");
+        println("  kvstore set <key> <value>");
+        println("  kvstore get <key>");
+        println("  kvstore delete <key>");
+        println("  kvstore list");
+        println("  kvstore compact");
+    }
+
+    pub fn main() with(Std) -> Int {
+        let argc: Int = count();
+
+        if argc < 2 {
+            print_usage();
+            return 1;
+        }
+
+        let mut map: HashMap<String, String> = HashMap::<String, String>::new(hash_string, eq_string);
+        let mut keys: Vec<String> = Vec::<String>::new();
+        replay_log(&mut map, &mut keys);
+
+        let cmd: String = get(1);
+
+        let mut exit_code: Int = 0;
+
+        if str_eq(&cmd, &"set") {
+            if argc < 4 {
+                println("Usage: kvstore set <key> <value>");
+                exit_code = 1;
+            } else {
+                let key: String = get(2);
+                let val: String = get(3);
+                cmd_set(&mut map, &mut keys, &key, &val);
+                val.drop();
+                key.drop();
+            }
+        } else if str_eq(&cmd, &"get") {
+            if argc < 3 {
+                println("Usage: kvstore get <key>");
+                exit_code = 1;
+            } else {
+                let key: String = get(2);
+                cmd_get(&mut map, &key);
+                key.drop();
+            }
+        } else if str_eq(&cmd, &"delete") {
+            if argc < 3 {
+                println("Usage: kvstore delete <key>");
+                exit_code = 1;
+            } else {
+                let key: String = get(2);
+                cmd_delete(&mut map, &mut keys, &key);
+                key.drop();
+            }
+        } else if str_eq(&cmd, &"list") {
+            cmd_list(&mut map, &mut keys);
+        } else if str_eq(&cmd, &"compact") {
+            compact(&mut map, &mut keys);
+        } else {
+            print("Unknown command: ");
+            print_string(&cmd);
+            print_char(10);
+            print_usage();
+            exit_code = 1;
+        }
+
+        cmd.drop();
+        keys.drop();
+        map.drop();
+        return exit_code;
+    }
+}

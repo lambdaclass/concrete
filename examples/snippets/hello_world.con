@@ -1,0 +1,18 @@
+mod hello {
+    extern fn malloc(size: u64) -> *mut u8;
+    extern fn puts(ptr: *mut u8) -> i32;
+
+    #[langitem = "String"]
+    struct String {
+        ptr: *mut u8,
+        len: u64,
+        cap: u64,
+    }
+
+    fn main() -> u64 {
+        let x: String = "hello \nworld!";
+        puts(x.ptr);
+
+        return 0;
+    }
+}

@@ -1,0 +1,13 @@
+base_url = "https://unbalancedparentheses.github.io/concrete2"
+title = "Concrete Documentation"
+description = "Reference and guide documentation for Concrete"
+compile_sass = false
+build_search_index = true
+generate_feeds = false
+minify_html = true
+
+[markdown]
+smart_punctuation = true
+
+[extra]
+repo_url = "https://github.com/unbalancedparentheses/concrete2"

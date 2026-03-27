@@ -1,0 +1,5 @@
+// Test: print with multiple arguments of different types in one call
+fn main() with(Std) {
+    print("count: ", 42, " ok: ", true);
+    print("\n");
+}

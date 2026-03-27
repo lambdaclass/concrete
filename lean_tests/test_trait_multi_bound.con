@@ -1,0 +1,31 @@
+// Test: generic function with two trait bounds
+trait Addable {
+    fn add_val(&self) -> Int;
+}
+
+trait Displayable {
+    fn display_val(&self) -> Int;
+}
+
+struct Copy Tagged { a: Int, b: Int }
+
+impl Addable for Tagged {
+    fn add_val(&self) -> Int {
+        return self.a;
+    }
+}
+
+impl Displayable for Tagged {
+    fn display_val(&self) -> Int {
+        return self.b;
+    }
+}
+
+fn use_both<T: Addable + Displayable>(x: T) -> Int {
+    return x.add_val() + x.display_val();
+}
+
+fn main() -> Int {
+    let t: Tagged = Tagged { a: 30, b: 12 };
+    return use_both(t);
+}

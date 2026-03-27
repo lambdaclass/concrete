@@ -1,0 +1,13 @@
+// Test: recursive fibonacci — tests recursive function codegen
+fn fib(n: Int) -> Int {
+    if n <= 1 {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn main() -> Int {
+    let result: Int = fib(10);
+    // fib(10) = 55, so 55 - 13 = 42
+    return result - 13;
+}

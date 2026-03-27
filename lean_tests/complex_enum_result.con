@@ -1,0 +1,24 @@
+// Complex test: Result type with ? operator and match
+enum Result { Ok { value: Int }, Err { error: Int } }
+
+fn safe_divide(a: Int, b: Int) -> Result {
+    if b == 0 {
+        return Result#Err { error: 1 };
+    } else {
+        return Result#Ok { value: a / b };
+    }
+}
+
+fn compute() -> Result {
+    let x: Int = safe_divide(100, 5)?;
+    let y: Int = safe_divide(x, 4)?;
+    return Result#Ok { value: x + y };
+}
+
+fn main() -> Int {
+    let result: Result = compute();
+    match result {
+        Result#Ok { value } => { return value; },
+        Result#Err { error } => { return error; },
+    }
+}

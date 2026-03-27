@@ -1,0 +1,7 @@
+fn main() -> Int {
+    let s: String = "world";
+    let len1: Int = string_length(&s);
+    let len2: Int = string_length(&s);
+    drop_string(s);
+    return len1 + len2;
+}

@@ -1,0 +1,9 @@
+// Test: importing a non-pub function should fail
+mod Lib {
+    fn secret() -> Int { return 42; }
+}
+
+mod Main {
+    import Lib.{ secret };
+    fn main() -> Int { return secret(); }
+}

@@ -1,0 +1,7 @@
+mod shapes;
+import shapes.{Point};
+
+fn main() -> Int {
+    let p: Point = Point { x: 20, y: 22 };
+    return shapes::point_sum(p);
+}

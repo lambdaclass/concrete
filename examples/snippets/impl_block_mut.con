@@ -1,0 +1,28 @@
+mod ImplBlockMut {
+    struct A {
+        a: i32,
+        b: i32,
+    }
+
+    impl A {
+        pub fn hello(&self, other: i32) -> i32 {
+            return self.a * other;
+        }
+
+        pub fn set_a(&mut self, value: i32) {
+            self.a = value;
+            return;
+        }
+    }
+
+    pub fn main() -> i32 {
+        let mut x: A = A {
+            a: 2,
+            b: 3,
+        };
+
+        x.set_a(4);
+
+        return x.a;
+    }
+}

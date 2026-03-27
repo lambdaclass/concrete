@@ -1,0 +1,17 @@
+struct A { a: Int, b: Int }
+
+impl A {
+    fn set_a(&mut self, value: Int) {
+        self.a = value;
+    }
+}
+
+fn consume_a(a: A) -> Int {
+    return a.a;
+}
+
+fn main() -> Int {
+    let mut x: A = A { a: 2, b: 3 };
+    x.set_a(42);
+    return consume_a(x);
+}

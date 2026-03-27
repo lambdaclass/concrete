@@ -1,0 +1,15 @@
+// Complex: heap allocation + arrow access + struct methods + free
+struct Pair { a: Int, b: Int }
+
+impl Pair {
+    fn sum(&self) -> Int {
+        return self.a + self.b;
+    }
+}
+
+fn main() with(Std) -> Int {
+    let p: Heap<Pair> = alloc(Pair { a: 17, b: 25 });
+    let s: Int = p->a + p->b;
+    free(p);
+    return s;
+}

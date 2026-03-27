@@ -1,0 +1,23 @@
+// Error: calling print_string without Console capability
+trusted extern fn putchar(c: i32) -> i32;
+
+trusted fn print_string(s: &String) with(Console) {
+    let len: Int = string_length(s);
+    let mut i: Int = 0;
+    while i < len {
+        let ch: Int = string_char_at(s, i);
+        putchar(ch as i32);
+        i = i + 1;
+    }
+}
+
+fn talk() -> Int {
+    let s: String = "hello";
+    print_string(&s);
+    drop_string(s);
+    return 0;
+}
+
+fn main() -> Int {
+    return 0;
+}

@@ -1,0 +1,23 @@
+// Test: nested while-as-expression
+// Expected: 6
+fn main() -> Int {
+    let mut i: Int = 0;
+    let x: Int = while i < 10 {
+        i = i + 1;
+        let mut j: Int = 0;
+        let inner: Int = while j < 5 {
+            j = j + 1;
+            if j == 3 {
+                break j;
+            }
+        } else {
+            0;
+        };
+        if inner + i == 6 {
+            break inner + i;
+        }
+    } else {
+        0;
+    };
+    return x;
+}

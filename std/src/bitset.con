@@ -1,0 +1,530 @@
+mod bitset {
+    import std.mem.{sizeof};
+    import std.alloc.{grow,dealloc};
+    import std.libc.{memset, memcpy};
+    import std.math.{max};
+
+    /// A growable bitset backed by a heap-allocated array of u64 words.
+    ///
+    /// `n_bits` is a high-water mark: the largest bit index ever set + 1
+    /// (or the capacity passed to `with_capacity`). It never shrinks
+    /// except on `clear()`. This means `len()` returns an upper bound,
+    /// not the exact highest set bit after `unset()` or `intersect()`.
+    pub struct BitSet {
+        data: *mut u64,
+        n_bits: u64,
+        cap_words: u64,
+    }
+
+    trusted impl BitSet {
+        pub fn new() -> BitSet {
+            let b: BitSet = BitSet {
+                data: 0 as *mut u64,
+                n_bits: 0,
+                cap_words: 0,
+            };
+            return b;
+        }
+
+        pub fn with_capacity(n: u64) with(Alloc, Unsafe) -> BitSet {
+            let words: u64 = (n + 63) / 64;
+            let ptr: *mut u64 = grow::<u64>(0 as *mut u64, words);
+            memset(ptr as *mut u8, 0, words * 8);
+            let b: BitSet = BitSet {
+                data: ptr,
+                n_bits: n,
+                cap_words: words,
+            };
+            return b;
+        }
+
+        pub fn set(&mut self, bit: u64) with(Alloc, Unsafe) {
+            if bit / 64 >= self.cap_words {
+                self.grow(bit + 1);
+            }
+            if bit >= self.n_bits {
+                self.n_bits = bit + 1;
+            }
+            let word: u64 = bit / 64;
+            let offset: u64 = bit & 63;
+            let word_ptr: *mut u64 = self.data + word;
+            *word_ptr = *word_ptr | (1 << offset);
+        }
+
+        pub fn unset(&mut self, bit: u64) {
+            if bit >= self.n_bits {
+                return;
+            }
+            let word: u64 = bit / 64;
+            let offset: u64 = bit & 63;
+            let word_ptr: *mut u64 = self.data + word;
+            let mask: u64 = 1 << offset;
+            *word_ptr = *word_ptr & (mask ^ 0xFFFFFFFFFFFFFFFF);
+        }
+
+        pub fn test(&self, bit: u64) -> bool {
+            if bit >= self.n_bits {
+                return false;
+            }
+            let word: u64 = bit / 64;
+            let offset: u64 = bit & 63;
+            let word_ptr: *mut u64 = self.data + word;
+            return (*word_ptr & (1 << offset)) != 0;
+        }
+
+        /// Count the number of set bits (popcount).
+        pub fn count(&self) -> u64 {
+            let total: u64 = 0;
+            let i: u64 = 0;
+            while i < self.cap_words {
+                let word_ptr: *mut u64 = self.data + i;
+                let w: u64 = *word_ptr;
+                // Kernighan's bit counting
+                while w != 0 {
+                    w = w & (w - 1);
+                    total = total + 1;
+                }
+                i = i + 1;
+            }
+            return total;
+        }
+
+        /// In-place union: self |= other.
+        pub fn union(&mut self, other: &BitSet) with(Alloc, Unsafe) {
+            if other.cap_words > self.cap_words {
+                self.grow(other.n_bits);
+            }
+            if other.n_bits > self.n_bits {
+                self.n_bits = other.n_bits;
+            }
+            let i: u64 = 0;
+            while i < other.cap_words {
+                let self_ptr: *mut u64 = self.data + i;
+                let other_ptr: *mut u64 = other.data + i;
+                *self_ptr = *self_ptr | *other_ptr;
+                i = i + 1;
+            }
+        }
+
+        /// In-place intersection: self &= other.
+        pub fn intersect(&mut self, other: &BitSet) {
+            let min_words: u64 = self.cap_words;
+            if other.cap_words < min_words {
+                min_words = other.cap_words;
+            }
+            let i: u64 = 0;
+            while i < min_words {
+                let self_ptr: *mut u64 = self.data + i;
+                let other_ptr: *mut u64 = other.data + i;
+                *self_ptr = *self_ptr & *other_ptr;
+                i = i + 1;
+            }
+            // Zero out remaining words in self
+            while i < self.cap_words {
+                let self_ptr: *mut u64 = self.data + i;
+                *self_ptr = 0;
+                i = i + 1;
+            }
+        }
+
+        /// Returns the high-water mark: the largest bit index ever set + 1.
+        /// Does not shrink after unset() or intersect(); only clear() resets it.
+        pub fn len(&self) -> u64 {
+            return self.n_bits;
+        }
+
+        pub fn clear(&mut self) with(Unsafe) {
+            if self.cap_words > 0 {
+                memset(self.data as *mut u8, 0, self.cap_words * 8);
+            }
+            self.n_bits = 0;
+        }
+
+        fn grow(&mut self, needed_bits: u64) with(Alloc, Unsafe) {
+            let needed_words: u64 = (needed_bits + 63) / 64;
+            let new_words: u64 = max::<u64>(needed_words, max::<u64>(self.cap_words, 1) * 2);
+            let new_ptr: *mut u64 = grow::<u64>(0 as *mut u64, new_words);
+            // Zero the new buffer
+            memset(new_ptr as *mut u8, 0, new_words * 8);
+            // Copy old data
+            if self.cap_words > 0 {
+                memcpy(new_ptr as *mut u8, self.data as *const u8, self.cap_words * 8);
+                dealloc::<u64>(self.data);
+            }
+            self.data = new_ptr;
+            self.cap_words = new_words;
+        }
+
+        pub fn drop(self) with(Alloc) {
+            if self.cap_words > 0 {
+                dealloc::<u64>(self.data);
+            }
+        }
+    }
+
+    import std.test.{assert_eq, assert_true};
+
+    #[test]
+    fn test_set_and_test() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::new();
+        b.set(0);
+        b.set(5);
+        b.set(63);
+        b.set(64);
+
+        if !(b.test(0)) { b.drop(); return 1; }
+        if !(b.test(5)) { b.drop(); return 1; }
+        if !(b.test(63)) { b.drop(); return 1; }
+        if !(b.test(64)) { b.drop(); return 1; }
+        if b.test(1) { b.drop(); return 1; }
+        if b.test(100) { b.drop(); return 1; }
+
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_unset() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::new();
+        b.set(10);
+        if !(b.test(10)) { b.drop(); return 1; }
+        b.unset(10);
+        if b.test(10) { b.drop(); return 1; }
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_count() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::new();
+        b.set(0);
+        b.set(1);
+        b.set(2);
+        b.set(100);
+
+        if !assert_eq::<u64>(b.count(), 4, "count should be 4") {
+            b.drop();
+            return 1;
+        }
+
+        b.unset(1);
+        if !assert_eq::<u64>(b.count(), 3, "count should be 3 after unset") {
+            b.drop();
+            return 1;
+        }
+
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_union() with(Alloc, Unsafe) -> i32 {
+        let mut a: BitSet = BitSet::new();
+        a.set(0);
+        a.set(2);
+
+        let mut b: BitSet = BitSet::new();
+        b.set(1);
+        b.set(2);
+        b.set(3);
+
+        a.union(&b);
+
+        // Should have bits 0, 1, 2, 3
+        if !assert_eq::<u64>(a.count(), 4, "union should have 4 bits set") {
+            a.drop();
+            b.drop();
+            return 1;
+        }
+        if !(a.test(0)) { a.drop(); b.drop(); return 1; }
+        if !(a.test(1)) { a.drop(); b.drop(); return 1; }
+        if !(a.test(2)) { a.drop(); b.drop(); return 1; }
+        if !(a.test(3)) { a.drop(); b.drop(); return 1; }
+
+        a.drop();
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_intersect() with(Alloc, Unsafe) -> i32 {
+        let mut a: BitSet = BitSet::new();
+        a.set(0);
+        a.set(1);
+        a.set(2);
+
+        let mut b: BitSet = BitSet::new();
+        b.set(1);
+        b.set(2);
+        b.set(3);
+
+        a.intersect(&b);
+
+        // Should have only bits 1, 2
+        if !assert_eq::<u64>(a.count(), 2, "intersect should have 2 bits set") {
+            a.drop();
+            b.drop();
+            return 1;
+        }
+        if a.test(0) { a.drop(); b.drop(); return 1; }
+        if !(a.test(1)) { a.drop(); b.drop(); return 1; }
+        if !(a.test(2)) { a.drop(); b.drop(); return 1; }
+        if a.test(3) { a.drop(); b.drop(); return 1; }
+
+        a.drop();
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_with_capacity() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::with_capacity(128);
+        b.set(0);
+        b.set(127);
+
+        if !(b.test(0)) { b.drop(); return 1; }
+        if !(b.test(127)) { b.drop(); return 1; }
+        if b.test(64) { b.drop(); return 1; }
+
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_loop_set_small() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::new();
+        let i: u64 = 0;
+        while i < 50 {
+            b.set(i * 7);
+            i = i + 1;
+        }
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_bitset_word_boundaries() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::new();
+        // Test bits at word boundaries: 63, 64, 127, 128
+        b.set(63);
+        b.set(64);
+        b.set(127);
+        b.set(128);
+
+        if !(b.test(63)) { b.drop(); return 1; }
+        if !(b.test(64)) { b.drop(); return 1; }
+        if !(b.test(127)) { b.drop(); return 1; }
+        if !(b.test(128)) { b.drop(); return 1; }
+        // Bits adjacent to boundaries should be unset
+        if b.test(62) { b.drop(); return 1; }
+        if b.test(65) { b.drop(); return 1; }
+        if b.test(126) { b.drop(); return 1; }
+        if b.test(129) { b.drop(); return 1; }
+
+        if !assert_eq::<u64>(b.count(), 4, "boundary bits count") {
+            b.drop();
+            return 1;
+        }
+
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_bitset_large_stress() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::new();
+        // Set every 3rd bit up to 300
+        let i: u64 = 0;
+        while i < 100 {
+            b.set(i * 3);
+            i = i + 1;
+        }
+
+        if !assert_eq::<u64>(b.count(), 100, "large stress count") {
+            b.drop();
+            return 1;
+        }
+
+        // Verify a few specific bits
+        if !(b.test(0)) { b.drop(); return 1; }
+        if !(b.test(99)) { b.drop(); return 1; }
+        if !(b.test(297)) { b.drop(); return 1; }
+        if b.test(1) { b.drop(); return 1; }
+        if b.test(298) { b.drop(); return 1; }
+
+        b.drop();
+        return 0;
+    }
+
+    /// Regression: len() must return logical size, not physical capacity.
+    #[test]
+    fn test_len_is_logical_size() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::new();
+        b.set(5);
+        // len() should be 6 (highest bit + 1), not cap_words * 64
+        if !assert_eq::<u64>(b.len(), 6, "len after set(5)") {
+            b.drop();
+            return 1;
+        }
+        b.set(3);
+        // Setting a lower bit should not change len
+        if !assert_eq::<u64>(b.len(), 6, "len after set(3)") {
+            b.drop();
+            return 1;
+        }
+        b.set(100);
+        if !assert_eq::<u64>(b.len(), 101, "len after set(100)") {
+            b.drop();
+            return 1;
+        }
+        b.drop();
+        return 0;
+    }
+
+    /// Regression: test() must return false for bits beyond logical size
+    /// even if they are within physical capacity.
+    #[test]
+    fn test_beyond_logical_size() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::new();
+        b.set(5);
+        // Bit 5 is set, len is 6, but cap_words is likely >= 1 (64 bits of capacity).
+        // Bits 6..63 are within physical capacity but beyond logical size.
+        if b.test(6) { b.drop(); return 1; }
+        if b.test(63) { b.drop(); return 1; }
+        b.drop();
+        return 0;
+    }
+
+    /// Regression: unset() must be a no-op for bits beyond logical size.
+    #[test]
+    fn test_unset_beyond_logical_size() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::new();
+        b.set(5);
+        let len_before: u64 = b.len();
+        // unset a bit beyond logical size — should be a no-op
+        b.unset(100);
+        if !assert_eq::<u64>(b.len(), len_before, "len unchanged after unset beyond") {
+            b.drop();
+            return 1;
+        }
+        if !(b.test(5)) { b.drop(); return 1; }
+        b.drop();
+        return 0;
+    }
+
+    /// Regression: non-monotonic sets must not cause exponential allocation.
+    #[test]
+    fn test_non_monotonic_sets() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::new();
+        // Alternating high and low bits — previously triggered grow on every call
+        b.set(100);
+        b.set(1);
+        b.set(200);
+        b.set(3);
+        b.set(150);
+        b.set(0);
+
+        if !assert_eq::<u64>(b.count(), 6, "non-monotonic count") {
+            b.drop();
+            return 1;
+        }
+        if !assert_eq::<u64>(b.len(), 201, "non-monotonic len") {
+            b.drop();
+            return 1;
+        }
+
+        b.drop();
+        return 0;
+    }
+
+    /// Contract: unset() does not shrink n_bits (high-water mark).
+    #[test]
+    fn test_unset_preserves_len() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::new();
+        b.set(10);
+        b.set(50);
+        if !assert_eq::<u64>(b.len(), 51, "len before unset") {
+            b.drop();
+            return 1;
+        }
+        // Unset the highest bit — len stays at high-water mark
+        b.unset(50);
+        if !assert_eq::<u64>(b.len(), 51, "len after unset(50)") {
+            b.drop();
+            return 1;
+        }
+        if !assert_eq::<u64>(b.count(), 1, "count after unset") {
+            b.drop();
+            return 1;
+        }
+        b.drop();
+        return 0;
+    }
+
+    /// Contract: intersect() does not shrink n_bits (high-water mark).
+    #[test]
+    fn test_intersect_preserves_len() with(Alloc, Unsafe) -> i32 {
+        let mut a: BitSet = BitSet::new();
+        a.set(0);
+        a.set(100);
+
+        let mut b: BitSet = BitSet::new();
+        b.set(0);
+        // b has no bit 100, so intersect clears it from a
+
+        a.intersect(&b);
+
+        // Only bit 0 remains set
+        if !assert_eq::<u64>(a.count(), 1, "intersect count") {
+            a.drop();
+            b.drop();
+            return 1;
+        }
+        // But len is still the high-water mark
+        if !assert_eq::<u64>(a.len(), 101, "intersect preserves len") {
+            a.drop();
+            b.drop();
+            return 1;
+        }
+
+        a.drop();
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_bitset_clear_reuse() with(Alloc, Unsafe) -> i32 {
+        let mut b: BitSet = BitSet::new();
+        b.set(10);
+        b.set(20);
+        b.set(30);
+
+        if !assert_eq::<u64>(b.count(), 3, "before clear") {
+            b.drop();
+            return 1;
+        }
+
+        b.clear();
+
+        if !assert_eq::<u64>(b.count(), 0, "after clear") {
+            b.drop();
+            return 1;
+        }
+
+        // Reuse after clear
+        b.set(5);
+        b.set(15);
+
+        if !assert_eq::<u64>(b.count(), 2, "after reuse") {
+            b.drop();
+            return 1;
+        }
+
+        if !(b.test(5)) { b.drop(); return 1; }
+        if !(b.test(15)) { b.drop(); return 1; }
+        if b.test(10) { b.drop(); return 1; }
+
+        b.drop();
+        return 0;
+    }
+}

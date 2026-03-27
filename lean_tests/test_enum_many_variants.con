@@ -1,0 +1,29 @@
+// Test: enum with 8 variants, exhaustive matching
+enum Octet {
+    V0 {},
+    V1 {},
+    V2 {},
+    V3 {},
+    V4 {},
+    V5 {},
+    V6 {},
+    V7 {},
+}
+
+fn to_int(o: Octet) -> Int {
+    match o {
+        Octet#V0 {} => { return 0; },
+        Octet#V1 {} => { return 1; },
+        Octet#V2 {} => { return 2; },
+        Octet#V3 {} => { return 3; },
+        Octet#V4 {} => { return 4; },
+        Octet#V5 {} => { return 5; },
+        Octet#V6 {} => { return 6; },
+        Octet#V7 {} => { return 42; },
+    }
+}
+
+fn main() -> Int {
+    let o: Octet = Octet#V7 {};
+    return to_int(o);
+}

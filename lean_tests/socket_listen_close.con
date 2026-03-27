@@ -1,0 +1,54 @@
+// Test: listen on port 0 (OS assigns) + close, return 0
+trusted extern fn socket(domain: i32, typ: i32, protocol: i32) -> i32;
+trusted extern fn bind(sockfd: i32, addr: *const u8, addrlen: u32) -> i32;
+trusted extern fn listen(sockfd: i32, backlog: i32) -> i32;
+trusted extern fn close(fd: i32) -> i32;
+trusted extern fn htons(hostshort: u16) -> u16;
+trusted extern fn setsockopt(sockfd: i32, level: i32, optname: i32, optval: *const u8, optlen: u32) -> i32;
+trusted extern fn malloc(size: u64) -> *mut u8;
+trusted extern fn free(ptr: *mut u8);
+
+trusted fn tcp_listen(port: i64, backlog: i64) with(Network) -> Int {
+    let lsock: i32 = socket(2, 1, 0);
+    let reuse_buf: *mut u8 = malloc(4);
+    let reuse_ptr: *mut i32 = reuse_buf as *mut i32;
+    *reuse_ptr = 1;
+    setsockopt(lsock, 65535, 4, reuse_buf as *const u8, 4);
+    free(reuse_buf);
+    let saddr: *mut u8 = malloc(16);
+    let mut i: u64 = 0;
+    while i < 16 {
+        let p: *mut u8 = saddr + i;
+        *p = 0;
+        i = i + 1;
+    }
+    *saddr = 16;
+    let sf: *mut u8 = saddr + 1;
+    *sf = 2;
+    let port16: u16 = port as u16;
+    let port_n: u16 = htons(port16);
+    let sp: *mut u16 = (saddr + 2) as *mut u16;
+    *sp = port_n;
+    let bind_ret: i32 = bind(lsock, saddr as *const u8, 16);
+    free(saddr);
+    if bind_ret < 0 {
+        close(lsock);
+        return -1;
+    }
+    let listen_ret: i32 = listen(lsock, backlog as i32);
+    if listen_ret < 0 {
+        close(lsock);
+        return -1;
+    }
+    return lsock as Int;
+}
+
+trusted fn socket_close(fd: Int) with(Network) {
+    close(fd as i32);
+}
+
+fn main() with(Std) -> Int {
+    let fd: Int = tcp_listen(0, 5);
+    socket_close(fd);
+    return 0;
+}

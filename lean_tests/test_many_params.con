@@ -1,0 +1,8 @@
+// Test: function with 10 parameters
+fn sum10(a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int, i: Int, j: Int) -> Int {
+    return a + b + c + d + e + f + g + h + i + j;
+}
+
+fn main() -> Int {
+    return sum10(1, 2, 3, 4, 5, 6, 7, 8, 3, 3);
+}

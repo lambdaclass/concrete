@@ -1,0 +1,7 @@
+// Test that continue outside of loop is an error
+// Expected error: continue outside of loop
+
+fn main() with(Std) -> Int {
+    continue;
+    return 0;
+}

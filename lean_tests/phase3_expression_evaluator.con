@@ -1,0 +1,288 @@
+// Phase 3 mixed-feature test: expression evaluator
+//
+// Combines: enums (expression tree with 5 variants), match (evaluation + printing),
+//   generics with trait bounds, modules (Expr, Eval, Format), traits (Displayable),
+//   function pointers (pluggable binary operators), structs, while loops, Vec, capabilities.
+//
+// A mini expression language: Lit(i32), Add(left_idx, right_idx), Mul(left_idx, right_idx),
+//   Neg(inner_idx), Const(name_tag). Expressions are stored in a Vec as a flat arena.
+//   Evaluation walks the arena using indices. A trait provides "display metric" for results.
+//
+// Expected output: 42
+
+mod Expr {
+    // Expression node: uses index-based children (into a Vec arena)
+    pub enum Copy ExprNode {
+        Lit { value: i32 },
+        Add { left: i32, right: i32 },
+        Mul { left: i32, right: i32 },
+        Neg { inner: i32 },
+        Const { tag: i32 },
+    }
+
+    // An arena is a Vec<i32> with 3 i32s per node:
+    //   [kind, param1, param2]
+    // kind: 0=Lit, 1=Add, 2=Mul, 3=Neg, 4=Const
+
+    pub fn encode_lit(arena: &mut Vec<i32>, value: i32) with(Alloc) -> i32 {
+        let idx: i32 = vec_len::<i32>(arena) as i32 / 3;
+        vec_push::<i32>(arena, 0);
+        vec_push::<i32>(arena, value);
+        vec_push::<i32>(arena, 0);
+        return idx;
+    }
+
+    pub fn encode_add(arena: &mut Vec<i32>, left: i32, right: i32) with(Alloc) -> i32 {
+        let idx: i32 = vec_len::<i32>(arena) as i32 / 3;
+        vec_push::<i32>(arena, 1);
+        vec_push::<i32>(arena, left);
+        vec_push::<i32>(arena, right);
+        return idx;
+    }
+
+    pub fn encode_mul(arena: &mut Vec<i32>, left: i32, right: i32) with(Alloc) -> i32 {
+        let idx: i32 = vec_len::<i32>(arena) as i32 / 3;
+        vec_push::<i32>(arena, 2);
+        vec_push::<i32>(arena, left);
+        vec_push::<i32>(arena, right);
+        return idx;
+    }
+
+    pub fn encode_neg(arena: &mut Vec<i32>, inner: i32) with(Alloc) -> i32 {
+        let idx: i32 = vec_len::<i32>(arena) as i32 / 3;
+        vec_push::<i32>(arena, 3);
+        vec_push::<i32>(arena, inner);
+        vec_push::<i32>(arena, 0);
+        return idx;
+    }
+
+    pub fn encode_const(arena: &mut Vec<i32>, tag: i32) with(Alloc) -> i32 {
+        let idx: i32 = vec_len::<i32>(arena) as i32 / 3;
+        vec_push::<i32>(arena, 4);
+        vec_push::<i32>(arena, tag);
+        vec_push::<i32>(arena, 0);
+        return idx;
+    }
+
+    pub fn decode_node(arena: &Vec<i32>, idx: i32) -> ExprNode {
+        let base: Int = (idx * 3) as Int;
+        let kind: i32 = vec_get::<i32>(arena, base);
+        let p1: i32 = vec_get::<i32>(arena, base + 1);
+        let p2: i32 = vec_get::<i32>(arena, base + 2);
+        if kind == 0 { return ExprNode#Lit { value: p1 }; }
+        if kind == 1 { return ExprNode#Add { left: p1, right: p2 }; }
+        if kind == 2 { return ExprNode#Mul { left: p1, right: p2 }; }
+        if kind == 3 { return ExprNode#Neg { inner: p1 }; }
+        return ExprNode#Const { tag: p1 };
+    }
+
+    pub fn node_count(arena: &Vec<i32>) -> i32 {
+        return vec_len::<i32>(arena) as i32 / 3;
+    }
+}
+
+mod Eval {
+    import Expr.{ ExprNode, decode_node };
+
+    // Resolve a named constant by its tag
+    pub fn resolve_const(tag: i32) -> i32 {
+        // tag 0 = PI_APPROX = 3, tag 1 = E_APPROX = 2, tag 2 = ANSWER = 7
+        if tag == 0 { return 3; }
+        if tag == 1 { return 2; }
+        if tag == 2 { return 7; }
+        return 0;
+    }
+
+    // Apply a binary operation via function pointer
+    pub fn apply_binop(op: fn(i32, i32) -> i32, a: i32, b: i32) -> i32 {
+        return op(a, b);
+    }
+
+    // Evaluate an expression tree recursively (iterative with explicit stack via Vec)
+    // We use a simple evaluation: walk from leaves up.
+    // Since our arena is built bottom-up, we can evaluate in order.
+    pub fn eval_all(arena: &Vec<i32>) with(Alloc) -> Vec<i32> {
+        let count: i32 = vec_len::<i32>(arena) as i32 / 3;
+        let mut results: Vec<i32> = vec_new::<i32>();
+        let mut i: i32 = 0;
+        while i < count {
+            let node: ExprNode = decode_node(arena, i);
+            let val: i32 = eval_node(&node, &results);
+            vec_push::<i32>(&mut results, val);
+            i = i + 1;
+        }
+        return results;
+    }
+
+    fn eval_node(node: &ExprNode, results: &Vec<i32>) -> i32 {
+        match *node {
+            ExprNode#Lit { value } => {
+                return value;
+            },
+            ExprNode#Add { left, right } => {
+                let lv: i32 = vec_get::<i32>(results, left as Int);
+                let rv: i32 = vec_get::<i32>(results, right as Int);
+                return lv + rv;
+            },
+            ExprNode#Mul { left, right } => {
+                let lv: i32 = vec_get::<i32>(results, left as Int);
+                let rv: i32 = vec_get::<i32>(results, right as Int);
+                return lv * rv;
+            },
+            ExprNode#Neg { inner } => {
+                let iv: i32 = vec_get::<i32>(results, inner as Int);
+                return 0 - iv;
+            },
+            ExprNode#Const { tag } => {
+                return resolve_const(tag);
+            }
+        }
+    }
+}
+
+mod Format {
+    import Expr.{ ExprNode, decode_node };
+
+    // Trait for computing a "display metric" — a numeric summary of a value
+    pub trait Displayable {
+        fn display_metric(&self) -> i32;
+    }
+
+    pub struct Copy EvalResult {
+        node_count: i32,
+        final_value: i32,
+        max_depth: i32,
+    }
+
+    impl Displayable for EvalResult {
+        fn display_metric(&self) -> i32 {
+            return self.final_value + self.node_count + self.max_depth;
+        }
+    }
+
+    pub fn compute_display<T: Displayable>(item: &T) -> i32 {
+        return item.display_metric();
+    }
+
+    // Compute the depth of a node in the arena
+    pub fn node_depth(arena: &Vec<i32>, idx: i32) -> i32 {
+        let node: ExprNode = decode_node(arena, idx);
+        match node {
+            ExprNode#Lit { value } => { return 1; },
+            ExprNode#Add { left, right } => {
+                let ld: i32 = node_depth(arena, left);
+                let rd: i32 = node_depth(arena, right);
+                if ld > rd { return ld + 1; }
+                return rd + 1;
+            },
+            ExprNode#Mul { left, right } => {
+                let ld: i32 = node_depth(arena, left);
+                let rd: i32 = node_depth(arena, right);
+                if ld > rd { return ld + 1; }
+                return rd + 1;
+            },
+            ExprNode#Neg { inner } => {
+                return node_depth(arena, inner) + 1;
+            },
+            ExprNode#Const { tag } => { return 1; }
+        }
+    }
+
+    // Count how many nodes of each kind exist
+    pub fn count_kind(arena: &Vec<i32>, target_kind: i32) -> i32 {
+        let count: i32 = vec_len::<i32>(arena) as i32 / 3;
+        let mut result: i32 = 0;
+        let mut i: i32 = 0;
+        while i < count {
+            let base: Int = (i * 3) as Int;
+            let kind: i32 = vec_get::<i32>(arena, base);
+            if kind == target_kind { result = result + 1; }
+            i = i + 1;
+        }
+        return result;
+    }
+}
+
+mod Main {
+    import Expr.{ encode_lit, encode_add, encode_mul, encode_neg, encode_const, node_count };
+    import Eval.{ eval_all, apply_binop };
+    import Format.{ EvalResult, compute_display, node_depth, count_kind };
+
+    fn add_op(a: i32, b: i32) -> i32 { return a + b; }
+    fn mul_op(a: i32, b: i32) -> i32 { return a * b; }
+
+    fn main() with(Std) -> Int {
+        let mut arena: Vec<i32> = vec_new::<i32>();
+
+        // Build expression: (3 + Const(2)) * (Neg(2) + 5)
+        // Const(2) = ANSWER = 7
+        // So: (3 + 7) * (-2 + 5) = 10 * 3 = 30
+        let n0: i32 = encode_lit(&mut arena, 3);       // idx 0: Lit(3)
+        let n1: i32 = encode_const(&mut arena, 2);     // idx 1: Const(2) = 7
+        let n2: i32 = encode_add(&mut arena, n0, n1);  // idx 2: Add(0,1) = 10
+        let n3: i32 = encode_lit(&mut arena, 2);       // idx 3: Lit(2)
+        let n4: i32 = encode_neg(&mut arena, n3);      // idx 4: Neg(3) = -2
+        let n5: i32 = encode_lit(&mut arena, 5);       // idx 5: Lit(5)
+        let n6: i32 = encode_add(&mut arena, n4, n5);  // idx 6: Add(4,5) = 3
+        let n7: i32 = encode_mul(&mut arena, n2, n6);  // idx 7: Mul(2,6) = 30
+
+        // Verify node count
+        let nc: i32 = node_count(&arena);
+        if nc != 8 { vec_free::<i32>(arena); return 1; }
+
+        // Evaluate all nodes
+        let results: Vec<i32> = eval_all(&arena);
+        let final_val: i32 = vec_get::<i32>(&results, 7);
+        if final_val != 30 { vec_free::<i32>(arena); vec_free::<i32>(results); return 2; }
+
+        // Check intermediate results
+        let r0: i32 = vec_get::<i32>(&results, 0);  // 3
+        let r1: i32 = vec_get::<i32>(&results, 1);  // 7
+        let r2: i32 = vec_get::<i32>(&results, 2);  // 10
+        let r4: i32 = vec_get::<i32>(&results, 4);  // -2
+        let r6: i32 = vec_get::<i32>(&results, 6);  // 3
+        if r0 != 3 { vec_free::<i32>(arena); vec_free::<i32>(results); return 3; }
+        if r1 != 7 { vec_free::<i32>(arena); vec_free::<i32>(results); return 4; }
+        if r2 != 10 { vec_free::<i32>(arena); vec_free::<i32>(results); return 5; }
+        if r4 != 0 - 2 { vec_free::<i32>(arena); vec_free::<i32>(results); return 6; }
+        if r6 != 3 { vec_free::<i32>(arena); vec_free::<i32>(results); return 7; }
+
+        // Test function pointers for binary ops
+        let fp_add: i32 = apply_binop(add_op, 15, 25);  // 40
+        let fp_mul: i32 = apply_binop(mul_op, 4, 3);    // 12
+        if fp_add != 40 { vec_free::<i32>(arena); vec_free::<i32>(results); return 8; }
+        if fp_mul != 12 { vec_free::<i32>(arena); vec_free::<i32>(results); return 9; }
+
+        // Compute depth of root node (idx 7)
+        let depth: i32 = node_depth(&arena, n7);
+        // Tree: Mul(Add(Lit,Const), Add(Neg(Lit), Lit))
+        // depth: Mul=1, Add=2, Lit/Const=3, Neg=3, Lit=4 => max depth from root = 4
+        if depth != 4 { vec_free::<i32>(arena); vec_free::<i32>(results); return 10; }
+
+        // Count node kinds: 3 Lit, 2 Add, 1 Mul, 1 Neg, 1 Const
+        let lit_count: i32 = count_kind(&arena, 0);
+        let add_count: i32 = count_kind(&arena, 1);
+        let mul_count: i32 = count_kind(&arena, 2);
+        let neg_count: i32 = count_kind(&arena, 3);
+        let const_count: i32 = count_kind(&arena, 4);
+        if lit_count != 3 { vec_free::<i32>(arena); vec_free::<i32>(results); return 11; }
+        if add_count != 2 { vec_free::<i32>(arena); vec_free::<i32>(results); return 12; }
+        if mul_count != 1 { vec_free::<i32>(arena); vec_free::<i32>(results); return 13; }
+        if neg_count != 1 { vec_free::<i32>(arena); vec_free::<i32>(results); return 14; }
+        if const_count != 1 { vec_free::<i32>(arena); vec_free::<i32>(results); return 15; }
+
+        // Use the Displayable trait with generic dispatch
+        let er: EvalResult = EvalResult {
+            node_count: nc,
+            final_value: final_val,
+            max_depth: depth,
+        };
+        // display_metric = 30 + 8 + 4 = 42
+        let metric: i32 = compute_display::<EvalResult>(&er);
+        if metric != 42 { vec_free::<i32>(arena); vec_free::<i32>(results); return 16; }
+
+        vec_free::<i32>(arena);
+        vec_free::<i32>(results);
+        return metric as Int;
+    }
+}

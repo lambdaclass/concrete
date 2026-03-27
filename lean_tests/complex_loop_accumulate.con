@@ -1,0 +1,23 @@
+// Complex test: loops with break/continue and arrays
+fn main() -> Int {
+    let mut arr: [Int; 5] = [10, 20, 30, 40, 50];
+    let mut sum: Int = 0;
+    let mut i: Int = 0;
+
+    // Sum only elements > 15, skip first, break when we hit 40
+    while i < 5 {
+        let val: Int = arr[i];
+        i = i + 1;
+
+        if val <= 15 {
+            continue;
+        }
+        if val >= 40 {
+            break;
+        }
+        sum = sum + val;
+    }
+    // Skip 10 (<=15), include 20, include 30, break at 40
+    // sum = 20 + 30 = 50
+    return sum;
+}

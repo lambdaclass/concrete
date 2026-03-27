@@ -1,0 +1,13 @@
+fn add(x: Int, y: Int) -> Int {
+    return x + y;
+}
+
+fn main() -> Int {
+    let a: Int = add(1, 2);
+    let b: bool = true;
+    if b {
+        return a;
+    } else {
+        return 0;
+    }
+}

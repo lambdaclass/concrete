@@ -1,0 +1,8 @@
+// Test: --report mono should show generic function count and specializations
+fn identity<T>(x: T) -> T { return x; }
+
+fn main() -> Int {
+    let a: Int = identity::<Int>(42);
+    let b: i32 = identity::<i32>(7);
+    return a;
+}

@@ -1,0 +1,6 @@
+// Tests that Check rejects assignment to immutable variable
+fn main() -> Int {
+    let x: Int = 10;
+    x = 20;
+    return x;
+}

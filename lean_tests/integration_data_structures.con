@@ -1,0 +1,165 @@
+// Integration test: generic data structures with traits, heap, and defer.
+// Exercises: generics with trait bounds, impl blocks with methods,
+// heap allocation (alloc/free), defer for cleanup, function pointers,
+// capability flow, while loops with break, mutable borrows.
+//
+// Implements a bounded priority queue and top-K algorithm using Vec<Int>
+// with parallel arrays for keys/values.
+
+trait Scorable {
+    fn score(&self) -> Int;
+}
+
+pub struct Copy Stats {
+    count: Int,
+    sum: Int,
+    min_val: Int,
+    max_val: Int,
+}
+
+impl Scorable for Stats {
+    fn score(&self) -> Int {
+        return self.sum;
+    }
+}
+
+impl Stats {
+    fn range(&self) -> Int {
+        return self.max_val - self.min_val;
+    }
+}
+
+// Insert into a sorted Vec, maintaining ascending order.
+fn sorted_insert(keys: &mut Vec<Int>, vals: &mut Vec<Int>, key: Int, val: Int) with(Alloc) {
+    let len: Int = vec_len::<Int>(keys);
+    let mut pos: Int = len;
+    let mut i: Int = 0;
+    while i < len {
+        if key < vec_get::<Int>(keys, i) {
+            pos = i;
+            break;
+        }
+        i = i + 1;
+    }
+
+    // Push at end, then rotate into position
+    vec_push::<Int>(keys, key);
+    vec_push::<Int>(vals, val);
+    let new_len: Int = vec_len::<Int>(keys);
+    i = new_len - 1;
+    while i > pos {
+        vec_set::<Int>(keys, i, vec_get::<Int>(keys, i - 1));
+        vec_set::<Int>(vals, i, vec_get::<Int>(vals, i - 1));
+        i = i - 1;
+    }
+    vec_set::<Int>(keys, pos, key);
+    vec_set::<Int>(vals, pos, val);
+}
+
+// Keep only first K elements
+fn truncate_to(v: &mut Vec<Int>, k: Int) with(Alloc) {
+    while vec_len::<Int>(v) > k {
+        vec_pop::<Int>(v);
+    }
+}
+
+// Find top-K smallest from values
+fn top_k_smallest(values: &Vec<Int>, k: Int) with(Alloc) -> Vec<Int> {
+    let mut keys: Vec<Int> = vec_new::<Int>();
+    let mut vals: Vec<Int> = vec_new::<Int>();
+    let n: Int = vec_len::<Int>(values);
+    let mut i: Int = 0;
+    while i < n {
+        let val: Int = vec_get::<Int>(values, i);
+        sorted_insert(&mut keys, &mut vals, val, val * 2);
+        truncate_to(&mut keys, k);
+        truncate_to(&mut vals, k);
+        i = i + 1;
+    }
+    vec_free::<Int>(vals);
+    return keys;
+}
+
+// Compute Stats using trait method
+fn compute_stats<T: Scorable>(s: T) -> Int {
+    return s.score();
+}
+
+// Apply transformation via function pointer
+fn map_vec(src: &Vec<Int>, f: fn(Int) -> Int) with(Alloc) -> Vec<Int> {
+    let mut out: Vec<Int> = vec_new::<Int>();
+    let n: Int = vec_len::<Int>(src);
+    let mut i: Int = 0;
+    while i < n {
+        vec_push::<Int>(&mut out, f(vec_get::<Int>(src, i)));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn negate(x: Int) -> Int { return 0 - x; }
+fn double(x: Int) -> Int { return x * 2; }
+
+// Sum values with heap-allocated counter and defer cleanup
+fn sum_with_heap(values: &Vec<Int>) with(Alloc) -> Int {
+    let mut total: Int = 0;
+    // Use heap for a secondary accumulator to exercise alloc+defer
+    let scratch: Heap<Int> = alloc(0);
+    defer free(scratch);
+    let n: Int = vec_len::<Int>(values);
+    let mut i: Int = 0;
+    while i < n {
+        total = total + vec_get::<Int>(values, i);
+        i = i + 1;
+    }
+    return total;
+}
+
+fn main() with(Std) -> Int {
+    // Build input: 50, 30, 80, 10, 70, 20, 90, 40, 60
+    let mut values: Vec<Int> = vec_new::<Int>();
+    vec_push::<Int>(&mut values, 50);
+    vec_push::<Int>(&mut values, 30);
+    vec_push::<Int>(&mut values, 80);
+    vec_push::<Int>(&mut values, 10);
+    vec_push::<Int>(&mut values, 70);
+    vec_push::<Int>(&mut values, 20);
+    vec_push::<Int>(&mut values, 90);
+    vec_push::<Int>(&mut values, 40);
+    vec_push::<Int>(&mut values, 60);
+
+    // Top-3 smallest: 10, 20, 30
+    let top3: Vec<Int> = top_k_smallest(&values, 3);
+    if vec_len::<Int>(&top3) != 3 { vec_free::<Int>(values); vec_free::<Int>(top3); return 1; }
+    if vec_get::<Int>(&top3, 0) != 10 { vec_free::<Int>(values); vec_free::<Int>(top3); return 2; }
+    if vec_get::<Int>(&top3, 1) != 20 { vec_free::<Int>(values); vec_free::<Int>(top3); return 3; }
+    if vec_get::<Int>(&top3, 2) != 30 { vec_free::<Int>(values); vec_free::<Int>(top3); return 4; }
+
+    // Sum top3 with heap accumulator: 10 + 20 + 30 = 60
+    let s: Int = sum_with_heap(&top3);
+    if s != 60 { vec_free::<Int>(values); vec_free::<Int>(top3); return 5; }
+
+    // Test trait dispatch via impl method
+    let stats: Stats = Stats { count: 3, sum: 60, min_val: 10, max_val: 30 };
+    if compute_stats(stats) != 60 { vec_free::<Int>(values); vec_free::<Int>(top3); return 6; }
+    if stats.range() != 20 { vec_free::<Int>(values); vec_free::<Int>(top3); return 7; }
+
+    // Function pointer mapping: negate all values
+    let negated: Vec<Int> = map_vec(&values, negate);
+    if vec_get::<Int>(&negated, 0) != -50 { vec_free::<Int>(values); vec_free::<Int>(top3); vec_free::<Int>(negated); return 8; }
+
+    // Double: 50*2 = 100
+    let doubled: Vec<Int> = map_vec(&values, double);
+    if vec_get::<Int>(&doubled, 0) != 100 { vec_free::<Int>(values); vec_free::<Int>(top3); vec_free::<Int>(negated); vec_free::<Int>(doubled); return 9; }
+
+    // Top-3 of negated: -90, -80, -70
+    let top3_neg: Vec<Int> = top_k_smallest(&negated, 3);
+    if vec_get::<Int>(&top3_neg, 0) != -90 { vec_free::<Int>(values); vec_free::<Int>(top3); vec_free::<Int>(negated); vec_free::<Int>(doubled); vec_free::<Int>(top3_neg); return 10; }
+
+    vec_free::<Int>(top3_neg);
+    vec_free::<Int>(doubled);
+    vec_free::<Int>(negated);
+    vec_free::<Int>(top3);
+    vec_free::<Int>(values);
+    return 0;
+}

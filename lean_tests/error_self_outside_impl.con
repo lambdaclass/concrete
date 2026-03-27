@@ -1,0 +1,14 @@
+struct Point { x: Int, y: Int }
+
+fn make_point() -> Self {
+    return Point { x: 1, y: 2 };
+}
+
+fn consume(p: Point) -> Int {
+    return p.x;
+}
+
+fn main() -> Int {
+    let p: Point = make_point();
+    return consume(p);
+}

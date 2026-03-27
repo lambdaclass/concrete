@@ -1,0 +1,14 @@
+// Test: simultaneous mutable borrows via nested borrow blocks
+fn main() -> Int {
+    let mut n: Int = 41;
+
+    borrow mut n as r1 in R1 {
+        // Trying to take another mutable borrow while r1 is active
+        borrow mut n as r2 in R2 {
+            *r2 = *r2 + 1;
+        }
+        *r1 = *r1 + 1;
+    }
+
+    return n;
+}

@@ -1,0 +1,17 @@
+// Three-level call chain: a() with(File, Network) -> b() with(File) -> c() with(File)
+// Tests capability subset checking across a call chain.
+fn c() with(File) -> Int {
+    return 42;
+}
+
+fn b() with(File) -> Int {
+    return c();
+}
+
+fn a() with(File, Network) -> Int {
+    return b();
+}
+
+fn main() with(Std) -> Int {
+    return a();
+}

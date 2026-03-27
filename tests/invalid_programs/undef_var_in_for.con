@@ -1,0 +1,7 @@
+mod foo {
+    pub fn main() -> i32 {
+        for (let mut n: i64 = 1; n <= undefined_var; n = n + 1) {
+            return 0;
+        }
+    }
+}

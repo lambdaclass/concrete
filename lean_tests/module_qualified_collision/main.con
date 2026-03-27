@@ -1,0 +1,9 @@
+// Test: two submodules defining the same leaf function name
+mod math;
+mod util;
+
+fn main() -> Int {
+    let a: Int = math::add(20, 22);
+    let b: Int = util::add(3, 4);
+    return a + b;
+}

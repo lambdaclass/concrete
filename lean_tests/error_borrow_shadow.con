@@ -1,0 +1,9 @@
+// Error: borrow ref shadows existing name
+fn main() -> Int {
+    let x: Int = 10;
+    let r: Int = 20;
+    borrow x as r in R {
+        let y: Int = *r;
+    }
+    return 0;
+}

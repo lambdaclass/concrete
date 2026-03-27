@@ -1,0 +1,15 @@
+// module main
+enum Option<T> {
+  Some { value: T },
+  None,
+}
+
+enum Result<T, E> {
+  Ok { value: T },
+  Err { value: E },
+}
+
+fn main() -> Int {
+  let arr: [Int; 3] = [10, 20, 30];
+  return (arr[0] + arr[2]);
+}

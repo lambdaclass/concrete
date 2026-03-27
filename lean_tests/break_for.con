@@ -1,0 +1,13 @@
+// Test break in for loop
+// Expected: 10 (0+1+2+3+4)
+
+fn main() with(Std) -> Int {
+    let mut sum: Int = 0;
+    for (let mut i: Int = 0; i < 100; i = i + 1) {
+        if i == 5 {
+            break;
+        }
+        sum = sum + i;
+    }
+    return sum;
+}

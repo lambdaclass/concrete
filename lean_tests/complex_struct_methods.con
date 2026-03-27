@@ -1,0 +1,35 @@
+// Complex test: structs with impl blocks, traits, and borrow regions
+struct Copy Point {
+    x: Int,
+    y: Int
+}
+
+impl Point {
+    fn new(x: Int, y: Int) -> Point {
+        return Point { x: x, y: y };
+    }
+
+    fn manhattan(&self) -> Int {
+        return self.x + self.y;
+    }
+}
+
+trait Scalable {
+    fn scale(&self, factor: Int) -> Point;
+}
+
+impl Scalable for Point {
+    fn scale(&self, factor: Int) -> Point {
+        return Point { x: self.x * factor, y: self.y * factor };
+    }
+}
+
+fn main() -> Int {
+    let p: Point = Point::new(3, 4);
+    let dist: Int = p.manhattan();
+    // dist = 7
+    let scaled: Point = p.scale(5);
+    let sdist: Int = scaled.manhattan();
+    // sdist = 35
+    return dist + sdist;
+}

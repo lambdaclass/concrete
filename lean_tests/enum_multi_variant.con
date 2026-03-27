@@ -1,0 +1,24 @@
+// Enum with many variants: tests match exhaustiveness across 5+ variants
+enum Weekday {
+    Mon {},
+    Tue {},
+    Wed {},
+    Thu {},
+    Fri {},
+}
+
+fn day_number(d: Weekday) -> Int {
+    match d {
+        Weekday#Mon {} => { return 1; },
+        Weekday#Tue {} => { return 2; },
+        Weekday#Wed {} => { return 3; },
+        Weekday#Thu {} => { return 4; },
+        Weekday#Fri {} => { return 5; },
+    }
+}
+
+fn main() -> Int {
+    let d1: Weekday = Weekday#Wed {};
+    let d2: Weekday = Weekday#Fri {};
+    return day_number(d1) + day_number(d2);
+}

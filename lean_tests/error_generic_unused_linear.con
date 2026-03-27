@@ -1,0 +1,12 @@
+struct Resource {
+    value: Int,
+}
+
+fn drop_it<T>(x: T) -> Int {
+    return 0;
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { value: 42 };
+    return drop_it(r);
+}

@@ -1,0 +1,28 @@
+enum Result<T, E> {
+    Ok { value: T },
+    Err { error: E },
+}
+
+enum MyError {
+    Bad,
+}
+
+fn might_fail(ok: bool) -> Result<Int, MyError> {
+    if ok {
+        return Result::<Int, MyError>#Ok { value: 42 };
+    }
+    return Result::<Int, MyError>#Err { error: MyError#Bad };
+}
+
+fn use_try() -> Result<Int, MyError> {
+    let v: Int = might_fail(true)?;
+    return Result::<Int, MyError>#Ok { value: v };
+}
+
+fn main() -> Int {
+    let r: Result<Int, MyError> = use_try();
+    match r {
+        Result#Ok { value } => { return value; },
+        Result#Err => { return 0; },
+    }
+}

@@ -1,0 +1,15 @@
+// Test: three levels of struct nesting
+struct Copy Inner { value: Int }
+struct Copy Middle { inner: Inner }
+struct Copy Outer { middle: Middle }
+
+fn get_value(o: Outer) -> Int {
+    return o.middle.inner.value;
+}
+
+fn main() -> Int {
+    let i: Inner = Inner { value: 42 };
+    let m: Middle = Middle { inner: i };
+    let o: Outer = Outer { middle: m };
+    return get_value(o);
+}

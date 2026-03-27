@@ -1,0 +1,2 @@
+fn mul8(x: Int) -> Int { return x * 8; }
+fn main() -> Int { return mul8(5); }

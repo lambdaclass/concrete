@@ -1,0 +1,13 @@
+// Error: trusted fn tries to allocate without declaring with(Alloc)
+trusted fn bad_alloc(p: *const i32) -> i32 {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    vec_push(&mut v, 1);
+    vec_free(v);
+    return *p;
+}
+
+fn main() with(Unsafe) -> i32 {
+    let x: i32 = 5;
+    let p: *const i32 = &x as *const i32;
+    return bad_alloc(p);
+}

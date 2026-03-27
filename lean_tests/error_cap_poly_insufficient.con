@@ -1,0 +1,12 @@
+// Error: capability polymorphism where caller doesn't have enough caps
+fn apply<T, cap C>(f: fn(T) with(C) -> T, x: T) with(C) -> T {
+    return f(x);
+}
+
+fn needs_file(x: Int) with(File) -> Int {
+    return x;
+}
+
+fn main() -> Int {
+    return apply((needs_file), 42);
+}
