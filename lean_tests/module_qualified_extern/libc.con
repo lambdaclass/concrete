@@ -1,0 +1,1 @@
+pub extern fn abs(x: Int) -> Int;

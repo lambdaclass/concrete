@@ -1,0 +1,348 @@
+# Phase 3: O2 differential testing candidates
+# Format: run_ok_O2 "$TESTDIR/test_name.con" EXPECTED_VALUE
+#
+# Selection criteria:
+#   INCLUDE: loops, recursion, arithmetic, struct/enum codegen, control flow,
+#            generics, trait dispatch, borrows, heap/alloc, defer, match, break/continue
+#   EXCLUDE: error tests, trivial "return 0" compile-only tests, file/network IO,
+#            print/stdout-dependent tests, tests already in O2 section
+#
+# Already covered by existing O2 section (13 tests):
+#   struct_loop_field_assign, struct_loop_break, struct_nested_loop,
+#   struct_if_else_merge, struct_match_merge, test_dead_code_after_return,
+#   test_branch_same_value, test_deeply_nested_return, test_loop_nested_three,
+#   test_early_return_loop, test_constant_fold_complex, test_loop_invariant,
+#   test_recursive_fibonacci
+
+# --- Core computation ---
+run_ok_O2 "$TESTDIR/fib.con"                55
+run_ok_O2 "$TESTDIR/arithmetic.con"         65
+run_ok_O2 "$TESTDIR/if_else.con"            1
+run_ok_O2 "$TESTDIR/while_loop.con"         5050
+run_ok_O2 "$TESTDIR/recursion.con"          479001600
+run_ok_O2 "$TESTDIR/nested_calls.con"       42
+
+# --- Struct codegen ---
+run_ok_O2 "$TESTDIR/struct_basic.con"       7
+run_ok_O2 "$TESTDIR/struct_field_assign.con" 33
+run_ok_O2 "$TESTDIR/struct_nested.con"      42
+run_ok_O2 "$TESTDIR/struct_method_chain.con" 39
+run_ok_O2 "$TESTDIR/struct_enum_field_vec.con" 123
+
+# --- Enum codegen ---
+run_ok_O2 "$TESTDIR/enum_basic.con"        2
+run_ok_O2 "$TESTDIR/enum_fields.con"       12
+run_ok_O2 "$TESTDIR/enum_linear.con"       42
+run_ok_O2 "$TESTDIR/enum_multi_variant.con" 8
+run_ok_O2 "$TESTDIR/nested_match_enum.con" 60
+
+# --- Linearity ---
+run_ok_O2 "$TESTDIR/linear_consume.con"     42
+run_ok_O2 "$TESTDIR/linear_branch_agree.con" 42
+run_ok_O2 "$TESTDIR/linear_loop_inner.con"  3
+
+# --- Borrows ---
+run_ok_O2 "$TESTDIR/borrow_read.con"      10
+run_ok_O2 "$TESTDIR/borrow_mut.con"       42
+run_ok_O2 "$TESTDIR/borrow_no_consume.con" 42
+run_ok_O2 "$TESTDIR/sequential_mut_borrow.con" 43
+run_ok_O2 "$TESTDIR/borrow_named.con"     30
+run_ok_O2 "$TESTDIR/borrow_mut_named.con"  42
+run_ok_O2 "$TESTDIR/borrow_multi.con"     35
+run_ok_O2 "$TESTDIR/borrow_sequential.con" 30
+run_ok_O2 "$TESTDIR/borrow_copy_in_block.con" 42
+run_ok_O2 "$TESTDIR/borrow_in_method.con" 67
+
+# --- Generics ---
+run_ok_O2 "$TESTDIR/generic_fn.con"       42
+run_ok_O2 "$TESTDIR/generic_struct.con"   30
+run_ok_O2 "$TESTDIR/generic_pair.con"     42
+run_ok_O2 "$TESTDIR/generic_multi_bound_dispatch.con" 49
+
+# --- Result / Option ---
+run_ok_O2 "$TESTDIR/result_ok.con"      42
+run_ok_O2 "$TESTDIR/result_err.con"     99
+run_ok_O2 "$TESTDIR/result_generic_try.con" 42
+run_ok_O2 "$TESTDIR/result_string.con" 5
+run_ok_O2 "$TESTDIR/option_basic.con"  52
+run_ok_O2 "$TESTDIR/option_heap.con"   42
+run_ok_O2 "$TESTDIR/option_string.con" 2
+run_ok_O2 "$TESTDIR/option_mixed_payloads.con" 44
+
+# --- String operations ---
+run_ok_O2 "$TESTDIR/string_basic.con"    5
+run_ok_O2 "$TESTDIR/string_borrow.con"   10
+run_ok_O2 "$TESTDIR/string_slice_basic.con" 5
+run_ok_O2 "$TESTDIR/string_char_at_basic.con" 65
+run_ok_O2 "$TESTDIR/string_contains_basic.con" 1
+run_ok_O2 "$TESTDIR/string_eq_basic.con" 1
+run_ok_O2 "$TESTDIR/int_to_string_basic.con" 2
+run_ok_O2 "$TESTDIR/string_to_int_basic.con" 123
+run_ok_O2 "$TESTDIR/string_trim_basic.con" 5
+run_ok_O2 "$TESTDIR/string_empty.con" 0
+run_ok_O2 "$TESTDIR/string_concat_empty.con" 5
+run_ok_O2 "$TESTDIR/string_eq_same.con" 1
+run_ok_O2 "$TESTDIR/string_eq_different.con" 0
+run_ok_O2 "$TESTDIR/string_slice_full.con" 5
+run_ok_O2 "$TESTDIR/string_multi_fn.con" 8
+run_ok_O2 "$TESTDIR/string_contains_empty.con" 1
+run_ok_O2 "$TESTDIR/string_char_at_first_last.con" 196
+run_ok_O2 "$TESTDIR/string_trim_spaces.con" 2
+run_ok_O2 "$TESTDIR/string_to_int_roundtrip.con" 42
+
+# --- Module ---
+run_ok_O2 "$TESTDIR/module_basic.con"   42
+run_ok_O2 "$TESTDIR/module_struct.con"  30
+
+# --- Array ---
+run_ok_O2 "$TESTDIR/array_basic.con"   20
+run_ok_O2 "$TESTDIR/array_assign.con"  5
+
+# --- Cast ---
+run_ok_O2 "$TESTDIR/cast_basic.con"    42
+run_ok_O2 "$TESTDIR/cast_float.con"    7
+
+# --- Impl / methods ---
+run_ok_O2 "$TESTDIR/impl_method.con"   30
+run_ok_O2 "$TESTDIR/impl_mut_method.con" 42
+run_ok_O2 "$TESTDIR/impl_static.con"   7
+run_ok_O2 "$TESTDIR/self_type_basic.con" 42
+run_ok_O2 "$TESTDIR/self_type_method.con" 42
+
+# --- Traits ---
+run_ok_O2 "$TESTDIR/trait_basic.con"   30
+run_ok_O2 "$TESTDIR/trait_multiple.con" 50
+run_ok_O2 "$TESTDIR/trait_bound_basic.con" 30
+run_ok_O2 "$TESTDIR/trait_bound_multiple.con" 50
+run_ok_O2 "$TESTDIR/trait_multi_bound.con" 42
+run_ok_O2 "$TESTDIR/trait_dispatch_basic.con" 30
+run_ok_O2 "$TESTDIR/trait_dispatch_multi.con" 47
+run_ok_O2 "$TESTDIR/trait_dispatch_chain.con" 42
+run_ok_O2 "$TESTDIR/trait_numeric_abs.con" 57
+
+# --- Break / continue / labeled ---
+run_ok_O2 "$TESTDIR/break_basic.con"  5
+run_ok_O2 "$TESTDIR/continue_basic.con" 25
+run_ok_O2 "$TESTDIR/break_for.con"    10
+run_ok_O2 "$TESTDIR/continue_for.con" 27
+run_ok_O2 "$TESTDIR/labeled_break.con" 42
+run_ok_O2 "$TESTDIR/labeled_continue.con" 0
+run_ok_O2 "$TESTDIR/while_nested_labeled.con" 25
+run_ok_O2 "$TESTDIR/break_accumulate.con" 10
+run_ok_O2 "$TESTDIR/while_nested_break.con" 6
+
+# --- While-expression ---
+run_ok_O2 "$TESTDIR/while_expr_basic.con" 5
+run_ok_O2 "$TESTDIR/while_expr_no_break.con" 99
+run_ok_O2 "$TESTDIR/while_expr_nested.con" 6
+run_ok_O2 "$TESTDIR/if_else_while.con" 3
+run_ok_O2 "$TESTDIR/while_seq_scoping.con" 400
+
+# --- Defer ---
+run_ok_O2 "$TESTDIR/defer_basic.con" 10
+run_ok_O2 "$TESTDIR/defer_lifo.con" 42
+run_ok_O2 "$TESTDIR/defer_early_return.con" 10
+run_ok_O2 "$TESTDIR/defer_loop.con" 42
+run_ok_O2 "$TESTDIR/defer_nested_scope.con" 42
+run_ok_O2 "$TESTDIR/defer_try.con" 42
+run_ok_O2 "$TESTDIR/defer_multiple.con" 30
+
+# --- Copy / destroy ---
+run_ok_O2 "$TESTDIR/destroy_trait.con" 42
+run_ok_O2 "$TESTDIR/copy_struct.con" 42
+run_ok_O2 "$TESTDIR/copy_enum.con" 42
+run_ok_O2 "$TESTDIR/copy_multiple_use.con" 50
+
+# --- Heap / alloc ---
+run_ok_O2 "$TESTDIR/alloc_basic.con" 30
+run_ok_O2 "$TESTDIR/alloc_propagate.con" 30
+run_ok_O2 "$TESTDIR/heap_arrow.con" 20
+run_ok_O2 "$TESTDIR/heap_arrow_mut.con" 42
+run_ok_O2 "$TESTDIR/heap_struct_method.con" 30
+run_ok_O2 "$TESTDIR/alloc_free_loop.con" 45
+run_ok_O2 "$TESTDIR/heap_deref_basic.con" 30
+run_ok_O2 "$TESTDIR/heap_deref_int.con" 42
+run_ok_O2 "$TESTDIR/heap_deref_enum.con" 42
+run_ok_O2 "$TESTDIR/heap_deref_recursive.con" 42
+
+# --- Cap (non-trivial ones) ---
+run_ok_O2 "$TESTDIR/cap_bang.con"     30
+run_ok_O2 "$TESTDIR/cap_poly.con" 42
+run_ok_O2 "$TESTDIR/cap_poly_chain.con" 42
+run_ok_O2 "$TESTDIR/cap_nested_call.con" 42
+run_ok_O2 "$TESTDIR/cap_alias_pub.con" 42
+
+# --- Escape / closures ---
+run_ok_O2 "$TESTDIR/escape_return.con" 10
+
+# --- Complex / integration ---
+run_ok_O2 "$TESTDIR/complex_linked_list.con" 42
+run_ok_O2 "$TESTDIR/complex_closure_pipeline.con" 27
+run_ok_O2 "$TESTDIR/complex_struct_methods.con" 42
+run_ok_O2 "$TESTDIR/complex_defer_destroy.con" 42
+run_ok_O2 "$TESTDIR/complex_enum_result.con" 25
+run_ok_O2 "$TESTDIR/complex_borrow_compute.con" 170
+run_ok_O2 "$TESTDIR/complex_generic_container.con" 42
+run_ok_O2 "$TESTDIR/complex_loop_accumulate.con" 50
+run_ok_O2 "$TESTDIR/complex_fibonacci_closure.con" 55
+run_ok_O2 "$TESTDIR/complex_state_machine.con" 42
+run_ok_O2 "$TESTDIR/complex_builder_pattern.con" 60
+run_ok_O2 "$TESTDIR/complex_error_chain.con" 40
+run_ok_O2 "$TESTDIR/complex_defer_cleanup.con" 30
+run_ok_O2 "$TESTDIR/complex_recursive_list.con" 42
+run_ok_O2 "$TESTDIR/complex_recursive_tree.con" 42
+run_ok_O2 "$TESTDIR/complex_recursive_mutual.con" 42
+run_ok_O2 "$TESTDIR/complex_multi_feature.con" 40
+run_ok_O2 "$TESTDIR/complex_heap_borrow.con" 42
+run_ok_O2 "$TESTDIR/complex_enum_nested.con" 87
+run_ok_O2 "$TESTDIR/complex_recursive_enum.con" 19
+run_ok_O2 "$TESTDIR/complex_option_chain.con" 26
+run_ok_O2 "$TESTDIR/complex_trait_hierarchy.con" 45
+
+# --- Integration tests ---
+run_ok_O2 "$TESTDIR/integration_data_structures.con" 0
+run_ok_O2 "$TESTDIR/integration_error_handling.con" 0
+run_ok_O2 "$TESTDIR/integration_generic_pipeline.con" 42
+run_ok_O2 "$TESTDIR/integration_state_machine.con" 42
+run_ok_O2 "$TESTDIR/integration_compiler_stress.con" 42
+run_ok_O2 "$TESTDIR/integration_multi_module.con" 42
+run_ok_O2 "$TESTDIR/integration_recursive_structures.con" 42
+run_ok_O2 "$TESTDIR/integration_multi_file_calculator.con" 42
+run_ok_O2 "$TESTDIR/integration_type_registry.con" 42
+run_ok_O2 "$TESTDIR/integration_pipeline_processor.con" 42
+run_ok_O2 "$TESTDIR/integration_stress_workload.con" 42
+
+# --- Vec (heap + loops, good O2 stress) ---
+run_ok_O2 "$TESTDIR/vec_basic.con" 23
+run_ok_O2 "$TESTDIR/vec_push_get.con" 500
+run_ok_O2 "$TESTDIR/vec_pop.con" 42
+run_ok_O2 "$TESTDIR/vec_set_basic.con" 99
+run_ok_O2 "$TESTDIR/vec_len_after_ops.con" 32
+run_ok_O2 "$TESTDIR/vec_stress_realloc.con" 249
+run_ok_O2 "$TESTDIR/vec_set_all.con" 60
+run_ok_O2 "$TESTDIR/vec_pop_until_empty.con" 29
+run_ok_O2 "$TESTDIR/vec_trace.con" 0
+
+# --- Bitwise / integer ---
+run_ok_O2 "$TESTDIR/bitwise_and.con" 15
+run_ok_O2 "$TESTDIR/bitwise_or.con" 255
+run_ok_O2 "$TESTDIR/bitwise_xor.con" 240
+run_ok_O2 "$TESTDIR/bitwise_shift.con" 1056
+run_ok_O2 "$TESTDIR/bitwise_not.con" -1
+run_ok_O2 "$TESTDIR/hex_literal.con" 255
+run_ok_O2 "$TESTDIR/bin_oct_literal.con" 73
+run_ok_O2 "$TESTDIR/int_arithmetic_negative.con" 50
+run_ok_O2 "$TESTDIR/int_division.con" 31
+run_ok_O2 "$TESTDIR/int_bitwise_combined.con" 15
+run_ok_O2 "$TESTDIR/int_shift_basic.con" 4
+run_ok_O2 "$TESTDIR/int_cast_i32.con" 42
+run_ok_O2 "$TESTDIR/int_large_multiply.con" 56088
+
+# --- Math ---
+run_ok_O2 "$TESTDIR/math_sqrt.con" 5
+run_ok_O2 "$TESTDIR/math_pow.con" 81
+run_ok_O2 "$TESTDIR/math_abs.con" 52
+run_ok_O2 "$TESTDIR/math_floor_ceil.con" 34
+run_ok_O2 "$TESTDIR/math_sin_cos.con" 10
+run_ok_O2 "$TESTDIR/math_exp_log.con" 10
+
+# --- Bug regressions ---
+run_ok_O2 "$TESTDIR/bug_cross_module_struct_field.con" 42
+run_ok_O2 "$TESTDIR/bug_i32_literal_type.con" 42
+run_ok_O2 "$TESTDIR/bug_cross_module_mut_borrow.con" 42
+run_ok_O2 "$TESTDIR/regress_deref_field_precedence.con" 42
+run_ok_O2 "$TESTDIR/regress_mut_field_writeback.con" 42
+run_ok_O2 "$TESTDIR/regress_char_bool_cast.con" 42
+run_ok_O2 "$TESTDIR/regress_ref_no_spill.con" 42
+run_ok_O2 "$TESTDIR/regress_string_field_access.con" 42
+
+# --- Hardening ---
+run_ok_O2 "$TESTDIR/hardening_int_literal_inference.con" 42
+run_ok_O2 "$TESTDIR/hardening_borrow_edge_cases.con" 42
+run_ok_O2 "$TESTDIR/hardening_cross_module_enum.con" 42
+run_ok_O2 "$TESTDIR/hardening_cross_module_trait.con" 42
+run_ok_O2 "$TESTDIR/hardening_cross_module_type_alias.con" 42
+
+# --- Newtype ---
+run_ok_O2 "$TESTDIR/newtype_basic.con" 42
+run_ok_O2 "$TESTDIR/newtype_copy.con" 20
+run_ok_O2 "$TESTDIR/newtype_linear.con" 7
+run_ok_O2 "$TESTDIR/newtype_generic.con" 100
+
+# --- Repr / layout ---
+run_ok_O2 "$TESTDIR/repr_c_basic.con" 42
+run_ok_O2 "$TESTDIR/repr_c_nested.con" 42
+run_ok_O2 "$TESTDIR/repr_c_cross_module.con" 30
+run_ok_O2 "$TESTDIR/repr_packed.con" 7
+run_ok_O2 "$TESTDIR/repr_align.con" 16
+run_ok_O2 "$TESTDIR/sizeof_basic.con" 12
+run_ok_O2 "$TESTDIR/alignof_basic.con" 12
+run_ok_O2 "$TESTDIR/union_basic.con" 42
+
+# --- Fn pointers ---
+run_ok_O2 "$TESTDIR/fn_ptr_struct_field.con" 42
+run_ok_O2 "$TESTDIR/fn_ptr_method_call.con" 42
+run_ok_O2 "$TESTDIR/ffi_basic.con" 42
+run_ok_O2 "$TESTDIR/trusted_extern_basic.con" 42
+
+# --- Trusted (runtime-exercising ones) ---
+run_ok_O2 "$TESTDIR/trusted_deref_runtime.con" 42
+run_ok_O2 "$TESTDIR/trusted_assign_runtime.con" 77
+run_ok_O2 "$TESTDIR/trusted_arith_runtime.con" 32
+run_ok_O2 "$TESTDIR/trusted_with_alloc.con" 10
+
+# --- Stdlib hashmap ---
+run_ok_O2 "$TESTDIR/stdlib_hashmap.con" 0
+
+# --- Property tests ---
+run_ok_O2 "$TESTDIR/fmt_parse_roundtrip.con" 0
+
+# --- Summary / module-system tests ---
+run_ok_O2 "$TESTDIR/summary_import_pub_fn.con" 42
+run_ok_O2 "$TESTDIR/summary_import_pub_constant.con" 42
+run_ok_O2 "$TESTDIR/summary_import_pub_extern.con" 42
+run_ok_O2 "$TESTDIR/summary_import_pub_newtype.con" 42
+run_ok_O2 "$TESTDIR/summary_import_type_alias.con" 42
+run_ok_O2 "$TESTDIR/summary_submodule.con" 42
+run_ok_O2 "$TESTDIR/summary_trait_impl_cross_module.con" 42
+
+# --- Hardening phase tests (non-trivial codegen) ---
+run_ok_O2 "$TESTDIR/test_generic_chain.con" 42
+run_ok_O2 "$TESTDIR/test_generic_nested_struct.con" 42
+run_ok_O2 "$TESTDIR/test_enum_recursive_sum.con" 42
+run_ok_O2 "$TESTDIR/test_match_exhaustive_nested.con" 42
+run_ok_O2 "$TESTDIR/test_linearity_branch_agree.con" 42
+run_ok_O2 "$TESTDIR/test_linearity_match_consume.con" 42
+run_ok_O2 "$TESTDIR/test_defer_linearity.con" 42
+run_ok_O2 "$TESTDIR/test_trait_multi_bound.con" 42
+run_ok_O2 "$TESTDIR/test_int_overflow_wrap.con" 42
+run_ok_O2 "$TESTDIR/test_nested_struct_access.con" 42
+run_ok_O2 "$TESTDIR/test_nested_if_else.con" 42
+run_ok_O2 "$TESTDIR/test_large_struct_pass.con" 42
+run_ok_O2 "$TESTDIR/test_cast_chain.con" 42
+run_ok_O2 "$TESTDIR/test_many_locals.con" 42
+run_ok_O2 "$TESTDIR/test_comparison_chain.con" 42
+run_ok_O2 "$TESTDIR/test_unused_variable.con" 42
+run_ok_O2 "$TESTDIR/test_zero_iterations.con" 42
+run_ok_O2 "$TESTDIR/test_single_iteration_loop.con" 42
+run_ok_O2 "$TESTDIR/test_cap_subset_chain.con" 42
+run_ok_O2 "$TESTDIR/test_cap_poly_apply.con" 42
+run_ok_O2 "$TESTDIR/test_cap_alias_nested.con" 42
+run_ok_O2 "$TESTDIR/test_trusted_impl_method.con" 42
+run_ok_O2 "$TESTDIR/test_trusted_extern_call.con" 42
+run_ok_O2 "$TESTDIR/test_module_nested.con" 42
+run_ok_O2 "$TESTDIR/test_module_struct_method.con" 42
+run_ok_O2 "$TESTDIR/test_module_enum_match.con" 42
+run_ok_O2 "$TESTDIR/test_module_reexport_type.con" 42
+run_ok_O2 "$TESTDIR/test_deeply_nested_expr.con" 42
+run_ok_O2 "$TESTDIR/test_many_params.con" 42
+run_ok_O2 "$TESTDIR/test_empty_struct.con" 42
+run_ok_O2 "$TESTDIR/test_enum_many_variants.con" 42
+run_ok_O2 "$TESTDIR/test_defer_early_return.con" 42
+run_ok_O2 "$TESTDIR/test_defer_loop_break.con" 42
+run_ok_O2 "$TESTDIR/test_repr_c_nested.con" 42
+run_ok_O2 "$TESTDIR/test_fn_ptr_call_chain.con" 42
+run_ok_O2 "$TESTDIR/test_fn_ptr_in_struct.con" 42
+run_ok_O2 "$TESTDIR/test_sizeof_basic_types.con" 42
+run_ok_O2 "$TESTDIR/test_array_bounds.con" 42
+run_ok_O2 "$TESTDIR/test_ptr_round_trip.con" 42

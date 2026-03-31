@@ -1,0 +1,19 @@
+// Test: defer with ownership-consuming calls like drop_string
+fn test(flag: bool) with(Console, Alloc) -> i32 {
+    let s: String = "hello";
+    defer drop_string(s);
+    if flag {
+        print_string(&s);
+        print_char(10);
+        return 1;
+    }
+    print_string(&s);
+    print_char(10);
+    return 0;
+}
+
+fn main() with(Std) -> Int {
+    let r1: i32 = test(true);
+    let r2: i32 = test(false);
+    return (r1 + r2) as Int;
+}

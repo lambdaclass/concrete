@@ -1,0 +1,35 @@
+// Test: __concrete_get_argc and __concrete_get_argv work correctly.
+// The test binary is invoked without extra args, so argc should be >= 1
+// (the program name itself).
+
+trusted extern fn __concrete_get_argc() -> i32;
+trusted extern fn __concrete_get_argv(idx: i32) -> *const u8;
+trusted extern fn strlen(s: *const u8) -> u64;
+
+trusted fn argv_to_string(idx: i32) with(Alloc) -> String {
+    let raw: *const u8 = __concrete_get_argv(idx);
+    if raw == (0 as *const u8) { return ""; }
+    let len: u64 = strlen(raw);
+    let mut s: String = "";
+    string_reserve(&mut s, (len + 1) as Int);
+    let mut i: u64 = 0;
+    while i < len {
+        let p: *const u8 = raw + i;
+        let ch: u8 = *p;
+        string_push_char(&mut s, ch as Int);
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() with(Std) -> Int {
+    let argc: i32 = __concrete_get_argc();
+    // argc should be at least 1 (the program name)
+    if argc < 1 { return 1; }
+    // argv[0] should be a non-empty string (the program path)
+    let prog: String = argv_to_string(0);
+    let len: Int = string_length(&prog);
+    drop_string(prog);
+    if len == 0 { return 2; }
+    return 0;
+}

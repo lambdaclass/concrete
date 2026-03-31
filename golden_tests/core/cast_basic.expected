@@ -1,0 +1,17 @@
+// module main
+enum Option<T> {
+  Some { value: T },
+  None,
+}
+
+enum Result<T, E> {
+  Ok { value: T },
+  Err { value: E },
+}
+
+fn main() -> Int {
+  let x: Int = 42;
+  let y: Uint = x as Uint;
+  let z: Int = y as Int;
+  return z;
+}

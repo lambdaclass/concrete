@@ -1,0 +1,8 @@
+fn main() -> Int {
+    let a: String = "test";
+    let b: String = "test";
+    let eq: Bool = string_eq(&a, &b);
+    drop_string(a);
+    drop_string(b);
+    if eq { return 1; } else { return 0; }
+}

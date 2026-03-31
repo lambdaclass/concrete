@@ -1,0 +1,22 @@
+; module main
+define i64 @fib(i64 %n) {
+entry:
+  %t0 = sle i1 %n, 1
+  br i1 %t0, label %then0, label %merge2
+then0:
+
+  ret i64 %n
+merge2:
+  %t1 = sub i64 %n, 1
+  %t2 = call i64 @fib(i64 %t1)
+  %t3 = sub i64 %n, 2
+  %t4 = call i64 @fib(i64 %t3)
+  %t5 = add i64 %t2, %t4
+  ret i64 %t5
+}
+
+define i64 @main() {
+entry:
+  %t0 = call i64 @fib(i64 10)
+  ret i64 %t0
+}

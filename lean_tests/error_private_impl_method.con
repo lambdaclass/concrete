@@ -1,0 +1,18 @@
+// Test: a non-pub impl method should not be callable from another module
+mod Lib {
+    pub struct Copy Point { x: Int, y: Int }
+
+    impl Point {
+        fn secret(&self) -> Int { return self.x + 1; }
+        pub fn public_method(&self) -> Int { return self.x + 2; }
+    }
+}
+
+mod Main {
+    import Lib.{ Point };
+    fn main() -> Int {
+        let p: Point = Point { x: 10, y: 20 };
+        let r: Int = p.secret();
+        return r;
+    }
+}

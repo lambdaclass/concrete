@@ -1,0 +1,19 @@
+// Cross-module repr(C) struct used with extern fn in same program
+mod Lib {
+    #[repr(C)]
+    pub struct Point { x: Int, y: Int }
+    pub fn make_point(x: Int, y: Int) -> Point {
+        return Point { x: x, y: y };
+    }
+    pub fn sum_point(p: Point) -> Int {
+        return p.x + p.y;
+    }
+}
+
+mod Main {
+    import Lib.{ Point, make_point, sum_point };
+    fn main() -> Int {
+        let p: Point = make_point(10, 20);
+        return sum_point(p);
+    }
+}

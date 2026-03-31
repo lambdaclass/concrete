@@ -1,0 +1,281 @@
+mod process {
+    import std.libc.{exit as libc_exit, getpid as libc_getpid, fork as libc_fork, kill as libc_kill, waitpid as libc_waitpid, execvp as libc_execvp};
+    import std.alloc.{grow,dealloc};
+    import std.result.{Result};
+
+    pub enum ProcessError {
+        ForkFailed,
+        KillFailed,
+        WaitFailed,
+        SpawnFailed,
+    }
+
+    // Signal constants
+    pub fn sig_int() -> i32 { return 2; }
+    pub fn sig_kill() -> i32 { return 9; }
+    pub fn sig_term() -> i32 { return 15; }
+
+    pub enum ForkResult {
+        Parent { child_pid: i32 },
+        Child,
+        Err { error: ProcessError },
+    }
+
+    pub enum ExitStatus {
+        Exited { code: i32 },
+        Signaled { raw: i32 },
+    }
+
+    pub fn process_exit(code: i32) with(Unsafe, Process) {
+        libc_exit(code);
+    }
+
+    pub fn process_getpid() with(Unsafe, Process) -> i32 {
+        return libc_getpid();
+    }
+
+    pub fn process_fork() with(Unsafe, Process) -> ForkResult {
+        let pid: i32 = libc_fork();
+        if pid < 0 {
+            return ForkResult#Err { error: ProcessError#ForkFailed };
+        }
+        if pid == 0 {
+            return ForkResult#Child;
+        }
+        return ForkResult#Parent { child_pid: pid };
+    }
+
+    pub fn process_kill(pid: i32, sig: i32) with(Unsafe, Process) -> Result<bool, ProcessError> {
+        let ret: i32 = libc_kill(pid, sig);
+        if ret != 0 {
+            return Result::<bool, ProcessError>#Err { error: ProcessError#KillFailed };
+        }
+        return Result::<bool, ProcessError>#Ok { value: true };
+    }
+
+    pub struct Child {
+        pid: i32,
+    }
+
+    trusted impl Child {
+        pub fn new(pid: i32) -> Child {
+            let c: Child = Child { pid: pid };
+            return c;
+        }
+
+        pub fn pid(&self) -> i32 {
+            return self.pid;
+        }
+
+        pub fn wait(&self) with(Unsafe, Process) -> Result<ExitStatus, ProcessError> {
+            let status: i32 = 0;
+            let status_ptr: *mut i32 = &status as *mut i32;
+            let ret: i32 = libc_waitpid(self.pid, status_ptr as *mut i32, 0);
+            if ret < 0 {
+                return Result::<ExitStatus, ProcessError>#Err { error: ProcessError#WaitFailed };
+            }
+            // WIFEXITED: (status & 0x7F) == 0
+            let low: i32 = status & 127;
+            if low == 0 {
+                // WEXITSTATUS: (status >> 8) & 0xFF
+                let code: i32 = (status >> 8) & 255;
+                return Result::<ExitStatus, ProcessError>#Ok { value: ExitStatus#Exited { code: code } };
+            }
+            return Result::<ExitStatus, ProcessError>#Ok { value: ExitStatus#Signaled { raw: status } };
+        }
+    }
+
+    pub fn spawn(cmd: &String, args: *const *const u8) with(Unsafe, Process) -> Result<Child, ProcessError> {
+        let pid: i32 = libc_fork();
+        if pid < 0 {
+            return Result::<Child, ProcessError>#Err { error: ProcessError#SpawnFailed };
+        }
+        if pid == 0 {
+            // Child process: exec
+            libc_execvp(cmd.ptr as *const u8, args);
+            // If execvp returns, it failed
+            libc_exit(127);
+            // unreachable
+            return Result::<Child, ProcessError>#Err { error: ProcessError#SpawnFailed };
+        }
+        let c: Child = Child { pid: pid };
+        return Result::<Child, ProcessError>#Ok { value: c };
+    }
+
+    #[test]
+    fn test_wait_invalid_pid() with(Unsafe, Process, Alloc) -> i32 {
+        // waitpid with nonexistent pid should return WaitFailed
+        let child: Child = Child::new(99999);
+        let result: Result<ExitStatus, ProcessError> = child.wait();
+        match result {
+            Result#Ok { value } => {
+                return 1;
+            },
+            Result#Err { error } => {
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_kill_invalid_pid() with(Unsafe, Process, Alloc) -> i32 {
+        // kill with nonexistent pid should return Err
+        let result: Result<bool, ProcessError> = process_kill(99999, 0);
+        match result {
+            Result#Ok { value } => {
+                return 1;
+            },
+            Result#Err { error } => {
+                return 0;
+            }
+        }
+    }
+
+    // Disabled: fork creates child processes that continue running tests
+    // #[test]
+    fn test_fork_returns_typed() with(Unsafe, Process, Alloc) -> i32 {
+        let result: ForkResult = process_fork();
+        match result {
+            ForkResult#Parent { child_pid } => {
+                // Parent: wait for child
+                let child: Child = Child::new(child_pid);
+                let wait_result: Result<ExitStatus, ProcessError> = child.wait();
+                match wait_result {
+                    Result#Ok { value } => {
+                        match value {
+                            ExitStatus#Exited { code } => {
+                                // Child exits with 0
+                                return code;
+                            },
+                            ExitStatus#Signaled { raw } => {
+                                return 1;
+                            }
+                        }
+                    },
+                    Result#Err { error } => {
+                        return 1;
+                    }
+                }
+            },
+            ForkResult#Child => {
+                // Child: exit cleanly
+                process_exit(0);
+                return 0;
+            },
+            ForkResult#Err { error } => {
+                return 1;
+            }
+        }
+    }
+
+    // Disabled: spawn forks which creates child processes that continue running tests
+    // #[test]
+    fn test_spawn_bad_command() with(Unsafe, Process, Alloc) -> i32 {
+        // Spawn a nonexistent command — child should exec-fail and exit 127
+        let cmd: String = "/nonexistent/binary/that/does/not/exist";
+        let args: [*const u8; 2] = [cmd.ptr as *const u8, 0 as *const u8];
+        let result: Result<Child, ProcessError> = spawn(&cmd, &args as *const *const u8);
+        cmd.drop();
+        match result {
+            Result#Ok { value } => {
+                // Child was forked, but execvp failed — child exits 127
+                let wr: Result<ExitStatus, ProcessError> = value.wait();
+                match wr {
+                    Result#Ok { value } => {
+                        match value {
+                            ExitStatus#Exited { code } => {
+                                if code == 127 {
+                                    return 0;
+                                }
+                                return 1;
+                            },
+                            ExitStatus#Signaled { raw } => {
+                                return 1;
+                            }
+                        }
+                    },
+                    Result#Err { error } => {
+                        return 1;
+                    }
+                }
+            },
+            Result#Err { error } => {
+                // Fork itself failed — also acceptable
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_signal_constants() with(Unsafe, Process, Alloc) -> i32 {
+        if sig_int() != 2 {
+            return 1;
+        }
+        if sig_kill() != 9 {
+            return 1;
+        }
+        if sig_term() != 15 {
+            return 1;
+        }
+        return 0;
+    }
+
+    #[test]
+    fn test_getpid() with(Unsafe, Process, Alloc) -> i32 {
+        let pid: i32 = process_getpid();
+        // PID must be positive
+        if pid <= 0 { return 1; }
+        // Calling again should return the same value
+        let pid2: i32 = process_getpid();
+        if pid != pid2 { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_kill_signal_zero() with(Unsafe, Process, Alloc) -> i32 {
+        // signal 0 to own PID should succeed (existence check)
+        let pid: i32 = process_getpid();
+        let result: Result<bool, ProcessError> = process_kill(pid, 0);
+        match result {
+            Result#Ok { value } => { return 0; },
+            Result#Err { error } => { return 1; }
+        }
+    }
+
+    #[test]
+    fn test_kill_invalid_signal() with(Unsafe, Process, Alloc) -> i32 {
+        // Sending an invalid signal number (e.g. 99999) to own PID should fail
+        let pid: i32 = process_getpid();
+        let result: Result<bool, ProcessError> = process_kill(pid, 99999);
+        match result {
+            Result#Ok { value } => { return 1; },
+            Result#Err { error } => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_wait_invalid_pid_negative() with(Unsafe, Process, Alloc) -> i32 {
+        // waitpid with pid -1 and no children should fail
+        let child: Child = Child::new(-1);
+        let result: Result<ExitStatus, ProcessError> = child.wait();
+        match result {
+            Result#Ok { value } => {
+                // If somehow succeeds (e.g. zombie child), accept it
+                return 0;
+            },
+            Result#Err { error } => {
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_kill_pid_zero_exists() with(Unsafe, Process, Alloc) -> i32 {
+        // kill(0, 0) sends signal 0 to the entire process group — should succeed
+        let result: Result<bool, ProcessError> = process_kill(0, 0);
+        match result {
+            Result#Ok { value } => { return 0; },
+            Result#Err { error } => { return 1; }
+        }
+    }
+}

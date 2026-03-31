@@ -1,0 +1,9 @@
+// Trusted fn can dereference raw pointer without with(Unsafe) — compiles successfully
+trusted fn read_ptr(p: *const i32) -> i32 {
+    let val: i32 = *p;
+    return val;
+}
+
+fn main() -> i32 {
+    return 0;
+}

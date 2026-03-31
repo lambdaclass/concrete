@@ -1,0 +1,9 @@
+// Test: while loop with false condition (zero iterations)
+// Expected: 42
+fn main() -> Int {
+    let mut x: Int = 42;
+    while false {
+        x = 0;
+    }
+    return x;
+}

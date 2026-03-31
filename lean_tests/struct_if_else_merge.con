@@ -1,0 +1,31 @@
+struct Pair {
+    x: Int,
+    y: Int,
+}
+
+fn sum(p: Pair) -> Int {
+    return p.x + p.y;
+}
+
+fn pick(flag: Int) -> Int {
+    // Indirection prevents constant folding
+    let mut p: Pair = Pair { x: 1, y: 2 };
+    if flag == 1 {
+        p.x = 10;
+        p.y = 20;
+    } else {
+        p.x = 100;
+        p.y = 200;
+    }
+    return sum(p);
+}
+
+fn main() -> Int {
+    // Both branches reachable (not constant-folded)
+    let a: Int = pick(1);   // 10 + 20 = 30
+    let b: Int = pick(0);   // 100 + 200 = 300
+    if a + b == 330 {
+        return 42;
+    }
+    return 1;
+}

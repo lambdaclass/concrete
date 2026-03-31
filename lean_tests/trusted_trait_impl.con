@@ -1,0 +1,20 @@
+// Trusted trait impl: methods can do pointer casts without with(Unsafe)
+struct Buf {
+    ptr: *mut u8,
+    len: u64,
+}
+
+trait Readable {
+    fn as_const(&self) -> *const u8;
+}
+
+trusted impl Readable for Buf {
+    fn as_const(&self) -> *const u8 {
+        let p: *const u8 = self.ptr as *const u8;
+        return p;
+    }
+}
+
+fn main() -> i32 {
+    return 0;
+}

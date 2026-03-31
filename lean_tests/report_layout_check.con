@@ -1,0 +1,23 @@
+// Test: --report layout should show struct/enum layout details
+struct Padded {
+    a: u8,
+    b: i32,
+}
+
+#[repr(C, packed)]
+struct Packed {
+    x: u8,
+    y: u16,
+    z: u32,
+}
+
+enum Shape {
+    Circle { radius: i32 },
+    Rect { w: i32, h: i32 },
+}
+
+fn main() -> Int {
+    let sz_padded: Uint = sizeof::<Padded>();
+    let sz_packed: Uint = sizeof::<Packed>();
+    return (sz_padded + sz_packed) as Int;
+}

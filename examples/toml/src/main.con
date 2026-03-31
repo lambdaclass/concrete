@@ -1,0 +1,907 @@
+// TOML Parser in Concrete
+//
+// Usage: toml_parser <file.toml>
+//
+// A recursive-descent TOML parser demonstrating Concrete's string processing,
+// capability system, and ownership discipline under real parsing pressure.
+//
+// Capability design:
+//   skip_ws, is_digit, etc.          -- PURE (no capabilities)
+//   parse_value, parse_table, etc.   -- with(Alloc) only
+//   print_val                        -- with(Console, Alloc)
+//   main                             -- with(Std) entry point
+//
+// Supports: key-value pairs, basic strings, literal strings, integers,
+// booleans, arrays, tables, inline tables, comments.
+//
+// Value representation (tag-based, similar to the JSON parser example):
+//   tag 0 = string       data = index into string pool
+//   tag 1 = integer      data = integer value (as i32)
+//   tag 2 = bool         data = 0 or 1
+//   tag 3 = array        data = index into array-desc pool
+//   tag 4 = table        data = index into table-desc pool
+//   tag 5 = error        data = line number where error occurred
+//
+// String pool design:
+//   All parsed string content is appended into a single large String buffer.
+//   A Vec<i32> stores (offset, length) pairs for each logical string.
+//   This avoids the double-free problem of storing String objects in a Vec.
+
+mod toml_parser {
+    import std.fs.{read_to_string, FsError};
+    import std.result.{Result};
+    import std.args.{count, get};
+    import std.vec.{Vec};
+
+    // ---- Value types ----
+
+    struct Copy Val {
+        tag: i32,
+        data: i32,
+    }
+
+    fn mk_string_val(idx: i32) -> Val { return Val { tag: 0, data: idx }; }
+    fn mk_int_val(n: i32) -> Val { return Val { tag: 1, data: n }; }
+    fn mk_bool_val(b: i32) -> Val { return Val { tag: 2, data: b }; }
+    fn mk_array_val(idx: i32) -> Val { return Val { tag: 3, data: idx }; }
+    fn mk_table_val(idx: i32) -> Val { return Val { tag: 4, data: idx }; }
+    fn mk_error_val(line: i32) -> Val { return Val { tag: 5, data: line }; }
+
+    fn is_error(v: Val) -> bool { return v.tag == 5; }
+
+    struct Copy ArrayDesc {
+        start: i32,
+        len: i32,
+    }
+
+    struct Copy TableDesc {
+        start: i32,
+        len: i32,
+    }
+
+    struct Copy KVPair {
+        key: i32,       // index into string pool
+        val_tag: i32,
+        val_data: i32,
+    }
+
+    struct Copy ParseResult {
+        val: Val,
+        pos: i32,
+    }
+
+    fn err_result(pos: i32, line: i32) -> ParseResult {
+        return ParseResult { val: mk_error_val(line), pos: pos };
+    }
+
+    // ---- String pool ----
+    // Stores all string content in a single buffer. Pool metadata (offset, length)
+    // stored in a Vec<i32> as pairs.
+
+    fn pool_store(buf: &mut String, meta: &mut Vec<i32>, s: &String) with(Alloc) -> i32 {
+        let idx: i32 = (meta.len() as i32) / 2;
+        let offset: i32 = string_length(s) as i32;  // use s's length first
+        let buf_len: i32 = string_length(s) as i32;  // placeholder
+        // Get buffer length by checking meta or computing from content
+        // Actually, we need buf length. Since buf is &mut, we can't call string_length on it.
+        // Track buffer length via the last offset + length in meta.
+        let meta_len: Int = meta.len() as Int;
+        let mut buf_offset: i32 = 0;
+        if meta_len >= 2 {
+            let last_off: i32 = *meta.get_unchecked((meta_len - 2) as u64);
+            let last_len: i32 = *meta.get_unchecked((meta_len - 1) as u64);
+            buf_offset = last_off + last_len;
+        }
+        let slen: i32 = string_length(s) as i32;
+        buf.append(s);
+        meta.push(buf_offset);
+        meta.push(slen);
+        return idx;
+    }
+
+    // Store a string built by the parser (takes ownership and drops after storing)
+    fn pool_store_owned(buf: &mut String, meta: &mut Vec<i32>, s: String) with(Alloc) -> i32 {
+        let idx: i32 = pool_store(buf, meta, &s);
+        s.drop();
+        return idx;
+    }
+
+    // Retrieve a string from the pool as a new owned String
+    fn pool_get(buf: &String, meta: &Vec<i32>, idx: i32) with(Alloc) -> String {
+        let off: i32 = *meta.get_unchecked((idx * 2) as u64);
+        let slen: i32 = *meta.get_unchecked((idx * 2 + 1) as u64);
+        if slen == 0 {
+            return "";
+        }
+        return string_slice(buf, off as Int, (off + slen) as Int);
+    }
+
+    // Print a string from the pool without allocating a copy
+    fn pool_print(buf: &String, meta: &Vec<i32>, idx: i32) with(Console, Alloc) {
+        let off: i32 = *meta.get_unchecked((idx * 2) as u64);
+        let slen: i32 = *meta.get_unchecked((idx * 2 + 1) as u64);
+        if slen > 0 {
+            let s: String = string_slice(buf, off as Int, (off + slen) as Int);
+            print_string(&s);
+            s.drop();
+        }
+    }
+
+    // ---- Lexer helpers (PURE) ----
+
+    fn is_ws(ch: Int) -> bool {
+        return ch == 32 || ch == 9;
+    }
+
+    fn is_newline(ch: Int) -> bool {
+        return ch == 10 || ch == 13;
+    }
+
+    fn is_digit(ch: Int) -> bool {
+        return ch >= 48 && ch <= 57;
+    }
+
+    fn is_bare_key_char(ch: Int) -> bool {
+        if ch >= 97 && ch <= 122 { return true; }
+        if ch >= 65 && ch <= 90 { return true; }
+        if ch >= 48 && ch <= 57 { return true; }
+        if ch == 45 { return true; }
+        if ch == 95 { return true; }
+        return false;
+    }
+
+    fn skip_ws(s: &String, pos: i32) -> i32 {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = pos;
+        while p < len {
+            let ch: Int = string_char_at(s, p as Int);
+            if !is_ws(ch) { return p; }
+            p = p + 1;
+        }
+        return p;
+    }
+
+    fn skip_ws_and_newlines(s: &String, pos: i32) -> i32 {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = pos;
+        while p < len {
+            let ch: Int = string_char_at(s, p as Int);
+            if !is_ws(ch) && !is_newline(ch) { return p; }
+            p = p + 1;
+        }
+        return p;
+    }
+
+    fn skip_comment(s: &String, pos: i32) -> i32 {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = pos;
+        if p < len && string_char_at(s, p as Int) == 35 {
+            while p < len && !is_newline(string_char_at(s, p as Int)) {
+                p = p + 1;
+            }
+        }
+        return p;
+    }
+
+    fn skip_trivia(s: &String, pos: i32) -> i32 {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = pos;
+        let mut changed: bool = true;
+        while changed {
+            changed = false;
+            let p2: i32 = skip_ws_and_newlines(s, p);
+            if p2 != p { changed = true; p = p2; }
+            if p < len && string_char_at(s, p as Int) == 35 {
+                let p3: i32 = skip_comment(s, p);
+                if p3 != p { changed = true; p = p3; }
+            }
+        }
+        return p;
+    }
+
+    fn line_at(s: &String, pos: i32) -> i32 {
+        let mut line: i32 = 1;
+        let mut i: i32 = 0;
+        while i < pos {
+            if string_char_at(s, i as Int) == 10 {
+                line = line + 1;
+            }
+            i = i + 1;
+        }
+        return line;
+    }
+
+    fn match_keyword(s: &String, pos: i32, kw: &String) -> bool {
+        let slen: i32 = string_length(s) as i32;
+        let kwlen: i32 = string_length(kw) as i32;
+        if pos + kwlen > slen { return false; }
+        let mut i: i32 = 0;
+        while i < kwlen {
+            let a: Int = string_char_at(s, (pos + i) as Int);
+            let b: Int = string_char_at(kw, i as Int);
+            if a != b { return false; }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    // ---- String parsing ----
+
+    fn parse_basic_string(s: &String, pos: i32,
+                          pool_buf: &mut String,
+                          pool_meta: &mut Vec<i32>) with(Alloc) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = pos + 1;
+        let mut buf: String = "";
+        string_reserve(&mut buf, 32);
+        let mut done: i32 = 0;
+        while p < len && done == 0 {
+            let ch: Int = string_char_at(s, p as Int);
+            if ch == 34 {
+                done = 1;
+            } else if ch == 92 {
+                p = p + 1;
+                if p >= len { done = 2; }
+                else {
+                    let esc: Int = string_char_at(s, p as Int);
+                    if esc == 34 { string_push_char(&mut buf, 34); }
+                    else if esc == 92 { string_push_char(&mut buf, 92); }
+                    else if esc == 110 { string_push_char(&mut buf, 10); }
+                    else if esc == 116 { string_push_char(&mut buf, 9); }
+                    else if esc == 114 { string_push_char(&mut buf, 13); }
+                    else if esc == 98 { string_push_char(&mut buf, 8); }
+                    else if esc == 102 { string_push_char(&mut buf, 12); }
+                    else { done = 2; }
+                    if done == 0 { p = p + 1; }
+                }
+            } else if is_newline(ch) {
+                done = 2;
+            } else {
+                string_push_char(&mut buf, ch);
+                p = p + 1;
+            }
+        }
+        if done == 1 {
+            let idx: i32 = pool_store_owned(pool_buf, pool_meta, buf);
+            return ParseResult { val: mk_string_val(idx), pos: p + 1 };
+        }
+        buf.drop();
+        return err_result(pos, line_at(s, pos));
+    }
+
+    fn parse_literal_string(s: &String, pos: i32,
+                            pool_buf: &mut String,
+                            pool_meta: &mut Vec<i32>) with(Alloc) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = pos + 1;
+        let mut buf: String = "";
+        string_reserve(&mut buf, 32);
+        let mut done: i32 = 0;
+        while p < len && done == 0 {
+            let ch: Int = string_char_at(s, p as Int);
+            if ch == 39 {
+                done = 1;
+            } else if is_newline(ch) {
+                done = 2;
+            } else {
+                string_push_char(&mut buf, ch);
+                p = p + 1;
+            }
+        }
+        if done == 1 {
+            let idx: i32 = pool_store_owned(pool_buf, pool_meta, buf);
+            return ParseResult { val: mk_string_val(idx), pos: p + 1 };
+        }
+        buf.drop();
+        return err_result(pos, line_at(s, pos));
+    }
+
+    // ---- Key parsing ----
+
+    fn parse_key(s: &String, pos: i32,
+                 pool_buf: &mut String,
+                 pool_meta: &mut Vec<i32>) with(Alloc) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let p: i32 = skip_ws(s, pos);
+        if p >= len {
+            return err_result(pos, line_at(s, pos));
+        }
+        let ch: Int = string_char_at(s, p as Int);
+        if ch == 34 {
+            return parse_basic_string(s, p, pool_buf, pool_meta);
+        }
+        if ch == 39 {
+            return parse_literal_string(s, p, pool_buf, pool_meta);
+        }
+        let start: i32 = p;
+        let mut end: i32 = p;
+        while end < len && is_bare_key_char(string_char_at(s, end as Int)) {
+            end = end + 1;
+        }
+        if end == start {
+            return err_result(pos, line_at(s, pos));
+        }
+        let key: String = string_slice(s, start as Int, end as Int);
+        let idx: i32 = pool_store_owned(pool_buf, pool_meta, key);
+        return ParseResult { val: mk_string_val(idx), pos: end };
+    }
+
+    // ---- Value parsing ----
+
+    fn parse_integer(s: &String, pos: i32) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = pos;
+        let mut neg: i32 = 1;
+
+        if p < len && string_char_at(s, p as Int) == 43 {
+            p = p + 1;
+        } else if p < len && string_char_at(s, p as Int) == 45 {
+            neg = 0 - 1;
+            p = p + 1;
+        }
+
+        if p >= len || !is_digit(string_char_at(s, p as Int)) {
+            return err_result(pos, line_at(s, pos));
+        }
+
+        let mut n: i32 = 0;
+        while p < len && (is_digit(string_char_at(s, p as Int)) || string_char_at(s, p as Int) == 95) {
+            let ch: Int = string_char_at(s, p as Int);
+            if ch != 95 {
+                let d: i32 = (ch - 48) as i32;
+                n = n * 10 + d;
+            }
+            p = p + 1;
+        }
+        return ParseResult { val: mk_int_val(n * neg), pos: p };
+    }
+
+    fn parse_value(s: &String, pos: i32,
+                   pool_buf: &mut String,
+                   pool_meta: &mut Vec<i32>,
+                   arrays: &mut Vec<ArrayDesc>,
+                   tables: &mut Vec<TableDesc>,
+                   kvpairs: &mut Vec<KVPair>,
+                   vals: &mut Vec<Val>) with(Alloc) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let p: i32 = skip_ws(s, pos);
+        if p >= len {
+            return err_result(p, line_at(s, p));
+        }
+
+        let ch: Int = string_char_at(s, p as Int);
+
+        if ch == 34 {
+            return parse_basic_string(s, p, pool_buf, pool_meta);
+        }
+
+        if ch == 39 {
+            return parse_literal_string(s, p, pool_buf, pool_meta);
+        }
+
+        if match_keyword(s, p, &"true") {
+            let after: i32 = p + 4;
+            if after >= len || !is_bare_key_char(string_char_at(s, after as Int)) {
+                return ParseResult { val: mk_bool_val(1), pos: p + 4 };
+            }
+        }
+
+        if match_keyword(s, p, &"false") {
+            let after: i32 = p + 5;
+            if after >= len || !is_bare_key_char(string_char_at(s, after as Int)) {
+                return ParseResult { val: mk_bool_val(0), pos: p + 5 };
+            }
+        }
+
+        if ch == 91 {
+            return parse_array(s, p + 1, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
+        }
+
+        if ch == 123 {
+            return parse_inline_table(s, p + 1, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
+        }
+
+        if is_digit(ch) || ch == 43 || ch == 45 {
+            return parse_integer(s, p);
+        }
+
+        return err_result(p, line_at(s, p));
+    }
+
+    fn parse_array(s: &String, pos: i32,
+                   pool_buf: &mut String,
+                   pool_meta: &mut Vec<i32>,
+                   arrays: &mut Vec<ArrayDesc>,
+                   tables: &mut Vec<TableDesc>,
+                   kvpairs: &mut Vec<KVPair>,
+                   vals: &mut Vec<Val>) with(Alloc) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = skip_trivia(s, pos);
+
+        if p < len && string_char_at(s, p as Int) == 93 {
+            let idx: i32 = arrays.len() as i32;
+            let start: i32 = vals.len() as i32;
+            arrays.push(ArrayDesc { start: start, len: 0 });
+            return ParseResult { val: mk_array_val(idx), pos: p + 1 };
+        }
+
+        let start: i32 = vals.len() as i32;
+        let mut arr_count: i32 = 0;
+
+        let r: ParseResult = parse_value(s, p, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
+        if is_error(r.val) { return r; }
+        vals.push(r.val);
+        arr_count = arr_count + 1;
+        p = skip_trivia(s, r.pos);
+
+        while p < len && string_char_at(s, p as Int) == 44 {
+            p = skip_trivia(s, p + 1);
+            if p < len && string_char_at(s, p as Int) == 93 {
+                break;
+            }
+            let elem: ParseResult = parse_value(s, p, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
+            if is_error(elem.val) { return elem; }
+            vals.push(elem.val);
+            arr_count = arr_count + 1;
+            p = skip_trivia(s, elem.pos);
+        }
+
+        if p >= len || string_char_at(s, p as Int) != 93 {
+            return err_result(p, line_at(s, p));
+        }
+
+        let idx: i32 = arrays.len() as i32;
+        arrays.push(ArrayDesc { start: start, len: arr_count });
+        return ParseResult { val: mk_array_val(idx), pos: p + 1 };
+    }
+
+    fn parse_inline_table(s: &String, pos: i32,
+                          pool_buf: &mut String,
+                          pool_meta: &mut Vec<i32>,
+                          arrays: &mut Vec<ArrayDesc>,
+                          tables: &mut Vec<TableDesc>,
+                          kvpairs: &mut Vec<KVPair>,
+                          vals: &mut Vec<Val>) with(Alloc) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = skip_ws(s, pos);
+
+        if p < len && string_char_at(s, p as Int) == 125 {
+            let idx: i32 = tables.len() as i32;
+            let start: i32 = kvpairs.len() as i32;
+            tables.push(TableDesc { start: start, len: 0 });
+            return ParseResult { val: mk_table_val(idx), pos: p + 1 };
+        }
+
+        // Stage kv triples to avoid interleaving with nested inline table kvpairs
+        let mut staging: Vec<i32> = Vec::<i32>::new();
+        let mut tbl_count: i32 = 0;
+        let mut has_error: bool = false;
+        let mut error_pos: i32 = 0;
+        let mut error_line: i32 = 0;
+
+        // First kv pair
+        let key_r: ParseResult = parse_key(s, p, pool_buf, pool_meta);
+        if is_error(key_r.val) {
+            staging.drop();
+            return key_r;
+        }
+        p = skip_ws(s, key_r.pos);
+        if p >= len || string_char_at(s, p as Int) != 61 {
+            staging.drop();
+            return err_result(p, line_at(s, p));
+        }
+        p = p + 1;
+        let val_r: ParseResult = parse_value(s, p, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
+        if is_error(val_r.val) {
+            staging.drop();
+            return val_r;
+        }
+        staging.push(key_r.val.data);
+        staging.push(val_r.val.tag);
+        staging.push(val_r.val.data);
+        tbl_count = tbl_count + 1;
+        p = skip_ws(s, val_r.pos);
+
+        // Remaining kv pairs
+        while p < len && string_char_at(s, p as Int) == 44 && !has_error {
+            p = skip_ws(s, p + 1);
+            if p < len && string_char_at(s, p as Int) == 125 {
+                break;
+            }
+            let next_key: ParseResult = parse_key(s, p, pool_buf, pool_meta);
+            if is_error(next_key.val) {
+                has_error = true;
+                error_pos = p;
+                error_line = next_key.val.data;
+            } else {
+                p = skip_ws(s, next_key.pos);
+                if p >= len || string_char_at(s, p as Int) != 61 {
+                    has_error = true;
+                    error_pos = p;
+                    error_line = line_at(s, p);
+                } else {
+                    p = p + 1;
+                    let next_val: ParseResult = parse_value(s, p, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
+                    if is_error(next_val.val) {
+                        has_error = true;
+                        error_pos = p;
+                        error_line = next_val.val.data;
+                    } else {
+                        staging.push(next_key.val.data);
+                        staging.push(next_val.val.tag);
+                        staging.push(next_val.val.data);
+                        tbl_count = tbl_count + 1;
+                        p = skip_ws(s, next_val.pos);
+                    }
+                }
+            }
+        }
+
+        if has_error {
+            staging.drop();
+            return err_result(error_pos, error_line);
+        }
+
+        if p >= len || string_char_at(s, p as Int) != 125 {
+            staging.drop();
+            return err_result(p, line_at(s, p));
+        }
+
+        // Flush staged kvpairs contiguously
+        let start: i32 = kvpairs.len() as i32;
+        let n: Int = staging.len() as Int;
+        let mut si: Int = 0;
+        while si < n {
+            let sk: i32 = *staging.get_unchecked(si as u64);
+            let sv: i32 = *staging.get_unchecked((si + 1) as u64);
+            let sd: i32 = *staging.get_unchecked((si + 2) as u64);
+            kvpairs.push(KVPair { key: sk, val_tag: sv, val_data: sd });
+            si = si + 3;
+        }
+        staging.drop();
+
+        let idx: i32 = tables.len() as i32;
+        tables.push(TableDesc { start: start, len: tbl_count });
+        return ParseResult { val: mk_table_val(idx), pos: p + 1 };
+    }
+
+    // ---- Top-level TOML document parsing ----
+
+    struct Copy KVData {
+        key_idx: i32,
+        val_tag: i32,
+        val_data: i32,
+        end_pos: i32,
+    }
+
+    fn parse_kv_data(s: &String, pos: i32,
+                     pool_buf: &mut String,
+                     pool_meta: &mut Vec<i32>,
+                     arrays: &mut Vec<ArrayDesc>,
+                     tables: &mut Vec<TableDesc>,
+                     kvpairs: &mut Vec<KVPair>,
+                     vals: &mut Vec<Val>) with(Alloc) -> KVData {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = skip_ws(s, pos);
+
+        let key_r: ParseResult = parse_key(s, p, pool_buf, pool_meta);
+        if is_error(key_r.val) {
+            return KVData { key_idx: 0 - 1, val_tag: 5, val_data: key_r.val.data, end_pos: p };
+        }
+        let key_idx: i32 = key_r.val.data;
+        p = skip_ws(s, key_r.pos);
+
+        if p >= len || string_char_at(s, p as Int) != 61 {
+            return KVData { key_idx: 0 - 1, val_tag: 5, val_data: line_at(s, p), end_pos: p };
+        }
+        p = p + 1;
+        p = skip_ws(s, p);
+
+        let val_r: ParseResult = parse_value(s, p, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
+        if is_error(val_r.val) {
+            return KVData { key_idx: 0 - 1, val_tag: 5, val_data: val_r.val.data, end_pos: p };
+        }
+
+        p = skip_ws(s, val_r.pos);
+        if p < len && string_char_at(s, p as Int) == 35 {
+            p = skip_comment(s, p);
+        }
+        while p < len && is_newline(string_char_at(s, p as Int)) {
+            p = p + 1;
+        }
+
+        return KVData {
+            key_idx: key_idx,
+            val_tag: val_r.val.tag,
+            val_data: val_r.val.data,
+            end_pos: p,
+        };
+    }
+
+    fn flush_section(staging: &Vec<i32>, staging_start: Int,
+                     kvpairs: &mut Vec<KVPair>,
+                     tables: &mut Vec<TableDesc>) with(Alloc) -> i32 {
+        let n: Int = staging.len() as Int;
+        let num_entries: i32 = ((n - staging_start) / 3) as i32;
+        let kv_start: i32 = kvpairs.len() as i32;
+
+        let mut i: Int = staging_start;
+        while i < n {
+            let key: i32 = *staging.get_unchecked(i as u64);
+            let vtag: i32 = *staging.get_unchecked((i + 1) as u64);
+            let vdata: i32 = *staging.get_unchecked((i + 2) as u64);
+            kvpairs.push(KVPair {
+                key: key,
+                val_tag: vtag,
+                val_data: vdata,
+            });
+            i = i + 3;
+        }
+
+        let tbl_idx: i32 = tables.len() as i32;
+        tables.push(TableDesc { start: kv_start, len: num_entries });
+        return tbl_idx;
+    }
+
+    fn parse_document(s: &String,
+                      pool_buf: &mut String,
+                      pool_meta: &mut Vec<i32>,
+                      arrays: &mut Vec<ArrayDesc>,
+                      tables: &mut Vec<TableDesc>,
+                      kvpairs: &mut Vec<KVPair>,
+                      vals: &mut Vec<Val>) with(Alloc) -> Val {
+        let len: i32 = string_length(s) as i32;
+        let mut pos: i32 = 0;
+
+        let mut staging: Vec<i32> = Vec::<i32>::new();
+        let mut root_staging: Vec<i32> = Vec::<i32>::new();
+
+        let mut section_start: Int = 0;
+        let mut section_key: i32 = 0 - 1;
+        let mut in_named_section: bool = false;
+        let mut error_line: i32 = 0;
+        let mut has_error: bool = false;
+
+        pos = skip_trivia(s, pos);
+
+        while pos < len && !has_error {
+            let ch: Int = string_char_at(s, pos as Int);
+
+            if ch == 91 {
+                if in_named_section {
+                    let tbl_idx: i32 = flush_section(&staging, section_start, kvpairs, tables);
+                    root_staging.push(section_key);
+                    root_staging.push(4);
+                    root_staging.push(tbl_idx);
+                }
+
+                section_start = staging.len() as Int;
+                in_named_section = true;
+
+                pos = pos + 1;
+
+                let name_r: ParseResult = parse_key(s, pos, pool_buf, pool_meta);
+                if is_error(name_r.val) {
+                    error_line = line_at(s, pos);
+                    has_error = true;
+                } else {
+                    section_key = name_r.val.data;
+                    pos = skip_ws(s, name_r.pos);
+
+                    if pos >= len || string_char_at(s, pos as Int) != 93 {
+                        error_line = line_at(s, pos);
+                        has_error = true;
+                    } else {
+                        pos = pos + 1;
+                        pos = skip_trivia(s, pos);
+                    }
+                }
+            } else {
+                let kv: KVData = parse_kv_data(s, pos, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
+                if kv.key_idx < 0 {
+                    error_line = kv.val_data;
+                    has_error = true;
+                } else {
+                    if in_named_section {
+                        staging.push(kv.key_idx);
+                        staging.push(kv.val_tag);
+                        staging.push(kv.val_data);
+                    } else {
+                        root_staging.push(kv.key_idx);
+                        root_staging.push(kv.val_tag);
+                        root_staging.push(kv.val_data);
+                    }
+                    pos = kv.end_pos;
+                    pos = skip_trivia(s, pos);
+                }
+            }
+        }
+
+        if has_error {
+            staging.drop();
+            root_staging.drop();
+            return mk_error_val(error_line);
+        }
+
+        if in_named_section {
+            let tbl_idx: i32 = flush_section(&staging, section_start, kvpairs, tables);
+            root_staging.push(section_key);
+            root_staging.push(4);
+            root_staging.push(tbl_idx);
+        }
+        staging.drop();
+
+        let root_idx: i32 = flush_section(&root_staging, 0, kvpairs, tables);
+        root_staging.drop();
+
+        return mk_table_val(root_idx);
+    }
+
+    // ---- Printer: with(Console, Alloc) ----
+
+    fn print_indent(depth: i32) with(Console, Alloc) {
+        let mut i: i32 = 0;
+        while i < depth {
+            print_string(&"  ");
+            i = i + 1;
+        }
+    }
+
+    fn print_val(v: Val, depth: i32,
+                 pool_buf: &String,
+                 pool_meta: &Vec<i32>,
+                 arrays: &Vec<ArrayDesc>,
+                 tables: &Vec<TableDesc>,
+                 kvpairs: &Vec<KVPair>,
+                 vals: &Vec<Val>) with(Console, Alloc) {
+        if v.tag == 0 {
+            print_char(34);
+            pool_print(pool_buf, pool_meta, v.data);
+            print_char(34);
+            return;
+        }
+        if v.tag == 1 {
+            print_int(v.data as Int);
+            return;
+        }
+        if v.tag == 2 {
+            if v.data == 1 {
+                print_string(&"true");
+            } else {
+                print_string(&"false");
+            }
+            return;
+        }
+        if v.tag == 3 {
+            let desc: ArrayDesc = *arrays.get_unchecked(v.data as u64);
+            if desc.len == 0 {
+                print_string(&"[]");
+                return;
+            }
+            print_char(91);
+            print_char(10);
+            let mut i: i32 = 0;
+            while i < desc.len {
+                print_indent(depth + 1);
+                let elem: Val = *vals.get_unchecked((desc.start + i) as u64);
+                print_val(elem, depth + 1, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
+                if i < desc.len - 1 {
+                    print_char(44);
+                }
+                print_char(10);
+                i = i + 1;
+            }
+            print_indent(depth);
+            print_char(93);
+            return;
+        }
+        if v.tag == 4 {
+            let desc: TableDesc = *tables.get_unchecked(v.data as u64);
+            if desc.len == 0 {
+                print_string(&"{}");
+                return;
+            }
+            print_char(123);
+            print_char(10);
+            let mut i: i32 = 0;
+            while i < desc.len {
+                let kv: KVPair = *kvpairs.get_unchecked((desc.start + i) as u64);
+                print_indent(depth + 1);
+                pool_print(pool_buf, pool_meta, kv.key);
+                print_string(&" = ");
+                let inner_val: Val = Val { tag: kv.val_tag, data: kv.val_data };
+                print_val(inner_val, depth + 1, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
+                print_char(10);
+                i = i + 1;
+            }
+            print_indent(depth);
+            print_char(125);
+            return;
+        }
+        if v.tag == 5 {
+            let mut msg: String = "ERROR at line ";
+            msg.append_int(v.data as Int);
+            print_string(&msg);
+            msg.drop();
+            return;
+        }
+    }
+
+    // ---- Cleanup ----
+
+    fn cleanup(pool_buf: String, pool_meta: Vec<i32>,
+               arrays: Vec<ArrayDesc>,
+               tables: Vec<TableDesc>, kvpairs: Vec<KVPair>,
+               vals: Vec<Val>) with(Alloc) {
+        pool_buf.drop();
+        pool_meta.drop();
+        arrays.drop();
+        tables.drop();
+        kvpairs.drop();
+        vals.drop();
+    }
+
+    // ---- Entry point ----
+
+    pub fn main() with(Std) -> Int {
+        let argc: Int = count();
+
+        if argc < 2 {
+            print_string(&"Usage: toml_parser <file.toml>");
+            print_char(10);
+            print_string(&"  Parses a TOML file and prints the parsed structure.");
+            print_char(10);
+            return 1;
+        }
+
+        let filename: String = get(1);
+        let result: Result<String, FsError> = read_to_string(&filename);
+
+        match result {
+            Result#Ok { value } => {
+                let mut pool_buf: String = "";
+                string_reserve(&mut pool_buf, 1024);
+                let mut pool_meta: Vec<i32> = Vec::<i32>::new();
+                let mut arrays: Vec<ArrayDesc> = Vec::<ArrayDesc>::new();
+                let mut tables: Vec<TableDesc> = Vec::<TableDesc>::new();
+                let mut kvpairs: Vec<KVPair> = Vec::<KVPair>::new();
+                let mut vals: Vec<Val> = Vec::<Val>::new();
+
+                let root: Val = parse_document(&value, &mut pool_buf, &mut pool_meta,
+                                               &mut arrays, &mut tables, &mut kvpairs, &mut vals);
+
+                if is_error(root) {
+                    let mut errmsg: String = "Parse error at line ";
+                    errmsg.append_int(root.data as Int);
+                    print_string(&errmsg);
+                    print_char(10);
+                    errmsg.drop();
+                    value.drop();
+                    filename.drop();
+                    cleanup(pool_buf, pool_meta, arrays, tables, kvpairs, vals);
+                    return 1;
+                }
+
+                print_string(&"--- Parsed TOML ---");
+                print_char(10);
+                print_val(root, 0, &pool_buf, &pool_meta, &arrays, &tables, &kvpairs, &vals);
+                print_char(10);
+
+                value.drop();
+                filename.drop();
+                cleanup(pool_buf, pool_meta, arrays, tables, kvpairs, vals);
+                return 0;
+            },
+            Result#Err { error } => {
+                let mut errmsg: String = "Error: cannot open '";
+                errmsg.append(&filename);
+                errmsg.append(&"'");
+                print_string(&errmsg);
+                print_char(10);
+                errmsg.drop();
+                filename.drop();
+                return 1;
+            }
+        }
+    }
+}

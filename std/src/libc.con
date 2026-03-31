@@ -1,0 +1,61 @@
+mod libc {
+    extern fn malloc(size: u64) -> *mut u8;
+    extern fn realloc(ptr: *mut u8, size: u64) -> *mut u8;
+    extern fn free(ptr: *mut u8);
+    extern fn puts(ptr: *mut u8) -> i32;
+    extern fn fopen(name: *mut u8, mode: *mut u8) -> *const u8;
+    extern fn fdopen(name: i32, mode: *mut u8) -> *const u8;
+    extern fn fclose(file: *const u8) -> i32;
+    extern fn fflush(file: *const u8) -> i32;
+    extern fn fread(buf: *mut u8, size: u64, count: u64, file: *const u8) -> u64;
+    extern fn fwrite(buf: *const u8, size: u64, count: u64, file: *const u8) -> u64;
+    extern fn fseek(file: *const u8, offset: i64, whence: i32) -> i32;
+    extern fn ftell(file: *const u8) -> i64;
+    extern fn exit(status: i32);
+    extern fn raise(signal: i32);
+    extern fn strlen(ptr: *const u8) -> u64;
+    extern fn memcpy(dest: *mut u8, src: *const u8, n: u64) -> *mut u8;
+    extern fn memset(ptr: *mut u8, value: i32, n: u64) -> *mut u8;
+    extern fn memcmp(a: *const u8, b: *const u8, n: u64) -> i32;
+    extern fn read(fd: i32, buf: *mut u8, count: u64) -> i64;
+    extern fn write(fd: i32, buf: *const u8, count: u64) -> i64;
+    extern fn putchar(c: i32) -> i32;
+    extern fn getenv(name: *const u8) -> *const u8;
+    extern fn snprintf(buf: *mut u8, size: u64, fmt: *const u8) -> i32;
+    extern fn strtol(str: *const u8, endptr: *mut *const u8, base: i32) -> i64;
+
+    // Process
+    extern fn setenv(name: *const u8, value: *const u8, overwrite: i32) -> i32;
+    extern fn unsetenv(name: *const u8) -> i32;
+    extern fn getpid() -> i32;
+    extern fn fork() -> i32;
+    extern fn execvp(file: *const u8, argv: *const *const u8) -> i32;
+    extern fn waitpid(pid: i32, status: *mut i32, options: i32) -> i32;
+    extern fn kill(pid: i32, sig: i32) -> i32;
+
+    // Time
+    extern fn time(t: *mut i64) -> i64;
+    extern fn clock_gettime(clk_id: i32, tp: *mut u8) -> i32;
+    extern fn nanosleep(req: *const u8, rem: *mut u8) -> i32;
+
+    // Random
+    extern fn rand() -> i32;
+    extern fn srand(seed: u32);
+
+    // Platform detection
+    extern fn uname(buf: *mut u8) -> i32;
+
+    // Networking
+    extern fn socket(domain: i32, typ: i32, protocol: i32) -> i32;
+    extern fn bind(sockfd: i32, addr: *const u8, addrlen: u32) -> i32;
+    extern fn listen(sockfd: i32, backlog: i32) -> i32;
+    extern fn accept(sockfd: i32, addr: *mut u8, addrlen: *mut u32) -> i32;
+    extern fn connect(sockfd: i32, addr: *const u8, addrlen: u32) -> i32;
+    extern fn close(fd: i32) -> i32;
+    extern fn send(sockfd: i32, buf: *const u8, len: u64, flags: i32) -> i64;
+    extern fn recv(sockfd: i32, buf: *mut u8, len: u64, flags: i32) -> i64;
+    extern fn htons(hostshort: u16) -> u16;
+    extern fn htonl(hostlong: u32) -> u32;
+    extern fn inet_pton(af: i32, src: *const u8, dst: *mut u8) -> i32;
+    extern fn setsockopt(sockfd: i32, level: i32, optname: i32, optval: *const u8, optlen: u32) -> i32;
+}

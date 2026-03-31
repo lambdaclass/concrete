@@ -1,0 +1,23 @@
+// module main
+enum Option<T> {
+  Some { value: T },
+  None,
+}
+
+enum Result<T, E> {
+  Ok { value: T },
+  Err { value: E },
+}
+
+fn main() -> Int with(File, Network, Clock, Env, Random, Process, Console, Alloc) {
+  let mut result: Int = 0;
+  let mut i: Int = 0;
+  while (i < 100) {
+    if (i == 5) {
+      break;
+    }
+    result = (result + 1);
+    i = (i + 1);
+  }
+  return result;
+}

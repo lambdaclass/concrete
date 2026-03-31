@@ -1,0 +1,15 @@
+// Trusted fn does ptr work AND allocates
+trusted fn alloc_and_deref(p: *const i32) with(Alloc) -> i32 {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    vec_push(&mut v, 99);
+    let val: i32 = *p;
+    vec_free(v);
+    return val;
+}
+
+fn main() with(Alloc, Unsafe) -> i32 {
+    let x: i32 = 10;
+    let p: *const i32 = &x as *const i32;
+    let result: i32 = alloc_and_deref(p);
+    return result;
+}

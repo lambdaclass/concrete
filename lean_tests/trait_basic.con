@@ -1,0 +1,22 @@
+struct Point { x: Int, y: Int }
+
+trait Summable {
+    fn total(&self) -> Int;
+}
+
+impl Summable for Point {
+    fn total(&self) -> Int {
+        return self.x + self.y;
+    }
+}
+
+fn consume_point(p: Point) -> Int {
+    return p.x;
+}
+
+fn main() -> Int {
+    let p: Point = Point { x: 10, y: 20 };
+    let s: Int = p.total();
+    let dummy: Int = consume_point(p);
+    return s;
+}

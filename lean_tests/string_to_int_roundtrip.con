@@ -1,0 +1,15 @@
+// int_to_string then string_to_int roundtrip
+enum Result<T, E> {
+    Ok { value: T },
+    Err { error: E },
+}
+
+fn main() -> Int {
+    let s: String = int_to_string(42);
+    let r: Result<Int, Int> = string_to_int(&s);
+    drop_string(s);
+    match r {
+        Result#Ok { value } => { return value; },
+        Result#Err { error } => { return error; },
+    }
+}

@@ -1,0 +1,17 @@
+// Test: multiple defers with ownership-consuming calls in one scope
+// Expected output: "ab\ncd\n2"  (two strings printed, then main returns 2)
+fn work() with(Console, Alloc) -> i32 {
+    let a: String = "ab";
+    let b: String = "cd";
+    defer drop_string(a);
+    defer drop_string(b);
+    print_string(&a);
+    print_char(10);
+    print_string(&b);
+    print_char(10);
+    return 2;
+}
+
+fn main() with(Std) -> Int {
+    return work() as Int;
+}

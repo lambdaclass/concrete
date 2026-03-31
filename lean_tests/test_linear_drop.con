@@ -1,0 +1,16 @@
+// Test: linear struct drop via self-consuming method
+
+struct Foo {
+    x: i32,
+}
+
+impl Foo {
+    fn drop(self) {
+    }
+}
+
+fn main() -> i32 {
+    let f: Foo = Foo { x: 42 };
+    f.drop();
+    return 0;
+}

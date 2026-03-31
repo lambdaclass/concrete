@@ -1,0 +1,13 @@
+// Error: read_file requires File capability
+trusted extern fn fopen(name: *mut u8, mode: *mut u8) -> *const u8;
+
+trusted fn read_file(path: &String) with(File) -> Int {
+    return 0;
+}
+
+fn main() -> Int {
+    let path: String = "/tmp/test.txt";
+    let data: Int = read_file(&path);
+    drop_string(path);
+    return 0;
+}

@@ -1,0 +1,26 @@
+struct Counter {
+    count: Int,
+    sum: Int,
+}
+
+fn consume(c: Counter) -> Int {
+    return c.sum;
+}
+
+fn main() -> Int {
+    // Mutable struct with field assignment + break in loop.
+    let mut c: Counter = Counter { count: 0, sum: 0 };
+    while c.count < 100 {
+        c.sum = c.sum + c.count;
+        c.count = c.count + 1;
+        if c.count == 10 {
+            break;
+        }
+    }
+    // sum = 0+1+2+...+9 = 45
+    let result: Int = consume(c);
+    if result == 45 {
+        return 42;
+    }
+    return 1;
+}

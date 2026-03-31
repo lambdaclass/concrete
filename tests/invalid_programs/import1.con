@@ -1,0 +1,7 @@
+mod Simple {
+    import Other.{hello1};
+
+    fn main() -> i64 {
+        return 0;
+    }
+}

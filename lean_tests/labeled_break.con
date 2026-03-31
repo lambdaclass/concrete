@@ -1,0 +1,14 @@
+fn main() -> Int {
+    let mut result: Int = 0;
+    'outer: while true {
+        let mut j: Int = 0;
+        while j < 10 {
+            j = j + 1;
+            if j == 3 {
+                result = 42;
+                break 'outer;
+            }
+        }
+    }
+    return result;
+}

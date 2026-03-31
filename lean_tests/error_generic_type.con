@@ -1,0 +1,5 @@
+fn add(x: Int, y: Int) -> Int { return x + y; }
+
+fn main() -> Int {
+    return add(1, true);
+}

@@ -1,0 +1,6 @@
+fn main() -> Int {
+    let mut x: Int = 10;
+    let r: &Int = &x;
+    let w: &mut Int = &mut x;
+    return *r + *w;
+}

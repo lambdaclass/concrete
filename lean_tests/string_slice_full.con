@@ -1,0 +1,9 @@
+fn main() -> Int {
+    let s: String = "hello";
+    let len: Int = string_length(&s);
+    let sliced: String = string_slice(&s, 0, len);
+    let sliced_len: Int = string_length(&sliced);
+    drop_string(s);
+    drop_string(sliced);
+    return sliced_len;
+}

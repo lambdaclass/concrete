@@ -1,0 +1,9 @@
+trait Printable {
+    fn to_int(&self) -> Int;
+}
+
+struct Msg { val:Int, }
+
+impl Printable for Msg {
+    fn to_int(&self)->Int { return self.val; }
+}

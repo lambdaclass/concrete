@@ -1,0 +1,26 @@
+// Test: nested #[repr(C)] struct layout
+#[repr(C)]
+struct Inner {
+    a: i32,
+    b: i32,
+}
+
+#[repr(C)]
+struct Outer {
+    x: i32,
+    inner: Inner,
+    y: i32,
+}
+
+fn sum_outer(o: Outer) -> Int {
+    return (o.x + o.inner.a + o.inner.b + o.y) as Int;
+}
+
+fn main() -> Int {
+    // C layout: x(4) + Inner(8) + y(4) = 16
+    let sz: Uint = sizeof::<Outer>();
+    let o: Outer = Outer { x: 1, inner: Inner { a: 2, b: 3 }, y: 4 };
+    let total: Int = sum_outer(o);
+    // total = 10, sz = 16, 10 + 16 + 16 = 42
+    return total + (sz as Int) + 16;
+}

@@ -1,0 +1,10 @@
+// string_to_int: convert "123" to int, match on Result, return the value
+fn main() -> Int {
+    let s: String = "123";
+    let result: Result<Int, Int> = string_to_int(&s);
+    drop_string(s);
+    match result {
+        Result#Ok { value } => { return value; },
+        Result#Err { value } => { return value; },
+    }
+}

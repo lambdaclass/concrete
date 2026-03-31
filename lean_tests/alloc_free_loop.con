@@ -1,0 +1,15 @@
+// Test: alloc/free in a loop
+// Expected: 45
+struct Box { value: Int }
+
+fn main() with(Std) -> Int {
+    let mut sum: Int = 0;
+    let mut i: Int = 0;
+    while i < 10 {
+        let p: Heap<Box> = alloc(Box { value: i });
+        sum = sum + p->value;
+        free(p);
+        i = i + 1;
+    }
+    return sum;
+}

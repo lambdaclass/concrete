@@ -1,0 +1,21 @@
+// Error: call a method on generic T that requires a trait bound, but bound not declared
+trait Describe {
+    fn describe(&self) -> Int;
+}
+
+struct Copy Point { x: Int, y: Int }
+
+impl Describe for Point {
+    fn describe(&self) -> Int {
+        return self.x + self.y;
+    }
+}
+
+fn show<T>(x: T) -> Int {
+    return x.describe();
+}
+
+fn main() -> Int {
+    let p: Point = Point { x: 10, y: 32 };
+    return show(p);
+}

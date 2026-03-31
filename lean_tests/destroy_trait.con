@@ -1,0 +1,15 @@
+// Test: impl Destroy for struct, call destroy()
+struct Handle { fd: Int }
+
+impl Destroy for Handle {
+    fn destroy(&self) {
+        // Would close file descriptor in real code
+    }
+}
+
+fn main() -> Int {
+    let mut h: Handle = Handle { fd: 42 };
+    let fd: Int = h.fd;
+    destroy(h);
+    return fd;
+}

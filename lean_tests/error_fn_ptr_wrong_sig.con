@@ -1,0 +1,12 @@
+// Error: passing function with wrong signature as function pointer
+fn add(x: Int, y: Int) -> Int {
+    return x + y;
+}
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+    return f(x);
+}
+
+fn main() -> Int {
+    return apply(add, 10);
+}

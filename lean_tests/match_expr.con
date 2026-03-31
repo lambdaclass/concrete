@@ -1,0 +1,37 @@
+mod test {
+    enum Color {
+        Red {},
+        Green {},
+        Blue {}
+    }
+
+    fn main() -> i32 {
+        // Basic match-as-expression with enum
+        let c: Color = Color#Red {};
+        let x: i32 = match c {
+            Color#Red {} => 10,
+            Color#Green {} => 20,
+            Color#Blue {} => 30
+        };
+        if x != 10 { return 1; }
+
+        // Match-as-expression with block body
+        let c2: Color = Color#Blue {};
+        let y: i32 = match c2 {
+            Color#Red {} => { 100 },
+            Color#Green {} => { 200 },
+            Color#Blue {} => { 300 }
+        };
+        if y != 300 { return 2; }
+
+        // Match-as-expression with value patterns
+        let v: i32 = 42;
+        let z: i32 = match v {
+            42 => 1,
+            _ => 0
+        };
+        if z != 1 { return 3; }
+
+        return 0;
+    }
+}

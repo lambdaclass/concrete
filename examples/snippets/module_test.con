@@ -1,0 +1,9 @@
+mod MyModule {
+    fn double(x: Int) -> Int {
+        return x * 2;
+    }
+
+    fn main() -> Int {
+        return double(21);
+    }
+}

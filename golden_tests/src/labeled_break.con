@@ -1,0 +1,12 @@
+fn main() with(Std) -> Int {
+    let mut result: Int = 0;
+    let mut i: Int = 0;
+    while i < 100 {
+        if i == 5 {
+            break;
+        }
+        result = result + 1;
+        i = i + 1;
+    }
+    return result;
+}

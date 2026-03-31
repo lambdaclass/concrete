@@ -1,0 +1,389 @@
+// Phase 3 mixed-feature test: mini type checker
+//
+// Combines: enums (Type 4 variants, Expr 6 variants, TypeError 3 variants),
+//   match (type inference + checking), structs (type environment),
+//   Vec (environment bindings + expression arena), modules (Types, Exprs, Checker),
+//   while loops, capabilities.
+//
+// A tiny language with types: TInt, TBool, TFun(param_type_tag, return_type_tag),
+//   TError. Expressions: EInt(value), EBool(value), EVar(binding_idx),
+//   EAdd(left, right), EEq(left, right), EApp(func, arg).
+//
+// The type checker infers types of expressions and validates them.
+// Expressions and types are encoded as flat Vecs.
+//
+// Expected output: 42
+
+mod Types {
+    // Type tags: 0=TInt, 1=TBool, 2=TFun, 3=TError
+    // TFun encoded as [2, param_tag, return_tag]
+    pub enum Copy TypeTag {
+        TInt {},
+        TBool {},
+        TFun { param: i32, ret: i32 },
+        TError { code: i32 },
+    }
+
+    pub fn make_int() -> TypeTag { return TypeTag#TInt {}; }
+    pub fn make_bool() -> TypeTag { return TypeTag#TBool {}; }
+    pub fn make_fun(p: i32, r: i32) -> TypeTag { return TypeTag#TFun { param: p, ret: r }; }
+    pub fn make_error(code: i32) -> TypeTag { return TypeTag#TError { code: code }; }
+
+    pub fn type_tag_id(t: &TypeTag) -> i32 {
+        match *t {
+            TypeTag#TInt {} => { return 0; },
+            TypeTag#TBool {} => { return 1; },
+            TypeTag#TFun { param, ret } => { return 2; },
+            TypeTag#TError { code } => { return 3; }
+        }
+    }
+
+    pub fn types_equal(a: &TypeTag, b: &TypeTag) -> bool {
+        let aid: i32 = type_tag_id(a);
+        let bid: i32 = type_tag_id(b);
+        if aid != bid { return false; }
+        if aid != 2 { return true; }
+        // Both are TFun, compare param and ret
+        let ap: i32 = get_fun_param(a);
+        let ar: i32 = get_fun_ret(a);
+        let bp: i32 = get_fun_param(b);
+        let br: i32 = get_fun_ret(b);
+        return ap == bp && ar == br;
+    }
+
+    pub fn get_fun_param(t: &TypeTag) -> i32 {
+        match *t {
+            TypeTag#TFun { param, ret } => { return param; },
+            TypeTag#TInt {} => { return -1; },
+            TypeTag#TBool {} => { return -1; },
+            TypeTag#TError { code } => { return -1; }
+        }
+    }
+
+    pub fn get_fun_ret(t: &TypeTag) -> i32 {
+        match *t {
+            TypeTag#TFun { param, ret } => { return ret; },
+            TypeTag#TInt {} => { return -1; },
+            TypeTag#TBool {} => { return -1; },
+            TypeTag#TError { code } => { return -1; }
+        }
+    }
+
+    pub fn is_error(t: &TypeTag) -> bool {
+        match *t {
+            TypeTag#TError { code } => { return true; },
+            TypeTag#TInt {} => { return false; },
+            TypeTag#TBool {} => { return false; },
+            TypeTag#TFun { param, ret } => { return false; }
+        }
+    }
+
+    pub fn type_name_code(t: &TypeTag) -> i32 {
+        // Return a numeric code for display: int=10, bool=20, fun=30, error=99
+        match *t {
+            TypeTag#TInt {} => { return 10; },
+            TypeTag#TBool {} => { return 20; },
+            TypeTag#TFun { param, ret } => { return 30; },
+            TypeTag#TError { code } => { return 99; }
+        }
+    }
+}
+
+mod Exprs {
+    // Expression encoding: 3 i32s per node [kind, param1, param2]
+    // kind: 0=EInt, 1=EBool, 2=EVar, 3=EAdd, 4=EEq, 5=EApp
+    pub fn encode_int(arena: &mut Vec<i32>, value: i32) with(Alloc) -> i32 {
+        let idx: i32 = vec_len::<i32>(arena) as i32 / 3;
+        vec_push::<i32>(arena, 0);
+        vec_push::<i32>(arena, value);
+        vec_push::<i32>(arena, 0);
+        return idx;
+    }
+
+    pub fn encode_bool(arena: &mut Vec<i32>, value: i32) with(Alloc) -> i32 {
+        let idx: i32 = vec_len::<i32>(arena) as i32 / 3;
+        vec_push::<i32>(arena, 1);
+        vec_push::<i32>(arena, value);
+        vec_push::<i32>(arena, 0);
+        return idx;
+    }
+
+    pub fn encode_var(arena: &mut Vec<i32>, binding_idx: i32) with(Alloc) -> i32 {
+        let idx: i32 = vec_len::<i32>(arena) as i32 / 3;
+        vec_push::<i32>(arena, 2);
+        vec_push::<i32>(arena, binding_idx);
+        vec_push::<i32>(arena, 0);
+        return idx;
+    }
+
+    pub fn encode_add(arena: &mut Vec<i32>, left: i32, right: i32) with(Alloc) -> i32 {
+        let idx: i32 = vec_len::<i32>(arena) as i32 / 3;
+        vec_push::<i32>(arena, 3);
+        vec_push::<i32>(arena, left);
+        vec_push::<i32>(arena, right);
+        return idx;
+    }
+
+    pub fn encode_eq(arena: &mut Vec<i32>, left: i32, right: i32) with(Alloc) -> i32 {
+        let idx: i32 = vec_len::<i32>(arena) as i32 / 3;
+        vec_push::<i32>(arena, 4);
+        vec_push::<i32>(arena, left);
+        vec_push::<i32>(arena, right);
+        return idx;
+    }
+
+    pub fn encode_app(arena: &mut Vec<i32>, func: i32, arg: i32) with(Alloc) -> i32 {
+        let idx: i32 = vec_len::<i32>(arena) as i32 / 3;
+        vec_push::<i32>(arena, 5);
+        vec_push::<i32>(arena, func);
+        vec_push::<i32>(arena, arg);
+        return idx;
+    }
+
+    pub fn get_kind(arena: &Vec<i32>, idx: i32) -> i32 {
+        return vec_get::<i32>(arena, (idx * 3) as Int);
+    }
+
+    pub fn get_param1(arena: &Vec<i32>, idx: i32) -> i32 {
+        return vec_get::<i32>(arena, (idx * 3 + 1) as Int);
+    }
+
+    pub fn get_param2(arena: &Vec<i32>, idx: i32) -> i32 {
+        return vec_get::<i32>(arena, (idx * 3 + 2) as Int);
+    }
+
+    pub fn expr_count(arena: &Vec<i32>) -> i32 {
+        return vec_len::<i32>(arena) as i32 / 3;
+    }
+}
+
+mod Checker {
+    import Types.{ TypeTag, make_int, make_bool, make_fun, make_error, type_tag_id, types_equal, is_error };
+    import Exprs.{ get_kind, get_param1, get_param2, expr_count };
+
+    // Environment: flat Vec of i32 type tags.
+    // Binding at index i has type = env[i] (simple type tag: 0=int, 1=bool).
+    // For function types, we store tag=2 and need a separate lookup (simplified here).
+
+    pub fn env_add(env: &mut Vec<i32>, type_tag: i32) with(Alloc) {
+        vec_push::<i32>(env, type_tag);
+    }
+
+    pub fn env_lookup(env: &Vec<i32>, idx: i32) -> TypeTag {
+        if idx < 0 { return make_error(1); }
+        let len: i32 = vec_len::<i32>(env) as i32;
+        if idx >= len { return make_error(2); }
+        let tag: i32 = vec_get::<i32>(env, idx as Int);
+        if tag == 0 { return make_int(); }
+        if tag == 1 { return make_bool(); }
+        // Simplified: tag=2 means fn(int)->int
+        if tag == 2 { return make_fun(0, 0); }
+        return make_error(3);
+    }
+
+    // Type-check all expressions, returning a Vec of inferred type tags (one per expr)
+    pub fn check_all(arena: &Vec<i32>, env: &Vec<i32>) with(Alloc) -> Vec<i32> {
+        let count: i32 = expr_count(arena);
+        let mut types: Vec<i32> = vec_new::<i32>();
+        let mut i: i32 = 0;
+        while i < count {
+            let t: TypeTag = infer_expr(arena, env, &types, i);
+            let tid: i32 = type_tag_id(&t);
+            vec_push::<i32>(&mut types, tid);
+            i = i + 1;
+        }
+        return types;
+    }
+
+    fn infer_expr(arena: &Vec<i32>, env: &Vec<i32>, types: &Vec<i32>, idx: i32) -> TypeTag {
+        let kind: i32 = get_kind(arena, idx);
+
+        // EInt
+        if kind == 0 { return make_int(); }
+
+        // EBool
+        if kind == 1 { return make_bool(); }
+
+        // EVar
+        if kind == 2 {
+            let binding: i32 = get_param1(arena, idx);
+            return env_lookup(env, binding);
+        }
+
+        // EAdd: both operands must be int, result is int
+        if kind == 3 {
+            let left_idx: i32 = get_param1(arena, idx);
+            let right_idx: i32 = get_param2(arena, idx);
+            let lt: i32 = vec_get::<i32>(types, left_idx as Int);
+            let rt: i32 = vec_get::<i32>(types, right_idx as Int);
+            if lt != 0 { return make_error(10); }  // left not int
+            if rt != 0 { return make_error(11); }  // right not int
+            return make_int();
+        }
+
+        // EEq: both operands must have same type, result is bool
+        if kind == 4 {
+            let left_idx: i32 = get_param1(arena, idx);
+            let right_idx: i32 = get_param2(arena, idx);
+            let lt: i32 = vec_get::<i32>(types, left_idx as Int);
+            let rt: i32 = vec_get::<i32>(types, right_idx as Int);
+            if lt != rt { return make_error(20); }  // type mismatch
+            return make_bool();
+        }
+
+        // EApp: func must be function type, arg must match param type
+        if kind == 5 {
+            let func_idx: i32 = get_param1(arena, idx);
+            let arg_idx: i32 = get_param2(arena, idx);
+            let ft: i32 = vec_get::<i32>(types, func_idx as Int);
+            if ft != 2 { return make_error(30); }  // not a function
+            // Simplified: fn(int)->int, so arg must be int, result is int
+            let at: i32 = vec_get::<i32>(types, arg_idx as Int);
+            if at != 0 { return make_error(31); }  // arg type mismatch
+            return make_int();
+        }
+
+        return make_error(99);
+    }
+
+    // Count type errors in the result
+    pub fn count_errors(types: &Vec<i32>) -> i32 {
+        let count: i32 = vec_len::<i32>(types) as i32;
+        let mut errors: i32 = 0;
+        let mut i: i32 = 0;
+        while i < count {
+            if vec_get::<i32>(types, i as Int) == 3 {
+                errors = errors + 1;
+            }
+            i = i + 1;
+        }
+        return errors;
+    }
+
+    // Count expressions of each type
+    pub fn count_type(types: &Vec<i32>, target: i32) -> i32 {
+        let count: i32 = vec_len::<i32>(types) as i32;
+        let mut result: i32 = 0;
+        let mut i: i32 = 0;
+        while i < count {
+            if vec_get::<i32>(types, i as Int) == target {
+                result = result + 1;
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+}
+
+mod Main {
+    import Types.{ TypeTag, make_int, make_bool, make_fun, type_tag_id, types_equal, is_error, type_name_code };
+    import Exprs.{ encode_int, encode_bool, encode_var, encode_add, encode_eq, encode_app, expr_count };
+    import Checker.{ env_add, check_all, count_errors, count_type };
+
+    fn main() with(Std) -> Int {
+        // Build type environment
+        let mut env: Vec<i32> = vec_new::<i32>();
+        env_add(&mut env, 0);   // binding 0: int (variable x)
+        env_add(&mut env, 1);   // binding 1: bool (variable b)
+        env_add(&mut env, 2);   // binding 2: fn(int)->int (variable f)
+        env_add(&mut env, 0);   // binding 3: int (variable y)
+
+        // Build expression arena (bottom-up)
+        let mut arena: Vec<i32> = vec_new::<i32>();
+
+        // Expr 0: EInt(5) => int
+        let e0: i32 = encode_int(&mut arena, 5);
+        // Expr 1: EInt(10) => int
+        let e1: i32 = encode_int(&mut arena, 10);
+        // Expr 2: EAdd(e0, e1) => int (5 + 10)
+        let e2: i32 = encode_add(&mut arena, e0, e1);
+        // Expr 3: EVar(0) => int (x)
+        let e3: i32 = encode_var(&mut arena, 0);
+        // Expr 4: EAdd(e2, e3) => int (15 + x)
+        let e4: i32 = encode_add(&mut arena, e2, e3);
+        // Expr 5: EBool(1) => bool (true)
+        let e5: i32 = encode_bool(&mut arena, 1);
+        // Expr 6: EVar(1) => bool (b)
+        let e6: i32 = encode_var(&mut arena, 1);
+        // Expr 7: EEq(e5, e6) => bool (true == b)
+        let e7: i32 = encode_eq(&mut arena, e5, e6);
+        // Expr 8: EVar(2) => fn(int)->int (f)
+        let e8: i32 = encode_var(&mut arena, 2);
+        // Expr 9: EApp(e8, e4) => int (f(15 + x))
+        let e9: i32 = encode_app(&mut arena, e8, e4);
+        // Expr 10: EInt(3) => int
+        let e10: i32 = encode_int(&mut arena, 3);
+        // Expr 11: EAdd(e9, e10) => int (f(15 + x) + 3)
+        let e11: i32 = encode_add(&mut arena, e9, e10);
+        // Expr 12: EEq(e0, e5) => ERROR (int == bool)
+        let e12: i32 = encode_eq(&mut arena, e0, e5);
+        // Expr 13: EVar(3) => int (y)
+        let e13: i32 = encode_var(&mut arena, 3);
+        // Expr 14: EAdd(e11, e13) => int (f(15+x) + 3 + y)
+        let e14: i32 = encode_add(&mut arena, e11, e13);
+
+        if expr_count(&arena) != 15 { vec_free::<i32>(arena); vec_free::<i32>(env); return 1; }
+
+        // Type-check everything
+        let types: Vec<i32> = check_all(&arena, &env);
+
+        // Verify individual types
+        // e0=int(0), e1=int(0), e2=int(0), e3=int(0), e4=int(0)
+        // e5=bool(1), e6=bool(1), e7=bool(1)
+        // e8=fun(2), e9=int(0), e10=int(0), e11=int(0)
+        // e12=error(3), e13=int(0), e14=int(0)
+        let t0: i32 = vec_get::<i32>(&types, 0);
+        let t5: i32 = vec_get::<i32>(&types, 5);
+        let t7: i32 = vec_get::<i32>(&types, 7);
+        let t8: i32 = vec_get::<i32>(&types, 8);
+        let t9: i32 = vec_get::<i32>(&types, 9);
+        let t12: i32 = vec_get::<i32>(&types, 12);
+        let t14: i32 = vec_get::<i32>(&types, 14);
+        if t0 != 0 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 2; }
+        if t5 != 1 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 3; }
+        if t7 != 1 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 4; }
+        if t8 != 2 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 5; }
+        if t9 != 0 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 6; }
+        if t12 != 3 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 7; }
+        if t14 != 0 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 8; }
+
+        // Count by type
+        let int_count: i32 = count_type(&types, 0);     // e0,e1,e2,e3,e4,e9,e10,e11,e13,e14 = 10
+        let bool_count: i32 = count_type(&types, 1);    // e5,e6,e7 = 3
+        let fun_count: i32 = count_type(&types, 2);     // e8 = 1
+        let err_count: i32 = count_errors(&types);      // e12 = 1
+
+        if int_count != 10 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 9; }
+        if bool_count != 3 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 10; }
+        if fun_count != 1 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 11; }
+        if err_count != 1 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 12; }
+
+        // Test type equality
+        let ti: TypeTag = make_int();
+        let tb: TypeTag = make_bool();
+        let tf: TypeTag = make_fun(0, 0);
+        if types_equal(&ti, &tb) { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 13; }
+        if !types_equal(&ti, &ti) { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 14; }
+        if types_equal(&ti, &tf) { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 15; }
+
+        // Test type_name_code
+        let nc_int: i32 = type_name_code(&ti);     // 10
+        let nc_bool: i32 = type_name_code(&tb);    // 20
+        let nc_fun: i32 = type_name_code(&tf);     // 30
+        if nc_int != 10 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 16; }
+        if nc_bool != 20 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 17; }
+
+        // Final checksum:
+        // int_count(10) * bool_count(3) + fun_count(1) * err_count(1) + nc_int(10) + nc_bool(20) + err_count(1)
+        // = 30 + 1 + 10 + 20 + 1 = 62... too much
+        // Try: int_count(10) + bool_count(3)*fun_count(1)*err_count(1) + nc_fun(30) - err_count(1)
+        // = 10 + 3 + 30 - 1 = 42
+        let checksum: i32 = int_count + bool_count * fun_count * err_count + nc_fun - err_count;
+        if checksum != 42 { vec_free::<i32>(arena); vec_free::<i32>(env); vec_free::<i32>(types); return 18; }
+
+        vec_free::<i32>(arena);
+        vec_free::<i32>(env);
+        vec_free::<i32>(types);
+        return checksum as Int;
+    }
+}

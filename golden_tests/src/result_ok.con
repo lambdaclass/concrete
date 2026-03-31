@@ -1,0 +1,16 @@
+enum MyResult { Ok { value: Int }, Err { error: Int } }
+
+fn safe_div(a: Int, b: Int) -> MyResult {
+    if b == 0 {
+        return MyResult#Err { error: 0 };
+    }
+    return MyResult#Ok { value: a / b };
+}
+
+fn main() -> Int {
+    let r: MyResult = safe_div(10, 2);
+    match r {
+        MyResult#Ok { value } => { return value; },
+        MyResult#Err { error } => { return error; },
+    }
+}

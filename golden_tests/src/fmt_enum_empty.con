@@ -1,0 +1,10 @@
+enum Color { Red {}, Green {}, Blue {} }
+
+fn pick(c: Color) -> Int {
+    let r: Int = match c {
+        Color#Red {} => { return 1; },
+        Color#Green {} => { return 2; },
+        Color#Blue {} => { return 3; },
+    };
+    return r;
+}

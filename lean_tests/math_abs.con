@@ -1,0 +1,26 @@
+// abs works on both Float64 and Int via Numeric trait
+trait Numeric {
+    fn abs(self) -> Self;
+}
+
+impl Numeric for Int {
+    fn abs(self) -> Int {
+        if self < 0 { return 0 - self; }
+        return self;
+    }
+}
+
+impl Numeric for Float64 {
+    fn abs(self) -> Float64 {
+        if self < 0.0 { return 0.0 - self; }
+        return self;
+    }
+}
+
+fn main() -> Int {
+    let x: Float64 = 0.0 - 42.0;
+    let y: Int = 0 - 10;
+    let fx: Float64 = x.abs();
+    let iy: Int = y.abs();
+    return (fx as Int) + iy;
+}

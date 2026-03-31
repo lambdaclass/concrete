@@ -1,0 +1,11 @@
+enum Result { Ok { value: Int }, Err { error: Int } }
+
+fn bad_fn() -> Int {
+    let r: Result = Result#Ok { value: 42 };
+    let v: Int = r?;
+    return v;
+}
+
+fn main() -> Int {
+    return bad_fn();
+}

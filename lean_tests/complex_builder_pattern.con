@@ -1,0 +1,35 @@
+// Test: struct builder with method chaining (simulated)
+// Expected: 60
+struct Copy Config {
+    width: Int,
+    height: Int,
+    depth: Int,
+}
+
+fn new_config() -> Config {
+    return Config { width: 0, height: 0, depth: 0 };
+}
+
+fn set_width(c: Config, w: Int) -> Config {
+    return Config { width: w, height: c.height, depth: c.depth };
+}
+
+fn set_height(c: Config, h: Int) -> Config {
+    return Config { width: c.width, height: h, depth: c.depth };
+}
+
+fn set_depth(c: Config, d: Int) -> Config {
+    return Config { width: c.width, height: c.height, depth: d };
+}
+
+fn volume(c: Config) -> Int {
+    return c.width * c.height * c.depth;
+}
+
+fn main() -> Int {
+    let c: Config = new_config();
+    let c: Config = set_width(c, 3);
+    let c: Config = set_height(c, 4);
+    let c: Config = set_depth(c, 5);
+    return volume(c);
+}

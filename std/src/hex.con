@@ -1,0 +1,148 @@
+mod hex {
+    import std.vec.{Vec};
+
+    /// Encode a single nibble (0-15) as a lowercase hex character.
+    fn nibble_to_char(n: u8) -> char {
+        if n < 10 {
+            return (48 + n) as char;
+        }
+        return (87 + n) as char;
+    }
+
+    /// Encode a byte buffer as a lowercase hex string.
+    /// Each byte becomes two hex characters.
+    pub fn encode_bytes(data: &Vec<u8>) with(Alloc) -> String {
+        let out: String = String::new();
+        let i: u64 = 0;
+        while i < data.len {
+            let b: u8 = *data.get_unchecked(i);
+            out.push_char(nibble_to_char((b >> 4) & 0xF));
+            out.push_char(nibble_to_char(b & 0xF));
+            i = i + 1;
+        }
+        return out;
+    }
+
+    /// Encode a u32 value as 8 lowercase hex characters (big-endian).
+    pub fn encode_u32(val: u32, out: &mut String) with(Alloc) {
+        let mut shift: i32 = 28;
+        while shift >= 0 {
+            let nibble: u8 = ((val >> (shift as u32)) & 0xF) as u8;
+            out.push_char(nibble_to_char(nibble));
+            shift = shift - 4;
+        }
+    }
+
+    /// Encode a Vec<u32> (e.g. SHA-256 hash words) as a hex string.
+    /// Each u32 is encoded big-endian as 8 hex characters.
+    pub fn encode_u32_vec(words: &Vec<u32>) with(Alloc) -> String {
+        let out: String = String::new();
+        let i: u64 = 0;
+        while i < words.len {
+            let word: u32 = *words.get_unchecked(i);
+            encode_u32(word, &mut out);
+            i = i + 1;
+        }
+        return out;
+    }
+
+    /// Decode a hex character to its nibble value (0-15).
+    /// Returns 255 on invalid input.
+    fn char_to_nibble(ch: char) -> u8 {
+        let c: u8 = ch as u8;
+        if c >= 48 && c <= 57 { return c - 48; }
+        if c >= 97 && c <= 102 { return c - 87; }
+        if c >= 65 && c <= 70 { return c - 55; }
+        return 255;
+    }
+
+    /// Decode a hex string into a byte vector.
+    /// Returns an empty vector on invalid input (odd length or bad chars).
+    pub fn decode(s: &String) with(Alloc) -> Vec<u8> {
+        let result: Vec<u8> = Vec::<u8>::new();
+        if s.len % 2 != 0 {
+            return result;
+        }
+        let i: u64 = 0;
+        while i < s.len {
+            let hi: u8 = char_to_nibble(s.get_unchecked(i));
+            let lo: u8 = char_to_nibble(s.get_unchecked(i + 1));
+            if hi == 255 || lo == 255 {
+                result.drop();
+                let empty: Vec<u8> = Vec::<u8>::new();
+                return empty;
+            }
+            result.push((hi << 4) | lo);
+            i = i + 2;
+        }
+        return result;
+    }
+
+    import std.test.{assert_eq, assert_true};
+
+    #[test]
+    fn test_encode_u32_vec() with(Alloc) -> i32 {
+        let mut words: Vec<u32> = Vec::<u32>::new();
+        words.push(0xdeadbeef);
+        words.push(0x01020304);
+        let hex_str: String = encode_u32_vec(&words);
+        let expected: String = "deadbeef01020304";
+        let ok: bool = hex_str.eq(&expected);
+        hex_str.drop();
+        expected.drop();
+        words.drop();
+        if ok { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_encode_u32() with(Alloc) -> i32 {
+        let out: String = String::new();
+        encode_u32(0xff, &mut out);
+        let expected: String = "000000ff";
+        let ok: bool = out.eq(&expected);
+        out.drop();
+        expected.drop();
+        if ok { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_decode_valid() with(Alloc) -> i32 {
+        let input: String = "48656c6c6f";
+        let bytes: Vec<u8> = decode(&input);
+        if !assert_eq::<u64>(bytes.len, 5, "decode should produce 5 bytes") {
+            input.drop();
+            bytes.drop();
+            return 1;
+        }
+        // H=0x48, e=0x65, l=0x6c, l=0x6c, o=0x6f
+        if *bytes.get_unchecked(0) != 0x48 {
+            input.drop();
+            bytes.drop();
+            return 1;
+        }
+        if *bytes.get_unchecked(4) != 0x6f {
+            input.drop();
+            bytes.drop();
+            return 1;
+        }
+        input.drop();
+        bytes.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_decode_odd_length() with(Alloc) -> i32 {
+        let input: String = "abc";
+        let bytes: Vec<u8> = decode(&input);
+        if !assert_eq::<u64>(bytes.len, 0, "odd-length hex should return empty") {
+            input.drop();
+            bytes.drop();
+            return 1;
+        }
+        input.drop();
+        bytes.drop();
+        return 0;
+    }
+}

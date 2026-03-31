@@ -1,0 +1,21 @@
+// Test: defer inside a function called from a loop
+// Each call to process() defers drop_string, which runs at that call's return.
+// This verifies defer works correctly when the containing function is called
+// repeatedly (no leak, no double-free).
+fn process(v: i32) with(Console, Alloc) -> i32 {
+    let s: String = "x";
+    defer drop_string(s);
+    print_string(&s);
+    return v;
+}
+
+fn main() with(Std) -> Int {
+    let mut sum: i32 = 0;
+    let mut i: i32 = 0;
+    while i < 3 {
+        sum = sum + process(i);
+        i = i + 1;
+    }
+    print_char(10);
+    return sum as Int;
+}

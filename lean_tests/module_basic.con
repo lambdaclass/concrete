@@ -1,0 +1,8 @@
+mod Lib {
+    pub fn double(x: Int) -> Int { return x * 2; }
+}
+
+mod Main {
+    import Lib.{ double };
+    fn main() -> Int { return double(21); }
+}

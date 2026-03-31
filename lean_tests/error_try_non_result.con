@@ -1,0 +1,5 @@
+fn main() -> Int {
+    let x: Int = 42;
+    let y: Int = x?;
+    return y;
+}

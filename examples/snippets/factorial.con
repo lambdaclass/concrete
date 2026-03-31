@@ -1,0 +1,12 @@
+mod FactorialModule {
+    pub fn factorial(x: Int) -> Int {
+        return match x {
+            0 -> return 1,
+            n -> return n * factorial(n - 1),
+        };
+    }
+
+    fn main() -> Int {
+        return factorial(10);
+    }
+}

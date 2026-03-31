@@ -1,0 +1,15 @@
+mod MyMod {
+    struct GenericStruct<T> {
+        a: T,
+        b: u32,
+    }
+
+    pub fn main() -> i32 {
+        let value: GenericStruct<i32> = GenericStruct::<i32> {
+            a: 2,
+            b: 4,
+        };
+
+        return value.a;
+    }
+}

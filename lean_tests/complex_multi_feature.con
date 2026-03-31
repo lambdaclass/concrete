@@ -1,0 +1,34 @@
+// Complex program combining traits, enums, structs, and generic dispatch
+trait Scorable {
+    fn score(&self) -> Int;
+}
+
+enum Copy Rank { Low {}, Mid {}, High {} }
+
+fn rank_value(r: Rank) -> Int {
+    match r {
+        Rank#Low {} => { return 1; },
+        Rank#Mid {} => { return 5; },
+        Rank#High {} => { return 10; },
+    }
+}
+
+struct Copy Entry { rank: Rank, weight: Int }
+
+impl Scorable for Entry {
+    fn score(&self) -> Int {
+        return rank_value(self.rank);
+    }
+}
+
+fn weighted<T: Scorable>(item: T, mult: Int) -> Int {
+    return item.score() * mult;
+}
+
+fn main() -> Int {
+    let e1: Entry = Entry { rank: Rank#High {}, weight: 3 };
+    let e2: Entry = Entry { rank: Rank#Mid {}, weight: 2 };
+    let s1: Int = weighted(e1, 3);
+    let s2: Int = weighted(e2, 2);
+    return s1 + s2;
+}

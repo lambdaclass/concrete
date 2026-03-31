@@ -1,0 +1,45 @@
+// Test: defer + ? operator inside a nested block.
+// The ? triggers an early return on error; deferred cleanup from
+// both the inner block scope and the function scope must run.
+enum Result {
+    Ok { value: i32 },
+    Err { code: i32 },
+}
+
+fn might_fail(succeed: bool) -> Result {
+    if succeed {
+        return Result#Ok { value: 10 };
+    }
+    return Result#Err { code: 99 };
+}
+
+fn work(succeed: bool) with(Console, Alloc) -> Result {
+    let a: String = "outer";
+    defer drop_string(a);
+    if true {
+        let b: String = "inner";
+        defer drop_string(b);
+        let v: i32 = might_fail(succeed)?;
+        print_string(&b);
+        print_char(32);
+        print_string(&a);
+        print_char(10);
+        return Result#Ok { value: v };
+    }
+    return Result#Ok { value: 0 };
+}
+
+fn extract(r: Result) -> i32 {
+    match r {
+        Result#Ok { value } -> { return value; }
+        Result#Err { code } -> { return code; }
+    }
+}
+
+fn main() with(Std) -> Int {
+    // Success path: both strings printed, defers run after return
+    let v1: i32 = extract(work(true));
+    // Error path: ? triggers early return, defers still run (no leak)
+    let v2: i32 = extract(work(false));
+    return (v1 + v2) as Int;
+}

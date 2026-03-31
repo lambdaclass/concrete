@@ -1,0 +1,19 @@
+// Test: multiple defers compile and execute in LIFO order
+struct A { value: Int }
+struct B { value: Int }
+
+impl Destroy for A {
+    fn destroy(&self) { }
+}
+
+impl Destroy for B {
+    fn destroy(&self) { }
+}
+
+fn main() -> Int {
+    let mut a: A = A { value: 1 };
+    let mut b: B = B { value: 2 };
+    defer destroy(a);
+    defer destroy(b);
+    return a.value + b.value + 39;
+}

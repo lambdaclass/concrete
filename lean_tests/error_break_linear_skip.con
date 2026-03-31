@@ -1,0 +1,19 @@
+// Test: break skips unconsumed linear variable
+struct Data { value: Int }
+
+fn consume(d: Data) -> Int {
+    return d.value;
+}
+
+fn main() -> Int {
+    let mut i: Int = 0;
+    while i < 10 {
+        let d: Data = Data { value: i };
+        i = i + 1;
+        if i == 3 {
+            break;
+        }
+        consume(d);
+    }
+    return 0;
+}

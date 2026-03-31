@@ -1,0 +1,103 @@
+mod ascii {
+    /// ASCII character classification.
+    /// All functions take a char (which is a byte-sized value in Concrete)
+    /// and return whether it falls in the given category.
+
+    pub fn is_digit(ch: char) -> bool {
+        let c: u8 = ch as u8;
+        return c >= 48 && c <= 57;
+    }
+
+    pub fn is_upper(ch: char) -> bool {
+        let c: u8 = ch as u8;
+        return c >= 65 && c <= 90;
+    }
+
+    pub fn is_lower(ch: char) -> bool {
+        let c: u8 = ch as u8;
+        return c >= 97 && c <= 122;
+    }
+
+    pub fn is_alpha(ch: char) -> bool {
+        return is_upper(ch) || is_lower(ch);
+    }
+
+    pub fn is_alnum(ch: char) -> bool {
+        return is_alpha(ch) || is_digit(ch);
+    }
+
+    pub fn is_whitespace(ch: char) -> bool {
+        let c: u8 = ch as u8;
+        // space, tab, newline, carriage return, form feed, vertical tab
+        return c == 32 || c == 9 || c == 10 || c == 13 || c == 12 || c == 11;
+    }
+
+    pub fn to_lower(ch: char) -> char {
+        if is_upper(ch) {
+            return ((ch as u8) + 32) as char;
+        }
+        return ch;
+    }
+
+    pub fn to_upper(ch: char) -> char {
+        if is_lower(ch) {
+            return ((ch as u8) - 32) as char;
+        }
+        return ch;
+    }
+
+    import std.test.{assert_true, assert_false, assert_eq};
+
+    #[test]
+    fn test_is_digit() -> i32 {
+        if !assert_true(is_digit('0'), "0 is digit") { return 1; }
+        if !assert_true(is_digit('9'), "9 is digit") { return 1; }
+        if !assert_false(is_digit('a'), "a is not digit") { return 1; }
+        if !assert_false(is_digit(' '), "space is not digit") { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_is_alpha() -> i32 {
+        if !assert_true(is_alpha('a'), "a is alpha") { return 1; }
+        if !assert_true(is_alpha('Z'), "Z is alpha") { return 1; }
+        if !assert_false(is_alpha('0'), "0 is not alpha") { return 1; }
+        if !assert_false(is_alpha(' '), "space is not alpha") { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_is_alnum() -> i32 {
+        if !assert_true(is_alnum('a'), "a is alnum") { return 1; }
+        if !assert_true(is_alnum('5'), "5 is alnum") { return 1; }
+        if !assert_false(is_alnum(' '), "space is not alnum") { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_is_whitespace() -> i32 {
+        if !assert_true(is_whitespace(' '), "space is ws") { return 1; }
+        if !assert_true(is_whitespace('\t'), "tab is ws") { return 1; }
+        if !assert_true(is_whitespace('\n'), "newline is ws") { return 1; }
+        if !assert_false(is_whitespace('a'), "a is not ws") { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_to_lower() -> i32 {
+        if to_lower('A') != 'a' { return 1; }
+        if to_lower('Z') != 'z' { return 1; }
+        if to_lower('a') != 'a' { return 1; }
+        if to_lower('5') != '5' { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_to_upper() -> i32 {
+        if to_upper('a') != 'A' { return 1; }
+        if to_upper('z') != 'Z' { return 1; }
+        if to_upper('A') != 'A' { return 1; }
+        if to_upper('5') != '5' { return 1; }
+        return 0;
+    }
+}

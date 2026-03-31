@@ -1,0 +1,8 @@
+fn main() -> Int {
+    let s: String = "  hi  ";
+    let trimmed: String = string_trim(&s);
+    let len: Int = string_length(&trimmed);
+    drop_string(s);
+    drop_string(trimmed);
+    return len;
+}

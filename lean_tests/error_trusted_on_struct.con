@@ -1,0 +1,8 @@
+// Error: trusted can only be applied to fn or impl
+trusted struct Bad {
+    x: i32,
+}
+
+fn main() -> i32 {
+    return 0;
+}

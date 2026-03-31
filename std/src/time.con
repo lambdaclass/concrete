@@ -1,0 +1,159 @@
+mod time {
+    import std.libc.{time as libc_time, clock_gettime, nanosleep};
+    import std.alloc.{grow,dealloc};
+
+    pub struct Duration {
+        secs: i64,
+        nanos: i64,
+    }
+
+    impl Duration {
+        pub fn from_secs(s: i64) -> Duration {
+            let d: Duration = Duration { secs: s, nanos: 0 };
+            return d;
+        }
+
+        pub fn from_millis(ms: i64) -> Duration {
+            let s: i64 = ms / 1000;
+            let ns: i64 = (ms - (s * 1000)) * 1000000;
+            let d: Duration = Duration { secs: s, nanos: ns };
+            return d;
+        }
+
+        pub fn from_nanos(ns: i64) -> Duration {
+            let s: i64 = ns / 1000000000;
+            let remaining: i64 = ns - (s * 1000000000);
+            let d: Duration = Duration { secs: s, nanos: remaining };
+            return d;
+        }
+    }
+
+    pub struct Instant {
+        secs: i64,
+        nanos: i64,
+    }
+
+    trusted impl Instant {
+        pub fn now() with(Unsafe, Alloc) -> Instant {
+            // Allocate 16 bytes for struct timespec (macOS arm64: i64 + i64)
+            let buf: *mut u8 = grow::<u8>(0 as *mut u8, 16);
+
+            // Zero the buffer
+            let i: u64 = 0;
+            while i < 16 {
+                let p: *mut u8 = buf + i;
+                *p = 0;
+                i = i + 1;
+            }
+
+            // CLOCK_MONOTONIC = 6 on macOS
+            clock_gettime(6, buf);
+
+            // Read tv_sec at offset 0 (i64)
+            let sec_ptr: *const i64 = buf as *const i64;
+            let sec: i64 = *sec_ptr;
+
+            // Read tv_nsec at offset 8 (i64)
+            let nsec_ptr: *const i64 = (buf + 8) as *const i64;
+            let nsec: i64 = *nsec_ptr;
+
+            dealloc::<u8>(buf);
+
+            let inst: Instant = Instant { secs: sec, nanos: nsec };
+            return inst;
+        }
+
+        pub fn elapsed(&self) with(Unsafe, Alloc) -> Duration {
+            let current: Instant = Instant::now();
+            let sec_diff: i64 = current.secs - self.secs;
+            let nsec_diff: i64 = current.nanos - self.nanos;
+
+            if nsec_diff < 0 {
+                sec_diff = sec_diff - 1;
+                nsec_diff = nsec_diff + 1000000000;
+            }
+
+            let d: Duration = Duration { secs: sec_diff, nanos: nsec_diff };
+            return d;
+        }
+    }
+
+    pub trusted fn sleep(dur: &Duration) with(Unsafe, Alloc) {
+        // Allocate 16 bytes for struct timespec
+        let req: *mut u8 = grow::<u8>(0 as *mut u8, 16);
+
+        // Write tv_sec at offset 0
+        let sec_ptr: *mut i64 = req as *mut i64;
+        *sec_ptr = dur.secs;
+
+        // Write tv_nsec at offset 8
+        let nsec_ptr: *mut i64 = (req + 8) as *mut i64;
+        *nsec_ptr = dur.nanos;
+
+        nanosleep(req as *const u8, 0 as *mut u8);
+
+        dealloc::<u8>(req);
+    }
+
+    pub trusted fn unix_timestamp() with(Unsafe) -> i64 {
+        return libc_time(0 as *mut i64);
+    }
+
+    import std.test.{assert_true};
+
+    #[test]
+    fn test_now_nonzero() with(Unsafe, Alloc) -> i32 {
+        let inst: Instant = Instant::now();
+        // Monotonic clock should return something > 0
+        if inst.secs <= 0 {
+            if inst.nanos <= 0 {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    #[test]
+    fn test_elapsed_nonnegative() with(Unsafe, Alloc) -> i32 {
+        let start: Instant = Instant::now();
+        // Do a small amount of work
+        let x: i64 = 0;
+        let i: i64 = 0;
+        while i < 1000 {
+            x = x + i;
+            i = i + 1;
+        }
+        let dur: Duration = start.elapsed();
+        if dur.secs < 0 {
+            return 1;
+        }
+        if dur.secs == 0 {
+            if dur.nanos < 0 {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    #[test]
+    fn test_unix_timestamp_reasonable() with(Unsafe, Alloc) -> i32 {
+        let ts: i64 = unix_timestamp();
+        // Should be after year 2023 (> 1700000000)
+        if ts <= 1700000000 {
+            return 1;
+        }
+        return 0;
+    }
+
+    #[test]
+    fn test_duration_from_millis() -> i32 {
+        let d: Duration = Duration::from_millis(1500);
+        if d.secs != 1 {
+            return 1;
+        }
+        if d.nanos != 500000000 {
+            return 1;
+        }
+        return 0;
+    }
+}

@@ -1,0 +1,15 @@
+// Option<T> basic usage: Some and None
+fn extract(opt: Option<Int>, default: Int) -> Int {
+    match opt {
+        Option#Some { value } => { return value; },
+        Option#None {} => { return default; },
+    }
+}
+
+fn main() with(Std) -> Int {
+    let some_val: Option<Int> = Option#Some { value: 42 };
+    let none_val: Option<Int> = Option#None {};
+    let a: Int = extract(some_val, 0);
+    let b: Int = extract(none_val, 10);
+    return a + b;
+}

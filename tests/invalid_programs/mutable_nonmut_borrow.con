@@ -1,0 +1,8 @@
+mod Simple {
+    fn main() -> i32 {
+        let x: i32 = 2;
+        let y: &mut i32 = &mut x;
+        *y = 4;
+        return *y;
+    }
+}

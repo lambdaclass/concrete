@@ -1,0 +1,61 @@
+// Hardening test: integer literal type inference across all expression forms.
+// Verifies that integer literals get the correct type (not default i64) in
+// various contexts involving i32.
+// Expected output: 42
+
+fn takes_i32(x: i32) -> i32 {
+    return x;
+}
+
+struct Copy Pair {
+    a: i32,
+    b: i32,
+}
+
+fn main() with(Std) -> Int {
+    // 1. Binary ops (already fixed)
+    let x: i32 = 10;
+    let a: i32 = 0 - x;
+    if a != -10 { return 1; }
+
+    // 2. Function call with literal arg
+    let b: i32 = takes_i32(5);
+    if b != 5 { return 2; }
+
+    // 3. Struct field init with literal
+    let p: Pair = Pair { a: 7, b: 3 };
+    if p.a != 7 { return 3; }
+    if p.b != 3 { return 4; }
+
+    // 4. Let binding with explicit type
+    let c: i32 = 100;
+    if c != 100 { return 5; }
+
+    // 5. Return from function (tested via takes_i32 above)
+
+    // 6. Comparison with literal
+    if x < 0 { return 6; }
+    if 0 > x { return 7; }
+
+    // 7. Cast source
+    let d: i32 = 20 as i32;
+    if d != 20 { return 8; }
+
+    // 8. Assignment
+    let mut e: i32 = 0;
+    e = 15;
+    if e != 15 { return 9; }
+
+    // 9. Vec push with literal (type arg provides hint)
+    let mut v: Vec<i32> = vec_new::<i32>();
+    vec_push::<i32>(&mut v, 42);
+    let val: i32 = vec_get::<i32>(&v, 0);
+    vec_free::<i32>(v);
+    if val != 42 { return 10; }
+
+    // Checksum: -10 + 5 + 7 + 3 + 20 + 15 + 42 - 40 = 42
+    let result: i32 = a + b + p.a + p.b + d + e + val - 40;
+    if result != 42 { return 11; }
+
+    return result as Int;
+}

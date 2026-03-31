@@ -1,0 +1,22 @@
+struct Point { x: Int, y: Int }
+
+impl Point {
+    fn origin() -> Self {
+        return Point { x: 0, y: 0 };
+    }
+
+    fn sum(&self) -> Int {
+        return self.x + self.y;
+    }
+}
+
+fn consume_point(p: Point) -> Int {
+    return p.x + p.y;
+}
+
+fn main() -> Int {
+    let p: Point = Point { x: 20, y: 22 };
+    let s: Int = p.sum();
+    let dummy: Int = consume_point(p);
+    return s;
+}

@@ -1,0 +1,7 @@
+// string_char_at: get char code at index 0 of "A" (should be 65)
+fn main() -> Int {
+    let s: String = "A";
+    let code: Int = string_char_at(&s, 0);
+    drop_string(s);
+    return code;
+}

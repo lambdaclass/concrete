@@ -1,0 +1,7 @@
+// Test: println with i32 and char types
+fn main() with(Std) {
+    let x: i32 = 42;
+    println(x);
+    let c: char = 'A';
+    println(c);
+}

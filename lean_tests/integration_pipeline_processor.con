@@ -1,0 +1,211 @@
+// Integration test: data transformation pipeline with 4 modules.
+//
+// Exercises:
+// - 4 modules with cross-module imports of enums and functions
+// - Data-flow patterns: records through multi-stage pipeline
+// - Enum dispatch for pipeline stages (3 variants) and categories (4 variants)
+// - Vec operations: build, iterate, transform, aggregate
+// - Numeric processing: scale, clamp, categorize
+// - While loops, capability propagation through 4 modules
+//
+// Records are stored as Vec<i32> with 3 fields per record: [id, value, cat_tag]
+//
+// Expected output: 42
+
+mod Data {
+    pub enum Copy Category {
+        Low {},
+        Medium {},
+        High {},
+        Critical {},
+    }
+
+    pub fn categorize_value(val: i32) -> i32 {
+        if val < 10 { return 0; }    // Low
+        if val < 50 { return 1; }    // Medium
+        if val < 100 { return 2; }   // High
+        return 3;                      // Critical
+    }
+
+    pub fn category_weight(cat_tag: i32) -> i32 {
+        return cat_tag + 1;
+    }
+
+    pub fn score(value: i32, cat_tag: i32) -> i32 {
+        return value * category_weight(cat_tag);
+    }
+}
+
+mod Transform {
+    import Data.{ categorize_value };
+
+    pub fn clamp(val: i32, lo: i32, hi: i32) -> i32 {
+        if val < lo { return lo; }
+        if val > hi { return hi; }
+        return val;
+    }
+
+    pub fn scale(val: i32, factor: i32) -> i32 {
+        return val * factor;
+    }
+
+    pub fn full_transform(value: i32, factor: i32, lo: i32, hi: i32) -> i32 {
+        let scaled: i32 = value * factor;
+        return clamp(scaled, lo, hi);
+    }
+}
+
+mod Pipeline {
+    import Data.{ categorize_value };
+    import Transform.{ full_transform, clamp, scale };
+
+    pub enum Copy Stage {
+        ScaleStage { factor: i32 },
+        ClampStage { lo: i32, hi: i32 },
+        FullStage { factor: i32, lo: i32, hi: i32 },
+    }
+
+    pub fn apply_stage_value(value: i32, stage: &Stage) -> i32 {
+        match *stage {
+            Stage#ScaleStage { factor } => {
+                return scale(value, factor);
+            },
+            Stage#ClampStage { lo, hi } => {
+                return clamp(value, lo, hi);
+            },
+            Stage#FullStage { factor, lo, hi } => {
+                return full_transform(value, factor, lo, hi);
+            }
+        }
+    }
+
+    // Apply 3 stages to a dataset of records [id, val, cat, ...]
+    pub fn run_pipeline(data: &Vec<i32>, s1: &Stage, s2: &Stage, s3: &Stage) with(Alloc) -> Vec<i32> {
+        let count: Int = vec_len::<i32>(data) / 3;
+        let mut result: Vec<i32> = vec_new::<i32>();
+        let mut i: Int = 0;
+        while i < count {
+            let base: Int = i * 3;
+            let id: i32 = vec_get::<i32>(data, base);
+            let value: i32 = vec_get::<i32>(data, base + 1);
+
+            let v1: i32 = apply_stage_value(value, s1);
+            let v2: i32 = apply_stage_value(v1, s2);
+            let v3: i32 = apply_stage_value(v2, s3);
+            let new_cat: i32 = categorize_value(v3);
+
+            vec_push::<i32>(&mut result, id);
+            vec_push::<i32>(&mut result, v3);
+            vec_push::<i32>(&mut result, new_cat);
+            i = i + 1;
+        }
+        return result;
+    }
+
+    pub fn sum_values(data: &Vec<i32>) -> i32 {
+        let count: Int = vec_len::<i32>(data) / 3;
+        let mut sum: i32 = 0;
+        let mut i: Int = 0;
+        while i < count {
+            sum = sum + vec_get::<i32>(data, i * 3 + 1);
+            i = i + 1;
+        }
+        return sum;
+    }
+
+    pub fn count_category(data: &Vec<i32>, target: i32) -> i32 {
+        let count: Int = vec_len::<i32>(data) / 3;
+        let mut result: i32 = 0;
+        let mut i: Int = 0;
+        while i < count {
+            if vec_get::<i32>(data, i * 3 + 2) == target { result = result + 1; }
+            i = i + 1;
+        }
+        return result;
+    }
+
+    pub fn max_value(data: &Vec<i32>) -> i32 {
+        let count: Int = vec_len::<i32>(data) / 3;
+        let mut best: i32 = 0;
+        let mut i: Int = 0;
+        while i < count {
+            let val: i32 = vec_get::<i32>(data, i * 3 + 1);
+            if val > best { best = val; }
+            i = i + 1;
+        }
+        return best;
+    }
+}
+
+mod Main {
+    import Data.{ categorize_value, score };
+    import Pipeline.{ Stage, run_pipeline, sum_values, count_category, max_value };
+
+    fn add_record(data: &mut Vec<i32>, id: i32, value: i32) with(Alloc) {
+        vec_push::<i32>(data, id);
+        vec_push::<i32>(data, value);
+        vec_push::<i32>(data, categorize_value(value));
+    }
+
+    fn main() with(Std) -> Int {
+        let mut data: Vec<i32> = vec_new::<i32>();
+        add_record(&mut data, 1, 5);     // Low (0)
+        add_record(&mut data, 2, 15);    // Medium (1)
+        add_record(&mut data, 3, 25);    // Medium (1)
+        add_record(&mut data, 4, 8);     // Low (0)
+        add_record(&mut data, 5, 55);    // High (2)
+        add_record(&mut data, 6, 120);   // Critical (3)
+        add_record(&mut data, 7, 35);    // Medium (1)
+        add_record(&mut data, 8, 75);    // High (2)
+        add_record(&mut data, 9, 3);     // Low (0)
+        add_record(&mut data, 10, 42);   // Medium (1)
+
+        if vec_len::<i32>(&data) != 30 { vec_free::<i32>(data); return 1; }
+
+        // Verify initial Low count: records 1,4,9 => 3
+        if count_category(&data, 0) != 3 { vec_free::<i32>(data); return 2; }
+
+        // Score check: score(25, 1) = 25*2 = 50
+        let sc: i32 = score(25, 1);
+        if sc != 50 { vec_free::<i32>(data); return 3; }
+
+        // Pipeline: scale*2 -> clamp[0,50] -> full(factor=1, clamp[0,50])
+        let s1: Stage = Stage#ScaleStage { factor: 2 };
+        let s2: Stage = Stage#ClampStage { lo: 0, hi: 50 };
+        let s3: Stage = Stage#FullStage { factor: 1, lo: 0, hi: 50 };
+
+        // After s1 (scale*2): 10,30,50,16,110,240,70,150,6,84
+        // After s2 (clamp 0-50): 10,30,50,16,50,50,50,50,6,50
+        // After s3 (full: *1, clamp 0-50): 10,30,50,16,50,50,50,50,6,50 (no change)
+        // Recategorize: 10->Med, 30->Med, 50->High, 16->Med, 50->High, 50->High,
+        //               50->High, 50->High, 6->Low, 50->High
+        let processed: Vec<i32> = run_pipeline(&data, &s1, &s2, &s3);
+
+        if vec_len::<i32>(&processed) != 30 { vec_free::<i32>(data); vec_free::<i32>(processed); return 4; }
+
+        // Sum: 10+30+50+16+50+50+50+50+6+50 = 362
+        if sum_values(&processed) != 362 { vec_free::<i32>(data); vec_free::<i32>(processed); return 5; }
+
+        // Max clamped to 50
+        if max_value(&processed) != 50 { vec_free::<i32>(data); vec_free::<i32>(processed); return 6; }
+
+        // Category counts after pipeline
+        let low_count: i32 = count_category(&processed, 0);    // 1 (val=6)
+        let med_count: i32 = count_category(&processed, 1);    // 3 (vals=10,30,16)
+        let high_count: i32 = count_category(&processed, 2);   // 6 (all val=50)
+        let crit_count: i32 = count_category(&processed, 3);   // 0
+
+        if low_count != 1 { vec_free::<i32>(data); vec_free::<i32>(processed); return 7; }
+        if med_count != 3 { vec_free::<i32>(data); vec_free::<i32>(processed); return 8; }
+        if high_count != 6 { vec_free::<i32>(data); vec_free::<i32>(processed); return 9; }
+        if crit_count != 0 { vec_free::<i32>(data); vec_free::<i32>(processed); return 10; }
+
+        // Checksum: high(6)*med(3) + high(6)*low(1)*4 = 18+24 = 42
+        let checksum: i32 = high_count * med_count + high_count * low_count * 4;
+        if checksum != 42 { vec_free::<i32>(data); vec_free::<i32>(processed); return 11; }
+
+        vec_free::<i32>(data);
+        vec_free::<i32>(processed);
+        return checksum as Int;
+    }
+}

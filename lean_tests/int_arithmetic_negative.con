@@ -1,0 +1,7 @@
+fn main() -> Int {
+    let a: Int = 10;
+    let b: Int = 30;
+    let diff: Int = a - b;
+    // diff = -20. Adding 70 to get positive exit code.
+    return diff + 70;
+}

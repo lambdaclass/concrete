@@ -1,0 +1,25 @@
+// Regression: &mut self.inner.method() must write mutations back.
+// Bug: calling a mutating method on a nested struct field copied the
+// field to a temp, mutated the temp, and never wrote back to self.
+struct Copy Inner { value: i32 }
+struct Copy Outer { inner: Inner, extra: i32 }
+
+impl Inner {
+    fn set(&mut self, v: i32) {
+        self.value = v;
+    }
+}
+
+impl Outer {
+    fn set_inner(&mut self, v: i32) {
+        // This calls a mutating method on a nested field.
+        // Without the fix, the mutation was lost.
+        self.inner.set(v);
+    }
+}
+
+fn main() -> i32 {
+    let mut o: Outer = Outer { inner: Inner { value: 0 }, extra: 0 };
+    o.set_inner(42);
+    return o.inner.value;
+}

@@ -1,0 +1,11 @@
+// Test repr(align(N)) — minimum alignment override
+#[repr(C, align(16))]
+struct Aligned {
+    x: i32,
+}
+
+fn main() -> Int {
+    // align(16): size should be rounded up to 16
+    let sz: Uint = sizeof::<Aligned>();
+    return sz as Int;
+}

@@ -1,0 +1,72 @@
+// Regression test: Bug 005 — enum fields inside structs, including Vec<T>.
+// Tests that the layout engine handles enum alignment inside named structs
+// and that such structs work correctly in Vec collections.
+// Expected output: 0
+
+enum Copy Color {
+    Red {},
+    Green {},
+    Blue {},
+}
+
+enum Copy Verdict {
+    Allow {},
+    Deny {},
+}
+
+struct Copy Rule {
+    color: Color,
+    verdict: Verdict,
+    priority: i32,
+}
+
+fn color_tag(c: &Color) -> i32 {
+    match *c {
+        Color#Red {} => { return 0; },
+        Color#Green {} => { return 1; },
+        Color#Blue {} => { return 2; }
+    }
+}
+
+fn verdict_tag(v: &Verdict) -> i32 {
+    match *v {
+        Verdict#Allow {} => { return 0; },
+        Verdict#Deny {} => { return 1; }
+    }
+}
+
+fn check_rule(r: &Rule, exp_color: i32, exp_verdict: i32, exp_prio: i32) -> bool {
+    let ct: i32 = color_tag(&r.color);
+    let vt: i32 = verdict_tag(&r.verdict);
+    return ct == exp_color && vt == exp_verdict && r.priority == exp_prio;
+}
+
+fn main() with(Std) -> Int {
+    // Basic struct with enum fields
+    let r1: Rule = Rule { color: Color#Red {}, verdict: Verdict#Allow {}, priority: 10 };
+    if !check_rule(&r1, 0, 0, 10) { return 1; }
+
+    let r2: Rule = Rule { color: Color#Blue {}, verdict: Verdict#Deny {}, priority: 5 };
+    if !check_rule(&r2, 2, 1, 5) { return 2; }
+
+    // Vec<Rule> — the collection-oriented pressure that originally triggered Bug 005
+    let mut rules: Vec<Rule> = vec_new::<Rule>();
+    vec_push::<Rule>(&mut rules, r1);
+    vec_push::<Rule>(&mut rules, r2);
+    vec_push::<Rule>(&mut rules, Rule { color: Color#Green {}, verdict: Verdict#Allow {}, priority: 7 });
+
+    let len: Int = vec_len::<Rule>(&mut rules) as Int;
+    if len != 3 { vec_free::<Rule>(rules); return 3; }
+
+    let got1: Rule = vec_get::<Rule>(&mut rules, 0);
+    if !check_rule(&got1, 0, 0, 10) { vec_free::<Rule>(rules); return 4; }
+
+    let got2: Rule = vec_get::<Rule>(&mut rules, 1);
+    if !check_rule(&got2, 2, 1, 5) { vec_free::<Rule>(rules); return 5; }
+
+    let got3: Rule = vec_get::<Rule>(&mut rules, 2);
+    if !check_rule(&got3, 1, 0, 7) { vec_free::<Rule>(rules); return 6; }
+
+    vec_free::<Rule>(rules);
+    return 0;
+}

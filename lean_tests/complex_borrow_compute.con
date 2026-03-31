@@ -1,0 +1,22 @@
+// Complex test: borrow regions with mutation
+fn main() -> Int {
+    let mut x: Int = 10;
+    let mut y: Int = 20;
+
+    // Read via borrow
+    borrow x as rx in R1 {
+        let val: Int = *rx;
+    }
+
+    // Mutate via mutable borrow
+    borrow mut x as wx in W1 {
+        *wx = 50;
+    }
+
+    borrow mut y as wy in W2 {
+        *wy = 120;
+    }
+
+    // x = 50, y = 120
+    return x + y;
+}

@@ -1,0 +1,20 @@
+// Test: Copy struct used 5+ times
+// Expected: 50
+struct Copy Point {
+    x: Int,
+    y: Int,
+}
+
+fn sum_point(p: Point) -> Int {
+    return p.x + p.y;
+}
+
+fn main() -> Int {
+    let p: Point = Point { x: 3, y: 7 };
+    let a: Int = sum_point(p);
+    let b: Int = sum_point(p);
+    let c: Int = sum_point(p);
+    let d: Int = sum_point(p);
+    let e: Int = sum_point(p);
+    return a + b + c + d + e;
+}

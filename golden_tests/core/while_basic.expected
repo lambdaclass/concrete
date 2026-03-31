@@ -1,0 +1,20 @@
+// module main
+enum Option<T> {
+  Some { value: T },
+  None,
+}
+
+enum Result<T, E> {
+  Ok { value: T },
+  Err { value: E },
+}
+
+fn main() -> Int {
+  let mut i: Int = 0;
+  let mut sum: Int = 0;
+  while (i < 10) {
+    sum = (sum + i);
+    i = (i + 1);
+  }
+  return sum;
+}

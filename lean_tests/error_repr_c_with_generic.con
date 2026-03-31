@@ -1,0 +1,10 @@
+// Error: repr(C) struct with generic type parameter should fail
+#[repr(C)]
+struct Pair<T> {
+    first: T,
+    second: T,
+}
+
+fn main() -> Int {
+    return 0;
+}

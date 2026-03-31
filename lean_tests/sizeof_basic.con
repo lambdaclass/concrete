@@ -1,0 +1,7 @@
+// Test sizeof intrinsic returns expected sizes
+fn main() -> Int {
+    let s1: Uint = sizeof::<i32>();
+    let s2: Uint = sizeof::<Int>();
+    // i32 = 4, Int = 8, total = 12
+    return (s1 + s2) as Int;
+}

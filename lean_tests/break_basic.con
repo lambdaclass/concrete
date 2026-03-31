@@ -1,0 +1,15 @@
+// Test basic break in while loop
+// Expected: 5
+
+fn main() with(Std) -> Int {
+    let mut sum: Int = 0;
+    let mut i: Int = 0;
+    while i < 100 {
+        if i == 5 {
+            break;
+        }
+        sum = sum + 1;
+        i = i + 1;
+    }
+    return sum;
+}

@@ -1,0 +1,187 @@
+mod set {
+    import std.map.{HashMap};
+    import std.option.{Option};
+    import std.hash.{hash_i32, eq_i32};
+
+    // HashSet<K> — thin wrapper around HashMap<K, u8>.
+    // Takes hash and eq function pointers at construction.
+
+    pub struct HashSet<K> {
+        inner: HashMap<K, u8>,
+    }
+
+    impl<K> HashSet<K> {
+        pub fn new(hash_fn: fn(&K) -> u64, eq_fn: fn(&K, &K) -> bool) with(Alloc, Unsafe) -> HashSet<K> {
+            let s: HashSet<K> = HashSet::<K> {
+                inner: HashMap::<K, u8>::new(hash_fn, eq_fn),
+            };
+            return s;
+        }
+
+        pub fn insert(&mut self, key: K) with(Alloc, Unsafe) -> bool {
+            let result: Option<u8> = self.inner.insert(key, 0);
+            match result {
+                Option#Some { value } => {
+                    return false;
+                },
+                Option#None => {
+                    return true;
+                }
+            }
+        }
+
+        pub fn contains(&self, key: &K) -> bool {
+            return self.inner.contains(key);
+        }
+
+        pub fn remove(&mut self, key: &K) with(Alloc, Unsafe) -> bool {
+            let result: Option<u8> = self.inner.remove(key);
+            match result {
+                Option#Some { value } => {
+                    return true;
+                },
+                Option#None => {
+                    return false;
+                }
+            }
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.inner.len();
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.inner.is_empty();
+        }
+
+        pub fn clear(&mut self) with(Unsafe) {
+            self.inner.clear();
+        }
+
+        /// Fold over all elements, threading an accumulator.
+        pub fn fold<A>(&self, init: A, f: fn(A, &K) -> A) -> A {
+            return self.inner.keys_fold::<A>(init, f);
+        }
+
+        /// Call a function for each element in the set.
+        pub fn for_each(&self, f: fn(&K)) {
+            self.inner.keys_for_each(f);
+        }
+
+        /// Collect all elements into a Vec.
+        pub fn elements(&self) with(Alloc) -> Vec<K> {
+            return self.inner.keys();
+        }
+
+        pub fn drop(self) with(Alloc) {
+            self.inner.drop();
+        }
+    }
+
+    #[test]
+    fn test_set_insert_contains() with(Alloc, Unsafe) -> i32 {
+        let mut s: HashSet<i32> = HashSet::<i32>::new(hash_i32, eq_i32);
+        s.insert(1);
+        s.insert(2);
+        s.insert(3);
+        let k1: i32 = 1;
+        let k2: i32 = 99;
+        if !(s.contains(&k1)) { s.drop(); return 1; }
+        if s.contains(&k2) { s.drop(); return 1; }
+        if s.len() != 3 { s.drop(); return 1; }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_set_remove() with(Alloc, Unsafe) -> i32 {
+        let mut s: HashSet<i32> = HashSet::<i32>::new(hash_i32, eq_i32);
+        s.insert(10);
+        s.insert(20);
+        s.remove(&10);
+        let k10: i32 = 10;
+        let k20: i32 = 20;
+        if s.contains(&k10) { s.drop(); return 1; }
+        if !(s.contains(&k20)) { s.drop(); return 1; }
+        if s.len() != 1 { s.drop(); return 1; }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_set_duplicate_insert() with(Alloc, Unsafe) -> i32 {
+        let mut s: HashSet<i32> = HashSet::<i32>::new(hash_i32, eq_i32);
+        let first: bool = s.insert(42);
+        if !first { s.drop(); return 1; }
+        let second: bool = s.insert(42);
+        if second { s.drop(); return 1; }
+        if s.len() != 1 { s.drop(); return 1; }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_set_remove_nonexistent() with(Alloc, Unsafe) -> i32 {
+        let mut s: HashSet<i32> = HashSet::<i32>::new(hash_i32, eq_i32);
+        s.insert(1);
+        let k: i32 = 99;
+        let removed: bool = s.remove(&k);
+        if removed { s.drop(); return 1; }
+        if s.len() != 1 { s.drop(); return 1; }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_set_elements() with(Alloc, Unsafe) -> i32 {
+        let mut s: HashSet<i32> = HashSet::<i32>::new(hash_i32, eq_i32);
+        s.insert(10);
+        s.insert(20);
+        s.insert(30);
+        let elems: Vec<i32> = s.elements();
+        if vec_len::<i32>(&elems) != 3 { vec_free::<i32>(elems); s.drop(); return 1; }
+        // Sum elements to verify all are present (order not guaranteed)
+        let mut sum: i32 = 0;
+        let mut i: u64 = 0;
+        while i < vec_len::<i32>(&elems) {
+            sum = sum + vec_get::<i32>(&elems, i);
+            i = i + 1;
+        }
+        vec_free::<i32>(elems);
+        if sum != 60 { s.drop(); return 1; }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_set_clear_reuse() with(Alloc, Unsafe) -> i32 {
+        let mut s: HashSet<i32> = HashSet::<i32>::new(hash_i32, eq_i32);
+        s.insert(1);
+        s.insert(2);
+        s.clear();
+        if s.len() != 0 { s.drop(); return 1; }
+        if s.is_empty() == false { s.drop(); return 1; }
+        s.insert(3);
+        if s.len() != 1 { s.drop(); return 1; }
+        let k: i32 = 3;
+        if !(s.contains(&k)) { s.drop(); return 1; }
+        s.drop();
+        return 0;
+    }
+
+    fn add_i32(acc: i32, x: &i32) -> i32 {
+        return acc + *x;
+    }
+
+    #[test]
+    fn test_set_fold() with(Alloc, Unsafe) -> i32 {
+        let mut s: HashSet<i32> = HashSet::<i32>::new(hash_i32, eq_i32);
+        s.insert(10);
+        s.insert(20);
+        s.insert(30);
+        let sum: i32 = s.fold::<i32>(0, add_i32);
+        if sum != 60 { s.drop(); return 1; }
+        s.drop();
+        return 0;
+    }
+}

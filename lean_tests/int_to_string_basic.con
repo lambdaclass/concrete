@@ -1,0 +1,7 @@
+// int_to_string: convert 42 to string, check length is 2
+fn main() -> Int {
+    let s: String = int_to_string(42);
+    let len: Int = string_length(&s);
+    drop_string(s);
+    return len;
+}

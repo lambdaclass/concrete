@@ -1,0 +1,774 @@
+// JSON Parser + Validator
+//
+// A recursive-descent JSON parser demonstrating Concrete's string processing,
+// capability system, and value representation under real parsing pressure.
+//
+// The key capability insight:
+//   fn skip_ws(s: &String, pos: i32) -> i32           -- PURE
+//   fn parse_value(s: &String, ...) -> ParseResult     -- needs Alloc only
+//   fn print_value(vals: &mut Vec<Val>, ...) with(Console, Alloc) -- needs Console
+//
+// Supports: objects, arrays, strings, numbers (integers), booleans, null.
+// Does NOT support: floating point, unicode escapes, full number spec.
+// This is intentional — the goal is to pressure Concrete's string/collection
+// layer, not to build a conformant JSON library.
+//
+// Run:  concrete examples/json/main.con
+//
+// Expected output (exit code):
+//   0 (all tests pass)
+
+// ---- Value representation ----
+//
+// JSON values stored as (tag: i32, data: i32):
+//   tag 0 = null          data = 0
+//   tag 1 = bool          data = 0 or 1
+//   tag 2 = number        data = integer value
+//   tag 3 = string        data = index into string pool
+//   tag 4 = array         data = index into array-desc pool
+//   tag 5 = object        data = index into object-desc pool
+//   tag 6 = error         data = position where error occurred
+
+mod Types {
+    pub struct Copy Val {
+        tag: i32,
+        data: i32,
+    }
+
+    pub fn mk_null() -> Val { return Val { tag: 0, data: 0 }; }
+    pub fn mk_bool(b: i32) -> Val { return Val { tag: 1, data: b }; }
+    pub fn mk_number(n: i32) -> Val { return Val { tag: 2, data: n }; }
+    pub fn mk_string(idx: i32) -> Val { return Val { tag: 3, data: idx }; }
+    pub fn mk_array(idx: i32) -> Val { return Val { tag: 4, data: idx }; }
+    pub fn mk_object(idx: i32) -> Val { return Val { tag: 5, data: idx }; }
+    pub fn mk_error(pos: i32) -> Val { return Val { tag: 6, data: pos }; }
+
+    pub fn is_error(v: Val) -> bool { return v.tag == 6; }
+
+    // Pure check: does the value's tag match?
+    pub fn check_tag(v: Val, expected_tag: i32) -> bool {
+        return v.tag == expected_tag;
+    }
+
+    // Pure check: does the value's tag and data match?
+    pub fn check_val(v: Val, expected_tag: i32, expected_data: i32) -> bool {
+        return v.tag == expected_tag && v.data == expected_data;
+    }
+
+    // Array descriptor: (start_index, length) into the values pool
+    pub struct Copy ArrayDesc {
+        start: i32,
+        len: i32,
+    }
+
+    // Object descriptor: (start_index, length) into the kv-pairs pool
+    pub struct Copy ObjDesc {
+        start: i32,
+        len: i32,
+    }
+
+    // Key-value pair for objects
+    pub struct Copy KVPair {
+        key: i32,    // index into string pool
+        val_tag: i32,
+        val_data: i32,
+    }
+}
+
+// ---- String pool ----
+
+mod StringPool {
+    // Store parsed strings. Returns index for later retrieval.
+    pub fn store(pool: &mut Vec<String>, s: String) with(Alloc) -> i32 {
+        let idx: Int = vec_len::<String>(pool) as Int;
+        vec_push::<String>(pool, s);
+        return idx as i32;
+    }
+}
+
+// ---- Lexer helpers ----
+
+mod Lex {
+    pub fn is_ws(ch: i32) -> bool {
+        return ch == 32 || ch == 9 || ch == 10 || ch == 13;
+    }
+
+    pub fn is_digit(ch: i32) -> bool {
+        return ch >= 48 && ch <= 57;
+    }
+
+    // Map an escape code to its output character, or -1 for invalid.
+    // Pure decision logic extracted from parse_string.
+    pub fn map_escape(esc: i32) -> i32 {
+        if esc == 34 { return 34; }   // \"
+        if esc == 92 { return 92; }   // \\
+        if esc == 47 { return 47; }   // \/
+        if esc == 110 { return 10; }  // \n
+        if esc == 116 { return 9; }   // \t
+        if esc == 114 { return 13; }  // \r
+        if esc == 98 { return 8; }    // \b
+        if esc == 102 { return 12; }  // \f
+        return 0 - 1;
+    }
+
+    pub fn skip_ws(s: &String, pos: i32) -> i32 {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = pos;
+        while p < len {
+            let ch: i32 = string_char_at(s, p as Int) as i32;
+            if !is_ws(ch) { return p; }
+            p = p + 1;
+        }
+        return p;
+    }
+
+    // Classify what JSON value type starts with this character.
+    // Returns: 0=string, 1=number, 2=array, 3=object, -1=keyword/unknown
+    pub fn classify_start(ch: i32) -> i32 {
+        if ch == 34 { return 0; }                    // " -> string
+        if is_digit(ch) || ch == 45 { return 1; }    // digit or - -> number
+        if ch == 91 { return 2; }                     // [ -> array
+        if ch == 123 { return 3; }                    // { -> object
+        return 0 - 1;                                 // keyword or invalid
+    }
+
+    // Check if string matches a keyword at position
+    pub fn match_keyword(s: &String, pos: i32, kw: &String) -> bool {
+        let slen: i32 = string_length(s) as i32;
+        let kwlen: i32 = string_length(kw) as i32;
+        if pos + kwlen > slen { return false; }
+        let mut i: i32 = 0;
+        while i < kwlen {
+            let a: i32 = string_char_at(s, (pos + i) as Int) as i32;
+            let b: i32 = string_char_at(kw, i as Int) as i32;
+            if a != b { return false; }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    // Match "true" at position without allocating a String
+    pub fn match_true(s: &String, pos: i32) -> bool {
+        let slen: i32 = string_length(s) as i32;
+        if pos + 4 > slen { return false; }
+        return string_char_at(s, pos as Int) as i32 == 116       // t
+            && string_char_at(s, (pos + 1) as Int) as i32 == 114 // r
+            && string_char_at(s, (pos + 2) as Int) as i32 == 117 // u
+            && string_char_at(s, (pos + 3) as Int) as i32 == 101;// e
+    }
+
+    // Match "false" at position without allocating a String
+    pub fn match_false(s: &String, pos: i32) -> bool {
+        let slen: i32 = string_length(s) as i32;
+        if pos + 5 > slen { return false; }
+        return string_char_at(s, pos as Int) as i32 == 102       // f
+            && string_char_at(s, (pos + 1) as Int) as i32 == 97  // a
+            && string_char_at(s, (pos + 2) as Int) as i32 == 108 // l
+            && string_char_at(s, (pos + 3) as Int) as i32 == 115 // s
+            && string_char_at(s, (pos + 4) as Int) as i32 == 101;// e
+    }
+
+    // Match "null" at position without allocating a String
+    pub fn match_null(s: &String, pos: i32) -> bool {
+        let slen: i32 = string_length(s) as i32;
+        if pos + 4 > slen { return false; }
+        return string_char_at(s, pos as Int) as i32 == 110       // n
+            && string_char_at(s, (pos + 1) as Int) as i32 == 117 // u
+            && string_char_at(s, (pos + 2) as Int) as i32 == 108 // l
+            && string_char_at(s, (pos + 3) as Int) as i32 == 108;// l
+    }
+}
+
+// ---- Parser ----
+
+mod Parser {
+    import Types.{ Val, ArrayDesc, ObjDesc, KVPair,
+                   mk_null, mk_bool, mk_number, mk_string,
+                   mk_array, mk_object, mk_error, is_error };
+    import Lex.{ is_digit, skip_ws, map_escape, classify_start,
+                  match_true, match_false, match_null };
+    import StringPool.{ store };
+
+    pub struct Copy ParseResult {
+        val: Val,
+        pos: i32,
+    }
+
+    fn err(pos: i32) -> ParseResult {
+        return ParseResult { val: mk_error(pos), pos: pos };
+    }
+
+    // Parse a JSON string (opening " already checked by caller)
+    // Uses flag pattern for loop control:
+    //   done=0: still scanning, done=1: found closing quote, done=2: error
+    fn parse_string(s: &String, pos: i32,
+                    strings: &mut Vec<String>) with(Alloc) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = pos + 1;
+        let mut buf: String = "";
+        let mut done: i32 = 0;
+        while p < len && done == 0 {
+            let ch: i32 = string_char_at(s, p as Int) as i32;
+            if ch == 34 { // closing "
+                done = 1;
+            } else if ch == 92 { // backslash
+                p = p + 1;
+                if p >= len { done = 2; }
+                else {
+                    let esc: i32 = string_char_at(s, p as Int) as i32;
+                    let mapped: i32 = map_escape(esc);
+                    if mapped < 0 { done = 2; }
+                    else {
+                        string_push_char(&mut buf, mapped as Int);
+                    }
+                    if done == 0 { p = p + 1; }
+                }
+            } else {
+                string_push_char(&mut buf, ch as Int);
+                p = p + 1;
+            }
+        }
+        if done == 1 {
+            let idx: i32 = store(strings, buf);
+            return ParseResult { val: mk_string(idx), pos: p + 1 };
+        }
+        buf.drop();
+        return err(p);
+    }
+
+    // Parse a JSON number (integers only for now)
+    fn parse_number(s: &String, pos: i32) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = pos;
+        let mut neg: i32 = 1;
+        if p < len && string_char_at(s, p as Int) as i32 == 45 { // '-'
+            neg = 0 - 1;
+            p = p + 1;
+        }
+        if p >= len || !is_digit(string_char_at(s, p as Int) as i32) {
+            return err(pos);
+        }
+        let mut n: i32 = 0;
+        while p < len && is_digit(string_char_at(s, p as Int) as i32) {
+            let d: i32 = (string_char_at(s, p as Int) as i32) - 48;
+            n = n * 10 + d;
+            p = p + 1;
+        }
+        return ParseResult { val: mk_number(n * neg), pos: p };
+    }
+
+    // Parse any JSON value
+    pub fn parse_value(s: &String, pos: i32,
+                       strings: &mut Vec<String>,
+                       arrays: &mut Vec<ArrayDesc>,
+                       objects: &mut Vec<ObjDesc>,
+                       kvpairs: &mut Vec<KVPair>,
+                       vals: &mut Vec<Val>) with(Alloc) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let p: i32 = skip_ws(s, pos);
+        if p >= len { return err(p); }
+
+        let ch: i32 = string_char_at(s, p as Int) as i32;
+        let kind: i32 = classify_start(ch);
+
+        // String
+        if kind == 0 { return parse_string(s, p, strings); }
+
+        // Number
+        if kind == 1 { return parse_number(s, p); }
+
+        // Array
+        if kind == 2 {
+            return parse_array(s, p + 1, strings, arrays, objects, kvpairs, vals);
+        }
+
+        // Object
+        if kind == 3 {
+            return parse_object(s, p + 1, strings, arrays, objects, kvpairs, vals);
+        }
+
+        // Keywords: true, false, null — matched without heap allocation
+        if match_true(s, p) {
+            return ParseResult { val: mk_bool(1), pos: p + 4 };
+        }
+
+        if match_false(s, p) {
+            return ParseResult { val: mk_bool(0), pos: p + 5 };
+        }
+
+        if match_null(s, p) {
+            return ParseResult { val: mk_null(), pos: p + 4 };
+        }
+
+        return err(p);
+    }
+
+    // Parse array elements after opening [
+    fn parse_array(s: &String, pos: i32,
+                   strings: &mut Vec<String>,
+                   arrays: &mut Vec<ArrayDesc>,
+                   objects: &mut Vec<ObjDesc>,
+                   kvpairs: &mut Vec<KVPair>,
+                   vals: &mut Vec<Val>) with(Alloc) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = skip_ws(s, pos);
+
+        // Empty array
+        if p < len && string_char_at(s, p as Int) as i32 == 93 { // ']'
+            let idx: i32 = vec_len::<ArrayDesc>(arrays) as i32;
+            let start: i32 = vec_len::<Val>(vals) as i32;
+            vec_push::<ArrayDesc>(arrays, ArrayDesc { start: start, len: 0 });
+            return ParseResult { val: mk_array(idx), pos: p + 1 };
+        }
+
+        let start: i32 = vec_len::<Val>(vals) as i32;
+        let mut count: i32 = 0;
+
+        // First element
+        let r: ParseResult = parse_value(s, p, strings, arrays, objects, kvpairs, vals);
+        if is_error(r.val) { return r; }
+        vec_push::<Val>(vals, r.val);
+        count = count + 1;
+        p = skip_ws(s, r.pos);
+
+        // Remaining elements
+        while p < len && string_char_at(s, p as Int) as i32 == 44 { // ','
+            p = p + 1;
+            let elem: ParseResult = parse_value(s, p, strings, arrays, objects, kvpairs, vals);
+            if is_error(elem.val) { return elem; }
+            vec_push::<Val>(vals, elem.val);
+            count = count + 1;
+            p = skip_ws(s, elem.pos);
+        }
+
+        // Expect closing ]
+        if p >= len || string_char_at(s, p as Int) as i32 != 93 {
+            return err(p);
+        }
+
+        let idx: i32 = vec_len::<ArrayDesc>(arrays) as i32;
+        vec_push::<ArrayDesc>(arrays, ArrayDesc { start: start, len: count });
+        return ParseResult { val: mk_array(idx), pos: p + 1 };
+    }
+
+    // Parse object entries after opening {
+    fn parse_object(s: &String, pos: i32,
+                    strings: &mut Vec<String>,
+                    arrays: &mut Vec<ArrayDesc>,
+                    objects: &mut Vec<ObjDesc>,
+                    kvpairs: &mut Vec<KVPair>,
+                    vals: &mut Vec<Val>) with(Alloc) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = skip_ws(s, pos);
+
+        // Empty object
+        if p < len && string_char_at(s, p as Int) as i32 == 125 { // '}'
+            let idx: i32 = vec_len::<ObjDesc>(objects) as i32;
+            let start: i32 = vec_len::<KVPair>(kvpairs) as i32;
+            vec_push::<ObjDesc>(objects, ObjDesc { start: start, len: 0 });
+            return ParseResult { val: mk_object(idx), pos: p + 1 };
+        }
+
+        let start: i32 = vec_len::<KVPair>(kvpairs) as i32;
+        let mut count: i32 = 0;
+
+        // Parse first key-value pair
+        let kv: ParseResult = parse_kv(s, p, strings, arrays, objects, kvpairs, vals);
+        if is_error(kv.val) { return kv; }
+        count = count + 1;
+        p = skip_ws(s, kv.pos);
+
+        // Remaining pairs
+        while p < len && string_char_at(s, p as Int) as i32 == 44 { // ','
+            p = p + 1;
+            let next_kv: ParseResult = parse_kv(s, p, strings, arrays, objects, kvpairs, vals);
+            if is_error(next_kv.val) { return next_kv; }
+            count = count + 1;
+            p = skip_ws(s, next_kv.pos);
+        }
+
+        // Expect closing }
+        if p >= len || string_char_at(s, p as Int) as i32 != 125 {
+            return err(p);
+        }
+
+        let idx: i32 = vec_len::<ObjDesc>(objects) as i32;
+        vec_push::<ObjDesc>(objects, ObjDesc { start: start, len: count });
+        return ParseResult { val: mk_object(idx), pos: p + 1 };
+    }
+
+    // Parse a single "key": value pair
+    fn parse_kv(s: &String, pos: i32,
+                strings: &mut Vec<String>,
+                arrays: &mut Vec<ArrayDesc>,
+                objects: &mut Vec<ObjDesc>,
+                kvpairs: &mut Vec<KVPair>,
+                vals: &mut Vec<Val>) with(Alloc) -> ParseResult {
+        let len: i32 = string_length(s) as i32;
+        let mut p: i32 = skip_ws(s, pos);
+
+        // Key must be a string
+        if p >= len || string_char_at(s, p as Int) as i32 != 34 {
+            return err(p);
+        }
+        let key_result: ParseResult = parse_string(s, p, strings);
+        if is_error(key_result.val) { return key_result; }
+        let key_idx: i32 = key_result.val.data;
+        p = skip_ws(s, key_result.pos);
+
+        // Expect colon
+        if p >= len || string_char_at(s, p as Int) as i32 != 58 { // ':'
+            return err(p);
+        }
+        p = p + 1;
+
+        // Value
+        let val_result: ParseResult = parse_value(s, p, strings, arrays, objects, kvpairs, vals);
+        if is_error(val_result.val) { return val_result; }
+
+        vec_push::<KVPair>(kvpairs, KVPair {
+            key: key_idx,
+            val_tag: val_result.val.tag,
+            val_data: val_result.val.data,
+        });
+
+        // Return an object-typed value with pos advanced
+        return ParseResult { val: mk_null(), pos: val_result.pos };
+    }
+}
+
+// ---- Printer ----
+
+mod Printer {
+    import Types.{ Val, ArrayDesc, ObjDesc, KVPair };
+
+    pub fn print_val(v: Val,
+                     strings: &mut Vec<String>,
+                     arrays: &mut Vec<ArrayDesc>,
+                     objects: &mut Vec<ObjDesc>,
+                     kvpairs: &mut Vec<KVPair>,
+                     vals: &mut Vec<Val>) with(Console, Alloc) {
+        if v.tag == 0 {
+            print_string(&"null");
+            return;
+        }
+        if v.tag == 1 {
+            if v.data == 1 {
+                print_string(&"true");
+            } else {
+                print_string(&"false");
+            }
+            return;
+        }
+        if v.tag == 2 {
+            print_int(v.data as Int);
+            return;
+        }
+        if v.tag == 3 {
+            print_char(34); // "
+            let s: String = vec_get::<String>(strings, v.data as Int);
+            defer s.drop();
+            print_string(&s);
+            print_char(34); // "
+            return;
+        }
+        if v.tag == 4 {
+            let desc: ArrayDesc = vec_get::<ArrayDesc>(arrays, v.data as Int);
+            print_char(91); // [
+            let mut i: i32 = 0;
+            while i < desc.len {
+                if i > 0 {
+                    print_char(44); // ,
+                }
+                let elem: Val = vec_get::<Val>(vals, (desc.start + i) as Int);
+                print_val(elem, strings, arrays, objects, kvpairs, vals);
+                i = i + 1;
+            }
+            print_char(93); // ]
+            return;
+        }
+        if v.tag == 5 {
+            let desc: ObjDesc = vec_get::<ObjDesc>(objects, v.data as Int);
+            print_char(123); // {
+            let mut i: i32 = 0;
+            while i < desc.len {
+                if i > 0 {
+                    print_char(44); // ,
+                }
+                let kv: KVPair = vec_get::<KVPair>(kvpairs, (desc.start + i) as Int);
+                print_char(34); // "
+                let k: String = vec_get::<String>(strings, kv.key as Int);
+                defer k.drop();
+                print_string(&k);
+                print_char(34); // "
+                print_char(58); // :
+                let val: Val = Val { tag: kv.val_tag, data: kv.val_data };
+                print_val(val, strings, arrays, objects, kvpairs, vals);
+                i = i + 1;
+            }
+            print_char(125); // }
+            return;
+        }
+        if v.tag == 6 {
+            let mut msg: String = "ERROR@";
+            defer msg.drop();
+            msg.append_int(v.data as Int);
+            print_string(&msg);
+            return;
+        }
+    }
+}
+
+// ---- Test harness ----
+
+mod Main {
+    import Types.{ Val, ArrayDesc, ObjDesc, KVPair, mk_error, is_error, check_tag, check_val };
+    import Parser.{ ParseResult, parse_value };
+    import Lex.{ skip_ws };
+
+    // Pure check: did parsing consume the entire input (after skipping trailing whitespace)?
+    fn is_fully_consumed(input: &String, pos: i32) -> bool {
+        let p: i32 = skip_ws(input, pos);
+        let len: i32 = string_length(input) as i32;
+        return p >= len;
+    }
+
+    // Parse a complete JSON string. Verifies entire input is consumed.
+    fn parse_json(input: &String,
+                  strings: &mut Vec<String>,
+                  arrays: &mut Vec<ArrayDesc>,
+                  objects: &mut Vec<ObjDesc>,
+                  kvpairs: &mut Vec<KVPair>,
+                  vals: &mut Vec<Val>) with(Alloc) -> Val {
+        let r: ParseResult = parse_value(input, 0, strings, arrays, objects, kvpairs, vals);
+        if is_error(r.val) { return r.val; }
+        if !is_fully_consumed(input, r.pos) {
+            let p: i32 = skip_ws(input, r.pos);
+            return mk_error(p);
+        }
+        return r.val;
+    }
+
+    // Test: parse succeeds and returns expected tag
+    fn test_tag(input: String, expected_tag: i32,
+                strings: &mut Vec<String>,
+                arrays: &mut Vec<ArrayDesc>,
+                objects: &mut Vec<ObjDesc>,
+                kvpairs: &mut Vec<KVPair>,
+                vals: &mut Vec<Val>,
+                err_code: Int) with(Console, Alloc) -> Int {
+        defer input.drop();
+        let v: Val = parse_json(&input, strings, arrays, objects, kvpairs, vals);
+        if !check_tag(v, expected_tag) {
+            let mut msg: String = "FAIL: expected tag ";
+            defer msg.drop();
+            msg.append_int(expected_tag as Int);
+            msg.append(&" got ");
+            msg.append_int(v.tag as Int);
+            print_string(&msg);
+            print_char(10);
+            return err_code;
+        }
+        return 0;
+    }
+
+    // Test: parse succeeds, tag matches, data matches
+    fn test_val(input: String, expected_tag: i32, expected_data: i32,
+                strings: &mut Vec<String>,
+                arrays: &mut Vec<ArrayDesc>,
+                objects: &mut Vec<ObjDesc>,
+                kvpairs: &mut Vec<KVPair>,
+                vals: &mut Vec<Val>,
+                err_code: Int) with(Console, Alloc) -> Int {
+        defer input.drop();
+        let v: Val = parse_json(&input, strings, arrays, objects, kvpairs, vals);
+        if !check_val(v, expected_tag, expected_data) {
+            let mut msg: String = "FAIL: expected (";
+            defer msg.drop();
+            msg.append_int(expected_tag as Int);
+            msg.append(&",");
+            msg.append_int(expected_data as Int);
+            msg.append(&") got (");
+            msg.append_int(v.tag as Int);
+            msg.append(&",");
+            msg.append_int(v.data as Int);
+            msg.append(&")");
+            print_string(&msg);
+            print_char(10);
+            return err_code;
+        }
+        return 0;
+    }
+
+    // Test: parse should fail (return error)
+    fn test_error(input: String,
+                  strings: &mut Vec<String>,
+                  arrays: &mut Vec<ArrayDesc>,
+                  objects: &mut Vec<ObjDesc>,
+                  kvpairs: &mut Vec<KVPair>,
+                  vals: &mut Vec<Val>,
+                  err_code: Int) with(Alloc) -> Int {
+        defer input.drop();
+        let v: Val = parse_json(&input, strings, arrays, objects, kvpairs, vals);
+        if !is_error(v) { return err_code; }
+        return 0;
+    }
+
+    fn cleanup(strings: Vec<String>, arrays: Vec<ArrayDesc>,
+               objects: Vec<ObjDesc>, kvpairs: Vec<KVPair>,
+               vals: Vec<Val>) with(Alloc) {
+        // Free stored strings
+        let slen: Int = vec_len::<String>(&mut strings) as Int;
+        let mut si: Int = 0;
+        while si < slen {
+            let s: String = vec_get::<String>(&mut strings, si);
+            s.drop();
+            si = si + 1;
+        }
+        vec_free::<String>(strings);
+        vec_free::<ArrayDesc>(arrays);
+        vec_free::<ObjDesc>(objects);
+        vec_free::<KVPair>(kvpairs);
+        vec_free::<Val>(vals);
+    }
+
+    fn main() with(Std) -> Int {
+        let mut strings: Vec<String> = vec_new::<String>();
+        let mut arrays: Vec<ArrayDesc> = vec_new::<ArrayDesc>();
+        let mut objects: Vec<ObjDesc> = vec_new::<ObjDesc>();
+        let mut kvpairs: Vec<KVPair> = vec_new::<KVPair>();
+        let mut vals: Vec<Val> = vec_new::<Val>();
+        defer cleanup(strings, arrays, objects, kvpairs, vals);
+
+        let mut err: Int = 0;
+
+        // ---- Primitives ----
+
+        err = test_val("null", 0, 0,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 10);
+        if err != 0 { return err; }
+
+        err = test_val("true", 1, 1,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 11);
+        if err != 0 { return err; }
+
+        err = test_val("false", 1, 0,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 12);
+        if err != 0 { return err; }
+
+        err = test_val("42", 2, 42,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 13);
+        if err != 0 { return err; }
+
+        err = test_val("-7", 2, 0 - 7,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 14);
+        if err != 0 { return err; }
+
+        err = test_val("0", 2, 0,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 15);
+        if err != 0 { return err; }
+
+        // ---- Strings ----
+
+        err = test_tag("\"hello\"", 3,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 20);
+        if err != 0 { return err; }
+
+        err = test_tag("\"\"", 3,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 21);
+        if err != 0 { return err; }
+
+        err = test_tag("\"hello\\nworld\"", 3,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 22);
+        if err != 0 { return err; }
+
+        // ---- Whitespace handling ----
+
+        err = test_val("  42  ", 2, 42,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 25);
+        if err != 0 { return err; }
+
+        err = test_val(" \n\t true \n", 1, 1,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 26);
+        if err != 0 { return err; }
+
+        // ---- Arrays ----
+
+        err = test_tag("[]", 4,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 30);
+        if err != 0 { return err; }
+
+        err = test_tag("[1]", 4,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 31);
+        if err != 0 { return err; }
+
+        err = test_tag("[1, 2, 3]", 4,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 32);
+        if err != 0 { return err; }
+
+        err = test_tag("[true, null, 42, \"hi\"]", 4,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 33);
+        if err != 0 { return err; }
+
+        err = test_tag("[[1, 2], [3, 4]]", 4,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 34);
+        if err != 0 { return err; }
+
+        // ---- Objects ----
+
+        err = test_tag("{}", 5,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 40);
+        if err != 0 { return err; }
+
+        err = test_tag("{\"a\": 1}", 5,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 41);
+        if err != 0 { return err; }
+
+        err = test_tag("{\"x\": 1, \"y\": 2}", 5,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 42);
+        if err != 0 { return err; }
+
+        err = test_tag("{\"name\": \"alice\", \"age\": 30, \"active\": true}", 5,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 43);
+        if err != 0 { return err; }
+
+        // Nested object
+        err = test_tag("{\"a\": {\"b\": 1}}", 5,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 44);
+        if err != 0 { return err; }
+
+        // Object with array value
+        err = test_tag("{\"items\": [1, 2, 3]}", 5,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 45);
+        if err != 0 { return err; }
+
+        // ---- Invalid JSON ----
+
+        err = test_error("", &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 50);
+        if err != 0 { return err; }
+
+        err = test_error("[", &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 51);
+        if err != 0 { return err; }
+
+        err = test_error("{\"a\"}", &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 52);
+        if err != 0 { return err; }
+
+        err = test_error("\"unterminated", &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 53);
+        if err != 0 { return err; }
+
+        err = test_error("[1,]", &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 54);
+        if err != 0 { return err; }
+
+        // Trailing content
+        err = test_error("42 extra", &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 55);
+        if err != 0 { return err; }
+
+        // ---- Complex nested structure ----
+
+        err = test_tag("{\"users\": [{\"name\": \"alice\", \"age\": 30}, {\"name\": \"bob\", \"age\": 25}], \"count\": 2}", 5,
+                       &mut strings, &mut arrays, &mut objects, &mut kvpairs, &mut vals, 60);
+        if err != 0 { return err; }
+
+        return 0;
+    }
+}

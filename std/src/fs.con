@@ -1,0 +1,540 @@
+mod fs {
+    import std.alloc.{grow,dealloc};
+    import std.libc.{fopen, fclose, fwrite, fread, fseek, ftell};
+    import std.bytes.{Bytes};
+    import std.result.{Result};
+
+    pub enum Copy FsError {
+        OpenFailed,
+    }
+
+    pub struct File {
+        handle: *const u8,
+    }
+
+    trusted impl File {
+        pub fn open(path: &String, mode: &String) with(Unsafe, Alloc) -> Result<File, FsError> {
+            let h: *const u8 = fopen(path.ptr, mode.ptr);
+            if h == (0 as *const u8) {
+                return Result::<File, FsError>#Err { error: FsError#OpenFailed };
+            }
+            let f: File = File { handle: h };
+            return Result::<File, FsError>#Ok { value: f };
+        }
+
+        pub fn create(path: &String) with(Unsafe, Alloc) -> Result<File, FsError> {
+            let mode: String = "w";
+            let h: *const u8 = fopen(path.ptr, mode.ptr);
+            mode.drop();
+            if h == (0 as *const u8) {
+                return Result::<File, FsError>#Err { error: FsError#OpenFailed };
+            }
+            let f: File = File { handle: h };
+            return Result::<File, FsError>#Ok { value: f };
+        }
+
+        pub fn write_bytes(&self, buf: *const u8, len: u64) with(Unsafe) -> u64 {
+            return fwrite(buf, 1, len, self.handle);
+        }
+
+        pub fn read_bytes(&self, buf: *mut u8, len: u64) with(Unsafe) -> u64 {
+            return fread(buf, 1, len, self.handle);
+        }
+
+        pub fn seek(&self, offset: i64, whence: i32) with(Unsafe) -> i32 {
+            return fseek(self.handle, offset, whence);
+        }
+
+        pub fn tell(&self) with(Unsafe) -> i64 {
+            return ftell(self.handle);
+        }
+
+        pub fn close(self) with(Unsafe) {
+            fclose(self.handle);
+        }
+    }
+
+    pub trusted fn read_file(path: &String) with(Unsafe, Alloc) -> Result<Bytes, FsError> {
+        let mode: String = "r";
+        let handle: *const u8 = fopen(path.ptr, mode.ptr);
+        mode.drop();
+
+        if handle == (0 as *const u8) {
+            return Result::<Bytes, FsError>#Err { error: FsError#OpenFailed };
+        }
+
+        // Seek to end to get size
+        fseek(handle, 0, 2); // SEEK_END = 2
+        let size: i64 = ftell(handle);
+        fseek(handle, 0, 0); // SEEK_SET = 0
+
+        let buf: Bytes = Bytes::with_capacity(size as u64);
+
+        // Read into the buffer's backing memory
+        let n: u64 = fread(buf.ptr, 1, size as u64, handle);
+        // Set the length to what was actually read
+        buf.len = n;
+
+        fclose(handle);
+        return Result::<Bytes, FsError>#Ok { value: buf };
+    }
+
+    pub trusted fn write_file(path: &String, data: &Bytes) with(Unsafe, Alloc) -> Result<u64, FsError> {
+        let mode: String = "w";
+        let handle: *const u8 = fopen(path.ptr, mode.ptr);
+        mode.drop();
+
+        if handle == (0 as *const u8) {
+            return Result::<u64, FsError>#Err { error: FsError#OpenFailed };
+        }
+
+        let written: u64 = fwrite(data.ptr as *const u8, 1, data.len, handle);
+        fclose(handle);
+        return Result::<u64, FsError>#Ok { value: written };
+    }
+
+    pub trusted fn append_file(path: &String, data: &Bytes) with(Unsafe, Alloc) -> Result<u64, FsError> {
+        let mode: String = "a";
+        let handle: *const u8 = fopen(path.ptr, mode.ptr);
+        mode.drop();
+
+        if handle == (0 as *const u8) {
+            return Result::<u64, FsError>#Err { error: FsError#OpenFailed };
+        }
+
+        let written: u64 = fwrite(data.ptr as *const u8, 1, data.len, handle);
+        fclose(handle);
+        return Result::<u64, FsError>#Ok { value: written };
+    }
+
+    pub trusted fn file_exists(path: &String) with(Unsafe, Alloc) -> bool {
+        let mode: String = "r";
+        let handle: *const u8 = fopen(path.ptr, mode.ptr);
+        mode.drop();
+        if handle == (0 as *const u8) {
+            return false;
+        }
+        fclose(handle);
+        return true;
+    }
+
+    pub trusted fn read_to_string(path: &String) with(Unsafe, Alloc) -> Result<String, FsError> {
+        let mode: String = "r";
+        let handle: *const u8 = fopen(path.ptr, mode.ptr);
+        mode.drop();
+
+        if handle == (0 as *const u8) {
+            return Result::<String, FsError>#Err { error: FsError#OpenFailed };
+        }
+
+        // Seek to end to get size
+        fseek(handle, 0, 2); // SEEK_END = 2
+        let size: i64 = ftell(handle);
+        fseek(handle, 0, 0); // SEEK_SET = 0
+
+        let s: String = String::new();
+        if size > 0 {
+            s.ptr = grow::<u8>(s.ptr, (size as u64) + 1);
+            s.cap = (size as u64) + 1;
+            let n: u64 = fread(s.ptr, 1, size as u64, handle);
+            s.len = n;
+            // Null-terminate for C compatibility
+            let term: *mut u8 = s.ptr + n;
+            *term = 0;
+        }
+
+        fclose(handle);
+        return Result::<String, FsError>#Ok { value: s };
+    }
+
+    // Test helpers: unwrap write/append to bool to avoid match-binding type conflicts
+    fn write_file_ok(path: &String, data: &Bytes) with(Unsafe, Alloc) -> bool {
+        let r: Result<u64, FsError> = write_file(path, data);
+        match r {
+            Result#Ok { value } => { return true; },
+            Result#Err { error } => { return false; }
+        }
+    }
+
+    fn append_file_ok(path: &String, data: &Bytes) with(Unsafe, Alloc) -> bool {
+        let r: Result<u64, FsError> = append_file(path, data);
+        match r {
+            Result#Ok { value } => { return true; },
+            Result#Err { error } => { return false; }
+        }
+    }
+
+    #[test]
+    fn test_file_exists() with(Unsafe, Alloc) -> i32 {
+        let path: String = "/dev/null";
+        let exists: bool = file_exists(&path);
+        path.drop();
+        if !exists {
+            return 1;
+        }
+        let bad: String = "/nonexistent/path/no_such_file.txt";
+        let exists2: bool = file_exists(&bad);
+        bad.drop();
+        if exists2 {
+            return 1;
+        }
+        return 0;
+    }
+
+    #[test]
+    fn test_write_read_roundtrip() with(Unsafe, Alloc) -> i32 {
+        let path: String = "/tmp/concrete_fs_test_roundtrip.txt";
+        let mut data: Bytes = Bytes::new();
+        data.push(72);  // H
+        data.push(105); // i
+        let wr: Result<u64, FsError> = write_file(&path, &data);
+        data.drop();
+        match wr {
+            Result#Ok { value } => {
+                let rr: Result<Bytes, FsError> = read_file(&path);
+                path.drop();
+                match rr {
+                    Result#Ok { value } => {
+                        if value.len != 2 {
+                            value.drop();
+                            return 1;
+                        }
+                        if value.get_unchecked(0) != 72 {
+                            value.drop();
+                            return 1;
+                        }
+                        if value.get_unchecked(1) != 105 {
+                            value.drop();
+                            return 1;
+                        }
+                        value.drop();
+                        return 0;
+                    },
+                    Result#Err { error } => {
+                        return 1;
+                    }
+                }
+            },
+            Result#Err { error } => {
+                path.drop();
+                return 1;
+            }
+        }
+    }
+
+    #[test]
+    fn test_fs_open_nonexistent() with(Unsafe, Alloc) -> i32 {
+        let path: String = "/nonexistent/path/no_such_file.txt";
+        let mode: String = "r";
+        let result: Result<File, FsError> = File::open(&path, &mode);
+        path.drop();
+        mode.drop();
+        match result {
+            Result#Ok { value } => {
+                value.close();
+                return 1;
+            },
+            Result#Err { error } => {
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_fs_create_bad_path() with(Unsafe, Alloc) -> i32 {
+        let path: String = "/nonexistent/dir/file.txt";
+        let result: Result<File, FsError> = File::create(&path);
+        path.drop();
+        match result {
+            Result#Ok { value } => {
+                value.close();
+                return 1;
+            },
+            Result#Err { error } => {
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_read_file_nonexistent() with(Unsafe, Alloc) -> i32 {
+        let path: String = "/nonexistent/path/no_such_file.txt";
+        let result: Result<Bytes, FsError> = read_file(&path);
+        path.drop();
+        match result {
+            Result#Ok { value } => {
+                value.drop();
+                return 1;
+            },
+            Result#Err { error } => {
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_write_to_readonly() with(Unsafe, Alloc) -> i32 {
+        // Open a file read-only, verify write returns 0 bytes
+        let path: String = "/dev/null";
+        let mode: String = "r";
+        let result: Result<File, FsError> = File::open(&path, &mode);
+        path.drop();
+        mode.drop();
+        match result {
+            Result#Ok { value } => {
+                // Writing to a read-only file should return 0 bytes written
+                let data: String = "hello";
+                let n: u64 = value.write_bytes(data.ptr as *const u8, data.len);
+                data.drop();
+                value.close();
+                if n == 0 {
+                    return 0;
+                }
+                return 1;
+            },
+            Result#Err { error } => {
+                return 1;
+            }
+        }
+    }
+
+    #[test]
+    fn test_write_file_bad_path() with(Unsafe, Alloc) -> i32 {
+        let path: String = "/nonexistent/dir/file.txt";
+        let data: Bytes = Bytes::new();
+        let result: Result<u64, FsError> = write_file(&path, &data);
+        path.drop();
+        data.drop();
+        match result {
+            Result#Ok { value } => {
+                return 1;
+            },
+            Result#Err { error } => {
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_read_file_empty() with(Unsafe, Alloc) -> i32 {
+        // Write an empty file, then read it back — should get 0-length Bytes
+        let path: String = "/tmp/concrete_fs_test_empty.txt";
+        let data: Bytes = Bytes::new();
+        let wrote: bool = write_file_ok(&path, &data);
+        data.drop();
+        if !wrote { path.drop(); return 1; }
+        let rr: Result<Bytes, FsError> = read_file(&path);
+        path.drop();
+        match rr {
+            Result#Ok { value } => {
+                if value.len != 0 { value.drop(); return 1; }
+                value.drop();
+                return 0;
+            },
+            Result#Err { error } => { return 1; }
+        }
+    }
+
+    #[test]
+    fn test_append_file() with(Unsafe, Alloc) -> i32 {
+        // Write "AB", append "CD", read back — should be "ABCD" (4 bytes)
+        let path: String = "/tmp/concrete_fs_test_append.txt";
+        let mut d1: Bytes = Bytes::new();
+        d1.push(65); // A
+        d1.push(66); // B
+        let wrote: bool = write_file_ok(&path, &d1);
+        d1.drop();
+        if !wrote { path.drop(); return 1; }
+        let mut d2: Bytes = Bytes::new();
+        d2.push(67); // C
+        d2.push(68); // D
+        let appended: bool = append_file_ok(&path, &d2);
+        d2.drop();
+        if !appended { path.drop(); return 1; }
+        let rr: Result<Bytes, FsError> = read_file(&path);
+        path.drop();
+        match rr {
+            Result#Ok { value } => {
+                if value.len != 4 { value.drop(); return 1; }
+                if value.get_unchecked(0) != 65 { value.drop(); return 1; }
+                if value.get_unchecked(1) != 66 { value.drop(); return 1; }
+                if value.get_unchecked(2) != 67 { value.drop(); return 1; }
+                if value.get_unchecked(3) != 68 { value.drop(); return 1; }
+                value.drop();
+                return 0;
+            },
+            Result#Err { error } => { return 1; }
+        }
+    }
+
+    #[test]
+    fn test_seek_tell() with(Unsafe, Alloc) -> i32 {
+        // Write 5 bytes, reopen, seek to offset 3, verify tell returns 3
+        let path: String = "/tmp/concrete_fs_test_seek.txt";
+        let mut data: Bytes = Bytes::new();
+        data.push(1);
+        data.push(2);
+        data.push(3);
+        data.push(4);
+        data.push(5);
+        let wrote: bool = write_file_ok(&path, &data);
+        data.drop();
+        if !wrote { path.drop(); return 1; }
+        let mode: String = "r";
+        let result: Result<File, FsError> = File::open(&path, &mode);
+        path.drop();
+        mode.drop();
+        match result {
+            Result#Ok { value } => {
+                value.seek(3, 0); // SEEK_SET = 0
+                let pos: i64 = value.tell();
+                value.close();
+                if pos != 3 { return 1; }
+                return 0;
+            },
+            Result#Err { error } => { return 1; }
+        }
+    }
+
+    #[test]
+    fn test_read_to_string_nonexistent() with(Unsafe, Alloc) -> i32 {
+        let path: String = "/nonexistent/path/no_such_file.txt";
+        let result: Result<String, FsError> = read_to_string(&path);
+        path.drop();
+        match result {
+            Result#Ok { value } => { value.drop(); return 1; },
+            Result#Err { error } => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_read_to_string_roundtrip() with(Unsafe, Alloc) -> i32 {
+        // Write "Hi" via write_file, read back via read_to_string
+        let path: String = "/tmp/concrete_fs_test_rts.txt";
+        let mut data: Bytes = Bytes::new();
+        data.push(72);  // H
+        data.push(105); // i
+        let wrote: bool = write_file_ok(&path, &data);
+        data.drop();
+        if !wrote { path.drop(); return 1; }
+        let rr: Result<String, FsError> = read_to_string(&path);
+        path.drop();
+        match rr {
+            Result#Ok { value } => {
+                if value.len != 2 { value.drop(); return 1; }
+                value.drop();
+                return 0;
+            },
+            Result#Err { error } => { return 1; }
+        }
+    }
+
+    #[test]
+    fn test_append_file_bad_path() with(Unsafe, Alloc) -> i32 {
+        let path: String = "/nonexistent/dir/file.txt";
+        let data: Bytes = Bytes::new();
+        let result: Result<u64, FsError> = append_file(&path, &data);
+        path.drop();
+        data.drop();
+        match result {
+            Result#Ok { value } => { return 1; },
+            Result#Err { error } => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_read_past_eof() with(Unsafe, Alloc) -> i32 {
+        // Write 3 bytes via write_file, read back via read_file to confirm,
+        // then open and read_bytes(64) — fread should return < 64
+        let path: String = "/tmp/concrete_fs_test_read_past_eof.txt";
+        let mut data: Bytes = Bytes::new();
+        data.push(10);
+        data.push(20);
+        data.push(30);
+        let wrote: bool = write_file_ok(&path, &data);
+        data.drop();
+        if !wrote { path.drop(); return 1; }
+        // Confirm file is 3 bytes via read_file
+        let check: Result<Bytes, FsError> = read_file(&path);
+        match check {
+            Result#Ok { value } => {
+                if value.len != 3 { value.drop(); path.drop(); return 1; }
+                value.drop();
+            },
+            Result#Err { error } => { path.drop(); return 1; }
+        }
+        // Now open and read more than the file contains
+        let mode: String = "r";
+        let result: Result<File, FsError> = File::open(&path, &mode);
+        path.drop();
+        mode.drop();
+        match result {
+            Result#Ok { value } => {
+                let buf: [u8; 64] = [0; 64];
+                let n: u64 = value.read_bytes(&buf as *mut u8, 64);
+                value.close();
+                // fread should return exactly 3 (the file size)
+                // but we accept any value < 64 and > 0 as proof that
+                // reading past EOF is correctly bounded
+                if n == 0 { return 1; }
+                if n > 3 { return 1; }
+                return 0;
+            },
+            Result#Err { error } => { return 1; }
+        }
+    }
+
+    #[test]
+    fn test_seek_past_end() with(Unsafe, Alloc) -> i32 {
+        // Write 5 bytes, seek to offset 100, verify tell returns 100
+        // (fseek past end is valid in C — read returns 0 bytes)
+        let path: String = "/tmp/concrete_fs_test_seek_past_end.txt";
+        let mut data: Bytes = Bytes::new();
+        data.push(1);
+        data.push(2);
+        data.push(3);
+        data.push(4);
+        data.push(5);
+        let wrote: bool = write_file_ok(&path, &data);
+        data.drop();
+        if !wrote { path.drop(); return 1; }
+        let mode: String = "r";
+        let result: Result<File, FsError> = File::open(&path, &mode);
+        path.drop();
+        mode.drop();
+        match result {
+            Result#Ok { value } => {
+                value.seek(100, 0); // SEEK_SET past end
+                let pos: i64 = value.tell();
+                // Read should return 0 bytes from beyond EOF
+                let buf: [u8; 16] = [0; 16];
+                let n: u64 = value.read_bytes(&buf as *mut u8, 16);
+                value.close();
+                if pos != 100 { return 1; }
+                if n != 0 { return 1; }
+                return 0;
+            },
+            Result#Err { error } => { return 1; }
+        }
+    }
+
+    #[test]
+    fn test_read_to_string_empty() with(Unsafe, Alloc) -> i32 {
+        // Write empty file, read as string — should get empty string
+        let path: String = "/tmp/concrete_fs_test_rts_empty.txt";
+        let data: Bytes = Bytes::new();
+        let wrote: bool = write_file_ok(&path, &data);
+        data.drop();
+        if !wrote { path.drop(); return 1; }
+        let rr: Result<String, FsError> = read_to_string(&path);
+        path.drop();
+        match rr {
+            Result#Ok { value } => {
+                if value.len != 0 { value.drop(); return 1; }
+                value.drop();
+                return 0;
+            },
+            Result#Err { error } => { return 1; }
+        }
+    }
+}

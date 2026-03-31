@@ -1,0 +1,12 @@
+// Trusted fn can do pointer casts without with(Unsafe)
+trusted fn cast_ptr(p: *const i32) -> *const u8 {
+    let q: *const u8 = p as *const u8;
+    return q;
+}
+
+fn main() with(Unsafe) -> i32 {
+    let x: i32 = 42;
+    let p: *const i32 = &x as *const i32;
+    let _q: *const u8 = cast_ptr(p);
+    return 0;
+}

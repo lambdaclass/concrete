@@ -1,0 +1,28 @@
+// Test: multiple resources with defer cleanup
+// Expected: 30
+struct FileHandle { fd: Int }
+struct Socket { port: Int }
+
+impl Destroy for FileHandle {
+    fn destroy(&self) {
+        // close file
+    }
+}
+
+impl Destroy for Socket {
+    fn destroy(&self) {
+        // close socket
+    }
+}
+
+fn do_io() -> Int {
+    let mut f: FileHandle = FileHandle { fd: 10 };
+    defer destroy(f);
+    let mut s: Socket = Socket { port: 20 };
+    defer destroy(s);
+    return f.fd + s.port;
+}
+
+fn main() -> Int {
+    return do_io();
+}

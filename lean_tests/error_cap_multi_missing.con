@@ -1,0 +1,13 @@
+// Error: caller has Alloc but callee needs Alloc + File
+fn needs_both() with(Alloc, File) -> Int {
+    return 1;
+}
+
+fn has_alloc() with(Alloc) -> Int {
+    let x: Int = needs_both();
+    return x;
+}
+
+fn main() -> Int {
+    return 0;
+}

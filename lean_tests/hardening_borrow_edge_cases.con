@@ -1,0 +1,63 @@
+// Hardening test: borrow checker edge cases.
+// Tests patterns that could be incorrectly rejected or silently wrong.
+// Expected output: 42
+
+struct Copy Point {
+    x: i32,
+    y: i32,
+}
+
+fn read_val(p: &Point) -> i32 {
+    return p.x + p.y;
+}
+
+fn add_refs(a: &i32, b: &i32) -> i32 {
+    return *a + *b;
+}
+
+fn mutate(v: &mut Vec<i32>, val: i32) with(Alloc) {
+    vec_push::<i32>(v, val);
+}
+
+fn main() with(Std) -> Int {
+    // 1. Multiple shared borrows of same variable in one call
+    let val: i32 = 10;
+    let sum: i32 = add_refs(&val, &val);
+    if sum != 20 { return 1; }
+
+    // 2. Borrow of struct field access
+    let p: Point = Point { x: 5, y: 7 };
+    let r: i32 = read_val(&p);
+    if r != 12 { return 2; }
+
+    // 3. Multiple &mut borrows of DIFFERENT variables in same scope
+    let mut v1: Vec<i32> = vec_new::<i32>();
+    let mut v2: Vec<i32> = vec_new::<i32>();
+    mutate(&mut v1, 3);
+    mutate(&mut v2, 7);
+    let a: i32 = vec_get::<i32>(&v1, 0);
+    let b: i32 = vec_get::<i32>(&v2, 0);
+    vec_free::<i32>(v1);
+    vec_free::<i32>(v2);
+    if a != 3 { return 3; }
+    if b != 7 { return 4; }
+
+    // 4. Sequential &mut borrows of same variable (reborrow after use)
+    let mut v3: Vec<i32> = vec_new::<i32>();
+    mutate(&mut v3, 10);
+    mutate(&mut v3, 20);
+    mutate(&mut v3, 12);
+    let c: i32 = vec_get::<i32>(&v3, 0);
+    let d: i32 = vec_get::<i32>(&v3, 1);
+    let e: i32 = vec_get::<i32>(&v3, 2);
+    vec_free::<i32>(v3);
+    if c != 10 { return 5; }
+    if d != 20 { return 6; }
+    if e != 12 { return 7; }
+
+    // Checksum: sum(20) - r(12) + a(3) + b(7) + c(10) + d(20) - e(12) + 6 = 42
+    let result: i32 = sum - r + a + b + c + d - e + 6;
+    if result != 42 { return 8; }
+
+    return result as Int;
+}

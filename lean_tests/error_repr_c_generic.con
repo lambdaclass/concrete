@@ -1,0 +1,9 @@
+// Error: repr(C) struct cannot have type parameters
+#[repr(C)]
+struct Wrapper<T> {
+    value: T,
+}
+
+fn main() -> Int {
+    return 0;
+}

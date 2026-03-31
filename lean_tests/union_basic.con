@@ -1,0 +1,17 @@
+// Basic union: fields share memory, typed as a struct with isUnion=true
+union Payload {
+    i: Int,
+    f: Float64,
+}
+
+// Create a union and read a field in a trusted function
+trusted fn read_int(p: Payload) -> Int {
+    let v: Int = p.i;
+    return v;
+}
+
+fn main() with(Std) -> Int {
+    let p: Payload = Payload { i: 42 };
+    let result: Int = read_int(p);
+    return result;
+}

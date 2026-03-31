@@ -1,0 +1,384 @@
+mod deque {
+    import std.mem.{sizeof};
+    import std.alloc.{grow,dealloc};
+    import std.math.{max};
+    import std.option.{Option};
+
+    pub struct Deque<T> {
+        ptr: *mut T,
+        head: u64,
+        len: u64,
+        cap: u64,
+    }
+
+    trusted impl<T> Deque<T> {
+        pub fn new() -> Deque<T> {
+            let d: Deque<T> = Deque::<T> {
+                ptr: 0 as *mut T,
+                head: 0,
+                len: 0,
+                cap: 0,
+            };
+            return d;
+        }
+
+        pub fn push_back(&mut self, value: T) with(Alloc) {
+            if self.len >= self.cap {
+                self.grow();
+            }
+            let tail: u64 = (self.head + self.len) & (self.cap - 1);
+            let target: *mut T = self.ptr + tail;
+            *target = value;
+            self.len = self.len + 1;
+        }
+
+        pub fn push_front(&mut self, value: T) with(Alloc) {
+            if self.len >= self.cap {
+                self.grow();
+            }
+            self.head = (self.head + self.cap - 1) & (self.cap - 1);
+            let target: *mut T = self.ptr + self.head;
+            *target = value;
+            self.len = self.len + 1;
+        }
+
+        pub fn pop_back(&mut self) -> Option<T> {
+            if self.len == 0 {
+                return Option::<T>#None;
+            }
+            self.len = self.len - 1;
+            let tail: u64 = (self.head + self.len) & (self.cap - 1);
+            let target: *mut T = self.ptr + tail;
+            return Option::<T>#Some { value: *target };
+        }
+
+        pub fn pop_front(&mut self) -> Option<T> {
+            if self.len == 0 {
+                return Option::<T>#None;
+            }
+            let target: *mut T = self.ptr + self.head;
+            let value: T = *target;
+            self.head = (self.head + 1) & (self.cap - 1);
+            self.len = self.len - 1;
+            return Option::<T>#Some { value: value };
+        }
+
+        /// Bounds-checked access.
+        pub fn get(&self, at: u64) -> Option<&T> {
+            if at >= self.len {
+                return Option::<&T>#None;
+            }
+            let idx: u64 = (self.head + at) & (self.cap - 1);
+            let target: *mut T = self.ptr + idx;
+            return Option::<&T>#Some { value: target as &T };
+        }
+
+        /// Unchecked access.
+        pub fn get_unchecked(&self, at: u64) -> &T {
+            let idx: u64 = (self.head + at) & (self.cap - 1);
+            let target: *mut T = self.ptr + idx;
+            return target as &T;
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.len == 0;
+        }
+
+        pub fn clear(&mut self) {
+            self.len = 0;
+            self.head = 0;
+        }
+
+        fn grow(&mut self) with(Alloc) {
+            let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
+            let new_ptr: *mut T = grow::<T>(0 as *mut T, new_cap);
+
+            // Copy elements in logical order to new buffer
+            let i: u64 = 0;
+            while i < self.len {
+                let src_idx: u64 = (self.head + i) & (self.cap - 1);
+                let src: *mut T = self.ptr + src_idx;
+                let dst: *mut T = new_ptr + i;
+                *dst = *src;
+                i = i + 1;
+            }
+
+            if self.cap > 0 {
+                dealloc(self.ptr);
+            }
+            self.ptr = new_ptr;
+            self.head = 0;
+            self.cap = new_cap;
+        }
+
+        pub fn drop(self) with(Alloc) {
+            if self.cap > 0 {
+                dealloc(self.ptr);
+            }
+        }
+    }
+
+    import std.test.{assert_eq, assert_true};
+
+    #[test]
+    fn test_push_back_pop_front() with(Alloc) -> i32 {
+        let mut d: Deque<i32> = Deque::<i32>::new();
+        d.push_back(10);
+        d.push_back(20);
+        d.push_back(30);
+
+        if !assert_eq::<u64>(d.len(), 3, "len should be 3") {
+            d.drop();
+            return 1;
+        }
+
+        let r1: Option<i32> = d.pop_front();
+        match r1 {
+            Option#Some { value } => {
+                if value != 10 {
+                    d.drop();
+                    return 1;
+                }
+            },
+            Option#None => { d.drop(); return 1; }
+        }
+
+        let r2: Option<i32> = d.pop_front();
+        match r2 {
+            Option#Some { value } => {
+                if value != 20 {
+                    d.drop();
+                    return 1;
+                }
+            },
+            Option#None => { d.drop(); return 1; }
+        }
+
+        let r3: Option<i32> = d.pop_front();
+        match r3 {
+            Option#Some { value } => {
+                if value != 30 {
+                    d.drop();
+                    return 1;
+                }
+            },
+            Option#None => { d.drop(); return 1; }
+        }
+
+        d.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_push_front_pop_back() with(Alloc) -> i32 {
+        let mut d: Deque<i32> = Deque::<i32>::new();
+        d.push_front(10);
+        d.push_front(20);
+        d.push_front(30);
+
+        // Order should be: 30, 20, 10
+        let r1: Option<i32> = d.pop_back();
+        match r1 {
+            Option#Some { value } => {
+                if value != 10 {
+                    d.drop();
+                    return 1;
+                }
+            },
+            Option#None => { d.drop(); return 1; }
+        }
+
+        let r2: Option<i32> = d.pop_back();
+        match r2 {
+            Option#Some { value } => {
+                if value != 20 {
+                    d.drop();
+                    return 1;
+                }
+            },
+            Option#None => { d.drop(); return 1; }
+        }
+
+        d.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_deque_pop_empty() with(Alloc) -> i32 {
+        let mut d: Deque<i32> = Deque::<i32>::new();
+        let r: Option<i32> = d.pop_front();
+        match r {
+            Option#Some { value } => { d.drop(); return 1; },
+            Option#None => {}
+        }
+        let r2: Option<i32> = d.pop_back();
+        match r2 {
+            Option#Some { value } => { d.drop(); return 1; },
+            Option#None => {}
+        }
+        d.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_get() with(Alloc) -> i32 {
+        let mut d: Deque<i32> = Deque::<i32>::new();
+        d.push_back(100);
+        d.push_back(200);
+        d.push_back(300);
+
+        let r: Option<&i32> = d.get(1);
+        match r {
+            Option#Some { value } => {
+                if *value != 200 {
+                    d.drop();
+                    return 1;
+                }
+            },
+            Option#None => { d.drop(); return 1; }
+        }
+
+        // Out of bounds
+        let r2: Option<&i32> = d.get(10);
+        match r2 {
+            Option#Some { value } => { d.drop(); return 1; },
+            Option#None => {}
+        }
+
+        d.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_growth_wrapping() with(Alloc) -> i32 {
+        let mut d: Deque<i32> = Deque::<i32>::new();
+
+        // Push 20 elements, forcing multiple grows
+        let i: i32 = 0;
+        while i < 20 {
+            d.push_back(i);
+            i = i + 1;
+        }
+
+        if !assert_eq::<u64>(d.len(), 20, "len should be 20") {
+            d.drop();
+            return 1;
+        }
+
+        // Pop from front and verify order
+        let j: i32 = 0;
+        while j < 20 {
+            let r: Option<i32> = d.pop_front();
+            match r {
+                Option#Some { value } => {
+                    if value != j {
+                        d.drop();
+                        return 1;
+                    }
+                },
+                Option#None => { d.drop(); return 1; }
+            }
+            j = j + 1;
+        }
+
+        d.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_mixed_push_pop() with(Alloc) -> i32 {
+        let mut d: Deque<i32> = Deque::<i32>::new();
+
+        // Interleave push_front and push_back
+        d.push_back(3);
+        d.push_front(2);
+        d.push_back(4);
+        d.push_front(1);
+        // Logical order: 1, 2, 3, 4
+
+        let sum: i32 = 0;
+        let i: u64 = 0;
+        while i < d.len() {
+            sum = sum + *(d.get_unchecked(i));
+            i = i + 1;
+        }
+
+        if sum != 10 {
+            d.drop();
+            return 1;
+        }
+
+        d.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_deque_wrap_stress() with(Alloc) -> i32 {
+        // Force head to wrap around by popping from front then pushing again
+        let mut d: Deque<i32> = Deque::<i32>::new();
+
+        // Fill initial capacity (4 after first grow), then pop front several
+        // times to advance head, then push_back to wrap tail around.
+        let i: i32 = 0;
+        while i < 6 {
+            d.push_back(i);
+            i = i + 1;
+        }
+        // Pop 4 from front using get_unchecked to verify, then pop
+        let j: u64 = 0;
+        while j < 4 {
+            if *(d.get_unchecked(0)) != j as i32 { d.drop(); return 1; }
+            d.pop_front();
+            j = j + 1;
+        }
+        // Push 10 more — forces growth while head is non-zero
+        let k: i32 = 100;
+        while k < 110 {
+            d.push_back(k);
+            k = k + 1;
+        }
+        // Verify total: 2 remaining + 10 new = 12
+        if !assert_eq::<u64>(d.len(), 12, "len should be 12") {
+            d.drop();
+            return 1;
+        }
+        // Verify order using get_unchecked: [4, 5, 100..109]
+        if *(d.get_unchecked(0)) != 4 { d.drop(); return 1; }
+        if *(d.get_unchecked(1)) != 5 { d.drop(); return 1; }
+        let m: u64 = 0;
+        while m < 10 {
+            if *(d.get_unchecked(m + 2)) != (100 + m) as i32 { d.drop(); return 1; }
+            m = m + 1;
+        }
+        d.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_deque_clear_reuse() with(Alloc) -> i32 {
+        let mut d: Deque<i32> = Deque::<i32>::new();
+        d.push_back(1);
+        d.push_back(2);
+        d.push_back(3);
+        d.clear();
+        if !assert_eq::<u64>(d.len(), 0, "len should be 0 after clear") {
+            d.drop();
+            return 1;
+        }
+        // Reuse after clear
+        d.push_back(42);
+        let r: Option<i32> = d.pop_front();
+        match r {
+            Option#Some { value } => {
+                if value != 42 { d.drop(); return 1; }
+            },
+            Option#None => { d.drop(); return 1; }
+        }
+        d.drop();
+        return 0;
+    }
+}

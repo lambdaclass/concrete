@@ -1,0 +1,8 @@
+struct Pair { a: Int, b: Int }
+
+fn sum(p: Pair) -> Int { return p.a + p.b; }
+
+fn main() -> Int {
+    let p: Pair = Pair { a: 10, b: 20 };
+    return sum(p);
+}

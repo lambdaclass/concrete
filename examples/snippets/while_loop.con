@@ -1,0 +1,13 @@
+fn sum_to(n: Int) -> Int {
+    let mut total: Int = 0;
+    let mut i: Int = 1;
+    while i <= n {
+        total = total + i;
+        i = i + 1;
+    }
+    return total;
+}
+
+fn main() -> Int {
+    return sum_to(100);
+}

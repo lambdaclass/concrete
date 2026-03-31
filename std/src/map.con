@@ -1,0 +1,549 @@
+mod map {
+    import std.mem.{sizeof};
+    import std.alloc.{grow, dealloc};
+    import std.option.{Option};
+    import std.libc.{memset};
+    import std.hash.{hash_i32, eq_i32};
+
+    // Open-addressing hash map with linear probing.
+    // Takes hash and eq function pointers at construction (Zig-style).
+    // Flag values: 0 = empty, 1 = occupied, 2 = tombstone.
+
+    pub struct HashMap<K, V> {
+        keys:    *mut K,
+        values:  *mut V,
+        flags:   *mut u8,
+        len:     u64,
+        cap:     u64,
+        hash_fn: fn(&K) -> u64,
+        eq_fn:   fn(&K, &K) -> bool,
+    }
+
+    trusted impl<K, V> HashMap<K, V> {
+        pub fn new(hash_fn: fn(&K) -> u64, eq_fn: fn(&K, &K) -> bool) -> HashMap<K, V> {
+            let cap: u64 = 16;
+            let keys: *mut K = grow::<K>(0 as *mut K, cap);
+            let values: *mut V = grow::<V>(0 as *mut V, cap);
+            let flags: *mut u8 = grow::<u8>(0 as *mut u8, cap);
+            memset(flags as *mut u8, 0, cap * sizeof::<u8>());
+            let m: HashMap<K, V> = HashMap::<K, V> {
+                keys: keys,
+                values: values,
+                flags: flags,
+                len: 0,
+                cap: cap,
+                hash_fn: hash_fn,
+                eq_fn: eq_fn,
+            };
+            return m;
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.len == 0;
+        }
+
+        pub fn contains(&self, key: &K) -> bool {
+            let idx: u64 = self.find_slot(key);
+            let flag_ptr: *mut u8 = self.flags + idx;
+            let flag: u8 = *flag_ptr;
+            return flag == 1;
+        }
+
+        pub fn get(&self, key: &K) -> Option<&V> {
+            let idx: u64 = self.find_slot(key);
+            let flag_ptr: *mut u8 = self.flags + idx;
+            let flag: u8 = *flag_ptr;
+            if flag == 1 {
+                let val_ptr: *mut V = self.values + idx;
+                return Option::<&V>#Some { value: val_ptr as &V };
+            }
+            return Option::<&V>#None;
+        }
+
+        pub fn insert(&mut self, key: K, value: V) with(Alloc, Unsafe) -> Option<V> {
+            // Grow if load factor >= 75%
+            if self.len * 4 >= self.cap * 3 {
+                self.grow();
+            }
+
+            let hash_f: fn(&K) -> u64 = self.hash_fn;
+            let h: u64 = hash_f(&key);
+            let mask: u64 = self.cap - 1;
+            let idx: u64 = h & mask;
+
+            while true {
+                let flag_ptr: *mut u8 = self.flags + idx;
+                let flag: u8 = *flag_ptr;
+
+                if flag == 0 || flag == 2 {
+                    // Empty or tombstone — insert here
+                    let key_ptr: *mut K = self.keys + idx;
+                    *key_ptr = key;
+                    let val_ptr: *mut V = self.values + idx;
+                    *val_ptr = value;
+                    *flag_ptr = 1;
+                    self.len = self.len + 1;
+                    return Option::<V>#None;
+                }
+
+                if flag == 1 {
+                    // Occupied — check if same key
+                    let key_ptr: *mut K = self.keys + idx;
+                    let eq_f: fn(&K, &K) -> bool = self.eq_fn;
+                    if eq_f(key_ptr as &K, &key) {
+                        // Overwrite: return old value
+                        let val_ptr: *mut V = self.values + idx;
+                        let old: V = *val_ptr;
+                        *val_ptr = value;
+                        // Also overwrite key for consistency
+                        *key_ptr = key;
+                        return Option::<V>#Some { value: old };
+                    }
+                }
+
+                idx = (idx + 1) & mask;
+            }
+
+            // Unreachable, but needed for type checker
+            return Option::<V>#None;
+        }
+
+        pub fn remove(&mut self, key: &K) -> Option<V> {
+            let idx: u64 = self.find_slot(key);
+            let flag_ptr: *mut u8 = self.flags + idx;
+            let flag: u8 = *flag_ptr;
+            if flag != 1 {
+                return Option::<V>#None;
+            }
+            let val_ptr: *mut V = self.values + idx;
+            let old: V = *val_ptr;
+            *flag_ptr = 2;  // tombstone
+            self.len = self.len - 1;
+            return Option::<V>#Some { value: old };
+        }
+
+        pub fn clear(&mut self) with(Unsafe) {
+            memset(self.flags as *mut u8, 0, self.cap * sizeof::<u8>());
+            self.len = 0;
+        }
+
+        pub fn drop(self) with(Alloc) {
+            dealloc::<K>(self.keys);
+            dealloc::<V>(self.values);
+            dealloc::<u8>(self.flags);
+        }
+
+        // --- Internal helpers ---
+
+        fn find_slot(&self, key: &K) -> u64 {
+            let hash_f: fn(&K) -> u64 = self.hash_fn;
+            let h: u64 = hash_f(key);
+            let mask: u64 = self.cap - 1;
+            let idx: u64 = h & mask;
+
+            while true {
+                let flag_ptr: *mut u8 = self.flags + idx;
+                let flag: u8 = *flag_ptr;
+
+                if flag == 0 {
+                    // Empty — key not found, return this slot
+                    return idx;
+                }
+                if flag == 1 {
+                    let key_ptr: *mut K = self.keys + idx;
+                    let eq_f: fn(&K, &K) -> bool = self.eq_fn;
+                    if eq_f(key_ptr as &K, key) {
+                        return idx;
+                    }
+                }
+                // flag == 2 (tombstone) or hash collision: keep probing
+                idx = (idx + 1) & mask;
+            }
+
+            return 0;
+        }
+
+        fn grow(&mut self) with(Alloc, Unsafe) {
+            let old_cap: u64 = self.cap;
+            let old_keys: *mut K = self.keys;
+            let old_values: *mut V = self.values;
+            let old_flags: *mut u8 = self.flags;
+
+            let new_cap: u64 = old_cap * 2;
+            let new_keys: *mut K = grow::<K>(0 as *mut K, new_cap);
+            let new_values: *mut V = grow::<V>(0 as *mut V, new_cap);
+            let new_flags: *mut u8 = grow::<u8>(0 as *mut u8, new_cap);
+            memset(new_flags as *mut u8, 0, new_cap * sizeof::<u8>());
+
+            self.keys = new_keys;
+            self.values = new_values;
+            self.flags = new_flags;
+            self.cap = new_cap;
+            self.len = 0;
+
+            // Rehash all occupied entries
+            let i: u64 = 0;
+            while i < old_cap {
+                let flag_ptr: *mut u8 = old_flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let key_ptr: *mut K = old_keys + i;
+                    let val_ptr: *mut V = old_values + i;
+                    self.insert_for_grow(*key_ptr, *val_ptr);
+                }
+                i = i + 1;
+            }
+
+            dealloc::<K>(old_keys);
+            dealloc::<V>(old_values);
+            dealloc::<u8>(old_flags);
+        }
+
+        /// Fold over all key-value pairs, threading an accumulator.
+        pub fn fold<A>(&self, init: A, f: fn(A, &K, &V) -> A) -> A {
+            let mut acc: A = init;
+            let i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let key_ptr: *mut K = self.keys + i;
+                    let val_ptr: *mut V = self.values + i;
+                    acc = f(acc, key_ptr as &K, val_ptr as &V);
+                }
+                i = i + 1;
+            }
+            return acc;
+        }
+
+        /// Call a function for each key-value pair in the map.
+        pub fn for_each(&self, f: fn(&K, &V)) {
+            let i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let key_ptr: *mut K = self.keys + i;
+                    let val_ptr: *mut V = self.values + i;
+                    f(key_ptr as &K, val_ptr as &V);
+                }
+                i = i + 1;
+            }
+        }
+
+        /// Fold over keys only, threading an accumulator.
+        pub fn keys_fold<A>(&self, init: A, f: fn(A, &K) -> A) -> A {
+            let mut acc: A = init;
+            let i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let key_ptr: *mut K = self.keys + i;
+                    acc = f(acc, key_ptr as &K);
+                }
+                i = i + 1;
+            }
+            return acc;
+        }
+
+        /// Fold over values only, threading an accumulator.
+        pub fn values_fold<A>(&self, init: A, f: fn(A, &V) -> A) -> A {
+            let mut acc: A = init;
+            let i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let val_ptr: *mut V = self.values + i;
+                    acc = f(acc, val_ptr as &V);
+                }
+                i = i + 1;
+            }
+            return acc;
+        }
+
+        /// Call a function for each key in the map.
+        pub fn keys_for_each(&self, f: fn(&K)) {
+            let i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let key_ptr: *mut K = self.keys + i;
+                    f(key_ptr as &K);
+                }
+                i = i + 1;
+            }
+        }
+
+        /// Call a function for each value in the map.
+        pub fn values_for_each(&self, f: fn(&V)) {
+            let i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let val_ptr: *mut V = self.values + i;
+                    f(val_ptr as &V);
+                }
+                i = i + 1;
+            }
+        }
+
+        /// Collect all keys into a Vec.
+        pub fn keys(&self) with(Alloc) -> Vec<K> {
+            let mut result: Vec<K> = vec_new::<K>();
+            let i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let key_ptr: *mut K = self.keys + i;
+                    vec_push::<K>(&mut result, *key_ptr);
+                }
+                i = i + 1;
+            }
+            return result;
+        }
+
+        /// Collect all values into a Vec.
+        pub fn values(&self) with(Alloc) -> Vec<V> {
+            let mut result: Vec<V> = vec_new::<V>();
+            let i: u64 = 0;
+            while i < self.cap {
+                let flag_ptr: *mut u8 = self.flags + i;
+                let flag: u8 = *flag_ptr;
+                if flag == 1 {
+                    let val_ptr: *mut V = self.values + i;
+                    vec_push::<V>(&mut result, *val_ptr);
+                }
+                i = i + 1;
+            }
+            return result;
+        }
+
+        fn insert_for_grow(&mut self, key: K, value: V) {
+            let hash_f: fn(&K) -> u64 = self.hash_fn;
+            let h: u64 = hash_f(&key);
+            let mask: u64 = self.cap - 1;
+            let idx: u64 = h & mask;
+
+            while true {
+                let flag_ptr: *mut u8 = self.flags + idx;
+                let flag: u8 = *flag_ptr;
+                if flag == 0 {
+                    let key_ptr: *mut K = self.keys + idx;
+                    *key_ptr = key;
+                    let val_ptr: *mut V = self.values + idx;
+                    *val_ptr = value;
+                    *flag_ptr = 1;
+                    self.len = self.len + 1;
+                    return;
+                }
+                idx = (idx + 1) & mask;
+            }
+        }
+    }
+
+    #[test]
+    fn test_map_insert_len() with(Alloc, Unsafe) -> i32 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        m.insert(1, 10);
+        m.insert(2, 20);
+        m.insert(3, 30);
+        if m.len() != 3 { m.drop(); return 1; }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_map_contains() with(Alloc, Unsafe) -> i32 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        m.insert(42, 100);
+        let k1: i32 = 42;
+        let k2: i32 = 99;
+        if !(m.contains(&k1)) { m.drop(); return 1; }
+        if m.contains(&k2) { m.drop(); return 1; }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_map_overwrite() with(Alloc, Unsafe) -> i32 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        m.insert(1, 100);
+        m.insert(1, 200);
+        if m.len() != 1 { m.drop(); return 1; }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_map_remove() with(Alloc, Unsafe) -> i32 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        m.insert(1, 100);
+        m.insert(2, 200);
+        m.remove(&1);
+        let k1: i32 = 1;
+        let k2: i32 = 2;
+        if m.contains(&k1) { m.drop(); return 1; }
+        if !(m.contains(&k2)) { m.drop(); return 1; }
+        if m.len() != 1 { m.drop(); return 1; }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_map_remove_nonexistent() with(Alloc, Unsafe) -> i32 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        m.insert(1, 100);
+        let k: i32 = 99;
+        let r: Option<i32> = m.remove(&k);
+        match r {
+            Option#Some { value } => { m.drop(); return 1; },
+            Option#None => {}
+        }
+        if m.len() != 1 { m.drop(); return 1; }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_map_get() with(Alloc, Unsafe) -> i32 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        m.insert(5, 500);
+        m.insert(10, 1000);
+        let k5: i32 = 5;
+        let k99: i32 = 99;
+        let r: Option<&i32> = m.get(&k5);
+        match r {
+            Option#Some { value } => {
+                if *value != 500 { m.drop(); return 1; }
+            },
+            Option#None => { m.drop(); return 1; }
+        }
+        // get non-existent key
+        let r2: Option<&i32> = m.get(&k99);
+        match r2 {
+            Option#Some { value } => { m.drop(); return 1; },
+            Option#None => {}
+        }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_map_clear() with(Alloc, Unsafe) -> i32 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        m.insert(1, 10);
+        m.insert(2, 20);
+        m.clear();
+        if m.len() != 0 { m.drop(); return 1; }
+        if m.is_empty() == false { m.drop(); return 1; }
+        // reuse after clear
+        m.insert(3, 30);
+        if m.len() != 1 { m.drop(); return 1; }
+        let k: i32 = 3;
+        if !(m.contains(&k)) { m.drop(); return 1; }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_map_insert_reinsert_after_remove() with(Alloc, Unsafe) -> i32 {
+        // Remove a key, then re-insert with different value — tombstone reuse
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        m.insert(1, 100);
+        m.remove(&1);
+        let k: i32 = 1;
+        if m.contains(&k) { m.drop(); return 1; }
+        m.insert(1, 999);
+        if !(m.contains(&k)) { m.drop(); return 1; }
+        let r: Option<&i32> = m.get(&k);
+        match r {
+            Option#Some { value } => {
+                if *value != 999 { m.drop(); return 1; }
+            },
+            Option#None => { m.drop(); return 1; }
+        }
+        if m.len() != 1 { m.drop(); return 1; }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_map_for_each() with(Alloc, Unsafe) -> i32 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        m.insert(1, 10);
+        m.insert(2, 20);
+        m.insert(3, 30);
+        let mut sum: i32 = 0;
+        let ks: Vec<i32> = m.keys();
+        let i: u64 = 0;
+        while i < vec_len::<i32>(&ks) {
+            sum = sum + vec_get::<i32>(&ks, i);
+            i = i + 1;
+        }
+        vec_free::<i32>(ks);
+        if sum != 6 { m.drop(); return 1; }
+        let vs: Vec<i32> = m.values();
+        let mut vsum: i32 = 0;
+        let j: u64 = 0;
+        while j < vec_len::<i32>(&vs) {
+            vsum = vsum + vec_get::<i32>(&vs, j);
+            j = j + 1;
+        }
+        vec_free::<i32>(vs);
+        if vsum != 60 { m.drop(); return 1; }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_map_growth() with(Alloc, Unsafe) -> i32 {
+        // Insert enough to force rehash (initial cap=16, grows at 75% = 12)
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        let i: i32 = 0;
+        while i < 50 {
+            m.insert(i, i * 10);
+            i = i + 1;
+        }
+        if m.len() != 50 { m.drop(); return 1; }
+        // Verify a few values survive rehash
+        let k0: i32 = 0;
+        let k25: i32 = 25;
+        let k49: i32 = 49;
+        if !(m.contains(&k0)) { m.drop(); return 1; }
+        if !(m.contains(&k25)) { m.drop(); return 1; }
+        if !(m.contains(&k49)) { m.drop(); return 1; }
+        m.drop();
+        return 0;
+    }
+
+    fn sum_values(acc: i32, _k: &i32, v: &i32) -> i32 {
+        return acc + *v;
+    }
+
+    fn sum_keys(acc: i32, k: &i32) -> i32 {
+        return acc + *k;
+    }
+
+    #[test]
+    fn test_map_fold() with(Alloc, Unsafe) -> i32 {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        m.insert(1, 10);
+        m.insert(2, 20);
+        m.insert(3, 30);
+        let vsum: i32 = m.fold::<i32>(0, sum_values);
+        if vsum != 60 { m.drop(); return 1; }
+        let ksum: i32 = m.keys_fold::<i32>(0, sum_keys);
+        if ksum != 6 { m.drop(); return 1; }
+        m.drop();
+        return 0;
+    }
+}

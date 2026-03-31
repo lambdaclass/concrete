@@ -1,0 +1,163 @@
+// conhash — artifact integrity verifier in Concrete
+//
+// Usage: conhash <file> [expected_hex]
+//   Without expected_hex: prints the SHA-256 hash of the file.
+//   With expected_hex:    verifies the file matches the expected hash.
+//
+// The capability signatures tell the security story:
+//   sha256()           — with(Alloc)           — pure computation, no I/O
+//   read_file_raw()    — with(File, Alloc)     — reads disk, cannot print
+//   hex_encode()       — with(Alloc)           — pure formatting
+//   report_*()         — with(Console)         — output only, cannot read files
+//   verify_artifact()  — with(File, Console, Alloc) — orchestrates
+//   main()             — with(Std)             — entry point
+//
+// An auditor can verify from signatures alone:
+//   - the hasher never touches the filesystem or network
+//   - the file reader cannot leak data to the console
+//   - the reporter cannot read or modify files
+//   - only main() and verify_artifact() can bridge these boundaries
+
+mod conhash {
+    import std.fs.{read_file, FsError};
+    import std.result.{Result};
+    import std.bytes.{Bytes};
+    import std.args.{count, get};
+    import std.vec.{Vec};
+    import std.sha256.{hash_raw};
+    import std.hex.{encode_u32_vec};
+    import std.string.{String};
+
+    trusted extern fn free(ptr: *mut u8);
+
+    // --- File I/O: with(File, Alloc) — can read files, cannot print ---
+
+    struct Copy FileData { ptr: *mut u8, len: u64 }
+
+    trusted fn read_file_raw(path: &String) with(File, Alloc) -> FileData {
+        let result: Result<Bytes, FsError> = read_file(path);
+        match result {
+            Result#Ok { value } => {
+                let fd: FileData = FileData { ptr: value.ptr, len: value.len };
+                return fd;
+            },
+            Result#Err { error } => {
+                return FileData { ptr: 0 as *mut u8, len: 0 };
+            }
+        }
+    }
+
+    trusted fn free_file_data(fd: FileData) with(Alloc) {
+        if fd.ptr != (0 as *mut u8) {
+            free(fd.ptr);
+        }
+    }
+
+    // --- Reporting: with(Console) — can output, cannot read files ---
+
+    fn report_hash(filename: &String, hex: &String) with(Console) {
+        print_string(hex);
+        print_string(&"  ");
+        print_string(filename);
+        print_char(10);
+    }
+
+    fn report_ok(filename: &String) with(Console) {
+        print_string(filename);
+        print_string(&": OK\n");
+    }
+
+    fn report_fail(filename: &String, expected: &String, actual: &String) with(Console, Alloc) {
+        print_string(filename);
+        let mut msg: String = String::new();
+        msg.append(&": FAILED\n  expected: ");
+        msg.append(expected);
+        msg.append(&"\n  actual:   ");
+        msg.append(actual);
+        msg.push_char(10 as char);
+        print_string(&msg);
+        msg.drop();
+    }
+
+    fn report_error(filename: &String, reason: &String) with(Console, Alloc) {
+        let mut msg: String = String::new();
+        msg.append(&"conhash: ");
+        msg.append(filename);
+        msg.append(&": ");
+        msg.append(reason);
+        msg.push_char(10 as char);
+        print_string(&msg);
+        msg.drop();
+    }
+
+    // --- Verification: bridges File, Console, Alloc ---
+
+    trusted fn verify_artifact(filename: &String, expected_hex: &String) with(File, Console, Alloc) -> bool {
+        let fd: FileData = read_file_raw(filename);
+        if fd.ptr == (0 as *mut u8) {
+            report_error(filename, &"cannot open file");
+            return false;
+        }
+
+        let hash: Vec<u32> = hash_raw(fd.ptr, fd.len);
+        free_file_data(fd);
+        let actual_hex: String = encode_u32_vec(&hash);
+        hash.drop();
+
+        let expected_empty: bool = expected_hex.is_empty();
+        if expected_empty {
+            report_hash(filename, &actual_hex);
+            actual_hex.drop();
+            return true;
+        }
+
+        let matches: bool = actual_hex.eq(expected_hex);
+        if matches {
+            report_ok(filename);
+        } else {
+            report_fail(filename, expected_hex, &actual_hex);
+        }
+        actual_hex.drop();
+        return matches;
+    }
+
+    fn get_expected_hash(argc: Int) with(Alloc) -> String {
+        if argc >= 3 {
+            return get(2);
+        }
+        return "";
+    }
+
+    // --- Main: with(Std) — entry point ---
+
+    pub fn main() with(Std) -> Int {
+        let argc: Int = count();
+
+        if argc < 2 {
+            print_string(&"Usage: conhash <file> [expected_sha256]\n");
+            print_string(&"  Without expected hash: prints SHA-256 of file\n  With expected hash: verifies file integrity\n");
+            return 1;
+        }
+
+        let filename: String = get(1);
+        let expected: String = get_expected_hash(argc);
+
+        let t0: Int = clock_monotonic_ns();
+        let ok: bool = verify_artifact(&filename, &expected);
+        let t1: Int = clock_monotonic_ns();
+
+        let elapsed_ms: Int = (t1 - t0) / 1000000;
+        let mut timing: String = String::new();
+        timing.append(&"(");
+        timing.append_int(elapsed_ms);
+        timing.append(&" ms)\n");
+        print_string(&timing);
+        timing.drop();
+
+        expected.drop();
+        filename.drop();
+
+        if ok { return 0; }
+        return 1;
+    }
+}

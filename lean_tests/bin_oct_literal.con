@@ -1,0 +1,5 @@
+fn main() -> Int {
+    let a: Int = 0b1010;
+    let b: Int = 0o77;
+    return a + b;
+}

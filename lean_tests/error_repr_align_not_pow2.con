@@ -1,0 +1,9 @@
+// Error: alignment must be a power of 2
+#[repr(C, align(3))]
+struct Bad {
+    x: i32,
+}
+
+fn main() -> Int {
+    return 0;
+}

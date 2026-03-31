@@ -1,0 +1,15 @@
+mod Example {
+    fn main() -> Int {
+        return sum_to(4);
+    }
+
+    fn sum_to(limit: Int) -> Int {
+        let mut result: Int = 0;
+        let mut n: Int = 1;
+        while n <= limit {
+            result = result + n;
+            n = n + 1;
+        }
+        return result;
+    }
+}

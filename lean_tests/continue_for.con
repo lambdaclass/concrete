@@ -1,0 +1,13 @@
+// Test continue in for loop - skip multiples of 3
+// Expected: 27 (1+2+4+5+7+8)
+
+fn main() with(Std) -> Int {
+    let mut sum: Int = 0;
+    for (let mut i: Int = 0; i < 9; i = i + 1) {
+        if i % 3 == 0 {
+            continue;
+        }
+        sum = sum + i;
+    }
+    return sum;
+}

@@ -1,0 +1,37 @@
+// Test: defer + ? operator interaction — defer runs on error path
+// Expected: 42
+struct Resource { value: Int }
+
+impl Destroy for Resource {
+    fn destroy(&self) {
+        // cleanup
+    }
+}
+
+enum Result {
+    Ok { value: Int },
+    Err { code: Int },
+}
+
+fn might_fail(succeed: Bool) -> Result {
+    if succeed {
+        return Result#Ok { value: 42 };
+    } else {
+        return Result#Err { code: 1 };
+    }
+}
+
+fn use_with_defer() -> Result {
+    let mut r: Resource = Resource { value: 10 };
+    defer destroy(r);
+    let v: Int = might_fail(true)?;
+    return Result#Ok { value: v };
+}
+
+fn main() -> Int {
+    let result: Result = use_with_defer();
+    match result {
+        Result#Ok { value } -> { return value; }
+        Result#Err { code } -> { return code; }
+    }
+}

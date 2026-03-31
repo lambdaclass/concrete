@@ -1,0 +1,10 @@
+// Test: if/else where both branches return the same value (phi node optimization)
+// Expected: 42
+fn main() -> Int {
+    let x: Int = 10;
+    if x > 5 {
+        return 42;
+    } else {
+        return 42;
+    }
+}

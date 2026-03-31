@@ -1,0 +1,12 @@
+struct Point { x: Int, y: Int }
+
+trait Summable {
+    fn total(&self) -> Int;
+}
+
+impl Summable for Point {
+}
+
+fn main() -> Int {
+    return 0;
+}

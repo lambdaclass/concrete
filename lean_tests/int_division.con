@@ -1,0 +1,7 @@
+fn main() -> Int {
+    let a: Int = 7;
+    let b: Int = 2;
+    let q: Int = a / b;
+    let r: Int = a % b;
+    return q * 10 + r;
+}

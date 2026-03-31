@@ -1,0 +1,19 @@
+// Test: defer runs on early return from inside an if
+struct Resource { value: Int }
+
+impl Destroy for Resource {
+    fn destroy(&self) { }
+}
+
+fn compute(flag: Bool) -> Int {
+    let mut r: Resource = Resource { value: 42 };
+    defer destroy(r);
+    if flag {
+        return r.value;
+    }
+    return 0;
+}
+
+fn main() -> Int {
+    return compute(true);
+}

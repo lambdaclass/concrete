@@ -1,0 +1,8 @@
+struct Resource {
+    value: Int,
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { value: 42 };
+    return 0;
+}

@@ -1,0 +1,9 @@
+// Concatenation with empty string preserves original
+fn main() -> Int {
+    let a: String = "hello";
+    let b: String = "";
+    let c: String = string_concat(a, b);
+    let len: Int = string_length(&c);
+    drop_string(c);
+    return len;
+}

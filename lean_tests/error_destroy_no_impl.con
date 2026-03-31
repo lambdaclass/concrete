@@ -1,0 +1,8 @@
+// Error: destroy() on type without Destroy impl
+struct Thing { value: Int }
+
+fn main() -> Int {
+    let mut t: Thing = Thing { value: 42 };
+    destroy(t);
+    return 0;
+}

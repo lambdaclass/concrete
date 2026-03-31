@@ -1,0 +1,38 @@
+struct Matrix {
+    a: Int,
+    b: Int,
+    c: Int,
+    d: Int,
+}
+
+fn sum_matrix(m: Matrix) -> Int {
+    return m.a + m.b + m.c + m.d;
+}
+
+fn main() -> Int {
+    // Mutable struct with field assignment in nested loops.
+    // Tests that aggregate state in stable allocas works across nesting.
+    let mut m: Matrix = Matrix { a: 0, b: 0, c: 0, d: 0 };
+    let mut i: Int = 0;
+    while i < 3 {
+        let mut j: Int = 0;
+        while j < 4 {
+            m.a = m.a + 1;
+            m.b = m.b + i;
+            m.c = m.c + j;
+            j = j + 1;
+        }
+        m.d = m.d + 10;
+        i = i + 1;
+    }
+    // m.a = 3*4 = 12
+    // m.b = 0*4 + 1*4 + 2*4 = 12
+    // m.c = (0+1+2+3)*3 = 18
+    // m.d = 10*3 = 30
+    // total = 72
+    let total: Int = sum_matrix(m);
+    if total == 72 {
+        return 42;
+    }
+    return 1;
+}

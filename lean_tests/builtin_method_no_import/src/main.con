@@ -1,0 +1,18 @@
+// Regression test: builtin type methods (String.drop, String.append, etc.)
+// must be available without explicitly importing the type.
+// This project only imports read_to_string from std.fs — never imports String directly.
+// Before the fix, s.drop() failed with "no method 'drop' on type 'String'".
+
+mod main {
+    import std.fs.{read_to_string};
+
+    fn main() with(Alloc) -> i32 {
+        // String methods available without import std.string.{String}
+        let mut s: String = "hello";
+        s.append(&" world");
+        let len: u64 = s.len();
+        s.drop();
+        if len != 11 { return 1; }
+        return 0;
+    }
+}

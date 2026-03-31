@@ -1,0 +1,37 @@
+// Multiple trait implementations on same type: tests trait dispatch correctness
+trait Area {
+    fn area(&self) -> Int;
+}
+
+trait Perimeter {
+    fn perimeter(&self) -> Int;
+}
+
+struct Copy Square { side: Int }
+
+impl Area for Square {
+    fn area(&self) -> Int {
+        return self.side * self.side;
+    }
+}
+
+impl Perimeter for Square {
+    fn perimeter(&self) -> Int {
+        return self.side * 4;
+    }
+}
+
+fn measure_area<T: Area>(shape: T) -> Int {
+    return shape.area();
+}
+
+fn measure_perim<T: Perimeter>(shape: T) -> Int {
+    return shape.perimeter();
+}
+
+fn main() -> Int {
+    let s: Square = Square { side: 5 };
+    let a: Int = measure_area(s);
+    let p: Int = measure_perim(s);
+    return a + p;
+}

@@ -1,0 +1,25 @@
+// Nested match on two enums: tests exhaustiveness and deep pattern matching
+enum Color { Red {}, Green {}, Blue {} }
+enum Size { Small {}, Large {} }
+
+fn score(c: Color) -> Int {
+    match c {
+        Color#Red {} => { return 10; },
+        Color#Green {} => { return 20; },
+        Color#Blue {} => { return 30; },
+    }
+}
+
+fn apply_size(base: Int, s: Size) -> Int {
+    match s {
+        Size#Small {} => { return base; },
+        Size#Large {} => { return base * 2; },
+    }
+}
+
+fn main() -> Int {
+    let c: Color = Color#Blue {};
+    let s: Size = Size#Large {};
+    let base: Int = score(c);
+    return apply_size(base, s);
+}

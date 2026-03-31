@@ -1,0 +1,17 @@
+fn collatz_steps(n: Int) -> Int {
+    let mut steps: Int = 0;
+    let mut x: Int = n;
+    while x != 1 {
+        if x % 2 == 0 {
+            x = x / 2;
+        } else {
+            x = x * 3 + 1;
+        }
+        steps = steps + 1;
+    }
+    return steps;
+}
+
+fn main() -> Int {
+    return collatz_steps(27);
+}

@@ -1,0 +1,8 @@
+mod Lib {
+    fn secret() -> Int { return 42; }
+}
+
+mod Main {
+    import Lib.{ nonexistent };
+    fn main() -> Int { return 0; }
+}

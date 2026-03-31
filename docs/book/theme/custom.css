@@ -1,0 +1,101 @@
+.hero {
+  padding: 2.5rem 0 2rem;
+  border-bottom: 1px solid var(--searchbar-border-color);
+  margin-bottom: 2rem;
+}
+
+.hero h1 {
+  font-size: 3rem;
+  line-height: 1.05;
+  margin-bottom: 0.8rem;
+}
+
+.hero p {
+  font-size: 1.15rem;
+  max-width: 48rem;
+  color: var(--fg);
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.hero-actions a,
+.quick-links a {
+  display: inline-block;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--searchbar-border-color);
+  text-decoration: none;
+}
+
+.hero-actions a.primary {
+  background: var(--links);
+  color: var(--bg);
+  border-color: var(--links);
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.feature-card {
+  border: 1px solid var(--searchbar-border-color);
+  border-radius: 14px;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--bg) 92%, var(--sidebar-bg) 8%);
+}
+
+.feature-card h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.feature-card p {
+  margin-bottom: 0;
+}
+
+.quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.positioning-note {
+  border-left: 4px solid var(--links);
+  padding-left: 1rem;
+  margin: 1.5rem 0;
+}
+
+.content main h1 {
+  letter-spacing: -0.02em;
+}
+
+.content main h2 {
+  margin-top: 2.2rem;
+  padding-top: 0.2rem;
+}
+
+.content main pre {
+  border-radius: 14px;
+  border: 1px solid var(--searchbar-border-color);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.content main code {
+  border-radius: 6px;
+}
+
+.content main blockquote {
+  border-left: 4px solid var(--links);
+  background: color-mix(in srgb, var(--bg) 90%, var(--sidebar-bg) 10%);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+}

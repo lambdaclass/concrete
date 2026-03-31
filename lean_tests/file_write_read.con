@@ -1,0 +1,80 @@
+// File I/O: write a string to a file, read it back, check length
+trusted extern fn fopen(name: *mut u8, mode: *mut u8) -> *const u8;
+trusted extern fn fclose(file: *const u8) -> i32;
+trusted extern fn fwrite(buf: *const u8, size: u64, count: u64, file: *const u8) -> u64;
+trusted extern fn fseek(file: *const u8, offset: i64, whence: i32) -> i32;
+trusted extern fn ftell(file: *const u8) -> i64;
+trusted extern fn malloc(size: u64) -> *mut u8;
+trusted extern fn free(ptr: *mut u8);
+
+trusted fn string_to_cstr(s: &String) -> *mut u8 {
+    let len: Int = string_length(s);
+    let buf: *mut u8 = malloc((len + 1) as u64);
+    let mut i: Int = 0;
+    while i < len {
+        let ch: Int = string_char_at(s, i);
+        let dst: *mut u8 = buf + (i as u64);
+        *dst = ch as u8;
+        i = i + 1;
+    }
+    let null_pos: *mut u8 = buf + (len as u64);
+    *null_pos = 0;
+    return buf;
+}
+
+trusted fn string_to_buf(s: &String) -> *mut u8 {
+    let len: Int = string_length(s);
+    let buf: *mut u8 = malloc(len as u64);
+    let mut i: Int = 0;
+    while i < len {
+        let ch: Int = string_char_at(s, i);
+        let dst: *mut u8 = buf + (i as u64);
+        *dst = ch as u8;
+        i = i + 1;
+    }
+    return buf;
+}
+
+trusted fn mode_cstr(ch: u8) -> *mut u8 {
+    let buf: *mut u8 = malloc(2);
+    *buf = ch;
+    let p1: *mut u8 = buf + 1;
+    *p1 = 0;
+    return buf;
+}
+
+trusted fn write_file_str(path: &String, data: &String) with(File) -> Int {
+    let path_buf: *mut u8 = string_to_cstr(path);
+    let mode_buf: *mut u8 = mode_cstr(119); // 'w'
+    let fp: *const u8 = fopen(path_buf, mode_buf);
+    free(mode_buf);
+    free(path_buf);
+    let data_len: Int = string_length(data);
+    let data_buf: *mut u8 = string_to_buf(data);
+    let written: u64 = fwrite(data_buf as *const u8, 1, data_len as u64, fp);
+    free(data_buf);
+    fclose(fp);
+    return written as Int;
+}
+
+trusted fn read_file_len(path: &String) with(File) -> Int {
+    let path_buf: *mut u8 = string_to_cstr(path);
+    let mode_buf: *mut u8 = mode_cstr(114); // 'r'
+    let fp: *const u8 = fopen(path_buf, mode_buf);
+    free(mode_buf);
+    free(path_buf);
+    fseek(fp, 0, 2);
+    let size: i64 = ftell(fp);
+    fclose(fp);
+    return size as Int;
+}
+
+fn main() with(Std) -> Int {
+    let path: String = "/tmp/concrete_test_io.txt";
+    let data: String = "hello";
+    write_file_str(&path, &data);
+    drop_string(data);
+    let len: Int = read_file_len(&path);
+    drop_string(path);
+    return len;
+}

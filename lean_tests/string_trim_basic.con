@@ -1,0 +1,9 @@
+// string_trim: trim "  hello  ", check length is 5
+fn main() -> Int {
+    let s: String = "  hello  ";
+    let trimmed: String = string_trim(&s);
+    let len: Int = string_length(&trimmed);
+    drop_string(trimmed);
+    drop_string(s);
+    return len;
+}

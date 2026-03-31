@@ -1,0 +1,24 @@
+// repr(C) struct containing another repr(C) struct
+#[repr(C)]
+struct Vec2 {
+    x: i32,
+    y: i32,
+}
+
+#[repr(C)]
+struct Rect {
+    origin: Vec2,
+    size: Vec2,
+}
+
+fn area(r: Rect) -> i32 {
+    return r.size.x * r.size.y;
+}
+
+fn main() -> Int {
+    let origin: Vec2 = Vec2 { x: 0, y: 0 };
+    let size: Vec2 = Vec2 { x: 6, y: 7 };
+    let r: Rect = Rect { origin: origin, size: size };
+    let a: i32 = area(r);
+    return a as Int;
+}

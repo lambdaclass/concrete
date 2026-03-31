@@ -1,0 +1,8 @@
+// Error: 'alloc' is a reserved identifier
+fn alloc(x: Int) -> Int {
+    return x;
+}
+
+fn main() -> Int {
+    return alloc(42);
+}

@@ -1,0 +1,11 @@
+// Tests that reassignment of Copy types is allowed
+mod test {
+    fn main() -> i32 {
+        let mut x: i32 = 10;
+        x = 20;
+        let mut b: bool = true;
+        b = false;
+        if b { return 1; }
+        return x - 20;
+    }
+}

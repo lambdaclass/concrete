@@ -1,0 +1,11 @@
+// Test: while loop that executes exactly once (immediate break)
+// Expected: 42
+fn main() -> Int {
+    let mut result: Int = 0;
+    let mut done: Bool = false;
+    while !done {
+        result = 42;
+        done = true;
+    }
+    return result;
+}

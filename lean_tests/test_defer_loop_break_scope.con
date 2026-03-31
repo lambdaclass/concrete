@@ -1,0 +1,20 @@
+// Test: defer inside loop body + break.
+// The deferred cleanup runs when break exits the loop body scope.
+fn work() with(Console, Alloc) -> i32 {
+    let mut i: i32 = 0;
+    while i < 10 {
+        let s: String = "y";
+        defer drop_string(s);
+        print_string(&s);
+        if i == 2 {
+            break;
+        }
+        i = i + 1;
+    }
+    print_char(10);
+    return i;
+}
+
+fn main() with(Std) -> Int {
+    return work() as Int;
+}

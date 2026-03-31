@@ -1,0 +1,9 @@
+mod Lib {
+    pub type Distance = Int;
+    pub fn zero_dist() -> Int { return 0; }
+    pub fn add_dist(a: Int, b: Int) -> Int { return a + b; }
+}
+mod Main {
+    import Lib.{ zero_dist, add_dist };
+    fn main() -> Int { return add_dist(zero_dist(), 42); }
+}

@@ -1,0 +1,11 @@
+// Error: extern fn with non-repr(C) struct parameter
+struct Point {
+    x: Int,
+    y: Int,
+}
+
+extern fn process_point(p: Point) -> i32;
+
+fn main() with(Unsafe) -> Int {
+    return 0;
+}

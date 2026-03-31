@@ -1,0 +1,17 @@
+// Nested labeled loops with break to outer
+fn main() -> Int {
+    let mut sum: Int = 0;
+    let mut i: Int = 0;
+    'outer: while i < 10 {
+        let mut j: Int = 0;
+        while j < 10 {
+            sum = sum + 1;
+            j = j + 1;
+            if sum >= 25 {
+                break 'outer;
+            }
+        }
+        i = i + 1;
+    }
+    return sum;
+}

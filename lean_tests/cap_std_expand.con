@@ -1,0 +1,15 @@
+// Test: main() with(Std) calling multiple effectful functions
+// Expected: 0
+fn print_stuff() with(Console) {
+    // uses Console capability
+}
+
+fn read_env() with(Env) {
+    // uses Env capability
+}
+
+fn main() with(Std) -> Int {
+    print_stuff();
+    read_env();
+    return 0;
+}

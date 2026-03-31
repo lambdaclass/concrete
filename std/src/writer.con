@@ -1,0 +1,141 @@
+mod writer {
+    import std.libc.{write as libc_write};
+    import std.string.{String, int_to_digit};
+
+    /// Writer is a minimal output sink for stdout or stderr.
+    ///
+    /// Capability story:
+    ///   All writer methods require Console — you need console authority to write.
+    ///   write_int is allocation-free — integer formatting uses a fixed stack buffer.
+
+    pub struct Copy Writer {
+        fd: i32,
+    }
+
+    trusted impl Writer {
+        /// Create a writer that writes to stdout.
+        pub fn stdout() -> Writer {
+            return Writer { fd: 1 };
+        }
+
+        /// Create a writer that writes to stderr.
+        pub fn stderr() -> Writer {
+            return Writer { fd: 2 };
+        }
+
+        /// Write a string's contents to the output.
+        pub fn str(&self, s: &String) with(Console) {
+            if s.len > 0 {
+                libc_write(self.fd, s.ptr as *const u8, s.len);
+            }
+        }
+
+        /// Write a single character.
+        pub fn char(&self, c: char) with(Console) {
+            let byte: u8 = c as u8;
+            libc_write(self.fd, &byte as *const u8, 1);
+        }
+
+        /// Write a newline.
+        pub fn newline(&self) with(Console) {
+            self.char(10 as char);
+        }
+
+        /// Write an integer formatted as decimal. Allocation-free.
+        pub fn int(&self, n: Int) with(Console) {
+            if n == 0 {
+                self.char('0');
+                return;
+            }
+
+            // Format into a fixed stack buffer (21 bytes max for i64)
+            let buf: [u8; 21] = [0; 21];
+            let base: *mut u8 = &buf as *mut u8;
+            let mut pos: Int = 20;
+            let negative: bool = n < 0;
+            let mut val: Int = n;
+            if negative {
+                val = 0 - val;
+            }
+
+            while val > 0 {
+                let digit: Int = val - ((val / 10) * 10);
+                let p: *mut u8 = base + (pos as u64);
+                *p = (48 + digit) as u8;
+                pos = pos - 1;
+                val = val / 10;
+            }
+
+            if negative {
+                let p: *mut u8 = base + (pos as u64);
+                *p = 45;
+                pos = pos - 1;
+            }
+
+            // Write from pos+1 to end
+            let start: u64 = (pos + 1) as u64;
+            let len: u64 = 21 - start;
+            let start_ptr: *const u8 = (base as *const u8) + start;
+            libc_write(self.fd, start_ptr, len);
+        }
+
+        /// Write a boolean as "true" or "false".
+        pub fn bool(&self, b: bool) with(Console) {
+            if b {
+                self.str(&"true");
+            } else {
+                self.str(&"false");
+            }
+        }
+    }
+
+    #[test]
+    fn test_writer_str() with(Console) -> i32 {
+        let w: Writer = Writer::stdout();
+        w.str(&"hello");
+        return 0;
+    }
+
+    #[test]
+    fn test_writer_char() with(Console) -> i32 {
+        let w: Writer = Writer::stdout();
+        w.char('x');
+        return 0;
+    }
+
+    #[test]
+    fn test_writer_int_zero() with(Console) -> i32 {
+        let w: Writer = Writer::stdout();
+        w.int(0);
+        return 0;
+    }
+
+    #[test]
+    fn test_writer_int_positive() with(Console) -> i32 {
+        let w: Writer = Writer::stdout();
+        w.int(12345);
+        return 0;
+    }
+
+    #[test]
+    fn test_writer_int_negative() with(Console) -> i32 {
+        let w: Writer = Writer::stdout();
+        w.int(0 - 42);
+        return 0;
+    }
+
+    #[test]
+    fn test_writer_bool() with(Console) -> i32 {
+        let w: Writer = Writer::stdout();
+        w.bool(true);
+        w.bool(false);
+        return 0;
+    }
+
+    #[test]
+    fn test_writer_newline() with(Console) -> i32 {
+        let w: Writer = Writer::stdout();
+        w.newline();
+        return 0;
+    }
+}

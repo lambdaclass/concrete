@@ -1,0 +1,7 @@
+fn main() -> Int {
+    let mut sum: Int = 0;
+    for (let mut i: Int = 0; i < 5; i = i + 1) {
+        sum = sum + i;
+    }
+    return sum;
+}

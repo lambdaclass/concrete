@@ -1,0 +1,31 @@
+// module main
+enum Option<T> {
+  Some { value: T },
+  None,
+}
+
+enum Result<T, E> {
+  Ok { value: T },
+  Err { value: E },
+}
+
+enum IntList {
+  Nil,
+  Cons { head: Int },
+}
+
+fn value(l: IntList) -> Int {
+  match l {
+  IntList::Nil -> {
+      return 0;
+  }
+  IntList::Cons { head: Int } -> {
+      return head;
+  }
+};
+}
+
+fn main() -> Int {
+  let l: IntList = IntList::Cons { head: 42 };
+  return value(l);
+}

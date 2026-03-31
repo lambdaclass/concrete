@@ -1,0 +1,16 @@
+mod test_direct_use {
+    mod ffi {
+        extern fn malloc(size: u64) -> *mut u8;
+    }
+
+    mod intrinsics {
+        #[intrinsic = "sizeof"]
+        fn sizeof<T>() -> u64;
+    }
+
+    pub fn main() -> i32 {
+        let mut x: *mut i32 = ffi::malloc(4) as *mut i32;
+        *x = 2 + (intrinsics::sizeof::<i32>() as i32);
+        return *x;
+    }
+}

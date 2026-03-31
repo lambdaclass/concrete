@@ -1,0 +1,11 @@
+mod GenericsBasic {
+    pub fn hello_generics<T>(x: T) -> T {
+        return x;
+    }
+
+    pub fn main() -> i32 {
+        let value: i32 = hello_generics::<i32>(4);
+
+        return value;
+    }
+}

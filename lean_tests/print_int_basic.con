@@ -1,0 +1,19 @@
+// print_int: use trusted extern fn to print via putchar
+trusted extern fn putchar(c: i32) -> i32;
+
+trusted fn print_int(x: i64) with(Console) {
+    let s: String = int_to_string(x);
+    let len: Int = string_length(&s);
+    let mut i: Int = 0;
+    while i < len {
+        let ch: Int = string_char_at(&s, i);
+        putchar(ch as i32);
+        i = i + 1;
+    }
+    putchar(10);
+    drop_string(s);
+}
+
+fn main() with(Std) {
+    print_int(42);
+}

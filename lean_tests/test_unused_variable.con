@@ -1,0 +1,9 @@
+// Test: unused variables (Copy types) should be handled by optimizer
+// Expected: 42
+fn main() -> Int {
+    let a: Int = 100;
+    let b: Int = 200;
+    let c: Bool = true;
+    let result: Int = 42;
+    return result;
+}

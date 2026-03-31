@@ -1,0 +1,20 @@
+mod Lib {
+    pub struct Point { x: Int, y: Int }
+    pub trait Summable {
+        fn total(&self) -> Int;
+    }
+    impl Summable for Point {
+        fn total(&self) -> Int { return self.x + self.y; }
+    }
+    fn consume(p: Point) -> Int { return p.x + p.y; }
+    pub fn make_and_sum(x: Int, y: Int) -> Int {
+        let p: Point = Point { x: x, y: y };
+        let result: Int = p.total();
+        let _: Int = consume(p);
+        return result;
+    }
+}
+mod Main {
+    import Lib.{ make_and_sum };
+    fn main() -> Int { return make_and_sum(12, 30); }
+}

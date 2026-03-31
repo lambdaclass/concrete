@@ -1,0 +1,6 @@
+// Error: extern fn with non-FFI-safe String parameter
+extern fn bad_extern(s: String) -> i32;
+
+fn main() with(Unsafe) -> Int {
+    return 0;
+}

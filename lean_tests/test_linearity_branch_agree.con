@@ -1,0 +1,17 @@
+// Test: linear struct consumed in both branches of if/else
+struct Resource { value: Int }
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { value: 42 };
+    let mut result: Int = 0;
+    if true {
+        result = consume(r);
+    } else {
+        result = consume(r);
+    }
+    return result;
+}

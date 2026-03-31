@@ -1,0 +1,27 @@
+// Test: multiple nested scopes with LIFO ordering across scope boundaries.
+// Deferred calls should run innermost-scope-first, and within each scope LIFO.
+// Scope structure:
+//   function scope: defer drop_string(a)   -- runs last
+//   if block:       defer drop_string(b)   -- runs second
+//                   defer drop_string(c)   -- runs first (LIFO within scope)
+// Expected print order: c b a (innermost scope's last defer first)
+fn work() with(Console, Alloc) -> i32 {
+    let a: String = "a";
+    defer drop_string(a);
+    if true {
+        let b: String = "b";
+        defer drop_string(b);
+        let c: String = "c";
+        defer drop_string(c);
+        print_string(&c);
+        print_string(&b);
+        print_string(&a);
+        print_char(10);
+        return 0;
+    }
+    return 1;
+}
+
+fn main() with(Std) -> Int {
+    return work() as Int;
+}

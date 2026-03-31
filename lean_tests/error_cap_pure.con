@@ -1,0 +1,13 @@
+// Pure function cannot call effectful function
+fn do_io() with(File) -> Int {
+    return 42;
+}
+
+fn pure_fn() -> Int {
+    let x: Int = do_io();
+    return x;
+}
+
+fn main() -> Int {
+    return 0;
+}

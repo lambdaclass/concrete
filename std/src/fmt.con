@@ -1,0 +1,436 @@
+mod fmt {
+    import std.alloc.{grow,dealloc};
+    import std.string.{int_to_digit};
+
+    pub trusted fn format_int(value: i64) with(Alloc) -> String {
+        if value == 0 {
+            let s: String = "0";
+            return s;
+        }
+
+        let buf: String = String::new();
+        let negative: bool = value < 0;
+        let n: i64 = value;
+        if negative {
+            n = 0 - n;
+        }
+
+        while n > 0 {
+            let digit: i64 = n - ((n / 10) * 10);
+            buf.push_char(int_to_digit::<i64>(digit));
+            n = n / 10;
+        }
+
+        if negative {
+            buf.push_char('-');
+        }
+
+        // Reverse in place
+        let i: u64 = 0;
+        let j: u64 = buf.len - 1;
+        while i < j {
+            let a: char = buf.get_unchecked(i);
+            let b: char = buf.get_unchecked(j);
+            let pa: *mut u8 = buf.ptr + i;
+            let pb: *mut u8 = buf.ptr + j;
+            *pa = b as u8;
+            *pb = a as u8;
+            i = i + 1;
+            j = j - 1;
+        }
+
+        return buf;
+    }
+
+    pub trusted fn format_uint(value: u64) with(Alloc) -> String {
+        if value == 0 {
+            let s: String = "0";
+            return s;
+        }
+
+        let buf: String = String::new();
+        let n: u64 = value;
+
+        while n > 0 {
+            let digit: u64 = n - ((n / 10) * 10);
+            buf.push_char(int_to_digit::<u64>(digit));
+            n = n / 10;
+        }
+
+        // Reverse in place
+        let i: u64 = 0;
+        let j: u64 = buf.len - 1;
+        while i < j {
+            let a: char = buf.get_unchecked(i);
+            let b: char = buf.get_unchecked(j);
+            let pa: *mut u8 = buf.ptr + i;
+            let pb: *mut u8 = buf.ptr + j;
+            *pa = b as u8;
+            *pb = a as u8;
+            i = i + 1;
+            j = j - 1;
+        }
+
+        return buf;
+    }
+
+    fn hex_digit(v: u64) -> char {
+        if v < 10 {
+            return int_to_digit::<u64>(v);
+        }
+        // 'a' = 97, so 97 + (v - 10)
+        let base: u64 = 87;
+        return (base + v) as char;
+    }
+
+    pub trusted fn format_hex(value: u64) with(Alloc) -> String {
+        if value == 0 {
+            let s: String = "0x0";
+            return s;
+        }
+
+        let buf: String = String::new();
+        let n: u64 = value;
+
+        while n > 0 {
+            let digit: u64 = n & 15;
+            buf.push_char(hex_digit(digit));
+            n = n >> 4;
+        }
+
+        buf.push_char('x');
+        buf.push_char('0');
+
+        // Reverse in place
+        let i: u64 = 0;
+        let j: u64 = buf.len - 1;
+        while i < j {
+            let a: char = buf.get_unchecked(i);
+            let b: char = buf.get_unchecked(j);
+            let pa: *mut u8 = buf.ptr + i;
+            let pb: *mut u8 = buf.ptr + j;
+            *pa = b as u8;
+            *pb = a as u8;
+            i = i + 1;
+            j = j - 1;
+        }
+
+        return buf;
+    }
+
+    pub trusted fn format_bin(value: u64) with(Alloc) -> String {
+        if value == 0 {
+            let s: String = "0b0";
+            return s;
+        }
+
+        let buf: String = String::new();
+        let n: u64 = value;
+
+        while n > 0 {
+            let digit: u64 = n & 1;
+            buf.push_char(int_to_digit::<u64>(digit));
+            n = n >> 1;
+        }
+
+        buf.push_char('b');
+        buf.push_char('0');
+
+        // Reverse in place
+        let i: u64 = 0;
+        let j: u64 = buf.len - 1;
+        while i < j {
+            let a: char = buf.get_unchecked(i);
+            let b: char = buf.get_unchecked(j);
+            let pa: *mut u8 = buf.ptr + i;
+            let pb: *mut u8 = buf.ptr + j;
+            *pa = b as u8;
+            *pb = a as u8;
+            i = i + 1;
+            j = j - 1;
+        }
+
+        return buf;
+    }
+
+    pub trusted fn format_oct(value: u64) with(Alloc) -> String {
+        if value == 0 {
+            let s: String = "0o0";
+            return s;
+        }
+
+        let buf: String = String::new();
+        let n: u64 = value;
+
+        while n > 0 {
+            let digit: u64 = n & 7;
+            buf.push_char(int_to_digit::<u64>(digit));
+            n = n >> 3;
+        }
+
+        buf.push_char('o');
+        buf.push_char('0');
+
+        // Reverse in place
+        let i: u64 = 0;
+        let j: u64 = buf.len - 1;
+        while i < j {
+            let a: char = buf.get_unchecked(i);
+            let b: char = buf.get_unchecked(j);
+            let pa: *mut u8 = buf.ptr + i;
+            let pb: *mut u8 = buf.ptr + j;
+            *pa = b as u8;
+            *pb = a as u8;
+            i = i + 1;
+            j = j - 1;
+        }
+
+        return buf;
+    }
+
+    pub trusted fn format_bool(value: bool) with(Alloc) -> String {
+        if value {
+            let s: String = "true";
+            return s;
+        }
+        let s: String = "false";
+        return s;
+    }
+
+    pub fn pad_left(s: &String, width: u64, fill: char) with(Alloc) -> String {
+        if s.len >= width {
+            // Copy the string as-is
+            let result: String = String::new();
+            let i: u64 = 0;
+            while i < s.len {
+                result.push_char(s.get_unchecked(i));
+                i = i + 1;
+            }
+            return result;
+        }
+
+        let result: String = String::new();
+        let pad: u64 = width - s.len;
+
+        let i: u64 = 0;
+        while i < pad {
+            result.push_char(fill);
+            i = i + 1;
+        }
+
+        i = 0;
+        while i < s.len {
+            result.push_char(s.get_unchecked(i));
+            i = i + 1;
+        }
+
+        return result;
+    }
+
+    pub fn pad_right(s: &String, width: u64, fill: char) with(Alloc) -> String {
+        let result: String = String::new();
+
+        let i: u64 = 0;
+        while i < s.len {
+            result.push_char(s.get_unchecked(i));
+            i = i + 1;
+        }
+
+        if s.len < width {
+            let pad: u64 = width - s.len;
+            i = 0;
+            while i < pad {
+                result.push_char(fill);
+                i = i + 1;
+            }
+        }
+
+        return result;
+    }
+
+    import std.test.{assert_eq, assert_true};
+
+    #[test]
+    fn test_format_int_positive() with(Alloc) -> i32 {
+        let s: String = format_int(12345);
+        let expected: String = "12345";
+        if !assert_eq::<u64>(s.len, 5, "format_int(12345) should have len 5") {
+            s.drop();
+            expected.drop();
+            return 1;
+        }
+        let i: u64 = 0;
+        while i < s.len {
+            if s.get_unchecked(i) != expected.get_unchecked(i) {
+                s.drop();
+                expected.drop();
+                return 1;
+            }
+            i = i + 1;
+        }
+        s.drop();
+        expected.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_format_int_negative() with(Alloc) -> i32 {
+        let s: String = format_int(-42);
+        let expected: String = "-42";
+        if !assert_eq::<u64>(s.len, 3, "format_int(-42) should have len 3") {
+            s.drop();
+            expected.drop();
+            return 1;
+        }
+        let i: u64 = 0;
+        while i < s.len {
+            if s.get_unchecked(i) != expected.get_unchecked(i) {
+                s.drop();
+                expected.drop();
+                return 1;
+            }
+            i = i + 1;
+        }
+        s.drop();
+        expected.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_format_int_zero() with(Alloc) -> i32 {
+        let s: String = format_int(0);
+        let expected: String = "0";
+        if !assert_eq::<u64>(s.len, 1, "format_int(0) should have len 1") {
+            s.drop();
+            expected.drop();
+            return 1;
+        }
+        if s.get_unchecked(0) != '0' {
+            s.drop();
+            expected.drop();
+            return 1;
+        }
+        s.drop();
+        expected.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_format_hex() with(Alloc) -> i32 {
+        let s: String = format_hex(255);
+        let expected: String = "0xff";
+        if !assert_eq::<u64>(s.len, 4, "format_hex(255) should have len 4") {
+            s.drop();
+            expected.drop();
+            return 1;
+        }
+        let i: u64 = 0;
+        while i < s.len {
+            if s.get_unchecked(i) != expected.get_unchecked(i) {
+                s.drop();
+                expected.drop();
+                return 1;
+            }
+            i = i + 1;
+        }
+        s.drop();
+        expected.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_format_bin() with(Alloc) -> i32 {
+        let s: String = format_bin(10);
+        let expected: String = "0b1010";
+        if !assert_eq::<u64>(s.len, 6, "format_bin(10) should have len 6") {
+            s.drop();
+            expected.drop();
+            return 1;
+        }
+        let i: u64 = 0;
+        while i < s.len {
+            if s.get_unchecked(i) != expected.get_unchecked(i) {
+                s.drop();
+                expected.drop();
+                return 1;
+            }
+            i = i + 1;
+        }
+        s.drop();
+        expected.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_format_bool() with(Alloc) -> i32 {
+        let t: String = format_bool(true);
+        let f: String = format_bool(false);
+        if !assert_eq::<u64>(t.len, 4, "format_bool(true) should have len 4") {
+            t.drop();
+            f.drop();
+            return 1;
+        }
+        if !assert_eq::<u64>(f.len, 5, "format_bool(false) should have len 5") {
+            t.drop();
+            f.drop();
+            return 1;
+        }
+        t.drop();
+        f.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_pad_left() with(Alloc) -> i32 {
+        let s: String = "42";
+        let padded: String = pad_left(&s, 5, '0');
+        let expected: String = "00042";
+        if !assert_eq::<u64>(padded.len, 5, "pad_left should produce len 5") {
+            s.drop();
+            padded.drop();
+            expected.drop();
+            return 1;
+        }
+        let i: u64 = 0;
+        while i < padded.len {
+            if padded.get_unchecked(i) != expected.get_unchecked(i) {
+                s.drop();
+                padded.drop();
+                expected.drop();
+                return 1;
+            }
+            i = i + 1;
+        }
+        s.drop();
+        padded.drop();
+        expected.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_pad_right() with(Alloc) -> i32 {
+        let s: String = "hi";
+        let padded: String = pad_right(&s, 5, '.');
+        let expected: String = "hi...";
+        if !assert_eq::<u64>(padded.len, 5, "pad_right should produce len 5") {
+            s.drop();
+            padded.drop();
+            expected.drop();
+            return 1;
+        }
+        let i: u64 = 0;
+        while i < padded.len {
+            if padded.get_unchecked(i) != expected.get_unchecked(i) {
+                s.drop();
+                padded.drop();
+                expected.drop();
+                return 1;
+            }
+            i = i + 1;
+        }
+        s.drop();
+        padded.drop();
+        expected.drop();
+        return 0;
+    }
+}

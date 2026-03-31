@@ -1,0 +1,20 @@
+// Test: defer inside a nested if branch
+// Only the taken branch's defer should run.
+fn work(flag: bool) with(Console, Alloc) -> i32 {
+    let s: String = "yes";
+    defer drop_string(s);
+    if flag {
+        print_string(&s);
+        print_char(10);
+        return 1;
+    }
+    print_string(&s);
+    print_char(10);
+    return 0;
+}
+
+fn main() with(Std) -> Int {
+    let a: i32 = work(true);
+    let b: i32 = work(false);
+    return (a + b) as Int;
+}

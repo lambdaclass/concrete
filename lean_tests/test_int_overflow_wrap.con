@@ -1,0 +1,10 @@
+// Test: integer arithmetic near i64 boundaries
+fn main() -> Int {
+    let max: Int = 9223372036854775807;
+    let zero: Int = max + 0;
+    // Verify max + 0 == max by checking last digits
+    // max mod 256 = 127, so we use that
+    let low: Int = zero - 9223372036854775765;
+    // low = 42
+    return low;
+}

@@ -1,0 +1,7 @@
+// Error: returning a reference from borrow block
+fn main() -> &Int {
+    let mut x: Int = 10;
+    borrow x as r in R {
+        return r;
+    }
+}

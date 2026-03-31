@@ -1,0 +1,8 @@
+mod Lib {
+    pub const MAGIC: Int = 42;
+    pub fn get_magic() -> Int { return 42; }
+}
+mod Main {
+    import Lib.{ get_magic };
+    fn main() -> Int { return get_magic(); }
+}

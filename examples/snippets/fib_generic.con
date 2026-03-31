@@ -1,0 +1,12 @@
+mod fib {
+     pub fn fib<T>(n: T) -> T {
+        if n < 2 {
+            return n;
+        }
+        return fib::<T>(n - 1) + fib::<T>(n - 2);
+    }
+
+    fn main() -> i32 {
+        return fib::<i32>(10);
+    }
+}

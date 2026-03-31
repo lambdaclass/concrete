@@ -1,0 +1,9 @@
+// Test: read fields via -> on Heap<T>
+struct Pair { a: Int, b: Int }
+
+fn main() with(Std) -> Int {
+    let p: Heap<Pair> = alloc(Pair { a: 8, b: 12 });
+    let sum: Int = p->a + p->b;
+    free(p);
+    return sum;
+}

@@ -1,0 +1,13 @@
+// Test: set every element in a vec and sum them
+fn main() with(Alloc) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    vec_push(&mut v, 0);
+    vec_push(&mut v, 0);
+    vec_push(&mut v, 0);
+    vec_set(&mut v, 0, 10);
+    vec_set(&mut v, 1, 20);
+    vec_set(&mut v, 2, 30);
+    let sum: Int = vec_get(&v, 0) + vec_get(&v, 1) + vec_get(&v, 2);
+    vec_free(v);
+    return sum;
+}

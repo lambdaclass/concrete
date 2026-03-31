@@ -1,0 +1,17 @@
+// Regression test: i32 literal type inference in binary operations.
+// Bug: `0 - a` where a: i32 generated `sub i64 0, %i32_val` (type mismatch).
+// Expected output: 42
+
+fn main() with(Std) -> Int {
+    let a: i32 = 10;
+    let b: i32 = 0 - a;          // Was: sub i64 0, %i32  — now: sub i32 0, %i32
+    if b != -10 { return 1; }
+
+    let c: i32 = 52;
+    let d: i32 = 0 + c;          // Literal 0 should match i32
+    if d != 52 { return 2; }
+
+    // b + d = -10 + 52 = 42
+    let result: i32 = b + d;
+    return result as Int;
+}

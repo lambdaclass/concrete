@@ -1,0 +1,13 @@
+// string_eq: compare two equal strings
+fn main() -> Int {
+    let a: String = "hello";
+    let b: String = "hello";
+    let eq: Bool = string_eq(&a, &b);
+    drop_string(a);
+    drop_string(b);
+    if eq {
+        return 1;
+    } else {
+        return 0;
+    }
+}

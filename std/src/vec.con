@@ -1,0 +1,356 @@
+mod vec {
+    import std.mem.{sizeof};
+    import std.alloc.{grow,dealloc};
+    import std.math.{max};
+    import std.option.{Option};
+
+    pub struct Vec<T> {
+        ptr: *mut T,
+        len: u64,
+        cap: u64,
+    }
+
+    trusted impl<T> Vec<T> {
+        pub fn new() -> Vec<T> {
+            let vec: Vec<T> = Vec::<T> {
+                ptr: 0 as *mut T,
+                len: 0,
+                cap: 0,
+            };
+            return vec;
+        }
+
+        pub fn push(&mut self, value: T) with(Alloc) {
+            if self.len >= self.cap {
+                self.grow();
+            }
+
+            let target_ptr: *mut T = self.ptr + self.len;
+            *target_ptr = value;
+            self.len = self.len + 1;
+        }
+
+        pub fn pop(&mut self) -> Option<T> {
+            if self.len == 0 {
+                return Option::<T>#None;
+            }
+            self.len = self.len - 1;
+            let target_ptr: *mut T = self.ptr + self.len;
+            return Option::<T>#Some { value: *target_ptr };
+        }
+
+        /// Bounds-checked access. Returns None if index is out of bounds.
+        pub fn get(&self, at: u64) -> Option<&T> {
+            if at >= self.len {
+                return Option::<&T>#None;
+            }
+            let target_ptr: *mut T = self.ptr + at;
+            return Option::<&T>#Some { value: target_ptr as &T };
+        }
+
+        /// Unchecked access. Caller must ensure index is within bounds.
+        pub fn get_unchecked(&self, at: u64) -> &T {
+            let target_ptr: *mut T = self.ptr + at;
+            return target_ptr as &T;
+        }
+
+        pub fn get_mut(&mut self, at: u64) -> &mut T {
+            let target_ptr: *mut T = self.ptr + at;
+            return target_ptr as &mut T;
+        }
+
+        /// Bounds-checked set. Returns false if index is out of bounds.
+        pub fn set(&mut self, at: u64, value: T) -> bool {
+            if at >= self.len {
+                return false;
+            }
+            let target_ptr: *mut T = self.ptr + at;
+            *target_ptr = value;
+            return true;
+        }
+
+        /// Unchecked set. Caller must ensure index is within bounds.
+        pub fn set_unchecked(&mut self, at: u64, value: T) {
+            let target_ptr: *mut T = self.ptr + at;
+            *target_ptr = value;
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        pub fn cap(&self) -> u64 {
+            return self.cap;
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.len == 0;
+        }
+
+        fn grow(&mut self) with(Alloc) {
+            let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
+            self.ptr = grow::<T>(self.ptr, new_cap);
+            self.cap = new_cap;
+        }
+
+        pub fn clear(&mut self) {
+            self.len = 0;
+        }
+
+        /// TODO: drop should be a trait, and isn't really called yet automatically.
+        pub fn drop(self) with(Alloc) {
+            dealloc(self.ptr);
+        }
+
+        /// Fold over all elements, threading an accumulator.
+        pub fn fold<A>(&self, init: A, f: fn(A, &T) -> A) -> A {
+            let mut acc: A = init;
+            let i: u64 = 0;
+            while i < self.len {
+                let target_ptr: *mut T = self.ptr + i;
+                acc = f(acc, target_ptr as &T);
+                i = i + 1;
+            }
+            return acc;
+        }
+
+        /// Call a function for each element in the vec.
+        pub fn for_each(&self, f: fn(&T)) {
+            let i: u64 = 0;
+            while i < self.len {
+                let target_ptr: *mut T = self.ptr + i;
+                f(target_ptr as &T);
+                i = i + 1;
+            }
+        }
+
+        // TODO: insert, remove
+    }
+
+    #[test]
+    fn test_vec_get_in_bounds() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(10);
+        v.push(20);
+        let r: Option<&i32> = v.get(0);
+        match r {
+            Option#Some { value } => {
+                if *value != 10 {
+                    v.drop();
+                    return 1;
+                }
+            },
+            Option#None => {
+                v.drop();
+                return 1;
+            }
+        }
+        let r2: Option<&i32> = v.get(1);
+        match r2 {
+            Option#Some { value } => {
+                if *value != 20 {
+                    v.drop();
+                    return 1;
+                }
+            },
+            Option#None => {
+                v.drop();
+                return 1;
+            }
+        }
+        v.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_vec_get_out_of_bounds() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(10);
+        let r: Option<&i32> = v.get(5);
+        match r {
+            Option#Some { value } => {
+                v.drop();
+                return 1;
+            },
+            Option#None => {
+                v.drop();
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_vec_get_empty() with(Alloc) -> i32 {
+        let v: Vec<i32> = Vec::<i32>::new();
+        let r: Option<&i32> = v.get(0);
+        match r {
+            Option#Some { value } => {
+                v.drop();
+                return 1;
+            },
+            Option#None => {
+                v.drop();
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_pop_some() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(42);
+        let r: Option<i32> = v.pop();
+        match r {
+            Option#Some { value } => {
+                if value != 42 {
+                    v.drop();
+                    return 1;
+                }
+            },
+            Option#None => {
+                v.drop();
+                return 1;
+            }
+        }
+        v.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_pop_none() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        let r: Option<i32> = v.pop();
+        match r {
+            Option#Some { value } => {
+                v.drop();
+                return 1;
+            },
+            Option#None => {
+                v.drop();
+                return 0;
+            }
+        }
+    }
+
+    #[test]
+    fn test_vec_set() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(10);
+        v.push(20);
+        v.push(30);
+        // set in-bounds should succeed
+        let ok: bool = v.set(1, 99);
+        if !ok { v.drop(); return 1; }
+        // verify the value changed
+        let r: Option<&i32> = v.get(1);
+        match r {
+            Option#Some { value } => {
+                if *value != 99 { v.drop(); return 1; }
+            },
+            Option#None => { v.drop(); return 1; }
+        }
+        // set out-of-bounds should return false
+        let bad: bool = v.set(10, 0);
+        if bad { v.drop(); return 1; }
+        v.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_vec_clear_reuse() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(1);
+        v.push(2);
+        v.push(3);
+        if v.len() != 3 { v.drop(); return 1; }
+        v.clear();
+        if v.len() != 0 { v.drop(); return 1; }
+        if v.is_empty() == false { v.drop(); return 1; }
+        // reuse after clear
+        v.push(42);
+        if v.len() != 1 { v.drop(); return 1; }
+        let r: Option<&i32> = v.get(0);
+        match r {
+            Option#Some { value } => {
+                if *value != 42 { v.drop(); return 1; }
+            },
+            Option#None => { v.drop(); return 1; }
+        }
+        v.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_vec_push_growth() with(Alloc) -> i32 {
+        // Push enough elements to force multiple growth cycles
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        let i: i32 = 0;
+        while i < 100 {
+            v.push(i);
+            i = i + 1;
+        }
+        if v.len() != 100 { v.drop(); return 1; }
+        // Verify first and last
+        let r0: Option<&i32> = v.get(0);
+        match r0 {
+            Option#Some { value } => { if *value != 0 { v.drop(); return 1; } },
+            Option#None => { v.drop(); return 1; }
+        }
+        let r99: Option<&i32> = v.get(99);
+        match r99 {
+            Option#Some { value } => { if *value != 99 { v.drop(); return 1; } },
+            Option#None => { v.drop(); return 1; }
+        }
+        v.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_vec_pop_until_empty() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(1);
+        v.push(2);
+        v.push(3);
+        // Pop all three — should get 3, 2, 1 (LIFO)
+        let r1: Option<i32> = v.pop();
+        match r1 {
+            Option#Some { value } => { if value != 3 { v.drop(); return 1; } },
+            Option#None => { v.drop(); return 1; }
+        }
+        let r2: Option<i32> = v.pop();
+        match r2 {
+            Option#Some { value } => { if value != 2 { v.drop(); return 1; } },
+            Option#None => { v.drop(); return 1; }
+        }
+        let r3: Option<i32> = v.pop();
+        match r3 {
+            Option#Some { value } => { if value != 1 { v.drop(); return 1; } },
+            Option#None => { v.drop(); return 1; }
+        }
+        // Now empty
+        let r4: Option<i32> = v.pop();
+        match r4 {
+            Option#Some { value } => { v.drop(); return 1; },
+            Option#None => {}
+        }
+        if v.is_empty() == false { v.drop(); return 1; }
+        v.drop();
+        return 0;
+    }
+
+    fn add_i32(acc: i32, x: &i32) -> i32 {
+        return acc + *x;
+    }
+
+    #[test]
+    fn test_vec_fold() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(10);
+        v.push(20);
+        v.push(30);
+        let sum: i32 = v.fold::<i32>(0, add_i32);
+        if sum != 60 { v.drop(); return 1; }
+        v.drop();
+        return 0;
+    }
+}

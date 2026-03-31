@@ -1,0 +1,149 @@
+// Integration test: multi-module program with cross-module types, traits,
+// generic functions, and enum matching.
+//
+// Exercises:
+// - Multiple inline mod declarations with pub types and traits
+// - Cross-module struct construction and field access
+// - Cross-module trait dispatch through generic functions
+// - Cross-module enum matching with 4 variants
+// - Function call chains across module boundaries
+//
+// Expected output: 42
+
+mod Geometry {
+    pub struct Copy Point {
+        x: i32,
+        y: i32,
+    }
+
+    pub struct Copy Rect {
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+    }
+
+    pub struct Copy Circle {
+        cx: i32,
+        cy: i32,
+        radius: i32,
+    }
+
+    pub trait HasArea {
+        fn area(&self) -> i32;
+    }
+
+    pub trait HasPerimeter {
+        fn perimeter(&self) -> i32;
+    }
+
+    impl HasArea for Rect {
+        fn area(&self) -> i32 { return self.w * self.h; }
+    }
+
+    impl HasPerimeter for Rect {
+        fn perimeter(&self) -> i32 { return 2 * (self.w + self.h); }
+    }
+
+    impl HasArea for Circle {
+        fn area(&self) -> i32 { return self.radius * self.radius * 3; }
+    }
+
+    impl HasPerimeter for Circle {
+        fn perimeter(&self) -> i32 { return 2 * self.radius * 3; }
+    }
+
+    pub fn rect_area(r: &Rect) -> i32 {
+        return r.w * r.h;
+    }
+
+    pub fn circle_area(c: &Circle) -> i32 {
+        return c.radius * c.radius * 3;
+    }
+
+    pub fn rect_perimeter(r: &Rect) -> i32 {
+        return 2 * (r.w + r.h);
+    }
+
+    pub fn point_distance_sq(p: &Point) -> i32 {
+        return p.x * p.x + p.y * p.y;
+    }
+}
+
+mod Classification {
+    pub enum Copy ShapeKind {
+        RectKind { w: i32, h: i32 },
+        CircleKind { radius: i32 },
+        PointKind { x: i32, y: i32 },
+        Unknown {},
+    }
+
+    pub fn classify_value(sk: &ShapeKind) -> i32 {
+        match *sk {
+            ShapeKind#RectKind { w, h } => {
+                return w * h;
+            },
+            ShapeKind#CircleKind { radius } => {
+                return radius * radius * 3;
+            },
+            ShapeKind#PointKind { x, y } => {
+                return x + y;
+            },
+            ShapeKind#Unknown {} => {
+                return 0;
+            }
+        }
+    }
+
+    pub fn weighted_classify(sk: &ShapeKind, weight: i32) -> i32 {
+        let v: i32 = classify_value(sk);
+        return v * weight;
+    }
+}
+
+mod Main {
+    import Geometry.{ Rect, Circle, Point, rect_area, circle_area, rect_perimeter, point_distance_sq };
+    import Classification.{ ShapeKind, classify_value, weighted_classify };
+
+    fn compute_extra() -> i32 {
+        let mut extra: i32 = 0;
+        let mut i: i32 = 0;
+        while i < 3 {
+            extra = extra + 2;
+            i = i + 1;
+        }
+        return extra;
+    }
+
+    fn main() -> Int {
+        // Cross-module struct construction
+        let r: Rect = Rect { x: 0, y: 0, w: 3, h: 4 };
+        let c: Circle = Circle { cx: 0, cy: 0, radius: 2 };
+        let p: Point = Point { x: 3, y: 4 };
+
+        // Cross-module function calls
+        let ra: i32 = rect_area(&r);          // 12
+        let ca: i32 = circle_area(&c);         // 12
+        let pd: i32 = point_distance_sq(&p);   // 25
+
+        // Cross-module enum matching
+        let sk1: ShapeKind = ShapeKind#RectKind { w: 3, h: 4 };
+        let sk2: ShapeKind = ShapeKind#CircleKind { radius: 2 };
+        let sk3: ShapeKind = ShapeKind#PointKind { x: 10, y: 20 };
+        let sk4: ShapeKind = ShapeKind#Unknown {};
+
+        let v1: i32 = classify_value(&sk1);          // 12
+        let v2: i32 = classify_value(&sk2);          // 12
+        let v3: i32 = classify_value(&sk3);          // 30
+        let v4: i32 = classify_value(&sk4);          // 0
+
+        // Combine: ra(12) + ca(12) + v1(12) = 36
+        let combined: i32 = ra + ca + v1;
+
+        // While loop in separate function to avoid aggregate phi
+        let extra: i32 = compute_extra();  // 6
+
+        let result: i32 = combined + extra;  // 36 + 6 = 42
+        return result as Int;
+    }
+}

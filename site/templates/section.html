@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="section-head">
+  <h1>{{ section.title }}</h1>
+  {% if section.content %}
+  <div class="section-copy">{{ section.content | safe }}</div>
+  {% endif %}
+</section>
+
+{% set pages = section.pages | sort(attribute="title") %}
+{% if pages | length > 0 %}
+<section>
+  <ul class="index-list">
+    {% for p in pages %}
+    <li>
+      <a href="{{ p.permalink }}">{{ p.title }}</a>
+      {% if p.summary %}<span>{{ p.summary | striptags }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if section.subsections | length > 0 %}
+<section>
+  <ul class="index-list">
+    {% for sub_path in section.subsections %}
+      {% set sub = get_section(path=sub_path) %}
+      <li>
+        <a href="{{ sub.permalink }}">{{ sub.title }}</a>
+        {% if sub.description %}<span>{{ sub.description }}</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock content %}

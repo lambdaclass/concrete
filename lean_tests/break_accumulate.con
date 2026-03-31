@@ -1,0 +1,16 @@
+// Test: break with computed accumulated value (while-as-expression)
+// Expected: 10
+fn main() -> Int {
+    let mut sum: Int = 0;
+    let mut i: Int = 0;
+    let result: Int = while i < 100 {
+        sum = sum + i;
+        i = i + 1;
+        if sum >= 10 {
+            break sum;
+        }
+    } else {
+        0;
+    };
+    return result;
+}

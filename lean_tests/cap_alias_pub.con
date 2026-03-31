@@ -1,0 +1,17 @@
+// Public cap alias and Std macro in alias
+pub cap Host = File + Network + Env + Process;
+cap All = Std;
+
+fn needs_host() with(Host) -> Int {
+    return 42;
+}
+
+fn needs_all() with(All) -> Int {
+    let x: Int = needs_host();
+    return x;
+}
+
+fn main() with(Std) -> Int {
+    let r: Int = needs_all();
+    return r;
+}

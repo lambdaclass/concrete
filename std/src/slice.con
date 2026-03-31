@@ -1,0 +1,103 @@
+mod slice {
+    pub struct Slice<T> {
+        ptr: *const T,
+        len: u64,
+    }
+
+    trusted impl<T> Slice<T> {
+        pub fn get_unchecked(&self, at: u64) -> &T {
+            let target_ptr: *const T = self.ptr + at;
+            return target_ptr as &T;
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.len == 0;
+        }
+    }
+
+    pub struct MutSlice<T> {
+        ptr: *mut T,
+        len: u64,
+    }
+
+    trusted impl<T> MutSlice<T> {
+        pub fn get_unchecked(&self, at: u64) -> &T {
+            let target_ptr: *mut T = self.ptr + at;
+            return target_ptr as &T;
+        }
+
+        pub fn set_unchecked(&mut self, at: u64, value: T) {
+            let target_ptr: *mut T = self.ptr + at;
+            *target_ptr = value;
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.len == 0;
+        }
+    }
+
+    import std.vec.{Vec};
+    import std.test.{assert_eq, assert_true};
+
+    #[test]
+    fn test_slice_len() with(Alloc, Unsafe) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(10);
+        v.push(20);
+        v.push(30);
+        let s: Slice<i32> = Slice::<i32> { ptr: v.ptr as *const i32, len: v.len() };
+        if !assert_eq::<u64>(s.len(), 3, "slice len should be 3") { v.drop(); return 1; }
+        if !assert_true(!(s.is_empty()), "slice should not be empty") { v.drop(); return 1; }
+        v.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_slice_get_unchecked() with(Alloc, Unsafe) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(10);
+        v.push(20);
+        v.push(30);
+        let s: Slice<i32> = Slice::<i32> { ptr: v.ptr as *const i32, len: v.len() };
+        let first: &i32 = s.get_unchecked(0);
+        if !assert_eq::<i32>(*first, 10, "first should be 10") { v.drop(); return 1; }
+        let last: &i32 = s.get_unchecked(2);
+        if !assert_eq::<i32>(*last, 30, "last should be 30") { v.drop(); return 1; }
+        v.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_slice_empty() with(Alloc, Unsafe) -> i32 {
+        let s: Slice<i32> = Slice::<i32> { ptr: 0 as *const i32, len: 0 };
+        if !assert_true(s.is_empty(), "empty slice should be empty") { return 1; }
+        if !assert_eq::<u64>(s.len(), 0, "empty slice len should be 0") { return 1; }
+        return 0;
+    }
+
+    #[test]
+    fn test_mutslice_set_get() with(Alloc, Unsafe) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(0);
+        v.push(0);
+        v.push(0);
+        let mut ms: MutSlice<i32> = MutSlice::<i32> { ptr: v.ptr, len: v.len() };
+        ms.set_unchecked(0, 100);
+        ms.set_unchecked(1, 200);
+        ms.set_unchecked(2, 300);
+        let r0: &i32 = ms.get_unchecked(0);
+        let r2: &i32 = ms.get_unchecked(2);
+        if !assert_eq::<i32>(*r0, 100, "slot 0 should be 100") { v.drop(); return 1; }
+        if !assert_eq::<i32>(*r2, 300, "slot 2 should be 300") { v.drop(); return 1; }
+        v.drop();
+        return 0;
+    }
+}

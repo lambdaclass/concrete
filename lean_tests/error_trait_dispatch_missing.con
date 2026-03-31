@@ -1,0 +1,14 @@
+// Error: calling method not in trait bounds
+trait Describe {
+    fn describe(&self) -> Int;
+}
+
+struct Point { x: Int, y: Int }
+
+fn show<T: Describe>(p: T) -> Int {
+    return p.unknown_method();
+}
+
+fn main() -> Int {
+    return 0;
+}

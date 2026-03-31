@@ -1,0 +1,9 @@
+// Test: type mismatch error should show both expected and actual types.
+fn add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+fn main() -> Int {
+    let result: Int = add(10, true);
+    return result;
+}

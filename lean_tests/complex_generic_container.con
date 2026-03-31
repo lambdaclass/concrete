@@ -1,0 +1,27 @@
+// Complex test: generic struct with function pointers
+struct Box<T> {
+    inner: T,
+    tag: Int
+}
+
+fn wrap(x: Int) -> Box<Int> {
+    return Box::<Int> { inner: x, tag: 1 };
+}
+
+fn unwrap(b: Box<Int>) -> Int {
+    return b.inner;
+}
+
+fn transform(b: Box<Int>, f: fn(Int) -> Int) -> Box<Int> {
+    let val: Int = b.inner;
+    let result: Int = f(val);
+    return Box::<Int> { inner: result, tag: 1 };
+}
+
+fn double(x: Int) -> Int { return x * 2; }
+
+fn main() -> Int {
+    let b1: Box<Int> = wrap(21);
+    let b2: Box<Int> = transform(b1, double);
+    return unwrap(b2);
+}

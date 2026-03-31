@@ -1,0 +1,24 @@
+// module main
+struct Pair {
+  a: Int,
+  b: Int,
+}
+
+enum Option<T> {
+  Some { value: T },
+  None,
+}
+
+enum Result<T, E> {
+  Ok { value: T },
+  Err { value: E },
+}
+
+fn sum(p: Pair) -> Int {
+  return (p.a + p.b);
+}
+
+fn main() -> Int {
+  let p: Pair = Pair { a: 7, b: 3 };
+  return sum(p);
+}

@@ -1,0 +1,20 @@
+// Test: generic struct with a generic type parameter — Pair<Wrapper<Int>, Int>
+struct Wrapper<T> { inner: T }
+
+struct Pair<A, B> { first: A, second: B }
+
+fn unwrap_wrapper(w: Wrapper<Int>) -> Int {
+    return w.inner;
+}
+
+fn unwrap_pair(p: Pair<Wrapper<Int>, Int>) -> Int {
+    let w: Wrapper<Int> = p.first;
+    let s: Int = p.second;
+    return unwrap_wrapper(w) + s;
+}
+
+fn main() -> Int {
+    let w: Wrapper<Int> = Wrapper::<Int> { inner: 30 };
+    let p: Pair<Wrapper<Int>, Int> = Pair::<Wrapper<Int>, Int> { first: w, second: 12 };
+    return unwrap_pair(p);
+}

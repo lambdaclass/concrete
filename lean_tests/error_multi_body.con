@@ -1,0 +1,6 @@
+// Multiple errors in one function body — error recovery should report all of them
+fn main() -> Int {
+    let x: Int = true;
+    let y: Int = "hello";
+    return 0;
+}

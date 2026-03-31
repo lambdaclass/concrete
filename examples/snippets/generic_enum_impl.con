@@ -1,0 +1,29 @@
+mod opt {
+    enum Option<T> {
+        Some {
+            value: T,
+        },
+        None,
+    }
+
+    impl<T> Option<T> {
+        pub fn is_some(&self) -> bool {
+            match self {
+                Option#Some { value } => {
+                    return true;
+                },
+                Option#None => {
+                    return false;
+                }
+            }
+        }
+    }
+
+    fn main() -> i32 {
+        let x: Option<i32> = Option::<i32>#Some {
+            value: 4
+        };
+
+        return x.is_some() as i32;
+    }
+}

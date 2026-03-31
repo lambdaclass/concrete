@@ -1,0 +1,9 @@
+// Error: using . instead of -> on Heap<T>
+struct Point { x: Int, y: Int }
+
+fn main() with(Std) -> Int {
+    let p: Heap<Point> = alloc(Point { x: 1, y: 2 });
+    let v: Int = p.x;
+    free(p);
+    return v;
+}

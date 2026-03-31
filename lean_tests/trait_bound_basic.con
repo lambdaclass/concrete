@@ -1,0 +1,31 @@
+trait Describe {
+    fn describe(&self) -> Int;
+}
+
+struct Point { x: Int, y: Int }
+struct Counter { value: Int }
+
+impl Describe for Point {
+    fn describe(&self) -> Int {
+        return self.x + self.y;
+    }
+}
+
+impl Describe for Counter {
+    fn describe(&self) -> Int {
+        return self.value;
+    }
+}
+
+fn show_point<T: Describe>(x: Int, y: Int) -> Int {
+    return x + y;
+}
+
+fn consume_point(p: Point) -> Int {
+    return p.x;
+}
+
+fn main() -> Int {
+    let result: Int = show_point::<Point>(10, 20);
+    return result;
+}

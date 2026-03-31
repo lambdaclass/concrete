@@ -1,0 +1,97 @@
+mod text {
+    pub struct Text {
+        ptr: *const u8,
+        len: u64,
+    }
+
+    trusted impl Text {
+        pub fn from_string(s: &String) -> Text {
+            let t: Text = Text {
+                ptr: s.ptr as *const u8,
+                len: s.len,
+            };
+            return t;
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.len == 0;
+        }
+
+        pub fn get_unchecked(&self, at: u64) -> u8 {
+            let target_ptr: *const u8 = self.ptr + at;
+            return *(target_ptr as *mut u8);
+        }
+
+        pub fn eq(&self, other: &Text) -> bool {
+            if self.len != other.len {
+                return false;
+            }
+
+            let i: u64 = 0;
+            while i < self.len {
+                let pa: *const u8 = self.ptr + i;
+                let pb: *const u8 = other.ptr + i;
+                if *(pa as *mut u8) != *(pb as *mut u8) {
+                    return false;
+                }
+                i = i + 1;
+            }
+
+            return true;
+        }
+    }
+
+    import std.test.{assert_eq, assert_true};
+
+    #[test]
+    fn test_text_from_string() with(Alloc) -> i32 {
+        let s: String = "hello";
+        let t: Text = Text::from_string(&s);
+        if !assert_eq::<u64>(t.len(), 5, "text len should be 5") { s.drop(); return 1; }
+        if !assert_true(!(t.is_empty()), "text should not be empty") { s.drop(); return 1; }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_text_get_unchecked() with(Alloc, Unsafe) -> i32 {
+        let s: String = "abc";
+        let t: Text = Text::from_string(&s);
+        let ch: u8 = t.get_unchecked(0);
+        if !assert_eq::<u8>(ch, 97, "first byte should be 'a'=97") { s.drop(); return 1; }
+        let ch2: u8 = t.get_unchecked(2);
+        if !assert_eq::<u8>(ch2, 99, "third byte should be 'c'=99") { s.drop(); return 1; }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_text_eq() with(Alloc) -> i32 {
+        let s1: String = "hello";
+        let s2: String = "hello";
+        let s3: String = "world";
+        let t1: Text = Text::from_string(&s1);
+        let t2: Text = Text::from_string(&s2);
+        let t3: Text = Text::from_string(&s3);
+        if !assert_true(t1.eq(&t2), "same content should be equal") { s1.drop(); s2.drop(); s3.drop(); return 1; }
+        if !assert_true(!(t1.eq(&t3)), "different content should not be equal") { s1.drop(); s2.drop(); s3.drop(); return 1; }
+        s1.drop();
+        s2.drop();
+        s3.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_text_empty() with(Alloc) -> i32 {
+        let s: String = String::new();
+        let t: Text = Text::from_string(&s);
+        if !assert_true(t.is_empty(), "empty text should be empty") { s.drop(); return 1; }
+        if !assert_eq::<u64>(t.len(), 0, "empty text len should be 0") { s.drop(); return 1; }
+        s.drop();
+        return 0;
+    }
+}

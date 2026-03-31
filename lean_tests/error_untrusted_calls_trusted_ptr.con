@@ -1,0 +1,15 @@
+// Error: calling a trusted fn doesn't give the caller trusted powers — ptr deref in non-trusted fn fails
+trusted fn safe_deref(p: *const i32) -> i32 {
+    return *p;
+}
+
+fn not_trusted() -> i32 {
+    let x: i32 = 5;
+    let p: *const i32 = &x as *const i32;
+    let val: i32 = *p;
+    return val;
+}
+
+fn main() -> i32 {
+    return 0;
+}

@@ -1,0 +1,30 @@
+mod args {
+    import std.alloc.{grow};
+    import std.libc.{strlen,memcpy};
+
+    trusted extern fn __concrete_get_argc() -> i32;
+    trusted extern fn __concrete_get_argv(idx: i32) -> *const u8;
+
+    /// Returns the number of command-line arguments (including the program name).
+    pub fn count() -> Int {
+        let c: i32 = __concrete_get_argc();
+        return c as Int;
+    }
+
+    /// Returns the command-line argument at the given index as a String.
+    /// Index 0 is the program name. Returns "" if the index is out of range.
+    pub trusted fn get(idx: Int) with(Alloc) -> String {
+        let i: i32 = idx as i32;
+        let raw: *const u8 = __concrete_get_argv(i);
+        if raw == (0 as *const u8) {
+            return "";
+        }
+        let n: u64 = strlen(raw);
+        let buf: *mut u8 = grow::<u8>(0 as *mut u8, n + 1);
+        memcpy(buf, raw, n);
+        let end: *mut u8 = buf + n;
+        *end = 0;
+        let s: String = String { ptr: buf, len: n as Int, cap: (n + 1) as Int };
+        return s;
+    }
+}

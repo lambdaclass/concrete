@@ -1,0 +1,234 @@
+// Phase 3 mixed-feature test: data pipeline with pluggable stages
+//
+// Combines: modules (Generate, Transform, Aggregate, Orchestrator), generics with
+//   trait bounds, traits (Summarizable), function pointers (pluggable transforms),
+//   Vec operations, while loops, enums (pipeline result variants), structs,
+//   match, capabilities.
+//
+// A 3-stage data pipeline:
+//   Generate: produces a dataset of records (Vec<i32>, 2 fields per record: [key, value])
+//   Transform: applies a chain of function-pointer transforms to each value
+//   Aggregate: reduces the dataset to summary statistics
+//
+// Expected output: 42
+
+mod Generate {
+    // Build a dataset: pairs of [key, value] in a flat Vec
+    pub fn make_dataset(count: i32, start_key: i32, base_value: i32) with(Alloc) -> Vec<i32> {
+        let mut data: Vec<i32> = vec_new::<i32>();
+        let mut i: i32 = 0;
+        while i < count {
+            vec_push::<i32>(&mut data, start_key + i);           // key
+            vec_push::<i32>(&mut data, base_value + i * 2);      // value
+            i = i + 1;
+        }
+        return data;
+    }
+
+    pub fn record_count(data: &Vec<i32>) -> i32 {
+        return vec_len::<i32>(data) as i32 / 2;
+    }
+
+    pub fn get_key(data: &Vec<i32>, idx: i32) -> i32 {
+        return vec_get::<i32>(data, (idx * 2) as Int);
+    }
+
+    pub fn get_value(data: &Vec<i32>, idx: i32) -> i32 {
+        return vec_get::<i32>(data, (idx * 2 + 1) as Int);
+    }
+}
+
+mod Transform {
+    import Generate.{ record_count, get_key, get_value };
+
+    // Apply a transform function to every value in the dataset, producing a new dataset
+    pub fn map_values(data: &Vec<i32>, f: fn(i32) -> i32) with(Alloc) -> Vec<i32> {
+        let count: i32 = record_count(data);
+        let mut result: Vec<i32> = vec_new::<i32>();
+        let mut i: i32 = 0;
+        while i < count {
+            let k: i32 = get_key(data, i);
+            let v: i32 = get_value(data, i);
+            vec_push::<i32>(&mut result, k);
+            vec_push::<i32>(&mut result, f(v));
+            i = i + 1;
+        }
+        return result;
+    }
+
+    // Apply two transforms in sequence (pipeline composition)
+    pub fn chain_transforms(data: &Vec<i32>, f1: fn(i32) -> i32, f2: fn(i32) -> i32) with(Alloc) -> Vec<i32> {
+        let intermediate: Vec<i32> = map_values(data, f1);
+        let final_data: Vec<i32> = map_values(&intermediate, f2);
+        vec_free::<i32>(intermediate);
+        return final_data;
+    }
+
+    // Filter: keep only records where predicate on value returns nonzero
+    pub fn filter_values(data: &Vec<i32>, pred: fn(i32) -> i32) with(Alloc) -> Vec<i32> {
+        let count: i32 = record_count(data);
+        let mut result: Vec<i32> = vec_new::<i32>();
+        let mut i: i32 = 0;
+        while i < count {
+            let k: i32 = get_key(data, i);
+            let v: i32 = get_value(data, i);
+            if pred(v) != 0 {
+                vec_push::<i32>(&mut result, k);
+                vec_push::<i32>(&mut result, v);
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+}
+
+mod Aggregate {
+    import Generate.{ record_count, get_key, get_value };
+
+    pub enum Copy AggResult {
+        Summary { sum: i32, count: i32, min: i32, max: i32 },
+        Empty {},
+    }
+
+    pub trait Summarizable {
+        fn summary_value(&self) -> i32;
+    }
+
+    pub struct Copy Stats {
+        total: i32,
+        avg: i32,
+        range: i32,
+    }
+
+    impl Summarizable for Stats {
+        fn summary_value(&self) -> i32 {
+            return self.total + self.avg + self.range;
+        }
+    }
+
+    pub fn compute_summary<T: Summarizable>(item: &T) -> i32 {
+        return item.summary_value();
+    }
+
+    pub fn compute_stats_summary(item: &Stats) -> i32 {
+        return compute_summary::<Stats>(item);
+    }
+
+    pub fn aggregate(data: &Vec<i32>) -> AggResult {
+        let count: i32 = record_count(data);
+        if count == 0 { return AggResult#Empty {}; }
+
+        let mut sum: i32 = 0;
+        let mut min_val: i32 = get_value(data, 0);
+        let mut max_val: i32 = get_value(data, 0);
+        let mut i: i32 = 0;
+        while i < count {
+            let v: i32 = get_value(data, i);
+            sum = sum + v;
+            if v < min_val { min_val = v; }
+            if v > max_val { max_val = v; }
+            i = i + 1;
+        }
+        return AggResult#Summary { sum: sum, count: count, min: min_val, max: max_val };
+    }
+
+    pub fn sum_keys(data: &Vec<i32>) -> i32 {
+        let count: i32 = record_count(data);
+        let mut sum: i32 = 0;
+        let mut i: i32 = 0;
+        while i < count {
+            sum = sum + get_key(data, i);
+            i = i + 1;
+        }
+        return sum;
+    }
+}
+
+mod Main {
+    import Generate.{ make_dataset, record_count };
+    import Transform.{ map_values, chain_transforms, filter_values };
+    import Aggregate.{ AggResult, Stats, compute_stats_summary, aggregate, sum_keys };
+
+    // Transform functions
+    fn double(x: i32) -> i32 { return x * 2; }
+    fn add_one(x: i32) -> i32 { return x + 1; }
+    fn is_positive(x: i32) -> i32 {
+        if x > 0 { return 1; }
+        return 0;
+    }
+    fn clamp_to_20(x: i32) -> i32 {
+        if x > 20 { return 20; }
+        return x;
+    }
+
+    fn main() with(Std) -> Int {
+        // Generate 6 records: keys 1..6, values 10,12,14,16,18,20
+        let data: Vec<i32> = make_dataset(6, 1, 10);
+        if record_count(&data) != 6 { vec_free::<i32>(data); return 1; }
+
+        // Stage 1: double all values => 20,24,28,32,36,40
+        let doubled: Vec<i32> = map_values(&data, double);
+        if record_count(&doubled) != 6 { vec_free::<i32>(data); vec_free::<i32>(doubled); return 2; }
+
+        // Stage 2: chain add_one then clamp_to_20 => add_one: 21,25,29,33,37,41 => clamp: 20,20,20,20,20,20
+        let clamped: Vec<i32> = chain_transforms(&doubled, add_one, clamp_to_20);
+        if record_count(&clamped) != 6 { vec_free::<i32>(data); vec_free::<i32>(doubled); vec_free::<i32>(clamped); return 3; }
+
+        // Aggregate the clamped data
+        let agg: AggResult = aggregate(&clamped);
+        let mut agg_sum: i32 = 0;
+        match agg {
+            AggResult#Summary { sum, count, min, max } => {
+                // sum=120, count=6, min=20, max=20
+                if count != 6 { agg_sum = 0 - 1; }
+                else if min != 20 { agg_sum = 0 - 2; }
+                else if max != 20 { agg_sum = 0 - 3; }
+                else { agg_sum = sum; }
+            },
+            AggResult#Empty {} => { agg_sum = 0 - 4; },
+        }
+        if agg_sum != 120 { vec_free::<i32>(data); vec_free::<i32>(doubled); vec_free::<i32>(clamped); return 4; }
+
+        // Aggregate original data
+        let orig_agg: AggResult = aggregate(&data);
+        let mut orig_sum: i32 = 0;
+        match orig_agg {
+            AggResult#Summary { sum, count, min, max } => {
+                // sum=10+12+14+16+18+20=90, min=10, max=20
+                if sum != 90 { orig_sum = 0 - 1; }
+                else { orig_sum = max - min; }
+            },
+            AggResult#Empty {} => { orig_sum = 0 - 2; },
+        }
+        if orig_sum != 10 { vec_free::<i32>(data); vec_free::<i32>(doubled); vec_free::<i32>(clamped); return 5; }
+
+        // Test filter: keep values > 0 from doubled (all pass)
+        let filtered: Vec<i32> = filter_values(&doubled, is_positive);
+        if record_count(&filtered) != 6 { vec_free::<i32>(data); vec_free::<i32>(doubled); vec_free::<i32>(clamped); vec_free::<i32>(filtered); return 6; }
+
+        // Sum keys of filtered: 1+2+3+4+5+6 = 21
+        let key_sum: i32 = sum_keys(&filtered);
+        if key_sum != 21 { vec_free::<i32>(data); vec_free::<i32>(doubled); vec_free::<i32>(clamped); vec_free::<i32>(filtered); return 7; }
+
+        // Use the Summarizable trait with generic dispatch
+        let stats: Stats = Stats {
+            total: agg_sum,     // 120
+            avg: agg_sum / 6,   // 20
+            range: orig_sum,    // 10
+        };
+        // summary_value = 120 + 20 + 10 = 150
+        let sv: i32 = compute_stats_summary(&stats);
+        if sv != 150 { vec_free::<i32>(data); vec_free::<i32>(doubled); vec_free::<i32>(clamped); vec_free::<i32>(filtered); return 8; }
+
+        // Final checksum: key_sum(21) * 2 = 42
+        let checksum: i32 = key_sum * 2;
+
+        vec_free::<i32>(data);
+        vec_free::<i32>(doubled);
+        vec_free::<i32>(clamped);
+        vec_free::<i32>(filtered);
+
+        if checksum != 42 { return 9; }
+        return checksum as Int;
+    }
+}

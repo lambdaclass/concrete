@@ -1,0 +1,17 @@
+// Trusted ptr arithmetic: offset a pointer and read through it
+struct Copy Pair {
+    a: i32,
+    b: i32,
+}
+
+trusted fn read_second(p: *const i32) -> i32 {
+    let q: *const i32 = p + 1;
+    return *q;
+}
+
+fn main() with(Unsafe) -> i32 {
+    let pair: Pair = Pair { a: 10, b: 32 };
+    let p: *const i32 = &pair as *const i32;
+    let val: i32 = read_second(p);
+    return val;
+}

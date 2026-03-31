@@ -1,0 +1,29 @@
+// Test: does the linearity checker block generic structs with type params?
+
+struct Copy Container<T> {
+    data: *mut T,
+    len: u64,
+}
+
+impl<T> Container<T> {
+    fn set(&mut self, idx: u64, value: T) with(Unsafe) {
+        let target: *mut T = self.data + idx;
+        *target = value;
+    }
+}
+
+extern fn malloc(size: u64) -> *mut u8;
+extern fn free(ptr: *mut u8);
+
+fn main() with(Unsafe) -> i32 {
+    let ptr: *mut i32 = malloc(16) as *mut i32;
+    let mut c: Container<i32> = Container::<i32> { data: ptr, len: 2 };
+    c.set(0, 42);
+    let result: *mut i32 = c.data;
+    let val: i32 = *result;
+    free(ptr as *mut u8);
+    if val == 42 {
+        return 0;
+    }
+    return 1;
+}

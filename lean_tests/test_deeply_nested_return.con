@@ -1,0 +1,31 @@
+// Test: return from inside 5 levels of nested if/else
+// Tests that control flow unwinding works correctly
+// Expected: 42
+fn main() -> Int {
+    let a: Int = 1;
+    if a > 0 {
+        let b: Int = 2;
+        if b > 0 {
+            let c: Int = 3;
+            if c > 0 {
+                let d: Int = 4;
+                if d > 0 {
+                    let e: Int = 5;
+                    if e > 0 {
+                        return 42;
+                    } else {
+                        return 0;
+                    }
+                } else {
+                    return 0;
+                }
+            } else {
+                return 0;
+            }
+        } else {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+}

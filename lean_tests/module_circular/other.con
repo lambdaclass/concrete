@@ -1,0 +1,5 @@
+mod main;
+
+pub fn foo() -> Int {
+    return 1;
+}

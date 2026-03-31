@@ -1,0 +1,8 @@
+// Tests that Resolve rejects using a struct in enum position
+struct Copy Point { x: Int, y: Int }
+
+fn main() -> Int {
+    match Point#Foo {} {
+        Point#Foo {} => { return 1; },
+    }
+}

@@ -1,0 +1,9 @@
+// Tests that Check rejects any reassignment of a linear variable
+mod test {
+    fn main() with(Alloc) -> i32 {
+        let mut s: String = "hello";
+        s = "world";
+        drop_string(s);
+        return 0;
+    }
+}

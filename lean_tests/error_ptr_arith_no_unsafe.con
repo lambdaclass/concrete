@@ -1,0 +1,9 @@
+// Pointer arithmetic without trusted or with(Unsafe) should fail
+fn offset_ptr(p: *mut u8, n: u64) -> *mut u8 {
+    let q: *mut u8 = p + n;
+    return q;
+}
+
+fn main() -> i32 {
+    return 0;
+}

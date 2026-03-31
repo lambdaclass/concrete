@@ -1,0 +1,9 @@
+// Test that newtype over Copy type is Copy (can be used multiple times)
+newtype Meters = Int;
+
+fn main() -> Int {
+    let d: Meters = Meters(10);
+    let a: Int = d.0;
+    let b: Int = d.0;
+    return a + b;
+}

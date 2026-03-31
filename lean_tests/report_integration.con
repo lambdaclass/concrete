@@ -1,0 +1,56 @@
+// Integration test for all report modes:
+// caps (with why traces), unsafe (with trust boundary), alloc, layout, interface, mono
+
+pub struct Copy Pair {
+    x: i32,
+    y: i32,
+}
+
+pub enum Shape {
+    Circle { radius: i32 },
+    Square { side: i32 },
+}
+
+pub fn pure_add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+pub fn uses_alloc(n: i32) with(Alloc) -> i32 {
+    let mut v: Vec<i32> = vec_new::<i32>();
+    vec_push::<i32>(&mut v, n);
+    let got: i32 = vec_get::<i32>(&v, 0);
+    vec_free::<i32>(v);
+    return got;
+}
+
+fn alloc_no_free(n: Int) with(Alloc) -> Heap<Int> {
+    let h: Heap<Int> = alloc(n);
+    return h;
+}
+
+fn alloc_with_defer(n: Int) with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(n);
+    defer free(h);
+    return n;
+}
+
+pub fn identity<T>(x: T) -> T {
+    return x;
+}
+
+trusted extern fn safe_abs(x: Int) -> Int;
+
+extern fn raw_extern(x: Int) -> Int;
+
+// Trusted wrapper around the unsafe extern
+trusted fn call_raw(x: Int) with(Unsafe) -> Int {
+    return raw_extern(x);
+}
+
+fn main() with(Std) -> i32 {
+    let a: i32 = pure_add(1, 2);
+    let b: i32 = uses_alloc(a);
+    let c: i32 = identity::<i32>(b);
+    let _d: Int = safe_abs(c as Int);
+    return 0;
+}

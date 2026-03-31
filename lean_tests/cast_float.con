@@ -1,0 +1,6 @@
+fn main() -> Int {
+    let x: Int = 7;
+    let f: Float64 = x as Float64;
+    let y: Int = f as Int;
+    return y;
+}

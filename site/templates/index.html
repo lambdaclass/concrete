@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero hero-main">
+  <p class="eyebrow">Concrete</p>
+  <h2>Concrete keeps authority, ownership, and trust boundaries visible.</h2>
+  <p class="lede">
+    If a function allocates, reaches the filesystem or network, crosses into foreign code, or depends on
+    trusted internals, Concrete wants that fact to remain visible. The language is for programs whose
+    behavior needs to stay legible under review, not for hiding operational reality behind convenience.
+  </p>
+  <ul class="hero-tags">
+    <li>visible authority</li>
+    <li>visible ownership</li>
+    <li>explicit trust boundaries</li>
+    <li>small runtime</li>
+  </ul>
+</section>
+
+<section class="home-example">
+  <article class="example-card">
+    <h3>Visible In The Source</h3>
+    <pre><code>fn fetch_manifest(url: &String, cache_path: &String)
+with(Network, File, Alloc) -&gt; Manifest {
+    let body: String = http::get_text(url)?;
+    defer drop_string(body);
+
+    let hash: Hash = sha256_text(&body);
+    verify_manifest_hash(&body, &hash)?;
+
+    fs::write_string(cache_path, &body)?;
+    return parse_manifest(&body)?;
+}
+</code></pre>
+    <p class="card-copy">
+      From the signature and body alone, a reviewer can already see network authority, file authority,
+      allocation, cleanup, verification, and persistence.
+    </p>
+  </article>
+
+  <div class="report-inline">
+    <h4>And The Compiler Can Report The Same Distinction</h4>
+    <pre class="report-block"><code>verify_manifest:
+  caps: none
+  alloc: no
+  trusted: no
+
+fetch_manifest:
+  caps: Network, Alloc
+  alloc: yes
+  trusted: no
+</code></pre>
+    <p class="card-copy">
+      Concrete is designed so these distinctions are not just present in the source, but mechanically
+      reportable. That makes authority drift and allocation drift easier to review than in languages
+      where those facts are mostly conventional rather than first-class.
+    </p>
+  </div>
+</section>
+
+<section class="home-intro">
+  <article class="prose-card">
+    <h3>Why This Matters</h3>
+    <p>
+      Concrete is aimed at systems code where hidden authority, hidden cleanup, and fuzzy trust boundaries
+      make review harder than it should be. It is for people auditing systems code, security-sensitive
+      tools, and infrastructure where hidden costs or hidden authority make review materially worse.
+    </p>
+    <p>
+      That means explicit capabilities instead of ambient authority, explicit ownership and cleanup instead
+      of hidden runtime machinery, and explicit trust boundaries between ordinary safe code, trusted
+      internals, foreign code, and proof-oriented subsets.
+    </p>
+  </article>
+
+  <article class="prose-card">
+    <h3>Why It Is Different</h3>
+    <p>
+      Concrete is not trying to maximize convenience by erasing operational facts. It is not moving toward
+      GC, invisible finalization, or a large managed runtime. It is not a proof-only project, and it does
+      not blur together safe code, trusted implementation techniques, and foreign unsafety.
+    </p>
+    <p>
+      Low-level pointer manipulation and foreign calls can exist, but they stay isolated behind `trusted`
+      and `with(Unsafe)` boundaries instead of disappearing into ordinary code.
+    </p>
+  </article>
+</section>
+
+<section class="start-card">
+  <h3>Start Here</h3>
+  <ul class="index-list">
+    <li><a href="{{ get_url(path='@/guide/landing.md') }}">why_concrete</a><span>project motivation and positioning</span></li>
+    <li><a href="{{ get_url(path='@/guide/getting_started.md') }}">getting_started</a><span>build the compiler and run a program</span></li>
+    <li><a href="{{ get_url(path='@/reference/STDLIB.md') }}">stdlib</a><span>current standard library direction</span></li>
+    <li><a href="{{ get_url(path='@/reference/SAFETY.md') }}">safety</a><span>capabilities, trusted, Unsafe, proof boundary</span></li>
+    <li><a href="{{ get_url(path='@/paper.md') }}">paper</a><span>research paper, build notes, and source links</span></li>
+    <li><a href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">roadmap</a><span>active work and sequencing</span></li>
+  </ul>
+</section>
+
+<section class="home-panels">
+  <article class="mini-panel">
+    <h3>Docs</h3>
+    <p>
+      Stable reference material for the language model, compiler pipeline, safety rules, ABI,
+      diagnostics, testing, and stdlib direction.
+    </p>
+    <ul class="index-list compact-index">
+      <li><a href="{{ get_url(path='@/reference/_index.md') }}">reference</a><span>stable contracts and implementation boundaries</span></li>
+      <li><a href="{{ get_url(path='@/guide/_index.md') }}">guide</a><span>narrative walkthrough for language and tooling</span></li>
+      <li><a href="{{ get_url(path='@/reference/STDLIB.md') }}">stdlib</a><span>current module direction and priorities</span></li>
+    </ul>
+  </article>
+
+  <article class="mini-panel">
+    <h3>Paper</h3>
+    <p>
+      A compact research-style statement of the project thesis, architecture, and current evidence.
+    </p>
+    <ul class="index-list compact-index">
+      <li><a href="{{ get_url(path='@/paper.md') }}">paper</a><span>paper landing page and build notes</span></li>
+      <li><a href="https://github.com/unbalancedparentheses/concrete2/blob/main/paper/main.typ">paper_source</a><span>Typst source in the repository</span></li>
+    </ul>
+  </article>
+
+  <article class="mini-panel">
+    <h3>Status</h3>
+    <p>
+      Concrete is active and still evolving. Use the roadmap and changelog for the current state of the tree.
+    </p>
+    <ul class="index-list compact-index">
+      <li><a href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">roadmap</a><span>active work and sequencing</span></li>
+      <li><a href="https://github.com/unbalancedparentheses/concrete2/blob/main/CHANGELOG.md">changelog</a><span>landed milestones and project history</span></li>
+    </ul>
+  </article>
+</section>
+{% endblock content %}

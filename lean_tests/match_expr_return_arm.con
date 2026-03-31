@@ -1,0 +1,16 @@
+mod test {
+    enum AB {
+        A {},
+        B {}
+    }
+
+    fn main() -> i32 {
+        // One arm returns early, other yields a value
+        let x: AB = AB#A {};
+        let y: i32 = match x {
+            AB#A {} => 42,
+            AB#B {} => { return 1; }
+        };
+        return y - 42;
+    }
+}

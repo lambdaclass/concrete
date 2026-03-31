@@ -1,0 +1,19 @@
+// Regression: *self.field must parse as *(self.field), not (*self).field.
+// Bug: the parser applied deref before field access, so *self.data
+// read from (*self) at offset 0 instead of dereferencing self.data.
+struct Copy Wrapper { data: *mut i32 }
+
+trusted impl Wrapper {
+    fn read(&self) -> i32 {
+        // This requires field access (.data) before deref (*).
+        // Without the fix, this was parsed as (*self).data which crashes.
+        let p: *mut i32 = self.data;
+        return *p;
+    }
+}
+
+fn main() with(Unsafe) -> i32 {
+    let x: i32 = 42;
+    let w: Wrapper = Wrapper { data: &x as *mut i32 };
+    return w.read();
+}

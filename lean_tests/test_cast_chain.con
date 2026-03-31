@@ -1,0 +1,9 @@
+// Test: chain of casts Int -> i32 -> u8 -> Int
+fn main() -> Int {
+    let x: Int = 298;
+    let y: i32 = x as i32;
+    let z: u8 = y as u8;
+    // 298 mod 256 = 42
+    let result: Int = z as Int;
+    return result;
+}

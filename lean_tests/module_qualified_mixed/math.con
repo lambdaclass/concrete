@@ -1,0 +1,7 @@
+pub fn add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+pub fn multiply(a: Int, b: Int) -> Int {
+    return a * b;
+}

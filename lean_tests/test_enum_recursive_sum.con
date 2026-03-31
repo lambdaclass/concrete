@@ -1,0 +1,29 @@
+// Test: recursive enum + heap allocation + pattern matching
+// Build: Add(Lit(10), Add(Lit(20), Lit(12))) => 42
+enum Expr {
+    Lit { value: Int },
+    Add { left: Heap<Expr>, right: Heap<Expr> }
+}
+
+fn eval_heap(h: Heap<Expr>) with(Alloc) -> Int {
+    let e: Expr = *h;
+    match e {
+        Expr#Lit { value } => {
+            return value;
+        },
+        Expr#Add { left, right } => {
+            let lv: Int = eval_heap(left);
+            let rv: Int = eval_heap(right);
+            return lv + rv;
+        },
+    }
+}
+
+fn main() with(Std) -> Int {
+    let lit10: Heap<Expr> = alloc(Expr#Lit { value: 10 });
+    let lit20: Heap<Expr> = alloc(Expr#Lit { value: 20 });
+    let lit12: Heap<Expr> = alloc(Expr#Lit { value: 12 });
+    let add_inner: Heap<Expr> = alloc(Expr#Add { left: lit20, right: lit12 });
+    let tree: Heap<Expr> = alloc(Expr#Add { left: lit10, right: add_inner });
+    return eval_heap(tree);
+}

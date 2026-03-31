@@ -1,0 +1,7 @@
+// Test generic newtype
+newtype Wrapper<T> = T;
+
+fn main() -> Int {
+    let w: Wrapper<Int> = Wrapper(100);
+    return w.0;
+}

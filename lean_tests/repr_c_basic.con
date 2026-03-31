@@ -1,0 +1,15 @@
+// repr(C) struct used in extern fn
+#[repr(C)]
+struct Point {
+    x: Int,
+    y: Int,
+}
+
+fn sum_point(p: Point) -> Int {
+    return p.x + p.y;
+}
+
+fn main() -> Int {
+    let p: Point = Point { x: 17, y: 25 };
+    return sum_point(p);
+}

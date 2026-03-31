@@ -1,0 +1,14 @@
+// Test: while-as-expression with break value
+// Expected: 5
+fn main() -> Int {
+    let mut i: Int = 0;
+    let x: Int = while i < 10 {
+        i = i + 1;
+        if i == 5 {
+            break i;
+        }
+    } else {
+        0;
+    };
+    return x;
+}

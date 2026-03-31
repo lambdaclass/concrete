@@ -1,0 +1,11 @@
+// Named borrow region: borrow x as y in R { ... }
+struct Copy Point { x: Int, y: Int }
+
+fn main() -> Int {
+    let p: Point = Point { x: 10, y: 20 };
+    let mut result: Int = 0;
+    borrow p as r in R {
+        result = r.x + r.y;
+    }
+    return result;
+}

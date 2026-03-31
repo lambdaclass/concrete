@@ -1,0 +1,8 @@
+// Error: return type mismatch — function returns Bool but declared Int
+fn bad() -> Int {
+    return true;
+}
+
+fn main() -> Int {
+    return bad();
+}

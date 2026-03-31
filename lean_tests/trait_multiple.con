@@ -1,0 +1,31 @@
+struct A { val: Int }
+struct B { val: Int }
+
+trait GetVal {
+    fn get(&self) -> Int;
+}
+
+impl GetVal for A {
+    fn get(&self) -> Int {
+        return self.val;
+    }
+}
+
+impl GetVal for B {
+    fn get(&self) -> Int {
+        return self.val * 2;
+    }
+}
+
+fn consume_a(a: A) -> Int { return a.val; }
+fn consume_b(b: B) -> Int { return b.val; }
+
+fn main() -> Int {
+    let a: A = A { val: 10 };
+    let b: B = B { val: 20 };
+    let va: Int = a.get();
+    let vb: Int = b.get();
+    let dummy1: Int = consume_a(a);
+    let dummy2: Int = consume_b(b);
+    return va + vb;
+}

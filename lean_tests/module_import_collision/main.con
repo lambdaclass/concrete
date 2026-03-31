@@ -1,0 +1,11 @@
+// Test: import from two submodules with same leaf name using aliases
+mod math;
+mod util;
+import math.{add as math_add};
+import util.{add as util_add};
+
+fn main() -> Int {
+    let a: Int = math_add(20, 22);
+    let b: Int = util_add(3, 4);
+    return a + b;
+}

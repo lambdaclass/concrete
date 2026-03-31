@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+<article class="doc-page">
+  <header class="section-head narrow">
+    <h1>{{ page.title }}</h1>
+  </header>
+  <div class="doc-body">
+    {{ page.content | safe }}
+  </div>
+</article>
+{% endblock content %}

@@ -1,0 +1,7 @@
+// Test: mixed-arg println with Int, String, and bool
+fn main() with(Std) {
+    println(42);
+    println("hello");
+    println(true);
+    println(false);
+}

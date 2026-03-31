@@ -1,0 +1,22 @@
+// Test: defer inside loop body + continue.
+// The deferred cleanup runs when continue exits the loop body scope.
+fn work() with(Console, Alloc) -> i32 {
+    let mut count: i32 = 0;
+    let mut i: i32 = 0;
+    while i < 4 {
+        let s: String = "z";
+        defer drop_string(s);
+        i = i + 1;
+        if i == 2 {
+            continue;
+        }
+        print_string(&s);
+        count = count + 1;
+    }
+    print_char(10);
+    return count;
+}
+
+fn main() with(Std) -> Int {
+    return work() as Int;
+}

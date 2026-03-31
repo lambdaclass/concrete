@@ -1,0 +1,456 @@
+mod ordered_map {
+    import std.mem.{sizeof};
+    import std.alloc.{grow,dealloc};
+    import std.math.{max};
+    import std.option.{Option};
+
+    pub struct OrderedMap<K, V> {
+        keys: *mut K,
+        values: *mut V,
+        len: u64,
+        cap: u64,
+        cmp_fn: fn(&K, &K) -> i32,
+    }
+
+    trusted impl<K, V> OrderedMap<K, V> {
+        /// Create a new ordered map. cmp_fn returns <0 if a<b, 0 if a==b, >0 if a>b.
+        pub fn new(cmp_fn: fn(&K, &K) -> i32) -> OrderedMap<K, V> {
+            let m: OrderedMap<K, V> = OrderedMap::<K, V> {
+                keys: 0 as *mut K,
+                values: 0 as *mut V,
+                len: 0,
+                cap: 0,
+                cmp_fn: cmp_fn,
+            };
+            return m;
+        }
+
+        /// Binary search. Returns the index where key is or should be inserted.
+        fn find_index(&self, key: &K) -> u64 {
+            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
+            let lo: u64 = 0;
+            let hi: u64 = self.len;
+            while lo < hi {
+                let mid: u64 = lo + (hi - lo) / 2;
+                let mid_key: *mut K = self.keys + mid;
+                let c: i32 = cmp(key, mid_key as &K);
+                if c == 0 {
+                    return mid;
+                }
+                if c < 0 {
+                    hi = mid;
+                } else {
+                    lo = mid + 1;
+                }
+            }
+            return lo;
+        }
+
+        pub fn get(&self, key: &K) -> Option<&V> {
+            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
+            if self.len == 0 {
+                return Option::<&V>#None;
+            }
+            let idx: u64 = self.find_index(key);
+            if idx >= self.len {
+                return Option::<&V>#None;
+            }
+            let k: *mut K = self.keys + idx;
+            if cmp(key, k as &K) != 0 {
+                return Option::<&V>#None;
+            }
+            let v: *mut V = self.values + idx;
+            return Option::<&V>#Some { value: v as &V };
+        }
+
+        pub fn contains(&self, key: &K) -> bool {
+            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
+            if self.len == 0 {
+                return false;
+            }
+            let idx: u64 = self.find_index(key);
+            if idx >= self.len {
+                return false;
+            }
+            let k: *mut K = self.keys + idx;
+            return cmp(key, k as &K) == 0;
+        }
+
+        /// Insert a key-value pair. Returns the old value if the key already existed.
+        pub fn insert(&mut self, key: K, value: V) with(Alloc) -> Option<V> {
+            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
+            let idx: u64 = self.find_index(&key);
+
+            // Check if key already exists at idx
+            if idx < self.len {
+                let existing: *mut K = self.keys + idx;
+                if cmp(&key, existing as &K) == 0 {
+                    let old_val_ptr: *mut V = self.values + idx;
+                    let old: V = *old_val_ptr;
+                    *old_val_ptr = value;
+                    return Option::<V>#Some { value: old };
+                }
+            }
+
+            // Need to insert at idx — shift elements right
+            if self.len >= self.cap {
+                self.grow();
+            }
+
+            // Shift keys and values from idx..len one position right
+            let i: u64 = self.len;
+            while i > idx {
+                let src_k: *mut K = self.keys + (i - 1);
+                let dst_k: *mut K = self.keys + i;
+                *dst_k = *src_k;
+
+                let src_v: *mut V = self.values + (i - 1);
+                let dst_v: *mut V = self.values + i;
+                *dst_v = *src_v;
+
+                i = i - 1;
+            }
+
+            let key_ptr: *mut K = self.keys + idx;
+            *key_ptr = key;
+            let val_ptr: *mut V = self.values + idx;
+            *val_ptr = value;
+            self.len = self.len + 1;
+
+            return Option::<V>#None;
+        }
+
+        pub fn remove(&mut self, key: &K) -> Option<V> {
+            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
+            if self.len == 0 {
+                return Option::<V>#None;
+            }
+            let idx: u64 = self.find_index(key);
+            if idx >= self.len {
+                return Option::<V>#None;
+            }
+            let k: *mut K = self.keys + idx;
+            if cmp(key, k as &K) != 0 {
+                return Option::<V>#None;
+            }
+
+            let val_ptr: *mut V = self.values + idx;
+            let old: V = *val_ptr;
+
+            // Shift elements left
+            let i: u64 = idx;
+            while i + 1 < self.len {
+                let src_k: *mut K = self.keys + (i + 1);
+                let dst_k: *mut K = self.keys + i;
+                *dst_k = *src_k;
+
+                let src_v: *mut V = self.values + (i + 1);
+                let dst_v: *mut V = self.values + i;
+                *dst_v = *src_v;
+
+                i = i + 1;
+            }
+
+            self.len = self.len - 1;
+            return Option::<V>#Some { value: old };
+        }
+
+        pub fn min_key(&self) -> Option<&K> {
+            if self.len == 0 {
+                return Option::<&K>#None;
+            }
+            return Option::<&K>#Some { value: self.keys as &K };
+        }
+
+        pub fn max_key(&self) -> Option<&K> {
+            if self.len == 0 {
+                return Option::<&K>#None;
+            }
+            let last: *mut K = self.keys + (self.len - 1);
+            return Option::<&K>#Some { value: last as &K };
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.len == 0;
+        }
+
+        pub fn clear(&mut self) {
+            self.len = 0;
+        }
+
+        fn grow(&mut self) with(Alloc) {
+            let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
+            self.keys = grow::<K>(self.keys, new_cap);
+            self.values = grow::<V>(self.values, new_cap);
+            self.cap = new_cap;
+        }
+
+        pub fn drop(self) with(Alloc) {
+            if self.cap > 0 {
+                dealloc::<K>(self.keys);
+                dealloc::<V>(self.values);
+            }
+        }
+    }
+
+    fn omap_cmp_i32(a: &i32, b: &i32) -> i32 {
+        if *a < *b { return -1; }
+        if *a > *b { return 1; }
+        return 0;
+    }
+
+    import std.test.{assert_eq, assert_true};
+
+    #[test]
+    fn test_insert_and_get() with(Alloc) -> i32 {
+        let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
+        m.insert(30, 300);
+        m.insert(10, 100);
+        m.insert(20, 200);
+
+        if !assert_eq::<u64>(m.len(), 3, "len should be 3") {
+            m.drop();
+            return 1;
+        }
+
+        let k: i32 = 20;
+        let r: Option<&i32> = m.get(&k);
+        match r {
+            Option#Some { value } => {
+                if *value != 200 { m.drop(); return 1; }
+            },
+            Option#None => { m.drop(); return 1; }
+        }
+
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_sorted_order() with(Alloc) -> i32 {
+        let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
+        m.insert(50, 5);
+        m.insert(10, 1);
+        m.insert(30, 3);
+
+        // min_key should be 10
+        let mn: Option<&i32> = m.min_key();
+        match mn {
+            Option#Some { value } => {
+                if *value != 10 { m.drop(); return 1; }
+            },
+            Option#None => { m.drop(); return 1; }
+        }
+
+        // max_key should be 50
+        let mx: Option<&i32> = m.max_key();
+        match mx {
+            Option#Some { value } => {
+                if *value != 50 { m.drop(); return 1; }
+            },
+            Option#None => { m.drop(); return 1; }
+        }
+
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_overwrite() with(Alloc) -> i32 {
+        let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
+        m.insert(10, 100);
+        let old: Option<i32> = m.insert(10, 999);
+        match old {
+            Option#Some { value } => {
+                if value != 100 { m.drop(); return 1; }
+            },
+            Option#None => { m.drop(); return 1; }
+        }
+
+        // New value should be 999
+        let k: i32 = 10;
+        let r: Option<&i32> = m.get(&k);
+        match r {
+            Option#Some { value } => {
+                if *value != 999 { m.drop(); return 1; }
+            },
+            Option#None => { m.drop(); return 1; }
+        }
+
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_omap_remove() with(Alloc) -> i32 {
+        let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
+        m.insert(10, 100);
+        m.insert(20, 200);
+        m.insert(30, 300);
+
+        let k: i32 = 20;
+        let old: Option<i32> = m.remove(&k);
+        match old {
+            Option#Some { value } => {
+                if value != 200 { m.drop(); return 1; }
+            },
+            Option#None => { m.drop(); return 1; }
+        }
+
+        if !assert_eq::<u64>(m.len(), 2, "len should be 2 after remove") {
+            m.drop();
+            return 1;
+        }
+
+        // 20 should be gone
+        if m.contains(&k) {
+            m.drop();
+            return 1;
+        }
+
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_get_missing() with(Alloc) -> i32 {
+        let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
+        m.insert(10, 100);
+        let k: i32 = 99;
+        let r: Option<&i32> = m.get(&k);
+        match r {
+            Option#Some { value } => { m.drop(); return 1; },
+            Option#None => {}
+        }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_omap_remove_empty() with(Alloc) -> i32 {
+        let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
+        let k: i32 = 1;
+        let r: Option<i32> = m.remove(&k);
+        match r {
+            Option#Some { value } => { m.drop(); return 1; },
+            Option#None => {}
+        }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_omap_min_max_empty() with(Alloc) -> i32 {
+        let m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
+        let mn: Option<&i32> = m.min_key();
+        match mn {
+            Option#Some { value } => { m.drop(); return 1; },
+            Option#None => {}
+        }
+        let mx: Option<&i32> = m.max_key();
+        match mx {
+            Option#Some { value } => { m.drop(); return 1; },
+            Option#None => {}
+        }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_omap_clear_reuse() with(Alloc) -> i32 {
+        let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
+        m.insert(10, 100);
+        m.insert(20, 200);
+        m.clear();
+        if m.len() != 0 { m.drop(); return 1; }
+        if m.is_empty() == false { m.drop(); return 1; }
+        m.insert(30, 300);
+        if m.len() != 1 { m.drop(); return 1; }
+        let k: i32 = 30;
+        if !(m.contains(&k)) { m.drop(); return 1; }
+        m.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_omap_insert_remove_stress() with(Alloc) -> i32 {
+        // Insert many elements, remove some, verify structure
+        let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
+        m.insert(50, 500);
+        m.insert(10, 100);
+        m.insert(30, 300);
+        m.insert(20, 200);
+        m.insert(40, 400);
+        m.insert(5, 50);
+        m.insert(25, 250);
+        m.insert(35, 350);
+        m.insert(15, 150);
+        m.insert(45, 450);
+
+        if !assert_eq::<u64>(m.len(), 10, "len should be 10") {
+            m.drop();
+            return 1;
+        }
+
+        // Remove 4 keys
+        let k20: i32 = 20;
+        let k40: i32 = 40;
+        let k5: i32 = 5;
+        let k35: i32 = 35;
+        m.remove(&k20);
+        m.remove(&k40);
+        m.remove(&k5);
+        m.remove(&k35);
+
+        if !assert_eq::<u64>(m.len(), 6, "len should be 6 after removes") {
+            m.drop();
+            return 1;
+        }
+
+        // min should be 10, max should be 50
+        let mn: Option<&i32> = m.min_key();
+        match mn {
+            Option#Some { value } => {
+                if *value != 10 { m.drop(); return 1; }
+            },
+            Option#None => { m.drop(); return 1; }
+        }
+        let mx: Option<&i32> = m.max_key();
+        match mx {
+            Option#Some { value } => {
+                if *value != 50 { m.drop(); return 1; }
+            },
+            Option#None => { m.drop(); return 1; }
+        }
+
+        // Removed keys should be absent
+        if m.contains(&k20) { m.drop(); return 1; }
+        if m.contains(&k40) { m.drop(); return 1; }
+        if m.contains(&k5) { m.drop(); return 1; }
+        if m.contains(&k35) { m.drop(); return 1; }
+
+        // Remaining keys should be present
+        let r10: i32 = 10;
+        let r30: i32 = 30;
+        let r50: i32 = 50;
+        if !(m.contains(&r10)) { m.drop(); return 1; }
+        if !(m.contains(&r30)) { m.drop(); return 1; }
+        if !(m.contains(&r50)) { m.drop(); return 1; }
+
+        // Verify a value
+        let v: Option<&i32> = m.get(&r30);
+        match v {
+            Option#Some { value } => {
+                if *value != 300 { m.drop(); return 1; }
+            },
+            Option#None => { m.drop(); return 1; }
+        }
+
+        m.drop();
+        return 0;
+    }
+}

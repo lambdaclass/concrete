@@ -1,0 +1,11 @@
+mod Helpers {
+    pub fn double(x: Int) -> Int { return x * 2; }
+}
+mod Lib {
+    import Helpers.{ double };
+    pub fn compute(x: Int) -> Int { return double(x) + 1; }
+}
+mod Main {
+    import Lib.{ compute };
+    fn main() -> Int { return compute(20) + 1; }
+}

@@ -1,0 +1,27 @@
+fn is_prime(n: Int) -> Int {
+    if n < 2 {
+        return 0;
+    }
+    let mut i: Int = 2;
+    while i * i <= n {
+        if n % i == 0 {
+            return 0;
+        }
+        i = i + 1;
+    }
+    return 1;
+}
+
+fn count_primes(limit: Int) -> Int {
+    let mut count: Int = 0;
+    let mut n: Int = 2;
+    while n <= limit {
+        count = count + is_prime(n);
+        n = n + 1;
+    }
+    return count;
+}
+
+fn main() -> Int {
+    return count_primes(100);
+}

@@ -1,0 +1,17 @@
+mod EnumExample {
+    enum Foo {
+		Bar,
+		Baz { n1: i32, n2: i32 },
+		Qux = 3,
+    }
+
+    fn main() -> i32 {
+        let mut foo: Foo = Foo.Bar;
+
+		match foo {
+			Foo.Bar -> return 1;,
+			Foo.Baz -> return 2;,
+			Foo.Qux -> return 3;,
+		}
+    }
+}

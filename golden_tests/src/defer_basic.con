@@ -1,0 +1,16 @@
+struct Resource { value: Int }
+
+impl Destroy for Resource {
+    fn destroy(&self) {
+    }
+}
+
+fn use_resource() -> Int {
+    let mut r: Resource = Resource { value: 10 };
+    defer destroy(r);
+    return r.value;
+}
+
+fn main() -> Int {
+    return use_resource();
+}

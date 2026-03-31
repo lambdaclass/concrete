@@ -1,0 +1,9 @@
+// Tests that even after dropping, linear variables cannot be reassigned
+mod test {
+    fn main() with(Alloc) -> i32 {
+        let mut s: String = "hello";
+        drop_string(s);
+        s = "world";
+        return 0;
+    }
+}

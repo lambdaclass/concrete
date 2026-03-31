@@ -1,0 +1,11 @@
+// Trusted fn dereferences raw pointer at runtime
+trusted fn read_i32(p: *const i32) -> i32 {
+    return *p;
+}
+
+fn main() with(Unsafe) -> i32 {
+    let x: i32 = 42;
+    let p: *const i32 = &x as *const i32;
+    let val: i32 = read_i32(p);
+    return val;
+}

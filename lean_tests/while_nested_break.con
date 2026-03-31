@@ -1,0 +1,19 @@
+// Test: break from inner loop only, outer continues
+// Expected: 6
+fn main() -> Int {
+    let mut outer_sum: Int = 0;
+    let mut i: Int = 0;
+    while i < 3 {
+        let mut j: Int = 0;
+        while j < 10 {
+            j = j + 1;
+            if j == 2 {
+                break;
+            }
+        }
+        // j should be 2 here (broke at j==2)
+        outer_sum = outer_sum + j;
+        i = i + 1;
+    }
+    return outer_sum;
+}

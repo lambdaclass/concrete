@@ -1,0 +1,18 @@
+; module main
+define i64 @max(i64 %a, i64 %b) {
+entry:
+  %t0 = sgt i1 %a, %b
+  br i1 %t0, label %then0, label %else1
+then0:
+
+  ret i64 %a
+else1:
+
+  ret i64 %b
+}
+
+define i64 @main() {
+entry:
+  %t0 = call i64 @max(i64 5, i64 10)
+  ret i64 %t0
+}

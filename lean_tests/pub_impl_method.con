@@ -1,0 +1,16 @@
+// Test: pub impl methods should be callable from another module
+mod Lib {
+    pub struct Copy Point { x: Int, y: Int }
+
+    impl Point {
+        pub fn sum(&self) -> Int { return self.x + self.y; }
+    }
+}
+
+mod Main {
+    import Lib.{ Point };
+    fn main() -> Int {
+        let p: Point = Point { x: 10, y: 20 };
+        return p.sum();
+    }
+}

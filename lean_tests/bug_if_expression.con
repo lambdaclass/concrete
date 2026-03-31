@@ -1,0 +1,27 @@
+// Regression test: if-else as expression (Bug 008).
+// Bug: if-else was statement-only; now works as expression.
+// Also tests type cast from Int literals to i32 in branches.
+// Expected output: 0
+
+fn test_basic() -> i32 {
+    let x: i32 = if true { 10 } else { 20 };
+    return x;
+}
+
+fn test_dynamic(a: i32) -> i32 {
+    let x: i32 = if a > 0 { 42 } else { 99 };
+    return x;
+}
+
+fn main() with(Std) -> Int {
+    let r1: i32 = test_basic();
+    if r1 != 10 { return 1; }
+
+    let r2: i32 = test_dynamic(5);
+    if r2 != 42 { return 2; }
+
+    let r3: i32 = test_dynamic(0 - 1);
+    if r3 != 99 { return 3; }
+
+    return 0;
+}

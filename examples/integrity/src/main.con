@@ -1,0 +1,350 @@
+// fcheck - file integrity checker with SHA-256
+//
+// Usage:
+//   fcheck scan  <manifest> <file1> [file2] ...
+//   fcheck check <manifest> <file1> [file2] ...
+
+mod fcheck {
+    import std.fs.{read_file, read_to_string, write_file, FsError};
+    import std.result.{Result};
+    import std.bytes.{Bytes};
+    import std.args.{count, get};
+    import std.map.{HashMap};
+    import std.set.{HashSet};
+    import std.hash.{hash_string, eq_string};
+    import std.vec.{Vec};
+    import std.sha256.{hash_raw};
+    import std.hex.{encode_u32_vec};
+    import std.string.{String};
+
+    trusted extern fn free(ptr: *mut u8);
+
+    // File reading
+
+    struct Copy FileData { ptr: *mut u8, len: u64 }
+
+    trusted fn read_file_raw(path: &String) with(File, Alloc) -> FileData {
+        let result: Result<Bytes, FsError> = read_file(path);
+        match result {
+            Result#Ok { value } => {
+                let fd: FileData = FileData { ptr: value.ptr, len: value.len };
+                return fd;
+            },
+            Result#Err { error } => {
+                return FileData { ptr: 0 as *mut u8, len: 0 };
+            }
+        }
+    }
+
+    trusted fn free_file_data(fd: FileData) with(Alloc) {
+        if fd.ptr != (0 as *mut u8) {
+            free(fd.ptr);
+        }
+    }
+
+    trusted fn hash_file(path: &String) with(File, Alloc) -> String {
+        let fd: FileData = read_file_raw(path);
+        if fd.ptr == (0 as *mut u8) {
+            return "";
+        }
+        let hash: Vec<u32> = hash_raw(fd.ptr, fd.len);
+        free_file_data(fd);
+        let hex: String = encode_u32_vec(&hash);
+        hash.drop();
+        return hex;
+    }
+
+    // Manifest I/O
+
+    fn append_string_to_bytes(buf: &mut Bytes, s: &String) with(Alloc) {
+        let slen: u64 = s.len();
+        let mut i: u64 = 0;
+        while i < slen {
+            let ch: char = s.get_unchecked(i);
+            buf.push(ch as u8);
+            i = i + 1;
+        }
+    }
+
+    trusted fn write_bytes_to_file(mpath: &String, data: &Bytes) with(File, Alloc) -> bool {
+        let result: Result<u64, FsError> = write_file(mpath, data);
+        match result {
+            Result#Ok { value } => { return true; },
+            Result#Err { error } => { return false; }
+        }
+    }
+
+    // Parse manifest ("hex64:path\n" per line) into a map and a path list.
+    trusted fn parse_manifest(manifest: &String, map: &mut HashMap<String, String>, paths: &mut Vec<String>) with(Alloc) {
+        let mlen: Int = string_length(manifest);
+        let mut line_start: Int = 0;
+        let mut pos: Int = 0;
+        while pos <= mlen {
+            let at_end: bool = pos == mlen;
+            let mut is_nl: bool = false;
+            if !at_end {
+                is_nl = string_char_at(manifest, pos) == 10;
+            }
+            if is_nl || at_end {
+                if pos > line_start {
+                    let llen: Int = pos - line_start;
+                    if llen > 65 {
+                        let colon: Int = string_char_at(manifest, line_start + 64);
+                        if colon == 58 {
+                            let path_part: String = string_slice(manifest, line_start + 65, pos);
+                            let hash_part: String = string_slice(manifest, line_start, line_start + 64);
+                            let path_copy: String = path_part.clone();
+                            map.insert(path_part, hash_part);
+                            paths.push(path_copy);
+                        }
+                    }
+                }
+                line_start = pos + 1;
+            }
+            pos = pos + 1;
+        }
+    }
+
+    fn read_manifest_file(path: &String) with(File, Alloc) -> String {
+        let result: Result<String, FsError> = read_to_string(path);
+        match result {
+            Result#Ok { value } => {
+                return value;
+            },
+            Result#Err { error } => {
+                return "";
+            }
+        }
+    }
+
+    // Reporting
+
+    fn report_status(label: &String, path: &String) with(Console, Alloc) {
+        let mut msg: String = String::new();
+        msg.append(&"  ");
+        msg.append(label);
+        msg.append(path);
+        print_string(&msg);
+        print_char(10);
+        msg.drop();
+    }
+
+    fn report_scan_line(path: &String, hash: &String) with(Console, Alloc) {
+        let mut msg: String = String::new();
+        msg.append(&"  ");
+        msg.append(hash);
+        msg.append(&"  ");
+        msg.append(path);
+        print_string(&msg);
+        print_char(10);
+        msg.drop();
+    }
+
+    fn report_file_error(path: &String) with(Console, Alloc) {
+        let mut msg: String = String::new();
+        msg.append(&"  ERROR    ");
+        msg.append(path);
+        msg.append(&": cannot read file");
+        print_string(&msg);
+        print_char(10);
+        msg.drop();
+    }
+
+    pub fn main() with(Std) -> Int {
+        let argc: Int = count();
+
+        if argc < 4 {
+            print_string(&"fcheck - file integrity checker\n\nUsage:\n");
+            print_string(&"  fcheck scan  <manifest> <file1> [file2] ...\n");
+            print_string(&"    Hash files with SHA-256, write manifest.\n\n");
+            print_string(&"  fcheck check <manifest> <file1> [file2] ...\n");
+            print_string(&"    Compare files against manifest, report changes.\n");
+            return 1;
+        }
+
+        let command: String = get(1);
+        let manifest_path: String = get(2);
+
+        // Detect command
+        let scan_cmd: String = "scan";
+        let check_cmd: String = "check";
+        let is_scan: bool = command.eq(&scan_cmd);
+        let is_check: bool = command.eq(&check_cmd);
+        scan_cmd.drop();
+        check_cmd.drop();
+
+        let mut exit_code: Int = 0;
+
+        if is_scan {
+            // --- SCAN: hash files, build manifest as Bytes, write to file ---
+            let mut manifest_bytes: Bytes = Bytes::new();
+            let mut scan_errors: Int = 0;
+            let mut nfiles: Int = 0;
+
+            print_string(&"Scanning files...\n");
+
+            let mut fi: Int = 3;
+            while fi < argc {
+                let fpath: String = get(fi);
+                let fhex: String = hash_file(&fpath);
+                let fhex_empty: bool = fhex.is_empty();
+                if fhex_empty {
+                    report_file_error(&fpath);
+                    fhex.drop();
+                    scan_errors = scan_errors + 1;
+                } else {
+                    report_scan_line(&fpath, &fhex);
+                    append_string_to_bytes(&mut manifest_bytes, &fhex);
+                    manifest_bytes.push(58);
+                    append_string_to_bytes(&mut manifest_bytes, &fpath);
+                    manifest_bytes.push(10);
+                    fhex.drop();
+                    nfiles = nfiles + 1;
+                }
+                fpath.drop();
+                fi = fi + 1;
+            }
+
+            if nfiles > 0 {
+                let wok: bool = write_bytes_to_file(&manifest_path, &manifest_bytes);
+                if wok {
+                    let mut wm: String = String::new();
+                    wm.append(&"\nManifest written to ");
+                    wm.append(&manifest_path);
+                    wm.append(&" (");
+                    wm.append_int(nfiles);
+                    wm.append(&" files)\n");
+                    print_string(&wm);
+                    wm.drop();
+                } else {
+                    print_string(&"fcheck: error writing manifest\n");
+                    scan_errors = scan_errors + 1;
+                }
+            }
+            manifest_bytes.drop();
+
+            if scan_errors > 0 { exit_code = 1; }
+
+        } else if is_check {
+            // --- CHECK: read manifest, re-hash files, compare ---
+            let manifest_content: String = read_manifest_file(&manifest_path);
+            let manifest_ok: bool = manifest_content.is_empty();
+
+            if manifest_ok {
+                let mut em: String = String::new();
+                em.append(&"fcheck: cannot read manifest '");
+                em.append(&manifest_path);
+                em.append(&"' (empty or missing)\n");
+                print_string(&em);
+                em.drop();
+            }
+
+            if !manifest_ok {
+                print_string(&"Checking files...\n");
+
+                let mut cnt_ok: Int = 0;
+                let mut cnt_add: Int = 0;
+                let mut cnt_mod: Int = 0;
+                let mut cnt_rem: Int = 0;
+                let mut cnt_err: Int = 0;
+
+                let mut manifest_map: HashMap<String, String> = HashMap::<String, String>::new(hash_string, eq_string);
+                let mut manifest_paths: Vec<String> = Vec::<String>::new();
+                parse_manifest(&manifest_content, &mut manifest_map, &mut manifest_paths);
+
+                let mut checked: HashSet<String> = HashSet::<String>::new(hash_string, eq_string);
+
+                let mut ci: Int = 3;
+                while ci < argc {
+                    let cpath: String = get(ci);
+                    let chex: String = hash_file(&cpath);
+                    let chex_empty: bool = chex.is_empty();
+                    if chex_empty {
+                        report_file_error(&cpath);
+                        chex.drop();
+                        cnt_err = cnt_err + 1;
+                    } else {
+                        let stored_opt: Option<&String> = manifest_map.get(&cpath);
+                        match stored_opt {
+                            Option#None => {
+                                report_status(&"ADDED    ", &cpath);
+                                cnt_add = cnt_add + 1;
+                            },
+                            Option#Some { value } => {
+                                let cpath_copy: String = cpath.clone();
+                                checked.insert(cpath_copy);
+
+                                let eq: bool = chex.eq(value);
+                                if eq {
+                                    report_status(&"OK       ", &cpath);
+                                    cnt_ok = cnt_ok + 1;
+                                } else {
+                                    report_status(&"MODIFIED ", &cpath);
+                                    cnt_mod = cnt_mod + 1;
+                                }
+                            }
+                        }
+                        chex.drop();
+                    }
+                    cpath.drop();
+                    ci = ci + 1;
+                }
+
+                // Report removed files
+                let m_count: Int = manifest_paths.len() as Int;
+                let mut ki: Int = 0;
+                while ki < m_count {
+                    let rp: &String = manifest_paths.get_unchecked(ki as u64);
+                    let was_checked: bool = checked.contains(rp);
+                    if !was_checked {
+                        report_status(&"REMOVED  ", rp);
+                        cnt_rem = cnt_rem + 1;
+                    }
+                    ki = ki + 1;
+                }
+
+                // Summary
+                print_char(10);
+                let mut sum: String = String::new();
+                sum.append(&"Summary: ");
+                sum.append_int(cnt_ok);
+                sum.append(&" ok, ");
+                sum.append_int(cnt_add);
+                sum.append(&" added, ");
+                sum.append_int(cnt_mod);
+                sum.append(&" modified, ");
+                sum.append_int(cnt_rem);
+                sum.append(&" removed, ");
+                sum.append_int(cnt_err);
+                sum.append(&" errors");
+                print_string(&sum);
+                print_char(10);
+                sum.drop();
+
+                manifest_paths.drop();
+                manifest_map.drop();
+                checked.drop();
+
+                if cnt_mod > 0 || cnt_rem > 0 || cnt_err > 0 {
+                    exit_code = 1;
+                }
+            } else {
+                exit_code = 1;
+            }
+            manifest_content.drop();
+
+        } else {
+            let mut err: String = String::new();
+            err.append(&"fcheck: unknown command '");
+            err.append(&command);
+            err.append(&"'. Use 'scan' or 'check'.\n");
+            print_string(&err);
+            err.drop();
+            exit_code = 1;
+        }
+
+        command.drop();
+        manifest_path.drop();
+        return exit_code;
+    }
+}

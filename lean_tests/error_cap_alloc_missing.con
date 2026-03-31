@@ -1,0 +1,13 @@
+// Error: calling a with(Alloc) function from a function without Alloc capability
+fn needs_alloc() with(Alloc) -> Int {
+    return 1;
+}
+
+fn no_caps() -> Int {
+    let x: Int = needs_alloc();
+    return x;
+}
+
+fn main() -> Int {
+    return 0;
+}

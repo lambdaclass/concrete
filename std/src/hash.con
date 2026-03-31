@@ -1,0 +1,191 @@
+mod hash {
+    import std.bytes.{Bytes};
+    // FNV-1a hash — pure Concrete, no libc dependency
+
+    // FNV offset basis: 14695981039346656037 = 0xcbf29ce484222325
+    // FNV prime: 1099511628211 = 0x100000001b3
+
+    pub fn fnv1a_bytes(data: &Bytes) -> u64 {
+        let hash: u64 = 0xcbf29ce484222325;
+        let prime: u64 = 0x100000001b3;
+
+        let i: u64 = 0;
+        while i < data.len {
+            let byte: u8 = data.get_unchecked(i);
+            hash = hash ^ (byte as u64);
+            hash = hash * prime;
+            i = i + 1;
+        }
+
+        return hash;
+    }
+
+    pub fn fnv1a_string(data: &String) -> u64 {
+        let hash: u64 = 0xcbf29ce484222325;
+        let prime: u64 = 0x100000001b3;
+
+        let i: u64 = 0;
+        while i < data.len {
+            let byte: u8 = data.get_unchecked(i) as u8;
+            hash = hash ^ (byte as u64);
+            hash = hash * prime;
+            i = i + 1;
+        }
+
+        return hash;
+    }
+
+    // --- Hash helpers for use as fn pointers with HashMap/HashSet ---
+    // Multiplicative hash (FxHash-style) with xorshift mixing.
+    // Constant: 0x9E3779B97F4A7C15 (golden ratio * 2^64)
+
+    pub trusted fn hash_u64(key: &u64) -> u64 {
+        let k: u64 = *key;
+        let h: u64 = k * 0x9E3779B97F4A7C15;
+        h = h ^ (h >> 32);
+        return h;
+    }
+
+    pub trusted fn hash_i32(key: &i32) -> u64 {
+        let k: u64 = *key as u64;
+        let h: u64 = k * 0x9E3779B97F4A7C15;
+        h = h ^ (h >> 32);
+        return h;
+    }
+
+    pub trusted fn hash_i64(key: &i64) -> u64 {
+        let k: u64 = *key as u64;
+        let h: u64 = k * 0x9E3779B97F4A7C15;
+        h = h ^ (h >> 32);
+        return h;
+    }
+
+    pub fn hash_string(key: &String) -> u64 {
+        return fnv1a_string(key);
+    }
+
+    pub trusted fn eq_u64(a: &u64, b: &u64) -> bool {
+        return *a == *b;
+    }
+
+    pub trusted fn eq_i32(a: &i32, b: &i32) -> bool {
+        return *a == *b;
+    }
+
+    pub trusted fn eq_i64(a: &i64, b: &i64) -> bool {
+        return *a == *b;
+    }
+
+    pub fn eq_string(a: &String, b: &String) -> bool {
+        if a.len != b.len {
+            return false;
+        }
+        let i: u64 = 0;
+        while i < a.len {
+            if a.get_unchecked(i) != b.get_unchecked(i) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    import std.test.{assert_eq, assert_true};
+
+    #[test]
+    fn test_fnv1a_empty_bytes() -> i32 {
+        let b: Bytes = Bytes::new();
+        let h: u64 = fnv1a_bytes(&b);
+        // Empty input should return the offset basis
+        if !assert_eq::<u64>(h, 0xcbf29ce484222325, "empty bytes should return offset basis") {
+            b.drop();
+            return 1;
+        }
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_fnv1a_single_byte() -> i32 {
+        let mut b: Bytes = Bytes::new();
+        b.push(0);
+        let h: u64 = fnv1a_bytes(&b);
+        // FNV-1a of single zero byte: (offset_basis ^ 0) * prime
+        // = offset_basis * prime
+        // This should NOT equal the offset basis
+        if h == 0xcbf29ce484222325 {
+            b.drop();
+            return 1;
+        }
+        b.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_fnv1a_deterministic() -> i32 {
+        let mut b1: Bytes = Bytes::new();
+        b1.push(72);  // 'H'
+        b1.push(101); // 'e'
+        b1.push(108); // 'l'
+        b1.push(108); // 'l'
+        b1.push(111); // 'o'
+
+        let mut b2: Bytes = Bytes::new();
+        b2.push(72);
+        b2.push(101);
+        b2.push(108);
+        b2.push(108);
+        b2.push(111);
+
+        let h1: u64 = fnv1a_bytes(&b1);
+        let h2: u64 = fnv1a_bytes(&b2);
+
+        if !assert_eq::<u64>(h1, h2, "same input should produce same hash") {
+            b1.drop();
+            b2.drop();
+            return 1;
+        }
+
+        b1.drop();
+        b2.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_fnv1a_string_basic() -> i32 {
+        let s: String = "hello";
+        let h: u64 = fnv1a_string(&s);
+        // Hash of non-empty string should not be the offset basis
+        if h == 0xcbf29ce484222325 {
+            s.drop();
+            return 1;
+        }
+        s.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_fnv1a_different_inputs() -> i32 {
+        let mut b1: Bytes = Bytes::new();
+        b1.push(1);
+        b1.push(2);
+
+        let mut b2: Bytes = Bytes::new();
+        b2.push(3);
+        b2.push(4);
+
+        let h1: u64 = fnv1a_bytes(&b1);
+        let h2: u64 = fnv1a_bytes(&b2);
+
+        // Different inputs should (almost certainly) produce different hashes
+        if h1 == h2 {
+            b1.drop();
+            b2.drop();
+            return 1;
+        }
+
+        b1.drop();
+        b2.drop();
+        return 0;
+    }
+}

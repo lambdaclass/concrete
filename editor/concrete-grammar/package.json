@@ -1,0 +1,33 @@
+{
+  "name": "concrete-grammar",
+  "displayName": "Concrete Grammar",
+  "description": "Concrete language syntax highlighting",
+  "version": "0.0.1",
+  "publisher": "edgluq",
+  "author": {
+    "name": "LambdaClass"
+  },
+  "repository": {
+    "url": "https://github.com/lambdaclass/concrete",
+    "type": "github"
+  },
+  "engines": {
+    "vscode": "^1.97.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "concrete",
+      "aliases": ["Concrete", "concrete"],
+      "extensions": [".con"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "concrete",
+      "scopeName": "source.concrete",
+      "path": "./syntaxes/concrete.tmLanguage.json"
+    }]
+  }
+}

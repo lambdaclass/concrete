@@ -1,0 +1,20 @@
+// Test: LIFO order for ownership-consuming defers
+// defer drop_string(a) registered first, defer drop_string(b) second.
+// At return, b is dropped first (LIFO), then a.
+// We verify both strings are still readable before return
+// and that the program doesn't crash (no double-free, correct order).
+fn work() with(Console, Alloc) -> i32 {
+    let a: String = "first";
+    defer drop_string(a);
+    let b: String = "second";
+    defer drop_string(b);
+    print_string(&a);
+    print_char(32);
+    print_string(&b);
+    print_char(10);
+    return 0;
+}
+
+fn main() with(Std) -> Int {
+    return work() as Int;
+}

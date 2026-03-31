@@ -1,0 +1,22 @@
+struct Point {
+    x: Int,
+    y: Int,
+}
+
+fn sum_point(p: Point) -> Int {
+    return p.x + p.y;
+}
+
+fn main() -> Int {
+    // Mutable struct value with field assignment inside a loop.
+    // Tests that aggregate state survives loop iterations correctly.
+    let mut p: Point = Point { x: 0, y: 0 };
+    let mut i: Int = 0;
+    while i < 10 {
+        p.x = p.x + 1;
+        p.y = p.y + 2;
+        i = i + 1;
+    }
+    // p.x should be 10, p.y should be 20 → sum 30
+    return sum_point(p) + 12;
+}

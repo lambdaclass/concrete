@@ -1,0 +1,25 @@
+; module main
+define void @set_value(ptr(mut %Box) %b, i64 %v) {
+entry:
+  store i64 %v, %b
+  ret void
+}
+
+define i64 @consume(%Box %b) {
+entry:
+  %t1 = load i64, %b
+  ret i64 %t1
+}
+
+define i64 @main() {
+entry:
+  %mutref.3 = alloca %Box
+  %t0 = alloca %Box
+  store i64 0, %t0
+  %t2 = load %Box, %t0
+  store %Box %t2, %mutref.3
+  call void @set_value(ptr(mut %Box) %mutref.3, i64 99)
+  %wb.4 = load %Box, %mutref.3
+  %t5 = call i64 @consume(%Box %wb.4)
+  ret i64 %t5
+}

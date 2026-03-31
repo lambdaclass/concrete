@@ -1,0 +1,11 @@
+// Error: reference cannot escape its borrow block
+struct Copy Point { x: Int, y: Int }
+
+fn main() -> Int {
+    let p: Point = Point { x: 10, y: 20 };
+    let mut leaked: &Point = &p;
+    borrow p as r in R {
+        leaked = r;
+    }
+    return leaked.x;
+}

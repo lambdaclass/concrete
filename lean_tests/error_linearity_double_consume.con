@@ -1,0 +1,13 @@
+// Error: consume a linear variable twice — should error about use after move
+struct Resource { value: Int }
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { value: 42 };
+    let x: Int = consume(r);
+    let y: Int = consume(r);
+    return x + y;
+}

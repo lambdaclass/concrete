@@ -1,0 +1,83 @@
+// Phase 3 ABI interop test: verify Concrete and C agree on struct layout
+// and by-value struct passing across FFI boundaries.
+// Calls C functions that report sizeof/offsetof and pass structs by value.
+
+#[repr(C)]
+struct Copy Point {
+    x: i32,
+    y: i32,
+}
+
+#[repr(C)]
+struct Copy Rect {
+    origin: Point,
+    size: Point,
+}
+
+#[repr(C)]
+struct Copy Aligned64 {
+    a: i64,
+    b: i32,
+    c: i64,
+}
+
+// C functions (defined in phase3_abi_interop.c)
+trusted extern fn c_sizeof_point() -> i64;
+trusted extern fn c_sizeof_rect() -> i64;
+trusted extern fn c_sizeof_aligned64() -> i64;
+trusted extern fn c_offsetof_rect_size() -> i64;
+trusted extern fn c_offsetof_aligned64_c() -> i64;
+
+// By-value struct passing (tests C ABI register flattening)
+trusted extern fn c_sum_point(p: Point) -> i64;
+trusted extern fn c_sum_rect(r: Rect) -> i64;
+
+fn main() with(Std) -> i32 {
+    // Check sizeof matches between C and Concrete
+    let con_point: i64 = sizeof::<Point>() as i64;
+    let c_point: i64 = c_sizeof_point();
+    if con_point != c_point {
+        return 1;
+    }
+
+    let con_rect: i64 = sizeof::<Rect>() as i64;
+    let c_rect: i64 = c_sizeof_rect();
+    if con_rect != c_rect {
+        return 2;
+    }
+
+    let con_aligned: i64 = sizeof::<Aligned64>() as i64;
+    let c_aligned: i64 = c_sizeof_aligned64();
+    if con_aligned != c_aligned {
+        return 3;
+    }
+
+    // Check offsetof matches
+    let c_off: i64 = c_offsetof_rect_size();
+    // Point is 8 bytes (2 x i32), so Rect.size should be at offset 8
+    if c_off != 8 {
+        return 4;
+    }
+
+    let c_off2: i64 = c_offsetof_aligned64_c();
+    // a(8) + b(4) + padding(4) = 16
+    if c_off2 != 16 {
+        return 5;
+    }
+
+    // Test by-value struct passing: Point (8 bytes, fits in 1 register)
+    let p: Point = Point { x: 10, y: 20 };
+    let sum_p: i64 = c_sum_point(p);
+    if sum_p != 30 {
+        return 6;
+    }
+
+    // Test by-value struct passing: Rect (16 bytes, fits in 2 registers)
+    let r: Rect = Rect { origin: Point { x: 1, y: 2 }, size: Point { x: 3, y: 4 } };
+    let sum_r: i64 = c_sum_rect(r);
+    if sum_r != 10 {
+        return 7;
+    }
+
+    return 42;
+}

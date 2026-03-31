@@ -1,0 +1,10 @@
+mod Main {
+    pub extern fn puts(data: *mut char) -> i32;
+
+    pub fn main() -> i32 {
+        let x: [char; 13] = ['h','e','l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', '!', '\0'];
+        let z: *mut char = x as *mut char;
+        puts(z);
+        return 0;
+    }
+}

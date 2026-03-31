@@ -1,0 +1,16 @@
+// Test: struct with function pointer field
+struct Copy Wrapper {
+    f: fn(Int) -> Int,
+    offset: Int,
+}
+
+fn double(x: Int) -> Int {
+    return x * 2;
+}
+
+fn main() -> Int {
+    let w: Wrapper = Wrapper { f: double, offset: 0 };
+    let func: fn(Int) -> Int = w.f;
+    let result: Int = func(21);
+    return result + w.offset;
+}

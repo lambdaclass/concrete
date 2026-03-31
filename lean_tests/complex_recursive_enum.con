@@ -1,0 +1,23 @@
+// Recursive evaluation: enum-based expression tree
+// Tests deep pattern matching and recursion
+enum Copy Op { Add {}, Sub {}, Mul {} }
+
+fn apply(op: Op, a: Int, b: Int) -> Int {
+    match op {
+        Op#Add {} => { return a + b; },
+        Op#Sub {} => { return a - b; },
+        Op#Mul {} => { return a * b; },
+    }
+}
+
+fn eval_chain(ops: Int) -> Int {
+    // Simulate: ((2 + 3) * 4) - 1 = 19
+    let step1: Int = apply(Op#Add {}, 2, 3);
+    let step2: Int = apply(Op#Mul {}, step1, 4);
+    let step3: Int = apply(Op#Sub {}, step2, 1);
+    return step3;
+}
+
+fn main() -> Int {
+    return eval_chain(0);
+}

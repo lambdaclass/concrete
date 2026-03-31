@@ -1,0 +1,44 @@
+; module main
+define %MyResult @safe_div(i64 %a, i64 %b) {
+entry:
+  %t0 = eq i1 %b, 0
+  br i1 %t0, label %then0, label %merge2
+then0:
+  %t1 = alloca %MyResult
+  store i32 1, %t1
+  %t2 = gep i8 %t1, i64 8
+  store i64 0, %t2
+  %t4 = load %MyResult, %t1
+  ret %MyResult %t4
+merge2:
+  %t5 = alloca %MyResult
+  store i32 0, %t5
+  %t6 = gep i8 %t5, i64 8
+  %t7 = sdiv i64 %a, %b
+  store i64 %t7, %t6
+  %t9 = load %MyResult, %t5
+  ret %MyResult %t9
+}
+
+define i64 @main() {
+entry:
+  %t0 = call %MyResult @safe_div(i64 10, i64 2)
+  %t2 = load i32, %t0
+  %t3 = cast i32 %t2 to i64
+  %t4 = eq i1 %t3, 0
+  br i1 %t4, label %arm01, label %check12
+arm01:
+  %t5 = gep i8 %t0, i64 8
+  %t7 = load i64, %t5
+  ret i64 %t7
+check12:
+  %t8 = eq i1 %t3, 1
+  br i1 %t8, label %arm13, label %check24
+arm13:
+  %t9 = gep i8 %t0, i64 8
+  %t11 = load i64, %t9
+  ret i64 %t11
+check24:
+
+  unreachable
+}

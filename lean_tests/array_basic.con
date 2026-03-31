@@ -1,0 +1,4 @@
+fn main() -> Int {
+    let arr: [Int; 3] = [10, 20, 30];
+    return arr[1];
+}

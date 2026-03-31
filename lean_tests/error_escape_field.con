@@ -1,0 +1,13 @@
+// Error: storing borrow ref into struct field outside block
+struct Holder {
+    val: &Int
+}
+
+fn main() -> Int {
+    let mut x: Int = 10;
+    let mut h: Holder = Holder { val: &x };
+    borrow x as r in R {
+        h.val = r;
+    }
+    return 0;
+}

@@ -1,0 +1,14 @@
+// Regression: field access on &String must resolve built-in String layout.
+// Bug: structNameFromTy returned "" for the built-in .string type,
+// causing fieldOffset to return 0 for all fields (len, cap read as ptr).
+fn get_length(s: &String) -> Int {
+    return string_length(s);
+}
+
+fn main() with(Alloc) -> Int {
+    let s: String = "hello";
+    // "hello" has length 5; multiply by 2 then add 32 = 42
+    let len: Int = get_length(&s);
+    drop_string(s);
+    return len * 2 + 32;
+}

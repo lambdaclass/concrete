@@ -1,0 +1,37 @@
+// Regression test: cross-module &mut borrow not consumed.
+// Bug: passing &mut Vec<T> to a function in another module consumed (moved)
+// the borrow, making second call fail with "linear variable used after move".
+// Expected output: 42
+
+mod Builder {
+    pub fn push_val(v: &mut Vec<i32>, val: i32) with(Alloc) {
+        vec_push::<i32>(v, val);
+    }
+}
+
+mod Main {
+    import Builder.{ push_val };
+
+    fn main() with(Std) -> Int {
+        let mut nums: Vec<i32> = vec_new::<i32>();
+
+        // Before the fix, the second call would fail at check time:
+        // "linear variable used after move"
+        push_val(&mut nums, 10);
+        push_val(&mut nums, 20);
+        push_val(&mut nums, 12);
+
+        let a: i32 = vec_get::<i32>(&nums, 0);
+        let b: i32 = vec_get::<i32>(&nums, 1);
+        let c: i32 = vec_get::<i32>(&nums, 2);
+        vec_free::<i32>(nums);
+
+        if a != 10 { return 1; }
+        if b != 20 { return 2; }
+        if c != 12 { return 3; }
+
+        // 10 + 20 + 12 = 42
+        let result: i32 = a + b + c;
+        return result as Int;
+    }
+}

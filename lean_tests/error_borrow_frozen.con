@@ -1,0 +1,8 @@
+// Error: original variable is frozen inside borrow block
+fn main() -> Int {
+    let mut x: Int = 10;
+    borrow mut x as r in R {
+        let y: Int = x;
+    }
+    return x;
+}

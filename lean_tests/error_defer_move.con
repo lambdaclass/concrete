@@ -1,0 +1,17 @@
+// Error: variable reserved by defer cannot be moved
+struct Resource { value: Int }
+
+impl Destroy for Resource {
+    fn destroy(&self) { }
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn main() -> Int {
+    let mut r: Resource = Resource { value: 42 };
+    defer destroy(r);
+    let x: Int = consume(r);
+    return x;
+}

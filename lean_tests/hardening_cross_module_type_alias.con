@@ -1,0 +1,52 @@
+// Hardening test: cross-module type alias propagation.
+// Verifies that type aliases defined in one module can be imported
+// and used in another module — in let bindings, function params/returns,
+// and arithmetic expressions.
+// Expected output: 42
+
+mod Units {
+    pub type Meters = i32;
+    pub type Seconds = i32;
+
+    pub fn make_meters(x: i32) -> Meters {
+        return x;
+    }
+
+    pub fn make_seconds(x: i32) -> Seconds {
+        return x;
+    }
+
+    pub fn speed(d: Meters, t: Seconds) -> i32 {
+        return d / t;
+    }
+
+    pub fn double(d: Meters) -> Meters {
+        return d + d;
+    }
+}
+
+mod Main {
+    import Units.{ Meters, Seconds, make_meters, make_seconds, speed, double };
+
+    fn main() with(Std) -> Int {
+        // Use imported type aliases in let bindings
+        let d: Meters = make_meters(210);
+        let t: Seconds = make_seconds(5);
+
+        // Call cross-module function using alias types
+        let s: i32 = speed(d, t);  // 210 / 5 = 42
+        if s != 42 { return 1; }
+
+        // Use imported alias in arithmetic
+        let m: Meters = make_meters(21);
+        let m2: Meters = double(m);  // 21 + 21 = 42
+        if m2 != 42 { return 2; }
+
+        // Type alias is transparent — can mix with base type
+        let raw: i32 = 10;
+        let sum: i32 = raw + m2;  // 10 + 42 = 52
+        if sum != 52 { return 3; }
+
+        return s as Int;
+    }
+}

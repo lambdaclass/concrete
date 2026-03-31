@@ -1,0 +1,43 @@
+; module main
+declare i32 @putchar(i32)
+
+define void @print_int(i64 %n) {
+entry:
+  %agg.3 = alloca %String
+  %t0 = call %String @int_to_string(i64 %n)
+  %borrow.1 = alloca %String
+  store %String %t0, %borrow.1
+  %t2 = call i64 @string_length(ptr(%String) %borrow.1)
+  store %String %t0, %agg.3
+  br label %while.hdr0
+while.hdr0:
+  %phi.6 = phi i64 [0, %entry], [%t13, %while.body1]
+  %t7 = slt i1 %phi.6, %t2
+  br i1 %t7, label %while.body1, label %while.exit2
+while.body1:
+  %pload.8 = load %String, %agg.3
+  %borrow.9 = alloca %String
+  store %String %pload.8, %borrow.9
+  %t10 = call i64 @string_char_at(ptr(%String) %borrow.9, i64 %phi.6)
+  %t11 = cast i64 %t10 to i32
+  %t12 = call i32 @putchar(i32 %t11)
+  %t13 = add i64 %phi.6, 1
+  br label %while.hdr0
+while.exit2:
+  %unpro.14 = load %String, %agg.3
+  %t15 = call i32 @putchar(i32 10)
+  call void @drop_string(%String %unpro.14)
+  ret void
+}
+
+define void @greet() {
+entry:
+  call void @print_int(i64 42)
+  ret void
+}
+
+define i64 @main() {
+entry:
+  call void @greet()
+  ret i64 0
+}

@@ -1,0 +1,6 @@
+mod error_test_on_struct {
+    #[test]
+    struct Foo {
+        x: i32,
+    }
+}

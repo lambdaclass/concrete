@@ -1,0 +1,11 @@
+// Error: inside a trusted fn, calling a regular extern fn without with(Unsafe)
+// Tests that trusted doesn't grant Unsafe
+extern fn puts(s: *const u8) -> i32;
+
+trusted fn call_extern(s: *const u8) -> i32 {
+    return puts(s);
+}
+
+fn main() -> i32 {
+    return 0;
+}

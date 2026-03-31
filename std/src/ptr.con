@@ -1,0 +1,5 @@
+mod ptr {
+    pub trusted fn offset<T>(ptr: *mut T, offset: u64) -> *mut T {
+        return ptr + offset;
+    }
+}

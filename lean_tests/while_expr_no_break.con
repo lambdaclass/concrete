@@ -1,0 +1,10 @@
+// Test: while-as-expression where condition is immediately false, else value returned
+// Expected: 99
+fn main() -> Int {
+    let x: Int = while false {
+        break 1;
+    } else {
+        99;
+    };
+    return x;
+}

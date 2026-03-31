@@ -1,0 +1,23 @@
+trusted extern fn putchar(c: i32) -> i32;
+
+trusted fn print_int(n: i64) with(Console) {
+    let s: String = int_to_string(n);
+    let len: Int = string_length(&s);
+    let mut i: Int = 0;
+    while i < len {
+        let ch: Int = string_char_at(&s, i);
+        putchar(ch as i32);
+        i = i + 1;
+    }
+    putchar(10);
+    drop_string(s);
+}
+
+fn greet() with(Console) {
+    print_int(42);
+}
+
+fn main() with(Std) -> Int {
+    greet();
+    return 0;
+}

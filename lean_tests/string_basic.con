@@ -1,0 +1,6 @@
+fn main() -> Int {
+    let s: String = "hello";
+    let len: Int = string_length(&s);
+    drop_string(s);
+    return len;
+}

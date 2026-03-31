@@ -1,0 +1,39 @@
+; module main
+define i64 @area(%Shape %s) {
+entry:
+  %t1 = load i32, %s
+  %t2 = cast i32 %t1 to i64
+  %t3 = eq i1 %t2, 0
+  br i1 %t3, label %arm01, label %check12
+arm01:
+  %t4 = gep i8 %s, i64 8
+  %t6 = load i64, %t4
+  %t7 = mul i64 %t6, %t6
+  ret i64 %t7
+check12:
+  %t8 = eq i1 %t2, 1
+  br i1 %t8, label %arm13, label %check24
+arm13:
+  %t9 = gep i8 %s, i64 8
+  %t11 = load i64, %t9
+  %t12 = gep i8 %t9, i64 8
+  %t13 = load i64, %t12
+  %t14 = mul i64 %t11, %t13
+  ret i64 %t14
+check24:
+
+  unreachable
+}
+
+define i64 @main() {
+entry:
+  %t0 = alloca %Shape
+  store i32 1, %t0
+  %t1 = gep i8 %t0, i64 8
+  store i64 3, %t1
+  %t3 = gep i8 %t1, i64 8
+  store i64 4, %t3
+  %t4 = load %Shape, %t0
+  %t5 = call i64 @area(%Shape %t4)
+  ret i64 %t5
+}

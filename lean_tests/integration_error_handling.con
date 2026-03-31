@@ -1,0 +1,245 @@
+// Integration test: error handling pipeline with validation, batching, and control flow.
+// Exercises: enums with payloads, pattern matching, Vec, structs with Copy,
+// capability propagation, labeled loops, break/continue, mutable borrows,
+// function composition, early returns from match arms.
+//
+// A pipeline that validates config, processes entries through multiple
+// fallible stages, and collects results with proper error discrimination.
+
+pub enum Copy ParseError {
+    Empty {},
+    Overflow {},
+    InvalidFormat {},
+}
+
+pub struct Copy Config {
+    max_value: i32,
+    min_value: i32,
+    scale: i32,
+}
+
+pub struct Copy BatchStats {
+    total_input: i32,
+    valid_count: i32,
+    sum: i32,
+    first_big: i32,
+    in_range: i32,
+}
+
+enum Copy ValidResult {
+    Good { value: i32 },
+    Bad { err: ParseError },
+}
+
+// Validate config: min < max, scale > 0
+fn validate_config(cfg: Config) -> ValidResult {
+    if cfg.min_value >= cfg.max_value {
+        return ValidResult#Bad { err: ParseError#InvalidFormat {} };
+    }
+    if cfg.scale <= 0 {
+        return ValidResult#Bad { err: ParseError#Overflow {} };
+    }
+    return ValidResult#Good { value: 1 };
+}
+
+// Validate a single value against config bounds, scale it
+fn validate_and_scale(val: i32, cfg: &Config) -> ValidResult {
+    if val < cfg.min_value {
+        return ValidResult#Bad { err: ParseError#Overflow {} };
+    }
+    if val > cfg.max_value {
+        return ValidResult#Bad { err: ParseError#Overflow {} };
+    }
+    return ValidResult#Good { value: val * cfg.scale };
+}
+
+// Chain: validate config then process value
+fn process_value(val: i32, cfg: Config) -> ValidResult {
+    match validate_config(cfg) {
+        ValidResult#Bad { err } => { return ValidResult#Bad { err: err }; },
+        ValidResult#Good { value } => {},
+    }
+    return validate_and_scale(val, &cfg);
+}
+
+// Process a batch, collecting only successful results (skip errors)
+fn process_batch(values: &Vec<i32>, cfg: Config) with(Alloc) -> Vec<i32> {
+    let mut results: Vec<i32> = vec_new::<i32>();
+    let n: Int = vec_len::<i32>(values);
+    let mut i: Int = 0;
+
+    while i < n {
+        let val: i32 = vec_get::<i32>(values, i);
+        match process_value(val, cfg) {
+            ValidResult#Good { value } => {
+                vec_push::<i32>(&mut results, value);
+            },
+            ValidResult#Bad { err } => {},
+        }
+        i = i + 1;
+    }
+    return results;
+}
+
+// Find first value exceeding threshold, using labeled loop
+fn find_first_exceeding(values: &Vec<i32>, threshold: i32) -> i32 {
+    let n: Int = vec_len::<i32>(values);
+    let mut found: i32 = -1;
+    let mut i: Int = 0;
+
+    'search: while i < n {
+        let val: i32 = vec_get::<i32>(values, i);
+        if val > threshold {
+            found = val;
+            break 'search;
+        }
+        i = i + 1;
+    }
+    return found;
+}
+
+// Count values in range [lo, hi] using continue
+fn count_in_range(values: &Vec<i32>, lo: i32, hi: i32) -> i32 {
+    let n: Int = vec_len::<i32>(values);
+    let mut count: i32 = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let val: i32 = vec_get::<i32>(values, i);
+        i = i + 1;
+        if val < lo { continue; }
+        if val > hi { continue; }
+        count = count + 1;
+    }
+    return count;
+}
+
+// Sum all values
+fn sum_values(values: &Vec<i32>) -> i32 {
+    let n: Int = vec_len::<i32>(values);
+    let mut total: i32 = 0;
+    let mut i: Int = 0;
+    while i < n {
+        total = total + vec_get::<i32>(values, i);
+        i = i + 1;
+    }
+    return total;
+}
+
+// Use defer for cleanup in a function that allocates and processes
+fn process_with_cleanup(n: i32, cfg: Config) with(Alloc) -> i32 {
+    let mut v: Vec<i32> = vec_new::<i32>();
+    let mut i: i32 = 0;
+    while i < n {
+        vec_push::<i32>(&mut v, i * 3);
+        i = i + 1;
+    }
+    let results: Vec<i32> = process_batch(&v, cfg);
+    let count: i32 = vec_len::<i32>(&results) as i32;
+    vec_free::<i32>(v);
+    vec_free::<i32>(results);
+    return count;
+}
+
+enum Copy PipelineResult {
+    Success { stats: BatchStats },
+    Failure { err: ParseError },
+}
+
+fn run_pipeline(cfg: Config) with(Alloc) -> PipelineResult {
+    // Validate config first
+    match validate_config(cfg) {
+        ValidResult#Bad { err } => { return PipelineResult#Failure { err: err }; },
+        ValidResult#Good { value } => {},
+    }
+
+    // Build input data
+    let mut input: Vec<i32> = vec_new::<i32>();
+    vec_push::<i32>(&mut input, 5);
+    vec_push::<i32>(&mut input, 15);
+    vec_push::<i32>(&mut input, 25);
+    vec_push::<i32>(&mut input, 35);
+    vec_push::<i32>(&mut input, 45);
+    vec_push::<i32>(&mut input, 55);  // out of range (max=50)
+    vec_push::<i32>(&mut input, -5);  // out of range (min=0)
+    vec_push::<i32>(&mut input, 100); // out of range
+
+    let total_input: i32 = vec_len::<i32>(&input) as i32;
+
+    // Process: only values in [0, 50] survive, scaled by 2
+    let results: Vec<i32> = process_batch(&input, cfg);
+    let valid_count: i32 = vec_len::<i32>(&results) as i32;
+
+    let sum: i32 = sum_values(&results);
+    let first_big: i32 = find_first_exceeding(&results, 60);
+    let in_range: i32 = count_in_range(&results, 20, 80);
+
+    vec_free::<i32>(input);
+    vec_free::<i32>(results);
+
+    return PipelineResult#Success { stats: BatchStats {
+        total_input: total_input,
+        valid_count: valid_count,
+        sum: sum,
+        first_big: first_big,
+        in_range: in_range,
+    }};
+}
+
+fn main() with(Std) -> Int {
+    // Good config: values in [0, 50], scale by 2
+    let cfg: Config = Config { max_value: 50, min_value: 0, scale: 2 };
+    let result: PipelineResult = run_pipeline(cfg);
+
+    match result {
+        PipelineResult#Success { stats } => {
+            if stats.total_input != 8 { return 1; }
+            // 5 valid: 5, 15, 25, 35, 45
+            if stats.valid_count != 5 { return 2; }
+            // scaled: 10, 30, 50, 70, 90 => sum = 250
+            if stats.sum != 250 { return 3; }
+            // first > 60 is 70
+            if stats.first_big != 70 { return 4; }
+            // in [20, 80]: 30, 50, 70 => 3
+            if stats.in_range != 3 { return 5; }
+        },
+        PipelineResult#Failure { err } => {
+            return 10;
+        },
+    }
+
+    // Bad config: min >= max
+    let bad_cfg: Config = Config { max_value: 10, min_value: 20, scale: 1 };
+    let bad_result: PipelineResult = run_pipeline(bad_cfg);
+    match bad_result {
+        PipelineResult#Success { stats } => { return 20; },
+        PipelineResult#Failure { err } => {
+            match err {
+                ParseError#InvalidFormat {} => {},
+                ParseError#Empty {} => { return 21; },
+                ParseError#Overflow {} => { return 22; },
+            }
+        },
+    }
+
+    // Bad config: scale <= 0
+    let bad_cfg2: Config = Config { max_value: 100, min_value: 0, scale: 0 };
+    let bad_result2: PipelineResult = run_pipeline(bad_cfg2);
+    match bad_result2 {
+        PipelineResult#Success { stats } => { return 30; },
+        PipelineResult#Failure { err } => {
+            match err {
+                ParseError#Overflow {} => {},
+                ParseError#Empty {} => { return 31; },
+                ParseError#InvalidFormat {} => { return 32; },
+            }
+        },
+    }
+
+    // Verify process_with_cleanup works (batch processing + cleanup)
+    let good_cfg: Config = Config { max_value: 30, min_value: 0, scale: 1 };
+    // Values: 0, 3, 6, 9, 12, 15, 18, 21, 24, 27 => all <= 30, all valid
+    let count: i32 = process_with_cleanup(10, good_cfg);
+    if count != 10 { return 40; }
+
+    return 0;
+}

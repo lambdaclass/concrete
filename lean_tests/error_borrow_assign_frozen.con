@@ -1,0 +1,18 @@
+// Test: assign to frozen variable inside borrow block
+struct Data { value: Int }
+
+impl Destroy for Data {
+    fn destroy(&self) {}
+}
+
+fn main() -> Int {
+    let mut d: Data = Data { value: 10 };
+
+    borrow d as dr in R {
+        d = Data { value: 20 };
+    }
+
+    let result: Int = d.value;
+    destroy(d);
+    return result;
+}

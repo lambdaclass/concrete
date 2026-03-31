@@ -1,0 +1,89 @@
+// Phase 3: Report consistency cross-check test program
+// Contains a mix of pure, capability, trusted, generic, and allocating functions
+// along with repr(C) and normal structs for layout cross-checking.
+
+// --- Structs ---
+
+#[repr(C)]
+pub struct Copy CPoint {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+pub struct Copy NormalPair {
+    a: i32,
+    b: i32,
+}
+
+// --- Pure functions (proof-eligible, no caps) ---
+
+pub fn pure_compute(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+pub fn pure_multiply(a: i32, b: i32) -> i32 {
+    return a * b;
+}
+
+// --- Functions with capabilities (appear in caps and authority) ---
+
+pub fn needs_alloc(n: i32) with(Alloc) -> i32 {
+    let mut v: Vec<i32> = vec_new::<i32>();
+    vec_push::<i32>(&mut v, n);
+    let got: i32 = vec_get::<i32>(&v, 0);
+    vec_free::<i32>(v);
+    return got;
+}
+
+pub fn needs_console(x: i32) with(Console) -> i32 {
+    return x;
+}
+
+// --- Trusted functions (appear in unsafe, excluded from proof) ---
+
+trusted fn trusted_read(p: *const i32) -> i32 {
+    return *p;
+}
+
+trusted extern fn safe_abs(x: Int) -> Int;
+
+// --- Generic functions (appear in mono) ---
+
+pub fn identity<T>(x: T) -> T {
+    return x;
+}
+
+pub fn generic_add_one<T>(x: T) -> T {
+    return x;
+}
+
+pub fn wrap_pair(x: i32, y: i32) -> NormalPair {
+    return NormalPair { a: x, b: y };
+}
+
+// --- Allocating function (appear in alloc) ---
+
+fn alloc_and_free(n: Int) with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(n);
+    defer free(h);
+    return n;
+}
+
+fn alloc_returned(n: Int) with(Alloc) -> Heap<Int> {
+    let h: Heap<Int> = alloc(n);
+    return h;
+}
+
+// --- Main ---
+
+fn main() with(Std) -> i32 {
+    let a: i32 = pure_compute(20, 1);
+    let b: i32 = pure_multiply(a, 2);
+    let c: i32 = needs_alloc(b);
+    let d: i32 = identity::<i32>(c);
+    let d2: i32 = generic_add_one::<i32>(d);
+    let e: i32 = wrap_pair(d2, 1).a;
+    let _f: Int = alloc_and_free(42);
+    return 42;
+}

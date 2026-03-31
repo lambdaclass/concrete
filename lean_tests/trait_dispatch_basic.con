@@ -1,0 +1,22 @@
+// Monomorphized trait dispatch: calling a trait method on a generic type variable
+trait Describe {
+    fn describe(&self) -> Int;
+}
+
+struct Copy Point { x: Int, y: Int }
+
+impl Describe for Point {
+    fn describe(&self) -> Int {
+        return self.x + self.y;
+    }
+}
+
+fn show<T: Describe>(p: T) -> Int {
+    return p.describe();
+}
+
+fn main() -> Int {
+    let p: Point = Point { x: 10, y: 20 };
+    let result: Int = show(p);
+    return result;
+}

@@ -1,0 +1,183 @@
+// Integration test: state machine with enum transitions, nested pattern
+// matching on multiple enum variants, and complex control flow.
+//
+// A state machine that processes a sequence of commands:
+// - Transitions through Idle/Running/Paused/Done states
+// - Accumulates results through multiple state transitions
+// - Exercises: nested match (match inside match), enum payloads with
+//   multiple fields, struct construction in match arms, while loops
+//   with state evolution, function calls passing enums by reference
+//
+// Expected output: 42
+
+pub enum Copy State {
+    Idle { acc: i32 },
+    Running { acc: i32, step: i32 },
+    Paused { acc: i32, saved_step: i32 },
+    Done { result: i32 },
+}
+
+pub enum Copy Command {
+    Start {},
+    Advance { amount: i32 },
+    Pause {},
+    Resume {},
+    Finish {},
+}
+
+pub struct Copy Transition {
+    new_state: State,
+    output: i32,
+}
+
+// --- State transition logic (nested match on state + command) ---
+
+fn transition(state: &State, cmd: &Command) -> Transition {
+    match *state {
+        State#Idle { acc } => {
+            match *cmd {
+                Command#Start {} => {
+                    return Transition {
+                        new_state: State#Running { acc: acc, step: 0 },
+                        output: 0,
+                    };
+                },
+                Command#Advance { amount } => {
+                    return Transition {
+                        new_state: State#Idle { acc: acc + amount },
+                        output: 0,
+                    };
+                },
+                Command#Pause {} => {
+                    return Transition { new_state: *state, output: 0 };
+                },
+                Command#Resume {} => {
+                    return Transition { new_state: *state, output: 0 };
+                },
+                Command#Finish {} => {
+                    return Transition {
+                        new_state: State#Done { result: acc },
+                        output: acc,
+                    };
+                }
+            }
+        },
+        State#Running { acc, step } => {
+            match *cmd {
+                Command#Advance { amount } => {
+                    return Transition {
+                        new_state: State#Running { acc: acc + amount, step: step + 1 },
+                        output: amount,
+                    };
+                },
+                Command#Pause {} => {
+                    return Transition {
+                        new_state: State#Paused { acc: acc, saved_step: step },
+                        output: 0,
+                    };
+                },
+                Command#Finish {} => {
+                    return Transition {
+                        new_state: State#Done { result: acc },
+                        output: acc,
+                    };
+                },
+                Command#Start {} => {
+                    return Transition { new_state: *state, output: 0 };
+                },
+                Command#Resume {} => {
+                    return Transition { new_state: *state, output: 0 };
+                }
+            }
+        },
+        State#Paused { acc, saved_step } => {
+            match *cmd {
+                Command#Resume {} => {
+                    return Transition {
+                        new_state: State#Running { acc: acc, step: saved_step },
+                        output: 0,
+                    };
+                },
+                Command#Advance { amount } => {
+                    return Transition {
+                        new_state: State#Paused { acc: acc + amount, saved_step: saved_step },
+                        output: 0,
+                    };
+                },
+                Command#Finish {} => {
+                    return Transition {
+                        new_state: State#Done { result: acc },
+                        output: acc,
+                    };
+                },
+                Command#Start {} => {
+                    return Transition { new_state: *state, output: 0 };
+                },
+                Command#Pause {} => {
+                    return Transition { new_state: *state, output: 0 };
+                }
+            }
+        },
+        State#Done { result } => {
+            // Terminal state — ignore all commands
+            return Transition {
+                new_state: State#Done { result: result },
+                output: 0,
+            };
+        }
+    }
+}
+
+// --- Extract accumulator from any state ---
+
+fn get_acc(state: &State) -> i32 {
+    match *state {
+        State#Idle { acc } => { return acc; },
+        State#Running { acc, step } => { return acc; },
+        State#Paused { acc, saved_step } => { return acc; },
+        State#Done { result } => { return result; }
+    }
+}
+
+// --- Step function: apply one command to a state ---
+
+fn step(state: &State, cmd: &Command) -> State {
+    let t: Transition = transition(state, cmd);
+    return t.new_state;
+}
+
+fn main() -> Int {
+    // Sequence: Start, Advance(10), Advance(5), Pause, Advance(7), Resume, Advance(20), Finish
+    // State trace:
+    //   Idle{0} --Start--> Running{0,0}
+    //   Running{0,0} --Advance(10)--> Running{10,1}
+    //   Running{10,1} --Advance(5)--> Running{15,2}
+    //   Running{15,2} --Pause--> Paused{15,2}
+    //   Paused{15,2} --Advance(7)--> Paused{22,2} (buffered)
+    //   Paused{22,2} --Resume--> Running{22,2}
+    //   Running{22,2} --Advance(20)--> Running{42,3}
+    //   Running{42,3} --Finish--> Done{42}
+    // Final acc = 42
+
+    let c0: Command = Command#Start {};
+    let c1: Command = Command#Advance { amount: 10 };
+    let c2: Command = Command#Advance { amount: 5 };
+    let c3: Command = Command#Pause {};
+    let c4: Command = Command#Advance { amount: 7 };
+    let c5: Command = Command#Resume {};
+    let c6: Command = Command#Advance { amount: 20 };
+    let c7: Command = Command#Finish {};
+
+    let s0: State = State#Idle { acc: 0 };
+    let s1: State = step(&s0, &c0);
+    let s2: State = step(&s1, &c1);
+    let s3: State = step(&s2, &c2);
+    let s4: State = step(&s3, &c3);
+    let s5: State = step(&s4, &c4);
+    let s6: State = step(&s5, &c5);
+    let s7: State = step(&s6, &c6);
+    let s8: State = step(&s7, &c7);
+
+    let result: i32 = get_acc(&s8);
+    return result as Int;
+}

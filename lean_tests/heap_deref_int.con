@@ -1,0 +1,6 @@
+// *heap_ptr on scalar Heap<Int>
+fn main() with(Std) -> Int {
+    let hp: Heap<Int> = alloc(42);
+    let val: Int = *hp;
+    return val;
+}

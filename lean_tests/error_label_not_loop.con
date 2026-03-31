@@ -1,0 +1,6 @@
+fn main() -> Int {
+    'bad: if true {
+        return 1;
+    }
+    return 0;
+}

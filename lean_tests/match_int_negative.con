@@ -1,0 +1,12 @@
+// Test: match on negative integer literals
+fn main() -> Int {
+    let x: Int = -1;
+    let mut result: Int = 0;
+    match x {
+        -1 => { result = 42; },
+        0 => { result = 10; },
+        1 => { result = 20; },
+        _ => { result = 0; },
+    }
+    return result;
+}

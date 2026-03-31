@@ -1,0 +1,18 @@
+// Test: consuming a linear var in an if-then that returns is allowed
+// (the then-branch diverges, so the else/fall-through path is the only continuation)
+
+struct Bar {
+    x: i32,
+}
+
+impl Bar {
+    fn drop(self) {
+    }
+}
+
+fn main() -> i32 {
+    let b: Bar = Bar { x: 10 };
+    if false { b.drop(); return 1; }
+    b.drop();
+    return 0;
+}

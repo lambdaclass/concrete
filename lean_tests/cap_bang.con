@@ -1,0 +1,14 @@
+// fn main() with(Std) has Std caps and can call anything except Unsafe
+fn do_io() with(File) -> Int {
+    return 10;
+}
+
+fn do_alloc() with(Alloc) -> Int {
+    return 20;
+}
+
+fn main() with(Std) -> Int {
+    let a: Int = do_io();
+    let b: Int = do_alloc();
+    return a + b;
+}

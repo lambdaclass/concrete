@@ -1,0 +1,134 @@
+mod test {
+    import std.io.{println};
+
+    pub fn assert_eq<T>(expected: T, result: T, message: String) with(Console) -> bool {
+        if expected != result {
+            let msg: String = "Assert error:";
+            println(&msg);
+            msg.drop();
+            println(&message);
+            message.drop();
+            return false;
+        }
+        message.drop();
+        return true;
+    }
+
+    pub fn assert_ne<T>(a: T, b: T, message: String) with(Console) -> bool {
+        if a == b {
+            let msg: String = "Assert error (expected not equal):";
+            println(&msg);
+            msg.drop();
+            println(&message);
+            message.drop();
+            return false;
+        }
+        message.drop();
+        return true;
+    }
+
+    pub fn assert_true(value: bool, message: String) with(Console) -> bool {
+        if !value {
+            let msg: String = "Assert error (expected true):";
+            println(&msg);
+            msg.drop();
+            println(&message);
+            message.drop();
+            return false;
+        }
+        message.drop();
+        return true;
+    }
+
+    pub fn assert_false(value: bool, message: String) with(Console) -> bool {
+        if value {
+            let msg: String = "Assert error (expected false):";
+            println(&msg);
+            msg.drop();
+            println(&message);
+            message.drop();
+            return false;
+        }
+        message.drop();
+        return true;
+    }
+
+    pub fn assert_gt<T>(a: T, b: T, message: String) with(Console) -> bool {
+        if a <= b {
+            let msg: String = "Assert error (expected a > b):";
+            println(&msg);
+            msg.drop();
+            println(&message);
+            message.drop();
+            return false;
+        }
+        message.drop();
+        return true;
+    }
+
+    pub fn assert_lt<T>(a: T, b: T, message: String) with(Console) -> bool {
+        if a >= b {
+            let msg: String = "Assert error (expected a < b):";
+            println(&msg);
+            msg.drop();
+            println(&message);
+            message.drop();
+            return false;
+        }
+        message.drop();
+        return true;
+    }
+
+    pub fn assert_ge<T>(a: T, b: T, message: String) with(Console) -> bool {
+        if a < b {
+            let msg: String = "Assert error (expected a >= b):";
+            println(&msg);
+            msg.drop();
+            println(&message);
+            message.drop();
+            return false;
+        }
+        message.drop();
+        return true;
+    }
+
+    pub fn assert_le<T>(a: T, b: T, message: String) with(Console) -> bool {
+        if a > b {
+            let msg: String = "Assert error (expected a <= b):";
+            println(&msg);
+            msg.drop();
+            println(&message);
+            message.drop();
+            return false;
+        }
+        message.drop();
+        return true;
+    }
+
+    pub fn str_eq(a: &String, b: &String) -> bool {
+        if a.len != b.len {
+            return false;
+        }
+        let i: u64 = 0;
+        while i < a.len {
+            if a.get_unchecked(i) != b.get_unchecked(i) {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    pub fn assert_str_eq(a: &String, b: &String, message: String) with(Console) -> bool {
+        if !str_eq(a, b) {
+            let msg: String = "Assert error (strings not equal):";
+            println(&msg);
+            msg.drop();
+            println(&message);
+            message.drop();
+            return false;
+        }
+        message.drop();
+        return true;
+    }
+}

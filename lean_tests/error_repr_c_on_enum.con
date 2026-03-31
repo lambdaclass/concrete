@@ -1,0 +1,11 @@
+// Error: #[repr(C)] applied to enum (not a struct)
+#[repr(C)]
+enum Color {
+    Red {},
+    Green {},
+    Blue {},
+}
+
+fn main() -> Int {
+    return 0;
+}

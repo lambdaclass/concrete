@@ -1,0 +1,26 @@
+// Complex test: defer + destroy + struct methods together
+struct Resource {
+    value: Int
+}
+
+impl Destroy for Resource {
+    fn destroy(&self) {
+    }
+}
+
+impl Resource {
+    fn get(&self) -> Int {
+        return self.value;
+    }
+}
+
+fn use_resource() -> Int {
+    let r: Resource = Resource { value: 42 };
+    defer destroy(r);
+    let val: Int = r.get();
+    return val;
+}
+
+fn main() -> Int {
+    return use_resource();
+}

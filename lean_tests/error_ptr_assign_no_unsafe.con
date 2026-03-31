@@ -1,0 +1,7 @@
+// Error: assigning through raw pointer without Unsafe capability
+fn main() -> i32 {
+    let mut x: i32 = 10;
+    let p: *mut i32 = &mut x as *mut i32;
+    *p = 42;
+    return x;
+}

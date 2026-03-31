@@ -1,0 +1,5 @@
+mod other;
+
+fn main() -> Int {
+    return 0;
+}

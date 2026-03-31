@@ -1,0 +1,30 @@
+// module main
+struct Pair {
+  a: Int,
+  b: Int,
+}
+
+enum Option<T> {
+  Some { value: T },
+  None,
+}
+
+enum Result<T, E> {
+  Ok { value: T },
+  Err { value: E },
+}
+
+fn read_a(p: &Pair) -> Int {
+  return p.a;
+}
+
+fn consume(p: Pair) -> Int {
+  return p.a;
+}
+
+fn main() -> Int {
+  let p: Pair = Pair { a: 10, b: 20 };
+  let val: Int = read_a(&p);
+  let dummy: Int = consume(p);
+  return val;
+}

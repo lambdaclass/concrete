@@ -1,0 +1,12 @@
+mod Lib {
+    pub newtype Meters = Int;
+    pub fn make_meters(x: Int) -> Meters { return Meters(x); }
+    pub fn unwrap_meters(m: Meters) -> Int { return m.0; }
+}
+mod Main {
+    import Lib.{ make_meters, unwrap_meters };
+    fn main() -> Int {
+        let m = make_meters(42);
+        return unwrap_meters(m);
+    }
+}

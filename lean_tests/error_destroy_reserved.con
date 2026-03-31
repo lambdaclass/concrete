@@ -1,0 +1,8 @@
+// Error: 'destroy' is a reserved identifier for top-level functions
+fn destroy(x: Int) -> Int {
+    return x;
+}
+
+fn main() -> Int {
+    return destroy(42);
+}

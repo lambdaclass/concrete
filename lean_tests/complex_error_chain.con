@@ -1,0 +1,33 @@
+// Test: multiple ? operators in sequence with Result
+// Expected: 40
+enum Result {
+    Ok { value: Int },
+    Err { code: Int },
+}
+
+fn step1(x: Int) -> Result {
+    return Result#Ok { value: x * 2 };
+}
+
+fn step2(x: Int) -> Result {
+    return Result#Ok { value: x * 3 };
+}
+
+fn step3(x: Int) -> Result {
+    return Result#Ok { value: x + 10 };
+}
+
+fn pipeline(x: Int) -> Result {
+    let a: Int = step1(x)?;
+    let b: Int = step2(a)?;
+    let c: Int = step3(b)?;
+    return Result#Ok { value: c };
+}
+
+fn main() -> Int {
+    let result: Result = pipeline(5);
+    match result {
+        Result#Ok { value } -> { return value; }
+        Result#Err { code } -> { return code; }
+    }
+}

@@ -1,0 +1,5 @@
+fn main() -> Int {
+    let arr: [Int; 3] = [1, 2, 3];
+    let b: Bool = true;
+    return arr[b];
+}

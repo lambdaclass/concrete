@@ -1,0 +1,6 @@
+mod error_test_generic {
+    #[test]
+    fn test_bad<T>() -> i32 {
+        return 0;
+    }
+}

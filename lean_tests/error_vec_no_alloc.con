@@ -1,0 +1,10 @@
+// Error: vec_new in pure function requires Alloc capability
+fn try_vec() -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    vec_free(v);
+    return 0;
+}
+
+fn main() -> Int {
+    return 0;
+}

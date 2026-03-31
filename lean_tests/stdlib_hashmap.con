@@ -1,0 +1,53 @@
+// Test fn pointer calls through struct fields — HashMap enabler test.
+// Exercises the compiler fix for indirect calls via struct fields.
+
+struct Copy Table {
+    hash_fn: fn(u64) -> u64,
+    eq_fn: fn(u64, u64) -> bool,
+}
+
+fn my_hash(k: u64) -> u64 {
+    return k * 31;
+}
+
+fn my_eq(a: u64, b: u64) -> bool {
+    return a == b;
+}
+
+fn main() -> Int {
+    let t: Table = Table { hash_fn: my_hash, eq_fn: my_eq };
+
+    // Call hash function via struct field
+    let hf: fn(u64) -> u64 = t.hash_fn;
+    let h1: u64 = hf(1);
+    let h2: u64 = hf(2);
+    let h3: u64 = hf(1);
+
+    // Same input → same hash
+    if h1 != h3 {
+        return 1;
+    }
+    // Different input → different hash
+    if h1 == h2 {
+        return 2;
+    }
+
+    // Call eq function via struct field
+    let ef: fn(u64, u64) -> bool = t.eq_fn;
+    if !ef(10, 10) {
+        return 3;
+    }
+    if ef(10, 20) {
+        return 4;
+    }
+
+    // Test with multiple struct instances
+    let t2: Table = Table { hash_fn: my_hash, eq_fn: my_eq };
+    let hf2: fn(u64) -> u64 = t2.hash_fn;
+    let h4: u64 = hf2(42);
+    if h4 != 42 * 31 {
+        return 5;
+    }
+
+    return 0;
+}

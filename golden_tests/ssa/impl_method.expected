@@ -1,0 +1,24 @@
+; module main
+define i64 @consume(%Counter %c) {
+entry:
+  %t1 = load i64, %c
+  ret i64 %t1
+}
+
+define i64 @main() {
+entry:
+  %t0 = alloca %Counter
+  store i64 42, %t0
+  %t2 = load %Counter, %t0
+  %borrow.3 = alloca %Counter
+  store %Counter %t2, %borrow.3
+  %t4 = call i64 @Counter_get(ptr(%Counter) %borrow.3)
+  %t5 = call i64 @consume(%Counter %t2)
+  ret i64 %t4
+}
+
+define i64 @Counter_get(ptr(%Counter) %self) {
+entry:
+  %t1 = load i64, %self
+  ret i64 %t1
+}

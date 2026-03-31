@@ -1,0 +1,6 @@
+fn main() -> Int {
+    let a: Int = 123;
+    let b: Int = 456;
+    let product: Int = a * b;
+    return product;
+}

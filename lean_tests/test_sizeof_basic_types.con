@@ -1,0 +1,12 @@
+// Test: sizeof for basic types
+fn main() -> Int {
+    let s1: Uint = sizeof::<Int>();      // 8
+    let s2: Uint = sizeof::<Bool>();     // 1
+    let s3: Uint = sizeof::<u8>();       // 1
+    let s4: Uint = sizeof::<i32>();      // 4
+    let s5: Uint = sizeof::<u64>();      // 8
+    let s6: Uint = sizeof::<Float64>(); // 8
+    // 8 + 1 + 1 + 4 + 8 + 8 = 30
+    let sum: Uint = s1 + s2 + s3 + s4 + s5 + s6;
+    return (sum as Int) + 12;
+}

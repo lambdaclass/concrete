@@ -1,0 +1,25 @@
+// Test: monomorphization chains — apply<T> calls transform<T> calls t.get()
+trait Transform {
+    fn get(&self) -> Int;
+}
+
+struct Copy Val { n: Int }
+
+impl Transform for Val {
+    fn get(&self) -> Int {
+        return self.n;
+    }
+}
+
+fn transform<T: Transform>(t: T) -> Int {
+    return t.get();
+}
+
+fn apply<T: Transform>(x: T) -> Int {
+    return transform(x);
+}
+
+fn main() -> Int {
+    let v: Val = Val { n: 42 };
+    return apply(v);
+}

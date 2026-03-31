@@ -1,0 +1,13 @@
+// Error: caller with(File) tries to call callee with(File, Network)
+// Should fail because caller doesn't have Network
+fn needs_both() with(File, Network) -> Int {
+    return 1;
+}
+
+fn only_file() with(File) -> Int {
+    return needs_both();
+}
+
+fn main() -> Int {
+    return 0;
+}

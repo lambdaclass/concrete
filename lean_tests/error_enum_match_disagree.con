@@ -1,0 +1,18 @@
+struct Resource { value: Int }
+
+fn consume(r: Resource) -> Int { return r.value; }
+
+enum Choice { A { }, B { } }
+
+fn test(ch: Choice, r: Resource) -> Int {
+    match ch {
+        Choice#A { } => { return consume(r); },
+        Choice#B { } => { return 0; },
+    }
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { value: 42 };
+    let ch: Choice = Choice#A { };
+    return test(ch, r);
+}

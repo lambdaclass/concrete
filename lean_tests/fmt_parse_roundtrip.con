@@ -1,0 +1,49 @@
+// Property tests: int_to_string / string_to_int round-trip
+
+fn extract_ok(result: Result<Int, Int>) -> Int {
+    match result {
+        Result#Ok { value } => { return value; },
+        Result#Err { value } => { return -999999; },
+    }
+}
+
+fn check_int_roundtrip(x: Int) -> Int {
+    let s: String = int_to_string(x);
+    let result: Result<Int, Int> = string_to_int(&s);
+    drop_string(s);
+    let back: Int = extract_ok(result);
+    if back != x { return 1; }
+    return 0;
+}
+
+fn main() -> Int {
+    // Zero
+    if check_int_roundtrip(0) != 0 { return 1; }
+    // Positive values
+    if check_int_roundtrip(1) != 0 { return 1; }
+    if check_int_roundtrip(42) != 0 { return 1; }
+    if check_int_roundtrip(999) != 0 { return 1; }
+    if check_int_roundtrip(12345) != 0 { return 1; }
+    if check_int_roundtrip(1000000) != 0 { return 1; }
+    // Negative values
+    if check_int_roundtrip(-1) != 0 { return 1; }
+    if check_int_roundtrip(-42) != 0 { return 1; }
+    if check_int_roundtrip(-999) != 0 { return 1; }
+    if check_int_roundtrip(-12345) != 0 { return 1; }
+    // Range around zero
+    let mut i: Int = -50;
+    while i <= 50 {
+        if check_int_roundtrip(i) != 0 { return 1; }
+        i = i + 1;
+    }
+    // Powers of 10
+    let mut val: Int = 1;
+    let mut count: Int = 0;
+    while count < 15 {
+        if check_int_roundtrip(val) != 0 { return 1; }
+        if check_int_roundtrip(0 - val) != 0 { return 1; }
+        val = val * 10;
+        count = count + 1;
+    }
+    return 0;
+}

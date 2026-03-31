@@ -1,0 +1,12 @@
+// Capability polymorphism: apply passes capability through to File-requiring function
+fn apply<T, cap C>(f: fn(T) with(C) -> T, x: T) with(C) -> T {
+    return f(x);
+}
+
+fn file_op(x: Int) with(File) -> Int {
+    return x;
+}
+
+fn main() with(Std) -> Int {
+    return apply((file_op), 42);
+}

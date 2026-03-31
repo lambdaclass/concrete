@@ -1,0 +1,7 @@
+trusted extern fn sqrt(x: Float64) -> Float64;
+
+fn main() -> Int {
+    let x: Float64 = 25.0;
+    let result: Float64 = sqrt(x);
+    return result as Int;
+}
