@@ -1,7 +1,0 @@
-mod Simple {
-    fn main() -> i32 {
-        let x: i32 = 2;
-        x = 4;
-        return x;
-    }
-}
