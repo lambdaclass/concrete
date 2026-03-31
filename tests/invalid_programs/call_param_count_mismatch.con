@@ -1,9 +1,0 @@
-mod Test {
-    fn main() -> i32 {
-        return hello(1, 2);
-    }
-
-    fn hello(a: i32) -> i32 {
-        return a * 2;
-    }
-}
