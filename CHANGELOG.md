@@ -10,6 +10,41 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase D bug bundle export
+
+The reducer's natural companion. Closes the gap between "I have a
+minimized repro" and "I have a manifest case landed in
+`tests/wrong-code/`." Roadmap reference: Phase D.12.
+
+- **Contract** (`docs/BUG_BUNDLE.md`): bundle purpose, required
+  layout, what is always included, what is included only if
+  available, and how bundles relate to
+  `tests/wrong-code/manifest.toml`.
+- **Bundler** (`scripts/tests/capture_wrong_code_bundle.sh`): wraps
+  the existing `concrete debug-bundle` for the structural
+  pipeline-state skeleton (manifest.json, source/, diagnostics.txt,
+  IR dumps via `--emit-core` / `--emit-ssa` / `--emit-llvm`) and
+  layers on corpus-specific overlay files: `command.txt`,
+  `predicate.txt`, `compiler-version.txt`, separated `stdout.txt` /
+  `stderr.txt` capture, and a `reports/` directory of any reports
+  that ran cleanly. Adds a sibling `bundle.json` recording the case
+  id, predicate, source basename, and line count. Also captures
+  `ssa-unverified.txt` opportunistically (useful for verifier-
+  rejection bugs like WC-0004).
+- **Reducer integration** (`scripts/tests/minimize_wrong_code.sh
+  --bundle <dir>`): after a successful reduction, captures a bundle
+  of the reduced output. Case id is the bundle directory's
+  basename; predicate is recorded verbatim. The full pipeline now
+  flows: `new bug → reduce → bundle → manifest entry → permanent
+  regression`.
+- **Smoke test** (`make test-bundle-smoke`): 29 checks. Captures
+  bundles on both a failing source (E0209 rejection) and a passing
+  source (fib), asserts every always-included file is present plus
+  the appropriate stage-conditional files (diagnostics.txt for the
+  failing case; core/ssa/llvm + reports for the passing case).
+  Validates argument plumbing rejects missing required flags. Does
+  not run a long reduction.
+
 ### Phase D reducer / minimizer workflow
 
 The wrong-code corpus pipeline now closes the loop from "I just hit a

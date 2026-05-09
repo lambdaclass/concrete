@@ -30,13 +30,17 @@ REDUCE_DIR="scripts/reduce"
 
 usage() {
   cat <<'USAGE'
-Usage: minimize_wrong_code.sh <source.con> --predicate <KIND>:<ARG> [-o <output>] [--verbose]
+Usage: minimize_wrong_code.sh <source.con> --predicate <KIND>:<ARG> [-o <output>] [--bundle <dir>] [--verbose]
 
 Predicate kinds:
   error-code:<E####>            e.g. error-code:E0708
   runtime-output:<EXPECTED>     e.g. runtime-output:42
   oracle-mismatch               (no argument)
   report-contains:<KIND>:<SUB>  e.g. report-contains:caps:Alloc
+
+--bundle <dir> captures a wrong-code bundle for the reduced output
+in <dir>. The basename is recorded as the case id. See
+docs/BUG_BUNDLE.md.
 
 Output is written to <source>.reduced unless -o is supplied.
 USAGE
@@ -49,11 +53,13 @@ SOURCE="$1"; shift
 PREDICATE=""
 OUTPUT=""
 VERBOSE=""
+BUNDLE_DIR=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --predicate) PREDICATE="$2"; shift 2 ;;
     -o)          OUTPUT="$2"; shift 2 ;;
     --verbose)   VERBOSE="--verbose"; shift ;;
+    --bundle)    BUNDLE_DIR="$2"; shift 2 ;;
     -h|--help)   usage; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
@@ -116,4 +122,16 @@ if ! $EXT "$ORIG_TMP" >/dev/null 2>&1; then
 fi
 [ -n "$VERBOSE" ] && echo "predicate holds on original. starting reduction..."
 
-exec "$COMPILER" reduce "$SOURCE" --predicate "external:$EXT" -o "$OUTPUT" $VERBOSE
+# Run the reducer. If a bundle was requested, we need its exit before
+# we can capture the bundle on the reduced output, so we don't `exec`.
+"$COMPILER" reduce "$SOURCE" --predicate "external:$EXT" -o "$OUTPUT" $VERBOSE
+RC=$?
+
+if [ $RC -eq 0 ] && [ -n "$BUNDLE_DIR" ]; then
+  CASE_ID=$(basename "$BUNDLE_DIR")
+  [ -n "$VERBOSE" ] && echo "capturing bundle for case $CASE_ID at $BUNDLE_DIR..."
+  bash scripts/tests/capture_wrong_code_bundle.sh "$OUTPUT" \
+      --case "$CASE_ID" --predicate "$PREDICATE" -o "$BUNDLE_DIR"
+fi
+
+exit $RC
