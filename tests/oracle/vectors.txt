@@ -53,6 +53,26 @@ tests/programs/linear_loop_inner.con
 tests/programs/generic_fn.con
 tests/programs/generic_struct.con
 
+# --- Borrows ---
+tests/programs/borrow_read.con
+tests/programs/borrow_mut.con
+tests/programs/borrow_no_consume.con
+tests/programs/sequential_mut_borrow.con
+tests/programs/impl_method.con
+tests/programs/impl_mut_method.con
+tests/programs/borrow_copy_in_block.con
+tests/programs/adversarial_mut_ref_method_on_owner.con
+
+# --- borrowIn (named borrow regions) ---
+tests/programs/borrow_named.con
+tests/programs/borrow_multi.con
+tests/programs/borrow_mut_named.con
+tests/programs/borrow_in_method.con
+tests/programs/adversarial_mut_ref_param_multi_use.con
+tests/programs/adversarial_mut_ref_loop_deref.con
+tests/programs/adversarial_mut_ref_param_return.con
+tests/programs/adversarial_mut_ref_sequential_borrows.con
+
 # --- Canonical roadmap examples ---
 examples/parse_validate/src/main.con
 examples/service_errors/src/main.con
@@ -61,8 +81,5 @@ examples/service_errors/src/main.con
 # skip reason as a regression target rather than silently dropping the example.
 tests/programs/result_ok.con
 tests/programs/result_err.con
-tests/programs/borrow_read.con
-tests/programs/borrow_mut.con
 tests/programs/string_basic.con
-tests/programs/impl_method.con
 examples/fixed_capacity/src/main.con

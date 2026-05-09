@@ -35,23 +35,30 @@ lowering, SSA emission, LLVM, clang, or any linker.
   bitwise `^ & | << >>`
 - Unary operators: `-` (neg), `!` (not), `~` (bitnot)
 - Casts between integer types and bool→int (`true→1`, `false→0`)
-- Function calls (named, by-value)
-- Struct literals and field access
+- Function calls (named, by-value or by-ref)
+- Struct literals and field access (including auto-deref when the
+  receiver is a borrow)
 - Enum literals and enum match (with field bindings)
 - Match expressions over int/bool literals, variable patterns, wildcard `_`,
   and enum variants
-- Array literals, array index reads
+- Array literals, array index reads (with auto-deref when the receiver
+  is a borrow)
 - `if` / `else` expressions, with scope restoration so block-local
   `let` bindings do not leak past the branch
+- `&` and `&mut` borrows of locals, fields, and array elements;
+  borrow targets capture a path (base + field/index steps) plus the
+  env frame depth at borrow time so callee shadowing cannot redirect
+  a borrow to the wrong binding
 
 ### Supported statements
 
 - `let` declarations (block-scoped)
 - Assignment to a local
-- Field assignment, when the receiver is a plain identifier
-  (`p.x = e;`)
+- Field assignment, when the receiver is a plain identifier (owned
+  struct or borrow of a struct)
 - Array index assignment, when the receiver is a plain identifier
-  (`arr[i] = e;`)
+  (owned array or borrow of an array)
+- Deref assignment `*r = e` through a mutable borrow
 - `return` (with or without value)
 - `if` / `else` with branch-local scope and outer-variable mutation
   preserved
@@ -59,6 +66,9 @@ lowering, SSA emission, LLVM, clang, or any linker.
   of 10,000,000 iterations
 - Statement-level `match` (mutations to outer variables persist; arm-local
   bindings are scoped out)
+- `borrow var as ref in 'region { body }` — named borrow regions
+  bind a borrow for the body and drop it on exit; mutations through
+  the borrow survive
 
 ### Supported entry contract
 
@@ -83,16 +93,13 @@ classify a vector as PENDING rather than FAIL.
 | String literal | `interp: string literals not yet supported` |
 | Char literal | `interp: char literals not yet supported` |
 | Float literal | `interp: float literals not yet supported` |
-| Borrow `&x` | `interp: borrow expressions not yet supported` |
-| Mutable borrow `&mut x` | `interp: borrow-mut expressions not yet supported` |
-| Deref `*p` | `interp: deref expressions not yet supported` |
 | Function reference | `interp: function references not yet supported` |
 | `?` (try) | `interp: try expressions not yet supported` |
 | Heap `alloc` | `interp: alloc expressions not yet supported` |
 | `while` as expression | `interp: while expressions not yet supported` |
 | `defer` | `interp: defer not yet supported` |
-| Deref-assign `*p = v` | `interp: deref assign not yet supported` |
-| Block-borrow `borrow_in` | `interp: borrowIn not yet supported` |
+| Borrow target shape (literal-borrow etc.) | `interp: unsupported borrow target shape` |
+| Deref-assign through immutable ref | `interp: deref-assign through immutable ref` |
 | Field-assign on non-ident | `interp: field assign on non-ident expression` |
 | Array index-assign on non-ident | `interp: array index assign on non-ident expression` |
 | Negative array index | `interp: negative array index <i>` |
@@ -113,24 +120,29 @@ and copied semantically.
 
 ### Values are flat ADTs
 
-`IVal` is `int | bool | struct | enum | array | unit`. Structs and
-arrays are represented by their fields/elements directly. Mutating an
-element of `arr` rebinds the local `arr` to a new array; there is no
-shared backing storage.
+`IVal` is `int | bool | struct | enum | array | unit | ref`. Structs
+and arrays are represented by their fields/elements directly. Refs
+are paths (base name + field/index steps + the env frame depth at
+borrow time + a mut flag) rather than addresses.
 
 This means:
 
-- Two locals never alias the same memory.
-- Mutation through a borrow is impossible (and explicitly rejected,
-  per §2).
-- A value passed to a function is fully owned by the callee; the caller
-  cannot observe callee mutations except through the return value.
+- Two locals never alias the same memory by accident — a borrow only
+  participates in aliasing when there is an actual ref value.
+- A ref always names a binding visible at borrow time. Same-named
+  callee parameters cannot redirect a ref to the wrong binding because
+  the ref skips frames pushed after its creation.
+- Function calls share the env stack with the caller: parameters
+  push on top, mutations through ref params reach into the caller's
+  frame, and the local frame is dropped on return. A value passed by
+  value is fully owned by the callee and the caller cannot observe
+  internal callee state.
 
-This is *intentionally weaker* than the surface language. The full
-compiler implements borrows, mutable references, and aliasing;
-the interpreter does not. Programs that need borrow semantics belong on
-the PENDING list — they are real semantic gaps in the oracle until the
-interpreter learns to model them, not silent passes.
+The interpreter's borrow model is weaker than the surface language's
+borrow checker (it does not enforce lifetimes or alias exclusion —
+the type checker already did, and the interpreter operates on
+already-validated Core IR). It is strong enough to give the same
+observable result as the compiled binary for the supported subset.
 
 ### Integer arithmetic is arbitrary-precision
 

@@ -6,17 +6,41 @@ open Concrete
 
 /-! ## Source-level interpreter for the predictable/core subset
 
-    First landing: targets `parse_validate` (integer/bool, structs, enums,
-    arrays, match, bounded loops, calls). Unsupported constructs fail
-    with explicit "interp: ..." diagnostics.
+    Currently supported (oracle subset, see `docs/INTERPRETER_TRUST.md`):
+    integer/bool, structs, enums, arrays, match, bounded loops, calls,
+    immutable/mutable borrows of locals, fields, and array elements.
+
+    Unsupported constructs fail with explicit "interp: ..." diagnostics
+    so the differential harness in `tests/oracle/` records them as
+    PENDING rather than silently mismatching.
 
     Limitations:
     - No I/O (print/println), no capabilities
-    - No borrow/deref/pointer operations
     - No float, char, string values
     - No overflow/truncation (arbitrary-precision integers)
-    - Expression-level match (inside let/return) does not propagate mutations
 -/
+
+-- ============================================================
+-- Reference paths (for borrows / mutable refs)
+-- ============================================================
+
+/-- A step inside a reference path: into a struct field or array element. -/
+inductive RefStep where
+  | field (name : String)
+  | index (i : Nat)
+  deriving Repr, Inhabited
+
+/-- A reference path roots at a variable name in the env at borrow
+    creation time and walks through fields/indices. `frame` is the
+    env.length at borrow time; it lets the lookup skip past callee
+    frames that may shadow the borrowed name. Structured-scope rules
+    ensure the binding outlives every use of the borrow. -/
+structure RefPath where
+  base : String
+  frame : Nat
+  steps : List RefStep
+  isMut : Bool := false
+  deriving Repr, Inhabited
 
 -- ============================================================
 -- Interpreter values
@@ -29,6 +53,7 @@ inductive IVal where
   | enum_ (enumName variant : String) (fields : List (String × IVal))
   | array (elems : Array IVal) (elemTy : Ty) (size : Nat)
   | unit
+  | ref (path : RefPath)
   deriving Repr, Inhabited
 
 -- ============================================================
@@ -149,6 +174,91 @@ def evalCast (v : IVal) (targetTy : Ty) : Except String IVal :=
   | _ => .error "interp: unsupported cast"
 
 -- ============================================================
+-- Reference path lookup / update
+-- ============================================================
+
+private partial def lookupAt (val : IVal) (steps : List RefStep) : Except String IVal :=
+  match steps with
+  | [] => .ok val
+  | .field fname :: rest =>
+    match val with
+    | .struct_ _ fields =>
+      match fields.find? (fun (n, _) => n == fname) with
+      | some (_, fv) => lookupAt fv rest
+      | none => .error s!"interp: ref path field '{fname}' not found"
+    | _ => .error "interp: ref step .field on non-struct"
+  | .index i :: rest =>
+    match val with
+    | .array elems _ _ =>
+      match arrayGet elems i with
+      | some ev => lookupAt ev rest
+      | none => .error s!"interp: ref path index {i} out of bounds (size {elems.size})"
+    | _ => .error "interp: ref step .index on non-array"
+
+/-- Drop entries pushed onto env after the ref was created, so that
+    same-named callee bindings don't shadow the borrowed binding. -/
+private def envViewAtFrame (env : Env) (frame : Nat) : Env :=
+  if env.length >= frame then env.drop (env.length - frame) else env
+
+partial def lookupPath (env : Env) (p : RefPath) : Except String IVal := do
+  let view := envViewAtFrame env p.frame
+  match envGet view p.base with
+  | none => .error s!"interp: ref path base '{p.base}' not in env"
+  | some v => lookupAt v p.steps
+
+private partial def updateAt (val : IVal) (steps : List RefStep) (newVal : IVal) : Except String IVal :=
+  match steps with
+  | [] => .ok newVal
+  | .field fname :: rest =>
+    match val with
+    | .struct_ sname fields =>
+      match fields.find? (fun (n, _) => n == fname) with
+      | none => .error s!"interp: ref update field '{fname}' not found"
+      | some (_, fv) => do
+        let newFv ← updateAt fv rest newVal
+        let newFields := fields.map fun (n, v) =>
+          if n == fname then (n, newFv) else (n, v)
+        return .struct_ sname newFields
+    | _ => .error "interp: ref step .field on non-struct (update)"
+  | .index i :: rest =>
+    match val with
+    | .array elems elemTy size =>
+      if h : i < elems.size then do
+        let oldElem := elems[i]
+        let newElem ← updateAt oldElem rest newVal
+        return .array (elems.set i newElem) elemTy size
+      else .error s!"interp: ref update index {i} out of bounds (size {elems.size})"
+    | _ => .error "interp: ref step .index on non-array (update)"
+
+/-- Like envSet but only rewrites bindings at depth >= `skip` (counting
+    from the head). Used so that a ref-update walks past intervening
+    callee frames and rewrites the binding that was actually borrowed. -/
+private partial def envSetSkipping (env : Env) (skip : Nat) (name : String) (val : IVal) : Env :=
+  match env, skip with
+  | [], _ => []
+  | (n, v) :: rest, 0 =>
+    if n == name then (n, val) :: rest
+    else (n, v) :: envSetSkipping rest 0 name val
+  | (n, v) :: rest, k + 1 =>
+    (n, v) :: envSetSkipping rest k name val
+
+partial def updatePath (env : Env) (p : RefPath) (newVal : IVal) : Except String Env := do
+  let skip := if env.length >= p.frame then env.length - p.frame else 0
+  let view := envViewAtFrame env p.frame
+  match envGet view p.base with
+  | none => .error s!"interp: ref path base '{p.base}' not in env (update)"
+  | some baseVal => do
+    let newBase ← updateAt baseVal p.steps newVal
+    return envSetSkipping env skip p.base newBase
+
+/-- If `v` is a ref, follow it; otherwise return `v` unchanged.
+    Used for auto-deref on field-access / array-index receivers. -/
+private def autoDeref (env : Env) (v : IVal) : Except String IVal :=
+  match v with
+  | .ref p => lookupPath env p
+  | other => .ok other
+
+-- ============================================================
 -- Helpers (must precede mutual block — no forward refs in Lean 4)
 -- ============================================================
 
@@ -175,172 +285,206 @@ private def matchLit (scrutinee : IVal) (lit : IVal) : Bool :=
 
 -- ============================================================
 -- Core evaluator (partial, mutually recursive)
+--
+-- Every evalX returns the post-evaluation Env so that callee
+-- mutations through borrows propagate back to the caller. Most
+-- expressions thread env unchanged; only `.call` and the
+-- statement-level mutators rewrite it.
 -- ============================================================
 
 mutual
 
-partial def evalExpr (fns : List CFnDef) (env : Env) (e : CExpr) : Except String Flow := do
+/-- Resolve a CExpr to a reference path.
+    Acceptable shapes: idents, field accesses, array indices, and
+    derefs of a ref (for `&*r` collapse). The borrow target's index
+    expressions are evaluated against the current env so the path
+    snapshot reflects the value at borrow time. -/
+partial def evalBorrowTarget (fns : List CFnDef) (env : Env) (e : CExpr) (isMut : Bool) :
+    Except String (Env × RefPath) := do
   match e with
-  | .intLit val ty => return .val (.int val ty)
-  | .boolLit val => return .val (.bool val)
+  | .ident name _ =>
+    return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
+  | .fieldAccess obj fld _ => do
+    let (env, p) ← evalBorrowTarget fns env obj isMut
+    return (env, { p with steps := p.steps ++ [.field fld] })
+  | .arrayIndex arr idx _ => do
+    let (env, p) ← evalBorrowTarget fns env arr isMut
+    let (env, iv) ← evalExprVal fns env idx
+    match iv with
+    | .int i _ =>
+      if i < 0 then .error s!"interp: negative array index {i} in borrow target"
+      else return (env, { p with steps := p.steps ++ [.index i.toNat] })
+    | _ => .error "interp: array index in borrow target is not an integer"
+  | .deref inner _ => do
+    -- &(*r) and &mut (*r): forward to r's path, optionally widening mutability
+    let (env, v) ← evalExprVal fns env inner
+    match v with
+    | .ref p => return (env, { p with isMut := p.isMut || isMut })
+    | _ => .error "interp: deref of non-ref in borrow target"
+  -- Borrowing a literal yields a ref to a temporary. Surface the underlying
+  -- "type X not yet supported" so the harness PENDING reflects the real gap.
+  | .strLit _ => .error "interp: string literals not yet supported"
+  | .charLit _ => .error "interp: char literals not yet supported"
+  | .floatLit _ _ => .error "interp: float literals not yet supported"
+  | _ => .error "interp: unsupported borrow target shape"
+
+partial def evalExpr (fns : List CFnDef) (env : Env) (e : CExpr) : Except String (Env × Flow) := do
+  match e with
+  | .intLit val ty => return (env, .val (.int val ty))
+  | .boolLit val => return (env, .val (.bool val))
   | .strLit _ => .error "interp: string literals not yet supported"
   | .charLit _ => .error "interp: char literals not yet supported"
   | .floatLit _ _ => .error "interp: float literals not yet supported"
 
   | .ident name _ =>
     match envGet env name with
-    | some v => return .val v
+    | some v => return (env, .val v)
     | none => .error s!"interp: undefined variable '{name}'"
 
   | .binOp op lhs rhs _ => do
-    let lv ← evalExprVal fns env lhs
-    let rv ← evalExprVal fns env rhs
+    let (env, lv) ← evalExprVal fns env lhs
+    let (env, rv) ← evalExprVal fns env rhs
     let result ← evalBinOp op lv rv
-    return .val result
+    return (env, .val result)
 
   | .unaryOp op operand _ => do
-    let v ← evalExprVal fns env operand
+    let (env, v) ← evalExprVal fns env operand
     let result ← evalUnaryOp op v
-    return .val result
+    return (env, .val result)
 
   | .call fnName _ args _ => do
-    let argVals ← evalCallArgs fns env args
+    let (env, argVals) ← evalCallArgs fns env args
     match findFn fns fnName with
     | none => .error s!"interp: undefined function '{fnName}'"
     | some fdef =>
       if fdef.params.length != argVals.length then
         .error s!"interp: arity mismatch calling '{fnName}': expected {fdef.params.length}, got {argVals.length}"
       else
-        let callEnv := bindParams [] fdef.params argVals
-        let (_, flow) ← evalStmts fns callEnv fdef.body
+        -- Share env with callee so borrows resolve against caller bindings.
+        -- After the call, drop the local frame; mutations to caller-visible
+        -- bindings (through ref params or otherwise) survive in the lower
+        -- portion of the env.
+        let outerLen := env.length
+        let callEnv := bindParams env fdef.params argVals
+        let (postEnv, flow) ← evalStmts fns callEnv fdef.body
+        let restored := postEnv.drop (postEnv.length - outerLen)
         match flow with
-        | .ret v => return .val v
-        | .val v => return .val v
-        | _ => return .val .unit
+        | .ret v => return (restored, .val v)
+        | .val v => return (restored, .val v)
+        | _ => return (restored, .val .unit)
 
   | .structLit name _ fields _ => do
-    let fieldVals ← evalFields fns env fields
-    return .val (.struct_ name fieldVals)
+    let (env, fieldVals) ← evalFields fns env fields
+    return (env, .val (.struct_ name fieldVals))
 
   | .fieldAccess obj field _ => do
-    let v ← evalExprVal fns env obj
-    match v with
+    let (env, v) ← evalExprVal fns env obj
+    let target ← autoDeref env v
+    match target with
     | .struct_ _ fields =>
       match fields.find? (fun (n, _) => n == field) with
-      | some (_, fv) => return .val fv
+      | some (_, fv) => return (env, .val fv)
       | none => .error s!"interp: field '{field}' not found in struct"
     | _ => .error "interp: field access on non-struct value"
 
   | .enumLit enumName variant _ fields _ => do
-    let fieldVals ← evalFields fns env fields
-    return .val (.enum_ enumName variant fieldVals)
+    let (env, fieldVals) ← evalFields fns env fields
+    return (env, .val (.enum_ enumName variant fieldVals))
 
   | .match_ scrutinee arms _ => do
-    let sv ← evalExprVal fns env scrutinee
+    let (env, sv) ← evalExprVal fns env scrutinee
     evalMatch fns env sv arms
 
   | .arrayLit elems ty => do
-    let vals ← evalCallArgs fns env elems
+    let (env, vals) ← evalCallArgs fns env elems
     let elemTy := match ty with
       | .array t _ => t
       | _ => .unit
-    return .val (.array vals.toArray elemTy vals.length)
+    return (env, .val (.array vals.toArray elemTy vals.length))
 
   | .arrayIndex arr idx _ => do
-    let av ← evalExprVal fns env arr
-    match av with
+    let (env, av) ← evalExprVal fns env arr
+    let arrayVal ← autoDeref env av
+    match arrayVal with
     | .array elems _ _ => do
-      let iv ← evalExprVal fns env idx
+      let (env, iv) ← evalExprVal fns env idx
       match iv with
       | .int i _ =>
         if i < 0 then .error s!"interp: negative array index {i}"
         else
           let n := i.toNat
           match arrayGet elems n with
-          | some v => return .val v
+          | some v => return (env, .val v)
           | none => .error s!"interp: array index {i} out of bounds (size {elems.size})"
       | _ => .error "interp: array index is not an integer"
     | _ => .error "interp: array index on non-array value"
 
   | .cast inner targetTy => do
-    let v ← evalExprVal fns env inner
+    let (env, v) ← evalExprVal fns env inner
     let result ← evalCast v targetTy
-    return .val result
+    return (env, .val result)
 
   | .ifExpr cond thenStmts elseStmts _ => do
-    let cv ← evalExprVal fns env cond
+    let (env, cv) ← evalExprVal fns env cond
     match cv with
     | .bool true =>
-      let (_, flow) ← evalStmts fns env thenStmts
-      return flow
+      let outerLen := env.length
+      let (branchEnv, flow) ← evalStmts fns env thenStmts
+      let restored := branchEnv.drop (branchEnv.length - outerLen)
+      return (restored, flow)
     | .bool false =>
-      let (_, flow) ← evalStmts fns env elseStmts
-      return flow
+      let outerLen := env.length
+      let (branchEnv, flow) ← evalStmts fns env elseStmts
+      let restored := branchEnv.drop (branchEnv.length - outerLen)
+      return (restored, flow)
     | _ => .error "interp: if condition is not a boolean"
 
-  | .borrow _ _ => .error "interp: borrow expressions not yet supported"
-  | .borrowMut _ _ => .error "interp: borrow-mut expressions not yet supported"
-  | .deref _ _ => .error "interp: deref expressions not yet supported"
+  | .borrow inner _ => do
+    let (env, p) ← evalBorrowTarget fns env inner false
+    return (env, .val (.ref p))
+  | .borrowMut inner _ => do
+    let (env, p) ← evalBorrowTarget fns env inner true
+    return (env, .val (.ref p))
+  | .deref inner _ => do
+    let (env, v) ← evalExprVal fns env inner
+    match v with
+    | .ref p => do
+      let target ← lookupPath env p
+      return (env, .val target)
+    | _ => .error "interp: deref of non-ref value"
+
   | .fnRef _ _ => .error "interp: function references not yet supported"
   | .try_ _ _ => .error "interp: try expressions not yet supported"
   | .allocCall _ _ _ => .error "interp: alloc expressions not yet supported"
   | .whileExpr _ _ _ _ => .error "interp: while expressions not yet supported"
 
-partial def evalExprVal (fns : List CFnDef) (env : Env) (e : CExpr) : Except String IVal := do
-  let f ← evalExpr fns env e
+partial def evalExprVal (fns : List CFnDef) (env : Env) (e : CExpr) : Except String (Env × IVal) := do
+  let (env, f) ← evalExpr fns env e
   match f with
-  | .val v => return v
+  | .val v => return (env, v)
   | .ret _ => .error "interp: unexpected return in value position"
   | .brk => .error "interp: unexpected break in value position"
   | .cont => .error "interp: unexpected continue in value position"
 
-partial def evalCallArgs (fns : List CFnDef) (env : Env) (args : List CExpr) : Except String (List IVal) :=
+partial def evalCallArgs (fns : List CFnDef) (env : Env) (args : List CExpr) : Except String (Env × List IVal) :=
   match args with
-  | [] => .ok []
+  | [] => .ok (env, [])
   | e :: rest => do
-    let v ← evalExprVal fns env e
-    let vs ← evalCallArgs fns env rest
-    return v :: vs
+    let (env, v) ← evalExprVal fns env e
+    let (env, vs) ← evalCallArgs fns env rest
+    return (env, v :: vs)
 
-partial def evalFields (fns : List CFnDef) (env : Env) (fields : List (String × CExpr)) : Except String (List (String × IVal)) :=
+partial def evalFields (fns : List CFnDef) (env : Env) (fields : List (String × CExpr)) :
+    Except String (Env × List (String × IVal)) :=
   match fields with
-  | [] => .ok []
+  | [] => .ok (env, [])
   | (name, expr) :: rest => do
-    let v ← evalExprVal fns env expr
-    let vs ← evalFields fns env rest
-    return (name, v) :: vs
+    let (env, v) ← evalExprVal fns env expr
+    let (env, vs) ← evalFields fns env rest
+    return (env, (name, v) :: vs)
 
-partial def evalMatch (fns : List CFnDef) (env : Env) (scrutinee : IVal) (arms : List CMatchArm) : Except String Flow :=
-  match arms with
-  | [] => .error "interp: no matching arm in match expression"
-  | arm :: rest =>
-    match arm with
-    | .enumArm enumName variant bindings body =>
-      match scrutinee with
-      | .enum_ sEnum sVariant sFields =>
-        if sEnum == enumName && sVariant == variant then
-          let armEnv := bindEnumFields env bindings sFields
-          evalMatchBody fns armEnv body
-        else
-          evalMatch fns env scrutinee rest
-      | _ => evalMatch fns env scrutinee rest
-    | .litArm value body => do
-      let litVal ← evalExprVal fns env value
-      if matchLit scrutinee litVal then
-        evalMatchBody fns env body
-      else
-        evalMatch fns env scrutinee rest
-    | .varArm binding _ body =>
-      let armEnv := if binding == "_" then env else envBind env binding scrutinee
-      evalMatchBody fns armEnv body
-
-partial def evalMatchBody (fns : List CFnDef) (env : Env) (body : List CStmt) : Except String Flow := do
-  let (_, flow) ← evalStmts fns env body
-  return flow
-
-/-- Statement-level match: returns (env, flow) so outer-variable mutations persist.
-    Block-local let bindings and arm bindings are trimmed via scope restoration. -/
-partial def evalMatchStmt (fns : List CFnDef) (env : Env) (scrutinee : IVal) (arms : List CMatchArm) : Except String (Env × Flow) :=
+partial def evalMatch (fns : List CFnDef) (env : Env) (scrutinee : IVal) (arms : List CMatchArm) :
+    Except String (Env × Flow) :=
   match arms with
   | [] => .error "interp: no matching arm in match expression"
   | arm :: rest =>
@@ -352,31 +496,31 @@ partial def evalMatchStmt (fns : List CFnDef) (env : Env) (scrutinee : IVal) (ar
           let outerLen := env.length
           let armEnv := bindEnumFields env bindings sFields
           let (bodyEnv, flow) ← evalStmts fns armEnv body
-          let restoredEnv := bodyEnv.drop (bodyEnv.length - outerLen)
-          return (restoredEnv, flow)
+          let restored := bodyEnv.drop (bodyEnv.length - outerLen)
+          return (restored, flow)
         else
-          evalMatchStmt fns env scrutinee rest
-      | _ => evalMatchStmt fns env scrutinee rest
+          evalMatch fns env scrutinee rest
+      | _ => evalMatch fns env scrutinee rest
     | .litArm value body => do
-      let litVal ← evalExprVal fns env value
+      let (env, litVal) ← evalExprVal fns env value
       if matchLit scrutinee litVal then do
         let outerLen := env.length
         let (bodyEnv, flow) ← evalStmts fns env body
-        let restoredEnv := bodyEnv.drop (bodyEnv.length - outerLen)
-        return (restoredEnv, flow)
+        let restored := bodyEnv.drop (bodyEnv.length - outerLen)
+        return (restored, flow)
       else
-        evalMatchStmt fns env scrutinee rest
+        evalMatch fns env scrutinee rest
     | .varArm binding _ body => do
       let outerLen := env.length
       let armEnv := if binding == "_" then env else envBind env binding scrutinee
       let (bodyEnv, flow) ← evalStmts fns armEnv body
-      let restoredEnv := bodyEnv.drop (bodyEnv.length - outerLen)
-      return (restoredEnv, flow)
+      let restored := bodyEnv.drop (bodyEnv.length - outerLen)
+      return (restored, flow)
 
 partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String (Env × Flow) := do
   match s with
   | .letDecl name _ _ value => do
-    let f ← evalExpr fns env value
+    let (env, f) ← evalExpr fns env value
     match f with
     | .val v => return (envBind env name v, .val .unit)
     | .ret v => return (env, .ret v)
@@ -384,7 +528,7 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     | .cont => return (env, .cont)
 
   | .assign name value => do
-    let f ← evalExpr fns env value
+    let (env, f) ← evalExpr fns env value
     match f with
     | .val v => return (envSet env name v, .val .unit)
     | .ret v => return (env, .ret v)
@@ -392,7 +536,7 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     | .cont => return (env, .cont)
 
   | .return_ (some expr) _ => do
-    let f ← evalExpr fns env expr
+    let (env, f) ← evalExpr fns env expr
     match f with
     | .val v => return (env, .ret v)
     | other => return (env, other)
@@ -400,13 +544,8 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
   | .return_ none _ =>
     return (env, .ret .unit)
 
-  | .expr (.match_ scrutinee arms _) => do
-    -- Statement-level match: propagate outer-variable mutations
-    let sv ← evalExprVal fns env scrutinee
-    evalMatchStmt fns env sv arms
-
   | .expr e => do
-    let f ← evalExpr fns env e
+    let (env, f) ← evalExpr fns env e
     match f with
     | .val _ => return (env, .val .unit)
     | .ret v => return (env, .ret v)
@@ -414,12 +553,11 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     | .cont => return (env, .cont)
 
   | .ifElse cond thenBody elseBody => do
-    let cf ← evalExpr fns env cond
+    let (env, cf) ← evalExpr fns env cond
     match cf with
     | .val (.bool true) =>
       let outerLen := env.length
       let (branchEnv, flow) ← evalStmts fns env thenBody
-      -- Restore scope: drop block-local let bindings, keep mutations to outer vars
       let restoredEnv := branchEnv.drop (branchEnv.length - outerLen)
       return (restoredEnv, flow)
     | .val (.bool false) =>
@@ -439,7 +577,7 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     evalWhile fns env cond body step 10000000
 
   | .fieldAssign obj field value => do
-    let newVal ← evalExprVal fns env value
+    let (env, newVal) ← evalExprVal fns env value
     match obj with
     | .ident name _ =>
       match envGet env name with
@@ -447,34 +585,65 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
         let newFields := fields.map fun (n, v) =>
           if n == field then (n, newVal) else (n, v)
         return (envSet env name (.struct_ sname newFields), .val .unit)
+      | some (.ref p) =>
+        let p' := { p with steps := p.steps ++ [.field field] }
+        let env' ← updatePath env p' newVal
+        return (env', .val .unit)
       | _ => .error s!"interp: field assign on non-struct variable '{name}'"
     | _ => .error "interp: field assign on non-ident expression"
 
   | .arrayIndexAssign arr idx value => do
-    let newVal ← evalExprVal fns env value
-    let idxVal ← evalExprVal fns env idx
+    let (env, newVal) ← evalExprVal fns env value
+    let (env, idxVal) ← evalExprVal fns env idx
     match idxVal with
     | .int i _ =>
       if i < 0 then .error s!"interp: negative array index {i} on assignment"
       else
-      match arr with
-      | .ident name _ =>
-        match envGet env name with
-        | some (.array elems elemTy size) =>
-          let n := i.toNat
-          if n < elems.size then
-            let newElems := elems.set! n newVal
-            return (envSet env name (.array newElems elemTy size), .val .unit)
-          else .error s!"interp: array index {i} out of bounds (size {elems.size})"
-        | _ => .error s!"interp: array index assign on non-array variable '{name}'"
-      | _ => .error "interp: array index assign on non-ident expression"
+        match arr with
+        | .ident name _ =>
+          match envGet env name with
+          | some (.array elems elemTy size) =>
+            let n := i.toNat
+            if n < elems.size then
+              let newElems := elems.set! n newVal
+              return (envSet env name (.array newElems elemTy size), .val .unit)
+            else .error s!"interp: array index {i} out of bounds (size {elems.size})"
+          | some (.ref p) =>
+            let p' := { p with steps := p.steps ++ [.index i.toNat] }
+            let env' ← updatePath env p' newVal
+            return (env', .val .unit)
+          | _ => .error s!"interp: array index assign on non-array variable '{name}'"
+        | _ => .error "interp: array index assign on non-ident expression"
     | _ => .error "interp: array index is not an integer"
+
+  | .derefAssign target value => do
+    let (env, newVal) ← evalExprVal fns env value
+    let (env, refVal) ← evalExprVal fns env target
+    match refVal with
+    | .ref p =>
+      if !p.isMut then .error "interp: deref-assign through immutable ref"
+      else do
+        let env' ← updatePath env p newVal
+        return (env', .val .unit)
+    | _ => .error "interp: deref-assign on non-ref value"
 
   | .break_ _ _ => return (env, .brk)
   | .continue_ _ => return (env, .cont)
   | .defer _ => .error "interp: defer not yet supported"
-  | .derefAssign _ _ => .error "interp: deref assign not yet supported"
-  | .borrowIn _ _ _ _ _ _ => .error "interp: borrowIn not yet supported"
+  | .borrowIn var ref _region isMut _refTy body => do
+    -- `borrow var as ref in 'region { body }` — bind `ref` to a path that
+    -- captures the current frame so callee shadows don't break it. Drop
+    -- the binding on exit; mutations to `var` through `ref` survive.
+    let path : RefPath := { base := var, frame := env.length, steps := [], isMut := isMut }
+    let outerLen := env.length
+    let inner := envBind env ref (.ref path)
+    let (postEnv, flow) ← evalStmts fns inner body
+    let restored := postEnv.drop (postEnv.length - outerLen)
+    match flow with
+    | .ret v => return (restored, .ret v)
+    | .brk => return (restored, .brk)
+    | .cont => return (restored, .cont)
+    | .val _ => return (restored, .val .unit)
 
 partial def evalStmts (fns : List CFnDef) (env : Env) (stmts : List CStmt) : Except String (Env × Flow) :=
   match stmts with
@@ -490,7 +659,7 @@ partial def evalStmts (fns : List CFnDef) (env : Env) (stmts : List CStmt) : Exc
 partial def evalWhile (fns : List CFnDef) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) : Except String (Env × Flow) := do
   if fuel == 0 then .error "interp: loop exceeded maximum iterations (10000000)"
   else
-    let cv ← evalExprVal fns env cond
+    let (env, cv) ← evalExprVal fns env cond
     match cv with
     | .bool false => return (env, .val .unit)
     | .bool true =>
@@ -547,6 +716,12 @@ partial def IVal.toString : IVal → String
     let es := ", ".intercalate (elems.toList.map IVal.toString)
     "[" ++ es ++ "]"
   | .unit => "()"
+  | .ref p =>
+    let stepStr (s : RefStep) : String := match s with
+      | .field n => "." ++ n
+      | .index i => s!"[{i}]"
+    let pfx := if p.isMut then "&mut " else "&"
+    pfx ++ p.base ++ String.join (p.steps.map stepStr)
 
 instance : ToString IVal := ⟨IVal.toString⟩
 
