@@ -1,0 +1,53 @@
+# Wrong-code regression corpus manifest.
+#
+# Operative contract: docs/WRONG_CODE_CORPUS.md
+# Operations guide: tests/wrong-code/README.md
+#
+# Every wrong-code regression — miscompile, codegen divergence,
+# verifier-trigger, fact/report mismatch, proof/evidence regression,
+# crasher, or error-emission bug — is registered here. The manifest
+# is a registry, not a relocation: existing repros stay where they
+# are, and the `repro` field points at them.
+
+[[case]]
+id          = "WC-0001"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/adversarial/newtype/chained.con"
+kind        = "runtime"
+expected    = "42"
+discovered  = "66d8736"
+fixed       = "66d8736"
+notes       = "tests/wrong-code/cases/WC-0001.md"
+
+[[case]]
+id          = "WC-0002"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/adversarial/newtype/borrow.con"
+kind        = "runtime"
+expected    = "8080"
+discovered  = "66d8736"
+fixed       = "66d8736"
+notes       = "tests/wrong-code/cases/WC-0002.md"
+
+[[case]]
+id          = "WC-0003"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_field_assign_narrow_field.con"
+kind        = "runtime"
+expected    = "100"
+discovered  = "66d8736"
+fixed       = "66d8736"
+notes       = "tests/wrong-code/cases/WC-0003.md"
+
+[[case]]
+id          = "WC-0004"
+category    = "verifier-trigger"
+status      = "open"
+repro       = "tests/wrong-code/cases/WC-0004/program.con"
+kind        = "compile-error"
+expected    = "E0708"
+discovered  = "parse_validate phase-3 work (CHANGELOG entry — original code E0703)"
+notes       = "tests/wrong-code/cases/WC-0004.md"

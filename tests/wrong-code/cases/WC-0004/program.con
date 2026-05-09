@@ -1,0 +1,60 @@
+// WC-0004 candidate minimization — accumulator-style match.
+//
+// The original symptom (CHANGELOG, parse_validate phase-3 work) was:
+//   "accumulator-style match (many sequential `match` + mutable
+//    counter) triggers E0703 dominator violation; early-return style
+//    works correctly"
+//
+// This is a working approximation. It currently compiles cleanly
+// against HEAD; that may mean the bug was incidentally fixed by
+// intervening changes, or that the minimization is missing the
+// specific shape the original code had. See WC-0004.md for the next
+// minimization steps.
+
+enum Check {
+    Pass {},
+    Fail { code: i32 },
+}
+
+fn check_a(x: i32) -> Check {
+    if x > 0 {
+        return Check::Pass {};
+    }
+    return Check::Fail { code: 1 };
+}
+
+fn check_b(x: i32) -> Check {
+    if x < 100 {
+        return Check::Pass {};
+    }
+    return Check::Fail { code: 2 };
+}
+
+fn check_c(x: i32) -> Check {
+    if x != 42 {
+        return Check::Pass {};
+    }
+    return Check::Fail { code: 3 };
+}
+
+fn count_failures(x: i32) -> i32 {
+    let mut failures: i32 = 0;
+    match check_a(x) {
+        Check::Pass {} => {},
+        Check::Fail { code } => { failures = failures + 1; },
+    }
+    match check_b(x) {
+        Check::Pass {} => {},
+        Check::Fail { code } => { failures = failures + 1; },
+    }
+    match check_c(x) {
+        Check::Pass {} => {},
+        Check::Fail { code } => { failures = failures + 1; },
+    }
+    return failures;
+}
+
+fn main() -> Int {
+    let n: i32 = count_failures(50);
+    return n as Int;
+}

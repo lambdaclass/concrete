@@ -10,6 +10,28 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase D wrong-code corpus contract + seed
+
+The Phase D.16 named regression corpus has a contract, a CI entry point, and the first four seeded cases.
+
+- **Contract** (`docs/WRONG_CODE_CORPUS.md`): defines what qualifies as a wrong-code regression (miscompile, codegen-divergence, verifier-trigger, fact-report-mismatch, proof-evidence-regression, crash, error-regression), the per-case manifest schema (id, category, status, repro, kind, expected, discovered, fixed, notes), the minimization rule ("smallest input that triggers the bug"), the artifact bundle (the per-case directory under `tests/wrong-code/cases/<id>/`), and the lifecycle (cases never deleted; growth is monotonic).
+- **Registry** (`tests/wrong-code/manifest.toml`): the corpus is a registry, not a relocation. Existing repros under `tests/programs/bug_*.con` and `tests/programs/adversarial/<area>/` keep their wiring; the manifest references them by path. New repros that have no other home land under `tests/wrong-code/cases/<id>/`.
+- **CI** (`make test-wrong-code`, `scripts/tests/test_wrong_code.sh`): runs every `status = "fixed"` case and asserts expected behavior. `--include-open` additionally probes open cases and reports when an open bug becomes fixed (so a manifest update isn't missed). The script also enforces manifest invariants (every `repro` and `notes` path exists).
+- **Seeded cases**:
+  - WC-0001 — chained newtypes broke the cast-validity exemption (fixed in `66d8736`, repro `tests/programs/adversarial/newtype/chained.con`)
+  - WC-0002 — `.0` on a borrowed newtype produced `&Newtype → Inner` (fixed in `66d8736`, repro `tests/programs/adversarial/newtype/borrow.con`)
+  - WC-0003 — narrow-int field assign elaborated the RHS as `Int` (fixed in `66d8736`, repro `tests/programs/bug_field_assign_narrow_field.con`)
+  - WC-0004 — accumulator-style match with mut-counter triggers SSA-verify dominator violation (status `open`; current code `E0708`, originally reported as `E0703`; the candidate minimized repro lives under `tests/wrong-code/cases/WC-0004/program.con` and confirms the bug is still reproducible)
+- **First run**: 3 fixed cases pass; 1 open case still fails as expected. `make test-wrong-code` exits 0; `--include-open` adds the open-case report without changing exit status.
+
+### Phase A close-out: value-return semantic oracle is effectively closed
+
+The Phase A.1 differential harness has reached its useful steady state. 56 PASS / 0 FAIL / 1 PENDING across 57 vectors cover the predictable-core surface: int/bool/struct/enum/array, linearity + borrows + named borrow regions + deref-assign, generics, Result/Option/`?`, string literals plus `string_length` / `drop_string`, and the canonical `parse_validate` / `service_errors` examples — every supported program is now a live differential check between compiled output and `--interp` output.
+
+- **Closed gaps**: borrow / `borrowIn` / `?` / string literals all flipped from PENDING to PASS via interpreter additions (`9de6ae0`, `f4a7539`, `764ddd4`).
+- **Single remaining PENDING**: `examples/fixed_capacity/src/main.con` is blocked on print/IO intrinsics. The interpreter cannot reproduce stdout side effects, so any program that interleaves `print` / `println` with its return value is intentionally outside the harness contract. This is a *contract widening* concern (compare interleaved stdout, not just the int return), not a Phase A interpreter gap. Modeling print/IO is deferred until a flagship example forces it.
+- **Trust boundary**: `docs/INTERPRETER_TRUST.md` documents the supported subset, the path-with-frame borrow model, the `?` lowering equivalence, the materialize-into-env handling for borrows of literals, and the explicit "interp: print/IO intrinsic ... not yet supported" diagnostic for I/O calls.
+
 ### Semantic-oracle differential harness lands as a regression surface
 
 Phase A.1 + A.2 close: the source-level interpreter (`Concrete/Interp.lean`, `--interp`) is now driven by a corpus harness that compiles every vector to a native binary, runs `--interp`, and compares trimmed stdout. Mismatches are fail-the-build regressions; explicit `interp: ...` skips are recorded as PENDING entries pointing at named interpreter gaps. The companion trust-boundary doc enumerates the interpreter's supported subset and the assumptions that make it a defensible oracle.
