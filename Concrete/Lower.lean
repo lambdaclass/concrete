@@ -838,13 +838,39 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
             let phiReg ← freshReg "match.phi."
             emit (.phi phiReg incoming varTy)
             setVar name (.reg phiReg varTy)
+      -- WC-0004: arm-local enum-payload bindings (e.g. `Check::Fail { code }`)
+      -- enter the var-table via `setVar` inside the arm body. After merge,
+      -- those bindings are out of scope but still leak into vars; the next
+      -- match's preMatchVars snapshot then sees them, builds a phi across
+      -- arms that don't all bind them, and produces a dominator violation
+      -- (E0708) when an arm without the binding pulls a value defined
+      -- inside a different arm. Restrict vars back to preMatchVars's name
+      -- set; merged updates from the phi pass survive because we just
+      -- wrote them via `setVar`.
+      let st ← getState
+      let cleaned := preMatchVars.map fun (n, preVal) =>
+        match st.vars.find? fun (vn, _) => vn == n with
+        | some (_, v) => (n, v)
+        | none => (n, preVal)
+      setState { st with vars := cleaned }
     else if liveSnapshots.length == 1 then
-      -- Only one arm reached merge — use its vars directly
+      -- Only one arm reached merge — use its vars directly, then drop
+      -- arm-local bindings (same WC-0004 leakage applies).
       match liveSnapshots with
       | [(endVars, _, _)] =>
         let st ← getState
-        setState { st with vars := endVars }
+        let cleaned := preMatchVars.map fun (n, preVal) =>
+          match endVars.find? fun (vn, _) => vn == n with
+          | some (_, v) => (n, v)
+          | none => (n, preVal)
+        setState { st with vars := cleaned }
       | _ => pure ()
+    else
+      -- All arms terminated; merge is unreachable. Restore vars so any
+      -- accidental downstream read sees the pre-match state instead of
+      -- the last arm's leaked bindings.
+      let st ← getState
+      setState { st with vars := preMatchVars }
     -- Handle the match result value phi
     -- Filter out .unit values (arms that produce no result, e.g. side-effect blocks)
     let realPhiIncoming := phiIncoming.filter fun (v, _) => match v with | .unit => false | _ => true

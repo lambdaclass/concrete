@@ -10,6 +10,48 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### WC-0004 fixed — match arm-local bindings leaked into next match's var-table
+
+The first wrong-code corpus case to be driven from `open` to `fixed`
+through the corpus's own workflow. Confirmed the contract works on
+real bugs, not just historical fixed ones.
+
+- **Symptom**: two or more sequential `match` expressions over an enum
+  with a payload-binding variant (e.g. `Check::Fail { code }`), plus a
+  mutable accumulator shared across the matches, triggered
+  `SSAVerify` E0708 (phi operand not dominated by def block).
+  `parse_validate`'s phase-3 work hit this in accumulator style and
+  was rewritten to early-return form to ship; the original symptom
+  cited E0703 (a sibling dominator code that may have been the
+  diagnostic before a verifier refactor).
+- **Root cause**: `Concrete/Lower.lean`'s match lowering calls
+  `setVar` for enum-payload arm bindings, mutating the global var-
+  table. Before each arm the lowering correctly restores `vars :=
+  preMatchVars`, but at the END of the match the var-table still
+  held whatever bindings the last arm introduced. The next match's
+  `snapshotVars` then captured those leaked bindings into its
+  `preMatchVars`. The next match's merge iterated over those leaked
+  names and emitted a phi across arms that didn't all bind them —
+  the `Pass` arm carried over the previous match's `Fail`-arm
+  register, producing a phi like `[%t9, %arm06], [%t21, %arm18]`
+  where `%t9` was defined inside an arm that doesn't dominate
+  `arm06`.
+- **Fix**: in all three exit paths of `.match_` lowering (multi-arm
+  merge, single-arm merge, all-arms-terminated), restrict the var-
+  table back to the names that existed in `preMatchVars`. The merge
+  has already written the phi registers for the merged variables;
+  the leaked arm-local bindings just need to be dropped.
+- **Diagnostic plumbing added**: `concrete <file>
+  --emit-ssa-unverified` and `Pipeline.lowerUnverified` skip both
+  the verifier and the cleanup pass to print raw Lower output.
+  Debugging infrastructure for the wrong-code workflow per
+  `docs/WRONG_CODE_CORPUS.md`; not on the production compile path.
+- **Regression coverage**: `tests/wrong-code/cases/WC-0004/
+  program.con` is now a permanent runtime regression in the corpus.
+  WC-0004 in `tests/wrong-code/manifest.toml` flips from `open` to
+  `fixed`. The full test suite (1572 positive tests, fast tier) is
+  green.
+
 ### Phase D wrong-code corpus contract + seed
 
 The Phase D.16 named regression corpus has a contract, a CI entry point, and the first four seeded cases.

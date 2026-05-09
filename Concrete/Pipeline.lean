@@ -137,6 +137,14 @@ def lower (mono : MonomorphizedProgram) : Except Diagnostics SSAProgram := do
     | .error ds => .error ds
     | .ok () => .ok { ssaModules }
 
+/-- Same as `lower`, but skip both verifier passes AND the cleanup
+    pass. Diagnostic-only — used by debugging entry points to print
+    raw SSA that the verifier rejects. Not on the production compile
+    path. -/
+def lowerUnverified (mono : MonomorphizedProgram) : Except Diagnostics SSAProgram := do
+  let ssaModules ← mono.coreModules.mapM (fun m => lowerModule m)
+  .ok { ssaModules }
+
 /-- Emit LLVM IR from SSA modules. -/
 def emit (ssa : SSAProgram) (testMode : Bool := false) (moduleFilter : Option String := none) : String :=
   emitSSAProgram ssa.ssaModules testMode moduleFilter

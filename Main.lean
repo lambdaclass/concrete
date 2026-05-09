@@ -284,7 +284,10 @@ def compileAndEmit (inputPath : String) (mode : String) : IO UInt32 := do
       IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
       return 1
     | .ok mono =>
-    match Pipeline.lower mono with
+    let lowerResult := if mode == "ssa-unverified"
+                        then Pipeline.lowerUnverified mono
+                        else Pipeline.lower mono
+    match lowerResult with
     | .error ds =>
       IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
       return 1
@@ -1460,6 +1463,8 @@ def main (args : List String) : IO UInt32 := do
     compileAndEmit inputPath "core"
   | [inputPath, "--emit-ssa"] =>
     compileAndEmit inputPath "ssa"
+  | [inputPath, "--emit-ssa-unverified"] =>
+    compileAndEmit inputPath "ssa-unverified"
   | [inputPath, "-o", outputPath] =>
     compileSSA inputPath outputPath false
   | [inputPath, "--check", checkType] =>
