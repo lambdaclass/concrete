@@ -1406,6 +1406,8 @@ def main (args : List String) : IO UInt32 := do
       IO.eprintln "Predicates: parse-error, resolve-error, check-error, elab-error, core-check-error,"
       IO.eprintln "            mono-error, lower-error, consistency-violation, verify-warning, crash"
       IO.eprintln "Substring match: check-error:expected Int"
+      IO.eprintln "External:        external:scripts/reduce/expect-error-code.sh E0708"
+      IO.eprintln "                 (the candidate file is appended as the final argument)"
       return 1
     | some inp =>
       let predStr := match rest with

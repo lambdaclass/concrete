@@ -10,6 +10,49 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase D reducer / minimizer workflow
+
+The wrong-code corpus pipeline now closes the loop from "I just hit a
+compiler bug" to "the bug is a manifest entry." Roadmap reference:
+Phase D.14.
+
+- **Contract** (`docs/REDUCER_WORKFLOW.md`): when to reduce, what
+  counts as a good minimized repro, when not to over-minimize, how
+  to preserve expected behavior with a correctly-stated predicate,
+  and how reduced cases enter `tests/wrong-code/manifest.toml`.
+- **Predicate scripts** (`scripts/reduce/expect-*.sh`): four
+  user-facing predicates — `expect-error-code.sh`,
+  `expect-runtime-output.sh`, `expect-oracle-mismatch.sh`,
+  `expect-report-contains.sh`. Each takes the candidate path as the
+  final argument and returns 0 (still triggers) or 1 (no longer
+  triggers). They're standalone tools — usable from a terminal, the
+  reducer, or anywhere a predicate makes sense.
+- **Wrapper** (`scripts/tests/minimize_wrong_code.sh`): translates a
+  high-level predicate (`error-code:E####`, `runtime-output:V`,
+  `oracle-mismatch`, `report-contains:KIND:SUB`) into a `concrete
+  reduce --predicate external:<scripts/reduce/...>` invocation.
+  Verifies the predicate holds on the original source before
+  starting (refuses to reduce a passing program).
+- **Reducer extension** (`Concrete/Reduce.lean`): new
+  `Predicate.external (cmd : String)` constructor. Writes the
+  candidate to a temp file, shells out to the command (split on
+  whitespace, candidate path appended), returns true iff exit 0.
+  All four high-level predicates now funnel through the same
+  syntax-aware shrinker.
+- **Smoke test** (`make test-reducer-smoke`): 13 checks covering
+  predicate parsing, compiler invocation, pass/fail discrimination,
+  and wrapper argument plumbing. Does NOT run a long minimization;
+  the engine is exercised indirectly by `make test-wrong-code`.
+- **Real-case demo**: ran on WC-0015 (`bug_int_match_disagree.con`,
+  the int-match consumption-disagreement rejection). 27 lines → 20
+  lines, predicate `error-code:E0209` preserved through the
+  reduction. The case's notes file now carries a Reduction block
+  with the replay command. Use this as the canonical example when
+  writing new corpus entries.
+
+The full pipeline is now: **new bug → reduce → manifest entry →
+permanent wrong-code regression**.
+
 ### Wrong-code corpus bulk import (WC-0005 .. WC-0022)
 
 The Phase D wrong-code corpus is bulk-registered with all existing

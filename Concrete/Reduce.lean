@@ -32,6 +32,10 @@ inductive Predicate where
   | consistencyViolation
   | verifyWarning
   | crash
+  /-- Run an external command on each candidate; the candidate's source
+      is written to a temp file and the path is appended as the final
+      argument. Exit code 0 means the bug is still present. -/
+  | external (cmd : String)
 
 /-- Parse a predicate string like "check-error:expected Int" into a Predicate. -/
 def parsePredicate (s : String) : Option Predicate :=
@@ -50,6 +54,7 @@ def parsePredicate (s : String) : Option Predicate :=
   | "consistency-violation" => some .consistencyViolation
   | "verify-warning"   => some .verifyWarning
   | "crash"            => some .crash
+  | "external"         => substr.map .external
   | _ => none
 
 /-- Check if diagnostics contain a substring (if specified). -/
@@ -73,6 +78,25 @@ def evalPredicate (pred : Predicate) (source : String)
     match Pipeline.parse source with
     | .error _ => return false
     | .ok _ => return true
+  | .external cmd => do
+    -- Write the candidate to a temp file, then run the command with the
+    -- file path appended as the final argument. The command is split on
+    -- whitespace so simple wrappers like
+    --   "scripts/reduce/expect-error-code.sh E0708"
+    -- work without escaping.
+    let stamp ← IO.monoMsNow
+    let tmpPath := s!"/tmp/concrete-reduce-{stamp}.con"
+    IO.FS.writeFile ⟨tmpPath⟩ source
+    let parts := cmd.splitOn " " |>.filter (fun p => !p.isEmpty)
+    let exitCode ← (do
+      match parts with
+      | [] => return 1
+      | exe :: args =>
+        let allArgs := (args ++ [tmpPath]).toArray
+        let result ← IO.Process.output { cmd := exe, args := allArgs }
+        return result.exitCode)
+    try IO.FS.removeFile ⟨tmpPath⟩ catch _ => pure ()
+    return exitCode == 0
   | _ =>
     -- All other predicates need at least parsing to succeed
     match Pipeline.parse source with
