@@ -79,11 +79,16 @@ tests/programs/result_err.con
 tests/programs/result_generic_try.con
 tests/programs/option_basic.con
 
+# --- Strings ---
+tests/programs/string_basic.con
+tests/programs/result_string.con
+tests/programs/option_string.con
+tests/programs/option_mixed_payloads.con
+
 # --- Canonical roadmap examples ---
 examples/parse_validate/src/main.con
 examples/service_errors/src/main.con
 
-# Pending interpreter coverage (Phase A.3). Listed so the harness records the
-# skip reason as a regression target rather than silently dropping the example.
-tests/programs/string_basic.con
+# Pending interpreter coverage (next gap: print/IO intrinsics so the
+# interpreter can match compiled stdout for fixed_capacity et al.).
 examples/fixed_capacity/src/main.con

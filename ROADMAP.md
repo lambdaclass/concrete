@@ -98,7 +98,7 @@ The active roadmap starts after the completed compiler-integrity and proof-workf
 
 Expected outcome example: a bounded helper like `fn sum4(a0: Int, a1: Int, a2: Int, a3: Int, len: Int) -> Int { ... }` can be shown to run without allocation, recursion, or blocking, with explicit failure and stack assumptions.
 
-1. broaden the semantic-oracle differential harness across all canonical predictable examples; the harness, trust-boundary doc, and borrow / `borrowIn` / `?` interpreter support are live (see `tests/oracle/`, `make test-oracle`, `docs/INTERPRETER_TRUST.md`). Only string-literal-blocked vectors remain (`string_basic`, `examples/fixed_capacity`). String-literal support in the interpreter unlocks the `fixed_capacity` showcase, the parser flagship candidates, and most stdlib `String`-based programs
+1. broaden the semantic-oracle differential harness across all canonical predictable examples; the harness and trust-boundary doc are live (see `tests/oracle/`, `make test-oracle`, `docs/INTERPRETER_TRUST.md`), and the interpreter now supports borrows / `borrowIn` / `?` / string literals / `string_length` / `drop_string`. The harness sits at 56 PASS / 0 FAIL / 1 PENDING. The remaining PENDING is `examples/fixed_capacity` blocked on `print` / `println` / `print_string` and friends — the next concrete interpreter gap is print/IO modeling so the interpreter can match compiled stdout for programs that interleave diagnostics with `fn main() -> Int`
 
 ### Phase B: Pre-Stdlib Pressure Workloads
 

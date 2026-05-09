@@ -49,6 +49,7 @@ structure RefPath where
 inductive IVal where
   | int (val : Int) (ty : Ty)
   | bool (val : Bool)
+  | string (s : String)
   | struct_ (name : String) (fields : List (String × IVal))
   | enum_ (enumName variant : String) (fields : List (String × IVal))
   | array (elems : Array IVal) (elemTy : Ty) (size : Nat)
@@ -151,6 +152,8 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   | .or_, .bool a, .bool b => .ok (.bool (a || b))
   | .eq, .bool a, .bool b => .ok (.bool (a == b))
   | .neq, .bool a, .bool b => .ok (.bool (a != b))
+  | .eq, .string a, .string b => .ok (.bool (a == b))
+  | .neq, .string a, .string b => .ok (.bool (a != b))
   | .bitxor, .int a _, .int b ty => .ok (.int (intXor a b) ty)
   | .bitand, .int a _, .int b ty => .ok (.int (intAnd a b) ty)
   | .bitor, .int a _, .int b ty => .ok (.int (intOr a b) ty)
@@ -328,9 +331,15 @@ partial def evalBorrowTarget (fns : List CFnDef) (enums : List CEnumDef) (env : 
     match v with
     | .ref p => return (env, { p with isMut := p.isMut || isMut })
     | _ => .error "interp: deref of non-ref in borrow target"
-  -- Borrowing a literal yields a ref to a temporary. Surface the underlying
-  -- "type X not yet supported" so the harness PENDING reflects the real gap.
-  | .strLit _ => .error "interp: string literals not yet supported"
+  -- Borrowing a literal yields a ref to a temporary. The interpreter
+  -- has no separate static-data area, so we materialize the literal
+  -- under a synthetic env name and ref that. The synthetic name is
+  -- keyed off the current env length so successive borrows in the
+  -- same statement do not collide.
+  | .strLit s => do
+    let name := s!"__interp_str_lit_{env.length}"
+    let env := envBind env name (.string s)
+    return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
   | .charLit _ => .error "interp: char literals not yet supported"
   | .floatLit _ _ => .error "interp: float literals not yet supported"
   | _ => .error "interp: unsupported borrow target shape"
@@ -339,7 +348,7 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
   match e with
   | .intLit val ty => return (env, .val (.int val ty))
   | .boolLit val => return (env, .val (.bool val))
-  | .strLit _ => .error "interp: string literals not yet supported"
+  | .strLit s => return (env, .val (.string s))
   | .charLit _ => .error "interp: char literals not yet supported"
   | .floatLit _ _ => .error "interp: float literals not yet supported"
 
@@ -362,7 +371,6 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
   | .call fnName _ args _ => do
     let (env, argVals) ← evalCallArgs fns enums env args
     match findFn fns fnName with
-    | none => .error s!"interp: undefined function '{fnName}'"
     | some fdef =>
       if fdef.params.length != argVals.length then
         .error s!"interp: arity mismatch calling '{fnName}': expected {fdef.params.length}, got {argVals.length}"
@@ -379,6 +387,35 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
         | .ret v => return (restored, .val v)
         | .val v => return (restored, .val v)
         | _ => return (restored, .val .unit)
+    | none =>
+      -- Builtins: a small allowlist of intrinsics whose semantics fit the
+      -- value-passing model. I/O (print, println, print_string, ...) is
+      -- intentionally left out — the interpreter cannot reproduce stdout
+      -- side effects, so any program that calls them is PENDING.
+      match fnName, argVals with
+      | "string_length", [arg] => do
+        let s ← (match arg with
+          | .string s => .ok s
+          | .ref p => do
+            let v ← lookupPath env p
+            match v with
+            | .string s => .ok s
+            | _ => .error "interp: string_length: ref does not point to a string"
+          | _ => .error "interp: string_length: argument is not a string")
+        return (env, .val (.int (Int.ofNat s.length) .int))
+      | "drop_string", [_] =>
+        -- Linear-discipline no-op: ownership transfer + heap free in the
+        -- compiled binary; the interpreter has no heap, so the consume
+        -- itself is enough. Return unit.
+        return (env, .val .unit)
+      | "print", _ | "println", _ | "print_string", _ | "print_int", _
+      | "print_char", _ | "print_bool", _ =>
+        -- I/O intrinsics produce stdout side effects in the compiled
+        -- binary. The interpreter cannot reproduce those — its only
+        -- output is the `fn main() -> Int` return value. Programs that
+        -- call these are PENDING for the harness, not silent passes.
+        .error s!"interp: print/IO intrinsic '{fnName}' not yet supported"
+      | _, _ => .error s!"interp: undefined function '{fnName}'"
 
   | .structLit name _ fields _ => do
     let (env, fieldVals) ← evalFields fns enums env fields
@@ -746,6 +783,7 @@ partial def IVal.toString : IVal → String
     let es := ", ".intercalate (elems.toList.map IVal.toString)
     "[" ++ es ++ "]"
   | .unit => "()"
+  | .string s => "\"" ++ s ++ "\""
   | .ref p =>
     let stepStr (s : RefStep) : String := match s with
       | .field n => "." ++ n

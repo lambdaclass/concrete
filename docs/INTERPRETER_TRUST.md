@@ -54,6 +54,16 @@ lowering, SSA emission, LLVM, clang, or any linker.
   `Some`), unwrap its single payload field; otherwise return the
   whole enum from the current function. Mirrors the
   `Concrete/Lower.lean` lowering exactly
+- String literals — `IVal.string` carries the value; `&"literal"`
+  materializes the string under a synthetic env name keyed off env
+  length so successive borrows do not collide
+- Selected pure builtins: `string_length(&s)` returns byte length;
+  `drop_string(s)` is a no-op (the interpreter has no heap, so the
+  linear consume itself is enough). I/O intrinsics (`print`,
+  `println`, `print_string`, `print_int`, `print_char`,
+  `print_bool`) are explicitly **not** supported — the interpreter
+  cannot reproduce stdout side effects, and any program that calls
+  them is PENDING
 
 ### Supported statements
 
@@ -95,9 +105,10 @@ classify a vector as PENDING rather than FAIL.
 
 | Construct | Diagnostic |
 |---|---|
-| String literal | `interp: string literals not yet supported` |
 | Char literal | `interp: char literals not yet supported` |
 | Float literal | `interp: float literals not yet supported` |
+| Print / IO intrinsic | `interp: print/IO intrinsic '<name>' not yet supported` |
+| Undefined function call | `interp: undefined function '<name>'` |
 | Function reference | `interp: function references not yet supported` |
 | Heap `alloc` | `interp: alloc expressions not yet supported` |
 | `while` as expression | `interp: while expressions not yet supported` |
