@@ -49,6 +49,11 @@ lowering, SSA emission, LLVM, clang, or any linker.
   borrow targets capture a path (base + field/index steps) plus the
   env frame depth at borrow time so callee shadowing cannot redirect
   a borrow to the wrong binding
+- `?` (try) on `Result` / `Option` and any other enum: if the inner
+  value is the enum's first variant (tag 0 — by convention `Ok` /
+  `Some`), unwrap its single payload field; otherwise return the
+  whole enum from the current function. Mirrors the
+  `Concrete/Lower.lean` lowering exactly
 
 ### Supported statements
 
@@ -94,7 +99,6 @@ classify a vector as PENDING rather than FAIL.
 | Char literal | `interp: char literals not yet supported` |
 | Float literal | `interp: float literals not yet supported` |
 | Function reference | `interp: function references not yet supported` |
-| `?` (try) | `interp: try expressions not yet supported` |
 | Heap `alloc` | `interp: alloc expressions not yet supported` |
 | `while` as expression | `interp: while expressions not yet supported` |
 | `defer` | `interp: defer not yet supported` |

@@ -96,8 +96,15 @@ partial def collectFns : List CModule → List CFnDef
   | [] => []
   | m :: ms => m.functions ++ collectFns m.submodules ++ collectFns ms
 
+partial def collectEnums : List CModule → List CEnumDef
+  | [] => []
+  | m :: ms => m.enums ++ collectEnums m.submodules ++ collectEnums ms
+
 def findFn (fns : List CFnDef) (name : String) : Option CFnDef :=
   fns.find? (fun f => f.name == name)
+
+def findEnum (enums : List CEnumDef) (name : String) : Option CEnumDef :=
+  enums.find? (fun e => e.name == name)
 
 -- ============================================================
 -- Array safe access
@@ -299,17 +306,17 @@ mutual
     derefs of a ref (for `&*r` collapse). The borrow target's index
     expressions are evaluated against the current env so the path
     snapshot reflects the value at borrow time. -/
-partial def evalBorrowTarget (fns : List CFnDef) (env : Env) (e : CExpr) (isMut : Bool) :
+partial def evalBorrowTarget (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e : CExpr) (isMut : Bool) :
     Except String (Env × RefPath) := do
   match e with
   | .ident name _ =>
     return (env, { base := name, frame := env.length, steps := [], isMut := isMut })
   | .fieldAccess obj fld _ => do
-    let (env, p) ← evalBorrowTarget fns env obj isMut
+    let (env, p) ← evalBorrowTarget fns enums env obj isMut
     return (env, { p with steps := p.steps ++ [.field fld] })
   | .arrayIndex arr idx _ => do
-    let (env, p) ← evalBorrowTarget fns env arr isMut
-    let (env, iv) ← evalExprVal fns env idx
+    let (env, p) ← evalBorrowTarget fns enums env arr isMut
+    let (env, iv) ← evalExprVal fns enums env idx
     match iv with
     | .int i _ =>
       if i < 0 then .error s!"interp: negative array index {i} in borrow target"
@@ -317,7 +324,7 @@ partial def evalBorrowTarget (fns : List CFnDef) (env : Env) (e : CExpr) (isMut 
     | _ => .error "interp: array index in borrow target is not an integer"
   | .deref inner _ => do
     -- &(*r) and &mut (*r): forward to r's path, optionally widening mutability
-    let (env, v) ← evalExprVal fns env inner
+    let (env, v) ← evalExprVal fns enums env inner
     match v with
     | .ref p => return (env, { p with isMut := p.isMut || isMut })
     | _ => .error "interp: deref of non-ref in borrow target"
@@ -328,7 +335,7 @@ partial def evalBorrowTarget (fns : List CFnDef) (env : Env) (e : CExpr) (isMut 
   | .floatLit _ _ => .error "interp: float literals not yet supported"
   | _ => .error "interp: unsupported borrow target shape"
 
-partial def evalExpr (fns : List CFnDef) (env : Env) (e : CExpr) : Except String (Env × Flow) := do
+partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e : CExpr) : Except String (Env × Flow) := do
   match e with
   | .intLit val ty => return (env, .val (.int val ty))
   | .boolLit val => return (env, .val (.bool val))
@@ -342,18 +349,18 @@ partial def evalExpr (fns : List CFnDef) (env : Env) (e : CExpr) : Except String
     | none => .error s!"interp: undefined variable '{name}'"
 
   | .binOp op lhs rhs _ => do
-    let (env, lv) ← evalExprVal fns env lhs
-    let (env, rv) ← evalExprVal fns env rhs
+    let (env, lv) ← evalExprVal fns enums env lhs
+    let (env, rv) ← evalExprVal fns enums env rhs
     let result ← evalBinOp op lv rv
     return (env, .val result)
 
   | .unaryOp op operand _ => do
-    let (env, v) ← evalExprVal fns env operand
+    let (env, v) ← evalExprVal fns enums env operand
     let result ← evalUnaryOp op v
     return (env, .val result)
 
   | .call fnName _ args _ => do
-    let (env, argVals) ← evalCallArgs fns env args
+    let (env, argVals) ← evalCallArgs fns enums env args
     match findFn fns fnName with
     | none => .error s!"interp: undefined function '{fnName}'"
     | some fdef =>
@@ -366,7 +373,7 @@ partial def evalExpr (fns : List CFnDef) (env : Env) (e : CExpr) : Except String
         -- portion of the env.
         let outerLen := env.length
         let callEnv := bindParams env fdef.params argVals
-        let (postEnv, flow) ← evalStmts fns callEnv fdef.body
+        let (postEnv, flow) ← evalStmts fns enums callEnv fdef.body
         let restored := postEnv.drop (postEnv.length - outerLen)
         match flow with
         | .ret v => return (restored, .val v)
@@ -374,11 +381,11 @@ partial def evalExpr (fns : List CFnDef) (env : Env) (e : CExpr) : Except String
         | _ => return (restored, .val .unit)
 
   | .structLit name _ fields _ => do
-    let (env, fieldVals) ← evalFields fns env fields
+    let (env, fieldVals) ← evalFields fns enums env fields
     return (env, .val (.struct_ name fieldVals))
 
   | .fieldAccess obj field _ => do
-    let (env, v) ← evalExprVal fns env obj
+    let (env, v) ← evalExprVal fns enums env obj
     let target ← autoDeref env v
     match target with
     | .struct_ _ fields =>
@@ -388,26 +395,26 @@ partial def evalExpr (fns : List CFnDef) (env : Env) (e : CExpr) : Except String
     | _ => .error "interp: field access on non-struct value"
 
   | .enumLit enumName variant _ fields _ => do
-    let (env, fieldVals) ← evalFields fns env fields
+    let (env, fieldVals) ← evalFields fns enums env fields
     return (env, .val (.enum_ enumName variant fieldVals))
 
   | .match_ scrutinee arms _ => do
-    let (env, sv) ← evalExprVal fns env scrutinee
-    evalMatch fns env sv arms
+    let (env, sv) ← evalExprVal fns enums env scrutinee
+    evalMatch fns enums env sv arms
 
   | .arrayLit elems ty => do
-    let (env, vals) ← evalCallArgs fns env elems
+    let (env, vals) ← evalCallArgs fns enums env elems
     let elemTy := match ty with
       | .array t _ => t
       | _ => .unit
     return (env, .val (.array vals.toArray elemTy vals.length))
 
   | .arrayIndex arr idx _ => do
-    let (env, av) ← evalExprVal fns env arr
+    let (env, av) ← evalExprVal fns enums env arr
     let arrayVal ← autoDeref env av
     match arrayVal with
     | .array elems _ _ => do
-      let (env, iv) ← evalExprVal fns env idx
+      let (env, iv) ← evalExprVal fns enums env idx
       match iv with
       | .int i _ =>
         if i < 0 then .error s!"interp: negative array index {i}"
@@ -420,33 +427,33 @@ partial def evalExpr (fns : List CFnDef) (env : Env) (e : CExpr) : Except String
     | _ => .error "interp: array index on non-array value"
 
   | .cast inner targetTy => do
-    let (env, v) ← evalExprVal fns env inner
+    let (env, v) ← evalExprVal fns enums env inner
     let result ← evalCast v targetTy
     return (env, .val result)
 
   | .ifExpr cond thenStmts elseStmts _ => do
-    let (env, cv) ← evalExprVal fns env cond
+    let (env, cv) ← evalExprVal fns enums env cond
     match cv with
     | .bool true =>
       let outerLen := env.length
-      let (branchEnv, flow) ← evalStmts fns env thenStmts
+      let (branchEnv, flow) ← evalStmts fns enums env thenStmts
       let restored := branchEnv.drop (branchEnv.length - outerLen)
       return (restored, flow)
     | .bool false =>
       let outerLen := env.length
-      let (branchEnv, flow) ← evalStmts fns env elseStmts
+      let (branchEnv, flow) ← evalStmts fns enums env elseStmts
       let restored := branchEnv.drop (branchEnv.length - outerLen)
       return (restored, flow)
     | _ => .error "interp: if condition is not a boolean"
 
   | .borrow inner _ => do
-    let (env, p) ← evalBorrowTarget fns env inner false
+    let (env, p) ← evalBorrowTarget fns enums env inner false
     return (env, .val (.ref p))
   | .borrowMut inner _ => do
-    let (env, p) ← evalBorrowTarget fns env inner true
+    let (env, p) ← evalBorrowTarget fns enums env inner true
     return (env, .val (.ref p))
   | .deref inner _ => do
-    let (env, v) ← evalExprVal fns env inner
+    let (env, v) ← evalExprVal fns enums env inner
     match v with
     | .ref p => do
       let target ← lookupPath env p
@@ -454,36 +461,58 @@ partial def evalExpr (fns : List CFnDef) (env : Env) (e : CExpr) : Except String
     | _ => .error "interp: deref of non-ref value"
 
   | .fnRef _ _ => .error "interp: function references not yet supported"
-  | .try_ _ _ => .error "interp: try expressions not yet supported"
+  | .try_ inner _ => do
+    -- Mirrors Concrete/Lower.lean's `.try_` lowering: if `inner` is the
+    -- enum's first variant (tag 0 — by convention `Ok` / `Some`), unwrap
+    -- the single payload field; otherwise return the whole enum as an
+    -- early function return.
+    let (env, v) ← evalExprVal fns enums env inner
+    match v with
+    | .enum_ enumName variant fields =>
+      match findEnum enums enumName with
+      | none => .error s!"interp: try: enum '{enumName}' not found"
+      | some ed =>
+        match ed.variants with
+        | [] => .error s!"interp: try: enum '{enumName}' has no variants"
+        | (firstVariant, _) :: _ =>
+          if variant == firstVariant then
+            -- Success: unwrap the single payload field.
+            match fields with
+            | (_, payload) :: _ => return (env, .val payload)
+            | [] => .error s!"interp: try: success variant '{variant}' has no payload"
+          else
+            -- Failure: return the whole enum from the current function.
+            return (env, .ret (.enum_ enumName variant fields))
+    | _ => .error "interp: try: inner expression did not evaluate to an enum"
   | .allocCall _ _ _ => .error "interp: alloc expressions not yet supported"
   | .whileExpr _ _ _ _ => .error "interp: while expressions not yet supported"
 
-partial def evalExprVal (fns : List CFnDef) (env : Env) (e : CExpr) : Except String (Env × IVal) := do
-  let (env, f) ← evalExpr fns env e
+partial def evalExprVal (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e : CExpr) : Except String (Env × IVal) := do
+  let (env, f) ← evalExpr fns enums env e
   match f with
   | .val v => return (env, v)
   | .ret _ => .error "interp: unexpected return in value position"
   | .brk => .error "interp: unexpected break in value position"
   | .cont => .error "interp: unexpected continue in value position"
 
-partial def evalCallArgs (fns : List CFnDef) (env : Env) (args : List CExpr) : Except String (Env × List IVal) :=
+partial def evalCallArgs (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (args : List CExpr) : Except String (Env × List IVal) :=
   match args with
   | [] => .ok (env, [])
   | e :: rest => do
-    let (env, v) ← evalExprVal fns env e
-    let (env, vs) ← evalCallArgs fns env rest
+    let (env, v) ← evalExprVal fns enums env e
+    let (env, vs) ← evalCallArgs fns enums env rest
     return (env, v :: vs)
 
-partial def evalFields (fns : List CFnDef) (env : Env) (fields : List (String × CExpr)) :
+partial def evalFields (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (fields : List (String × CExpr)) :
     Except String (Env × List (String × IVal)) :=
   match fields with
   | [] => .ok (env, [])
   | (name, expr) :: rest => do
-    let (env, v) ← evalExprVal fns env expr
-    let (env, vs) ← evalFields fns env rest
+    let (env, v) ← evalExprVal fns enums env expr
+    let (env, vs) ← evalFields fns enums env rest
     return (env, (name, v) :: vs)
 
-partial def evalMatch (fns : List CFnDef) (env : Env) (scrutinee : IVal) (arms : List CMatchArm) :
+partial def evalMatch (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (scrutinee : IVal) (arms : List CMatchArm) :
     Except String (Env × Flow) :=
   match arms with
   | [] => .error "interp: no matching arm in match expression"
@@ -495,32 +524,32 @@ partial def evalMatch (fns : List CFnDef) (env : Env) (scrutinee : IVal) (arms :
         if sEnum == enumName && sVariant == variant then do
           let outerLen := env.length
           let armEnv := bindEnumFields env bindings sFields
-          let (bodyEnv, flow) ← evalStmts fns armEnv body
+          let (bodyEnv, flow) ← evalStmts fns enums armEnv body
           let restored := bodyEnv.drop (bodyEnv.length - outerLen)
           return (restored, flow)
         else
-          evalMatch fns env scrutinee rest
-      | _ => evalMatch fns env scrutinee rest
+          evalMatch fns enums env scrutinee rest
+      | _ => evalMatch fns enums env scrutinee rest
     | .litArm value body => do
-      let (env, litVal) ← evalExprVal fns env value
+      let (env, litVal) ← evalExprVal fns enums env value
       if matchLit scrutinee litVal then do
         let outerLen := env.length
-        let (bodyEnv, flow) ← evalStmts fns env body
+        let (bodyEnv, flow) ← evalStmts fns enums env body
         let restored := bodyEnv.drop (bodyEnv.length - outerLen)
         return (restored, flow)
       else
-        evalMatch fns env scrutinee rest
+        evalMatch fns enums env scrutinee rest
     | .varArm binding _ body => do
       let outerLen := env.length
       let armEnv := if binding == "_" then env else envBind env binding scrutinee
-      let (bodyEnv, flow) ← evalStmts fns armEnv body
+      let (bodyEnv, flow) ← evalStmts fns enums armEnv body
       let restored := bodyEnv.drop (bodyEnv.length - outerLen)
       return (restored, flow)
 
-partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String (Env × Flow) := do
+partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s : CStmt) : Except String (Env × Flow) := do
   match s with
   | .letDecl name _ _ value => do
-    let (env, f) ← evalExpr fns env value
+    let (env, f) ← evalExpr fns enums env value
     match f with
     | .val v => return (envBind env name v, .val .unit)
     | .ret v => return (env, .ret v)
@@ -528,7 +557,7 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     | .cont => return (env, .cont)
 
   | .assign name value => do
-    let (env, f) ← evalExpr fns env value
+    let (env, f) ← evalExpr fns enums env value
     match f with
     | .val v => return (envSet env name v, .val .unit)
     | .ret v => return (env, .ret v)
@@ -536,7 +565,7 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     | .cont => return (env, .cont)
 
   | .return_ (some expr) _ => do
-    let (env, f) ← evalExpr fns env expr
+    let (env, f) ← evalExpr fns enums env expr
     match f with
     | .val v => return (env, .ret v)
     | other => return (env, other)
@@ -545,7 +574,7 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     return (env, .ret .unit)
 
   | .expr e => do
-    let (env, f) ← evalExpr fns env e
+    let (env, f) ← evalExpr fns enums env e
     match f with
     | .val _ => return (env, .val .unit)
     | .ret v => return (env, .ret v)
@@ -553,18 +582,18 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     | .cont => return (env, .cont)
 
   | .ifElse cond thenBody elseBody => do
-    let (env, cf) ← evalExpr fns env cond
+    let (env, cf) ← evalExpr fns enums env cond
     match cf with
     | .val (.bool true) =>
       let outerLen := env.length
-      let (branchEnv, flow) ← evalStmts fns env thenBody
+      let (branchEnv, flow) ← evalStmts fns enums env thenBody
       let restoredEnv := branchEnv.drop (branchEnv.length - outerLen)
       return (restoredEnv, flow)
     | .val (.bool false) =>
       match elseBody with
       | some body =>
         let outerLen := env.length
-        let (branchEnv, flow) ← evalStmts fns env body
+        let (branchEnv, flow) ← evalStmts fns enums env body
         let restoredEnv := branchEnv.drop (branchEnv.length - outerLen)
         return (restoredEnv, flow)
       | none => return (env, .val .unit)
@@ -574,10 +603,10 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     | .cont => return (env, .cont)
 
   | .while_ cond body _label step =>
-    evalWhile fns env cond body step 10000000
+    evalWhile fns enums env cond body step 10000000
 
   | .fieldAssign obj field value => do
-    let (env, newVal) ← evalExprVal fns env value
+    let (env, newVal) ← evalExprVal fns enums env value
     match obj with
     | .ident name _ =>
       match envGet env name with
@@ -593,8 +622,8 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     | _ => .error "interp: field assign on non-ident expression"
 
   | .arrayIndexAssign arr idx value => do
-    let (env, newVal) ← evalExprVal fns env value
-    let (env, idxVal) ← evalExprVal fns env idx
+    let (env, newVal) ← evalExprVal fns enums env value
+    let (env, idxVal) ← evalExprVal fns enums env idx
     match idxVal with
     | .int i _ =>
       if i < 0 then .error s!"interp: negative array index {i} on assignment"
@@ -617,8 +646,8 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     | _ => .error "interp: array index is not an integer"
 
   | .derefAssign target value => do
-    let (env, newVal) ← evalExprVal fns env value
-    let (env, refVal) ← evalExprVal fns env target
+    let (env, newVal) ← evalExprVal fns enums env value
+    let (env, refVal) ← evalExprVal fns enums env target
     match refVal with
     | .ref p =>
       if !p.isMut then .error "interp: deref-assign through immutable ref"
@@ -637,7 +666,7 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     let path : RefPath := { base := var, frame := env.length, steps := [], isMut := isMut }
     let outerLen := env.length
     let inner := envBind env ref (.ref path)
-    let (postEnv, flow) ← evalStmts fns inner body
+    let (postEnv, flow) ← evalStmts fns enums inner body
     let restored := postEnv.drop (postEnv.length - outerLen)
     match flow with
     | .ret v => return (restored, .ret v)
@@ -645,36 +674,36 @@ partial def evalStmt (fns : List CFnDef) (env : Env) (s : CStmt) : Except String
     | .cont => return (restored, .cont)
     | .val _ => return (restored, .val .unit)
 
-partial def evalStmts (fns : List CFnDef) (env : Env) (stmts : List CStmt) : Except String (Env × Flow) :=
+partial def evalStmts (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (stmts : List CStmt) : Except String (Env × Flow) :=
   match stmts with
   | [] => .ok (env, .val .unit)
   | s :: rest => do
-    let (env', flow) ← evalStmt fns env s
+    let (env', flow) ← evalStmt fns enums env s
     match flow with
     | .ret v => return (env', .ret v)
     | .brk => return (env', .brk)
     | .cont => return (env', .cont)
-    | .val _ => evalStmts fns env' rest
+    | .val _ => evalStmts fns enums env' rest
 
-partial def evalWhile (fns : List CFnDef) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) : Except String (Env × Flow) := do
+partial def evalWhile (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) : Except String (Env × Flow) := do
   if fuel == 0 then .error "interp: loop exceeded maximum iterations (10000000)"
   else
-    let (env, cv) ← evalExprVal fns env cond
+    let (env, cv) ← evalExprVal fns enums env cond
     match cv with
     | .bool false => return (env, .val .unit)
     | .bool true =>
-      let (bodyEnv, flow) ← evalStmts fns env body
+      let (bodyEnv, flow) ← evalStmts fns enums env body
       match flow with
       | .ret v => return (bodyEnv, .ret v)
       | .brk => return (bodyEnv, .val .unit)
       | .val _ =>
         -- Step is already included in body (for-loop desugaring appends it).
         -- Only run step explicitly on continue (where body was cut short).
-        evalWhile fns bodyEnv cond body step (fuel - 1)
+        evalWhile fns enums bodyEnv cond body step (fuel - 1)
       | .cont =>
         -- Continue skips the rest of body, so run step before looping.
-        let (stepEnv, _) ← evalStmts fns bodyEnv step
-        evalWhile fns stepEnv cond body step (fuel - 1)
+        let (stepEnv, _) ← evalStmts fns enums bodyEnv step
+        evalWhile fns enums stepEnv cond body step (fuel - 1)
     | _ => .error "interp: while condition is not a boolean"
 
 end -- mutual
@@ -687,10 +716,11 @@ end -- mutual
     Finds and runs `main`, returns exit code. -/
 def interpret (modules : List CModule) : Except String Int := do
   let fns := collectFns modules
+  let enums := collectEnums modules
   match fns.find? (fun f => f.name == "main") with
   | none => .error "interp: no 'main' function found"
   | some mainFn =>
-    let (_, flow) ← evalStmts fns [] mainFn.body
+    let (_, flow) ← evalStmts fns enums [] mainFn.body
     match flow with
     | .ret (.int n _) => return n
     | .ret _ => return 0
