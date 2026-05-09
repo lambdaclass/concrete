@@ -1,0 +1,68 @@
+# Phase A.1 semantic-oracle differential corpus.
+#
+# One vector per non-blank, non-comment line:
+#   <path-to-.con>
+#
+# Each vector is compiled to a native binary and run; the same source is also
+# run through `--interp`. The trimmed stdout of both must agree exactly.
+#
+# Programs whose interp run starts with `interp: ...` are skipped with reason
+# (recorded as PENDING — see Phase A.3).
+#
+# Adding a vector: pick a program whose `fn main() -> Int` return value is
+# observable (compiled binary prints `<value>\n`). Bool/void main are not on
+# the harness contract yet.
+
+# --- Predictable-core baseline ---
+tests/programs/fib.con
+tests/programs/arithmetic.con
+tests/programs/recursion.con
+tests/programs/while_loop.con
+tests/programs/if_else.con
+tests/programs/nested_calls.con
+tests/programs/match_int_basic.con
+tests/programs/match_int_default.con
+tests/programs/match_int_negative.con
+tests/programs/match_bool.con
+tests/programs/let_else.con
+tests/programs/cast_basic.con
+
+# --- Aggregate values ---
+tests/programs/struct_basic.con
+tests/programs/struct_field_assign.con
+tests/programs/struct_loop_field_assign.con
+tests/programs/struct_loop_break.con
+tests/programs/struct_nested_loop.con
+tests/programs/struct_if_else_merge.con
+tests/programs/struct_match_merge.con
+tests/programs/struct_destructure.con
+tests/programs/array_basic.con
+tests/programs/array_assign.con
+
+# --- Enums ---
+tests/programs/enum_basic.con
+tests/programs/enum_fields.con
+tests/programs/enum_linear.con
+
+# --- Linearity (non-borrow) ---
+tests/programs/linear_consume.con
+tests/programs/linear_branch_agree.con
+tests/programs/linear_loop_inner.con
+
+# --- Generics ---
+tests/programs/generic_fn.con
+tests/programs/generic_struct.con
+
+# --- Canonical roadmap examples ---
+examples/parse_validate/src/main.con
+examples/service_errors/src/main.con
+
+# Pending interpreter coverage (Phase A.3). Listed so the harness records the
+# skip reason as a regression target rather than silently dropping the example.
+tests/programs/result_ok.con
+tests/programs/result_err.con
+tests/programs/borrow_read.con
+tests/programs/borrow_mut.con
+tests/programs/string_basic.con
+tests/programs/impl_method.con
+examples/fixed_capacity/src/main.con

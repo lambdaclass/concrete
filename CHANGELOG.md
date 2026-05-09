@@ -10,6 +10,16 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Semantic-oracle differential harness lands as a regression surface
+
+Phase A.1 + A.2 close: the source-level interpreter (`Concrete/Interp.lean`, `--interp`) is now driven by a corpus harness that compiles every vector to a native binary, runs `--interp`, and compares trimmed stdout. Mismatches are fail-the-build regressions; explicit `interp: ...` skips are recorded as PENDING entries pointing at named interpreter gaps. The companion trust-boundary doc enumerates the interpreter's supported subset and the assumptions that make it a defensible oracle.
+
+- **Harness**: `scripts/tests/test_oracle.sh` reads `tests/oracle/vectors.txt` and produces `ORACLE: PASS=N FAIL=N PENDING=N TOTAL=N`. Compiled and `--interp` paths share the same `<value>\n` contract for `fn main() -> Int` because the SSA wrapper formats the int return as `%lld\n` and `Main.lean`'s `interpProgram` `IO.println`s the int return.
+- **Corpus**: 39 vectors covering fib/arithmetic/recursion, structs, arrays, enums, match, linearity (non-borrow), generics, plus the canonical roadmap examples `parse_validate` and `service_errors`. Initial state: 32 PASS, 0 FAIL, 7 PENDING — borrow/try/string-literal cases (`fixed_capacity`, `result_ok`, `borrow_read`, `string_basic`, `impl_method`).
+- **Wired into normal flow**: `make test-oracle` runs standalone; `make test-full` runs the harness as the tail of the existing `interp` section in `scripts/tests/run_tests.sh`. The `full` mode includes `interp` (it didn't before this change).
+- **Trust-boundary doc**: `docs/INTERPRETER_TRUST.md` enumerates supported expressions/statements, the explicit `interp: ...` rejection contract for unsupported constructs, the value-passing-no-aliasing memory model, the arbitrary-precision-integer arithmetic stance (no wrapping — programs that need it are outside the predictable subset, not interpreter bugs), the 10M-iteration loop fuel, and the four reasons the interpreter is intentionally smaller and more trustworthy than the full compiler (small single file, no transformation passes, no platform dependence, no silent approximations).
+- **Oracle README**: `tests/oracle/README.md` documents the harness contract, the PENDING-vs-FAIL split, and the rule that a PENDING is a Phase A.3 work item, not a permanent skip.
+
 ### Completed roadmap tasks moved out of the active roadmap
 
 The active roadmap now lists remaining work only. Completed Phase A/B/C task lines were removed from `ROADMAP.md`, summarized here, and the remaining phase task numbers were renumbered.

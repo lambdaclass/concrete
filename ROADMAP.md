@@ -98,9 +98,7 @@ The active roadmap starts after the completed compiler-integrity and proof-workf
 
 Expected outcome example: a bounded helper like `fn sum4(a0: Int, a1: Int, a2: Int, a3: Int, len: Int) -> Int { ... }` can be shown to run without allocation, recursion, or blocking, with explicit failure and stack assumptions.
 
-1. turn the first predictable/core interpreter into a reusable differential harness with named test vectors and compiled-vs-interpreted result comparison, so the semantic oracle becomes a normal regression surface instead of a one-off prototype
-2. define the trust boundary of the first predictable/core interpreter explicitly: supported constructs, excluded constructs, memory/UB assumptions, and why the interpreter is intentionally smaller and more trustworthy than the full compiler
-3. broaden the first semantic-oracle differential harness across all canonical predictable examples, starting with `fixed_capacity` and `service_errors`, and keep every compiled-vs-interpreted mismatch as a named semantic regression target
+1. broaden the semantic-oracle differential harness across all canonical predictable examples; the harness and trust-boundary doc are now live (see `tests/oracle/`, `make test-oracle`, `docs/INTERPRETER_TRUST.md`), but every PENDING vector (currently borrow / try / string-literal cases including `fixed_capacity`, `result_ok`, `borrow_read`) is an interpreter gap that must close into a real differential check, not stay a permanent skip — pick the next gap by impact (borrow first unlocks `fixed_capacity` and `impl_method`; try unlocks `result_ok`/`result_err`; string literals unlocks the parser flagship)
 
 ### Phase B: Pre-Stdlib Pressure Workloads
 

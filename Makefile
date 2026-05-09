@@ -1,4 +1,4 @@
-.PHONY: build test test-full test-trust-gate test-proof-gate test-ssa test-fuzz clean check-grammar paper docs-site docs-serve
+.PHONY: build test test-full test-trust-gate test-proof-gate test-ssa test-fuzz test-oracle clean check-grammar paper docs-site docs-serve
 
 NIX_DEVELOP = XDG_CACHE_HOME=$(CURDIR)/.cache nix --extra-experimental-features "nix-command flakes" develop --command
 
@@ -22,6 +22,9 @@ test-ssa: build
 
 test-fuzz: build
 	$(NIX_DEVELOP) bash ./scripts/tests/test_parser_fuzz.sh
+
+test-oracle: build
+	$(NIX_DEVELOP) bash ./scripts/tests/test_oracle.sh
 
 check-grammar:
 	$(NIX_DEVELOP) python3 scripts/check_ll1.py grammar/concrete.ebnf

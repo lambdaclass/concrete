@@ -241,7 +241,7 @@ resolve_affected_sections() {
 
 # Resolve which sections are active based on MODE
 case "$MODE" in
-    full)    SECTION="passlevel,positive,negative,testflag,report,codegen,O2,stdlib,collection,xtarget,perf,determinism,consistency,terminology,verify,evidence,malformed,query,desync,bugaudit,apiversioning,errorcodes,policy,taxonomy,workflow,bundle,proofgate,fixedcap,parsevalidate,serviceerrors,stackdepth" ;;
+    full)    SECTION="passlevel,positive,negative,testflag,report,codegen,O2,stdlib,collection,xtarget,perf,determinism,consistency,terminology,verify,evidence,malformed,query,desync,bugaudit,apiversioning,errorcodes,policy,taxonomy,workflow,bundle,proofgate,fixedcap,parsevalidate,serviceerrors,stackdepth,interp" ;;
     fast)    SECTION="passlevel,positive,negative,testflag,report,codegen,O2,stdlib,collection" ;;
     stdlib)  SECTION="stdlib,collection" ;;
     stdlib-module) SECTION="stdlib" ;;
@@ -11413,6 +11413,19 @@ fi
 echo "  $interp_pass interpreter gates passed"
 PASS=$((PASS + interp_pass))
 FAIL=$((FAIL + interp_fail))
+
+# Phase A.1 differential corpus: compiled vs --interp across tests/oracle/vectors.txt.
+echo ""
+echo "=== Interpreter (semantic oracle) corpus ==="
+oracle_log="$TMPDIR/oracle.log"
+if bash ./scripts/tests/test_oracle.sh > "$oracle_log" 2>&1; then
+    grep -E '^(PEND|ORACLE:)' "$oracle_log" | sed 's/^/  /'
+    PASS=$((PASS + 1))
+else
+    cat "$oracle_log" | sed 's/^/  /'
+    echo "  FAIL oracle: differential corpus had mismatches (see above)"
+    FAIL=$((FAIL + 1))
+fi
 fi # end section: interp
 
 echo ""
