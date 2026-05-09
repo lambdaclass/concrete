@@ -10,6 +10,41 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Wrong-code corpus bulk import (WC-0005 .. WC-0022)
+
+The Phase D wrong-code corpus is bulk-registered with all existing
+`tests/programs/bug_*.con` cases plus a curated selection of high-risk
+adversarial cases. The corpus now sits at **22 PASS / 0 FAIL / 0 OPEN**.
+
+- **bug_*.con bulk import**: 14 new entries (`WC-0005` through
+  `WC-0018`), one per existing `bug_*.con` outside the four already
+  registered. Per the contract, each entry references the existing
+  repro path — no files were moved. Per-case notes capture the
+  symptom, expected behavior, regression command, and known
+  historical context (commit / bug-number when available).
+- **Adversarial selective import**: 4 new entries (`WC-0019` through
+  `WC-0022`) drawn from `tests/programs/adversarial/<area>/` — only
+  cases that exercise high-risk compiler boundaries already known to
+  produce real bugs. `newtype/heap_pattern.con` and
+  `newtype/in_option_chain.con` cover the same enum-payload + heap
+  layout surface as the older newtype-in-enum-payload codegen bug;
+  `borrow/mut_borrow_through_match.con` is adjacent to WC-0004's
+  match+borrow class; `trait_dispatch/trait_method_via_bound.con` is
+  recently-shipped feature surface. Generic adversarial coverage
+  stays under `tests/programs/adversarial/<area>/` without a manifest
+  entry, per the curated-not-exhaustive rule.
+- **Manifest schema**: handles both `kind = "runtime"` (21 cases) and
+  `kind = "compile-error"` (1 case — `WC-0015`, the int-match
+  consumption-disagreement rejection that must surface as `E0209`).
+  Multi-line `expected` values now use TOML `\n` escapes; the harness
+  parser unescapes them through TSV transport.
+- **Categories**:
+  - `miscompile` — 19 cases (the bulk: layout, codegen, intrinsic,
+    field-assign, cross-module borrow / field bugs)
+  - `error-regression` — 3 cases (WC-0013 if-expr, WC-0014 int-match
+    propagate, WC-0015 int-match disagree)
+- **Run state**: all 22 entries pass under `make test-wrong-code`.
+
 ### WC-0004 fixed — match arm-local bindings leaked into next match's var-table
 
 The first wrong-code corpus case to be driven from `open` to `fixed`

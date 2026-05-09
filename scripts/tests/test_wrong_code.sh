@@ -55,10 +55,19 @@ import re, sys
 src = open(sys.argv[1]).read()
 # Split on case-table headers; first chunk is preamble.
 chunks = re.split(r'^\[\[case\]\]\s*$', src, flags=re.MULTILINE)[1:]
+
+def unescape(s):
+    # Minimal TOML basic-string escape handling (\n, \t, \\, \").
+    return (s.replace('\\\\', '\x00')
+             .replace('\\n', '\n')
+             .replace('\\t', '\t')
+             .replace('\\"', '"')
+             .replace('\x00', '\\'))
+
 for c in chunks:
     fields = {}
-    for m in re.finditer(r'^\s*(\w+)\s*=\s*"([^"]*)"\s*$', c, flags=re.MULTILINE):
-        fields[m.group(1)] = m.group(2)
+    for m in re.finditer(r'^\s*(\w+)\s*=\s*"((?:\\.|[^"\\])*)"\s*$', c, flags=re.MULTILINE):
+        fields[m.group(1)] = unescape(m.group(2))
     cols = [
         fields.get('id', ''),
         fields.get('category', ''),
@@ -68,6 +77,9 @@ for c in chunks:
         fields.get('expected', ''),
         fields.get('notes', ''),
     ]
+    # TSV cannot carry literal tabs/newlines in fields; encode as escapes
+    # for transport and decode in bash via printf '%b'.
+    cols = [c.replace('\\', '\\\\').replace('\t', '\\t').replace('\n', '\\n') for c in cols]
     print('\t'.join(cols))
 PYEOF
 
@@ -146,6 +158,9 @@ run_compile_error_case() {
 
 while IFS=$'\t' read -r id category status repro kind expected notes; do
   [ -z "$id" ] && continue
+  # Decode escapes that the python parser added so newlines / tabs in
+  # `expected` survive the TSV transport.
+  expected=$(printf '%b' "$expected")
 
   # Manifest invariants
   if [ ! -e "$repro" ]; then
