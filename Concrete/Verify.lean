@@ -317,14 +317,20 @@ def renderVerifyDiagnostics (ds : Diagnostics) : String :=
       acc ++ s!"  {sev}: {d.message}\n") ""
     header ++ body
 
-/-- Render a per-gate verify report as a human-readable banner. -/
+/-- Render a per-gate verify report as a human-readable banner.
+    A gate is marked `skipped` if any upstream gate has errors — that
+    is, when its input artifact was not produced. Post-elab is
+    warnings-only (never blocks downstream), so the skip cascade
+    starts at post-mono. -/
 def renderVerifyGates
     (postElab postMono postLower postCleanup : Diagnostics) : String :=
-  let renderGate (label : String) (ds : Diagnostics) : String :=
+  let hasErrors (ds : Diagnostics) : Bool := ds.any (·.severity == .error)
+  let renderGate (label : String) (ds : Diagnostics) (skipped : Bool) : String :=
     let errors := (ds.filter (·.severity == .error)).length
     let warnings := (ds.filter (·.severity == .warning)).length
     let status :=
-      if errors > 0 then s!"FAIL ({errors} error(s), {warnings} warning(s))"
+      if skipped then "skipped (upstream gate failed)"
+      else if errors > 0 then s!"FAIL ({errors} error(s), {warnings} warning(s))"
       else if warnings > 0 then s!"warn ({warnings} warning(s))"
       else "ok"
     let detail := ds.foldl (fun acc d =>
@@ -333,6 +339,9 @@ def renderVerifyGates
       acc ++ s!"      {sev}: {d.message}\n") ""
     let pad := if label.length < 12 then "".pushn ' ' (12 - label.length) else ""
     s!"  {label}{pad} {status}\n{detail}"
+  let monoSkipped     := false  -- post-elab never blocks
+  let lowerSkipped    := hasErrors postMono
+  let cleanupSkipped  := hasErrors postMono || hasErrors postLower
   let totalErrors :=
     (postElab.filter (·.severity == .error)).length +
     (postMono.filter (·.severity == .error)).length +
@@ -348,9 +357,9 @@ def renderVerifyGates
     else if totalWarnings > 0 then s!"VERIFY-GATES: warn ({totalWarnings} warning(s))\n"
     else "VERIFY-GATES: ok (all 4 gates clean)\n"
   banner ++
-    renderGate "post-elab"    postElab ++
-    renderGate "post-mono"    postMono ++
-    renderGate "post-lower"   postLower ++
-    renderGate "post-cleanup" postCleanup
+    renderGate "post-elab"    postElab    false ++
+    renderGate "post-mono"    postMono    monoSkipped ++
+    renderGate "post-lower"   postLower   lowerSkipped ++
+    renderGate "post-cleanup" postCleanup cleanupSkipped
 
 end Concrete

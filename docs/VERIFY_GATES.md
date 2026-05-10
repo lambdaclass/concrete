@@ -117,6 +117,22 @@ When errors are present, the banner reads `VERIFY-GATES: FAIL` and
 the per-gate detail includes the diagnostic lines and codes. The
 process exits non-zero only on errors.
 
+A downstream gate whose input artifact was not produced is reported
+as `skipped (upstream gate failed)` rather than `ok`. The skip
+cascade is:
+
+- `post-elab` is warnings-only — never blocks downstream.
+- `post-mono` runs whenever a `ValidatedCore` exists. If it errors,
+  `post-lower` and `post-cleanup` are skipped.
+- `post-lower` runs whenever `post-mono` is clean. If it errors,
+  `post-cleanup` is skipped (cleanup is meant to verify that
+  `ssaCleanupProgram` preserved invariants, which is only a
+  meaningful claim when the raw SSA already verified).
+
+The renderer shows `skipped` so a clean banner cannot accidentally
+mean "downstream gates didn't run and we'd have caught a regression
+if they had."
+
 ### Corpus: `make test-verify-gates`
 
 Runs the gates across the curated corpora — the oracle vectors

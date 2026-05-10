@@ -50,10 +50,13 @@ run_one() {
       ;;
     *)
       # Couldn't even produce a verify report — most likely a
-      # frontend error (parse/resolve/check) blocking the gate input.
-      # Surface as skip rather than fail, because the gates only run
-      # over ValidatedCore.
+      # frontend error (parse/resolve/check) blocking the gate
+      # input. The curated corpora here (oracle vectors +
+      # wrong-code kind=runtime cases) all reach ValidatedCore in
+      # the production compile path, so a skip here is a frontend
+      # regression and must fail the run.
       SKIP=$((SKIP + 1))
+      FAIL_LINES+=("SKIP $file — verify report not produced; frontend regression?")
       ;;
   esac
 }
@@ -99,4 +102,7 @@ done
 
 echo ""
 echo "VERIFY-GATES: PASS=$PASS  FAIL=$FAIL  SKIP=$SKIP  warnings=$WARN_TOTAL"
-[ "$FAIL" -gt 0 ] && exit 1 || exit 0
+if [ "$FAIL" -gt 0 ] || [ "$SKIP" -gt 0 ]; then
+  exit 1
+fi
+exit 0

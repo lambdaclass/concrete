@@ -201,12 +201,12 @@ end VerifyReport
 def runVerifyGates (vc : ValidatedCore) : VerifyReport :=
   let postElab := verifyPostElab vc.coreModules
   match monoProgram vc.coreModules with
-  | .error _ =>
-    -- Mono refused to even run; surface that as a post-mono error.
-    -- The caller's Pipeline.monomorphize would have produced the same
-    -- diagnostics if it had been used; we deliberately skip that path
-    -- here because we want to keep the gate stage labeled clearly.
-    { VerifyReport.empty with postElab := postElab }
+  | .error ds =>
+    -- Mono refused to even run; surface its diagnostics as post-mono
+    -- errors. We keep the per-gate label on what the diagnostics
+    -- actually represent (a failure of the post-mono boundary's
+    -- input artifact to be well-formed), rather than dropping them.
+    { VerifyReport.empty with postElab := postElab, postMono := ds }
   | .ok monoMods =>
     let postMono := verifyPostMono monoMods
     if !postMono.isEmpty then
@@ -225,10 +225,18 @@ def runVerifyGates (vc : ValidatedCore) : VerifyReport :=
         let postLower := match ssaVerifyProgram ssaMods with
           | .error ds => ds
           | .ok () => []
-        let cleaned := ssaCleanupProgram ssaMods
-        let postCleanup := match ssaVerifyProgram cleaned with
-          | .error ds => ds
-          | .ok () => []
+        -- post-cleanup checks that ssaCleanupProgram preserved SSA
+        -- invariants. That claim is only meaningful when post-lower
+        -- was clean; running cleanup on already-invalid SSA and
+        -- reporting it as "post-cleanup ok" would imply cleanup was
+        -- meaningfully checked on bad input. Skip it instead.
+        let postCleanup :=
+          if !postLower.isEmpty then ([] : Diagnostics)
+          else
+            let cleaned := ssaCleanupProgram ssaMods
+            match ssaVerifyProgram cleaned with
+            | .error ds => ds
+            | .ok () => []
         { postElab := postElab, postMono := postMono,
           postLower := postLower, postCleanup := postCleanup }
 
