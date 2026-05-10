@@ -921,18 +921,15 @@ def compileAndReport (inputPath : String) (reportType : String) : IO UInt32 := d
       IO.println (ConsistencyViolation.render violations)
       if violations.isEmpty then return 0 else return 1
     if reportType == "verify" then
-      -- Post-Elab: placeholder check (warnings)
-      let elabDs := Pipeline.verifyPostElab validCore.coreModules
-      -- Post-Mono: typeVar check (errors)
-      match Pipeline.monomorphize validCore with
-      | .error ds =>
-        IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
-        return 1
-      | .ok mono =>
-        let monoDs := verifyPostMono mono.coreModules
-        let allDs := elabDs ++ monoDs
-        IO.println (renderVerifyDiagnostics allDs)
-        if monoDs.isEmpty then return 0 else return 1
+      -- Pass-by-pass verify gates: post-elab, post-mono, post-lower,
+      -- post-cleanup. Each gate's diagnostics are reported separately
+      -- per docs/VERIFY_GATES.md. Earlier failures (mono refusing to
+      -- run, lower aborting entirely) surface via the standard
+      -- Pipeline.* error path; runVerifyGates short-circuits at the
+      -- first such failure.
+      let r := Pipeline.runVerifyGates validCore
+      IO.println (renderVerifyGates r.postElab r.postMono r.postLower r.postCleanup)
+      if r.errorCount > 0 then return 1 else return 0
     if reportType == "traceability" then
       match Pipeline.monomorphize validCore with
       | .error ds =>

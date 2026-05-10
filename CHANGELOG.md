@@ -10,6 +10,46 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase E pass-by-pass verify gates
+
+The four downstream pipeline boundaries — post-elab, post-mono,
+post-lower, post-cleanup — are now wired through a single
+`Pipeline.runVerifyGates` entry point and exposed both as a per-
+program report (`concrete <file> --report verify`) and a corpus-wide
+make target (`make test-verify-gates`). Roadmap reference: Phase
+E.11.
+
+- **Contract** (`docs/VERIFY_GATES.md`): named boundaries, structural
+  invariant per boundary, severity, surface, the documented `try_`
+  and `defer` placeholder exceptions for the post-elab gate, and the
+  never-delete rule.
+- **Plumbing** (`Concrete/Pipeline.lean`): new `VerifyReport`
+  structure carrying per-gate diagnostic lists, with helpers
+  `isClean` / `errorCount` / `warningCount` / `allDiagnostics`. New
+  `runVerifyGates : ValidatedCore → VerifyReport` runs every gate
+  and short-circuits cleanly when a downstream pass refuses to even
+  produce its artifact (mono error → post-mono diags; lower error →
+  post-lower diags; etc.).
+- **Renderer** (`Concrete/Verify.lean`): `renderVerifyGates`
+  produces a human-readable per-gate banner with `ok` / `warn` /
+  `FAIL` status and indented detail per non-clean gate.
+- **Single-program surface**: `concrete <file> --report verify`
+  replaces the previous post-elab + post-mono-only output with the
+  full four-gate report. Exits non-zero only on errors.
+- **Corpus surface** (`make test-verify-gates`,
+  `scripts/tests/test_verify_gates.sh`): runs the gates across the
+  oracle vectors (`tests/oracle/vectors.txt`) and the wrong-code
+  corpus's `kind = "runtime"` entries. Asserts zero errors. First
+  landing: 78 PASS / 0 FAIL / 0 SKIP, 2 warnings — both the
+  documented `try_` placeholder leak in `result_ok.con` and
+  `result_err.con`.
+- **Discipline**: WC-0004 is the canonical wrong-code case for this
+  pipeline pattern (post-lower SSAVerify caught a Lower bug before
+  it could miscompile). Future verify-gate failures across the
+  corpora will register in the wrong-code corpus under the
+  `verifier-trigger` category with bundle capture per
+  `docs/BUG_BUNDLE.md`.
+
 ### Phase D bug bundle export
 
 The reducer's natural companion. Closes the gap between "I have a

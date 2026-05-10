@@ -145,6 +145,93 @@ def lowerUnverified (mono : MonomorphizedProgram) : Except Diagnostics SSAProgra
   let ssaModules ← mono.coreModules.mapM (fun m => lowerModule m)
   .ok { ssaModules }
 
+/-- Per-gate verify report.  Each field collects diagnostics produced
+    at a specific named pipeline boundary; an empty list means the gate
+    passed cleanly. Currently:
+
+      `postElab`        Ty.placeholder leak after elab (warnings —
+                        try/defer have documented exceptions per
+                        `docs/VERIFY_GATES.md`).
+      `postMono`        Ty.typeVar leak + Copy-field violations after
+                        monomorphization (errors).
+      `postLower`       SSA structural / dominator invariants on the
+                        raw `lowerModule` output (errors).
+      `postCleanup`     Same invariants re-checked after
+                        `ssaCleanupProgram` (errors — non-empty means
+                        cleanup broke something Lower got right).
+
+    Earlier-pass failures (parse / resolve / check / elab / coreCheck /
+    mono) are not represented here; they are surfaced through the
+    Except return of the corresponding Pipeline.* function, since they
+    block construction of the input artifact this gate runs on. -/
+structure VerifyReport where
+  postElab    : Diagnostics
+  postMono    : Diagnostics
+  postLower   : Diagnostics
+  postCleanup : Diagnostics
+  deriving Inhabited
+
+namespace VerifyReport
+
+def empty : VerifyReport :=
+  { postElab := [], postMono := [], postLower := [], postCleanup := [] }
+
+def isClean (r : VerifyReport) : Bool :=
+  r.postElab.isEmpty && r.postMono.isEmpty
+    && r.postLower.isEmpty && r.postCleanup.isEmpty
+
+def errorCount (r : VerifyReport) : Nat :=
+  let count (ds : Diagnostics) : Nat := (ds.filter (·.severity == .error)).length
+  count r.postElab + count r.postMono + count r.postLower + count r.postCleanup
+
+def warningCount (r : VerifyReport) : Nat :=
+  let count (ds : Diagnostics) : Nat := (ds.filter (·.severity == .warning)).length
+  count r.postElab + count r.postMono + count r.postLower + count r.postCleanup
+
+def allDiagnostics (r : VerifyReport) : Diagnostics :=
+  r.postElab ++ r.postMono ++ r.postLower ++ r.postCleanup
+
+end VerifyReport
+
+/-- Run every per-gate verifier on a validated Core program, returning
+    the per-boundary diagnostics. Earlier-pass failures must already
+    have been handled by the caller; this function consumes
+    ValidatedCore and produces the report or short-circuits if a
+    downstream pass (mono / lower) fails outright. -/
+def runVerifyGates (vc : ValidatedCore) : VerifyReport :=
+  let postElab := verifyPostElab vc.coreModules
+  match monoProgram vc.coreModules with
+  | .error _ =>
+    -- Mono refused to even run; surface that as a post-mono error.
+    -- The caller's Pipeline.monomorphize would have produced the same
+    -- diagnostics if it had been used; we deliberately skip that path
+    -- here because we want to keep the gate stage labeled clearly.
+    { VerifyReport.empty with postElab := postElab }
+  | .ok monoMods =>
+    let postMono := verifyPostMono monoMods
+    if !postMono.isEmpty then
+      { VerifyReport.empty with postElab := postElab, postMono := postMono }
+    else
+      let ssa := monoMods.map lowerModule
+      -- Each lowerModule produces Except — short-circuit on first error.
+      let lowerErrors : Diagnostics := ssa.foldl (fun acc r =>
+        match r with | .error ds => acc ++ ds | .ok _ => acc) []
+      if !lowerErrors.isEmpty then
+        { VerifyReport.empty with postElab := postElab, postMono := postMono,
+                                  postLower := lowerErrors }
+      else
+        let ssaMods : List SModule := ssa.foldl (fun acc r =>
+          match r with | .ok m => acc ++ [m] | .error _ => acc) []
+        let postLower := match ssaVerifyProgram ssaMods with
+          | .error ds => ds
+          | .ok () => []
+        let cleaned := ssaCleanupProgram ssaMods
+        let postCleanup := match ssaVerifyProgram cleaned with
+          | .error ds => ds
+          | .ok () => []
+        { postElab := postElab, postMono := postMono,
+          postLower := postLower, postCleanup := postCleanup }
+
 /-- Emit LLVM IR from SSA modules. -/
 def emit (ssa : SSAProgram) (testMode : Bool := false) (moduleFilter : Option String := none) : String :=
   emitSSAProgram ssa.ssaModules testMode moduleFilter

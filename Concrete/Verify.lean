@@ -317,4 +317,40 @@ def renderVerifyDiagnostics (ds : Diagnostics) : String :=
       acc ++ s!"  {sev}: {d.message}\n") ""
     header ++ body
 
+/-- Render a per-gate verify report as a human-readable banner. -/
+def renderVerifyGates
+    (postElab postMono postLower postCleanup : Diagnostics) : String :=
+  let renderGate (label : String) (ds : Diagnostics) : String :=
+    let errors := (ds.filter (·.severity == .error)).length
+    let warnings := (ds.filter (·.severity == .warning)).length
+    let status :=
+      if errors > 0 then s!"FAIL ({errors} error(s), {warnings} warning(s))"
+      else if warnings > 0 then s!"warn ({warnings} warning(s))"
+      else "ok"
+    let detail := ds.foldl (fun acc d =>
+      let sev := match d.severity with
+        | .error => "error" | .warning => "warning" | .note => "note"
+      acc ++ s!"      {sev}: {d.message}\n") ""
+    let pad := if label.length < 12 then "".pushn ' ' (12 - label.length) else ""
+    s!"  {label}{pad} {status}\n{detail}"
+  let totalErrors :=
+    (postElab.filter (·.severity == .error)).length +
+    (postMono.filter (·.severity == .error)).length +
+    (postLower.filter (·.severity == .error)).length +
+    (postCleanup.filter (·.severity == .error)).length
+  let totalWarnings :=
+    (postElab.filter (·.severity == .warning)).length +
+    (postMono.filter (·.severity == .warning)).length +
+    (postLower.filter (·.severity == .warning)).length +
+    (postCleanup.filter (·.severity == .warning)).length
+  let banner :=
+    if totalErrors > 0 then s!"VERIFY-GATES: FAIL ({totalErrors} error(s), {totalWarnings} warning(s))\n"
+    else if totalWarnings > 0 then s!"VERIFY-GATES: warn ({totalWarnings} warning(s))\n"
+    else "VERIFY-GATES: ok (all 4 gates clean)\n"
+  banner ++
+    renderGate "post-elab"    postElab ++
+    renderGate "post-mono"    postMono ++
+    renderGate "post-lower"   postLower ++
+    renderGate "post-cleanup" postCleanup
+
 end Concrete

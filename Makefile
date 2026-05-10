@@ -1,4 +1,4 @@
-.PHONY: build test test-full test-trust-gate test-proof-gate test-ssa test-fuzz test-oracle test-wrong-code test-reducer-smoke test-bundle-smoke clean check-grammar paper docs-site docs-serve
+.PHONY: build test test-full test-trust-gate test-proof-gate test-ssa test-fuzz test-oracle test-wrong-code test-reducer-smoke test-bundle-smoke test-verify-gates clean check-grammar paper docs-site docs-serve
 
 NIX_DEVELOP = XDG_CACHE_HOME=$(CURDIR)/.cache nix --extra-experimental-features "nix-command flakes" develop --command
 
@@ -34,6 +34,9 @@ test-reducer-smoke: build
 
 test-bundle-smoke: build
 	$(NIX_DEVELOP) bash ./scripts/tests/test_bundle_smoke.sh
+
+test-verify-gates: build
+	$(NIX_DEVELOP) bash ./scripts/tests/test_verify_gates.sh
 
 check-grammar:
 	$(NIX_DEVELOP) python3 scripts/check_ll1.py grammar/concrete.ebnf
