@@ -4,7 +4,7 @@ This document is the active execution plan. It answers one question: **what shou
 
 North star: **systems code with explicit authority, bounded behavior, small trusted boundaries, and a path from compiler-enforced properties to Lean-backed proof, while keeping backend, compiler, toolchain, and target assumptions honest.**
 
-Read the active list with the explicit **Active Dependency Order** below rather than assuming phase letters are a strict execution sequence. The 14 phase letters below are thematic buckets for remaining work, and task numbering restarts inside each phase.
+Read the active list with the explicit **Active Dependency Order** below rather than assuming phase letters are a strict execution sequence. Completed phases are removed from the active list and summarized in the changelog; active phase letters below are thematic buckets for remaining work, and task numbering restarts inside each phase.
 
 For landed work, see [CHANGELOG.md](CHANGELOG.md). For detailed design, see `docs/` and `research/`.
 
@@ -36,8 +36,7 @@ Do not call the language releasable until these are true:
 
 For fast scanning, the remaining major missing feature surfaces are:
 
-- Language/stdlib pressure workloads before stdlib freeze: parser/decoder, ownership-heavy, borrow-heavy, trusted-wrapper/FFI, and cleanup-heavy pressure workloads.
-- Stable stdlib and syntax definition: string/text contract, checked indexing and slice/view rules, opaque validated wrappers, fallible conversion conventions, core-vs-hosted split, Result helpers, endian-aware byte cursors, explicit visibility, arithmetic policy, explicit layout/ABI contracts, and LL(1)-safe destructuring / `let ... else`.
+- Post-freeze language/stdlib polish: arithmetic-policy visibility in reports/evidence, Result helper expansion when function-pointer-in-generic validation warrants it, and narrowly-scoped LL(1)-preserving syntax relief.
 - Tooling, tests, and wrong-code hardening: formatter, doc extraction, doc tests, fuzzing, metamorphic differential testing, sanitizer-backed generated-code checks, trusted-boundary stress suites, reducer/minimizer workflow, crash bundles, named wrong-code corpus, semantic coverage dashboards, and a lightweight playground.
 - Stronger runtime/allocation/performance surfaces: allocation reporting, stack reporting, profiling, benchmark harnesses/guardrails, per-pass verifier gates, report-consistency checks, ABI/layout round-trip checks, and compiler self-leak/resource soak harnesses.
 - Editor and artifact UX: compiler-as-service, editor/LSP support, and a small human-friendly artifact viewer.
@@ -49,11 +48,8 @@ For fast scanning, the remaining major missing feature surfaces are:
 
 | Phase | Tasks | Human goal |
 |---|---:|---|
-| A. Predictable Core | 1-3 | Make bounded, predictable, failure-aware code usable before broadening scope. |
-| B. Pre-Stdlib Pressure Workloads | closed | Use real workloads to discover what the stdlib must actually provide. |
-| C. Stdlib and Syntax Freeze | 1-3 | Define, build, polish, and freeze the first-release stdlib, visibility, error, binary parsing, and LL(1) syntax surface. |
-| D. Tooling, Tests, and Wrong-Code Corpus | 1-22 | Make examples, docs, formatting, fuzzing, wrong-code capture, minimization, and instant feedback normal workflow. |
-| E. Performance, Artifacts, and Contract Hardening | 1-25 | Put budgets, reports, artifacts, and explicit failure behavior around the compiler. |
+| D. Tooling, Tests, and Wrong-Code Corpus | 1-23 | Make examples, docs, formatting, fuzzing, wrong-code capture, minimization, and instant feedback normal workflow. |
+| E. Performance, Artifacts, and Contract Hardening | 1-26 | Put budgets, reports, artifacts, and explicit failure behavior around the compiler. |
 | F. Release Credibility and Showcase | 1-24 | Prepare honest public positioning, C-replacement validation, and release packaging only after the broader proof/toolchain surface is stable enough to defend publicly. |
 | G. Proof Expansion and Provable Subset | 1-25 | Grow ProofCore, obligations, and provable-subset claims only after the surrounding language, stdlib, tooling, and runtime-profile surface is stable enough that the new proofs mean something durable. |
 | H. Backend, Target, and Incremental Pipeline | 1-20 | Stabilize backend contracts, targets, incremental builds, and semantic regression coverage. |
@@ -68,12 +64,11 @@ For fast scanning, the remaining major missing feature surfaces are:
 
 Do not treat the remaining phase letters as a strict execution sequence. They are thematic buckets. Use this dependency order when deciding what to do next:
 
-1. **Make the surrounding language stable enough to prove against**: Phases A and C remain active; Phase B is closed and recorded in the changelog. First finish the semantic-oracle/predictable-core follow-through, then keep stdlib/syntax follow-up work bounded to post-freeze polish.
-2. **Make the workflow operationally trustworthy**: Phases D, E, and L. Before broadening proof claims, harden tests, wrong-code capture, artifacts, profiling, allocation/leak reporting, and runtime-profile boundaries.
-3. **Broaden the provable subset on top of that stable surface**: Phases G and H. Once the language/runtime/toolchain surfaces stop drifting, expand ProofCore coverage, obligation generation, backend contracts, and incremental/equivalence guarantees.
-4. **Only then package the public story**: Phase F, followed by Phases J, K, and M as needed. Public showcases, release criteria, package trust, editor UX, onboarding, and governance should rest on stable evidence rather than aspirational internals.
-5. **Treat compiler verification as a later trust multiplier, not a prerequisite for the first credible release**: Phase I comes after the proof workflow, backend assumptions, and artifact contracts are already clear.
-6. **Keep research-gated ideas fenced off**: Phase N stays last unless a concrete earlier example forces one of those topics forward.
+1. **Make the workflow operationally trustworthy**: Phases D, E, and L. The predictable-core oracle, pressure workloads, and stdlib/syntax freeze are closed history; before broadening proof claims, keep hardening tests, wrong-code capture, artifacts, profiling, allocation/leak reporting, and runtime-profile boundaries.
+2. **Broaden the provable subset on top of that stable surface**: Phases G and H. Once the language/runtime/toolchain surfaces stop drifting, expand ProofCore coverage, obligation generation, backend contracts, and incremental/equivalence guarantees.
+3. **Package the public story only on stable evidence**: Phase F, followed by Phases J, K, and M as needed. Public showcases, release criteria, package trust, editor UX, onboarding, and governance should rest on stable evidence rather than aspirational internals.
+4. **Treat compiler verification as a later trust multiplier, not a prerequisite for the first credible release**: Phase I comes after the proof workflow, backend assumptions, and artifact contracts are already clear.
+5. **Keep research-gated ideas fenced off**: Phase N stays last unless a concrete earlier example forces one of those topics forward.
 
 ## Operating Rules
 
@@ -92,31 +87,7 @@ Do not treat the remaining phase letters as a strict execution sequence. They ar
 
 ## Active List
 
-The active roadmap starts after the completed compiler-integrity and proof-workflow foundation now recorded in [CHANGELOG.md](CHANGELOG.md). Former pre-letter roadmap phases 1 and 2 are historical; the active remaining work is organized below as Phases A-N, with task numbering restarting in each phase.
-
-### Phase A: Predictable Core
-
-Expected outcome example: a bounded helper like `fn sum4(a0: Int, a1: Int, a2: Int, a3: Int, len: Int) -> Int { ... }` can be shown to run without allocation, recursion, or blocking, with explicit failure and stack assumptions.
-
-Status: the value-return semantic oracle is effectively closed (56 PASS / 0 FAIL / 1 PENDING across 57 vectors covering int/bool/struct/enum/array, linearity + borrows + named regions, generics, Result/Option/`?`, string literals, plus the canonical `parse_validate` and `service_errors`). The single remaining PENDING is `examples/fixed_capacity`, intentionally outside the `fn main() -> Int` value contract because it interleaves `print`/`println` with the return value. Print/IO modeling would widen the harness contract, not just close an interpreter gap; it stays explicitly out of Phase A scope.
-
-1. (deferred) print/IO modeling so the interpreter can match compiled stdout for programs that interleave diagnostics with `fn main() -> Int`. This widens the harness contract from value-equality to stdout-equality and is a deliberate pivot — pursue only when a flagship example demands it
-
-### Phase B: Pre-Stdlib Pressure Workloads
-
-Expected outcome example: real programs such as a JSON subset parser, DNS packet parser, ring buffer, and intrusive list compile cleanly enough to reveal exactly which stdlib, result/error, byte, and ownership APIs are still missing.
-
-No active tasks remain in this phase. Completed pressure-workload history is recorded in [CHANGELOG.md](CHANGELOG.md).
-
-### Phase C: Stdlib and Syntax Freeze
-
-Expected outcome example: parser-facing code such as `let len = cur.read_u16_be();`, string-heavy code such as `grep`/policy output, and runtime-heavy code such as interpreter environments all exist in a stable stdlib/syntax surface that is explicit, teachable, workload-backed, and still LL(1).
-
-Status: the Phase C exit checklist is now closed in `docs/PHASE_EXIT_CHECKLISTS.md` (19/19). Remaining work that still touches these surfaces is follow-up evidence or tooling/polish, not freeze-blocking stdlib/syntax definition.
-
-1. follow-up after the Phase C freeze: carry the arithmetic policy all the way into reports, diagnostics, and proof/evidence artifacts so reviewers can see the active mode directly rather than inferring it from source and policy docs
-2. follow-up after the Phase C freeze: expand the library helper layer beyond the shipped Tier 1 floor (`unwrap_or`, `ok`, `err`, `ok_or`) only when function-pointer-in-generic validation makes helpers like `map_err`, `and_then`, `unwrap_or_else`, or `with_context` worth freezing
-3. follow-up after the Phase C freeze: revisit remaining syntax friction only through LL(1)-preserving, evidence-driven changes such as typed-context generic-construction relief or modifier-order cleanup; keep bare variants, contextual inference, and competing syntaxes explicitly out
+The active roadmap starts after the completed predictable-core, pre-stdlib-pressure, stdlib/syntax-freeze, compiler-integrity, and proof-workflow foundation now recorded in [CHANGELOG.md](CHANGELOG.md). Former pre-letter roadmap phases and lettered Phases A-C are historical; the active remaining work is organized below as Phases D-N, with task numbering restarting in each phase.
 
 ### Phase D: Tooling, Tests, and Wrong-Code Corpus
 
@@ -144,6 +115,7 @@ Expected outcome example: a proved parser helper and an ownership-heavy negative
 20. quarantine known external toolchain/interpreter bugs from the default developer workflow while retaining named reproductions and native/compiler-level checks; external failures such as `lli` crashes should not make the normal fast path look like a Concrete miscompile
 21. make example metadata machine-readable and generate the inventory/lifecycle/no-duplicate docs from it so example status, oracle strategy, promotion state, and phase ownership cannot drift across docs and roadmap
 22. make negative examples first-class documentation and regression material: every major checker, capability, ownership, predictable, proof, FFI, and concurrency rule should have at least one small rejected example that explains what Concrete refuses and why
+23. widen the semantic-oracle harness to model print/IO only when a flagship example needs stdout-level comparison: the value-return oracle is closed, and the remaining `fixed_capacity` PENDING is deliberately outside the `fn main() -> Int` value contract because it interleaves `print` / `println` with the return value
 
 ### Phase E: Performance, Artifacts, and Contract Hardening
 
@@ -174,6 +146,7 @@ Expected outcome example: a proof-bearing function ships with stable report arti
 23. add authority/evidence diffing as a first-class artifact workflow: show when a function, module, package, or commit gains capabilities such as `File`, `Alloc`, `Unsafe`, trusted assumptions, allocation, proof obligations, or weaker evidence levels
 24. add explicit assumption files as machine-readable artifacts: target, compiler, backend, OS, toolchain, FFI contracts, external libraries, trusted regions, and proof/evidence assumptions should be versioned and diffable
 25. add project policy files for enforceable authority and evidence budgets: examples include no `Unsafe`, no `Alloc`, max stack, only these capabilities, no trusted functions outside `trusted/`, and required proof/evidence levels for selected modules
+26. carry the frozen arithmetic policy all the way into reports, diagnostics, and proof/evidence artifacts so reviewers can see the active mode directly rather than inferring it from source and policy docs
 
 ### Phase F: Release Credibility and Showcase
 
@@ -310,7 +283,7 @@ Expected outcome example: hovering over `fn check_nonce(...) -> Bool` in an edit
 9. add release / compatibility discipline when external users depend on the language
 10. build a backwards-compatibility regression corpus once public users exist: old accepted programs, old facts/reports, old proof artifacts, deprecated syntax/API examples, and expected migration diagnostics should remain testable across releases
 11. define explicit language/versioning/deprecation policy across syntax, stdlib APIs, and proof/fact artifacts so users know what stability guarantees exist and how removals happen
-12. add stdlib quality gates for the bounded systems surface: API stability expectations, allocation/capability discipline, proof/predictability friendliness for core modules, and compatibility rules for example-grade helper APIs
+12. add stdlib quality gates for the bounded systems surface: API stability expectations, allocation/capability discipline, proof/predictability friendliness for core modules, compatibility rules for example-grade helper APIs, and post-freeze Result/Option helper expansion only when function-pointer-in-generic validation makes helpers like `map_err`, `and_then`, `unwrap_or_else`, or `with_context` worth freezing
 13. add a tiny `concrete audit` bundle command after the underlying reports are stable: produce one human-readable and machine-readable package of capabilities, unsafe/trusted boundaries, allocation, stack, proof/evidence, FFI, backend/target assumptions, policy violations, and authority/evidence drift
 
 ### Phase L: Runtime Profiles, Allocation, and Predictability
@@ -372,7 +345,7 @@ Expected outcome example: a new user can install Concrete, run one proof-bearing
 8. audit design-only user-facing docs and workflows against the actual shipped CLI/runtime surface and either implement or explicitly relabel each promised surface before public-facing material pretends it is real
 9. perform one roadmap/docs/changelog reference migration to the current numbering and phase structure before the new consistency gates start enforcing future drift prevention
 10. define the stability / experimental boundary for public users
-11. define the language evolution policy on top of that boundary: edition/versioning rules, deprecation windows, breaking-change policy, and how experimental features graduate into the supported subset
+11. define the language evolution policy on top of that boundary: edition/versioning rules, deprecation windows, breaking-change policy, how experimental features graduate into the supported subset, and how post-freeze LL(1)-preserving syntax relief such as typed-context generic-construction relief or modifier-order cleanup is proposed without reopening bare variants, contextual inference, or competing syntaxes
 12. define public governance and decision process for language evolution: how syntax changes, profile changes, stdlib stabilization, breaking changes, and security-relevant decisions are proposed, reviewed, accepted, and documented
 13. add roadmap/docs reference-consistency checks so phase/task references in user-facing docs cannot silently rot when the roadmap is renumbered, regrouped, or partially completed
 

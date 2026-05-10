@@ -10,6 +10,33 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Active roadmap cleanup: Phases A-C closed and deferred work moved later
+
+The active roadmap now starts at Phase D. Completed or closed early
+language-stabilization work was removed from the active list instead
+of being kept as empty or follow-up-only phases.
+
+- **Phase A closed**: the value-return semantic oracle remains the
+  closed Phase A result (56 PASS / 0 FAIL / 1 PENDING across 57
+  vectors at close-out). The single remaining PENDING
+  (`examples/fixed_capacity`) is print/IO stdout-contract widening,
+  not a Phase A value-oracle gap, and now lives under Phase D as a
+  later harness-widening task only if a flagship demands it.
+- **Phase B removed from the active roadmap**: pre-stdlib pressure
+  workloads already had no active tasks; their evidence remains
+  recorded in prior changelog entries.
+- **Phase C removed from the active roadmap**: the stdlib/syntax
+  freeze is closed. Its follow-up items were moved to the later
+  phases where they belong operationally: arithmetic-policy
+  visibility moved to Phase E artifact/report hardening, Result /
+  Option helper expansion moved to Phase K stdlib quality gates, and
+  LL(1)-preserving syntax relief moved to Phase M language evolution
+  policy.
+- **Priority map and dependency order updated**: the active roadmap
+  now reflects the real center of gravity: Phase D/E/L hardening,
+  then Phase G/H proof/backend expansion, then Phase F/J/K/M public
+  packaging and user-facing work on top of stable evidence.
+
 ### Phase E pass-by-pass verify gates
 
 The four downstream pipeline boundaries — post-elab, post-mono,
