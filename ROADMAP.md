@@ -52,8 +52,8 @@ Do not call the language releasable until these are true:
 
 Phases are listed in dependency order, but execution overlaps. The standing rules:
 
-1. **Phases 1-4 gate the first flagship.** Hardening, artifacts, runtime profile, and proof workflow must be honest before any flagship can claim them.
-2. **One bounded pull-through pilot may run in parallel.** Pick one flagship (likely `examples/parse_validate`) and let its concrete gaps prioritize work inside Phases 1-4. The pilot does not paper over gaps; gaps it exposes become normal phase work. A second flagship does not start until the first's gaps are closed.
+1. **The relevant slices of Phases 1-4 gate the first flagship.** Hardening, artifacts, runtime profile, and proof workflow must be honest in the areas the flagship actually touches before it can claim them. The pilot (rule 2) determines which runtime / proof / artifact surfaces are actually required; not every item in Phases 1-4 gates every flagship — for example, the concurrency sub-track in Phase 3 only gates a flagship that uses concurrency.
+2. **One bounded pull-through pilot may run in parallel.** Pick one flagship (likely `examples/parse_validate`) and let its concrete gaps prioritize work inside Phases 1-4. The pilot does not paper over gaps; gaps it exposes become normal phase work. A second flagship does not start until the first's gaps are closed. The pilot is *not* yet a Phase 7 public flagship — Phase 7 is the curated public showcase set, which only opens after stable evidence per rule 5.
 3. **Phase 5 lands when backend honesty matters.** SSA contract, target model, and incremental boundaries before public packaging.
 4. **Phase 6 is not on the critical path to the first release.** Benchmarks and budgets help but do not gate it.
 5. **Phases 7-8 only after stable evidence.** Flagships and release packaging rest on Phases 1-5, not the other way around.
@@ -253,6 +253,8 @@ Expected outcome: a proof-bearing function ships with benchmark numbers, allocat
 9. Explicit AI optimization loop: generate packet, propose patch, run benchmarks, run evidence gates, reject patches that weaken proof/trust/predictability unless requested.
 
 ## Phase 7: Flagships
+
+This phase is the **curated public showcase set**, opened only after Phases 1-5 are stable enough to back the claims (per Active Dependency Order rule 5). The early pull-through pilot from rule 2 is a forcing function for Phases 1-4 and is not itself a Phase 7 entry; an example only becomes a Phase 7 flagship after its gaps in 1-5 are closed and its evidence holds up to outside review.
 
 Expected outcome: a flagship packet/header validator has explicit authority, one Lean-backed property, report/snapshot/diff coverage, and a release evidence bundle that tells an outsider exactly what is proved and what is assumed.
 
