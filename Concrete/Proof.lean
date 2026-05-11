@@ -842,6 +842,37 @@ theorem validate_header_correct (b0 b1 b2 b3 cls encoding ver : Int) (fuel : Nat
       BEq.beq]
 
 -- ============================================================
+-- parse_validate (pull-through pilot — first attached theorem)
+-- ============================================================
+
+-- PExpr definitions matching the Concrete source in
+-- examples/parse_validate/src/main.con. parse_validate uses the
+-- early-return-as-else shape: every validator returns 0 on success
+-- and 1 on failure (opposite of ELF's success-returns-1 convention).
+
+/-- `fn validate_version(v: i32) -> i32` — checks v == 1, returns 0 on
+    success and 1 on failure. -/
+def validateVersionExpr : PExpr :=
+  .ifThenElse (.binOp .eq (.var "v") (.lit (.int 1)))
+    (.lit (.int 0))
+    (.lit (.int 1))
+
+def validateVersionFn : PFnDef :=
+  { name := "validate_version", params := ["v"], body := validateVersionExpr }
+
+/-- Function table for parse_validate proofs. -/
+def parseValidateFns : FnTable
+  | "validate_version" => some validateVersionFn
+  | _ => none
+
+/-- validate_version returns 0 iff v == 1, and 1 otherwise. -/
+theorem validate_version_correct (v : Int) (fuel : Nat) :
+    eval parseValidateFns (Env.empty.bind "v" (.int v)) (fuel + 2) validateVersionExpr
+    = some (.int (if v = 1 then 0 else 1)) := by
+  by_cases h : v = 1 <;>
+    simp_all [validateVersionExpr, eval, Env.bind, evalBinOp, BEq.beq]
+
+-- ============================================================
 -- Proved functions registry
 -- ============================================================
 

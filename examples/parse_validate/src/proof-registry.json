@@ -1,0 +1,8 @@
+[
+  {
+    "function": "parse_validate.validate_version",
+    "body_fingerprint": "[(if (binop Concrete.BinOp.eq (var v) (int 1)) [(ret (int 0))]) (ret (int 1))]",
+    "proof": "Concrete.Proof.validate_version_correct",
+    "spec": "Concrete.Proof.validateVersionExpr"
+  }
+]
