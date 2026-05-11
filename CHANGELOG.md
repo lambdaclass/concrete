@@ -10,6 +10,39 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Roadmap reorganized: phases renumbered 1-13, items renamed and resorted
+
+The active roadmap is fully reorganized. Phase letters D-N are gone;
+phases are now numbered 1-13 in execution-dependency order. Two
+historically-mixed phases are split, several items are moved to
+where they actually belong, and all items are renamed to tighter
+imperative form. Item count preserved (218 items); no deletions.
+
+- **Renumbered**. Old D → 1 Hardening; E → 2 Artifacts + 6
+  Performance (split); F → 7 Flagships + 8 Release (split); G → 4
+  Proof + flagship items pushed into Phase 7; H → 5 Backend; I → 12
+  Verification; J → 9 Packages; K → 10 Editor; L → 3 Runtime; M →
+  11 Governance + items distributed into 1/2/6; N → 13 Research.
+- **Split rationale**. Old E mixed contract hardening with
+  performance budgeting — different gating relationships to a
+  flagship, so they are now separate phases. Old F mixed flagship
+  *content* with release *plumbing* (distribution, supply chain,
+  release criteria) — same reason.
+- **Cross-phase moves**. Old G.1–G.6 (the flagship examples) were
+  structurally misplaced in Proof; moved to Phase 7. Old F.1–F.2
+  (packaging artifacts) moved to Phase 9. Old M.1 (memory/layout
+  audit reports) moved to Phase 2; old M.2 (coverage tooling) moved
+  to Phase 1; old M.3 (memory-profiler integration) moved to Phase
+  6.
+- **Active Dependency Order updated** with the pull-through pilot
+  rule: one bounded flagship may run early in parallel with Phases
+  1–4, but cannot paper over gaps; gaps it exposes become normal
+  phase work.
+- **Item renaming**. All 218 items rewritten as imperative-form
+  one-liners (most ≤ 2 lines); verbose status footnotes trimmed
+  where the relevant work is already in the changelog. Terse
+  "(live; ongoing)" markers retained where work continues.
+
 ### Active roadmap cleanup: Phases A-C closed and deferred work moved later
 
 The active roadmap now starts at Phase D. Completed or closed early
