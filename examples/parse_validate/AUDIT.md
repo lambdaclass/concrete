@@ -148,9 +148,9 @@ The example becomes a Phase 7 entry when each of the following is true:
 
 | # | Bar | Currently |
 |---:|---|---|
-| 1 | At least one Lean-backed property, theorem checked by Lean, surfaced in `--report proof-status` as `proved`. | ❌ blocked on ProofCore "if without else" |
+| 1 | At least one Lean-backed property, theorem checked by Lean, surfaced in `--report proof-status` as `proved`. | ✅ `validate_version` proved (commits `2673244` + `7081139`) |
 | 2 | Composition property (e.g. `parse_header` returns `Ok` iff all validators pass) Lean-backed. | ❌ blocked on (1) |
-| 3 | Assumption file present, machine-readable, listing target / arithmetic / alloc / stack assumptions. | ❌ absent |
+| 3 | Assumption file present, machine-readable, listing target / arithmetic / alloc / stack assumptions. | ✅ `examples/parse_validate/assumptions.toml` enforced by `make test-assumptions` |
 | 4 | Policy file present, with enforceable authority/alloc/stack budgets that CI checks. | ❌ partial (`predictable = true` only) |
 | 5 | Oracle beyond hand-written tests — at minimum a property-based test or a reference-implementation differential. | ❌ absent (oracle is `--interp` only) |
 | 6 | "Concrete catches this" negative pair on file. | ❌ absent |
@@ -159,7 +159,11 @@ The example becomes a Phase 7 entry when each of the following is true:
 | 9 | Snapshot/diff coverage: a baseline of facts/reports that a regression would break. | ❌ absent |
 | 10 | Listed in a curated Phase 7 showcase manifest (not just `tests/oracle/vectors.txt`). | ❌ no such manifest exists yet |
 
-Today: **0 of 10 bars met.** Most of those bars are not parse_validate-specific work — they are infrastructure that the pilot is supposed to force into existence. Closing them in order is the pilot's whole purpose.
+Today: **2 of 10 bars met.** Most of the remaining bars are not parse_validate-specific work — they are infrastructure that the pilot is supposed to force into existence. Closing them in order is the pilot's whole purpose.
+
+**Closed so far:**
+- Bar #1 — `validate_version` proved with Lean theorem. 5 of 8 eligible validators now extract via the new early-return-as-else rule in ProofCore.
+- Bar #3 — assumption file landed with schema, CI gate, and drift detection.
 
 ## 8. Suggested first three pilot commits (per ROADMAP rule 2)
 

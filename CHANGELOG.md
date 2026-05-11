@@ -10,6 +10,35 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### parse_validate pilot — bars #1 + #3 closed
+
+Two graduation bars from `examples/parse_validate/AUDIT.md` are met,
+forcing two reusable infrastructure pieces into existence.
+
+- **Bar #1 (`bdc9caa`, `2673244`, `7081139`) — first Lean-backed
+  property.** The ProofCore extractor learned the early-return
+  if-without-else shape via a continuation-threading refactor of
+  `cStmtsToPExpr` (Phase 4); 5 of 8 eligible validators in
+  parse_validate now extract. `validate_version` carries the first
+  attached theorem (`Concrete.Proof.validate_version_correct`)
+  registered via the per-example `proof-registry.json` pattern.
+  Surfaces as `proved` in `--report proof-status`.
+- **Bar #3 — first assumption file format.** The Phase 2 E.24
+  surface lands with `docs/ASSUMPTION_FILES.md` (TOML schema v1
+  covering target, arithmetic, allocation, authority, ffi, trusted,
+  proof sections), `examples/parse_validate/assumptions.toml`
+  (first instance), and `scripts/tests/check_assumptions.sh` +
+  `make test-assumptions` (drift-enforced CI gate). Five
+  enforcement points active: heap allocation match,
+  stack-max-bytes budget, capability subset / forbidden,
+  FFI externs match, trusted-region match. Drift fails the gate.
+- **Pilot AUDIT updated** to mark bars #1 and #3 met, with
+  pointers to the closing commits. 8 bars remain.
+
+The two pieces of infrastructure (the early-return ProofCore rule
+and the assumption-file schema + CI gate) are sized for parse_validate
+but reusable by every future flagship.
+
 ### Roadmap reorganized: phases renumbered 1-13, items renamed and resorted
 
 The active roadmap is fully reorganized. Phase letters D-N are gone;
