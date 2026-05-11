@@ -10,6 +10,36 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### parse_validate pilot — bar #6 closed ("Concrete catches this")
+
+First negative pair on file for the pull-through pilot. The
+shipped `examples/parse_validate` is the accepted example; the new
+companion under `examples/parse_validate/catches/` is the rejected
+one. Phase 1 D.22 + Phase 7.15 surface.
+
+- **First case**: `examples/parse_validate/catches/01_authority_widening.con`
+  is parse_validate with a single line — `print_string(&"validating");`
+  — inserted into `parse_header`. The signature still claims
+  `fn parse_header(...) -> Result<...>` (no `with(...)` clause). The
+  compiler rejects with `E0520 — function 'print_string' requires
+  Console but caller has (none)`. The diagnostic-substring contract
+  in the file header pins what the user-visible rejection must say.
+- **Narrative** (`examples/parse_validate/CATCHES.md`): explains why
+  a negative pair matters — the accepted example proves the
+  language can express the property; the rejected companion proves
+  the language refuses the violation. Without the negative,
+  parse_validate is just "a program that happens to be pure;" with
+  it, "a program that Concrete proves to be pure and stays pure
+  under hostile editing."
+- **CI gate** (`scripts/tests/check_catches.sh`, `make test-catches`):
+  walks every `examples/*/catches/*.con` and asserts each
+  compile-fails with the diagnostic substring declared in its
+  header. Drift in either direction — a case that suddenly
+  compiles, or one that fails with the wrong message — fails the
+  gate. First run: 1 PASS / 0 FAIL. Drift-tested both directions.
+
+Audit status: 4 of 10 graduation bars now met (bars #1, #3, #4, #6).
+
 ### parse_validate pilot — bar #4 closed (policy files)
 
 The Phase 2 E.25 policy-file surface lands as a schema-extension to

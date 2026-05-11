@@ -1,0 +1,110 @@
+// catches/01_authority_widening.con
+//
+// "Concrete catches this" companion to examples/parse_validate.
+//
+// Demonstrates: capability discipline. parse_validate claims a fully
+// pure surface (Concrete.toml: authority.allowed_capabilities = [],
+// forbidden_capabilities lists Console explicitly). Adding even a
+// single line of diagnostic output to a validator violates that
+// surface — `print_string` requires the `Console` capability, and
+// `parse_header` does not declare it.
+//
+// Thesis claim: a reviewer can audit a function's authority surface
+// without reading the implementation. If `parse_header(...) -> Result<...>`
+// has no `with(...)` clause, it cannot perform I/O — and the
+// compiler enforces that statically, not by convention.
+//
+// What changed from the accepted parse_validate: a single line
+// `print_string(&"validating");` was inserted at the top of
+// `parse_header`. Everything else is identical to the shipped
+// example. The point of the negative pair is to show that this
+// kind of edit — the natural "let me add a debug log" temptation —
+// does not silently expand the trust surface. It fails to compile.
+//
+// catches: E0520
+// catches-substring: requires Console but caller has
+
+mod parse_validate {
+
+    enum Copy ParseError {
+        TooShort,
+        BadVersion,
+        BadType,
+        PayloadTooBig,
+        Truncated,
+        BadChecksum,
+    }
+
+    struct Copy Header {
+        version: i32,
+        msg_type: i32,
+        payload_len: i32,
+        checksum: i32,
+    }
+
+    fn validate_version(v: i32) -> i32 {
+        if v == 1 { return 0; }
+        return 1;
+    }
+
+    fn validate_msg_type(t: i32) -> i32 {
+        if t >= 1 {
+            if t <= 4 { return 0; }
+        }
+        return 1;
+    }
+
+    fn validate_payload_len(plen: i32, max_len: i32) -> i32 {
+        if plen >= 0 {
+            if plen <= max_len { return 0; }
+        }
+        return 1;
+    }
+
+    fn validate_total_len(actual: i32, needed: i32) -> i32 {
+        if actual >= needed { return 0; }
+        return 1;
+    }
+
+    fn compute_checksum(data: [i32; 8], count: i32) -> i32 {
+        let mut acc: i32 = 0;
+        for (let mut i: i32 = 0; i < count; i = i + 1) {
+            acc = acc ^ data[i];
+        }
+        return acc;
+    }
+
+    fn validate_checksum(expected: i32, computed: i32) -> i32 {
+        if expected == computed { return 0; }
+        return 1;
+    }
+
+    fn parse_header(data: [i32; 8], len: i32) -> Result<Header, ParseError> {
+        // <<< The one line that breaks the trust surface. >>>
+        print_string(&"validating");
+
+        if validate_total_len(len, 5) != 0 {
+            return Result::<Header, ParseError>::Err { error: ParseError::TooShort };
+        }
+        if validate_version(data[0]) != 0 {
+            return Result::<Header, ParseError>::Err { error: ParseError::BadVersion };
+        }
+        if validate_msg_type(data[1]) != 0 {
+            return Result::<Header, ParseError>::Err { error: ParseError::BadType };
+        }
+        return Result::<Header, ParseError>::Ok { value: Header {
+            version: data[0],
+            msg_type: data[1],
+            payload_len: data[2],
+            checksum: data[4],
+        } };
+    }
+
+    pub fn main() -> Int {
+        let good: [i32; 8] = [1, 2, 0, 0, 0, 0, 0, 0];
+        match parse_header(good, 5) {
+            Result::Ok { value } => { return 0; },
+            Result::Err { error } => { return 1; },
+        }
+    }
+}

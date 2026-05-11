@@ -99,7 +99,7 @@ Expected outcome: every checker, capability, ownership, predictable, proof, FFI,
 1. Wrong-code corpus maintenance: every new bug enters `tests/wrong-code/manifest.toml` with notes on discovery day (live; ongoing).
 2. Reducer / minimizer workflow: keep `Concrete.Reduce` + `scripts/tests/minimize_wrong_code.sh` healthy as new predicate kinds arrive (live; ongoing).
 3. Bug bundle export: keep `capture_wrong_code_bundle.sh` and `--bundle` integration in sync with new artifact surfaces (live; ongoing).
-4. Negative examples as first-class regressions for every checker / capability / ownership / predictable / proof / FFI / concurrency rule.
+4. Negative examples as first-class regressions for every checker / capability / ownership / predictable / proof / FFI / concurrency rule (first pair live for parse_validate's pilot: `examples/parse_validate/catches/` + `CATCHES.md` + `make test-catches`; demonstrates capability discipline via authority-widening rejection).
 5. Trusted-boundary stress harness: raw-pointer wrappers, FFI ownership transfer, abort/failure cleanup, layout-sensitive wrappers, capability narrowing.
 6. Property-based tests for formatter/parser round-trips, stdlib containers, parser cores, report facts.
 7. Fuzzing infrastructure where there is an oracle: grammar, structure-aware parser, coverage-guided.
