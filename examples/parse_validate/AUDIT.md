@@ -155,17 +155,18 @@ The example becomes a Phase 7 entry when each of the following is true:
 | 5 | Oracle beyond hand-written tests — at minimum a property-based test or a reference-implementation differential. | ❌ absent (oracle is `--interp` only) |
 | 6 | "Concrete catches this" negative pair on file. | ✅ `examples/parse_validate/catches/01_authority_widening.con` + `CATCHES.md`, enforced by `make test-catches` |
 | 7 | Release evidence bundle capturable in one command, producing source + reports + proof status + assumption + policy in a stable layout. | ❌ partial (bundle capture works for wrong-code, not yet for showcase) |
-| 8 | Honest framing: a README explaining what is proved, what is enforced, what is reported, what is assumed, and where the trust boundary actually sits. | ❌ absent |
+| 8 | Honest framing: a README explaining what is proved, what is enforced, what is reported, what is assumed, and where the trust boundary actually sits. | ✅ `examples/parse_validate/README.md` |
 | 9 | Snapshot/diff coverage: a baseline of facts/reports that a regression would break. | ❌ absent |
 | 10 | Listed in a curated Phase 7 showcase manifest (not just `tests/oracle/vectors.txt`). | ❌ no such manifest exists yet |
 
-Today: **4 of 10 bars met.** Most of the remaining bars are not parse_validate-specific work — they are infrastructure that the pilot is supposed to force into existence. Closing them in order is the pilot's whole purpose.
+Today: **5 of 10 bars met.** Most of the remaining bars are not parse_validate-specific work — they are infrastructure that the pilot is supposed to force into existence. Closing them in order is the pilot's whole purpose.
 
 **Closed so far:**
 - Bar #1 — `validate_version` proved with Lean theorem. 5 of 8 eligible validators now extract via the new early-return-as-else rule in ProofCore.
 - Bar #3 — assumption file landed with schema, CI gate, and drift detection.
 - Bar #4 — policy section landed in `Concrete.toml` with 8 enforced fields; CI gate detects drift on stack budget, capability forbid, and allow-list violation.
 - Bar #6 — first negative pair: `catches/01_authority_widening.con` + `CATCHES.md`. Drift-enforced by `make test-catches`. Demonstrates that adding a single `print_string` debug line to a pure validator is rejected with `E0520 — requires Console but caller has (none)`.
+- Bar #8 — `README.md` lands as the honest framing template. States what is proved, enforced, reported, assumed, where the trust boundary sits, and explicitly what is **not** yet done (composition theorem, oracle, release bundle, snapshot baseline, Phase 7 entry).
 
 ## 8. Suggested first three pilot commits (per ROADMAP rule 2)
 

@@ -10,6 +10,31 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### parse_validate pilot — bar #8 closed (honest README)
+
+The pull-through pilot now has its README. The doc is structured
+as the **template for future pilot/flagship docs**: every section
+states a category (proved, enforced statically, enforced by CI,
+reported, assumed, trusted, missing, negative pair) and answers it
+from facts on the ground today, not aspiration.
+
+- **Up-front "What is NOT yet done" section** names every remaining
+  graduation bar by number. No oversell: parse_validate is a
+  pilot, not a public flagship. The pilot rule says one bounded
+  example at a time; this README is the doc that makes that clear.
+- **Three-layer trust boundary** explicit: (1) Lean kernel checks
+  the theorem; (2) Concrete compiler extracts and reports — trusted
+  but not yet Lean-verified; (3) toolchain + runtime preserves at
+  runtime — not verified, recorded in `assumptions.toml`.
+- **Pointer doc, not standalone doc**: AUDIT.md is the
+  graduation-bar tracker, CATCHES.md is the negative-pair
+  narrative, assumptions.toml + Concrete.toml [policy] are the
+  enforced surface, proof-registry.json + Concrete.Proof.* are the
+  theorem. README ties them together and points outward.
+
+Audit status: 5 of 10 graduation bars now met (bars #1, #3, #4,
+#6, #8).
+
 ### parse_validate pilot — bar #6 closed ("Concrete catches this")
 
 First negative pair on file for the pull-through pilot. The
