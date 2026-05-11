@@ -651,20 +651,60 @@ partial def cExprToPExpr : CExpr → Option Proof.PExpr
     some (.ifThenElse pc pt pe)
   | _ => none
 
-partial def cStmtsToPExpr : List CStmt → Option Proof.PExpr
-  | [] => none
-  | [.return_ (some e) _] => cExprToPExpr e
-  | [.expr e] => cExprToPExpr e
-  | (.letDecl name _ _ val) :: rest => do
+/-- Extract a statement list to a pure PExpr, threading a
+    continuation `k` that says "what does the function return if
+    control falls off the end of these statements?"
+
+    A return statement terminates the function and discards `k`. An
+    if-without-else falls through to the surrounding scope: the
+    inner if's "else" is exactly the outer if's continuation. This
+    lets early-return chains (parse_validate's validator shape) and
+    nested early returns (`if a { if b { return X; } } return Y;`)
+    extract correctly.
+
+    `k = none` means "no continuation, fail if control falls off."
+    A function body extracts by calling this with `k = none`. -/
+partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
+  | [], k => k
+  | [.return_ (some e) _], _ => cExprToPExpr e
+  | [.expr e], _ => cExprToPExpr e
+  | (.letDecl name _ _ val) :: rest, k => do
     let pv ← cExprToPExpr val
-    let pb ← cStmtsToPExpr rest
+    let pb ← cStmtsToPExprK rest k
     some (.letIn name pv pb)
-  | [.ifElse cond thenBranch (some elseBranch)] => do
+  -- Singleton if-else (last stmt of body): each branch inherits the
+  -- outer continuation. If a branch returns, k is dead; if it falls
+  -- through, k is used.
+  | [.ifElse cond thenBranch (some elseBranch)], k => do
     let pc ← cExprToPExpr cond
-    let pt ← cStmtsToPExpr thenBranch
-    let pe ← cStmtsToPExpr elseBranch
+    let pt ← cStmtsToPExprK thenBranch k
+    let pe ← cStmtsToPExprK elseBranch k
     some (.ifThenElse pc pt pe)
-  | _ => none
+  -- If-else followed by more statements: both branches' fall-through
+  -- continuation is `rest with the outer k`.
+  | (.ifElse cond thenBranch (some elseBranch)) :: rest, k => do
+    let pc ← cExprToPExpr cond
+    let pkRest ← cStmtsToPExprK rest k
+    let pt ← cStmtsToPExprK thenBranch (some pkRest)
+    let pe ← cStmtsToPExprK elseBranch (some pkRest)
+    some (.ifThenElse pc pt pe)
+  -- If-without-else (early-return shape): then-branch's
+  -- continuation is `rest with k`; the implicit else is the same.
+  -- parse_validate's validator shape:
+  --     if v == 1 { return 0; }
+  --     return 1;
+  -- becomes `if v == 1 then 0 else 1`. Nested early returns thread
+  -- through because the inner if's continuation is the outer's
+  -- continuation.
+  | (.ifElse cond thenBranch none) :: rest, k => do
+    let pc ← cExprToPExpr cond
+    let pkRest ← cStmtsToPExprK rest k
+    let pt ← cStmtsToPExprK thenBranch (some pkRest)
+    some (.ifThenElse pc pt pkRest)
+  | _, _ => none
+
+partial def cStmtsToPExpr (stmts : List CStmt) : Option Proof.PExpr :=
+  cStmtsToPExprK stmts none
 end
 
 -- Unsupported construct identification

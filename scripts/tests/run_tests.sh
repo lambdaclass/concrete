@@ -2765,7 +2765,7 @@ check_report "$TESTDIR/adversarial_profile_mixed_evidence.con" proof-status \
 
 # Summary counts
 check_report "$TESTDIR/adversarial_profile_mixed_evidence.con" proof-status \
-    "1 proved.*0 stale.*0 unproved.*1 blocked.*2 ineligible.*1 trusted" \
+    "1 proved.*0 stale.*1 unproved.*0 blocked.*2 ineligible.*1 trusted" \
     "proof-status: summary counts correct" \
     "proof-status: summary counts wrong"
 
