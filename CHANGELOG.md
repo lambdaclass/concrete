@@ -10,6 +10,29 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### parse_validate pilot — bar #4 closed (policy files)
+
+The Phase 2 E.25 policy-file surface lands as a schema-extension to
+the existing `Concrete.toml` `[policy]` convention plus a
+drift-enforced CI gate.
+
+- **Contract** (`docs/POLICY_FILES.md`): schema v1 covering
+  `predictable`, `no_alloc`, `no_unsafe`, `no_trusted`,
+  `no_externs`, `max_stack_bytes`, `forbidden_capabilities`,
+  `allowed_capabilities`. Documents the distinction from assumption
+  files (prescriptive budgets vs descriptive trust surface).
+- **First instance** — `examples/parse_validate/Concrete.toml` now
+  carries the full `[policy]` section with 8 enforced fields.
+- **CI gate** (`scripts/tests/check_policy.sh`, `make test-policy`):
+  walks every `examples/*/Concrete.toml`, runs the audit reports,
+  asserts each policy field is met. Drift fails the gate.
+- **First run**: 4 PASS / 0 FAIL across the examples that carry a
+  `[policy]` section. parse_validate runs all 8 enforcement points
+  green. Drift-tested: tightening `max_stack_bytes` below the
+  actual max correctly raises FAIL.
+
+3 of 10 graduation bars now met (bars #1, #3, #4).
+
 ### parse_validate pilot — bars #1 + #3 closed
 
 Two graduation bars from `examples/parse_validate/AUDIT.md` are met,

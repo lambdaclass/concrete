@@ -137,7 +137,7 @@ Expected outcome: a function ships with stable, diffable, fingerprinted artifact
 10. `CheckedProgram` artifact between checking and elaboration if it materially simplifies plumbing; otherwise reject explicitly.
 11. Authority / evidence diffing as a first-class artifact workflow.
 12. Assumption files as machine-readable artifacts: target, compiler, backend, OS, toolchain, FFI contracts, trusted regions, proof/evidence assumptions, versioned and diffable (live for v1 — `docs/ASSUMPTION_FILES.md`, first instance at `examples/parse_validate/assumptions.toml`, drift-enforced by `make test-assumptions`).
-13. Project policy files for enforceable authority and evidence budgets (no `Unsafe`, no `Alloc`, max stack, required proof/evidence levels).
+13. Project policy files for enforceable authority and evidence budgets (no `Unsafe`, no `Alloc`, max stack, required proof/evidence levels) (live for v1 — `docs/POLICY_FILES.md`, schema extends `Concrete.toml` `[policy]`, first instance at `examples/parse_validate/Concrete.toml`, drift-enforced by `make test-policy`).
 14. Warning / lint discipline: separate hard errors, warnings, deny-in-CI warnings, advisory lints.
 15. ABI/layout round-trip checkers: generate C headers/stubs from public ABI surfaces, verify offsets/size/alignment/calling conventions cross-language.
 16. Strengthen memory/layout audit reports with source locations, qualified names, repr/packed/align facts, trusted-pointer boundaries, backend/target caveats.
