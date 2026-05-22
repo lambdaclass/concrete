@@ -1,0 +1,40 @@
+=== Proof Obligations ===
+
+  main.compute_tag
+    status:       proved
+    spec:         Concrete.Proof.computeTagExpr
+    proof:        Concrete.Proof.compute_tag_correct
+    source:       registry
+    fingerprint:  [(ret (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var key) (var message)) (var nonce)))]
+    dependencies: none
+    loc:          examples/crypto_verify/src/main.con:18
+
+  main.verify_tag
+    status:       proved
+    spec:         Concrete.Proof.verifyTagExpr
+    proof:        Concrete.Proof.verify_tag_correct
+    source:       registry
+    fingerprint:  [(let computed (call compute_tag (var key) (var message) (var nonce))) (if (binop Concrete.BinOp.eq (var computed) (var expected_tag)) [(ret (int 1))] [(ret (int 0))])]
+    dependencies: main.compute_tag
+    loc:          examples/crypto_verify/src/main.con:24
+
+  main.check_nonce
+    status:       proved
+    spec:         Concrete.Proof.checkNonceExpr
+    proof:        Concrete.Proof.check_nonce_correct
+    source:       registry
+    fingerprint:  [(if (binop Concrete.BinOp.gt (var nonce) (int 0)) [(if (binop Concrete.BinOp.leq (var nonce) (var max_nonce)) [(ret (int 1))] [(ret (int 0))])] [(ret (int 0))])]
+    dependencies: none
+    loc:          examples/crypto_verify/src/main.con:35
+
+  main.main
+    status:       ineligible
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(let key (int 42)) (let msg (int 100)) (let nonce (int 7)) (let tag (call compute_tag (var key) (var msg) (var nonce))) (let valid (call verify_tag (var key) (var msg) (var nonce) (var tag))) (let bad (call verify_tag (var key) (var msg) (var nonce) (int 9999))) (let nonce_ok (call check_nonce (var nonce) (int 1000))) (ret (int 0))]
+    dependencies: main.compute_tag, main.verify_tag, main.check_nonce
+    loc:          examples/crypto_verify/src/main.con:49
+
+Totals: 4 obligations — 3 proved, 0 stale, 0 missing, 0 blocked, 1 ineligible, 0 trusted
+

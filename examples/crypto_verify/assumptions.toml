@@ -1,0 +1,41 @@
+# Assumption file for the crypto_verify flagship candidate.
+# Schema: docs/ASSUMPTION_FILES.md
+#
+# Active pull-through candidate per ROADMAP Active Dependency Order
+# rule 2 (slot opened 2026-05-22 after parse_validate graduated).
+# This file is the declared trust surface; `make test-assumptions`
+# enforces that the compiler's reports agree with these values.
+
+schema_version = 1
+
+[target]
+host      = "any"
+toolchain = "llvm"
+runtime   = "hosted-libc"
+
+[arithmetic]
+# Int (i64) operations. The toy tag function `key * message + nonce`
+# uses i64 arithmetic; overflow is part of the explicit "toy" framing
+# in the source docstring (the proof does not claim overflow-freedom).
+overflow       = "wrapping"
+divide_by_zero = "trap"
+shift_oversize = "wrap"
+
+[allocation]
+heap            = "none"
+stack_max_bytes = 200
+
+[authority]
+required  = []
+forbidden = ["Alloc", "File", "Net", "Unsafe", "Console", "Clock"]
+
+[ffi]
+externs = []
+
+[trusted]
+functions = []
+shells    = []
+
+[proof]
+provable_subset = "predictable-pure-int"
+trust_anchor    = "Lean kernel + Concrete.Proof.*"

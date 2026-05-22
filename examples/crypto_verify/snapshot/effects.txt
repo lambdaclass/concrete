@@ -1,0 +1,15 @@
+=== Combined Effects Report ===
+
+module main:
+      compute_tag
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/crypto_verify/src/main.con:18
+      verify_tag
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/crypto_verify/src/main.con:24
+      check_nonce
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/crypto_verify/src/main.con:35
+      main
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/crypto_verify/src/main.con:49
+
+Totals: 4 functions, 4 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
+Evidence: 3 proved, 1 enforced, 0 trusted-assumption, 0 reported
+

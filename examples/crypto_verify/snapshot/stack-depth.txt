@@ -1,0 +1,15 @@
+=== Stack-Depth Report ===
+
+module main:
+  compute_tag
+    frame: 32 bytes  depth: 0  stack: 32 bytes  @ examples/crypto_verify/src/main.con:18
+  verify_tag
+    frame: 48 bytes  depth: 1  stack: 80 bytes  @ examples/crypto_verify/src/main.con:24
+  check_nonce
+    frame: 24 bytes  depth: 0  stack: 24 bytes  @ examples/crypto_verify/src/main.con:35
+  main
+    frame: 64 bytes  depth: 2  stack: 144 bytes  @ examples/crypto_verify/src/main.con:49
+
+Totals: 4 functions, 4 bounded, 0 recursive (unbounded)
+Max stack bound: 144 bytes (main)
+

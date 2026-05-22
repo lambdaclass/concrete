@@ -1,0 +1,4 @@
+=== Authority Report ===
+
+All functions are pure — no capabilities required.
+
