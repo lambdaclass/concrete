@@ -1,0 +1,88 @@
+# Curated Phase 7 showcase manifest.
+#
+# Each entry is a graduated flagship example: an example that has met
+# every bar in its own AUDIT.md, carries a Lean-backed property, an
+# assumption file, an enforced policy, a "Concrete catches this"
+# negative pair, snapshot baselines, an oracle, an honest README, and
+# a release evidence bundle is capturable on demand.
+#
+# Adding an example requires AUDIT.md to show 10 of 10 bars met.
+# Removing an example is allowed only with a roadmap note explaining
+# why (e.g., language churn forced retirement; in that case the
+# example moves to an "archived" section).
+#
+# CI gate: scripts/tests/check_showcase.sh (make test-showcase)
+# walks every entry, runs its drift-enforced CI gates
+# (policy/assumptions/catches/snapshots), and asserts the release
+# bundle still captures cleanly. Drift is a real signal.
+
+schema_version = 1
+
+[[flagship]]
+example     = "parse_validate"
+path        = "examples/parse_validate"
+graduated   = "2026-05-22"
+audit       = "examples/parse_validate/AUDIT.md"
+readme      = "examples/parse_validate/README.md"
+thesis_role = "Capability-pure, predictable validation core with one Lean composition theorem and a drift-enforced negative pair."
+
+# Bars met (must be 10/10 to be listed here).
+[flagship.bars]
+proved_property        = true   # bar #1
+composition_property   = true   # bar #2
+assumption_file        = true   # bar #3
+policy_file            = true   # bar #4
+oracle_beyond_handwritten = true   # bar #5
+negative_pair          = true   # bar #6
+release_bundle         = true   # bar #7
+honest_readme          = true   # bar #8
+snapshot_baseline      = true   # bar #9
+on_showcase_manifest   = true   # bar #10 — this entry
+
+# Evidence pointers — what a reviewer reads to audit the claims.
+[flagship.evidence]
+proof_registry = "examples/parse_validate/src/proof-registry.json"
+proofs         = ["Concrete.Proof.validate_version_correct",
+                  "Concrete.Proof.validate_header_fields_success"]
+assumptions    = "examples/parse_validate/assumptions.toml"
+policy         = "examples/parse_validate/Concrete.toml"
+catches        = "examples/parse_validate/catches/"
+catches_doc    = "examples/parse_validate/CATCHES.md"
+snapshots      = "examples/parse_validate/snapshot/"
+oracle         = "examples/parse_validate/oracle/"
+
+# CI gates that enforce this entry's contract. Drift fails the gate.
+[flagship.gates]
+policy       = "make test-policy"
+assumptions  = "make test-assumptions"
+catches      = "make test-catches"
+snapshots    = "make test-snapshots"
+oracle       = "make test-pv-oracle"
+verify_gates = "make test-verify-gates"
+release_bundle = "make test-release-bundle"
+
+# Known limits — honest framing.
+[flagship.limits]
+proofs = """
+Two attached theorems: validate_version (full correctness) and
+validate_header_fields_success (positive direction of the
+composition). The Result-returning parse_header on the array input
+is blocked on Phase 4 ProofCore extensions (array indexing, enum
+construction, struct construction). The composition iff
+(failure direction with return code matching the first failing
+check) is left as future work — the 256-branch case split exhausts
+heartbeats today.
+"""
+oracle = """
+Reference implementation is in Python, not Lean. Two independent
+implementations of the same spec, agreeing across 600 cases (three
+seeds). Stronger oracle (Lean equivalence proof) waits on the
+ProofCore extensions above.
+"""
+audience = """
+This is the first graduated flagship. The audience that benefits
+from parse_validate's evidence today is narrow: reviewers auditing
+a pure-int validator under wrapping i32 arithmetic on a hosted-libc
+target. Broader systems audiences need the flagship corpus to
+grow.
+"""

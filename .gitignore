@@ -85,6 +85,9 @@ scripts/check_ll1_rs
 # Temporary
 /tmp/
 
+# Release bundles (regenerable via scripts/tests/capture_release_bundle.sh)
+out/release/
+
 # Generated paper artifacts
 paper/*.pdf
 site/public/

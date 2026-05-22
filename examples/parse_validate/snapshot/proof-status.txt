@@ -1,0 +1,110 @@
+=== Proof Status Report ===
+
+-- proved ------------------------------------------------ examples/parse_validate/src/main.con:55
+
+  ✓ `parse_validate.validate_version` — proof matches current body.
+
+ 55 |     fn validate_version(v: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:60
+
+  `parse_validate.validate_msg_type` passes the predictable profile but has no registered proof.
+
+ 60 |     fn validate_msg_type(t: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.geq (var t) (int 1)) [(if (binop Concrete.BinOp.leq (var t) (int 4)) [(ret (int 0))])]) (ret (int 1))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:67
+
+  `parse_validate.validate_payload_len` passes the predictable profile but has no registered proof.
+
+ 67 |     fn validate_payload_len(plen: i32, max_len: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.geq (var plen) (int 0)) [(if (binop Concrete.BinOp.leq (var plen) (var max_len)) [(ret (int 0))])]) (ret (int 1))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:74
+
+  `parse_validate.validate_total_len` passes the predictable profile but has no registered proof.
+
+ 74 |     fn validate_total_len(actual: i32, needed: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.geq (var actual) (var needed)) [(ret (int 0))]) (ret (int 1))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- blocked ------------------------------------------------ examples/parse_validate/src/main.con:79
+
+  `parse_validate.compute_checksum` is eligible but uses unsupported constructs — extraction failed.
+
+ 79 |     fn compute_checksum(data: [i32; 8], count: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  unsupported: while loop
+
+  hint: Remove while loop to enable proof extraction.
+
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:87
+
+  `parse_validate.validate_checksum` passes the predictable profile but has no registered proof.
+
+ 87 |     fn validate_checksum(expected: i32, computed: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.eq (var expected) (var computed)) [(ret (int 0))]) (ret (int 1))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- proved ------------------------------------------------ examples/parse_validate/src/main.con:107
+
+  ✓ `parse_validate.validate_header_fields` — proof matches current body.
+
+ 107 |     fn validate_header_fields(
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+-- blocked ------------------------------------------------ examples/parse_validate/src/main.con:125
+
+  `parse_validate.parse_header` is eligible but uses unsupported constructs — extraction failed.
+
+ 125 |     fn parse_header(data: [i32; 8], len: i32) -> Result<Header, ParseError> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  unsupported: enum literal, if without else, array index
+
+  hint: Remove enum literal, if without else, array index to enable proof extraction.
+
+-- blocked ------------------------------------------------ examples/parse_validate/src/main.con:167
+
+  `parse_validate.error_code` is eligible but uses unsupported constructs — extraction failed.
+
+ 167 |     fn error_code(e: ParseError) -> i32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  unsupported: no return statement, match expression
+
+  hint: Remove no return statement, match expression to enable proof extraction.
+
+-- not eligible ------------------------------------------- examples/parse_validate/src/main.con:180
+
+  `parse_validate.main` cannot be proved: fails predictable profile (is entry point (main)).
+
+ 180 |     pub fn main() -> Int {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  reasons: is entry point (main)
+
+  hint: Address these constraints to make this function eligible for proof.
+
+Totals: 10 functions — 2 proved, 0 stale, 4 unproved, 3 blocked, 1 ineligible, 0 trusted
+

@@ -1,0 +1,25 @@
+=== Proof Eligibility Assessment ===
+
+  eligible   `parse_validate.validate_version`  @ examples/parse_validate/src/main.con:55
+             in provable subset: pure, bounded, no FFI
+  eligible   `parse_validate.validate_msg_type`  @ examples/parse_validate/src/main.con:60
+             in provable subset: pure, bounded, no FFI
+  eligible   `parse_validate.validate_payload_len`  @ examples/parse_validate/src/main.con:67
+             in provable subset: pure, bounded, no FFI
+  eligible   `parse_validate.validate_total_len`  @ examples/parse_validate/src/main.con:74
+             in provable subset: pure, bounded, no FFI
+  eligible   `parse_validate.compute_checksum`  @ examples/parse_validate/src/main.con:79
+             in provable subset: pure, bounded, no FFI
+  eligible   `parse_validate.validate_checksum`  @ examples/parse_validate/src/main.con:87
+             in provable subset: pure, bounded, no FFI
+  eligible   `parse_validate.validate_header_fields`  @ examples/parse_validate/src/main.con:107
+             in provable subset: pure, bounded, no FFI
+  eligible   `parse_validate.parse_header`  @ examples/parse_validate/src/main.con:125
+             in provable subset: pure, bounded, no FFI
+  eligible   `parse_validate.error_code`  @ examples/parse_validate/src/main.con:167
+             in provable subset: pure, bounded, no FFI
+  excluded   `parse_validate.main`  @ examples/parse_validate/src/main.con:180
+             source: is entry point (main)
+
+Totals: 10 functions — 9 eligible, 1 excluded (1 source, 0 profile, 0 both), 0 trusted
+

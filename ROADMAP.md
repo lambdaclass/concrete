@@ -52,11 +52,11 @@ Do not call the language releasable until these are true:
 
 Phases are listed in dependency order, but execution overlaps. The standing rules:
 
-1. **The relevant slices of Phases 1-4 gate the first flagship.** Hardening, artifacts, runtime profile, and proof workflow must be honest in the areas the flagship actually touches before it can claim them. The pilot (rule 2) determines which runtime / proof / artifact surfaces are actually required; not every item in Phases 1-4 gates every flagship — for example, the concurrency sub-track in Phase 3 only gates a flagship that uses concurrency.
-2. **One bounded pull-through pilot may run in parallel.** Pick one flagship (likely `examples/parse_validate`) and let its concrete gaps prioritize work inside Phases 1-4. The pilot does not paper over gaps; gaps it exposes become normal phase work. A second flagship does not start until the first's gaps are closed. The pilot is *not* yet a Phase 7 public flagship — Phase 7 is the curated public showcase set, which only opens after stable evidence per rule 5.
+1. **The relevant slices of Phases 1-4 gate each flagship.** Hardening, artifacts, runtime profile, and proof workflow must be honest in the areas the flagship actually touches before it can claim them. The active candidate (rule 2) determines which runtime / proof / artifact surfaces are actually required; not every item in Phases 1-4 gates every flagship — for example, the concurrency sub-track in Phase 3 only gates a flagship that uses concurrency.
+2. **Run examples through one linear ladder.** Examples start as inventory entries, then become candidates, then one active pull-through candidate at a time may force gaps in Phases 1-4, and only after its evidence holds does it graduate into Phase 7. `parse_validate` has completed that path and is now the first graduated Phase 7 entry. A second active pull-through candidate does not start until the current one graduates or is explicitly parked with reasons.
 3. **Phase 5 lands when backend honesty matters.** SSA contract, target model, and incremental boundaries before public packaging.
 4. **Phase 6 is not on the critical path to the first release.** Benchmarks and budgets help but do not gate it.
-5. **Phases 7-8 only after stable evidence.** Flagships and release packaging rest on Phases 1-5, not the other way around.
+5. **Phases 7-8 only after stable evidence.** Phase 7 grows by promotion from the candidate ladder, not by starting many public showcases at once. Release packaging rests on Phases 1-5 plus at least one graduated showcase, not the other way around.
 6. **Phases 9-11 only after first-release surface holds.** Packages, editor UX, and public governance assume the artifact / proof / release contracts are stable.
 7. **Phase 12 is a trust multiplier, not a prerequisite.** Compiler-correctness proofs come after Phases 4, 5, and the artifact contracts in 2 are stable.
 8. **Phase 13 stays last** unless a current example forces a research topic forward.
@@ -66,6 +66,7 @@ Phases are listed in dependency order, but execution overlaps. The standing rule
 - When a task is completed, move it to [CHANGELOG.md](CHANGELOG.md) and renumber the remaining tasks inside that phase.
 - Close phases on concrete outputs (examples, reports, docs, tool surfaces) with explicit success bars, not abstract intent.
 - Every flagship example must name its oracle or explicitly state none exists yet.
+- Keep examples on the linear ladder: inventory entry -> candidate -> one active pull-through candidate -> graduated Phase 7 flagship; do not maintain several almost-flagships in parallel.
 - Judge new language features by grammar cost, audit cost, and proof cost, not expressiveness alone.
 - Keep specs in Lean-attached / artifact-registry form until obligations and diagnostics support source-level contracts honestly.
 - Build a local fact CLI before MCP / editor integrations.
@@ -108,7 +109,7 @@ Expected outcome: every checker, capability, ownership, predictable, proof, FFI,
 10. Targeted differential / codegen tests where there is an executable oracle and a known backend risk.
 11. Semantic coverage dashboard: track language constructs, report surfaces, trusted/FFI edges, negative diagnostics, optimizer-sensitive cases, proof/evidence paths.
 12. Coverage tooling over tests, report facts, policy checks, obligations, proof artifacts, doc tests.
-13. Machine-readable example metadata; generate inventory/lifecycle/no-duplicate docs from it.
+13. Machine-readable example inventory and candidate pool: classify examples by thesis claim, oracle, proof status, policy / assumption coverage, negative pair, maturity level, and promotion blocker; generate lifecycle and no-duplicate docs from that data.
 14. Docs/CLI truthfulness gates: every documented command has a smoke test or an explicit "design only" label.
 15. Code formatter robust enough to be the default documentation / example workflow.
 16. Documentation-comment extraction and API reference generation from source.
@@ -254,25 +255,28 @@ Expected outcome: a proof-bearing function ships with benchmark numbers, allocat
 
 ## Phase 7: Flagships
 
-This phase is the **curated public showcase set**, opened only after Phases 1-5 are stable enough to back the claims (per Active Dependency Order rule 5). The early pull-through pilot from rule 2 is a forcing function for Phases 1-4 and is not itself a Phase 7 entry; an example only becomes a Phase 7 flagship after its gaps in 1-5 are closed and its evidence holds up to outside review.
+This phase is the **curated public showcase set**, opened only after Phases 1-5 are stable enough to back the claims (per Active Dependency Order rule 5). Examples do not start here; they enter through the Phase 1 inventory / candidate pool, run one at a time as pull-through candidates, and graduate here only after their gaps in 1-5 are closed and their evidence holds up to outside review.
+
+Status: live. `tests/showcase/manifest.toml` is the curated registry; `make test-showcase` is the drift-enforced gate. First graduated entry is `parse_validate` (2026-05-22); see `examples/parse_validate/AUDIT.md` for the 10-bar contract every flagship must meet.
 
 Expected outcome: a flagship packet/header validator has explicit authority, one Lean-backed property, report/snapshot/diff coverage, and a release evidence bundle that tells an outsider exactly what is proved and what is assumed.
 
-1. Polish the packet/parser flagship as the canonical thesis demo (packet / HTTP / DNS / ELF); name one as the explicit flagship with oracle-backed validation.
-2. FFI showcase with a `trusted` wrapper and `with(Unsafe)` isolated at the boundary (libc, checksum/hash, OS call facade, C-ABI library).
-3. Ownership-heavy data-structure showcase with linear ownership and deterministic cleanup (ordered map, intrusive list, tree, arena-backed graph).
-4. Privilege-separated tool where capability signatures prove the trusted core cannot touch files/network/processes.
-5. Fixed-capacity / no-alloc showcase proving the predictable subset is practical (ring buffer, bounded queue, bounded-state controller, fixed parser state machine).
-6. Cryptography example only after the proof/artifact boundary is stronger (constant-time equality, HMAC verification, Ed25519 verification subset).
-7. Broader public showcase corpus shaped as small / medium / big programs (one property per small, composition per medium, scale per big); must include borrow/aliasing, cleanup/leak-boundary, ownership-heavy, bounded/no-alloc.
-8. Curated showcase set: each example proves a different thesis claim with honest framing, report/snapshot/diff coverage, "what the compiler catches," and an oracle when possible.
-9. Require capability-shaped APIs in at least one flagship so authority is visible in source/API, not only reports.
-10. Privilege-separated capability-first showcase as a core thesis example, not incidental.
-11. Showcase maintenance policy: showcase examples are first-class regression targets; framing must stay honest; report/snapshot/diff coverage must be retained.
-12. C-replacement examples as a named release bar: at least one C packet validator, one C state machine, one syscall wrapper, one checksum/length helper.
-13. Big-workload flagship set: at minimum one protocol/parser security example, one crypto/security proof, one privilege-separated tool, one ownership-heavy medium, one bounded/no-alloc medium.
-14. Big-workload flagship quality bar: each has honest proof/trust framing, report/snapshot/diff coverage, an oracle when possible.
-15. Focused "Concrete catches this" showcase: examples where C/Rust/Zig/SPARK rely on convention while Concrete rejects or reports the boundary directly; include matching "why not" docs for rejected directions (GC, actors, STM, hidden async, effect handlers, broad inference, detached tasks).
+1. Maintain `parse_validate` as the first packet/parser flagship and use its 10-bar contract as the promotion template for every later showcase.
+2. Promote the next packet/parser candidate only after it passes the same ladder (packet / HTTP / DNS / ELF); name the explicit canonical thesis demo with oracle-backed validation.
+3. Promote an FFI candidate with a `trusted` wrapper and `with(Unsafe)` isolated at the boundary (libc, checksum/hash, OS call facade, C-ABI library).
+4. Promote an ownership-heavy data-structure candidate with linear ownership and deterministic cleanup (ordered map, intrusive list, tree, arena-backed graph).
+5. Promote a privilege-separated tool candidate where capability signatures prove the trusted core cannot touch files/network/processes.
+6. Promote a fixed-capacity / no-alloc candidate proving the predictable subset is practical (ring buffer, bounded queue, bounded-state controller, fixed parser state machine).
+7. Promote a cryptography candidate only after the proof/artifact boundary is stronger (constant-time equality, HMAC verification, Ed25519 verification subset).
+8. Grow the public showcase corpus linearly from graduated candidates shaped as small / medium / big programs (one property per small, composition per medium, scale per big); must include borrow/aliasing, cleanup/leak-boundary, ownership-heavy, bounded/no-alloc.
+9. Keep the curated showcase set balanced: each graduated example proves a different thesis claim with honest framing, report/snapshot/diff coverage, "what the compiler catches," and an oracle when possible.
+10. Require capability-shaped APIs in at least one flagship so authority is visible in source/API, not only reports.
+11. Privilege-separated capability-first showcase as a core thesis example, not incidental.
+12. Showcase maintenance policy: showcase examples are first-class regression targets; framing must stay honest; report/snapshot/diff coverage must be retained.
+13. C-replacement examples as a named release bar: at least one C packet validator, one C state machine, one syscall wrapper, one checksum/length helper.
+14. Big-workload flagship set: at minimum one protocol/parser security example, one crypto/security proof, one privilege-separated tool, one ownership-heavy medium, one bounded/no-alloc medium.
+15. Big-workload flagship quality bar: each has honest proof/trust framing, report/snapshot/diff coverage, an oracle when possible.
+16. Focused "Concrete catches this" showcase: examples where C/Rust/Zig/SPARK rely on convention while Concrete rejects or reports the boundary directly; include matching "why not" docs for rejected directions (GC, actors, STM, hidden async, effect handlers, broad inference, detached tasks).
 
 ## Phase 8: Release
 

@@ -1,0 +1,8 @@
+=== Interface Summary ===
+
+module parse_validate (1 exports):
+  public API:
+    fn main() -> Int  [(pure)]
+
+Totals: 1 modules, 1 public exports
+

@@ -10,6 +10,69 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### parse_validate graduates to Phase 7 — bars #2, #5, #7, #9, #10 closed
+
+The pull-through pilot is done. parse_validate is now the **first
+graduated Phase 7 flagship**. All 10 bars in
+`examples/parse_validate/AUDIT.md` are met; the example is
+registered in `tests/showcase/manifest.toml`; the entire pilot
+contract is enforced by drift-detecting CI gates.
+
+The five bars closed in this batch:
+
+- **Bar #9 (snapshot/diff baseline)** — `examples/parse_validate/
+  snapshot/` captures 16 reports as byte-identical baselines.
+  `make test-snapshots` walks every `examples/*/snapshot/`,
+  re-runs the report, and fails on drift. `UPDATE_SNAPSHOTS=1`
+  intentionally refreshes the baseline.
+- **Bar #5 (oracle beyond hand-written tests)** — independent
+  Python reference (`oracle/reference.py`) reimplements the
+  parse_header spec from scratch. `oracle/run_oracle.sh` runs 200
+  seeded random cases through the Concrete binary AND the
+  reference; both must agree. `make test-pv-oracle` runs three
+  seeds (0, 42, 999) = 600 cases. Today: 600/600 agree.
+- **Bar #2 (composition theorem)** — `validate_header_fields_success`
+  proves the success direction of the 6-validator composition.
+  Lean kernel-checked. The `parse_header` Result-returning
+  function itself is blocked on Phase 4 ProofCore extensions
+  (array indexing, enum construction, struct construction); the
+  scalar helper `validate_header_fields` is the honest scaffold.
+  Per-failure theorems for the failure direction are small
+  follow-ups (256-branch case split exhausts heartbeats as one
+  theorem).
+- **Bar #7 (release evidence bundle)** —
+  `scripts/tests/capture_release_bundle.sh` is the showcase sibling
+  of `capture_wrong_code_bundle.sh`. Refuses to capture on broken
+  examples. Produces a stable directory with source, full report
+  set, proof-registry, assumption/policy/AUDIT/CATCHES/README,
+  snapshots, runtime stdout, compiler version, and a manifest.
+  `make test-release-bundle` verifies the capture script (29/0).
+- **Bar #10 (curated Phase 7 manifest)** —
+  `tests/showcase/manifest.toml` is the registry of graduated
+  flagships. parse_validate is the first entry. Every claim it
+  makes points at a CI gate that enforces it. `make test-showcase`
+  walks the manifest, verifies every artifact exists, and asserts
+  the release bundle still captures cleanly.
+
+Pull-through pilot rule status: parse_validate occupied the slot
+from its audit landing through 2026-05-22. The next bounded
+flagship can now start under the same rule.
+
+Reusable infrastructure landed by this pilot (all schema-level,
+sized for one flagship but applicable to every future one):
+- ProofCore early-return if-without-else extractor extension.
+- Per-example `proof-registry.json` + `Concrete.Proof.*_correct`
+  attachment pattern.
+- `docs/ASSUMPTION_FILES.md` + `assumptions.toml` schema v1.
+- `docs/POLICY_FILES.md` + `Concrete.toml` `[policy]` schema.
+- `docs/RELEASE_BUNDLE.md` + capture-bundle script.
+- Negative pair pattern (`catches/` directory + `CATCHES.md` + CI
+  gate).
+- Snapshot baseline gate (`snapshot/` + `check_snapshots.sh`).
+- Differential oracle pattern (independent reference + seeded
+  random cases).
+- Phase 7 showcase manifest (registry + walk-gate).
+
 ### parse_validate pilot — bar #8 closed (honest README)
 
 The pull-through pilot now has its README. The doc is structured

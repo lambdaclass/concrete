@@ -1,0 +1,18 @@
+=== Type Layout Report ===
+
+struct Header  (size: 16, align: 4)
+    offset   0  size  4  align  4  version: i32
+    offset   4  size  4  align  4  msg_type: i32
+    offset   8  size  4  align  4  payload_len: i32
+    offset  12  size  4  align  4  checksum: i32
+
+enum ParseError  (size: 4, align: 4, tag: 4, payload_offset: 4, max_payload: 0)
+    TooShort
+    BadVersion
+    BadType
+    PayloadTooBig
+    Truncated
+    BadChecksum
+
+Totals: 1 struct, 1 enum
+

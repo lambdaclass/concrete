@@ -149,24 +149,32 @@ The example becomes a Phase 7 entry when each of the following is true:
 | # | Bar | Currently |
 |---:|---|---|
 | 1 | At least one Lean-backed property, theorem checked by Lean, surfaced in `--report proof-status` as `proved`. | ✅ `validate_version` proved (commits `2673244` + `7081139`) |
-| 2 | Composition property (e.g. `parse_header` returns `Ok` iff all validators pass) Lean-backed. | ❌ blocked on (1) |
+| 2 | Composition property (e.g. `parse_header` returns `Ok` iff all validators pass) Lean-backed. | ✅ `validate_header_fields_success` proves the success direction of the 6-validator composition (Concrete.Proof.lean). `parse_header` itself is blocked on Phase 4 ProofCore array/enum/struct extraction; the scalar-parameter helper carries the composition theorem honestly. |
 | 3 | Assumption file present, machine-readable, listing target / arithmetic / alloc / stack assumptions. | ✅ `examples/parse_validate/assumptions.toml` enforced by `make test-assumptions` |
 | 4 | Policy file present, with enforceable authority/alloc/stack budgets that CI checks. | ✅ `Concrete.toml` [policy] enforced by `make test-policy` (8 fields active) |
-| 5 | Oracle beyond hand-written tests — at minimum a property-based test or a reference-implementation differential. | ❌ absent (oracle is `--interp` only) |
+| 5 | Oracle beyond hand-written tests — at minimum a property-based test or a reference-implementation differential. | ✅ `examples/parse_validate/oracle/` — independent Python reference + differential harness; 600/600 cases agree across 3 seeds; `make test-pv-oracle` |
 | 6 | "Concrete catches this" negative pair on file. | ✅ `examples/parse_validate/catches/01_authority_widening.con` + `CATCHES.md`, enforced by `make test-catches` |
-| 7 | Release evidence bundle capturable in one command, producing source + reports + proof status + assumption + policy in a stable layout. | ❌ partial (bundle capture works for wrong-code, not yet for showcase) |
+| 7 | Release evidence bundle capturable in one command, producing source + reports + proof status + assumption + policy in a stable layout. | ✅ `scripts/tests/capture_release_bundle.sh examples/parse_validate` produces `out/release/parse_validate/`; verified by `make test-release-bundle` (29/0); contract `docs/RELEASE_BUNDLE.md` |
 | 8 | Honest framing: a README explaining what is proved, what is enforced, what is reported, what is assumed, and where the trust boundary actually sits. | ✅ `examples/parse_validate/README.md` |
-| 9 | Snapshot/diff coverage: a baseline of facts/reports that a regression would break. | ❌ absent |
-| 10 | Listed in a curated Phase 7 showcase manifest (not just `tests/oracle/vectors.txt`). | ❌ no such manifest exists yet |
+| 9 | Snapshot/diff coverage: a baseline of facts/reports that a regression would break. | ✅ `examples/parse_validate/snapshot/` baselines 16 reports; enforced by `make test-snapshots` |
+| 10 | Listed in a curated Phase 7 showcase manifest (not just `tests/oracle/vectors.txt`). | ✅ `tests/showcase/manifest.toml` — parse_validate is the first graduated flagship (2026-05-22); enforced by `make test-showcase` |
 
-Today: **5 of 10 bars met.** Most of the remaining bars are not parse_validate-specific work — they are infrastructure that the pilot is supposed to force into existence. Closing them in order is the pilot's whole purpose.
+Today: **10 of 10 bars met.** parse_validate has graduated from
+pilot to Phase 7 flagship as of 2026-05-22. The pull-through pilot
+rule (Active Dependency Order rule 2) now opens up the next
+flagship candidate.
 
-**Closed so far:**
+**All bars closed:**
 - Bar #1 — `validate_version` proved with Lean theorem. 5 of 8 eligible validators now extract via the new early-return-as-else rule in ProofCore.
+- Bar #2 — `validate_header_fields_success` proves the success direction of the 6-validator composition. Lean kernel-checked.
 - Bar #3 — assumption file landed with schema, CI gate, and drift detection.
 - Bar #4 — policy section landed in `Concrete.toml` with 8 enforced fields; CI gate detects drift on stack budget, capability forbid, and allow-list violation.
-- Bar #6 — first negative pair: `catches/01_authority_widening.con` + `CATCHES.md`. Drift-enforced by `make test-catches`. Demonstrates that adding a single `print_string` debug line to a pure validator is rejected with `E0520 — requires Console but caller has (none)`.
-- Bar #8 — `README.md` lands as the honest framing template. States what is proved, enforced, reported, assumed, where the trust boundary sits, and explicitly what is **not** yet done (composition theorem, oracle, release bundle, snapshot baseline, Phase 7 entry).
+- Bar #5 — Python reference + 600-case differential oracle; `make test-pv-oracle`.
+- Bar #6 — first negative pair: `catches/01_authority_widening.con` + `CATCHES.md`. Drift-enforced by `make test-catches`.
+- Bar #7 — release evidence bundle pattern; `scripts/tests/capture_release_bundle.sh`, verified by `make test-release-bundle`.
+- Bar #8 — `README.md` honest-framing template.
+- Bar #9 — 16 report snapshots baselined; `make test-snapshots`.
+- Bar #10 — listed in `tests/showcase/manifest.toml`; `make test-showcase`.
 
 ## 8. Suggested first three pilot commits (per ROADMAP rule 2)
 

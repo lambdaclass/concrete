@@ -89,6 +89,34 @@ mod parse_validate {
         return 1;
     }
 
+    // ---- Composition over scalar inputs (proof-friendly) ----
+    //
+    // parse_header below composes the same validators on an array
+    // input, returning Result<Header, ParseError>. That version
+    // exercises constructs (array indexing, enum construction,
+    // struct construction) that ProofCore does not yet extract —
+    // future Phase 4 work.
+    //
+    // validate_header_fields composes the same logic on scalar
+    // inputs, returning an int status: 0 on success or the index
+    // (1..6) of the first failing check. This shape is in the
+    // ProofCore-extractable subset today, and is the function that
+    // carries the composition theorem `validate_header_fields_correct`
+    // in Concrete/Proof.lean.
+
+    fn validate_header_fields(
+        v: i32, t: i32, plen: i32,
+        total_len: i32, cs_expected: i32, cs_computed: i32
+    ) -> i32 {
+        if validate_total_len(total_len, 5) != 0 { return 1; }
+        if validate_version(v) != 0 { return 2; }
+        if validate_msg_type(t) != 0 { return 3; }
+        if validate_payload_len(plen, 240) != 0 { return 4; }
+        if validate_total_len(total_len, 4 + plen) != 0 { return 5; }
+        if validate_checksum(cs_expected, cs_computed) != 0 { return 6; }
+        return 0;
+    }
+
     // ---- Composite parser ----
     // Calls validators in sequence. Each failure returns immediately
     // with the specific error category. No hidden control flow —

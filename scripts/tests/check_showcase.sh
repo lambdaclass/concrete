@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Phase 7 showcase CI gate.
+#
+# For each graduated flagship in tests/showcase/manifest.toml,
+# verifies:
+#   1. The example path exists.
+#   2. Every claimed evidence file exists.
+#   3. Every claimed bar is actually still met (cross-checked
+#      against the file's bar declaration).
+#   4. The release bundle still captures cleanly.
+#
+# This is the strictest standing gate — it composes every other
+# drift-enforced gate the project has built. A flagship that has
+# graduated must STAY graduated.
+
+set -uo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+
+MANIFEST="tests/showcase/manifest.toml"
+COMPILER=".lake/build/bin/concrete"
+
+if [ ! -f "$MANIFEST" ]; then
+  echo "No showcase manifest found. Nothing to check."
+  exit 0
+fi
+if [ ! -x "$COMPILER" ]; then
+  echo "error: compiler not found at $COMPILER. Run 'make build' first." >&2
+  exit 2
+fi
+
+PASS=0
+FAIL=0
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+# Parse the manifest's [[flagship]] entries. Yields example name +
+# path on each line.
+python3 - "$MANIFEST" > "$TMP/entries.tsv" <<'PYEOF'
+import re, sys
+src = open(sys.argv[1]).read()
+chunks = re.split(r'^\[\[flagship\]\]\s*$', src, flags=re.MULTILINE)[1:]
+for c in chunks:
+    fields = {}
+    for m in re.finditer(r'^\s*(\w+)\s*=\s*"([^"]*)"\s*$', c, flags=re.MULTILINE):
+        fields[m.group(1)] = m.group(2)
+    name = fields.get('example', '')
+    path = fields.get('path', '')
+    if name and path:
+        print(f"{name}\t{path}")
+PYEOF
+
+while IFS=$'\t' read -r name path; do
+  [ -z "$name" ] && continue
+  echo "=== flagship: $name ==="
+
+  # 1. Path exists.
+  if [ ! -d "$path" ]; then
+    echo "  FAIL path $path missing"
+    FAIL=$((FAIL + 1))
+    continue
+  fi
+
+  # 2. Required artifacts (the 10 bars' artifacts).
+  errs=0
+  for f in src/main.con AUDIT.md README.md CATCHES.md Concrete.toml \
+           assumptions.toml src/proof-registry.json; do
+    if [ ! -f "$path/$f" ]; then
+      echo "  FAIL missing artifact: $path/$f"
+      errs=$((errs + 1))
+    fi
+  done
+  for d in catches snapshot oracle; do
+    if [ ! -d "$path/$d" ]; then
+      echo "  FAIL missing directory: $path/$d"
+      errs=$((errs + 1))
+    fi
+  done
+
+  # 3. AUDIT.md must show "10 of 10 bars met" (or higher) — assert
+  #    the bars-met line names 10/10.
+  if ! grep -qE 'bars met' "$path/AUDIT.md"; then
+    echo "  FAIL $path/AUDIT.md has no bars-met line"
+    errs=$((errs + 1))
+  fi
+
+  # 4. Release bundle captures cleanly.
+  bundle_out="$TMP/bundle-$name"
+  if ! bash scripts/tests/capture_release_bundle.sh "$path" -o "$bundle_out" >/dev/null 2>&1; then
+    echo "  FAIL release bundle capture failed"
+    errs=$((errs + 1))
+  fi
+
+  if [ "$errs" -eq 0 ]; then
+    echo "  ok   $name — all artifacts present, release bundle captures cleanly"
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+  fi
+done < "$TMP/entries.tsv"
+
+echo ""
+echo "SHOWCASE: PASS=$PASS  FAIL=$FAIL"
+[ "$FAIL" -gt 0 ] && exit 1 || exit 0

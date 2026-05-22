@@ -860,9 +860,80 @@ def validateVersionExpr : PExpr :=
 def validateVersionFn : PFnDef :=
   { name := "validate_version", params := ["v"], body := validateVersionExpr }
 
+/-- `fn validate_msg_type(t: i32) -> i32` — checks 1 ≤ t ≤ 4. -/
+def validateMsgTypeExpr : PExpr :=
+  .ifThenElse (.binOp .ge (.var "t") (.lit (.int 1)))
+    (.ifThenElse (.binOp .le (.var "t") (.lit (.int 4)))
+      (.lit (.int 0))
+      (.lit (.int 1)))
+    (.lit (.int 1))
+
+def validateMsgTypeFn : PFnDef :=
+  { name := "validate_msg_type", params := ["t"], body := validateMsgTypeExpr }
+
+/-- `fn validate_payload_len(plen, max_len: i32) -> i32` —
+    checks 0 ≤ plen ≤ max_len. -/
+def validatePayloadLenExpr : PExpr :=
+  .ifThenElse (.binOp .ge (.var "plen") (.lit (.int 0)))
+    (.ifThenElse (.binOp .le (.var "plen") (.var "max_len"))
+      (.lit (.int 0))
+      (.lit (.int 1)))
+    (.lit (.int 1))
+
+def validatePayloadLenFn : PFnDef :=
+  { name := "validate_payload_len", params := ["plen", "max_len"], body := validatePayloadLenExpr }
+
+/-- `fn validate_total_len(actual, needed: i32) -> i32` —
+    checks actual ≥ needed. -/
+def validateTotalLenExpr : PExpr :=
+  .ifThenElse (.binOp .ge (.var "actual") (.var "needed"))
+    (.lit (.int 0))
+    (.lit (.int 1))
+
+def validateTotalLenFn : PFnDef :=
+  { name := "validate_total_len", params := ["actual", "needed"], body := validateTotalLenExpr }
+
+/-- `fn validate_checksum(expected, computed: i32) -> i32` —
+    checks expected == computed. -/
+def validateChecksumExpr : PExpr :=
+  .ifThenElse (.binOp .eq (.var "expected") (.var "computed"))
+    (.lit (.int 0))
+    (.lit (.int 1))
+
+def validateChecksumFn : PFnDef :=
+  { name := "validate_checksum", params := ["expected", "computed"], body := validateChecksumExpr }
+
+/-- `fn validate_header_fields(v, t, plen, total_len, cs_expected, cs_computed) -> i32`
+    — composes the five validators. Returns 0 on success or the
+    1..6 index of the first failing check. -/
+def validateHeaderFieldsExpr : PExpr :=
+  .ifThenElse (.binOp .ne (.call "validate_total_len" [.var "total_len", .lit (.int 5)]) (.lit (.int 0)))
+    (.lit (.int 1))
+    (.ifThenElse (.binOp .ne (.call "validate_version" [.var "v"]) (.lit (.int 0)))
+      (.lit (.int 2))
+      (.ifThenElse (.binOp .ne (.call "validate_msg_type" [.var "t"]) (.lit (.int 0)))
+        (.lit (.int 3))
+        (.ifThenElse (.binOp .ne (.call "validate_payload_len" [.var "plen", .lit (.int 240)]) (.lit (.int 0)))
+          (.lit (.int 4))
+          (.ifThenElse (.binOp .ne (.call "validate_total_len" [.var "total_len", .binOp .add (.lit (.int 4)) (.var "plen")]) (.lit (.int 0)))
+            (.lit (.int 5))
+            (.ifThenElse (.binOp .ne (.call "validate_checksum" [.var "cs_expected", .var "cs_computed"]) (.lit (.int 0)))
+              (.lit (.int 6))
+              (.lit (.int 0)))))))
+
+def validateHeaderFieldsFn : PFnDef :=
+  { name := "validate_header_fields",
+    params := ["v", "t", "plen", "total_len", "cs_expected", "cs_computed"],
+    body := validateHeaderFieldsExpr }
+
 /-- Function table for parse_validate proofs. -/
 def parseValidateFns : FnTable
   | "validate_version" => some validateVersionFn
+  | "validate_msg_type" => some validateMsgTypeFn
+  | "validate_payload_len" => some validatePayloadLenFn
+  | "validate_total_len" => some validateTotalLenFn
+  | "validate_checksum" => some validateChecksumFn
+  | "validate_header_fields" => some validateHeaderFieldsFn
   | _ => none
 
 /-- validate_version returns 0 iff v == 1, and 1 otherwise. -/
@@ -871,6 +942,43 @@ theorem validate_version_correct (v : Int) (fuel : Nat) :
     = some (.int (if v = 1 then 0 else 1)) := by
   by_cases h : v = 1 <;>
     simp_all [validateVersionExpr, eval, Env.bind, evalBinOp, BEq.beq]
+
+set_option linter.unusedSimpArgs false in
+/-- validate_header_fields composition theorem (success direction).
+
+    The central thesis claim of the parse_validate pilot, at the scope
+    ProofCore can currently extract: "successful return implies multiple
+    structural invariants." Stated as the *contrapositive* — when every
+    structural precondition holds, the composition returns 0.
+
+    The function returns 0 iff every component validator succeeds. This
+    theorem proves the success direction (preconditions ⟹ returns 0).
+    The full iff (failure direction with return code matching the first
+    failing check) is a 256-branch case split that exhausts heartbeats;
+    splitting it into per-failure theorems is follow-up work. -/
+theorem validate_header_fields_success
+    (v t plen total_len cs_expected cs_computed : Int) (fuel : Nat)
+    (h_tl5 : total_len ≥ 5) (h_v : v = 1)
+    (h_t1 : t ≥ 1) (h_t4 : t ≤ 4)
+    (h_p0 : plen ≥ 0) (h_p240 : plen ≤ 240)
+    (h_tlp : total_len ≥ 4 + plen) (h_cs : cs_expected = cs_computed) :
+    eval parseValidateFns
+      (((((Env.empty.bind "v" (.int v)).bind "t" (.int t)).bind "plen" (.int plen)).bind
+        "total_len" (.int total_len)).bind "cs_expected" (.int cs_expected) |>.bind
+        "cs_computed" (.int cs_computed))
+      (fuel + 20) validateHeaderFieldsExpr
+    = some (.int 0) := by
+  -- Substitute the equalities so v becomes 1 and cs_expected becomes cs_computed.
+  subst h_v
+  subst h_cs
+  simp_all [validateHeaderFieldsExpr,
+            validateVersionFn, validateVersionExpr,
+            validateMsgTypeFn, validateMsgTypeExpr,
+            validatePayloadLenFn, validatePayloadLenExpr,
+            validateTotalLenFn, validateTotalLenExpr,
+            validateChecksumFn, validateChecksumExpr,
+            eval, eval.evalArgs, parseValidateFns,
+            Env.bind, evalBinOp, bindArgs, BEq.beq]
 
 -- ============================================================
 -- Proved functions registry
