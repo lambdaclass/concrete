@@ -21,16 +21,23 @@
  35 | fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
--- not eligible ------------------------------------------- examples/crypto_verify/src/main.con:49
+-- proved ------------------------------------------------ examples/crypto_verify/src/main.con:52
+
+  ✓ `main.verify_message` — proof matches current body.
+
+ 52 | fn verify_message(
+    | ^^^^^^^^^^^^^^^^^^
+
+-- not eligible ------------------------------------------- examples/crypto_verify/src/main.con:63
 
   `main.main` cannot be proved: fails predictable profile (is entry point (main)).
 
- 49 | fn main() -> i32 {
+ 63 | fn main() -> i32 {
     | ^^^^^^^^^^^^^^^^^^
 
   reasons: is entry point (main)
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 4 functions — 3 proved, 0 stale, 0 unproved, 0 blocked, 1 ineligible, 0 trusted
+Totals: 5 functions — 4 proved, 0 stale, 0 unproved, 0 blocked, 1 ineligible, 0 trusted
 

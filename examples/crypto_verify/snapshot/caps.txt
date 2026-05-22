@@ -4,7 +4,8 @@ module main:
       compute_tag : (pure)
       verify_tag : (pure)
       check_nonce : (pure)
+      verify_message : (pure)
       main : (pure)
 
-Totals: 4 functions (4 pure), 0 externs
+Totals: 5 functions (5 pure), 0 externs
 

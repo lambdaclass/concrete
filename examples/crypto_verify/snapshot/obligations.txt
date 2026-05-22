@@ -27,14 +27,23 @@
     dependencies: none
     loc:          examples/crypto_verify/src/main.con:35
 
+  main.verify_message
+    status:       proved
+    spec:         Concrete.Proof.verifyMessageExpr
+    proof:        Concrete.Proof.verify_message_composed_correct
+    source:       registry
+    fingerprint:  [(if (binop Concrete.BinOp.neq (call verify_tag (var key) (var message) (var nonce) (var expected_tag)) (int 1)) [(ret (int 0))]) (if (binop Concrete.BinOp.neq (call check_nonce (var nonce) (var max_nonce)) (int 1)) [(ret (int 0))]) (ret (int 1))]
+    dependencies: main.verify_tag, main.check_nonce
+    loc:          examples/crypto_verify/src/main.con:52
+
   main.main
     status:       ineligible
     spec:         (none)
     proof:        (none)
     source:       none
-    fingerprint:  [(let key (int 42)) (let msg (int 100)) (let nonce (int 7)) (let tag (call compute_tag (var key) (var msg) (var nonce))) (let valid (call verify_tag (var key) (var msg) (var nonce) (var tag))) (let bad (call verify_tag (var key) (var msg) (var nonce) (int 9999))) (let nonce_ok (call check_nonce (var nonce) (int 1000))) (ret (int 0))]
-    dependencies: main.compute_tag, main.verify_tag, main.check_nonce
-    loc:          examples/crypto_verify/src/main.con:49
+    fingerprint:  [(let key (int 42)) (let msg (int 100)) (let nonce (int 7)) (let tag (call compute_tag (var key) (var msg) (var nonce))) (let valid (call verify_tag (var key) (var msg) (var nonce) (var tag))) (let bad (call verify_tag (var key) (var msg) (var nonce) (int 9999))) (let nonce_ok (call check_nonce (var nonce) (int 1000))) (let ok (call verify_message (var key) (var msg) (var nonce) (var tag) (int 1000))) (ret (int 0))]
+    dependencies: main.compute_tag, main.verify_tag, main.check_nonce, main.verify_message
+    loc:          examples/crypto_verify/src/main.con:63
 
-Totals: 4 obligations — 3 proved, 0 stale, 0 missing, 0 blocked, 1 ineligible, 0 trusted
+Totals: 5 obligations — 4 proved, 0 stale, 0 missing, 0 blocked, 1 ineligible, 0 trusted
 

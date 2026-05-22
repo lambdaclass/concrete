@@ -1,0 +1,55 @@
+// catches/01_alloc_in_pure_core.con
+//
+// "Concrete catches this" companion to examples/crypto_verify.
+//
+// Demonstrates: allocation discipline. crypto_verify claims a fully
+// pure surface — Concrete.toml [policy] has no_alloc=true and
+// forbidden_capabilities includes Alloc. The verification core
+// must compute its tags purely; reaching for heap data structures
+// is the kind of edit that, in C/Rust without effect tracking,
+// silently changes the failure mode (now you can OOM, now your
+// "constant-time" operation has data-dependent allocation).
+//
+// What changed from the accepted crypto_verify: verify_tag now
+// allocates a Vec<Int> to "buffer" intermediate values. The body
+// is otherwise the same logic.
+//
+// Concrete refuses: vec_with_capacity needs the Alloc capability,
+// and verify_tag's signature does not declare it. Either the
+// signature widens (deliberate, visible in git diff) or the
+// allocation does not happen. There is no silent path.
+//
+// catches: E0520
+// catches-substring: requires Alloc but caller has (none)
+
+// A hypothetical helper that "wants" to do something heap-backed.
+// The exact body doesn't matter — declaring `with(Alloc)` is the
+// signature claim that this function may allocate.
+fn audit_log(value: Int) with(Alloc) -> Int {
+    return value;
+}
+
+// Toy keyed tag: same as the accepted example.
+fn compute_tag(key: Int, message: Int, nonce: Int) -> Int {
+    return key * message + nonce;
+}
+
+// Same shape as the accepted verify_tag, but it now calls
+// audit_log(). audit_log() declares with(Alloc); verify_tag does
+// not. The capability checker refuses.
+fn verify_tag(key: Int, message: Int, nonce: Int, expected_tag: Int) -> Int {
+    // <<< The one line that breaks the trust surface. >>>
+    let _logged: Int = audit_log(expected_tag);
+
+    let computed: Int = compute_tag(key, message, nonce);
+    if computed == expected_tag {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+fn main() -> i32 {
+    let valid: Int = verify_tag(42, 100, 7, 4207);
+    return 0;
+}

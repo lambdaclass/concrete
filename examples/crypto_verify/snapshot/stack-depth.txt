@@ -7,9 +7,11 @@ module main:
     frame: 48 bytes  depth: 1  stack: 80 bytes  @ examples/crypto_verify/src/main.con:24
   check_nonce
     frame: 24 bytes  depth: 0  stack: 24 bytes  @ examples/crypto_verify/src/main.con:35
+  verify_message
+    frame: 48 bytes  depth: 2  stack: 128 bytes  @ examples/crypto_verify/src/main.con:52
   main
-    frame: 64 bytes  depth: 2  stack: 144 bytes  @ examples/crypto_verify/src/main.con:49
+    frame: 72 bytes  depth: 3  stack: 200 bytes  @ examples/crypto_verify/src/main.con:63
 
-Totals: 4 functions, 4 bounded, 0 recursive (unbounded)
-Max stack bound: 144 bytes (main)
+Totals: 5 functions, 5 bounded, 0 recursive (unbounded)
+Max stack bound: 200 bytes (main)
 

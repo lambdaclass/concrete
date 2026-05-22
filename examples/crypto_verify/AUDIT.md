@@ -9,9 +9,10 @@ slot opened for crypto_verify on 2026-05-22).
 Second domain from parse_validate's parsing/validation focus.
 crypto_verify exercises authentication and integrity verification —
 the Phase 7 "real cryptography example" surface (item 6). Honestly
-small (67 lines, 4 functions): a toy multiplicative-tag MAC, a
-verifier, a nonce range check, and an entry point. Not real crypto;
-the value is in the **proof structure**, not the algorithm.
+small (85 lines, 5 functions): a toy multiplicative-tag MAC, a
+verifier, a nonce range check, a composed verifier, and an entry
+point. Not real crypto; the value is in the **proof structure**,
+not the algorithm.
 
 The author docstring says it directly:
 
@@ -30,18 +31,23 @@ nix develop --command bash -c '.lake/build/bin/concrete \
 
 Output: `0`.
 
-**Functions** (4 total):
+**Functions** (5 total):
 
 - `compute_tag(key, message, nonce) -> Int` — pure: `key * message + nonce`
 - `verify_tag(key, message, nonce, expected_tag) -> Int` — pure: 1 iff `compute_tag` matches expected
 - `check_nonce(nonce, max_nonce) -> Int` — pure: 1 iff `0 < nonce ≤ max_nonce`
+- `verify_message(key, message, nonce, expected_tag, max_nonce) -> Int` — pure: 1 iff tag and nonce checks both pass
 - `main() -> i32` — entry point, exercises the core, returns 0
 
-**Oracle (today):** `--interp` agreement at the Phase A harness scope.
+**Oracle (today):** independent Python reference in
+`oracle/reference.py`, run by `oracle/run_oracle.sh`. `make
+test-cv-oracle` runs three seeds (0, 42, 999), 200 cases each:
+600 generated valid/invalid messages must agree with the Concrete
+binary.
 
 ## 2. Authority / capability surface
 
-- **0 capabilities required.** All 4 functions are `(pure)`.
+- **0 capabilities required.** All 5 functions are `(pure)`.
 - **0 externs, 0 unsafe, 0 trusted, 0 allocations.**
 
 Strongest possible authority surface. main() is the entry point but
@@ -50,7 +56,7 @@ performs no I/O — it computes, returns 0.
 ## 3. Allocation / stack / failure assumptions
 
 - **Allocation:** none. `--report alloc` is empty.
-- **Stack:** max 144 bytes (main). Bounded.
+- **Stack:** max 200 bytes (main). Bounded.
 - **Failure:** no explicit error path; `verify_tag` returns 0/1, no
   panics, no aborts.
 - **Arithmetic:** `Int` (i64) for all values. The toy tag function
@@ -61,103 +67,80 @@ performs no I/O — it computes, returns 0.
 
 All 16 reports run cleanly. Substantive content:
 
-- `caps` / `authority` / `effects` — 4 functions, all pure.
-- `eligibility` — 3 eligible, 1 excluded (main, entry point).
-- `proof-status` — **3 proved**, 0 blocked, 0 unproved. (Better than
+- `caps` / `authority` / `effects` — 5 functions, all pure.
+- `eligibility` — 4 eligible, 1 excluded (main, entry point).
+- `proof-status` — **4 proved**, 0 blocked, 0 unproved. (Better than
   parse_validate's starting state.)
-- `stack-depth` — max 144 bytes.
+- `stack-depth` — max 200 bytes.
 - `layout` / `mono` / `interface` / `consistency` — clean.
 
 ## 5. Smallest Lean-backed property candidate
 
-**Already done.** Three theorems already attached in
+**Already done.** Four theorems already attached in
 `Concrete/Proof.lean`, registered in
 `examples/crypto_verify/src/proof-registry.json`:
 
 - `compute_tag_correct (key m nonce)`: `compute_tag(k, m, n) = k*m + n`
 - `verify_tag_correct (key m nonce expected)`: `verify_tag = 1 ↔ k*m+n = expected`
 - `check_nonce_correct (nonce max_nonce)`: `check_nonce = 1 ↔ 0 < n ≤ max`
+- `verify_message_composed_correct`: if tag and nonce validators both succeed, `verify_message` returns 1
 
-All three surface as `proved` in `--report proof-status`.
-
-**Composition candidate.** A theorem chaining `verify_tag` and
-`check_nonce` ("a message+tag pair is acceptable iff the tag matches
-AND the nonce is in range") would be the composition story. The
-underlying functions are already proved; composing them is a small
-theorem.
+All four surface as `proved` in `--report proof-status`.
 
 ## 6. Missing artifacts / policies / assumptions
 
-**Already met (no work needed):**
+**Already met:**
 
-- ✅ Lean-backed proofs (3 functions proved)
+- ✅ Lean-backed proofs (4 functions proved)
 - ✅ Proof-registry attachment
 - ✅ Predictable profile passes
+- ✅ Assumption file and policy file
+- ✅ Negative pair and `CATCHES.md`
+- ✅ Oracle directory and seeded differential runner
+- ✅ Snapshot baseline
+- ✅ Honest README
+- ✅ Release evidence bundle captures cleanly
 - ✅ All reports clean
 
 **Missing (graduation-blocking):**
 
-1. **No `assumptions.toml`.** Phase 2 E.24 surface — copy
-   parse_validate's pattern, fill in.
-2. **No `[policy]` enforcement.** `Concrete.toml` has
-   `predictable = true` and `deny = ["Unsafe"]` but the rest of the
-   schema (`no_alloc`, `no_unsafe`, `no_trusted`, `no_externs`,
-   `max_stack_bytes`, `forbidden_capabilities`, `allowed_capabilities`)
-   is not set. Drift-enforce by adding the full set.
-3. **No `catches/` negative pair.** No demonstration of what
-   Concrete refuses (authority widening, allocation in a pure
-   function, etc.). Phase 1 D.22 surface.
-4. **No `snapshot/` baseline.** Phase 2 E.23 surface.
-5. **No `oracle/` directory.** Hand-written test only inside
-   `main`; no fuzz/differential. Phase 1 D.6/D.9 surface.
-6. **No `AUDIT.md`** (this file fills it).
-7. **No `README.md`** with honest framing.
-8. **No `CATCHES.md`** narrative.
-9. **No release evidence bundle on file** (capturable via the
-   existing script).
-10. **Not in `tests/showcase/manifest.toml`** (graduation step).
+1. **Not in `tests/showcase/manifest.toml`** (graduation step).
+2. **Not yet a real crypto algorithm.** This can still graduate as a
+   crypto-adjacent proof-structure showcase, but the manifest must
+   frame it honestly as toy crypto rather than cryptographic
+   assurance.
 
 ## 7. Graduation contract (10 bars, same as parse_validate)
 
 | # | Bar | Status |
 |---:|---|---|
-| 1 | Lean-backed property surfaced as `proved` | ✅ 3 functions proved |
-| 2 | Composition property Lean-backed | ⏳ candidate identified (verify + nonce); to land |
+| 1 | Lean-backed property surfaced as `proved` | ✅ 4 functions proved |
+| 2 | Composition property Lean-backed | ✅ `verify_message_composed_correct` success direction |
 | 3 | Assumption file with schema, CI-enforced | ✅ `assumptions.toml`; `make test-assumptions` 2/0 |
 | 4 | Policy file with enforceable budgets, CI-enforced | ✅ `Concrete.toml [policy]` 8 fields enforced; `make test-policy` |
-| 5 | Oracle beyond hand-written tests | ❌ absent |
-| 6 | "Concrete catches this" negative pair | ❌ absent |
-| 7 | Release evidence bundle capturable | ⏳ infrastructure exists (`capture_release_bundle.sh`); just needs the example to carry the artifacts that flesh it out |
-| 8 | Honest README | ❌ absent |
+| 5 | Oracle beyond hand-written tests | ✅ Python reference + `make test-cv-oracle` |
+| 6 | "Concrete catches this" negative pair | ✅ `catches/01_alloc_in_pure_core.con` + `CATCHES.md` |
+| 7 | Release evidence bundle capturable | ✅ `capture_release_bundle.sh examples/crypto_verify` captures cleanly |
+| 8 | Honest README | ✅ `README.md` |
 | 9 | Snapshot/diff baseline | ✅ `examples/crypto_verify/snapshot/` 16 reports baselined; `make test-snapshots` 32/0 across both flagships |
 | 10 | Listed in `tests/showcase/manifest.toml` | ❌ absent |
 
-**Today: 4 of 10 bars met (#1, #3, #4, #9).** The cheap batch
-landed in the candidate's first commit — assumption file, full
-policy, snapshot baseline — confirming the reusable infrastructure
-from parse_validate's pilot pays back. Remaining bars need real
-content work (composition theorem, oracle, negative pair, README,
-release bundle, graduation).
+**Today: 9 of 10 bars met.** The remaining decision is whether to
+graduate this as a toy crypto-adjacent proof-structure showcase, or
+park it and reserve Phase 7 crypto status for a later real
+algorithm/wrapper.
 
-## 8. Suggested first pilot batch
+## 8. Next step
 
-Cheapest batch — copy the patterns parse_validate established:
+Make the graduation call:
 
-1. **Land `assumptions.toml`** matching the actual surface.
-2. **Extend `Concrete.toml` [policy]`** with the full 8-field schema.
-3. **Land `snapshot/` baseline** by running the snapshot capture.
-
-These three are mechanical given the templates exist. They close
-bars #3, #4, #9 in one commit.
-
-Subsequent commits:
-- Composition theorem (bar #2) — small, the underlying proofs exist.
-- Negative pair + CATCHES.md (bar #6) — one rejected file showing
-  what Concrete refuses for this domain.
-- README (bar #8) — template from parse_validate.
-- Oracle (bar #5) — Python reference + differential, parse_validate
-  pattern.
-- Graduation (bar #10) — add to `tests/showcase/manifest.toml`.
+- **Graduate now** as an explicitly toy crypto-adjacent showcase:
+  add `crypto_verify` to `tests/showcase/manifest.toml`, with claims
+  scoped to proof composition, allocation/capability discipline, and
+  honest assumptions — not real cryptographic security.
+- **Park it** as an active candidate: keep the 9-bar evidence, but
+  record that Phase 7 crypto graduation waits for a real HMAC /
+  Ed25519 / constant-time wrapper.
 
 ## See also
 

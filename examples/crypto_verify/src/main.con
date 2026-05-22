@@ -44,6 +44,20 @@ fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
     }
 }
 
+// Composed verification: a message+tag pair is accepted iff the
+// tag matches under the given key AND the nonce is in range.
+// This is the central composition the proof story is about —
+// `verify_message_composed_correct` in Concrete/Proof.lean proves
+// that when both validators succeed, this returns 1.
+fn verify_message(
+    key: Int, message: Int, nonce: Int,
+    expected_tag: Int, max_nonce: Int
+) -> Int {
+    if verify_tag(key, message, nonce, expected_tag) != 1 { return 0; }
+    if check_nonce(nonce, max_nonce) != 1 { return 0; }
+    return 1;
+}
+
 // === Entry point (pure, no I/O) ===
 
 fn main() -> i32 {
@@ -62,6 +76,10 @@ fn main() -> i32 {
     // Nonce check
     let nonce_ok: Int = check_nonce(nonce, 1000);
     // nonce_ok == 1: nonce is in [1, 1000]
+
+    // Composed verification: tag matches AND nonce in range.
+    let ok: Int = verify_message(key, msg, nonce, tag, 1000);
+    // ok == 1: both checks pass
 
     return 0;
 }

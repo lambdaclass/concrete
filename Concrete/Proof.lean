@@ -574,11 +574,36 @@ def checkNonceExpr : PExpr :=
 def checkNonceFn : PFnDef :=
   { name := "check_nonce", params := ["nonce", "max_nonce"], body := checkNonceExpr }
 
+/-- `fn verify_message(key, message, nonce, expected_tag, max_nonce) -> Int {
+       if verify_tag(key, message, nonce, expected_tag) != 1 { return 0; }
+       if check_nonce(nonce, max_nonce) != 1 { return 0; }
+       return 1;
+    }`
+    — composed verification: the message is acceptable iff its tag
+    matches under the given key AND the nonce is in range. -/
+def verifyMessageExpr : PExpr :=
+  .ifThenElse
+    (.binOp .ne (.call "verify_tag"
+                  [.var "key", .var "message", .var "nonce", .var "expected_tag"])
+                (.lit (.int 1)))
+    (.lit (.int 0))
+    (.ifThenElse
+      (.binOp .ne (.call "check_nonce" [.var "nonce", .var "max_nonce"])
+                  (.lit (.int 1)))
+      (.lit (.int 0))
+      (.lit (.int 1)))
+
+def verifyMessageFn : PFnDef :=
+  { name := "verify_message",
+    params := ["key", "message", "nonce", "expected_tag", "max_nonce"],
+    body := verifyMessageExpr }
+
 /-- Function table for crypto verification proofs. -/
 def cryptoFns : FnTable
   | "compute_tag" => some computeTagFn
   | "verify_tag" => some verifyTagFn
   | "check_nonce" => some checkNonceFn
+  | "verify_message" => some verifyMessageFn
   | _ => none
 
 -- Evaluation helpers
@@ -667,6 +692,38 @@ theorem check_nonce_rejects_over_max (nonce maxNonce : Int)
   have hgt : decide (0 < nonce) = true := decide_eq_true hpos
   have hle : decide (nonce ≤ maxNonce) = false := decide_eq_false (by omega)
   simp [checkNonceExpr, eval, Env.bind, evalBinOp, hgt, hle]
+
+set_option linter.unusedSimpArgs false in
+/-- Composition theorem for verify_message (success direction).
+
+    A message+tag pair is acceptable iff:
+      1. the tag matches under the given key   (verify_tag → 1)
+      2. the nonce is in the accepted range    (check_nonce → 1)
+
+    This theorem proves that when both component validators succeed,
+    the composed verify_message returns 1. The component theorems
+    (verify_tag_correct, check_nonce_accepts_valid) carry the
+    individual properties; this theorem chains them.
+
+    The failure direction (returns 0 if either sub-check fails) is
+    follow-up — same per-failure pattern as parse_validate. -/
+theorem verify_message_composed_correct
+    (key message nonce maxNonce : Int) (fuel : Nat)
+    (h_nonce_pos : 0 < nonce) (h_nonce_max : nonce ≤ maxNonce) :
+    let env := (((((Env.empty.bind "key" (.int key)).bind
+                    "message" (.int message)).bind
+                    "nonce" (.int nonce)).bind
+                    "expected_tag" (.int (key * message + nonce))).bind
+                    "max_nonce" (.int maxNonce))
+    eval cryptoFns env (fuel + 20) verifyMessageExpr = some (.int 1) := by
+  have hgt : decide (0 < nonce) = true := decide_eq_true h_nonce_pos
+  have hle : decide (nonce ≤ maxNonce) = true := decide_eq_true h_nonce_max
+  simp_all [verifyMessageExpr,
+            verifyTagFn, verifyTagExpr,
+            checkNonceFn, checkNonceExpr,
+            computeTagFn, computeTagExpr,
+            eval, eval.evalArgs, cryptoFns,
+            Env.bind, evalBinOp, bindArgs, BEq.beq]
 
 /-- Full contract for check_nonce: returns 1 iff nonce ∈ [1, max_nonce], 0 otherwise.
     This is the theorem attached in the proof registry for main.check_nonce. -/
