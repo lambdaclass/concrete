@@ -1666,6 +1666,7 @@ private partial def renderPExpr : Proof.PExpr → String
   | .lit (.int n) => toString n
   | .lit (.bool b) => toString b
   | .lit (.struct_ name _) => s!"<struct {name}>"
+  | .lit (.enum_ enumName variant _) => s!"<{enumName}::{variant}>"
   | .var name => name
   | .binOp op lhs rhs =>
     let opStr := match op with
@@ -1684,6 +1685,11 @@ private partial def renderPExpr : Proof.PExpr → String
     let fieldsStr := ", ".intercalate (fields.map fun (fname, fexpr) =>
       s!"{fname}: {renderPExpr fexpr}")
     s!"{name} \{ {fieldsStr} }"
+  | .enumLit enumName variant fields =>
+    let fieldsStr := ", ".intercalate (fields.map fun (fname, fexpr) =>
+      s!"{fname}: {renderPExpr fexpr}")
+    if fields.isEmpty then s!"{enumName}::{variant}"
+    else s!"{enumName}::{variant} \{ {fieldsStr} }"
   | .fieldAccess obj field =>
     s!"{renderPExpr obj}.{field}"
 
@@ -1761,6 +1767,8 @@ private partial def renderPExprAsLean : Proof.PExpr → String
     -- canonical surface for proof attachment is the source-level
     -- fingerprint, not the Lean stub. Emit a placeholder.
     s!"/- struct value of {name} (raw form) -/"
+  | .lit (.enum_ enumName variant _) =>
+    s!"/- enum value {enumName}::{variant} (raw form) -/"
   | .var name => s!".var \"{name}\""
   | .binOp op lhs rhs =>
     let opStr := match op with
@@ -1779,6 +1787,10 @@ private partial def renderPExprAsLean : Proof.PExpr → String
     let fieldsLean := fields.map fun (fname, fexpr) =>
       s!"(\"{fname}\", {renderPExprAsLean fexpr})"
     s!".structLit \"{name}\" [{", ".intercalate fieldsLean}]"
+  | .enumLit enumName variant fields =>
+    let fieldsLean := fields.map fun (fname, fexpr) =>
+      s!"(\"{fname}\", {renderPExprAsLean fexpr})"
+    s!".enumLit \"{enumName}\" \"{variant}\" [{", ".intercalate fieldsLean}]"
   | .fieldAccess obj field =>
     s!".fieldAccess ({renderPExprAsLean obj}) \"{field}\""
 

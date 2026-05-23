@@ -46,6 +46,7 @@ inductive PVal where
   | int (n : Int)
   | bool (b : Bool)
   | struct_ (name : String) (fields : List (String × PVal))
+  | enum_ (enumName variant : String) (fields : List (String × PVal))
   deriving Repr, Inhabited, BEq
 
 -- Note on DecidableEq:
@@ -71,6 +72,7 @@ inductive PExpr where
   | call (fn : String) (args : List PExpr)
   | structLit (name : String) (fields : List (String × PExpr))
   | fieldAccess (obj : PExpr) (field : String)
+  | enumLit (enumName variant : String) (fields : List (String × PExpr))
   deriving Repr, BEq
 
 /-- A function definition in the proof fragment. -/
@@ -154,7 +156,12 @@ def eval (fns : FnTable) (env : Env) : Nat → PExpr → Option PVal
   | fuel + 1, .fieldAccess obj field =>
     match eval fns env (fuel + 1) obj with
     | some (.struct_ _ fields) => lookupField fields field
+    | some (.enum_ _ _ fields) => lookupField fields field
     | _ => none
+  | fuel + 1, .enumLit enumName variant fields =>
+    match evalFields fns env fuel fields with
+    | none => none
+    | some fieldVals => some (.enum_ enumName variant fieldVals)
 where
   /-- Evaluate a list of argument expressions. -/
   evalArgs (fns : FnTable) (env : Env) (fuel : Nat) : List PExpr → Option (List PVal)

@@ -551,6 +551,7 @@ private partial def pexprFreeIn (name : String) : Proof.PExpr → Bool
   | .ifThenElse c t e => pexprFreeIn name c || pexprFreeIn name t || pexprFreeIn name e
   | .call _ args => args.any (pexprFreeIn name)
   | .structLit _ fields => fields.any fun (_, fexpr) => pexprFreeIn name fexpr
+  | .enumLit _ _ fields => fields.any fun (_, fexpr) => pexprFreeIn name fexpr
   | .fieldAccess obj _ => pexprFreeIn name obj
 
 /-- Ordering key for commutative canonicalization.
@@ -618,6 +619,8 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
     .call fn (args.map normalizePExpr)
   | .structLit name fields =>
     .structLit name (fields.map fun (fname, fexpr) => (fname, normalizePExpr fexpr))
+  | .enumLit enumName variant fields =>
+    .enumLit enumName variant (fields.map fun (fname, fexpr) => (fname, normalizePExpr fexpr))
   | .fieldAccess obj field =>
     .fieldAccess (normalizePExpr obj) field
 
@@ -662,6 +665,13 @@ partial def cExprToPExpr : CExpr → Option Proof.PExpr
       let pe ← cExprToPExpr fexpr
       some (fname, pe)
     some (.structLit name pfields)
+  | .enumLit enumName variant _typeArgs fields _ => do
+    -- Same shape as struct literal: each field's expression must
+    -- extract; result is a tagged enum value (variant + fields).
+    let pfields ← fields.mapM fun (fname, fexpr) => do
+      let pe ← cExprToPExpr fexpr
+      some (fname, pe)
+    some (.enumLit enumName variant pfields)
   | .fieldAccess obj field _ => do
     let po ← cExprToPExpr obj
     some (.fieldAccess po field)
@@ -730,14 +740,16 @@ private partial def identifyUnsupportedExpr : CExpr → List String
   | .floatLit .. => ["float literal"]
   | .strLit .. => ["string literal"]
   | .charLit .. => ["char literal"]
-  -- structLit and fieldAccess are now supported by cExprToPExpr; their
-  -- only unsupported residual is whatever's inside the field exprs /
-  -- the object. Recurse so a struct of unsupported things is reported
-  -- precisely, while a struct of pure-int things lists nothing.
+  -- structLit, enumLit, and fieldAccess are now supported by
+  -- cExprToPExpr; their only unsupported residual is whatever's
+  -- inside the field exprs / the object. Recurse so a literal of
+  -- unsupported things is reported precisely, while a literal of
+  -- pure-int things lists nothing.
   | .structLit _ _ fields _ =>
     fields.foldl (fun acc (_, fexpr) => acc ++ identifyUnsupportedExpr fexpr) []
+  | .enumLit _ _ _ fields _ =>
+    fields.foldl (fun acc (_, fexpr) => acc ++ identifyUnsupportedExpr fexpr) []
   | .fieldAccess obj _ _ => identifyUnsupportedExpr obj
-  | .enumLit .. => ["enum literal"]
   | .match_ .. => ["match expression"]
   | .borrow .. => ["borrow"]
   | .borrowMut .. => ["mutable borrow"]
