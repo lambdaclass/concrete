@@ -43,7 +43,8 @@ on_showcase_manifest   = true   # bar #10 — this entry
 [flagship.evidence]
 proof_registry = "examples/parse_validate/src/proof-registry.json"
 proofs         = ["Concrete.Proof.validate_version_correct",
-                  "Concrete.Proof.validate_header_fields_success"]
+                  "Concrete.Proof.validate_header_fields_success",
+                  "Concrete.Proof.parse_header_too_short"]
 assumptions    = "examples/parse_validate/assumptions.toml"
 policy         = "examples/parse_validate/Concrete.toml"
 catches        = "examples/parse_validate/catches/"

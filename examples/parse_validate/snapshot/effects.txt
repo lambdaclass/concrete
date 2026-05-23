@@ -16,12 +16,12 @@ module parse_validate:
       validate_header_fields
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/parse_validate/src/main.con:107
       parse_header
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:125
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/parse_validate/src/main.con:125
       error_code
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:167
   pub main
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/parse_validate/src/main.con:180
 
 Totals: 10 functions, 10 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
-Evidence: 2 proved, 8 enforced, 0 trusted-assumption, 0 reported
+Evidence: 3 proved, 7 enforced, 0 trusted-assumption, 0 reported
 

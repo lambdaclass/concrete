@@ -64,10 +64,10 @@
     loc:          examples/parse_validate/src/main.con:107
 
   parse_validate.parse_header
-    status:       missing
-    spec:         (none)
-    proof:        (none)
-    source:       none
+    status:       proved
+    spec:         Concrete.Proof.parseHeaderExpr
+    proof:        Concrete.Proof.parse_header_too_short
+    source:       registry
     fingerprint:  [(if (binop Concrete.BinOp.neq (call validate_total_len (var len) (int 5)) (int 0)) [(ret (enum Result::Err error=(enum ParseError::TooShort )))]) (if (binop Concrete.BinOp.neq (call validate_version (index (var data) (int 0))) (int 0)) [(ret (enum Result::Err error=(enum ParseError::BadVersion )))]) (if (binop Concrete.BinOp.neq (call validate_msg_type (index (var data) (int 1))) (int 0)) [(ret (enum Result::Err error=(enum ParseError::BadType )))]) (if (binop Concrete.BinOp.neq (call validate_payload_len (index (var data) (int 2)) (int 240)) (int 0)) [(ret (enum Result::Err error=(enum ParseError::PayloadTooBig )))]) (if (binop Concrete.BinOp.neq (call validate_total_len (var len) (binop Concrete.BinOp.add (int 4) (index (var data) (int 2)))) (int 0)) [(ret (enum Result::Err error=(enum ParseError::Truncated )))]) (let computed (call compute_checksum (var data) (int 4))) (if (binop Concrete.BinOp.neq (call validate_checksum (index (var data) (int 4)) (var computed)) (int 0)) [(ret (enum Result::Err error=(enum ParseError::BadChecksum )))]) (ret (enum Result::Ok value=(struct Header version=(index (var data) (int 0)) msg_type=(index (var data) (int 1)) payload_len=(index (var data) (int 2)) checksum=(index (var data) (int 4)))))]
     dependencies: parse_validate.validate_version
     loc:          examples/parse_validate/src/main.con:125
@@ -87,8 +87,8 @@
     proof:        (none)
     source:       none
     fingerprint:  [(let good (array (int 1) (int 2) (int 0) (int 0) (int 3) (int 0) (int 0) (int 0))) (match (call parse_header (var good) (int 5)) (arm Result::Ok [value] [(if (binop Concrete.BinOp.neq (field (var value) version) (int 1)) [(ret (int 11))]) (if (binop Concrete.BinOp.neq (field (var value) msg_type) (int 2)) [(ret (int 12))]) (if (binop Concrete.BinOp.neq (field (var value) payload_len) (int 0)) [(ret (int 13))]) (if (binop Concrete.BinOp.neq (field (var value) checksum) (int 3)) [(ret (int 14))])]) (arm Result::Err [error] [(ret (int 10))])) (let bad_ver (array (int 99) (int 2) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (match (call parse_header (var bad_ver) (int 5)) (arm Result::Ok [value] [(ret (int 20))]) (arm Result::Err [error] [(if (binop Concrete.BinOp.neq (call error_code (var error)) (int 2)) [(ret (int 21))])])) (let bad_type (array (int 1) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (match (call parse_header (var bad_type) (int 5)) (arm Result::Ok [value] [(ret (int 30))]) (arm Result::Err [error] [(if (binop Concrete.BinOp.neq (call error_code (var error)) (int 3)) [(ret (int 31))])])) (let short (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (match (call parse_header (var short) (int 2)) (arm Result::Ok [value] [(ret (int 40))]) (arm Result::Err [error] [(if (binop Concrete.BinOp.neq (call error_code (var error)) (int 1)) [(ret (int 41))])])) (let overflow (array (int 1) (int 1) (int 241) (int 0) (int 0) (int 0) (int 0) (int 0))) (match (call parse_header (var overflow) (int 5)) (arm Result::Ok [value] [(ret (int 50))]) (arm Result::Err [error] [(if (binop Concrete.BinOp.neq (call error_code (var error)) (int 4)) [(ret (int 51))])])) (let bad_cs (array (int 1) (int 2) (int 0) (int 0) (int 99) (int 0) (int 0) (int 0))) (match (call parse_header (var bad_cs) (int 5)) (arm Result::Ok [value] [(ret (int 60))]) (arm Result::Err [error] [(if (binop Concrete.BinOp.neq (call error_code (var error)) (int 6)) [(ret (int 61))])])) (let with_payload (array (int 1) (int 1) (int 3) (int 0) (int 3) (int 10) (int 20) (int 30))) (match (call parse_header (var with_payload) (int 8)) (arm Result::Ok [value] [(if (binop Concrete.BinOp.neq (field (var value) payload_len) (int 3)) [(ret (int 71))])]) (arm Result::Err [error] [(ret (int 70))])) (let trunc (array (int 1) (int 1) (int 3) (int 0) (int 3) (int 0) (int 0) (int 0))) (match (call parse_header (var trunc) (int 5)) (arm Result::Ok [value] [(ret (int 80))]) (arm Result::Err [error] [(if (binop Concrete.BinOp.neq (call error_code (var error)) (int 5)) [(ret (int 81))])])) (ret (int 0))]
-    dependencies: none
+    dependencies: parse_validate.parse_header
     loc:          examples/parse_validate/src/main.con:180
 
-Totals: 10 obligations — 2 proved, 0 stale, 5 missing, 2 blocked, 1 ineligible, 0 trusted
+Totals: 10 obligations — 3 proved, 0 stale, 4 missing, 2 blocked, 1 ineligible, 0 trusted
 

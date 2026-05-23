@@ -1075,6 +1075,71 @@ def validateHeaderFieldsFn : PFnDef :=
     params := ["v", "t", "plen", "total_len", "cs_expected", "cs_computed"],
     body := validateHeaderFieldsExpr }
 
+-- Helpers for parse_header construction (PExpr layer, not Concrete source).
+private def errResultExpr (variant : String) : PExpr :=
+  .enumLit "Result" "Err"
+    [("error", .enumLit "ParseError" variant [])]
+
+private def okHeaderExpr : PExpr :=
+  .enumLit "Result" "Ok"
+    [("value", .structLit "Header"
+      [("version",     .arrayIndex (.var "data") (.lit (.int 0))),
+       ("msg_type",    .arrayIndex (.var "data") (.lit (.int 1))),
+       ("payload_len", .arrayIndex (.var "data") (.lit (.int 2))),
+       ("checksum",    .arrayIndex (.var "data") (.lit (.int 4)))])]
+
+/-- `fn parse_header(data: [i32; 8], len: i32) -> Result<Header, ParseError>`
+    — the actual Result-returning function, extracted exactly per the
+    body fingerprint emitted by `--report fingerprints`.
+
+    Uses array index, struct literal, and enum literal — all three are
+    supported by ProofCore as of recent commits. compute_checksum
+    appears in the body but its body uses a while loop that ProofCore
+    cannot yet extract; theorems below evaluate `parseHeaderExpr` in
+    paths that bail before the checksum call (the failure-path
+    theorems work this way), or take the checksum result as an
+    assumption (the success-path theorem, when it lands). -/
+def parseHeaderExpr : PExpr :=
+  .ifThenElse
+    (.binOp .ne
+      (.call "validate_total_len" [.var "len", .lit (.int 5)])
+      (.lit (.int 0)))
+    (errResultExpr "TooShort")
+    (.ifThenElse
+      (.binOp .ne
+        (.call "validate_version" [.arrayIndex (.var "data") (.lit (.int 0))])
+        (.lit (.int 0)))
+      (errResultExpr "BadVersion")
+      (.ifThenElse
+        (.binOp .ne
+          (.call "validate_msg_type" [.arrayIndex (.var "data") (.lit (.int 1))])
+          (.lit (.int 0)))
+        (errResultExpr "BadType")
+        (.ifThenElse
+          (.binOp .ne
+            (.call "validate_payload_len" [.arrayIndex (.var "data") (.lit (.int 2)), .lit (.int 240)])
+            (.lit (.int 0)))
+          (errResultExpr "PayloadTooBig")
+          (.ifThenElse
+            (.binOp .ne
+              (.call "validate_total_len"
+                [.var "len",
+                 .binOp .add (.lit (.int 4)) (.arrayIndex (.var "data") (.lit (.int 2)))])
+              (.lit (.int 0)))
+            (errResultExpr "Truncated")
+            (.letIn "computed"
+              (.call "compute_checksum" [.var "data", .lit (.int 4)])
+              (.ifThenElse
+                (.binOp .ne
+                  (.call "validate_checksum"
+                    [.arrayIndex (.var "data") (.lit (.int 4)), .var "computed"])
+                  (.lit (.int 0)))
+                (errResultExpr "BadChecksum")
+                okHeaderExpr))))))
+
+def parseHeaderFn : PFnDef :=
+  { name := "parse_header", params := ["data", "len"], body := parseHeaderExpr }
+
 /-- Function table for parse_validate proofs. -/
 def parseValidateFns : FnTable
   | "validate_version" => some validateVersionFn
@@ -1083,6 +1148,7 @@ def parseValidateFns : FnTable
   | "validate_total_len" => some validateTotalLenFn
   | "validate_checksum" => some validateChecksumFn
   | "validate_header_fields" => some validateHeaderFieldsFn
+  | "parse_header" => some parseHeaderFn
   | _ => none
 
 /-- validate_version returns 0 iff v == 1, and 1 otherwise. -/
@@ -1128,6 +1194,30 @@ theorem validate_header_fields_success
             validateChecksumFn, validateChecksumExpr,
             eval, eval.evalArgs, parseValidateFns,
             Env.bind, evalBinOp, bindArgs, BEq.beq]
+
+set_option linter.unusedSimpArgs false in
+/-- parse_header returns `Err(TooShort)` whenever `len < 5`.
+
+    First attached theorem on the actual `parse_header` function (not
+    the scalar-parameter scaffold `validate_header_fields`). The
+    failure-path theorems are the ones we can prove today without
+    modelling `compute_checksum` (whose body uses a while loop, a
+    ProofCore subgoal still pending). The success-path theorem will
+    follow either bounded-while-loop extraction or a hand-modelled
+    compute_checksum convention. -/
+theorem parse_header_too_short
+    (data : List PVal) (len : Int) (fuel : Nat) (h : len < 5) :
+    eval parseValidateFns
+      ((Env.empty.bind "data" (.array_ data)).bind "len" (.int len))
+      (fuel + 10) parseHeaderExpr
+    = some (.enum_ "Result" "Err"
+        [("error", .enum_ "ParseError" "TooShort" [])]) := by
+  -- validate_total_len(len, 5) = 1 when len < 5, by its definition.
+  have h_dec : decide (5 ≤ len) = false := decide_eq_false (by omega)
+  simp [parseHeaderExpr, errResultExpr,
+        validateTotalLenFn, validateTotalLenExpr,
+        eval, eval.evalArgs, eval.evalFields, parseValidateFns,
+        Env.bind, evalBinOp, bindArgs, BEq.beq, h_dec]
 
 -- ============================================================
 -- Proved functions registry

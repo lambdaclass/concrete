@@ -10,6 +10,71 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### parse_header carries its first Lean theorem
+
+The actual Result-returning `parse_header` (not the scalar
+scaffold `validate_header_fields`) now has a registered, kernel-
+checked Lean theorem. parse_validate's proof-status goes from 2
+proved to **3 proved**.
+
+The theorem is `parse_header_too_short`: when `len < 5`,
+`parse_header` returns `Err(TooShort)`. Failure-direction path,
+honest scope — it bails before reaching `compute_checksum`
+(blocked on while-loop extraction), so this theorem is provable
+today without modelling the XOR fold in Lean.
+
+Why this matters
+----------------
+Before this commit, parse_header was the canonical "we can almost
+prove it" function — discussed in pilot docs and roadmap. The
+scalar scaffold `validate_header_fields` carried the composition
+story but called itself a scaffold. After this commit, the actual
+function on the array input has a real attached theorem.
+
+What's still missing
+--------------------
+- **Success-direction theorem** (`parse_header_well_formed →
+  Ok(Header{...})`). Needs either bounded-while-loop extraction
+  for `compute_checksum`, or a Lean-side hand-modeled
+  `computeChecksumFn` plus a bitxor PBinOp variant. Both are
+  separate commits.
+- **Per-failure theorems** for the other error variants
+  (BadVersion, BadType, PayloadTooBig, Truncated, BadChecksum).
+  Each follows the same shape as `parse_header_too_short` — a
+  small targeted hypothesis triggers the corresponding `Err`
+  return. Mechanical follow-up.
+
+What changed
+------------
+- `Concrete/Proof.lean`: `parseHeaderExpr` PExpr matching the
+  exact body fingerprint emitted by `--report fingerprints`.
+  Uses array index, struct literal, and enum literal — all
+  supported by ProofCore as of the prior three commits.
+  `parseHeaderFn` + entry in `parseValidateFns` table.
+  `errResultExpr` / `okHeaderExpr` helpers for readability.
+- `parse_header_too_short` theorem with `len < 5` hypothesis.
+  Proof is a single targeted `simp` with the right unfoldings
+  + a `decide_eq_false` for the boundary comparison.
+- `examples/parse_validate/src/proof-registry.json`: entry
+  added; proof = `Concrete.Proof.parse_header_too_short`,
+  spec = `Concrete.Proof.parseHeaderExpr`.
+
+`--report proof-status` for parse_validate:
+
+  before: 2 proved / 5 unproved / 2 blocked / 1 ineligible
+  after:  3 proved / 4 unproved / 2 blocked / 1 ineligible
+
+Snapshots refreshed: 48/48 byte-identical.
+
+Numbers
+-------
+make test-showcase:     2/0
+make test-snapshots:   48/0
+make test-policy:       4/0
+make test-assumptions:  3/0
+make test-catches:      2/0
+make test-verify-gates:78/0
+
 ### Phase 4: ProofCore extracts array index (read)
 
 Third Phase 4 extension forced by parse_validate's `parse_header`,
