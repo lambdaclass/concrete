@@ -1662,9 +1662,10 @@ def proofDiagnosticsReport (pc : Concrete.ProofCore) : String :=
 -- ============================================================
 
 /-- Pretty-print a PExpr as a readable S-expression. -/
-private def renderPExpr : Proof.PExpr → String
+private partial def renderPExpr : Proof.PExpr → String
   | .lit (.int n) => toString n
   | .lit (.bool b) => toString b
+  | .lit (.struct_ name _) => s!"<struct {name}>"
   | .var name => name
   | .binOp op lhs rhs =>
     let opStr := match op with
@@ -1679,6 +1680,12 @@ private def renderPExpr : Proof.PExpr → String
   | .call fn args =>
     let argsStr := ", ".intercalate (args.map renderPExpr)
     s!"{fn}({argsStr})"
+  | .structLit name fields =>
+    let fieldsStr := ", ".intercalate (fields.map fun (fname, fexpr) =>
+      s!"{fname}: {renderPExpr fexpr}")
+    s!"{name} \{ {fieldsStr} }"
+  | .fieldAccess obj field =>
+    s!"{renderPExpr obj}.{field}"
 
 /-- Extraction entry for one function. -/
 structure ExtractionEntry where
@@ -1744,11 +1751,16 @@ def extractionReport (registry : ProofRegistry := [])
 -- ============================================================
 
 /-- Render a PExpr as Lean constructor syntax (Concrete.Proof.PExpr). -/
-private def renderPExprAsLean : Proof.PExpr → String
+private partial def renderPExprAsLean : Proof.PExpr → String
   | .lit (.int n) =>
     if n < 0 then s!".lit (.int ({n}))"
     else s!".lit (.int {n})"
   | .lit (.bool b) => s!".lit (.bool {b})"
+  | .lit (.struct_ name _) =>
+    -- Struct literals as raw Lean constructor syntax are noisy; the
+    -- canonical surface for proof attachment is the source-level
+    -- fingerprint, not the Lean stub. Emit a placeholder.
+    s!"/- struct value of {name} (raw form) -/"
   | .var name => s!".var \"{name}\""
   | .binOp op lhs rhs =>
     let opStr := match op with
@@ -1763,6 +1775,12 @@ private def renderPExprAsLean : Proof.PExpr → String
   | .call fn args =>
     let argsLean := args.map fun a => s!"({renderPExprAsLean a})"
     s!".call \"{fn}\" [{", ".intercalate argsLean}]"
+  | .structLit name fields =>
+    let fieldsLean := fields.map fun (fname, fexpr) =>
+      s!"(\"{fname}\", {renderPExprAsLean fexpr})"
+    s!".structLit \"{name}\" [{", ".intercalate fieldsLean}]"
+  | .fieldAccess obj field =>
+    s!".fieldAccess ({renderPExprAsLean obj}) \"{field}\""
 
 /-- Convert a function's bare name to a Lean-safe identifier. -/
 private def leanIdent (name : String) : String :=

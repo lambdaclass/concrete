@@ -550,6 +550,8 @@ private partial def pexprFreeIn (name : String) : Proof.PExpr → Bool
   | .letIn n v b => pexprFreeIn name v || (n != name && pexprFreeIn name b)
   | .ifThenElse c t e => pexprFreeIn name c || pexprFreeIn name t || pexprFreeIn name e
   | .call _ args => args.any (pexprFreeIn name)
+  | .structLit _ fields => fields.any fun (_, fexpr) => pexprFreeIn name fexpr
+  | .fieldAccess obj _ => pexprFreeIn name obj
 
 /-- Ordering key for commutative canonicalization.
     vars sort before lits; among vars, alphabetical; among lits, by value. -/
@@ -614,6 +616,10 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
     | _ => .ifThenElse c t e
   | .call fn args =>
     .call fn (args.map normalizePExpr)
+  | .structLit name fields =>
+    .structLit name (fields.map fun (fname, fexpr) => (fname, normalizePExpr fexpr))
+  | .fieldAccess obj field =>
+    .fieldAccess (normalizePExpr obj) field
 
 -- ============================================================
 -- Core → PExpr extraction
@@ -649,6 +655,16 @@ partial def cExprToPExpr : CExpr → Option Proof.PExpr
     let pt ← cStmtsToPExpr thenBranch
     let pe ← cStmtsToPExpr elseBranch
     some (.ifThenElse pc pt pe)
+  | .structLit name _typeArgs fields _ => do
+    -- Each field's expression must extract; the resulting struct value
+    -- pairs field names with extracted PExprs.
+    let pfields ← fields.mapM fun (fname, fexpr) => do
+      let pe ← cExprToPExpr fexpr
+      some (fname, pe)
+    some (.structLit name pfields)
+  | .fieldAccess obj field _ => do
+    let po ← cExprToPExpr obj
+    some (.fieldAccess po field)
   | _ => none
 
 /-- Extract a statement list to a pure PExpr, threading a
@@ -714,8 +730,13 @@ private partial def identifyUnsupportedExpr : CExpr → List String
   | .floatLit .. => ["float literal"]
   | .strLit .. => ["string literal"]
   | .charLit .. => ["char literal"]
-  | .structLit .. => ["struct literal"]
-  | .fieldAccess .. => ["field access"]
+  -- structLit and fieldAccess are now supported by cExprToPExpr; their
+  -- only unsupported residual is whatever's inside the field exprs /
+  -- the object. Recurse so a struct of unsupported things is reported
+  -- precisely, while a struct of pure-int things lists nothing.
+  | .structLit _ _ fields _ =>
+    fields.foldl (fun acc (_, fexpr) => acc ++ identifyUnsupportedExpr fexpr) []
+  | .fieldAccess obj _ _ => identifyUnsupportedExpr obj
   | .enumLit .. => ["enum literal"]
   | .match_ .. => ["match expression"]
   | .borrow .. => ["borrow"]
@@ -747,11 +768,13 @@ private partial def identifyUnsupportedStmt : CStmt → List String
   | .return_ (some e) _ => identifyUnsupportedExpr e
   | .expr e => identifyUnsupportedExpr e
   | .ifElse cond thenBr elseBr =>
+    -- if without else is supported by cStmtsToPExprK as
+    -- early-return-with-fall-through. Do NOT flag it here.
     identifyUnsupportedExpr cond ++
     thenBr.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) [] ++
     match elseBr with
     | some stmts => stmts.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) []
-    | none => ["if without else"]
+    | none => []
   | _ => []
 end
 

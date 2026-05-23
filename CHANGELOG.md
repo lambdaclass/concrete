@@ -10,6 +10,76 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 4: ProofCore extracts struct literals + field access
+
+First real Phase 4 ProofCore extractor extension forced by the
+`fixed_capacity` pull-through candidate. ROADMAP Phase 4 item 2
+listed five named subgoals for the extractor; this commit closes
+the first two (struct literal + field access).
+
+What changed
+------------
+- `Concrete/Proof.lean`: `PVal` gains a `struct_ (name, fields)`
+  constructor carrying the struct name plus a `List (String × PVal)`
+  of field values. `PExpr` gains `structLit` (construction by
+  name+fields) and `fieldAccess` (obj.field). `eval` learns both,
+  with helper `evalFields` and `lookupField` in the `where` block.
+- `Concrete/ProofCore.lean`: `cExprToPExpr` translates
+  `CExpr.structLit` and `CExpr.fieldAccess`; recurses into field
+  expressions so a struct of supported things extracts. The stale
+  "if without else" diagnostic in `identifyUnsupportedStmt` is
+  dropped — `cStmtsToPExprK` has supported early-return-with-fall-
+  through since the parse_validate pilot.
+- `Concrete/ProofCore.lean`: `normalizePExpr` extended for the new
+  PExpr variants. `pexprFreeIn` recurses into struct fields and
+  field-access objects.
+- `Concrete/Report.lean`: `renderPExpr` and `renderPExprAsLean`
+  handle the new variants. Both made `partial` (the recursion
+  through `List.map` doesn't satisfy Lean's structural-termination
+  checker without it).
+
+Existing #eval-style theorems (`abs_positive`, `parse_byte_10_3`,
+`check_length_short`, etc.) used `native_decide` which requires
+`DecidableEq PVal`. With `struct_` carrying a `List`-of-`PVal`,
+auto-derivation fails. Switched them to `simp`-based unfoldings
+that don't need `DecidableEq`. No proof content lost.
+
+Result: fixed_capacity unblocks 3 functions
+-------------------------------------------
+proof-status totals on `examples/fixed_capacity/src/main.con`:
+
+  before: 5 unproved,  9 blocked
+  after:  8 unproved,  6 blocked
+
+The three newly-extracting functions are:
+  - `err_result(code) -> ValidateResult` — struct literal
+  - `ok_result(msg_type, seq, plen) -> ValidateResult` — struct literal
+  - `ring_new() -> RingBuf` — struct literal + array literal
+    blocks elsewhere (this one still extracts; the array-literal
+    blocker is in `validate_payload`)
+
+Remaining 6 blocked functions surface the next Phase 4 subgoals:
+cast, array literal, while loop, array index assignment, mod
+operator. Each is a separate extension commit.
+
+parse_validate's `parse_header` is still blocked — it needs
+`enum literal` and `array index` extraction (Phase 4 subgoals
+(d) and (e)). The struct-literal extension alone doesn't unblock
+it; this is expected.
+
+Snapshots refreshed (UPDATE_SNAPSHOTS=1) — proof-status output
+for parse_validate / crypto_verify / fixed_capacity reflects the
+new extractor coverage. 48/48 green.
+
+Numbers
+-------
+make test-snapshots:    48/0  (16 × 3 candidates)
+make test-policy:        4/0
+make test-assumptions:   3/0
+make test-catches:       2/0
+make test-showcase:      2/0
+make test-verify-gates: 78/0/0  (2 warnings)
+
 ### fixed_capacity candidate audit + baseline gates (bars #3, #4, #9)
 
 Third pull-through candidate. Bounded / no-allocation predictable

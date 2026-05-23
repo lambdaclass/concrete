@@ -54,12 +54,13 @@ Phases are listed in dependency order, but execution overlaps. The standing rule
 
 1. **The relevant slices of Phases 1-4 gate each flagship.** Hardening, artifacts, runtime profile, and proof workflow must be honest in the areas the flagship actually touches before it can claim them. The active candidate (rule 2) determines which runtime / proof / artifact surfaces are actually required; not every item in Phases 1-4 gates every flagship — for example, the concurrency sub-track in Phase 3 only gates a flagship that uses concurrency.
 2. **Run examples through one linear ladder.** Examples start as inventory entries, then become candidates, then one active pull-through candidate at a time may force gaps in Phases 1-4, and only after its evidence holds does it graduate into Phase 7. `parse_validate` has completed that path and is now the first graduated Phase 7 entry. A second active pull-through candidate does not start until the current one graduates or is explicitly parked with reasons.
-3. **Phase 5 lands when backend honesty matters.** SSA contract, target model, and incremental boundaries before public packaging.
-4. **Phase 6 is not on the critical path to the first release.** Benchmarks and budgets help but do not gate it.
-5. **Phases 7-8 only after stable evidence.** Phase 7 grows by promotion from the candidate ladder, not by starting many public showcases at once. Release packaging rests on Phases 1-5 plus at least one graduated showcase, not the other way around.
-6. **Phases 9-11 only after first-release surface holds.** Packages, editor UX, and public governance assume the artifact / proof / release contracts are stable.
-7. **Phase 12 is a trust multiplier, not a prerequisite.** Compiler-correctness proofs come after Phases 4, 5, and the artifact contracts in 2 are stable.
-8. **Phase 13 stays last** unless a current example forces a research topic forward.
+3. **Make the compiler artifact-first before broadening surface area.** The current architecture track is ProofCore as a first-class IR, stable artifact identities, pass contracts, and report generation from a shared fact layer. `fixed_capacity` is the forcing candidate for this work because it exposes the ProofCore gaps that block both bounded/no-alloc and real-crypto flagships.
+4. **Phase 5 lands when backend honesty matters.** SSA contract, target model, and incremental boundaries before public packaging.
+5. **Phase 6 is not on the critical path to the first release.** Benchmarks and budgets help but do not gate it.
+6. **Phases 7-8 only after stable evidence.** Phase 7 grows by promotion from the candidate ladder, not by starting many public showcases at once. Release packaging rests on Phases 1-5 plus at least one graduated showcase, not the other way around.
+7. **Phases 9-11 only after first-release surface holds.** Packages, editor UX, and public governance assume the artifact / proof / release contracts are stable.
+8. **Phase 12 is a trust multiplier, not a prerequisite.** Compiler-correctness proofs come after Phases 4, 5, and the artifact contracts in 2 are stable.
+9. **Phase 13 stays last** unless a current example forces a research topic forward.
 
 ## Operating Rules
 
@@ -67,6 +68,7 @@ Phases are listed in dependency order, but execution overlaps. The standing rule
 - Close phases on concrete outputs (examples, reports, docs, tool surfaces) with explicit success bars, not abstract intent.
 - Every flagship example must name its oracle or explicitly state none exists yet.
 - Keep examples on the linear ladder: inventory entry -> candidate -> one active pull-through candidate -> graduated Phase 7 flagship; do not maintain several almost-flagships in parallel.
+- Refactor compiler architecture only when a candidate makes the boundary undeniable; current forcing candidate is `fixed_capacity`, and the current boundary is `Core -> normalized Core -> ProofCore -> obligations/reports`.
 - Judge new language features by grammar cost, audit cost, and proof cost, not expressiveness alone.
 - Keep specs in Lean-attached / artifact-registry form until obligations and diagnostics support source-level contracts honestly.
 - Build a local fact CLI before MCP / editor integrations.
@@ -127,24 +129,26 @@ Expected outcome: every checker, capability, ownership, predictable, proof, FFI,
 Expected outcome: a function ships with stable, diffable, fingerprinted artifacts that another engineer can audit without reading compiler internals.
 
 1. Pass-by-pass verifier gates: extend the four downstream gates (live: post-elab, post-mono, post-lower, post-cleanup) to earlier boundaries (parsed / resolved / import-summary / post-check) when concrete bugs motivate them.
-2. Report-consistency checkers: `--report alloc`, `layout`, `caps`, `authority`, `proof`, `unsafe`, `mono`, and interface outputs must agree with each other and with compiler state.
-3. Compiler-debuggable dump modes for the important IR boundaries: typed/core IR, ProofCore, obligations, diagnostics, lowering, SSA.
-4. Carry the frozen arithmetic policy into reports, diagnostics, and proof/evidence artifacts.
-5. End-to-end source traceability across IR boundaries (source → resolved names → checked/elaborated → Core/ProofCore → lowered/SSA/report).
-6. Stable identities and deterministic fingerprints for modules, declarations, obligations, diagnostics, reports, proof subjects.
-7. Deterministic artifact serialization and compatibility rules: canonical ordering, hashing scope, schema/version rules, reproducibility.
-8. Module / interface artifacts: exported types, signatures, capabilities, proof expectations, policy requirements, fact schema version, dependency fingerprints.
-9. Durable frontend artifact boundaries: parsed-file bundles, resolved program/import state, per-stage contracts named explicitly.
-10. `CheckedProgram` artifact between checking and elaboration if it materially simplifies plumbing; otherwise reject explicitly.
-11. Authority / evidence diffing as a first-class artifact workflow.
-12. Assumption files as machine-readable artifacts: target, compiler, backend, OS, toolchain, FFI contracts, trusted regions, proof/evidence assumptions, versioned and diffable (live for v1 — `docs/ASSUMPTION_FILES.md`, first instance at `examples/parse_validate/assumptions.toml`, drift-enforced by `make test-assumptions`).
-13. Project policy files for enforceable authority and evidence budgets (no `Unsafe`, no `Alloc`, max stack, required proof/evidence levels) (live for v1 — `docs/POLICY_FILES.md`, schema extends `Concrete.toml` `[policy]`, first instance at `examples/parse_validate/Concrete.toml`, drift-enforced by `make test-policy`).
-14. Warning / lint discipline: separate hard errors, warnings, deny-in-CI warnings, advisory lints.
-15. ABI/layout round-trip checkers: generate C headers/stubs from public ABI surfaces, verify offsets/size/alignment/calling conventions cross-language.
-16. Strengthen memory/layout audit reports with source locations, qualified names, repr/packed/align facts, trusted-pointer boundaries, backend/target caveats.
-17. Compiler self-leak / resource soak harness: long-running compile/query/report/rebuild cycles assert no unbounded RSS, FD, temp-file, or subprocess growth.
-18. Deepen leak-risk reporting: richer allocation/cleanup path explanations, trusted/FFI leak attribution, precise leak-risk classes.
-19. Deepen allocation/leak regression coverage on larger examples; assert `--report alloc` consistency.
+2. Pass contracts as first-class artifacts: every named compiler boundary states input invariants, output invariants, identity/fingerprint preservation rules, assumptions introduced, and the verifier/report that checks the boundary.
+3. Compiler-debuggable dump modes for the important IR boundaries: checked program, Core, normalized Core, ProofCore, obligations, diagnostics, lowering, SSA.
+4. Shared fact database for reports: `--report alloc`, `layout`, `caps`, `authority`, `proof`, `unsafe`, `mono`, policy, assumptions, snapshots, and showcase manifests should render from one canonical fact layer instead of recomputing truth independently.
+5. Report-consistency checkers over that fact database: reports and interface outputs must agree with each other and with compiler state, with contradictions kept as regressions.
+6. Carry the frozen arithmetic policy into reports, diagnostics, and proof/evidence artifacts.
+7. End-to-end source traceability across IR boundaries (source → resolved names → checked/elaborated → Core → normalized Core → ProofCore → lowered/SSA/report).
+8. Stable identities and deterministic fingerprints for modules, declarations, obligations, diagnostics, reports, proof subjects, policy subjects, assumption subjects, and release-bundle entries.
+9. Deterministic artifact serialization and compatibility rules: canonical ordering, hashing scope, schema/version rules, reproducibility.
+10. Module / interface artifacts: exported types, signatures, capabilities, proof expectations, policy requirements, fact schema version, dependency fingerprints.
+11. Durable frontend artifact boundaries: parsed-file bundles, resolved program/import state, checked program state, normalized proof-target state, and per-stage contracts named explicitly.
+12. `CheckedProgram` artifact between checking and elaboration if it materially simplifies plumbing; otherwise reject explicitly.
+13. Authority / evidence diffing as a first-class artifact workflow.
+14. Assumption files as machine-readable artifacts: target, compiler, backend, OS, toolchain, FFI contracts, trusted regions, proof/evidence assumptions, versioned and diffable (live for v1 — `docs/ASSUMPTION_FILES.md`, first instance at `examples/parse_validate/assumptions.toml`, drift-enforced by `make test-assumptions`).
+15. Project policy files for enforceable authority and evidence budgets (no `Unsafe`, no `Alloc`, max stack, required proof/evidence levels) (live for v1 — `docs/POLICY_FILES.md`, schema extends `Concrete.toml` `[policy]`, first instance at `examples/parse_validate/Concrete.toml`, drift-enforced by `make test-policy`).
+16. Warning / lint discipline: separate hard errors, warnings, deny-in-CI warnings, advisory lints.
+17. ABI/layout round-trip checkers: generate C headers/stubs from public ABI surfaces, verify offsets/size/alignment/calling conventions cross-language.
+18. Strengthen memory/layout audit reports with source locations, qualified names, repr/packed/align facts, trusted-pointer boundaries, backend/target caveats.
+19. Compiler self-leak / resource soak harness: long-running compile/query/report/rebuild cycles assert no unbounded RSS, FD, temp-file, or subprocess growth.
+20. Deepen leak-risk reporting: richer allocation/cleanup path explanations, trusted/FFI leak attribution, precise leak-risk classes.
+21. Deepen allocation/leak regression coverage on larger examples; assert `--report alloc` consistency.
 
 ## Phase 3: Runtime
 
@@ -194,25 +198,27 @@ Expected outcome: a bounded queue or parser helper can carry claims like "no all
 
 Expected outcome: helper composition like `fn validate_header(...) -> Bool { ... }` carries a Lean-backed claim that successful return implies multiple structural invariants.
 
-1. Refine and stabilize the explicit `Core → ProofCore` phase after a flagship has forced it into the open.
-2. Extend ProofCore to more constructs: structs/fields, pattern matching, arrays/slices, borrows/dereferences, casts, cleanup/defer/drop. Concrete subgoals named by current flagship candidates: (a) **array indexing** — blocks `parse_header` on `data[i]`, blocks SHA-256 on block-byte access; (b) **bounded while loops** — blocks `compute_checksum` and any real cryptographic round loop; (c) **struct value construction** — blocks `Header { ... }` and any hash-state struct; (d) **enum value construction** — blocks `Result::Ok { value: ... }`; (e) **pattern matching** — blocks `error_code` and any tagged-union dispatch. Items (a)–(c) together gate the next Phase 7 real-cryptography flagship slot (HMAC / Ed25519 / constant-time); see Phase 7 item 7.
-3. Broaden proof obligation generation beyond the first pipeline slice: loop, memory, contract obligations become mechanically inspectable.
-4. Broaden the pure Core proof fragment after artifacts, diagnostics, ProofCore phase, normalization, and obligation generation are usable.
-5. Deepen the memory / reference proof model: ownership, aliasing, mutation, pointer/reference, cleanup, layout reasoning where examples require.
-6. Deepen the effect / trust proof boundaries: prove right up to capability, allocation, blocking, FFI, trusted edges without pretending they disappear.
-7. Proof-regression test pipeline: `Core → ProofCore`, normalization stability, obligation generation, exclusion reasons, stale proof behavior, proof artifact drift.
-8. Stabilize the provable subset as an explicit user-facing target.
-9. Public release criteria for the provable subset: supported / unsupported constructs, trust assumptions, artifact stability, what users may rely on.
-10. Small reference interpreter for the proof-relevant subset once `Core → ProofCore` and the memory/UB model are precise.
-11. Proof artifact / schema compatibility alongside fact/query schema: proof-status, obligations, extraction, traceability, fingerprints, spec/proof identifiers.
-12. Scale proof extraction and obligation generation to larger projects: measure cost, identify bottlenecks, keep tractable.
-13. AI-assisted proof repair and authoring on top of stable artifacts, explicit statuses, and kernel-checked validation.
-14. Proof replay / caching on top of the artifact model.
-15. Selected compiler-preservation proofs where they protect evidence claims.
-16. Evaluate contracts / source-level preconditions only after Lean-attached specs, obligations, diagnostics, registry, ProofCore boundary, and proof workflow are real.
-17. Evaluate loop invariants only after specs, obligations, and proof UX / repair loop are usable.
-18. Evaluate ghost / proof-only code only when a proof-backed example needs it.
-19. Pull research-gated language features into implementation only when a current example or proof needs them.
+1. Make `ProofCore` a first-class IR with a named compiler boundary, verifier, human-readable dump, regression tests, and a documented extension contract. This is the main compiler architecture track because it is the path from evidence demos to proofs over real systems code.
+2. Split the proof path explicitly into `Core -> normalized Core -> ProofCore -> obligations/reports`: normalize early returns, simple control flow, field/array operations, enum construction, and other source conveniences once, then make ProofCore and report generation consume that stable shape.
+3. Extend ProofCore in the order forced by `fixed_capacity` and the real-crypto slot: (a) **array indexing** — blocks `parse_header` on `data[i]`, blocks SHA-256 on block-byte access; (b) **bounded while loops** — blocks `compute_checksum`, `compute_tag`, and any real cryptographic round loop; (c) **struct value construction** — blocks `Header { ... }` and any hash-state struct; (d) **enum value construction** — blocks `Result::Ok { value: ... }`; (e) **pattern matching** — blocks `error_code` and tagged-union dispatch; (f) **casts** — blocks byte/int normalization; (g) **field-heavy code** — blocks struct/enum payload proofs. Items (a)–(c) together gate the next Phase 7 real-cryptography flagship slot (HMAC / Ed25519 / constant-time); see Phase 7 item 7.
+4. Add ProofCore pass contracts and self-checks: every extraction rule states what Concrete construct it covers, what assumptions it introduces, why rejected constructs are excluded, and which example/regression forces it.
+5. Broaden proof obligation generation beyond the first pipeline slice: loop, memory, contract obligations become mechanically inspectable.
+6. Broaden the pure Core proof fragment after artifacts, diagnostics, ProofCore phase, normalization, and obligation generation are usable.
+7. Deepen the memory / reference proof model: ownership, aliasing, mutation, pointer/reference, cleanup, layout reasoning where examples require.
+8. Deepen the effect / trust proof boundaries: prove right up to capability, allocation, blocking, FFI, trusted edges without pretending they disappear.
+9. Proof-regression test pipeline: `Core -> normalized Core -> ProofCore`, normalization stability, obligation generation, exclusion reasons, stale proof behavior, proof artifact drift.
+10. Stabilize the provable subset as an explicit user-facing target.
+11. Public release criteria for the provable subset: supported / unsupported constructs, trust assumptions, artifact stability, what users may rely on.
+12. Small reference interpreter for the proof-relevant subset once `Core -> ProofCore` and the memory/UB model are precise.
+13. Proof artifact / schema compatibility alongside fact/query schema: proof-status, obligations, extraction, traceability, fingerprints, spec/proof identifiers.
+14. Scale proof extraction and obligation generation to larger projects: measure cost, identify bottlenecks, keep tractable.
+15. AI-assisted proof repair and authoring on top of stable artifacts, explicit statuses, and kernel-checked validation.
+16. Proof replay / caching on top of the artifact model.
+17. Selected compiler-preservation proofs where they protect evidence claims.
+18. Evaluate contracts / source-level preconditions only after Lean-attached specs, obligations, diagnostics, registry, ProofCore boundary, and proof workflow are real.
+19. Evaluate loop invariants only after specs, obligations, and proof UX / repair loop are usable.
+20. Evaluate ghost / proof-only code only when a proof-backed example needs it.
+21. Pull research-gated language features into implementation only when a current example or proof needs them.
 
 ## Phase 5: Backend
 
@@ -359,11 +365,11 @@ Expected outcome: a new user can install Concrete, run one proof-bearing example
 
 Expected outcome: a simple function like `fn add1(x: Int) -> Int { return x + 1; }` is not only user-proved but backed by proofs that `Core → ProofCore` extraction and selected normalization/preservation steps keep its intended pure meaning intact.
 
-1. Define precisely what "compiler proof" means for Concrete: user-code property proofs, ProofCore semantic proofs, pass-preservation proofs, future end-to-end correctness claims.
+1. Define precisely what "compiler proof" means for Concrete: user-code property proofs, ProofCore semantic proofs, normalization/extraction proofs, pass-preservation proofs, future end-to-end correctness claims.
 2. Separate public user-code proof claims from compiler-correctness claims so reports never imply the compiler itself is fully verified.
 3. Inventory the compiler-verification trusted base and unproved assumptions: parser, checker, elaborator, CoreCheck, mono, lowering, SSA emission, LLVM/toolchain, runtime, target model, proof registry attachment.
-4. Prove ProofCore normalization preserves ProofCore semantics for the supported expression fragment.
-5. Prove `Core → ProofCore` extraction sound for the supported constructs.
+4. Prove normalized Core preserves Core semantics for the supported expression fragment before relying on normalized proof targets as equivalent to source-derived Core.
+5. Prove `normalized Core -> ProofCore` extraction sound for the supported constructs.
 6. Prove selected checker / report / artifact facts agree with compiler state: proof eligibility, predictable status, capabilities, trusted boundaries, fingerprints, obligations, traceability.
 7. Prove small internal compiler invariants: no post-mono type variables, well-formed qualified identities, well-formed SSA facts, consistent interface artifacts, stable diagnostic attachment.
 8. Prove selected pass-preservation properties for a restricted pure subset, starting with transformations that directly affect proof/evidence claims.

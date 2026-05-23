@@ -80,9 +80,9 @@
  125 |     fn parse_header(data: [i32; 8], len: i32) -> Result<Header, ParseError> {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: enum literal, if without else, array index
+  unsupported: enum literal, array index
 
-  hint: Remove enum literal, if without else, array index to enable proof extraction.
+  hint: Remove enum literal, array index to enable proof extraction.
 
 -- blocked ------------------------------------------------ examples/parse_validate/src/main.con:167
 

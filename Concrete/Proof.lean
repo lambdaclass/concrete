@@ -38,15 +38,30 @@ inductive PBinOp where
   | eq | ne | lt | le | gt | ge
   deriving Repr, BEq, DecidableEq
 
-/-- Values in the proof fragment. -/
+/-- Values in the proof fragment.
+    `struct_` carries the struct's name plus its fields as
+    name → value pairs. The list order is the construction order
+    in source; field-access lookup is by name. -/
 inductive PVal where
   | int (n : Int)
   | bool (b : Bool)
-  deriving Repr, BEq, DecidableEq
+  | struct_ (name : String) (fields : List (String × PVal))
+  deriving Repr, Inhabited, BEq
+
+-- Note on DecidableEq:
+-- Lean's auto-deriving for DecidableEq does not handle the
+-- `List (String × PVal)` recursion through containers. Concrete's
+-- existing proofs that used `native_decide` on Option PVal values
+-- have been converted to simp-based proofs that unfold eval directly,
+-- removing the dependency on DecidableEq for PVal. If a future
+-- consumer needs DecidableEq, a hand-written mutually-recursive
+-- instance is the standard pattern.
 
 /-- Expressions in the proof fragment.
     This is a strict subset of `CExpr`, restricted to pure integer/boolean
-    operations with let bindings and conditionals. -/
+    operations with let bindings, conditionals, function calls, and the
+    struct subset that supports flagship-shape parsers and validators
+    (struct literal + field access). -/
 inductive PExpr where
   | lit (v : PVal)
   | var (name : String)
@@ -54,6 +69,8 @@ inductive PExpr where
   | letIn (name : String) (val body : PExpr)
   | ifThenElse (cond thenBr elseBr : PExpr)
   | call (fn : String) (args : List PExpr)
+  | structLit (name : String) (fields : List (String × PExpr))
+  | fieldAccess (obj : PExpr) (field : String)
   deriving Repr, BEq
 
 /-- A function definition in the proof fragment. -/
@@ -130,6 +147,14 @@ def eval (fns : FnTable) (env : Env) : Nat → PExpr → Option PVal
         match bindArgs Env.empty fdef.params argVals with
         | none => none
         | some callEnv => eval fns callEnv fuel fdef.body
+  | fuel + 1, .structLit name fields =>
+    match evalFields fns env fuel fields with
+    | none => none
+    | some fieldVals => some (.struct_ name fieldVals)
+  | fuel + 1, .fieldAccess obj field =>
+    match eval fns env (fuel + 1) obj with
+    | some (.struct_ _ fields) => lookupField fields field
+    | _ => none
 where
   /-- Evaluate a list of argument expressions. -/
   evalArgs (fns : FnTable) (env : Env) (fuel : Nat) : List PExpr → Option (List PVal)
@@ -141,6 +166,22 @@ where
         match evalArgs fns env fuel es with
         | none => none
         | some vs => some (v :: vs)
+  /-- Evaluate a list of (field-name, expression) pairs into a list of
+      (field-name, value) pairs.  Construction order is preserved. -/
+  evalFields (fns : FnTable) (env : Env) (fuel : Nat) :
+      List (String × PExpr) → Option (List (String × PVal))
+    | [] => some []
+    | (name, e) :: rest =>
+      match eval fns env fuel e with
+      | none => none
+      | some v =>
+        match evalFields fns env fuel rest with
+        | none => none
+        | some vs => some ((name, v) :: vs)
+  /-- Find a field's value in a struct's field list by name. -/
+  lookupField : List (String × PVal) → String → Option PVal
+    | [], _ => none
+    | (n, v) :: rest, target => if n == target then some v else lookupField rest target
 
 -- ============================================================
 -- Embedded Concrete programs
@@ -231,32 +272,50 @@ def evalClamp (x lo hi : Int) : Option PVal :=
 #eval evalMax 10 20 -- some (int 20)
 #eval evalMax 7 3   -- some (int 7)
 
+set_option linter.unusedSimpArgs false in
 /-- abs(5) = 5 -/
-theorem abs_positive : evalAbs 5 = some (.int 5) := by native_decide
+theorem abs_positive : evalAbs 5 = some (.int 5) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
+            eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- abs(-3) = 3 -/
-theorem abs_negative : evalAbs (-3) = some (.int 3) := by native_decide
+theorem abs_negative : evalAbs (-3) = some (.int 3) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
+            eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- abs(0) = 0 -/
-theorem abs_zero : evalAbs 0 = some (.int 0) := by native_decide
+theorem abs_zero : evalAbs 0 = some (.int 0) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
+            eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- max(10, 20) = 20 -/
-theorem max_right : evalMax 10 20 = some (.int 20) := by native_decide
+theorem max_right : evalMax 10 20 = some (.int 20) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
+            eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- max(7, 3) = 7 -/
-theorem max_left : evalMax 7 3 = some (.int 7) := by native_decide
+theorem max_left : evalMax 7 3 = some (.int 7) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
+            eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- max(x, x) = x for a specific value (kernel-reducible). -/
-theorem max_self : evalMax 42 42 = some (.int 42) := by native_decide
+theorem max_self : evalMax 42 42 = some (.int 42) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
+            eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- clamp(5, 0, 10) = 5 (in range) -/
-theorem clamp_in_range : evalClamp 5 0 10 = some (.int 5) := by native_decide
+theorem clamp_in_range : evalClamp 5 0 10 = some (.int 5) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
+            eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- clamp(-3, 0, 10) = 0 (below range) -/
-theorem clamp_below : evalClamp (-3) 0 10 = some (.int 0) := by native_decide
+theorem clamp_below : evalClamp (-3) 0 10 = some (.int 0) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
+            eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- clamp(15, 0, 10) = 10 (above range) -/
-theorem clamp_above : evalClamp 15 0 10 = some (.int 10) := by native_decide
+theorem clamp_above : evalClamp 15 0 10 = some (.int 10) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
+            eval, evalBinOp, Env.bind, Env.empty]
 
 /-- Integer literal evaluates to itself (with sufficient fuel). -/
 theorem eval_lit (n : Int) (fuel : Nat) (fns : FnTable) (env : Env) :
@@ -311,14 +370,20 @@ theorem eval_mul_lits (a b : Int) (fuel : Nat) (fns : FnTable) (env : Env) :
 def evalParseByte (data offset : Int) : Option PVal :=
   eval proofFns ((Env.empty.bind "data" (.int data)).bind "offset" (.int offset)) 10 parseByteExpr
 
+set_option linter.unusedSimpArgs false in
 /-- parse_byte(10, 3) = 13 -/
-theorem parse_byte_10_3 : evalParseByte 10 3 = some (.int 13) := by native_decide
+theorem parse_byte_10_3 : evalParseByte 10 3 = some (.int 13) := by
+  simp [evalParseByte, parseByteExpr, eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- parse_byte(0, 0) = 0 -/
-theorem parse_byte_zero : evalParseByte 0 0 = some (.int 0) := by native_decide
+theorem parse_byte_zero : evalParseByte 0 0 = some (.int 0) := by
+  simp [evalParseByte, parseByteExpr, eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- parse_byte(255, 1) = 256 -/
-theorem parse_byte_boundary : evalParseByte 255 1 = some (.int 256) := by native_decide
+theorem parse_byte_boundary : evalParseByte 255 1 = some (.int 256) := by
+  simp [evalParseByte, parseByteExpr, eval, evalBinOp, Env.bind, Env.empty]
 
 /-- Universal: parse_byte(a, b) = a + b for all integers.
     This is the first universally quantified proof over a Concrete function. -/
@@ -340,17 +405,25 @@ def evalCheckLength (len : Int) : Option PVal :=
   eval proofFns (Env.empty.bind "len" (.int len)) 10 checkLengthExpr
 
 -- Concrete test cases
+set_option linter.unusedSimpArgs false in
 /-- check_length(5) = 1 (too short) -/
-theorem check_length_short : evalCheckLength 5 = some (.int 1) := by native_decide
+theorem check_length_short : evalCheckLength 5 = some (.int 1) := by
+  simp [evalCheckLength, checkLengthExpr, eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- check_length(10) = 0 (exactly minimum) -/
-theorem check_length_exact : evalCheckLength 10 = some (.int 0) := by native_decide
+theorem check_length_exact : evalCheckLength 10 = some (.int 0) := by
+  simp [evalCheckLength, checkLengthExpr, eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- check_length(1500) = 0 (typical packet) -/
-theorem check_length_large : evalCheckLength 1500 = some (.int 0) := by native_decide
+theorem check_length_large : evalCheckLength 1500 = some (.int 0) := by
+  simp [evalCheckLength, checkLengthExpr, eval, evalBinOp, Env.bind, Env.empty]
 
+set_option linter.unusedSimpArgs false in
 /-- check_length(0) = 1 (empty buffer) -/
-theorem check_length_zero : evalCheckLength 0 = some (.int 1) := by native_decide
+theorem check_length_zero : evalCheckLength 0 = some (.int 1) := by
+  simp [evalCheckLength, checkLengthExpr, eval, evalBinOp, Env.bind, Env.empty]
 
 /-- Universal: for any length < 10, check_length returns 1 (reject).
     This proves the decoder never reads beyond a too-short buffer. -/

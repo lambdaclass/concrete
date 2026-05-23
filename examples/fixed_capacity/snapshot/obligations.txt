@@ -1,7 +1,7 @@
 === Proof Obligations ===
 
   fixed_capacity.ok_result
-    status:       blocked
+    status:       missing
     spec:         (none)
     proof:        (none)
     source:       none
@@ -10,7 +10,7 @@
     loc:          examples/fixed_capacity/src/main.con:57
 
   fixed_capacity.err_result
-    status:       blocked
+    status:       missing
     spec:         (none)
     proof:        (none)
     source:       none
@@ -118,7 +118,7 @@
     loc:          examples/fixed_capacity/src/main.con:145
 
   fixed_capacity.validate_message
-    status:       blocked
+    status:       missing
     spec:         (none)
     proof:        (none)
     source:       none
@@ -180,5 +180,5 @@
     dependencies: none
     loc:          examples/fixed_capacity/src/main.con:270
 
-Totals: 20 obligations — 0 proved, 0 stale, 5 missing, 9 blocked, 2 ineligible, 4 trusted
+Totals: 20 obligations — 0 proved, 0 stale, 8 missing, 6 blocked, 2 ineligible, 4 trusted
 
