@@ -10,6 +10,70 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### fixed_capacity candidate audit + baseline gates (bars #3, #4, #9)
+
+Third pull-through candidate. Bounded / no-allocation predictable
+subset on a realistic message processor — Phase 7 item 6 names
+this category. Strategically chosen: this example surfaces every
+Phase 4 ProofCore extractor gap the real-cryptography flagship
+slot is gated on.
+
+**Phase 4 surface mapping** — fixed_capacity's 9 extraction-blocked
+functions name every Phase 4 item 2 subgoal in concrete code:
+
+| ProofCore gap | Blocked functions |
+|---|---|
+| struct literal | `err_result`, `ok_result`, `ring_new`, `validate_payload` |
+| field access | `process_packet`, `ring_contains`, `ring_record` |
+| cast | `validate_payload`, `process_packet` |
+| while loop | `compute_tag`, `ring_record` |
+| array literal | `validate_payload` |
+| array index assignment | `ring_record` |
+| `mod` operator | `ring_record` |
+
+This is the bridge candidate — closing these gaps in Phase 4
+unlocks fixed_capacity's graduation AND the deferred real-crypto
+flagship slot in one stroke.
+
+**Cheap baseline batch closed** (same shape as crypto_verify's
+first batch):
+
+- `examples/fixed_capacity/AUDIT.md` — 10-bar contract, with §8
+  naming the strategic Phase 4 forcing value explicitly.
+- `examples/fixed_capacity/assumptions.toml` — full schema with
+  declared trusted list (4 names matching the actual `--report
+  unsafe` output).
+- `examples/fixed_capacity/Concrete.toml [policy]` — 6 enforced
+  fields. Omits `no_unsafe` / `no_trusted` because this example
+  has 4 deliberate trusted shells for adversarial test-packet
+  construction. The trusted list is enumerated in assumptions to
+  catch drift.
+- `examples/fixed_capacity/snapshot/` — 16 baselined reports.
+  `make test-snapshots` now 48/0 across all three candidates.
+
+**Trusted-list drift detection added.** The assumptions gate
+previously only handled empty-trusted; extended to assert that a
+declared non-empty trusted list matches the actual `trusted fn
+<name>` entries in `--report unsafe`. A new or removed trusted
+shell now fails the gate.
+
+**Allowed-capability widening.** fixed_capacity is the first
+candidate with `allowed_capabilities = ["Std"]` rather than `[]`.
+Entry points (`main`, `run_test`) print test output; the
+validation core itself remains pure. Documented in the policy
+comment.
+
+**Bars closed today**: #3 (assumptions), #4 (policy), #9
+(snapshots). 3 of 10 met. Bar #1 (Lean theorem on a single
+validator) is mechanically trivial and waits with #2 for a small
+follow-up commit.
+
+**Phase 4 work track now active in parallel.** The candidate
+serves as the forcing function; subsequent commits will attack
+the ProofCore extractor extensions one at a time, with each
+extension unblocking both fixed_capacity's progress and the
+deferred real-crypto flagship slot.
+
 ### crypto_verify graduates to Phase 7 (second flagship, honestly-framed toy)
 
 The second flagship enters the curated showcase. `crypto_verify` is

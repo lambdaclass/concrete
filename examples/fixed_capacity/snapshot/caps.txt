@@ -1,0 +1,28 @@
+=== Capability Summary ===
+
+module fixed_capacity:
+      ok_result : (pure)
+      err_result : (pure)
+      validate_version : (pure)
+      validate_msg_type : (pure)
+      validate_payload_len : (pure)
+      validate_total_len : (pure)
+      validate_tag : (pure)
+      read_u8 : (pure)
+      read_u16_be : (pure)
+      ring_new : (pure)
+      ring_contains : (pure)
+      ring_push : (pure)
+      compute_tag : (pure)
+      validate_message : (pure)
+      build_msg : (pure)
+      build_bad_version : (pure)
+      build_bad_type : (pure)
+      build_payload_overflow : (pure)
+      report : Console
+    Console    <- calls print_string (intrinsic), print_int (intrinsic), print_char (intrinsic)
+  pub main : Console
+    Console    <- calls print_string (intrinsic), print_char (intrinsic), report, print_int (intrinsic)
+
+Totals: 20 functions (18 pure), 0 externs
+

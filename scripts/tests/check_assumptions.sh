@@ -209,6 +209,22 @@ check_example() {
     else
       echo "  ok   trusted — no trusted boundaries"
     fi
+  else
+    # Non-empty: declared trusted list must match what --report unsafe lists.
+    # The report's "trusted fn <name>" lines name the actual trusted functions.
+    local actual_trusted
+    actual_trusted=$(grep -oE 'trusted fn [a-zA-Z_][a-zA-Z0-9_]*' <<<"$report_unsafe" \
+                     | awk '{print $3}' | sort -u | tr '\n' ' ' | sed 's/ $//')
+    local declared_sorted
+    declared_sorted=$(echo "$trusted_fns $trusted_shells" | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' ' | sed 's/ $//')
+    if [ "$actual_trusted" = "$declared_sorted" ]; then
+      echo "  ok   trusted list matches declared ($actual_trusted)"
+    else
+      echo "  FAIL trusted list drift"
+      echo "    declared: $declared_sorted"
+      echo "    actual:   $actual_trusted"
+      errs=$((errs + 1))
+    fi
   fi
 
   if [ "$errs" -eq 0 ]; then
