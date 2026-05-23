@@ -1667,6 +1667,7 @@ private partial def renderPExpr : Proof.PExpr → String
   | .lit (.bool b) => toString b
   | .lit (.struct_ name _) => s!"<struct {name}>"
   | .lit (.enum_ enumName variant _) => s!"<{enumName}::{variant}>"
+  | .lit (.array_ elems) => s!"<array (size {elems.length})>"
   | .var name => name
   | .binOp op lhs rhs =>
     let opStr := match op with
@@ -1692,6 +1693,8 @@ private partial def renderPExpr : Proof.PExpr → String
     else s!"{enumName}::{variant} \{ {fieldsStr} }"
   | .fieldAccess obj field =>
     s!"{renderPExpr obj}.{field}"
+  | .arrayIndex arr idx =>
+    s!"{renderPExpr arr}[{renderPExpr idx}]"
 
 /-- Extraction entry for one function. -/
 structure ExtractionEntry where
@@ -1769,6 +1772,8 @@ private partial def renderPExprAsLean : Proof.PExpr → String
     s!"/- struct value of {name} (raw form) -/"
   | .lit (.enum_ enumName variant _) =>
     s!"/- enum value {enumName}::{variant} (raw form) -/"
+  | .lit (.array_ _) =>
+    s!"/- array value (raw form) -/"
   | .var name => s!".var \"{name}\""
   | .binOp op lhs rhs =>
     let opStr := match op with
@@ -1793,6 +1798,8 @@ private partial def renderPExprAsLean : Proof.PExpr → String
     s!".enumLit \"{enumName}\" \"{variant}\" [{", ".intercalate fieldsLean}]"
   | .fieldAccess obj field =>
     s!".fieldAccess ({renderPExprAsLean obj}) \"{field}\""
+  | .arrayIndex arr idx =>
+    s!".arrayIndex ({renderPExprAsLean arr}) ({renderPExprAsLean idx})"
 
 /-- Convert a function's bare name to a Lean-safe identifier. -/
 private def leanIdent (name : String) : String :=

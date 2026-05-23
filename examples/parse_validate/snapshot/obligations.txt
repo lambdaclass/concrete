@@ -64,7 +64,7 @@
     loc:          examples/parse_validate/src/main.con:107
 
   parse_validate.parse_header
-    status:       blocked
+    status:       missing
     spec:         (none)
     proof:        (none)
     source:       none
@@ -90,5 +90,5 @@
     dependencies: none
     loc:          examples/parse_validate/src/main.con:180
 
-Totals: 10 obligations — 2 proved, 0 stale, 4 missing, 3 blocked, 1 ineligible, 0 trusted
+Totals: 10 obligations — 2 proved, 0 stale, 5 missing, 2 blocked, 1 ineligible, 0 trusted
 

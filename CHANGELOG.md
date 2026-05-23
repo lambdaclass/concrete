@@ -10,6 +10,67 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 4: ProofCore extracts array index (read)
+
+Third Phase 4 extension forced by parse_validate's `parse_header`,
+which was the only remaining blocker for the actual Result-returning
+function (not the scalar-parameter scaffold from earlier). Closes
+the array-index subgoal in Phase 4 item 2.
+
+What changed
+------------
+- `PVal` gains `array_ (elems : List PVal)` — array values as
+  ordered element lists. Used as the result of evaluating an array
+  expression and as the input shape for parameters typed `[T; N]`.
+- `PExpr` gains `arrayIndex (arr idx : PExpr)` — read at a
+  computed index. eval looks up by `Nat`-coerced index, returns
+  `none` for negative or out-of-bounds. Bounds-violation in proofs
+  is exactly the gap a proof would have to address; the
+  Option-typed return is the honest representation.
+- `lookupIndex` helper added in `eval`'s `where` block alongside
+  `lookupField`.
+- `cExprToPExpr` translates `CExpr.arrayIndex`. ProofCore drops
+  `array index` from its unsupported list.
+
+Scope is **read only**. `arrayIndexAssign` (write at index) stays
+unsupported; that's a separate commit in the fixed_capacity track
+(ring_record is its forcing function). `arrayLit` (literal
+construction) also stays unsupported — proof-writers construct
+array PVals directly via `.array_` for now.
+
+parse_validate breakthrough
+---------------------------
+`parse_header` was previously blocked on `array index`. After this
+commit it extracts cleanly. proof-status totals went from:
+
+  2 proved / 4 unproved / 3 blocked / 1 ineligible
+to:
+  2 proved / 5 unproved / 2 blocked / 1 ineligible
+
+`parse_header` is now in the "no proof" column — extracts cleanly,
+ready for a theorem attachment. That's a separate commit; this
+commit lands only the extractor extension.
+
+`error_code` remains blocked on `match expression` (next gap).
+
+fixed_capacity unchanged
+------------------------
+fixed_capacity's 6 blocked functions use cast / array literal /
+while loop / mutation — none of them are blocked on array index
+alone. Totals stay at 8 unproved / 6 blocked.
+
+Snapshots refreshed (UPDATE_SNAPSHOTS=1). 48/48 byte-identical.
+
+Numbers
+-------
+make test-showcase:     2/0
+make test-snapshots:   48/0
+make test-policy:       4/0
+make test-assumptions:  3/0
+make test-catches:      2/0
+make test-verify-gates:78/0
+make test-wrong-code:  22/0
+
 ### Phase 4: ProofCore extracts enum literals (49760d2)
 
 Second Phase 4 extension forced by `fixed_capacity` (after struct

@@ -553,6 +553,7 @@ private partial def pexprFreeIn (name : String) : Proof.PExpr → Bool
   | .structLit _ fields => fields.any fun (_, fexpr) => pexprFreeIn name fexpr
   | .enumLit _ _ fields => fields.any fun (_, fexpr) => pexprFreeIn name fexpr
   | .fieldAccess obj _ => pexprFreeIn name obj
+  | .arrayIndex arr idx => pexprFreeIn name arr || pexprFreeIn name idx
 
 /-- Ordering key for commutative canonicalization.
     vars sort before lits; among vars, alphabetical; among lits, by value. -/
@@ -623,6 +624,8 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
     .enumLit enumName variant (fields.map fun (fname, fexpr) => (fname, normalizePExpr fexpr))
   | .fieldAccess obj field =>
     .fieldAccess (normalizePExpr obj) field
+  | .arrayIndex arr idx =>
+    .arrayIndex (normalizePExpr arr) (normalizePExpr idx)
 
 -- ============================================================
 -- Core → PExpr extraction
@@ -675,6 +678,10 @@ partial def cExprToPExpr : CExpr → Option Proof.PExpr
   | .fieldAccess obj field _ => do
     let po ← cExprToPExpr obj
     some (.fieldAccess po field)
+  | .arrayIndex arr idx _ => do
+    let pa ← cExprToPExpr arr
+    let pi ← cExprToPExpr idx
+    some (.arrayIndex pa pi)
   | _ => none
 
 /-- Extract a statement list to a pure PExpr, threading a
@@ -750,12 +757,13 @@ private partial def identifyUnsupportedExpr : CExpr → List String
   | .enumLit _ _ _ fields _ =>
     fields.foldl (fun acc (_, fexpr) => acc ++ identifyUnsupportedExpr fexpr) []
   | .fieldAccess obj _ _ => identifyUnsupportedExpr obj
+  | .arrayIndex arr idx _ =>
+    identifyUnsupportedExpr arr ++ identifyUnsupportedExpr idx
   | .match_ .. => ["match expression"]
   | .borrow .. => ["borrow"]
   | .borrowMut .. => ["mutable borrow"]
   | .deref .. => ["deref"]
   | .arrayLit .. => ["array literal"]
-  | .arrayIndex .. => ["array index"]
   | .cast .. => ["cast"]
   | .fnRef .. => ["function reference"]
   | .try_ .. => ["try expression"]

@@ -73,16 +73,17 @@
  107 |     fn validate_header_fields(
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
--- blocked ------------------------------------------------ examples/parse_validate/src/main.con:125
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:125
 
-  `parse_validate.parse_header` is eligible but uses unsupported constructs — extraction failed.
+  `parse_validate.parse_header` passes the predictable profile but has no registered proof.
 
  125 |     fn parse_header(data: [i32; 8], len: i32) -> Result<Header, ParseError> {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: array index
+  current fingerprint:
+    [(if (binop Concrete.BinOp.neq (call validate_total_len (var len) (int 5)) (int 0)) [(ret (enum Result::Err error=(enum ParseError::TooShort )))]) (if (binop Concrete.BinOp.neq (call validate_version (index (var data) (int 0))) (int 0)) [(ret (enum Result::Err error=(enum ParseError::BadVersion )))]) (if (binop Concrete.BinOp.neq (call validate_msg_type (index (var data) (int 1))) (int 0)) [(ret (enum Result::Err error=(enum ParseError::BadType )))]) (if (binop Concrete.BinOp.neq (call validate_payload_len (index (var data) (int 2)) (int 240)) (int 0)) [(ret (enum Result::Err error=(enum ParseError::PayloadTooBig )))]) (if (binop Concrete.BinOp.neq (call validate_total_len (var len) (binop Concrete.BinOp.add (int 4) (index (var data) (int 2)))) (int 0)) [(ret (enum Result::Err error=(enum ParseError::Truncated )))]) (let computed (call compute_checksum (var data) (int 4))) (if (binop Concrete.BinOp.neq (call validate_checksum (index (var data) (int 4)) (var computed)) (int 0)) [(ret (enum Result::Err error=(enum ParseError::BadChecksum )))]) (ret (enum Result::Ok value=(struct Header version=(index (var data) (int 0)) msg_type=(index (var data) (int 1)) payload_len=(index (var data) (int 2)) checksum=(index (var data) (int 4)))))]
 
-  hint: Remove array index to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
 -- blocked ------------------------------------------------ examples/parse_validate/src/main.con:167
 
@@ -106,5 +107,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 10 functions — 2 proved, 0 stale, 4 unproved, 3 blocked, 1 ineligible, 0 trusted
+Totals: 10 functions — 2 proved, 0 stale, 5 unproved, 2 blocked, 1 ineligible, 0 trusted
 

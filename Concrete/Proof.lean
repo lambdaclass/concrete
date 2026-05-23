@@ -47,6 +47,7 @@ inductive PVal where
   | bool (b : Bool)
   | struct_ (name : String) (fields : List (String × PVal))
   | enum_ (enumName variant : String) (fields : List (String × PVal))
+  | array_ (elems : List PVal)
   deriving Repr, Inhabited, BEq
 
 -- Note on DecidableEq:
@@ -73,6 +74,7 @@ inductive PExpr where
   | structLit (name : String) (fields : List (String × PExpr))
   | fieldAccess (obj : PExpr) (field : String)
   | enumLit (enumName variant : String) (fields : List (String × PExpr))
+  | arrayIndex (arr idx : PExpr)
   deriving Repr, BEq
 
 /-- A function definition in the proof fragment. -/
@@ -162,6 +164,11 @@ def eval (fns : FnTable) (env : Env) : Nat → PExpr → Option PVal
     match evalFields fns env fuel fields with
     | none => none
     | some fieldVals => some (.enum_ enumName variant fieldVals)
+  | fuel + 1, .arrayIndex arr idx =>
+    match eval fns env (fuel + 1) arr, eval fns env (fuel + 1) idx with
+    | some (.array_ elems), some (.int i) =>
+      if i < 0 then none else lookupIndex elems i.toNat
+    | _, _ => none
 where
   /-- Evaluate a list of argument expressions. -/
   evalArgs (fns : FnTable) (env : Env) (fuel : Nat) : List PExpr → Option (List PVal)
@@ -189,6 +196,11 @@ where
   lookupField : List (String × PVal) → String → Option PVal
     | [], _ => none
     | (n, v) :: rest, target => if n == target then some v else lookupField rest target
+  /-- Find an element in an array's value list by index. -/
+  lookupIndex : List PVal → Nat → Option PVal
+    | [], _ => none
+    | v :: _, 0 => some v
+    | _ :: rest, n + 1 => lookupIndex rest n
 
 -- ============================================================
 -- Embedded Concrete programs
