@@ -10,6 +10,65 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### parse_header gains four sibling failure-path theorems
+
+Mechanical follow-up to `parse_header_too_short` (4a36107). Each
+theorem proves that `parse_header` returns the right `Err`
+variant when one specific structural precondition fails. The
+five together cover every failure path that bails before
+`compute_checksum` (the remaining checksum + success-direction
+theorems wait on while-loop extraction or a hand-modeled
+checksum convention).
+
+New theorems
+------------
+- `parse_header_bad_version`: `len ≥ 5 ∧ data[0] ≠ 1` → `Err(BadVersion)`
+- `parse_header_bad_type`: `len ≥ 5 ∧ data[0] = 1 ∧ (data[1] < 1 ∨ data[1] > 4)` → `Err(BadType)`
+- `parse_header_payload_too_big`: prior checks pass, `data[2] < 0 ∨ data[2] > 240` → `Err(PayloadTooBig)`
+- `parse_header_truncated`: prior checks pass, `len < 4 + data[2]` → `Err(Truncated)`
+
+Each theorem binds `data` to a concrete `PVal.array_` constructed
+from `[.int v, .int t, .int plen, ...] ++ rest` with enough
+elements to make the relevant `validate_*` calls compute. The
+`rest` parameter is universally quantified — the theorems
+don't care what the rest of the array carries; the validator
+under test only reads a fixed prefix.
+
+The proofs are uniformly: bind `decide`-form hypotheses for the
+boundary conditions, then a single `simp` with the relevant
+`validate_*Fn` + `validate_*Expr` unfoldings. The bad_type and
+payload_too_big proofs need an `rcases` to split on the
+disjunction (low vs high boundary violation), but the structure
+is otherwise identical.
+
+What's left
+-----------
+- `parse_header_bad_checksum`: needs a Lean-side model of
+  `compute_checksum` (while loop + XOR fold). Future Phase 4
+  while-loop work or a stub convention.
+- `parse_header_success` (well-formed input → `Ok(Header{...})`):
+  same dependency. Both come together.
+- `error_code` proof: needs Phase 4 match expression extraction.
+
+`--report proof-status` for parse_validate:
+
+  before: 3 proved / 4 unproved / 2 blocked
+  after:  3 proved / 4 unproved / 2 blocked (unchanged — these
+          new theorems all attach to parse_header, which is
+          already in the "proved" column from the prior commit)
+
+The Lean kernel now checks 5 theorems on parse_header. The
+proof-registry still references only one (`parse_header_too_short`)
+since registering multiple theorems per function isn't a
+supported pattern — the others are reachable from
+`Concrete.Proof.*` for review.
+
+Numbers
+-------
+make test-showcase:     2/0
+make test-snapshots:   48/0
+make test-verify-gates:78/0
+
 ### parse_header carries its first Lean theorem
 
 The actual Result-returning `parse_header` (not the scalar
