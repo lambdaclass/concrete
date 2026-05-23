@@ -10,6 +10,49 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### crypto_verify graduates to Phase 7 (second flagship, honestly-framed toy)
+
+The second flagship enters the curated showcase. `crypto_verify` is
+the **toy authenticated-tag** companion to parse_validate — a
+demonstrator of the proof-composition pattern for authentication
+code, NOT a real cryptographic primitive. The manifest entry's
+`limits.algorithm` field states this directly. The graduation is
+of the proof scaffolding, not the algorithm.
+
+- **2 graduated flagships** now in `tests/showcase/manifest.toml`:
+  parse_validate (parsing/validation, 2026-05-22) and crypto_verify
+  (toy MAC, 2026-05-23). `make test-showcase` enforces both.
+- **All 10 bars met on crypto_verify** with the same drift-enforced
+  CI gates parse_validate established: 4 Lean theorems
+  (compute_tag, verify_tag, check_nonce, verify_message
+  composition), assumption file, 8-field policy, oracle (600
+  differential cases across 3 seeds), negative pair
+  (alloc-in-pure-core), snapshot baseline, honest README.
+- **Toy-not-real framing is the central honesty discipline.** The
+  Phase 7 entry registers the scaffolding so a future real
+  HMAC-SHA256 / Ed25519 / constant-time flagship can be a sibling
+  entry, not a replacement. Both the manifest and the AUDIT name
+  what is and is not claimed.
+- **Real-crypto flagship deferred to Phase 4 ProofCore
+  extensions.** ROADMAP Phase 7 item 7 now states the gate
+  explicitly: a real cryptography flagship lands only after Phase
+  4 extracts (a) array indexing, (b) bounded while loops, (c)
+  struct construction. Phase 4 item 2 enumerates the named
+  subgoals.
+- **Reusable infrastructure paid back at scale.** crypto_verify
+  graduated in ~one session of work because the patterns
+  parse_validate established — assumption file schema, policy
+  schema, snapshot baseline, oracle differential, negative pair,
+  release bundle, showcase manifest — all worked unchanged on the
+  second flagship. The cost of the second graduation is
+  qualitatively less than the first.
+- **Pull-through pilot slot now open.** Per Active Dependency
+  Order rule 2, the next candidate can start. Suggested:
+  `fixed_capacity` — its bounded loops + array indexing + struct
+  construction surface is precisely the Phase 4 forcing function
+  required to enable a real-crypto flagship later. See ROADMAP
+  Phase 7 item 6 + Phase 4 item 2.
+
 ### parse_validate graduates to Phase 7 — bars #2, #5, #7, #9, #10 closed
 
 The pull-through pilot is done. parse_validate is now the **first

@@ -86,3 +86,90 @@ a pure-int validator under wrapping i32 arithmetic on a hosted-libc
 target. Broader systems audiences need the flagship corpus to
 grow.
 """
+
+[[flagship]]
+example     = "crypto_verify"
+path        = "examples/crypto_verify"
+graduated   = "2026-05-23"
+audit       = "examples/crypto_verify/AUDIT.md"
+readme      = "examples/crypto_verify/README.md"
+thesis_role = """
+Toy authenticated-tag model demonstrating PROOF SCAFFOLDING for
+authentication, not real cryptographic security. The tag function
+key*message+nonce is invertible and offers no secrecy. The
+graduation is of the proof-composition pattern, the
+allocation/capability discipline, and the honest-assumption story
+— NOT of the underlying algorithm. A future flagship using a real
+HMAC / Ed25519 / constant-time primitive would be a sibling entry,
+not a replacement; this entry exists so the proof scaffolding has
+a registered home today.
+"""
+
+[flagship.bars]
+proved_property        = true   # bar #1 — 4 functions proved
+composition_property   = true   # bar #2 — verify_message_composed_correct
+assumption_file        = true   # bar #3
+policy_file            = true   # bar #4 — 8 enforced fields
+oracle_beyond_handwritten = true   # bar #5 — 600 differential cases
+negative_pair          = true   # bar #6 — alloc-in-pure-core
+release_bundle         = true   # bar #7
+honest_readme          = true   # bar #8
+snapshot_baseline      = true   # bar #9 — 16 reports
+on_showcase_manifest   = true   # bar #10 — this entry
+
+[flagship.evidence]
+proof_registry = "examples/crypto_verify/src/proof-registry.json"
+proofs         = ["Concrete.Proof.compute_tag_correct",
+                  "Concrete.Proof.verify_tag_correct",
+                  "Concrete.Proof.check_nonce_correct",
+                  "Concrete.Proof.verify_message_composed_correct"]
+assumptions    = "examples/crypto_verify/assumptions.toml"
+policy         = "examples/crypto_verify/Concrete.toml"
+catches        = "examples/crypto_verify/catches/"
+catches_doc    = "examples/crypto_verify/CATCHES.md"
+snapshots      = "examples/crypto_verify/snapshot/"
+oracle         = "examples/crypto_verify/oracle/"
+
+[flagship.gates]
+policy         = "make test-policy"
+assumptions    = "make test-assumptions"
+catches        = "make test-catches"
+snapshots      = "make test-snapshots"
+oracle         = "make test-cv-oracle"
+verify_gates   = "make test-verify-gates"
+release_bundle = "make test-release-bundle"
+
+[flagship.limits]
+algorithm = """
+NOT real cryptography. compute_tag(k, m, n) = k * m + n is
+invertible; the "key" offers no secrecy. The source docstring,
+README, AUDIT, and CATCHES all state this directly. This is a
+demonstrator of proof STRUCTURE, not of cryptographic security.
+
+A real flagship using HMAC-SHA256, Ed25519 verification, or
+constant-time tag comparison would be a separate entry. Such a
+flagship is gated on Phase 4 ProofCore extensions (array indexing,
+bounded while loops, struct construction) — without those, the
+algorithm's inner loop cannot extract into ProofCore, and the
+proof story would be no better than the toy.
+"""
+proofs = """
+Four attached theorems all surface as `proved`. The composition
+theorem proves the success direction (both validators succeed →
+returns 1); the failure direction is per-failure follow-up
+theorems, same shape as parse_validate's composition.
+"""
+oracle = """
+Python reference implementation, not Lean. 600 differential cases
+across three seeds agree with the Concrete binary. A Lean
+equivalence proof would be stronger but waits on the same Phase 4
+extensions named above.
+"""
+audience = """
+Reviewers wanting to see the proof scaffolding pattern that a real
+cryptographic primitive flagship would use. The audience for
+crypto_verify's evidence today is engineers evaluating Concrete's
+PROOF WORKFLOW, not engineers needing a verified MAC for
+production. The Phase 7 catalog graduates the scaffolding; the
+algorithm catalog waits for Phase 4.
+"""

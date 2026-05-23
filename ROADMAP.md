@@ -195,7 +195,7 @@ Expected outcome: a bounded queue or parser helper can carry claims like "no all
 Expected outcome: helper composition like `fn validate_header(...) -> Bool { ... }` carries a Lean-backed claim that successful return implies multiple structural invariants.
 
 1. Refine and stabilize the explicit `Core → ProofCore` phase after a flagship has forced it into the open.
-2. Extend ProofCore to more constructs: structs/fields, pattern matching, arrays/slices, borrows/dereferences, casts, cleanup/defer/drop.
+2. Extend ProofCore to more constructs: structs/fields, pattern matching, arrays/slices, borrows/dereferences, casts, cleanup/defer/drop. Concrete subgoals named by current flagship candidates: (a) **array indexing** — blocks `parse_header` on `data[i]`, blocks SHA-256 on block-byte access; (b) **bounded while loops** — blocks `compute_checksum` and any real cryptographic round loop; (c) **struct value construction** — blocks `Header { ... }` and any hash-state struct; (d) **enum value construction** — blocks `Result::Ok { value: ... }`; (e) **pattern matching** — blocks `error_code` and any tagged-union dispatch. Items (a)–(c) together gate the next Phase 7 real-cryptography flagship slot (HMAC / Ed25519 / constant-time); see Phase 7 item 7.
 3. Broaden proof obligation generation beyond the first pipeline slice: loop, memory, contract obligations become mechanically inspectable.
 4. Broaden the pure Core proof fragment after artifacts, diagnostics, ProofCore phase, normalization, and obligation generation are usable.
 5. Deepen the memory / reference proof model: ownership, aliasing, mutation, pointer/reference, cleanup, layout reasoning where examples require.
@@ -257,7 +257,10 @@ Expected outcome: a proof-bearing function ships with benchmark numbers, allocat
 
 This phase is the **curated public showcase set**, opened only after Phases 1-5 are stable enough to back the claims (per Active Dependency Order rule 5). Examples do not start here; they enter through the Phase 1 inventory / candidate pool, run one at a time as pull-through candidates, and graduate here only after their gaps in 1-5 are closed and their evidence holds up to outside review.
 
-Status: live. `tests/showcase/manifest.toml` is the curated registry; `make test-showcase` is the drift-enforced gate. First graduated entry is `parse_validate` (2026-05-22); see `examples/parse_validate/AUDIT.md` for the 10-bar contract every flagship must meet.
+Status: live. `tests/showcase/manifest.toml` is the curated registry; `make test-showcase` is the drift-enforced gate. Graduated entries:
+
+1. `parse_validate` (2026-05-22) — packet/parser flagship. First pull-through pilot. See `examples/parse_validate/AUDIT.md` for the 10-bar contract every flagship must meet.
+2. `crypto_verify` (2026-05-23) — toy authenticated-tag model. Graduates the proof scaffolding for authentication, NOT real cryptographic security. The tag function is invertible and the "key" offers no secrecy; the manifest's `limits.algorithm` field states this directly. A real HMAC / Ed25519 / constant-time flagship would be a sibling entry, gated on the Phase 4 ProofCore extensions named below.
 
 Expected outcome: a flagship packet/header validator has explicit authority, one Lean-backed property, report/snapshot/diff coverage, and a release evidence bundle that tells an outsider exactly what is proved and what is assumed.
 
@@ -266,8 +269,8 @@ Expected outcome: a flagship packet/header validator has explicit authority, one
 3. Promote an FFI candidate with a `trusted` wrapper and `with(Unsafe)` isolated at the boundary (libc, checksum/hash, OS call facade, C-ABI library).
 4. Promote an ownership-heavy data-structure candidate with linear ownership and deterministic cleanup (ordered map, intrusive list, tree, arena-backed graph).
 5. Promote a privilege-separated tool candidate where capability signatures prove the trusted core cannot touch files/network/processes.
-6. Promote a fixed-capacity / no-alloc candidate proving the predictable subset is practical (ring buffer, bounded queue, bounded-state controller, fixed parser state machine).
-7. Promote a cryptography candidate only after the proof/artifact boundary is stronger (constant-time equality, HMAC verification, Ed25519 verification subset).
+6. Promote a fixed-capacity / no-alloc candidate proving the predictable subset is practical (ring buffer, bounded queue, bounded-state controller, fixed parser state machine). Suggested next pull-through candidate — its bounded loops + array indexing + struct construction surface forces the Phase 4 ProofCore extensions named in (7) below.
+7. Promote a **real cryptography** candidate (HMAC-SHA256 verification, Ed25519 verification subset, or constant-time tag comparison) ONLY after Phase 4 ProofCore extends to (a) array indexing, (b) bounded while loops, (c) struct construction. Without those, the algorithm's inner loop cannot extract and the proof story would be no better than `crypto_verify`'s toy. The toy graduated 2026-05-23 specifically to register the proof scaffolding; this entry registers the real-algorithm slot the toy does NOT fill.
 8. Grow the public showcase corpus linearly from graduated candidates shaped as small / medium / big programs (one property per small, composition per medium, scale per big); must include borrow/aliasing, cleanup/leak-boundary, ownership-heavy, bounded/no-alloc.
 9. Keep the curated showcase set balanced: each graduated example proves a different thesis claim with honest framing, report/snapshot/diff coverage, "what the compiler catches," and an oracle when possible.
 10. Require capability-shaped APIs in at least one flagship so authority is visible in source/API, not only reports.

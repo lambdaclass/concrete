@@ -59,6 +59,15 @@ walk.
 | Example | Graduated | Thesis role |
 |---|---|---|
 | parse_validate | 2026-05-22 | First pull-through pilot to graduate. Capability-pure validation core with one Lean composition theorem and a drift-enforced negative pair. |
+| crypto_verify | 2026-05-23 | Toy authenticated-tag model. Graduates the **proof scaffolding** for authentication, **not** real cryptographic security. The tag function is invertible; the "key" offers no secrecy. A real HMAC / Ed25519 / constant-time flagship would be a sibling entry, gated on Phase 4 ProofCore extensions. |
+
+## Honest framing per entry
+
+Every entry's `limits` block in `manifest.toml` states what is
+NOT claimed. `crypto_verify` is the canonical example of this
+discipline: the algorithm is a toy, the graduation is of the
+proof structure, and the limits field says so directly. Future
+entries follow the same rule — sell only what is true.
 
 ## See also
 

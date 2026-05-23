@@ -1,8 +1,9 @@
 # crypto_verify — Pilot Audit
 
-Status: **active pull-through candidate** per ROADMAP Active
-Dependency Order rule 2 (parse_validate graduated 2026-05-22,
-slot opened for crypto_verify on 2026-05-22).
+Status: **graduated Phase 7 flagship** as of 2026-05-23. Listed
+in `tests/showcase/manifest.toml` with explicit toy-crypto framing
+(see the `limits.algorithm` field there). The pull-through pilot
+slot opens for the next candidate.
 
 ## Why this example
 
@@ -123,24 +124,25 @@ All four surface as `proved` in `--report proof-status`.
 | 7 | Release evidence bundle capturable | ✅ `capture_release_bundle.sh examples/crypto_verify` captures cleanly |
 | 8 | Honest README | ✅ `README.md` |
 | 9 | Snapshot/diff baseline | ✅ `examples/crypto_verify/snapshot/` 16 reports baselined; `make test-snapshots` 32/0 across both flagships |
-| 10 | Listed in `tests/showcase/manifest.toml` | ❌ absent |
+| 10 | Listed in `tests/showcase/manifest.toml` | ✅ entry added 2026-05-23 with explicit toy-crypto framing |
 
-**Today: 9 of 10 bars met.** The remaining decision is whether to
-graduate this as a toy crypto-adjacent proof-structure showcase, or
-park it and reserve Phase 7 crypto status for a later real
-algorithm/wrapper.
+**Today: 10 of 10 bars met. Graduated 2026-05-23.**
 
-## 8. Next step
+## 8. Honest framing of the graduation
 
-Make the graduation call:
+This entry graduates the **proof scaffolding**, not the algorithm.
+The Phase 7 manifest entry's `limits.algorithm` field states this
+directly: the tag function is invertible, the "key" offers no
+secrecy, and this is a demonstrator of proof STRUCTURE — not of
+cryptographic security.
 
-- **Graduate now** as an explicitly toy crypto-adjacent showcase:
-  add `crypto_verify` to `tests/showcase/manifest.toml`, with claims
-  scoped to proof composition, allocation/capability discipline, and
-  honest assumptions — not real cryptographic security.
-- **Park it** as an active candidate: keep the 9-bar evidence, but
-  record that Phase 7 crypto graduation waits for a real HMAC /
-  Ed25519 / constant-time wrapper.
+A real flagship using HMAC-SHA256, Ed25519 verification, or
+constant-time tag comparison would be a **sibling entry**, not a
+replacement. Such a flagship is gated on Phase 4 ProofCore
+extensions (array indexing, bounded while loops, struct
+construction). The pull-through candidate slot now opens for the
+next candidate, which should be chosen to force those Phase 4
+gaps.
 
 ## See also
 
