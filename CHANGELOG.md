@@ -10,6 +10,26 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 4: ProofCore extracts enum literals (49760d2)
+
+Second Phase 4 extension forced by `fixed_capacity` (after struct
+literal + field access in e2ab5ee). Closes one of the five Phase 4
+item 2 named subgoals.
+
+Scope is **enum value construction only** — pattern matching is a
+deliberate separate commit. Same shape as struct literal: `PVal`
+gains `enum_`, `PExpr` gains `enumLit`, `eval` mirrors struct
+construction. `fieldAccess` now also reads from `enum_` values
+so `result.value` after a match arm extracts.
+
+parse_validate's `parse_header` blocker list went from 3
+constructs (enum literal, if without else, array index) to 1
+(array index — the next gap). `error_code` still blocked on
+match.
+
+Match expressions and array indexing are the next two extension
+commits.
+
 ### Phase 4: ProofCore extracts struct literals + field access
 
 First real Phase 4 ProofCore extractor extension forced by the
