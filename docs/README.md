@@ -18,6 +18,7 @@ Use these files as the primary reference once a design has moved out of explorat
 - [PREDICTABLE_FAILURE_DISCIPLINE.md](PREDICTABLE_FAILURE_DISCIPLINE.md) — allowed and excluded failure forms for predictable-profile code
 - [EXECUTION_MODEL.md](EXECUTION_MODEL.md) — runtime boundary, allocation model, FFI/runtime contract, and execution profiles
 - [ARCHITECTURE.md](ARCHITECTURE.md) — compiler pipeline, artifact flow, pass boundaries, and architecture phase reference
+- [PROOF_AUDIT_PIPELINE.md](PROOF_AUDIT_PIPELINE.md) — target proof/audit pipeline: CheckedProgram, Core, normalized Core, ProofCore, obligations, shared facts, and pass contracts
 - [PASSES.md](PASSES.md) — pass-by-pass contracts, ownership boundaries, and what each phase may assume
 - [ABI.md](ABI.md) — layout, enum representation, FFI-safety, and ABI boundary rules
 - [DIAGNOSTICS.md](DIAGNOSTICS.md) — diagnostics model, current status, and staged diagnostics work
