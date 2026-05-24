@@ -1707,6 +1707,7 @@ private partial def renderPExpr : Proof.PExpr → String
         | .varPat name => name
       s!"{patStr} => {renderPExpr body}"
     s!"match {renderPExpr scrutinee} \{ {"; ".intercalate armStrs} }"
+  | .cast inner => s!"({renderPExpr inner} as _)"
 
 /-- Extraction entry for one function. -/
 structure ExtractionEntry where
@@ -1825,6 +1826,7 @@ private partial def renderPExprAsLean : Proof.PExpr → String
         | .varPat name => s!".varPat \"{name}\""
       s!"({patLean}, {renderPExprAsLean body})"
     s!".match_\n      ({renderPExprAsLean scrutinee})\n      [{", ".intercalate armsLean}]"
+  | .cast inner => s!".cast ({renderPExprAsLean inner})"
 
 /-- Convert a function's bare name to a Lean-safe identifier. -/
 private def leanIdent (name : String) : String :=

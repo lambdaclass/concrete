@@ -10,6 +10,43 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 4 ProofCore extracts width-changing casts
+
+`PExpr.cast inner` is a new identity-on-value shape: evaluation
+unwraps the cast and returns the inner expression's value. This
+is sound for widening (`u8 as i32`, `i32 as i64`) because
+`PVal.int` is mathematical `Int` with no width. It is NOT sound
+for narrowing — a proof that assumes `(x : u32) as u8`
+truncates would be wrong here. The eligibility profile is
+expected to keep narrowing casts out of proof-eligible code
+(or to add an explicit narrow_int side-condition that the
+extractor preserves).
+
+Pull-through evidence
+---------------------
+`examples/fixed_capacity/src/main.con` proof-status:
+
+    before: 0 proved / 8 unproved / 6 blocked / 2 ineligible / 4 trusted
+    after:  0 proved / 10 unproved / 4 blocked / 2 ineligible / 4 trusted
+
+Two functions newly extract: `read_u8` (single widening cast)
+and `read_u16_be` (two widening casts + arithmetic).
+Remaining fixed_capacity blockers: `ring_new` (array literal),
+`ring_contains` (while loop), `ring_push` (array index
+assignment + mod operator), `compute_tag` (while loop).
+
+`identifyUnsupportedExpr`'s `.cast` arm no longer flags cast
+itself; it recurses into the cast operand so any unsupported
+construct inside still surfaces precisely. `pexprFreeIn`,
+`normalizePExpr`, `renderPExpr`, and `renderPExprAsLean` all
+gained cast cases (transparent on the inner expression).
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0 (2 fixed_capacity snapshots refreshed)
+
 ### Phase 4 ProofCore extracts match expressions
 
 `match` is now a first-class shape in `Concrete.Proof.PExpr`.

@@ -64,7 +64,7 @@
     loc:          examples/fixed_capacity/src/main.con:94
 
   fixed_capacity.read_u8
-    status:       blocked
+    status:       missing
     spec:         (none)
     proof:        (none)
     source:       none
@@ -73,7 +73,7 @@
     loc:          examples/fixed_capacity/src/main.con:103
 
   fixed_capacity.read_u16_be
-    status:       blocked
+    status:       missing
     spec:         (none)
     proof:        (none)
     source:       none
@@ -180,5 +180,5 @@
     dependencies: none
     loc:          examples/fixed_capacity/src/main.con:270
 
-Totals: 20 obligations — 0 proved, 0 stale, 8 missing, 6 blocked, 2 ineligible, 4 trusted
+Totals: 20 obligations — 0 proved, 0 stale, 10 missing, 4 blocked, 2 ineligible, 4 trusted
 

@@ -564,6 +564,7 @@ private partial def pexprFreeIn (name : String) : Proof.PExpr → Bool
         | .varPat binding => binding == name
         | .litPat _ => false
       !shadows && pexprFreeIn name body
+  | .cast inner => pexprFreeIn name inner
 
 /-- Ordering key for commutative canonicalization.
     vars sort before lits; among vars, alphabetical; among lits, by value. -/
@@ -639,6 +640,7 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
   | .match_ scrutinee arms =>
     .match_ (normalizePExpr scrutinee)
       (arms.map fun (pat, body) => (pat, normalizePExpr body))
+  | .cast inner => .cast (normalizePExpr inner)
 
 -- ============================================================
 -- Core → PExpr extraction
@@ -699,6 +701,9 @@ partial def cExprToPExpr : CExpr → Option Proof.PExpr
     let ps ← cExprToPExpr scrutinee
     let parms ← arms.mapM cMatchArmToP
     some (.match_ ps parms)
+  | .cast inner _ => do
+    let pi ← cExprToPExpr inner
+    some (.cast pi)
   | _ => none
 
 /-- Translate one Concrete match arm into a `(pattern, body)` pair.
@@ -813,7 +818,10 @@ private partial def identifyUnsupportedExpr : CExpr → List String
   | .borrowMut .. => ["mutable borrow"]
   | .deref .. => ["deref"]
   | .arrayLit .. => ["array literal"]
-  | .cast .. => ["cast"]
+  -- `.cast` extracts to `PExpr.cast` (identity semantics on
+  -- mathematical `Int`); recurse so any unsupported construct
+  -- inside the cast operand still surfaces.
+  | .cast inner _ => identifyUnsupportedExpr inner
   | .fnRef .. => ["function reference"]
   | .try_ .. => ["try expression"]
   | .allocCall .. => ["alloc call"]

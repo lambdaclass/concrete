@@ -96,6 +96,16 @@ inductive PExpr where
       Bodies are PExprs (the source-level CStmt list is already
       extracted to a single PExpr via cStmtsToPExprK). -/
   | match_ (scrutinee : PExpr) (arms : List (PMatchPat × PExpr))
+  /-- Integer-width cast (e.g. `u8 as i32`, `i32 as i64`).
+      Evaluates the inner expression and returns its value
+      unchanged: `PVal.int` is mathematical `Int`, with no
+      width, so widening casts are identity. Narrowing /
+      wrapping semantics are NOT modeled — a proof that
+      assumes `(x : u32) as i32` truncates would be unsound
+      here. The eligibility profile is responsible for
+      keeping narrowing casts out of proof-eligible code,
+      or for adding a narrow_int side-condition. -/
+  | cast (inner : PExpr)
   deriving Repr, BEq
 
 /-- A function definition in the proof fragment. -/
@@ -194,6 +204,7 @@ def eval (fns : FnTable) (env : Env) : Nat → PExpr → Option PVal
     match eval fns env (fuel + 1) scrutinee with
     | none => none
     | some sv => evalArms fns env fuel sv arms
+  | fuel + 1, .cast inner => eval fns env fuel inner
 where
   /-- Evaluate a list of argument expressions. -/
   evalArgs (fns : FnTable) (env : Env) (fuel : Nat) : List PExpr → Option (List PVal)
