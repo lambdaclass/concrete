@@ -82,7 +82,7 @@
     loc:          examples/fixed_capacity/src/main.con:107
 
   fixed_capacity.ring_new
-    status:       blocked
+    status:       missing
     spec:         (none)
     proof:        (none)
     source:       none
@@ -180,5 +180,5 @@
     dependencies: none
     loc:          examples/fixed_capacity/src/main.con:270
 
-Totals: 20 obligations — 0 proved, 0 stale, 10 missing, 4 blocked, 2 ineligible, 4 trusted
+Totals: 20 obligations — 0 proved, 0 stale, 11 missing, 3 blocked, 2 ineligible, 4 trusted
 

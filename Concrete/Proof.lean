@@ -106,6 +106,12 @@ inductive PExpr where
       keeping narrowing casts out of proof-eligible code,
       or for adding a narrow_int side-condition. -/
   | cast (inner : PExpr)
+  /-- `[e1, e2, ..., eN]` — fixed-shape array literal.
+      Evaluates each element left-to-right; the result is a
+      `PVal.array_` carrying the evaluated values in the same
+      order. Element type is not modeled (PVal is dynamically
+      shaped); Check ensures all elements share a type. -/
+  | arrayLit (elems : List PExpr)
   deriving Repr, BEq
 
 /-- A function definition in the proof fragment. -/
@@ -205,6 +211,10 @@ def eval (fns : FnTable) (env : Env) : Nat → PExpr → Option PVal
     | none => none
     | some sv => evalArms fns env fuel sv arms
   | fuel + 1, .cast inner => eval fns env fuel inner
+  | fuel + 1, .arrayLit elems =>
+    match evalElems fns env fuel elems with
+    | none => none
+    | some vs => some (.array_ vs)
 where
   /-- Evaluate a list of argument expressions. -/
   evalArgs (fns : FnTable) (env : Env) (fuel : Nat) : List PExpr → Option (List PVal)
@@ -259,6 +269,18 @@ where
     | .varPat binding, sv =>
       if binding == "_" then some env else some (env.bind binding sv)
     | _, _ => none
+  /-- Evaluate a list of element expressions, returning a list of
+      values in the same order, or `none` if any element fails. -/
+  evalElems (fns : FnTable) (env : Env) (fuel : Nat) :
+      List PExpr → Option (List PVal)
+    | [] => some []
+    | e :: rest =>
+      match eval fns env fuel e with
+      | none => none
+      | some v =>
+        match evalElems fns env fuel rest with
+        | none => none
+        | some vs => some (v :: vs)
   /-- Bind a list of arm-binding names to their corresponding
       field values in a matched enum variant.  Bindings whose
       names are not present in the variant's fields skip silently

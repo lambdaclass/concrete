@@ -10,6 +10,35 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 4 ProofCore extracts array literals
+
+`PExpr.arrayLit elems` is a new shape: evaluates each element
+left-to-right, returns a `PVal.array_` carrying the values in
+the same order. Element type is not modeled (PVal is dynamically
+shaped); Check ensures elements share a type at source level.
+
+Pull-through evidence
+---------------------
+`examples/fixed_capacity/src/main.con` proof-status:
+
+    before: 0 proved / 10 unproved / 4 blocked / 2 ineligible / 4 trusted
+    after:  0 proved / 11 unproved / 3 blocked / 2 ineligible / 4 trusted
+
+`ring_new` (zero-initialized 16-element RingBuf) now extracts.
+Remaining fixed_capacity blockers: `ring_contains` (while loop),
+`ring_push` (array index assignment + mod), `compute_tag`
+(while loop).
+
+`identifyUnsupportedExpr`'s `.arrayLit` arm now recurses into
+elements so any unsupported construct inside still surfaces.
+`pexprFreeIn`, `normalizePExpr`, `renderPExpr`, and
+`renderPExprAsLean` all gained array-literal cases.
+
+Numbers
+-------
+make test:             1572/0
+make test-snapshots:   48/0 (2 fixed_capacity snapshots refreshed)
+
 ### Phase 4 ProofCore extracts width-changing casts
 
 `PExpr.cast inner` is a new identity-on-value shape: evaluation
