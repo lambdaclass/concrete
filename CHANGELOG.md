@@ -10,6 +10,88 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 4 ProofCore extracts match expressions
+
+`match` is now a first-class shape in `Concrete.Proof.PExpr`.
+Source-level match-arm constructs (`enum::Variant`, literal,
+variable/wildcard patterns) extract into a `(pattern, body)` arm
+list and evaluate under a small operational rule.
+
+This is the largest remaining Phase 4 subgoal: every parse_validate
+function except `compute_checksum` (still blocked on while-loop
+extraction) now extracts into ProofCore. The pull-through example
+is `parse_validate.error_code`, which dispatches a `ParseError`
+variant to a numeric code — previously surfaced as
+`blocked: match expression`, now surfaces as `no proof` with a
+real fingerprint over the new `match` shape.
+
+What landed
+-----------
+- `PMatchPat` (non-recursive): `enumPat`, `litPat`, `varPat`.
+- `PExpr.match_ scrutinee arms` where `arms : List (PMatchPat × PExpr)`.
+- `eval` rule: evaluate scrutinee, walk arms in order, first
+  pattern that matches wins. enumPat binds variant fields by name;
+  litPat checks equality; varPat binds (or wildcards on `"_"`).
+- `cExprToPExpr` for `CExpr.match_`, dispatching per-arm via
+  `cMatchArmToP`. enumArm bindings drop their declared types
+  (PVal carries dynamic shape); litArm narrows to int/bool values
+  via the existing `cExprToPExpr`.
+- `identifyUnsupportedExpr` no longer flags `match`; it now
+  recurses into scrutinee + arm bodies so any nested unsupported
+  construct is reported precisely.
+- `pexprFreeIn` / `normalizePExpr` / `renderPExpr` / `renderPExprAsLean`
+  all gained match cases. Pattern bindings shadow free occurrences
+  in arm bodies (`pexprFreeIn` filters them out).
+
+Pull-through evidence
+---------------------
+`examples/parse_validate/src/main.con` proof-status:
+
+    before: 3 proved / 4 unproved / 2 blocked / 1 ineligible
+    after:  3 proved / 5 unproved / 1 blocked / 1 ineligible
+
+`error_code` moved from `blocked` to `no proof` with this
+fingerprint:
+
+    [(match (var e)
+        (arm ParseError::TooShort [] [(ret (int 1))])
+        (arm ParseError::BadVersion [] [(ret (int 2))])
+        ...)]
+
+The only remaining blocker in parse_validate is `compute_checksum`
+(while loop). Every other function now extracts.
+
+Side effects of recursing into match arms
+-----------------------------------------
+Three stale tests in `scripts/tests/run_tests.sh` and one stale
+docstring in `tests/programs/adversarial_proofcore_extraction.con`
+were updated to assert the new (correct) behavior:
+
+- `proofcore-extraction: match expression should extract` (was
+  `should block extraction`).
+- `proofcore-extraction: summary totals` now reads
+  `3 extracted, 1 eligible but not extractable, 2 excluded`.
+- `extraction: color_value extracts` (was `should fail on match
+  expression`).
+- Also caught and updated stale crypto_verify count tests from
+  earlier Phase 4 extensions: `verify_message` extracts +
+  proves, so `total_functions=5`, `proved=4`, `extracted=4`,
+  `facts=36`, and the named-specs check now includes
+  `Concrete.Proof.verifyMessageExpr`. The
+  `verify_tag not weakened` test was tightened from substring
+  grep to a JSON `function` field check (the rendered
+  fingerprint of `main`'s body mentions `(call verify_tag ...)`
+  and would have false-positived).
+- Also caught a stale `uses_struct` and `make_point` test from
+  the earlier struct-literal commit (e2ab5ee). Updated to assert
+  extraction.
+
+Numbers
+-------
+make test:             1572/0 (12 stale tests updated)
+make test-showcase:    2/0
+make test-snapshots:   48/0
+
 ### parse_header gains four sibling failure-path theorems
 
 Mechanical follow-up to `parse_header_too_short` (4a36107). Each

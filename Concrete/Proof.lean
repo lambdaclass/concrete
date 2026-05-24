@@ -50,6 +50,22 @@ inductive PVal where
   | array_ (elems : List PVal)
   deriving Repr, Inhabited, BEq
 
+/-- Pattern shapes inside `match` arms.
+    Non-recursive (no PExpr inside) so PExpr can reference
+    `List (PMatchPat × PExpr)` without a mutual inductive. -/
+inductive PMatchPat where
+  /-- `EnumName::Variant { f1, f2, ... }` — matches only when the
+      scrutinee is `enum_ enumName variant fields`. The `bindings`
+      list names the variables to introduce; each is bound to the
+      corresponding field's value (looked up by name). -/
+  | enumPat (enumName variant : String) (bindings : List String)
+  /-- `<lit>` — matches when the scrutinee equals the literal. -/
+  | litPat (value : PVal)
+  /-- `name` (or `_`) — matches anything; binds the scrutinee to
+      `binding`. `"_"` means wildcard (no binding). -/
+  | varPat (binding : String)
+  deriving Repr, BEq
+
 -- Note on DecidableEq:
 -- Lean's auto-deriving for DecidableEq does not handle the
 -- `List (String × PVal)` recursion through containers. Concrete's
@@ -75,6 +91,11 @@ inductive PExpr where
   | fieldAccess (obj : PExpr) (field : String)
   | enumLit (enumName variant : String) (fields : List (String × PExpr))
   | arrayIndex (arr idx : PExpr)
+  /-- `match scrutinee { pat1 => body1, pat2 => body2, ... }`.
+      Arms are tried in order; the first matching pattern wins.
+      Bodies are PExprs (the source-level CStmt list is already
+      extracted to a single PExpr via cStmtsToPExprK). -/
+  | match_ (scrutinee : PExpr) (arms : List (PMatchPat × PExpr))
   deriving Repr, BEq
 
 /-- A function definition in the proof fragment. -/
@@ -169,6 +190,10 @@ def eval (fns : FnTable) (env : Env) : Nat → PExpr → Option PVal
     | some (.array_ elems), some (.int i) =>
       if i < 0 then none else lookupIndex elems i.toNat
     | _, _ => none
+  | fuel + 1, .match_ scrutinee arms =>
+    match eval fns env (fuel + 1) scrutinee with
+    | none => none
+    | some sv => evalArms fns env fuel sv arms
 where
   /-- Evaluate a list of argument expressions. -/
   evalArgs (fns : FnTable) (env : Env) (fuel : Nat) : List PExpr → Option (List PVal)
@@ -201,6 +226,40 @@ where
     | [], _ => none
     | v :: _, 0 => some v
     | _ :: rest, n + 1 => lookupIndex rest n
+  /-- Try each arm in order against the scrutinee value. -/
+  evalArms (fns : FnTable) (env : Env) (fuel : Nat) (sv : PVal) :
+      List (PMatchPat × PExpr) → Option PVal
+    | [] => none
+    | (pat, body) :: rest =>
+      match matchPat env pat sv with
+      | none => evalArms fns env fuel sv rest
+      | some armEnv => eval fns armEnv fuel body
+  /-- Attempt to match a pattern against a value.  Returns an
+      extended environment on success, `none` on failure. -/
+  matchPat (env : Env) : PMatchPat → PVal → Option Env
+    | .enumPat eName variant bindings, .enum_ sEnum sVar sFields =>
+      if eName == sEnum && variant == sVar
+      then some (bindEnumFields env bindings sFields)
+      else none
+    | .litPat (.int n), .int m =>
+      if n == m then some env else none
+    | .litPat (.bool a), .bool b =>
+      if a == b then some env else none
+    | .varPat binding, sv =>
+      if binding == "_" then some env else some (env.bind binding sv)
+    | _, _ => none
+  /-- Bind a list of arm-binding names to their corresponding
+      field values in a matched enum variant.  Bindings whose
+      names are not present in the variant's fields skip silently
+      (Concrete's enumArm bindings are always a subset of the
+      declared variant fields, enforced at Check time). -/
+  bindEnumFields (env : Env) : List String → List (String × PVal) → Env
+    | [], _ => env
+    | name :: rest, fields =>
+      let val := match fields.find? (fun p => p.1 == name) with
+        | some (_, v) => v
+        | none => .int 0  -- unreachable under Check; safe default
+      bindEnumFields (env.bind name val) rest fields
 
 -- ============================================================
 -- Embedded Concrete programs

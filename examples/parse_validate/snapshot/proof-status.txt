@@ -80,16 +80,17 @@
  125 |     fn parse_header(data: [i32; 8], len: i32) -> Result<Header, ParseError> {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
--- blocked ------------------------------------------------ examples/parse_validate/src/main.con:167
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:167
 
-  `parse_validate.error_code` is eligible but uses unsupported constructs — extraction failed.
+  `parse_validate.error_code` passes the predictable profile but has no registered proof.
 
  167 |     fn error_code(e: ParseError) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: no return statement, match expression
+  current fingerprint:
+    [(match (var e) (arm ParseError::TooShort [] [(ret (int 1))]) (arm ParseError::BadVersion [] [(ret (int 2))]) (arm ParseError::BadType [] [(ret (int 3))]) (arm ParseError::PayloadTooBig [] [(ret (int 4))]) (arm ParseError::Truncated [] [(ret (int 5))]) (arm ParseError::BadChecksum [] [(ret (int 6))]))]
 
-  hint: Remove no return statement, match expression to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
 -- not eligible ------------------------------------------- examples/parse_validate/src/main.con:180
 
@@ -102,5 +103,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 10 functions — 3 proved, 0 stale, 4 unproved, 2 blocked, 1 ineligible, 0 trusted
+Totals: 10 functions — 3 proved, 0 stale, 5 unproved, 1 blocked, 1 ineligible, 0 trusted
 

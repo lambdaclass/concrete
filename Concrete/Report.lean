@@ -1695,6 +1695,18 @@ private partial def renderPExpr : Proof.PExpr → String
     s!"{renderPExpr obj}.{field}"
   | .arrayIndex arr idx =>
     s!"{renderPExpr arr}[{renderPExpr idx}]"
+  | .match_ scrutinee arms =>
+    let armStrs := arms.map fun (pat, body) =>
+      let patStr := match pat with
+        | .enumPat eName variant [] => s!"{eName}::{variant}"
+        | .enumPat eName variant bindings =>
+          s!"{eName}::{variant} \{ {", ".intercalate bindings} }"
+        | .litPat (.int n) => toString n
+        | .litPat (.bool b) => toString b
+        | .litPat _ => "<lit>"
+        | .varPat name => name
+      s!"{patStr} => {renderPExpr body}"
+    s!"match {renderPExpr scrutinee} \{ {"; ".intercalate armStrs} }"
 
 /-- Extraction entry for one function. -/
 structure ExtractionEntry where
@@ -1800,6 +1812,19 @@ private partial def renderPExprAsLean : Proof.PExpr → String
     s!".fieldAccess ({renderPExprAsLean obj}) \"{field}\""
   | .arrayIndex arr idx =>
     s!".arrayIndex ({renderPExprAsLean arr}) ({renderPExprAsLean idx})"
+  | .match_ scrutinee arms =>
+    let armsLean := arms.map fun (pat, body) =>
+      let patLean := match pat with
+        | .enumPat eName variant bindings =>
+          let bs := bindings.map fun b => s!"\"{b}\""
+          s!".enumPat \"{eName}\" \"{variant}\" [{", ".intercalate bs}]"
+        | .litPat (.int n) =>
+          if n < 0 then s!".litPat (.int ({n}))" else s!".litPat (.int {n})"
+        | .litPat (.bool b) => s!".litPat (.bool {b})"
+        | .litPat _ => "/- non-int/bool litPat (raw form) -/"
+        | .varPat name => s!".varPat \"{name}\""
+      s!"({patLean}, {renderPExprAsLean body})"
+    s!".match_\n      ({renderPExprAsLean scrutinee})\n      [{", ".intercalate armsLean}]"
 
 /-- Convert a function's bare name to a Lean-safe identifier. -/
 private def leanIdent (name : String) : String :=

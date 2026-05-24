@@ -554,6 +554,16 @@ private partial def pexprFreeIn (name : String) : Proof.PExpr → Bool
   | .enumLit _ _ fields => fields.any fun (_, fexpr) => pexprFreeIn name fexpr
   | .fieldAccess obj _ => pexprFreeIn name obj
   | .arrayIndex arr idx => pexprFreeIn name arr || pexprFreeIn name idx
+  | .match_ scrutinee arms =>
+    pexprFreeIn name scrutinee ||
+    arms.any fun (pat, body) =>
+      -- An arm's pattern can shadow `name` via its bindings; if so,
+      -- the body doesn't free-occur `name` even if textually present.
+      let shadows := match pat with
+        | .enumPat _ _ bindings => bindings.contains name
+        | .varPat binding => binding == name
+        | .litPat _ => false
+      !shadows && pexprFreeIn name body
 
 /-- Ordering key for commutative canonicalization.
     vars sort before lits; among vars, alphabetical; among lits, by value. -/
@@ -626,6 +636,9 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
     .fieldAccess (normalizePExpr obj) field
   | .arrayIndex arr idx =>
     .arrayIndex (normalizePExpr arr) (normalizePExpr idx)
+  | .match_ scrutinee arms =>
+    .match_ (normalizePExpr scrutinee)
+      (arms.map fun (pat, body) => (pat, normalizePExpr body))
 
 -- ============================================================
 -- Core → PExpr extraction
@@ -682,7 +695,33 @@ partial def cExprToPExpr : CExpr → Option Proof.PExpr
     let pa ← cExprToPExpr arr
     let pi ← cExprToPExpr idx
     some (.arrayIndex pa pi)
+  | .match_ scrutinee arms _ => do
+    let ps ← cExprToPExpr scrutinee
+    let parms ← arms.mapM cMatchArmToP
+    some (.match_ ps parms)
   | _ => none
+
+/-- Translate one Concrete match arm into a `(pattern, body)` pair.
+    The body is a CStmt list; we extract it via `cStmtsToPExpr`
+    with `none` continuation — match arm bodies must terminate
+    (return or yield a value), not fall through. -/
+partial def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
+  | .enumArm enumName variant bindings body => do
+    let pbody ← cStmtsToPExpr body
+    some (.enumPat enumName variant (bindings.map Prod.fst), pbody)
+  | .litArm value body => do
+    -- Literal patterns must extract to PExpr values; we then read
+    -- the literal value back out for the pattern shape. Only int
+    -- and bool literals are supported as match-arm values today.
+    let pval ← cExprToPExpr value
+    let v ← match pval with
+      | .lit v => some v
+      | _ => none
+    let pbody ← cStmtsToPExpr body
+    some (.litPat v, pbody)
+  | .varArm binding _bindTy body => do
+    let pbody ← cStmtsToPExpr body
+    some (.varPat binding, pbody)
 
 /-- Extract a statement list to a pure PExpr, threading a
     continuation `k` that says "what does the function return if
@@ -759,7 +798,17 @@ private partial def identifyUnsupportedExpr : CExpr → List String
   | .fieldAccess obj _ _ => identifyUnsupportedExpr obj
   | .arrayIndex arr idx _ =>
     identifyUnsupportedExpr arr ++ identifyUnsupportedExpr idx
-  | .match_ .. => ["match expression"]
+  | .match_ scrutinee arms _ =>
+    -- Match itself is supported; recurse so any unsupported
+    -- construct inside the scrutinee or arm bodies is reported.
+    let scrutUns := identifyUnsupportedExpr scrutinee
+    let armUns := arms.foldl (fun acc arm =>
+      let body := match arm with
+        | .enumArm _ _ _ b => b
+        | .litArm _ b => b
+        | .varArm _ _ b => b
+      acc ++ body.foldl (fun a s => a ++ identifyUnsupportedStmt s) []) []
+    scrutUns ++ armUns
   | .borrow .. => ["borrow"]
   | .borrowMut .. => ["mutable borrow"]
   | .deref .. => ["deref"]

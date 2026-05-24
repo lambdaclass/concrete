@@ -2863,24 +2863,24 @@ ext_check "main.add_simple" "extracted" "" \
     "proofcore-extraction: add_simple extracted successfully" \
     "proofcore-extraction: add_simple should be extracted"
 
-ext_check "main.uses_struct" "eligible_not_extractable" "struct literal" \
-    "proofcore-extraction: struct literal blocks extraction" \
-    "proofcore-extraction: struct literal should block extraction"
+ext_check "main.uses_struct" "extracted" "" \
+    "proofcore-extraction: struct literal extracts (Phase 4)" \
+    "proofcore-extraction: struct literal should extract"
 
 ext_check "main.uses_while" "excluded" "" \
     "proofcore-extraction: while loop excluded by eligibility" \
     "proofcore-extraction: while loop should be excluded"
 
-ext_check "main.uses_match" "eligible_not_extractable" "match expression" \
-    "proofcore-extraction: match expression blocks extraction" \
-    "proofcore-extraction: match expression should block extraction"
+ext_check "main.uses_match" "extracted" "" \
+    "proofcore-extraction: match expression extracts (Phase 4)" \
+    "proofcore-extraction: match expression should extract"
 
 ext_check "main.uses_mut" "eligible_not_extractable" "mutable assignment" \
     "proofcore-extraction: mutable assignment blocks extraction" \
     "proofcore-extraction: mutable assignment should block extraction"
 
 check_report "$PCEXT" extraction \
-    "1 extracted, 3 eligible but not extractable, 2 excluded" \
+    "3 extracted, 1 eligible but not extractable, 2 excluded" \
     "proofcore-extraction: summary totals correct" \
     "proofcore-extraction: summary totals wrong"
 
@@ -4879,23 +4879,22 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# Eligible but not extractable: struct literal, match
+# Struct literal and match both extract (Phase 4 ProofCore extensions).
 ext_elig=$(cached_output "$TESTDIR/test_proof_eligible_pure.con" "--report extraction")
-if echo "$ext_elig" | grep -A3 "make_point" | grep -q "extraction failed" && \
-   echo "$ext_elig" | grep -A3 "make_point" | grep -q "struct literal"; then
-    echo "  ok  extraction: make_point eligible but blocked by struct literal"
+if echo "$ext_elig" | grep -A2 "make_point" | grep -q "status: extracted"; then
+    echo "  ok  extraction: make_point extracts (struct literal supported)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  extraction: make_point should fail on struct literal"
+    echo "FAIL  extraction: make_point should extract"
     echo "$ext_elig"
     FAIL=$((FAIL + 1))
 fi
 
-if echo "$ext_elig" | grep -A3 "color_value" | grep -q "match expression"; then
-    echo "  ok  extraction: color_value eligible but blocked by match expression"
+if echo "$ext_elig" | grep -A2 "color_value" | grep -q "status: extracted"; then
+    echo "  ok  extraction: color_value extracts (match expression supported)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  extraction: color_value should fail on match expression"
+    echo "FAIL  extraction: color_value should extract"
     echo "$ext_elig"
     FAIL=$((FAIL + 1))
 fi
@@ -5822,58 +5821,59 @@ CRYPTO_SNAP_DIR=$(mktemp -d)
 
 # Snapshot generates correct fact count
 snap_crypto=$($COMPILER snapshot "$CRYPTO_DIR/main.con" -o "$CRYPTO_SNAP_DIR/good.facts.json" 2>&1 || true)
-if echo "$snap_crypto" | grep -q "29 facts"; then
-    echo "  ok  crypto_verify: snapshot produces 29 facts"
+if echo "$snap_crypto" | grep -q "36 facts"; then
+    echo "  ok  crypto_verify: snapshot produces 36 facts"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  crypto_verify: expected 29 facts in snapshot"
+    echo "FAIL  crypto_verify: expected 36 facts in snapshot"
     echo "$snap_crypto"
     FAIL=$((FAIL + 1))
 fi
 
-# All 3 core functions are proved
+# All 4 core functions are proved (compute_tag, verify_tag, check_nonce,
+# verify_message); main is the lone ineligible (entry point).
 if python3 -c "
 import json
 with open('$CRYPTO_SNAP_DIR/good.facts.json') as f:
     s = json.load(f)
-assert s['summary']['proved'] == 3
+assert s['summary']['proved'] == 4
 assert s['summary']['stale'] == 0
 assert s['summary']['missing'] == 0
 assert s['summary']['ineligible'] == 1
-assert s['summary']['total_functions'] == 4
+assert s['summary']['total_functions'] == 5
 " 2>/dev/null; then
-    echo "  ok  crypto_verify: summary shows 3 proved, 1 ineligible, 0 stale"
+    echo "  ok  crypto_verify: summary shows 4 proved, 1 ineligible, 0 stale"
     PASS=$((PASS + 1))
 else
     echo "FAIL  crypto_verify: summary proof counts incorrect"
     FAIL=$((FAIL + 1))
 fi
 
-# All 3 obligations proved
+# All 4 obligations proved
 if python3 -c "
 import json
 with open('$CRYPTO_SNAP_DIR/good.facts.json') as f:
     s = json.load(f)
-assert s['summary']['obligations_proved'] == 3
+assert s['summary']['obligations_proved'] == 4
 assert s['summary']['obligations_missing'] == 0
 assert s['summary']['obligations_stale'] == 0
 " 2>/dev/null; then
-    echo "  ok  crypto_verify: 3 obligations proved, 0 missing"
+    echo "  ok  crypto_verify: 4 obligations proved, 0 missing"
     PASS=$((PASS + 1))
 else
     echo "FAIL  crypto_verify: obligation counts incorrect"
     FAIL=$((FAIL + 1))
 fi
 
-# All 3 core functions extracted
+# All 4 core functions extracted
 if python3 -c "
 import json
 with open('$CRYPTO_SNAP_DIR/good.facts.json') as f:
     s = json.load(f)
-assert s['summary']['extracted'] == 3
+assert s['summary']['extracted'] == 4
 assert s['summary']['excluded'] == 1
 " 2>/dev/null; then
-    echo "  ok  crypto_verify: 3 functions extracted, 1 excluded"
+    echo "  ok  crypto_verify: 4 functions extracted, 1 excluded"
     PASS=$((PASS + 1))
 else
     echo "FAIL  crypto_verify: extraction counts incorrect"
@@ -5887,11 +5887,12 @@ with open('$CRYPTO_SNAP_DIR/good.facts.json') as f:
     s = json.load(f)
 facts = s['facts']
 proof_statuses = [f for f in facts if f['kind'] == 'proof_status' and f.get('spec')]
-assert len(proof_statuses) == 3
+assert len(proof_statuses) == 4
 specs = {f['function']: f['spec'] for f in proof_statuses}
 assert specs['main.compute_tag'] == 'Concrete.Proof.computeTagExpr'
 assert specs['main.verify_tag'] == 'Concrete.Proof.verifyTagExpr'
 assert specs['main.check_nonce'] == 'Concrete.Proof.checkNonceExpr'
+assert specs['main.verify_message'] == 'Concrete.Proof.verifyMessageExpr'
 " 2>/dev/null; then
     echo "  ok  crypto_verify: named specs present in proof_status facts"
     PASS=$((PASS + 1))
@@ -5941,8 +5942,8 @@ fi
 
 # Proof status report shows 3 proved
 report_out=$($COMPILER "$CRYPTO_DIR/main.con" --report proof-status 2>&1 || true)
-if echo "$report_out" | grep -q "3 proved" && echo "$report_out" | grep -q "0 unproved" && echo "$report_out" | grep -q "1 ineligible"; then
-    echo "  ok  crypto_verify: proof-status report shows 3 proved, 0 unproved, 1 ineligible"
+if echo "$report_out" | grep -q "4 proved" && echo "$report_out" | grep -q "0 unproved" && echo "$report_out" | grep -q "1 ineligible"; then
+    echo "  ok  crypto_verify: proof-status report shows 4 proved, 0 unproved, 1 ineligible"
     PASS=$((PASS + 1))
 else
     echo "FAIL  crypto_verify: proof-status report counts wrong"
@@ -5994,8 +5995,19 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# verify_tag is NOT in the weakened list (unchanged)
-if ! echo "$diff_out" | grep "TRUST WEAKENED" -A 100 | grep -q "verify_tag"; then
+# verify_tag is NOT in the weakened list (unchanged). Use JSON view so
+# we look at the entry's function field, not substring-match the
+# rendered fingerprint (which mentions `(call verify_tag ...)` from
+# `main`'s body and would yield a false positive).
+$COMPILER diff "$CRYPTO_SNAP_DIR/good.facts.json" "$CRYPTO_SNAP_DIR/drifted.facts.json" --json > "$CRYPTO_SNAP_DIR/diff_for_vt.json" 2>&1 && : || :
+if python3 -c "
+import json
+with open('$CRYPTO_SNAP_DIR/diff_for_vt.json') as f:
+    entries = json.load(f)
+for e in entries:
+    if e.get('drift') == 'weakened' and e.get('function') == 'main.verify_tag':
+        raise SystemExit(1)
+" 2>/dev/null; then
     echo "  ok  crypto_verify: verify_tag not flagged as weakened (unchanged)"
     PASS=$((PASS + 1))
 else

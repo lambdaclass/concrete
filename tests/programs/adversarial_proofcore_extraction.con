@@ -3,9 +3,9 @@
 //
 // Expected extraction results:
 //   add_simple      → extraction succeeds (simple arithmetic)
-//   uses_struct     → extraction fails, unsupported = "struct literal"
-//   uses_while      → extraction fails, unsupported = "while loop"
-//   uses_match      → extraction fails, unsupported = "match expression"
+//   uses_struct     → extraction succeeds (Phase 4: struct literal supported)
+//   uses_while      → extraction fails (while loop excluded by eligibility)
+//   uses_match      → extraction succeeds (Phase 4: match expression supported)
 //   uses_mut        → extraction fails, unsupported = "mutable assignment"
 
 struct Copy Pair {
