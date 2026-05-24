@@ -37,7 +37,7 @@ Do not call the language releasable until these are true:
 | 1 | Hardening | Make compiler self-checks, test discipline, and bug-capture pipelines normal workflow. |
 | 2 | Artifacts | Produce stable, diffable, machine-readable artifacts reviewers and tools can rely on. |
 | 3 | Runtime | Define allocation, stack, failure, arithmetic, and concurrency profiles proof/release claims rest on. |
-| 4 | Proof | Expand ProofCore coverage, obligation generation, and the provable-subset surface. |
+| 4 | Proof | Expand ProofCore coverage, obligation generation, and the provable-subset surface — the immediate implementation half of the proof/verification spine. |
 | 5 | Backend | Stabilize backend contracts, target/toolchain model, and incremental build story. |
 | 6 | Performance | Benchmark, profile, and budget compile-time and runtime costs. |
 | 7 | Flagships | Build the canonical example set the language is defended with. |
@@ -45,8 +45,17 @@ Do not call the language releasable until these are true:
 | 9 | Packages | Package manifest, dependency resolution, trust policy, registry. |
 | 10 | Editor | LSP, refactoring, artifact viewer, compatibility regression. |
 | 11 | Governance | Onboarding, evolution policy, stability boundary, decision process. |
-| 12 | Verification | Selected compiler-correctness and pass-preservation proofs. |
+| 12 | Verification | Selected extraction-soundness, normalization-preservation, and compiler pass-preservation proofs — the later formalization half of the proof/verification spine. |
 | 13 | Research | Speculative ideas gated behind a concrete forcing example. |
+
+## Proof And Verification Spine
+
+Concrete's proof strategy has two linked tracks, and they should be read as one priority spine even though they execute at different times:
+
+1. **Phase 4: user-code proof surface.** Expand `ProofCore` so real Concrete functions can be translated into Lean objects, receive obligations, and carry kernel-checked user-code theorems today.
+2. **Phase 12: compiler-verification trust multiplier.** Once the Phase 4 proof target, artifacts, and reports stabilize, prove selected normalization, extraction, and compiler-pass preservation claims about that pipeline.
+
+The execution order stays linear: first make real programs provable, then prove that the proof pipeline preserves the intended meaning. But Phase 12 is not a disconnected future ambition. Every Phase 4 extraction rule should name the later Phase 12 soundness / preservation obligation it creates.
 
 ## Active Dependency Order
 
@@ -54,12 +63,12 @@ Phases are listed in dependency order, but execution overlaps. The standing rule
 
 1. **The relevant slices of Phases 1-4 gate each flagship.** Hardening, artifacts, runtime profile, and proof workflow must be honest in the areas the flagship actually touches before it can claim them. The active candidate (rule 2) determines which runtime / proof / artifact surfaces are actually required; not every item in Phases 1-4 gates every flagship — for example, the concurrency sub-track in Phase 3 only gates a flagship that uses concurrency.
 2. **Run examples through one linear ladder.** Examples start as inventory entries, then become candidates, then one active pull-through candidate at a time may force gaps in Phases 1-4, and only after its evidence holds does it graduate into Phase 7. `parse_validate` has completed that path and is now the first graduated Phase 7 entry. A second active pull-through candidate does not start until the current one graduates or is explicitly parked with reasons.
-3. **Make the compiler artifact-first before broadening surface area.** The current architecture track is ProofCore as a first-class IR, stable artifact identities, pass contracts, and report generation from a shared fact layer. `fixed_capacity` is the forcing candidate for this work because it exposes the ProofCore gaps that block both bounded/no-alloc and real-crypto flagships.
+3. **Keep the proof/verification spine moving.** The highest-priority compiler architecture track is `ProofCore` as a first-class IR, stable artifact identities, pass contracts, and report generation from a shared fact layer. `fixed_capacity` is the forcing candidate for this work because it exposes the ProofCore gaps that block both bounded/no-alloc and real-crypto flagships. Phase 4 implements the usable proof surface now; Phase 12 later proves selected preservation/soundness claims about that surface.
 4. **Phase 5 lands when backend honesty matters.** SSA contract, target model, and incremental boundaries before public packaging.
 5. **Phase 6 is not on the critical path to the first release.** Benchmarks and budgets help but do not gate it.
 6. **Phases 7-8 only after stable evidence.** Phase 7 grows by promotion from the candidate ladder, not by starting many public showcases at once. Release packaging rests on Phases 1-5 plus at least one graduated showcase, not the other way around.
 7. **Phases 9-11 only after first-release surface holds.** Packages, editor UX, and public governance assume the artifact / proof / release contracts are stable.
-8. **Phase 12 is a trust multiplier, not a prerequisite.** Compiler-correctness proofs come after Phases 4, 5, and the artifact contracts in 2 are stable.
+8. **Phase 12 is adjacent in priority but later in execution.** Compiler-correctness proofs come after Phases 4, 5, and the artifact contracts in 2 are stable, but every Phase 4 proof-pipeline boundary should leave an explicit Phase 12 proof target behind.
 9. **Phase 13 stays last** unless a current example forces a research topic forward.
 
 ## Operating Rules
@@ -74,7 +83,7 @@ Phases are listed in dependency order, but execution overlaps. The standing rule
 - Keep specs in Lean-attached / artifact-registry form until obligations and diagnostics support source-level contracts honestly.
 - Build a local fact CLI before MCP / editor integrations.
 - Keep QBE and other backend work waiting until proof/evidence attachment, optimization policy, and backend trust boundaries are trustworthy.
-- Treat compiler verification as a long-term trust multiplier; do not promise full compiler correctness at first release.
+- Treat compiler verification as the second half of the proof/verification spine: do not promise full compiler correctness at first release, but do record the later extraction-soundness / preservation obligation whenever Phase 4 adds a new proof construct.
 - Parallelize only low-risk inventories and docs while the active implementation path is proof/diagnostic/compiler-contract work.
 
 ## Design Constraints
@@ -197,12 +206,12 @@ Expected outcome: a bounded queue or parser helper can carry claims like "no all
 
 ## Phase 4: Proof
 
-Expected outcome: helper composition like `fn validate_header(...) -> Bool { ... }` carries a Lean-backed claim that successful return implies multiple structural invariants.
+Expected outcome: real Concrete functions like `parse_header` carry Lean-backed claims about success/failure behavior, and each supported `Core -> ProofCore` extraction rule names the later Phase 12 soundness obligation it creates.
 
 1. Make `ProofCore` a first-class IR with a named compiler boundary, verifier, human-readable dump, regression tests, and a documented extension contract. This is the main compiler architecture track because it is the path from evidence demos to proofs over real systems code.
 2. Split the proof path explicitly into `Core -> normalized Core -> ProofCore -> obligations/reports`: normalize early returns, simple control flow, field/array operations, enum construction, and other source conveniences once, then make ProofCore and report generation consume that stable shape.
-3. Extend ProofCore in the order forced by `fixed_capacity` and the real-crypto slot: (a) **array indexing** — blocks `parse_header` on `data[i]`, blocks SHA-256 on block-byte access; (b) **bounded while loops** — blocks `compute_checksum`, `compute_tag`, and any real cryptographic round loop; (c) **struct value construction** — blocks `Header { ... }` and any hash-state struct; (d) **enum value construction** — blocks `Result::Ok { value: ... }`; (e) **pattern matching** — blocks `error_code` and tagged-union dispatch; (f) **casts** — blocks byte/int normalization; (g) **field-heavy code** — blocks struct/enum payload proofs. Items (a)–(c) together gate the next Phase 7 real-cryptography flagship slot (HMAC / Ed25519 / constant-time); see Phase 7 item 7.
-4. Add ProofCore pass contracts and self-checks: every extraction rule states what Concrete construct it covers, what assumptions it introduces, why rejected constructs are excluded, and which example/regression forces it.
+3. Extend ProofCore in the order forced by `fixed_capacity` and the real-crypto slot: (a) **bounded while loops** — blocks `compute_checksum`, `compute_tag`, and any real cryptographic round loop; (b) **bitwise / arithmetic operators** — blocks checksum/hash rounds (`bitxor`, `mod`); (c) **casts** — blocks byte/int normalization; (d) **array literals** — blocks fixed-capacity state construction; (e) **array index assignment / mutation** — blocks ring-buffer update; (f) **field-heavy code** — blocks larger struct/enum payload proofs. Items (a)–(e) together gate the next Phase 7 real-cryptography flagship slot (HMAC / Ed25519 / constant-time); see Phase 7 item 7. Completed construct families move to [CHANGELOG.md](CHANGELOG.md) and remain covered by regression tests.
+4. Add ProofCore pass contracts and self-checks: every extraction rule states what Concrete construct it covers, what assumptions it introduces, why rejected constructs are excluded, which example/regression forces it, and what Phase 12 preservation/soundness theorem will eventually justify it.
 5. Broaden proof obligation generation beyond the first pipeline slice: loop, memory, contract obligations become mechanically inspectable.
 6. Broaden the pure Core proof fragment after artifacts, diagnostics, ProofCore phase, normalization, and obligation generation are usable.
 7. Deepen the memory / reference proof model: ownership, aliasing, mutation, pointer/reference, cleanup, layout reasoning where examples require.
@@ -277,7 +286,7 @@ Expected outcome: a flagship packet/header validator has explicit authority, one
 4. Promote an ownership-heavy data-structure candidate with linear ownership and deterministic cleanup (ordered map, intrusive list, tree, arena-backed graph).
 5. Promote a privilege-separated tool candidate where capability signatures prove the trusted core cannot touch files/network/processes.
 6. Promote a fixed-capacity / no-alloc candidate proving the predictable subset is practical (ring buffer, bounded queue, bounded-state controller, fixed parser state machine). Suggested next pull-through candidate — its bounded loops + array indexing + struct construction surface forces the Phase 4 ProofCore extensions named in (7) below.
-7. Promote a **real cryptography** candidate (HMAC-SHA256 verification, Ed25519 verification subset, or constant-time tag comparison) ONLY after Phase 4 ProofCore extends to (a) array indexing, (b) bounded while loops, (c) struct construction. Without those, the algorithm's inner loop cannot extract and the proof story would be no better than `crypto_verify`'s toy. The toy graduated 2026-05-23 specifically to register the proof scaffolding; this entry registers the real-algorithm slot the toy does NOT fill.
+7. Promote a **real cryptography** candidate (HMAC-SHA256 verification, Ed25519 verification subset, or constant-time tag comparison) ONLY after Phase 4 ProofCore covers the algorithm's extraction surface: bounded loops, byte/int casts, required bitwise/arithmetic operators, array reads/literals/mutation as needed, and structured return values. Without those, the algorithm's inner loop cannot extract and the proof story would be no better than `crypto_verify`'s toy. The toy graduated 2026-05-23 specifically to register the proof scaffolding; this entry registers the real-algorithm slot the toy does NOT fill.
 8. Grow the public showcase corpus linearly from graduated candidates shaped as small / medium / big programs (one property per small, composition per medium, scale per big); must include borrow/aliasing, cleanup/leak-boundary, ownership-heavy, bounded/no-alloc.
 9. Keep the curated showcase set balanced: each graduated example proves a different thesis claim with honest framing, report/snapshot/diff coverage, "what the compiler catches," and an oracle when possible.
 10. Require capability-shaped APIs in at least one flagship so authority is visible in source/API, not only reports.
@@ -364,13 +373,13 @@ Expected outcome: a new user can install Concrete, run one proof-bearing example
 
 ## Phase 12: Verification
 
-Expected outcome: a simple function like `fn add1(x: Int) -> Int { return x + 1; }` is not only user-proved but backed by proofs that `Core → ProofCore` extraction and selected normalization/preservation steps keep its intended pure meaning intact.
+Expected outcome: functions already proved through Phase 4 are backed by proofs that selected `Core -> normalized Core -> ProofCore` extraction and normalization steps preserve their intended pure meaning.
 
 1. Define precisely what "compiler proof" means for Concrete: user-code property proofs, ProofCore semantic proofs, normalization/extraction proofs, pass-preservation proofs, future end-to-end correctness claims.
 2. Separate public user-code proof claims from compiler-correctness claims so reports never imply the compiler itself is fully verified.
 3. Inventory the compiler-verification trusted base and unproved assumptions: parser, checker, elaborator, CoreCheck, mono, lowering, SSA emission, LLVM/toolchain, runtime, target model, proof registry attachment.
 4. Prove normalized Core preserves Core semantics for the supported expression fragment before relying on normalized proof targets as equivalent to source-derived Core.
-5. Prove `normalized Core -> ProofCore` extraction sound for the supported constructs.
+5. Prove `normalized Core -> ProofCore` extraction sound construct-by-construct, starting with the Phase 4 extraction rules used by graduated flagships: early-return conditionals, function calls, structs/fields, enums, arrays, pattern matching, bounded loops, casts, and bounded mutation.
 6. Prove selected checker / report / artifact facts agree with compiler state: proof eligibility, predictable status, capabilities, trusted boundaries, fingerprints, obligations, traceability.
 7. Prove small internal compiler invariants: no post-mono type variables, well-formed qualified identities, well-formed SSA facts, consistent interface artifacts, stable diagnostic attachment.
 8. Prove selected pass-preservation properties for a restricted pure subset, starting with transformations that directly affect proof/evidence claims.
