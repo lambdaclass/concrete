@@ -10,6 +10,89 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 4 ProofCore extracts bounded while loops (flat-assign body)
+
+`PExpr.while_ cond assigns cont` is a new shape: each iteration
+re-evaluates `cond`; when true, every `(name, expr)` in `assigns`
+is evaluated in order with later assigns seeing earlier updates
+in the same iteration; when false, control falls through to
+`cont`. Termination is by fuel — each iteration consumes one
+unit. The eligibility profile's existing bounded-loop
+classification is what guarantees only bounded loops reach
+extraction; PExpr itself carries no static iteration bound.
+
+This is the largest architectural Phase 4 addition so far — every
+prior extension (struct/enum/match/cast/array lit/array index)
+was a single shape with no env-threading. While loops thread
+updated bindings through the iteration, and that's the first
+piece of machinery in PExpr that models mutation.
+
+Scope honestly named
+--------------------
+Extraction restricts the loop body + step to flat
+`CStmt.assign` statements. Nested `let`, `if`, or `return`
+inside the loop body falls back to a precise blocker:
+`while loop body shape (only flat assigns supported)`. This
+matches the `compute_checksum` and `compute_tag` shape; it
+does NOT match `ring_contains` (which has `let idx = ...; if
+... return 1`). A later commit can lift the body into a
+step-function PExpr to cover that shape; nothing forces it
+yet.
+
+`bitxor` is also not modeled. Lean core has no `HXor Int Int`
+instance, and defining one (via `BitVec` or sign-handling) is
+a semantic decision worth deferring. So both `compute_checksum`
+and `compute_tag` still surface as blocked — but the precise
+reason changes from `while loop` (catch-all) to
+`unsupported operator: Concrete.BinOp.bitxor`.
+
+Pull-through evidence
+---------------------
+`examples/parse_validate/src/main.con` proof-status:
+
+    before: compute_checksum blocked: "while loop"
+    after:  compute_checksum blocked: "unsupported operator: bitxor"
+
+`examples/fixed_capacity/src/main.con` proof-status:
+
+    before: compute_tag blocked: "while loop"
+            ring_contains blocked: "while loop"
+    after:  compute_tag blocked: "unsupported operator: bitxor"
+            ring_contains blocked: "while loop body shape (only flat
+                          assigns supported)"
+
+Function totals are unchanged on both flagships — the
+structural piece works, but operator + body-shape gaps still
+bar full extraction. The failure surface is now load-bearing:
+a follow-up "add bitxor" commit unblocks two functions; a
+"lift nested control flow inside while" commit unblocks
+`ring_contains`.
+
+What landed
+-----------
+- `PExpr.while_` + `eval`/`evalAssigns` rule (env threading).
+- `cStmtsToPExprK` case for `(.while_ cond body _ step) :: rest`.
+  Body + step are concatenated into a single update list; each
+  member must be `CStmt.assign` or extraction returns `none`.
+- `identifyUnsupportedStmt` `.while_` case recurses into cond
+  and each assign expr to surface inner blockers (operator,
+  cast, etc.); reports `while loop body shape (only flat assigns
+  supported)` if any non-assign appears.
+- Top-level `identifyUnsupported` no longer flags `.while_` as a
+  catch-all; precise reasons come through the stmt walker above.
+- `pexprFreeIn` / `normalizePExpr` / `renderPExpr` /
+  `renderPExprAsLean` all gained while_ cases.  Note that
+  assigns do NOT shadow names — the variable pre-existed before
+  the loop — so `pexprFreeIn` walks all assign right-hand sides
+  and the continuation.
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0 (2 proof-status snapshots refreshed:
+                       parse_validate, fixed_capacity)
+
 ### fixed_capacity gains its first Lean theorem (ring_new)
 
 `ring_new_correct` proves that `fn ring_new() -> RingBuf` evaluates

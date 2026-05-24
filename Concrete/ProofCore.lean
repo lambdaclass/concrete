@@ -566,6 +566,13 @@ private partial def pexprFreeIn (name : String) : Proof.PExpr → Bool
       !shadows && pexprFreeIn name body
   | .cast inner => pexprFreeIn name inner
   | .arrayLit elems => elems.any (pexprFreeIn name)
+  | .while_ cond assigns cont =>
+    -- An assign rebinds `name` (it does NOT shadow — the variable
+    -- pre-existed). The right-hand expression and the cont can
+    -- still free-occur `name`. Walk all three.
+    pexprFreeIn name cond ||
+    assigns.any (fun (_, e) => pexprFreeIn name e) ||
+    pexprFreeIn name cont
 
 /-- Ordering key for commutative canonicalization.
     vars sort before lits; among vars, alphabetical; among lits, by value. -/
@@ -643,6 +650,10 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
       (arms.map fun (pat, body) => (pat, normalizePExpr body))
   | .cast inner => .cast (normalizePExpr inner)
   | .arrayLit elems => .arrayLit (elems.map normalizePExpr)
+  | .while_ cond assigns cont =>
+    .while_ (normalizePExpr cond)
+      (assigns.map fun (n, e) => (n, normalizePExpr e))
+      (normalizePExpr cont)
 
 -- ============================================================
 -- Core → PExpr extraction
@@ -754,6 +765,21 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
     let pv ← cExprToPExpr val
     let pb ← cStmtsToPExprK rest k
     some (.letIn name pv pb)
+  -- Bounded while loop with flat-assign body.  Body + step
+  -- statements must all be `CStmt.assign`; any nested `let`,
+  -- `if`, or `return` inside the loop body fails extraction
+  -- and falls back to identifyUnsupportedStmt (which reports
+  -- the actual blocker, not "while loop").
+  | (.while_ cond body _ step) :: rest, k => do
+    let pc ← cExprToPExpr cond
+    let updates ← (body ++ step).mapM fun s =>
+      match s with
+      | .assign name val => do
+        let pv ← cExprToPExpr val
+        some (name, pv)
+      | _ => none
+    let pCont ← cStmtsToPExprK rest k
+    some (.while_ pc updates pCont)
   -- Singleton if-else (last stmt of body): each branch inherits the
   -- outer continuation. If a branch returns, k is dead; if it falls
   -- through, k is used.
@@ -860,6 +886,24 @@ private partial def identifyUnsupportedStmt : CStmt → List String
     match elseBr with
     | some stmts => stmts.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) []
     | none => []
+  -- Bounded while is supported by cStmtsToPExprK when body + step
+  -- are flat assigns. Surface the actual blocker:
+  --   * non-assign statements inside body/step → "while loop body shape"
+  --   * unsupported constructs inside cond or assign exprs → recurse
+  | .while_ cond body _ step =>
+    let bodyAllAssigns := (body ++ step).all fun s =>
+      match s with
+      | .assign .. => true
+      | _ => false
+    let shapeReason :=
+      if bodyAllAssigns then []
+      else ["while loop body shape (only flat assigns supported)"]
+    let condUnsup := identifyUnsupportedExpr cond
+    let assignUnsup := (body ++ step).foldl (fun acc s =>
+      match s with
+      | .assign _ val => acc ++ identifyUnsupportedExpr val
+      | _ => acc) []
+    shapeReason ++ condUnsup ++ assignUnsup
   | _ => []
 end
 
@@ -881,7 +925,9 @@ def identifyUnsupported (body : List CStmt) : List String :=
       (if hasVoidRet then ["void return"] else []) ++
       (if !hasReturn then ["no return statement"] else [])
   let stmtKinds := body.filterMap fun s => match s with
-    | .while_ .. => some "while loop"
+    -- `.while_` is supported when body + step are flat assigns;
+    -- precise blockers (non-assign body shape, unsupported op
+    -- inside cond/assign expr) surface via identifyUnsupportedStmt.
     | .fieldAssign .. => some "field assignment"
     | .derefAssign .. => some "deref assignment"
     | .arrayIndexAssign .. => some "array index assignment"

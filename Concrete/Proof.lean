@@ -112,6 +112,25 @@ inductive PExpr where
       order. Element type is not modeled (PVal is dynamically
       shaped); Check ensures all elements share a type. -/
   | arrayLit (elems : List PExpr)
+  /-- Bounded `while` loop with flat-assign body.
+
+      `cond` is re-evaluated each iteration. When `cond` is `true`,
+      every `(name, expr)` in `assigns` is evaluated in order and
+      its result rebinds `name` in the env — later assigns in the
+      same iteration see earlier assigns' updates. When `cond` is
+      `false`, control falls through to `cont`.
+
+      `assigns` carries both the source-level loop body and the
+      for-loop step concatenated; extraction insists every member
+      is a `CStmt.assign` (no nested `let`, `if`, or `return`
+      inside the loop body — those shapes fall back to the
+      eligibility-blocked path with a precise reason).
+
+      Termination is by fuel: each iteration consumes one unit.
+      `bound`-style static iteration limits are not in PExpr; the
+      eligibility profile already classifies loops as bounded /
+      unbounded, and only bounded loops reach extraction. -/
+  | while_ (cond : PExpr) (assigns : List (String × PExpr)) (cont : PExpr)
   deriving Repr, BEq
 
 /-- A function definition in the proof fragment. -/
@@ -215,6 +234,14 @@ def eval (fns : FnTable) (env : Env) : Nat → PExpr → Option PVal
     match evalElems fns env fuel elems with
     | none => none
     | some vs => some (.array_ vs)
+  | fuel + 1, .while_ cond assigns cont =>
+    match eval fns env fuel cond with
+    | some (.bool true) =>
+      match evalAssigns fns env fuel assigns with
+      | none => none
+      | some env' => eval fns env' fuel (.while_ cond assigns cont)
+    | some (.bool false) => eval fns env fuel cont
+    | _ => none
 where
   /-- Evaluate a list of argument expressions. -/
   evalArgs (fns : FnTable) (env : Env) (fuel : Nat) : List PExpr → Option (List PVal)
@@ -281,6 +308,16 @@ where
         match evalElems fns env fuel rest with
         | none => none
         | some vs => some (v :: vs)
+  /-- Evaluate a list of assignments, threading each new binding
+      through the env so subsequent assigns in the same iteration
+      see earlier updates. -/
+  evalAssigns (fns : FnTable) (env : Env) (fuel : Nat) :
+      List (String × PExpr) → Option Env
+    | [] => some env
+    | (name, expr) :: rest =>
+      match eval fns env fuel expr with
+      | none => none
+      | some v => evalAssigns fns (env.bind name v) fuel rest
   /-- Bind a list of arm-binding names to their corresponding
       field values in a matched enum variant.  Bindings whose
       names are not present in the variant's fields skip silently

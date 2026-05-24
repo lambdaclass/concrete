@@ -1709,6 +1709,9 @@ private partial def renderPExpr : Proof.PExpr → String
     s!"match {renderPExpr scrutinee} \{ {"; ".intercalate armStrs} }"
   | .cast inner => s!"({renderPExpr inner} as _)"
   | .arrayLit elems => s!"[{", ".intercalate (elems.map renderPExpr)}]"
+  | .while_ cond assigns cont =>
+    let assignStrs := assigns.map fun (n, e) => s!"{n} = {renderPExpr e}"
+    s!"while {renderPExpr cond} \{ {"; ".intercalate assignStrs} }; {renderPExpr cont}"
 
 /-- Extraction entry for one function. -/
 structure ExtractionEntry where
@@ -1831,6 +1834,10 @@ private partial def renderPExprAsLean : Proof.PExpr → String
   | .arrayLit elems =>
     let elemsLean := elems.map fun e => s!"({renderPExprAsLean e})"
     s!".arrayLit [{", ".intercalate elemsLean}]"
+  | .while_ cond assigns cont =>
+    let assignsLean := assigns.map fun (n, e) =>
+      s!"(\"{n}\", {renderPExprAsLean e})"
+    s!".while_\n      ({renderPExprAsLean cond})\n      [{", ".intercalate assignsLean}]\n      ({renderPExprAsLean cont})"
 
 /-- Convert a function's bare name to a Lean-safe identifier. -/
 private def leanIdent (name : String) : String :=

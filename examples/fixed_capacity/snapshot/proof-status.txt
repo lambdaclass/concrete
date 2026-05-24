@@ -122,9 +122,9 @@
  122 |     fn ring_contains(rb: RingBuf, val: i32) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: while loop
+  unsupported: while loop body shape (only flat assigns supported)
 
-  hint: Remove while loop to enable proof extraction.
+  hint: Remove while loop body shape (only flat assigns supported) to enable proof extraction.
 
 -- blocked ------------------------------------------------ examples/fixed_capacity/src/main.con:133
 
@@ -144,9 +144,9 @@
  145 |     fn compute_tag(buf: MsgBuf) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: while loop
+  unsupported: unsupported operator: Concrete.BinOp.bitxor
 
-  hint: Remove while loop to enable proof extraction.
+  hint: Remove unsupported operator: Concrete.BinOp.bitxor to enable proof extraction.
 
 -- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:155
 
