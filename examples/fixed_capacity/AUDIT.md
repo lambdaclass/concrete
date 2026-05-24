@@ -149,7 +149,7 @@ loops) makes this provable.
 
 | # | Bar | Status |
 |---:|---|---|
-| 1 | Lean-backed property surfaced as `proved` | ❌ no theorem attached yet (5 of 14 extract clean; trivial to attach one for an integer validator) |
+| 1 | Lean-backed property surfaced as `proved` | ✅ `ring_new_correct` attached (2026-05-24); first proof in the project that composes arrayLit + structLit + letIn under the kernel |
 | 2 | Composition property Lean-backed | ⏳ scalar-validator composition provable today; whole-flow composition blocked on Phase 4 while-loop / struct-literal / cast |
 | 3 | Assumption file with schema, CI-enforced | ✅ `assumptions.toml` with trusted list; `make test-assumptions` 3/0 |
 | 4 | Policy file with enforceable budgets, CI-enforced | ✅ `Concrete.toml [policy]` 6 fields enforced (omits no_unsafe/no_trusted since 4 trusted shells are by design); `make test-policy` |
@@ -160,9 +160,11 @@ loops) makes this provable.
 | 9 | Snapshot/diff baseline | ✅ `examples/fixed_capacity/snapshot/` 16 reports baselined; `make test-snapshots` 48/0 across all 3 candidates |
 | 10 | Listed in `tests/showcase/manifest.toml` | ❌ absent |
 
-**Today: 3 of 10 bars met (#3, #4, #9).** Same cheap-baseline
-batch as the prior candidates; this commit closes it. Remaining
-bars are real content + Phase 4 forcing work.
+**Today: 4 of 10 bars met (#1, #3, #4, #9).** Bar #1 closed
+2026-05-24 with `ring_new_correct` once Phase 4 array literal
+extraction landed.  Remaining bars are real content (#5 oracle,
+#6 catches, #7 bundle, #8 README, #10 manifest) + Phase 4
+forcing work for the composition theorem (#2).
 
 ## 8. Strategic value beyond graduation
 

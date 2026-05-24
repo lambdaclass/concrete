@@ -10,6 +10,59 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### fixed_capacity gains its first Lean theorem (ring_new)
+
+`ring_new_correct` proves that `fn ring_new() -> RingBuf` evaluates
+to the canonical empty buffer: `data` is a 16-element array of
+zeros, `head` is 0, `count` is 0. This is bar #1 for the active
+pull-through candidate — and the first proof in the project that
+composes `arrayLit` + `structLit` + `letIn` under the Lean kernel.
+parse_validate and crypto_verify both stay inside pure-int code,
+so neither flagship exercised this extraction path end-to-end.
+
+Why this matters
+----------------
+Five consecutive Phase 4 extension commits (struct lit, enum lit,
+match, cast, array lit) had landed with zero new attached proofs.
+The active candidate `fixed_capacity` was at 3/10 bars and 0
+theorems attached. Adding extraction capability without
+proof-of-use widens the "claimed vs evidenced" gap. This commit
+demonstrates the workflow generalizes beyond parse_validate's
+shape: extraction → spec → registered proof → drift-detection
+all compose on a struct-carrying function with an array field.
+
+What landed
+-----------
+- `Concrete.Proof.ringNewExpr` — the PExpr spec: a `letIn` binding
+  `data` to an `arrayLit` of 16 `(.lit (.int 0))` items, then a
+  `structLit` building `RingBuf { data, head: 0, count: 0 }`.
+- `Concrete.Proof.fixedCapacityFns` — minimal `FnTable` carrying
+  only `ring_new`; future fixed_capacity proofs extend it.
+- `Concrete.Proof.ring_new_correct` — the theorem.  Proof is a
+  single `simp` invocation that unfolds the spec, evaluator,
+  `evalElems`, `evalFields`, `List.replicate`, and the env binder.
+- `examples/fixed_capacity/src/proof-registry.json` — new
+  per-example registry. fixed_capacity now uses the same loading
+  path as parse_validate and crypto_verify.
+
+Pull-through evidence
+---------------------
+`examples/fixed_capacity/src/main.con` proof-status:
+
+    before: 0 proved / 11 unproved / 3 blocked / 2 ineligible / 4 trusted
+    after:  1 proved / 10 unproved / 3 blocked / 2 ineligible / 4 trusted
+
+AUDIT bar count: 3/10 → 4/10 (bar #1 closed; #3, #4, #9
+already met; remaining #2 composition + #5 oracle + #6 catches +
+#7 bundle + #8 README + #10 manifest).
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0 (3 fixed_capacity snapshots refreshed:
+                       proof-status, obligations, effects)
+
 ### Phase 4 ProofCore extracts array literals
 
 `PExpr.arrayLit elems` is a new shape: evaluates each element

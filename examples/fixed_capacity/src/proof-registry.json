@@ -1,0 +1,8 @@
+[
+  {
+    "function": "fixed_capacity.ring_new",
+    "body_fingerprint": "[(let data (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (ret (struct RingBuf data=(var data) head=(int 0) count=(int 0)))]",
+    "proof": "Concrete.Proof.ring_new_correct",
+    "spec": "Concrete.Proof.ringNewExpr"
+  }
+]

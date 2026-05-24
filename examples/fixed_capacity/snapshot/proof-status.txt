@@ -108,17 +108,12 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:115
+-- proved ------------------------------------------------ examples/fixed_capacity/src/main.con:115
 
-  `fixed_capacity.ring_new` passes the predictable profile but has no registered proof.
+  ✓ `fixed_capacity.ring_new` — proof matches current body.
 
  115 |     fn ring_new() -> RingBuf {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-  current fingerprint:
-    [(let data (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (ret (struct RingBuf data=(var data) head=(int 0) count=(int 0)))]
-
-  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
 -- blocked ------------------------------------------------ examples/fixed_capacity/src/main.con:122
 
@@ -215,5 +210,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 20 functions — 0 proved, 0 stale, 11 unproved, 3 blocked, 2 ineligible, 4 trusted
+Totals: 20 functions — 1 proved, 0 stale, 10 unproved, 3 blocked, 2 ineligible, 4 trusted
 

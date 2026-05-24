@@ -1422,6 +1422,53 @@ theorem parse_header_truncated
         h_len_dec, h_plen_lo_d, h_plen_hi_d, h_trunc_d]
 
 -- ============================================================
+-- fixed_capacity — first attached theorem (bar #1 for the active
+-- candidate). Targets ring_new: zero-initialized 16-element
+-- RingBuf. The theorem exercises arrayLit + structLit + letIn
+-- composed together under the kernel — neither parse_validate
+-- nor crypto_verify uses arrays, so this is the first end-to-end
+-- evidence that the recent Phase 4 extensions compose.
+-- ============================================================
+
+/-- `fn ring_new() -> RingBuf` — returns a fresh RingBuf with a
+    16-element data array zeroed, head = 0, count = 0. -/
+def ringNewExpr : PExpr :=
+  .letIn "data" (.arrayLit (List.replicate 16 (.lit (.int 0))))
+    (.structLit "RingBuf"
+      [ ("data",  .var "data")
+      , ("head",  .lit (.int 0))
+      , ("count", .lit (.int 0))
+      ])
+
+def ringNewFn : PFnDef :=
+  { name := "ring_new", params := [], body := ringNewExpr }
+
+/-- Function table for fixed_capacity's first proof.  ring_new is
+    self-contained (no inter-function calls), so the table carries
+    only ring_new for now; future fixed_capacity proofs will
+    extend it. -/
+def fixedCapacityFns : FnTable
+  | "ring_new" => some ringNewFn
+  | _          => none
+
+set_option linter.unusedSimpArgs false in
+/-- `ring_new()` evaluates to the canonical empty RingBuf:
+    `data` is 16 zeros, `head` and `count` are both 0.  This is the
+    first attached theorem on fixed_capacity, and the first proof
+    in the project that combines arrayLit + structLit + letIn. -/
+theorem ring_new_correct (fuel : Nat) :
+    eval fixedCapacityFns Env.empty (fuel + 5) ringNewExpr
+    = some (.struct_ "RingBuf"
+        [ ("data",  .array_ (List.replicate 16 (.int 0)))
+        , ("head",  .int 0)
+        , ("count", .int 0)
+        ]) := by
+  simp [ringNewExpr,
+        eval, eval.evalElems, eval.evalFields,
+        fixedCapacityFns, Env.bind,
+        List.replicate]
+
+-- ============================================================
 -- Proved functions registry
 -- ============================================================
 
