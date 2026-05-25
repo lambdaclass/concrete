@@ -313,16 +313,7 @@ def eval (fns : FnTable) (env : Env) : Nat → PExpr → Option PVal
     | some (.bool false) => eval fns env fuel cont
     | _ => none
   | fuel + 1, .while_step cond carried step cont =>
-    match eval fns env fuel cond with
-    | some (.bool true) =>
-      match eval fns env fuel step with
-      | some (.enum_ "LoopStep" "Cont" updates) =>
-        let env' := updates.foldl (fun e (name, val) => e.bind name val) env
-        eval fns env' fuel (.while_step cond carried step cont)
-      | some (.enum_ "LoopStep" "Break" [("value", v)]) => some v
-      | _ => none
-    | some (.bool false) => eval fns env fuel cont
-    | _ => none
+    evalWhileStep fns env fuel cond carried step cont
 where
   /-- Evaluate a list of argument expressions. -/
   evalArgs (fns : FnTable) (env : Env) (fuel : Nat) : List PExpr → Option (List PVal)
@@ -389,6 +380,22 @@ where
         match evalElems fns env fuel rest with
         | none => none
         | some vs => some (v :: vs)
+  /-- One while_step iteration.  Factored out of `eval` so proofs
+      have a stable rewrite rule: `eval ... .while_step ... =
+      eval.evalWhileStep ...` by `rfl`. -/
+  evalWhileStep (fns : FnTable) (env : Env) (fuel : Nat)
+      (cond : PExpr) (carried : List String) (step cont : PExpr) :
+      Option PVal :=
+    match eval fns env fuel cond with
+    | some (.bool true) =>
+      match eval fns env fuel step with
+      | some (.enum_ "LoopStep" "Cont" updates) =>
+        let env' := updates.foldl (fun e (name, val) => e.bind name val) env
+        eval fns env' fuel (.while_step cond carried step cont)
+      | some (.enum_ "LoopStep" "Break" [("value", v)]) => some v
+      | _ => none
+    | some (.bool false) => eval fns env fuel cont
+    | _ => none
   /-- Evaluate a list of assignments, threading each new binding
       through the env so subsequent assigns in the same iteration
       see earlier updates. -/
@@ -1677,6 +1684,71 @@ def fixedCapacityFns : FnTable
   | "ring_contains" => some ringContainsFn
   | _               => none
 
+-- ============================================================
+-- while_step lemma surface (Phase 4 item 1 follow-through)
+-- ============================================================
+--
+-- The composition proof for ring_contains needs a stable lemma
+-- surface for `while_step` evaluation that doesn't go through
+-- simp's full eval expansion (which exceeds the step counter
+-- on a multi-letIn + while_step chain).  These three lemmas
+-- give that surface:
+--
+--   eval_while_step_unfold:  one-step structural rewrite
+--   while_step_break:        break path (returns the value)
+--   while_step_cont:         continue path (recurses on updated env)
+
+/-- Structural unfolding: `eval` on a `while_step` is exactly
+    `eval.evalWhileStep`, by definition.  Used by the lemmas
+    below to rewrite into a target the proof can analyze. -/
+theorem eval_while_step_unfold
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (cond : PExpr) (carried : List String) (step cont : PExpr) :
+    eval fns env (fuel + 1) (.while_step cond carried step cont) =
+    eval.evalWhileStep fns env fuel cond carried step cont := by
+  simp [eval]
+
+/-- Break branch: cond true, step produces `Break v` → return `v`. -/
+theorem while_step_break
+    (fns : FnTable) (env : Env) (fuel : Nat) (v : PVal)
+    (cond step cont : PExpr) (carried : List String)
+    (h_cond : eval fns env fuel cond = some (.bool true))
+    (h_step : eval fns env fuel step
+              = some (.enum_ "LoopStep" "Break" [("value", v)])) :
+    eval fns env (fuel + 1) (.while_step cond carried step cont) = some v := by
+  rw [eval_while_step_unfold]
+  unfold eval.evalWhileStep
+  rw [h_cond, h_step]
+  rfl
+
+/-- Continue branch: cond true, step produces `Cont updates` →
+    recurse on updated env with same loop. -/
+theorem while_step_cont
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (updates : List (String × PVal))
+    (cond step cont : PExpr) (carried : List String)
+    (h_cond : eval fns env fuel cond = some (.bool true))
+    (h_step : eval fns env fuel step
+              = some (.enum_ "LoopStep" "Cont" updates)) :
+    eval fns env (fuel + 1) (.while_step cond carried step cont) =
+    eval fns (updates.foldl (fun e (name, val) => e.bind name val) env) fuel
+         (.while_step cond carried step cont) := by
+  rw [eval_while_step_unfold]
+  unfold eval.evalWhileStep
+  rw [h_cond, h_step]
+  rfl
+
+/-- Exit branch: cond false → fall through to cont. -/
+theorem while_step_exit
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (cond step cont : PExpr) (carried : List String)
+    (h_cond : eval fns env fuel cond = some (.bool false)) :
+    eval fns env (fuel + 1) (.while_step cond carried step cont) =
+    eval fns env fuel cont := by
+  rw [eval_while_step_unfold]
+  unfold eval.evalWhileStep
+  rw [h_cond]
+
 set_option linter.unusedSimpArgs false in
 /-- `ring_contains` on an empty ring (count = 0) returns 0 for any
     value: `scan = min(count, cap) = 0`, so the while_step's cond
@@ -1699,7 +1771,44 @@ theorem ring_contains_empty_correct
         ])).bind "val" (.int v))
       (fuel + 10) ringContainsExpr
     = some (.int 0) := by
-  simp [ringContainsExpr, eval, eval.lookupField,
+  simp [ringContainsExpr, eval, eval.evalWhileStep, eval.lookupField,
+        fixedCapacityFns, Env.bind, evalBinOp]
+
+set_option maxHeartbeats 2000000 in
+set_option linter.unusedSimpArgs false in
+/-- **Composition theorem**: a 1-element ring containing `v` at
+    index 0 (head=1, count=1, data starts with `.int v`) has
+    `ring_contains v = 1`.
+
+    This is the iteration-counted companion to
+    `ring_contains_empty_correct`: the loop runs exactly one
+    iteration because `scan = min(count, cap) = 1`.
+
+    Proof strategy uses the helper lemmas above to bypass simp's
+    full-eval expansion:
+      1. Reach the while_step via the outer letIn chain.
+      2. Apply `while_step_break` with hypotheses for cond and
+         step (each closed by a focused simp).
+      3. cond: `i = 0 < scan = 1` evaluates to true.
+      4. step: idx computes to 0 via BitVec.srem 32 16; the eq
+         check `val == rb.data[0]` fires; arm returns Break(1).
+
+    Composes with `ring_push_zero_correct`: pushing `v` into the
+    empty ring produces exactly this {head=1, count=1, data=[v..]}
+    shape.  Two functions, one chain. -/
+theorem ring_push_then_contains_correct
+    (data_tail : List PVal) (fuel : Nat) :
+    eval fixedCapacityFns
+      ((Env.empty.bind "rb" (.struct_ "RingBuf"
+        [ ("data",  .array_ ((.int 0) :: data_tail))
+        , ("head",  .int 1)
+        , ("count", .int 1)
+        ])).bind "val" (.int 0))
+      (fuel + 30) ringContainsExpr
+    = some (.int 1) := by
+  simp (config := { maxSteps := 1000000 })
+       [ringContainsExpr, eval, eval.evalWhileStep, eval.evalFields,
+        eval.lookupField, eval.lookupIndex,
         fixedCapacityFns, Env.bind, evalBinOp]
 
 set_option linter.unusedSimpArgs false in

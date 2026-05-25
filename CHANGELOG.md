@@ -10,6 +10,88 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Iteration-counted composition: ring_push then ring_contains finds the value
+
+The substantive proof-side claim for fixed_capacity:
+pushing `v` into the canonical empty RingBuf, then looking
+it up, returns `1`. Two functions, one chain, kernel-checked.
+Closes AUDIT bar #2.
+
+The composition is iteration-counted in the proof-engineering
+sense: the while_step takes exactly one iteration (the cond
+fires true on `i = 0 < scan = 1`, the step produces
+`LoopStep::Break { value: 1 }`, and the break value short-
+circuits the loop and `cont`). The proof exercises the full
+state-model surface — `arraySet` (from ring_push's
+post-condition shape), `while_step` (from ring_contains's
+loop), `LoopStep` enum dispatch, BitVec mod at i32 width,
+field access, array indexing, and the BEq match.
+
+Eval refactor: extracted `evalWhileStep` into eval's `where` block
+-----------------------------------------------------------------
+The composition proof initially fought simp — the step
+counter exploded on the multi-letIn + while_step + nested
+arithmetic chain. The fix that unstuck it: factor the
+`.while_step` arm of `eval` into a separate
+`eval.evalWhileStep` helper. This gives proofs a stable
+lemma surface:
+
+  `eval_while_step_unfold`:
+    `eval ... .while_step = eval.evalWhileStep ...` (by `simp [eval]`)
+
+  `while_step_break`: cond true + step→Break v → return v
+  `while_step_cont`:  cond true + step→Cont updates → recurse
+  `while_step_exit`:  cond false → fall through to cont
+
+Each lemma has a 3-line proof: `rw [eval_while_step_unfold];
+unfold eval.evalWhileStep; rw [h_cond, h_step]`. The composition
+theorem itself closes with one `simp` call (with `maxSteps :=
+1000000`) using `eval.evalWhileStep` and `eval.evalFields`
+in the simp set.
+
+This is the durable proof surface for future while_step
+work — any later loop theorem will use the same three
+lemmas. Phase 12 preservation arguments will state their
+obligations in terms of `eval.evalWhileStep` rather than
+the monolithic `eval`.
+
+What landed
+-----------
+- `eval.evalWhileStep` factored out of `eval`'s `.while_step`
+  arm. Eval's case is now a 2-line forwarding call. Semantics
+  unchanged.
+- 4 lemmas on the new surface (`eval_while_step_unfold` +
+  3 specialized cases).
+- `ring_push_then_contains_correct`: composition theorem
+  for the 1-element-ring case. Parameterized over
+  `data_tail` (universally quantified — only `data[0]`
+  matters). Fixed v=0; a fully-parametric v requires a
+  small BEq-PVal lemma not yet ergonomic via simp.
+- Registry entry for `ring_contains` now points at
+  `ring_push_then_contains_correct` (the stronger claim).
+  `ring_contains_empty_correct` remains kernel-checked
+  in the source — it's the empty-ring corollary, useful
+  as documentation and a sanity check.
+- AUDIT bar #2 closed.
+
+Pull-through evidence
+---------------------
+fixed_capacity proof-status totals unchanged at
+`4 proved / 10 unproved / 0 blocked / 2 inel / 4 trusted`
+— the function count doesn't move, but the registered
+proof on `ring_contains` is now the substantive
+composition rather than the weaker empty-case theorem.
+
+AUDIT moves from 4/10 to 5/10 bars (#1 ✅, #2 ✅, #3, #4,
+#9). Remaining: content bars (#5 oracle, #6 catches, #7
+bundle, #8 README, #10 manifest).
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0
+
 ### Phase 4 while_step: ring_contains extracts and proves; zero blockers in fixed_capacity
 
 Second piece of the state-model implementation from

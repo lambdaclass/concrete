@@ -150,7 +150,7 @@ loops) makes this provable.
 | # | Bar | Status |
 |---:|---|---|
 | 1 | Lean-backed property surfaced as `proved` | ✅ `ring_new_correct` attached (2026-05-24); first proof in the project that composes arrayLit + structLit + letIn under the kernel |
-| 2 | Composition property Lean-backed | ⏳ scalar-validator composition provable today; whole-flow composition blocked on Phase 4 while-loop / struct-literal / cast |
+| 2 | Composition property Lean-backed | ✅ `ring_push_then_contains_correct` — iteration-counted 2-function composition over bounded mutable state |
 | 3 | Assumption file with schema, CI-enforced | ✅ `assumptions.toml` with trusted list; `make test-assumptions` 3/0 |
 | 4 | Policy file with enforceable budgets, CI-enforced | ✅ `Concrete.toml [policy]` 6 fields enforced (omits no_unsafe/no_trusted since 4 trusted shells are by design); `make test-policy` |
 | 5 | Oracle beyond hand-written tests | ❌ absent; harness needs widening or wrapper |
@@ -160,17 +160,19 @@ loops) makes this provable.
 | 9 | Snapshot/diff baseline | ✅ `examples/fixed_capacity/snapshot/` 16 reports baselined; `make test-snapshots` 48/0 across all 3 candidates |
 | 10 | Listed in `tests/showcase/manifest.toml` | ❌ absent |
 
-**Today: 4 of 10 bars met (#1, #3, #4, #9), with bar #1 now
-backed by 4 attached theorems and zero remaining extraction
-blockers.** Bar #1 closed 2026-05-24 with `ring_new_correct`;
-extended 2026-05-25 with `compute_tag_zero_correct` (first
-while-loop theorem), `ring_push_zero_correct` (first arraySet
-theorem), and `ring_contains_empty_correct` (first while_step
-theorem — empty-ring case). Every extraction-eligible
-function in fixed_capacity is now either proved or has a
-clean `no proof` slot — 0 blocked. Remaining graduation bars
-are content work (#5 oracle, #6 catches, #7 bundle, #8 README,
-#10 manifest) + the composition theorem (#2).
+**Today: 5 of 10 bars met (#1, #2, #3, #4, #9), with bar #1
+backed by 4 attached theorems and bar #2 closed by the
+iteration-counted composition theorem.** Bar #1 closed
+2026-05-24 with `ring_new_correct`; extended 2026-05-25 with
+`compute_tag_zero_correct`, `ring_push_zero_correct`, and
+the empty-ring `ring_contains_empty_correct` plus the
+composition `ring_push_then_contains_correct` (1-element
+ring → contains finds the value via one Break iteration of
+while_step). Bar #2 — composition — is now real: the chain
+"push v into empty ring; contains v returns 1" is
+kernel-checked. Zero extraction blockers. Remaining bars
+are content work (#5 oracle, #6 catches, #7 bundle, #8
+README, #10 manifest).
 
 ## 8. Strategic value beyond graduation
 
