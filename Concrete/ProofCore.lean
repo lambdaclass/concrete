@@ -1361,6 +1361,19 @@ inductive RegistryIssue where
   | emptyProofName (entry : ProofRegistryEntry)
   | emptySpecName (entry : ProofRegistryEntry)
   | extractionBlocked (entry : ProofRegistryEntry) (unsupported : List String)
+  /-- Spec drift: the registry's spec name resolves to a `PExpr` (via
+      `Concrete.Proof.specs`) that does NOT equal the source-extracted
+      `PExpr`.  The theorem in the registry is about a different
+      function than the source.  This is the spec-side counterpart of
+      `staleFingerprint` (which catches the source-side equivalent).
+
+      Only fires when the function appears in BOTH `Concrete.Proof.specs`
+      and the registry.  A registry entry whose function is missing
+      from `specs` is silently uncovered by this gate — that's by
+      design: test programs and out-of-tree examples can register
+      proofs by string name without forcing the compiler's spec table
+      to know about them. -/
+  | specDrift (entry : ProofRegistryEntry)
   deriving Repr
 
 /-- Registry issues that are errors (attachment integrity violations)
@@ -1375,6 +1388,7 @@ def RegistryIssue.isError : RegistryIssue → Bool
   | .emptyProofName _ => true
   | .emptySpecName _ => true
   | .extractionBlocked _ _ => true
+  | .specDrift _ => true            -- drifted spec invalidates the proof
 
 /-- Validate a proof registry against a ProofCore artifact. -/
 def validateRegistry (pc : ProofCore) (registry : ProofRegistry) : List RegistryIssue :=
@@ -1431,7 +1445,30 @@ def validateRegistry (pc : ProofCore) (registry : ProofRegistry) : List Registry
     if re.proof.isEmpty then some (.emptyProofName re) else none
   let emptySpecs := registry.filterMap fun re =>
     if re.spec.isEmpty then some (.emptySpecName re) else none
-  unknowns ++ duplicates ++ conflicts ++ stales ++ ineligibles ++ blocked ++ emptyProofs ++ emptySpecs
+  -- Spec-drift check (Phase 4 item 2): for each registry entry whose
+  -- source extraction succeeded AND whose function is listed in
+  -- `Concrete.Proof.specs`, compare the (already-normalized) extracted
+  -- PExpr to the normalized registered spec PExpr.  Mismatch is an
+  -- error; absence from `specs` is a warning.  Skip entries that are
+  -- already stale (body_fingerprint mismatch) — those are reported by
+  -- `staleFingerprint` and the user is already going to update both.
+  let staleNames := stales.filterMap fun
+    | .staleFingerprint re _ => some re.function
+    | _ => none
+  let specDrifts := registry.filterMap fun re =>
+    if staleNames.contains re.function then none
+    else match pc.entries.find? fun e => e.qualName == re.function with
+      | none => none  -- excluded/blocked/unknown; covered elsewhere
+      | some entry =>
+        match entry.extracted with
+        | none => none  -- extraction failed; covered by extractionBlocked
+        | some extractedPExpr =>
+          match Proof.specs.find? fun (n, _) => n == re.function with
+          | none => none  -- function not in specs table; gate uncovered (intentional)
+          | some (_, specPExpr) =>
+            if extractedPExpr == normalizePExpr specPExpr then none
+            else some (.specDrift re)
+  unknowns ++ duplicates ++ conflicts ++ stales ++ ineligibles ++ blocked ++ emptyProofs ++ emptySpecs ++ specDrifts
 
 /-- Render a registry validation issue as a diagnostic string. -/
 def renderRegistryIssue : RegistryIssue → String
@@ -1453,6 +1490,8 @@ def renderRegistryIssue : RegistryIssue → String
     s!"error: registry entry for '{re.function}' has empty spec name"
   | .extractionBlocked re unsupported =>
     s!"error: registry entry for '{re.function}' targets extraction-blocked function (unsupported: {", ".intercalate unsupported})"
+  | .specDrift re =>
+    s!"error: spec drift for '{re.function}' — registered spec '{re.spec}' (via Concrete.Proof.specs) does not match the source-extracted PExpr; the theorem '{re.proof}' is about a different function than the source"
 
 /-- Convert registry validation issues into proof diagnostics with
     the attachment_integrity failure class. The `locMap` lets us populate
@@ -1471,10 +1510,12 @@ def registryIssuesToDiagnostics (issues : List RegistryIssue)
       | .emptyProofName _ => ["empty proof name"]
       | .emptySpecName _ => ["empty spec name"]
       | .extractionBlocked _ unsupported => unsupported
+      | .specDrift _ => ["spec drift"]
     let fn := match issue with
       | .unknownFunction re | .renamedFunction re _ | .staleFingerprint re _
       | .ineligibleFunction re _ | .emptyProofName re | .emptySpecName re
-      | .extractionBlocked re _ => re.function
+      | .extractionBlocked re _
+      | .specDrift re => re.function
       | .duplicateEntry f _ | .conflictingEntry f _ => f
     let loc := (locMap.find? fun e => e.1 == fn).map (·.2)
     some { kind := .attachmentIntegrity, severity := sev, function := fn
@@ -1489,6 +1530,7 @@ def registryIssuesToDiagnostics (issues : List RegistryIssue)
            | .emptyProofName _ => "Add a proof name to the registry entry."
            | .emptySpecName _ => "Add a spec name to the registry entry."
            | .extractionBlocked _ _ => "Remove the registry entry or fix unsupported constructs."
+           | .specDrift _ => "Update the Lean spec in Concrete/Proof.lean to match the source-extracted PExpr, or update the source to match the spec."
          , details := det
          , failureClass := failureClassOf .attachmentIntegrity
          , repairClass := repairClassOf .attachmentIntegrity
@@ -1609,9 +1651,16 @@ private partial def extractModule
     (accE ++ e, accX ++ x)) ([], [])
   (entries ++ subEntries, excluded ++ subExcluded)
 
-/-- Derive obligation status from eligibility, trust, extraction, and spec attachment. -/
+/-- Derive obligation status from eligibility, trust, extraction, and spec attachment.
+
+    `specDrifted = true` means the registered spec PExpr (from
+    `Concrete.Proof.specs`) does NOT match the source-extracted
+    PExpr.  A drifted spec invalidates the proof claim even when the
+    body fingerprint still matches, so it's treated as `.stale`
+    (the user must update the Lean spec or the source). -/
 private def deriveObligationStatus
     (eligible : Bool) (isTrusted : Bool) (extracted : Bool)
+    (specDrifted : Bool)
     (spec : Option SpecAttachment) (currentFp : String) : ObligationStatus :=
   if isTrusted then .trusted
   else if !eligible then
@@ -1621,6 +1670,7 @@ private def deriveObligationStatus
   else match spec with
   | some a =>
     if a.expectedFp != currentFp then .stale
+    else if specDrifted then .stale
     else if a.source == .hardcoded then .proved  -- hardcoded proofs done in Lean, extraction not required
     else if !extracted then .blocked
     else .proved
@@ -1634,11 +1684,17 @@ private def generateObligations
     (entries : List ProofCoreEntry)
     (excluded : List ProofCoreExcluded)
     (graph : CallGraph) : List Obligation :=
-  -- Build obligations for extracted (eligible) entries
+  -- Build obligations for extracted (eligible) entries.
+  -- specDrifted = registered spec from `Concrete.Proof.specs` doesn't
+  -- match the extracted PExpr (when both exist).
   let entryObls := entries.map fun e =>
     let extracted := e.extracted.isSome
+    let specDrifted := match e.extracted, Proof.specs.find? fun (n, _) => n == e.qualName with
+      | some extractedPExpr, some (_, specPExpr) =>
+        extractedPExpr != normalizePExpr specPExpr
+      | _, _ => false  -- no extracted or no registered spec → no drift detectable here
     let status := deriveObligationStatus e.eligibility.eligible
-        e.eligibility.isTrusted extracted e.spec e.fingerprint
+        e.eligibility.isTrusted extracted specDrifted e.spec e.fingerprint
     let cat := if status == .ineligible
       then some (classifyIneligible e.eligibility.sourceReasons e.eligibility.profileReasons)
       else none
@@ -1652,10 +1708,12 @@ private def generateObligations
     , dependencies := []  -- filled in second pass
     , staleDeps := []
     , loc := e.loc : Obligation }
-  -- Build obligations for excluded entries (never extracted)
+  -- Build obligations for excluded entries (never extracted).
+  -- Excluded functions have no extracted PExpr to compare, so
+  -- specDrifted is always false here.
   let exclObls := excluded.map fun e =>
     let status := deriveObligationStatus e.eligibility.eligible
-        e.eligibility.isTrusted false e.spec e.fingerprint
+        e.eligibility.isTrusted false false e.spec e.fingerprint
     let cat := if status == .ineligible
       then some (classifyIneligible e.eligibility.sourceReasons e.eligibility.profileReasons)
       else none
@@ -1829,8 +1887,12 @@ def ProofCore.selfCheck (pc : ProofCore) : List ConsistencyViolation :=
     let qn := o.functionId.qualName
     match pc.findEntry qn with
     | some e =>
+      let specDrifted := match e.extracted, Proof.specs.find? fun (n, _) => n == qn with
+        | some extractedPExpr, some (_, specPExpr) =>
+          extractedPExpr != normalizePExpr specPExpr
+        | _, _ => false
       let expected := deriveObligationStatus e.eligibility.eligible
-          e.eligibility.isTrusted e.extracted.isSome e.spec e.fingerprint
+          e.eligibility.isTrusted e.extracted.isSome specDrifted e.spec e.fingerprint
       if o.status != expected then
         some { invariant := "OBL-STATUS", function := qn
              , message := s!"obligation status '{repr o.status}' disagrees with re-derived '{repr expected}'" }
@@ -1839,7 +1901,7 @@ def ProofCore.selfCheck (pc : ProofCore) : List ConsistencyViolation :=
       match pc.findExcluded qn with
       | some x =>
         let expected := deriveObligationStatus x.eligibility.eligible
-            x.eligibility.isTrusted false x.spec x.fingerprint
+            x.eligibility.isTrusted false false x.spec x.fingerprint
         if o.status != expected then
           some { invariant := "OBL-STATUS", function := qn
                , message := s!"obligation status '{repr o.status}' disagrees with re-derived '{repr expected}'" }

@@ -1628,4 +1628,44 @@ def provedFunctions : List (String × String × String) :=
      "Concrete.Proof.validate_header_correct")
   ]
 
+-- ============================================================
+-- Registered spec table (Phase 4 item 2 — spec/body drift gate)
+-- ============================================================
+
+/-- Function-qualified-name → registered spec PExpr.
+
+    This is the **machine-readable** mapping from source function
+    to its formal spec, used by the spec-drift CI gate in
+    `Concrete.ProofCore.validateRegistry`.  The gate normalizes the
+    registered spec and asserts it equals the source-extracted PExpr
+    (which is itself already normalized at storage time).  Mismatch
+    → `RegistryIssue.specDrift` and a `--report proof-status`
+    diagnostic.
+
+    Must stay in sync with `examples/*/src/proof-registry.json`.
+    The registry's `spec` JSON field is the human-readable Lean name
+    pointer; this table is the value the compiler actually compares
+    against.  If you add a new registry entry, add the corresponding
+    `(qualName, specExpr)` here.
+
+    Why this exists: before this gate, a typo in a hand-written spec
+    produced a kernel-checked theorem about the wrong function while
+    the report still said "proved".  The body-fingerprint check
+    catches source drift, but it cannot catch spec drift — both
+    sides are hand-written. -/
+def specs : List (String × PExpr) :=
+  [ -- parse_validate
+    ("parse_validate.validate_version",       validateVersionExpr)
+  , ("parse_validate.validate_header_fields", validateHeaderFieldsExpr)
+  , ("parse_validate.parse_header",           parseHeaderExpr)
+    -- crypto_verify (toy MAC)
+  , ("main.compute_tag",   computeTagExpr)
+  , ("main.verify_tag",    verifyTagExpr)
+  , ("main.check_nonce",   checkNonceExpr)
+  , ("main.verify_message", verifyMessageExpr)
+    -- fixed_capacity
+  , ("fixed_capacity.ring_new",    ringNewExpr)
+  , ("fixed_capacity.compute_tag", fcTagExpr)
+  ]
+
 end Concrete.Proof
