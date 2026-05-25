@@ -35,6 +35,21 @@ over that subset.  The two are complementary:
 /-- Binary operators in the proof fragment. -/
 inductive PBinOp where
   | add | sub | mul
+  /-- Signed remainder at i32 width.  Modeled via `BitVec.srem` on
+      the `BitVec 32` round-trip of the operands.  This is the
+      principled coupling to Concrete's surface semantics:
+      Concrete's `.mod` lowers to LLVM `srem` for signed integer
+      types (`EmitSSA.lean:.mod => .srem` for `ssaIsSignedInt`).
+      Width is currently hardcoded to 32; multi-width support is
+      a Phase 4 follow-up that needs to thread `Ty` through PExpr.
+      Today every flagship `mod` is on `i32` (e.g. ring_push's
+      `head % cap`), so the i32-only restriction is not blocking. -/
+  | mod
+  /-- Bitwise XOR at i32 width.  Modeled via `BitVec.xor` on the
+      `BitVec 32` round-trip of the operands, with the result
+      reinterpreted as `Int` via `BitVec.toInt` (signed view).
+      Same width caveat as `mod`. -/
+  | bitxor
   | eq | ne | lt | le | gt | ge
   deriving Repr, BEq, DecidableEq
 
@@ -161,6 +176,16 @@ def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
   | .add, .int a, .int b => some (.int (a + b))
   | .sub, .int a, .int b => some (.int (a - b))
   | .mul, .int a, .int b => some (.int (a * b))
+  | .mod, .int a, .int b =>
+    -- Signed remainder at i32 width via BitVec.srem (matches LLVM
+    -- srem, which is what EmitSSA emits for signed `.mod`).
+    if b = 0 then none
+    else some (.int (BitVec.toInt
+      (BitVec.srem (BitVec.ofInt 32 a) (BitVec.ofInt 32 b))))
+  | .bitxor, .int a, .int b =>
+    -- Bitwise xor at i32 width via the BitVec round-trip.
+    some (.int (BitVec.toInt
+      ((BitVec.ofInt 32 a) ^^^ (BitVec.ofInt 32 b))))
   | .eq,  .int a, .int b => some (.bool (a == b))
   | .ne,  .int a, .int b => some (.bool (a != b))
   | .lt,  .int a, .int b => some (.bool (a < b))
@@ -1467,6 +1492,34 @@ theorem parse_header_truncated
 -- evidence that the recent Phase 4 extensions compose.
 -- ============================================================
 
+/-- `fn compute_tag(buf: MsgBuf) -> i32` — XOR fold of bytes 0..5.
+
+      let acc = 0
+      let i   = 0
+      while i < 6 {
+        acc = acc ^ (buf.data[i] as i32)
+        i   = i + 1
+      }
+      return acc
+
+    Single-iteration cost is one cond eval + two evalAssigns.
+    The loop runs exactly 6 iterations (bounded literal). -/
+def fcTagExpr : PExpr :=
+  .letIn "acc" (.lit (.int 0))
+    (.letIn "i" (.lit (.int 0))
+      (.while_
+        (.binOp .lt (.var "i") (.lit (.int 6)))
+        [ ("acc",
+           .binOp .bitxor (.var "acc")
+             (.cast (.arrayIndex (.fieldAccess (.var "buf") "data")
+                       (.var "i"))))
+        , ("i", .binOp .add (.var "i") (.lit (.int 1)))
+        ]
+        (.var "acc")))
+
+def fcTagFn : PFnDef :=
+  { name := "compute_tag", params := ["buf"], body := fcTagExpr }
+
 /-- `fn ring_new() -> RingBuf` — returns a fresh RingBuf with a
     16-element data array zeroed, head = 0, count = 0. -/
 def ringNewExpr : PExpr :=
@@ -1480,13 +1533,36 @@ def ringNewExpr : PExpr :=
 def ringNewFn : PFnDef :=
   { name := "ring_new", params := [], body := ringNewExpr }
 
-/-- Function table for fixed_capacity's first proof.  ring_new is
-    self-contained (no inter-function calls), so the table carries
-    only ring_new for now; future fixed_capacity proofs will
-    extend it. -/
+/-- Function table for fixed_capacity proofs.  Each new proof
+    extends this table with the function it targets. -/
 def fixedCapacityFns : FnTable
-  | "ring_new" => some ringNewFn
-  | _          => none
+  | "ring_new"    => some ringNewFn
+  | "compute_tag" => some fcTagFn
+  | _             => none
+
+set_option linter.unusedSimpArgs false in
+/-- `compute_tag` on a buffer whose first 6 data bytes are all 0
+    returns 0 (any tail is ignored).  This is the first theorem
+    in the project that exercises a bounded while loop end-to-end
+    under the Lean kernel: each iteration evaluates the cond,
+    runs the two flat assigns through `evalAssigns`, and rebinds
+    `acc` and `i` in the env.  After 6 iterations acc remains 0
+    (0 xor 0 = 0 at each step) and `i = 6` makes the cond
+    false, falling through to `return acc`. -/
+theorem compute_tag_zero_correct (rest : List PVal) (fuel : Nat) :
+    eval fixedCapacityFns
+      (Env.empty.bind "buf"
+        (.struct_ "MsgBuf"
+          [("data", .array_ (List.replicate 6 (.int 0) ++ rest))]))
+      (fuel + 80) fcTagExpr
+    = some (.int 0) := by
+  -- The proof unfolds the loop 6 times.  Each iteration's
+  -- bitxor case reduces (0).toNat ^^^ (0).toNat = 0, so acc
+  -- stays 0.  After iteration 6, `decide (i < 6) = false`
+  -- fires the fall-through branch.
+  simp [fcTagExpr,
+        eval, eval.evalAssigns, eval.lookupField, eval.lookupIndex,
+        fixedCapacityFns, Env.bind, evalBinOp, List.replicate]
 
 set_option linter.unusedSimpArgs false in
 /-- `ring_new()` evaluates to the canonical empty RingBuf:

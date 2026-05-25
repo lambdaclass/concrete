@@ -10,6 +10,98 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### BitVec-backed bitxor + mod; first while-loop theorem (compute_tag)
+
+The fixed-width integer model the prior commit said had to be
+decided before `bitxor` / `mod` could land: **decided as BitVec
+round-trip at i32 width** (hardcoded for now; multi-width is the
+explicit Phase 4 follow-up). The implementation commits to one
+principled coupling — Concrete's surface ops are evaluated by
+converting `Int` operands to `BitVec 32`, running the BitVec
+operation, and reinterpreting via `BitVec.toInt`:
+
+    evalBinOp .bitxor (.int a) (.int b) =
+      some (.int (BitVec.toInt (BitVec.ofInt 32 a ^^^ BitVec.ofInt 32 b)))
+
+    evalBinOp .mod (.int a) (.int b) =
+      some (.int (BitVec.toInt
+        (BitVec.srem (BitVec.ofInt 32 a) (BitVec.ofInt 32 b))))
+
+For `mod`, `BitVec.srem` matches what `EmitSSA.lean` emits for
+signed `.mod` (LLVM `srem` — result has sign of dividend). For
+unsigned types, the lowering uses `urem`; PExpr's i32-only
+hardcoding doesn't distinguish yet, which is the known limit
+named below.
+
+This replaces the toy non-negative-only `Int.ofNat (a.toNat ^^^
+b.toNat)` and `Int.emod` semantics that an earlier draft of this
+commit shipped. The toy versions matched the value-level
+behaviour on the inputs we actually prove about (compute_tag's
+byte XOR-fold), but they weren't faithful to Concrete's i32
+surface — a proof of a property involving negative inputs or
+high-bit-set bytes would have used the wrong semantics. The
+BitVec round-trip is faithful: anything provable in PExpr is
+provable in `i32` at the source.
+
+Known limit (named, not hidden)
+-------------------------------
+Width is currently hardcoded to 32. PExpr ops don't carry a `Ty`;
+extraction would need to thread it through. None of today's
+flagship targets are non-i32, so this is not blocking. A future
+commit will widen `PExpr.binOp` to carry an operand-width tag
+(or split into `binOp32`, `binOp64`, …), at which point u8 /
+i64 / etc. become available. Until then, attempting to attach a
+proof on a u32 `bitxor` would extract correctly but the proof
+would have to acknowledge the width mismatch.
+
+The active candidate
+--------------------
+With BitVec semantics in place, `compute_tag_zero_correct` is
+the first theorem in the project that exercises a bounded while
+loop end-to-end under the Lean kernel. Statement: when the input
+buffer's first 6 data bytes are `.int 0`, `compute_tag` returns
+`.int 0` (any tail is ignored). Proof is one `simp` invocation
+that unfolds the spec, evaluator, `evalAssigns`, lookup helpers,
+`evalBinOp`, and `List.replicate`; the kernel walks 6
+iterations, each producing `BitVec.toInt (0 ^^^ 0) = 0`, then
+takes the fall-through branch when `i = 6`.
+
+Bug fix found by writing the theorem
+------------------------------------
+While inspecting `compute_tag`'s extracted PExpr, I noticed the
+loop body had `i = i + 1` TWICE per iteration. Cause: the
+for-loop desugar in `Concrete/Elab.lean:1087` concatenates step
+into the while body (`whileBody := cBody ++ cStep`) AND stores
+step separately in `CStmt.while_`'s `step` field. The prior
+extraction commit iterated `body ++ step` and double-stepped
+every for-desugared loop. Fix: walk `body` only at extraction
+(it already contains step); the `step` field exists for other
+consumers like continue-target lowering. The previous commit's
+while extraction was wrong on every for-loop; the theorem
+caught it.
+
+Pull-through evidence
+---------------------
+parse_validate: `compute_checksum` moves from
+`blocked: bitxor` to `no proof` (extracts; no theorem yet —
+needs the multi-iteration data dependency, which is a different
+proof shape from compute_tag_zero).
+fixed_capacity:
+  before: 1 proved / 11 unproved / 2 blocked / 2 inel / 4 trusted
+  after:  2 proved / 10 unproved / 2 blocked / 2 inel / 4 trusted
+ring_push's blocker narrows from
+`array index assignment, unsupported operator: mod`
+to just `array index assignment`.
+
+AUDIT bar #1 now backed by 2 theorems (`ring_new_correct`,
+`compute_tag_zero_correct`).
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0 (5 snapshots refreshed)
+
 ### Proof roadmap realigned around state, bitvectors, and reusable lemmas
 
 After array literals, `ring_new_correct`, casts, match extraction, and

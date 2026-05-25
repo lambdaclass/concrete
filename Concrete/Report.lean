@@ -1671,7 +1671,8 @@ private partial def renderPExpr : Proof.PExpr → String
   | .var name => name
   | .binOp op lhs rhs =>
     let opStr := match op with
-      | .add => "+" | .sub => "-" | .mul => "*"
+      | .add => "+" | .sub => "-" | .mul => "*" | .mod => "%"
+      | .bitxor => "^"
       | .eq => "==" | .ne => "!=" | .lt => "<"
       | .le => "<=" | .gt => ">" | .ge => ">="
     s!"({renderPExpr lhs} {opStr} {renderPExpr rhs})"
@@ -1795,6 +1796,7 @@ private partial def renderPExprAsLean : Proof.PExpr → String
   | .binOp op lhs rhs =>
     let opStr := match op with
       | .add => ".add" | .sub => ".sub" | .mul => ".mul"
+      | .mod => ".mod" | .bitxor => ".bitxor"
       | .eq => ".eq" | .ne => ".ne" | .lt => ".lt"
       | .le => ".le" | .gt => ".gt" | .ge => ".ge"
     s!".binOp {opStr}\n      ({renderPExprAsLean lhs})\n      ({renderPExprAsLean rhs})"

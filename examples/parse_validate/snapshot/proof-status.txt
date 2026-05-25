@@ -43,16 +43,17 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- blocked ------------------------------------------------ examples/parse_validate/src/main.con:79
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:79
 
-  `parse_validate.compute_checksum` is eligible but uses unsupported constructs — extraction failed.
+  `parse_validate.compute_checksum` passes the predictable profile but has no registered proof.
 
  79 |     fn compute_checksum(data: [i32; 8], count: i32) -> i32 {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: unsupported operator: Concrete.BinOp.bitxor
+  current fingerprint:
+    [(let acc (int 0)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (var count)) [(set acc (binop Concrete.BinOp.bitxor (var acc) (index (var data) (var i)))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (var acc))]
 
-  hint: Remove unsupported operator: Concrete.BinOp.bitxor to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
 -- no proof ----------------------------------------------- examples/parse_validate/src/main.con:87
 
@@ -103,5 +104,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 10 functions — 3 proved, 0 stale, 5 unproved, 1 blocked, 1 ineligible, 0 trusted
+Totals: 10 functions — 3 proved, 0 stale, 6 unproved, 0 blocked, 1 ineligible, 0 trusted
 

@@ -4,5 +4,11 @@
     "body_fingerprint": "[(let data (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (ret (struct RingBuf data=(var data) head=(int 0) count=(int 0)))]",
     "proof": "Concrete.Proof.ring_new_correct",
     "spec": "Concrete.Proof.ringNewExpr"
+  },
+  {
+    "function": "fixed_capacity.compute_tag",
+    "body_fingerprint": "[(let acc (int 0)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 6)) [(set acc (binop Concrete.BinOp.bitxor (var acc) (cast (index (field (var buf) data) (var i)) Concrete.Ty.i32))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (var acc))]",
+    "proof": "Concrete.Proof.compute_tag_zero_correct",
+    "spec": "Concrete.Proof.fcTagExpr"
   }
 ]

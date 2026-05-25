@@ -663,6 +663,8 @@ private def binOpToPBinOp : BinOp → Option Proof.PBinOp
   | .add => some .add
   | .sub => some .sub
   | .mul => some .mul
+  | .mod => some .mod
+  | .bitxor => some .bitxor
   | .eq  => some .eq
   | .neq => some .ne
   | .lt  => some .lt
@@ -765,14 +767,19 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
     let pv ← cExprToPExpr val
     let pb ← cStmtsToPExprK rest k
     some (.letIn name pv pb)
-  -- Bounded while loop with flat-assign body.  Body + step
-  -- statements must all be `CStmt.assign`; any nested `let`,
-  -- `if`, or `return` inside the loop body fails extraction
-  -- and falls back to identifyUnsupportedStmt (which reports
-  -- the actual blocker, not "while loop").
-  | (.while_ cond body _ step) :: rest, k => do
+  -- Bounded while loop with flat-assign body.  CStmt.while_
+  -- carries `body` containing the source body with the for-loop
+  -- step already concatenated (see Elab.lean's forLoop desugar:
+  -- `whileBody := cBody ++ cStep`).  The `step` field exists for
+  -- other consumers (continue-target lowering) and is NOT
+  -- iterated separately — using it here would double-step.
+  -- Every member of `body` must be `CStmt.assign`; any nested
+  -- `let`, `if`, or `return` fails extraction and falls back to
+  -- identifyUnsupportedStmt (which reports the actual blocker,
+  -- not "while loop").
+  | (.while_ cond body _ _step) :: rest, k => do
     let pc ← cExprToPExpr cond
-    let updates ← (body ++ step).mapM fun s =>
+    let updates ← body.mapM fun s =>
       match s with
       | .assign name val => do
         let pv ← cExprToPExpr val
@@ -886,12 +893,15 @@ private partial def identifyUnsupportedStmt : CStmt → List String
     match elseBr with
     | some stmts => stmts.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) []
     | none => []
-  -- Bounded while is supported by cStmtsToPExprK when body + step
-  -- are flat assigns. Surface the actual blocker:
-  --   * non-assign statements inside body/step → "while loop body shape"
+  -- Bounded while is supported by cStmtsToPExprK when body is
+  -- a flat list of assigns. The `step` field of CStmt.while_
+  -- is NOT iterated separately (the for-loop desugar already
+  -- concatenated step into body), so we walk `body` only.
+  -- Surface the actual blocker:
+  --   * non-assign statements inside body → "while loop body shape"
   --   * unsupported constructs inside cond or assign exprs → recurse
-  | .while_ cond body _ step =>
-    let bodyAllAssigns := (body ++ step).all fun s =>
+  | .while_ cond body _ _step =>
+    let bodyAllAssigns := body.all fun s =>
       match s with
       | .assign .. => true
       | _ => false
@@ -899,7 +909,7 @@ private partial def identifyUnsupportedStmt : CStmt → List String
       if bodyAllAssigns then []
       else ["while loop body shape (only flat assigns supported)"]
     let condUnsup := identifyUnsupportedExpr cond
-    let assignUnsup := (body ++ step).foldl (fun acc s =>
+    let assignUnsup := body.foldl (fun acc s =>
       match s with
       | .assign _ val => acc ++ identifyUnsupportedExpr val
       | _ => acc) []

@@ -160,11 +160,14 @@ loops) makes this provable.
 | 9 | Snapshot/diff baseline | ✅ `examples/fixed_capacity/snapshot/` 16 reports baselined; `make test-snapshots` 48/0 across all 3 candidates |
 | 10 | Listed in `tests/showcase/manifest.toml` | ❌ absent |
 
-**Today: 4 of 10 bars met (#1, #3, #4, #9).** Bar #1 closed
-2026-05-24 with `ring_new_correct` once Phase 4 array literal
-extraction landed.  Remaining bars are real content (#5 oracle,
-#6 catches, #7 bundle, #8 README, #10 manifest) + Phase 4
-forcing work for the composition theorem (#2).
+**Today: 4 of 10 bars met (#1, #3, #4, #9), with bar #1 now
+backed by 2 attached theorems.** Bar #1 closed 2026-05-24 with
+`ring_new_correct`; extended 2026-05-25 with
+`compute_tag_zero_correct` — the first project theorem to
+exercise the bounded-while-loop extraction end-to-end under
+the kernel. Remaining bars are real content (#5 oracle, #6
+catches, #7 bundle, #8 README, #10 manifest) + Phase 4 forcing
+work for the composition theorem (#2).
 
 ## 8. Strategic value beyond graduation
 

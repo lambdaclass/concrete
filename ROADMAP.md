@@ -109,6 +109,8 @@ Phases are listed in dependency order, but execution overlaps. The standing rule
 
 Expected outcome: every checker, capability, ownership, predictable, proof, FFI, and concurrency rule has both a positive test and a named regression, and every new compiler bug enters the wrong-code corpus on the day it is found.
 
+Phase closes when: the example inventory is machine-readable, every current release-claiming rule has a positive and negative regression, bug/reducer/bundle maintenance is routine, and remaining tooling items are either moved later or explicitly classified as maintenance.
+
 1. Expand negative examples as first-class regressions beyond the first capability-discipline pair: every checker / capability / ownership / predictable / proof / FFI / concurrency rule should have a positive case and a rejected companion.
 2. Trusted-boundary stress harness: raw-pointer wrappers, FFI ownership transfer, abort/failure cleanup, layout-sensitive wrappers, capability narrowing.
 3. Property-based tests for formatter/parser round-trips, stdlib containers, parser cores, report facts.
@@ -138,6 +140,8 @@ Expected outcome: every checker, capability, ownership, predictable, proof, FFI,
 
 Expected outcome: a function ships with stable, diffable, fingerprinted artifacts that another engineer can audit without reading compiler internals.
 
+Phase closes when: pass contracts, stable identities, deterministic serialization, shared facts, interface artifacts, assumption/policy artifacts, and artifact diffing are coherent enough that a flagship evidence bundle can be regenerated and reviewed without compiler-internal knowledge.
+
 1. Pass contracts as first-class artifacts: every named compiler boundary states input invariants, output invariants, identity/fingerprint preservation rules, assumptions introduced, and the verifier/report that checks the boundary.
 2. Compiler-debuggable dump modes for the important IR boundaries: checked program, Core, normalized Core, ProofCore, obligations, diagnostics, lowering, SSA.
 3. Stable identities and deterministic fingerprints for modules, declarations, obligations, diagnostics, reports, proof subjects, policy subjects, assumption subjects, and release-bundle entries.
@@ -163,6 +167,8 @@ Expected outcome: a function ships with stable, diffable, fingerprinted artifact
 ## Phase 3: Runtime
 
 Expected outcome: a bounded queue or parser helper can carry claims like "no allocation," explicit overflow policy, and explicit failure-path assumptions, with allocation/stack/concurrency profiles backing them.
+
+Phase closes when: arithmetic, allocation, stack, failure-path, backend/target, and predictable-profile claims used by graduated examples are documented, report-backed, and enforceable; concurrency remains later unless a concurrency flagship enters the active ladder.
 
 1. Arithmetic-overflow policy for predictable/proved profiles versus performance-oriented profiles.
 2. Failure-path boundedness: abort, assertions, impossible branches, OOM-excluded profiles, `defer`, drops, cleanup paths.
@@ -208,6 +214,8 @@ Expected outcome: a bounded queue or parser helper can carry claims like "no all
 
 Expected outcome: real Concrete functions like `parse_header` carry Lean-backed claims about success/failure behavior, and each supported `Core -> ProofCore` extraction rule names the later Phase 12 soundness obligation it creates.
 
+Phase closes when: `fixed_capacity` graduates with at least one proof over bounded state, its proof-eligible core has no unsupported constructs, the supported provable subset is documented, ProofCore has pass contracts/self-checks, and each extraction rule records its later Phase 12 obligation.
+
 1. Decide the proof integer model for byte-level systems code: keep `Int` for source-level mathematical integers, introduce typed `BitVec` semantics for fixed-width byte/word operations, and define cast/overflow/XOR behavior explicitly before widening crypto/checksum proofs.
 2. Add the remaining bitwise / arithmetic operators needed by the active candidates under that model, starting with `bitxor` for checksums and `mod` for ring-buffer indexing.
 3. Design the coherent ProofCore state model for mutation: environment updates, array get/set, field update, loop-carried variables, bounds assumptions, and failure behavior. This should replace one-off mutation patches as the guiding contract for later extraction rules.
@@ -241,6 +249,8 @@ Expected outcome: real Concrete functions like `parse_header` carry Lean-backed 
 
 Expected outcome: the same pure function and proof artifacts produce equivalent facts, obligations, diagnostics, and outputs across clean builds, incremental builds, and supported backend/target configurations.
 
+Phase closes when: SSA is documented as the backend contract, target/toolchain assumptions are explicit, clean and incremental builds agree on facts/diagnostics/proof artifacts, and backend/resource validation is strong enough for the first release surface.
+
 1. Stabilize SSA as the backend contract before experimenting with another backend.
 2. Target / toolchain model: triple, data layout, linker, runtime/startup, libc expectation, clang/llc boundary, sanitizer/coverage hooks.
 3. Host-boundary / platform-boundary design note: core / hosted / freestanding expectations, host responsibilities, artifact boundary assumptions.
@@ -266,6 +276,8 @@ Expected outcome: the same pure function and proof artifacts produce equivalent 
 
 Expected outcome: a proof-bearing function ships with benchmark numbers, allocation/leak visibility, and enforceable budgets that CI and review can hold.
 
+Phase closes when: the release examples have repeatable benchmark baselines, compiler/report overhead budgets, memory-growth checks, and enough profiling output to reject performance regressions without weakening proof/trust claims.
+
 1. Stable benchmark harness: selected programs, repeatable runner, baseline artifacts, size/output checks, comparison metadata.
 2. Explicit compiler performance budgets: acceptable compile-time regressions, artifact-generation overhead, memory-growth limits enforceable in CI.
 3. Compile-time regression profiling: parse/check/elaboration/proof/report time, artifact-generation cost, baseline data.
@@ -284,6 +296,8 @@ The curated registry and drift gate already exist; this phase tracks
 which future candidates should graduate next.
 
 Expected outcome: a flagship packet/header validator has explicit authority, one Lean-backed property, report/snapshot/diff coverage, and a release evidence bundle that tells an outsider exactly what is proved and what is assumed.
+
+Phase closes when: the curated showcase set contains a balanced small/medium/big story with at least one parser/security example, one bounded/no-alloc systems example, one second-domain example, and each entry has honest framing, oracle/evidence coverage, drift gates, and a "Concrete catches this" companion where applicable.
 
 1. Maintain `parse_validate` as the first packet/parser flagship and use its 10-bar contract as the promotion template for every later showcase.
 2. Maintain `crypto_verify` as a toy proof-scaffolding flagship with explicit non-crypto framing; do not let it substitute for a real cryptography candidate.
@@ -307,6 +321,8 @@ Expected outcome: a flagship packet/header validator has explicit authority, one
 
 Expected outcome: the first public language release ships with installable artifacts, a supported subset narrower than the full roadmap, and a public security/disclosure policy.
 
+Phase closes when: the first public release criteria, supported-workload matrix, documentation, positioning, migration guidance, security policy, distribution/provenance story, and release artifact checks are complete enough to cut a narrow honest version.
+
 1. First public release criteria: supported subset, required examples (small/medium/big), required diagnostics, required proof workflow, stdlib/project UX, evidence/policy/tooling story.
 2. Supported-workload matrix: first-class / showcase-only / research-only workloads separated explicitly.
 3. Semantic diff / trust-drift review as a first-class workflow over stable facts and release artifacts: proof-target drift, theorem/attachment drift, claim-scope drift, package-boundary evidence drift.
@@ -324,6 +340,8 @@ Expected outcome: the first public language release ships with installable artif
 ## Phase 9: Packages
 
 Expected outcome: a package exporting `pub fn parse_version(...) -> Int` also exports package-level facts about proof status, trusted assumptions, and authority surface that downstream users can review before adoption.
+
+Phase closes when: packages have a manifest, lockfile, workspace model, package-aware tests, interface/body artifacts, proof/trust/authority summaries, policy inheritance, provenance, and registry protocol sufficient for controlled publishing.
 
 1. Expand packaging / artifacts only after reports, registry, policies, interface artifacts, and CI gates have proved what artifacts must carry.
 2. Design and parse the package manifest.
@@ -348,6 +366,8 @@ Expected outcome: a package exporting `pub fn parse_version(...) -> Int` also ex
 
 Expected outcome: hovering over `fn check_nonce(...) -> Bool` in an editor shows capability status, proof status, predictable status, and theorem/obligation links from the same artifact model.
 
+Phase closes when: the artifact viewer, audit command, compiler service/LSP, proof/fact hovers, refactoring hooks, dependency auditing, and compatibility checks expose the same facts as CI and command-line reports.
+
 1. Small human-friendly artifact viewer (CLI/TUI/web) for facts, diff, evidence, proof state once schemas stabilize.
 2. `concrete audit` bundle command: one human-readable + machine-readable package of capabilities, unsafe/trusted boundaries, allocation, stack, proof/evidence, FFI, backend/target assumptions, policy violations, authority/evidence drift.
 3. Compiler-as-service / editor / LSP support after diagnostics and facts are structured: parser/checker/report/query entrypoints without forcing executable compilation.
@@ -366,6 +386,8 @@ Expected outcome: hovering over `fn check_nonce(...) -> Bool` in an editor shows
 
 Expected outcome: a new user can install Concrete, run one proof-bearing example, inspect its evidence bundle, and understand what is proved / enforced / reported / trusted without reading compiler source.
 
+Phase closes when: onboarding, templates, outsider workflow CI, design-only doc audits, stability boundaries, language evolution policy, public decision process, and roadmap/docs reference checks are established for external users.
+
 1. Improve onboarding so a newcomer can build one small program without project-author help.
 2. First real `concrete new` bootstrap path with predictable / library / FFI starter templates.
 3. Implement or explicitly reject the standalone `--stdlib` bridge for single-file stdlib access.
@@ -381,6 +403,8 @@ Expected outcome: a new user can install Concrete, run one proof-bearing example
 
 Expected outcome: functions already proved through Phase 4 are backed by proofs that selected `Core -> normalized Core -> ProofCore` extraction and normalization steps preserve their intended pure meaning.
 
+Phase closes when: Concrete can state exactly which compiler-correctness claims are proved, which trusted assumptions remain, and has selected preservation/soundness proofs for the extraction/report/artifact boundaries that protect graduated proof claims.
+
 1. Define precisely what "compiler proof" means for Concrete: user-code property proofs, ProofCore semantic proofs, normalization/extraction proofs, pass-preservation proofs, future end-to-end correctness claims.
 2. Separate public user-code proof claims from compiler-correctness claims so reports never imply the compiler itself is fully verified.
 3. Inventory the compiler-verification trusted base and unproved assumptions: parser, checker, elaborator, CoreCheck, mono, lowering, SSA emission, LLVM/toolchain, runtime, target model, proof registry attachment.
@@ -395,6 +419,8 @@ Expected outcome: functions already proved through Phase 4 are backed by proofs 
 ## Phase 13: Research
 
 Expected outcome: future ideas (typestate, arena proofs, richer timing models, Miri-style semantic checking) stay clearly gated until Concrete has a stable artifact/proof/evidence foundation.
+
+Phase closes when: each speculative idea is either pulled into an earlier phase by a concrete forcing example, recorded with a clear deferral condition, or rejected; no research item silently competes with the linear execution path.
 
 1. Expand formalization only after obligations, extraction reports, proof diagnostics, attached specs, ProofCore boundary, and broader memory/effect model are artifact-backed.
 2. Research typestate only if a current state-machine / protocol example needs it.
