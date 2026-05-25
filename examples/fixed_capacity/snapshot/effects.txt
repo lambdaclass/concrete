@@ -22,7 +22,7 @@ module fixed_capacity:
       ring_new
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/fixed_capacity/src/main.con:115
       ring_contains
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/fixed_capacity/src/main.con:122
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/fixed_capacity/src/main.con:122
       ring_push
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/fixed_capacity/src/main.con:133
       compute_tag
@@ -43,5 +43,5 @@ module fixed_capacity:
     caps: Console  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/fixed_capacity/src/main.con:270
 
 Totals: 20 functions, 18 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 4 trusted
-Evidence: 3 proved, 13 enforced, 4 trusted-assumption, 0 reported
+Evidence: 4 proved, 12 enforced, 4 trusted-assumption, 0 reported
 

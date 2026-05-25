@@ -16,5 +16,11 @@
     "body_fingerprint": "[(let cap (int 16)) (let d (field (var rb) data)) (setindex (var d) (binop Concrete.BinOp.mod (field (var rb) head) (var cap)) (var val)) (let new_head (binop Concrete.BinOp.mod (binop Concrete.BinOp.add (field (var rb) head) (int 1)) (var cap))) (let new_count (if (binop Concrete.BinOp.lt (field (var rb) count) (var cap)) [(binop Concrete.BinOp.add (field (var rb) count) (int 1))] [(var cap)])) (ret (struct RingBuf data=(var d) head=(var new_head) count=(var new_count)))]",
     "proof": "Concrete.Proof.ring_push_zero_correct",
     "spec": "Concrete.Proof.ringPushExpr"
+  },
+  {
+    "function": "fixed_capacity.ring_contains",
+    "body_fingerprint": "[(let cap (int 16)) (let scan (if (binop Concrete.BinOp.lt (field (var rb) count) (var cap)) [(field (var rb) count)] [(var cap)])) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (var scan)) [(let idx (binop Concrete.BinOp.mod (binop Concrete.BinOp.add (binop Concrete.BinOp.add (binop Concrete.BinOp.sub (field (var rb) head) (field (var rb) count)) (var i)) (binop Concrete.BinOp.mul (var cap) (int 2))) (var cap))) (if (binop Concrete.BinOp.eq (index (field (var rb) data) (var idx)) (var val)) [(ret (int 1))]) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (int 0))]",
+    "proof": "Concrete.Proof.ring_contains_empty_correct",
+    "spec": "Concrete.Proof.ringContainsExpr"
   }
 ]

@@ -161,15 +161,16 @@ loops) makes this provable.
 | 10 | Listed in `tests/showcase/manifest.toml` | ❌ absent |
 
 **Today: 4 of 10 bars met (#1, #3, #4, #9), with bar #1 now
-backed by 3 attached theorems.** Bar #1 closed 2026-05-24 with
-`ring_new_correct`; extended 2026-05-25 with
-`compute_tag_zero_correct` (first while-loop theorem) and
-`ring_push_zero_correct` (first arraySet theorem — exercises
-the state-model functional-update encoding end-to-end under
-the kernel). Remaining bars are real content (#5 oracle, #6
-catches, #7 bundle, #8 README, #10 manifest) + Phase 4 forcing
-work for the composition theorem (#2). Only blocker now:
-`ring_contains` (while_step / LoopStep follow-up).
+backed by 4 attached theorems and zero remaining extraction
+blockers.** Bar #1 closed 2026-05-24 with `ring_new_correct`;
+extended 2026-05-25 with `compute_tag_zero_correct` (first
+while-loop theorem), `ring_push_zero_correct` (first arraySet
+theorem), and `ring_contains_empty_correct` (first while_step
+theorem — empty-ring case). Every extraction-eligible
+function in fixed_capacity is now either proved or has a
+clean `no proof` slot — 0 blocked. Remaining graduation bars
+are content work (#5 oracle, #6 catches, #7 bundle, #8 README,
+#10 manifest) + the composition theorem (#2).
 
 ## 8. Strategic value beyond graduation
 

@@ -1715,6 +1715,8 @@ private partial def renderPExpr : Proof.PExpr → String
   | .while_ cond assigns cont =>
     let assignStrs := assigns.map fun (n, e) => s!"{n} = {renderPExpr e}"
     s!"while {renderPExpr cond} \{ {"; ".intercalate assignStrs} }; {renderPExpr cont}"
+  | .while_step cond carried step cont =>
+    s!"while_step {renderPExpr cond} carried=[{", ".intercalate carried}] \{ {renderPExpr step} }; {renderPExpr cont}"
 
 /-- Extraction entry for one function. -/
 structure ExtractionEntry where
@@ -1844,6 +1846,9 @@ private partial def renderPExprAsLean : Proof.PExpr → String
     let assignsLean := assigns.map fun (n, e) =>
       s!"(\"{n}\", {renderPExprAsLean e})"
     s!".while_\n      ({renderPExprAsLean cond})\n      [{", ".intercalate assignsLean}]\n      ({renderPExprAsLean cont})"
+  | .while_step cond carried step cont =>
+    let carriedLean := carried.map fun n => s!"\"{n}\""
+    s!".while_step\n      ({renderPExprAsLean cond})\n      [{", ".intercalate carriedLean}]\n      ({renderPExprAsLean step})\n      ({renderPExprAsLean cont})"
 
 /-- Convert a function's bare name to a Lean-safe identifier. -/
 private def leanIdent (name : String) : String :=

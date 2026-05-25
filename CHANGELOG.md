@@ -10,6 +10,85 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 4 while_step: ring_contains extracts and proves; zero blockers in fixed_capacity
+
+Second piece of the state-model implementation from
+`docs/PROOF_STATE_MODEL.md`.  Bounded while loops with bodies
+richer than flat assignments — nested `let`s, `if`s with
+early `return`s, and assignments to loop-carried variables —
+now extract into `PExpr.while_step` with a `LoopStep` enum
+that distinguishes Cont (continue with updated carried state)
+from Break (early return with value).
+
+This closes the last extraction blocker in `fixed_capacity`.
+Every eligible function in the active candidate now extracts.
+
+What landed
+-----------
+- `PExpr.while_step cond carried step cont`: the step
+  expression evaluates to a `PVal.enum_ "LoopStep" variant`
+  per iteration.  Cont reads `(name, value)` updates and
+  rebinds them in the env before re-testing the cond.  Break
+  carries a value and exits the loop immediately, with that
+  value becoming the whole expression's result (cont is
+  skipped — Break is a function-level return).
+- `eval` rule unwraps the LoopStep enum and threads
+  accordingly; falls through to `cont` when `cond` is false.
+- `cStmtsToStepExpr`: walks a CStmt list bottom-up, producing
+  a step PExpr.  Supports `letDecl`, `assign` (carried),
+  `return_ (some e)` (Break), and `ifElse cond thenBr none`
+  (if-without-else).  Any other shape returns `none` and
+  surfaces as "while loop body shape" via the unsupported
+  diagnostic.
+- `extractCarried`: scans the body for `assign` names,
+  populates the `carried` informational field used by Phase
+  12 preservation arguments.
+- `cStmtsToPExprK`'s while case now tries flat-assign first
+  (existing `PExpr.while_`); falls back to while_step when
+  the body has richer control flow.  Both shapes coexist.
+- `identifyUnsupportedStmt`'s while case mirrors the new
+  acceptance criteria: only complain about body shape when
+  neither flat-assign nor while_step can fit.
+- normalize / pexprFreeIn / renderPExpr / renderPExprAsLean
+  all gained while_step cases.
+
+Pull-through evidence
+---------------------
+fixed_capacity proof-status:
+
+    before: 3 proved / 10 unproved / 1 blocked / 2 inel / 4 trusted
+    after:  4 proved / 10 unproved / 0 blocked / 2 inel / 4 trusted
+
+Every fixed_capacity function now either extracts or is
+structurally ineligible (entry-point / trusted).  The
+candidate is one composition theorem away from the proof
+side of graduation.
+
+First while_step theorem
+------------------------
+`ring_contains_empty_correct`: when ring_contains is called
+on a ring with `count = 0`, the result is `.int 0` for any
+val.  `scan = min(count, cap) = 0`, the while_step's cond
+`i < scan` is `0 < 0 = false` on the first check, and
+control falls through to `cont = .lit (.int 0)`.  The body
+never runs.  One-simp proof; no iteration counting required.
+
+Modest by design — the empty-ring case is the cheapest
+while_step instance (zero iterations) and shows the cond/cont
+path works end-to-end.  Theorems about non-empty rings (e.g.
+"ring contains the value we just pushed") need iteration
+counting and are a Phase 4 follow-up.
+
+AUDIT bar #1 now backed by 4 theorems
+(`ring_new_correct`, `compute_tag_zero_correct`,
+`ring_push_zero_correct`, `ring_contains_empty_correct`).
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0
+
 ### Phase 4 arraySet: ring_push extracts and proves
 
 First implementation of the state-model design from

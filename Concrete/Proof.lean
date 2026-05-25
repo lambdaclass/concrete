@@ -162,6 +162,26 @@ inductive PExpr where
       eligibility profile already classifies loops as bounded /
       unbounded, and only bounded loops reach extraction. -/
   | while_ (cond : PExpr) (assigns : List (String × PExpr)) (cont : PExpr)
+  /-- Bounded while loop whose body may contain control flow
+      richer than flat assignments — nested `let`s, `if`s with
+      early `return`s, and assignments to loop-carried variables.
+
+      The `step` expression must evaluate to a `PVal.enum_
+      "LoopStep" variant fields`:
+        * `Cont` with fields `[(name, value), ...]` → rebind each
+          name to its value in the loop env, re-test `cond`, repeat.
+        * `Break` with field `[("value", v)]` → exit the loop
+          immediately, the whole `while_step` evaluates to `v`.
+          (Skips `cont` entirely — Break is a function-level return.)
+
+      `carried` documents which env names the step rebinds; it is
+      informational (the actual rebinds come from the Cont
+      payload), but matters for the Phase 12 preservation argument.
+
+      When `cond` evaluates to `false`, control falls through to
+      `cont` — same as the flat-assign `while_` shape. -/
+  | while_step (cond : PExpr) (carried : List String)
+               (step cont : PExpr)
   deriving Repr, BEq
 
 /-- A function definition in the proof fragment. -/
@@ -290,6 +310,17 @@ def eval (fns : FnTable) (env : Env) : Nat → PExpr → Option PVal
       match evalAssigns fns env fuel assigns with
       | none => none
       | some env' => eval fns env' fuel (.while_ cond assigns cont)
+    | some (.bool false) => eval fns env fuel cont
+    | _ => none
+  | fuel + 1, .while_step cond carried step cont =>
+    match eval fns env fuel cond with
+    | some (.bool true) =>
+      match eval fns env fuel step with
+      | some (.enum_ "LoopStep" "Cont" updates) =>
+        let env' := updates.foldl (fun e (name, val) => e.bind name val) env
+        eval fns env' fuel (.while_step cond carried step cont)
+      | some (.enum_ "LoopStep" "Break" [("value", v)]) => some v
+      | _ => none
     | some (.bool false) => eval fns env fuel cont
     | _ => none
 where
@@ -1593,13 +1624,83 @@ def ringPushExpr : PExpr :=
 def ringPushFn : PFnDef :=
   { name := "ring_push", params := ["rb", "val"], body := ringPushExpr }
 
+/-- `fn ring_contains(rb: RingBuf, val: i32) -> i32` — scans the
+    ring (up to `rb.count` entries, capped at 16) and returns 1 if
+    any slot contains `val`, else 0.  The for-loop desugars into a
+    while with rich body (let-binding + if-with-early-return), so
+    extraction uses `PExpr.while_step` with a `LoopStep` enum:
+      * `Cont { i: i+1 }`  — continue with incremented index
+      * `Break { value: 1 }` — early exit with hit
+    (See `docs/PROOF_STATE_MODEL.md` § 4 for the encoding.)
+
+    Spec uses normalized form (commutative ops sorted by
+    `normalizePExpr`'s pexprSortKey: vars before lits before
+    compounds). -/
+def ringContainsExpr : PExpr :=
+  .letIn "cap" (.lit (.int 16))
+    (.letIn "scan"
+      (.ifThenElse
+        (.binOp .lt (.fieldAccess (.var "rb") "count") (.var "cap"))
+        (.fieldAccess (.var "rb") "count")
+        (.var "cap"))
+      (.letIn "i" (.lit (.int 0))
+        (.while_step
+          (.binOp .lt (.var "i") (.var "scan"))
+          ["i"]
+          (.letIn "idx"
+            (.binOp .mod
+              (.binOp .add
+                (.binOp .add
+                  (.var "i")
+                  (.binOp .sub
+                    (.fieldAccess (.var "rb") "head")
+                    (.fieldAccess (.var "rb") "count")))
+                (.binOp .mul (.var "cap") (.lit (.int 2))))
+              (.var "cap"))
+            (.ifThenElse
+              (.binOp .eq (.var "val")
+                (.arrayIndex (.fieldAccess (.var "rb") "data") (.var "idx")))
+              (.enumLit "LoopStep" "Break" [("value", .lit (.int 1))])
+              (.enumLit "LoopStep" "Cont"
+                [("i", .binOp .add (.var "i") (.lit (.int 1)))])))
+          (.lit (.int 0)))))
+
+def ringContainsFn : PFnDef :=
+  { name := "ring_contains", params := ["rb", "val"], body := ringContainsExpr }
+
 /-- Function table for fixed_capacity proofs.  Each new proof
     extends this table with the function it targets. -/
 def fixedCapacityFns : FnTable
-  | "ring_new"    => some ringNewFn
-  | "compute_tag" => some fcTagFn
-  | "ring_push"   => some ringPushFn
-  | _             => none
+  | "ring_new"      => some ringNewFn
+  | "compute_tag"   => some fcTagFn
+  | "ring_push"     => some ringPushFn
+  | "ring_contains" => some ringContainsFn
+  | _               => none
+
+set_option linter.unusedSimpArgs false in
+/-- `ring_contains` on an empty ring (count = 0) returns 0 for any
+    value: `scan = min(count, cap) = 0`, so the while_step's cond
+    `i < scan` is `0 < 0 = false` on the first check and control
+    falls through to `cont = .lit (.int 0)`.  The body never runs.
+
+    This is the first proof in the project that exercises
+    `PExpr.while_step` end-to-end under the kernel.  It's modest by
+    design — the empty-ring case is the cheapest while_step
+    instance (zero iterations) and shows the cond/cont path works.
+    Theorems about non-empty rings need iteration counting and are
+    a follow-up. -/
+theorem ring_contains_empty_correct
+    (data : List PVal) (head v : Int) (fuel : Nat) :
+    eval fixedCapacityFns
+      ((Env.empty.bind "rb" (.struct_ "RingBuf"
+        [ ("data",  .array_ data)
+        , ("head",  .int head)
+        , ("count", .int 0)
+        ])).bind "val" (.int v))
+      (fuel + 10) ringContainsExpr
+    = some (.int 0) := by
+  simp [ringContainsExpr, eval, eval.lookupField,
+        fixedCapacityFns, Env.bind, evalBinOp]
 
 set_option linter.unusedSimpArgs false in
 /-- `ring_push` on the canonical empty RingBuf (head=0, count=0,
@@ -1751,9 +1852,10 @@ def specs : List (String × PExpr) :=
   , ("main.check_nonce",   checkNonceExpr)
   , ("main.verify_message", verifyMessageExpr)
     -- fixed_capacity
-  , ("fixed_capacity.ring_new",    ringNewExpr)
-  , ("fixed_capacity.ring_push",   ringPushExpr)
-  , ("fixed_capacity.compute_tag", fcTagExpr)
+  , ("fixed_capacity.ring_new",      ringNewExpr)
+  , ("fixed_capacity.ring_push",     ringPushExpr)
+  , ("fixed_capacity.ring_contains", ringContainsExpr)
+  , ("fixed_capacity.compute_tag",   fcTagExpr)
   ]
 
 end Concrete.Proof

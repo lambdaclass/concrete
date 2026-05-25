@@ -575,6 +575,12 @@ private partial def pexprFreeIn (name : String) : Proof.PExpr → Bool
     pexprFreeIn name cond ||
     assigns.any (fun (_, e) => pexprFreeIn name e) ||
     pexprFreeIn name cont
+  | .while_step cond _ step cont =>
+    -- carried list documents rebinds but doesn't shadow (per while_).
+    -- Walk cond, step, and cont.
+    pexprFreeIn name cond ||
+    pexprFreeIn name step ||
+    pexprFreeIn name cont
 
 /-- Ordering key for commutative canonicalization.
     vars sort before lits; among vars, alphabetical; among lits, by value. -/
@@ -657,6 +663,10 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
   | .while_ cond assigns cont =>
     .while_ (normalizePExpr cond)
       (assigns.map fun (n, e) => (n, normalizePExpr e))
+      (normalizePExpr cont)
+  | .while_step cond carried step cont =>
+    .while_step (normalizePExpr cond) carried
+      (normalizePExpr step)
       (normalizePExpr cont)
 
 -- ============================================================
@@ -794,14 +804,23 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
   -- not "while loop").
   | (.while_ cond body _ _step) :: rest, k => do
     let pc ← cExprToPExpr cond
-    let updates ← body.mapM fun s =>
-      match s with
-      | .assign name val => do
-        let pv ← cExprToPExpr val
-        some (name, pv)
-      | _ => none
     let pCont ← cStmtsToPExprK rest k
-    some (.while_ pc updates pCont)
+    -- First try flat-assign extraction (every body stmt is a
+    -- CStmt.assign); fall back to while_step when body has
+    -- richer control flow (let, if-with-return, ...).
+    let flatUpdates : Option (List (String × Proof.PExpr)) :=
+      body.mapM fun s =>
+        match s with
+        | .assign name val => do
+          let pv ← cExprToPExpr val
+          some (name, pv)
+        | _ => none
+    match flatUpdates with
+    | some updates => some (.while_ pc updates pCont)
+    | none => do
+      let carried := extractCarried body
+      let step ← cStmtsToStepExpr [] body
+      some (.while_step pc carried step pCont)
   -- Singleton if-else (last stmt of body): each branch inherits the
   -- outer continuation. If a branch returns, k is dead; if it falls
   -- through, k is used.
@@ -835,6 +854,65 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
 
 partial def cStmtsToPExpr (stmts : List CStmt) : Option Proof.PExpr :=
   cStmtsToPExprK stmts none
+
+/-- Collect names that are `assign`-ed (rebound) inside a CStmt list.
+    Walks the body recursively, including inside `ifElse` branches.
+    Used to populate the `carried` field of `PExpr.while_step` so
+    the Phase 12 preservation argument can name exactly which env
+    bindings the loop rewrites. -/
+partial def extractCarried : List CStmt → List String
+  | [] => []
+  | (.assign name _) :: rest =>
+    let r := extractCarried rest
+    if r.contains name then r else name :: r
+  | (.ifElse _ thenBr (some elseBr)) :: rest =>
+    (extractCarried thenBr ++ extractCarried elseBr ++ extractCarried rest).eraseDups
+  | (.ifElse _ thenBr none) :: rest =>
+    (extractCarried thenBr ++ extractCarried rest).eraseDups
+  | _ :: rest => extractCarried rest
+
+/-- Extract a CStmt list (a while-loop body) into a PExpr that
+    evaluates to a `PVal.enum_ "LoopStep" variant fields` value
+    per `docs/PROOF_STATE_MODEL.md` § 4.
+
+    `assigns` accumulates loop-carried-variable updates from `assign`
+    statements walked so far.  When control falls off the end of the
+    body, the result is `Cont assigns`; an early `return e` aborts
+    with `Break e`.  Local `let` bindings wrap the surrounding step
+    PExpr.
+
+    Supported body shapes (anything else returns `none`):
+      - `letDecl name _ _ val`: wraps rest in `letIn`
+      - `assign name val`: extends `assigns`, walks rest
+      - `return_ (some e)`: produces `Break e`
+      - `ifElse cond thenBr none`: branches; then is its own
+        step-expr (may Break or fall-through), else is `rest`. -/
+partial def cStmtsToStepExpr
+    (assigns : List (String × Proof.PExpr)) :
+    List CStmt → Option Proof.PExpr
+  | [] =>
+    some (.enumLit "LoopStep" "Cont" assigns)
+  | (.return_ (some e) _) :: _ => do
+    let pv ← cExprToPExpr e
+    some (.enumLit "LoopStep" "Break" [("value", pv)])
+  | (.letDecl name _ _ val) :: rest => do
+    let pv ← cExprToPExpr val
+    let pb ← cStmtsToStepExpr assigns rest
+    some (.letIn name pv pb)
+  | (.assign name val) :: rest => do
+    let pv ← cExprToPExpr val
+    let assigns' :=
+      if assigns.any (·.1 == name) then
+        assigns.map fun (n, e) => if n == name then (name, pv) else (n, e)
+      else
+        assigns ++ [(name, pv)]
+    cStmtsToStepExpr assigns' rest
+  | (.ifElse cond thenBr none) :: rest => do
+    let pc ← cExprToPExpr cond
+    let pt ← cStmtsToStepExpr assigns thenBr
+    let pe ← cStmtsToStepExpr assigns rest
+    some (.ifThenElse pc pt pe)
+  | _ => none
 end
 
 -- Unsupported construct identification
@@ -908,27 +986,26 @@ private partial def identifyUnsupportedStmt : CStmt → List String
     match elseBr with
     | some stmts => stmts.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) []
     | none => []
-  -- Bounded while is supported by cStmtsToPExprK when body is
-  -- a flat list of assigns. The `step` field of CStmt.while_
-  -- is NOT iterated separately (the for-loop desugar already
-  -- concatenated step into body), so we walk `body` only.
-  -- Surface the actual blocker:
-  --   * non-assign statements inside body → "while loop body shape"
-  --   * unsupported constructs inside cond or assign exprs → recurse
+  -- Bounded while is supported by cStmtsToPExprK in two forms:
+  --   1. flat-assign body → PExpr.while_ (every body stmt is .assign)
+  --   2. richer body  → PExpr.while_step (let/assign/return/if-no-else)
+  -- Only flag the shape when neither form fits.
   | .while_ cond body _ _step =>
-    let bodyAllAssigns := body.all fun s =>
-      match s with
-      | .assign .. => true
-      | _ => false
+    -- Match the support criteria of cStmtsToStepExpr:
+    let rec bodyFitsStep : List CStmt → Bool
+      | [] => true
+      | (.letDecl ..) :: rest => bodyFitsStep rest
+      | (.assign ..) :: rest => bodyFitsStep rest
+      | (.return_ (some _) _) :: _ => true  -- early Break, body terminates here
+      | (.ifElse _ thenBr none) :: rest => bodyFitsStep thenBr && bodyFitsStep rest
+      | _ :: _ => false
     let shapeReason :=
-      if bodyAllAssigns then []
-      else ["while loop body shape (only flat assigns supported)"]
+      if bodyFitsStep body then []
+      else ["while loop body shape (only let/assign/return/if-no-else supported)"]
     let condUnsup := identifyUnsupportedExpr cond
-    let assignUnsup := body.foldl (fun acc s =>
-      match s with
-      | .assign _ val => acc ++ identifyUnsupportedExpr val
-      | _ => acc) []
-    shapeReason ++ condUnsup ++ assignUnsup
+    -- Recurse into body statements for nested unsupported exprs.
+    let bodyUnsup := body.foldl (fun acc s => acc ++ identifyUnsupportedStmt s) []
+    shapeReason ++ condUnsup ++ bodyUnsup
   | _ => []
 end
 

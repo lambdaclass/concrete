@@ -91,10 +91,10 @@
     loc:          examples/fixed_capacity/src/main.con:115
 
   fixed_capacity.ring_contains
-    status:       blocked
-    spec:         (none)
-    proof:        (none)
-    source:       none
+    status:       proved
+    spec:         Concrete.Proof.ringContainsExpr
+    proof:        Concrete.Proof.ring_contains_empty_correct
+    source:       registry
     fingerprint:  [(let cap (int 16)) (let scan (if (binop Concrete.BinOp.lt (field (var rb) count) (var cap)) [(field (var rb) count)] [(var cap)])) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (var scan)) [(let idx (binop Concrete.BinOp.mod (binop Concrete.BinOp.add (binop Concrete.BinOp.add (binop Concrete.BinOp.sub (field (var rb) head) (field (var rb) count)) (var i)) (binop Concrete.BinOp.mul (var cap) (int 2))) (var cap))) (if (binop Concrete.BinOp.eq (index (field (var rb) data) (var idx)) (var val)) [(ret (int 1))]) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (int 0))]
     dependencies: none
     loc:          examples/fixed_capacity/src/main.con:122
@@ -123,7 +123,7 @@
     proof:        (none)
     source:       none
     fingerprint:  [(if (binop Concrete.BinOp.lt (field (var buf) len) (int 8)) [(ret (call err_result (int 1)))]) (let version (call read_u8 (var buf) (int 0))) (let msg_type (call read_u8 (var buf) (int 1))) (let seq_num (call read_u16_be (var buf) (int 2))) (let payload_len (call read_u16_be (var buf) (int 4))) (let tag (call read_u16_be (var buf) (int 6))) (let e1 (call validate_version (var version))) (if (binop Concrete.BinOp.neq (var e1) (int 0)) [(ret (call err_result (var e1)))]) (let e2 (call validate_msg_type (var msg_type))) (if (binop Concrete.BinOp.neq (var e2) (int 0)) [(ret (call err_result (var e2)))]) (let e3 (call validate_payload_len (var payload_len))) (if (binop Concrete.BinOp.neq (var e3) (int 0)) [(ret (call err_result (var e3)))]) (let e4 (call validate_total_len (field (var buf) len) (int 8) (var payload_len))) (if (binop Concrete.BinOp.neq (var e4) (int 0)) [(ret (call err_result (var e4)))]) (let computed (call compute_tag (var buf))) (let e5 (call validate_tag (var computed) (var tag))) (if (binop Concrete.BinOp.neq (var e5) (int 0)) [(ret (call err_result (var e5)))]) (let seen (call ring_contains (var ring) (var seq_num))) (if (binop Concrete.BinOp.eq (var seen) (int 1)) [(ret (call err_result (int 7)))]) (ret (call ok_result (var msg_type) (var seq_num) (var payload_len)))]
-    dependencies: fixed_capacity.compute_tag
+    dependencies: fixed_capacity.compute_tag, fixed_capacity.ring_contains
     loc:          examples/fixed_capacity/src/main.con:155
 
   fixed_capacity.build_msg
@@ -180,5 +180,5 @@
     dependencies: fixed_capacity.ring_new, fixed_capacity.ring_push
     loc:          examples/fixed_capacity/src/main.con:270
 
-Totals: 20 obligations — 3 proved, 0 stale, 10 missing, 1 blocked, 2 ineligible, 4 trusted
+Totals: 20 obligations — 4 proved, 0 stale, 10 missing, 0 blocked, 2 ineligible, 4 trusted
 
