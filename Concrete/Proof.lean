@@ -127,6 +127,22 @@ inductive PExpr where
       order. Element type is not modeled (PVal is dynamically
       shaped); Check ensures all elements share a type. -/
   | arrayLit (elems : List PExpr)
+  /-- Functional array update at a single index.
+
+      `arr` evaluates to a `.array_ elems`, `idx` to `.int i`, `val`
+      to any `PVal`.  Returns `.array_ (elems.set i.toNat val)` —
+      a new array with the i-th element replaced.  The original
+      array is unchanged (PExpr is pure; mutation is encoded as
+      functional update + name rebind, per `docs/PROOF_STATE_MODEL.md`).
+
+      Out-of-bounds (`i < 0` or `i >= elems.length`) is *stuck*:
+      eval returns `none`.  This matches the state-model decision
+      that OOB is undefined territory; theorems pass hypotheses to
+      rule out the stuck cases.  Phase 12 obligation:
+      `array_set_preservation` — source-level `arr[i] = v` mutates
+      to an array whose j-th element is `v` when j=i and the
+      original otherwise, exactly what `List.set` produces. -/
+  | arraySet (arr idx val : PExpr)
   /-- Bounded `while` loop with flat-assign body.
 
       `cond` is re-evaluated each iteration. When `cond` is `true`,
@@ -259,6 +275,15 @@ def eval (fns : FnTable) (env : Env) : Nat → PExpr → Option PVal
     match evalElems fns env fuel elems with
     | none => none
     | some vs => some (.array_ vs)
+  | fuel + 1, .arraySet arr idx val =>
+    match eval fns env fuel arr,
+          eval fns env fuel idx,
+          eval fns env fuel val with
+    | some (.array_ elems), some (.int i), some v =>
+      if i < 0 then none
+      else if i.toNat ≥ elems.length then none
+      else some (.array_ (elems.set i.toNat v))
+    | _, _, _ => none
   | fuel + 1, .while_ cond assigns cont =>
     match eval fns env fuel cond with
     | some (.bool true) =>
@@ -1533,12 +1558,74 @@ def ringNewExpr : PExpr :=
 def ringNewFn : PFnDef :=
   { name := "ring_new", params := [], body := ringNewExpr }
 
+/-- `fn ring_push(rb: RingBuf, val: i32) -> RingBuf` — push `val`
+    at the current head slot, advance head by 1 mod 16, bump count
+    by 1 (capped at 16).  This is the first proof in the project
+    that exercises functional array update (`arraySet`).
+
+    Note: the spec uses the normalized form (binOp .add operands
+    sorted commutatively), so `(rb.head + 1)` appears as
+    `(1 + rb.head)` and `(rb.count + 1)` as `(1 + rb.count)`.
+    This matches the source-extracted PExpr after normalizePExpr;
+    the spec-drift gate verifies this equality at build time. -/
+def ringPushExpr : PExpr :=
+  .letIn "cap" (.lit (.int 16))
+    (.letIn "d" (.fieldAccess (.var "rb") "data")
+      (.letIn "d"
+        (.arraySet (.var "d")
+          (.binOp .mod (.fieldAccess (.var "rb") "head") (.var "cap"))
+          (.var "val"))
+        (.letIn "new_head"
+          (.binOp .mod
+            (.binOp .add (.lit (.int 1)) (.fieldAccess (.var "rb") "head"))
+            (.var "cap"))
+          (.letIn "new_count"
+            (.ifThenElse
+              (.binOp .lt (.fieldAccess (.var "rb") "count") (.var "cap"))
+              (.binOp .add (.lit (.int 1)) (.fieldAccess (.var "rb") "count"))
+              (.var "cap"))
+            (.structLit "RingBuf"
+              [ ("data",  .var "d")
+              , ("head",  .var "new_head")
+              , ("count", .var "new_count")
+              ])))))
+
+def ringPushFn : PFnDef :=
+  { name := "ring_push", params := ["rb", "val"], body := ringPushExpr }
+
 /-- Function table for fixed_capacity proofs.  Each new proof
     extends this table with the function it targets. -/
 def fixedCapacityFns : FnTable
   | "ring_new"    => some ringNewFn
   | "compute_tag" => some fcTagFn
+  | "ring_push"   => some ringPushFn
   | _             => none
+
+set_option linter.unusedSimpArgs false in
+/-- `ring_push` on the canonical empty RingBuf (head=0, count=0,
+    data all zeros) with value `v` produces a RingBuf whose data
+    has `.int v` at index 0 (the rest zeros), head=1, count=1.
+
+    This is the first proof in the project that exercises
+    `PExpr.arraySet` end-to-end under the Lean kernel: the source's
+    `d[i] = val` extracts to a shadowing `letIn` rebinding `d` via
+    `arraySet`, which is what the state model document specifies. -/
+theorem ring_push_zero_correct (v : Int) (fuel : Nat) :
+    eval fixedCapacityFns
+      ((Env.empty.bind "rb" (.struct_ "RingBuf"
+        [ ("data",  .array_ (List.replicate 16 (.int 0)))
+        , ("head",  .int 0)
+        , ("count", .int 0)
+        ])).bind "val" (.int v))
+      (fuel + 20) ringPushExpr
+    = some (.struct_ "RingBuf"
+        [ ("data",  .array_ ((.int v) :: List.replicate 15 (.int 0)))
+        , ("head",  .int 1)
+        , ("count", .int 1)
+        ]) := by
+  simp [ringPushExpr, eval, eval.evalFields, eval.lookupField,
+        eval.lookupIndex, fixedCapacityFns, Env.bind, evalBinOp,
+        List.replicate, List.set]
 
 set_option linter.unusedSimpArgs false in
 /-- `compute_tag` on a buffer whose first 6 data bytes are all 0
@@ -1665,6 +1752,7 @@ def specs : List (String × PExpr) :=
   , ("main.verify_message", verifyMessageExpr)
     -- fixed_capacity
   , ("fixed_capacity.ring_new",    ringNewExpr)
+  , ("fixed_capacity.ring_push",   ringPushExpr)
   , ("fixed_capacity.compute_tag", fcTagExpr)
   ]
 

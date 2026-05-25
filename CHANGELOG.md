@@ -10,6 +10,78 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 4 arraySet: ring_push extracts and proves
+
+First implementation of the state-model design from
+`docs/PROOF_STATE_MODEL.md`.  Source-level mutation
+(`arr[i] = v`) extracts as a shadowing `letIn` that rebinds
+the array name to a functional update — no in-place
+mutation in PExpr, just new arrays produced by `arraySet`.
+The encoding matches the state-model § 2 contract.
+
+What landed
+-----------
+- `PExpr.arraySet arr idx val` evaluates each subexpression,
+  asserts `idx` is a non-negative integer in bounds, and
+  returns `.array_ (elems.set i.toNat v)` — Lean's
+  bounds-safe `List.set` produces the new array.
+  Out-of-bounds (`i < 0` or `i ≥ length`) is stuck (`none`),
+  per the state-model decision that OOB is undefined
+  territory; theorems pass hypotheses to rule it out.
+- `cStmtsToPExprK` case for `CStmt.arrayIndexAssign`:
+  source `arr[i] = v` extracts to `letIn name (arraySet
+  (var name) idx val) rest` when `arr` is a simple
+  identifier.  Complex `arr` (e.g. `obj.field[i] = v`)
+  needs `structSet` first and is deferred.
+- `identifyUnsupportedStmt` refined: top-level
+  `arrayIndexAssign` on a simple ident is supported (not
+  flagged); complex receivers surface
+  `"array index assignment (complex receiver)"`.
+- `normalizePExpr`, `pexprFreeIn`, `Report.renderPExpr`,
+  `Report.renderPExprAsLean` all gained `arraySet` cases.
+
+Pull-through evidence
+---------------------
+fixed_capacity proof-status:
+
+    before: 2 proved / 10 unproved / 2 blocked / 2 inel / 4 trusted
+    after:  3 proved / 10 unproved / 1 blocked / 2 inel / 4 trusted
+
+ring_push now extracts (was blocked on `array index
+assignment` + `mod`; the mod blocker fell with the prior
+commit).  Only one fixed_capacity blocker remains:
+`ring_contains`, waiting on `while_step` (rich loop bodies).
+
+First arraySet theorem
+----------------------
+`ring_push_zero_correct`: when ring_push is called on the
+canonical empty RingBuf (head=0, count=0, data all zeros)
+with value `v`, the result is the RingBuf with `.int v`
+at data index 0 (rest zeros), head=1, count=1.  This is
+the first proof exercising functional array update under
+the kernel.  Proof is one `simp` invocation; the BitVec
+arithmetic for `0 % 16 = 0` and `(1 + 0) % 16 = 1`
+reduces cleanly under decide+simp.
+
+The spec uses normalized form: `(rb.head + 1)` appears as
+`(1 + rb.head)` (operands sorted commutatively, per
+`normalizePExpr`).  The spec-drift gate from commit
+`f371cc1` verifies at build time that the registered
+spec matches the source-extracted PExpr; this was
+non-trivial to get right by hand (operand ordering matters)
+and the gate caught the discrepancy as expected during
+authoring.
+
+AUDIT bar #1 now backed by 3 theorems
+(`ring_new_correct`, `compute_tag_zero_correct`,
+`ring_push_zero_correct`).
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0
+
 ### BitVec-backed bitxor + mod; first while-loop theorem (compute_tag)
 
 The fixed-width integer model the prior commit said had to be

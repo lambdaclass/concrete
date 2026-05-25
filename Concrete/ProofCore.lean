@@ -566,6 +566,8 @@ private partial def pexprFreeIn (name : String) : Proof.PExpr → Bool
       !shadows && pexprFreeIn name body
   | .cast inner => pexprFreeIn name inner
   | .arrayLit elems => elems.any (pexprFreeIn name)
+  | .arraySet arr idx val =>
+    pexprFreeIn name arr || pexprFreeIn name idx || pexprFreeIn name val
   | .while_ cond assigns cont =>
     -- An assign rebinds `name` (it does NOT shadow — the variable
     -- pre-existed). The right-hand expression and the cont can
@@ -650,6 +652,8 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
       (arms.map fun (pat, body) => (pat, normalizePExpr body))
   | .cast inner => .cast (normalizePExpr inner)
   | .arrayLit elems => .arrayLit (elems.map normalizePExpr)
+  | .arraySet arr idx val =>
+    .arraySet (normalizePExpr arr) (normalizePExpr idx) (normalizePExpr val)
   | .while_ cond assigns cont =>
     .while_ (normalizePExpr cond)
       (assigns.map fun (n, e) => (n, normalizePExpr e))
@@ -767,6 +771,17 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
     let pv ← cExprToPExpr val
     let pb ← cStmtsToPExprK rest k
     some (.letIn name pv pb)
+  -- Array index assignment `arr[i] = v`.  Only supported when
+  -- `arr` is a simple identifier — we model the mutation as a
+  -- shadowing letIn that rebinds the name to (arraySet arr idx
+  -- val), which is the canonical functional-update encoding from
+  -- docs/PROOF_STATE_MODEL.md § 2.  More complex `arr` (e.g.
+  -- `obj.field[i] = v`) needs structSet first; deferred.
+  | (.arrayIndexAssign (.ident name _) idx val) :: rest, k => do
+    let pi ← cExprToPExpr idx
+    let pv ← cExprToPExpr val
+    let pb ← cStmtsToPExprK rest k
+    some (.letIn name (.arraySet (.var name) pi pv) pb)
   -- Bounded while loop with flat-assign body.  CStmt.while_
   -- carries `body` containing the source body with the for-loop
   -- step already concatenated (see Elab.lean's forLoop desugar:
@@ -940,7 +955,11 @@ def identifyUnsupported (body : List CStmt) : List String :=
     -- inside cond/assign expr) surface via identifyUnsupportedStmt.
     | .fieldAssign .. => some "field assignment"
     | .derefAssign .. => some "deref assignment"
-    | .arrayIndexAssign .. => some "array index assignment"
+    -- `.arrayIndexAssign` is supported when arr is a simple ident;
+    -- complex-arr forms (obj.field[i] = v) are not, and the precise
+    -- blocker surfaces via identifyUnsupportedStmt below.
+    | .arrayIndexAssign (.ident ..) .. => none
+    | .arrayIndexAssign .. => some "array index assignment (complex receiver)"
     | .break_ .. => some "break"
     | .continue_ .. => some "continue"
     | .defer .. => some "defer"

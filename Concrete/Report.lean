@@ -1710,6 +1710,8 @@ private partial def renderPExpr : Proof.PExpr → String
     s!"match {renderPExpr scrutinee} \{ {"; ".intercalate armStrs} }"
   | .cast inner => s!"({renderPExpr inner} as _)"
   | .arrayLit elems => s!"[{", ".intercalate (elems.map renderPExpr)}]"
+  | .arraySet arr idx val =>
+    s!"{renderPExpr arr}.set({renderPExpr idx}, {renderPExpr val})"
   | .while_ cond assigns cont =>
     let assignStrs := assigns.map fun (n, e) => s!"{n} = {renderPExpr e}"
     s!"while {renderPExpr cond} \{ {"; ".intercalate assignStrs} }; {renderPExpr cont}"
@@ -1836,6 +1838,8 @@ private partial def renderPExprAsLean : Proof.PExpr → String
   | .arrayLit elems =>
     let elemsLean := elems.map fun e => s!"({renderPExprAsLean e})"
     s!".arrayLit [{", ".intercalate elemsLean}]"
+  | .arraySet arr idx val =>
+    s!".arraySet\n      ({renderPExprAsLean arr})\n      ({renderPExprAsLean idx})\n      ({renderPExprAsLean val})"
   | .while_ cond assigns cont =>
     let assignsLean := assigns.map fun (n, e) =>
       s!"(\"{n}\", {renderPExprAsLean e})"
