@@ -25,6 +25,14 @@ refactors" and the caveats below:
 - **Continue direct ProofCore extension** while the per-construct
   rules stay coherent. If those rules start duplicating logic or
   feel ad-hoc, normalization becomes the right next step.
+- **Do not keep adding ad hoc mutation semantics.** Bounded while
+  loops introduced the first environment-threading PExpr machinery.
+  Array updates, field updates, and richer loop bodies now need a
+  coherent state model instead of one-off evaluator patches.
+- **Byte-level arithmetic needs an explicit proof model.** Casts are
+  extractable today, but `bitxor`, crypto/hash rounds, and overflow
+  claims need typed fixed-width semantics (`BitVec` or an explicitly
+  justified equivalent), not accidental Lean `Int` behavior.
 - **Each open caveat below must be resolved before its layer
   lands** — see Open Decisions further down.
 
@@ -87,6 +95,7 @@ Examples of normalization:
 - early returns become explicit proof-friendly control flow
 - field access is represented consistently
 - array indexing and assignment have one canonical form
+- mutable assignments become explicit loop-carried/state updates
 - struct and enum construction are explicit
 - casts are explicit
 - simple control flow has predictable shape
@@ -102,19 +111,28 @@ is a proof-oriented view, not a rival language semantics. Extraction
 either succeeds into a construct with known proof semantics or
 reports a precise exclusion reason.
 
-Current flagship pressure says the next ProofCore extensions should
-land in this order:
+Current flagship pressure says the next ProofCore work should land in
+this order:
 
-1. Array indexing.
-2. Bounded while loops.
-3. Struct value construction.
-4. Enum value construction.
-5. Pattern matching.
-6. Casts.
-7. Field-heavy struct/enum code.
+1. Fix the byte-level arithmetic model: decide how fixed-width values,
+   casts, overflow, `bitxor`, and `mod` are represented in Lean.
+2. Add `bitxor` / `mod` under that model to unblock checksum and
+   ring-buffer paths.
+3. Design the state model for mutation: environment updates, array
+   get/set, field update, loop-carried variables, bounds assumptions,
+   and failure behavior.
+4. Add array index assignment / bounded mutation using that state
+   model.
+5. Lift bounded while bodies from flat assignment lists to proof-level
+   step functions so nested control flow can extract.
+6. Improve generated proof stubs for arrays, structs, enums,
+   fixed-capacity buffers, and `Result`/`Option`.
+7. Build reusable lemmas for array lookup/update, loop-carried state,
+   struct fields, enum/match reasoning, and bounded buffers.
 
 `fixed_capacity` is the current forcing candidate for this work. The
-first three also gate the later real-cryptography flagship slot.
+byte-level arithmetic and loop/state pieces also gate the later
+real-cryptography flagship slot.
 
 ## Shared Fact Layer
 
@@ -174,11 +192,16 @@ Live today:
 - Validated Core exists as the current proof boundary.
 - ProofCore extraction exists for a narrow pure fragment that now
   includes integer/bool, function calls, if-then-else (including
-  early-return-with-fall-through), struct literal, and field
-  access.
+  early-return-with-fall-through), struct literal, field access,
+  enum literal, match expression, array index read, array literal,
+  width-changing casts, and bounded while loops whose body/step are
+  flat assignments.
 - Proof status, assumptions, policy, snapshots, catches, release
   bundles, and showcase manifests are already used by graduated
   examples.
+- `fixed_capacity.ring_new_correct` is the first attached proof that
+  composes array literals, struct literals, and let bindings under the
+  Lean kernel.
 
 Still roadmap work:
 
@@ -188,8 +211,49 @@ Still roadmap work:
 - Shared fact database for reports.
 - Stable identities/fingerprints across reports, policies,
   assumptions, snapshots, and bundles.
-- ProofCore support for arrays, loops, enums, matches, casts, and
-  mod operator.
+- Byte-level proof semantics (`BitVec`/fixed-width integer model),
+  `bitxor`, `mod`, array index assignment, richer loop bodies, a
+  coherent mutation/state model, typed generated proof stubs, and
+  reusable systems-code proof lemmas.
+
+## ProofCore State Model To Add
+
+The next ProofCore improvements should share one state story:
+
+- **Environment updates**: assignment updates an existing binding and
+  exposes the updated value to later expressions.
+- **Array get/set**: array reads and updates are functional values in
+  ProofCore; `set i v` returns a new array value with precise
+  out-of-bounds behavior.
+- **Field update**: struct updates follow the same functional-update
+  discipline as arrays.
+- **Loop-carried variables**: bounded loops are proof-level state
+  transformers; body and step should be modeled as a single explicit
+  step function, not as ad hoc statement lists.
+- **Failure behavior**: unsupported bounds, bad indexes, type-shape
+  mismatches, or unsupported body forms fail extraction with precise
+  diagnostics.
+
+This state model is the line between "ProofCore can model systems
+data structures" and "ProofCore only models pure validators with
+some special cases."
+
+## Reusable Lemma Surface
+
+Once the state model is explicit, proofs should stop being bespoke
+unfold/simp scripts. The core reusable lemma set should cover:
+
+- array lookup after construction
+- array lookup after update
+- array update preserves length
+- loop-carried accumulator/state facts
+- struct field access after construction/update
+- enum/match elimination facts
+- `Result` success/error reasoning
+- fixed-capacity buffer invariants
+
+These lemmas are part of making future flagships cheaper. Without
+them, every example re-proves the same evaluator facts by hand.
 
 ## Open Decisions
 

@@ -10,6 +10,31 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Proof roadmap realigned around state, bitvectors, and reusable lemmas
+
+After array literals, `ring_new_correct`, casts, match extraction, and
+flat-assign bounded while extraction landed, the active Phase 4 list
+was updated to stop treating completed construct support as future
+work. The next proof-track priorities are now explicit:
+
+- decide the fixed-width integer / `BitVec` model before adding
+  `bitxor`, `mod`, and crypto/checksum claims;
+- design one coherent ProofCore state model for assignment, array
+  updates, field updates, and loop-carried variables;
+- lift while bodies beyond flat assignment lists through proof-level
+  step functions;
+- improve generated proof stubs for arrays, structs, enums,
+  fixed-capacity buffers, and `Result`/`Option`;
+- build reusable lemmas for arrays, loop state, struct fields,
+  enum/match reasoning, `Result`, and bounded buffers;
+- keep Phase 12 extraction-soundness obligations attached to every
+  Phase 4 extraction rule.
+
+`docs/PROOF_AUDIT_PIPELINE.md` now records the same direction so the
+roadmap and target architecture agree: direct ProofCore extension can
+continue, but mutation and byte-level arithmetic need principled
+semantics rather than one-off evaluator patches.
+
 ### Phase 4 ProofCore extracts bounded while loops (flat-assign body)
 
 `PExpr.while_ cond assigns cont` is a new shape: each iteration
