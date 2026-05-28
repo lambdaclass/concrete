@@ -1,0 +1,26 @@
+=== Proof Status Report ===
+
+-- blocked ------------------------------------------------ examples/constant_time_tag/src/main.con:33
+
+  `constant_time_tag.ct_compare` is eligible but uses unsupported constructs — extraction failed.
+
+ 33 |     fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  unsupported: unsupported constructs
+
+  hint: Remove unsupported constructs to enable proof extraction.
+
+-- not eligible ------------------------------------------- examples/constant_time_tag/src/main.con:50
+
+  `constant_time_tag.main` cannot be proved: fails predictable profile (has capabilities: Console, is entry point (main)).
+
+ 50 |     pub fn main() with(Console) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  reasons: has capabilities: Console, is entry point (main)
+
+  hint: Address these constraints to make this function eligible for proof.
+
+Totals: 2 functions — 0 proved, 0 stale, 0 unproved, 1 blocked, 1 ineligible, 0 trusted
+

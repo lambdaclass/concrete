@@ -1,0 +1,8 @@
+=== Interface Summary ===
+
+module constant_time_tag (1 exports):
+  public API:
+    fn main() -> i32  [Console]
+
+Totals: 1 modules, 1 public exports
+

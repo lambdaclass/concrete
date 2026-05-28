@@ -196,25 +196,29 @@ after the loop" — needs induction on the loop.
 
 ## 7. Missing artifacts / policies / assumptions
 
-Pre-implementation (this audit), all 10 bars are open:
+First pilot batch landed 2026-05-28 (bars #3, #4, #9):
 
 | # | Bar | Status |
 |---:|---|---|
-| 1  | Lean-backed property surfaced as `proved` | ❌ pre-implementation |
-| 2  | Composition property Lean-backed | ❌ pre-implementation |
-| 3  | Assumption file with schema, CI-enforced | ❌ |
-| 4  | Policy file with enforceable budgets, CI-enforced | ❌ |
+| 1  | Lean-backed property surfaced as `proved` | ❌ pending Phase 4 forcing (u8 bitor + u8 bitxor + universal-property while_step proof) |
+| 2  | Composition property Lean-backed | ❌ pending bar #1 |
+| 3  | Assumption file with schema, CI-enforced | ✅ `assumptions.toml` with explicit three-layer claim entries; `make test-assumptions` 4/0 |
+| 4  | Policy file with enforceable budgets, CI-enforced | ✅ `Concrete.toml [policy]` stricter than fixed_capacity (no_unsafe + no_trusted both set); `make test-policy` 5/0 |
 | 5  | Oracle beyond hand-written tests | ❌ |
 | 6  | "Concrete catches this" negative pair | ❌ |
 | 7  | Release evidence bundle capturable | ❌ |
 | 8  | Honest README | ❌ |
-| 9  | Snapshot/diff baseline | ❌ |
+| 9  | Snapshot/diff baseline | ✅ 16 reports baselined under `snapshot/`; `make test-snapshots` 64/0 across all 4 candidates |
 | 10 | Listed in `tests/showcase/manifest.toml` | ❌ |
 
-**Today: 0 of 10 bars.**  Same starting state as every prior
-candidate.  Bars #3, #4, #9 close in the first "cheap
-baseline" batch following parse_validate / crypto_verify /
-fixed_capacity precedent.
+**Today: 3 of 10 bars met (#3, #4, #9).**  Source landed
+2026-05-28 with extraction blocked exactly as the audit
+predicted — `ct_compare` shows `eligible (extraction failed)`
+on `--report extraction`.  The blockers (visible in the
+fingerprint) are `Concrete.BinOp.bitor` (not in PBinOp at
+all) and `Concrete.BinOp.bitxor` at u8 width (we have
+i32/u32 only).  These are exactly the Phase 4 extensions
+named in § 5.
 
 ## 8. Strategic value beyond graduation
 
