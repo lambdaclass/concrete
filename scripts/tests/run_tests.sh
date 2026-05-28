@@ -2884,6 +2884,38 @@ check_report "$PCEXT" extraction \
     "proofcore-extraction: summary totals correct" \
     "proofcore-extraction: summary totals wrong"
 
+# --- Spec-drift gate regression (commit f371cc1) ---
+# A checked-in fixture where:
+#   * source body_fingerprint MATCHES the registered fingerprint
+#     (so the existing staleFingerprint check does NOT fire)
+#   * registered Lean spec (Concrete.Proof.driftTestSpec) does
+#     NOT match the source-extracted PExpr
+# Gate must surface a `spec drift` error AND downgrade status
+# from `proved` to `stale`. If either link breaks, the gate is
+# silently bypassable.
+PCDRIFT="$TESTDIR/adversarial_spec_drift/test_drift.con"
+drift_out=$($COMPILER "$PCDRIFT" --report proof-status 2>&1 || true)
+if echo "$drift_out" | grep -q "spec drift for 'test_drift.simple_add'" && \
+   echo "$drift_out" | grep -q "registered spec 'Concrete.Proof.driftTestSpec'" && \
+   echo "$drift_out" | grep -q "does not match the source-extracted PExpr"; then
+    echo "  ok  spec_drift: gate fires with precise diagnostic"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  spec_drift: gate diagnostic missing or wrong"
+    echo "$drift_out"
+    FAIL=$((FAIL + 1))
+fi
+# Obligation status must downgrade to stale (not stay proved).
+if echo "$drift_out" | grep -q "proof stale" && \
+   echo "$drift_out" | grep -E "Totals:.*1 stale.*0 proved|Totals:.*0 proved.*1 stale" >/dev/null; then
+    echo "  ok  spec_drift: obligation status downgrades to stale"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  spec_drift: status should downgrade to stale, not stay proved"
+    echo "$drift_out" | grep -E "Totals|proof stale|proved" | head -5
+    FAIL=$((FAIL + 1))
+fi
+
 # --- PBinOp width discipline (Phase 4 multi-width regression) ---
 # u8 ^ u8 is proof-eligible by profile but must reject at
 # extraction with a precise blocker — NOT silently fall back

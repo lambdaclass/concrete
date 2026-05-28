@@ -2030,6 +2030,33 @@ def provedFunctions : List (String × String × String) :=
     the report still said "proved".  The body-fingerprint check
     catches source drift, but it cannot catch spec drift — both
     sides are hand-written. -/
+-- ============================================================
+-- Adversarial fixture for the spec-drift gate (regression for
+-- commit f371cc1).  KEEP BROKEN ON PURPOSE — this exists to
+-- prove the gate fires.
+--
+-- `driftTestSpec` is a deliberately-wrong spec for
+-- `test_drift.simple_add` (whose source is `return a + b;`).
+-- The spec evaluates to `.int 42` (a literal), not the sum.
+-- Adding the (qualName, specExpr) row to `specs` below makes
+-- the gate fire when extraction runs on the adversarial test
+-- program.
+--
+-- The trivial theorem `drift_test_theorem` exists so the
+-- registry's `proof` field resolves to a real Lean theorem
+-- (the registry would otherwise fail attachment validation).
+-- The theorem is about the WRONG spec — that's the whole
+-- point.  The drift gate's job is to notice that the
+-- theorem is about a different function than the source.
+--
+-- Do not "fix" this to match the source.  See
+-- tests/programs/adversarial_spec_drift/test_drift.con. -/
+def driftTestSpec : PExpr := .lit (.int 42)
+
+theorem drift_test_theorem : driftTestSpec = .lit (.int 42) := rfl
+
+-- ============================================================
+
 def specs : List (String × PExpr) :=
   [ -- parse_validate
     ("parse_validate.validate_version",       validateVersionExpr)
@@ -2045,6 +2072,8 @@ def specs : List (String × PExpr) :=
   , ("fixed_capacity.ring_push",     ringPushExpr)
   , ("fixed_capacity.ring_contains", ringContainsExpr)
   , ("fixed_capacity.compute_tag",   fcTagExpr)
+    -- adversarial spec-drift fixture (deliberately wrong)
+  , ("test_drift.simple_add",        driftTestSpec)
   ]
 
 end Concrete.Proof

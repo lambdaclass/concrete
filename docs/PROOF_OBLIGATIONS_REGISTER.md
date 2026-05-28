@@ -68,7 +68,7 @@ means.
 | ID | Gate | What it verifies | Phase 12 obligation |
 |---:|---|---|---|
 | G-01 | Body fingerprint check | Source `CExpr/CStmt` fingerprint matches `proof-registry.json`'s registered `body_fingerprint`.  Drift downgrades obligation status to `stale`. | `fingerprint_determinism`: source produces a single canonical fingerprint string; equivalent source produces same fingerprint. |
-| G-02 | Spec drift check (commit `f371cc1`) | For every registered proof, the source-extracted PExpr equals `normalizePExpr (Concrete.Proof.specs[function])`.  Mismatch downgrades obligation status to `stale` and surfaces `RegistryIssue.specDrift`. | `spec_drift_completeness`: the gate fires iff source-extracted PExpr disagrees with registered spec; no false negatives. |
+| G-02 | Spec drift check (commit `f371cc1`) | For every registered proof, the source-extracted PExpr equals `normalizePExpr (Concrete.Proof.specs[function])`.  Mismatch downgrades obligation status to `stale` and surfaces `RegistryIssue.specDrift`.  Regression: `tests/programs/adversarial_spec_drift/test_drift.con` with `driftTestSpec` deliberately differing from source; CI asserts the gate fires and status downgrades. | `spec_drift_completeness`: the gate fires iff source-extracted PExpr disagrees with registered spec; no false negatives. |
 | G-03 | Registered-proof attachment | `proof-registry.json` references a Lean theorem by name; the Lean module containing the theorem is part of `make build` (Lean kernel rejection fails the build). | `theorem_lookup_completeness`: every registered `proof` field resolves to a Lean theorem; theorem statement uses the registered `spec` symbol. |
 | G-04 | Eligibility profile | Functions can only be registered if they pass `predictable` (no recursion, bounded loops, no alloc, no FFI).  Restricts what shapes ever reach extraction. | `eligibility_preservation`: a proof-eligible function's source semantics agrees with PExpr semantics within the modeled fragment. |
 
@@ -174,22 +174,33 @@ obligations `while_step_preservation` and
 
 ### G-02 (spec drift gate)
 
-The new trust gate from commit `f371cc1`.  Verified
-end-to-end during development: deliberately drifted
-`ringNewExpr` (changed head=0 to head=99 in the spec, updated
-the theorem consistently so the Lean kernel still accepted
-it), confirmed the gate fired:
+The trust gate from commit `f371cc1`, with a **checked-in
+regression** under
+`tests/programs/adversarial_spec_drift/test_drift.con` that
+exercises it every CI build:
 
-    error: spec drift for 'fixed_capacity.ring_new' —
-      registered spec 'Concrete.Proof.ringNewExpr' (via
-      Concrete.Proof.specs) does not match the source-
-      extracted PExpr; the theorem 'ring_new_correct' is
-      about a different function than the source.
+- `simple_add(a, b: i32) -> i32 { return a + b; }` extracts
+  to `binOp .add (var a) (var b)`.
+- The registry's `body_fingerprint` matches the current source
+  (so the existing `staleFingerprint` check does NOT fire).
+- The registered Lean spec is `Concrete.Proof.driftTestSpec =
+  .lit (.int 42)` — deliberately wrong.
+- CI asserts the gate produces the diagnostic
+  `spec drift for 'test_drift.simple_add' — registered spec
+  'Concrete.Proof.driftTestSpec' (via Concrete.Proof.specs)
+  does not match the source-extracted PExpr` AND downgrades
+  obligation status from `proved` to `stale`.
 
-Totals dropped from "2 proved, 0 stale" to "1 proved, 1
-stale" — `ring_new` correctly reclassified.  Reverted; report
-back to clean.  The gate is in code, exercised by 9 attached
-proofs every CI build with zero false positives.
+If either link breaks (the gate stops detecting drift, or the
+status pipeline stops downgrading), the test fails.  This is
+the regression that prevents future commits from silently
+bypassing the gate.
+
+In production: exercised by 11 attached proofs every CI build
+(parse_validate's 3, crypto_verify's 4, fixed_capacity's 4)
+with zero false positives.  The fixture is the 12th entry in
+`Concrete.Proof.specs` and is the only one where the spec
+deliberately doesn't match the source.
 
 ## What's NOT yet in this register (intentional)
 
