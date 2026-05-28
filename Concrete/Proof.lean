@@ -35,21 +35,33 @@ over that subset.  The two are complementary:
 /-- Binary operators in the proof fragment. -/
 inductive PBinOp where
   | add | sub | mul
-  /-- Signed remainder at i32 width.  Modeled via `BitVec.srem` on
-      the `BitVec 32` round-trip of the operands.  This is the
-      principled coupling to Concrete's surface semantics:
-      Concrete's `.mod` lowers to LLVM `srem` for signed integer
-      types (`EmitSSA.lean:.mod => .srem` for `ssaIsSignedInt`).
-      Width is currently hardcoded to 32; multi-width support is
-      a Phase 4 follow-up that needs to thread `Ty` through PExpr.
-      Today every flagship `mod` is on `i32` (e.g. ring_push's
-      `head % cap`), so the i32-only restriction is not blocking. -/
-  | mod
-  /-- Bitwise XOR at i32 width.  Modeled via `BitVec.xor` on the
-      `BitVec 32` round-trip of the operands, with the result
-      reinterpreted as `Int` via `BitVec.toInt` (signed view).
-      Same width caveat as `mod`. -/
-  | bitxor
+  /-- Integer remainder at a specific width.
+
+      `mod width signed` models Concrete's `%` operator at the
+      named integer width.  Semantics:
+        * `mod 32 true`  — LLVM `srem` via `BitVec.srem` on `BitVec 32`.
+                           This is what `EmitSSA.lean` emits for
+                           signed `.mod` (`ssaIsSignedInt` branch).
+        * `mod 32 false` — LLVM `urem` via `BitVec.umod` on `BitVec 32`.
+                           Unsigned remainder for `u32` operands.
+
+      Other widths are NOT modeled by `evalBinOp` today; extraction
+      refuses to emit them (returns `none` from `cExprToPExpr`),
+      surfacing as a precise blocker instead of a silent fallback
+      to i32 semantics.  Multi-width support extends one row at a
+      time in `PROOF_OBLIGATIONS_REGISTER.md` as flagships force it. -/
+  | mod (width : Nat) (signed : Bool)
+  /-- Bitwise XOR at a specific width.
+
+      `bitxor width` models Concrete's `^` operator at the named
+      width via `BitVec.xor` on `BitVec width`, with the result
+      reinterpreted as `Int` via `BitVec.toInt`.  Bit-level XOR is
+      the same operation for signed and unsigned operands, so no
+      sign tag is needed.
+
+      Today `evalBinOp` supports `bitxor 32` only.  Other widths
+      extract as `none` from `cExprToPExpr` and surface a blocker. -/
+  | bitxor (width : Nat)
   | eq | ne | lt | le | gt | ge
   deriving Repr, BEq, DecidableEq
 
@@ -212,16 +224,23 @@ def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
   | .add, .int a, .int b => some (.int (a + b))
   | .sub, .int a, .int b => some (.int (a - b))
   | .mul, .int a, .int b => some (.int (a * b))
-  | .mod, .int a, .int b =>
-    -- Signed remainder at i32 width via BitVec.srem (matches LLVM
-    -- srem, which is what EmitSSA emits for signed `.mod`).
+  -- mod 32 signed: LLVM srem via BitVec.srem at i32 width.
+  | .mod 32 true, .int a, .int b =>
     if b = 0 then none
     else some (.int (BitVec.toInt
       (BitVec.srem (BitVec.ofInt 32 a) (BitVec.ofInt 32 b))))
-  | .bitxor, .int a, .int b =>
-    -- Bitwise xor at i32 width via the BitVec round-trip.
+  -- mod 32 unsigned: LLVM urem via BitVec.umod at u32 width.
+  | .mod 32 false, .int a, .int b =>
+    if b = 0 then none
+    else some (.int (BitVec.toInt
+      (BitVec.umod (BitVec.ofInt 32 a) (BitVec.ofInt 32 b))))
+  -- bitxor 32: BitVec.xor at i32/u32 width.
+  | .bitxor 32, .int a, .int b =>
     some (.int (BitVec.toInt
       ((BitVec.ofInt 32 a) ^^^ (BitVec.ofInt 32 b))))
+  -- Other widths intentionally unmodeled — extraction refuses to
+  -- emit them, so a `.mod w s` or `.bitxor w` with w ≠ 32 reaching
+  -- eval signals a bug (or a future extension yet to land).
   | .eq,  .int a, .int b => some (.bool (a == b))
   | .ne,  .int a, .int b => some (.bool (a != b))
   | .lt,  .int a, .int b => some (.bool (a < b))
@@ -1573,7 +1592,7 @@ def fcTagExpr : PExpr :=
       (.while_
         (.binOp .lt (.var "i") (.lit (.int 6)))
         [ ("acc",
-           .binOp .bitxor (.var "acc")
+           .binOp (.bitxor 32) (.var "acc")
              (.cast (.arrayIndex (.fieldAccess (.var "buf") "data")
                        (.var "i"))))
         , ("i", .binOp .add (.var "i") (.lit (.int 1)))
@@ -1611,10 +1630,10 @@ def ringPushExpr : PExpr :=
     (.letIn "d" (.fieldAccess (.var "rb") "data")
       (.letIn "d"
         (.arraySet (.var "d")
-          (.binOp .mod (.fieldAccess (.var "rb") "head") (.var "cap"))
+          (.binOp (.mod 32 true) (.fieldAccess (.var "rb") "head") (.var "cap"))
           (.var "val"))
         (.letIn "new_head"
-          (.binOp .mod
+          (.binOp (.mod 32 true)
             (.binOp .add (.lit (.int 1)) (.fieldAccess (.var "rb") "head"))
             (.var "cap"))
           (.letIn "new_count"
@@ -1655,7 +1674,7 @@ def ringContainsExpr : PExpr :=
           (.binOp .lt (.var "i") (.var "scan"))
           ["i"]
           (.letIn "idx"
-            (.binOp .mod
+            (.binOp (.mod 32 true)
               (.binOp .add
                 (.binOp .add
                   (.var "i")

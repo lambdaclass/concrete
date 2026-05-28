@@ -53,8 +53,8 @@ informally below the table but not yet a Lean theorem name.
 | R-13 | `arrayIndex arr idx` | `arr[i]` (read) | parse_validate (compute_checksum) | `array_index_preservation`; OOB returns `none` |
 | R-14 | `cast inner` (identity on `PVal.int`) | `x as i32`, `u8 as i32` | fixed_capacity (`read_u8`, `read_u16_be`) | `cast_identity_preservation` — sound for widening; narrowing is excluded by eligibility |
 | R-15 | `arrayLit elems` | `[0, 0, 0, ...]` | fixed_capacity (`ring_new`) | `array_lit_preservation` |
-| R-16 | `binOp .mod` (BitVec.srem at i32) | `a % b` for signed i32 | fixed_capacity (`ring_push`'s `head % cap`) | `mod_i32_srem_preservation` — matches LLVM `srem` (commit 2605fb5) |
-| R-17 | `binOp .bitxor` (BitVec.xor at i32) | `a ^ b` for i32 | fixed_capacity (`compute_tag`), parse_validate (`compute_checksum`) | `bitxor_i32_preservation` — BitVec.xor at i32 width, round-trip via `BitVec.toInt` |
+| R-16 | `binOp (.mod width signed)` (BitVec.srem / BitVec.umod) | `a % b` for `i32`/`u32` (other widths reject at extraction) | fixed_capacity (`ring_push`'s `head % cap`) | `mod_width_preservation` — `.mod 32 true` matches LLVM `srem`; `.mod 32 false` matches `urem` (commits 2605fb5, multi-width landed later) |
+| R-17 | `binOp (.bitxor width)` (BitVec.xor at width) | `a ^ b` for `i32`/`u32` (other widths reject at extraction) | fixed_capacity (`compute_tag`), parse_validate (`compute_checksum`) | `bitxor_width_preservation` — BitVec.xor at the operand width, round-trip via `BitVec.toInt` |
 | R-18 | `while_ cond assigns cont` (flat-assign body) | `while cond { x = ...; y = ...; }` | parse_validate (`compute_checksum`), fixed_capacity (`compute_tag`) | `while_flat_assign_preservation`; termination via fuel only — `bounded` profile enforces real termination at Check |
 | R-19 | `arraySet arr idx val` | `arr[i] = v` extracted as shadowing `letIn name (arraySet …)` | fixed_capacity (`ring_push`) | `array_set_preservation` (named in `docs/PROOF_STATE_MODEL.md` § 2); OOB stuck |
 | R-20 | `while_step cond carried step cont` + `LoopStep::Cont`/`Break` enum | `while cond { let x = ...; if c { return v; } i = i + 1 }` | fixed_capacity (`ring_contains`) | `while_step_preservation` + `while_step_early_break` (PROOF_STATE_MODEL § 4) |
@@ -88,27 +88,43 @@ extractor preserves.  Phase 12 obligation
 `cast_identity_preservation` will state this restriction
 explicitly.
 
-### R-16, R-17 (mod, bitxor — BitVec round-trip at i32)
+### R-16, R-17 (mod, bitxor — typed BitVec round-trip)
 
-`evalBinOp` for `.mod` and `.bitxor` converts operands to
-`BitVec 32` via `BitVec.ofInt`, runs the BitVec operation, and
-reinterprets via `BitVec.toInt`:
+`PBinOp.mod (width : Nat) (signed : Bool)` and
+`PBinOp.bitxor (width : Nat)` carry the operand width.
+`evalBinOp` supports `mod 32 true` / `mod 32 false` /
+`bitxor 32`:
 
-    evalBinOp .bitxor (.int a) (.int b) =
+    evalBinOp (.bitxor 32) (.int a) (.int b) =
       some (.int (BitVec.toInt (BitVec.ofInt 32 a ^^^ BitVec.ofInt 32 b)))
 
-    evalBinOp .mod (.int a) (.int b) =
+    evalBinOp (.mod 32 true)  (.int a) (.int b) =       -- i32 srem
       some (.int (BitVec.toInt (BitVec.srem (BitVec.ofInt 32 a) (BitVec.ofInt 32 b))))
         when b ≠ 0
 
-`BitVec.srem` matches LLVM `srem` (which is what
-`EmitSSA.lean` emits for signed `.mod`).  Width is hardcoded
-to 32 — **this is a known limit** (ROADMAP Phase 4 item 7).
-Until multi-width PBinOp lands, attaching a proof on a u8 /
-u16 / i64 op would extract correctly but the proof would have
-to acknowledge the width mismatch.  Phase 12 obligations
-`mod_i32_srem_preservation` and `bitxor_i32_preservation`
-will state the i32-width restriction.
+    evalBinOp (.mod 32 false) (.int a) (.int b) =       -- u32 urem
+      some (.int (BitVec.toInt (BitVec.umod (BitVec.ofInt 32 a) (BitVec.ofInt 32 b))))
+        when b ≠ 0
+
+`BitVec.srem` matches LLVM `srem`; `BitVec.umod` matches
+`urem`.  Both are what `EmitSSA.lean` emits for the
+respective sign at i32 width.
+
+**Width extension via the register, not silent fallback.**
+`binOpToPBinOp` (in `ProofCore.lean`) reads the operand type
+from the source CExpr and emits the matching typed PBinOp.
+Source operations at widths other than 32 fail extraction
+explicitly (`cExprToPExpr` returns `none`), surfacing as a
+precise blocker (`unsupported operator: Concrete.BinOp.X at
+Concrete.Ty.YY`) instead of silently re-using i32 semantics.
+Adding a new width (e.g. i64 srem) means:
+  1. Add the corresponding `evalBinOp` case.
+  2. Add the `binOpToPBinOp` mapping (`.i64` / `.u64` / etc.).
+  3. Append a row to this register naming the new obligation.
+The Phase 12 obligations `mod_width_preservation` and
+`bitxor_width_preservation` are parameterized over width and
+signedness — one preservation theorem per supported width
+combination.
 
 ### R-19 (arraySet)
 
@@ -168,10 +184,13 @@ but not yet implemented:
   field update.  Source `obj.f = v` extracts to `letIn name
   (structSet (var name) "f" val) rest`.  No flagship yet
   forces it; ring_push only mutates an array field.
-- **Multi-width PBinOp** (ROADMAP Phase 4 item 7): currently
-  i32 hardcoded.  Future work will extend `PBinOp` to carry
-  `Ty` or split into typed ops.  Required before any u8 /
-  u16 / i64 proof attaches.
+- **Multi-width PBinOp at non-32 widths** (ROADMAP Phase 4
+  item 7): the constructor is parameterized
+  (`.mod width signed` / `.bitxor width`); evalBinOp supports
+  width 32 only.  Adding u8 / u16 / i64 etc. is now a
+  one-case-per-width addition with no shape change.  The
+  flagship-forcing example for the next width hasn't landed
+  yet.
 - **Multi-iteration while_step proofs**: today
   `ring_push_then_contains_correct` proves the
   single-iteration case.  Future work needs an inductive

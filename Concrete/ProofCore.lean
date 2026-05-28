@@ -673,19 +673,32 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
 -- Core → PExpr extraction
 -- ============================================================
 
-private def binOpToPBinOp : BinOp → Option Proof.PBinOp
-  | .add => some .add
-  | .sub => some .sub
-  | .mul => some .mul
-  | .mod => some .mod
-  | .bitxor => some .bitxor
-  | .eq  => some .eq
-  | .neq => some .ne
-  | .lt  => some .lt
-  | .leq => some .le
-  | .gt  => some .gt
-  | .geq => some .ge
-  | _    => none
+/-- Map a Concrete `BinOp` to a typed `PBinOp` at the operand
+    width.  Width-sensitive ops (`mod`, `bitxor`) carry the
+    operand width and signedness; comparisons and width-agnostic
+    arithmetic (`add`/`sub`/`mul`) ignore the type.
+
+    Only widths/signs that `evalBinOp` supports are emitted; other
+    combinations return `none` (extraction fails with a precise
+    blocker rather than silently using i32 semantics).  See
+    `docs/PROOF_OBLIGATIONS_REGISTER.md` R-16 and R-17. -/
+private def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
+  | .add, _ => some .add
+  | .sub, _ => some .sub
+  | .mul, _ => some .mul
+  | .mod, .i32 => some (.mod 32 true)
+  | .mod, .u32 => some (.mod 32 false)
+  | .mod, _ => none  -- other widths await multi-width extension
+  | .bitxor, .i32 => some (.bitxor 32)
+  | .bitxor, .u32 => some (.bitxor 32)  -- xor is sign-agnostic at bit level
+  | .bitxor, _ => none
+  | .eq, _  => some .eq
+  | .neq, _ => some .ne
+  | .lt, _  => some .lt
+  | .leq, _ => some .le
+  | .gt, _  => some .gt
+  | .geq, _ => some .ge
+  | _, _    => none
 
 mutual
 partial def cExprToPExpr : CExpr → Option Proof.PExpr
@@ -693,7 +706,10 @@ partial def cExprToPExpr : CExpr → Option Proof.PExpr
   | .boolLit b => some (.lit (.bool b))
   | .ident name _ => some (.var name)
   | .binOp op lhs rhs _ => do
-    let pop ← binOpToPBinOp op
+    -- Pass operand type (from lhs.ty) — for width-sensitive ops
+    -- (mod, bitxor) this picks the right typed PBinOp; for
+    -- width-agnostic ops the type is ignored.
+    let pop ← binOpToPBinOp op (CExpr.ty lhs)
     let pl ← cExprToPExpr lhs
     let pr ← cExprToPExpr rhs
     some (.binOp pop pl pr)
@@ -962,8 +978,10 @@ private partial def identifyUnsupportedExpr : CExpr → List String
   | .whileExpr .. => ["while expression"]
   | .unaryOp .. => ["unary operator"]
   | .binOp op lhs rhs _ =>
-    let opUnsup := match binOpToPBinOp op with
-      | none => [s!"unsupported operator: {repr op}"]
+    -- Pass operand type so width-sensitive ops (mod/bitxor) flag
+    -- unsupported widths precisely instead of conflating with op support.
+    let opUnsup := match binOpToPBinOp op (CExpr.ty lhs) with
+      | none => [s!"unsupported operator: {repr op} at {repr (CExpr.ty lhs)}"]
       | some _ => []
     opUnsup ++ identifyUnsupportedExpr lhs ++ identifyUnsupportedExpr rhs
   | .call _ _ args _ =>
