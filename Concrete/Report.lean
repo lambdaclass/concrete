@@ -1672,9 +1672,10 @@ private partial def renderPExpr : Proof.PExpr → String
   | .binOp op lhs rhs =>
     let opStr := match op with
       | .add => "+" | .sub => "-" | .mul => "*"
-      | .mod _ true => "%"   -- signed mod (i32 srem semantics)
-      | .mod _ false => "%u" -- unsigned mod (urem semantics)
-      | .bitxor _ => "^"
+      | .mod _ true => "%"    -- signed mod (i32 srem semantics)
+      | .mod _ false => "%u"  -- unsigned mod (urem semantics)
+      | .bitxor _ true => "^"
+      | .bitxor _ false => "^u"
       | .eq => "==" | .ne => "!=" | .lt => "<"
       | .le => "<=" | .gt => ">" | .ge => ">="
     s!"({renderPExpr lhs} {opStr} {renderPExpr rhs})"
@@ -1803,7 +1804,7 @@ private partial def renderPExprAsLean : Proof.PExpr → String
     let opStr := match op with
       | .add => ".add" | .sub => ".sub" | .mul => ".mul"
       | .mod w s => s!"(.mod {w} {s})"
-      | .bitxor w => s!"(.bitxor {w})"
+      | .bitxor w s => s!"(.bitxor {w} {s})"
       | .eq => ".eq" | .ne => ".ne" | .lt => ".lt"
       | .le => ".le" | .gt => ".gt" | .ge => ".ge"
     s!".binOp {opStr}\n      ({renderPExprAsLean lhs})\n      ({renderPExprAsLean rhs})"

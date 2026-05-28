@@ -51,17 +51,27 @@ inductive PBinOp where
       to i32 semantics.  Multi-width support extends one row at a
       time in `PROOF_OBLIGATIONS_REGISTER.md` as flagships force it. -/
   | mod (width : Nat) (signed : Bool)
-  /-- Bitwise XOR at a specific width.
+  /-- Bitwise XOR at a specific width, with a `signed` tag that
+      controls how the result `BitVec` is reinterpreted as `Int`.
 
-      `bitxor width` models Concrete's `^` operator at the named
-      width via `BitVec.xor` on `BitVec width`, with the result
-      reinterpreted as `Int` via `BitVec.toInt`.  Bit-level XOR is
-      the same operation for signed and unsigned operands, so no
-      sign tag is needed.
+      The bit-level XOR itself is sign-agnostic; the `signed` flag
+      only chooses the result interpretation:
+        * `signed = true`  — `BitVec.toInt` (two's-complement view;
+                              high bit set → negative `Int`).
+        * `signed = false` — `Int.ofNat bv.toNat` (unsigned view;
+                              high bit set → large positive `Int`).
 
-      Today `evalBinOp` supports `bitxor 32` only.  Other widths
-      extract as `none` from `cExprToPExpr` and surface a blocker. -/
-  | bitxor (width : Nat)
+      This matters for crypto-adjacent code: `0xFFFFFFFF ^ 0`
+      should evaluate to `4294967295` for `u32` operands, NOT
+      `-1`.  Without this tag, the prior (pre-fix) encoding
+      `bitxor 32` silently used `BitVec.toInt` for both signed and
+      unsigned operands, producing wrong values whenever the
+      result's high bit was set on unsigned inputs.
+
+      Today `evalBinOp` supports `bitxor 32 true` and
+      `bitxor 32 false` only.  Other widths extract as `none`
+      from `cExprToPExpr` and surface a blocker. -/
+  | bitxor (width : Nat) (signed : Bool)
   | eq | ne | lt | le | gt | ge
   deriving Repr, BEq, DecidableEq
 
@@ -224,23 +234,34 @@ def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
   | .add, .int a, .int b => some (.int (a + b))
   | .sub, .int a, .int b => some (.int (a - b))
   | .mul, .int a, .int b => some (.int (a * b))
-  -- mod 32 signed: LLVM srem via BitVec.srem at i32 width.
+  -- mod 32 signed: LLVM srem via BitVec.srem at i32 width;
+  -- result re-interpreted as signed Int via BitVec.toInt.
   | .mod 32 true, .int a, .int b =>
     if b = 0 then none
     else some (.int (BitVec.toInt
       (BitVec.srem (BitVec.ofInt 32 a) (BitVec.ofInt 32 b))))
-  -- mod 32 unsigned: LLVM urem via BitVec.umod at u32 width.
+  -- mod 32 unsigned: LLVM urem via BitVec.umod at u32 width;
+  -- result re-interpreted as unsigned Int via Int.ofNat ∘ toNat.
+  -- Crucial for crypto-adjacent code where `urem` can leave the
+  -- high bit set on the result; signed view would surface as
+  -- a negative Int and break the proof.
   | .mod 32 false, .int a, .int b =>
     if b = 0 then none
-    else some (.int (BitVec.toInt
-      (BitVec.umod (BitVec.ofInt 32 a) (BitVec.ofInt 32 b))))
-  -- bitxor 32: BitVec.xor at i32/u32 width.
-  | .bitxor 32, .int a, .int b =>
+    else some (.int (Int.ofNat
+      (BitVec.umod (BitVec.ofInt 32 a) (BitVec.ofInt 32 b)).toNat))
+  -- bitxor 32 signed: BitVec.xor at i32, signed view.
+  | .bitxor 32 true, .int a, .int b =>
     some (.int (BitVec.toInt
       ((BitVec.ofInt 32 a) ^^^ (BitVec.ofInt 32 b))))
+  -- bitxor 32 unsigned: BitVec.xor at u32, unsigned view.
+  -- 0xFFFFFFFF ^ 0 = 4294967295 (not -1).
+  | .bitxor 32 false, .int a, .int b =>
+    some (.int (Int.ofNat
+      ((BitVec.ofInt 32 a) ^^^ (BitVec.ofInt 32 b)).toNat))
   -- Other widths intentionally unmodeled — extraction refuses to
-  -- emit them, so a `.mod w s` or `.bitxor w` with w ≠ 32 reaching
-  -- eval signals a bug (or a future extension yet to land).
+  -- emit them, so a `.mod w s` or `.bitxor w s` with w ≠ 32
+  -- reaching eval signals a bug (or a future extension yet to
+  -- land).
   | .eq,  .int a, .int b => some (.bool (a == b))
   | .ne,  .int a, .int b => some (.bool (a != b))
   | .lt,  .int a, .int b => some (.bool (a < b))
@@ -250,6 +271,46 @@ def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
   | .eq,  .bool a, .bool b => some (.bool (a == b))
   | .ne,  .bool a, .bool b => some (.bool (a != b))
   | _, _, _ => none
+
+-- ============================================================
+-- evalBinOp regression checks for unsigned high-bit results
+-- (Phase 4 multi-width fix — signed/unsigned interpretation
+-- of BitVec results must be distinct).
+-- ============================================================
+
+/-- Signed u32 xor of 0xFFFFFFFF and 0: surfaces as `-1` under
+    the signed (two's-complement) view. -/
+example :
+    evalBinOp (.bitxor 32 true)
+      (.int 4294967295) (.int 0) = some (.int (-1)) := by rfl
+
+/-- Unsigned u32 xor of 0xFFFFFFFF and 0: surfaces as
+    `4294967295` (NOT `-1`) under the unsigned view.  This is
+    the regression the multi-width fix had to address. -/
+example :
+    evalBinOp (.bitxor 32 false)
+      (.int 4294967295) (.int 0) = some (.int 4294967295) := by rfl
+
+/-- Unsigned u32 xor that DOES set the high bit must remain a
+    positive `Int`.  `0x80000000 ^ 0 = 2147483648`. -/
+example :
+    evalBinOp (.bitxor 32 false)
+      (.int 2147483648) (.int 0) = some (.int 2147483648) := by rfl
+
+/-- Unsigned u32 mod where the dividend has the high bit set:
+    `0xFFFFFFFF mod 4 = 3`, NOT `-1 mod 4` (which would be `-1`
+    or `3` depending on Int.emod's branch convention).  The
+    `Int.ofNat ∘ toNat` view forces the unsigned read. -/
+example :
+    evalBinOp (.mod 32 false)
+      (.int 4294967295) (.int 4) = some (.int 3) := by rfl
+
+/-- Signed i32 mod of the same dividend at i32 width should
+    differ: signed -1 mod 4 via BitVec.srem = -1.  Distinct
+    from the unsigned case above. -/
+example :
+    evalBinOp (.mod 32 true)
+      (.int 4294967295) (.int 4) = some (.int (-1)) := by rfl
 
 /-- Bind a list of argument values to parameter names. -/
 def bindArgs (env : Env) (params : List String) (args : List PVal) : Option Env :=
@@ -1592,7 +1653,7 @@ def fcTagExpr : PExpr :=
       (.while_
         (.binOp .lt (.var "i") (.lit (.int 6)))
         [ ("acc",
-           .binOp (.bitxor 32) (.var "acc")
+           .binOp (.bitxor 32 true) (.var "acc")
              (.cast (.arrayIndex (.fieldAccess (.var "buf") "data")
                        (.var "i"))))
         , ("i", .binOp .add (.var "i") (.lit (.int 1)))

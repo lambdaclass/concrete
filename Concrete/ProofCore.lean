@@ -689,8 +689,8 @@ private def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
   | .mod, .i32 => some (.mod 32 true)
   | .mod, .u32 => some (.mod 32 false)
   | .mod, _ => none  -- other widths await multi-width extension
-  | .bitxor, .i32 => some (.bitxor 32)
-  | .bitxor, .u32 => some (.bitxor 32)  -- xor is sign-agnostic at bit level
+  | .bitxor, .i32 => some (.bitxor 32 true)
+  | .bitxor, .u32 => some (.bitxor 32 false)
   | .bitxor, _ => none
   | .eq, _  => some .eq
   | .neq, _ => some .ne

@@ -54,7 +54,7 @@ informally below the table but not yet a Lean theorem name.
 | R-14 | `cast inner` (identity on `PVal.int`) | `x as i32`, `u8 as i32` | fixed_capacity (`read_u8`, `read_u16_be`) | `cast_identity_preservation` — sound for widening; narrowing is excluded by eligibility |
 | R-15 | `arrayLit elems` | `[0, 0, 0, ...]` | fixed_capacity (`ring_new`) | `array_lit_preservation` |
 | R-16 | `binOp (.mod width signed)` (BitVec.srem / BitVec.umod) | `a % b` for `i32`/`u32` (other widths reject at extraction) | fixed_capacity (`ring_push`'s `head % cap`) | `mod_width_preservation` — `.mod 32 true` matches LLVM `srem`; `.mod 32 false` matches `urem` (commits 2605fb5, multi-width landed later) |
-| R-17 | `binOp (.bitxor width)` (BitVec.xor at width) | `a ^ b` for `i32`/`u32` (other widths reject at extraction) | fixed_capacity (`compute_tag`), parse_validate (`compute_checksum`) | `bitxor_width_preservation` — BitVec.xor at the operand width, round-trip via `BitVec.toInt` |
+| R-17 | `binOp (.bitxor width signed)` (BitVec.xor at width; signed/unsigned result interpretation) | `a ^ b` for `i32`/`u32` (other widths reject at extraction) | fixed_capacity (`compute_tag`), parse_validate (`compute_checksum`) | `bitxor_width_preservation` — BitVec.xor at the operand width; signed view via `BitVec.toInt`, unsigned via `Int.ofNat ∘ toNat` |
 | R-18 | `while_ cond assigns cont` (flat-assign body) | `while cond { x = ...; y = ...; }` | parse_validate (`compute_checksum`), fixed_capacity (`compute_tag`) | `while_flat_assign_preservation`; termination via fuel only — `bounded` profile enforces real termination at Check |
 | R-19 | `arraySet arr idx val` | `arr[i] = v` extracted as shadowing `letIn name (arraySet …)` | fixed_capacity (`ring_push`) | `array_set_preservation` (named in `docs/PROOF_STATE_MODEL.md` § 2); OOB stuck |
 | R-20 | `while_step cond carried step cont` + `LoopStep::Cont`/`Break` enum | `while cond { let x = ...; if c { return v; } i = i + 1 }` | fixed_capacity (`ring_contains`) | `while_step_preservation` + `while_step_early_break` (PROOF_STATE_MODEL § 4) |
@@ -91,20 +91,36 @@ explicitly.
 ### R-16, R-17 (mod, bitxor — typed BitVec round-trip)
 
 `PBinOp.mod (width : Nat) (signed : Bool)` and
-`PBinOp.bitxor (width : Nat)` carry the operand width.
-`evalBinOp` supports `mod 32 true` / `mod 32 false` /
-`bitxor 32`:
+`PBinOp.bitxor (width : Nat) (signed : Bool)` both carry
+operand width AND a signedness tag.  The signedness tag
+controls how the `BitVec` result is reinterpreted as `Int`:
+signed view via `BitVec.toInt` (two's-complement), unsigned
+via `Int.ofNat ∘ toNat` (always non-negative).
 
-    evalBinOp (.bitxor 32) (.int a) (.int b) =
+`evalBinOp` supports four (width, signed) combinations today:
+
+    evalBinOp (.bitxor 32 true)  (.int a) (.int b) =     -- i32 xor
       some (.int (BitVec.toInt (BitVec.ofInt 32 a ^^^ BitVec.ofInt 32 b)))
 
-    evalBinOp (.mod 32 true)  (.int a) (.int b) =       -- i32 srem
+    evalBinOp (.bitxor 32 false) (.int a) (.int b) =     -- u32 xor
+      some (.int (Int.ofNat ((BitVec.ofInt 32 a) ^^^ (BitVec.ofInt 32 b)).toNat))
+
+    evalBinOp (.mod 32 true)  (.int a) (.int b) =        -- i32 srem
       some (.int (BitVec.toInt (BitVec.srem (BitVec.ofInt 32 a) (BitVec.ofInt 32 b))))
         when b ≠ 0
 
-    evalBinOp (.mod 32 false) (.int a) (.int b) =       -- u32 urem
-      some (.int (BitVec.toInt (BitVec.umod (BitVec.ofInt 32 a) (BitVec.ofInt 32 b))))
+    evalBinOp (.mod 32 false) (.int a) (.int b) =        -- u32 urem
+      some (.int (Int.ofNat (BitVec.umod (BitVec.ofInt 32 a) (BitVec.ofInt 32 b)).toNat))
         when b ≠ 0
+
+The unsigned cases use `Int.ofNat ∘ toNat`, not `BitVec.toInt`.
+This matters when the result's high bit is set: signed view
+surfaces as a negative `Int` (which is correct for `i32` but
+WRONG for `u32`); unsigned view surfaces as a large positive
+`Int` (correct for `u32`).  Inline regression theorems in
+`Concrete/Proof.lean` pin this behavior:
+- `0xFFFFFFFF ^ 0` signed = `-1`, unsigned = `4294967295`
+- `0xFFFFFFFF mod 4` signed = `-1`, unsigned = `3`
 
 `BitVec.srem` matches LLVM `srem`; `BitVec.umod` matches
 `urem`.  Both are what `EmitSSA.lean` emits for the
