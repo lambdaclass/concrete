@@ -10,6 +10,82 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### fixed_capacity graduates to Phase 7 (third flagship)
+
+fixed_capacity closes all 10 graduation bars and lands as the
+third entry in `tests/showcase/manifest.toml`.  The bounded /
+no-allocation systems flagship the Phase 7 corpus was missing
+alongside parse_validate (parsing) and crypto_verify
+(authentication scaffolding).
+
+What makes this graduation substantive: bar #2 is closed by
+`ring_push_then_contains_correct`, the project's first
+iteration-counted composition theorem.  It proves "push v into
+empty ring; ring_contains(v) = 1" through one Break iteration
+of `while_step` over the full state-model surface (arraySet,
+LoopStep enum, BitVec mod at i32 width).  This is the
+strongest substantive proof-side claim in the Phase 7 corpus
+to date — a 2-function chain over bounded mutable state,
+kernel-checked.
+
+The 10 bars in one batch
+------------------------
+- #5 Oracle: Python reference (`oracle/reference.py`) mirrors
+  the spec exactly.  `oracle/run_oracle.sh` generates 200
+  seeded cases per seed, builds a Concrete driver per case
+  with case-specific MsgBuf bytes via a `trusted`
+  `driver_buf()` constructor, runs both sides, asserts agreement.
+  600 cases across seeds 0/42/999 — all pass.  `make
+  test-fc-oracle` wired into Makefile.
+- #6 Catches: `catches/01_alloc_in_bounded_core.con` — same
+  `ring_push` shape with an `audit_log` helper declared
+  `with(Alloc)`.  Capability check rejects with E0520.
+  `make test-catches` 3/0.
+- #7 Release bundle: captures cleanly via
+  `scripts/tests/capture_release_bundle.sh`.  All required
+  artifacts present.
+- #8 README: full honest-framing doc following parse_validate
+  / crypto_verify template.  Names what is proved, what is
+  NOT yet proved, what is statically enforced, what is
+  assumed.
+- #10 Showcase manifest entry: 10/10 bars marked, evidence
+  pointers, CI gates, limits explicitly named.
+
+Previously-met bars
+-------------------
+- #1: 4 attached theorems (ring_new, compute_tag_zero,
+  ring_push_zero, ring_push_then_contains)
+- #2: composition theorem (this commit's predecessor)
+- #3: assumption file
+- #4: policy file
+- #9: 16 report snapshots baselined
+
+Pull-through evidence
+---------------------
+`make test-showcase` goes from 2/0 to 3/0 (fixed_capacity
+joins).  All CI gates remain green.
+
+Status as of HEAD
+-----------------
+Three graduated Phase 7 flagships:
+- parse_validate (2026-05-22) — parsing
+- crypto_verify (2026-05-23) — auth scaffolding (toy)
+- fixed_capacity (2026-05-28) — bounded systems state
+
+Phase 7's core thesis is now demonstrated by all three
+flagships agreeing on what proof + evidence + policy +
+catches + drift detection look like for different systems
+domains.  The next flagship candidate (real cryptography,
+ELF, etc.) follows from the ROADMAP ladder.
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    3/0  (was 2/0)
+make test-snapshots:   48/0
+make test-catches:     3/0  (was 2/0)
+make test-fc-oracle:   600/0 (new gate, 3 seeds × 200 cases)
+
 ### Iteration-counted composition: ring_push then ring_contains finds the value
 
 The substantive proof-side claim for fixed_capacity:

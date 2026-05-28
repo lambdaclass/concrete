@@ -174,3 +174,84 @@ PROOF WORKFLOW, not engineers needing a verified MAC for
 production. The Phase 7 catalog graduates the scaffolding; the
 algorithm catalog waits for Phase 4.
 """
+
+[[flagship]]
+example     = "fixed_capacity"
+path        = "examples/fixed_capacity"
+graduated   = "2026-05-28"
+audit       = "examples/fixed_capacity/AUDIT.md"
+readme      = "examples/fixed_capacity/README.md"
+thesis_role = """
+Bounded / no-allocation systems flagship: ring buffer, message
+validator, XOR-fold tag. Carries the substantive proof-side
+claim of the Phase 7 corpus — an iteration-counted composition
+theorem over bounded mutable state ('push then contains finds
+the value'), kernel-checked through the state-model surface
+(arraySet + while_step + LoopStep enum).
+"""
+
+[flagship.bars]
+proved_property        = true   # bar #1 — 4 attached theorems
+composition_property   = true   # bar #2 — ring_push_then_contains_correct
+assumption_file        = true   # bar #3
+policy_file            = true   # bar #4
+oracle_beyond_handwritten = true   # bar #5 — 600 differential cases
+negative_pair          = true   # bar #6 — alloc-in-bounded-core
+release_bundle         = true   # bar #7
+honest_readme          = true   # bar #8
+snapshot_baseline      = true   # bar #9 — 16 reports
+on_showcase_manifest   = true   # bar #10 — this entry
+
+[flagship.evidence]
+proof_registry = "examples/fixed_capacity/src/proof-registry.json"
+proofs         = ["Concrete.Proof.ring_new_correct",
+                  "Concrete.Proof.compute_tag_zero_correct",
+                  "Concrete.Proof.ring_push_zero_correct",
+                  "Concrete.Proof.ring_push_then_contains_correct"]
+assumptions    = "examples/fixed_capacity/assumptions.toml"
+policy         = "examples/fixed_capacity/Concrete.toml"
+catches        = "examples/fixed_capacity/catches/"
+catches_doc    = "examples/fixed_capacity/CATCHES.md"
+snapshots      = "examples/fixed_capacity/snapshot/"
+oracle         = "examples/fixed_capacity/oracle/"
+
+[flagship.gates]
+policy         = "make test-policy"
+assumptions    = "make test-assumptions"
+catches        = "make test-catches"
+snapshots      = "make test-snapshots"
+oracle         = "make test-fc-oracle"
+verify_gates   = "make test-verify-gates"
+release_bundle = "make test-release-bundle"
+
+[flagship.limits]
+proofs = """
+Four attached theorems exercise the full state-model surface
+end-to-end. The composition theorem
+(ring_push_then_contains_correct) holds for the canonical
+1-element ring; multi-iteration generalizations (e.g. "after K
+pushes ring_contains finds value if it was pushed") require
+multi-iteration while_step reasoning and are Phase 4 follow-up
+work. The 5 scalar validators extract cleanly but have no
+attached theorems (their proofs would copy verbatim from
+parse_validate's shape). The full validate_message composition
+across arbitrary input is also future work.
+"""
+oracle = """
+Python reference implementation, not Lean. 600 differential
+cases across three seeds (200 per seed) agree with the Concrete
+binary on every error path (1..7) plus the OK case with replay
+detection. A Lean equivalence proof against the reference would
+be stronger but waits on the multi-iteration extensions named
+above.
+"""
+audience = """
+Third graduated flagship. Targets reviewers evaluating
+Concrete's bounded-state / no-allocation discipline on small
+systems data structures (ring buffers, message validators,
+fixed parser state machines, bounded-state controllers). The
+iteration-counted composition theorem is the strongest
+substantive proof-side claim in the Phase 7 corpus to date —
+it covers a 2-function chain over mutable state, not just a
+sequence of scalar validations.
+"""
