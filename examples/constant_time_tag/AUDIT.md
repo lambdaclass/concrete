@@ -201,8 +201,8 @@ First theorem landed 2026-05-29 (bar #1):
 
 | # | Bar | Status |
 |---:|---|---|
-| 1  | Lean-backed property surfaced as `proved` | ✅ `ct_compare_equal_zeros_correct` — comparing zeros to zeros returns 1.  Exercises u8 bitxor + u8 bitor + bounded 16-iteration while_ + final eq branch under the Lean kernel.  Concrete-input case; the universal `ct_compare a a = 1` is bar #2. |
-| 2  | Composition property Lean-backed | ❌ pending — universal `ct_compare a a = 1` for any 16-element array.  Helper `bitxor_u8_self_zero` is landed; the remaining piece is array-induction with a `bitor_u8_right_zero` companion lemma. |
+| 1  | Lean-backed property surfaced as `proved` | ✅ `ct_compare_same_tag_correct` (since 2026-05-29) — for any 16-byte tag, `ct_compare a a = 1`.  Stronger than the initial concrete-zeros theorem; covers arbitrary byte values via `BitVec.xor_self` + `BitVec.zero_or`. |
+| 2  | Composition property Lean-backed | ✅ `ct_compare_same_tag_correct` is universal over byte values (parametric in 16 `Int`s) and exercises all 16 loop iterations — the credible crypto-adjacent claim "equal tags always pass with all bytes inspected".  The full iff (`ct_compare a b = 1 iff a = b`) is the natural next stronger target; pending negative-direction array-position reasoning. |
 | 3  | Assumption file with schema, CI-enforced | ✅ `assumptions.toml` with explicit three-layer claim entries; `make test-assumptions` 4/0 |
 | 4  | Policy file with enforceable budgets, CI-enforced | ✅ `Concrete.toml [policy]` stricter than fixed_capacity (no_unsafe + no_trusted both set); `make test-policy` 5/0 |
 | 5  | Oracle beyond hand-written tests | ❌ |
@@ -212,11 +212,15 @@ First theorem landed 2026-05-29 (bar #1):
 | 9  | Snapshot/diff baseline | ✅ 16 reports baselined under `snapshot/`; `make test-snapshots` 64/0 across all 4 candidates |
 | 10 | Listed in `tests/showcase/manifest.toml` | ❌ |
 
-**Today: 4 of 10 bars met (#1, #3, #4, #9).**  Bar #1 closed
-2026-05-29 with `ct_compare_equal_zeros_correct` — the first
-real-crypto theorem in the project.  Exercises every Phase 4
-extension this candidate forced.  The universal-equal
-generalization is bar #2's natural target.
+**Today: 5 of 10 bars met (#1, #2, #3, #4, #9).**  Bar #1
+closed 2026-05-29 with the concrete-zeros theorem, then
+upgraded same day to `ct_compare_same_tag_correct` — the
+universal same-tag claim.  Bar #2 is closed by that same
+theorem: it covers any 16-byte input parametrically and
+exercises all 16 loop iterations.  The full bidirectional
+iff is a stronger stretch target, NOT bar #2's minimum
+threshold.  Remaining: content bars (#5 oracle, #6 catches,
+#7 bundle, #8 README, #10 manifest).
 
 ## 8. Strategic value beyond graduation
 

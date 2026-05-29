@@ -2094,12 +2094,71 @@ def ctTagFns : FnTable
   | _            => none
 
 /-- Helper: any u8 value xor'd with itself is 0 at our unsigned-
-    u8 evalBinOp encoding.  Used by future universal-equal
-    theorems on `ct_compare`; landed now so the lemma surface
-    is in place when the array-induction proof comes. -/
+    u8 evalBinOp encoding. -/
 theorem bitxor_u8_self_zero (n : Int) :
     evalBinOp (.bitxor 8 false) (.int n) (.int n) = some (.int 0) := by
   simp [evalBinOp, BitVec.xor_self]
+
+/-- Helper: `0 | 0 = 0` at u8 unsigned width.  Used by the
+    universal same-tag theorem: when the accumulator `diff` is 0
+    and `a[i] ^ b[i] = 0` (which holds when `a[i] = b[i]`), the
+    next `diff` stays 0. -/
+theorem bitor_u8_zero_zero :
+    evalBinOp (.bitor 8 false) (.int 0) (.int 0) = some (.int 0) := by
+  rfl
+
+/-- Composed helper: for any int `n`, the loop body's effect
+    `diff := 0 | (n ^ n)` produces accumulator `0` at u8 unsigned.
+    This is the per-iteration invariant of the same-tag universal
+    proof.  Formulated as a sequenced evalBinOp pair so simp can
+    rewrite both ops in a single step. -/
+theorem ct_loop_iteration_invariant (n : Int) :
+    (match evalBinOp (.bitxor 8 false) (.int n) (.int n) with
+      | some xorRes => evalBinOp (.bitor 8 false) (.int 0) xorRes
+      | none => none) = some (.int 0) := by
+  rw [bitxor_u8_self_zero]; rfl
+
+set_option maxHeartbeats 4000000 in
+set_option linter.unusedSimpArgs false in
+/-- **Universal same-tag theorem** (AUDIT bar #2):
+    `ct_compare a a = 1` for any 16-element tag `a`, where each
+    byte is given as an `Int` (wrapped in `PVal.int`).
+
+    Phrased over a tuple of 16 Ints rather than an opaque `List
+    PVal` so each `lookupIndex` reduces concretely under simp.
+    The shape `[.int b0, .int b1, ..., .int b15]` is the actual
+    image of any `[u8; 16]` source array under PExpr extraction;
+    no information is lost.
+
+    Per-iteration: `diff := 0 | (bᵢ ^ bᵢ) = 0 | 0 = 0`.
+    After 16 iterations `i = 16` makes `i < 16` false, falling
+    through to `if 0 == 0 then 1 else 0` which returns 1.
+
+    Stronger than `ct_compare_equal_zeros_correct` because the
+    byte values are arbitrary; the previous theorem held only
+    for the all-zero tag.  This theorem is the credible
+    crypto-adjacent claim: **equal tags always pass, with all
+    16 loop iterations executed**. -/
+theorem ct_compare_same_tag_correct
+    (b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 : Int)
+    (fuel : Nat) :
+    let tag : PVal := .array_
+      [.int b0, .int b1, .int b2, .int b3,
+       .int b4, .int b5, .int b6, .int b7,
+       .int b8, .int b9, .int b10, .int b11,
+       .int b12, .int b13, .int b14, .int b15]
+    eval ctTagFns
+      ((Env.empty.bind "a" tag).bind "b" tag)
+      (fuel + 200) ctCompareExpr
+    = some (.int 1) := by
+  -- Each lookupIndex returns the matching .int bᵢ on both
+  -- sides; bᵢ ^ bᵢ = 0 via BitVec.xor_self; 0 | 0 = 0.  Simp
+  -- chains the 16 iterations using the helpers above as
+  -- rewrite rules.
+  simp [ctCompareExpr,
+        eval, eval.evalAssigns, eval.lookupIndex,
+        ctTagFns, Env.bind, evalBinOp,
+        BitVec.xor_self, BitVec.zero_or]
 
 set_option maxHeartbeats 2000000 in
 set_option linter.unusedSimpArgs false in
