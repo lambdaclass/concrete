@@ -2923,12 +2923,12 @@ fi
 # and the signedness fix that followed.
 PCWIDTHS="$TESTDIR/adversarial_pbinop_widths.con"
 widths_out=$($COMPILER "$PCWIDTHS" --report proof-status 2>&1 || true)
-if echo "$widths_out" | grep -q "u8_xor_blocks" && \
-   echo "$widths_out" | grep -q "Concrete.BinOp.bitxor at Concrete.Ty.u8"; then
-    echo "  ok  pbinop_widths: u8 ^ u8 blocks with precise diagnostic"
+if echo "$widths_out" | grep -q "u16_xor_blocks" && \
+   echo "$widths_out" | grep -q "Concrete.BinOp.bitxor at Concrete.Ty.u16"; then
+    echo "  ok  pbinop_widths: u16 ^ u16 blocks with precise diagnostic"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  pbinop_widths: u8 ^ u8 should block with precise diagnostic"
+    echo "FAIL  pbinop_widths: u16 ^ u16 should block with precise diagnostic"
     echo "$widths_out"
     FAIL=$((FAIL + 1))
 fi

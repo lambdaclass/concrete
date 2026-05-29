@@ -1,2 +1,1 @@
-Found 1 consistency violation(s):
-  [BLOCKED-UNSUP] constant_time_tag.ct_compare: entry is eligible with no extraction but unsupported list is empty
+All consistency checks passed.

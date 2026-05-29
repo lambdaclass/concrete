@@ -1,22 +1,28 @@
 // Adversarial: PBinOp width discipline (Phase 4 multi-width fix).
 //
-// Concrete's mod/bitxor are currently modeled by ProofCore only
-// at i32 / u32 widths.  This file exercises a u8 operand: the
-// function is otherwise proof-eligible (pure, not trusted, not
-// recursive, bounded), but the u8 xor should fail extraction
-// with a precise blocker rather than silently re-using i32
-// semantics.
+// Concrete's mod/bitxor/bitor are currently modeled by ProofCore
+// at i32, u32, and u8 widths.  This file exercises a u16 operand:
+// the function is otherwise proof-eligible (pure, not trusted,
+// not recursive, bounded), but u16 xor should fail extraction
+// with a precise blocker rather than silently re-using i32 or
+// u8 semantics.
 //
 // Expected status: extracted=blocked, unsupported includes
-// "Concrete.BinOp.bitxor at Concrete.Ty.u8".
+// "Concrete.BinOp.bitxor at Concrete.Ty.u16".
 //
 // Tested by scripts/tests/run_tests.sh — search "pbinop_widths".
+//
+// History: this file used u8 ^ u8 originally; constant_time_tag
+// forced u8 support so the test pivoted to the next unsupported
+// width.  When a flagship forces u16 support, pivot again to the
+// next width — the gate's job is "non-supported widths reject
+// explicitly," not "any specific width forever stays unsupported."
 
-fn u8_xor_blocks(a: u8, b: u8) -> u8 {
+fn u16_xor_blocks(a: u16, b: u16) -> u16 {
     return a ^ b;
 }
 
 fn main() -> i32 {
-    let _: u8 = u8_xor_blocks(1, 2);
+    let _: u16 = u16_xor_blocks(1, 2);
     return 0;
 }

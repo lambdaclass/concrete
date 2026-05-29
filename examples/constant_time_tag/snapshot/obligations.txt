@@ -1,7 +1,7 @@
 === Proof Obligations ===
 
   constant_time_tag.ct_compare
-    status:       blocked
+    status:       missing
     spec:         (none)
     proof:        (none)
     source:       none
@@ -18,5 +18,5 @@
     dependencies: none
     loc:          examples/constant_time_tag/src/main.con:50
 
-Totals: 2 obligations — 0 proved, 0 stale, 0 missing, 1 blocked, 1 ineligible, 0 trusted
+Totals: 2 obligations — 0 proved, 0 stale, 1 missing, 0 blocked, 1 ineligible, 0 trusted
 

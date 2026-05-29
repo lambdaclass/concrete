@@ -1676,6 +1676,8 @@ private partial def renderPExpr : Proof.PExpr → String
       | .mod _ false => "%u"  -- unsigned mod (urem semantics)
       | .bitxor _ true => "^"
       | .bitxor _ false => "^u"
+      | .bitor _ true => "|"
+      | .bitor _ false => "|u"
       | .eq => "==" | .ne => "!=" | .lt => "<"
       | .le => "<=" | .gt => ">" | .ge => ">="
     s!"({renderPExpr lhs} {opStr} {renderPExpr rhs})"
@@ -1805,6 +1807,7 @@ private partial def renderPExprAsLean : Proof.PExpr → String
       | .add => ".add" | .sub => ".sub" | .mul => ".mul"
       | .mod w s => s!"(.mod {w} {s})"
       | .bitxor w s => s!"(.bitxor {w} {s})"
+      | .bitor w s => s!"(.bitor {w} {s})"
       | .eq => ".eq" | .ne => ".ne" | .lt => ".lt"
       | .le => ".le" | .gt => ".gt" | .ge => ".ge"
     s!".binOp {opStr}\n      ({renderPExprAsLean lhs})\n      ({renderPExprAsLean rhs})"

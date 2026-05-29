@@ -54,7 +54,8 @@ informally below the table but not yet a Lean theorem name.
 | R-14 | `cast inner` (identity on `PVal.int`) | `x as i32`, `u8 as i32` | fixed_capacity (`read_u8`, `read_u16_be`) | `cast_identity_preservation` — sound for widening; narrowing is excluded by eligibility |
 | R-15 | `arrayLit elems` | `[0, 0, 0, ...]` | fixed_capacity (`ring_new`) | `array_lit_preservation` |
 | R-16 | `binOp (.mod width signed)` (BitVec.srem / BitVec.umod) | `a % b` for `i32`/`u32` (other widths reject at extraction) | fixed_capacity (`ring_push`'s `head % cap`) | `mod_width_preservation` — `.mod 32 true` matches LLVM `srem`; `.mod 32 false` matches `urem` (commits 2605fb5, multi-width landed later) |
-| R-17 | `binOp (.bitxor width signed)` (BitVec.xor at width; signed/unsigned result interpretation) | `a ^ b` for `i32`/`u32` (other widths reject at extraction) | fixed_capacity (`compute_tag`), parse_validate (`compute_checksum`) | `bitxor_width_preservation` — BitVec.xor at the operand width; signed view via `BitVec.toInt`, unsigned via `Int.ofNat ∘ toNat` |
+| R-17 | `binOp (.bitxor width signed)` (BitVec.xor at width; signed/unsigned result interpretation) | `a ^ b` for `i32`/`u32`/`u8` (other widths reject at extraction) | fixed_capacity (`compute_tag`), parse_validate (`compute_checksum`), constant_time_tag (`ct_compare`) | `bitxor_width_preservation` — BitVec.xor at the operand width; signed view via `BitVec.toInt`, unsigned via `Int.ofNat ∘ toNat` |
+| R-21 | `binOp (.bitor width signed)` (BitVec.or at width; signed/unsigned result interpretation) | `a \| b` for `u8` (other widths reject at extraction) | constant_time_tag (`ct_compare` OR-accumulate) | `bitor_width_preservation` — BitVec.or at the operand width; unsigned view via `Int.ofNat ∘ toNat` (the only mode currently supported) |
 | R-18 | `while_ cond assigns cont` (flat-assign body) | `while cond { x = ...; y = ...; }` | parse_validate (`compute_checksum`), fixed_capacity (`compute_tag`) | `while_flat_assign_preservation`; termination via fuel only — `bounded` profile enforces real termination at Check |
 | R-19 | `arraySet arr idx val` | `arr[i] = v` extracted as shadowing `letIn name (arraySet …)` | fixed_capacity (`ring_push`) | `array_set_preservation` (named in `docs/PROOF_STATE_MODEL.md` § 2); OOB stuck |
 | R-20 | `while_step cond carried step cont` + `LoopStep::Cont`/`Break` enum | `while cond { let x = ...; if c { return v; } i = i + 1 }` | fixed_capacity (`ring_contains`) | `while_step_preservation` + `while_step_early_break` (PROOF_STATE_MODEL § 4) |
@@ -87,6 +88,26 @@ or to attach an explicit `narrow_int` side-condition the
 extractor preserves.  Phase 12 obligation
 `cast_identity_preservation` will state this restriction
 explicitly.
+
+### R-21 (bitor — typed BitVec round-trip)
+
+New constructor introduced by constant_time_tag's
+OR-accumulate loop body (`diff = diff | (a[i] ^ b[i])`).
+Same typed-BitVec round-trip shape as R-17 (bitxor):
+
+    evalBinOp (.bitor 8 false) (.int a) (.int b) =
+      some (.int (Int.ofNat ((BitVec.ofInt 8 a) ||| (BitVec.ofInt 8 b)).toNat))
+
+`evalBinOp` supports `bitor 8 false` only today (the
+u8-unsigned case ct_compare actually uses).  Signed-mode
+`bitor` and other widths are append-only follow-ups, each
+requiring one `evalBinOp` case + one `binOpToPBinOp`
+mapping + an updated row in this register.
+
+Inline regression theorems in `Concrete/Proof.lean` pin the
+u8 unsigned behavior:
+- `128 | 0 = 128`  (high bit set, still positive)
+- `128 | 1 = 129`
 
 ### R-16, R-17 (mod, bitxor — typed BitVec round-trip)
 
@@ -211,13 +232,18 @@ but not yet implemented:
   field update.  Source `obj.f = v` extracts to `letIn name
   (structSet (var name) "f" val) rest`.  No flagship yet
   forces it; ring_push only mutates an array field.
-- **Multi-width PBinOp at non-32 widths** (ROADMAP Phase 4
-  item 7): the constructor is parameterized
-  (`.mod width signed` / `.bitxor width`); evalBinOp supports
-  width 32 only.  Adding u8 / u16 / i64 etc. is now a
-  one-case-per-width addition with no shape change.  The
-  flagship-forcing example for the next width hasn't landed
-  yet.
+- **Multi-width PBinOp at non-32 / non-u8 widths** (ROADMAP
+  Phase 4 item 7): all width-sensitive constructors are
+  parameterized (`.mod width signed` / `.bitxor width signed`
+  / `.bitor width signed`).  evalBinOp currently supports
+  i32/u32 (mod, bitxor), u8 (bitxor, bitor).  Adding u16 /
+  i64 / etc. is now a one-case-per-(op, width, signed)
+  addition with no shape change.  The
+  `adversarial_pbinop_widths` regression in
+  `tests/programs/` exercises a still-unsupported width
+  (u16 today) and asserts the precise diagnostic; when a
+  flagship forces u16 support, the regression pivots to the
+  next unsupported width.
 - **Multi-iteration while_step proofs**: today
   `ring_push_then_contains_correct` proves the
   single-iteration case.  Future work needs an inductive

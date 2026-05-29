@@ -1,15 +1,16 @@
 === Proof Status Report ===
 
--- blocked ------------------------------------------------ examples/constant_time_tag/src/main.con:33
+-- no proof ----------------------------------------------- examples/constant_time_tag/src/main.con:33
 
-  `constant_time_tag.ct_compare` is eligible but uses unsupported constructs — extraction failed.
+  `constant_time_tag.ct_compare` passes the predictable profile but has no registered proof.
 
  33 |     fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: unsupported constructs
+  current fingerprint:
+    [(let diff (int 0)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 16)) [(set diff (binop Concrete.BinOp.bitor (var diff) (binop Concrete.BinOp.bitxor (index (var a) (var i)) (index (var b) (var i))))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (if (binop Concrete.BinOp.eq (var diff) (int 0)) [(ret (int 1))]) (ret (int 0))]
 
-  hint: Remove unsupported constructs to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
 -- not eligible ------------------------------------------- examples/constant_time_tag/src/main.con:50
 
@@ -22,5 +23,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 2 functions — 0 proved, 0 stale, 0 unproved, 1 blocked, 1 ineligible, 0 trusted
+Totals: 2 functions — 0 proved, 0 stale, 1 unproved, 0 blocked, 1 ineligible, 0 trusted
 

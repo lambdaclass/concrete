@@ -211,14 +211,14 @@ First pilot batch landed 2026-05-28 (bars #3, #4, #9):
 | 9  | Snapshot/diff baseline | ✅ 16 reports baselined under `snapshot/`; `make test-snapshots` 64/0 across all 4 candidates |
 | 10 | Listed in `tests/showcase/manifest.toml` | ❌ |
 
-**Today: 3 of 10 bars met (#3, #4, #9).**  Source landed
+**Today: 3 of 10 bars met (#3, #4, #9), and the Phase 4
+forcing surface from § 5 is closed.**  Source landed
 2026-05-28 with extraction blocked exactly as the audit
-predicted — `ct_compare` shows `eligible (extraction failed)`
-on `--report extraction`.  The blockers (visible in the
-fingerprint) are `Concrete.BinOp.bitor` (not in PBinOp at
-all) and `Concrete.BinOp.bitxor` at u8 width (we have
-i32/u32 only).  These are exactly the Phase 4 extensions
-named in § 5.
+predicted.  On 2026-05-29 the u8 PBinOp extensions landed
+(R-17 bitxor extended to u8; new R-21 bitor at u8); the
+candidate now extracts (`ct_compare` is `no proof` on
+`--report proof-status`, not `blocked`).  Next batch is
+the first attached theorem (bar #1: `ct_compare_equal_correct`).
 
 ## 8. Strategic value beyond graduation
 

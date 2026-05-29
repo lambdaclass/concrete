@@ -63,15 +63,23 @@ inductive PBinOp where
 
       This matters for crypto-adjacent code: `0xFFFFFFFF ^ 0`
       should evaluate to `4294967295` for `u32` operands, NOT
-      `-1`.  Without this tag, the prior (pre-fix) encoding
-      `bitxor 32` silently used `BitVec.toInt` for both signed and
-      unsigned operands, producing wrong values whenever the
-      result's high bit was set on unsigned inputs.
+      `-1`.
 
-      Today `evalBinOp` supports `bitxor 32 true` and
-      `bitxor 32 false` only.  Other widths extract as `none`
-      from `cExprToPExpr` and surface a blocker. -/
+      Today `evalBinOp` supports `bitxor 32 {true,false}` and
+      `bitxor 8 false`.  Other widths extract as `none` from
+      `cExprToPExpr` and surface a blocker. -/
   | bitxor (width : Nat) (signed : Bool)
+  /-- Bitwise OR at a specific width, with a `signed` tag for
+      result-mode interpretation (same convention as `bitxor`).
+
+      Forced by constant_time_tag's OR-accumulate loop body
+      (`diff = diff | (a[i] ^ b[i])`).  At u8 width, unsigned
+      result-mode is required: `128 | 0` must evaluate to `128`,
+      not `-128`.
+
+      Today `evalBinOp` supports `bitor 8 false` only.  Other
+      widths are append-only follow-ups. -/
+  | bitor (width : Nat) (signed : Bool)
   | eq | ne | lt | le | gt | ge
   deriving Repr, BEq, DecidableEq
 
@@ -258,6 +266,17 @@ def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
   | .bitxor 32 false, .int a, .int b =>
     some (.int (Int.ofNat
       ((BitVec.ofInt 32 a) ^^^ (BitVec.ofInt 32 b)).toNat))
+  -- bitxor 8 unsigned: BitVec.xor at u8, unsigned view.
+  -- 0xFF ^ 0 = 255 (not -1).  Forced by constant_time_tag.
+  | .bitxor 8 false, .int a, .int b =>
+    some (.int (Int.ofNat
+      ((BitVec.ofInt 8 a) ^^^ (BitVec.ofInt 8 b)).toNat))
+  -- bitor 8 unsigned: BitVec.or at u8, unsigned view.
+  -- 0x80 | 0 = 128 (not -128).  Forced by constant_time_tag's
+  -- OR-accumulate loop body.
+  | .bitor 8 false, .int a, .int b =>
+    some (.int (Int.ofNat
+      ((BitVec.ofInt 8 a) ||| (BitVec.ofInt 8 b)).toNat))
   -- Other widths intentionally unmodeled — extraction refuses to
   -- emit them, so a `.mod w s` or `.bitxor w s` with w ≠ 32
   -- reaching eval signals a bug (or a future extension yet to
@@ -311,6 +330,29 @@ example :
 example :
     evalBinOp (.mod 32 true)
       (.int 4294967295) (.int 4) = some (.int (-1)) := by rfl
+
+/-- u8 xor of 0xFF and 0 surfaces as `255` under unsigned view
+    (NOT `-1`).  This is the high-bit u8 case forced by
+    constant_time_tag's OR-accumulate. -/
+example :
+    evalBinOp (.bitxor 8 false)
+      (.int 255) (.int 0) = some (.int 255) := by rfl
+
+/-- u8 or of 0x80 and 0 surfaces as `128` under unsigned view
+    (NOT `-128`).  -/
+example :
+    evalBinOp (.bitor 8 false)
+      (.int 128) (.int 0) = some (.int 128) := by rfl
+
+/-- u8 or of 0x80 and 0x01 = 0x81 = 129 (not a negative i8). -/
+example :
+    evalBinOp (.bitor 8 false)
+      (.int 128) (.int 1) = some (.int 129) := by rfl
+
+/-- u8 xor with self is 0 (identity property at any width). -/
+example :
+    evalBinOp (.bitxor 8 false)
+      (.int 200) (.int 200) = some (.int 0) := by rfl
 
 /-- Bind a list of argument values to parameter names. -/
 def bindArgs (env : Env) (params : List String) (args : List PVal) : Option Env :=
