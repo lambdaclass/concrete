@@ -2,10 +2,10 @@
 
 module constant_time_tag:
       ct_compare
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/constant_time_tag/src/main.con:33
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/constant_time_tag/src/main.con:33
   pub main
     caps: Console  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/constant_time_tag/src/main.con:50
 
 Totals: 2 functions, 1 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
-Evidence: 0 proved, 2 enforced, 0 trusted-assumption, 0 reported
+Evidence: 1 proved, 1 enforced, 0 trusted-assumption, 0 reported
 

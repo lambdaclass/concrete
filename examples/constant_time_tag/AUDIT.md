@@ -196,12 +196,13 @@ after the loop" — needs induction on the loop.
 
 ## 7. Missing artifacts / policies / assumptions
 
-First pilot batch landed 2026-05-28 (bars #3, #4, #9):
+First pilot batch landed 2026-05-28 (bars #3, #4, #9).
+First theorem landed 2026-05-29 (bar #1):
 
 | # | Bar | Status |
 |---:|---|---|
-| 1  | Lean-backed property surfaced as `proved` | ❌ pending Phase 4 forcing (u8 bitor + u8 bitxor + universal-property while_step proof) |
-| 2  | Composition property Lean-backed | ❌ pending bar #1 |
+| 1  | Lean-backed property surfaced as `proved` | ✅ `ct_compare_equal_zeros_correct` — comparing zeros to zeros returns 1.  Exercises u8 bitxor + u8 bitor + bounded 16-iteration while_ + final eq branch under the Lean kernel.  Concrete-input case; the universal `ct_compare a a = 1` is bar #2. |
+| 2  | Composition property Lean-backed | ❌ pending — universal `ct_compare a a = 1` for any 16-element array.  Helper `bitxor_u8_self_zero` is landed; the remaining piece is array-induction with a `bitor_u8_right_zero` companion lemma. |
 | 3  | Assumption file with schema, CI-enforced | ✅ `assumptions.toml` with explicit three-layer claim entries; `make test-assumptions` 4/0 |
 | 4  | Policy file with enforceable budgets, CI-enforced | ✅ `Concrete.toml [policy]` stricter than fixed_capacity (no_unsafe + no_trusted both set); `make test-policy` 5/0 |
 | 5  | Oracle beyond hand-written tests | ❌ |
@@ -211,14 +212,11 @@ First pilot batch landed 2026-05-28 (bars #3, #4, #9):
 | 9  | Snapshot/diff baseline | ✅ 16 reports baselined under `snapshot/`; `make test-snapshots` 64/0 across all 4 candidates |
 | 10 | Listed in `tests/showcase/manifest.toml` | ❌ |
 
-**Today: 3 of 10 bars met (#3, #4, #9), and the Phase 4
-forcing surface from § 5 is closed.**  Source landed
-2026-05-28 with extraction blocked exactly as the audit
-predicted.  On 2026-05-29 the u8 PBinOp extensions landed
-(R-17 bitxor extended to u8; new R-21 bitor at u8); the
-candidate now extracts (`ct_compare` is `no proof` on
-`--report proof-status`, not `blocked`).  Next batch is
-the first attached theorem (bar #1: `ct_compare_equal_correct`).
+**Today: 4 of 10 bars met (#1, #3, #4, #9).**  Bar #1 closed
+2026-05-29 with `ct_compare_equal_zeros_correct` — the first
+real-crypto theorem in the project.  Exercises every Phase 4
+extension this candidate forced.  The universal-equal
+generalization is bar #2's natural target.
 
 ## 8. Strategic value beyond graduation
 

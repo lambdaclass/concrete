@@ -2048,6 +2048,97 @@ def provedFunctions : List (String × String × String) :=
   ]
 
 -- ============================================================
+-- constant_time_tag — first real-crypto candidate.
+-- Source: examples/constant_time_tag/src/main.con
+-- See AUDIT.md for the three-layer claim framing.
+-- ============================================================
+
+/-- `fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32` —
+    OR-accumulate over byte-level XOR, with the final
+    branch-free-at-source `diff == 0` test.
+
+      let diff = 0
+      let i    = 0
+      while i < 16 {
+        diff = diff | (a[i] ^ b[i])
+        i    = i + 1
+      }
+      if diff == 0 { return 1; }
+      return 0
+
+    u8 bitxor/bitor in PExpr at unsigned width.  Bounded 16
+    iterations.  No early exit from the loop. -/
+def ctCompareExpr : PExpr :=
+  .letIn "diff" (.lit (.int 0))
+    (.letIn "i" (.lit (.int 0))
+      (.while_
+        (.binOp .lt (.var "i") (.lit (.int 16)))
+        [ ("diff",
+           .binOp (.bitor 8 false) (.var "diff")
+             (.binOp (.bitxor 8 false)
+               (.arrayIndex (.var "a") (.var "i"))
+               (.arrayIndex (.var "b") (.var "i"))))
+        , ("i", .binOp .add (.var "i") (.lit (.int 1)))
+        ]
+        (.ifThenElse
+          (.binOp .eq (.var "diff") (.lit (.int 0)))
+          (.lit (.int 1))
+          (.lit (.int 0)))))
+
+def ctCompareFn : PFnDef :=
+  { name := "ct_compare", params := ["a", "b"], body := ctCompareExpr }
+
+/-- Function table for constant_time_tag proofs. -/
+def ctTagFns : FnTable
+  | "ct_compare" => some ctCompareFn
+  | _            => none
+
+/-- Helper: any u8 value xor'd with itself is 0 at our unsigned-
+    u8 evalBinOp encoding.  Used by future universal-equal
+    theorems on `ct_compare`; landed now so the lemma surface
+    is in place when the array-induction proof comes. -/
+theorem bitxor_u8_self_zero (n : Int) :
+    evalBinOp (.bitxor 8 false) (.int n) (.int n) = some (.int 0) := by
+  simp [evalBinOp, BitVec.xor_self]
+
+set_option maxHeartbeats 2000000 in
+set_option linter.unusedSimpArgs false in
+/-- `ct_compare zeros zeros = 1`: comparing the canonical
+    all-zero tag against itself returns 1.
+
+    First attached theorem on constant_time_tag (AUDIT bar #1).
+    Exercises every Phase 4 extension the candidate forced:
+      * u8 `bitxor` at unsigned width
+      * u8 `bitor`  at unsigned width
+      * bounded 16-iteration `while_` (flat-assign body)
+      * source-level no-early-exit discipline
+      * final `if diff == 0` branch
+
+    The proof reduces by simp: each iteration evaluates
+    `0 | (0 ^ 0) = 0` and `0 + 1 = 1` ... `15 + 1 = 16`,
+    then `16 < 16 = false` fires the fall-through, and the
+    final `0 == 0` branch returns 1.
+
+    NOTE: this is the concrete all-zero case.  The
+    universal `ct_compare a a = 1` for any `a : [u8; 16]`
+    is the natural next step, tracked as the AUDIT bar #2
+    composition theorem.  The universal version requires
+    a small lemma `x ^ x = 0` at u8 (which closes by
+    decide on each byte value) plus induction over the
+    array; the concrete version covers the substantive
+    machinery (u8 bitor/bitxor + 16-iteration while_ +
+    final eq branch) without the induction. -/
+theorem ct_compare_equal_zeros_correct (fuel : Nat) :
+    eval ctTagFns
+      ((Env.empty.bind "a" (.array_ (List.replicate 16 (.int 0)))).bind
+        "b" (.array_ (List.replicate 16 (.int 0))))
+      (fuel + 200) ctCompareExpr
+    = some (.int 1) := by
+  simp [ctCompareExpr,
+        eval, eval.evalAssigns, eval.lookupIndex,
+        ctTagFns, Env.bind, evalBinOp, List.replicate]
+
+-- ============================================================
 -- Registered spec table (Phase 4 item 2 — spec/body drift gate)
 -- ============================================================
 
@@ -2114,6 +2205,8 @@ def specs : List (String × PExpr) :=
   , ("fixed_capacity.ring_push",     ringPushExpr)
   , ("fixed_capacity.ring_contains", ringContainsExpr)
   , ("fixed_capacity.compute_tag",   fcTagExpr)
+    -- constant_time_tag
+  , ("constant_time_tag.ct_compare", ctCompareExpr)
     -- adversarial spec-drift fixture (deliberately wrong)
   , ("test_drift.simple_add",        driftTestSpec)
   ]
