@@ -64,7 +64,7 @@
     loc:          examples/hmac_sha256/src/main.con:120
 
   hmac_sha256.small_sigma0
-    status:       blocked
+    status:       missing
     spec:         (none)
     proof:        (none)
     source:       none
@@ -73,7 +73,7 @@
     loc:          examples/hmac_sha256/src/main.con:125
 
   hmac_sha256.small_sigma1
-    status:       blocked
+    status:       missing
     spec:         (none)
     proof:        (none)
     source:       none
@@ -162,5 +162,5 @@
     dependencies: none
     loc:          examples/hmac_sha256/src/main.con:219
 
-Totals: 18 obligations — 0 proved, 0 stale, 14 missing, 3 blocked, 1 ineligible, 0 trusted
+Totals: 18 obligations — 0 proved, 0 stale, 16 missing, 1 blocked, 1 ineligible, 0 trusted
 

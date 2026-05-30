@@ -258,6 +258,32 @@ extractor preserves.  Phase 12 obligation
 `cast_identity_preservation` will state this restriction
 explicitly.
 
+### R-23 (shr — logical right shift, typed BitVec round-trip)
+
+New constructor introduced by HMAC-SHA256's `sigma` functions
+(`SHR(x, n)` in `small_sigma0`/`small_sigma1`) and `rotr` at
+u32 width:
+
+    evalBinOp (.shr 32 false) (.int a) (.int b) =
+      some (.int (Int.ofNat ((BitVec.ofInt 32 a) >>> b.toNat).toNat))
+
+The shift amount is the right operand value as a `Nat`; SHA-256
+only shifts by compile-time constants in `(0, 32)`.  Backend
+match: source `>>` on an unsigned operand lowers to LLVM `lshr`
+(`EmitSSA.lean`, the `else` branch of `ssaIsSignedInt`), so the
+BitVec `>>>` (logical) model and codegen agree.  An arithmetic
+`ashr` variant (`signed = true`) is an append-only follow-up.
+
+Inline regression theorems in `Concrete/Proof.lean`:
+- `0xFFFFFFFF >> 4 = 0x0FFFFFFF`  (zero-fill from the top, not negative)
+- `0xFFFFFFFF >> 3 = 0x1FFFFFFF`  (the sigma0 SHR amount)
+- `0x80000000 >> 31 = 1`  (high bit to bottom)
+
+This discharges the AUDIT.md § 5 forcing-surface item
+"`PBinOp.shr (width, signed)` at u32" and moves `small_sigma0`/
+`small_sigma1` from `blocked` to `in` ProvableV1.  `rotr` stays
+blocked pending `shl` + u32 `bitor` (R-24, R-25).
+
 ### R-22 (bitand — typed BitVec round-trip)
 
 New constructor introduced by HMAC-SHA256's `Ch`/`Maj` round

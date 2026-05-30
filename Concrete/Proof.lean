@@ -92,6 +92,21 @@ inductive PBinOp where
       Today `evalBinOp` supports `bitand 32 false` only.  Other
       widths are append-only follow-ups. -/
   | bitand (width : Nat) (signed : Bool)
+  /-- Logical right shift at a specific width.
+
+      Forced by HMAC-SHA256's `sigma` functions
+      (`SHR(x, n)` in `small_sigma0`/`small_sigma1`) and by `rotr`
+      at u32 width.  Models LLVM `lshr` (which `EmitSSA.lean` emits
+      for unsigned `>>`): the high bits fill with zero and the
+      result is read unsigned.  The `signed = false` u32 case is
+      the only one modeled today; a `signed = true` variant would
+      model `ashr` (arithmetic shift) and is an append-only
+      follow-up.
+
+      The shift amount is the right operand value as a `Nat`
+      (`Int.toNat`); SHA-256 only ever shifts by compile-time
+      constants in `(0, 32)`. -/
+  | shr (width : Nat) (signed : Bool)
   | eq | ne | lt | le | gt | ge
   deriving Repr, BEq, DecidableEq
 
@@ -295,6 +310,12 @@ def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
   | .bitand 32 false, .int a, .int b =>
     some (.int (Int.ofNat
       ((BitVec.ofInt 32 a) &&& (BitVec.ofInt 32 b)).toNat))
+  -- shr 32 unsigned: BitVec logical right shift (lshr) at u32,
+  -- unsigned view.  0xFFFFFFFF >> 4 = 0x0FFFFFFF.  Forced by
+  -- HMAC-SHA256's sigma functions and rotr.
+  | .shr 32 false, .int a, .int b =>
+    some (.int (Int.ofNat
+      ((BitVec.ofInt 32 a) >>> b.toNat).toNat))
   -- Other widths intentionally unmodeled — extraction refuses to
   -- emit them, so a `.mod w s` or `.bitxor w s` with w ≠ 32
   -- reaching eval signals a bug (or a future extension yet to
@@ -389,6 +410,25 @@ example :
 example :
     evalBinOp (.bitand 32 false)
       (.int 4042322160) (.int 0) = some (.int 0) := by rfl
+
+/-- u32 logical right shift fills with zero from the top:
+    `0xFFFFFFFF >> 4 = 0x0FFFFFFF` (268435455), NOT a negative
+    arithmetic-shift result. -/
+example :
+    evalBinOp (.shr 32 false)
+      (.int 4294967295) (.int 4) = some (.int 268435455) := by rfl
+
+/-- u32 logical right shift by 3 (the SHR amount in sigma0):
+    `0xFFFFFFFF >> 3 = 0x1FFFFFFF` (536870911). -/
+example :
+    evalBinOp (.shr 32 false)
+      (.int 4294967295) (.int 3) = some (.int 536870911) := by rfl
+
+/-- u32 shift of the high bit down to the bottom:
+    `0x80000000 >> 31 = 1`. -/
+example :
+    evalBinOp (.shr 32 false)
+      (.int 2147483648) (.int 31) = some (.int 1) := by rfl
 
 /-- Bind a list of argument values to parameter names. -/
 def bindArgs (env : Env) (params : List String) (args : List PVal) : Option Env :=

@@ -83,6 +83,7 @@ The current `ProvableV1` ProofCore expression surface is:
 | `mod` | Supported for the width/signedness cases recorded in ProofCore. |
 | bitxor / bitor | Supported for currently forced widths: `i32`, `u32`, `u8` as applicable. |
 | bitand | Supported at `u32` (unsigned view), forced by HMAC-SHA256's `Ch`/`Maj`. Other widths are append-only follow-ups. |
+| shr (logical right shift) | Supported at `u32` (unsigned view, models LLVM `lshr`), forced by HMAC-SHA256's `sigma` functions and `rotr`. Other widths / arithmetic `ashr` are append-only follow-ups. |
 | let bindings | Supported. |
 | if/then/else and early-return fall-through shape | Supported. |
 | non-recursive direct calls | Supported when FnTable-complete. |
@@ -97,7 +98,8 @@ The current `ProvableV1` ProofCore expression surface is:
 
 Excluded from `ProvableV1` until explicitly added:
 
-- shifts (`shl`, `shr`) — forced next by HMAC-SHA256's `rotr` and `sigma` functions
+- `shl` (left shift) — forced next by HMAC-SHA256's `rotr` (the last blocked helper)
+- shifts at widths other than `u32`; arithmetic right shift (`ashr`)
 - bitand at widths other than `u32`
 - rotations
 - multi-word arithmetic (`u32` wrapping `add` not yet width-tagged)

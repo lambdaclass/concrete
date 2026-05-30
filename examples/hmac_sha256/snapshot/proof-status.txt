@@ -55,9 +55,9 @@
  110 |     fn rotr(x: u32, n: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: unsupported operator: Concrete.BinOp.bitor at Concrete.Ty.u32, unsupported operator: Concrete.BinOp.shr at Concrete.Ty.u32, unsupported operator: Concrete.BinOp.shl at Concrete.Ty.u32
+  unsupported: unsupported operator: Concrete.BinOp.bitor at Concrete.Ty.u32, unsupported operator: Concrete.BinOp.shl at Concrete.Ty.u32
 
-  hint: Remove unsupported operator: Concrete.BinOp.bitor at Concrete.Ty.u32, unsupported operator: Concrete.BinOp.shr at Concrete.Ty.u32, unsupported operator: Concrete.BinOp.shl at Concrete.Ty.u32 to enable proof extraction.
+  hint: Remove unsupported operator: Concrete.BinOp.bitor at Concrete.Ty.u32, unsupported operator: Concrete.BinOp.shl at Concrete.Ty.u32 to enable proof extraction.
 
 -- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:115
 
@@ -83,27 +83,29 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:125
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:125
 
-  `hmac_sha256.small_sigma0` is eligible but uses unsupported constructs — extraction failed.
+  `hmac_sha256.small_sigma0` passes the predictable profile but has no registered proof.
 
  125 |     fn small_sigma0(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: unsupported operator: Concrete.BinOp.shr at Concrete.Ty.u32
+  current fingerprint:
+    [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (call rotr (var x) (int 7)) (call rotr (var x) (int 18))) (binop Concrete.BinOp.shr (var x) (int 3))))]
 
-  hint: Remove unsupported operator: Concrete.BinOp.shr at Concrete.Ty.u32 to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:130
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:130
 
-  `hmac_sha256.small_sigma1` is eligible but uses unsupported constructs — extraction failed.
+  `hmac_sha256.small_sigma1` passes the predictable profile but has no registered proof.
 
  130 |     fn small_sigma1(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: unsupported operator: Concrete.BinOp.shr at Concrete.Ty.u32
+  current fingerprint:
+    [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (call rotr (var x) (int 17)) (call rotr (var x) (int 19))) (binop Concrete.BinOp.shr (var x) (int 10))))]
 
-  hint: Remove unsupported operator: Concrete.BinOp.shr at Concrete.Ty.u32 to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
 -- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:147
 
@@ -212,5 +214,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 18 functions — 0 proved, 0 stale, 14 unproved, 3 blocked, 1 ineligible, 0 trusted
+Totals: 18 functions — 0 proved, 0 stale, 16 unproved, 1 blocked, 1 ineligible, 0 trusted
 
