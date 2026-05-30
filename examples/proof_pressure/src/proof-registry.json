@@ -3,13 +3,13 @@
   "proofs": [
     {
       "function": "main.check_nonce",
-      "body_fingerprint": "[(if (binop Concrete.BinOp.lt (var nonce) (int 0)) [(ret (int 1))] [(if (binop Concrete.BinOp.gt (var nonce) (var max_nonce)) [(ret (int 2))] [(ret (int 0))])])]",
+      "body_fingerprint": "[(if (binop Concrete.BinOp.gt (var nonce) (int 0)) [(if (binop Concrete.BinOp.leq (var nonce) (var max_nonce)) [(ret (int 1))] [(ret (int 0))])] [(ret (int 0))])]",
       "proof": "Concrete.Proof.check_nonce_correct",
       "spec": "check_nonce.spec"
     },
     {
       "function": "main.validate_header",
-      "body_fingerprint": "[(let nonce_result (call check_nonce (var nonce) (var max_nonce))) (if (binop Concrete.BinOp.neq (var nonce_result) (int 0)) [(ret (var nonce_result))] [(if (binop Concrete.BinOp.lt (var version) (int 1)) [(ret (int 3))] [(if (binop Concrete.BinOp.gt (var version) (int 3)) [(ret (int 4))] [(ret (int 0))])])])]",
+      "body_fingerprint": "[(let nonce_result (call check_nonce (var nonce) (var max_nonce))) (if (binop Concrete.BinOp.neq (var nonce_result) (int 1)) [(ret (int 1))] [(if (binop Concrete.BinOp.lt (var version) (int 1)) [(ret (int 3))] [(if (binop Concrete.BinOp.gt (var version) (int 3)) [(ret (int 4))] [(ret (int 0))])])])]",
       "proof": "Concrete.Proof.validate_header_correct",
       "spec": "validate_header.spec"
     },

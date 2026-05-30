@@ -10,7 +10,7 @@
 //   3. compute_checksum   → stale      (registry fingerprint is outdated)
 //   4. format_result      → ineligible (has Console capability)
 //   5. clamp_value        → missing    (pure, extractable, no registry entry)
-//   6. classify_range     → blocked    (pure, eligible, uses struct field access — unsupported)
+//   6. classify_range     → blocked    (pure, eligible, uses integer division — unsupported)
 //
 // Run:
 //   concrete src/main.con --report proof-status
@@ -24,18 +24,21 @@
 //   classify_range    — blocked
 
 // ---- 1. PROVED: conditional-heavy validator ----
-// Checks that a nonce is within a valid range.
-// Registry entry has correct fingerprint.
+// Checks that a nonce is within the valid range (0, max_nonce].
+// Returns 1 iff in range, 0 otherwise.  Body is identical to
+// crypto_verify's check_nonce, so it rides the shared spec
+// `main.check_nonce` (checkNonceExpr) and theorem
+// `check_nonce_correct` — that is what makes it "proved".
 
 fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
-    if nonce < 0 {
-        return 1;
-    } else {
-        if nonce > max_nonce {
-            return 2;
+    if nonce > 0 {
+        if nonce <= max_nonce {
+            return 1;
         } else {
             return 0;
         }
+    } else {
+        return 0;
     }
 }
 
@@ -46,8 +49,8 @@ fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
 
 fn validate_header(nonce: Int, max_nonce: Int, version: Int) -> Int {
     let nonce_result: Int = check_nonce(nonce, max_nonce);
-    if nonce_result != 0 {
-        return nonce_result;
+    if nonce_result != 1 {
+        return 1;
     } else {
         if version < 1 {
             return 3;
@@ -101,13 +104,21 @@ fn clamp_value(x: Int, lo: Int, hi: Int) -> Int {
 
 // ---- 6. BLOCKED: eligible but uses unsupported construct ----
 // Pure function with no capabilities, no recursion, no allocation.
-// But uses struct field access, which the extraction pipeline does
-// not yet support. Must show as "blocked".
+// Uses integer division (`/`), which the proof extractor does not
+// model (there is no `PBinOp.div`), so extraction fails. Must show
+// as "blocked".
+//
+// NOTE: this fixture previously used struct field access as its
+// blocker, but field-access extraction is now supported — so the
+// blocker was repointed at division, which remains unmodeled. The
+// function still reads the Bounds struct (field access is exercised
+// as a now-SUPPORTED construct); division is the construct that
+// blocks extraction.
 
 struct Copy Bounds { lo: Int, hi: Int }
 
 fn classify_range(b: Bounds, x: Int) -> Int {
-    if x < b.lo {
+    if x < (b.lo + b.hi) / 2 {
         return 1;
     } else {
         if x > b.hi {
