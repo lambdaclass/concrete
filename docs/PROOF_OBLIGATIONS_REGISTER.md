@@ -38,8 +38,8 @@ informally below the table but not yet a Lean theorem name.
 
 | ID | PExpr shape | Concrete source | Forcing example | Phase 12 obligation |
 |---:|---|---|---|---|
-| R-01 | `lit (int n)` | `42`, `0x10`, `-1` | parse_validate | `lit_int_preservation` |
-| R-02 | `lit (bool b)` | `true`, `false` | parse_validate | `lit_bool_preservation` |
+| R-01 | `lit (int n)` | `42`, `0x10`, `-1` | parse_validate | `lit_int_preservation` — **partially discharged 2026-05-30** in `Concrete.ProofSoundness`; see per-rule notes |
+| R-02 | `lit (bool b)` | `true`, `false` | parse_validate | `lit_bool_preservation` — **partially discharged 2026-05-30** in `Concrete.ProofSoundness`; see per-rule notes |
 | R-03 | `var n` | identifier reference | parse_validate | `var_preservation` |
 | R-04 | `binOp .add/.sub/.mul` | `a + b`, `a - b`, `a * b` | parse_validate | `binop_int_preservation` |
 | R-05 | `binOp .eq/.ne/.lt/.le/.gt/.ge` | `a == b`, `a < b`, etc. | parse_validate | `binop_cmp_preservation` |
@@ -74,6 +74,50 @@ means.
 | G-04 | Eligibility profile | Functions can only be registered if they pass `predictable` (no recursion, bounded loops, no alloc, no FFI).  Restricts what shapes ever reach extraction. | `eligibility_preservation`: a proof-eligible function's source semantics agrees with PExpr semantics within the modeled fragment. |
 
 ## Per-rule notes
+
+### R-01, R-02 (literal preservation — first Phase 12 batch)
+
+`Concrete.ProofSoundness.lit_int_preservation` and
+`lit_bool_preservation` (landed 2026-05-30) establish the
+Phase 12 proof pattern: a tiny source semantics
+(`evalSourceLit`) for the literal fragment of `CExpr`, and
+a preservation theorem stating that evaluating the
+extracted PExpr produces the same value as the
+source-level semantics.
+
+The pattern, in shape:
+
+    theorem lit_X_preservation (...) :
+        eval fns env (fuel + 1) (.lit (.X v)) = some (.X v)
+      ∧ evalSourceLit (.XLit v ...) = some (.X v)
+
+closed by `simp [eval]` for the PExpr-eval half and `rfl`
+for the source-semantics half.  Generalizes structurally to
+each future literal rule.
+
+**Partially discharged, not fully.**  The theorems prove
+the eval-vs-source-semantics agreement.  They do NOT yet
+prove the antecedent
+
+    cExprToPExpr (.intLit n ty) = some (.lit (.int n))
+
+because `cExprToPExpr` is a `partial def` (it recurses
+through `cMatchArmToP` in a mutual block), and Lean's
+kernel treats `partial def` as opaque — no equation
+lemmas, no `unfold` / `rfl` reduction.
+
+Closing the antecedent requires refactoring the mutual
+block so the literal cases sit outside `partial def`, or
+declaring `cExprToPExpr` with `decreasing_by` so it can be
+a non-partial `def`.  This refactor is the next Phase 12
+soundness item, and it unlocks the rest of R-03..R-21
+(every other extraction rule has the same antecedent
+shape).
+
+The lemma file `Concrete/ProofSoundness.lean` documents
+this gap inline so a future commit that fully discharges
+R-01/R-02 will both prove the antecedent AND keep the
+existing eval-vs-source half intact.
 
 ### R-14 (cast)
 
