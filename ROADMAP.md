@@ -50,6 +50,8 @@ Do not call the language releasable until these are true:
   new user in under ten minutes.
 - Claims are clearly separated into `proved`, `enforced`, `reported`,
   `assumed`, and `trusted`.
+- The public threat model names what Concrete is trying to prevent, what it
+  intentionally does not prevent, and which assumptions a user must review.
 - Bad changes are caught by normal tools: authority widening, allocation/FFI
   changes, predictable-profile breaks, proof/spec/body drift, missing
   obligations, and evidence weakening.
@@ -115,6 +117,10 @@ report tells reviewers exactly what kind of theorem each green check represents.
 8. Add "no hidden green" discipline: every green badge in showcase/release
    material links to the exact command, fact, theorem, or bundle that justifies
    it.
+9. Add assumption lifecycle checks: every assumption has an owner, scope,
+   rationale, review date, affected claims, and a diff gate when it widens.
+10. Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern,
+    backend, runtime, and target assumptions in one machine-readable list.
 
 ## Phase 2: Build The Phase 12 Source-To-Proof Bridge
 
@@ -158,6 +164,11 @@ remaining trusted assumptions.
 19. Record a machine-readable trusted computing base for proof/evidence claims:
    Lean kernel, compiler modules, backend/toolchain, runtime/OS/hardware,
    trusted/extern code.
+20. Prove selected checker/report agreement for authority and purity facts used
+    by proof eligibility, so a function cannot be called proof-eligible while
+    secretly requiring capabilities.
+21. Add a Phase 12 proof-status dashboard that shows which extraction rules are
+    discharged, partially discharged, trusted, or blocked by compiler structure.
 
 ## Phase 3: Freeze A Provable Systems Subset
 
@@ -184,8 +195,12 @@ constructs, arithmetic profile, runtime-error policy, and compatibility promise.
    bounds, explicit backend timing assumptions.
 8. Define secret/data-sensitivity labels for future security work:
    `public`, `secret`, `timing-sensitive`.
-9. Add negative examples for every `ProvableV1` and `PredictableV1` exclusion.
-10. Update `CLAIMS_TODAY.md`, README, showcase docs, and release bundles to use
+9. Define source-level memory-safety claims precisely: what linearity, borrows,
+   cleanup, trusted code, raw pointers, and FFI do and do not guarantee.
+10. Define the v1 threat model: adversary, trusted base, proof scope, backend
+    scope, side-channel scope, dependency scope, and what remains out of model.
+11. Add negative examples for every `ProvableV1` and `PredictableV1` exclusion.
+12. Update `CLAIMS_TODAY.md`, README, showcase docs, and release bundles to use
     the frozen subset names consistently.
 
 ## Phase 4: Runtime-Error Obligation Generation
@@ -213,7 +228,11 @@ div/mod zero, overflow profile, casts, and loop bounds with statuses
     violation, invalid cast, loop-bound violation.
 11. Add a runtime-error-obligation flagship requirement: one graduated example
     must demonstrate no OOB/div-zero/overflow under a named profile.
-12. Prove or validate obligation-generation soundness for the first obligation
+12. Add high-quality diagnostics for obligation failures: violated obligation,
+    source expression, required evidence, current status, and next action.
+13. Add obligation suppression only through explicit assumptions or policy
+    waivers, never comments or hidden allowlists.
+14. Prove or validate obligation-generation soundness for the first obligation
     kinds in Phase 12.
 
 ## Phase 5: Source-Level Contracts
@@ -247,7 +266,12 @@ or blocked.
 9. Add source contract soundness work to Phase 12: parsing preserves meaning,
    generated obligations correspond to contract semantics, discharged
    obligations imply the advertised contract claim.
-10. Add one contract-bearing flagship retrofit after the machinery is real.
+10. Add contract diagnostics that explain whether the failure is caller-side
+    precondition, callee-side postcondition, loop invariant initialization,
+    invariant preservation, or variant decrease.
+11. Add contract stability rules: weakening a precondition, strengthening a
+    postcondition, or changing a public invariant is a semantic API change.
+12. Add one contract-bearing flagship retrofit after the machinery is real.
 
 ## Phase 6: Proof Ergonomics And Automation
 
@@ -270,7 +294,10 @@ standard lemmas, and actionable failure diagnostics.
 7. Add proof replay/caching once proof artifacts and fingerprints are stable.
 8. Add simple auto-discharge for structural obligations that do not need human
    proof search.
-9. Add AI-assisted proof repair only after artifacts, statuses, and replay are
+9. Add a small verified/spec-checked standard proof library for common
+   predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
+   constant-time source shape.
+10. Add AI-assisted proof repair only after artifacts, statuses, and replay are
    stable enough to validate suggestions mechanically.
 
 ## Phase 7: Audit Artifacts And Review UX
@@ -302,6 +329,11 @@ the four graduated flagships and one package-scale example.
 9. Add evidence-level monotonicity checks to audit/diff output.
 10. Add one AI-audit demo where an agent answers authority/proof/trust
     questions using compiler facts rather than source guesses.
+11. Add review checklists generated from facts: what changed, what widened,
+    what became trusted, what lost proof, what gained assumptions, and which
+    obligations remain open.
+12. Add artifact redaction/stability rules so release bundles can be shared
+    publicly without leaking local paths, secrets, or machine-specific noise.
 
 ## Phase 8: Flagship Depth
 
@@ -332,7 +364,9 @@ protocol example with proof/evidence strong enough to anchor the public pitch.
    wrappers.
 10. Graduate one FFI-wrapper flagship: trusted C boundary, safe pure core,
     explicit assumptions, layout/ABI evidence.
-11. Keep the curated showcase balanced: parser/protocol, bounded state,
+11. Graduate one ownership-heavy resource flagship: explicit cleanup,
+    borrow-heavy APIs, no leaks/double-use, and evidence explaining why.
+12. Keep the curated showcase balanced: parser/protocol, bounded state,
     crypto/security, authority, FFI/trust, ownership-heavy.
 
 ## Phase 9: Backend, Target, And Compiler Contracts
@@ -356,9 +390,14 @@ incremental build contracts are explicit enough for release evidence.
    pointer-heavy examples.
 7. Add backend/codegen differential validation where executable oracles exist.
 8. Add compiler self-leak/resource soak harness for long-running workflows.
-9. Evaluate a normalized mid-level IR only when traceability/backend-contract
+9. Define stdlib stability and evidence policy: which stdlib functions are
+   trusted, proved, enforced, allocation-free, capability-free, or assumption
+   carriers.
+10. Add stdlib evidence gates so core helpers cannot silently widen authority,
+    allocation, proof assumptions, or runtime-error obligations.
+11. Evaluate a normalized mid-level IR only when traceability/backend-contract
    reports expose a concrete gap.
-10. Keep QBE/WASM/second backend deferred until evidence attachment,
+12. Keep QBE/WASM/second backend deferred until evidence attachment,
     optimization policy, and backend trust boundaries are trustworthy.
 
 ## Phase 10: Release Product Bar
@@ -380,17 +419,19 @@ minutes.
 4. Add compatibility policy for proof artifacts and fact schemas.
 5. Add public security/soundness disclosure policy: compiler/proof pipeline
    bugs are security-relevant.
-6. Add first-user workflow CI: install compiler, create/run one example,
+6. Publish `THREAT_MODEL.md` and keep it linked from README, release bundles,
+   showcase manifests, and assumptions docs.
+7. Add first-user workflow CI: install compiler, create/run one example,
    inspect one audit bundle without repo-local assumptions.
-7. Improve onboarding, tutorial, and docs around `proved` / `enforced` /
+8. Improve onboarding, tutorial, and docs around `proved` / `enforced` /
    `reported` / `assumed` / `trusted`.
-8. Add positioning page against Rust, Zig, Lean, SPARK/Ada, Austral, Dafny,
+9. Add positioning page against Rust, Zig, Lean, SPARK/Ada, Austral, Dafny,
    F*, Why3.
-9. Add migration/adoption playbook: what C/Rust/Zig code moves first, how to
+10. Add migration/adoption playbook: what C/Rust/Zig code moves first, how to
    wrap libraries honestly, what stays outside Concrete.
-10. Add release/install distribution matrix: host triples, checksums/signing,
+11. Add release/install distribution matrix: host triples, checksums/signing,
     install paths, supported/deferred channels.
-11. Ship the first narrow public release only after the above are green.
+12. Ship the first narrow public release only after the above are green.
 
 ## Phase 11: Packages And Ecosystem Evidence
 
@@ -412,8 +453,10 @@ trust policies, provenance, and registry protocol.
 8. Add module/package authority budgets after package graphs are real.
 9. Add dependency trust policy: trust widening across boundaries, review and
    inheritance.
-10. Add package provenance and publishing model.
-11. Add package registry server protocol and trust model.
+10. Add package-level assumption inheritance: dependency assumptions must be
+    visible to dependents and release bundles.
+11. Add package provenance and publishing model.
+12. Add package registry server protocol and trust model.
 
 ## Phase 12: Editor And Human Tooling
 
@@ -466,4 +509,3 @@ a forcing example, explicitly deferred, or rejected.
     if the proof-subset interpreter proves valuable.
 11. Research persistent equality/rewrite state after backend contracts,
     semantic diff, and proof/evidence pipeline are stronger.
-

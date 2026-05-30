@@ -1,4 +1,4 @@
-.PHONY: build test test-full test-trust-gate test-proof-gate test-ssa test-fuzz test-oracle test-wrong-code test-reducer-smoke test-bundle-smoke test-verify-gates test-assumptions test-policy test-catches test-snapshots test-pv-oracle test-cv-oracle test-fc-oracle test-ct-oracle test-release-bundle test-showcase clean check-grammar paper docs-site docs-serve
+.PHONY: build test test-full test-trust-gate test-proof-gate test-ssa test-fuzz test-oracle test-wrong-code test-reducer-smoke test-bundle-smoke test-verify-gates test-assumptions test-policy test-catches test-snapshots test-pv-oracle test-cv-oracle test-fc-oracle test-ct-oracle test-release-bundle test-showcase clean check-grammar paper paper-ec paper-ec-short papers docs-site docs-serve
 
 NIX_DEVELOP = XDG_CACHE_HOME=$(CURDIR)/.cache nix --extra-experimental-features "nix-command flakes" develop --command
 
@@ -81,6 +81,15 @@ check-grammar:
 
 paper:
 	$(NIX_DEVELOP) typst compile paper/main.typ paper/main.pdf
+
+# Evidence-carrying workflow paper (full + 2-page extended abstract)
+paper-ec:
+	$(NIX_DEVELOP) typst compile paper/evidence-carrying.typ paper/evidence-carrying.pdf
+
+paper-ec-short:
+	$(NIX_DEVELOP) typst compile paper/evidence-carrying-short.typ paper/evidence-carrying-short.pdf
+
+papers: paper paper-ec paper-ec-short
 
 docs-site:
 	$(NIX_DEVELOP) zola --root site build
