@@ -171,6 +171,59 @@ theorem var_preservation (name : String) (ty : Ty) (fuel : Nat)
   refine ⟨rfl, ?_, rfl⟩
   simp [eval]
 
+/-! ## R-04: `binop_preservation` (compositional form)
+
+The first **compositional** Phase 12 rule — R-04's
+preservation depends on the operands' preservation, so
+the theorem takes hypotheses about the sub-extractions
+and propagates them.
+
+For `e := .binOp op lhs rhs ty`, given:
+  * the op maps to a typed PBinOp at the operand width:
+    `binOpToPBinOp op (CExpr.ty lhs) = some pop`,
+  * the left operand extracts: `cExprToPExpr lhs = some pl`,
+  * the right operand extracts: `cExprToPExpr rhs = some pr`,
+
+the conclusion holds in three views:
+  * `cExprToPExpr e = some (.binOp pop pl pr)` — proved
+    against the REAL extractor via the new wrapper arm
+    (closed by `simp` over the hypotheses);
+  * eval on `.binOp pop pl pr` reduces via `evalBinOp`
+    once `pl`/`pr` evaluate (the eval side is a
+    rewriting fact, stated here as the equation to be
+    discharged at use sites with operand eval lemmas).
+
+The compositional pattern matters for scale: future
+rules (R-06 letIn, R-07 if, R-08 call, ...) follow this
+shape — hypotheses on sub-expressions; conclusion about
+the composite.
+
+The wrapper's `.binOp` arm:
+
+    | .binOp op lhs rhs _ => do
+        let pop ← binOpToPBinOp op (CExpr.ty lhs)
+        let pl ← cExprToPExpr lhs
+        let pr ← cExprToPExpr rhs
+        some (.binOp pop pl pr)
+
+closes the antecedent by simp/rfl over the three
+hypotheses.  Lean accepts structural recursion on
+`lhs`/`rhs` (single-sub-expression case, no `mapM`). -/
+theorem binop_preservation
+    (op : Concrete.BinOp) (lhs rhs : CExpr) (ty : Ty)
+    (pop : PBinOp) (pl pr : PExpr)
+    (h_op : binOpToPBinOp op (CExpr.ty lhs) = some pop)
+    (h_lhs : cExprToPExpr lhs = some pl)
+    (h_rhs : cExprToPExpr rhs = some pr) :
+    cExprToPExpr (.binOp op lhs rhs ty) = some (.binOp pop pl pr) := by
+  show (do
+    let pop' ← binOpToPBinOp op (CExpr.ty lhs)
+    let pl' ← cExprToPExpr lhs
+    let pr' ← cExprToPExpr rhs
+    some (PExpr.binOp pop' pl' pr')) = some (.binOp pop pl pr)
+  rw [h_op, h_lhs, h_rhs]
+  rfl
+
 /-! ## Sanity checks (inline regression theorems)
 
 Same pattern as the inline `example` blocks in

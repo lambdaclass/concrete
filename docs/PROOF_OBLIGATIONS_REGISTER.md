@@ -41,8 +41,8 @@ informally below the table but not yet a Lean theorem name.
 | R-01 | `lit (int n)` | `42`, `0x10`, `-1` | parse_validate | `lit_int_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness`; non-partial wrapper landed same day |
 | R-02 | `lit (bool b)` | `true`, `false` | parse_validate | `lit_bool_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness` |
 | R-03 | `var n` | identifier reference | parse_validate | `var_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness`; wrapper arm landed same day |
-| R-04 | `binOp .add/.sub/.mul` | `a + b`, `a - b`, `a * b` | parse_validate | `binop_int_preservation` |
-| R-05 | `binOp .eq/.ne/.lt/.le/.gt/.ge` | `a == b`, `a < b`, etc. | parse_validate | `binop_cmp_preservation` |
+| R-04 | `binOp pop pl pr` (all widths) | `a + b`, `a - b`, `a * b`, etc. | parse_validate | `binop_preservation` — **antecedent fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness` (compositional form: takes operand-extraction hypotheses) |
+| R-05 | `binOp .eq/.ne/.lt/.le/.gt/.ge` | `a == b`, `a < b`, etc. | parse_validate | `binop_cmp_preservation` — subsumed by R-04 (comparisons go through the same wrapper arm) |
 | R-06 | `letIn name v body` | `let x = v; ...` | parse_validate | `let_preservation` |
 | R-07 | `ifThenElse c t e` | `if c { t } else { e }` and `if c { return X; } else-fallthrough` | parse_validate | `if_preservation` + `if_no_else_as_fallthrough` |
 | R-08 | `call fn args` | function call (FnTable lookup) | parse_validate | `call_preservation` |
@@ -123,6 +123,45 @@ mutual block (binops with sub-expressions, structLit
 with mapM over fields, etc.) still need the harder
 mapM-to-structural-recursion lift — that's the next
 Phase 12 architectural piece.
+
+### R-04 (binop preservation — first compositional rule)
+
+`binop_preservation` (landed 2026-05-30) is the FIRST
+Phase 12 rule whose preservation depends on sub-rule
+preservation (R-01 / R-03 for the operands).  The wrapper
+arm:
+
+    | .binOp op lhs rhs _ => do
+        let pop ← binOpToPBinOp op (CExpr.ty lhs)
+        let pl ← cExprToPExpr lhs    -- recursion through wrapper
+        let pr ← cExprToPExpr rhs    -- recursion through wrapper
+        some (.binOp pop pl pr)
+
+Lean accepts structural recursion on `lhs`/`rhs` (single
+sub-expression each, no `mapM`).  The wrapper is no longer
+strictly "leaf rules only" — composite rules whose
+recursion is structurally simple also fit.
+
+The theorem takes hypotheses:
+
+    theorem binop_preservation
+        (op : Concrete.BinOp) (lhs rhs : CExpr) (ty : Ty)
+        (pop : PBinOp) (pl pr : PExpr)
+        (h_op : binOpToPBinOp op (CExpr.ty lhs) = some pop)
+        (h_lhs : cExprToPExpr lhs = some pl)
+        (h_rhs : cExprToPExpr rhs = some pr) :
+        cExprToPExpr (.binOp op lhs rhs ty)
+          = some (.binOp pop pl pr)
+
+Closed by `show`/`rw`/`rfl` over the three hypotheses.
+This is the COMPOSITIONAL pattern: caller provides
+operand-extraction facts (from R-01 / R-03), the theorem
+discharges the composite step.  Every future
+recursive-shape rule follows this template.
+
+`binOpToPBinOp` made public (was `private`) so the
+preservation theorem in `ProofSoundness` can reference
+it.  No other call sites changed.
 
 ### R-03 (identifier preservation — second wrapper rule)
 

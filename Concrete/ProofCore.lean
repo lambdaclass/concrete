@@ -682,7 +682,7 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
     combinations return `none` (extraction fails with a precise
     blocker rather than silently using i32 semantics).  See
     `docs/PROOF_OBLIGATIONS_REGISTER.md` R-16 and R-17. -/
-private def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
+def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
   | .add, _ => some .add
   | .sub, _ => some .sub
   | .mul, _ => some .mul
@@ -986,6 +986,11 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
   | .intLit n _   => some (.lit (.int n))
   | .boolLit b    => some (.lit (.bool b))
   | .ident name _ => some (.var name)
+  | .binOp op lhs rhs _ => do
+    let pop ← binOpToPBinOp op (CExpr.ty lhs)
+    let pl ← cExprToPExpr lhs
+    let pr ← cExprToPExpr rhs
+    some (.binOp pop pl pr)
   | e             => cExprToPExprImpl e
 
 -- Unsupported construct identification
