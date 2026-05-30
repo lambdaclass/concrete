@@ -93,8 +93,9 @@ Goal: make every green proof/evidence status precise, traceable, and hard to
 misread.
 
 Done when: all existing production proof specs are directly and transitively
-FnTable-complete, proof coverage is classified, and the proof report tells
-reviewers exactly what kind of theorem each green check represents.
+FnTable-complete, proof dependencies and provenance are visible, assumptions
+and trust boundaries have lifecycle reports, and weaker evidence cannot appear
+under a stronger badge.
 
 1. Add transitive FnTable completeness: walk registered spec call graphs, not
    only direct call sites, and fail or flag missing callees before theorem
@@ -102,59 +103,50 @@ reviewers exactly what kind of theorem each green check represents.
 2. Add proof dependency tracking: if proof/spec for `f` depends on `g`, drift in
    `g` must affect `f`'s proof/evidence status or surface an explicit
    dependency warning.
-3. Add proof coverage classification to proof registry and reports:
-   point proof, one-direction theorem, iff theorem, invariant theorem,
-   runtime-error proof, full contract proof.
-4. Classify existing flagship proofs under that vocabulary so a zero-case proof
-   and an iff theorem cannot both appear as an undifferentiated green check.
-5. Add proof debugging output for failed/stale proofs: extracted spec, current
+3. Add proof debugging output for failed/stale proofs: extracted spec, current
    fingerprint, registered fingerprint, expected theorem shape, missing callee
    facts, likely missing lemma class.
-6. Add evidence provenance to proof/evidence facts: source file/span, compiler
+4. Add evidence provenance to proof/evidence facts: source file/span, compiler
    commit, theorem name, spec name, policy file, assumption file, tool version,
    and replay command where available.
-7. Add evidence monotonicity checks: a refactor cannot silently present a weaker
+5. Add evidence monotonicity checks: a refactor cannot silently present a weaker
    claim as if it were still stronger (`proved` cannot degrade to `reported`
    while retaining the same badge/summary).
-8. Add "no hidden green" discipline: every green badge in showcase/release
-   material links to the exact command, fact, theorem, or bundle that justifies
-   it.
-9. Add assumption lifecycle checks: every assumption has an owner, scope,
+6. Add assumption lifecycle checks: every assumption has an owner, scope,
    rationale, review date, affected claims, and a diff gate when it widens.
-10. Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern,
-    backend, runtime, and target assumptions in one machine-readable list.
+7. Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern,
+   backend, runtime, and target assumptions in one machine-readable list.
 
 ## Phase 2: Provable And Predictable Subsets
 
 Goal: give users a named small subset they can rely on for serious
 proof/evidence work.
 
-Done when: the subset has a public name, allowed constructs, rejected
-constructs, arithmetic profile, runtime-error policy, and compatibility promise.
+Done when: the subset family has public names, allowed constructs, rejected
+constructs, arithmetic profiles, runtime-error policy, and compatibility
+promises.
 
-1. Define `ProvableV1`: allowed types, expressions, statements, effects, loops,
-   trusted boundaries, allocation rules, and proof attachment requirements.
-2. Define `PredictableV1`: no allocation unless bounded, no FFI unless trusted
+1. Define `PredictableV1`: no allocation unless bounded, no FFI unless trusted
    and assumed, no unbounded loops/recursion, explicit failure-path policy.
-3. Freeze the first arithmetic profiles:
+2. Freeze the first arithmetic profiles:
    wrapping, checked, and proved/no-overflow.
-4. Carry arithmetic profile choices into diagnostics, reports, assumptions,
+3. Carry arithmetic profile choices into diagnostics, reports, assumptions,
    proof obligations, and release bundles.
-5. Define a first runtime failure model: abort, assertion failure, OOM, stack
+4. Define a first runtime failure model: abort, assertion failure, OOM, stack
    overflow, `defer`/cleanup, impossible branches, and what each does to
    proof/resource claims.
-6. Define source-level stack-depth versus backend/target stack claims.
-7. Define source-level constant-time profile v1:
+5. Define source-level stack-depth versus backend/target stack claims.
+6. Define source-level constant-time profile v1:
    no secret-dependent branch, no secret-dependent memory index, fixed loop
    bounds, explicit backend timing assumptions.
-8. Define secret/data-sensitivity labels for future security work:
+7. Define secret/data-sensitivity labels for future security work:
    `public`, `secret`, `timing-sensitive`.
-9. Define source-level memory-safety claims precisely: what linearity, borrows,
+8. Define source-level memory-safety claims precisely: what linearity, borrows,
    cleanup, trusted code, raw pointers, and FFI do and do not guarantee.
-10. Define the v1 threat model: adversary, trusted base, proof scope, backend
-    scope, side-channel scope, dependency scope, and what remains out of model.
-11. Add negative examples for every `ProvableV1` and `PredictableV1` exclusion.
-12. Update `CLAIMS_TODAY.md`, README, showcase docs, and release bundles to use
+9. Define the v1 threat model: adversary, trusted base, proof scope, backend
+   scope, side-channel scope, dependency scope, and what remains out of model.
+10. Add negative examples for every `ProvableV1` and `PredictableV1` exclusion.
+11. Update `CLAIMS_TODAY.md`, README, showcase docs, and release bundles to use
     the frozen subset names consistently.
 
 ## Phase 3: Runtime Safety Obligations

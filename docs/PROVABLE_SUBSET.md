@@ -2,6 +2,11 @@
 
 Status: standing reference
 
+For the first named, release-facing subset contract, see
+[PROVABLE_V1.md](PROVABLE_V1.md).  This document remains the broader background
+reference for how ProofCore relates to the compiler pipeline; `PROVABLE_V1.md`
+is the tighter compatibility contract reviewers should read first.
+
 This document defines the clearly analyzable, proof-eligible subset of Concrete. It specifies what is included, what is excluded, why, and how the subset connects to the proof pipeline.
 
 For the safety model, see [SAFETY.md](SAFETY.md). For the proof architecture, see [ARCHITECTURE.md](ARCHITECTURE.md). For the effect/trust proof boundary, see [EFFECT_PROOF_BOUNDARIES.md](EFFECT_PROOF_BOUNDARIES.md).

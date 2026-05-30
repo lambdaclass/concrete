@@ -76,7 +76,7 @@ Every function has exactly one status: `proved`, `stale`, `missing`, `blocked`, 
 
 **Claim class:** Proved. Lean 4 kernel has verified the theorem. Stale detection is compiler-enforced.
 
-References: [PROOF_CONTRACT.md](PROOF_CONTRACT.md), [PROOF_THEOREM_SHAPES.md](PROOF_THEOREM_SHAPES.md), [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md), [PROOF_SEMANTICS_BOUNDARY.md](PROOF_SEMANTICS_BOUNDARY.md)
+References: [PROOF_CONTRACT.md](PROOF_CONTRACT.md), [PROOF_THEOREM_SHAPES.md](PROOF_THEOREM_SHAPES.md), [PROVABLE_V1.md](PROVABLE_V1.md), [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md), [PROOF_SEMANTICS_BOUNDARY.md](PROOF_SEMANTICS_BOUNDARY.md)
 
 ---
 

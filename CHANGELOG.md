@@ -10,6 +10,39 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Proof coverage classification lands in proof-status reports
+
+Proof registry entries now carry an explicit coverage class, and
+`--report proof-status` surfaces that class so a reviewer can distinguish a
+point proof from a one-direction theorem, an iff theorem, an invariant theorem,
+a runtime-error proof, or a full contract proof.
+
+All existing production flagship proofs were classified. The showcase manifest
+also records the per-flagship coverage table, so "green" proof evidence no
+longer hides whether the theorem is a concrete-input regression, a universal
+one-direction statement, or a fuller functional specification.
+
+This closes the Phase 1 coverage-classification items and the first "no hidden
+green" pass for proof evidence. Remaining Phase 1 work is now about dependency
+tracking, provenance, monotonicity, assumption lifecycle, and trust-boundary
+inventory.
+
+### ProvableV1 defined as the first named provable subset
+
+`docs/PROVABLE_V1.md` defines the first release-facing proof subset contract:
+which functions, types, expressions, state forms, loops, effects, trusted
+boundaries, runtime failures, and proof attachment requirements are inside the
+subset.
+
+The contract turns the current flagship proof surface into a named target:
+pure, non-trusted, non-entry functions whose validated Core extracts to
+ProofCore, whose registered specs match current source extraction, whose
+FnTable callees resolve, and whose theorem coverage is explicitly classified.
+
+This closes the first Phase 2 item. The active roadmap now moves on to
+`PredictableV1` and the runtime/profile pieces that sit beside the provable
+subset.
+
 ### constant_time_tag graduates to Phase 7 (fourth flagship; first real-crypto)
 
 constant_time_tag closes all 10 graduation bars and lands
