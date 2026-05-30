@@ -727,7 +727,7 @@ def cExprLitToPExpr : CExpr → Option Proof.PExpr
   | _           => none
 
 mutual
-partial def cExprToPExpr : CExpr → Option Proof.PExpr
+partial def cExprToPExprImpl : CExpr → Option Proof.PExpr
   | .intLit n _ => some (.lit (.int n))
   | .boolLit b => some (.lit (.bool b))
   | .ident name _ => some (.var name)
@@ -736,14 +736,14 @@ partial def cExprToPExpr : CExpr → Option Proof.PExpr
     -- (mod, bitxor) this picks the right typed PBinOp; for
     -- width-agnostic ops the type is ignored.
     let pop ← binOpToPBinOp op (CExpr.ty lhs)
-    let pl ← cExprToPExpr lhs
-    let pr ← cExprToPExpr rhs
+    let pl ← cExprToPExprImpl lhs
+    let pr ← cExprToPExprImpl rhs
     some (.binOp pop pl pr)
   | .call fn _ args _ => do
-    let pargs ← args.mapM cExprToPExpr
+    let pargs ← args.mapM cExprToPExprImpl
     some (.call fn pargs)
   | .ifExpr cond thenBranch elseBranch _ => do
-    let pc ← cExprToPExpr cond
+    let pc ← cExprToPExprImpl cond
     let pt ← cStmtsToPExpr thenBranch
     let pe ← cStmtsToPExpr elseBranch
     some (.ifThenElse pc pt pe)
@@ -751,32 +751,32 @@ partial def cExprToPExpr : CExpr → Option Proof.PExpr
     -- Each field's expression must extract; the resulting struct value
     -- pairs field names with extracted PExprs.
     let pfields ← fields.mapM fun (fname, fexpr) => do
-      let pe ← cExprToPExpr fexpr
+      let pe ← cExprToPExprImpl fexpr
       some (fname, pe)
     some (.structLit name pfields)
   | .enumLit enumName variant _typeArgs fields _ => do
     -- Same shape as struct literal: each field's expression must
     -- extract; result is a tagged enum value (variant + fields).
     let pfields ← fields.mapM fun (fname, fexpr) => do
-      let pe ← cExprToPExpr fexpr
+      let pe ← cExprToPExprImpl fexpr
       some (fname, pe)
     some (.enumLit enumName variant pfields)
   | .fieldAccess obj field _ => do
-    let po ← cExprToPExpr obj
+    let po ← cExprToPExprImpl obj
     some (.fieldAccess po field)
   | .arrayIndex arr idx _ => do
-    let pa ← cExprToPExpr arr
-    let pi ← cExprToPExpr idx
+    let pa ← cExprToPExprImpl arr
+    let pi ← cExprToPExprImpl idx
     some (.arrayIndex pa pi)
   | .match_ scrutinee arms _ => do
-    let ps ← cExprToPExpr scrutinee
+    let ps ← cExprToPExprImpl scrutinee
     let parms ← arms.mapM cMatchArmToP
     some (.match_ ps parms)
   | .cast inner _ => do
-    let pi ← cExprToPExpr inner
+    let pi ← cExprToPExprImpl inner
     some (.cast pi)
   | .arrayLit elems _ => do
-    let pelems ← elems.mapM cExprToPExpr
+    let pelems ← elems.mapM cExprToPExprImpl
     some (.arrayLit pelems)
   | _ => none
 
@@ -792,7 +792,7 @@ partial def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
     -- Literal patterns must extract to PExpr values; we then read
     -- the literal value back out for the pattern shape. Only int
     -- and bool literals are supported as match-arm values today.
-    let pval ← cExprToPExpr value
+    let pval ← cExprToPExprImpl value
     let v ← match pval with
       | .lit v => some v
       | _ => none
@@ -817,10 +817,10 @@ partial def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
     A function body extracts by calling this with `k = none`. -/
 partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
   | [], k => k
-  | [.return_ (some e) _], _ => cExprToPExpr e
-  | [.expr e], _ => cExprToPExpr e
+  | [.return_ (some e) _], _ => cExprToPExprImpl e
+  | [.expr e], _ => cExprToPExprImpl e
   | (.letDecl name _ _ val) :: rest, k => do
-    let pv ← cExprToPExpr val
+    let pv ← cExprToPExprImpl val
     let pb ← cStmtsToPExprK rest k
     some (.letIn name pv pb)
   -- Array index assignment `arr[i] = v`.  Only supported when
@@ -830,8 +830,8 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
   -- docs/PROOF_STATE_MODEL.md § 2.  More complex `arr` (e.g.
   -- `obj.field[i] = v`) needs structSet first; deferred.
   | (.arrayIndexAssign (.ident name _) idx val) :: rest, k => do
-    let pi ← cExprToPExpr idx
-    let pv ← cExprToPExpr val
+    let pi ← cExprToPExprImpl idx
+    let pv ← cExprToPExprImpl val
     let pb ← cStmtsToPExprK rest k
     some (.letIn name (.arraySet (.var name) pi pv) pb)
   -- Bounded while loop with flat-assign body.  CStmt.while_
@@ -845,7 +845,7 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
   -- identifyUnsupportedStmt (which reports the actual blocker,
   -- not "while loop").
   | (.while_ cond body _ _step) :: rest, k => do
-    let pc ← cExprToPExpr cond
+    let pc ← cExprToPExprImpl cond
     let pCont ← cStmtsToPExprK rest k
     -- First try flat-assign extraction (every body stmt is a
     -- CStmt.assign); fall back to while_step when body has
@@ -854,7 +854,7 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
       body.mapM fun s =>
         match s with
         | .assign name val => do
-          let pv ← cExprToPExpr val
+          let pv ← cExprToPExprImpl val
           some (name, pv)
         | _ => none
     match flatUpdates with
@@ -867,14 +867,14 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
   -- outer continuation. If a branch returns, k is dead; if it falls
   -- through, k is used.
   | [.ifElse cond thenBranch (some elseBranch)], k => do
-    let pc ← cExprToPExpr cond
+    let pc ← cExprToPExprImpl cond
     let pt ← cStmtsToPExprK thenBranch k
     let pe ← cStmtsToPExprK elseBranch k
     some (.ifThenElse pc pt pe)
   -- If-else followed by more statements: both branches' fall-through
   -- continuation is `rest with the outer k`.
   | (.ifElse cond thenBranch (some elseBranch)) :: rest, k => do
-    let pc ← cExprToPExpr cond
+    let pc ← cExprToPExprImpl cond
     let pkRest ← cStmtsToPExprK rest k
     let pt ← cStmtsToPExprK thenBranch (some pkRest)
     let pe ← cStmtsToPExprK elseBranch (some pkRest)
@@ -888,7 +888,7 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
   -- through because the inner if's continuation is the outer's
   -- continuation.
   | (.ifElse cond thenBranch none) :: rest, k => do
-    let pc ← cExprToPExpr cond
+    let pc ← cExprToPExprImpl cond
     let pkRest ← cStmtsToPExprK rest k
     let pt ← cStmtsToPExprK thenBranch (some pkRest)
     some (.ifThenElse pc pt pkRest)
@@ -935,14 +935,14 @@ partial def cStmtsToStepExpr
   | [] =>
     some (.enumLit "LoopStep" "Cont" assigns)
   | (.return_ (some e) _) :: _ => do
-    let pv ← cExprToPExpr e
+    let pv ← cExprToPExprImpl e
     some (.enumLit "LoopStep" "Break" [("value", pv)])
   | (.letDecl name _ _ val) :: rest => do
-    let pv ← cExprToPExpr val
+    let pv ← cExprToPExprImpl val
     let pb ← cStmtsToStepExpr assigns rest
     some (.letIn name pv pb)
   | (.assign name val) :: rest => do
-    let pv ← cExprToPExpr val
+    let pv ← cExprToPExprImpl val
     let assigns' :=
       if assigns.any (·.1 == name) then
         assigns.map fun (n, e) => if n == name then (name, pv) else (n, e)
@@ -950,12 +950,35 @@ partial def cStmtsToStepExpr
         assigns ++ [(name, pv)]
     cStmtsToStepExpr assigns' rest
   | (.ifElse cond thenBr none) :: rest => do
-    let pc ← cExprToPExpr cond
+    let pc ← cExprToPExprImpl cond
     let pt ← cStmtsToStepExpr assigns thenBr
     let pe ← cStmtsToStepExpr assigns rest
     some (.ifThenElse pc pt pe)
   | _ => none
 end
+
+/-- Non-partial wrapper for `cExprToPExprImpl`.  The literal
+    cases reduce by `rfl` so Phase 12 preservation theorems
+    (R-01, R-02) can close their antecedent against the REAL
+    extractor, not just a parallel helper.  All other cases
+    delegate to the partial-def implementation in the mutual
+    block above.
+
+    Why: `cExprToPExprImpl` is `partial def` (the mutual block
+    contains `mapM` calls Lean's structural-recursion checker
+    can't see decreasing through).  Lean's kernel treats partial
+    def as opaque — no equation lemmas, `rfl` cannot reduce.
+    This wrapper sits OUTSIDE the mutual block, so its literal
+    arms ARE reducible by definition.
+
+    The wrapper preserves the public API: every caller of
+    `cExprToPExpr` (Report.lean, the rest of ProofCore) gets
+    the same behavior as before.  Internal recursive calls
+    inside the mutual block use `cExprToPExprImpl` directly. -/
+def cExprToPExpr : CExpr → Option Proof.PExpr
+  | .intLit n _ => some (.lit (.int n))
+  | .boolLit b  => some (.lit (.bool b))
+  | e           => cExprToPExprImpl e
 
 -- Unsupported construct identification
 

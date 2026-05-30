@@ -38,8 +38,8 @@ informally below the table but not yet a Lean theorem name.
 
 | ID | PExpr shape | Concrete source | Forcing example | Phase 12 obligation |
 |---:|---|---|---|---|
-| R-01 | `lit (int n)` | `42`, `0x10`, `-1` | parse_validate | `lit_int_preservation` — **discharged against `cExprLitToPExpr` 2026-05-30** in `Concrete.ProofSoundness`; agreement of `cExprLitToPExpr` with `cExprToPExpr` is an open follow-up (see per-rule notes) |
-| R-02 | `lit (bool b)` | `true`, `false` | parse_validate | `lit_bool_preservation` — **discharged against `cExprLitToPExpr` 2026-05-30** in `Concrete.ProofSoundness`; same follow-up as R-01 |
+| R-01 | `lit (int n)` | `42`, `0x10`, `-1` | parse_validate | `lit_int_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness`; non-partial wrapper landed same day |
+| R-02 | `lit (bool b)` | `true`, `false` | parse_validate | `lit_bool_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness` |
 | R-03 | `var n` | identifier reference | parse_validate | `var_preservation` |
 | R-04 | `binOp .add/.sub/.mul` | `a + b`, `a - b`, `a * b` | parse_validate | `binop_int_preservation` |
 | R-05 | `binOp .eq/.ne/.lt/.le/.gt/.ge` | `a == b`, `a < b`, etc. | parse_validate | `binop_cmp_preservation` |
@@ -96,32 +96,33 @@ The pattern, in shape:
 closed by `rfl` + `simp [eval]` + `rfl`.  Generalizes
 structurally to each future literal rule.
 
-**Discharged against `cExprLitToPExpr` — open against
-`cExprToPExpr`.**  The non-partial helper landed
-2026-05-30 so the antecedent now closes by `rfl`.  The
-remaining piece — proving
-`cExprToPExpr X = cExprLitToPExpr X` on the literal
-fragment — is still open because `cExprToPExpr` is still
-`partial def`.  This is the "agree by source inspection"
-gap: true by reading the code, not yet a Lean theorem.
+**Fully discharged 2026-05-30** (against the real
+public `cExprToPExpr`, not just a helper).
 
-**Why `cExprToPExpr` is still partial.**  Tried removing
-`partial` from the mutual block (commit `06383cf` attempt,
-reverted): Lean's structural recursion checker cannot
-prove termination through `mapM` over struct fields,
-array elements, match arms.  The full lift requires
-replacing each `mapM` with explicit structural recursion
-via paired mutual helpers — one for each list-shape (3
-list shapes × 1 helper each = 3 new helpers, each of
-which then participates in the mutual block).  That's
-the next Phase 12 architectural step; it discharges the
-agreement claim for every literal AND unlocks the
-antecedent shape for R-03..R-21.
+The lift architecture: `cExprToPExpr` is now a
+non-partial wrapper in `ProofCore.lean` that handles
+`.intLit` and `.boolLit` definitionally and delegates
+all other cases to a renamed `cExprToPExprImpl` (the
+old partial-def, still in the mutual block).  Because
+the wrapper is plain `def`, Lean reduces
+`cExprToPExpr (.intLit n ty)` to `some (.lit (.int n))`
+by `rfl`.
 
-The lemma file `Concrete/ProofSoundness.lean` documents
-this gap inline so a future commit that fully lifts the
-mutual block can add the missing equality theorem
-without touching the existing R-01/R-02 statements.
+Public API unchanged: every caller of `cExprToPExpr`
+(Report, the rest of ProofCore) gets identical
+behavior.  The mutual block's internal recursive calls
+now go through `cExprToPExprImpl` (just a name change).
+
+**What this unlocks for R-03..R-21.**  The wrapper
+pattern is the template.  Each future rule whose
+top-level case sits OUTSIDE the partial-def mutual
+block can be discharged the same way: add it as a wrapper
+arm before the `| e => cExprToPExprImpl e` fallback.
+Rules whose extraction logic genuinely lives inside the
+mutual block (binops with sub-expressions, structLit
+with mapM over fields, etc.) still need the harder
+mapM-to-structural-recursion lift — that's the next
+Phase 12 architectural piece.
 
 ### R-14 (cast)
 

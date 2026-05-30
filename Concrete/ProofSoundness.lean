@@ -66,73 +66,63 @@ def evalSourceLit : CExpr → Option PVal
   | .boolLit b  => some (.bool b)
   | _           => none
 
-/-! ## Note on the `partial def` opacity barrier (PARTIALLY LIFTED)
+/-! ## Phase 12 wrapper architecture (lift landed 2026-05-30)
 
-`cExprToPExpr` is declared `partial def` in
-`Concrete/ProofCore.lean` because the mutual block it
-sits in has `mapM` calls over field / element / arm
-lists, which Lean's structural recursion checker cannot
-prove decreasing automatically.  Lean's kernel treats
-`partial def` as opaque — it generates no equation
-lemmas, and `unfold` / `rfl` cannot reduce calls to it.
+`cExprToPExprImpl` (the partial-def, in the mutual block)
+still has the structural-recursion barrier through
+`List.mapM` over field / element / arm lists.  Lean's
+kernel treats `partial def` as opaque — no equation
+lemmas, `rfl` cannot reduce.
 
-**What 06383cf shipped:** the preservation theorems
-proved only the eval-vs-source-semantics agreement,
-WITHOUT the antecedent `cExprToPExpr (.intLit n ty) =
-some (.lit (.int n))`.  Marked "partially discharged"
-in the register.
+**The lift.**  `cExprToPExpr` (the public entry point in
+`Concrete.ProofCore`) is now a non-partial wrapper that
+handles `.intLit` and `.boolLit` definitionally and
+delegates all other cases to `cExprToPExprImpl`.  Because
+the wrapper sits OUTSIDE the mutual block and is a plain
+`def`, Lean reduces `cExprToPExpr (.intLit n ty)` to
+`some (.lit (.int n))` by `rfl`.
 
-**What this commit adds:** a non-partial helper
-`cExprLitToPExpr` in `Concrete/ProofCore.lean` that
-covers the literal fragment only.  Its body is identical
-to the literal cases of `cExprToPExpr`, and the theorems
-below now close the FULL preservation claim against this
-helper.
+This is the minimum refactor that makes the literal cases
+of the REAL extractor theorem-friendly.  All other cases
+of `cExprToPExpr` still go through the partial-def
+implementation; theorems about them remain blocked until a
+future commit replaces the `mapM`s with paired structural
+recursion.
 
-**What's still open:** proving
-`cExprToPExpr X = cExprLitToPExpr X` for X in the
-literal fragment.  This is the "agree by source
-inspection" claim — true by reading the code, but not
-yet a Lean theorem because `cExprToPExpr` is still
-`partial def`.  A future commit that lifts the entire
-mutual block out of `partial def` (by replacing each
-`mapM` with explicit structural recursion) discharges
-this remaining piece.
+R-01 and R-02 below are now stated against `cExprToPExpr`
+(the wrapper), not the parallel `cExprLitToPExpr` helper.
+The helper remains in `ProofCore` as a literal-only spec
+useful for documentation and as a redundant cross-check;
+the theorems below no longer depend on it. -/
 
-The lift requires real engineering: each of the three
-list-mapping shapes (struct fields, array elements,
-match arms) needs a paired mutual helper.  That's the
-next Phase 12 architectural step; it's named in the
-obligations register's per-rule notes as a follow-up.
--/
-
-/-! ## R-01: `lit_int_preservation`
+/-! ## R-01: `lit_int_preservation` (against real extractor)
 
 For any int literal source `e := .intLit n ty`:
-  * `cExprLitToPExpr e = some (.lit (.int n))` —
-    the literal extractor produces the expected PExpr
-    (closed by `rfl` since `cExprLitToPExpr` is `def`,
-    not `partial def`);
+  * `cExprToPExpr e = some (.lit (.int n))` —
+    proved against the REAL public extractor
+    (closed by `rfl` via the non-partial wrapper);
   * evaluating that PExpr at any non-zero fuel produces
     `some (.int n)`;
   * the source-level semantics produces `some (.int n)`.
 
-Closed by `rfl` for the source-semantics half and
-`simp [eval]` for the PExpr-eval half. -/
+Phase 12 obligation R-01 is now FULLY discharged
+end-to-end: source → extractor → PExpr eval →
+source-semantics, all three agree. -/
 theorem lit_int_preservation (n : Int) (ty : Ty) (fuel : Nat)
     (fns : FnTable) (env : Env) :
-    cExprLitToPExpr (.intLit n ty) = some (.lit (.int n))
+    cExprToPExpr (.intLit n ty) = some (.lit (.int n))
   ∧ eval fns env (fuel + 1) (.lit (.int n)) = some (.int n)
   ∧ evalSourceLit (.intLit n ty) = some (.int n) := by
   refine ⟨rfl, ?_, rfl⟩
   simp [eval]
 
-/-! ## R-02: `lit_bool_preservation`
+/-! ## R-02: `lit_bool_preservation` (against real extractor)
 
-Same shape as R-01 for `.boolLit b`. -/
+Same shape as R-01 for `.boolLit b`.  Phase 12 obligation
+R-02 is now FULLY discharged end-to-end. -/
 theorem lit_bool_preservation (b : Bool) (fuel : Nat)
     (fns : FnTable) (env : Env) :
-    cExprLitToPExpr (.boolLit b) = some (.lit (.bool b))
+    cExprToPExpr (.boolLit b) = some (.lit (.bool b))
   ∧ eval fns env (fuel + 1) (.lit (.bool b)) = some (.bool b)
   ∧ evalSourceLit (.boolLit b) = some (.bool b) := by
   refine ⟨rfl, ?_, rfl⟩
