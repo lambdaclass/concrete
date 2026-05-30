@@ -139,6 +139,25 @@ release bundle downgrades the claim
 
 The same example carries the paper's main evidence classes in one place. The function is pure, so proof extraction is allowed. Its theorem says equal tags return `1`. Its oracle exercises equal and unequal tags. Its `assumptions.toml` records that machine-level constant-time behavior is not proved. A reviewer therefore sees one source function with a theorem, a registry entry, an oracle, an assumption file, and a release-bundle claim that all agree about scope.
 
+Revocation is not hypothetical. A checked-in regression keeps a function whose body still matches its registered fingerprint but whose registered spec no longer matches the extracted body; the compiler reports it as an error and downgrades the status, rather than trusting the stale theorem (@fig-drift). The same gate fires the moment an edit changes the fingerprint at all.
+
+#figure(
+  block(inset: 6pt, stroke: 0.4pt + luma(180), width: 100%)[
+```
+error: spec drift for 'test_drift.simple_add' —
+  registered spec 'driftTestSpec' does not match the
+  source-extracted PExpr; the theorem is about a
+  different function than the source
+
+-- stale_proof [error] ----- test_drift.con:21
+  `simple_add` has a registered proof, but the body
+   changed.
+  failure: stale_proof    repair: theorem_update
+```
+  ],
+  caption: [Real diagnostic from the spec-drift regression. The proof is revoked and given a repair class; nothing downstream may rely on it.],
+) <fig-drift>
+
 = Language Sketch
 
 Concrete is a small no-GC systems language; we describe only what the evidence pipeline rests on.
@@ -178,6 +197,28 @@ A proof workflow grafted onto a proof-assistant toy would not be worth reporting
 
 #emph[Smaller on purpose.] Concrete's design stance is subtractive. Where Rust answers complexity with more machinery — lifetimes, traits, async, a large standard library — Concrete bets that a smaller language with explicit capabilities, linear ownership, and visible cleanup is easier for a human to audit and for a compiler to reason about. There is no garbage collector, no virtual machine, no hidden runtime initialization, no unwinder, and no ambient cleanup hook; programs begin in `main`, call into compiled user code, and exit through ordinary process termination. The runtime boundary is a small set of external libc symbols, not a managed environment.
 
+Against the mainstream systems languages it most resembles (@fig-langs), Concrete shares no-GC with all of them and a safe-subset memory guarantee with Rust. What sets it apart is orthogonal to memory safety: authority is part of the signature, and the proof/evidence lifecycle lives in the compiler rather than in convention or a separate tool.
+
+#text(size: 7.2pt)[
+#figure(
+  table(
+    columns: (0.62fr, 0.74fr, 0.86fr, 0.66fr, 0.74fr, 0.78fr),
+    align: (left, center, left, center, center, center),
+    inset: 2.8pt,
+    stroke: 0.3pt + gray,
+    table.header(
+      [*Lang*], [*Safe-subset\ mem. safety*], [*Ownership /\ cleanup*], [*Authority\ in sig.*], [*Trust\ boundary*], [*Evidence\ in compiler*],
+    ),
+    [C], [none], [manual], [no], [none], [no],
+    [C++], [partial (RAII)], [RAII / manual], [no], [none], [no],
+    [Rust], [yes (borrowck)], [own + borrow + `Drop`], [no], [`unsafe`], [external],
+    [Zig], [debug-only], [manual + alloc param], [no], [none], [no],
+    [Concrete], [yes (linear)], [linear + `defer`], [yes (caps)], [`trusted`], [native],
+  ),
+  caption: [Concrete against mainstream systems languages. It joins Rust on safe-subset memory safety and all four on no-GC; the distinguishing columns are signature-level authority and compiler-native evidence. "external" = via a separate tool such as Verus or Creusot.],
+) <fig-langs>
+]
+
 #emph[A real program corpus.] Concrete has carried eleven non-trivial programs, each built to apply pressure rather than to demo: a policy engine, a ~1150-line Make-A-Lisp interpreter, a recursive-descent JSON parser, a grep-like tool, a 22-opcode bytecode VM, a SHA-256 artifact-integrity verifier, a TOML parser, a file-integrity monitor, an append-only key-value store with compaction, a single-threaded HTTP server, and a ~1050-line Lox tree-walk interpreter. Parsers, interpreters, storage, integrity tooling, and networked code are no longer hypothetical targets.
 
 #emph[Performance.] Under LLVM `-O2`, the ownership and capability model adds no measurable runtime cost in the workloads we ran. On text and parser workloads Concrete sits in the same band as Python and system tools; on pure bitwise computation it reaches near-C quality; and on a dispatch-heavy VM loop it matches C once we forced the vec builtins to inline, which closed a 3× gap (@fig-perf). The largest gap we measured came from code generation, not from the explicit model.
@@ -198,6 +239,24 @@ A proof workflow grafted onto a proof-assistant toy would not be worth reporting
 ) <fig-perf>
 
 #emph[A fact-producing compiler.] The same machinery that supports proof also makes Concrete unusually legible to tooling. The compiler answers queries about a function — its capabilities, transitive authority, allocation sites, recursion and loop-bound status, layout, and proof-eligibility — as ordinary reports over validated Core. A reviewer, a CI gate, or an LLM can ask the compiler what a function is allowed to do instead of inferring it from the body. When authority, effects, and execution shape are facts the compiler will answer, a code generator and a checker work from the same source of truth rather than each guessing separately — a property that grows more useful as more low-level code is written and reviewed by machines.
+
+#emph[An audit, concretely.] Take a question a security reviewer actually asks of the HTTP server: #emph[which functions can reach the network?] In C or Rust this means reading bodies and trusting that no transitive call opens a socket. In Concrete it is a single report (@fig-audit): the `Network` capability names three functions — `send_string`, which declares it, and `handle_client` and `main`, which inherit it through the call chain. The sixteen `Alloc` functions — request parsing, path resolution, response building — cannot reach the network, and the reviewer establishes that without opening one of them. Monotonicity is what makes the answer trustworthy: a callee cannot acquire authority its callers do not already carry.
+
+#figure(
+  block(inset: 6pt, stroke: 0.4pt + luma(180), width: 100%)[
+```
+$ concrete http.con --report authority
+capability Network (3 functions):
+      send_string    <- declared
+      handle_client  <- handle_client -> send_string
+  pub main           <- main -> handle_client
+capability Alloc (16 functions):
+      find_space, parse_method, parse_path,
+      resolve_path, build_200_response, …
+```
+  ],
+  caption: [Real `--report authority` output (abridged). "Which functions touch the network?" is answered by the report and the monotonicity rule, not by reading sixteen bodies.],
+) <fig-audit>
 
 #emph[Ergonomic no-GC.] Linearity gives resource safety without a borrow-checker's lifetime calculus, and scoped `defer` moves cleanup from repeated boilerplate into a stable idiom while keeping every destruction path visible — a concrete ergonomic win observed when `defer` removed a class of repetitive cleanup from the JSON parser without changing the explicit-cost model. The standard library is layered to keep host assumptions auditable: a pure #emph[Core] (computation and analysis-friendly modules), an #emph[Alloc] layer (allocation but no broader host services), and a #emph[Hosted] layer (POSIX/libc: files, networking, time, processes). The same layering is why a future `no_alloc` or `core_only` execution profile could be added without restructuring the library.
 
@@ -316,6 +375,8 @@ The workflow above is implemented by three small predicates: authority monotonic
 
 The invariant that does the work: editing a body changes $phi(f)$, so any registered $h_f eq.not phi(f)$ flips the status to #raw("stale") on the next build. Proof revocation is automatic, not a discipline the developer must remember. Renames are absorbed because matching is by fingerprint, not by name.
 
+#emph[What the fingerprint captures.] $phi(f)$ is a structural encoding of the elaborated Core body — operators, literals, calls, control flow, and local names — taken after type-checking and canonicalization. Comments and whitespace are absent by construction, so reformatting never revokes a proof. The encoding is conservative in the safe direction: a meaning-preserving structural edit (reordering commutative operands, an `x + 0`, a dead `let`) changes $phi(f)$ and forces re-confirmation, even though the proof, stated over the normalized `PExpr`, would still hold. The direction that would be dangerous — a meaning-changing edit that leaves $phi(f)$ unchanged — is bounded by what the encoding omits: it drops surface type annotations, relying on Core having already type-checked, so the residual risk is a width- or type-level change that alters runtime meaning without changing the structural shape. Tightening the fingerprint to carry operand widths is future work; today the gate errs toward over-reporting staleness, not under-reporting it.
+
 = Threat Model
 
 Concrete's evidence is only useful if its trust boundary is explicit. The paper uses the following classification throughout:
@@ -408,21 +469,23 @@ theorem ring_push_then_contains_correct
 
 A 10-function pure module that parses an 8-field `i32` header and validates six properties against a closed error taxonomy; 3 functions carry registry-bound proofs. Beyond the per-input contract on the leaf version check and the six-validator #emph[success-direction] composition (on a scalar-parameter helper, under wrapping `i32`), the #emph[failure direction is proved on the real `parse_header`] — which consumes an array and returns enum-tagged errors — by a family of per-variant theorems: `parse_header_too_short`, `…bad_version`, `…bad_type`, `…payload_too_big`, `…truncated`. Extraction therefore already reaches array indexing and enum construction; the residual gap is the #emph[success path] of `parse_header`, which requires extracting the `while`-loop body of `compute_checksum`, and the full combined `iff`, a 256-branch split that exhausts the Lean heartbeat budget. The behavioral oracle is a second implementation in Python agreeing across 600 randomized cases over three seeds — not yet a Lean equivalence.
 
+#text(size: 7.6pt)[
 #figure(
   table(
-    columns: (1.0fr, 0.62fr, 0.62fr, 1.05fr),
+    columns: (0.95fr, 0.46fr, 0.46fr, 1.35fr),
     align: (left, center, center, left),
-    inset: 4.5pt,
-    stroke: 0.4pt + gray,
+    inset: 3.2pt,
+    stroke: 0.35pt + gray,
     table.header(
       [*Case study*], [*Proved*], [*Funcs*], [*Strongest checked claim*],
     ),
-    [`constant_time_tag`], [1], [2], [`ct_compare(t,t)=1` ∀ 16-byte `t`],
+    [`constant_time_tag`], [1], [2], [equal tags always pass, for all 16-byte tags],
     [`fixed_capacity`], [4], [20], [push-then-contains over bounded state],
     [`parse_validate`], [3], [10], [success composition + 5 per-variant error theorems],
   ),
-  caption: [Live counts from `--report proof-status`. "Proved" is registry-bound, drift-gated functions; "Funcs" is total functions in the module — most are eligible-but-unproved, exactly as the model predicts ($E(f)$ ⇏ proved).],
+  caption: [Live counts from `--report proof-status`. "Proved" is registry-bound, drift-gated functions; "Funcs" is total functions in the module — most are eligible-but-unproved, as the model predicts ($E(f)$ ⇏ proved).],
 )
+]
 
 = Trust Model
 
@@ -456,7 +519,7 @@ This sequencing is deliberate. If source contracts arrived before drift detectio
 
 = Toward Compiler-Side Soundness
 
-The trust model above trusts #emph[extraction]: nothing in §6 proves that $cal(E): "Core" -> "ProofCore"$ preserves meaning. We report a first compiler-side result and, as importantly, the precise obstacle that bounds it.
+The trust model above trusts #emph[extraction]: nothing stated so far proves that $cal(E): "Core" -> "ProofCore"$ preserves meaning. We report a first compiler-side result and, as importantly, the precise obstacle that bounds it.
 
 The discharged fragment is $cal(C)_0 = {"intLit", "boolLit", "ident", "binOp"}$. For each, extraction agrees with both the extracted-`PExpr` evaluator and a small source-side semantics. The integer-literal instance, proved #emph[against the real extractor], is:
 
@@ -509,11 +572,13 @@ theorem binop_preservation
 
 The title echoes #emph[proof-carrying code] (PCC) @necula1997pcc and typed assembly language @morrisett1998tal, where a proof or typing derivation travels with a binary and is checked at load time. Concrete differs in #emph[what] carries the evidence and #emph[when]: the evidence is a source-tied, drift-gated attachment maintained by the compiler across edits, not a fixed certificate shipped with a binary. The fingerprint-binding lifecycle and automatic staleness are the contribution, not the proof object.
 
-Verification-first systems languages — F\* and its Low\* subset @swamy2016fstar @protzenko2017lowstar, Dafny @leino2010dafny, and SPARK-style Ada workflows — start from contracts and generated proof obligations. Concrete inverts the emphasis: it is systems-first, with proof as an #emph[opt-in attachment] over a validated-Core anchor and a small eligible fragment, accepting that most code is enforced-and-reported rather than proved. CompCert @leroy2009compcert proves the compiler itself; Concrete explicitly does #emph[not], and its contribution is making the unproved-but-evidenced boundary legible and self-invalidating rather than eliminating it — our §9 result is a single preservation fragment, not a verified pipeline. RustBelt @jung2018rustbelt establishes semantic foundations for Rust's type system externally; Concrete keeps a weaker but in-toolchain notion of currency tied to the exact compiled body.
+Verification-first systems languages — F\* and its Low\* subset @swamy2016fstar @protzenko2017lowstar, Dafny @leino2010dafny, and SPARK-style Ada workflows — start from contracts and generated proof obligations. Concrete inverts the emphasis: it is systems-first, with proof as an #emph[opt-in attachment] over a validated-Core anchor and a small eligible fragment, accepting that most code is enforced-and-reported rather than proved. CompCert @leroy2009compcert proves the compiler itself; Concrete explicitly does #emph[not], and its contribution is making the unproved-but-evidenced boundary legible and self-invalidating rather than eliminating it — our extraction-preservation result is a single fragment, not a verified pipeline. RustBelt @jung2018rustbelt establishes semantic foundations for Rust's type system externally; Concrete keeps a weaker but in-toolchain notion of currency tied to the exact compiled body.
 
 Among practical systems languages, Rust is the nearest relative (no GC, ownership, explicit `unsafe`), but authority there is inferred from APIs and modules rather than declared in signatures, and semantic inspection is distributed across diagnostics, lints, MIR tools, and external analyzers rather than centered on one report surface. Zig shares the no-hidden-runtime, explicit-allocator ethos but does not treat effect visibility as a first-class surface. C, the baseline these languages react to, leaves authority, effects, and cleanup entirely to convention; it is the audit problem in its starkest form, and also the performance bar Concrete aims to meet (@fig-perf).
 
-The closest active work is the ecosystem for attaching proofs to Rust. Prusti @astrauskas2019prusti adds Viper-based modular specifications; Creusot @denis2022creusot translates Rust's MIR into Why3 and uses prophecy variables to reason about mutable borrows; Verus @lattuada2023verus verifies Rust directly with SMT and linear ghost types; and Kani @kani bounded-model-checks Rust to a fixed unrolling depth. All four express far richer properties than Concrete's eligible fragment, and we make no claim to match their proof power. They differ from Concrete in three respects that mark out this paper's contribution. First, they are external tools layered onto a language and compiler that are themselves unaware of the proof, whereas Concrete makes attachment, eligibility, and staleness ordinary outputs of the compiler that emits the code. Second, none binds a discharged proof to a body fingerprint and revokes it automatically on drift; drift is handled, if at all, by re-running the external tool in CI rather than by the compiler refusing to carry a stale claim. Third, authority and effects are not signature-level facts in Rust, so the capability and trust-boundary half of Concrete's evidence has no direct analogue. Concrete is weaker on proof power and stronger on lifecycle: the compiler, not a satellite tool, is what keeps the evidence current. Austral @borretti2024austral demonstrates linear types and capability-secure design for a serious systems language and is closest in spirit; Concrete adds capability signatures, report-oriented workflows, and the validated-Core proof boundary. The Lean 4 kernel and language @demoura2021lean4 are the proof substrate and the implementation language, which is what lets the compiler and the theorem checker share one kernel.
+The closest active work is the ecosystem for attaching proofs to Rust. Prusti @astrauskas2019prusti adds Viper-based modular specifications; Creusot @denis2022creusot translates Rust's MIR into Why3 and uses prophecy variables to reason about mutable borrows; Verus @lattuada2023verus verifies Rust directly with SMT and linear ghost types; and Kani @kani bounded-model-checks Rust to a fixed unrolling depth. All four express far richer properties than Concrete's eligible fragment, and we make no claim to match their proof power. They differ from Concrete in three respects that mark out this paper's contribution. First, they are external tools layered onto a language and compiler that are themselves unaware of the proof, whereas Concrete makes attachment, eligibility, and staleness ordinary outputs of the compiler that emits the code. Second, none binds a discharged proof to a body fingerprint and revokes it automatically on drift; drift is handled, if at all, by re-running the external tool in CI rather than by the compiler refusing to carry a stale claim. Third, authority and effects are not signature-level facts in Rust, so the capability and trust-boundary half of Concrete's evidence has no direct analogue. Concrete is weaker on proof power and stronger on lifecycle: the compiler, not a satellite tool, is what keeps the evidence current.
+
+Two verified-systems landmarks mark the far end of the spectrum. Cogent @oconnor2016cogent is the closest in spirit — a linear, no-GC systems language whose certifying compiler emits a refinement proof relating the generated C to a functional specification, used for real file-system code. Cogent proves more than Concrete does, but through a specialized pipeline for a restricted language; Concrete keeps a lighter, opt-in attachment in a general-purpose compiler and foregrounds the drift lifecycle instead. seL4 @klein2009sel4, a fully verified OS kernel, is the touchstone for whole-system verification and marks the cost Concrete is not paying: it proves neither its compiler nor its binaries. In cryptography, EverCrypt @protzenko2020evercrypt shows verified, high-performance primitives extracted from F\*; our `constant_time_tag` is a small step toward that domain, honest that it proves equality reasoning rather than the machine-level timing guarantees such work targets. Austral @borretti2024austral demonstrates linear types and capability-secure design for a serious systems language and is closest in spirit; Concrete adds capability signatures, report-oriented workflows, and the validated-Core proof boundary. The Lean 4 kernel and language @demoura2021lean4 are the proof substrate and the implementation language, which is what lets the compiler and the theorem checker share one kernel.
 
 = What Failed or Surprised Us
 
@@ -523,9 +588,15 @@ Four failures changed the design. First, `partial def` opacity blocked the first
 
 Three lessons generalize beyond Concrete. #emph[Drift gates are the load-bearing feature]: the value of an attached proof in a changing codebase comes almost entirely from automatic revocation; without it, a proof is a comment that ages silently. #emph[Examples force the proof surface, not the reverse]: each graduated case study closed a specific extraction gap — `fixed_capacity` forced functional array update and the bounded `while_step`; `constant_time_tag` forced `u8` bitwise reasoning — which argues for growing the provable fragment from forcing examples rather than speculatively. #emph[Proof ergonomics, not expressiveness, is the bottleneck]: the binding limits we hit were a heartbeat budget on a 256-branch split and the `partial def` opacity barrier — engineering and recursion-checker frictions, not missing logical power.
 
+= Cost of the Discipline
+
+A workflow this explicit is only worth it if the overhead is bearable, so we report what it costs. The #emph[machine] cost is small: across the example and demo corpus the proof layer is roughly 2,300 lines of Lean holding 68 kernel-checked theorems plus the `PExpr` specs they reference, and the extraction-soundness layer adds another ~830 lines. These are checked by the Lean kernel on every `make build`; the reporting and drift commands themselves are cheap, with `--report proof-status` returning in about 0.3 s on these modules. Authority, eligibility, and fingerprint checks are deterministic and piggyback on the ordinary compile.
+
+The #emph[human] cost is the real variable, and it splits in two. Writing a proof ranges from trivial to fiddly: `validate_version` closes in a three-line script (`by_cases` then `simp_all`), while the universal constant-time theorem needs three helper lemmas and a four-million-heartbeat budget to chain its sixteen iterations. Maintaining a proof is where the conservative fingerprint shows its price: because a meaning-preserving structural edit (a commutative reorder, an `x + 0`) flips the status to `stale`, a developer occasionally re-confirms a proof that was never actually broken. We regard that as the right trade — a false `stale` costs a re-check, a false `proved` costs trust — but it is a real friction, and it is the cost a future contract layer would have to keep low to be usable.
+
 = Limitations and Threats to Validity
 
-The evidence is real but bounded. The proved fragment is small (pure, loop-free or bounded-state, integer/bytewise) and per-function; many modules prove a minority of their functions (3/10, 4/20, 1/2). Some theorems prove one direction or fixed cases rather than full contracts. The `parse_validate` oracle is a second implementation, not a Lean equivalence. The "easier to audit" claim is supported by signatures and report outputs but is #emph[not] backed by a controlled user study, and remains the least-defended part of the thesis. The empirical corpus, while non-trivial for an early language, is small relative to a mature ecosystem. Finally, every "proved" claim is contingent on the trusted computing base of §6 — most consequentially an unproved backend and an extraction soundness result that currently covers only the $cal(C)_0$ fragment.
+The evidence is real but bounded. The proved fragment is small (pure, loop-free or bounded-state, integer/bytewise) and per-function; many modules prove a minority of their functions (3/10, 4/20, 1/2). Some theorems prove one direction or fixed cases rather than full contracts. The `parse_validate` oracle is a second implementation, not a Lean equivalence. The "easier to audit" claim is supported by signatures and report outputs but is #emph[not] backed by a controlled user study, and remains the least-defended part of the thesis. The empirical corpus, while non-trivial for an early language, is small relative to a mature ecosystem. Finally, every "proved" claim is contingent on the trusted computing base set out above — most consequentially an unproved backend and an extraction soundness result that currently covers only the $cal(C)_0$ fragment.
 
 = Future Work
 
