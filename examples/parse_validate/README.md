@@ -94,6 +94,17 @@ If a function body changes, the body fingerprint in
 `src/proof-registry.json` will not match and the `proved` evidence
 is revoked — drift detection is part of the contract.
 
+## ProvableV1 conformance
+
+Every proof-eligible function in `parse_validate` fits the
+`ProvableV1` profile (see [`docs/PROVABLE_V1.md`](../../docs/PROVABLE_V1.md)).
+The eight pure scalar validators plus `parse_header` use only
+constructs in the supported surface: i32 arithmetic, comparisons,
+let bindings, if/then/else, direct calls, struct and enum literals,
+array indexing. Each registered theorem's `coverage` field
+(`iff`, `one_direction`) is one of the classifications `ProvableV1`
+requires. `main` is outside `ProvableV1` by design (entry point).
+
 ## What is enforced (statically, by the compiler)
 
 The compiler's normal pipeline rejects the program if it violates

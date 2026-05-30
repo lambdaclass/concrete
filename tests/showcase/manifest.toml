@@ -52,6 +52,13 @@ proofs         = ["Concrete.Proof.validate_version_correct",
 proof_coverage = { "Concrete.Proof.validate_version_correct" = "iff",
                    "Concrete.Proof.validate_header_fields_success" = "one_direction",
                    "Concrete.Proof.parse_header_too_short" = "one_direction" }
+# ProvableV1 conformance — see docs/PROVABLE_V1.md.  "full" = every
+# proof-eligible function in this flagship fits the ProvableV1
+# eligibility gates and supported-construct surface.  Entry points
+# and trusted impls are excluded by the profile itself, not counted
+# against conformance.  "partial" would name the proof-eligible
+# functions that fall outside.
+provable_v1_conformance = "full"
 assumptions    = "examples/parse_validate/assumptions.toml"
 policy         = "examples/parse_validate/Concrete.toml"
 catches        = "examples/parse_validate/catches/"
@@ -135,6 +142,7 @@ proof_coverage = { "Concrete.Proof.compute_tag_correct" = "iff",
                    "Concrete.Proof.verify_tag_correct" = "one_direction",
                    "Concrete.Proof.check_nonce_correct" = "iff",
                    "Concrete.Proof.verify_message_composed_correct" = "one_direction" }
+provable_v1_conformance = "full"
 assumptions    = "examples/crypto_verify/assumptions.toml"
 policy         = "examples/crypto_verify/Concrete.toml"
 catches        = "examples/crypto_verify/catches/"
@@ -226,6 +234,7 @@ proof_coverage = { "Concrete.Proof.ring_new_correct" = "point",
                    "Concrete.Proof.compute_tag_zero_correct" = "point",
                    "Concrete.Proof.ring_push_zero_correct" = "point",
                    "Concrete.Proof.ring_push_then_contains_correct" = "point" }
+provable_v1_conformance = "full"
 assumptions    = "examples/fixed_capacity/assumptions.toml"
 policy         = "examples/fixed_capacity/Concrete.toml"
 catches        = "examples/fixed_capacity/catches/"
@@ -319,6 +328,7 @@ proofs         = ["Concrete.Proof.ct_compare_equal_zeros_correct",
 proof_coverage = { "Concrete.Proof.ct_compare_equal_zeros_correct" = "point",
                    "Concrete.Proof.ct_compare_same_tag_correct" = "one_direction",
                    "Concrete.Proof.bitxor_u8_self_zero" = "invariant" }
+provable_v1_conformance = "full"
 assumptions    = "examples/constant_time_tag/assumptions.toml"
 policy         = "examples/constant_time_tag/Concrete.toml"
 catches        = "examples/constant_time_tag/catches/"

@@ -79,6 +79,20 @@ surface from `docs/PROOF_STATE_MODEL.md`.
 A non-composition empty-ring corollary
 (`ring_contains_empty_correct`) is also kernel-checked.
 
+## ProvableV1 conformance
+
+The proof-eligible functions in `fixed_capacity` fit the
+`ProvableV1` profile (see [`docs/PROVABLE_V1.md`](../../docs/PROVABLE_V1.md)).
+The ring buffer, message validator, and tag fold exercise the full
+`ProvableV1` state-model surface: i32 BitVec arithmetic, structs,
+fixed arrays, array literals, `arraySet` functional update, and
+bounded `while_step` loops with `LoopStep::Cont`/`LoopStep::Break`.
+Each registered theorem's `coverage` is `point` — the
+multi-iteration and universal generalizations are explicitly named
+open follow-ups, not silent gaps. The four trusted shells and two
+entry points are outside `ProvableV1` by design (the profile
+excludes `trusted` impls and entry points).
+
 ## What is NOT yet proved
 
 Stated up front:

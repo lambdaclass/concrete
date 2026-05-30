@@ -72,6 +72,17 @@ Concrete.Proof.verify_message_composed_correct
 theorem is the central thesis claim: when both sub-validators
 succeed, the composed verifier returns success.
 
+## ProvableV1 conformance
+
+Every proof-eligible function in `crypto_verify` fits the
+`ProvableV1` profile (see [`docs/PROVABLE_V1.md`](../../docs/PROVABLE_V1.md)).
+The four pure scalar functions use only constructs in the supported
+surface: integer arithmetic, comparisons, let bindings,
+if/then/else, direct calls. Each registered theorem has a `coverage`
+field (`iff`, `one_direction`). The "toy crypto" caveat is at the
+algorithm level, not the `ProvableV1` level — a real cryptographic
+primitive flagship would inherit the same conformance shape.
+
 ## What is enforced (statically, by the compiler)
 
 - **Pure surface.** All 4 user functions and `main` are `(pure)`.

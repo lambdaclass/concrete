@@ -202,6 +202,28 @@ Adding a construct to `ProvableV1` requires:
 Removing or weakening a supported construct is a compatibility break and must
 show up in the roadmap, changelog, and release notes.
 
+## Direction
+
+`ProvableV1` is not the destination.  The long-term goal is for
+the provable subset to expand toward the whole language: every
+construct that does not violate the proof-evidence preconditions
+(purity boundary, capability gating, FFI honesty, no hidden
+state) should eventually be a candidate.  Each expansion follows
+the Compatibility Rule above — forcing example, ProofCore rule,
+register entry, theorems, claim class, negative examples if
+needed, doc updates.
+
+Some constructs may stay outside indefinitely: FFI bodies, raw
+pointer arithmetic, unrestrained loops, dynamic dispatch on
+non-monomorphized targets.  That is a property of those
+constructs' semantics, not a limitation of the provable-subset
+machinery.
+
+`ProvableV1` is the smallest subset that meets the criteria
+today and is wired into the flagship corpus.  Future subsets
+(`ProvableV2`, etc.) will be additive and named.  A subset
+narrowing is a compatibility break.
+
 ## Relation To Other Documents
 
 - `docs/PROVABLE_SUBSET.md` is the broader background document.

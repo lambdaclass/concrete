@@ -87,6 +87,22 @@ the bounded while loop.  No induction over array contents is
 required because the invariant — `diff` stays at 0 — is
 uniform.
 
+## ProvableV1 conformance
+
+`ct_compare` fits the `ProvableV1` profile (see
+[`docs/PROVABLE_V1.md`](../../docs/PROVABLE_V1.md)).  The
+function uses only constructs in the supported surface: u8
+BitVec `bitxor` and `bitor`, array indexing, a bounded
+16-iteration `while_` loop, and an `i32` accumulator branch
+at the end.  The registered theorem's `coverage` is
+`one_direction` — universal positive direction over arbitrary
+byte values, with the iff direction named (not hidden) as
+open follow-up work.  `main` is outside `ProvableV1` by
+design (entry point with `Console`).  The machine-level
+constant-time gap is a target-level claim outside the
+`ProvableV1` source / PExpr scope; `assumptions.toml`'s
+`[claims.machine_level_constant_time]` carries it.
+
 ## What is NOT yet proved
 
 Stated up front:
