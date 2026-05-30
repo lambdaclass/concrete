@@ -1273,13 +1273,43 @@ structure EligibilityEntry where
 -- Proof registry types (moved from Report.lean)
 -- ============================================================
 
-/-- A single proof registry entry linking a Concrete function to its proof. -/
+/-- A single proof registry entry linking a Concrete function to its proof.
+
+    The `coverage` field classifies what KIND of theorem the proof
+    is, so a reviewer reading "X is proved" can tell at a glance
+    whether they're looking at a point proof or an iff theorem:
+
+    * `point` — concrete-input case (e.g., zeros tag returns 0).
+    * `one_direction` — universal but covers only one direction of
+      an iff (e.g., "equal tags return 1" without "differing tags
+      return 0"; "len < 5 returns TooShort" without
+      "len ≥ 5 returns Ok").
+    * `iff` — full functional specification or bidirectional iff
+      (e.g., `validate_version` proves `eval = if v=1 then 0 else 1`).
+    * `invariant` — loop / data-structure invariant theorem.
+    * `runtime_error` — discharges a runtime-error obligation
+      (bounds, div/mod-zero, overflow, cast, loop bound).
+    * `full_contract` — a `#[requires]`/`#[ensures]` source contract
+      discharged in full.
+
+    Empty string means "unclassified" — back-compat for older
+    registry entries written before this field existed.  Phase 1
+    item 4 closes the gap by classifying every existing flagship
+    proof.
+
+    See `docs/PROOF_OBLIGATIONS_REGISTER.md` for which proofs map to
+    which classification, and "Phase 1 items 3/4" in the roadmap. -/
 structure ProofRegistryEntry where
   function        : String  -- qualified name, e.g. "main.parse_byte"
   bodyFingerprint : String  -- expected body fingerprint
   proof           : String  -- Lean proof name, e.g. "Concrete.Proof.parse_byte_correct"
   spec            : String  -- spec name, e.g. "parse_byte_adds_offset"
+  coverage        : String  -- point|one_direction|iff|invariant|runtime_error|full_contract|""
   deriving Repr, Inhabited
+
+/-- All canonical proof coverage classifications. -/
+def ProofRegistryEntry.allCoverageKinds : List String :=
+  ["point", "one_direction", "iff", "invariant", "runtime_error", "full_contract"]
 
 abbrev ProofRegistry := List ProofRegistryEntry
 
@@ -1323,15 +1353,26 @@ def parseRegistryJson (input : String) : ProofRegistry × List String :=
     let fp := extractStr block "body_fingerprint"
     let pr := extractStr block "proof"
     let sp := extractStr block "spec"
+    let cv := extractStr block "coverage"
     match fn with
     | none => (es, ws ++ ["warning: proof-registry.json entry has missing or malformed \"function\" field"])
     | some fnVal =>
       if fnVal.isEmpty then (es, ws ++ ["warning: proof-registry.json entry has empty \"function\" field"])
       else
+        let cvVal := cv.getD ""
+        let validCoverage := cvVal.isEmpty ||
+          ProofRegistryEntry.allCoverageKinds.contains cvVal
+        let coverageWarn := if !validCoverage then
+          [s!"warning: proof-registry.json entry '{fnVal}' has unknown coverage '{cvVal}' (expected one of: {", ".intercalate ProofRegistryEntry.allCoverageKinds})"]
+          else []
+        let missingCoverageWarn := if cv.isNone then
+          [s!"warning: proof-registry.json entry '{fnVal}' has no \"coverage\" classification (Phase 1 item 4 — every registered proof should be classified)"]
+          else []
         let entryWarns := (if fp.isNone then [s!"warning: proof-registry.json entry '{fnVal}' has missing \"body_fingerprint\" field"] else [])
           ++ (if pr.isNone then [s!"warning: proof-registry.json entry '{fnVal}' has missing \"proof\" field"] else [])
           ++ (if sp.isNone then [s!"warning: proof-registry.json entry '{fnVal}' has missing \"spec\" field"] else [])
-        (es ++ [{ function := fnVal, bodyFingerprint := fp.getD "", proof := pr.getD "", spec := sp.getD "" }],
+          ++ coverageWarn ++ missingCoverageWarn
+        (es ++ [{ function := fnVal, bodyFingerprint := fp.getD "", proof := pr.getD "", spec := sp.getD "", coverage := cvVal }],
          ws ++ entryWarns)
   ) (([] : List ProofRegistryEntry), ([] : List String))
   -- Check for duplicates

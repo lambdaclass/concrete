@@ -3,24 +3,28 @@
     "function": "main.compute_tag",
     "body_fingerprint": "[(ret (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var key) (var message)) (var nonce)))]",
     "proof": "Concrete.Proof.compute_tag_correct",
-    "spec": "Concrete.Proof.computeTagExpr"
+    "spec": "Concrete.Proof.computeTagExpr",
+    "coverage": "iff"
   },
   {
     "function": "main.verify_tag",
     "body_fingerprint": "[(let computed (call compute_tag (var key) (var message) (var nonce))) (if (binop Concrete.BinOp.eq (var computed) (var expected_tag)) [(ret (int 1))] [(ret (int 0))])]",
     "proof": "Concrete.Proof.verify_tag_correct",
-    "spec": "Concrete.Proof.verifyTagExpr"
+    "spec": "Concrete.Proof.verifyTagExpr",
+    "coverage": "one_direction"
   },
   {
     "function": "main.check_nonce",
     "body_fingerprint": "[(if (binop Concrete.BinOp.gt (var nonce) (int 0)) [(if (binop Concrete.BinOp.leq (var nonce) (var max_nonce)) [(ret (int 1))] [(ret (int 0))])] [(ret (int 0))])]",
     "proof": "Concrete.Proof.check_nonce_correct",
-    "spec": "Concrete.Proof.checkNonceExpr"
+    "spec": "Concrete.Proof.checkNonceExpr",
+    "coverage": "iff"
   },
   {
     "function": "main.verify_message",
     "body_fingerprint": "[(if (binop Concrete.BinOp.neq (call verify_tag (var key) (var message) (var nonce) (var expected_tag)) (int 1)) [(ret (int 0))]) (if (binop Concrete.BinOp.neq (call check_nonce (var nonce) (var max_nonce)) (int 1)) [(ret (int 0))]) (ret (int 1))]",
     "proof": "Concrete.Proof.verify_message_composed_correct",
-    "spec": "Concrete.Proof.verifyMessageExpr"
+    "spec": "Concrete.Proof.verifyMessageExpr",
+    "coverage": "one_direction"
   }
 ]

@@ -1375,6 +1375,7 @@ structure ProofStatusEntry where
   specName      : String       -- spec name (from registry or derived)
   proofName     : String       -- proof/theorem name (from registry or derived)
   proofSource   : String       -- "registry" | "hardcoded" | "none"
+  coverage      : String       -- proof coverage kind: point|one_direction|iff|invariant|runtime_error|full_contract|""
   loc           : Option SourceLoc
   fnSpan        : Option Span
 
@@ -1422,9 +1423,13 @@ private partial def collectProofStatus
     let unsup := match pc.entries.find? fun e => e.qualName == qualName with
       | some e => e.unsupported
       | none => []
+    -- Look up coverage classification from the registry entry.
+    let coverage := match registry.find? fun re => re.function == qualName with
+      | some re => re.coverage
+      | none => ""
     { qualName, bareName := f.name, state, currentFp := fp, expectedFp
     , profileGates := gates, unsupported := unsup, specName := sName, proofName := pName
-    , proofSource := pSrc, loc := fnLoc, fnSpan := fnSp }
+    , proofSource := pSrc, coverage, loc := fnLoc, fnSpan := fnSp }
   entries ++ m.submodules.foldl (fun acc sub =>
     acc ++ collectProofStatus pc locMap sub qualPrefix registry) []
 
@@ -1448,7 +1453,8 @@ private def renderProofStatusEntry (e : ProofStatusEntry) (sourceMap : SourceMap
     | _, _ => ""
   match e.state with
   | .proved =>
-    s!"-- proved {String.ofList (List.replicate 48 '-')} {locStr}\n\n  ✓ `{e.qualName}` — proof matches current body.{snippet}"
+    let coverageTag := if e.coverage.isEmpty then "" else s!" [{e.coverage}]"
+    s!"-- proved{coverageTag} {String.ofList (List.replicate 48 '-')} {locStr}\n\n  ✓ `{e.qualName}` — proof matches current body.{snippet}\n\n  coverage: {if e.coverage.isEmpty then "unclassified" else e.coverage}"
   | .stale =>
     s!"-- proof stale {String.ofList (List.replicate 44 '-')} {locStr}\n\n  Function `{e.qualName}` has a registered proof, but the body changed.{snippet}\n\n  expected fingerprint:\n    {e.expectedFp}\n\n  current fingerprint:\n    {e.currentFp}\n\n  hint: Update the Lean proof in Concrete/Proof.lean, or restore the proved implementation."
   | .notProved =>

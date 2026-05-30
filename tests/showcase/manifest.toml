@@ -45,6 +45,13 @@ proof_registry = "examples/parse_validate/src/proof-registry.json"
 proofs         = ["Concrete.Proof.validate_version_correct",
                   "Concrete.Proof.validate_header_fields_success",
                   "Concrete.Proof.parse_header_too_short"]
+# Proof coverage classification per registered theorem.  See
+# `Concrete.ProofRegistryEntry.allCoverageKinds`.  "No hidden green":
+# any reviewer reading `proved` for this flagship should be able to
+# tell which theorems are point proofs vs. one-direction vs. iff.
+proof_coverage = { "Concrete.Proof.validate_version_correct" = "iff",
+                   "Concrete.Proof.validate_header_fields_success" = "one_direction",
+                   "Concrete.Proof.parse_header_too_short" = "one_direction" }
 assumptions    = "examples/parse_validate/assumptions.toml"
 policy         = "examples/parse_validate/Concrete.toml"
 catches        = "examples/parse_validate/catches/"
@@ -124,6 +131,10 @@ proofs         = ["Concrete.Proof.compute_tag_correct",
                   "Concrete.Proof.verify_tag_correct",
                   "Concrete.Proof.check_nonce_correct",
                   "Concrete.Proof.verify_message_composed_correct"]
+proof_coverage = { "Concrete.Proof.compute_tag_correct" = "iff",
+                   "Concrete.Proof.verify_tag_correct" = "one_direction",
+                   "Concrete.Proof.check_nonce_correct" = "iff",
+                   "Concrete.Proof.verify_message_composed_correct" = "one_direction" }
 assumptions    = "examples/crypto_verify/assumptions.toml"
 policy         = "examples/crypto_verify/Concrete.toml"
 catches        = "examples/crypto_verify/catches/"
@@ -208,6 +219,13 @@ proofs         = ["Concrete.Proof.ring_new_correct",
                   "Concrete.Proof.compute_tag_zero_correct",
                   "Concrete.Proof.ring_push_zero_correct",
                   "Concrete.Proof.ring_push_then_contains_correct"]
+# All four are point proofs (concrete-input cases) — universal /
+# multi-iteration generalizations are open follow-ups named in
+# [flagship.limits].proofs.
+proof_coverage = { "Concrete.Proof.ring_new_correct" = "point",
+                   "Concrete.Proof.compute_tag_zero_correct" = "point",
+                   "Concrete.Proof.ring_push_zero_correct" = "point",
+                   "Concrete.Proof.ring_push_then_contains_correct" = "point" }
 assumptions    = "examples/fixed_capacity/assumptions.toml"
 policy         = "examples/fixed_capacity/Concrete.toml"
 catches        = "examples/fixed_capacity/catches/"
@@ -292,6 +310,15 @@ proof_registry = "examples/constant_time_tag/src/proof-registry.json"
 proofs         = ["Concrete.Proof.ct_compare_equal_zeros_correct",
                   "Concrete.Proof.ct_compare_same_tag_correct",
                   "Concrete.Proof.bitxor_u8_self_zero"]
+# Note ct_compare's REGISTERED proof is ct_compare_same_tag_correct
+# (one_direction: universal over byte values, positive direction
+# only).  The zeros theorem is a sanity corollary kept
+# kernel-checked.  bitxor_u8_self_zero is a helper lemma supporting
+# future iff work.  The full iff direction is open — named in
+# [flagship.limits].proofs.
+proof_coverage = { "Concrete.Proof.ct_compare_equal_zeros_correct" = "point",
+                   "Concrete.Proof.ct_compare_same_tag_correct" = "one_direction",
+                   "Concrete.Proof.bitxor_u8_self_zero" = "invariant" }
 assumptions    = "examples/constant_time_tag/assumptions.toml"
 policy         = "examples/constant_time_tag/Concrete.toml"
 catches        = "examples/constant_time_tag/catches/"

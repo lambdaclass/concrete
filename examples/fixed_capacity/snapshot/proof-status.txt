@@ -108,33 +108,41 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- proved ------------------------------------------------ examples/fixed_capacity/src/main.con:115
+-- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:115
 
   ✓ `fixed_capacity.ring_new` — proof matches current body.
 
  115 |     fn ring_new() -> RingBuf {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
--- proved ------------------------------------------------ examples/fixed_capacity/src/main.con:122
+  coverage: point
+
+-- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:122
 
   ✓ `fixed_capacity.ring_contains` — proof matches current body.
 
  122 |     fn ring_contains(rb: RingBuf, val: i32) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
--- proved ------------------------------------------------ examples/fixed_capacity/src/main.con:133
+  coverage: point
+
+-- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:133
 
   ✓ `fixed_capacity.ring_push` — proof matches current body.
 
  133 |     fn ring_push(rb: RingBuf, val: i32) -> RingBuf {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
--- proved ------------------------------------------------ examples/fixed_capacity/src/main.con:145
+  coverage: point
+
+-- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:145
 
   ✓ `fixed_capacity.compute_tag` — proof matches current body.
 
  145 |     fn compute_tag(buf: MsgBuf) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  coverage: point
 
 -- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:155
 
