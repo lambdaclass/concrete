@@ -991,6 +991,16 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
     let pl ← cExprToPExpr lhs
     let pr ← cExprToPExpr rhs
     some (.binOp pop pl pr)
+  | .cast inner _ => do
+    let pi ← cExprToPExpr inner
+    some (.cast pi)
+  | .fieldAccess obj field _ => do
+    let po ← cExprToPExpr obj
+    some (.fieldAccess po field)
+  | .arrayIndex arr idx _ => do
+    let pa ← cExprToPExpr arr
+    let pi ← cExprToPExpr idx
+    some (.arrayIndex pa pi)
   | e             => cExprToPExprImpl e
 
 /-- Non-partial wrapper for `cStmtsToPExprKImpl`.  Handles
@@ -1004,10 +1014,25 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
     expression wrapper) so the val side is also wrapper-
     reducible when val itself is in the supported fragment. -/
 def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
+  | [], k => k
+  | [.return_ (some e) _], _ => cExprToPExpr e
+  | [.expr e], _ => cExprToPExpr e
   | (.letDecl name _ _ val) :: rest, k => do
     let pv ← cExprToPExpr val
     let pb ← cStmtsToPExprK rest k
     some (.letIn name pv pb)
+  | (.arrayIndexAssign (.ident name _) idx val) :: rest, k => do
+    let pi ← cExprToPExpr idx
+    let pv ← cExprToPExpr val
+    let pb ← cStmtsToPExprK rest k
+    some (.letIn name (.arraySet (.var name) pi pv) pb)
+  -- if-without-else (early-return shape): then branch's cont
+  -- is `rest with k`; implicit else is the same.
+  | (.ifElse cond thenBranch none) :: rest, k => do
+    let pc ← cExprToPExpr cond
+    let pkRest ← cStmtsToPExprK rest k
+    let pt ← cStmtsToPExprK thenBranch (some pkRest)
+    some (.ifThenElse pc pt pkRest)
   | stmts, k => cStmtsToPExprKImpl stmts k
 
 -- Unsupported construct identification

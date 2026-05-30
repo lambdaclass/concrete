@@ -44,20 +44,20 @@ informally below the table but not yet a Lean theorem name.
 | R-04 | `binOp pop pl pr` (all widths) | `a + b`, `a - b`, `a * b`, etc. | parse_validate | `binop_preservation` + `eval_binop_reduces` + `source_binop_step` — **fully discharged across all three views 2026-05-30** in `Concrete.ProofSoundness` (compositional template) |
 | R-05 | `binOp .eq/.ne/.lt/.le/.gt/.ge` | `a == b`, `a < b`, etc. | parse_validate | `binop_cmp_preservation` — subsumed by R-04 (comparisons go through the same wrapper arm) |
 | R-06 | `letIn name v body` | `let x = v; ...` | parse_validate | `let_preservation` + `eval_let_reduces` + `source_let_step` — **fully discharged across all three views 2026-05-30** in `Concrete.ProofSoundness`; first rule using the `cStmtsToPExprK` wrapper |
-| R-07 | `ifThenElse c t e` | `if c { t } else { e }` and `if c { return X; } else-fallthrough` | parse_validate | `if_preservation` + `if_no_else_as_fallthrough` |
+| R-07 | `ifThenElse c t e` | `if c { t } else { e }` and `if c { return X; } else-fallthrough` | parse_validate | `if_no_else_as_fallthrough_preservation` — **extraction discharged against `cStmtsToPExprK` 2026-05-30**; full if-else forms still open |
 | R-08 | `call fn args` | function call (FnTable lookup) | parse_validate | `call_preservation` |
 | R-09 | `structLit name fields` | `Point { x: 1, y: 2 }` | parse_validate (parse_header Ok) | `struct_lit_preservation` |
-| R-10 | `fieldAccess obj f` | `obj.f` | parse_validate | `field_access_preservation` |
+| R-10 | `fieldAccess obj f` | `obj.f` | parse_validate | `field_access_preservation` — **extraction discharged against `cExprToPExpr` 2026-05-30** |
 | R-11 | `enumLit ename var fields` | `Result::Ok { value: v }` | parse_validate (parse_header Err) | `enum_lit_preservation` |
 | R-12 | `match_ scrutinee arms` (`PMatchPat`: `enumPat` / `litPat` / `varPat`) | `match c { Pat => body, ... }` | parse_validate (`error_code`) | `match_preservation` + per-arm match for each `PMatchPat` variant |
-| R-13 | `arrayIndex arr idx` | `arr[i]` (read) | parse_validate (compute_checksum) | `array_index_preservation`; OOB returns `none` |
-| R-14 | `cast inner` (identity on `PVal.int`) | `x as i32`, `u8 as i32` | fixed_capacity (`read_u8`, `read_u16_be`) | `cast_identity_preservation` — sound for widening; narrowing is excluded by eligibility |
+| R-13 | `arrayIndex arr idx` | `arr[i]` (read) | parse_validate (compute_checksum) | `array_index_preservation` — **extraction discharged against `cExprToPExpr` 2026-05-30**; OOB returns `none` |
+| R-14 | `cast inner` (identity on `PVal.int`) | `x as i32`, `u8 as i32` | fixed_capacity (`read_u8`, `read_u16_be`) | `cast_identity_preservation` + `eval_cast_identity` — **extraction discharged against `cExprToPExpr` 2026-05-30**; sound for widening; narrowing is excluded by eligibility |
 | R-15 | `arrayLit elems` | `[0, 0, 0, ...]` | fixed_capacity (`ring_new`) | `array_lit_preservation` |
 | R-16 | `binOp (.mod width signed)` (BitVec.srem / BitVec.umod) | `a % b` for `i32`/`u32` (other widths reject at extraction) | fixed_capacity (`ring_push`'s `head % cap`) | `mod_width_preservation` — `.mod 32 true` matches LLVM `srem`; `.mod 32 false` matches `urem` (commits 2605fb5, multi-width landed later) |
 | R-17 | `binOp (.bitxor width signed)` (BitVec.xor at width; signed/unsigned result interpretation) | `a ^ b` for `i32`/`u32`/`u8` (other widths reject at extraction) | fixed_capacity (`compute_tag`), parse_validate (`compute_checksum`), constant_time_tag (`ct_compare`) | `bitxor_width_preservation` — BitVec.xor at the operand width; signed view via `BitVec.toInt`, unsigned via `Int.ofNat ∘ toNat` |
 | R-21 | `binOp (.bitor width signed)` (BitVec.or at width; signed/unsigned result interpretation) | `a \| b` for `u8` (other widths reject at extraction) | constant_time_tag (`ct_compare` OR-accumulate) | `bitor_width_preservation` — BitVec.or at the operand width; unsigned view via `Int.ofNat ∘ toNat` (the only mode currently supported) |
 | R-18 | `while_ cond assigns cont` (flat-assign body) | `while cond { x = ...; y = ...; }` | parse_validate (`compute_checksum`), fixed_capacity (`compute_tag`) | `while_flat_assign_preservation`; termination via fuel only — `bounded` profile enforces real termination at Check |
-| R-19 | `arraySet arr idx val` | `arr[i] = v` extracted as shadowing `letIn name (arraySet …)` | fixed_capacity (`ring_push`) | `array_set_preservation` (named in `docs/PROOF_STATE_MODEL.md` § 2); OOB stuck |
+| R-19 | `arraySet arr idx val` | `arr[i] = v` extracted as shadowing `letIn name (arraySet …)` | fixed_capacity (`ring_push`) | `array_set_preservation` — **extraction discharged against `cStmtsToPExprK` 2026-05-30** (named in `docs/PROOF_STATE_MODEL.md` § 2); OOB stuck |
 | R-20 | `while_step cond carried step cont` + `LoopStep::Cont`/`Break` enum | `while cond { let x = ...; if c { return v; } i = i + 1 }` | fixed_capacity (`ring_contains`) | `while_step_preservation` + `while_step_early_break` (PROOF_STATE_MODEL § 4) |
 
 ## Trust gates (verification, not extraction)

@@ -321,12 +321,7 @@ theorem let_preservation
     (h_rest : cStmtsToPExprK rest k = some pb) :
     cStmtsToPExprK ((CStmt.letDecl name isMut ty val) :: rest) k
       = some (.letIn name pv pb) := by
-  show (do
-    let pv' ← cExprToPExpr val
-    let pb' ← cStmtsToPExprK rest k
-    some (PExpr.letIn name pv' pb')) = some (.letIn name pv pb)
-  rw [h_val, h_rest]
-  rfl
+  simp [cStmtsToPExprK, h_val, h_rest]
 
 /-! ## R-06: eval-side compositional reduction
 
@@ -358,6 +353,108 @@ theorem source_let_step
     (val extraction + val eval; rest extraction; body eval
     under extended env) come from the rules below R-06 at
     use sites. -/
+
+/-! ## R-10: `field_access_preservation` (extraction + eval)
+
+`.fieldAccess obj field _` extracts to `.fieldAccess po field`
+given `cExprToPExpr obj = some po`.  Wrapper arm:
+
+    | .fieldAccess obj field _ => do
+        let po ← cExprToPExpr obj
+        some (.fieldAccess po field)
+
+Single-sub-expression structural recursion (on `obj`). -/
+theorem field_access_preservation
+    (obj : CExpr) (field : String) (ty : Ty)
+    (po : PExpr) (h_obj : cExprToPExpr obj = some po) :
+    cExprToPExpr (.fieldAccess obj field ty)
+      = some (.fieldAccess po field) := by
+  simp [cExprToPExpr, h_obj]
+
+/-! ## R-13: `cast_identity_preservation` (extraction + eval)
+
+`.cast inner _` extracts to `.cast pi` given
+`cExprToPExpr inner = some pi`.  The eval-side identity
+(cast is identity at `Int`) is structural via the eval rule. -/
+theorem cast_identity_preservation
+    (inner : CExpr) (ty : Ty)
+    (pi : PExpr) (h_inner : cExprToPExpr inner = some pi) :
+    cExprToPExpr (.cast inner ty) = some (.cast pi) := by
+  simp [cExprToPExpr, h_inner]
+
+theorem eval_cast_identity
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (inner : PExpr) (v : PVal)
+    (h_inner : eval fns env (fuel + 1) inner = some v) :
+    eval fns env (fuel + 2) (.cast inner) = some v := by
+  simp [eval, h_inner]
+
+/-! ## R-14: `array_index_preservation` (extraction)
+
+`.arrayIndex arr idx _` extracts to `.arrayIndex pa pi`
+given both operands extract.  Two-sub-expression
+structural recursion (on `arr` and `idx`). -/
+theorem array_index_preservation
+    (arr idx : CExpr) (ty : Ty)
+    (pa pi : PExpr)
+    (h_arr : cExprToPExpr arr = some pa)
+    (h_idx : cExprToPExpr idx = some pi) :
+    cExprToPExpr (.arrayIndex arr idx ty)
+      = some (.arrayIndex pa pi) := by
+  simp [cExprToPExpr, h_arr, h_idx]
+
+/-! ## R-19: `array_set_preservation` (extraction)
+
+Source-level `arr[i] = v;` extracts to a shadowing letIn
+that rebinds `arr` via `arraySet`.  Only supported when
+`arr` is a simple identifier — the wrapper arm:
+
+    | (.arrayIndexAssign (.ident name _) idx val) :: rest, k =>
+        let pi ← cExprToPExpr idx
+        let pv ← cExprToPExpr val
+        let pb ← cStmtsToPExprK rest k
+        some (.letIn name (.arraySet (.var name) pi pv) pb) -/
+theorem array_set_preservation
+    (name : String) (idxTy : Ty)
+    (idx val : CExpr) (rest : List CStmt) (k : Option PExpr)
+    (pi pv pb : PExpr)
+    (h_idx  : cExprToPExpr idx = some pi)
+    (h_val  : cExprToPExpr val = some pv)
+    (h_rest : cStmtsToPExprK rest k = some pb) :
+    cStmtsToPExprK
+      ((CStmt.arrayIndexAssign (.ident name idxTy) idx val) :: rest) k
+      = some (.letIn name (.arraySet (.var name) pi pv) pb) := by
+  simp [cStmtsToPExprK, h_idx, h_val, h_rest]
+
+/-! ## R-07: `if_no_else_as_fallthrough_preservation` (extraction)
+
+The early-return shape from `parse_validate`'s validators:
+
+    if v == 1 { return 0; }
+    return 1;
+
+becomes the PExpr `if cond then thenExpr else fallthrough`
+where the fallthrough is the rest's extraction.
+
+Wrapper arm:
+
+    | (.ifElse cond thenBranch none) :: rest, k => do
+        let pc ← cExprToPExpr cond
+        let pkRest ← cStmtsToPExprK rest k
+        let pt ← cStmtsToPExprK thenBranch (some pkRest)
+        some (.ifThenElse pc pt pkRest)
+
+Lean accepts the structural recursion on the nested
+`thenBranch` (sub-list of the head CStmt). -/
+theorem if_no_else_as_fallthrough_preservation
+    (cond : CExpr) (thenBranch rest : List CStmt) (k : Option PExpr)
+    (pc pkRest pt : PExpr)
+    (h_cond : cExprToPExpr cond = some pc)
+    (h_rest : cStmtsToPExprK rest k = some pkRest)
+    (h_then : cStmtsToPExprK thenBranch (some pkRest) = some pt) :
+    cStmtsToPExprK ((CStmt.ifElse cond thenBranch none) :: rest) k
+      = some (.ifThenElse pc pt pkRest) := by
+  simp [cStmtsToPExprK, h_cond, h_rest, h_then]
 
 /-! ## Sanity checks (inline regression theorems)
 
