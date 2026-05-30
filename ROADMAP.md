@@ -32,8 +32,11 @@ The proof/evidence pipeline is operational:
 - FnTable completeness checks catch missing proof callees.
 - Assumptions, policies, snapshots, oracles, catches, release bundles, and
   showcase manifests exist for graduated examples.
-- Phase 12 has started: literal extraction preservation is proved against the
-  public extractor wrapper.
+- Compiler-soundness work has started: the flagship-used ProofCore extraction
+  surface is no longer blocked by `partial def` opacity, and R-01 through R-21
+  now have extraction/preservation coverage at least at the shape level. The
+  remaining work is deeper source-semantics agreement and trust-gate soundness,
+  not basic extractor access.
 
 The remaining question is no longer "can Concrete compile programs?" It is:
 
@@ -84,15 +87,14 @@ Do not call the language releasable until these are true:
 
 ---
 
-## Phase 1: Stabilize The Proof Trust Core
+## Phase 1: Proof Status And Trust Gates
 
-Expected outcome: the existing proof/evidence pipeline is no longer vulnerable
-to practical attachment footguns, and every current green proof status has a
-clear provenance trail.
+Goal: make every green proof/evidence status precise, traceable, and hard to
+misread.
 
-Phase closes when: all existing production proof specs are directly and
-transitively FnTable-complete, proof coverage is classified, and the proof
-report tells reviewers exactly what kind of theorem each green check represents.
+Done when: all existing production proof specs are directly and transitively
+FnTable-complete, proof coverage is classified, and the proof report tells
+reviewers exactly what kind of theorem each green check represents.
 
 1. Add transitive FnTable completeness: walk registered spec call graphs, not
    only direct call sites, and fail or flag missing callees before theorem
@@ -122,60 +124,12 @@ report tells reviewers exactly what kind of theorem each green check represents.
 10. Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern,
     backend, runtime, and target assumptions in one machine-readable list.
 
-## Phase 2: Build The Phase 12 Source-To-Proof Bridge
+## Phase 2: Provable And Predictable Subsets
 
-Expected outcome: the flagship-used `Core -> ProofCore` extraction rules start
-moving from trusted compiler behavior to Lean-proved preservation claims.
+Goal: give users a named small subset they can rely on for serious
+proof/evidence work.
 
-Phase closes when: the ProofCore constructs used by the four graduated
-flagships have source semantics, extraction theorems, and a clear list of
-remaining trusted assumptions.
-
-1. Extend Phase 12 from R-01/R-02 literals to R-03 identifiers: source
-   environment lookup, `cExprToPExpr (.ident name ty)`, and PExpr `.var`
-   evaluation agree.
-2. Discharge R-04 for simple width-agnostic binops (`add`, `sub`, `mul`) over
-   the current proof value model.
-3. Discharge R-05 comparisons and boolean result preservation.
-4. Discharge R-06 let-binding preservation.
-5. Discharge R-07 if/early-return preservation for the validator shape used by
-   `parse_validate`.
-6. Decide whether the mutual extraction block needs a structural-recursion lift.
-   If later rules remain blocked by `partial`, replace `mapM` recursion with
-   explicit structural helpers.
-7. Build source semantics for the provable subset as needed by the discharged
-   rules, not as a speculative full-language semantics.
-8. Discharge calls/FnTable preservation for direct calls with complete proof
-   tables.
-9. Discharge structs and field access.
-10. Discharge enum literals and match expressions.
-11. Discharge arrays: literals, index reads, and in-bounds/OOB behavior.
-12. Discharge casts under the current widening-only proof restriction.
-13. Discharge width-tagged BitVec operations used by flagships: `mod`, `bitxor`,
-   `bitor`, signed/unsigned result interpretation.
-14. Discharge arraySet / functional update preservation.
-15. Discharge flat bounded `while` preservation.
-16. Discharge `while_step` / `LoopStep.Cont` / `LoopStep.Break` preservation.
-17. Prove selected proof-report facts agree with compiler state: `proved`,
-   `stale`, `blocked`, `missing`, `ineligible`, `trusted`.
-18. Prove or mechanically validate trust-gate correctness: body fingerprint
-   determinism, spec-drift completeness, proof attachment lookup, FnTable
-   completeness, eligibility classification.
-19. Record a machine-readable trusted computing base for proof/evidence claims:
-   Lean kernel, compiler modules, backend/toolchain, runtime/OS/hardware,
-   trusted/extern code.
-20. Prove selected checker/report agreement for authority and purity facts used
-    by proof eligibility, so a function cannot be called proof-eligible while
-    secretly requiring capabilities.
-21. Add a Phase 12 proof-status dashboard that shows which extraction rules are
-    discharged, partially discharged, trusted, or blocked by compiler structure.
-
-## Phase 3: Freeze A Provable Systems Subset
-
-Expected outcome: Concrete has a named small subset that users can rely on for
-serious proof/evidence work.
-
-Phase closes when: the subset has a public name, allowed constructs, rejected
+Done when: the subset has a public name, allowed constructs, rejected
 constructs, arithmetic profile, runtime-error policy, and compatibility promise.
 
 1. Define `ProvableV1`: allowed types, expressions, statements, effects, loops,
@@ -203,13 +157,13 @@ constructs, arithmetic profile, runtime-error policy, and compatibility promise.
 12. Update `CLAIMS_TODAY.md`, README, showcase docs, and release bundles to use
     the frozen subset names consistently.
 
-## Phase 4: Runtime-Error Obligation Generation
+## Phase 3: Runtime Safety Obligations
 
-Expected outcome: Concrete starts generating SPARK-like obligations for boring
-runtime failures instead of relying only on examples and prose.
+Goal: generate SPARK-like obligations for boring runtime failures instead of
+relying only on examples and prose.
 
-Phase closes when: parser/security examples can show obligations for bounds,
-div/mod zero, overflow profile, casts, and loop bounds with statuses
+Done when: parser/security examples can show obligations for bounds, div/mod
+zero, overflow profile, casts, and loop bounds with statuses
 `proved`, `enforced`, `assumed`, `missing`, or `blocked`.
 
 1. Define stable obligation schema v1: id, kind, source span, function,
@@ -233,17 +187,16 @@ div/mod zero, overflow profile, casts, and loop bounds with statuses
 13. Add obligation suppression only through explicit assumptions or policy
     waivers, never comments or hidden allowlists.
 14. Prove or validate obligation-generation soundness for the first obligation
-    kinds in Phase 12.
+    kinds through the compiler soundness bridge.
 
-## Phase 5: Source-Level Contracts
+## Phase 4: Source Contracts
 
-Expected outcome: proof-relevant properties can live in source code without
-breaking LL(1), and every contract generates obligations instead of becoming
-decorative prose.
+Goal: let proof-relevant properties live in source code without breaking LL(1),
+and make every contract generate obligations instead of becoming decorative
+prose.
 
-Phase closes when: one flagship uses source contracts as the primary proof
-surface, and each contract is classified as proved, enforced, assumed, missing,
-or blocked.
+Done when: one flagship uses source contracts as the primary proof surface, and
+each contract is classified as proved, enforced, assumed, missing, or blocked.
 
 1. Add LL(1)-safe function attributes:
    `#[requires(...)]` and `#[ensures(...)]`.
@@ -263,9 +216,9 @@ or blocked.
    `#[invariant(...)]` and `#[variant(...)]`.
 8. Generate loop-invariant obligations: initialization, preservation, variant
    decrease, and exit-implies-postcondition.
-9. Add source contract soundness work to Phase 12: parsing preserves meaning,
-   generated obligations correspond to contract semantics, discharged
-   obligations imply the advertised contract claim.
+9. Add source contract soundness work to the compiler soundness bridge: parsing
+   preserves meaning, generated obligations correspond to contract semantics,
+   discharged obligations imply the advertised contract claim.
 10. Add contract diagnostics that explain whether the failure is caller-side
     precondition, callee-side postcondition, loop invariant initialization,
     invariant preservation, or variant decrease.
@@ -273,13 +226,13 @@ or blocked.
     postcondition, or changing a public invariant is a semantic API change.
 12. Add one contract-bearing flagship retrofit after the machinery is real.
 
-## Phase 6: Proof Ergonomics And Automation
+## Phase 5: Proof Authoring And Automation
 
-Expected outcome: proving flagship properties becomes a repeatable engineering
-workflow, not a collection of one-off `simp` scripts.
+Goal: make flagship proofs a repeatable engineering workflow, not a collection
+of one-off `simp` scripts.
 
-Phase closes when: new flagship proofs can start from useful generated stubs,
-standard lemmas, and actionable failure diagnostics.
+Done when: new flagship proofs can start from useful generated stubs, standard
+lemmas, and actionable failure diagnostics.
 
 1. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
    OOB stuck behavior.
@@ -300,13 +253,13 @@ standard lemmas, and actionable failure diagnostics.
 10. Add AI-assisted proof repair only after artifacts, statuses, and replay are
    stable enough to validate suggestions mechanically.
 
-## Phase 7: Audit Artifacts And Review UX
+## Phase 6: Audit Commands And Review Artifacts
 
-Expected outcome: a reviewer can answer "what can this program do, what is
-proved, what is assumed, and what changed?" without reading compiler internals.
+Goal: let a reviewer answer "what can this program do, what is proved, what is
+assumed, and what changed?" without reading compiler internals.
 
-Phase closes when: `concrete audit`, semantic diff, and an artifact viewer cover
-the four graduated flagships and one package-scale example.
+Done when: `concrete audit`, semantic diff, and an artifact viewer cover the
+four graduated flagships and one package-scale example.
 
 1. Stabilize machine-readable fact schemas for proof status, obligations,
    effects, capabilities, assumptions, policies, snapshots, and showcase
@@ -335,13 +288,13 @@ the four graduated flagships and one package-scale example.
 12. Add artifact redaction/stability rules so release bundles can be shared
     publicly without leaking local paths, secrets, or machine-specific noise.
 
-## Phase 8: Flagship Depth
+## Phase 7: Flagship Depth And Examples
 
-Expected outcome: Concrete has one example that outside systems engineers find
-impressive, not only internally coherent.
+Goal: produce examples that outside systems engineers find impressive, not only
+internally coherent.
 
-Phase closes when: the showcase set includes a serious security/crypto or
-protocol example with proof/evidence strong enough to anchor the public pitch.
+Done when: the showcase set includes a serious security/crypto or protocol
+example with proof/evidence strong enough to anchor the public pitch.
 
 1. Maintain the four graduated flagships and keep their evidence bundles green:
    `parse_validate`, `crypto_verify`, `fixed_capacity`, `constant_time_tag`.
@@ -369,13 +322,50 @@ protocol example with proof/evidence strong enough to anchor the public pitch.
 12. Keep the curated showcase balanced: parser/protocol, bounded state,
     crypto/security, authority, FFI/trust, ownership-heavy.
 
-## Phase 9: Backend, Target, And Compiler Contracts
+## Phase 8: Compiler Soundness Bridge
 
-Expected outcome: backend/toolchain assumptions are no longer vague, and
-evidence claims state exactly where source-level proof stops.
+Goal: move the flagship-used `Core -> ProofCore` rules from "extracts to the
+expected ProofCore shape" toward source-semantics agreement and checked
+trust-gate correctness.
 
-Phase closes when: SSA, target/toolchain, optimization, ABI/layout, and
-incremental build contracts are explicit enough for release evidence.
+Done when: each flagship-used ProofCore construct is classified as
+shape-preserved, eval/source-semantics-preserved, or still trusted; proof-report
+facts agree with compiler state; and the remaining trusted base is
+machine-readable.
+
+1. Add a compiler-soundness rule-status dashboard over R-01..R-21:
+   `shape-preserved`, `eval-preserved`, `source-preserved`, `trusted`, or
+   `blocked`, with theorem names and source links for each status.
+2. Build source semantics for the provable subset as needed by rule discharge,
+   not as a speculative full-language semantics.
+3. Upgrade extraction-only rules to three-view preservation where practical:
+   source Core evaluation, extracted PExpr evaluation, and extraction theorem
+   agree.
+4. Prioritize the hard eval/source rules in dependency order: direct calls,
+   structs/fields, enums/match, arrays, casts, arraySet, flat bounded `while`,
+   and `while_step`.
+5. Prove selected proof-report facts agree with compiler state: `proved`,
+   `stale`, `blocked`, `missing`, `ineligible`, `trusted`.
+6. Prove or mechanically validate trust-gate correctness: body fingerprint
+   determinism, spec-drift completeness, proof attachment lookup, FnTable
+   completeness, eligibility classification.
+7. Record a machine-readable trusted computing base for proof/evidence claims:
+   Lean kernel, compiler modules, backend/toolchain, runtime/OS/hardware,
+   trusted/extern code.
+8. Prove selected checker/report agreement for authority and purity facts used
+   by proof eligibility, so a function cannot be called proof-eligible while
+   secretly requiring capabilities.
+9. Decide whether deeper source-semantics proofs require a normalized Core
+   layer. Add the layer only if the direct rule proofs show repeated semantic
+   duplication across at least two forcing examples.
+
+## Phase 9: Backend, Target, And Stdlib Contracts
+
+Goal: make backend/toolchain/stdlib assumptions explicit, and state exactly
+where source-level proof stops.
+
+Done when: SSA, target/toolchain, optimization, ABI/layout, stdlib evidence,
+and incremental build contracts are explicit enough for release evidence.
 
 1. Stabilize SSA as the only backend contract.
 2. Document target/toolchain model: triple, data layout, linker, runtime/startup,
@@ -400,14 +390,13 @@ incremental build contracts are explicit enough for release evidence.
 12. Keep QBE/WASM/second backend deferred until evidence attachment,
     optimization policy, and backend trust boundaries are trustworthy.
 
-## Phase 10: Release Product Bar
+## Phase 10: Public Release Bar
 
-Expected outcome: Concrete is understandable and usable by someone who did not
-build the compiler.
+Goal: make Concrete understandable and usable by someone who did not build the
+compiler.
 
-Phase closes when: a fresh user can install Concrete, run a proof-bearing
-example, inspect its audit bundle, and understand the claim matrix in under ten
-minutes.
+Done when: a fresh user can install Concrete, run a proof-bearing example,
+inspect its audit bundle, and understand the claim matrix in under ten minutes.
 
 1. Define first public release criteria: supported subset, required examples,
    required diagnostics, proof workflow, stdlib/project UX, evidence/policy/
@@ -433,13 +422,13 @@ minutes.
     install paths, supported/deferred channels.
 12. Ship the first narrow public release only after the above are green.
 
-## Phase 11: Packages And Ecosystem Evidence
+## Phase 11: Packages And Dependency Evidence
 
-Expected outcome: package users can inspect proof, trust, capability, and
-assumption facts before adopting a dependency.
+Goal: let package users inspect proof, trust, capability, and assumption facts
+before adopting a dependency.
 
-Phase closes when: packages have manifests, lockfiles, package-aware facts,
-trust policies, provenance, and registry protocol.
+Done when: packages have manifests, lockfiles, package-aware facts, trust
+policies, provenance, and registry protocol.
 
 1. Expand package artifacts only after reports, policies, assumptions,
    interface artifacts, and CI gates prove what packages must carry.
@@ -460,10 +449,10 @@ trust policies, provenance, and registry protocol.
 
 ## Phase 12: Editor And Human Tooling
 
-Expected outcome: evidence is visible where developers work.
+Goal: make evidence visible where developers work.
 
-Phase closes when: editor/LSP/tooling exposes the same facts as CI and command
-line reports without inventing a second truth source.
+Done when: editor/LSP/tooling exposes the same facts as CI and command-line
+reports without inventing a second truth source.
 
 1. Add artifact viewer integration for proof/evidence facts.
 2. Add compiler-as-service / LSP entrypoints after diagnostics and facts are
@@ -481,11 +470,11 @@ line reports without inventing a second truth source.
 
 ## Phase 13: Concurrency And Research-Gated Extensions
 
-Expected outcome: speculative ideas stay gated until Concrete's proof/evidence
-foundation can contain them honestly.
+Goal: keep speculative ideas gated until Concrete's proof/evidence foundation
+can contain them honestly.
 
-Phase closes when: each research idea is either pulled into an earlier phase by
-a forcing example, explicitly deferred, or rejected.
+Done when: each research idea is either pulled into an earlier phase by a
+forcing example, explicitly deferred, or rejected.
 
 1. Keep concurrency design-only until the v1 surface is frozen:
    capability lattice, scopes, spawn/join, linear handles, bounded channels,
