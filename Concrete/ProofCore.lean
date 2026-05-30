@@ -822,13 +822,13 @@ partial def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
 
     `k = none` means "no continuation, fail if control falls off."
     A function body extracts by calling this with `k = none`. -/
-partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
+partial def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExpr
   | [], k => k
   | [.return_ (some e) _], _ => cExprToPExprImpl e
   | [.expr e], _ => cExprToPExprImpl e
   | (.letDecl name _ _ val) :: rest, k => do
     let pv ← cExprToPExprImpl val
-    let pb ← cStmtsToPExprK rest k
+    let pb ← cStmtsToPExprKImpl rest k
     some (.letIn name pv pb)
   -- Array index assignment `arr[i] = v`.  Only supported when
   -- `arr` is a simple identifier — we model the mutation as a
@@ -839,7 +839,7 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
   | (.arrayIndexAssign (.ident name _) idx val) :: rest, k => do
     let pi ← cExprToPExprImpl idx
     let pv ← cExprToPExprImpl val
-    let pb ← cStmtsToPExprK rest k
+    let pb ← cStmtsToPExprKImpl rest k
     some (.letIn name (.arraySet (.var name) pi pv) pb)
   -- Bounded while loop with flat-assign body.  CStmt.while_
   -- carries `body` containing the source body with the for-loop
@@ -853,7 +853,7 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
   -- not "while loop").
   | (.while_ cond body _ _step) :: rest, k => do
     let pc ← cExprToPExprImpl cond
-    let pCont ← cStmtsToPExprK rest k
+    let pCont ← cStmtsToPExprKImpl rest k
     -- First try flat-assign extraction (every body stmt is a
     -- CStmt.assign); fall back to while_step when body has
     -- richer control flow (let, if-with-return, ...).
@@ -875,16 +875,16 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
   -- through, k is used.
   | [.ifElse cond thenBranch (some elseBranch)], k => do
     let pc ← cExprToPExprImpl cond
-    let pt ← cStmtsToPExprK thenBranch k
-    let pe ← cStmtsToPExprK elseBranch k
+    let pt ← cStmtsToPExprKImpl thenBranch k
+    let pe ← cStmtsToPExprKImpl elseBranch k
     some (.ifThenElse pc pt pe)
   -- If-else followed by more statements: both branches' fall-through
   -- continuation is `rest with the outer k`.
   | (.ifElse cond thenBranch (some elseBranch)) :: rest, k => do
     let pc ← cExprToPExprImpl cond
-    let pkRest ← cStmtsToPExprK rest k
-    let pt ← cStmtsToPExprK thenBranch (some pkRest)
-    let pe ← cStmtsToPExprK elseBranch (some pkRest)
+    let pkRest ← cStmtsToPExprKImpl rest k
+    let pt ← cStmtsToPExprKImpl thenBranch (some pkRest)
+    let pe ← cStmtsToPExprKImpl elseBranch (some pkRest)
     some (.ifThenElse pc pt pe)
   -- If-without-else (early-return shape): then-branch's
   -- continuation is `rest with k`; the implicit else is the same.
@@ -896,13 +896,13 @@ partial def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.
   -- continuation.
   | (.ifElse cond thenBranch none) :: rest, k => do
     let pc ← cExprToPExprImpl cond
-    let pkRest ← cStmtsToPExprK rest k
-    let pt ← cStmtsToPExprK thenBranch (some pkRest)
+    let pkRest ← cStmtsToPExprKImpl rest k
+    let pt ← cStmtsToPExprKImpl thenBranch (some pkRest)
     some (.ifThenElse pc pt pkRest)
   | _, _ => none
 
 partial def cStmtsToPExpr (stmts : List CStmt) : Option Proof.PExpr :=
-  cStmtsToPExprK stmts none
+  cStmtsToPExprKImpl stmts none
 
 /-- Collect names that are `assign`-ed (rebound) inside a CStmt list.
     Walks the body recursively, including inside `ifElse` branches.
@@ -992,6 +992,23 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
     let pr ← cExprToPExpr rhs
     some (.binOp pop pl pr)
   | e             => cExprToPExprImpl e
+
+/-- Non-partial wrapper for `cStmtsToPExprKImpl`.  Handles
+    `.letDecl :: rest` directly so Phase 12 R-06 (letIn
+    preservation) can discharge against the REAL extractor.
+    All other CStmt-list shapes delegate to the partial-def
+    implementation in the mutual block above.
+
+    Recursion is structural on `rest` (shorter than the
+    input list).  The val arm uses `cExprToPExpr` (the
+    expression wrapper) so the val side is also wrapper-
+    reducible when val itself is in the supported fragment. -/
+def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
+  | (.letDecl name _ _ val) :: rest, k => do
+    let pv ← cExprToPExpr val
+    let pb ← cStmtsToPExprK rest k
+    some (.letIn name pv pb)
+  | stmts, k => cStmtsToPExprKImpl stmts k
 
 -- Unsupported construct identification
 

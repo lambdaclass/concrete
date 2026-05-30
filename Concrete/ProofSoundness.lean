@@ -83,6 +83,22 @@ def evalSourceIdent (env : Env) : CExpr → Option PVal
   | .ident name _ => env name
   | _             => none
 
+/-- Source semantics for a letIn step.
+
+    Given the val evaluates to `vv`, evaluating
+    `letIn name val body` under env extends env with
+    `name ↦ vv` and evaluates body in the extended env.
+    Stated as a step function rather than a recursive
+    source-eval (same reason as `evalSourceBinOpStep`:
+    avoids re-creating partial-def opacity for
+    not-yet-discharged source constructs).
+
+    The "extend then eval body" view matches PExpr.eval's
+    letIn case exactly. -/
+def evalSourceLetStep (env : Env) (name : String) (vv : PVal)
+    (evalBody : Env → Option PVal) : Option PVal :=
+  evalBody (env.bind name vv)
+
 /-- Source semantics for a binary operation step.
 
     Given that the operands `lhs` and `rhs` evaluate (at the
@@ -279,6 +295,69 @@ theorem source_binop_step
     R-01 / R-03 at use sites — that's the point of the
     compositional pattern.  Phase 12 obligation R-04 is now
     fully discharged end-to-end. -/
+
+/-! ## R-06: `let_preservation` (compositional, three views)
+
+`letIn` extraction lives in `cStmtsToPExprK`, not
+`cExprToPExpr`.  Same wrapper-arm pattern as R-04 but
+applied to the CStmt-list extractor — the new
+`cStmtsToPExprK` wrapper handles `.letDecl :: rest`
+directly, recursing through itself for both `val` (via
+the expression wrapper) and `rest`.
+
+For `(.letDecl name _ ty val) :: rest`, given:
+  * `cExprToPExpr val = some pv`,
+  * `cStmtsToPExprK rest k = some pb`,
+the conclusion is
+  `cStmtsToPExprK ((.letDecl name _ ty val) :: rest) k
+    = some (.letIn name pv pb)`.
+
+Closed by `show`/`rw`/`rfl` over the two hypotheses. -/
+theorem let_preservation
+    (name : String) (isMut : Bool) (ty : Ty) (val : CExpr)
+    (rest : List CStmt) (k : Option PExpr)
+    (pv pb : PExpr)
+    (h_val  : cExprToPExpr val = some pv)
+    (h_rest : cStmtsToPExprK rest k = some pb) :
+    cStmtsToPExprK ((CStmt.letDecl name isMut ty val) :: rest) k
+      = some (.letIn name pv pb) := by
+  show (do
+    let pv' ← cExprToPExpr val
+    let pb' ← cStmtsToPExprK rest k
+    some (PExpr.letIn name pv' pb')) = some (.letIn name pv pb)
+  rw [h_val, h_rest]
+  rfl
+
+/-! ## R-06: eval-side compositional reduction
+
+Given `val` evaluates (PExpr-side) to `vv` and `body`
+evaluates under the extended env to `vb`, eval on
+`.letIn name val body` reduces to `vb`. -/
+theorem eval_let_reduces
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (name : String) (val body : PExpr) (vv vb : PVal)
+    (h_val  : eval fns env (fuel + 1) val = some vv)
+    (h_body : eval fns (env.bind name vv) fuel body = some vb) :
+    eval fns env (fuel + 1) (.letIn name val body) = some vb := by
+  simp [eval, h_val, h_body]
+
+/-! ## R-06: source-side compositional step
+
+`evalSourceLetStep env name vv evalBody` extends the env
+with `name ↦ vv` and evaluates body in the extended env.
+Trivially equals `evalBody (env.bind name vv)`. -/
+theorem source_let_step
+    (env : Env) (name : String) (vv : PVal)
+    (evalBody : Env → Option PVal) :
+    evalSourceLetStep env name vv evalBody
+      = evalBody (env.bind name vv) := rfl
+
+/-! `let_preservation` + `eval_let_reduces` + `source_let_step`
+    discharge R-06 across all three views: extraction
+    antecedent, eval reduction, source step.  Operand facts
+    (val extraction + val eval; rest extraction; body eval
+    under extended env) come from the rules below R-06 at
+    use sites. -/
 
 /-! ## Sanity checks (inline regression theorems)
 

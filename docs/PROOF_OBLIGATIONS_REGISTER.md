@@ -43,7 +43,7 @@ informally below the table but not yet a Lean theorem name.
 | R-03 | `var n` | identifier reference | parse_validate | `var_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness`; wrapper arm landed same day |
 | R-04 | `binOp pop pl pr` (all widths) | `a + b`, `a - b`, `a * b`, etc. | parse_validate | `binop_preservation` + `eval_binop_reduces` + `source_binop_step` — **fully discharged across all three views 2026-05-30** in `Concrete.ProofSoundness` (compositional template) |
 | R-05 | `binOp .eq/.ne/.lt/.le/.gt/.ge` | `a == b`, `a < b`, etc. | parse_validate | `binop_cmp_preservation` — subsumed by R-04 (comparisons go through the same wrapper arm) |
-| R-06 | `letIn name v body` | `let x = v; ...` | parse_validate | `let_preservation` |
+| R-06 | `letIn name v body` | `let x = v; ...` | parse_validate | `let_preservation` + `eval_let_reduces` + `source_let_step` — **fully discharged across all three views 2026-05-30** in `Concrete.ProofSoundness`; first rule using the `cStmtsToPExprK` wrapper |
 | R-07 | `ifThenElse c t e` | `if c { t } else { e }` and `if c { return X; } else-fallthrough` | parse_validate | `if_preservation` + `if_no_else_as_fallthrough` |
 | R-08 | `call fn args` | function call (FnTable lookup) | parse_validate | `call_preservation` |
 | R-09 | `structLit name fields` | `Point { x: 1, y: 2 }` | parse_validate (parse_header Ok) | `struct_lit_preservation` |
@@ -123,6 +123,39 @@ mutual block (binops with sub-expressions, structLit
 with mapM over fields, etc.) still need the harder
 mapM-to-structural-recursion lift — that's the next
 Phase 12 architectural piece.
+
+### R-06 (let preservation — first rule via `cStmtsToPExprK` wrapper)
+
+R-06's extraction lives in `cStmtsToPExprK` (the CStmt-list
+extractor), not `cExprToPExpr` — `let x = v;` is a statement,
+not an expression.  Same wrapper-extension pattern as R-04
+but applied to a different mutual-block function.
+
+`cStmtsToPExprK` was renamed to `cStmtsToPExprKImpl` (in the
+mutual block, 12 internal call sites updated) and a new
+non-partial `cStmtsToPExprK` wrapper sits OUTSIDE the
+block, handling `.letDecl :: rest` directly:
+
+    def cStmtsToPExprK : List CStmt → Option PExpr → Option PExpr
+      | (.letDecl name _ _ val) :: rest, k => do
+          let pv ← cExprToPExpr val      -- expression wrapper
+          let pb ← cStmtsToPExprK rest k -- recurse through wrapper
+          some (.letIn name pv pb)
+      | stmts, k => cStmtsToPExprKImpl stmts k
+
+Recursion is structural on `rest` (shorter list).  Lean
+accepts.
+
+Three theorems discharge R-06 across all views, mirroring
+R-04's template: `let_preservation` (extraction antecedent
+with val + rest hypotheses), `eval_let_reduces` (eval-side
+compositional reduction), `source_let_step` (source-side
+step lookup via `evalSourceLetStep`).  Each takes
+operand-level hypotheses from the rules below.
+
+This is the second pattern-instance after R-04 — the
+compositional template generalizes from `cExprToPExpr`
+wrapper rules to `cStmtsToPExprK` wrapper rules.
 
 ### R-04 (binop preservation — first compositional rule, all three views)
 
