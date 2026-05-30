@@ -36,7 +36,7 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 # Parse the manifest's [[flagship]] entries. Yields example name +
-# path on each line.
+# path + claimed provable_v1_conformance on each line.
 python3 - "$MANIFEST" > "$TMP/entries.tsv" <<'PYEOF'
 import re, sys
 src = open(sys.argv[1]).read()
@@ -47,11 +47,12 @@ for c in chunks:
         fields[m.group(1)] = m.group(2)
     name = fields.get('example', '')
     path = fields.get('path', '')
+    conf = fields.get('provable_v1_conformance', '')
     if name and path:
-        print(f"{name}\t{path}")
+        print(f"{name}\t{path}\t{conf}")
 PYEOF
 
-while IFS=$'\t' read -r name path; do
+while IFS=$'\t' read -r name path claimed_conf; do
   [ -z "$name" ] && continue
   echo "=== flagship: $name ==="
 
@@ -92,8 +93,24 @@ while IFS=$'\t' read -r name path; do
     errs=$((errs + 1))
   fi
 
+  # 5. ProvableV1 conformance — the manifest's claimed
+  #    provable_v1_conformance must match the runtime audit's Status line.
+  #    Closes the doc → manifest → runtime loop; a future change that
+  #    breaks ProvableV1 conformance surfaces here.
+  if [ -n "$claimed_conf" ] && [ -f "$path/src/main.con" ]; then
+    audit_out=$("$COMPILER" "$path/src/main.con" --report audit 2>/dev/null || true)
+    runtime_conf=$(echo "$audit_out" | grep -m1 "^Status: " | awk '{print $2}')
+    if [ -z "$runtime_conf" ]; then
+      echo "  FAIL ProvableV1 conformance: runtime audit produced no Status line"
+      errs=$((errs + 1))
+    elif [ "$runtime_conf" != "$claimed_conf" ]; then
+      echo "  FAIL ProvableV1 conformance drift: manifest claims '$claimed_conf', runtime says '$runtime_conf'"
+      errs=$((errs + 1))
+    fi
+  fi
+
   if [ "$errs" -eq 0 ]; then
-    echo "  ok   $name — all artifacts present, release bundle captures cleanly"
+    echo "  ok   $name — all artifacts present, release bundle captures cleanly, ProvableV1 conformance matches manifest"
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))
