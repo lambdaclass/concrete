@@ -261,18 +261,22 @@ with `decide`-closed `example` assertions per (spec,
 FnTable) pair in `Concrete.ProofSoundness`.  A missing
 entry surfaces as a Lean compile error at `make build`.
 
-**Known gap surfaced by the first run.**  The
-parse_validate's `parseHeaderExpr` calls `compute_checksum`
-but `parseValidateFns` has no entry for it — there is
-currently no `computeChecksumExpr` / `computeChecksumFn`
-spec written for parse_validate's while-loop XOR-fold
-function.  The shipped parse_header failure-direction
-theorems work because eval bails before the call site;
-a future parse_header_success theorem walking the full
-path would silently break.  The check assertion for
-`parseHeaderExpr` is intentionally REMOVED (not patched)
-so the gap stays visible.  Follow-up: write the spec and
-extend the table.
+**Gap surfaced on first run, CLOSED same day.**  The
+check's initial run reported that `parseHeaderExpr` calls
+`compute_checksum` but `parseValidateFns` had no entry —
+no `computeChecksumExpr`/`Fn` existed for parse_validate's
+while-loop XOR-fold function.  The shipped failure-
+direction parse_header theorems were safe (early-return
+bails before the call site) but precarious: a future
+parse_header_success theorem would have silently broken.
+
+`computeChecksumExpr` + `computeChecksumFn` landed
+2026-05-30 with the spec mirroring the extracted
+fingerprint; `parseValidateFns` extended; the
+`parseHeaderExpr` assertion re-enabled and now closes by
+`decide`.  Production proof-status totals unchanged
+(3 proved, 0 stale).  All 12 production specs are now
+FnTable-complete by build-time check.
 
 **One-level today; transitive follow-up.**  Today's
 check is one-level (direct call sites in the spec).  It

@@ -231,22 +231,13 @@ One `example` per (spec, FnTable) pair.  Closed by
 -- parse_validate (uses parseValidateFns)
 example : fnTableComplete parseValidateFns validateVersionExpr := by decide
 example : fnTableComplete parseValidateFns validateHeaderFieldsExpr := by decide
--- KNOWN GAP, FOUND BY THIS CHECK 2026-05-30:
---   parseHeaderExpr calls "compute_checksum" but parseValidateFns
---   has no entry for it (no `computeChecksumExpr` / `Fn`
---   currently exists in Concrete.Proof for parse_validate's
---   while-loop XOR-fold function).  The shipping
---   parse_header_too_short / _bad_version / etc. theorems work
---   only because eval bails before reaching the call site
---   (early-return on validator failures).  A future
---   parse_header_success theorem that walks the full path
---   would silently fail without this entry.
---   Follow-up: write Concrete.Proof.computeChecksumExpr +
---   computeChecksumFn and extend parseValidateFns.  This is
---   exactly the kind of issue the check is supposed to surface
---   — the assertion is intentionally REMOVED here, not patched,
---   so the gap stays visible until the spec lands.
--- example : fnTableComplete parseValidateFns parseHeaderExpr := by decide
+-- compute_checksum spec landed 2026-05-30, closing the gap
+-- the G-05 check surfaced on its first run.  The parse_header
+-- theorems that bail before the call site (too_short,
+-- bad_version, bad_type, payload_too_big, truncated) are
+-- unaffected; a future parse_header_success theorem now has
+-- the FnTable entry it needs.
+example : fnTableComplete parseValidateFns parseHeaderExpr := by decide
 
 -- crypto_verify (uses cryptoFns)
 example : fnTableComplete cryptoFns computeTagExpr := by decide

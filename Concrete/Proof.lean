@@ -1391,6 +1391,42 @@ def validateChecksumExpr : PExpr :=
 def validateChecksumFn : PFnDef :=
   { name := "validate_checksum", params := ["expected", "computed"], body := validateChecksumExpr }
 
+/-- `fn compute_checksum(data: [i32; 8], count: i32) -> i32` —
+    XOR fold of `data[0..count)` at i32 width.  Source:
+
+      let mut acc: i32 = 0
+      for (let mut i: i32 = 0; i < count; i = i + 1) {
+          acc = acc ^ data[i]
+      }
+      return acc
+
+    Spec mirrors the extracted fingerprint exactly so the
+    spec-drift gate stays clean.  Added 2026-05-30 to close
+    the G-05 (FnTable completeness) gap: parseHeaderExpr
+    calls `compute_checksum`, but until this commit there
+    was no spec for it in `Concrete.Proof`, so
+    `parseValidateFns` could not list it.  The existing
+    failure-direction parse_header theorems
+    (parse_header_too_short, _bad_version, _bad_type,
+    _payload_too_big, _truncated) all bail before the call
+    site via early-return; they remain unchanged.  A future
+    `parse_header_success` theorem walking the full path
+    now has the FnTable entry it needs. -/
+def computeChecksumExpr : PExpr :=
+  .letIn "acc" (.lit (.int 0))
+    (.letIn "i" (.lit (.int 0))
+      (.while_
+        (.binOp .lt (.var "i") (.var "count"))
+        [ ("acc",
+           .binOp (.bitxor 32 true) (.var "acc")
+             (.arrayIndex (.var "data") (.var "i")))
+        , ("i", .binOp .add (.var "i") (.lit (.int 1)))
+        ]
+        (.var "acc")))
+
+def computeChecksumFn : PFnDef :=
+  { name := "compute_checksum", params := ["data", "count"], body := computeChecksumExpr }
+
 /-- `fn validate_header_fields(v, t, plen, total_len, cs_expected, cs_computed) -> i32`
     — composes the five validators. Returns 0 on success or the
     1..6 index of the first failing check. -/
@@ -1486,6 +1522,7 @@ def parseValidateFns : FnTable
   | "validate_payload_len" => some validatePayloadLenFn
   | "validate_total_len" => some validateTotalLenFn
   | "validate_checksum" => some validateChecksumFn
+  | "compute_checksum" => some computeChecksumFn
   | "validate_header_fields" => some validateHeaderFieldsFn
   | "parse_header" => some parseHeaderFn
   | _ => none
