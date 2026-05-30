@@ -3,7 +3,7 @@ import Concrete
 open Concrete
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -1441,6 +1441,13 @@ def main (args : List String) : IO UInt32 := do
           let redLines := (result.splitOn "\n").length
           IO.println s!"Reduced: {origLines} → {redLines} lines — {outputPath}"
           return 0
+  -- concrete audit <file.con> — alias for `concrete <file> --report audit`
+  if args.head? == some "audit" then
+    match args.drop 1 with
+    | [inputPath] => return (← compileAndReport inputPath "audit")
+    | _ =>
+      IO.eprintln "Usage: concrete audit <file.con>"
+      return 1
   -- concrete --version
   if args == ["--version"] then
     let id ← compilerIdentity

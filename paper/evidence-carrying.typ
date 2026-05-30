@@ -47,7 +47,7 @@
     #pad(x: 1.2em)[
       #text(size: 8.5pt)[
         #text(weight: "bold")[Abstract — ]
-        Systems code is checked by tests, sanitizers, and analyzers; proof assistants offer rigor but live in a different world. The bridge between them is brittle: a theorem about a function is rarely tied to the exact source the compiler built, and it drifts silently when the body changes. This paper describes #emph[evidence-carrying source code]: source, compiler facts, proof registry entries, assumptions, and drift gates kept together by the compiler. Concrete is a small no-GC systems language with linear ownership and capability-visible effects whose compiler is written in Lean 4. The language is usable on its own — interpreters, parsers, a key-value store, and an HTTP server compile to C- and Python-competitive performance under `-O2` — and the same compiler that builds them can check theorems about them. The compiler extracts an eligible pure fragment of its validated intermediate representation into Lean objects, lets a developer attach kernel-checked theorems to individual functions through a registry keyed by a body fingerprint, and automatically revokes a #raw("proved") claim when the source drifts. The contribution is the #emph[workflow], not a verified compiler: authority, effects, proof-eligibility, trust boundaries, and stale-proof detection become ordinary compiler outputs over one semantic anchor. We give a formal account of the eligibility and drift predicates and report three non-toy graduated case studies — a bounded header validator (3 of 10 functions proved), a no-allocation bounded-state validator (4 of 20), and a constant-time tag comparison (1 of 2) — each stating precisely what is proved, enforced, reported, and assumed. We state the trusted computing base explicitly, and report an early compiler-side soundness result: extraction is proved meaning-preserving for the integer-literal, boolean-literal, variable, and binary-operator fragment against the real extractor, with the residual obstacle (a #raw("partial def") opacity barrier on list-shaped constructs) named precisely. We do not claim a verified backend, full constant-time guarantees, complete language semantics, or SPARK-level proof-obligation generation.
+        Systems code is checked by tests, sanitizers, and analyzers; proof assistants offer rigor but live in a different world. The bridge between them is brittle: a theorem about a function is rarely tied to the exact source the compiler built, and it drifts silently when the body changes. This paper describes #emph[evidence-carrying source code]: source, compiler facts, proof registry entries, assumptions, and drift gates kept together by the compiler. Concrete is a small no-GC systems language with linear ownership and capability-visible effects whose compiler is written in Lean 4. The compiler extracts an eligible fragment of validated Core into Lean objects, lets a developer attach kernel-checked theorems to individual functions through a registry keyed by a body fingerprint, and automatically revokes a #raw("proved") claim when the source drifts. The contribution is the #emph[workflow], not a verified compiler: authority, effects, proof-eligibility, trust boundaries, stale-proof detection, and claim classification become ordinary compiler outputs over one semantic anchor. We report three non-toy graduated case studies — a bounded header validator (3 of 10 functions proved), a no-allocation bounded-state validator (4 of 20), and a constant-time tag comparison (1 of 2) — each stating precisely what is proved, enforced, reported, assumed, and trusted. We also report the current compiler-side soundness frontier: the #raw("partial def") opacity barrier has been removed for the flagship-used extractor surface, many extraction/evaluator rules now have checked preservation facts, and the remaining gap is deeper source-semantics agreement plus backend/toolchain trust. We do not claim a verified backend, full constant-time guarantees, complete language semantics, or SPARK-level proof-obligation generation.
       ]
     ]
     #v(0.35em)
@@ -83,7 +83,7 @@ The negative space is equally important. Concrete does not yet generate SPARK-st
     [Authority tracking], [Enforced], [Capability checker and authority report],
     [Proof drift detection], [Enforced], [Body fingerprints and stale-proof gate],
     [Theorem correctness], [Proved], [Lean kernel checks theorem over extracted `PExpr`],
-    [Source→ProofCore extraction], [Partially proved], [R-01..R-04 discharged; later rules trusted],
+    [Source→ProofCore extraction], [Proved + trusted], [R-01..R-15, R-18, R-19 extraction/eval coverage; R-20 extraction-only; backend equivalence still trusted],
     [Backend correctness], [Trusted], [Core→SSA→LLVM→binary not verified],
     [Machine constant-time], [Assumed], [`assumptions.toml`; source shape only],
   ),
@@ -103,7 +103,7 @@ The negative space is equally important. Concrete does not yet generate SPARK-st
     [Oracle coverage], [200 randomized cases/seed; `parse_validate` cross-checked across 600 (seeds 0/42/999)],
     [Wrong-code corpus], [22 registered cases retained as regressions],
     [Spec-drift regression], [Checked-in adversarial fixture downgrades proof status],
-    [Extraction rules discharged], [R-01..R-04: literals, identifiers, binops],
+    [Extraction rules discharged], [R-01..R-15, R-18, R-19 have extraction/eval coverage; R-20 extraction coverage],
   ),
   caption: [Evaluation summary. The counts are small; the point is that each one is tied to a compiler artifact or a checked regression.],
 )
@@ -113,6 +113,8 @@ The negative space is equally important. Concrete does not yet generate SPARK-st
 The central claim is that low-level software becomes easier to trust when four kinds of information are #emph[compiler artifacts] rather than reconstructed by hand: #emph[authority] (which external effects a function may use), #emph[trust boundaries] (where pointer-level techniques and foreign calls are concentrated), #emph[proof-eligibility] (whether a function lies in the fragment the compiler can extract for proof at all), and #emph[proof currency] (whether an attached theorem still applies to the function's current body).
 
 Let $f$ be a function. The design objective is that the capability set $A(f)$, the trusted/foreign boundary set $T(f)$, and the eligibility/currency pair $(E(f), P(f))$ are all derivable from the ordinary compilation pipeline and re-checked on every build. The novelty is not any one of these in isolation; it is that they share a single validated semantic anchor and that $P(f)$ is #emph[automatically revoked] when $f$'s body fingerprint changes.
+
+The larger design rule is #emph[no semantically dark constructs]. "Provable language" does not mean every construct is forced into the current pure `ProvableV1` subset. It means every construct has an explicit proof story: it is proved, enforced, reported, assumed, trusted, or explicitly open with a named gap. Pure value code may be proved through `ProvableV1`; capability calls may be enforced by authority typing; allocation may be reported or policy-gated; FFI bodies and backend behavior may remain trusted but named. The future `concrete audit` command is therefore not just a summary report — it is the program-specific rendering of this proof-story matrix.
 
 = Evidence-Carrying Source Code
 
@@ -308,9 +310,10 @@ The pipeline emits machine-readable evidence: `--report proof-status`, a JSON `p
 #figure(
   block(inset: 6pt, stroke: 0.4pt + luma(180), width: 100%)[
 ```
--- proved ------ constant_time_tag/src/main.con:33
+-- proved [one_direction] -- constant_time_tag/src/main.con:33
   ✓ `constant_time_tag.ct_compare` — proof matches
     current body.
+  coverage: one_direction
 -- not eligible  constant_time_tag/src/main.con:50
   `…main` cannot be proved: has capabilities: Console,
    is entry point (main).
@@ -501,12 +504,12 @@ This sequencing is deliberate. If source contracts arrived before drift detectio
 
 The claim classes above list #emph[extraction] as trusted: nothing stated so far proves that $cal(E): "Core" -> "ProofCore"$ preserves meaning. We report a first compiler-side result and, as importantly, the precise obstacle that bounds it.
 
-The discharged fragment is $cal(C)_0 = {"intLit", "boolLit", "ident", "binOp"}$. For each, extraction agrees with both the extracted-`PExpr` evaluator and a small source-side semantics. The integer-literal instance, proved #emph[against the real extractor], is:
+The earliest discharged fragment was $cal(C)_0 = {"intLit", "boolLit", "ident", "binOp"}$. For each, extraction agrees with both the extracted-`PExpr` evaluator and a small source-side semantics. The integer-literal instance, proved #emph[against the real extractor], is:
 
 $ cal(E)(#raw(".intLit n")) = #raw(".lit(.int n)") $
 $ "eval"_P (#raw(".lit(.int n)")) = "some"(#raw(".int n")) = "eval"_S (#raw(".intLit n")) $
 
-and the binary-operator rule is #emph[compositional] — given the operands' extraction/eval/source facts, the composite reduces to the same `evalBinOp` value across all three views, establishing the pattern later rules (`let`, `if`, `call`) reuse:
+and the binary-operator rule is #emph[compositional] — given the operands' extraction/eval/source facts, the composite reduces to the same `evalBinOp` value across all three views, establishing the pattern later rules reuse:
 
 #figure(
   block(inset: 6pt, stroke: 0.4pt + luma(180), width: 100%)[
@@ -523,7 +526,9 @@ theorem binop_preservation
   caption: [The compositional extraction-preservation rule (R-04), proved against the real public extractor.],
 )
 
-#emph[The obstacle, named.] The full extractor `cExprToPExprImpl` is a `partial def` because its mutual block calls `mapM` over field, element, and arm lists; Lean's kernel treats `partial def` as #emph[opaque] — no equation lemmas, `rfl` cannot reduce it. The lift that made $cal(C)_0$ provable is a non-partial #emph[wrapper] `cExprToPExpr` sitting outside the mutual block: it handles literals, identifiers, and binops definitionally (so `rfl` reduces them) and delegates every list-shaped case to the partial implementation. Consequently struct, enum, array, match, and multi-argument-call extraction remain inside the trusted boundary until the `mapM`s are replaced by paired structural recursion. We present this as a result of independent interest: it locates exactly where the proved/trusted line falls, and shows the obstacle is a recursion-checker limitation, not a missing theorem.
+#emph[The obstacle moved.] The first attempt stopped at a `partial def` opacity barrier: the extractor's mutual block called `mapM` over field, element, and arm lists, and Lean's kernel would not reduce it. That obstacle is now removed for the flagship-used surface: the list traversals were lifted into paired structural recursion, so the public extractor is non-partial over the relevant rules. The current register records extraction/evaluator coverage for literals, variables, binops, let, if, calls, structs, enums, match, casts, arrays, array updates, and flat bounded loops; `while_step` has extraction coverage and a proof-facing evaluator surface, but its full early-break/source-semantics story is still open.
+
+This is still not a verified compiler. Several obligations remain below the line: BitVec operations such as `mod`, `bitxor`, and `bitor` are modeled in Lean, but their LLVM/backend equivalence is still trusted; source-semantics preservation is complete for only the smaller fragments; and the trust gates themselves (fingerprint determinism, spec-drift completeness, coverage classification) still need proof or independent validation. The result we claim is narrower but current: the proved/trusted boundary is now a per-rule matrix, not a single opaque extractor.
 
 = Related Work
 
@@ -562,7 +567,7 @@ Two verified-systems landmarks mark the far end of the spectrum. Cogent @oconnor
 
 = What Failed, and What It Taught Us
 
-Four things shaped the design, and three of them generalize past Concrete. The `partial def` opacity barrier blocked the first extraction-soundness attempt — Lean would not unfold the mutually recursive extractor — and forced the non-partial wrapper; the lasting lesson is that #emph[proof ergonomics, not logical expressiveness, is the bottleneck], since the binding limits throughout were a heartbeat budget on a 256-branch split and recursion-checker frictions, not missing power. Drift gates caught real attachment bugs early — a missing proof-table callee, hand-written spec mismatches — which is why we treat #emph[automatic revocation as the load-bearing feature]: without it, an attached proof is a comment that ages silently. And the toy `crypto_verify` was too weak to carry a crypto-adjacent story, which forced `constant_time_tag`; more generally, #emph[examples force the proof surface, not the reverse] — `fixed_capacity` forced functional array update and the bounded `while_step`, `constant_time_tag` forced `u8` bitwise reasoning. We grew the provable fragment from forcing examples rather than speculatively.
+Four things shaped the design, and three of them generalize past Concrete. The `partial def` opacity barrier blocked the first extraction-soundness attempt — Lean would not unfold the mutually recursive extractor — and forced a structural-recursion lift; the lasting lesson is that #emph[proof ergonomics, not logical expressiveness, is the bottleneck], since the binding limits throughout were a heartbeat budget on a 256-branch split and recursion-checker frictions, not missing power. Drift gates caught real attachment bugs early — a missing proof-table callee, hand-written spec mismatches — which is why we treat #emph[automatic revocation as the load-bearing feature]: without it, an attached proof is a comment that ages silently. And the toy `crypto_verify` was too weak to carry a crypto-adjacent story, which forced `constant_time_tag`; more generally, #emph[examples force the proof surface, not the reverse] — `fixed_capacity` forced functional array update and the bounded `while_step`, `constant_time_tag` forced `u8` bitwise reasoning. We grew the provable fragment from forcing examples rather than speculatively.
 
 = Cost of the Discipline
 
@@ -572,11 +577,11 @@ The #emph[human] cost is the real variable, and it splits in two. Writing a proo
 
 = Limitations and Threats to Validity
 
-The evidence is real but bounded. The proved fragment is small (pure, loop-free or bounded-state, integer/bytewise) and per-function; many modules prove a minority of their functions (3/10, 4/20, 1/2). Some theorems prove one direction or fixed cases rather than full contracts. The `parse_validate` oracle is a second implementation, not a Lean equivalence. The "easier to audit" claim is supported by signatures and report outputs but is #emph[not] backed by a controlled user study, and remains the least-defended part of the thesis. The empirical corpus, while non-trivial for an early language, is small relative to a mature ecosystem. Finally, every "proved" claim is contingent on the trusted computing base set out above — most consequentially an unproved backend and an extraction soundness result that currently covers only the $cal(C)_0$ fragment.
+The evidence is real but bounded. The proved fragment is small (pure, loop-free or bounded-state, integer/bytewise) and per-function; many modules prove a minority of their functions (3/10, 4/20, 1/2). Some theorems prove one direction or fixed cases rather than full contracts; this is now surfaced by proof-coverage classes (`point`, `one_direction`, `iff`, etc.), not hidden behind a single green check. The `parse_validate` oracle is a second implementation, not a Lean equivalence. The "easier to audit" claim is supported by signatures and report outputs but is #emph[not] backed by a controlled user study, and remains the least-defended part of the thesis. The empirical corpus, while non-trivial for an early language, is small relative to a mature ecosystem. Finally, every "proved" claim is contingent on the trusted computing base set out above — most consequentially an unproved backend and a compiler-soundness bridge whose extraction/eval coverage is broader than before but whose source-semantics and trust-gate correctness remain incomplete.
 
 = Future Work
 
-Following the forcing-example discipline: extend extraction-preservation past $cal(C)_0$ (`let`, `if`, `call`, then bounded loops), which first requires replacing the `mapM`s with paired structural recursion to lift the `partial def` barrier for list-shaped constructs; add SPARK-like runtime obligations for bounds, division, overflow, casts, and loop variants; introduce source-level contracts only when they can generate obligations with statuses rather than decorative prose; close the success-path and combined-`iff` gaps on `parse_header`; pursue a real-crypto candidate (an HMAC-SHA256 or Ed25519-verify subset) to force shifts, `bitand`, and multi-iteration inductive invariants; and mature packages and the backend contract. Compiler-correctness proofs remain explicitly downstream of a stable extraction surface, not a precondition for the workflow.
+Following the forcing-example discipline: turn the proof-story matrix into a per-program `concrete audit` view; strengthen the compiler-soundness bridge from extraction/evaluator facts toward source-semantics agreement and trust-gate correctness; add SPARK-like runtime obligations for bounds, division, overflow, casts, and loop variants; introduce source-level contracts only when they can generate obligations with statuses rather than decorative prose; close the success-path and combined-`iff` gaps on `parse_header`; pursue a real-crypto candidate (an HMAC-SHA256 or Ed25519-verify subset) to force u32 wrapping add, shifts, rotations, `bitand`, and multi-iteration inductive invariants; and mature packages and the backend contract. Compiler-correctness proofs remain explicitly downstream of a stable extraction surface, not a precondition for the workflow.
 
 = Artifact and Reproducibility
 
