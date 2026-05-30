@@ -1487,6 +1487,53 @@ def proofStatusReport (modules : List CModule) (locMap : FnLocMap := [])
   let summary := s!"Totals: {entries.length} functions — {proved} proved, {stale} stale, {notProved} unproved, {blockedCnt} blocked, {notEligible} ineligible, {trusted} trusted"
   s!"{header}\n\n{"\n\n".intercalate body}\n\n{summary}\n"
 
+/-- Program-level conformance check against `docs/PROVABLE_V1.md`.
+    Classifies each function as:
+    - in:        proof-eligible AND extraction succeeds (fits ProvableV1)
+    - blocked:   proof-eligible BUT extraction failed on unsupported constructs
+                 (the only case that counts against conformance)
+    - excluded:  ineligible or trusted — outside ProvableV1 by profile design,
+                 not counted against conformance
+    Status is `full` iff there are no blocked functions. -/
+def provableV1ConformanceReport (modules : List CModule) (locMap : FnLocMap := [])
+    (registry : ProofRegistry := []) (pc : Concrete.ProofCore) : String :=
+  let header := "=== ProvableV1 Conformance ==="
+  let entries := modules.foldl (fun acc m =>
+    acc ++ collectProofStatus pc locMap m "" registry) []
+  let inEntries := entries.filter fun e =>
+    e.state matches .proved || e.state matches .stale ||
+    e.state matches .notProved
+  let blockedEntries := entries.filter fun e => e.state matches .blocked
+  let excludedEntries := entries.filter fun e =>
+    e.state matches .notEligible || e.state matches .trusted
+  let conformance := if blockedEntries.isEmpty then "full" else "partial"
+  let inLines := inEntries.map fun e => s!"  in        `{e.qualName}`"
+  let blockedLines := blockedEntries.map fun e =>
+    let reason := if e.unsupported.isEmpty then "blocked"
+                  else ", ".intercalate e.unsupported
+    s!"  blocked   `{e.qualName}` — {reason}"
+  let excludedLines := excludedEntries.map fun e =>
+    let reason :=
+      if e.state matches .trusted then "trusted"
+      else if e.profileGates.isEmpty then "by profile"
+      else ", ".intercalate e.profileGates
+    s!"  excluded  `{e.qualName}` — by design ({reason})"
+  let chunks :=
+    (if inLines.isEmpty then []
+     else [s!"Inside ProvableV1 ({inEntries.length}):"] ++ inLines) ++
+    (if blockedLines.isEmpty then []
+     else [""] ++ [s!"Outside ProvableV1 — construct violations ({blockedEntries.length}):"]
+            ++ blockedLines) ++
+    (if excludedLines.isEmpty then []
+     else [""] ++ [s!"Outside ProvableV1 — by profile design ({excludedEntries.length}):"]
+            ++ excludedLines)
+  let footer :=
+    if blockedEntries.isEmpty then
+      "Every proof-eligible function fits the ProvableV1 supported surface.\nExcluded functions are excluded by the profile itself (entry points,\ntrusted impls, capability use), not counted against conformance."
+    else
+      s!"{blockedEntries.length} function(s) are proof-eligible but use constructs\noutside the current ProvableV1 supported surface (see docs/PROVABLE_V1.md)."
+  s!"{header}\n\n{"\n".intercalate chunks}\n\nStatus: {conformance}\n{footer}\n"
+
 /-- Compact one-line proof summary suitable for build output. -/
 def proofSummaryLine (pc : Concrete.ProofCore) : String :=
   let obls := pc.obligations
@@ -3595,6 +3642,8 @@ def auditReport (modules : List CModule) (locMap : FnLocMap := [])
     eligibilityReport pc,
     sectionHeader "Proof Status",
     proofStatusReport modules locMap sourceMap (registry := registry) (pc := pc),
+    sectionHeader "ProvableV1 Conformance",
+    provableV1ConformanceReport modules locMap (registry := registry) (pc := pc),
     sectionHeader "Obligations",
     obligationsReport modules locMap registry pc
   ]
