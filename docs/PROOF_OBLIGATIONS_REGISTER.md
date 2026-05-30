@@ -258,6 +258,40 @@ extractor preserves.  Phase 12 obligation
 `cast_identity_preservation` will state this restriction
 explicitly.
 
+### R-24, R-25 (shl, u32 bitor — typed BitVec round-trip)
+
+The last two ops HMAC-SHA256's `rotr` needs.  `rotr(x, n)` is
+`(x >> n) | (x << (32 - n))`, so unblocking it requires u32
+`shl` AND u32 `bitor` together (u32 `shr` landed in R-23).
+
+R-24 introduces `PBinOp.shl (width signed)`:
+
+    evalBinOp (.shl 32 false) (.int a) (.int b) =
+      some (.int (Int.ofNat ((BitVec.ofInt 32 a) <<< b.toNat).toNat))
+
+`BitVec.shiftLeft` TRUNCATES to width, so `0xFFFFFFFF << 4 =
+0xFFFFFFF0` (top bits discarded) — the wrapping the interpreter's
+unmasked `a * 2^n` does not model.  Backend match: source `<<`
+lowers to LLVM `shl` (`EmitSSA.lean`).
+
+R-25 extends the existing `bitor` constructor to u32:
+
+    evalBinOp (.bitor 32 false) (.int a) (.int b) =
+      some (.int (Int.ofNat ((BitVec.ofInt 32 a) ||| (BitVec.ofInt 32 b)).toNat))
+
+Inline regression theorems in `Concrete/Proof.lean`:
+- `0xFFFFFFFF << 4 = 0xFFFFFFF0`  (truncation at width)
+- `1 << 31 = 0x80000000`  (high bit, still positive unsigned)
+- `0x0F0F0F0F | 0xF0F0F0F0 = 0xFFFFFFFF`  (u32 or)
+- `(1 >> 1) | (1 << 31) = 0x80000000`  (the composed rotr idiom)
+
+Together these discharge the remaining AUDIT.md § 5 bitwise
+forcing-surface items and move `rotr` from `blocked` to `in`.
+hmac_sha256 now reports `Status: full` — every proof-eligible
+function fits ProvableV1.  (Conformance `full` ≠ proved: proofs
+are still `missing`, and the interpreter's u32 masking + the
+u32-wrapping-`add` row remain before RFC vectors can run.)
+
 ### R-23 (shr — logical right shift, typed BitVec round-trip)
 
 New constructor introduced by HMAC-SHA256's `sigma` functions

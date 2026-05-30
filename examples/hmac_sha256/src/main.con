@@ -4,47 +4,43 @@
 // See AUDIT.md for the full contract and the four-layer threat model.
 //
 // ============================================================
-// PILOT BATCH — scaffold, NOT yet a working primitive.
+// SCAFFOLD — forcing surface landed, conformance now `full`.
 // ============================================================
-// This file is the first pilot batch described in AUDIT.md § 9.
-// It deliberately lands BEFORE the ProvableV1 forcing surface
-// (AUDIT.md § 5) is implemented.  Today, by design:
+// This started as the pilot batch of AUDIT.md § 9, landing at
+// `Status: partial`.  The per-construct forcing-surface commits
+// (AUDIT.md § 5; register R-22/R-23/R-24/R-25) have since added
+// u32 `bitand`, `shr`, `shl`, and `bitor` to ProvableV1.  Every
+// proof-eligible function now sits `in`:
 //
-//   * The constant tables (`sha256_init`, `sha256_k`) are pure
-//     data — proof-eligible AND extractable; they sit `in`
-//     ProvableV1.
-//   * Five bitwise helpers — `ch`, `maj`, `rotr`,
-//     `small_sigma0`, `small_sigma1` — are proof-eligible but
-//     EXTRACTION-BLOCKED on the u32 ops they use DIRECTLY:
-//     `bitand` (ch, maj), and `shl`/`shr`/`bitor` (rotr), and
-//     `shr` (the small sigmas).  These are exactly the
-//     constructs § 5 forces into ProvableV1, one commit at a
-//     time.  They are why `concrete audit` reports
-//     `Status: partial` at intake — the conformance gate working
-//     as a PROGRESS INDICATOR, not a green badge.
-//   * `big_sigma0`/`big_sigma1` sit `in` ProvableV1 even now:
-//     their own bodies use only u32 `bitxor` (already supported)
-//     plus calls to `rotr`.  The conformance check is
-//     NON-TRANSITIVE — it flags a function's direct construct
-//     use, not its callees'.  So a big sigma reads `in` while
-//     the `rotr` it depends on reads `blocked`.  Transitive
-//     FnTable completeness is a separate open item (ROADMAP
-//     Phase 1); until then this asymmetry is expected and honest.
+//   * `sha256_init`, `sha256_k` — pure constant data.
+//   * `ch`, `maj` — u32 `bitand` (R-22).
+//   * `small_sigma0`, `small_sigma1` — u32 `shr` (R-23).
+//   * `rotr` — u32 `shl` + `bitor` (R-24/R-25).
+//   * `big_sigma0`, `big_sigma1`, `ct_compare_32` — already in.
+//
+// `concrete audit` reports `Status: full` — the conformance gate
+// walked partial -> full, one construct at a time, exactly as the
+// audit predicted: a PROGRESS INDICATOR, not a green badge.
+//
+// What `full` does NOT mean (so it is not over-read):
+//   * NO correctness proofs are attached.  --report proof-status
+//     shows every eligible function as `missing` (eligible +
+//     extractable + no registered theorem).  Conformance `full`
+//     means "all constructs are in-subset", NOT "proved".
 //   * The pipeline functions (`block_to_words`, `sha256_schedule`,
 //     `sha256_round`, `sha256_compress`, `state_to_bytes`,
-//     `hmac_sha256`, `verify_hmac`) are STUBS.  Their signatures
-//     are final (they match AUDIT.md § 2); their bodies return
-//     placeholder zeros until the forcing surface lands.
+//     `hmac_sha256`, `verify_hmac`) are still STUBS — final
+//     signatures (AUDIT.md § 2), placeholder zero bodies.
+//   * The INTERPRETER does not yet mask u32 arithmetic (wrapping
+//     `add`, and `shl` truncation).  The PROOF model does (via
+//     BitVec), but until the interpreter agrees a full SHA-256
+//     would compute wrong word values at runtime.  So `main`
+//     still exercises ONLY the bit-exact parts and runs NO RFC
+//     4231 vectors.
 //
-// Why no RFC vectors run yet: the interpreter does not yet mask
-// u32 arithmetic to 32 bits (wrapping add, logical shr).  That
-// masking is part of the forcing surface; until it lands, a full
-// SHA-256 would compute the wrong word values.  `main` therefore
-// exercises ONLY the parts that are already bit-exact (the
-// constant table and the branch-free Boolean functions on
-// in-range inputs) and prints an honest scaffold status.  It does
-// NOT claim any RFC 4231 test vector passes — that claim arrives
-// with the theorems (AUDIT.md § 6, bars #1 and #2).
+// Next: u32 wrapping `add` (forcing surface) + interpreter
+// masking, then fill the pipeline and attach RFC-vector theorems
+// (AUDIT.md § 6, bars #1 and #2).
 //
 // This is NOT a vetted crypto library.  Do not deploy.  See § 4
 // of AUDIT.md and assumptions.toml for the trust boundaries.

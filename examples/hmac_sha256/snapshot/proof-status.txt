@@ -1,10 +1,10 @@
 === Proof Status Report ===
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:61
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:57
 
   `hmac_sha256.sha256_init` passes the predictable profile but has no registered proof.
 
- 61 |     fn sha256_init() -> [u32; 8] {
+ 57 |     fn sha256_init() -> [u32; 8] {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -12,11 +12,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:69
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:65
 
   `hmac_sha256.sha256_k` passes the predictable profile but has no registered proof.
 
- 69 |     fn sha256_k() -> [u32; 64] {
+ 65 |     fn sha256_k() -> [u32; 64] {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -24,23 +24,23 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:100
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:96
 
   `hmac_sha256.ch` passes the predictable profile but has no registered proof.
 
- 100 |     fn ch(x: u32, y: u32, z: u32) -> u32 {
-     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 96 |     fn ch(x: u32, y: u32, z: u32) -> u32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
     [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitand (var x) (var y)) (binop Concrete.BinOp.bitand (binop Concrete.BinOp.bitxor (var x) (int 4294967295)) (var z))))]
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:105
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:101
 
   `hmac_sha256.maj` passes the predictable profile but has no registered proof.
 
- 105 |     fn maj(x: u32, y: u32, z: u32) -> u32 {
+ 101 |     fn maj(x: u32, y: u32, z: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -48,22 +48,23 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:110
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:106
 
-  `hmac_sha256.rotr` is eligible but uses unsupported constructs — extraction failed.
+  `hmac_sha256.rotr` passes the predictable profile but has no registered proof.
 
- 110 |     fn rotr(x: u32, n: u32) -> u32 {
+ 106 |     fn rotr(x: u32, n: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: unsupported operator: Concrete.BinOp.bitor at Concrete.Ty.u32, unsupported operator: Concrete.BinOp.shl at Concrete.Ty.u32
+  current fingerprint:
+    [(ret (binop Concrete.BinOp.bitor (binop Concrete.BinOp.shr (var x) (var n)) (binop Concrete.BinOp.shl (var x) (binop Concrete.BinOp.sub (int 32) (var n)))))]
 
-  hint: Remove unsupported operator: Concrete.BinOp.bitor at Concrete.Ty.u32, unsupported operator: Concrete.BinOp.shl at Concrete.Ty.u32 to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:115
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:111
 
   `hmac_sha256.big_sigma0` passes the predictable profile but has no registered proof.
 
- 115 |     fn big_sigma0(x: u32) -> u32 {
+ 111 |     fn big_sigma0(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -71,11 +72,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:120
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:116
 
   `hmac_sha256.big_sigma1` passes the predictable profile but has no registered proof.
 
- 120 |     fn big_sigma1(x: u32) -> u32 {
+ 116 |     fn big_sigma1(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -83,11 +84,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:125
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:121
 
   `hmac_sha256.small_sigma0` passes the predictable profile but has no registered proof.
 
- 125 |     fn small_sigma0(x: u32) -> u32 {
+ 121 |     fn small_sigma0(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -95,11 +96,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:130
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:126
 
   `hmac_sha256.small_sigma1` passes the predictable profile but has no registered proof.
 
- 130 |     fn small_sigma1(x: u32) -> u32 {
+ 126 |     fn small_sigma1(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -107,11 +108,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:147
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:143
 
   `hmac_sha256.ct_compare_32` passes the predictable profile but has no registered proof.
 
- 147 |     fn ct_compare_32(a: [u8; 32], b: [u8; 32]) -> i32 {
+ 143 |     fn ct_compare_32(a: [u8; 32], b: [u8; 32]) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -119,11 +120,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:167
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:163
 
   `hmac_sha256.block_to_words` passes the predictable profile but has no registered proof.
 
- 167 |     fn block_to_words(block: [u8; 64]) -> [u32; 16] {
+ 163 |     fn block_to_words(block: [u8; 64]) -> [u32; 16] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -131,11 +132,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:172
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:168
 
   `hmac_sha256.sha256_schedule` passes the predictable profile but has no registered proof.
 
- 172 |     fn sha256_schedule(w: [u32; 16]) -> [u32; 64] {
+ 168 |     fn sha256_schedule(w: [u32; 16]) -> [u32; 64] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -143,11 +144,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:181
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:177
 
   `hmac_sha256.sha256_round` passes the predictable profile but has no registered proof.
 
- 181 |     fn sha256_round(state: [u32; 8], k: u32, w: u32) -> [u32; 8] {
+ 177 |     fn sha256_round(state: [u32; 8], k: u32, w: u32) -> [u32; 8] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -155,11 +156,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:186
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:182
 
   `hmac_sha256.sha256_compress` passes the predictable profile but has no registered proof.
 
- 186 |     fn sha256_compress(state: [u32; 8], block: [u8; 64]) -> [u32; 8] {
+ 182 |     fn sha256_compress(state: [u32; 8], block: [u8; 64]) -> [u32; 8] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -167,11 +168,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:191
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:187
 
   `hmac_sha256.state_to_bytes` passes the predictable profile but has no registered proof.
 
- 191 |     fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
+ 187 |     fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -179,11 +180,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:198
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:194
 
   `hmac_sha256.hmac_sha256` passes the predictable profile but has no registered proof.
 
- 198 |     fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
+ 194 |     fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -191,11 +192,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:204
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:200
 
   `hmac_sha256.verify_hmac` passes the predictable profile but has no registered proof.
 
- 204 |     fn verify_hmac(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32,
+ 200 |     fn verify_hmac(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32,
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -203,16 +204,16 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- not eligible ------------------------------------------- examples/hmac_sha256/src/main.con:219
+-- not eligible ------------------------------------------- examples/hmac_sha256/src/main.con:215
 
   `hmac_sha256.main` cannot be proved: fails predictable profile (has capabilities: Console, is entry point (main)).
 
- 219 |     pub fn main() with(Console) -> i32 {
+ 215 |     pub fn main() with(Console) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   reasons: has capabilities: Console, is entry point (main)
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 18 functions — 0 proved, 0 stale, 16 unproved, 1 blocked, 1 ineligible, 0 trusted
+Totals: 18 functions — 0 proved, 0 stale, 17 unproved, 0 blocked, 1 ineligible, 0 trusted
 

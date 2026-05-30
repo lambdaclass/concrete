@@ -7,7 +7,7 @@
     source:       none
     fingerprint:  [(ret (array (int 1779033703) (int 3144134277) (int 1013904242) (int 2773480762) (int 1359893119) (int 2600822924) (int 528734635) (int 1541459225)))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:61
+    loc:          examples/hmac_sha256/src/main.con:57
 
   hmac_sha256.sha256_k
     status:       missing
@@ -16,7 +16,7 @@
     source:       none
     fingerprint:  [(ret (array (int 1116352408) (int 1899447441) (int 3049323471) (int 3921009573) (int 961987163) (int 1508970993) (int 2453635748) (int 2870763221) (int 3624381080) (int 310598401) (int 607225278) (int 1426881987) (int 1925078388) (int 2162078206) (int 2614888103) (int 3248222580) (int 3835390401) (int 4022224774) (int 264347078) (int 604807628) (int 770255983) (int 1249150122) (int 1555081692) (int 1996064986) (int 2554220882) (int 2821834349) (int 2952996808) (int 3210313671) (int 3336571891) (int 3584528711) (int 113926993) (int 338241895) (int 666307205) (int 773529912) (int 1294757372) (int 1396182291) (int 1695183700) (int 1986661051) (int 2177026350) (int 2456956037) (int 2730485921) (int 2820302411) (int 3259730800) (int 3345764771) (int 3516065817) (int 3600352804) (int 4094571909) (int 275423344) (int 430227734) (int 506948616) (int 659060556) (int 883997877) (int 958139571) (int 1322822218) (int 1537002063) (int 1747873779) (int 1955562222) (int 2024104815) (int 2227730452) (int 2361852424) (int 2428436474) (int 2756734187) (int 3204031479) (int 3329325298)))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:69
+    loc:          examples/hmac_sha256/src/main.con:65
 
   hmac_sha256.ch
     status:       missing
@@ -25,7 +25,7 @@
     source:       none
     fingerprint:  [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitand (var x) (var y)) (binop Concrete.BinOp.bitand (binop Concrete.BinOp.bitxor (var x) (int 4294967295)) (var z))))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:100
+    loc:          examples/hmac_sha256/src/main.con:96
 
   hmac_sha256.maj
     status:       missing
@@ -34,16 +34,16 @@
     source:       none
     fingerprint:  [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitand (var x) (var y)) (binop Concrete.BinOp.bitand (var x) (var z))) (binop Concrete.BinOp.bitand (var y) (var z))))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:105
+    loc:          examples/hmac_sha256/src/main.con:101
 
   hmac_sha256.rotr
-    status:       blocked
+    status:       missing
     spec:         (none)
     proof:        (none)
     source:       none
     fingerprint:  [(ret (binop Concrete.BinOp.bitor (binop Concrete.BinOp.shr (var x) (var n)) (binop Concrete.BinOp.shl (var x) (binop Concrete.BinOp.sub (int 32) (var n)))))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:110
+    loc:          examples/hmac_sha256/src/main.con:106
 
   hmac_sha256.big_sigma0
     status:       missing
@@ -52,7 +52,7 @@
     source:       none
     fingerprint:  [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (call rotr (var x) (int 2)) (call rotr (var x) (int 13))) (call rotr (var x) (int 22))))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:115
+    loc:          examples/hmac_sha256/src/main.con:111
 
   hmac_sha256.big_sigma1
     status:       missing
@@ -61,7 +61,7 @@
     source:       none
     fingerprint:  [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (call rotr (var x) (int 6)) (call rotr (var x) (int 11))) (call rotr (var x) (int 25))))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:120
+    loc:          examples/hmac_sha256/src/main.con:116
 
   hmac_sha256.small_sigma0
     status:       missing
@@ -70,7 +70,7 @@
     source:       none
     fingerprint:  [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (call rotr (var x) (int 7)) (call rotr (var x) (int 18))) (binop Concrete.BinOp.shr (var x) (int 3))))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:125
+    loc:          examples/hmac_sha256/src/main.con:121
 
   hmac_sha256.small_sigma1
     status:       missing
@@ -79,7 +79,7 @@
     source:       none
     fingerprint:  [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (call rotr (var x) (int 17)) (call rotr (var x) (int 19))) (binop Concrete.BinOp.shr (var x) (int 10))))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:130
+    loc:          examples/hmac_sha256/src/main.con:126
 
   hmac_sha256.ct_compare_32
     status:       missing
@@ -88,7 +88,7 @@
     source:       none
     fingerprint:  [(let diff (int 0)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 32)) [(set diff (binop Concrete.BinOp.bitor (var diff) (binop Concrete.BinOp.bitxor (index (var a) (var i)) (index (var b) (var i))))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (if (binop Concrete.BinOp.eq (var diff) (int 0)) [(ret (int 1))]) (ret (int 0))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:147
+    loc:          examples/hmac_sha256/src/main.con:143
 
   hmac_sha256.block_to_words
     status:       missing
@@ -97,7 +97,7 @@
     source:       none
     fingerprint:  [(ret (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0)))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:167
+    loc:          examples/hmac_sha256/src/main.con:163
 
   hmac_sha256.sha256_schedule
     status:       missing
@@ -106,7 +106,7 @@
     source:       none
     fingerprint:  [(ret (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0)))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:172
+    loc:          examples/hmac_sha256/src/main.con:168
 
   hmac_sha256.sha256_round
     status:       missing
@@ -115,7 +115,7 @@
     source:       none
     fingerprint:  [(ret (var state))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:181
+    loc:          examples/hmac_sha256/src/main.con:177
 
   hmac_sha256.sha256_compress
     status:       missing
@@ -124,7 +124,7 @@
     source:       none
     fingerprint:  [(ret (var state))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:186
+    loc:          examples/hmac_sha256/src/main.con:182
 
   hmac_sha256.state_to_bytes
     status:       missing
@@ -133,7 +133,7 @@
     source:       none
     fingerprint:  [(ret (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0)))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:191
+    loc:          examples/hmac_sha256/src/main.con:187
 
   hmac_sha256.hmac_sha256
     status:       missing
@@ -142,7 +142,7 @@
     source:       none
     fingerprint:  [(ret (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0)))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:198
+    loc:          examples/hmac_sha256/src/main.con:194
 
   hmac_sha256.verify_hmac
     status:       missing
@@ -151,7 +151,7 @@
     source:       none
     fingerprint:  [(let tag (call hmac_sha256 (var k) (var k_len) (var m) (var m_len))) (ret (call ct_compare_32 (var tag) (var expected)))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:204
+    loc:          examples/hmac_sha256/src/main.con:200
 
   hmac_sha256.main
     status:       ineligible
@@ -160,7 +160,7 @@
     source:       none
     fingerprint:  [(let checks (int 0)) (let failures (int 0)) (let h (call sha256_init )) (set checks (binop Concrete.BinOp.add (var checks) (int 1))) (if (binop Concrete.BinOp.neq (index (var h) (int 0)) (int 1779033703)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (let k (call sha256_k )) (set checks (binop Concrete.BinOp.add (var checks) (int 1))) (if (binop Concrete.BinOp.neq (index (var k) (int 0)) (int 1116352408)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (set checks (binop Concrete.BinOp.add (var checks) (int 1))) (if (binop Concrete.BinOp.neq (call ch (int 4294967295) (int 305419896) (int 2596069104)) (int 305419896)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (set checks (binop Concrete.BinOp.add (var checks) (int 1))) (if (binop Concrete.BinOp.neq (call maj (int 252645135) (int 252645135) (int 0)) (int 252645135)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (if (binop Concrete.BinOp.eq (var failures) (int 0)) [(call print_string (borrow (str "hmac_sha256 scaffold: 4/4 bit-exact checks passed."))) (call print_char (int 10)) (call print_string (borrow (str "Pipeline + RFC 4231 vectors pending forcing surface (see AUDIT.md)."))) (call print_char (int 10)) (ret (int 0))]) (call print_string (borrow (str "hmac_sha256 scaffold: bit-exact checks FAILED."))) (call print_char (int 10)) (ret (var failures))]
     dependencies: none
-    loc:          examples/hmac_sha256/src/main.con:219
+    loc:          examples/hmac_sha256/src/main.con:215
 
-Totals: 18 obligations — 0 proved, 0 stale, 16 missing, 1 blocked, 1 ineligible, 0 trusted
+Totals: 18 obligations — 0 proved, 0 stale, 17 missing, 0 blocked, 1 ineligible, 0 trusted
 

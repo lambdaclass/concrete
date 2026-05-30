@@ -107,6 +107,22 @@ inductive PBinOp where
       (`Int.toNat`); SHA-256 only ever shifts by compile-time
       constants in `(0, 32)`. -/
   | shr (width : Nat) (signed : Bool)
+  /-- Left shift at a specific width, with TRUNCATION to that
+      width.
+
+      Forced by HMAC-SHA256's `rotr` (`x << (32 - n)` in the
+      rotation idiom `(x >> n) | (x << (32 - n))`) at u32 width.
+      Models LLVM `shl`: bits shifted past the top are discarded.
+      `BitVec.shiftLeft` truncates to width `w` automatically, so
+      `0xFFFFFFFF << 4 = 0xFFFFFFF0` (NOT a value wider than 32
+      bits) — this is the wrapping behavior the interpreter's
+      unmasked `a * 2^n` does NOT model, which is exactly why the
+      proof model uses BitVec.  Read unsigned (`signed = false`),
+      the only modeled case today.
+
+      Shift amount is the right operand as a `Nat`; SHA-256 only
+      shifts by compile-time constants in `(0, 32)`. -/
+  | shl (width : Nat) (signed : Bool)
   | eq | ne | lt | le | gt | ge
   deriving Repr, BEq, DecidableEq
 
@@ -316,6 +332,17 @@ def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
   | .shr 32 false, .int a, .int b =>
     some (.int (Int.ofNat
       ((BitVec.ofInt 32 a) >>> b.toNat).toNat))
+  -- shl 32 unsigned: BitVec left shift at u32 with truncation to
+  -- width.  0xFFFFFFFF << 4 = 0xFFFFFFF0 (top bits discarded).
+  -- Forced by HMAC-SHA256's rotr idiom `x << (32 - n)`.
+  | .shl 32 false, .int a, .int b =>
+    some (.int (Int.ofNat
+      ((BitVec.ofInt 32 a) <<< b.toNat).toNat))
+  -- bitor 32 unsigned: BitVec.or at u32, unsigned view.  Forced by
+  -- HMAC-SHA256's rotr idiom `(x >> n) | (x << (32 - n))`.
+  | .bitor 32 false, .int a, .int b =>
+    some (.int (Int.ofNat
+      ((BitVec.ofInt 32 a) ||| (BitVec.ofInt 32 b)).toNat))
   -- Other widths intentionally unmodeled — extraction refuses to
   -- emit them, so a `.mod w s` or `.bitxor w s` with w ≠ 32
   -- reaching eval signals a bug (or a future extension yet to
@@ -429,6 +456,34 @@ example :
 example :
     evalBinOp (.shr 32 false)
       (.int 2147483648) (.int 31) = some (.int 1) := by rfl
+
+/-- u32 left shift TRUNCATES at the width: `0xFFFFFFFF << 4 =
+    0xFFFFFFF0` (4294967280), NOT a 36-bit value.  This is the
+    wrapping behavior the proof model must capture and the
+    interpreter's unmasked `a * 2^n` does not. -/
+example :
+    evalBinOp (.shl 32 false)
+      (.int 4294967295) (.int 4) = some (.int 4294967280) := by rfl
+
+/-- u32 left shift of 1 to the high bit: `1 << 31 = 0x80000000`
+    (2147483648), still a positive Int under the unsigned view. -/
+example :
+    evalBinOp (.shl 32 false)
+      (.int 1) (.int 31) = some (.int 2147483648) := by rfl
+
+/-- u32 bitor combines complementary nibble masks to all-ones:
+    `0x0F0F0F0F | 0xF0F0F0F0 = 0xFFFFFFFF` (4294967295). -/
+example :
+    evalBinOp (.bitor 32 false)
+      (.int 252645135) (.int 4042322160) = some (.int 4294967295) := by rfl
+
+/-- u32 rotate-right of 1 by 1, computed as `(1 >> 1) | (1 << 31)`,
+    composes shr/shl/bitor into `0x80000000`. -/
+example :
+    (do
+      let hi ← evalBinOp (.shr 32 false) (.int 1) (.int 1)
+      let lo ← evalBinOp (.shl 32 false) (.int 1) (.int 31)
+      evalBinOp (.bitor 32 false) hi lo) = some (.int 2147483648) := by rfl
 
 /-- Bind a list of argument values to parameter names. -/
 def bindArgs (env : Env) (params : List String) (args : List PVal) : Option Env :=
