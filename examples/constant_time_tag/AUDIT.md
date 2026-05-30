@@ -206,21 +206,19 @@ First theorem landed 2026-05-29 (bar #1):
 | 3  | Assumption file with schema, CI-enforced | ✅ `assumptions.toml` with explicit three-layer claim entries; `make test-assumptions` 4/0 |
 | 4  | Policy file with enforceable budgets, CI-enforced | ✅ `Concrete.toml [policy]` stricter than fixed_capacity (no_unsafe + no_trusted both set); `make test-policy` 5/0 |
 | 5  | Oracle beyond hand-written tests | ✅ Python reference + differential harness; 600 cases (200 per seed × 3 seeds) covering all-equal, per-position single-byte diffs (positions 0/15/middle), multiple differences, high-bit byte values, all-bytes-differ.  `make test-ct-oracle` |
-| 6  | "Concrete catches this" negative pair | ❌ |
+| 6  | "Concrete catches this" negative pair | ✅ `catches/01_alloc_in_compare_core.con` — alloc-discipline violation in the comparison loop; rejected with E0520.  CATCHES.md ALSO names the deferred timing/early-exit gap honestly (Concrete cannot reject early-exit inside bounded loops today; needs Phase 3 constant-time profile).  `make test-catches` |
 | 7  | Release evidence bundle capturable | ❌ |
 | 8  | Honest README | ❌ |
 | 9  | Snapshot/diff baseline | ✅ 16 reports baselined under `snapshot/`; `make test-snapshots` 64/0 across all 4 candidates |
 | 10 | Listed in `tests/showcase/manifest.toml` | ❌ |
 
-**Today: 6 of 10 bars met (#1, #2, #3, #4, #5, #9).**  Bar
-#1 closed 2026-05-29 with the universal same-tag theorem,
-which simultaneously closed bar #2.  Bar #5 closed 2026-05-29
-with the differential oracle (600 cases × 3 seeds).
-Crucially, the oracle exercises the NEGATIVE direction the
-theorem does not yet cover — when any byte differs,
-ct_compare returns 0 — across 152 of the 200 cases per seed.
-Remaining: content bars (#6 catches, #7 bundle, #8 README,
-#10 manifest).
+**Today: 7 of 10 bars met (#1, #2, #3, #4, #5, #6, #9).**
+Bar #6 closed 2026-05-30 with the alloc-in-compare-core
+catch; CATCHES.md additionally names the timing/early-exit
+gap that Concrete cannot mechanically catch today, so the
+candidate's framing stays honest about what the language
+does and does not enforce.  Remaining: content bars (#7
+bundle, #8 README, #10 manifest).
 
 ## 8. Strategic value beyond graduation
 
