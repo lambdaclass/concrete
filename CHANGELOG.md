@@ -10,6 +10,87 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### constant_time_tag graduates to Phase 7 (fourth flagship; first real-crypto)
+
+constant_time_tag closes all 10 graduation bars and lands
+as the fourth entry in `tests/showcase/manifest.toml`.  The
+first real-crypto flagship per the explicit slot
+crypto_verify's toy-MAC graduation reserved.  The Phase 7
+corpus now demonstrates four distinct systems domains:
+parsing (parse_validate), auth scaffolding (crypto_verify
+toy), bounded mutable state (fixed_capacity), and now
+real-crypto-adjacent code (constant_time_tag).
+
+What this graduation demonstrates
+---------------------------------
+The smallest real-crypto artifact that forces the exact
+distinction Concrete should be good at: **the code is
+simple, but the claim is subtle**.  Six-line OR-accumulate
+over `[u8; 16]` arrays.  Two attached theorems:
+
+- `ct_compare_equal_zeros_correct` — concrete zeros case.
+- `ct_compare_same_tag_correct` — UNIVERSAL: for any
+  16-byte tag, `ct_compare(a, a) = 1`.  Closes both bar
+  #1 (first theorem) and bar #2 (composition / universal
+  property).  Exercises u8 bitxor + u8 bitor + bounded
+  16-iteration while_ end-to-end under the Lean kernel.
+
+The proof closes by a single `simp` invocation chaining
+`BitVec.xor_self` and `BitVec.zero_or` through 16 unrolled
+iterations.  No induction over byte values required
+because the invariant — `diff` stays 0 — is uniform.
+
+Honest gaps named in three places
+---------------------------------
+The full iff direction (`ct_compare a b = 1 ⟹ a = b`) is
+NOT proved.  The oracle closes it empirically (152 of 200
+cases per seed × 3 seeds exercise the negative direction).
+Future stretch theorem; helpers landed.
+
+Machine-level constant time is NOT proved (no Phase 3
+constant_time profile exists; LLVM may rewrite the
+branch-free idiom; CPUs leak through cache).  Named as
+load-bearing assumed_not_proved in three places:
+`assumptions.toml`'s `[claims.machine_level_constant_time]`,
+`CATCHES.md`'s "What's NOT (yet) in this negative pair"
+section, and the manifest's
+`[flagship.limits].constant_time` block.
+
+The 10 bars closed
+------------------
+- #1 ct_compare_equal_zeros_correct + ct_compare_same_tag_correct
+- #2 the universal same-tag theorem (covers both directions)
+- #3 assumptions.toml with 4 explicit [claims.*] entries
+- #4 stricter [policy] than other flagships
+- #5 600 differential cases × 3 seeds via make test-ct-oracle
+- #6 alloc-in-compare-core catch + named timing gap
+- #7 release bundle captures cleanly
+- #8 honest README
+- #9 16 report snapshots baselined
+- #10 [[flagship]] entry with load-bearing
+  [flagship.limits].constant_time block
+
+Forced extensions documented
+----------------------------
+R-17 (bitxor) extended to u8; R-21 (bitor) NEW row.  Both
+append-only against the typed-PBinOp shape from 28b1f2a.
+
+Status as of HEAD
+-----------------
+Four graduated Phase 7 flagships:
+  parse_validate     (2026-05-22) — parsing
+  crypto_verify      (2026-05-23) — auth scaffolding (toy)
+  fixed_capacity     (2026-05-28) — bounded systems state
+  constant_time_tag  (2026-05-30) — real-crypto (narrow)
+
+Numbers
+-------
+make test:             1575/0
+make test-showcase:    4/0   (was 3/0)
+make test-snapshots:   64/0
+make test-catches:     4/0
+make test-ct-oracle:   600/0
+
 ### fixed_capacity graduates to Phase 7 (third flagship)
 
 fixed_capacity closes all 10 graduation bars and lands as the

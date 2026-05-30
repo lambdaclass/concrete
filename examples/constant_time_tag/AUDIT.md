@@ -1,8 +1,12 @@
 # constant_time_tag — Candidate Audit
 
-Status: **active pull-through candidate** per ROADMAP Active
-Dependency Order rule 2.  fixed_capacity graduated
-2026-05-28; constant_time_tag slot opened 2026-05-28.
+Status: **graduated 2026-05-30** as the fourth Phase 7
+flagship; first real-crypto flagship per the explicit slot
+crypto_verify's toy-MAC graduation reserved.  Listed in
+`tests/showcase/manifest.toml`.  parse_validate graduated
+2026-05-22; crypto_verify 2026-05-23; fixed_capacity
+2026-05-28; constant_time_tag slot opened 2026-05-28 and
+graduated on completion of all 10 bars.
 
 ## Why this example
 
@@ -207,18 +211,23 @@ First theorem landed 2026-05-29 (bar #1):
 | 4  | Policy file with enforceable budgets, CI-enforced | ✅ `Concrete.toml [policy]` stricter than fixed_capacity (no_unsafe + no_trusted both set); `make test-policy` 5/0 |
 | 5  | Oracle beyond hand-written tests | ✅ Python reference + differential harness; 600 cases (200 per seed × 3 seeds) covering all-equal, per-position single-byte diffs (positions 0/15/middle), multiple differences, high-bit byte values, all-bytes-differ.  `make test-ct-oracle` |
 | 6  | "Concrete catches this" negative pair | ✅ `catches/01_alloc_in_compare_core.con` — alloc-discipline violation in the comparison loop; rejected with E0520.  CATCHES.md ALSO names the deferred timing/early-exit gap honestly (Concrete cannot reject early-exit inside bounded loops today; needs Phase 3 constant-time profile).  `make test-catches` |
-| 7  | Release evidence bundle capturable | ❌ |
-| 8  | Honest README | ❌ |
+| 7  | Release evidence bundle capturable | ✅ `scripts/tests/capture_release_bundle.sh examples/constant_time_tag` produces a full bundle with manifest.json + reports + snapshots + AUDIT/CATCHES/README; `make test-release-bundle` (parse_validate proxy) |
+| 8  | Honest README | ✅ `README.md` with what-is / what-is-NOT / what-is-proved / what-is-NOT-yet-proved / static enforcement / negative pair / oracle-complements-proof / honest-deployment-disclaimer |
 | 9  | Snapshot/diff baseline | ✅ 16 reports baselined under `snapshot/`; `make test-snapshots` 64/0 across all 4 candidates |
-| 10 | Listed in `tests/showcase/manifest.toml` | ❌ |
+| 10 | Listed in `tests/showcase/manifest.toml` | ✅ `[[flagship]]` entry with all 10 bars marked, evidence pointers, CI gates, and a load-bearing `[flagship.limits].constant_time` block explicitly naming the machine-level-timing gap; `make test-showcase` 4/0 |
 
-**Today: 7 of 10 bars met (#1, #2, #3, #4, #5, #6, #9).**
-Bar #6 closed 2026-05-30 with the alloc-in-compare-core
-catch; CATCHES.md additionally names the timing/early-exit
-gap that Concrete cannot mechanically catch today, so the
-candidate's framing stays honest about what the language
-does and does not enforce.  Remaining: content bars (#7
-bundle, #8 README, #10 manifest).
+**Graduated 2026-05-30: 10 of 10 bars met.**  The
+substantive proof-side claim is the universal same-tag
+theorem `ct_compare_same_tag_correct`; the substantive
+evidence claim is the oracle's 600 cases covering both
+directions (152 per seed exercise the negative direction
+the theorem does not yet cover); the substantive
+discipline-violation claim is the alloc-in-compare-core
+catch.  CATCHES.md, README.md, assumptions.toml, and the
+showcase manifest's `[flagship.limits].constant_time`
+block all name the machine-level-timing gap honestly:
+this is a structural source-level discipline candidate,
+NOT a machine-level constant-time guarantee.
 
 ## 8. Strategic value beyond graduation
 

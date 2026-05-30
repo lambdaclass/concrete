@@ -255,3 +255,103 @@ substantive proof-side claim in the Phase 7 corpus to date —
 it covers a 2-function chain over mutable state, not just a
 sequence of scalar validations.
 """
+
+[[flagship]]
+example     = "constant_time_tag"
+path        = "examples/constant_time_tag"
+graduated   = "2026-05-30"
+audit       = "examples/constant_time_tag/AUDIT.md"
+readme      = "examples/constant_time_tag/README.md"
+thesis_role = """
+First real-crypto flagship: a fixed-size byte-array
+comparison helper with source-level constant-time
+discipline.  Smallest real-crypto artifact that forces the
+distinction Concrete should be good at — the code is
+simple, but the claim is subtle.  Universal same-tag
+theorem (ct_compare(a, a) = 1 for any 16-byte input)
+exercises u8 bitxor + u8 bitor + bounded 16-iteration
+while_ end-to-end under the Lean kernel.  Honest about
+the gaps (full iff, machine-level timing) it does not
+yet cover.
+"""
+
+[flagship.bars]
+proved_property        = true   # bar #1 — ct_compare_equal_zeros_correct
+composition_property   = true   # bar #2 — ct_compare_same_tag_correct (universal)
+assumption_file        = true   # bar #3
+policy_file            = true   # bar #4 — stricter than other flagships
+oracle_beyond_handwritten = true   # bar #5 — 600 differential cases
+negative_pair          = true   # bar #6 — alloc-in-compare-core + named timing gap
+release_bundle         = true   # bar #7
+honest_readme          = true   # bar #8
+snapshot_baseline      = true   # bar #9 — 16 reports
+on_showcase_manifest   = true   # bar #10 — this entry
+
+[flagship.evidence]
+proof_registry = "examples/constant_time_tag/src/proof-registry.json"
+proofs         = ["Concrete.Proof.ct_compare_equal_zeros_correct",
+                  "Concrete.Proof.ct_compare_same_tag_correct",
+                  "Concrete.Proof.bitxor_u8_self_zero"]
+assumptions    = "examples/constant_time_tag/assumptions.toml"
+policy         = "examples/constant_time_tag/Concrete.toml"
+catches        = "examples/constant_time_tag/catches/"
+catches_doc    = "examples/constant_time_tag/CATCHES.md"
+snapshots      = "examples/constant_time_tag/snapshot/"
+oracle         = "examples/constant_time_tag/oracle/"
+
+[flagship.gates]
+policy         = "make test-policy"
+assumptions    = "make test-assumptions"
+catches        = "make test-catches"
+snapshots      = "make test-snapshots"
+oracle         = "make test-ct-oracle"
+verify_gates   = "make test-verify-gates"
+release_bundle = "make test-release-bundle"
+
+[flagship.limits]
+proofs = """
+Two attached theorems on ct_compare plus one helper lemma.
+The universal same-tag theorem (ct_compare a a = 1 for any
+16-byte input) closes both bar #1 and bar #2.  The full iff
+direction (ct_compare a b = 1 ⟹ a = b) is open as a
+stretch theorem — needs an inductive argument over byte
+positions for the negative direction.  Helpers
+(bitxor_u8_self_zero, bitor_u8_zero_zero,
+ct_loop_iteration_invariant) are landed for the work.  The
+oracle (see below) closes the negative direction
+empirically until the theorem catches up.
+"""
+oracle = """
+Python reference + differential harness.  600 cases across
+three seeds (200 per seed); ~48 return 1 (equal), ~152
+return 0 (differ).  Covers per-position single-byte diffs
+(positions 0, 15, random middle), multiple-byte diffs,
+all-byte-diffs, high-bit-only diffs.  Exercises the
+negative direction the theorem does NOT yet cover.
+"""
+constant_time = """
+THIS IS THE LOAD-BEARING LIMIT.  Source-level structural
+constant-time discipline (no early exit, fixed loop bound,
+no content-dependent branch inside the loop) is enforced by
+manual review and by the source body fingerprint check; it
+is NOT proved as a Concrete static guarantee today (no
+constant_time profile exists; would require Phase 3 work).
+Machine-level constant time is NEITHER proved NOR enforced
+— LLVM may rewrite the branch-free idiom, target CPUs leak
+through cache/branch predictor.  assumptions.toml's
+[claims.machine_level_constant_time] entry records this as
+assumed_not_proved.  Do not deploy ct_compare as your
+auth-tag check; use a vetted crypto library.
+"""
+audience = """
+Fourth graduated flagship; FIRST real-crypto flagship per
+the explicit slot crypto_verify's toy-MAC graduation
+reserved.  Targets reviewers evaluating Concrete's proof
+workflow on crypto-adjacent code where the security claim
+is subtle but the implementation is small.  NOT intended
+for deployment — the README, CATCHES, and assumptions all
+state this directly.  The pattern (small surface, subtle
+property, honest backend assumption) is the template for
+future real-crypto candidates (HMAC-SHA256, Ed25519 verify
+subset).
+"""
