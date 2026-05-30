@@ -522,6 +522,40 @@ theorem match_preservation
       = some (.match_ ps parms) := by
   simp [cExprToPExpr, h_scrut, h_arms]
 
+/-! ## R-18: `while_flat_preservation` (extraction)
+
+When the source while body is all flat assigns
+(`cAssignBodyToUpdates body = some updates`), the
+extraction lands in `PExpr.while_` (the simpler shape). -/
+theorem while_flat_preservation
+    (cond : CExpr) (body : List CStmt) (label : Option String)
+    (step_body : List CStmt) (rest : List CStmt) (k : Option PExpr)
+    (pc : PExpr) (updates : List (String × PExpr)) (pCont : PExpr)
+    (h_cond : cExprToPExpr cond = some pc)
+    (h_rest : cStmtsToPExprK rest k = some pCont)
+    (h_updates : cAssignBodyToUpdates body = some updates) :
+    cStmtsToPExprK ((CStmt.while_ cond body label step_body) :: rest) k
+      = some (.while_ pc updates pCont) := by
+  simp [cStmtsToPExprK, h_cond, h_rest, h_updates]
+
+/-! ## R-20: `while_step_preservation` (extraction)
+
+When the source while body is NOT all flat assigns
+(`cAssignBodyToUpdates body = none`), the extractor falls
+back to `PExpr.while_step` with the `LoopStep` enum
+encoding from `docs/PROOF_STATE_MODEL.md` § 4. -/
+theorem while_step_preservation
+    (cond : CExpr) (body : List CStmt) (label : Option String)
+    (step_body : List CStmt) (rest : List CStmt) (k : Option PExpr)
+    (pc : PExpr) (stepE : PExpr) (pCont : PExpr)
+    (h_cond : cExprToPExpr cond = some pc)
+    (h_rest : cStmtsToPExprK rest k = some pCont)
+    (h_not_flat : cAssignBodyToUpdates body = none)
+    (h_step : cStmtsToStepExpr [] body = some stepE) :
+    cStmtsToPExprK ((CStmt.while_ cond body label step_body) :: rest) k
+      = some (.while_step pc (extractCarried body) stepE pCont) := by
+  simp [cStmtsToPExprK, h_cond, h_rest, h_not_flat, h_step]
+
 /-! ## Sanity checks (inline regression theorems)
 
 Same pattern as the inline `example` blocks in

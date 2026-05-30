@@ -1082,6 +1082,16 @@ def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
     let pkRest ← cStmtsToPExprK rest k
     let pt ← cStmtsToPExprK thenBranch (some pkRest)
     some (.ifThenElse pc pt pkRest)
+  -- Bounded while loop: flat-assign body extracts to PExpr.while_;
+  -- richer body falls back to PExpr.while_step.
+  | (.while_ cond body _ _step) :: rest, k => do
+    let pc ← cExprToPExpr cond
+    let pCont ← cStmtsToPExprK rest k
+    match cAssignBodyToUpdates body with
+    | some updates => some (.while_ pc updates pCont)
+    | none => do
+      let stepE ← cStmtsToStepExpr [] body
+      some (.while_step pc (extractCarried body) stepE pCont)
   | stmts, k => cStmtsToPExprKImpl stmts k
 
 -- Unsupported construct identification
