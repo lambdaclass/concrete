@@ -66,74 +66,76 @@ def evalSourceLit : CExpr → Option PVal
   | .boolLit b  => some (.bool b)
   | _           => none
 
-/-! ## Note on `cExprToPExpr` opacity
+/-! ## Note on the `partial def` opacity barrier (PARTIALLY LIFTED)
 
 `cExprToPExpr` is declared `partial def` in
-`Concrete/ProofCore.lean` so it can recurse through the
-mutual block with `cMatchArmToP`.  Lean's kernel treats
+`Concrete/ProofCore.lean` because the mutual block it
+sits in has `mapM` calls over field / element / arm
+lists, which Lean's structural recursion checker cannot
+prove decreasing automatically.  Lean's kernel treats
 `partial def` as opaque — it generates no equation
 lemmas, and `unfold` / `rfl` cannot reduce calls to it.
 
-We therefore CANNOT state the preservation theorem in the
-form
+**What 06383cf shipped:** the preservation theorems
+proved only the eval-vs-source-semantics agreement,
+WITHOUT the antecedent `cExprToPExpr (.intLit n ty) =
+some (.lit (.int n))`.  Marked "partially discharged"
+in the register.
 
-    cExprToPExpr (.intLit n ty) = some (.lit (.int n)) ∧ ...
+**What this commit adds:** a non-partial helper
+`cExprLitToPExpr` in `Concrete/ProofCore.lean` that
+covers the literal fragment only.  Its body is identical
+to the literal cases of `cExprToPExpr`, and the theorems
+below now close the FULL preservation claim against this
+helper.
 
-and close it by `rfl`.  Two ways to handle this for the
-literal case:
+**What's still open:** proving
+`cExprToPExpr X = cExprLitToPExpr X` for X in the
+literal fragment.  This is the "agree by source
+inspection" claim — true by reading the code, but not
+yet a Lean theorem because `cExprToPExpr` is still
+`partial def`.  A future commit that lifts the entire
+mutual block out of `partial def` (by replacing each
+`mapM` with explicit structural recursion) discharges
+this remaining piece.
 
-  (a) state preservation as "if the extractor produces
-      `.lit (.int n)`, then the two views agree" — the
-      antecedent is the extraction observation, the
-      conclusion is what we actually need to prove.
-  (b) refactor `cExprToPExpr` to `def` for the literal
-      cases (split out a non-partial helper).
+The lift requires real engineering: each of the three
+list-mapping shapes (struct fields, array elements,
+match arms) needs a paired mutual helper.  That's the
+next Phase 12 architectural step; it's named in the
+obligations register's per-rule notes as a follow-up.
+-/
 
-We do (a) here: the theorem assumes the extraction
-output as a hypothesis.  This is honest — we are not yet
-proving that `cExprToPExpr` IS that function, we are
-proving that the value relationships hold WHEN extraction
-produces the expected shape.
+/-! ## R-01: `lit_int_preservation`
 
-The harder Phase 12 obligation — proving
-`cExprToPExpr (.intLit n ty) = some (.lit (.int n))`
-without `partial def` opacity — is a separate item.  It
-needs refactoring the mutual block so the literal cases
-sit outside `partial def`.  That refactor is named in
-this comment and in the obligations register's R-01
-note as a follow-up; landing it does not change the
-content of these theorems, only the antecedent's
-provability.
+For any int literal source `e := .intLit n ty`:
+  * `cExprLitToPExpr e = some (.lit (.int n))` —
+    the literal extractor produces the expected PExpr
+    (closed by `rfl` since `cExprLitToPExpr` is `def`,
+    not `partial def`);
+  * evaluating that PExpr at any non-zero fuel produces
+    `some (.int n)`;
+  * the source-level semantics produces `some (.int n)`.
 
-The source-level semantics agreement
-(`evalSourceLit` ↔ `eval`) IS provable today; that's
-what the theorems below close. -/
-
-/-! ## R-01: `lit_int_preservation` (eval-vs-source-semantics agreement)
-
-Whenever the extractor produces `.lit (.int n)` from
-`.intLit n ty` (the antecedent we cannot yet prove
-without lifting the `partial def`), evaluating that
-PExpr at any non-zero fuel produces the same value as
-the source-level semantics.
-
-Closed by `rfl` for the eval side and direct match for
-the source side. -/
+Closed by `rfl` for the source-semantics half and
+`simp [eval]` for the PExpr-eval half. -/
 theorem lit_int_preservation (n : Int) (ty : Ty) (fuel : Nat)
     (fns : FnTable) (env : Env) :
-    eval fns env (fuel + 1) (.lit (.int n)) = some (.int n)
+    cExprLitToPExpr (.intLit n ty) = some (.lit (.int n))
+  ∧ eval fns env (fuel + 1) (.lit (.int n)) = some (.int n)
   ∧ evalSourceLit (.intLit n ty) = some (.int n) := by
-  refine ⟨?_, rfl⟩
+  refine ⟨rfl, ?_, rfl⟩
   simp [eval]
 
-/-! ## R-02: `lit_bool_preservation` (eval-vs-source-semantics agreement)
+/-! ## R-02: `lit_bool_preservation`
 
 Same shape as R-01 for `.boolLit b`. -/
 theorem lit_bool_preservation (b : Bool) (fuel : Nat)
     (fns : FnTable) (env : Env) :
-    eval fns env (fuel + 1) (.lit (.bool b)) = some (.bool b)
+    cExprLitToPExpr (.boolLit b) = some (.lit (.bool b))
+  ∧ eval fns env (fuel + 1) (.lit (.bool b)) = some (.bool b)
   ∧ evalSourceLit (.boolLit b) = some (.bool b) := by
-  refine ⟨?_, rfl⟩
+  refine ⟨rfl, ?_, rfl⟩
   simp [eval]
 
 /-! ## Sanity checks (inline regression theorems)

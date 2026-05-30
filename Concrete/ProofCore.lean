@@ -703,6 +703,29 @@ private def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
   | .geq, _ => some .ge
   | _, _    => none
 
+/-- Non-partial extractor restricted to the LITERAL fragment of
+    `CExpr`.  Mirrors the literal cases of `cExprToPExpr` (lines
+    708–709) so the Phase 12 soundness proofs in
+    `Concrete.ProofSoundness` can reason about it WITHOUT the
+    `partial def` opacity barrier.
+
+    Returns `none` on any non-literal `CExpr` shape — extending
+    the helper to other constructs would require unwinding the
+    mutual block that makes `cExprToPExpr` `partial def` in the
+    first place; do not extend this helper construct-by-construct
+    in lockstep with `cExprToPExpr`, that defeats the purpose.
+
+    Phase 12 obligation: a future commit that lifts the entire
+    mutual block out of `partial def` (by replacing the `mapM`
+    over field/element/arm lists with explicit structural
+    recursion) discharges
+    `cExprToPExpr (.intLit n ty) = cExprLitToPExpr (.intLit n ty)`
+    as a theorem; today it holds by source inspection. -/
+def cExprLitToPExpr : CExpr → Option Proof.PExpr
+  | .intLit n _ => some (.lit (.int n))
+  | .boolLit b  => some (.lit (.bool b))
+  | _           => none
+
 mutual
 partial def cExprToPExpr : CExpr → Option Proof.PExpr
   | .intLit n _ => some (.lit (.int n))
