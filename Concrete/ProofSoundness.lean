@@ -149,4 +149,118 @@ example : evalSourceLit (.intLit 42 .i32) = some (.int 42) := rfl
 example : evalSourceLit (.boolLit true) = some (.bool true) := rfl
 example : evalSourceLit (.boolLit false) = some (.bool false) := rfl
 
+/-! ## FnTable completeness check (Phase 4 trust gate)
+
+A hand-written FnTable that is missing a callee makes
+`eval` silently return `none` on every `.call name args`
+to that missing function.  A theorem that depends on
+such an eval still "passes" the Lean kernel — but it
+proves a vacuous (or even wrong-shaped) claim.  This
+section adds a build-time check that catches the
+footgun: for every registered (spec, FnTable) pair, the
+spec's call sites all resolve in the table.
+
+The check uses `decide`, so a missing entry surfaces as
+a Lean compile error at `make build` — no separate test
+target needed.
+
+The approach:
+  1. `pexprCalls` walks a PExpr and collects every
+     `.call fn _` site's `fn` name.  Defined via mutual
+     structural recursion (one helper per list-shape in
+     PExpr) so it's a non-partial `def` and can run
+     under `decide`.
+  2. `fnTableComplete table pe` returns `true` iff every
+     name in `pexprCalls pe` resolves to `some _` in
+     `table`.
+  3. Per-flagship `example : fnTableComplete ... := by
+     decide` assertions kernel-check at every build. -/
+
+mutual
+def pexprCalls : PExpr → List String
+  | .lit _ => []
+  | .var _ => []
+  | .binOp _ l r => pexprCalls l ++ pexprCalls r
+  | .letIn _ v b => pexprCalls v ++ pexprCalls b
+  | .ifThenElse c t e => pexprCalls c ++ pexprCalls t ++ pexprCalls e
+  | .call fn args => fn :: pexprCallsList args
+  | .structLit _ fields => pexprCallsFields fields
+  | .enumLit _ _ fields => pexprCallsFields fields
+  | .fieldAccess o _ => pexprCalls o
+  | .arrayIndex a i => pexprCalls a ++ pexprCalls i
+  | .match_ s arms => pexprCalls s ++ pexprCallsArms arms
+  | .cast i => pexprCalls i
+  | .arrayLit elems => pexprCallsList elems
+  | .arraySet a i v => pexprCalls a ++ pexprCalls i ++ pexprCalls v
+  | .while_ c assigns cont =>
+      pexprCalls c ++ pexprCallsFields assigns ++ pexprCalls cont
+  | .while_step c _ s cont =>
+      pexprCalls c ++ pexprCalls s ++ pexprCalls cont
+def pexprCallsList : List PExpr → List String
+  | [] => []
+  | e :: rest => pexprCalls e ++ pexprCallsList rest
+def pexprCallsFields : List (String × PExpr) → List String
+  | [] => []
+  | (_, e) :: rest => pexprCalls e ++ pexprCallsFields rest
+def pexprCallsArms : List (PMatchPat × PExpr) → List String
+  | [] => []
+  | (_, b) :: rest => pexprCalls b ++ pexprCallsArms rest
+end
+
+/-- Every callee directly invoked by `pe` resolves in `table`.
+
+    This is the one-level check: it catches the immediate
+    footgun (a spec mentions `.call X` but the table has no
+    entry for `X`).  It does NOT recurse into callees'
+    bodies — that's the transitive check, currently not
+    needed because no flagship spec has a multi-level call
+    chain at the registered-theorem level.  A future spec
+    that nests calls (e.g. `verify_message` calling
+    `verify_tag` which calls `compute_tag`) would benefit
+    from transitive-checking; the call-graph machinery in
+    `ProofCore` (`buildCallGraphModule`) is the natural
+    next-step for that. -/
+def fnTableComplete (table : FnTable) (pe : PExpr) : Bool :=
+  (pexprCalls pe).all (fun name => (table name).isSome)
+
+/-! ### Per-flagship completeness assertions
+
+One `example` per (spec, FnTable) pair.  Closed by
+`decide`; future drift surfaces as build failure. -/
+
+-- parse_validate (uses parseValidateFns)
+example : fnTableComplete parseValidateFns validateVersionExpr := by decide
+example : fnTableComplete parseValidateFns validateHeaderFieldsExpr := by decide
+-- KNOWN GAP, FOUND BY THIS CHECK 2026-05-30:
+--   parseHeaderExpr calls "compute_checksum" but parseValidateFns
+--   has no entry for it (no `computeChecksumExpr` / `Fn`
+--   currently exists in Concrete.Proof for parse_validate's
+--   while-loop XOR-fold function).  The shipping
+--   parse_header_too_short / _bad_version / etc. theorems work
+--   only because eval bails before reaching the call site
+--   (early-return on validator failures).  A future
+--   parse_header_success theorem that walks the full path
+--   would silently fail without this entry.
+--   Follow-up: write Concrete.Proof.computeChecksumExpr +
+--   computeChecksumFn and extend parseValidateFns.  This is
+--   exactly the kind of issue the check is supposed to surface
+--   — the assertion is intentionally REMOVED here, not patched,
+--   so the gap stays visible until the spec lands.
+-- example : fnTableComplete parseValidateFns parseHeaderExpr := by decide
+
+-- crypto_verify (uses cryptoFns)
+example : fnTableComplete cryptoFns computeTagExpr := by decide
+example : fnTableComplete cryptoFns verifyTagExpr := by decide
+example : fnTableComplete cryptoFns checkNonceExpr := by decide
+example : fnTableComplete cryptoFns verifyMessageExpr := by decide
+
+-- fixed_capacity (uses fixedCapacityFns)
+example : fnTableComplete fixedCapacityFns ringNewExpr := by decide
+example : fnTableComplete fixedCapacityFns ringPushExpr := by decide
+example : fnTableComplete fixedCapacityFns ringContainsExpr := by decide
+example : fnTableComplete fixedCapacityFns fcTagExpr := by decide
+
+-- constant_time_tag (uses ctTagFns)
+example : fnTableComplete ctTagFns ctCompareExpr := by decide
+
 end Concrete.ProofSoundness

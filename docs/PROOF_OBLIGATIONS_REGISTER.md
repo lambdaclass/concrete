@@ -72,6 +72,7 @@ means.
 | G-02 | Spec drift check (commit `f371cc1`) | For every registered proof, the source-extracted PExpr equals `normalizePExpr (Concrete.Proof.specs[function])`.  Mismatch downgrades obligation status to `stale` and surfaces `RegistryIssue.specDrift`.  Regression: `tests/programs/adversarial_spec_drift/test_drift.con` with `driftTestSpec` deliberately differing from source; CI asserts the gate fires and status downgrades. | `spec_drift_completeness`: the gate fires iff source-extracted PExpr disagrees with registered spec; no false negatives. |
 | G-03 | Registered-proof attachment | `proof-registry.json` references a Lean theorem by name; the Lean module containing the theorem is part of `make build` (Lean kernel rejection fails the build). | `theorem_lookup_completeness`: every registered `proof` field resolves to a Lean theorem; theorem statement uses the registered `spec` symbol. |
 | G-04 | Eligibility profile | Functions can only be registered if they pass `predictable` (no recursion, bounded loops, no alloc, no FFI).  Restricts what shapes ever reach extraction. | `eligibility_preservation`: a proof-eligible function's source semantics agrees with PExpr semantics within the modeled fragment. |
+| G-05 | FnTable completeness check (commit 2026-05-30 landing) | For every (registered spec, FnTable) pair, every `.call X` site in the spec resolves to `some _` in the FnTable.  A missing entry makes `eval` silently return `none` and the theorem becomes vacuous.  Enforced by `decide`-checked `example` blocks in `Concrete.ProofSoundness`; failure surfaces as a Lean build error. | `fntable_completeness_completeness`: no false negatives — if the assertion fires, the gap is real. |
 
 ## Per-rule notes
 
@@ -239,6 +240,49 @@ rather than expanding the full eval pattern.  Phase 12
 obligations `while_step_preservation` and
 `while_step_early_break` will state preservation against
 `eval.evalWhileStep`, not the monolithic `eval`.
+
+### G-05 (FnTable completeness)
+
+A `partial def` FnTable is a `String → Option PFnDef`.  When
+a registered spec calls `.call X args` but the FnTable has
+no entry for `X`, `eval` silently returns `none` on that
+call site.  If the theorem's proof structure happens to not
+reach that site (e.g. an early-return bails before), the
+theorem still kernel-checks — but it proves a vacuous or
+narrowly-scoped claim, not the universal property the
+reader expects.
+
+The check (commit landing 2026-05-30):
+
+    def fnTableComplete (table : FnTable) (pe : PExpr) : Bool :=
+      (pexprCalls pe).all (fun name => (table name).isSome)
+
+with `decide`-closed `example` assertions per (spec,
+FnTable) pair in `Concrete.ProofSoundness`.  A missing
+entry surfaces as a Lean compile error at `make build`.
+
+**Known gap surfaced by the first run.**  The
+parse_validate's `parseHeaderExpr` calls `compute_checksum`
+but `parseValidateFns` has no entry for it — there is
+currently no `computeChecksumExpr` / `computeChecksumFn`
+spec written for parse_validate's while-loop XOR-fold
+function.  The shipped parse_header failure-direction
+theorems work because eval bails before the call site;
+a future parse_header_success theorem walking the full
+path would silently break.  The check assertion for
+`parseHeaderExpr` is intentionally REMOVED (not patched)
+so the gap stays visible.  Follow-up: write the spec and
+extend the table.
+
+**One-level today; transitive follow-up.**  Today's
+check is one-level (direct call sites in the spec).  It
+does NOT walk callee bodies recursively.  No current
+flagship's registered spec has a multi-level call chain
+where the top-level callee's body itself calls something
+missing.  When that arises (e.g. crypto_verify's
+`verify_message` calling `verify_tag` calling
+`compute_tag`), a transitive variant — reusing
+`ProofCore`'s call-graph builder — is the next refinement.
 
 ### G-02 (spec drift gate)
 
