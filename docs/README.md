@@ -12,6 +12,7 @@ Use these files as the primary reference once a design has moved out of explorat
 - [SAFETY.md](SAFETY.md) — capabilities, `trusted`, `Unsafe`, proof boundary, and high-integrity direction
 - [PROFILES.md](PROFILES.md) — named user-facing profiles: `safe`, `predictable`, `provable`, and the long-term `high-integrity` direction
 - [CLAIMS_TODAY.md](CLAIMS_TODAY.md) — the short public claim surface: what Concrete claims today, what it does not, and what remains trusted
+- [PROOF_STORY_MATRIX.md](PROOF_STORY_MATRIX.md) — per-construct proof/evidence story; the "no semantically dark constructs" inventory
 - [TRUSTED_COMPUTING_BASE.md](TRUSTED_COMPUTING_BASE.md) — explicit trusted-computing-base accounting for Concrete's strongest current claims
 - [PREDICTABLE_BOUNDARIES.md](PREDICTABLE_BOUNDARIES.md) — host calls, cleanup paths, determinism sources, failure paths, and memory/UB boundaries for predictable/proved code
 - [FAILURE_STRATEGY.md](FAILURE_STRATEGY.md) — abort-only decision, cleanup guarantees, FFI failure consequences, and proof-backed code failure assumptions

@@ -10,6 +10,22 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Proof-story matrix defines the no-dark-constructs contract
+
+`docs/PROOF_STORY_MATRIX.md` records the language-level proof/evidence story:
+every construct must be classified as proved, enforced, reported, assumed,
+trusted, or explicitly open with a named gap.
+
+This reframes the long-term goal from "everything is in ProvableV1" to "nothing
+is semantically dark." Pure value code can move through `ProvableV1`; capability
+code, allocation, FFI, raw pointers, backend behavior, constant-time behavior,
+and future concurrency each get their own proof/evidence story instead of being
+silently ignored.
+
+The roadmap now makes the matrix an operating rule, and the future
+`concrete audit` command is defined as the per-program rendering of this
+matrix.
+
 ### Proof coverage classification lands in proof-status reports
 
 Proof registry entries now carry an explicit coverage class, and

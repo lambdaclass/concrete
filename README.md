@@ -195,7 +195,7 @@ make clean
 
 **Discipline:** [docs/WRONG_CODE_CORPUS.md](docs/WRONG_CODE_CORPUS.md), [docs/REDUCER_WORKFLOW.md](docs/REDUCER_WORKFLOW.md), [docs/BUG_BUNDLE.md](docs/BUG_BUNDLE.md), [docs/VERIFY_GATES.md](docs/VERIFY_GATES.md), [docs/ASSUMPTION_FILES.md](docs/ASSUMPTION_FILES.md), [docs/POLICY_FILES.md](docs/POLICY_FILES.md), [docs/INTERPRETER_TRUST.md](docs/INTERPRETER_TRUST.md).
 
-**Identity / claims:** [docs/IDENTITY.md](docs/IDENTITY.md), [docs/PRINCIPLES.md](docs/PRINCIPLES.md), [docs/CLAIMS_TODAY.md](docs/CLAIMS_TODAY.md), [docs/PROVABLE_V1.md](docs/PROVABLE_V1.md), [docs/TRUSTED_COMPUTING_BASE.md](docs/TRUSTED_COMPUTING_BASE.md), [docs/PROFILES.md](docs/PROFILES.md), [docs/INFLUENCES.md](docs/INFLUENCES.md).
+**Identity / claims:** [docs/IDENTITY.md](docs/IDENTITY.md), [docs/PRINCIPLES.md](docs/PRINCIPLES.md), [docs/CLAIMS_TODAY.md](docs/CLAIMS_TODAY.md), [docs/PROOF_STORY_MATRIX.md](docs/PROOF_STORY_MATRIX.md), [docs/PROVABLE_V1.md](docs/PROVABLE_V1.md), [docs/TRUSTED_COMPUTING_BASE.md](docs/TRUSTED_COMPUTING_BASE.md), [docs/PROFILES.md](docs/PROFILES.md), [docs/INFLUENCES.md](docs/INFLUENCES.md).
 
 **Direction:** [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), [research/](research/).
 

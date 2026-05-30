@@ -71,6 +71,8 @@ Do not call the language releasable until these are true:
   section in this file.
 - Every proof/evidence claim must identify whether it is proved, enforced,
   reported, assumed, or trusted.
+- No semantically dark constructs: every language construct has a row in the
+  proof-story matrix, or its absence is treated as a documentation bug.
 - Contracts, when they land, create obligations. They are never promises by
   themselves.
 - Keep parser changes LL(1). Attribute-style contracts are allowed; ambiguous
@@ -258,7 +260,8 @@ four graduated flagships and one package-scale example.
    metadata.
 2. Add `concrete audit`: one human-readable plus machine-readable bundle
    covering authority, trust, allocation, proof status, obligations,
-   assumptions, policy, snapshots, backend/target assumptions, and replay.
+   assumptions, policy, snapshots, backend/target assumptions, replay, and the
+   proof-story matrix specialized to the audited program.
 3. Add `concrete explain <function>`: capabilities, proof status, assumptions,
    obligations, trusted callees, evidence level, and why each status is what it
    is.

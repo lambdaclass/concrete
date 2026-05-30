@@ -224,8 +224,13 @@ today and is wired into the flagship corpus.  Future subsets
 (`ProvableV2`, etc.) will be additive and named.  A subset
 narrowing is a compatibility break.
 
+For the whole-language version of this principle, see
+[PROOF_STORY_MATRIX.md](PROOF_STORY_MATRIX.md): every construct should be
+proved, enforced, reported, assumed, trusted, or explicitly open.
+
 ## Relation To Other Documents
 
+- `docs/PROOF_STORY_MATRIX.md` is the per-construct proof/evidence inventory.
 - `docs/PROVABLE_SUBSET.md` is the broader background document.
 - `docs/PROOF_OBLIGATIONS_REGISTER.md` records per-construct soundness debt.
 - `docs/PROOF_STATE_MODEL.md` defines the functional mutation model.
