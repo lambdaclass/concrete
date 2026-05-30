@@ -24,27 +24,29 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:100
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:100
 
-  `hmac_sha256.ch` is eligible but uses unsupported constructs — extraction failed.
+  `hmac_sha256.ch` passes the predictable profile but has no registered proof.
 
  100 |     fn ch(x: u32, y: u32, z: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: unsupported operator: Concrete.BinOp.bitand at Concrete.Ty.u32
+  current fingerprint:
+    [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitand (var x) (var y)) (binop Concrete.BinOp.bitand (binop Concrete.BinOp.bitxor (var x) (int 4294967295)) (var z))))]
 
-  hint: Remove unsupported operator: Concrete.BinOp.bitand at Concrete.Ty.u32 to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:105
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:105
 
-  `hmac_sha256.maj` is eligible but uses unsupported constructs — extraction failed.
+  `hmac_sha256.maj` passes the predictable profile but has no registered proof.
 
  105 |     fn maj(x: u32, y: u32, z: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: unsupported operator: Concrete.BinOp.bitand at Concrete.Ty.u32
+  current fingerprint:
+    [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitand (var x) (var y)) (binop Concrete.BinOp.bitand (var x) (var z))) (binop Concrete.BinOp.bitand (var y) (var z))))]
 
-  hint: Remove unsupported operator: Concrete.BinOp.bitand at Concrete.Ty.u32 to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
 -- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:110
 
@@ -210,5 +212,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 18 functions — 0 proved, 0 stale, 12 unproved, 5 blocked, 1 ineligible, 0 trusted
+Totals: 18 functions — 0 proved, 0 stale, 14 unproved, 3 blocked, 1 ineligible, 0 trusted
 

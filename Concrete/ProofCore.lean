@@ -695,6 +695,8 @@ def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
   | .bitxor, _ => none
   | .bitor, .u8 => some (.bitor 8 false)
   | .bitor, _ => none
+  | .bitand, .u32 => some (.bitand 32 false)
+  | .bitand, _ => none
   | .eq, _  => some .eq
   | .neq, _ => some .ne
   | .lt, _  => some .lt

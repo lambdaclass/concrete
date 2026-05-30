@@ -80,6 +80,18 @@ inductive PBinOp where
       Today `evalBinOp` supports `bitor 8 false` only.  Other
       widths are append-only follow-ups. -/
   | bitor (width : Nat) (signed : Bool)
+  /-- Bitwise AND at a specific width, with a `signed` tag for
+      result-mode interpretation (same convention as `bitxor`).
+
+      Forced by HMAC-SHA256's `Ch`/`Maj` round functions
+      (`(x & y) ^ ((~x) & z)`, `(x & y) ^ (x & z) ^ (y & z)`) at
+      u32 width.  The bit-level AND is sign-agnostic; the unsigned
+      result-mode (`signed = false`) keeps `0xFFFFFFFF & y` equal
+      to `y`, not a negative two's-complement value.
+
+      Today `evalBinOp` supports `bitand 32 false` only.  Other
+      widths are append-only follow-ups. -/
+  | bitand (width : Nat) (signed : Bool)
   | eq | ne | lt | le | gt | ge
   deriving Repr, BEq, DecidableEq
 
@@ -277,6 +289,12 @@ def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
   | .bitor 8 false, .int a, .int b =>
     some (.int (Int.ofNat
       ((BitVec.ofInt 8 a) ||| (BitVec.ofInt 8 b)).toNat))
+  -- bitand 32 unsigned: BitVec.and at u32, unsigned view.
+  -- 0xFFFFFFFF & y = y (not -1 & y).  Forced by HMAC-SHA256's
+  -- Ch/Maj round functions.
+  | .bitand 32 false, .int a, .int b =>
+    some (.int (Int.ofNat
+      ((BitVec.ofInt 32 a) &&& (BitVec.ofInt 32 b)).toNat))
   -- Other widths intentionally unmodeled — extraction refuses to
   -- emit them, so a `.mod w s` or `.bitxor w s` with w ≠ 32
   -- reaching eval signals a bug (or a future extension yet to
@@ -353,6 +371,24 @@ example :
 example :
     evalBinOp (.bitxor 8 false)
       (.int 200) (.int 200) = some (.int 0) := by rfl
+
+/-- u32 and with the all-ones mask is the identity: `0xFFFFFFFF & y
+    = y`.  This is the property HMAC-SHA256's `Ch` relies on when
+    `x = 0xFFFFFFFF` makes the `(x & y)` term select `y`. -/
+example :
+    evalBinOp (.bitand 32 false)
+      (.int 4294967295) (.int 305419896) = some (.int 305419896) := by rfl
+
+/-- u32 and of all-ones with all-ones stays a positive `Int`
+    (`4294967295`, NOT `-1`) under the unsigned view. -/
+example :
+    evalBinOp (.bitand 32 false)
+      (.int 4294967295) (.int 4294967295) = some (.int 4294967295) := by rfl
+
+/-- u32 and with zero is zero (the annihilator). -/
+example :
+    evalBinOp (.bitand 32 false)
+      (.int 4042322160) (.int 0) = some (.int 0) := by rfl
 
 /-- Bind a list of argument values to parameter names. -/
 def bindArgs (env : Env) (params : List String) (args : List PVal) : Option Env :=

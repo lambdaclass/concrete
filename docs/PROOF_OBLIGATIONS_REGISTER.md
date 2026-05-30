@@ -258,6 +258,34 @@ extractor preserves.  Phase 12 obligation
 `cast_identity_preservation` will state this restriction
 explicitly.
 
+### R-22 (bitand — typed BitVec round-trip)
+
+New constructor introduced by HMAC-SHA256's `Ch`/`Maj` round
+functions (`(x & y) ^ ((~x) & z)` and `(x & y) ^ (x & z) ^
+(y & z)`) at u32 width.  Same typed-BitVec round-trip shape
+as R-21 (bitor):
+
+    evalBinOp (.bitand 32 false) (.int a) (.int b) =
+      some (.int (Int.ofNat ((BitVec.ofInt 32 a) &&& (BitVec.ofInt 32 b)).toNat))
+
+`evalBinOp` supports `bitand 32 false` only today (the
+u32-unsigned case `Ch`/`Maj` use).  Signed-mode `bitand` and
+other widths are append-only follow-ups, each requiring one
+`evalBinOp` case + one `binOpToPBinOp` mapping + an updated
+row in this register.  Backend match: source `&` lowers to
+LLVM `and` at the operand width (`EmitSSA.lean`), so the
+BitVec `&&&` model and codegen agree.
+
+Inline regression theorems in `Concrete/Proof.lean` pin the
+u32 unsigned behavior:
+- `0xFFFFFFFF & 0x12345678 = 0x12345678`  (mask identity `Ch` relies on)
+- `0xFFFFFFFF & 0xFFFFFFFF = 4294967295`  (high bit set, still positive)
+- `x & 0 = 0`  (annihilator)
+
+This row discharges the AUDIT.md § 5 forcing-surface item
+"`PBinOp.bitand (width, signed)` at u32" for hmac_sha256 and
+moves `ch`/`maj` from `blocked` to `in` ProvableV1.
+
 ### R-21 (bitor — typed BitVec round-trip)
 
 New constructor introduced by constant_time_tag's
