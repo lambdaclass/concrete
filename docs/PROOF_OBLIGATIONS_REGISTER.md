@@ -40,7 +40,7 @@ informally below the table but not yet a Lean theorem name.
 |---:|---|---|---|---|
 | R-01 | `lit (int n)` | `42`, `0x10`, `-1` | parse_validate | `lit_int_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness`; non-partial wrapper landed same day |
 | R-02 | `lit (bool b)` | `true`, `false` | parse_validate | `lit_bool_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness` |
-| R-03 | `var n` | identifier reference | parse_validate | `var_preservation` |
+| R-03 | `var n` | identifier reference | parse_validate | `var_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness`; wrapper arm landed same day |
 | R-04 | `binOp .add/.sub/.mul` | `a + b`, `a - b`, `a * b` | parse_validate | `binop_int_preservation` |
 | R-05 | `binOp .eq/.ne/.lt/.le/.gt/.ge` | `a == b`, `a < b`, etc. | parse_validate | `binop_cmp_preservation` |
 | R-06 | `letIn name v body` | `let x = v; ...` | parse_validate | `let_preservation` |
@@ -123,6 +123,31 @@ mutual block (binops with sub-expressions, structLit
 with mapM over fields, etc.) still need the harder
 mapM-to-structural-recursion lift — that's the next
 Phase 12 architectural piece.
+
+### R-03 (identifier preservation — second wrapper rule)
+
+`var_preservation` (landed 2026-05-30) extends the wrapper
+to `.ident` and the source semantics to identifier lookup:
+
+    def evalSourceIdent (env : Env) : CExpr → Option PVal
+      | .ident name _ => env name
+      | _             => none
+
+    theorem var_preservation (name : String) (ty : Ty) ... :
+        cExprToPExpr (.ident name ty) = some (.var name)
+      ∧ eval fns env (fuel+1) (.var name) = env name
+      ∧ evalSourceIdent env (.ident name ty) = env name
+
+Same structural pattern as R-01/R-02.  The result depends
+on `env` (unlike literals); both eval and source semantics
+use the same `Env` shape, so "lookup agreement" is
+structural.
+
+Discharges against the REAL `cExprToPExpr` via the
+non-partial wrapper arm.  Public API unchanged.
+
+`cExprIdentToPExpr` added in `ProofCore` as a redundant
+literal-style spec helper (mirrors `cExprLitToPExpr`).
 
 ### R-14 (cast)
 

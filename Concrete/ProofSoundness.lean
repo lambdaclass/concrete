@@ -66,6 +66,23 @@ def evalSourceLit : CExpr → Option PVal
   | .boolLit b  => some (.bool b)
   | _           => none
 
+/-- Source semantics for identifier references.
+
+    At the source level, `.ident name ty` looks up `name` in the
+    surrounding scope.  Concrete's scope discipline is enforced
+    by Resolve / Check before extraction reaches ProofCore, so by
+    the time a CExpr.ident appears in proof-eligible code the
+    name is guaranteed to be in scope (a typed environment maps
+    each in-scope name to its PVal).
+
+    We model "the scope" as the same `Env` PExpr eval uses
+    (`String → Option PVal`).  This is honest: the source-side
+    and PExpr-side environments are the same shape; the
+    preservation theorem is that lookup agrees on both sides. -/
+def evalSourceIdent (env : Env) : CExpr → Option PVal
+  | .ident name _ => env name
+  | _             => none
+
 /-! ## Phase 12 wrapper architecture (lift landed 2026-05-30)
 
 `cExprToPExprImpl` (the partial-def, in the mutual block)
@@ -125,6 +142,32 @@ theorem lit_bool_preservation (b : Bool) (fuel : Nat)
     cExprToPExpr (.boolLit b) = some (.lit (.bool b))
   ∧ eval fns env (fuel + 1) (.lit (.bool b)) = some (.bool b)
   ∧ evalSourceLit (.boolLit b) = some (.bool b) := by
+  refine ⟨rfl, ?_, rfl⟩
+  simp [eval]
+
+/-! ## R-03: `var_preservation` (against real extractor)
+
+For any identifier source `e := .ident name ty`:
+  * `cExprToPExpr e = some (.var name)` — proved against
+    the REAL public extractor (closed by `rfl` via the
+    non-partial wrapper, same pattern as R-01/R-02);
+  * evaluating that PExpr at any non-zero fuel produces
+    `env name` (the scope's value for `name`);
+  * the source-level semantics produces the same lookup.
+
+The three views agree.  Note the result depends on `env` —
+unlike literals, identifier evaluation is environment-
+sensitive.  Both PExpr and source semantics use the same
+`Env` shape (`String → Option PVal`), so "lookup agreement"
+is structural.
+
+Phase 12 obligation R-03 is FULLY discharged end-to-end
+2026-05-30. -/
+theorem var_preservation (name : String) (ty : Ty) (fuel : Nat)
+    (fns : FnTable) (env : Env) :
+    cExprToPExpr (.ident name ty) = some (.var name)
+  ∧ eval fns env (fuel + 1) (.var name) = env name
+  ∧ evalSourceIdent env (.ident name ty) = env name := by
   refine ⟨rfl, ?_, rfl⟩
   simp [eval]
 

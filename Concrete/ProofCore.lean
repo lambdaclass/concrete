@@ -726,6 +726,13 @@ def cExprLitToPExpr : CExpr → Option Proof.PExpr
   | .boolLit b  => some (.lit (.bool b))
   | _           => none
 
+/-- Non-partial extractor restricted to the IDENTIFIER fragment.
+    Companion to `cExprLitToPExpr` for variable references; same
+    motivation (`partial def` opacity) and same usage pattern. -/
+def cExprIdentToPExpr : CExpr → Option Proof.PExpr
+  | .ident name _ => some (.var name)
+  | _             => none
+
 mutual
 partial def cExprToPExprImpl : CExpr → Option Proof.PExpr
   | .intLit n _ => some (.lit (.int n))
@@ -976,9 +983,10 @@ end
     the same behavior as before.  Internal recursive calls
     inside the mutual block use `cExprToPExprImpl` directly. -/
 def cExprToPExpr : CExpr → Option Proof.PExpr
-  | .intLit n _ => some (.lit (.int n))
-  | .boolLit b  => some (.lit (.bool b))
-  | e           => cExprToPExprImpl e
+  | .intLit n _   => some (.lit (.int n))
+  | .boolLit b    => some (.lit (.bool b))
+  | .ident name _ => some (.var name)
+  | e             => cExprToPExprImpl e
 
 -- Unsupported construct identification
 
