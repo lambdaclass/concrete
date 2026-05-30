@@ -11,6 +11,14 @@ North star: **systems code with explicit authority, bounded behavior, small
 trusted boundaries, and Lean-backed evidence tied to real source code, while
 keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
 
+Governing frame: **no semantically dark constructs.** Every language
+construct is `proved`, `enforced`, `reported`, `assumed`, or `trusted` —
+never a vague middle. "Provable language" is not "everything in
+`ProvableV1`"; it is "every construct has a defined proof story across the
+five claim classes." `ProvableV1` is the current `proved`-via-value-semantics
+cell. Other cells are populated by capability typing, runtime obligations,
+assumption files, and declared trust boundaries.
+
 ## Current State
 
 Concrete already has a real Lean 4 compiler pipeline:
@@ -37,6 +45,13 @@ The proof/evidence pipeline is operational:
   now have extraction/preservation coverage at least at the shape level. The
   remaining work is deeper source-semantics agreement and trust-gate soundness,
   not basic extractor access.
+- `ProvableV1` is named, documented, and wired into the flagship corpus.
+  `docs/PROVABLE_V1.md` is the public contract; every graduated flagship
+  declares conformance in its README; `tests/showcase/manifest.toml` carries a
+  `provable_v1_conformance` field per flagship (all four currently `full`).
+  The "Direction" section in `docs/PROVABLE_V1.md` records the long-term
+  commitment: the subset is additive, and the broader frame is "no
+  semantically dark constructs."
 
 The remaining question is no longer "can Concrete compile programs?" It is:
 
