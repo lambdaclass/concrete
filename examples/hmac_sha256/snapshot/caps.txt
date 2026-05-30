@@ -1,0 +1,25 @@
+=== Capability Summary ===
+
+module hmac_sha256:
+      sha256_init : (pure)
+      sha256_k : (pure)
+      ch : (pure)
+      maj : (pure)
+      rotr : (pure)
+      big_sigma0 : (pure)
+      big_sigma1 : (pure)
+      small_sigma0 : (pure)
+      small_sigma1 : (pure)
+      ct_compare_32 : (pure)
+      block_to_words : (pure)
+      sha256_schedule : (pure)
+      sha256_round : (pure)
+      sha256_compress : (pure)
+      state_to_bytes : (pure)
+      hmac_sha256 : (pure)
+      verify_hmac : (pure)
+  pub main : Console
+    Console    <- calls print_string (intrinsic), print_char (intrinsic)
+
+Totals: 18 functions (17 pure), 0 externs
+

@@ -1,0 +1,8 @@
+=== Interface Summary ===
+
+module hmac_sha256 (1 exports):
+  public API:
+    fn main() -> i32  [Console]
+
+Totals: 1 modules, 1 public exports
+

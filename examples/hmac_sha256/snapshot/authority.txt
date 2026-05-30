@@ -1,0 +1,7 @@
+=== Authority Report ===
+
+capability Console (1 functions):
+  pub main  <- main -> print_string
+
+Totals: 18 functions (17 pure, 1 with capabilities), 0 externs
+

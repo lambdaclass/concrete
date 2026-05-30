@@ -1,0 +1,214 @@
+=== Proof Status Report ===
+
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:61
+
+  `hmac_sha256.sha256_init` passes the predictable profile but has no registered proof.
+
+ 61 |     fn sha256_init() -> [u32; 8] {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (array (int 1779033703) (int 3144134277) (int 1013904242) (int 2773480762) (int 1359893119) (int 2600822924) (int 528734635) (int 1541459225)))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:69
+
+  `hmac_sha256.sha256_k` passes the predictable profile but has no registered proof.
+
+ 69 |     fn sha256_k() -> [u32; 64] {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (array (int 1116352408) (int 1899447441) (int 3049323471) (int 3921009573) (int 961987163) (int 1508970993) (int 2453635748) (int 2870763221) (int 3624381080) (int 310598401) (int 607225278) (int 1426881987) (int 1925078388) (int 2162078206) (int 2614888103) (int 3248222580) (int 3835390401) (int 4022224774) (int 264347078) (int 604807628) (int 770255983) (int 1249150122) (int 1555081692) (int 1996064986) (int 2554220882) (int 2821834349) (int 2952996808) (int 3210313671) (int 3336571891) (int 3584528711) (int 113926993) (int 338241895) (int 666307205) (int 773529912) (int 1294757372) (int 1396182291) (int 1695183700) (int 1986661051) (int 2177026350) (int 2456956037) (int 2730485921) (int 2820302411) (int 3259730800) (int 3345764771) (int 3516065817) (int 3600352804) (int 4094571909) (int 275423344) (int 430227734) (int 506948616) (int 659060556) (int 883997877) (int 958139571) (int 1322822218) (int 1537002063) (int 1747873779) (int 1955562222) (int 2024104815) (int 2227730452) (int 2361852424) (int 2428436474) (int 2756734187) (int 3204031479) (int 3329325298)))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:100
+
+  `hmac_sha256.ch` is eligible but uses unsupported constructs — extraction failed.
+
+ 100 |     fn ch(x: u32, y: u32, z: u32) -> u32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  unsupported: unsupported operator: Concrete.BinOp.bitand at Concrete.Ty.u32
+
+  hint: Remove unsupported operator: Concrete.BinOp.bitand at Concrete.Ty.u32 to enable proof extraction.
+
+-- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:105
+
+  `hmac_sha256.maj` is eligible but uses unsupported constructs — extraction failed.
+
+ 105 |     fn maj(x: u32, y: u32, z: u32) -> u32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  unsupported: unsupported operator: Concrete.BinOp.bitand at Concrete.Ty.u32
+
+  hint: Remove unsupported operator: Concrete.BinOp.bitand at Concrete.Ty.u32 to enable proof extraction.
+
+-- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:110
+
+  `hmac_sha256.rotr` is eligible but uses unsupported constructs — extraction failed.
+
+ 110 |     fn rotr(x: u32, n: u32) -> u32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  unsupported: unsupported operator: Concrete.BinOp.bitor at Concrete.Ty.u32, unsupported operator: Concrete.BinOp.shr at Concrete.Ty.u32, unsupported operator: Concrete.BinOp.shl at Concrete.Ty.u32
+
+  hint: Remove unsupported operator: Concrete.BinOp.bitor at Concrete.Ty.u32, unsupported operator: Concrete.BinOp.shr at Concrete.Ty.u32, unsupported operator: Concrete.BinOp.shl at Concrete.Ty.u32 to enable proof extraction.
+
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:115
+
+  `hmac_sha256.big_sigma0` passes the predictable profile but has no registered proof.
+
+ 115 |     fn big_sigma0(x: u32) -> u32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (call rotr (var x) (int 2)) (call rotr (var x) (int 13))) (call rotr (var x) (int 22))))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:120
+
+  `hmac_sha256.big_sigma1` passes the predictable profile but has no registered proof.
+
+ 120 |     fn big_sigma1(x: u32) -> u32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (call rotr (var x) (int 6)) (call rotr (var x) (int 11))) (call rotr (var x) (int 25))))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:125
+
+  `hmac_sha256.small_sigma0` is eligible but uses unsupported constructs — extraction failed.
+
+ 125 |     fn small_sigma0(x: u32) -> u32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  unsupported: unsupported operator: Concrete.BinOp.shr at Concrete.Ty.u32
+
+  hint: Remove unsupported operator: Concrete.BinOp.shr at Concrete.Ty.u32 to enable proof extraction.
+
+-- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:130
+
+  `hmac_sha256.small_sigma1` is eligible but uses unsupported constructs — extraction failed.
+
+ 130 |     fn small_sigma1(x: u32) -> u32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  unsupported: unsupported operator: Concrete.BinOp.shr at Concrete.Ty.u32
+
+  hint: Remove unsupported operator: Concrete.BinOp.shr at Concrete.Ty.u32 to enable proof extraction.
+
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:147
+
+  `hmac_sha256.ct_compare_32` passes the predictable profile but has no registered proof.
+
+ 147 |     fn ct_compare_32(a: [u8; 32], b: [u8; 32]) -> i32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(let diff (int 0)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 32)) [(set diff (binop Concrete.BinOp.bitor (var diff) (binop Concrete.BinOp.bitxor (index (var a) (var i)) (index (var b) (var i))))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (if (binop Concrete.BinOp.eq (var diff) (int 0)) [(ret (int 1))]) (ret (int 0))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:167
+
+  `hmac_sha256.block_to_words` passes the predictable profile but has no registered proof.
+
+ 167 |     fn block_to_words(block: [u8; 64]) -> [u32; 16] {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0)))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:172
+
+  `hmac_sha256.sha256_schedule` passes the predictable profile but has no registered proof.
+
+ 172 |     fn sha256_schedule(w: [u32; 16]) -> [u32; 64] {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0)))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:181
+
+  `hmac_sha256.sha256_round` passes the predictable profile but has no registered proof.
+
+ 181 |     fn sha256_round(state: [u32; 8], k: u32, w: u32) -> [u32; 8] {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (var state))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:186
+
+  `hmac_sha256.sha256_compress` passes the predictable profile but has no registered proof.
+
+ 186 |     fn sha256_compress(state: [u32; 8], block: [u8; 64]) -> [u32; 8] {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (var state))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:191
+
+  `hmac_sha256.state_to_bytes` passes the predictable profile but has no registered proof.
+
+ 191 |     fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0)))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:198
+
+  `hmac_sha256.hmac_sha256` passes the predictable profile but has no registered proof.
+
+ 198 |     fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0)))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:204
+
+  `hmac_sha256.verify_hmac` passes the predictable profile but has no registered proof.
+
+ 204 |     fn verify_hmac(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32,
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(let tag (call hmac_sha256 (var k) (var k_len) (var m) (var m_len))) (ret (call ct_compare_32 (var tag) (var expected)))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- not eligible ------------------------------------------- examples/hmac_sha256/src/main.con:219
+
+  `hmac_sha256.main` cannot be proved: fails predictable profile (has capabilities: Console, is entry point (main)).
+
+ 219 |     pub fn main() with(Console) -> i32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  reasons: has capabilities: Console, is entry point (main)
+
+  hint: Address these constraints to make this function eligible for proof.
+
+Totals: 18 functions — 0 proved, 0 stale, 12 unproved, 5 blocked, 1 ineligible, 0 trusted
+

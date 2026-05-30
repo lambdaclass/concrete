@@ -1,0 +1,7 @@
+=== Monomorphization Report ===
+
+Functions before mono: 18
+Functions after mono:  18
+Generic functions:     0
+Specializations:       0
+

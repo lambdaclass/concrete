@@ -1,0 +1,145 @@
+# Assumption file for the hmac_sha256 candidate.
+# Schema: docs/ASSUMPTION_FILES.md
+#
+# Fifth flagship candidate; first cryptographic-PRIMITIVE flagship.
+# Slot opened 2026-05-30 (the day constant_time_tag graduated as the
+# fourth flagship).  This is the pilot batch — see AUDIT.md § 9.  The
+# pipeline functions are stubs and the ProvableV1 forcing surface
+# (AUDIT.md § 5) is not yet landed, so `concrete audit` reads
+# `Status: partial`.  That partial status is the intended intake
+# state, recorded honestly in snapshot/.
+
+schema_version = 1
+
+[target]
+host      = "any"
+toolchain = "llvm"
+runtime   = "hosted-libc"
+
+[arithmetic]
+# u32 wrapping arithmetic (mod 2^32) is the SHA-256 word model; u8
+# for tag/message bytes; i32 for loop counters and lengths.  NOTE:
+# the interpreter does not yet mask u32 ops to 32 bits — that mask is
+# part of the forcing surface (AUDIT.md § 5) and lands before any RFC
+# vector is claimed.  Wrapping is the predictable-profile default.
+overflow       = "wrapping"
+divide_by_zero = "trap"
+shift_oversize = "wrap"
+
+[allocation]
+# Zero heap.  Every buffer is a fixed-size stack array
+# ([u32; 8], [u32; 16], [u32; 64], [u8; 32], [u8; 64],
+# [u8; 128] = KEY_MAX, [u8; 256] = MSG_MAX).
+heap            = "none"
+stack_max_bytes = 1024   # actual measured: 864 bytes (verify_hmac)
+
+[authority]
+# Entry point uses Console (narrower than Std) for println.
+# Every other function is pure.  No trusted shells, no FFI.
+required  = ["Console"]
+forbidden = ["File", "Net", "Unsafe", "Alloc"]
+
+[ffi]
+externs = []
+
+[trusted]
+# No trusted shells at all — same discipline as constant_time_tag.
+# All buffers are constructed via array literals; no raw byte writes.
+functions = []
+shells    = []
+
+[proof]
+provable_subset = "predictable-u32-word-array-with-bitwise-shift-and-loop"
+trust_anchor    = "Lean kernel + Concrete.Proof.*"
+
+# ============================================================
+# Honest claim boundaries — the four-layer threat model of
+# AUDIT.md § 4.  These are load-bearing for the candidate's
+# framing; the README must echo them and the showcase manifest's
+# [flagship.limits] must reference them at graduation.
+# ============================================================
+
+[claims.functional_correctness]
+status      = "pending"
+description = """
+hmac_sha256(k, m) equals the RFC 2104 / FIPS 180-4 specification
+of HMAC-SHA256, verified against RFC 4231 test vectors.  This is
+the Layer-1 functional-correctness claim.  It is PENDING: the
+pipeline functions are stubs and the Lean theorems (AUDIT.md § 6,
+bars #1 and #2) are not attached yet.  The first theorem
+(sha256_init_correct) is gated only on the proof model accepting
+[u32; 8] constant arrays; the substantive RFC-vector theorems are
+gated on the Phase-4 forcing surface (u32 add tagged, u32 bitand,
+u32 shl, u32 shr — AUDIT.md § 5).
+"""
+
+[claims.structural_constant_time]
+status      = "statically_enforced"
+description = """
+At the SOURCE level, the tag-equality check (ct_compare_32) and
+the compression core have no content-dependent control flow:
+  * ct_compare_32 has no `return` inside its loop body (no early
+    exit), uses the compile-time constant bound 32, and folds
+    byte differences branch-free via OR-accumulate;
+  * all SHA-256 loops are compile-time bounded (64 rounds, 48
+    schedule steps, 16 word loads, 8 finalize steps);
+  * the Boolean round functions (ch, maj) are branch-free.
+These properties are visible in --report unsafe and
+--report eligibility and any regression surfaces as snapshot
+drift (the source body fingerprint changes).
+"""
+
+[claims.hmac_security]
+status      = "assumed_from_rfc"
+description = """
+HMAC's MAC security property — no probabilistic polynomial-time
+adversary can forge a valid tag for a fresh message — is a
+cryptographic assumption about SHA-256's pseudo-random-function
+property (RFC 2104, the HMAC security analysis of Bellare et al.).
+Concrete proves FUNCTIONAL CORRECTNESS against the specification,
+NOT security against an adaptive chosen-message adversary.  This
+gap is out of scope by construction; it is named, not closed.
+"""
+
+[claims.machine_level_constant_time]
+status      = "assumed_not_proved"
+description = """
+THIS IS A LOAD-BEARING GAP, more so than for constant_time_tag
+because keys are involved.  The source's structural constant-time
+properties (claims.structural_constant_time) are NECESSARY but NOT
+SUFFICIENT for true constant-time execution at the machine level:
+  * LLVM may lower `if diff == 0` into a conditional branch rather
+    than a branch-free select.  Compile -O0, or wrap with an
+    asm-volatile / manual branchless idiom, if machine-level
+    constant-time matters.
+  * Target CPUs leak through cache, branch predictor, and
+    speculative execution.  Constant-time-at-source does not
+    prevent these.
+  * Sanitizers, profilers, and instrumentation may introduce
+    data-dependent code paths.
+Concrete has no target-level timing proofs today.  A deployer who
+needs machine-level constant-time must validate it independently.
+"""
+
+[claims.target_endianness]
+status      = "assumed_little_endian"
+description = """
+SHA-256 is big-endian on its input/output bytes.  The source
+constructs words from bytes via explicit indexing
+(block_to_words) and unpacks the state to bytes the same way
+(state_to_bytes), so the ALGORITHM is endianness-independent at
+the API level.  The compiled binary's TARGET endianness is
+assumed little-endian (x86/ARM).  This records the host
+assumption; the algorithmic endianness is handled in source.
+"""
+
+[claims.deployment_audience]
+status      = "informational"
+description = """
+This candidate is NOT a substitute for a vetted crypto library.
+Audience is reviewers evaluating Concrete's proof workflow on a
+real RFC primitive where the correctness claim is precise and the
+trust boundary is explicit.  Do NOT deploy this for production
+message authentication; use libsodium, BoringSSL, or a vetted
+Rust crate.
+"""
