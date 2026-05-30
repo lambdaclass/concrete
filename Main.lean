@@ -3,7 +3,7 @@ import Concrete
 open Concrete
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|verify] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -920,6 +920,9 @@ def compileAndReport (inputPath : String) (reportType : String) : IO UInt32 := d
       let violations := pc.selfCheck
       IO.println (ConsistencyViolation.render violations)
       if violations.isEmpty then return 0 else return 1
+    if reportType == "audit" then
+      IO.println (Report.auditReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc))
+      return (if hasRegistryErrors then 1 else 0)
     if reportType == "verify" then
       -- Pass-by-pass verify gates: post-elab, post-mono, post-lower,
       -- post-cleanup. Each gate's diagnostics are reported separately
@@ -951,7 +954,7 @@ def compileAndReport (inputPath : String) (reportType : String) : IO UInt32 := d
       | .ok mono =>
         IO.println (Report.monoReport validCore.coreModules mono.coreModules)
         return 0
-    IO.eprintln s!"Unknown report type: {reportType}. Use: caps, unsafe, layout, interface, alloc, mono, authority, proof, eligibility, proof-status, obligations, extraction, proof-diagnostics, proof-deps, proof-bundle, lean-stubs, check-proofs, traceability, diagnostics-json, schema, diagnostic-codes, effects, recursion, fingerprints, consistency, verify"
+    IO.eprintln s!"Unknown report type: {reportType}. Use: caps, unsafe, layout, interface, alloc, mono, authority, proof, eligibility, proof-status, obligations, extraction, proof-diagnostics, proof-deps, proof-bundle, lean-stubs, check-proofs, traceability, diagnostics-json, schema, diagnostic-codes, effects, recursion, fingerprints, consistency, verify, audit"
     return 1
 
 def compileAndCheck (inputPath : String) (checkType : String) : IO UInt32 := do

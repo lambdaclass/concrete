@@ -3562,6 +3562,43 @@ def snapshotJson
   ]
   snapshot.render
 
+/-- Single-command audit composing the surfaces a reviewer needs to answer
+    "what does this program claim, and where do the trust boundaries sit?".
+    The audit is the per-program rendering of the proof-story matrix
+    (`docs/PROOF_STORY_MATRIX.md`): authority, trust, allocation, proof
+    evidence with coverage, obligations.  Each section is the existing
+    aspect-specific report under a labeled banner; later versions can
+    add machine-readable JSON output and a ProvableV1 conformance check. -/
+def auditReport (modules : List CModule) (locMap : FnLocMap := [])
+    (sourceMap : SourceMap := []) (registry : ProofRegistry := [])
+    (pc : Concrete.ProofCore) : String :=
+  let banner := String.intercalate "\n"
+    [ "=== Concrete Audit Report ==="
+    , ""
+    , "Governing frame: every construct is one of"
+    , "  proved / enforced / reported / assumed / trusted."
+    , "See docs/PROVABLE_V1.md and docs/PROOF_STORY_MATRIX.md for context."
+    ]
+  let sectionHeader (name : String) : String :=
+    s!"\n\n--- {name} ---\n"
+  String.intercalate "" [
+    banner,
+    sectionHeader "Authority",
+    capabilityReport modules,
+    sectionHeader "Allocation",
+    allocReport modules,
+    sectionHeader "Unsafe / Trust",
+    unsafeReport modules pc,
+    sectionHeader "Effects",
+    effectsReport modules locMap pc,
+    sectionHeader "Eligibility",
+    eligibilityReport pc,
+    sectionHeader "Proof Status",
+    proofStatusReport modules locMap sourceMap (registry := registry) (pc := pc),
+    sectionHeader "Obligations",
+    obligationsReport modules locMap registry pc
+  ]
+
 open Json in
 /-- Produce the JSON API schema definition. Documents all fact kinds, their fields,
     query response shapes, location encoding, and compatibility rules. -/
