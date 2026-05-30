@@ -556,6 +556,164 @@ theorem while_step_preservation
       = some (.while_step pc (extractCarried body) stepE pCont) := by
   simp [cStmtsToPExprK, h_cond, h_rest, h_not_flat, h_step]
 
+/-! ## Eval-side compositional reductions (closing the remaining gaps)
+
+For each rule whose extraction was discharged earlier in this
+file but whose eval-side compositional reduction wasn't
+stated, add the eval-side theorem.  Each takes the standard
+"operands evaluate to known values" hypothesis shape and
+concludes that the composite PExpr reduces appropriately.
+
+R-04 (binop), R-06 (letIn), R-13 (cast) already had their
+eval-side theorems (`eval_binop_reduces`, `eval_let_reduces`,
+`eval_cast_identity`).  R-20 (while_step) has eval-side via
+`while_step_break` / `_cont` / `_exit` in `Concrete.Proof`. -/
+
+/-! R-07: eval reduces ifThenElse to the chosen branch. -/
+theorem eval_if_true
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (cond t e : PExpr) (v : PVal)
+    (h_cond : eval fns env (fuel + 1) cond = some (.bool true))
+    (h_then : eval fns env fuel t = some v) :
+    eval fns env (fuel + 1) (.ifThenElse cond t e) = some v := by
+  simp [eval, h_cond, h_then]
+
+theorem eval_if_false
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (cond t e : PExpr) (v : PVal)
+    (h_cond : eval fns env (fuel + 1) cond = some (.bool false))
+    (h_else : eval fns env fuel e = some v) :
+    eval fns env (fuel + 1) (.ifThenElse cond t e) = some v := by
+  simp [eval, h_cond, h_else]
+
+/-! R-08: eval reduces a `.call` once the FnTable resolves
+the callee, args evaluate, bindArgs succeeds, and the body
+evaluates. -/
+theorem eval_call_reduces
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (fn : String) (args : List PExpr)
+    (fdef : PFnDef) (argVals : List PVal) (callEnv : Env) (v : PVal)
+    (h_fns : fns fn = some fdef)
+    (h_args : eval.evalArgs fns env fuel args = some argVals)
+    (h_bind : bindArgs Env.empty fdef.params argVals = some callEnv)
+    (h_body : eval fns callEnv fuel fdef.body = some v) :
+    eval fns env (fuel + 1) (.call fn args) = some v := by
+  simp [eval, h_fns, h_args, h_bind, h_body]
+
+/-! R-09: eval reduces structLit to a `.struct_` value when
+the fields all evaluate. -/
+theorem eval_struct_lit_reduces
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (name : String) (fields : List (String × PExpr))
+    (fieldVals : List (String × PVal))
+    (h_fields : eval.evalFields fns env fuel fields = some fieldVals) :
+    eval fns env (fuel + 1) (.structLit name fields)
+      = some (.struct_ name fieldVals) := by
+  simp [eval, h_fields]
+
+/-! R-10: eval reduces `.fieldAccess obj field` to the
+field's value once `obj` evaluates to a struct or enum
+containing the field. -/
+theorem eval_field_access_struct
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (obj : PExpr) (sname : String) (fields : List (String × PVal))
+    (field : String)
+    (h_obj : eval fns env (fuel + 1) obj = some (.struct_ sname fields)) :
+    eval fns env (fuel + 1) (.fieldAccess obj field)
+      = eval.lookupField fields field := by
+  simp [eval, h_obj]
+
+theorem eval_field_access_enum
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (obj : PExpr) (ename variant : String)
+    (fields : List (String × PVal)) (field : String)
+    (h_obj : eval fns env (fuel + 1) obj = some (.enum_ ename variant fields)) :
+    eval fns env (fuel + 1) (.fieldAccess obj field)
+      = eval.lookupField fields field := by
+  simp [eval, h_obj]
+
+/-! R-11: eval reduces enumLit to an `.enum_` value when
+the fields evaluate. -/
+theorem eval_enum_lit_reduces
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (enumName variant : String) (fields : List (String × PExpr))
+    (fieldVals : List (String × PVal))
+    (h_fields : eval.evalFields fns env fuel fields = some fieldVals) :
+    eval fns env (fuel + 1) (.enumLit enumName variant fields)
+      = some (.enum_ enumName variant fieldVals) := by
+  simp [eval, h_fields]
+
+/-! R-12: eval reduces `.match_ scrutinee arms` to
+arm-dispatch once the scrutinee evaluates. -/
+theorem eval_match_reduces
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (scrutinee : PExpr) (arms : List (PMatchPat × PExpr))
+    (sv : PVal)
+    (h_scrut : eval fns env (fuel + 1) scrutinee = some sv) :
+    eval fns env (fuel + 1) (.match_ scrutinee arms)
+      = eval.evalArms fns env fuel sv arms := by
+  simp [eval, h_scrut]
+
+/-! R-14: eval reduces `.arrayIndex arr idx` to the
+element at `idx` once `arr` is an array and `idx` is a
+non-negative integer in bounds. -/
+theorem eval_array_index_reduces
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (arr idx : PExpr) (elems : List PVal) (i : Int)
+    (h_arr : eval fns env (fuel + 1) arr = some (.array_ elems))
+    (h_idx : eval fns env (fuel + 1) idx = some (.int i))
+    (h_nneg : ¬ i < 0) :
+    eval fns env (fuel + 1) (.arrayIndex arr idx)
+      = eval.lookupIndex elems i.toNat := by
+  simp [eval, h_arr, h_idx, h_nneg]
+
+/-! R-15: eval reduces arrayLit to an `.array_` value when
+all elements evaluate. -/
+theorem eval_array_lit_reduces
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (elems : List PExpr) (vs : List PVal)
+    (h_elems : eval.evalElems fns env fuel elems = some vs) :
+    eval fns env (fuel + 1) (.arrayLit elems) = some (.array_ vs) := by
+  simp [eval, h_elems]
+
+/-! R-19: eval reduces `.arraySet arr idx val` to a new
+array with the index updated, once arr is an array, idx is
+in bounds, and val evaluates. -/
+theorem eval_array_set_reduces
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (arr idx val : PExpr) (elems : List PVal) (i : Int) (v : PVal)
+    (h_arr : eval fns env fuel arr = some (.array_ elems))
+    (h_idx : eval fns env fuel idx = some (.int i))
+    (h_val : eval fns env fuel val = some v)
+    (h_nneg : ¬ i < 0)
+    (h_bounds : ¬ i.toNat ≥ elems.length) :
+    eval fns env (fuel + 1) (.arraySet arr idx val)
+      = some (.array_ (elems.set i.toNat v)) := by
+  simp [eval, h_arr, h_idx, h_val, h_nneg, h_bounds]
+
+/-! R-18: eval reduces `.while_` in two cases.  When cond
+is false, fall through to cont.  When cond is true, run
+the assigns and recurse — typically applied iteratively
+by callers, not as a single-step reduction. -/
+theorem eval_while_false
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (cond : PExpr) (assigns : List (String × PExpr)) (cont : PExpr)
+    (v : PVal)
+    (h_cond : eval fns env fuel cond = some (.bool false))
+    (h_cont : eval fns env fuel cont = some v) :
+    eval fns env (fuel + 1) (.while_ cond assigns cont) = some v := by
+  simp [eval, h_cond, h_cont]
+
+theorem eval_while_true_step
+    (fns : FnTable) (env : Env) (fuel : Nat)
+    (cond : PExpr) (assigns : List (String × PExpr)) (cont : PExpr)
+    (env' : Env)
+    (h_cond : eval fns env fuel cond = some (.bool true))
+    (h_assigns : eval.evalAssigns fns env fuel assigns = some env') :
+    eval fns env (fuel + 1) (.while_ cond assigns cont)
+      = eval fns env' fuel (.while_ cond assigns cont) := by
+  simp [eval, h_cond, h_assigns]
+
 /-! ## Sanity checks (inline regression theorems)
 
 Same pattern as the inline `example` blocks in
