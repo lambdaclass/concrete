@@ -377,26 +377,28 @@ The invariant that does the work: editing a body changes $phi(f)$, so any regist
 
 #emph[What the fingerprint captures.] $phi(f)$ is a structural encoding of the elaborated Core body — operators, literals, calls, control flow, and local names — taken after type-checking and canonicalization. Comments and whitespace are absent by construction, so reformatting never revokes a proof. The encoding is conservative in the safe direction: a meaning-preserving structural edit (reordering commutative operands, an `x + 0`, a dead `let`) changes $phi(f)$ and forces re-confirmation, even though the proof, stated over the normalized `PExpr`, would still hold. The direction that would be dangerous — a meaning-changing edit that leaves $phi(f)$ unchanged — is bounded by what the encoding omits: it drops surface type annotations, relying on Core having already type-checked, so the residual risk is a width- or type-level change that alters runtime meaning without changing the structural shape. Tightening the fingerprint to carry operand widths is future work; today the gate errs toward over-reporting staleness, not under-reporting it.
 
-= Threat Model
+= Threat Model and Claim Classes
 
-Concrete's evidence is only useful if its trust boundary is explicit. The paper uses the following classification throughout:
+Concrete's evidence is only useful if its trust boundary is explicit. Every claim in the paper and the artifacts is labeled with one of the classes below, and the strength of a statement is the class it sits in.
 
 #figure(
   table(
-    columns: (0.72fr, 1.72fr),
+    columns: (0.66fr, 1.78fr),
     align: (left, left),
     inset: 4.2pt,
     stroke: 0.35pt + gray,
-    table.header([*Class*], [*Meaning in this paper*]),
-    [Trusted], [Concrete compiler extraction, proof registry plumbing, Lean kernel, LLVM/backend/toolchain, runtime and platform],
-    [Proved], [Lean theorem over extracted `PExpr`, current body fingerprint, complete proof table],
-    [Enforced], [Checker rules such as capabilities, linearity, purity gates, and predictable-profile exclusions],
-    [Reported], [Facts exposed for review but not blocking by default: authority traces, layout, unsafe/trusted boundaries],
-    [Assumed], [Explicit `assumptions.toml` entries, e.g. machine-level constant-time behavior],
-    [Not claimed], [Verified compiler, verified binary, complete language semantics, full side-channel safety],
+    table.header([*Class*], [*Meaning and root of trust*]),
+    [Enforced], [Safe code cannot violate it and compile — ownership, linearity, capability monotonicity, predictable-profile gates. Trusts the checker; no mechanized soundness proof.],
+    [Proved], [Lean kernel verified the theorem over the extracted `PExpr` with a current body fingerprint. Trusts the kernel and the extractor.],
+    [Reported], [Compiler-observed but non-blocking: authority traces, allocation, layout, trusted/unsafe boundaries. For audit, not enforcement.],
+    [Assumed], [Explicit `assumptions.toml` entries marked `assumed_not_proved`, e.g. machine-level constant-time behavior.],
+    [Trusted], [The TCB: compiler extraction and registry plumbing, the Lean kernel, and the LLVM/C backend, runtime, and platform. The backend (Core→SSA→LLVM→binary) is trusted, not proved.],
+    [Not claimed], [Verified compiler, verified binary, complete language semantics, full side-channel safety.],
   ),
-  caption: [Threat model and claim vocabulary. Every claim below is labeled with one of these classes.],
-)
+  caption: [Claim classes and the trust boundary. Every claim below carries one of these labels.],
+) <tab-claims>
+
+What "proved" does #emph[not] mean is worth stating plainly: not that the compiled binary is correct (the proof is over `PExpr` with unbounded integers, not the emitted machine code), not that the checker is sound, and not anything about cross-function composition beyond what a stated theorem captures; eligibility is not proof. The checker is exercised by an adversarial suite (1272 trust-gate checks) and the CI proof gate, but not by a mechanized correctness proof.
 
 = Case Studies
 
@@ -487,28 +489,6 @@ A 10-function pure module that parses an 8-field `i32` header and validates six 
 )
 ]
 
-= Trust Model
-
-Concrete's claims fall into five classes, and the strength of any statement is the class it sits in.
-
-#figure(
-  table(
-    columns: (0.82fr, 1.7fr),
-    align: (left, left),
-    inset: 4.5pt,
-    stroke: 0.4pt + gray,
-    table.header([*Class*], [*Meaning and root of trust*]),
-    [Enforced], [Safe code cannot violate it and compile (ownership, linearity, capability monotonicity). Trusts the checker; no mechanized soundness proof.],
-    [Proved], [Lean kernel verified the stated theorem over extracted `PExpr`; fingerprint current. Trusts kernel + extraction.],
-    [Reported], [Compiler observed but does not block (authority traces, alloc, layout). For audit, not enforcement.],
-    [Assumed], [Named in `assumptions.toml` as `assumed_not_proved` (e.g. machine-level constant time).],
-    [Backend], [Codegen Core→SSA→LLVM→binary is trusted, not proved.],
-  ),
-  caption: [Claim classes. Every claim in the paper and in the artifacts is labeled with its class.],
-)
-
-What "proved" does #emph[not] mean is stated explicitly: it does not mean the compiled binary is correct (the proof is over `PExpr` with unbounded integers, not the emitted machine code); it does not mean the checker is sound; it does not cover cross-function composition beyond what a stated theorem captures; and eligibility is not proof. The trusted computing base is the Concrete compiler (parsing through emission, fingerprinting, stale detection), the Lean kernel, and the C toolchain and platform. The checker is actively verified by an adversarial suite (1272 trust-gate checks) and the CI proof gate, but not by a mechanized correctness proof.
-
 = Comparison to Contract Verifiers
 
 Concrete sits near SPARK, Dafny, F\*, and Why3, but its workflow is different today. Those systems center on contracts and verification-condition generation: a user writes preconditions, postconditions, loop invariants, and data-flow contracts, and the tool generates obligations that must be discharged automatically or interactively. Concrete currently starts one layer lower: it first makes proof attachment, authority reporting, stale-proof detection, assumptions, and release evidence part of the compiler's ordinary outputs.
@@ -519,7 +499,7 @@ This sequencing is deliberate. If source contracts arrived before drift detectio
 
 = Toward Compiler-Side Soundness
 
-The trust model above trusts #emph[extraction]: nothing stated so far proves that $cal(E): "Core" -> "ProofCore"$ preserves meaning. We report a first compiler-side result and, as importantly, the precise obstacle that bounds it.
+The claim classes above list #emph[extraction] as trusted: nothing stated so far proves that $cal(E): "Core" -> "ProofCore"$ preserves meaning. We report a first compiler-side result and, as importantly, the precise obstacle that bounds it.
 
 The discharged fragment is $cal(C)_0 = {"intLit", "boolLit", "ident", "binOp"}$. For each, extraction agrees with both the extracted-`PExpr` evaluator and a small source-side semantics. The integer-literal instance, proved #emph[against the real extractor], is:
 
@@ -580,13 +560,9 @@ The closest active work is the ecosystem for attaching proofs to Rust. Prusti @a
 
 Two verified-systems landmarks mark the far end of the spectrum. Cogent @oconnor2016cogent is the closest in spirit — a linear, no-GC systems language whose certifying compiler emits a refinement proof relating the generated C to a functional specification, used for real file-system code. Cogent proves more than Concrete does, but through a specialized pipeline for a restricted language; Concrete keeps a lighter, opt-in attachment in a general-purpose compiler and foregrounds the drift lifecycle instead. seL4 @klein2009sel4, a fully verified OS kernel, is the touchstone for whole-system verification and marks the cost Concrete is not paying: it proves neither its compiler nor its binaries. In cryptography, EverCrypt @protzenko2020evercrypt shows verified, high-performance primitives extracted from F\*; our `constant_time_tag` is a small step toward that domain, honest that it proves equality reasoning rather than the machine-level timing guarantees such work targets. Austral @borretti2024austral demonstrates linear types and capability-secure design for a serious systems language and is closest in spirit; Concrete adds capability signatures, report-oriented workflows, and the validated-Core proof boundary. The Lean 4 kernel and language @demoura2021lean4 are the proof substrate and the implementation language, which is what lets the compiler and the theorem checker share one kernel.
 
-= What Failed or Surprised Us
+= What Failed, and What It Taught Us
 
-Four failures changed the design. First, `partial def` opacity blocked the first extraction-soundness attempt: Lean would not unfold the mutually recursive extractor, so proving even obvious cases required a non-partial wrapper. Second, proof ergonomics, not logical expressiveness, became the bottleneck; several true statements failed because `simp` explored too much or because the right evaluator lemma surface did not exist yet. Third, drift gates caught real attachment bugs, including a missing proof-table callee and hand-written spec mismatches; the trust infrastructure paid for itself immediately. Fourth, the toy `crypto_verify` example was not enough to support a crypto-adjacent story, which forced `constant_time_tag`: a narrow but real source-level constant-time shape with explicit machine-level assumptions.
-
-= Lessons
-
-Three lessons generalize beyond Concrete. #emph[Drift gates are the load-bearing feature]: the value of an attached proof in a changing codebase comes almost entirely from automatic revocation; without it, a proof is a comment that ages silently. #emph[Examples force the proof surface, not the reverse]: each graduated case study closed a specific extraction gap — `fixed_capacity` forced functional array update and the bounded `while_step`; `constant_time_tag` forced `u8` bitwise reasoning — which argues for growing the provable fragment from forcing examples rather than speculatively. #emph[Proof ergonomics, not expressiveness, is the bottleneck]: the binding limits we hit were a heartbeat budget on a 256-branch split and the `partial def` opacity barrier — engineering and recursion-checker frictions, not missing logical power.
+Four things shaped the design, and three of them generalize past Concrete. The `partial def` opacity barrier blocked the first extraction-soundness attempt — Lean would not unfold the mutually recursive extractor — and forced the non-partial wrapper; the lasting lesson is that #emph[proof ergonomics, not logical expressiveness, is the bottleneck], since the binding limits throughout were a heartbeat budget on a 256-branch split and recursion-checker frictions, not missing power. Drift gates caught real attachment bugs early — a missing proof-table callee, hand-written spec mismatches — which is why we treat #emph[automatic revocation as the load-bearing feature]: without it, an attached proof is a comment that ages silently. And the toy `crypto_verify` was too weak to carry a crypto-adjacent story, which forced `constant_time_tag`; more generally, #emph[examples force the proof surface, not the reverse] — `fixed_capacity` forced functional array update and the bounded `while_step`, `constant_time_tag` forced `u8` bitwise reasoning. We grew the provable fragment from forcing examples rather than speculatively.
 
 = Cost of the Discipline
 
@@ -601,6 +577,10 @@ The evidence is real but bounded. The proved fragment is small (pure, loop-free 
 = Future Work
 
 Following the forcing-example discipline: extend extraction-preservation past $cal(C)_0$ (`let`, `if`, `call`, then bounded loops), which first requires replacing the `mapM`s with paired structural recursion to lift the `partial def` barrier for list-shaped constructs; add SPARK-like runtime obligations for bounds, division, overflow, casts, and loop variants; introduce source-level contracts only when they can generate obligations with statuses rather than decorative prose; close the success-path and combined-`iff` gaps on `parse_header`; pursue a real-crypto candidate (an HMAC-SHA256 or Ed25519-verify subset) to force shifts, `bitand`, and multi-iteration inductive invariants; and mature packages and the backend contract. Compiler-correctness proofs remain explicitly downstream of a stable extraction surface, not a precondition for the workflow.
+
+= Artifact and Reproducibility
+
+The compiler, the three case studies, the proof registries, the wrong-code corpus, and the spec-drift fixture live in one public repository (`github.com/unbalancedparentheses/concrete2`). `make build` runs the Lean kernel over every attached proof, so a broken proof fails the build. Each number in this paper is regenerable from the command line: `concrete <example> --report proof-status` reproduces the proved-versus-eligible counts, `--report authority` the audit table, `--report proof-bundle` the per-example evidence, and `scripts/ci/proof_gate.sh` the full evidence gate. The drift diagnostic is produced by `tests/programs/adversarial_spec_drift`, and the performance figures by the harnesses under `bench/` and each example's `oracle/`.
 
 = Conclusion
 
