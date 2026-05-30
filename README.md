@@ -30,6 +30,19 @@ Concrete combines Rust-like ownership, Zig-like explicit systems control, Austra
 
 The empty cell is the bet: no GC + linear + capability-visible effects + kernel-checked user proofs + compiler written in the same kernel + systems target.
 
+## What Others Can Do
+
+Concrete is not claiming every piece is unique. The unusual part is the
+combination.
+
+- **Rust / Zig / C / C++** are great systems languages, but proofs are mostly external. You can test, fuzz, use sanitizers, or model-check pieces, but the compiler does not normally track "this function has a theorem attached and the theorem drifted when the body changed."
+- **SPARK / Ada, Dafny, F*, Why3** have strong verification stories, but they are not trying to feel like a small C/Rust/Zig-style systems language with Lean as the compiler/proof substrate.
+- **Lean / Coq / Isabelle** are excellent proof systems, but writing normal low-level systems code there is not the primary path.
+- **Austral** is closer on linear types and safety, but it does not have the same Lean-backed proof/evidence pipeline.
+
+Concrete's useful bet is: systems-language shape, compiler-enforced discipline,
+Lean-backed theorem attachment, drift gates, and evidence bundles in one toolchain.
+
 ## The Thesis
 
 Most systems languages give you safety **or** control. Concrete is trying to make four things visible at the function boundary:
@@ -53,7 +66,7 @@ A reviewer should be able to audit a function from its signature plus the compil
 
 ## What This Looks Like
 
-The pull-through pilot, [examples/parse_validate](examples/parse_validate/), is the example to read first. Its [`README.md`](examples/parse_validate/README.md) follows the honest framing the rest of the project tries to live up to: what is proved, what is enforced (statically and by CI), what is reported, what is assumed, and **what is not yet done**.
+The first graduated flagship, [examples/parse_validate](examples/parse_validate/), is the example to read first.  Its [`README.md`](examples/parse_validate/README.md) follows the honest framing the rest of the project tries to live up to: what is proved, what is enforced (statically and by CI), what is reported, what is assumed, and **what is not yet done**.  Three later flagships ([crypto_verify](examples/crypto_verify/), [fixed_capacity](examples/fixed_capacity/), [constant_time_tag](examples/constant_time_tag/)) reuse the same template across different systems domains.
 
 For the minimal effects-report shape, here is [examples/thesis_demo](examples/thesis_demo/src/main.con):
 
@@ -112,11 +125,17 @@ Reports that run cleanly today: `caps`, `unsafe`, `layout`, `interface`, `alloc`
 
 The README discipline this project tries to live up to: state what is true today, name what is not, do not sell harder than the AUDITs allow.
 
-**The compiler is written in Lean 4. It is not yet proved in Lean 4.** That distinction matters. Phase 12 of the roadmap is where compiler-correctness work happens; today the compiler is well-tested (1572 positive tests, 22 wrong-code regressions, 78 verify-gate checks, 56 oracle differentials) but not Lean-verified. The 4-layer trust map: (1) Lean kernel checks the user's theorem; (2) Concrete compiler extracts the property — trusted; (3) LLVM/clang/linker — trusted; (4) host kernel + libc — trusted. See [docs/TRUSTED_COMPUTING_BASE.md](docs/TRUSTED_COMPUTING_BASE.md).
+**The compiler is written in Lean 4. It is not yet proved in Lean 4.** That distinction matters. Phase 12 of the roadmap is where compiler-correctness work happens; today the compiler is well-tested (1575 positive tests, drift-detection gates including the spec-drift gate that prevents typo'd specs from silently "proving," 4 graduated flagships' worth of oracle differentials totaling ~2400 cases) but not Lean-verified.  Every Phase 4 extraction rule names the Phase 12 preservation obligation it creates; see `docs/PROOF_OBLIGATIONS_REGISTER.md`.  The 4-layer trust map: (1) Lean kernel checks the user's theorem; (2) Concrete compiler extracts the property — trusted; (3) LLVM/clang/linker — trusted; (4) host kernel + libc — trusted. See [docs/TRUSTED_COMPUTING_BASE.md](docs/TRUSTED_COMPUTING_BASE.md).
 
-**"Every function provable" is the long-term aim, not the current state.** Today ProofCore covers integer/bool, if-then-else (including early-return desugaring), function calls, and let-binding. It does not yet cover structs, pattern matching, while loops, Result/struct construction, or borrows. parse_validate's pilot is the forcing function for closing each gap. See [examples/parse_validate/AUDIT.md](examples/parse_validate/AUDIT.md).
+**"Every function provable" is the long-term aim, not the current state.** Today ProofCore covers integer/bool, if-then-else (including early-return desugaring), function calls, let-bindings, struct + enum literals, pattern matching, array reads and functional array updates, bounded `while` loops (flat-assign body) and richer `while_step` loops (Cont/Break enum), casts, and width-tagged bitwise/mod ops at i32/u32/u8 widths with signed and unsigned result modes.  It does NOT yet cover shifts, bitand, multi-word arithmetic, references/borrows, or arbitrary loop invariants.  Each gap closes when a pull-through candidate forces it; see `docs/PROOF_OBLIGATIONS_REGISTER.md` for the per-construct register and `docs/PROOF_STATE_MODEL.md` for the mutation model.
 
-**No public flagship yet.** parse_validate is a *pilot*, not a Phase 7 entry. The graduation contract has 10 bars; 5 are met today. The remaining 5 (composition theorem, oracle beyond hand-written tests, release evidence bundle, snapshot/diff baseline, curated Phase 7 manifest) are what move it from pilot to flagship.
+**Four graduated Phase 7 flagships as of 2026-05-30:**
+- [parse_validate](examples/parse_validate/) — capability-pure validation core, Lean composition theorem, drift-enforced negative pair.
+- [crypto_verify](examples/crypto_verify/) — toy proof-scaffolding for authenticated-tag verification (explicitly NOT real crypto).
+- [fixed_capacity](examples/fixed_capacity/) — bounded ring buffer + message validator with iteration-counted composition theorem over mutable state.
+- [constant_time_tag](examples/constant_time_tag/) — fixed-size byte-array comparison with universal same-tag theorem and honest machine-level-timing gap.
+
+Each is in `tests/showcase/manifest.toml` with 10 of 10 graduation bars met; `make test-showcase` walks all four and asserts CI gates + release bundle capture cleanly.
 
 **Async / concurrency / threads / channels are not implemented.** The research direction is documented (evidence-bearing structured concurrency, `with(Async)` vs `with(Concurrent)`, linear task handles, deterministic simulation as a future backend) but no code exists. See [research/stdlib-runtime/async-concurrency-evidence.md](research/stdlib-runtime/async-concurrency-evidence.md).
 
@@ -150,7 +169,7 @@ make build
 .lake/build/bin/concrete examples/parse_validate/src/main.con --report proof-status
 .lake/build/bin/concrete examples/parse_validate/src/main.con --check predictable
 
-# CI gates that enforce the pilot's contract
+# CI gates that enforce the showcase contract
 make test-policy          # enforced budgets in Concrete.toml [policy]
 make test-assumptions     # declared trust surface in assumptions.toml
 make test-catches         # "Concrete catches this" negative cases
@@ -172,7 +191,7 @@ make clean
 
 ## Doc Map
 
-**Start here:** [examples/parse_validate/README.md](examples/parse_validate/README.md) — the pilot, with honest framing template.
+**Start here:** [examples/parse_validate/README.md](examples/parse_validate/README.md) — the first graduated flagship, with the honest framing template all four flagships share.
 
 **Discipline:** [docs/WRONG_CODE_CORPUS.md](docs/WRONG_CODE_CORPUS.md), [docs/REDUCER_WORKFLOW.md](docs/REDUCER_WORKFLOW.md), [docs/BUG_BUNDLE.md](docs/BUG_BUNDLE.md), [docs/VERIFY_GATES.md](docs/VERIFY_GATES.md), [docs/ASSUMPTION_FILES.md](docs/ASSUMPTION_FILES.md), [docs/POLICY_FILES.md](docs/POLICY_FILES.md), [docs/INTERPRETER_TRUST.md](docs/INTERPRETER_TRUST.md).
 
