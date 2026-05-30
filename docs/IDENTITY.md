@@ -59,6 +59,28 @@ Short version:
 4. Lean 4 makes proof a practical implementation and theorem-proving environment.
 5. Concrete is trying to make operational power and evidence explicit in native systems code.
 
+## Positioning Against Nearby Tools
+
+Concrete's claim is not that no other tool can prove programs, write systems
+code, or enforce safety. The claim is that these pieces are usually separated.
+
+- **Rust / Zig / C / C++** are strong systems languages. Their proof story is
+  usually external: tests, fuzzing, sanitizers, static analyzers, model
+  checkers, or separate proof tools. The compiler does not normally maintain a
+  source/spec/theorem attachment and downgrade evidence when it drifts.
+- **SPARK / Ada, Dafny, F*, Why3** have mature verification workflows, but their
+  center of gravity is high-assurance verification rather than a small
+  C/Rust/Zig-shaped systems language implemented in Lean.
+- **Lean / Coq / Isabelle** are excellent proof systems. They are not primarily
+  normal low-level systems languages with explicit FFI, layout, authority, and
+  no-GC runtime boundaries.
+- **Austral** is close on linearity and capability-shaped safety, but it does
+  not provide the same Lean-backed proof/evidence pipeline.
+
+The intended Concrete workflow is: write ordinary systems-shaped code, keep
+authority and trust visible, attach selected Lean theorems, and let compiler
+artifacts catch body/spec/proof drift.
+
 For the explicit map of what Concrete copies, adapts, or rejects from other
 languages, see [INFLUENCES.md](INFLUENCES.md).
 

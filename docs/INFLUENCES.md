@@ -20,6 +20,24 @@ The synthesis Concrete is aiming for is roughly:
 That synthesis only works if the result stays minimalist, linear/resource-aware,
 no-GC, and honest about what is enforced, reported, proved, or trusted.
 
+## Positioning Summary
+
+The surrounding tools each cover part of the space:
+
+- Rust, Zig, C, and C++ are strong systems languages, but proofs usually live
+  outside the compiler workflow.
+- SPARK/Ada, Dafny, F*, and Why3 have strong verification workflows, but are not
+  trying to be a small C/Rust/Zig-style systems language with Lean as the
+  compiler/proof substrate.
+- Lean, Coq, and Isabelle are excellent proof systems, but ordinary low-level
+  systems programming is not their primary path.
+- Austral is close on linear safety, but not on Lean-backed proof artifacts and
+  drift-gated evidence.
+
+Concrete's niche is the intersection: no-GC systems code, explicit authority,
+linear/resource discipline, selected Lean theorems, and machine-readable
+evidence tying the theorem back to the current source.
+
 ## How To Read This
 
 Each influence is classified as:
