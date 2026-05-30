@@ -83,7 +83,7 @@ The negative space is equally important. Concrete does not yet generate SPARK-st
     [Authority tracking], [Enforced], [Capability checker and authority report],
     [Proof drift detection], [Enforced], [Body fingerprints and stale-proof gate],
     [Theorem correctness], [Proved], [Lean kernel checks theorem over extracted `PExpr`],
-    [Source→ProofCore extraction], [Proved + trusted], [R-01..R-15, R-18, R-19 extraction/eval coverage; R-20 extraction-only; backend equivalence still trusted],
+    [Source→ProofCore extraction], [Proved + trusted], [R-01..R-15 (R-05 via R-04; R-07 partial), R-18, R-19 extraction/eval coverage; R-20 extraction-only; backend equivalence still trusted],
     [Backend correctness], [Trusted], [Core→SSA→LLVM→binary not verified],
     [Machine constant-time], [Assumed], [`assumptions.toml`; source shape only],
   ),
@@ -103,7 +103,7 @@ The negative space is equally important. Concrete does not yet generate SPARK-st
     [Oracle coverage], [200 randomized cases/seed; `parse_validate` cross-checked across 600 (seeds 0/42/999)],
     [Wrong-code corpus], [22 registered cases retained as regressions],
     [Spec-drift regression], [Checked-in adversarial fixture downgrades proof status],
-    [Extraction rules discharged], [R-01..R-15, R-18, R-19 have extraction/eval coverage; R-20 extraction coverage],
+    [Extraction rules discharged], [R-01..R-15 (R-05 subsumed by R-04; R-07 partial), R-18, R-19 extraction/eval; R-20 extraction-only],
   ),
   caption: [Evaluation summary. The counts are small; the point is that each one is tied to a compiler artifact or a checked regression.],
 )
