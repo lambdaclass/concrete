@@ -456,6 +456,72 @@ theorem if_no_else_as_fallthrough_preservation
       = some (.ifThenElse pc pt pkRest) := by
   simp [cStmtsToPExprK, h_cond, h_rest, h_then]
 
+/-! ## Rules unlocked by the partial-def → def lift (2026-05-30)
+
+The mutual block (`cExprToPExprImpl`, `cMatchArmToP`,
+`cStmtsToPExprKImpl`, `cStmtsToStepExpr`, `extractCarried`,
+plus four new helpers `cExprListToPExpr`, `cFieldsToPExpr`,
+`cMatchArmsToP`, `cAssignBodyToUpdates`) is now non-partial.
+`List.mapM` calls were replaced with explicit structural
+recursion via paired mutual helpers; Lean's structural
+recursion checker accepts the whole block.
+
+Consequence: every rule whose extraction lives inside the
+mutual block is now wrapper-free reducible — theorems can
+prove against `cExprToPExprImpl` (or the public
+`cExprToPExpr` which dispatches into it) by `simp`. -/
+
+/-! ## R-08: `call_preservation` (extraction)
+
+For `.call fn _ args _` with all args extracting, the
+extraction is `.call fn pargs`.  Antecedent is the
+extraction of the args list, supplied by repeated R-01..R-N
+at use sites. -/
+theorem call_preservation
+    (fn : String) (typeArgs : List Ty) (args : List CExpr) (ty : Ty)
+    (pargs : List PExpr)
+    (h_args : cExprListToPExpr args = some pargs) :
+    cExprToPExpr (.call fn typeArgs args ty) = some (.call fn pargs) := by
+  simp [cExprToPExpr, h_args]
+
+/-! ## R-09: `struct_lit_preservation` (extraction) -/
+theorem struct_lit_preservation
+    (name : String) (typeArgs : List Ty)
+    (fields : List (String × CExpr)) (ty : Ty)
+    (pfields : List (String × PExpr))
+    (h_fields : cFieldsToPExpr fields = some pfields) :
+    cExprToPExpr (.structLit name typeArgs fields ty)
+      = some (.structLit name pfields) := by
+  simp [cExprToPExpr, h_fields]
+
+/-! ## R-11: `enum_lit_preservation` (extraction) -/
+theorem enum_lit_preservation
+    (enumName variant : String) (typeArgs : List Ty)
+    (fields : List (String × CExpr)) (ty : Ty)
+    (pfields : List (String × PExpr))
+    (h_fields : cFieldsToPExpr fields = some pfields) :
+    cExprToPExpr (.enumLit enumName variant typeArgs fields ty)
+      = some (.enumLit enumName variant pfields) := by
+  simp [cExprToPExpr, h_fields]
+
+/-! ## R-15: `array_lit_preservation` (extraction) -/
+theorem array_lit_preservation
+    (elems : List CExpr) (ty : Ty)
+    (pelems : List PExpr)
+    (h_elems : cExprListToPExpr elems = some pelems) :
+    cExprToPExpr (.arrayLit elems ty) = some (.arrayLit pelems) := by
+  simp [cExprToPExpr, h_elems]
+
+/-! ## R-12: `match_preservation` (extraction) -/
+theorem match_preservation
+    (scrutinee : CExpr) (arms : List CMatchArm) (ty : Ty)
+    (ps : PExpr) (parms : List (PMatchPat × PExpr))
+    (h_scrut : cExprToPExpr scrutinee = some ps)
+    (h_arms : cMatchArmsToP arms = some parms) :
+    cExprToPExpr (.match_ scrutinee arms ty)
+      = some (.match_ ps parms) := by
+  simp [cExprToPExpr, h_scrut, h_arms]
+
 /-! ## Sanity checks (inline regression theorems)
 
 Same pattern as the inline `example` blocks in

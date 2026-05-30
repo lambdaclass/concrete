@@ -734,7 +734,7 @@ def cExprIdentToPExpr : CExpr → Option Proof.PExpr
   | _             => none
 
 mutual
-partial def cExprToPExprImpl : CExpr → Option Proof.PExpr
+def cExprToPExprImpl : CExpr → Option Proof.PExpr
   | .intLit n _ => some (.lit (.int n))
   | .boolLit b => some (.lit (.bool b))
   | .ident name _ => some (.var name)
@@ -747,7 +747,7 @@ partial def cExprToPExprImpl : CExpr → Option Proof.PExpr
     let pr ← cExprToPExprImpl rhs
     some (.binOp pop pl pr)
   | .call fn _ args _ => do
-    let pargs ← args.mapM cExprToPExprImpl
+    let pargs ← cExprListToPExpr args
     some (.call fn pargs)
   | .ifExpr cond thenBranch elseBranch _ => do
     let pc ← cExprToPExprImpl cond
@@ -755,18 +755,10 @@ partial def cExprToPExprImpl : CExpr → Option Proof.PExpr
     let pe ← cStmtsToPExpr elseBranch
     some (.ifThenElse pc pt pe)
   | .structLit name _typeArgs fields _ => do
-    -- Each field's expression must extract; the resulting struct value
-    -- pairs field names with extracted PExprs.
-    let pfields ← fields.mapM fun (fname, fexpr) => do
-      let pe ← cExprToPExprImpl fexpr
-      some (fname, pe)
+    let pfields ← cFieldsToPExpr fields
     some (.structLit name pfields)
   | .enumLit enumName variant _typeArgs fields _ => do
-    -- Same shape as struct literal: each field's expression must
-    -- extract; result is a tagged enum value (variant + fields).
-    let pfields ← fields.mapM fun (fname, fexpr) => do
-      let pe ← cExprToPExprImpl fexpr
-      some (fname, pe)
+    let pfields ← cFieldsToPExpr fields
     some (.enumLit enumName variant pfields)
   | .fieldAccess obj field _ => do
     let po ← cExprToPExprImpl obj
@@ -777,13 +769,13 @@ partial def cExprToPExprImpl : CExpr → Option Proof.PExpr
     some (.arrayIndex pa pi)
   | .match_ scrutinee arms _ => do
     let ps ← cExprToPExprImpl scrutinee
-    let parms ← arms.mapM cMatchArmToP
+    let parms ← cMatchArmsToP arms
     some (.match_ ps parms)
   | .cast inner _ => do
     let pi ← cExprToPExprImpl inner
     some (.cast pi)
   | .arrayLit elems _ => do
-    let pelems ← elems.mapM cExprToPExprImpl
+    let pelems ← cExprListToPExpr elems
     some (.arrayLit pelems)
   | _ => none
 
@@ -791,7 +783,7 @@ partial def cExprToPExprImpl : CExpr → Option Proof.PExpr
     The body is a CStmt list; we extract it via `cStmtsToPExpr`
     with `none` continuation — match arm bodies must terminate
     (return or yield a value), not fall through. -/
-partial def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
+def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
   | .enumArm enumName variant bindings body => do
     let pbody ← cStmtsToPExpr body
     some (.enumPat enumName variant (bindings.map Prod.fst), pbody)
@@ -822,7 +814,7 @@ partial def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
 
     `k = none` means "no continuation, fail if control falls off."
     A function body extracts by calling this with `k = none`. -/
-partial def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExpr
+def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExpr
   | [], k => k
   | [.return_ (some e) _], _ => cExprToPExprImpl e
   | [.expr e], _ => cExprToPExprImpl e
@@ -858,12 +850,7 @@ partial def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Pr
     -- CStmt.assign); fall back to while_step when body has
     -- richer control flow (let, if-with-return, ...).
     let flatUpdates : Option (List (String × Proof.PExpr)) :=
-      body.mapM fun s =>
-        match s with
-        | .assign name val => do
-          let pv ← cExprToPExprImpl val
-          some (name, pv)
-        | _ => none
+      cAssignBodyToUpdates body
     match flatUpdates with
     | some updates => some (.while_ pc updates pCont)
     | none => do
@@ -901,7 +888,7 @@ partial def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Pr
     some (.ifThenElse pc pt pkRest)
   | _, _ => none
 
-partial def cStmtsToPExpr (stmts : List CStmt) : Option Proof.PExpr :=
+def cStmtsToPExpr (stmts : List CStmt) : Option Proof.PExpr :=
   cStmtsToPExprKImpl stmts none
 
 /-- Collect names that are `assign`-ed (rebound) inside a CStmt list.
@@ -909,7 +896,7 @@ partial def cStmtsToPExpr (stmts : List CStmt) : Option Proof.PExpr :=
     Used to populate the `carried` field of `PExpr.while_step` so
     the Phase 12 preservation argument can name exactly which env
     bindings the loop rewrites. -/
-partial def extractCarried : List CStmt → List String
+def extractCarried : List CStmt → List String
   | [] => []
   | (.assign name _) :: rest =>
     let r := extractCarried rest
@@ -936,7 +923,7 @@ partial def extractCarried : List CStmt → List String
       - `return_ (some e)`: produces `Break e`
       - `ifElse cond thenBr none`: branches; then is its own
         step-expr (may Break or fall-through), else is `rest`. -/
-partial def cStmtsToStepExpr
+def cStmtsToStepExpr
     (assigns : List (String × Proof.PExpr)) :
     List CStmt → Option Proof.PExpr
   | [] =>
@@ -962,6 +949,52 @@ partial def cStmtsToStepExpr
     let pe ← cStmtsToStepExpr assigns rest
     some (.ifThenElse pc pt pe)
   | _ => none
+
+/-- Helper: extract a list of CExprs into a list of PExprs.
+    Replaces `args.mapM cExprToPExprImpl` and
+    `elems.mapM cExprToPExprImpl` so the mutual block can be
+    non-partial. -/
+def cExprListToPExpr : List CExpr → Option (List Proof.PExpr)
+  | [] => some []
+  | e :: rest => do
+    let pe ← cExprToPExprImpl e
+    let prest ← cExprListToPExpr rest
+    some (pe :: prest)
+
+/-- Helper: extract a list of (name, CExpr) field pairs.
+    Replaces both struct-literal and enum-literal field mapMs. -/
+def cFieldsToPExpr :
+    List (String × CExpr) → Option (List (String × Proof.PExpr))
+  | [] => some []
+  | (name, e) :: rest => do
+    let pe ← cExprToPExprImpl e
+    let prest ← cFieldsToPExpr rest
+    some ((name, pe) :: prest)
+
+/-- Helper: extract a list of match arms.
+    Replaces `arms.mapM cMatchArmToP`. -/
+def cMatchArmsToP :
+    List CMatchArm → Option (List (Proof.PMatchPat × Proof.PExpr))
+  | [] => some []
+  | arm :: rest => do
+    let parm ← cMatchArmToP arm
+    let prest ← cMatchArmsToP rest
+    some (parm :: prest)
+
+/-- Helper: try flat-assign extraction over a while body.
+    Returns `some updates` if every stmt is a `.assign`,
+    `none` otherwise.  Replaces the `body.mapM` lambda in
+    cStmtsToPExprKImpl's while_ case. -/
+def cAssignBodyToUpdates :
+    List CStmt → Option (List (String × Proof.PExpr))
+  | [] => some []
+  | s :: rest =>
+    match s with
+    | .assign name val => do
+      let pv ← cExprToPExprImpl val
+      let prest ← cAssignBodyToUpdates rest
+      some ((name, pv) :: prest)
+    | _ => none
 end
 
 /-- Non-partial wrapper for `cExprToPExprImpl`.  The literal
@@ -1001,6 +1034,22 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
     let pa ← cExprToPExpr arr
     let pi ← cExprToPExpr idx
     some (.arrayIndex pa pi)
+  | .call fn _ args _ => do
+    let pargs ← cExprListToPExpr args
+    some (.call fn pargs)
+  | .structLit name _ fields _ => do
+    let pfields ← cFieldsToPExpr fields
+    some (.structLit name pfields)
+  | .enumLit ename variant _ fields _ => do
+    let pfields ← cFieldsToPExpr fields
+    some (.enumLit ename variant pfields)
+  | .arrayLit elems _ => do
+    let pelems ← cExprListToPExpr elems
+    some (.arrayLit pelems)
+  | .match_ scrutinee arms _ => do
+    let ps ← cExprToPExpr scrutinee
+    let parms ← cMatchArmsToP arms
+    some (.match_ ps parms)
   | e             => cExprToPExprImpl e
 
 /-- Non-partial wrapper for `cStmtsToPExprKImpl`.  Handles
