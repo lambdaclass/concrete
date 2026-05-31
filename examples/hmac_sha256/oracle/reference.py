@@ -56,8 +56,9 @@ def main():
     rng = random.Random(seed)
     for (k, m) in CORNERS:
         emit(rng, k, m)
-    # Random cases across the full bounded range.
-    for _ in range(30):
+    # Random cases across the full bounded range (corners + these
+    # give 200 per seed -> 600 across the three CI seeds).
+    for _ in range(200 - len(CORNERS)):
         emit(rng, rng.randrange(KEY_MAX + 1), rng.randrange(MSG_MAX + 1))
 
 

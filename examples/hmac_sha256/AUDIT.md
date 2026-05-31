@@ -1,10 +1,18 @@
 # hmac_sha256 — Candidate Audit
 
-Status: **audit landed 2026-05-30** (slot opened after
-constant_time_tag graduated as the fourth flagship the same
-day). Pre-implementation contract. No source, no proofs, no
-oracle yet — this audit is the contract the implementation
-must satisfy before graduation.
+Status: **8 of 10 bars met** (audit landed 2026-05-30; build-out
+2026-05-31). The primitive is implemented and runtime-verified
+(FIPS 180-4 + RFC 4231, compiled and interpreted), ProvableV1
+conformance is `full`, and two kernel theorems are attached
+(`sha256_init_correct`, `ch_selects_high`). Bars met: #1, #3, #4,
+#5, #6, #7, #8, #9. **Remaining: bar #2** (a Lean-backed
+*composition* / RFC-vector theorem — the loop-induction milestone;
+point proofs by evaluation do not scale past a couple of
+iterations, so this needs `while_step` induction, bottom-up
+ch/maj/σ → compress → hash → hmac) and **bar #10** (showcase
+manifest / graduation, gated on bar #2 reaching 10/10). The oracle
+(bar #5) covers correctness empirically until the composition
+theorem catches up.
 
 ## Why this example
 
@@ -300,16 +308,16 @@ unprecedented territory.
 
 | # | Bar | Status |
 |---:|---|---|
-| 1  | Lean-backed property surfaced as `proved` | open — gated on Phase 4 forcing surface (§ 5) and at least `sha256_init_correct` |
-| 2  | Composition property Lean-backed | open — gated on at least one RFC test vector theorem |
-| 3  | Assumption file with schema, CI-enforced | open — must include `[claims.machine_level_constant_time] = assumed_not_proved`, `[claims.hmac_security] = assumed_from_rfc`, `[claims.target_endianness] = assumed_little_endian` |
-| 4  | Policy file with enforceable budgets, CI-enforced | open — at least 8 fields, stricter than fixed_capacity (no_trusted=true) |
-| 5  | Oracle beyond hand-written tests | open — Python `hmac.new(k, m, hashlib.sha256).digest()` differential harness, 600+ cases across 3 seeds covering all key/message length regimes |
-| 6  | "Concrete catches this" negative pair | open — at minimum: alloc-in-compression-core rejection; stretch: a `catches/` entry naming the timing/early-exit gap honestly (same shape as constant_time_tag) |
-| 7  | Release evidence bundle capturable | open — `scripts/tests/capture_release_bundle.sh examples/hmac_sha256` |
-| 8  | Honest README | open — what-is / what-is-NOT / what-is-proved / four-layer trust framing / oracle / negative pair / deployment disclaimer |
-| 9  | Snapshot/diff baseline | open — 16 reports baselined under `snapshot/` |
-| 10 | Listed in `tests/showcase/manifest.toml` with full evidence section | open — `[flagship.evidence]`, `[flagship.gates]`, `[flagship.limits]` including a load-bearing `crypto_security` block matching constant_time_tag's `constant_time` block |
+| 1  | Lean-backed property surfaced as `proved` | **MET** — `sha256_init_correct` (point) and `ch_selects_high` (point, over the forced u32 `bitand`/`bitxor`) are kernel-verified; `--report check-proofs` = 2 verified, 0 failed |
+| 2  | Composition property Lean-backed | **OPEN** — the loop-induction milestone. A composition / RFC-vector theorem requires `while_step` induction over compress/hash (point proofs by evaluation hit `simp`'s recursion limit at ~2 array-update iterations, so they do not scale to 64 rounds). Path: universal ch/maj/rotr/σ → `sha256_compress` over one block → `sha256_hash` → `hmac_sha256`. The oracle (bar #5) covers this empirically until the theorem lands |
+| 3  | Assumption file with schema, CI-enforced | **MET** — `assumptions.toml` with the four `[claims.*]` blocks; `make test-assumptions` green |
+| 4  | Policy file with enforceable budgets, CI-enforced | **MET** — `Concrete.toml [policy]`, 8 fields, `no_trusted=true`, Alloc forbidden; `make test-policy` green |
+| 5  | Oracle beyond hand-written tests | **MET** — Python `hmac.new(...)` differential harness, 200 cases/seed × 3 seeds = 600, all length regimes; `make test-hmac-oracle` green |
+| 6  | "Concrete catches this" negative pair | **MET** — `catches/01_alloc_in_compression_core.con` (alloc in the round) and `catches/02_ambient_key_read.con` (key from ambient I/O), both rejected; `CATCHES.md` + the honest timing-gap note; `make test-catches` green |
+| 7  | Release evidence bundle capturable | **MET** — `scripts/tests/capture_release_bundle.sh examples/hmac_sha256` captures cleanly |
+| 8  | Honest README | **MET** — `README.md`: what-is / what-is-NOT / four-layer trust / proof-status table / R-22..R-28 journey / deployment disclaimer |
+| 9  | Snapshot/diff baseline | **MET** — 16 reports baselined under `snapshot/`; `make test-snapshots` green |
+| 10 | Listed in `tests/showcase/manifest.toml` with full evidence section | **OPEN** — graduation; gated on bar #2 reaching 10/10. Not added until the composition theorem lands (the showcase gate requires "10 of 10 bars met") |
 
 ## 8. Strategic value beyond graduation
 
