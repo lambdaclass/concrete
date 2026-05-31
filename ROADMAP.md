@@ -92,6 +92,10 @@ Do not call the language releasable until these are true:
   themselves.
 - Keep parser changes LL(1). Attribute-style contracts are allowed; ambiguous
   trailing contract syntax is not.
+- SMT can assist obligation discharge, but it must never silently replace Lean
+  or human-readable evidence. Solver results are classified as `proved_by_smt`,
+  `smt_unknown`, `smt_counterexample`, or `solver_trusted`, and audit/release
+  artifacts must show that classification.
 - Add proof/evidence infrastructure only when it tightens a real claim, unlocks
   a flagship, or reduces a named trust gap.
 - New flagship candidates enter through an audit first, then code, then proof,
@@ -204,8 +208,11 @@ Goal: let proof-relevant properties live in source code without breaking LL(1),
 and make every contract generate obligations instead of becoming decorative
 prose.
 
+Design reference: [docs/CONTRACTS_AND_VCS.md](docs/CONTRACTS_AND_VCS.md).
+
 Done when: one flagship uses source contracts as the primary proof surface, and
-each contract is classified as proved, enforced, assumed, missing, or blocked.
+each contract is classified as proved, enforced, assumed, missing, blocked, or
+solver-assisted.
 
 1. Add LL(1)-safe function attributes:
    `#[requires(...)]` and `#[ensures(...)]`.
@@ -215,27 +222,77 @@ each contract is classified as proved, enforced, assumed, missing, or blocked.
    supported.
 3. Store source contracts through Parse/Resolve/Check/Core and report them with
    source spans.
-4. Add `--report contracts` with evidence statuses and links to generated
-   obligations.
-5. Connect contracts to the proof registry: a theorem can discharge a specific
+4. Generate verification-condition seeds for each source contract: caller-side
+   preconditions, callee-side postconditions, and assumptions needed by the
+   expression language.
+5. Add `--report contracts` with evidence statuses and links to generated
+   obligations and VC ids.
+6. Connect contracts to the proof registry: a theorem can discharge a specific
    source contract id.
-6. Add contract negative examples: unmet precondition at call site, missing
+7. Add contract negative examples: unmet precondition at call site, missing
    postcondition proof, weakened postcondition, invalid contract expression.
-7. Add loop attributes:
+8. Add loop attributes:
    `#[invariant(...)]` and `#[variant(...)]`.
-8. Generate loop-invariant obligations: initialization, preservation, variant
+9. Generate loop-invariant obligations: initialization, preservation, variant
    decrease, and exit-implies-postcondition.
-9. Add source contract soundness work to the compiler soundness bridge: parsing
+10. Add source contract soundness work to the compiler soundness bridge: parsing
    preserves meaning, generated obligations correspond to contract semantics,
    discharged obligations imply the advertised contract claim.
-10. Add contract diagnostics that explain whether the failure is caller-side
+11. Add contract diagnostics that explain whether the failure is caller-side
     precondition, callee-side postcondition, loop invariant initialization,
     invariant preservation, or variant decrease.
-11. Add contract stability rules: weakening a precondition, strengthening a
+12. Add contract stability rules: weakening a precondition, strengthening a
     postcondition, or changing a public invariant is a semantic API change.
-12. Add one contract-bearing flagship retrofit after the machinery is real.
+13. Add one contract-bearing flagship retrofit after the machinery is real.
 
-## Phase 5: Proof Authoring And Automation
+## Phase 5: Verification Conditions And SMT Assistance
+
+Goal: get closer to SPARK-style automation without hiding solver trust or
+replacing Lean-checked theorem claims.
+
+Design reference: [docs/CONTRACTS_AND_VCS.md](docs/CONTRACTS_AND_VCS.md).
+
+Done when: contracts, bounds checks, arithmetic side conditions, and simple loop
+invariants generate machine-readable VCs; a solver can discharge the easy ones;
+counterexamples are reported clearly; and audit output distinguishes Lean,
+SMT, tests, enforcement, assumptions, and trusted solver claims.
+
+1. Define VC schema v1: id, source span, kind, hypotheses, conclusion,
+   originating contract/obligation, dependencies, arithmetic profile, and
+   expected discharge mode.
+2. Generate VCs for pure no-loop contracts first: preconditions at call sites
+   and postconditions at returns.
+3. Generate VCs for runtime safety obligations from Phase 3: array bounds,
+   div/mod nonzero, checked/proved overflow, casts, and loop bounds.
+4. Generate VCs for loop invariants: initialization, preservation,
+   variant decrease, and exit-implies-postcondition.
+5. Add an SMT backend behind an explicit flag or policy gate. Start with one
+   solver adapter and a stable SMT-LIB output path before adding more solvers.
+6. Classify solver results in reports and artifacts:
+   `proved_by_smt`, `unknown`, `counterexample`, `timeout`,
+   `solver_error`, or `solver_trusted`.
+7. Surface counterexamples in source terms where possible: function inputs,
+   loop variables, failing index, failing arithmetic side condition, and the
+   contract/obligation that failed.
+8. Add CI gates for solver determinism and replay: same VC, same solver
+   configuration, same result class, with timeouts treated as non-proofs.
+9. Add Lean replay for the simplest SMT-discharged fragments where practical:
+   propositional/linear integer facts, bounds arithmetic, and trivial BitVec
+   identities. Results without replay remain explicitly solver-trusted.
+10. Add policy controls: projects can require `proved_by_lean`, allow
+    `proved_by_smt`, or permit `solver_trusted` only under named assumptions.
+11. Add SMT negative examples: false postcondition, missing invariant,
+    overflow counterexample, OOB counterexample, div-zero counterexample,
+    solver timeout, and unsupported theory.
+12. Retrofit one flagship with source contracts whose easy VCs discharge
+    automatically, while the meaningful theorem remains Lean-checked.
+13. Update audit/release bundles so VC results appear beside proof registry,
+    assumptions, runtime obligations, and proof coverage classification.
+14. Add soundness documentation for the SMT path: trusted solver binary,
+    encoding assumptions, unsupported theories, replayed fragments, and how a
+    solver bug affects each claim class.
+
+## Phase 6: Proof Authoring And Automation
 
 Goal: make flagship proofs a repeatable engineering workflow, not a collection
 of one-off `simp` scripts.
@@ -262,7 +319,7 @@ lemmas, and actionable failure diagnostics.
 10. Add AI-assisted proof repair only after artifacts, statuses, and replay are
    stable enough to validate suggestions mechanically.
 
-## Phase 6: Audit Commands And Review Artifacts
+## Phase 7: Audit Commands And Review Artifacts
 
 Goal: let a reviewer answer "what can this program do, what is proved, what is
 assumed, and what changed?" without reading compiler internals.
@@ -298,7 +355,7 @@ four graduated flagships and one package-scale example.
 12. Add artifact redaction/stability rules so release bundles can be shared
     publicly without leaking local paths, secrets, or machine-specific noise.
 
-## Phase 7: Flagship Depth And Examples
+## Phase 8: Flagship Depth And Examples
 
 Goal: produce examples that outside systems engineers find impressive, not only
 internally coherent.
@@ -332,7 +389,7 @@ example with proof/evidence strong enough to anchor the public pitch.
 12. Keep the curated showcase balanced: parser/protocol, bounded state,
     crypto/security, authority, FFI/trust, ownership-heavy.
 
-## Phase 8: Compiler Soundness Bridge
+## Phase 9: Compiler Soundness Bridge
 
 Goal: move the flagship-used `Core -> ProofCore` rules from "extracts to the
 expected ProofCore shape" toward source-semantics agreement and checked
@@ -369,7 +426,7 @@ machine-readable.
    layer. Add the layer only if the direct rule proofs show repeated semantic
    duplication across at least two forcing examples.
 
-## Phase 9: Backend, Target, And Stdlib Contracts
+## Phase 10: Backend, Target, And Stdlib Contracts
 
 Goal: make backend/toolchain/stdlib assumptions explicit, and state exactly
 where source-level proof stops.
@@ -400,7 +457,7 @@ and incremental build contracts are explicit enough for release evidence.
 12. Keep QBE/WASM/second backend deferred until evidence attachment,
     optimization policy, and backend trust boundaries are trustworthy.
 
-## Phase 10: Public Release Bar
+## Phase 11: Public Release Bar
 
 Goal: make Concrete understandable and usable by someone who did not build the
 compiler.
@@ -432,7 +489,7 @@ inspect its audit bundle, and understand the claim matrix in under ten minutes.
     install paths, supported/deferred channels.
 12. Ship the first narrow public release only after the above are green.
 
-## Phase 11: Packages And Dependency Evidence
+## Phase 12: Packages And Dependency Evidence
 
 Goal: let package users inspect proof, trust, capability, and assumption facts
 before adopting a dependency.
@@ -457,7 +514,7 @@ policies, provenance, and registry protocol.
 11. Add package provenance and publishing model.
 12. Add package registry server protocol and trust model.
 
-## Phase 12: Editor And Human Tooling
+## Phase 13: Editor And Human Tooling
 
 Goal: make evidence visible where developers work.
 
@@ -478,7 +535,7 @@ reports without inventing a second truth source.
 8. Add language/versioning/deprecation policy across syntax, stdlib, proof/fact
    artifacts.
 
-## Phase 13: Concurrency And Research-Gated Extensions
+## Phase 14: Concurrency And Research-Gated Extensions
 
 Goal: keep speculative ideas gated until Concrete's proof/evidence foundation
 can contain them honestly.
