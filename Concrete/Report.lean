@@ -1728,6 +1728,8 @@ private partial def renderPExpr : Proof.PExpr → String
       | .addw _ _ => "+w"     -- wrapping add at width (mod 2^w)
       | .mod _ true => "%"    -- signed mod (i32 srem semantics)
       | .mod _ false => "%u"  -- unsigned mod (urem semantics)
+      | .div _ true => "/"    -- signed div (i32 sdiv semantics)
+      | .div _ false => "/u"  -- unsigned div (udiv semantics)
       | .bitxor _ true => "^"
       | .bitxor _ false => "^u"
       | .bitor _ true => "|"
@@ -1865,6 +1867,7 @@ private partial def renderPExprAsLean : Proof.PExpr → String
       | .add => ".add" | .sub => ".sub" | .mul => ".mul"
       | .addw w s => s!"(.addw {w} {s})"
       | .mod w s => s!"(.mod {w} {s})"
+      | .div w s => s!"(.div {w} {s})"
       | .bitxor w s => s!"(.bitxor {w} {s})"
       | .bitor w s => s!"(.bitor {w} {s})"
       | .bitand w s => s!"(.bitand {w} {s})"

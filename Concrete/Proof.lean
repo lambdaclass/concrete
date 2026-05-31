@@ -71,6 +71,17 @@ inductive PBinOp where
       to i32 semantics.  Multi-width support extends one row at a
       time in `PROOF_OBLIGATIONS_REGISTER.md` as flagships force it. -/
   | mod (width : Nat) (signed : Bool)
+  /-- Integer division at a specific width (truncating toward zero).
+
+      `div width signed` models Concrete's `/` operator:
+        * `div 32 true`  — LLVM `sdiv` via `BitVec.sdiv` on `BitVec 32`,
+                           result read signed (`BitVec.toInt`).
+        * `div 32 false` — LLVM `udiv` via `BitVec.udiv` on `BitVec 32`,
+                           result read unsigned.
+      Division by zero evaluates to `none` (the same trap-shaped
+      result `mod` uses).  Forced by HMAC-SHA256's `sha256_hash`,
+      which computes the padded-block count as `(len + 9 + 63) / 64`. -/
+  | div (width : Nat) (signed : Bool)
   /-- Bitwise XOR at a specific width, with a `signed` tag that
       controls how the result `BitVec` is reinterpreted as `Int`.
 
@@ -326,6 +337,16 @@ def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
     if b = 0 then none
     else some (.int (Int.ofNat
       (BitVec.umod (BitVec.ofInt 32 a) (BitVec.ofInt 32 b)).toNat))
+  -- div 32 signed: LLVM sdiv via BitVec.sdiv at i32 width; signed view.
+  | .div 32 true, .int a, .int b =>
+    if b = 0 then none
+    else some (.int (BitVec.toInt
+      (BitVec.sdiv (BitVec.ofInt 32 a) (BitVec.ofInt 32 b))))
+  -- div 32 unsigned: LLVM udiv via BitVec.udiv at u32 width; unsigned view.
+  | .div 32 false, .int a, .int b =>
+    if b = 0 then none
+    else some (.int (Int.ofNat
+      (BitVec.udiv (BitVec.ofInt 32 a) (BitVec.ofInt 32 b)).toNat))
   -- bitxor 32 signed: BitVec.xor at i32, signed view.
   | .bitxor 32 true, .int a, .int b =>
     some (.int (BitVec.toInt
@@ -535,6 +556,22 @@ example :
 example :
     evalBinOp (.addw 32 false)
       (.int 4294967295) (.int 2) = some (.int 1) := by rfl
+
+/-- i32 division truncates toward zero: `144 / 64 = 2` (the
+    sha256_hash block-count shape for a 72-byte input). -/
+example :
+    evalBinOp (.div 32 true)
+      (.int 144) (.int 64) = some (.int 2) := by rfl
+
+/-- i32 division of the longest HMAC inner input's padded-block
+    count: `(320 + 9 + 63) / 64 = 392 / 64 = 6`. -/
+example :
+    evalBinOp (.div 32 true)
+      (.int 392) (.int 64) = some (.int 6) := by rfl
+
+/-- Division by zero evaluates to `none` (trap-shaped). -/
+example :
+    evalBinOp (.div 32 true) (.int 5) (.int 0) = none := by rfl
 
 /-- Bind a list of argument values to parameter names. -/
 def bindArgs (env : Env) (params : List String) (args : List PVal) : Option Env :=

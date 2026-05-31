@@ -7,11 +7,12 @@
 # landed and the SHA-256 + HMAC implementation is COMPLETE and
 # runtime-verified: `main` checks SHA-256("abc") against FIPS 180-4
 # and HMAC-SHA256 against RFC 4231 TC1+TC2 (compiled and --interp).
-# `concrete audit` still reads `Status: partial` because the
-# array-writing loops (block_to_words / sha256_schedule /
-# state_to_bytes / sha256_hash / hmac_sha256) use a loop-body shape
-# extraction does not model yet — array-element assignment.  That is
-# the next forcing-surface item; correctness theorems follow it.
+# `concrete audit` now reads `Status: FULL` — every proof-eligible
+# function fits ProvableV1 (registers R-22..R-28); only the
+# capability-bearing entry point `main` is excluded by profile
+# design.  The first kernel theorem (sha256_init_correct) is
+# attached; the remaining functions are extractable and awaiting
+# their correctness theorems (AUDIT.md § 6 bar #2).
 
 schema_version = 1
 

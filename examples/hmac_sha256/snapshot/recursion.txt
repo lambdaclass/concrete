@@ -1,6 +1,6 @@
 === Recursion / Call-Cycle Report ===
 
-Totals: 24 functions, 24 non-recursive, 0 direct recursion, 0 in mutual cycles
+Totals: 26 functions, 26 non-recursive, 0 direct recursion, 0 in mutual cycles
 
 No recursion detected — all call paths are acyclic.
 

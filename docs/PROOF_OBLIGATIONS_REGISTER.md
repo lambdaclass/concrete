@@ -258,6 +258,31 @@ extractor preserves.  Phase 12 obligation
 `cast_identity_preservation` will state this restriction
 explicitly.
 
+### R-28 (div — integer division, typed BitVec round-trip)
+
+New constructor introduced by HMAC-SHA256's `sha256_hash`, which
+computes the padded-block count as `(len + 9 + 63) / 64`.
+
+    evalBinOp (.div 32 true)  (.int a) (.int b) =     -- i32 sdiv
+      if b = 0 then none else some (.int (BitVec.toInt (BitVec.sdiv …)))
+    evalBinOp (.div 32 false) (.int a) (.int b) =     -- u32 udiv
+      if b = 0 then none else some (.int (Int.ofNat (BitVec.udiv …).toNat))
+
+Division by zero evaluates to `none` (the same trap-shaped result
+`mod` uses).  Mirrors R-16's mod exactly (srem/umod -> sdiv/udiv).
+Backend match: source `/` lowers to LLVM `sdiv`/`udiv` by signedness
+(`EmitSSA.lean`).  Inline regression theorems: `144/64=2`,
+`392/64=6` (the longest HMAC inner block count), `5/0=none`.
+
+This was the last arithmetic op the pipeline needed.  Together
+with restructuring sha256_hash to compress straight out of its work
+buffer (sha256_compress_at, eliminating the nested copy loop) and
+computing the length bytes in u32 (so byte extraction uses the
+supported u32 bitand/shr rather than i32), it moves `sha256_hash`
+from blocked to `in` — and hmac_sha256 conformance to **Status: full**
+(every proof-eligible function fits ProvableV1; only the
+capability-bearing entry point is excluded by profile design).
+
 ### R-27 (array-element assignment in bounded loop bodies)
 
 Forced by HMAC-SHA256's `block_to_words`, `sha256_schedule`,

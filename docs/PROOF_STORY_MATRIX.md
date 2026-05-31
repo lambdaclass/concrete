@@ -35,7 +35,7 @@ reported, assumed, or trusted instead.
 | Integer and boolean literals | proved | R-01/R-02 soundness rules; PExpr eval theorems | deeper compiler-wide preservation remains Phase 8 work |
 | Variables | proved | R-03 soundness rule | none for current ProofCore surface |
 | Arithmetic and comparisons | proved for admitted `PBinOp` cases | R-04/R-05; proof-status and flagship specs | richer arithmetic profiles still need `PredictableV1`/runtime obligations |
-| Width-tagged mod / bitxor / bitor / bitand / shr / shl / addw | proved at extraction shape; trusted for backend equivalence | R-16/R-17/R-21/R-22/R-23/R-24/R-25/R-26 register entries; BitVec eval rules | BitVec-vs-LLVM semantic agreement; more widths/ops by forcing example |
+| Width-tagged mod / div / bitxor / bitor / bitand / shr / shl / addw | proved at extraction shape; trusted for backend equivalence | R-16/R-17/R-21..R-26/R-28 register entries; BitVec eval rules | BitVec-vs-LLVM semantic agreement; more widths/ops by forcing example |
 | Let bindings | proved | R-06; PExpr eval theorem pattern | none for current shape |
 | If/then/else and early-return fall-through | proved at extraction/eval shape | R-07; parse_validate proofs | fuller source semantics for all if forms |
 | Direct non-recursive calls | proved at extraction/eval shape when FnTable-complete | R-08; G-05 direct FnTable checks | transitive FnTable and proof dependency tracking |

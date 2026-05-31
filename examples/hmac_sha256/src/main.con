@@ -21,31 +21,26 @@
 // (multi-byte key, multi-block message) — green in BOTH the
 // compiled binary and `--interp`.
 //
-// Conformance reads `Status: partial`, and that is the honest
-// signal.  Array-element assignment in bounded loop bodies
-// (`w[i] = ...`) is now extractable (register R-27), so
-// block_to_words, sha256_schedule, state_to_bytes and hmac_sha256
-// have moved `in`.  Just ONE function is still blocked:
-//
-//   blocked: sha256_hash — uses i32 `/` (the padded-block count)
-//            AND a richer loop body (a `let` + a nested loop + a
-//            call-assign, not a flat update list).  Both are
-//            separate, larger forcing-surface items (div support;
-//            nested-loop / let-in-loop-body extraction).
-//
-// Everything else sits `in`.  So the gate walked partial -> full
-// (trivial stubs) -> partial (real array-store loops) -> almost
-// full (R-27), tracking each proof obligation precisely.
+// Conformance reads `Status: FULL` — every proof-eligible
+// function fits ProvableV1; only `main` is excluded by design
+// (it has the Console capability).  The gate walked
+// partial -> full (trivial stubs) -> partial (real array-store
+// loops) -> full again, tracking each proof obligation precisely
+// the whole way.  The last function, sha256_hash, was unblocked
+// by two changes: u32 `div` joined ProvableV1 (register R-28, for
+// the padded-block count), and its inner block-copy loop was
+// replaced by sha256_compress_at reading straight out of the work
+// buffer, so every loop body is flat (no nested loops).
 //
 // The FIRST kernel theorem is attached: `sha256_init_correct`
 // (AUDIT.md § 6 bar #1) is kernel-verified — `concrete <file>
 // --report proof-status` shows `sha256_init` as `proved [point]`,
 // and --report check-proofs reports "1 verified, 0 failed".  The
 // remaining eligible functions show `missing` (extractable, no
-// theorem yet); functional correctness for them is established at
+// theorem yet); their functional correctness is established at
 // RUNTIME (RFC/FIPS vectors).  Next: the bar #2 composition
-// theorems (block_to_words / compress / an RFC-vector point proof),
-// and unblocking sha256_hash (i32 `/` + nested-loop body).
+// theorems (block_to_words / compress / an RFC-vector point
+// proof) — now unblocked for every function in the pipeline.
 //
 // This is NOT a vetted crypto library.  Do not deploy.  See § 4
 // of AUDIT.md and assumptions.toml for the trust boundaries.
@@ -221,6 +216,36 @@ mod hmac_sha256 {
                 state[6] + s[6], state[7] + s[7]];
     }
 
+    // Big-endian pack of the 64-byte block at `off` in a 384-byte
+    // buffer into 16 u32 words.  Offset variant of block_to_words:
+    // lets sha256_hash compress straight out of its work buffer
+    // without an inner copy loop, keeping every loop body flat (so
+    // extraction stays in ProvableV1 — no nested loops).
+    fn block_to_words_at(buf: [u8; 384], off: i32) -> [u32; 16] {
+        let mut w: [u32; 16] = [0; 16];
+        for (let mut k: i32 = 0; k < 16; k = k + 1) {
+            w[k] = ((buf[off + k * 4] as u32) << 24)
+                 | ((buf[off + k * 4 + 1] as u32) << 16)
+                 | ((buf[off + k * 4 + 2] as u32) << 8)
+                 | (buf[off + k * 4 + 3] as u32);
+        }
+        return w;
+    }
+
+    // Compress the 64-byte block at `off` in `buf` into `state`.
+    // Offset variant of sha256_compress (same Davies-Meyer body).
+    fn sha256_compress_at(state: [u32; 8], buf: [u8; 384], off: i32) -> [u32; 8] {
+        let w: [u32; 64] = sha256_schedule(block_to_words_at(buf, off));
+        let k: [u32; 64] = sha256_k();
+        let mut s: [u32; 8] = state;
+        for (let mut i: i32 = 0; i < 64; i = i + 1) {
+            s = sha256_round(s, k[i], w[i]);
+        }
+        return [state[0] + s[0], state[1] + s[1], state[2] + s[2],
+                state[3] + s[3], state[4] + s[4], state[5] + s[5],
+                state[6] + s[6], state[7] + s[7]];
+    }
+
     // Big-endian unpack of the 8-word state into 32 bytes.
     fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
         let mut out: [u8; 32] = [0; 32];
@@ -236,16 +261,25 @@ mod hmac_sha256 {
     // Full SHA-256 of `len` bytes held in a zero-padded work buffer
     // (the caller guarantees data[len..] = 0).  Applies FIPS 180-4
     // padding (0x80 marker, zero fill, 64-bit big-endian bit length)
-    // in a local copy, then runs sha256_compress over each 64-byte
-    // block, chaining the state.  HASH_CAP = 384 = ceil((64 + 256 +
-    // 9) / 64) * 64 — large enough for the longest HMAC inner input
-    // (one block of key material + MSG_MAX message + padding).
+    // in a local copy, then compresses each 64-byte block straight
+    // out of the buffer via sha256_compress_at, chaining the state.
+    // HASH_CAP = 384 = ceil((64 + 256 + 9) / 64) * 64 — large enough
+    // for the longest HMAC inner input (one block of key material +
+    // MSG_MAX message + padding).
+    //
+    // Every loop body here is FLAT (the block loop is a single
+    // `state = sha256_compress_at(...)` scalar assign — no inner
+    // copy loop), and the block count uses `/` (register R-28), so
+    // the whole function is proof-extractable (ProvableV1).
     fn sha256_hash(data: [u8; 384], len: i32) -> [u8; 32] {
         let mut buf: [u8; 384] = data;
         buf[len] = 128;                          // 0x80 marker
         let nblocks: i32 = (len + 9 + 63) / 64;  // blocks after padding
         let plen: i32 = nblocks * 64;
-        let bits: i32 = len * 8;                 // message length in bits
+        // Length in bits as u32 so the byte-extraction below uses
+        // u32 bitand/shr (which ProvableV1 supports) rather than
+        // i32 bitwise ops (which it does not).
+        let bits: u32 = (len * 8) as u32;        // message length in bits
         buf[plen - 1] = (bits & 255) as u8;
         buf[plen - 2] = ((bits >> 8) & 255) as u8;
         buf[plen - 3] = ((bits >> 16) & 255) as u8;
@@ -253,11 +287,7 @@ mod hmac_sha256 {
         // bytes plen-5..plen-8 stay 0 (bit length < 2^32 here)
         let mut state: [u32; 8] = sha256_init();
         for (let mut blk: i32 = 0; blk < nblocks; blk = blk + 1) {
-            let mut block: [u8; 64] = [0; 64];
-            for (let mut j: i32 = 0; j < 64; j = j + 1) {
-                block[j] = buf[blk * 64 + j];
-            }
-            state = sha256_compress(state, block);
+            state = sha256_compress_at(state, buf, blk * 64);
         }
         return state_to_bytes(state);
     }

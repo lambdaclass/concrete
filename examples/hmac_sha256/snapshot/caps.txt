@@ -15,6 +15,8 @@ module hmac_sha256:
       sha256_schedule : (pure)
       sha256_round : (pure)
       sha256_compress : (pure)
+      block_to_words_at : (pure)
+      sha256_compress_at : (pure)
       state_to_bytes : (pure)
       sha256_hash : (pure)
       hmac_sha256 : (pure)
@@ -25,5 +27,5 @@ module hmac_sha256:
   pub main : Console
     Console    <- calls print_string (intrinsic), print_char (intrinsic)
 
-Totals: 22 functions (21 pure), 0 externs
+Totals: 24 functions (23 pure), 0 externs
 

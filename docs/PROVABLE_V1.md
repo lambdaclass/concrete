@@ -82,6 +82,7 @@ The current `ProvableV1` ProofCore expression surface is:
 | arithmetic and comparisons | Supported for the operations admitted by `PBinOp`. Width-agnostic `add`/`sub`/`mul` model mathematical `Int`. |
 | wrapping add (`addw`) | Supported at `u32` (wraps mod 2^32, models LLVM `add`), forced by SHA-256's compression rounds. Distinct from the width-agnostic `Int` `add`. Wrapping `sub`/`mul` and other widths are append-only follow-ups. |
 | `mod` | Supported for the width/signedness cases recorded in ProofCore. |
+| `div` | Supported at `i32` (sdiv) and `u32` (udiv); division by zero evaluates to `none`. R-28. |
 | bitxor / bitor | Supported for currently forced widths: `i32`, `u32`, `u8` as applicable. |
 | bitand | Supported at `u32` (unsigned view), forced by HMAC-SHA256's `Ch`/`Maj`. Other widths are append-only follow-ups. |
 | shr (logical right shift) | Supported at `u32` (unsigned view, models LLVM `lshr`), forced by HMAC-SHA256's `sigma` functions and `rotr`. Other widths / arithmetic `ashr` are append-only follow-ups. |

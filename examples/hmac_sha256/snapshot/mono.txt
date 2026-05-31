@@ -1,7 +1,7 @@
 === Monomorphization Report ===
 
-Functions before mono: 22
-Functions after mono:  22
+Functions before mono: 24
+Functions after mono:  24
 Generic functions:     0
 Specializations:       0
 
