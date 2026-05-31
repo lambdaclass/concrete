@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "proofs": [
+    {
+      "function": "hmac_sha256.sha256_init",
+      "body_fingerprint": "[(ret (array (int 1779033703) (int 3144134277) (int 1013904242) (int 2773480762) (int 1359893119) (int 2600822924) (int 528734635) (int 1541459225)))]",
+      "proof": "Concrete.Proof.sha256_init_correct",
+      "spec": "Concrete.Proof.sha256_initExpr",
+      "coverage": "point"
+    }
+  ]
+}

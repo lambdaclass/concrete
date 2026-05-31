@@ -2417,6 +2417,34 @@ theorem ct_compare_equal_zeros_correct (fuel : Nat) :
         ctTagFns, Env.bind, evalBinOp, List.replicate]
 
 -- ============================================================
+-- hmac_sha256 (fifth flagship) — first attached theorem
+-- ============================================================
+
+/-- Extracted spec for `hmac_sha256.sha256_init`: the SHA-256
+    initial hash value H(0), the first 32 bits of the fractional
+    parts of the square roots of the first 8 primes (FIPS 180-4
+    § 5.3.3).  A pure constant-array body — no PBinOp dependency. -/
+def sha256_initExpr : PExpr :=
+  .arrayLit
+    [ .lit (.int 1779033703), .lit (.int 3144134277)
+    , .lit (.int 1013904242), .lit (.int 2773480762)
+    , .lit (.int 1359893119), .lit (.int 2600822924)
+    , .lit (.int 528734635),  .lit (.int 1541459225) ]
+
+/-- **First attached theorem on hmac_sha256** (AUDIT.md § 6 bar #1).
+    `sha256_init()` evaluates to exactly the eight FIPS 180-4 H(0)
+    constants.  A point proof with no PBinOp dependency — its job is
+    to establish the array-of-u32 shape in the proof model and the
+    body-fingerprint mechanism on the candidate's simplest function,
+    the foundation the compression-pipeline theorems build on. -/
+theorem sha256_init_correct (fuel : Nat) :
+    eval (fun _ => none) Env.empty (fuel + 2) sha256_initExpr
+      = some (.array_
+          [ .int 1779033703, .int 3144134277, .int 1013904242, .int 2773480762
+          , .int 1359893119, .int 2600822924, .int 528734635, .int 1541459225 ]) := by
+  simp [sha256_initExpr, eval, eval.evalElems]
+
+-- ============================================================
 -- Registered spec table (Phase 4 item 2 — spec/body drift gate)
 -- ============================================================
 
@@ -2485,6 +2513,8 @@ def specs : List (String × PExpr) :=
   , ("fixed_capacity.compute_tag",   fcTagExpr)
     -- constant_time_tag
   , ("constant_time_tag.ct_compare", ctCompareExpr)
+    -- hmac_sha256
+  , ("hmac_sha256.sha256_init",      sha256_initExpr)
     -- adversarial spec-drift fixture (deliberately wrong)
   , ("test_drift.simple_add",        driftTestSpec)
   ]

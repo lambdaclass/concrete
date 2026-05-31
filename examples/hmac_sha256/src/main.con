@@ -35,12 +35,17 @@
 //
 // Everything else sits `in`.  So the gate walked partial -> full
 // (trivial stubs) -> partial (real array-store loops) -> almost
-// full (R-27), tracking each proof obligation precisely.  No
-// correctness proofs are attached yet — proof-status shows the
-// eligible functions as `missing`; functional correctness is
-// established at RUNTIME (RFC/FIPS vectors), not yet by the kernel
-// (AUDIT.md § 6 theorems are the remaining step, now unblocked for
-// every function except sha256_hash).
+// full (R-27), tracking each proof obligation precisely.
+//
+// The FIRST kernel theorem is attached: `sha256_init_correct`
+// (AUDIT.md § 6 bar #1) is kernel-verified — `concrete <file>
+// --report proof-status` shows `sha256_init` as `proved [point]`,
+// and --report check-proofs reports "1 verified, 0 failed".  The
+// remaining eligible functions show `missing` (extractable, no
+// theorem yet); functional correctness for them is established at
+// RUNTIME (RFC/FIPS vectors).  Next: the bar #2 composition
+// theorems (block_to_words / compress / an RFC-vector point proof),
+// and unblocking sha256_hash (i32 `/` + nested-loop body).
 //
 // This is NOT a vetted crypto library.  Do not deploy.  See § 4
 // of AUDIT.md and assumptions.toml for the trust boundaries.

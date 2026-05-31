@@ -70,14 +70,15 @@ description = """
 hmac_sha256(k, m) equals the RFC 2104 / FIPS 180-4 specification
 of HMAC-SHA256.  The implementation is COMPLETE and verified at
 RUNTIME against RFC 4231 (TC1 + TC2) and FIPS 180-4 SHA-256("abc"),
-in both the compiled binary and the interpreter.  The claim is
-PENDING only at the PROOF level: the Lean correctness theorems
-(AUDIT.md § 6, bars #1 and #2) are not attached yet, because the
-array-writing loops are not extractable until the next
-forcing-surface item (array-element assignment in bounded loop
-bodies — while_step + arraySet) lands.  Runtime agreement across
-proof-model arithmetic, interpreter, and compiled binary is
-established; kernel-checked theorems are the remaining step.
+in both the compiled binary and the interpreter.  Kernel-checked
+proofs are now BEING ATTACHED: bar #1 is done —
+`sha256_init_correct` (Concrete.Proof) is kernel-verified and shows
+`proved [point]` in --report proof-status / check-proofs.  The
+remaining functions are extractable (register R-27) but not yet
+proved (`missing`); the substantive RFC-vector composition
+theorems (bar #2) and the still-blocked sha256_hash (i32 `/` +
+nested-loop body) follow.  Runtime agreement across proof-model
+arithmetic, interpreter, and compiled binary is established.
 """
 
 [claims.structural_constant_time]
