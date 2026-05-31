@@ -1702,7 +1702,18 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let elemTy := match arr.ty with | .array t _ => t | _ => value.ty
     let gepDst ← freshReg
     emit (.gep gepDst aVal [iVal] elemTy)
-    emit (.store vVal (.reg gepDst elemTy))
+    -- Coerce the value to the element type before storing.  Without
+    -- this, an int literal (typed `Int`/i64) assigned to a narrower
+    -- slot (e.g. `b[i] = 9` where b : [u8; N]) would emit
+    -- `store i64 9` into a u8 cell, writing 8 bytes past the element
+    -- and corrupting the array.  Runtime values already carry the
+    -- slot type, so this only inserts a (truncating) cast for the
+    -- literal/width-mismatch case.
+    let storeVal ← if value.ty == elemTy then pure vVal else do
+      let castDst ← freshReg
+      emit (.cast castDst vVal elemTy)
+      pure (SVal.reg castDst elemTy)
+    emit (.store storeVal (.reg gepDst elemTy))
 
   | .break_ value breakLabel =>
     match ← findLoopByLabel breakLabel with

@@ -92,3 +92,6 @@ examples/service_errors/src/main.con
 # Pending interpreter coverage (next gap: print/IO intrinsics so the
 # interpreter can match compiled stdout for fixed_capacity et al.).
 examples/fixed_capacity/src/main.con
+
+# Regression: constant store into narrow array element (i64-into-u8 bug)
+tests/programs/array_const_store.con
