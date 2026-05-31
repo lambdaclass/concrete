@@ -31,16 +31,17 @@
 //     `sha256_round`, `sha256_compress`, `state_to_bytes`,
 //     `hmac_sha256`, `verify_hmac`) are still STUBS — final
 //     signatures (AUDIT.md § 2), placeholder zero bodies.
-//   * The INTERPRETER does not yet mask u32 arithmetic (wrapping
-//     `add`, and `shl` truncation).  The PROOF model does (via
-//     BitVec), but until the interpreter agrees a full SHA-256
-//     would compute wrong word values at runtime.  So `main`
-//     still exercises ONLY the bit-exact parts and runs NO RFC
-//     4231 vectors.
+//   * The pipeline is not wired together yet.  u32 arithmetic now
+//     wraps correctly in BOTH execution paths — the proof model
+//     (BitVec) and the interpreter (maskWidth) agree, and both
+//     agree with the compiled binary's LLVM wrapping (oracle
+//     differential green).  So the ONLY thing keeping `main` from
+//     running RFC 4231 vectors is that the pipeline functions are
+//     stubs; the arithmetic underneath is ready.
 //
-// Next: u32 wrapping `add` (forcing surface) + interpreter
-// masking, then fill the pipeline and attach RFC-vector theorems
-// (AUDIT.md § 6, bars #1 and #2).
+// Next: fill the pipeline (block_to_words -> schedule -> compress
+// -> hmac) now that the arithmetic surface is complete, then
+// attach RFC-vector theorems (AUDIT.md § 6, bars #1 and #2).
 //
 // This is NOT a vetted crypto library.  Do not deploy.  See § 4
 // of AUDIT.md and assumptions.toml for the trust boundaries.

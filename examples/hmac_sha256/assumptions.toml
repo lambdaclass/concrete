@@ -18,10 +18,11 @@ runtime   = "hosted-libc"
 
 [arithmetic]
 # u32 wrapping arithmetic (mod 2^32) is the SHA-256 word model; u8
-# for tag/message bytes; i32 for loop counters and lengths.  NOTE:
-# the interpreter does not yet mask u32 ops to 32 bits — that mask is
-# part of the forcing surface (AUDIT.md § 5) and lands before any RFC
-# vector is claimed.  Wrapping is the predictable-profile default.
+# for tag/message bytes; i32 for loop counters and lengths.  u32 ops
+# wrap mod 2^32 consistently across all three semantics — the proof
+# model (BitVec, register R-22..R-26), the interpreter (maskWidth),
+# and the compiled binary (LLVM) — verified by the oracle
+# differential.  Wrapping is the predictable-profile default.
 overflow       = "wrapping"
 divide_by_zero = "trap"
 shift_oversize = "wrap"

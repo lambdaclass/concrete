@@ -133,15 +133,38 @@ private def intAnd (a b : Int) : Int :=
 private def intOr (a b : Int) : Int :=
   Int.ofNat (Nat.lor a.toNat b.toNat)
 
+/-- Bit width of an unsigned fixed-width integer type, if any. -/
+private def unsignedBitWidth : Ty → Option Nat
+  | .uint => some 64
+  | .u8   => some 8
+  | .u16  => some 16
+  | .u32  => some 32
+  | _     => none
+
+/-- Wrap an integer result to its type's width for unsigned
+    fixed-width types — exactly the BitVec round-trip the proof
+    model uses (`Concrete.Proof.evalBinOp`), so the interpreter
+    and the proof semantics agree by construction (e.g. u32 add
+    is mod 2^32, u32 `<<` truncates).  Signed / `Int` types are
+    left as mathematical `Int`, matching the width-agnostic
+    `add`/`sub`/`mul` of the proof model. -/
+private def maskWidth (ty : Ty) (n : Int) : Int :=
+  match unsignedBitWidth ty with
+  | some w => Int.ofNat (BitVec.ofInt w n).toNat
+  | none   => n
+
 def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
+  -- Result type is the LHS (value) type; for shifts this is the
+  -- shifted value's width, not the shift-count's.  maskWidth then
+  -- wraps unsigned results to that width.
   match op, lhs, rhs with
-  | .add, .int a _, .int b ty => .ok (.int (a + b) ty)
-  | .sub, .int a _, .int b ty => .ok (.int (a - b) ty)
-  | .mul, .int a _, .int b ty => .ok (.int (a * b) ty)
+  | .add, .int a ty, .int b _ => .ok (.int (maskWidth ty (a + b)) ty)
+  | .sub, .int a ty, .int b _ => .ok (.int (maskWidth ty (a - b)) ty)
+  | .mul, .int a ty, .int b _ => .ok (.int (maskWidth ty (a * b)) ty)
   | .div, .int _ _, .int 0 _ => .error "interp: division by zero"
-  | .div, .int a _, .int b ty => .ok (.int (a / b) ty)
+  | .div, .int a ty, .int b _ => .ok (.int (maskWidth ty (a / b)) ty)
   | .mod, .int _ _, .int 0 _ => .error "interp: modulo by zero"
-  | .mod, .int a _, .int b ty => .ok (.int (a % b) ty)
+  | .mod, .int a ty, .int b _ => .ok (.int (maskWidth ty (a % b)) ty)
   | .eq, .int a _, .int b _ => .ok (.bool (a == b))
   | .neq, .int a _, .int b _ => .ok (.bool (a != b))
   | .lt, .int a _, .int b _ => .ok (.bool (a < b))
@@ -154,11 +177,11 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   | .neq, .bool a, .bool b => .ok (.bool (a != b))
   | .eq, .string a, .string b => .ok (.bool (a == b))
   | .neq, .string a, .string b => .ok (.bool (a != b))
-  | .bitxor, .int a _, .int b ty => .ok (.int (intXor a b) ty)
-  | .bitand, .int a _, .int b ty => .ok (.int (intAnd a b) ty)
-  | .bitor, .int a _, .int b ty => .ok (.int (intOr a b) ty)
-  | .shl, .int a _, .int b ty => .ok (.int (a * (2 ^ b.toNat)) ty)
-  | .shr, .int a _, .int b ty => .ok (.int (a / (2 ^ b.toNat)) ty)
+  | .bitxor, .int a ty, .int b _ => .ok (.int (maskWidth ty (intXor a b)) ty)
+  | .bitand, .int a ty, .int b _ => .ok (.int (maskWidth ty (intAnd a b)) ty)
+  | .bitor, .int a ty, .int b _ => .ok (.int (maskWidth ty (intOr a b)) ty)
+  | .shl, .int a ty, .int b _ => .ok (.int (maskWidth ty (a * (2 ^ b.toNat))) ty)
+  | .shr, .int a ty, .int b _ => .ok (.int (maskWidth ty (a / (2 ^ b.toNat))) ty)
   | _, _, _ => .error "interp: unsupported binop on given value types"
 
 -- ============================================================
@@ -167,9 +190,12 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
 
 def evalUnaryOp (op : UnaryOp) (v : IVal) : Except String IVal :=
   match op, v with
-  | .neg, .int n ty => .ok (.int (-n) ty)
+  | .neg, .int n ty => .ok (.int (maskWidth ty (-n)) ty)
   | .not_, .bool b => .ok (.bool (!b))
-  | .bitnot, .int n ty => .ok (.int (-(n + 1)) ty)
+  -- ~n at an unsigned width is `2^w - 1 - n`; maskWidth turns the
+  -- mathematical `-(n+1)` into exactly that (e.g. ~0 = 0xFFFFFFFF
+  -- at u32, not -1).
+  | .bitnot, .int n ty => .ok (.int (maskWidth ty (-(n + 1))) ty)
   | _, _ => .error "interp: unsupported unary op"
 
 -- ============================================================
