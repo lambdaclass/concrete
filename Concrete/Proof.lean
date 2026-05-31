@@ -2740,4 +2740,82 @@ theorem eval_fuel_le (fns : FnTable) (env : Env) (fuel extra : Nat)
     rw [heq]
     exact eval_fuel_succ fns env (fuel + k) e v ih
 
+-- ---- Rung 3: bounded counter-loop induction ----
+--
+-- The reusable theorem for `for (i = 0; i < N; i++) { body }` loops
+-- (which is what Concrete's for-loops desugar to: a `while_` whose
+-- body is the flat update list `body ++ [i := i+1]`).  Given an
+-- invariant expressed as the env `st k` at the start of iteration k,
+-- a proof that the body steps `st k` to `st (k+1)` while the guard
+-- holds, and that the guard fails at `st N`, the loop evaluates to
+-- `cont` in the final env `st N` — proved by induction on the
+-- iteration count, NOT by unfolding the body N times.  The fuel
+-- bookkeeping that used to make this fragile is gone: the
+-- hypotheses are stated at a single `base` fuel and lifted to each
+-- iteration's fuel by `eval_fuel_le` / `evalAssigns_fuel_le`.
+
+/-- `evalAssigns` is fuel-monotone — a list induction over the body's
+    assignments on top of `eval_fuel_le`. -/
+theorem evalAssigns_fuel_le (fns : FnTable) :
+    ∀ (assigns : List (String × PExpr)) (env : Env) (fuel extra : Nat) (env' : Env),
+      eval.evalAssigns fns env fuel assigns = some env' →
+      eval.evalAssigns fns env (fuel + extra) assigns = some env' := by
+  intro assigns
+  induction assigns with
+  | nil => intro env fuel extra env' h; simpa [eval.evalAssigns] using h
+  | cons hd rest ih =>
+    intro env fuel extra env' h
+    obtain ⟨name, e⟩ := hd
+    simp only [eval.evalAssigns] at h ⊢
+    cases hv : eval fns env fuel e with
+    | none => rw [hv] at h; simp at h
+    | some v =>
+      rw [hv] at h
+      rw [eval_fuel_le fns env fuel extra e v hv]
+      exact ih (env.bind name v) fuel extra env' h
+
+/-- **Bounded counter-loop induction.**  For a `while_` whose env at
+    the start of iteration `k` is `st k`: if the guard is true and the
+    body's assignments reach `st (k+1)` for every `k < N`, and the
+    guard is false at `st N`, then the whole loop evaluates to `cont`
+    in the final env `st N`.  This is the lemma SHA-256's packing /
+    schedule / compression loops are proved with. -/
+theorem eval_while_count (fns : FnTable)
+    (cond : PExpr) (assigns : List (String × PExpr)) (cont : PExpr)
+    (st : Nat → Env) (N base : Nat)
+    (hstep : ∀ k, k < N →
+        eval fns (st k) base cond = some (.bool true) ∧
+        eval.evalAssigns fns (st k) base assigns = some (st (k + 1)))
+    (hexit : eval fns (st N) base cond = some (.bool false)) :
+    eval fns (st 0) (base + N + 1) (.while_ cond assigns cont)
+      = eval fns (st N) base cont := by
+  suffices h : ∀ j, j ≤ N →
+      eval fns (st (N - j)) (base + j + 1) (.while_ cond assigns cont)
+        = eval fns (st N) base cont by
+    have hN := h N (Nat.le_refl N)
+    rwa [Nat.sub_self] at hN
+  intro j
+  induction j with
+  | zero =>
+    intro _
+    simp only [Nat.sub_zero]
+    exact eval_while_false fns (st N) base cond assigns cont hexit
+  | succ m ih =>
+    intro hm
+    have hk : N - (m + 1) < N := by omega
+    obtain ⟨hc, ha⟩ := hstep (N - (m + 1)) hk
+    have hc' : eval fns (st (N - (m + 1))) (base + m + 1) cond = some (.bool true) := by
+      have := eval_fuel_le fns (st (N - (m + 1))) base (m + 1) cond (.bool true) hc
+      rwa [show base + (m + 1) = base + m + 1 by omega] at this
+    have ha' : eval.evalAssigns fns (st (N - (m + 1))) (base + m + 1) assigns
+                 = some (st (N - (m + 1) + 1)) := by
+      have := evalAssigns_fuel_le fns assigns (st (N - (m + 1))) base (m + 1)
+                (st (N - (m + 1) + 1)) ha
+      rwa [show base + (m + 1) = base + m + 1 by omega] at this
+    rw [show base + (m + 1) + 1 = (base + m + 1) + 1 by omega]
+    rw [eval_while_true fns (st (N - (m + 1))) (st (N - (m + 1) + 1)) (base + m + 1)
+          cond assigns cont hc' ha']
+    rw [show N - (m + 1) + 1 = N - m by omega]
+    exact ih (by omega)
+
 end Concrete.Proof
