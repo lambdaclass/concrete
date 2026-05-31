@@ -49,9 +49,17 @@ The proof/evidence pipeline is operational:
   array update lemmas, `while_` unfolding, evaluator fuel monotonicity
   (`eval_fuel_succ`/`eval_fuel_le`), and bounded counter-loop induction
   (`eval_while_count`) — so loop/array proofs are systematic, not one-off
-  scripts. `bv_decide` (kernel-checked BitVec automation, in-toolchain) is
-  validated against the HMAC helper facts with zero added trust. See
+  scripts. `bv_decide` (kernel-checked BitVec automation, in-toolchain) now
+  backs a committed proof with zero added trust. See
   [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).
+- The first eval ↔ spec **refinements** ship: an independent `BitVec`-valued
+  SHA-256 spec (`Concrete/Sha256Spec.lean`) and proofs that the extracted
+  Boolean round functions refine it for ALL inputs — `ch_refines` /
+  `maj_refines` (`Concrete/Sha256Refine.lean`), word-level core discharged by
+  `bv_decide` (`proved_by_kernel_decision`). This is "the source computes the
+  function the spec names," not "evaluates to these bytes." The
+  rotation/sigma/schedule/compression refinements and the `hash`/`hmac`
+  composition (HMAC bar #2) are next.
 - A fifth flagship, `hmac_sha256` (first real cryptographic primitive), is
   implemented and runtime-verified against FIPS 180-4 + RFC 4231; ProvableV1
   conformance `full`; two kernel theorems attached; graduation gated on bar #2
@@ -224,10 +232,11 @@ Design reference: [docs/CONTRACTS_AND_VCS.md](docs/CONTRACTS_AND_VCS.md), and
 
 **Ordering (let the proof teach the syntax):** do not freeze contract syntax or
 VC shapes before at least one real refinement proof exists. The spec layer, the
-`bv_decide` tier, the refinement pattern, and `block_to_words_refines_spec`
-(Phase 8 / bar #2) come **first**, so this phase designs against an obligation
-shape that has actually been discharged rather than an imagined one. See the
-build order in `docs/PROOF_LADDER.md`.
+`bv_decide` tier, and the refinement pattern have **shipped** (`ch_refines` /
+`maj_refines`); `block_to_words_refines_spec` (Phase 8 / bar #2) — the first
+refinement over a loop — comes **next** and remains the gate, so this phase
+designs against an obligation shape that has actually been discharged rather
+than an imagined one. See the build order in `docs/PROOF_LADDER.md`.
 
 Done when: one flagship uses source contracts as the primary proof surface, and
 each contract is classified as proved, enforced, assumed, missing, blocked, or

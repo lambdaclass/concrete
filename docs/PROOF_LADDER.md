@@ -115,8 +115,16 @@ contract system must generate.
    (the refinement targets *and* the vocabulary future contracts point at).
 2. **`bv_decide` automation tier** — wire it into the proof workflow; use it on
    the HMAC helper lemmas. Low-risk, useful immediately, zero TCB cost.
+   *(Shipped: `Concrete/Sha256Refine.lean` uses `bv_decide` to close the
+   word-level core of the first refinements — the `proved_by_kernel_decision`
+   tier's first committed use.)*
 3. **Refinement theorem pattern** — establish the shape "extracted `PExpr`
    refines the pure Lean spec," not "evaluates to these bytes."
+   *(Shipped: `ch_refines` / `maj_refines` prove the extracted Boolean round
+   functions equal `Sha256Spec.ch` / `maj` for ALL inputs, via two reusable
+   `BitVec.ofInt ∘ toNat` round-trip bridging lemmas + `bv_decide`. The
+   rotation/sigma/schedule refinements, which add `32−n` shift amounts and
+   `rotr` calls, follow with step 4.)*
 4. **`block_to_words_refines_spec`** — the first real proof using the pattern +
    `eval_while_count`. This validates what kind of obligation contracts must
    generate.
@@ -144,9 +152,11 @@ ghost values erase; the compiled binary is unchanged.
 | Piece | Status |
 |---|---|
 | Array / `while_` / fuel-monotonicity / counter-loop lemmas | **shipped** (`Concrete/Proof.lean`) |
-| `bv_decide` available in toolchain; validated on HMAC helper facts | **shipped / available**, not yet used in committed proofs |
+| `bv_decide` kernel-checked tier, used in a committed proof | **shipped** (`Concrete/Sha256Refine.lean`; `proved_by_kernel_decision`) |
+| Spec layer (`Concrete/Sha256Spec.lean`) | **shipped** |
+| Refinement pattern: extracted `PExpr` refines spec, ∀ inputs | **shipped** for the Boolean round functions (`ch_refines` / `maj_refines`) |
 | Evidence classes `proved` / `enforced` / `reported` / `assumed` + `concrete audit` | **shipped** |
-| Spec layer, refinement pattern, `block_to_words_refines_spec` | **next** (ROADMAP Phase 8 / bar #2) |
+| `rotr` / σ / schedule / `block_to_words_refines_spec` refinement | **next** (ROADMAP Phase 8 / bar #2) |
 | `#[requires/ensures/invariant/decreases]`, `ghost`, `assume`, `contract` | **design** (ROADMAP Phase 4) |
 | VC generator; `proved_by_kernel_decision` / `proved_by_smt` / `solver_trusted` / `runtime_checked` classes; external SMT; gradual mode | **design** (ROADMAP Phase 5) |
 

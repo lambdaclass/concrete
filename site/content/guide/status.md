@@ -53,15 +53,19 @@ What exists today:
   width-tagged `mod`/`div`/`bitand`/`bitor`/`bitxor`/`shl`/`shr`/wrapping-`add`
 - a **reusable proof layer** (evaluator fuel monotonicity + bounded counter-loop
   induction) that makes loop/array proofs systematic, and kernel-checked
-  `bv_decide` automation validated on the crypto helper facts
+  `bv_decide` automation now backing a committed proof
+- the **first refinement proofs against an independent spec**: a `BitVec`-valued
+  SHA-256 spec, and proofs that the extracted Boolean round functions (`ch`,
+  `maj`) compute exactly that spec for all inputs — word-level core discharged
+  by `bv_decide`, kernel-checked
 
 What does not exist yet (planned, not shipped):
 
 - **source-level contracts** (`requires`/`ensures`/`invariant`/`ghost`) and
   automatic verification-condition generation — see the design in the docs
-- **refinement against an independent spec**: today's theorems characterize the
-  extracted IR; proving a function refines a pure mathematical spec is the next
-  step
+- **full refinement of a real primitive**: the Boolean round functions refine
+  their spec today, but the rotations/sigmas, the message schedule, compression,
+  and the full `hash`/`hmac` composition (HMAC bar #2) are not yet proved
 - whole-compiler formal verification
 
 Those last three are active goals, not shipped claims. The discipline is to
