@@ -265,6 +265,8 @@ pre {
 .code-section,
 .goal-section,
 .examples-section,
+.status-section,
+.example-section,
 .evidence-section,
 .flagship-section,
 .compare-section,
@@ -354,6 +356,10 @@ pre {
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr) minmax(0, 0.9fr);
   gap: 0.75rem;
   align-items: stretch;
+}
+
+.code-grid.two-up {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .snippet-panel {
@@ -680,6 +686,7 @@ pre {
   .hero-main,
   .section-kicker,
   .code-grid,
+  .code-grid.two-up,
   .goal-copy,
   .example-grid,
   .workflow-grid,
@@ -743,6 +750,8 @@ pre {
   .code-section,
   .goal-section,
   .examples-section,
+  .status-section,
+  .example-section,
   .evidence-section,
   .flagship-section,
   .compare-section,
