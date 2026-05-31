@@ -150,6 +150,240 @@ Contracts do not insert runtime checks by default. A `requires` clause creates
 a caller obligation. If Concrete later supports runtime-enforced contracts,
 they should use distinct syntax such as `#[requires_checked(...)]`.
 
+## Proposed User-Facing Shape
+
+This section is illustrative. The syntax is not implemented or frozen. Its
+purpose is to keep the design honest about what users would write, what
+obligations the compiler would generate, and what `concrete audit` would show.
+
+No Lean tactics or theorem terms appear in `.con` files. Source code states
+claims; the compiler generates obligations; Lean, kernel-checked automation,
+SMT, runtime checks, or assumptions discharge or classify those obligations.
+
+### Lean-checked proof
+
+```concrete
+spec fn ch_spec(x: u32, y: u32, z: u32) -> u32 {
+    (x & y) ^ ((~x) & z)
+}
+
+#[ensures(result == ch_spec(x, y, z))]
+#[prove_by(lean)]
+fn ch(x: u32, y: u32, z: u32) -> u32 {
+    return (x & y) ^ ((~x) & z);
+}
+```
+
+The compiler would generate an obligation such as:
+
+```text
+O1: extracted ch PExpr refines ch_spec
+```
+
+Audit shape:
+
+```text
+ch
+  O1 ensures result == ch_spec(x,y,z)
+     status: proved_by_lean
+     theorem: Concrete.Proof.ch_correct
+```
+
+### Kernel-checked BitVec automation
+
+`bv_decide` is the preferred first automation tier for bitvector leaves. It is
+SMT-like automation, but the result is checked by the Lean kernel, so it does
+not add an external solver to the trusted base.
+
+```concrete
+spec fn rotr_spec(x: u32, n: i32) -> u32 {
+    (x >> n) | (x << (32 - n))
+}
+
+#[requires(0 <= n && n < 32)]
+#[ensures(result == rotr_spec(x, n))]
+#[prove_by(bv_decide)]
+fn rotr(x: u32, n: i32) -> u32 {
+    return (x >> n) | (x << (32 - n));
+}
+```
+
+Audit shape:
+
+```text
+rotr
+  O1 requires 0 <= n && n < 32
+     status: proved_by_kernel_decision
+     engine: bv_decide
+  O2 ensures result == rotr_spec(x,n)
+     status: proved_by_kernel_decision
+     engine: bv_decide
+```
+
+### SMT-assisted bounds
+
+External SMT is useful for boring bounds and arithmetic obligations, but it is
+not the same evidence class as Lean or `bv_decide`.
+
+```concrete
+#[requires(0 <= i && i < 16)]
+#[ensures(result == a[i])]
+#[prove_by(smt)]
+fn get16(a: [u8; 16], i: i32) -> u8 {
+    return a[i];
+}
+```
+
+Audit shape without certificate replay:
+
+```text
+get16
+  O1 array_bounds a[i]
+     status: proved_by_smt
+     solver: z3 4.13.0
+     replay: none
+     trust: solver_trusted
+```
+
+If a future SMT certificate or replay path is checked by Lean, the audit must
+say so explicitly:
+
+```text
+status: proved_by_smt
+certificate: checked_by_lean
+trust: kernel_checked
+```
+
+### Loop invariant with Lean structure and automated leaves
+
+```concrete
+spec fn diff_prefix(a: [u8; 16], b: [u8; 16], n: i32) -> u8;
+
+contract SameTag(a: [u8; 16], b: [u8; 16], r: Int) {
+    (a == b && r == 1) || (a != b && r == 0)
+}
+
+#[ensures(SameTag(a, b, result))]
+#[prove_by(lean)]
+fn ct_compare(a: [u8; 16], b: [u8; 16]) -> Int {
+    let mut diff: u8 = 0;
+    let mut i: i32 = 0;
+
+    #[invariant(0 <= i && i <= 16)]
+    #[invariant(diff == diff_prefix(a, b, i))]
+    #[decreases(16 - i)]
+    while i < 16 {
+        set diff = diff | (a[i] ^ b[i]);
+        set i = i + 1;
+    }
+
+    if diff == 0 {
+        return 1;
+    }
+    return 0;
+}
+```
+
+Audit shape:
+
+```text
+ct_compare
+  O1 invariant init: 0 <= i && i <= 16
+     status: proved_by_smt
+  O2 invariant init: diff == diff_prefix(a,b,i)
+     status: proved_by_lean
+  O3 invariant preservation
+     status: proved_by_lean
+     theorem: Concrete.Proof.ct_compare_loop_preserves
+     leaves:
+       - bounds i < 16: proved_by_smt
+       - u8 xor/or fact: proved_by_kernel_decision
+  O4 decreases 16 - i
+     status: proved_by_smt
+  O5 ensures SameTag(a,b,result)
+     status: proved_by_lean
+```
+
+The intended split is that Lean proves the loop structure/refinement, while
+`bv_decide` and SMT discharge the arithmetic leaves.
+
+### Runtime-checked gradual mode
+
+Runtime checking is a bridge for unproved claims, not a proof.
+
+```concrete
+#[ensures(result == sha256_spec(msg))]
+#[check_runtime]
+fn sha256_hash(msg: [u8; 64]) -> [u8; 32] {
+    ...
+}
+```
+
+In gradual mode:
+
+```text
+sha256_hash
+  O1 ensures result == sha256_spec(msg)
+     status: runtime_checked
+     inserted_check: yes
+```
+
+In a stricter release mode, policy may reject it:
+
+```text
+error: release policy requires proved_by_lean for sha256_hash.O1
+```
+
+### Assumptions are loud
+
+```concrete
+#[assume(machine_level_constant_time)]
+fn ct_compare(a: [u8; 16], b: [u8; 16]) -> Int {
+    ...
+}
+```
+
+Audit shape:
+
+```text
+ct_compare
+  A1 machine_level_constant_time
+     status: assumed
+     scope: function
+     release_allowed: no unless policy permits
+```
+
+`assume` is intentionally not a proof mechanism. It routes into the same
+assumption lifecycle and release-policy machinery as `assumptions.toml`.
+
+### HMAC shape
+
+```concrete
+spec fn hmac_sha256_spec(
+    key: [u8; 64],
+    msg: [u8; 64],
+    msg_len: i32
+) -> [u8; 32];
+
+#[requires(0 <= msg_len && msg_len <= 64)]
+#[ensures(result == hmac_sha256_spec(key, msg, msg_len))]
+#[prove_by(lean)]
+fn hmac_sha256(
+    key: [u8; 64],
+    msg: [u8; 64],
+    msg_len: i32
+) -> [u8; 32] {
+    ghost let expected = hmac_sha256_spec(key, msg, msg_len);
+
+    ...
+}
+```
+
+The `.con` file states the claim. The compiler generates obligations. The
+audit records whether each obligation is proved by Lean, proved by
+kernel-checked automation, discharged by an external solver, runtime-checked,
+assumed, open, stale, or blocked.
+
 ## Contract Expression V1
 
 The first contract language should be deliberately small.
