@@ -18,8 +18,9 @@ module hmac_sha256:
       state_to_bytes : (pure)
       hmac_sha256 : (pure)
       verify_hmac : (pure)
+      abc_block : (pure)
   pub main : Console
     Console    <- calls print_string (intrinsic), print_char (intrinsic)
 
-Totals: 18 functions (17 pure), 0 externs
+Totals: 19 functions (18 pure), 0 externs
 

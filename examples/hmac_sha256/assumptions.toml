@@ -32,7 +32,7 @@ shift_oversize = "wrap"
 # ([u32; 8], [u32; 16], [u32; 64], [u8; 32], [u8; 64],
 # [u8; 128] = KEY_MAX, [u8; 256] = MSG_MAX).
 heap            = "none"
-stack_max_bytes = 1024   # actual measured: 864 bytes (verify_hmac)
+stack_max_bytes = 2048   # actual measured: 1444 bytes (main, SHA-256 core)
 
 [authority]
 # Entry point uses Console (narrower than Std) for println.

@@ -8,13 +8,14 @@ name = "hmac_sha256"
 # Alloc anywhere (forbidden_capabilities includes Alloc explicitly).
 # The SHA-256 / HMAC core is pure; the entry point uses Console only
 # for println.  Stack budget is set above the measured maximum
-# (864 bytes, verify_hmac) with headroom.
+# (1444 bytes, main — dominated by the [u32; 64] schedule and K
+# table in the SHA-256 core) with headroom.
 [policy]
 predictable            = true
 no_alloc               = true
 no_externs             = true
 no_unsafe              = true
 no_trusted             = true
-max_stack_bytes        = 1024
+max_stack_bytes        = 2048
 forbidden_capabilities = ["File", "Net", "Unsafe", "Alloc"]
 allowed_capabilities   = ["Console"]
