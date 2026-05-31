@@ -1,0 +1,48 @@
+// catches/01_alloc_in_compression_core.con
+//
+// "Concrete catches this" companion to examples/hmac_sha256.
+//
+// Demonstrates: allocation discipline in the SHA-256 compression
+// core.  hmac_sha256's policy sets no_alloc=true and
+// forbidden_capabilities includes Alloc.  The shipped pipeline runs
+// entirely on fixed-size stack arrays ([u32; 8], [u32; 64], ...).
+//
+// The hazard this catches: someone "logs" each round's working
+// state for debugging by appending to a Vec, or buffers schedule
+// words for "later analysis".  In C/Rust/Zig without effect
+// tracking, this silently changes the function's resource profile —
+// now a hash of attacker-controlled input can OOM, and the
+// allocation pattern is data-dependent (a side channel).
+//
+// What changed from the accepted pipeline: a hypothetical
+// `audit_word` helper declared `with(Alloc)` is called from inside
+// the round.  sha256_round's signature has NOT been widened.
+//
+// Concrete refuses: audit_word requires Alloc but the round's
+// caller surface is pure-eligible.  Either the signature widens
+// (deliberate, visible in git diff and --report caps) or the
+// allocation does not happen.  No silent path.
+//
+// catches: E0520
+// catches-substring: requires Alloc but caller has (none)
+
+mod hmac_sha256_catch {
+
+    fn audit_word(w: u32) with(Alloc) -> u32 {
+        return w;
+    }
+
+    fn sha256_round(state: [u32; 8], k: u32, w: u32) -> [u32; 8] {
+        // <<< The one line that breaks the bounded, no-alloc core. >>>
+        let _logged: u32 = audit_word(w);
+        let t1: u32 = state[7] + k + w;
+        return [t1, state[0], state[1], state[2],
+                state[3], state[4], state[5], state[6]];
+    }
+
+    fn main() -> i32 {
+        let s: [u32; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+        let _r: [u32; 8] = sha256_round(s, 1, 2);
+        return 0;
+    }
+}
