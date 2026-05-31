@@ -683,7 +683,8 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
     blocker rather than silently using i32 semantics).  See
     `docs/PROOF_OBLIGATIONS_REGISTER.md` R-16 and R-17. -/
 def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
-  | .add, _ => some .add
+  | .add, .u32 => some (.addw 32 false)  -- u32 `+` wraps mod 2^32
+  | .add, _ => some .add                 -- Int/i32/… mathematical add
   | .sub, _ => some .sub
   | .mul, _ => some .mul
   | .mod, .i32 => some (.mod 32 true)

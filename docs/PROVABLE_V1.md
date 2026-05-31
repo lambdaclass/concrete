@@ -79,7 +79,8 @@ The current `ProvableV1` ProofCore expression surface is:
 |---|---|
 | integer and boolean literals | Supported. |
 | variables | Supported. |
-| arithmetic and comparisons | Supported for the operations admitted by `PBinOp`. |
+| arithmetic and comparisons | Supported for the operations admitted by `PBinOp`. Width-agnostic `add`/`sub`/`mul` model mathematical `Int`. |
+| wrapping add (`addw`) | Supported at `u32` (wraps mod 2^32, models LLVM `add`), forced by SHA-256's compression rounds. Distinct from the width-agnostic `Int` `add`. Wrapping `sub`/`mul` and other widths are append-only follow-ups. |
 | `mod` | Supported for the width/signedness cases recorded in ProofCore. |
 | bitxor / bitor | Supported for currently forced widths: `i32`, `u32`, `u8` as applicable. |
 | bitand | Supported at `u32` (unsigned view), forced by HMAC-SHA256's `Ch`/`Maj`. Other widths are append-only follow-ups. |
@@ -102,7 +103,8 @@ Excluded from `ProvableV1` until explicitly added:
 - shifts at widths other than `u32`; arithmetic right shift (`ashr`)
 - bitand at widths other than `u32`
 - rotations as a dedicated op (HMAC-SHA256 derives `rotr` from `shl`/`shr`/`bitor`)
-- multi-word arithmetic (`u32` wrapping `add` not yet width-tagged — the next forcing-surface row)
+- wrapping `sub` / `mul` at fixed width (only wrapping `add` is forced so far); width-agnostic `Int` `sub`/`mul` remain supported
+- true multi-word (>64-bit) arithmetic
 - arbitrary mutation outside the modeled state forms
 - arbitrary loop invariants
 - recursive functions

@@ -258,6 +258,40 @@ extractor preserves.  Phase 12 obligation
 `cast_identity_preservation` will state this restriction
 explicitly.
 
+### R-26 (addw — u32 wrapping add, typed BitVec round-trip)
+
+New constructor introduced by SHA-256's compression-round
+additions (`T1 = h + Σ1(e) + Ch(e,f,g) + K[i] + W[i]` mod 2^32).
+
+`add`/`sub`/`mul` in `PBinOp` are width-AGNOSTIC and model
+mathematical `Int` — every existing flagship proof relies on
+that (e.g. crypto_verify's `key * message + nonce` over `Int`).
+`addw width signed` is the DISTINCT fixed-width variant:
+
+    evalBinOp (.addw 32 false) (.int a) (.int b) =
+      some (.int (Int.ofNat ((BitVec.ofInt 32 a) + (BitVec.ofInt 32 b)).toNat))
+
+`BitVec` addition wraps mod 2^width, so `0xFFFFFFFF + 1 = 0`.
+Extraction maps `.add` at `u32` to `addw 32 false` and leaves
+`.add` at every other type as the mathematical `add`, so no
+existing spec drifts (verified: crypto_verify, parse_validate,
+fixed_capacity, constant_time_tag use `Int`/`u8`, not `u32`
+`add`).  Backend match: source `+` on `u32` lowers to LLVM `add`
+(`EmitSSA.lean`), which wraps at the type width.
+
+Inline regression theorems in `Concrete/Proof.lean`:
+- `0xFFFFFFFF + 1 = 0`  (overflow to zero)
+- `0x80000000 + 0x80000000 = 0`  (carry leaves the 32-bit window)
+- `0x7FFFFFFF + 1 = 0x80000000`  (no overflow, read unsigned/positive)
+- `0xFFFFFFFF + 2 = 1`  (wrap by exactly the overflow)
+
+This discharges the AUDIT.md § 5 forcing-surface item "`u32`
+wrapping `add`".  No hmac_sha256 conformance change yet — the
+compression functions that will use it are still stubs — but it
+is the semantic prerequisite for filling them (and for the
+interpreter to mask u32 arithmetic the same way, so executable
+and proof semantics agree).
+
 ### R-24, R-25 (shl, u32 bitor — typed BitVec round-trip)
 
 The last two ops HMAC-SHA256's `rotr` needs.  `rotr(x, n)` is

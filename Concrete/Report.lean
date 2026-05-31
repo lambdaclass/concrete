@@ -1725,6 +1725,7 @@ private partial def renderPExpr : Proof.PExpr → String
   | .binOp op lhs rhs =>
     let opStr := match op with
       | .add => "+" | .sub => "-" | .mul => "*"
+      | .addw _ _ => "+w"     -- wrapping add at width (mod 2^w)
       | .mod _ true => "%"    -- signed mod (i32 srem semantics)
       | .mod _ false => "%u"  -- unsigned mod (urem semantics)
       | .bitxor _ true => "^"
@@ -1862,6 +1863,7 @@ private partial def renderPExprAsLean : Proof.PExpr → String
   | .binOp op lhs rhs =>
     let opStr := match op with
       | .add => ".add" | .sub => ".sub" | .mul => ".mul"
+      | .addw w s => s!"(.addw {w} {s})"
       | .mod w s => s!"(.mod {w} {s})"
       | .bitxor w s => s!"(.bitxor {w} {s})"
       | .bitor w s => s!"(.bitor {w} {s})"

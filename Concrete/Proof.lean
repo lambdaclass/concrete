@@ -35,6 +35,26 @@ over that subset.  The two are complementary:
 /-- Binary operators in the proof fragment. -/
 inductive PBinOp where
   | add | sub | mul
+  /-- Wrapping addition at a specific width (mod 2^width).
+
+      `add`/`sub`/`mul` above are width-AGNOSTIC: they model
+      mathematical `Int` arithmetic and every flagship's proof
+      relies on that (e.g. crypto_verify's `key * message + nonce`
+      over `Int`).  `addw width signed` is the DISTINCT
+      fixed-width variant: it models LLVM's wrapping `add` on
+      `BitVec width` (overflow wraps to zero), which is what
+      `EmitSSA.lean` emits for `u32` `+`.
+
+      Semantics: `(BitVec.ofInt width a) + (BitVec.ofInt width b)`
+      read back unsigned via `Int.ofNat ∘ toNat`.  So at width 32:
+      `0xFFFFFFFF + 1 = 0`, `0x80000000 + 0x80000000 = 0`.
+
+      Forced by SHA-256's compression rounds
+      (`T1 = h + Σ1(e) + Ch(e,f,g) + K[i] + W[i]` mod 2^32).  Today
+      `evalBinOp` supports `addw 32 false` only; wrapping `sub`/
+      `mul` and other widths are append-only follow-ups, each
+      forced by an example that needs them. -/
+  | addw (width : Nat) (signed : Bool)
   /-- Integer remainder at a specific width.
 
       `mod width signed` models Concrete's `%` operator at the
@@ -285,6 +305,12 @@ def evalBinOp (op : PBinOp) (lhs rhs : PVal) : Option PVal :=
   | .add, .int a, .int b => some (.int (a + b))
   | .sub, .int a, .int b => some (.int (a - b))
   | .mul, .int a, .int b => some (.int (a * b))
+  -- addw 32 unsigned: LLVM wrapping `add` at u32; result wraps
+  -- mod 2^32 and is read unsigned.  0xFFFFFFFF + 1 = 0.  Forced
+  -- by SHA-256's compression-round additions.
+  | .addw 32 false, .int a, .int b =>
+    some (.int (Int.ofNat
+      ((BitVec.ofInt 32 a) + (BitVec.ofInt 32 b)).toNat))
   -- mod 32 signed: LLVM srem via BitVec.srem at i32 width;
   -- result re-interpreted as signed Int via BitVec.toInt.
   | .mod 32 true, .int a, .int b =>
@@ -484,6 +510,31 @@ example :
       let hi ← evalBinOp (.shr 32 false) (.int 1) (.int 1)
       let lo ← evalBinOp (.shl 32 false) (.int 1) (.int 31)
       evalBinOp (.bitor 32 false) hi lo) = some (.int 2147483648) := by rfl
+
+/-- u32 wrapping add overflows to zero: `0xFFFFFFFF + 1 = 0`. -/
+example :
+    evalBinOp (.addw 32 false)
+      (.int 4294967295) (.int 1) = some (.int 0) := by rfl
+
+/-- u32 wrapping add of two high-bit values cancels:
+    `0x80000000 + 0x80000000 = 0` (the carry leaves the 32-bit
+    window). -/
+example :
+    evalBinOp (.addw 32 false)
+      (.int 2147483648) (.int 2147483648) = some (.int 0) := by rfl
+
+/-- u32 wrapping add with no overflow is ordinary addition, read
+    unsigned: `0x7FFFFFFF + 1 = 0x80000000` (2147483648), a
+    positive Int, not a negative two's-complement value. -/
+example :
+    evalBinOp (.addw 32 false)
+      (.int 2147483647) (.int 1) = some (.int 2147483648) := by rfl
+
+/-- u32 wrapping add just past the top wraps by exactly the
+    overflow: `0xFFFFFFFF + 2 = 1`. -/
+example :
+    evalBinOp (.addw 32 false)
+      (.int 4294967295) (.int 2) = some (.int 1) := by rfl
 
 /-- Bind a list of argument values to parameter names. -/
 def bindArgs (env : Env) (params : List String) (args : List PVal) : Option Env :=
