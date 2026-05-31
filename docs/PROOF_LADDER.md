@@ -128,6 +128,16 @@ contract system must generate.
 4. **`block_to_words_refines_spec`** — the first real proof using the pattern +
    `eval_while_count`. This validates what kind of obligation contracts must
    generate.
+   *(Shipped: `block_to_words_refines_spec` proves the extracted 16-iteration
+   big-endian word-packing loop refines `Sha256Spec.blockToWords` for ALL 64
+   input bytes — `eval_while_count` for the loop, a `List.set`/`getElem`
+   invariant (`wList_set`) for the per-iteration array write, `bv_decide` for
+   the per-word packing fact, and the spec layer as target. The project has
+   moved from straight-line helper refinement to **looping crypto-state
+   refinement**. The remaining steps in the SHA-256 pipeline — `rotr`/sigmas
+   (the `32−n` shift amounts and `rotr` calls), the 48-round schedule, the
+   64-round compression, and the `hash`/`hmac` composition — reuse this same
+   machinery.)*
 5. **Attribute contracts + `ghost`** — `#[requires]`, `#[ensures]`,
    `#[invariant]`, `#[decreases]` (attribute form, LL(1)-safe), now designed
    against an obligation shape we have actually discharged.
@@ -155,8 +165,9 @@ ghost values erase; the compiled binary is unchanged.
 | `bv_decide` kernel-checked tier, used in a committed proof | **shipped** (`Concrete/Sha256Refine.lean`; `proved_by_kernel_decision`) |
 | Spec layer (`Concrete/Sha256Spec.lean`) | **shipped** |
 | Refinement pattern: extracted `PExpr` refines spec, ∀ inputs | **shipped** for the Boolean round functions (`ch_refines` / `maj_refines`) |
+| First **loop** refinement: `block_to_words_refines_spec` (∀ 64 bytes, via `eval_while_count`) | **shipped** (`Concrete/Sha256Refine.lean`) |
 | Evidence classes `proved` / `enforced` / `reported` / `assumed` + `concrete audit` | **shipped** |
-| `rotr` / σ / schedule / `block_to_words_refines_spec` refinement | **next** (ROADMAP Phase 8 / bar #2) |
+| `rotr` / σ / schedule / compression / `hash` / `hmac` refinement | **next** (ROADMAP Phase 8 / bar #2) |
 | `#[requires/ensures/invariant/decreases]`, `ghost`, `assume`, `contract` | **design** (ROADMAP Phase 4) |
 | VC generator; `proved_by_kernel_decision` / `proved_by_smt` / `solver_trusted` / `runtime_checked` classes; external SMT; gradual mode | **design** (ROADMAP Phase 5) |
 

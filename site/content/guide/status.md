@@ -55,9 +55,12 @@ What exists today:
   induction) that makes loop/array proofs systematic, and kernel-checked
   `bv_decide` automation now backing a committed proof
 - the **first refinement proofs against an independent spec**: a `BitVec`-valued
-  SHA-256 spec, and proofs that the extracted Boolean round functions (`ch`,
-  `maj`) compute exactly that spec for all inputs — word-level core discharged
-  by `bv_decide`, kernel-checked
+  SHA-256 spec, proofs that the extracted Boolean round functions (`ch`, `maj`)
+  compute exactly that spec for all inputs (word-level core discharged by
+  `bv_decide`, kernel-checked), and the **first loop refinement** —
+  `block_to_words_refines_spec` proves the 16-iteration big-endian packing loop
+  refines the spec for all 64 input bytes, via the bounded-counter-loop
+  induction lemma
 
 What does not exist yet (planned, not shipped):
 

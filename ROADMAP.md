@@ -57,9 +57,15 @@ The proof/evidence pipeline is operational:
   Boolean round functions refine it for ALL inputs — `ch_refines` /
   `maj_refines` (`Concrete/Sha256Refine.lean`), word-level core discharged by
   `bv_decide` (`proved_by_kernel_decision`). This is "the source computes the
-  function the spec names," not "evaluates to these bytes." The
+  function the spec names," not "evaluates to these bytes."
+- The first **loop** refinement ships: `block_to_words_refines_spec` proves the
+  extracted 16-iteration big-endian word-packing loop refines
+  `Sha256Spec.blockToWords` for ALL 64 input bytes — `eval_while_count` drives
+  the loop, a `List.set`/`getElem` array invariant the per-iteration write, and
+  `bv_decide` the per-word packing. The project has moved from straight-line
+  helper refinement to looping crypto-state refinement. The
   rotation/sigma/schedule/compression refinements and the `hash`/`hmac`
-  composition (HMAC bar #2) are next.
+  composition (HMAC bar #2) reuse this machinery and are next.
 - A fifth flagship, `hmac_sha256` (first real cryptographic primitive), is
   implemented and runtime-verified against FIPS 180-4 + RFC 4231; ProvableV1
   conformance `full`; two kernel theorems attached; graduation gated on bar #2
@@ -231,12 +237,12 @@ Design reference: [docs/CONTRACTS_AND_VCS.md](docs/CONTRACTS_AND_VCS.md), and
 [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md) for the build order.
 
 **Ordering (let the proof teach the syntax):** do not freeze contract syntax or
-VC shapes before at least one real refinement proof exists. The spec layer, the
-`bv_decide` tier, and the refinement pattern have **shipped** (`ch_refines` /
-`maj_refines`); `block_to_words_refines_spec` (Phase 8 / bar #2) — the first
-refinement over a loop — comes **next** and remains the gate, so this phase
-designs against an obligation shape that has actually been discharged rather
-than an imagined one. See the build order in `docs/PROOF_LADDER.md`.
+VC shapes before a real refinement proof exists. The spec layer, the `bv_decide`
+tier, the refinement pattern (`ch_refines` / `maj_refines`), and the first loop
+refinement (`block_to_words_refines_spec`, Phase 8) have all **shipped** — so
+this phase now designs against obligation shapes that have actually been
+discharged, including a real `eval_while_count` loop obligation, rather than
+imagined ones. See the build order in `docs/PROOF_LADDER.md`.
 
 Done when: one flagship uses source contracts as the primary proof surface, and
 each contract is classified as proved, enforced, assumed, missing, blocked, or
