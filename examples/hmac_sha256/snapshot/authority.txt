@@ -3,5 +3,5 @@
 capability Console (1 functions):
   pub main  <- main -> print_string
 
-Totals: 19 functions (18 pure, 1 with capabilities), 0 externs
+Totals: 22 functions (21 pure, 1 with capabilities), 0 externs
 

@@ -2,12 +2,16 @@
 # Schema: docs/ASSUMPTION_FILES.md
 #
 # Fifth flagship candidate; first cryptographic-PRIMITIVE flagship.
-# Slot opened 2026-05-30 (the day constant_time_tag graduated as the
-# fourth flagship).  This is the pilot batch — see AUDIT.md § 9.  The
-# pipeline functions are stubs and the ProvableV1 forcing surface
-# (AUDIT.md § 5) is not yet landed, so `concrete audit` reads
-# `Status: partial`.  That partial status is the intended intake
-# state, recorded honestly in snapshot/.
+# Slot opened 2026-05-30 (the day constant_time_tag graduated).  The
+# ProvableV1 forcing surface (AUDIT.md § 5; register R-22..R-26) has
+# landed and the SHA-256 + HMAC implementation is COMPLETE and
+# runtime-verified: `main` checks SHA-256("abc") against FIPS 180-4
+# and HMAC-SHA256 against RFC 4231 TC1+TC2 (compiled and --interp).
+# `concrete audit` still reads `Status: partial` because the
+# array-writing loops (block_to_words / sha256_schedule /
+# state_to_bytes / sha256_hash / hmac_sha256) use a loop-body shape
+# extraction does not model yet — array-element assignment.  That is
+# the next forcing-surface item; correctness theorems follow it.
 
 schema_version = 1
 
@@ -32,7 +36,7 @@ shift_oversize = "wrap"
 # ([u32; 8], [u32; 16], [u32; 64], [u8; 32], [u8; 64],
 # [u8; 128] = KEY_MAX, [u8; 256] = MSG_MAX).
 heap            = "none"
-stack_max_bytes = 2048   # actual measured: 1444 bytes (main, SHA-256 core)
+stack_max_bytes = 8192   # actual measured: 5312 bytes (main, SHA-256 + HMAC buffers)
 
 [authority]
 # Entry point uses Console (narrower than Std) for println.
@@ -64,14 +68,16 @@ trust_anchor    = "Lean kernel + Concrete.Proof.*"
 status      = "pending"
 description = """
 hmac_sha256(k, m) equals the RFC 2104 / FIPS 180-4 specification
-of HMAC-SHA256, verified against RFC 4231 test vectors.  This is
-the Layer-1 functional-correctness claim.  It is PENDING: the
-pipeline functions are stubs and the Lean theorems (AUDIT.md § 6,
-bars #1 and #2) are not attached yet.  The first theorem
-(sha256_init_correct) is gated only on the proof model accepting
-[u32; 8] constant arrays; the substantive RFC-vector theorems are
-gated on the Phase-4 forcing surface (u32 add tagged, u32 bitand,
-u32 shl, u32 shr — AUDIT.md § 5).
+of HMAC-SHA256.  The implementation is COMPLETE and verified at
+RUNTIME against RFC 4231 (TC1 + TC2) and FIPS 180-4 SHA-256("abc"),
+in both the compiled binary and the interpreter.  The claim is
+PENDING only at the PROOF level: the Lean correctness theorems
+(AUDIT.md § 6, bars #1 and #2) are not attached yet, because the
+array-writing loops are not extractable until the next
+forcing-surface item (array-element assignment in bounded loop
+bodies — while_step + arraySet) lands.  Runtime agreement across
+proof-model arithmetic, interpreter, and compiled binary is
+established; kernel-checked theorems are the remaining step.
 """
 
 [claims.structural_constant_time]

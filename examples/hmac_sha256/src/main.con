@@ -4,46 +4,41 @@
 // See AUDIT.md for the full contract and the four-layer threat model.
 //
 // ============================================================
-// SHA-256 single-block CORE implemented and byte-exact.
+// HMAC-SHA256 implemented; runtime-verified vs FIPS 180-4 + RFC 4231.
 // ============================================================
-// The forcing-surface commits (AUDIT.md § 5; register
-// R-22..R-26) put u32 `bitand`/`shr`/`shl`/`bitor` and wrapping
-// `add` into ProvableV1, and the interpreter masks u32 the same
-// way (maskWidth) — so u32 arithmetic agrees across the proof
-// model (BitVec), the interpreter, and the compiled binary.
+// The forcing-surface commits (AUDIT.md § 5; register R-22..R-26)
+// put u32 `bitand`/`shr`/`shl`/`bitor` and wrapping `add` into
+// ProvableV1, and the interpreter masks u32 the same way
+// (maskWidth) — so u32 arithmetic agrees across the proof model
+// (BitVec), the interpreter, and the compiled binary.
 //
-// On that base the SHA-256 compression pipeline is now REAL and
-// verified: `main` computes SHA-256("abc") and checks it against
-// the published FIPS 180-4 digest (ba7816bf...f20015ad), both
-// compiled and interpreted.  block_to_words -> schedule -> 64
-// rounds -> feed-forward all run.
+// On that base the WHOLE primitive is now real and verified:
+//   * SHA-256 compression (block_to_words -> schedule -> 64 rounds
+//     -> feed-forward) and multi-block hashing with FIPS padding;
+//   * HMAC key normalization, ipad/opad, inner+outer hash.
+// `main` checks SHA-256("abc") against FIPS 180-4 and HMAC-SHA256
+// against RFC 4231 Test Case 1 (multi-block inner) and Test Case 2
+// (multi-byte key, multi-block message) — green in BOTH the
+// compiled binary and `--interp`.
 //
-// Conformance is back to `Status: partial`, and that is the
-// honest signal: filling the real loops reintroduced a construct
-// ProvableV1 does not model yet —
+// Conformance reads `Status: partial`, and that is the honest
+// signal.  The functions whose loop bodies do ARRAY-ELEMENT
+// assignment (`w[i] = ...`) — block_to_words, sha256_schedule,
+// state_to_bytes, sha256_hash, hmac_sha256 — are extraction-blocked
+// because the proof model only handles flat scalar loop bodies so
+// far (sha256_hash is also blocked on i32 `/`).  The pure-expr and
+// scalar-loop functions (ch, maj, rotr, the sigmas, sha256_round,
+// sha256_compress, ct_compare_32, the constant tables) sit `in`.
 //
-//   blocked: block_to_words, sha256_schedule, state_to_bytes
-//            — their loop bodies do ARRAY-ELEMENT assignment
-//              (`w[i] = ...`), and extraction supports only flat
-//              scalar let/assign/return/if loop bodies so far.
-//   in:      sha256_round (pure expr), sha256_compress (its loop
-//            body is a single scalar assign `s = round(s,...)`),
-//            and all the bitwise helpers / constant tables.
-//
-// So the conformance gate walked partial -> full (trivial stubs)
-// -> partial again (real array-store loops) — tracking the new
-// proof obligation precisely.  The NEXT forcing-surface item is
-// array-element assignment inside bounded loop bodies (the
-// `while_step` + arraySet technique sketched in AUDIT.md § 5,
-// re-using fixed_capacity's loop-induction machinery).
-//
-// Still stubbed: `hmac_sha256` (key padding, ipad/opad, and
-// multi-block message padding) — single-block SHA is done, HMAC
-// wrapping is the next implementation step, then RFC 4231
-// vectors, then the correctness theorems (AUDIT.md § 6).
-//
-// No correctness proofs are attached yet: --report proof-status
-// shows the eligible functions as `missing`.
+// So the gate walked partial -> full (trivial stubs) -> partial
+// (real array-store loops) — tracking the proof obligation
+// precisely.  The NEXT forcing-surface item is array-element
+// assignment inside bounded loop bodies (the `while_step` +
+// arraySet technique of AUDIT.md § 5, re-using fixed_capacity's
+// loop induction); the correctness theorems (AUDIT.md § 6) follow
+// it.  No correctness proofs are attached yet — proof-status shows
+// the eligible functions as `missing`; functional correctness is
+// established at RUNTIME (RFC/FIPS vectors), not yet by the kernel.
 //
 // This is NOT a vetted crypto library.  Do not deploy.  See § 4
 // of AUDIT.md and assumptions.toml for the trust boundaries.
@@ -231,14 +226,67 @@ mod hmac_sha256 {
         return out;
     }
 
-    // HMAC-SHA256(key, message) -> 32-byte tag. STUB.
-    // KEY_MAX = 128, MSG_MAX = 256.
-    fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
-        return [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    // Full SHA-256 of `len` bytes held in a zero-padded work buffer
+    // (the caller guarantees data[len..] = 0).  Applies FIPS 180-4
+    // padding (0x80 marker, zero fill, 64-bit big-endian bit length)
+    // in a local copy, then runs sha256_compress over each 64-byte
+    // block, chaining the state.  HASH_CAP = 384 = ceil((64 + 256 +
+    // 9) / 64) * 64 — large enough for the longest HMAC inner input
+    // (one block of key material + MSG_MAX message + padding).
+    fn sha256_hash(data: [u8; 384], len: i32) -> [u8; 32] {
+        let mut buf: [u8; 384] = data;
+        buf[len] = 128;                          // 0x80 marker
+        let nblocks: i32 = (len + 9 + 63) / 64;  // blocks after padding
+        let plen: i32 = nblocks * 64;
+        let bits: i32 = len * 8;                 // message length in bits
+        buf[plen - 1] = (bits & 255) as u8;
+        buf[plen - 2] = ((bits >> 8) & 255) as u8;
+        buf[plen - 3] = ((bits >> 16) & 255) as u8;
+        buf[plen - 4] = ((bits >> 24) & 255) as u8;
+        // bytes plen-5..plen-8 stay 0 (bit length < 2^32 here)
+        let mut state: [u32; 8] = sha256_init();
+        for (let mut blk: i32 = 0; blk < nblocks; blk = blk + 1) {
+            let mut block: [u8; 64] = [0; 64];
+            for (let mut j: i32 = 0; j < 64; j = j + 1) {
+                block[j] = buf[blk * 64 + j];
+            }
+            state = sha256_compress(state, block);
+        }
+        return state_to_bytes(state);
     }
 
-    // Verify a tag against the expected value (constant-time). STUB.
+    // HMAC-SHA256(key, message) -> 32-byte tag (RFC 2104).
+    //   K' = key padded to 64 bytes (hashed first if longer than the
+    //        block), then HMAC = H((K' ^ opad) || H((K' ^ ipad) || m)).
+    // KEY_MAX = 128, MSG_MAX = 256.
+    fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
+        // 1. Normalize the key to a 64-byte block K'.
+        let mut kp: [u8; 64] = [0; 64];
+        if k_len > 64 {
+            let mut kbuf: [u8; 384] = [0; 384];
+            for (let mut i: i32 = 0; i < k_len; i = i + 1) { kbuf[i] = k[i]; }
+            let kh: [u8; 32] = sha256_hash(kbuf, k_len);
+            for (let mut i: i32 = 0; i < 32; i = i + 1) { kp[i] = kh[i]; }
+        } else {
+            for (let mut i: i32 = 0; i < k_len; i = i + 1) { kp[i] = k[i]; }
+        }
+        // 2. Build the ipad/opad blocks (K' XOR 0x36 / 0x5c).
+        let mut inner: [u8; 384] = [0; 384];
+        let mut outer: [u8; 384] = [0; 384];
+        for (let mut i: i32 = 0; i < 64; i = i + 1) {
+            inner[i] = kp[i] ^ 54;   // ipad 0x36
+            outer[i] = kp[i] ^ 92;   // opad 0x5c
+        }
+        // 3. inner hash = H((K' ^ ipad) || m).
+        for (let mut i: i32 = 0; i < m_len; i = i + 1) { inner[64 + i] = m[i]; }
+        let ih: [u8; 32] = sha256_hash(inner, 64 + m_len);
+        // 4. tag = H((K' ^ opad) || inner).
+        for (let mut i: i32 = 0; i < 32; i = i + 1) { outer[64 + i] = ih[i]; }
+        return sha256_hash(outer, 96);
+    }
+
+    // Verify a tag against the expected value using the constant-time
+    // compare (no early exit on mismatch).
     fn verify_hmac(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32,
                    expected: [u8; 32]) -> i32 {
         let tag: [u8; 32] = hmac_sha256(k, k_len, m, m_len);
@@ -259,16 +307,30 @@ mod hmac_sha256 {
         return b;
     }
 
+    // RFC 4231 expected HMAC-SHA256 tags.
+    // Test Case 1: key = 0x0b x 20, data = "Hi There".
+    fn rfc4231_tc1_tag() -> [u8; 32] {
+        return [176, 52, 76, 97, 216, 219, 56, 83, 92, 168, 175, 206,
+                175, 11, 241, 43, 136, 29, 194, 0, 201, 131, 61, 167,
+                38, 233, 55, 108, 46, 50, 207, 247];
+    }
+    // Test Case 2: key = "Jefe", data = "what do ya want for nothing?".
+    fn rfc4231_tc2_tag() -> [u8; 32] {
+        return [91, 220, 193, 70, 191, 96, 117, 78, 106, 4, 36, 38,
+                8, 149, 117, 199, 90, 0, 63, 8, 157, 39, 57, 131,
+                157, 236, 88, 185, 100, 236, 56, 67];
+    }
+
     // ============================================================
     // Entry point
     // ============================================================
     //
-    // Exercises the constant tables, the Boolean round functions,
-    // and — now that the SHA-256 core is implemented — a real
-    // byte-exact single-block hash: SHA-256("abc") against the
-    // published FIPS 180-4 digest.  HMAC (key padding, multi-block
-    // message padding) is still stubbed; full RFC 4231 vectors and
-    // the correctness theorems follow.
+    // Exercises the constant tables, the Boolean round functions, a
+    // byte-exact single-block SHA-256("abc") against FIPS 180-4, and
+    // — now that HMAC is implemented — the RFC 4231 HMAC-SHA256 test
+    // vectors (Test Case 1 single-block-key/short-message and Test
+    // Case 2 multi-byte-key/multi-block-message) via verify_hmac's
+    // constant-time compare.
 
     pub fn main() with(Console) -> i32 {
         let mut failures: i32 = 0;
@@ -309,8 +371,35 @@ mod hmac_sha256 {
         let bytes: [u8; 32] = state_to_bytes(d);
         if bytes[0] != 186 { failures = failures + 1; }
 
+        // 7. RFC 4231 Test Case 1: HMAC-SHA256(0x0b x 20, "Hi There").
+        //    Inner input is 72 bytes (one key block + 8 message bytes),
+        //    so this exercises MULTI-BLOCK SHA-256 and key zero-padding.
+        let mut k1: [u8; 128] = [0; 128];
+        for (let mut i: i32 = 0; i < 20; i = i + 1) { k1[i] = 11; }   // 0x0b
+        let mut m1: [u8; 256] = [0; 256];
+        m1[0] = 72; m1[1] = 105; m1[2] = 32; m1[3] = 84;             // "Hi T"
+        m1[4] = 104; m1[5] = 101; m1[6] = 114; m1[7] = 101;          // "here"
+        if verify_hmac(k1, 20, m1, 8, rfc4231_tc1_tag()) != 1 {
+            failures = failures + 1;
+        }
+
+        // 8. RFC 4231 Test Case 2: HMAC-SHA256("Jefe",
+        //    "what do ya want for nothing?") — 4-byte key, 28-byte
+        //    multi-block message.
+        let mut k2: [u8; 128] = [0; 128];
+        k2[0] = 74; k2[1] = 101; k2[2] = 102; k2[3] = 101;          // "Jefe"
+        let mut m2: [u8; 256] = [0; 256];
+        let d2: [u8; 28] = [119, 104, 97, 116, 32, 100, 111, 32, 121, 97, 32,
+                            119, 97, 110, 116, 32, 102, 111, 114, 32, 110, 111,
+                            116, 104, 105, 110, 103, 63];
+        for (let mut i: i32 = 0; i < 28; i = i + 1) { m2[i] = d2[i]; }
+        if verify_hmac(k2, 4, m2, 28, rfc4231_tc2_tag()) != 1 {
+            failures = failures + 1;
+        }
+
         if failures == 0 {
-            println("hmac_sha256: SHA-256(\"abc\") matches FIPS 180-4; all checks passed.");
+            println("hmac_sha256: SHA-256(\"abc\") matches FIPS 180-4 and");
+            println("HMAC-SHA256 matches RFC 4231 TC1+TC2; all checks passed.");
             return 0;
         }
         println("hmac_sha256: checks FAILED.");
