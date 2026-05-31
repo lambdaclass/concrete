@@ -21,17 +21,14 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:96
+-- proved [point] ------------------------------------------------ examples/hmac_sha256/src/main.con:96
 
-  `hmac_sha256.ch` passes the predictable profile but has no registered proof.
+  ✓ `hmac_sha256.ch` — proof matches current body.
 
  96 |     fn ch(x: u32, y: u32, z: u32) -> u32 {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  current fingerprint:
-    [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitand (var x) (var y)) (binop Concrete.BinOp.bitand (binop Concrete.BinOp.bitxor (var x) (int 4294967295)) (var z))))]
-
-  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+  coverage: point
 
 -- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:101
 
@@ -284,5 +281,5 @@
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 24 functions — 1 proved, 0 stale, 22 unproved, 0 blocked, 1 ineligible, 0 trusted
+Totals: 24 functions — 2 proved, 0 stale, 21 unproved, 0 blocked, 1 ineligible, 0 trusted
 

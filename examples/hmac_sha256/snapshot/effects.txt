@@ -6,7 +6,7 @@ module hmac_sha256:
       sha256_k
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:65
       ch
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:96
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:96
       maj
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:101
       rotr
@@ -51,5 +51,5 @@ module hmac_sha256:
     caps: Console  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:372
 
 Totals: 24 functions, 23 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
-Evidence: 1 proved, 23 enforced, 0 trusted-assumption, 0 reported
+Evidence: 2 proved, 22 enforced, 0 trusted-assumption, 0 reported
 

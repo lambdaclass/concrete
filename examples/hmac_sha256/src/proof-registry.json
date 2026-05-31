@@ -7,6 +7,13 @@
       "proof": "Concrete.Proof.sha256_init_correct",
       "spec": "Concrete.Proof.sha256_initExpr",
       "coverage": "point"
+    },
+    {
+      "function": "hmac_sha256.ch",
+      "body_fingerprint": "[(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitand (var x) (var y)) (binop Concrete.BinOp.bitand (binop Concrete.BinOp.bitxor (var x) (int 4294967295)) (var z))))]",
+      "proof": "Concrete.Proof.ch_selects_high",
+      "spec": "Concrete.Proof.chExpr",
+      "coverage": "point"
     }
   ]
 }

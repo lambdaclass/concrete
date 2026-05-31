@@ -2481,6 +2481,32 @@ theorem sha256_init_correct (fuel : Nat) :
           , .int 1359893119, .int 2600822924, .int 528734635, .int 1541459225 ]) := by
   simp [sha256_initExpr, eval, eval.evalElems]
 
+/-- Extracted spec for `hmac_sha256.ch`: the SHA-256 `Ch` choice
+    function `(x AND y) XOR ((NOT x) AND z)`, with `~x` written as
+    `x XOR 0xFFFFFFFF` (FIPS 180-4 § 4.1.2).  First spec over a
+    function that uses the FORCED u32 bitwise surface (R-22 bitand,
+    plus u32 bitxor). -/
+def chExpr : PExpr :=
+  .binOp (.bitxor 32 false)
+    (.binOp (.bitand 32 false) (.var "x") (.var "y"))
+    (.binOp (.bitand 32 false)
+      (.binOp (.bitxor 32 false) (.var "x") (.lit (.int 4294967295)))
+      (.var "z"))
+
+/-- `Ch(0xFFFFFFFF, 0x12345678, 0x9abcdef0) = 0x12345678`: when the
+    selector word is all-ones, `Ch` chooses the second word and the
+    third vanishes.  A point proof over the EXTRACTED `chExpr` — the
+    first kernel theorem over the candidate's forced u32 bitwise ops
+    (`bitand`/`bitxor` at width 32); sha256_init had no PBinOp
+    dependency, this one bottoms out in the BitVec eval rules. -/
+theorem ch_selects_high (fuel : Nat) :
+    eval (fun _ => none)
+      (((Env.empty.bind "x" (.int 4294967295)).bind "y" (.int 305419896)).bind
+        "z" (.int 2596069104))
+      (fuel + 1) chExpr
+      = some (.int 305419896) := by
+  simp [chExpr, eval, Env.bind, evalBinOp]
+
 -- ============================================================
 -- Registered spec table (Phase 4 item 2 — spec/body drift gate)
 -- ============================================================
@@ -2552,6 +2578,7 @@ def specs : List (String × PExpr) :=
   , ("constant_time_tag.ct_compare", ctCompareExpr)
     -- hmac_sha256
   , ("hmac_sha256.sha256_init",      sha256_initExpr)
+  , ("hmac_sha256.ch",               chExpr)
     -- adversarial spec-drift fixture (deliberately wrong)
   , ("test_drift.simple_add",        driftTestSpec)
   ]
