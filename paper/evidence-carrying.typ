@@ -1,5 +1,5 @@
 #set document(
-  title: "Evidence-Carrying Systems Code: A Lean-Implemented Compiler Pipeline for Auditable Low-Level Programs",
+  title: "When Proofs Go Stale: Evidence-Carrying Source in a Small Systems Compiler",
   author: ("Federico Carrone"),
 )
 
@@ -36,7 +36,7 @@
     #v(0.3em)
     #align(center)[
       #text(size: 14.5pt, weight: "bold")[
-        Evidence-Carrying Systems Code: A Lean-Implemented Compiler Pipeline for Auditable Low-Level Programs
+        When Proofs Go Stale: Evidence-Carrying Source in a Small Systems Compiler
       ]
       #v(0.5em)
       #text(size: 10pt)[Federico Carrone]
@@ -45,9 +45,16 @@
       #v(0.55em)
     ]
     #pad(x: 1.2em)[
+      #text(size: 7.9pt)[
+        #text(weight: "bold")[CCS Concepts:] Software and its engineering → Formal software verification; Compilers; Imperative languages. \
+        #text(weight: "bold")[Keywords:] systems programming, proof drift, Lean, capabilities, compiler evidence, verification workflow.
+      ]
+    ]
+    #v(0.28em)
+    #pad(x: 1.2em)[
       #text(size: 8.5pt)[
         #text(weight: "bold")[Abstract — ]
-        Systems code is checked by tests, sanitizers, and analyzers; proof assistants offer rigor but live in a different world. The bridge between them is brittle: a theorem about a function is rarely tied to the exact source the compiler built, and it drifts silently when the body changes. This paper describes #emph[evidence-carrying source code]: source, compiler facts, proof registry entries, assumptions, and drift gates kept together by the compiler. Concrete is a small no-GC systems language with linear ownership and capability-visible effects whose compiler is written in Lean 4. The compiler extracts an eligible fragment of validated Core into Lean objects, lets a developer attach kernel-checked theorems to individual functions through a registry keyed by a body fingerprint, and automatically revokes a #raw("proved") claim when the source drifts. The contribution is the #emph[workflow], not a verified compiler: authority, effects, proof-eligibility, trust boundaries, stale-proof detection, and claim classification become ordinary compiler outputs over one semantic anchor. We report three non-toy graduated case studies — a bounded header validator (3 of 10 functions proved), a no-allocation bounded-state validator (4 of 20), and a constant-time tag comparison (1 of 2) — each stating precisely what is proved, enforced, reported, assumed, and trusted. We also report the current compiler-side soundness frontier: the #raw("partial def") opacity barrier has been removed for the flagship-used extractor surface, many extraction/evaluator rules now have checked preservation facts, and the remaining gap is deeper source-semantics agreement plus backend/toolchain trust. We do not claim a verified backend, full constant-time guarantees, complete language semantics, or SPARK-level proof-obligation generation.
+        A proof about source code can go stale in a depressingly ordinary way: the function changes, the model or theorem does not, and the build keeps looking green. Concrete is a small no-GC systems language, implemented in Lean 4, that treats this as a compiler problem rather than a documentation problem. The compiler extracts a proof-eligible fragment of checked Core into Lean objects, records attached theorems in a registry keyed by a body fingerprint, and revokes a `proved` claim when the source no longer matches what was proved. The same build also reports authority, allocation, trusted code, assumptions, and proof coverage. The result is not a verified compiler. It is a compiler that keeps evidence current enough for review. The current implementation has three non-toy graduated examples — a header validator, a bounded-state validator, and a fixed-time tag comparison — plus a partially proved extraction bridge. The backend, full language semantics, machine-level constant time, and SPARK-style VC generation remain outside the present claim.
       ]
     ]
     #v(0.35em)
@@ -56,20 +63,20 @@
   ]
 ]
 
-= Problem
+= A proof can rot
 
-Two communities have largely disjoint trust stories. Systems programmers trust code through tests, fuzzers, sanitizers, and static analyzers — fast, scalable, and approximate. Verification communities trust code through machine-checked proof — rigorous, but rarely applied to ordinary low-level code as it is actually compiled and shipped. The bridge between the two is the weak link.
+The thing that bothered me was not that systems programmers test and proof engineers prove. That division is old and often sensible. The part that kept looking wrong was the gap in the middle: a code review can show a function, and a proof development can show a theorem, but the compiler often cannot say whether the theorem is still about the function in front of you.
 
-The specific failure we target is #emph[proof drift]. When a theorem about a function lives in a separate development — a model in a proof assistant, a contract in a verifier — there is usually nothing in the compiler that knows the theorem exists, knows which source it was proved against, or notices when the body changes underneath it. A reviewer reading the function cannot tell, from the compiler's own output, whether an attached property is currently true, stale, or never re-checked. Tests catch behavioral regressions; they do not catch a proof that quietly stopped applying.
+That is the failure this paper is about. Systems code is normally trusted through tests, fuzzers, sanitizers, and static analyzers: fast, useful, and incomplete. Proof assistants give a different kind of confidence, but the proof frequently lives beside the program rather than inside the compiler's account of the program. If the body changes, the theorem may become a historical fact about yesterday's code.
 
-This paper asks a narrow question: what does it take for a real compiler to carry #emph[evidence] — capability requirements, trust boundaries, proof-eligibility, and kernel-checked theorems — as ordinary, drift-aware outputs, so that the bridge between "code that compiles" and "code with a proof" is maintained by the toolchain rather than by convention? We do not propose a verified compiler. We propose making the unverified-but-evidenced boundary legible and self-invalidating, and we report what a working implementation of that idea looks like.
+Concrete takes proof drift seriously enough to put it in the build. A theorem is attached to the body fingerprint it was proved against. Change the body and the claim downgrades. The theorem has not been refuted; it has simply stopped applying to this source. That sounds mundane, but it changes the review surface: a reviewer can ask the compiler which functions are proved, which are stale, which are only tested, which rely on assumptions, and which cross a trusted boundary.
 
-The paper makes four concrete contributions:
+The implementation has these load-bearing pieces:
 
-- a source-tied proof attachment model with deterministic proof revocation on body drift;
-- a shared evidence pipeline for capabilities, trust boundaries, proof eligibility, assumptions, and release bundles;
-- three non-toy case studies whose claims are each classified as proved, enforced, reported, assumed, or trusted;
-- an initial compiler-side preservation result that narrows, rather than hides, the trusted extraction boundary.
+- proof attachment by source-body fingerprint, with deterministic revocation on drift;
+- compiler reports for authority, trusted code, proof eligibility, assumptions, and release bundles;
+- case studies whose claims are classified as proved, enforced, reported, assumed, or trusted;
+- the first extraction-preservation facts for the compiler path from checked Core to ProofCore.
 
 The negative space is equally important. Concrete does not yet generate SPARK-style verification conditions for every array access, loop invariant, or arithmetic operation; it does not prove the emitted binary correct; and it does not make side-channel claims beyond source-level structural checks plus explicit assumptions.
 
@@ -108,15 +115,15 @@ The negative space is equally important. Concrete does not yet generate SPARK-st
   caption: [Evaluation summary. The counts are small; the point is that each one is tied to a compiler artifact or a checked regression.],
 )
 
-= Thesis
+= What Concrete is trying to make impossible
 
-The central claim is that low-level software becomes easier to trust when four kinds of information are #emph[compiler artifacts] rather than reconstructed by hand: #emph[authority] (which external effects a function may use), #emph[trust boundaries] (where pointer-level techniques and foreign calls are concentrated), #emph[proof-eligibility] (whether a function lies in the fragment the compiler can extract for proof at all), and #emph[proof currency] (whether an attached theorem still applies to the function's current body).
+The central claim is that low-level software becomes easier to review when the compiler can answer the questions reviewers actually ask. What external effects can this function use? Where is the raw pointer code? Is this function inside the fragment the proof tool understands? If it has a theorem attached, was that theorem checked against this body or an older one?
 
 Let $f$ be a function. The design objective is that the capability set $A(f)$, the trusted/foreign boundary set $T(f)$, and the eligibility/currency pair $(E(f), P(f))$ are all derivable from the ordinary compilation pipeline and re-checked on every build. The novelty is not any one of these in isolation; it is that they share a single validated semantic anchor and that $P(f)$ is #emph[automatically revoked] when $f$'s body fingerprint changes.
 
 The larger design rule is #emph[no semantically dark constructs]. "Provable language" does not mean every construct is forced into the current pure `ProvableV1` subset. It means every construct has an explicit proof story: it is proved, enforced, reported, assumed, trusted, or explicitly open with a named gap. Pure value code may be proved through `ProvableV1`; capability calls may be enforced by authority typing; allocation may be reported or policy-gated; FFI bodies and backend behavior may remain trusted but named. The future `concrete audit` command is therefore not just a summary report — it is the program-specific rendering of this proof-story matrix.
 
-= Evidence-Carrying Source Code
+= Keeping the theorem attached
 
 Concrete is not proof-carrying code for binaries. It is #emph[evidence-carrying source code]: the source body, compiler facts, extracted proof object, registry entry, assumptions, and release evidence are kept in one compiler-maintained loop. The running example in this paper is `constant_time_tag.ct_compare`, a fixed-size tag comparison whose source-level constant-time shape is simple enough to inspect but subtle enough to require honest assumptions.
 
@@ -160,7 +167,7 @@ error: spec drift for 'test_drift.simple_add' —
   caption: [Real diagnostic from the spec-drift regression. The proof is revoked and given a repair class; nothing downstream may rely on it.],
 ) <fig-drift>
 
-= Language Sketch
+= Language surface
 
 Concrete is a small no-GC systems language; we describe only what the evidence pipeline rests on.
 
@@ -262,13 +269,13 @@ capability Alloc (16 functions):
 
 #emph[Ergonomic no-GC.] Linearity gives resource safety without a borrow-checker's lifetime calculus, and scoped `defer` moves cleanup from repeated boilerplate into a stable idiom while keeping every destruction path visible — a concrete ergonomic win observed when `defer` removed a class of repetitive cleanup from the JSON parser without changing the explicit-cost model. The standard library is layered to keep host assumptions auditable: a pure #emph[Core] (computation and analysis-friendly modules), an #emph[Alloc] layer (allocation but no broader host services), and a #emph[Hosted] layer (POSIX/libc: files, networking, time, processes). The same layering is why a future `no_alloc` or `core_only` execution profile could be added without restructuring the library.
 
-= Proof and Evidence Pipeline
+= How the compiler keeps score
 
-== A single semantic anchor
+== The proof boundary
 
 The compiler runs
 `Parse → Resolve → Check → Elab → CoreCanon → CoreCheck → Mono → Lower → SSA → clang`.
-The proof boundary sits #emph[after] `CoreCheck` and #emph[before] monomorphization, materialized as a validated Core artifact (@fig-anchor). By that point surface sugar is gone and legality checks have run, but the program is still close to source meaning. Reports, proof extraction, and later artifact workflows all speak about this one validated object rather than inventing parallel semantic authorities.
+The proof boundary sits #emph[after] `CoreCheck` and #emph[before] monomorphization, materialized as a validated Core artifact (@fig-anchor). By that point surface sugar is gone and legality checks have run, but the program is still close to source meaning. Reports, proof extraction, and later artifact workflows all speak about this object, rather than each inventing its own account of the program.
 
 #figure(
   block(inset: 6pt, stroke: 0.4pt + luma(180), width: 100%)[
@@ -285,7 +292,7 @@ The proof boundary sits #emph[after] `CoreCheck` and #emph[before] monomorphizat
   caption: [Validated Core is the shared anchor for proof and reports — not a separate verification compiler.],
 ) <fig-anchor>
 
-== Extraction, registry, and evidence
+== Registry and revocation
 
 `ProofCore` extracts the eligible fragment of validated Core into Lean objects (`PExpr`/`PVal`) whose semantics use Lean values plus width-tagged BitVec operations where the source demands fixed-width behavior. Theorems are attached through a registry keyed by fingerprint; a registry entry is exactly the $(P_f, h_f)$ pair of the model:
 
@@ -328,9 +335,9 @@ Totals: 2 functions — 1 proved, 0 stale, 0 unproved,
 
 Because the compiler is the trust root for evidence, miscompiles are first-class adversaries. The project maintains a wrong-code corpus of captured compiler bugs retained as regressions, a test-case reducer for shrinking failures, evidence bundles for review, and `verify` gates in CI. Adversarial compiler bugs, once found, are reduced and frozen. The evidence pipeline does double duty here: alongside reporting, it keeps understood compiler bugs from coming back.
 
-= A Small Formal Model
+= The small model
 
-The workflow above is implemented by three small predicates: authority monotonicity, proof eligibility, and proof currency.
+The workflow above reduces to three predicates: authority monotonicity, proof eligibility, and proof currency.
 
 #emph[Authority.] Write $"callees"(f)$ for the functions $f$ calls directly. Capability monotonicity is checked by the compiler:
 
@@ -403,7 +410,7 @@ Concrete's evidence is only useful if its trust boundary is explicit. Every clai
 
 What "proved" does #emph[not] mean is worth stating plainly: not that the compiled binary is correct (the proof is over `PExpr` with unbounded integers, not the emitted machine code), not that the checker is sound, and not anything about cross-function composition beyond what a stated theorem captures; eligibility is not proof. The checker is exercised by an adversarial suite (1272 trust-gate checks) and the CI proof gate, but not by a mechanized correctness proof.
 
-= Case Studies
+= What has been tried
 
 The project currently has four graduated showcase entries. We omit `crypto_verify` from the evaluation table because it is explicitly a toy authentication scaffold; it is useful as proof-pipeline scaffolding, but not as evidence that Concrete handles real cryptographic code. The three case studies below are the non-toy graduated entries — every audit bar met, every drift gate green, listed in the showcase manifest.
 
@@ -492,9 +499,9 @@ A 10-function pure module that parses an 8-field `i32` header and validates six 
 )
 ]
 
-= Comparison to Contract Verifiers
+= Why this is not SPARK yet
 
-Concrete sits near SPARK, Dafny, F\*, and Why3, but its workflow is different today. Those systems center on contracts and verification-condition generation: a user writes preconditions, postconditions, loop invariants, and data-flow contracts, and the tool generates obligations that must be discharged automatically or interactively. Concrete currently starts one layer lower: it first makes proof attachment, authority reporting, stale-proof detection, assumptions, and release evidence part of the compiler's ordinary outputs.
+Concrete sits near the Hoare-logic line of tools: SPARK, Dafny, F\*, and Why3 @hoare1969axiomatic @barnes2012spark @leino2010dafny @swamy2016fstar @filliatre2013why3. Those systems center on contracts and verification-condition generation: a user writes preconditions, postconditions, loop invariants, and data-flow contracts, and the tool generates obligations that must be discharged automatically or interactively. Concrete currently starts one layer lower: it first makes proof attachment, authority reporting, stale-proof detection, assumptions, and release evidence part of the compiler's ordinary outputs.
 
 This is weaker than SPARK in an important way. Concrete does #emph[not] yet generate obligations for every bounds check, division, overflow, loop invariant, or contract. A source-level contract system is on the roadmap, but is not part of the evaluated implementation. The paper's claim is therefore not "Concrete is already a SPARK replacement." The claim is that a small systems compiler can keep the proof/evidence lifecycle tied to the code it compiles, and that this lifecycle is the substrate on which contracts and generated obligations should later sit.
 
@@ -557,7 +564,7 @@ This is still not a verified compiler. Several obligations remain below the line
 
 The title echoes #emph[proof-carrying code] (PCC) @necula1997pcc and typed assembly language @morrisett1998tal, where a proof or typing derivation travels with a binary and is checked at load time. Concrete differs in #emph[what] carries the evidence and #emph[when]: the evidence is a source-tied, drift-gated attachment maintained by the compiler across edits, not a fixed certificate shipped with a binary. The fingerprint-binding lifecycle and automatic staleness are the contribution, not the proof object.
 
-Verification-first systems languages — F\* and its Low\* subset @swamy2016fstar @protzenko2017lowstar, Dafny @leino2010dafny, and SPARK-style Ada workflows — start from contracts and generated proof obligations. Concrete inverts the emphasis: it is systems-first, with proof as an #emph[opt-in attachment] over a validated-Core anchor and a small eligible fragment, accepting that most code is enforced-and-reported rather than proved. CompCert @leroy2009compcert proves the compiler itself; Concrete explicitly does #emph[not], and its contribution is making the unproved-but-evidenced boundary legible and self-invalidating rather than eliminating it — our extraction-preservation result is a single fragment, not a verified pipeline. RustBelt @jung2018rustbelt establishes semantic foundations for Rust's type system externally; Concrete keeps a weaker but in-toolchain notion of currency tied to the exact compiled body.
+Verification-first systems languages — F\* and its Low\* subset @swamy2016fstar @protzenko2017lowstar, Dafny @leino2010dafny, Why3 @filliatre2013why3, and SPARK Ada workflows @barnes2012spark — start from contracts and generated proof obligations. Concrete inverts the emphasis: it is systems-first, with proof as an #emph[opt-in attachment] over a validated-Core anchor and a small eligible fragment, accepting that most code is enforced-and-reported rather than proved. CompCert @leroy2009compcert proves the compiler itself; Concrete explicitly does #emph[not], and its contribution is making the unproved-but-evidenced boundary legible and self-invalidating rather than eliminating it — our extraction-preservation result is a single fragment, not a verified pipeline. RustBelt @jung2018rustbelt establishes semantic foundations for Rust's type system externally; Concrete keeps a weaker but in-toolchain notion of currency tied to the exact compiled body.
 
 Among practical systems languages, Rust is the nearest relative (no GC, ownership, explicit `unsafe`), but authority there is inferred from APIs and modules rather than declared in signatures, and semantic inspection is distributed across diagnostics, lints, MIR tools, and external analyzers rather than centered on one report surface. Zig shares the no-hidden-runtime, explicit-allocator ethos but does not treat effect visibility as a first-class surface. C, the baseline these languages react to, leaves authority, effects, and cleanup entirely to convention; it is the audit problem in its starkest form, and also the performance bar Concrete aims to meet (@fig-perf).
 
