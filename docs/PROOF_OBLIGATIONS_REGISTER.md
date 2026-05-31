@@ -258,6 +258,41 @@ extractor preserves.  Phase 12 obligation
 `cast_identity_preservation` will state this restriction
 explicitly.
 
+### R-27 (array-element assignment in bounded loop bodies)
+
+Forced by HMAC-SHA256's `block_to_words`, `sha256_schedule`,
+`state_to_bytes` (and the byte-copy / ipad-opad loops of
+`hmac_sha256`), whose loop bodies write array elements:
+
+    for (i ...) { w[i] = <expr>; }
+
+Extraction previously accepted only scalar `CStmt.assign` in a
+`while_` body (`cAssignBodyToUpdates`), so these fell through to
+the eligibility-blocked path with "while loop body shape".
+
+Fix: `cAssignBodyToUpdates` now also accepts
+`arrayIndexAssign (.ident name _) idx val`, modelling it as the
+flat update `(name, arraySet name idx val)` — the same functional
+-update encoding cStmtsToPExprKImpl already uses at the top level
+(PROOF_STATE_MODEL.md § 2).  `PExpr.while_` applies its update
+list IN ORDER with later updates seeing earlier ones, so:
+  * several writes to the same array in one iteration chain
+    correctly (state_to_bytes stores 4 bytes per step), and
+  * the trailing for-loop counter step `i = i + 1` is just the
+    final scalar update in the list.
+
+No new constructor or eval rule: `arraySet` and `while_` already
+exist (R-20 and the array-update model); this is an extraction
+admissibility extension only, so the Phase-12 preservation
+lemmas over `while_`/`arraySet` cover it unchanged.
+
+Effect on hmac_sha256: block_to_words, sha256_schedule,
+state_to_bytes, hmac_sha256 move blocked -> in (5 blocked -> 1).
+`sha256_hash` remains blocked on i32 `/` (the padded-block count)
+AND a richer loop body (a `let` + nested loop + call assign, not
+a flat update list) — a separate, larger forcing-surface item
+(nested-loop / let-in-loop-body extraction + `div`).
+
 ### R-26 (addw — u32 wrapping add, typed BitVec round-trip)
 
 New constructor introduced by SHA-256's compression-round

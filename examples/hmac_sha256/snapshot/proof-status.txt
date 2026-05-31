@@ -1,10 +1,10 @@
 === Proof Status Report ===
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:55
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:57
 
   `hmac_sha256.sha256_init` passes the predictable profile but has no registered proof.
 
- 55 |     fn sha256_init() -> [u32; 8] {
+ 57 |     fn sha256_init() -> [u32; 8] {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -12,11 +12,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:63
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:65
 
   `hmac_sha256.sha256_k` passes the predictable profile but has no registered proof.
 
- 63 |     fn sha256_k() -> [u32; 64] {
+ 65 |     fn sha256_k() -> [u32; 64] {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -24,11 +24,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:94
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:96
 
   `hmac_sha256.ch` passes the predictable profile but has no registered proof.
 
- 94 |     fn ch(x: u32, y: u32, z: u32) -> u32 {
+ 96 |     fn ch(x: u32, y: u32, z: u32) -> u32 {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -36,23 +36,23 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:99
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:101
 
   `hmac_sha256.maj` passes the predictable profile but has no registered proof.
 
- 99 |     fn maj(x: u32, y: u32, z: u32) -> u32 {
-    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 101 |     fn maj(x: u32, y: u32, z: u32) -> u32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
     [(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitand (var x) (var y)) (binop Concrete.BinOp.bitand (var x) (var z))) (binop Concrete.BinOp.bitand (var y) (var z))))]
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:104
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:106
 
   `hmac_sha256.rotr` passes the predictable profile but has no registered proof.
 
- 104 |     fn rotr(x: u32, n: u32) -> u32 {
+ 106 |     fn rotr(x: u32, n: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -60,11 +60,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:109
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:111
 
   `hmac_sha256.big_sigma0` passes the predictable profile but has no registered proof.
 
- 109 |     fn big_sigma0(x: u32) -> u32 {
+ 111 |     fn big_sigma0(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -72,11 +72,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:114
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:116
 
   `hmac_sha256.big_sigma1` passes the predictable profile but has no registered proof.
 
- 114 |     fn big_sigma1(x: u32) -> u32 {
+ 116 |     fn big_sigma1(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -84,11 +84,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:119
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:121
 
   `hmac_sha256.small_sigma0` passes the predictable profile but has no registered proof.
 
- 119 |     fn small_sigma0(x: u32) -> u32 {
+ 121 |     fn small_sigma0(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -96,11 +96,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:124
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:126
 
   `hmac_sha256.small_sigma1` passes the predictable profile but has no registered proof.
 
- 124 |     fn small_sigma1(x: u32) -> u32 {
+ 126 |     fn small_sigma1(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -108,11 +108,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:141
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:143
 
   `hmac_sha256.ct_compare_32` passes the predictable profile but has no registered proof.
 
- 141 |     fn ct_compare_32(a: [u8; 32], b: [u8; 32]) -> i32 {
+ 143 |     fn ct_compare_32(a: [u8; 32], b: [u8; 32]) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -120,33 +120,35 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:161
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:163
 
-  `hmac_sha256.block_to_words` is eligible but uses unsupported constructs — extraction failed.
+  `hmac_sha256.block_to_words` passes the predictable profile but has no registered proof.
 
- 161 |     fn block_to_words(block: [u8; 64]) -> [u32; 16] {
+ 163 |     fn block_to_words(block: [u8; 64]) -> [u32; 16] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: while loop body shape (only let/assign/return/if-no-else supported)
+  current fingerprint:
+    [(let w (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 16)) [(setindex (var w) (var i) (binop Concrete.BinOp.bitor (binop Concrete.BinOp.bitor (binop Concrete.BinOp.bitor (binop Concrete.BinOp.shl (cast (index (var block) (binop Concrete.BinOp.mul (var i) (int 4))) Concrete.Ty.u32) (int 24)) (binop Concrete.BinOp.shl (cast (index (var block) (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var i) (int 4)) (int 1))) Concrete.Ty.u32) (int 16))) (binop Concrete.BinOp.shl (cast (index (var block) (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var i) (int 4)) (int 2))) Concrete.Ty.u32) (int 8))) (cast (index (var block) (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var i) (int 4)) (int 3))) Concrete.Ty.u32))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (var w))]
 
-  hint: Remove while loop body shape (only let/assign/return/if-no-else supported) to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:175
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:177
 
-  `hmac_sha256.sha256_schedule` is eligible but uses unsupported constructs — extraction failed.
+  `hmac_sha256.sha256_schedule` passes the predictable profile but has no registered proof.
 
- 175 |     fn sha256_schedule(w16: [u32; 16]) -> [u32; 64] {
+ 177 |     fn sha256_schedule(w16: [u32; 16]) -> [u32; 64] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: while loop body shape (only let/assign/return/if-no-else supported)
+  current fingerprint:
+    [(let w (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 16)) [(setindex (var w) (var i) (index (var w16) (var i))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (let i (int 16)) (while (binop Concrete.BinOp.lt (var i) (int 64)) [(setindex (var w) (var i) (binop Concrete.BinOp.add (binop Concrete.BinOp.add (binop Concrete.BinOp.add (call small_sigma1 (index (var w) (binop Concrete.BinOp.sub (var i) (int 2)))) (index (var w) (binop Concrete.BinOp.sub (var i) (int 7)))) (call small_sigma0 (index (var w) (binop Concrete.BinOp.sub (var i) (int 15))))) (index (var w) (binop Concrete.BinOp.sub (var i) (int 16))))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (var w))]
 
-  hint: Remove while loop body shape (only let/assign/return/if-no-else supported) to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:193
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:195
 
   `hmac_sha256.sha256_round` passes the predictable profile but has no registered proof.
 
- 193 |     fn sha256_round(state: [u32; 8], k: u32, w: u32) -> [u32; 8] {
+ 195 |     fn sha256_round(state: [u32; 8], k: u32, w: u32) -> [u32; 8] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -154,11 +156,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:204
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:206
 
   `hmac_sha256.sha256_compress` passes the predictable profile but has no registered proof.
 
- 204 |     fn sha256_compress(state: [u32; 8], block: [u8; 64]) -> [u32; 8] {
+ 206 |     fn sha256_compress(state: [u32; 8], block: [u8; 64]) -> [u32; 8] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -166,44 +168,46 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:218
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:220
 
-  `hmac_sha256.state_to_bytes` is eligible but uses unsupported constructs — extraction failed.
+  `hmac_sha256.state_to_bytes` passes the predictable profile but has no registered proof.
 
- 218 |     fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
+ 220 |     fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: while loop body shape (only let/assign/return/if-no-else supported)
+  current fingerprint:
+    [(let out (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 8)) [(setindex (var out) (binop Concrete.BinOp.mul (var i) (int 4)) (cast (binop Concrete.BinOp.bitand (binop Concrete.BinOp.shr (index (var state) (var i)) (int 24)) (int 255)) Concrete.Ty.u8)) (setindex (var out) (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var i) (int 4)) (int 1)) (cast (binop Concrete.BinOp.bitand (binop Concrete.BinOp.shr (index (var state) (var i)) (int 16)) (int 255)) Concrete.Ty.u8)) (setindex (var out) (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var i) (int 4)) (int 2)) (cast (binop Concrete.BinOp.bitand (binop Concrete.BinOp.shr (index (var state) (var i)) (int 8)) (int 255)) Concrete.Ty.u8)) (setindex (var out) (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var i) (int 4)) (int 3)) (cast (binop Concrete.BinOp.bitand (index (var state) (var i)) (int 255)) Concrete.Ty.u8)) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (var out))]
 
-  hint: Remove while loop body shape (only let/assign/return/if-no-else supported) to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:236
+-- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:238
 
   `hmac_sha256.sha256_hash` is eligible but uses unsupported constructs — extraction failed.
 
- 236 |     fn sha256_hash(data: [u8; 384], len: i32) -> [u8; 32] {
+ 238 |     fn sha256_hash(data: [u8; 384], len: i32) -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   unsupported: unsupported operator: Concrete.BinOp.div at Concrete.Ty.i32, while loop body shape (only let/assign/return/if-no-else supported)
 
   hint: Remove unsupported operator: Concrete.BinOp.div at Concrete.Ty.i32, while loop body shape (only let/assign/return/if-no-else supported) to enable proof extraction.
 
--- blocked ------------------------------------------------ examples/hmac_sha256/src/main.con:262
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:264
 
-  `hmac_sha256.hmac_sha256` is eligible but uses unsupported constructs — extraction failed.
+  `hmac_sha256.hmac_sha256` passes the predictable profile but has no registered proof.
 
- 262 |     fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
+ 264 |     fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  unsupported: while loop body shape (only let/assign/return/if-no-else supported)
+  current fingerprint:
+    [(let kp (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (if (binop Concrete.BinOp.gt (var k_len) (int 64)) [(let kbuf (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (var k_len)) [(setindex (var kbuf) (var i) (index (var k) (var i))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (let kh (call sha256_hash (var kbuf) (var k_len))) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 32)) [(setindex (var kp) (var i) (index (var kh) (var i))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))])] [(let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (var k_len)) [(setindex (var kp) (var i) (index (var k) (var i))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))])]) (let inner (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (let outer (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 64)) [(setindex (var inner) (var i) (binop Concrete.BinOp.bitxor (index (var kp) (var i)) (int 54))) (setindex (var outer) (var i) (binop Concrete.BinOp.bitxor (index (var kp) (var i)) (int 92))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (var m_len)) [(setindex (var inner) (binop Concrete.BinOp.add (int 64) (var i)) (index (var m) (var i))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (let ih (call sha256_hash (var inner) (binop Concrete.BinOp.add (int 64) (var m_len)))) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 32)) [(setindex (var outer) (binop Concrete.BinOp.add (int 64) (var i)) (index (var ih) (var i))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (call sha256_hash (var outer) (int 96)))]
 
-  hint: Remove while loop body shape (only let/assign/return/if-no-else supported) to enable proof extraction.
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:290
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:292
 
   `hmac_sha256.verify_hmac` passes the predictable profile but has no registered proof.
 
- 290 |     fn verify_hmac(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32,
+ 292 |     fn verify_hmac(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32,
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -211,11 +215,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:300
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:302
 
   `hmac_sha256.abc_block` passes the predictable profile but has no registered proof.
 
- 300 |     fn abc_block() -> [u8; 64] {
+ 302 |     fn abc_block() -> [u8; 64] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -223,11 +227,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:312
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:314
 
   `hmac_sha256.rfc4231_tc1_tag` passes the predictable profile but has no registered proof.
 
- 312 |     fn rfc4231_tc1_tag() -> [u8; 32] {
+ 314 |     fn rfc4231_tc1_tag() -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -235,11 +239,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:318
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:320
 
   `hmac_sha256.rfc4231_tc2_tag` passes the predictable profile but has no registered proof.
 
- 318 |     fn rfc4231_tc2_tag() -> [u8; 32] {
+ 320 |     fn rfc4231_tc2_tag() -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -247,16 +251,16 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- not eligible ------------------------------------------- examples/hmac_sha256/src/main.con:335
+-- not eligible ------------------------------------------- examples/hmac_sha256/src/main.con:337
 
   `hmac_sha256.main` cannot be proved: fails predictable profile (has capabilities: Console, is entry point (main)).
 
- 335 |     pub fn main() with(Console) -> i32 {
+ 337 |     pub fn main() with(Console) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   reasons: has capabilities: Console, is entry point (main)
 
   hint: Address these constraints to make this function eligible for proof.
 
-Totals: 22 functions — 0 proved, 0 stale, 16 unproved, 5 blocked, 1 ineligible, 0 trusted
+Totals: 22 functions — 0 proved, 0 stale, 20 unproved, 1 blocked, 1 ineligible, 0 trusted
 

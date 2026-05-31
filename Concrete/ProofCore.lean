@@ -990,9 +990,21 @@ def cMatchArmsToP :
     some (parm :: prest)
 
 /-- Helper: try flat-assign extraction over a while body.
-    Returns `some updates` if every stmt is a `.assign`,
+    Returns `some updates` if every stmt is a flat update —
+    either a scalar `.assign name val` or an array-element
+    assignment `arr[i] = v` where `arr` is a simple identifier —
     `none` otherwise.  Replaces the `body.mapM` lambda in
-    cStmtsToPExprKImpl's while_ case. -/
+    cStmtsToPExprKImpl's while_ case.
+
+    An array-element assignment `name[idx] = val` is modelled as
+    the functional update `(name, arraySet name idx val)`, the
+    same encoding cStmtsToPExprKImpl uses at the top level
+    (docs/PROOF_STATE_MODEL.md § 2).  Because `while_` applies the
+    update list IN ORDER with later updates seeing earlier ones
+    (see PExpr.while_ semantics), several writes to the same array
+    in one iteration (e.g. state_to_bytes' four byte stores) chain
+    correctly, and the trailing for-loop counter step `i = i + 1`
+    is just another scalar update at the end of the list. -/
 def cAssignBodyToUpdates :
     List CStmt → Option (List (String × Proof.PExpr))
   | [] => some []
@@ -1002,6 +1014,11 @@ def cAssignBodyToUpdates :
       let pv ← cExprToPExprImpl val
       let prest ← cAssignBodyToUpdates rest
       some ((name, pv) :: prest)
+    | .arrayIndexAssign (.ident name _) idx val => do
+      let pi ← cExprToPExprImpl idx
+      let pv ← cExprToPExprImpl val
+      let prest ← cAssignBodyToUpdates rest
+      some ((name, .arraySet (.var name) pi pv) :: prest)
     | _ => none
 end
 

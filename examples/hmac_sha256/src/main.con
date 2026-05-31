@@ -22,23 +22,25 @@
 // compiled binary and `--interp`.
 //
 // Conformance reads `Status: partial`, and that is the honest
-// signal.  The functions whose loop bodies do ARRAY-ELEMENT
-// assignment (`w[i] = ...`) — block_to_words, sha256_schedule,
-// state_to_bytes, sha256_hash, hmac_sha256 — are extraction-blocked
-// because the proof model only handles flat scalar loop bodies so
-// far (sha256_hash is also blocked on i32 `/`).  The pure-expr and
-// scalar-loop functions (ch, maj, rotr, the sigmas, sha256_round,
-// sha256_compress, ct_compare_32, the constant tables) sit `in`.
+// signal.  Array-element assignment in bounded loop bodies
+// (`w[i] = ...`) is now extractable (register R-27), so
+// block_to_words, sha256_schedule, state_to_bytes and hmac_sha256
+// have moved `in`.  Just ONE function is still blocked:
 //
-// So the gate walked partial -> full (trivial stubs) -> partial
-// (real array-store loops) — tracking the proof obligation
-// precisely.  The NEXT forcing-surface item is array-element
-// assignment inside bounded loop bodies (the `while_step` +
-// arraySet technique of AUDIT.md § 5, re-using fixed_capacity's
-// loop induction); the correctness theorems (AUDIT.md § 6) follow
-// it.  No correctness proofs are attached yet — proof-status shows
-// the eligible functions as `missing`; functional correctness is
-// established at RUNTIME (RFC/FIPS vectors), not yet by the kernel.
+//   blocked: sha256_hash — uses i32 `/` (the padded-block count)
+//            AND a richer loop body (a `let` + a nested loop + a
+//            call-assign, not a flat update list).  Both are
+//            separate, larger forcing-surface items (div support;
+//            nested-loop / let-in-loop-body extraction).
+//
+// Everything else sits `in`.  So the gate walked partial -> full
+// (trivial stubs) -> partial (real array-store loops) -> almost
+// full (R-27), tracking each proof obligation precisely.  No
+// correctness proofs are attached yet — proof-status shows the
+// eligible functions as `missing`; functional correctness is
+// established at RUNTIME (RFC/FIPS vectors), not yet by the kernel
+// (AUDIT.md § 6 theorems are the remaining step, now unblocked for
+// every function except sha256_hash).
 //
 // This is NOT a vetted crypto library.  Do not deploy.  See § 4
 // of AUDIT.md and assumptions.toml for the trust boundaries.

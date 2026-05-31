@@ -95,7 +95,7 @@ The current `ProvableV1` ProofCore expression surface is:
 | array literals | Supported. |
 | array reads | Supported; out of bounds evaluates to `none` in the proof model. |
 | array functional update | Supported via `arraySet`; out of bounds evaluates to `none`. |
-| bounded flat-assignment while loops | Supported through `while_` with fuel in the proof evaluator and boundedness checked by profile tooling. |
+| bounded flat-assignment while loops | Supported through `while_` with fuel in the proof evaluator and boundedness checked by profile tooling. Loop bodies may rebind scalars AND write array elements (`arr[i] = v`, modelled as `arraySet`); R-27. |
 | richer loop body with Cont/Break | Supported through `while_step` and the `LoopStep` enum encoding. |
 
 Excluded from `ProvableV1` until explicitly added:
