@@ -482,4 +482,56 @@ theorem small_sigma1_refines (X : BitVec 32) (fuel : Nat) :
     BitVec.toNat_inj, ofInt_natCast_toNat, ofInt_ofNat_toNat]
   rw [show ((10:Int)).toNat = 10 by omega]
 
+
+-- ==================================================================
+-- sha256_round refines its spec (task #20, part 2): the compression
+-- round — Sigma1/Ch/Sigma0/Maj over the working state plus the
+-- wrapping-add (`addw`) chain t1 = h+Σ1(e)+Ch(e,f,g)+k+w,
+-- t2 = Σ0(a)+Maj(a,b,c), next = [t1+t2, a,b,c, d+t1, e,f,g].
+-- The helper *calls* (rotr/ch/maj/sigmas) and the state[i] reads are
+-- unfolded inline; the whole word-level identity is kernel-checked by
+-- `bv_decide`.
+-- ==================================================================
+
+private def addwE (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
+private def stateAt (i : Int) : PExpr := .arrayIndex (.var "state") (.lit (.int i))
+
+/-- Extracted `sha256_round(state, k, w)` body. -/
+def roundExpr : PExpr :=
+  .letIn "t1"
+    (addwE (addwE (addwE (addwE (stateAt 7) (.call "big_sigma1" [stateAt 4]))
+              (.call "ch" [stateAt 4, stateAt 5, stateAt 6])) (.var "k")) (.var "w"))
+    (.letIn "t2"
+      (addwE (.call "big_sigma0" [stateAt 0]) (.call "maj" [stateAt 0, stateAt 1, stateAt 2]))
+      (.arrayLit [ addwE (.var "t1") (.var "t2"), stateAt 0, stateAt 1, stateAt 2,
+                   addwE (stateAt 3) (.var "t1"), stateAt 4, stateAt 5, stateAt 6 ]))
+
+set_option maxHeartbeats 4000000 in
+set_option linter.unusedSimpArgs false in
+/-- `roundExpr` refines `Sha256Spec.round` for ALL working-state words
+    and round constants — the SHA-256 compression round computes exactly
+    the spec round. -/
+theorem round_refines (S0 S1 S2 S3 S4 S5 S6 S7 K W : BitVec 32) (fuel : Nat) :
+    eval shaFns
+      (((Env.empty.bind "state" (.array_
+          [.int S0.toNat, .int S1.toNat, .int S2.toNat, .int S3.toNat,
+           .int S4.toNat, .int S5.toNat, .int S6.toNat, .int S7.toNat])).bind
+        "k" (.int K.toNat)).bind "w" (.int W.toNat))
+      (fuel + 8) roundExpr
+    = some (.array_ ((Sha256Spec.round
+        [S0, S1, S2, S3, S4, S5, S6, S7] K W).map (fun w => PVal.int w.toNat))) := by
+  simp only [roundExpr, addwE, stateAt, eval, Env.bind, evalBinOp, eval.evalArgs,
+    eval.evalElems, eval.lookupIndex, bindArgs, shaFns, rotrExpr, chExpr, majExpr,
+    bigSigma0Expr, bigSigma1Expr, Sha256Spec.round, Sha256Spec.ch, Sha256Spec.maj,
+    Sha256Spec.bigSigma0, Sha256Spec.bigSigma1, Sha256Spec.rotr,
+    beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    Int.reduceToNat, Int.reduceLT, Int.reduceSub, Nat.reduceSub, reduceIte,
+    List.getD_cons_zero, List.getD_cons_succ, List.map_cons, List.map_nil,
+    ofInt_natCast_toNat, ofInt_ofNat_toNat,
+    Option.some.injEq, PVal.array_.injEq, PVal.int.injEq, List.cons.injEq,
+    and_true, true_and, and_self, Int.ofNat_eq_natCast, Int.natCast_inj, BitVec.toNat_inj]
+  have hnot : ∀ v : BitVec 32, v ^^^ BitVec.ofInt 32 4294967295 = ~~~v := fun v => by bv_decide
+  simp only [hnot]
+  bv_decide
+
 end Concrete.Proof
