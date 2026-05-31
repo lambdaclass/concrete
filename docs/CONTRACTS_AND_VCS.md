@@ -29,6 +29,20 @@ that `concrete audit`, CI, and release bundles can inspect.
 6. SMT assists proof work but does not define Concrete semantics.
 7. Audit is the user-facing truth surface.
 8. The contract syntax must remain LL(1)-friendly.
+9. Discharge is tiered by trust cost: kernel-checked first (Lean and
+   `bv_decide`), external SMT only when needed and always as a louder,
+   distinct class. See [PROOF_LADDER.md](PROOF_LADDER.md) for the tiers and
+   evidence classes.
+10. `assume` is a controlled trapdoor: it taints its obligation to `assumed`
+    (never `proved`), flows into the same audit ledger as `assumptions.toml`,
+    and is gate-forbiddable in release.
+
+**Build order — the proof teaches the syntax.** This document is a *design
+proposal*; the contract syntax and VC shapes are not frozen. They must be
+designed against an obligation we have actually discharged, not an imagined
+one. The spec layer, the `bv_decide` tier, the refinement pattern, and a first
+real proof (`block_to_words_refines_spec`) come **before** contract syntax. The
+full sequence is in [PROOF_LADDER.md](PROOF_LADDER.md#build-order--the-proof-teaches-the-syntax).
 
 ## Claim Sources
 

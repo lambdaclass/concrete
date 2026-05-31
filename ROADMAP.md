@@ -41,10 +41,21 @@ The proof/evidence pipeline is operational:
 - Assumptions, policies, snapshots, oracles, catches, release bundles, and
   showcase manifests exist for graduated examples.
 - Compiler-soundness work has started: the flagship-used ProofCore extraction
-  surface is no longer blocked by `partial def` opacity, and R-01 through R-21
+  surface is no longer blocked by `partial def` opacity, and R-01 through R-28
   now have extraction/preservation coverage at least at the shape level. The
   remaining work is deeper source-semantics agreement and trust-gate soundness,
   not basic extractor access.
+- A reusable proof layer (the "proof ladder") is shipped and kernel-verified:
+  array update lemmas, `while_` unfolding, evaluator fuel monotonicity
+  (`eval_fuel_succ`/`eval_fuel_le`), and bounded counter-loop induction
+  (`eval_while_count`) — so loop/array proofs are systematic, not one-off
+  scripts. `bv_decide` (kernel-checked BitVec automation, in-toolchain) is
+  validated against the HMAC helper facts with zero added trust. See
+  [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).
+- A fifth flagship, `hmac_sha256` (first real cryptographic primitive), is
+  implemented and runtime-verified against FIPS 180-4 + RFC 4231; ProvableV1
+  conformance `full`; two kernel theorems attached; graduation gated on bar #2
+  (a Lean-checked composition/refinement theorem).
 - `ProvableV1` is named, documented, and wired into the flagship corpus.
   `docs/PROVABLE_V1.md` is the public contract; every graduated flagship
   declares conformance in its README; `tests/showcase/manifest.toml` carries a
@@ -208,7 +219,15 @@ Goal: let proof-relevant properties live in source code without breaking LL(1),
 and make every contract generate obligations instead of becoming decorative
 prose.
 
-Design reference: [docs/CONTRACTS_AND_VCS.md](docs/CONTRACTS_AND_VCS.md).
+Design reference: [docs/CONTRACTS_AND_VCS.md](docs/CONTRACTS_AND_VCS.md), and
+[docs/PROOF_LADDER.md](docs/PROOF_LADDER.md) for the build order.
+
+**Ordering (let the proof teach the syntax):** do not freeze contract syntax or
+VC shapes before at least one real refinement proof exists. The spec layer, the
+`bv_decide` tier, the refinement pattern, and `block_to_words_refines_spec`
+(Phase 8 / bar #2) come **first**, so this phase designs against an obligation
+shape that has actually been discharged rather than an imagined one. See the
+build order in `docs/PROOF_LADDER.md`.
 
 Done when: one flagship uses source contracts as the primary proof surface, and
 each contract is classified as proved, enforced, assumed, missing, blocked, or
@@ -266,11 +285,21 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
    div/mod nonzero, checked/proved overflow, casts, and loop bounds.
 4. Generate VCs for loop invariants: initialization, preservation,
    variant decrease, and exit-implies-postcondition.
-5. Add an SMT backend behind an explicit flag or policy gate. Start with one
-   solver adapter and a stable SMT-LIB output path before adding more solvers.
-6. Classify solver results in reports and artifacts:
-   `proved_by_smt`, `unknown`, `counterexample`, `timeout`,
-   `solver_error`, or `solver_trusted`.
+5. **Kernel-checked automation first (`bv_decide`).** Before any external
+   solver, route BitVec / bounded-arithmetic VCs to Lean's `bv_decide`
+   (in-toolchain; bit-blasts to SAT and replays a kernel-checked certificate —
+   **no TCB growth**). Already validated against the HMAC helper facts. Its
+   results are classified `proved_by_kernel_decision`, a kernel-checked class
+   distinct from `proved_by_smt`. See [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).
+6. Add an *external* SMT backend behind an explicit flag or policy gate, reached
+   for only when `bv_decide` cannot (e.g. nonlinear). Start with one solver
+   adapter and a stable SMT-LIB output path before adding more solvers. Its
+   results are `solver_trusted` (solver enters the TCB) unless a certificate is
+   replayed — never collapsed into a kernel-checked class.
+7. Classify solver results in reports and artifacts:
+   `proved_by_kernel_decision` (kernel-checked), `proved_by_smt` /
+   `solver_trusted` (external), `unknown`, `counterexample`, `timeout`,
+   `solver_error`.
 7. Surface counterexamples in source terms where possible: function inputs,
    loop variables, failing index, failing arithmetic side condition, and the
    contract/obligation that failed.
@@ -563,5 +592,10 @@ forcing example, explicitly deferred, or rejected.
    package policies are stable.
 10. Broaden the proof-relevant interpreter toward Miri-style UB checking only
     if the proof-subset interpreter proves valuable.
-11. Research persistent equality/rewrite state after backend contracts,
+11. Investigate a sized/indexed ProofCore evaluator only if the current
+    fuel-indexed evaluator remains repeated proof debt after HMAC and at least
+    one other substantial loop/composition proof. This is ProofCore v2
+    research, not a migration commitment; see
+    [docs/SIZED_EVALUATOR_INVESTIGATION.md](docs/SIZED_EVALUATOR_INVESTIGATION.md).
+12. Research persistent equality/rewrite state after backend contracts,
     semantic diff, and proof/evidence pipeline are stronger.

@@ -40,18 +40,33 @@ The current center of gravity is **Phase D**:
 
 The project is serious about proofs, but it is important to separate what exists from what is planned.
 
-What exists architecturally:
+What exists today:
 
 - compiler implemented in Lean 4
 - validated Core after `CoreCheck` as the proof boundary
-- explicit proof-oriented roadmap and research direction
+- **kernel-checked Lean 4 proofs on selected functions** across the graduated
+  flagships (plus the in-progress `hmac_sha256`), tied to source by body
+  fingerprints with a spec-drift gate
+- a documented, additive provable subset (`ProvableV1`, R-1…R-28) covering
+  integer/bool, calls, lets, structs/enums, pattern matching, array
+  read/update, bounded loops (incl. array-element writes), casts, and
+  width-tagged `mod`/`div`/`bitand`/`bitor`/`bitxor`/`shl`/`shr`/wrapping-`add`
+- a **reusable proof layer** (evaluator fuel monotonicity + bounded counter-loop
+  induction) that makes loop/array proofs systematic, and kernel-checked
+  `bv_decide` automation validated on the crypto helper facts
 
-What does not exist yet:
+What does not exist yet (planned, not shipped):
 
-- actual Lean 4 proofs of selected Concrete functions
+- **source-level contracts** (`requires`/`ensures`/`invariant`/`ghost`) and
+  automatic verification-condition generation — see the design in the docs
+- **refinement against an independent spec**: today's theorems characterize the
+  extracted IR; proving a function refines a pure mathematical spec is the next
+  step
 - whole-compiler formal verification
 
-Those are active future goals, not shipped claims.
+Those last three are active goals, not shipped claims. The discipline is to
+separate what is proved from what is planned — see the proof-ladder and
+contracts docs in the repository.
 
 ## If You Want The Current Truth
 
