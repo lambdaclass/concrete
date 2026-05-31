@@ -1,3 +1,7 @@
+﻿+++
+title = "Compiler Pass Contracts"
++++
+
 # Compiler Pass Contracts
 
 This document describes each pass in the Concrete compiler pipeline, its signature, preconditions, postconditions, error conditions, and the invariant it establishes.
