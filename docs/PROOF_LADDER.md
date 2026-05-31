@@ -122,9 +122,12 @@ contract system must generate.
    refines the pure Lean spec," not "evaluates to these bytes."
    *(Shipped: `ch_refines` / `maj_refines` prove the extracted Boolean round
    functions equal `Sha256Spec.ch` / `maj` for ALL inputs, via two reusable
-   `BitVec.ofInt ∘ toNat` round-trip bridging lemmas + `bv_decide`. The
-   rotation/sigma/schedule refinements, which add `32−n` shift amounts and
-   `rotr` calls, follow with step 4.)*
+   `BitVec.ofInt ∘ toNat` round-trip bridging lemmas + `bv_decide`. Also shipped:
+   `rotr_refines` (with the `32−n` shift amount) and all four sigma refinements
+   (`big_sigma0/1`, `small_sigma0/1`) — plus the `rotr_call` call/bind
+   scaffolding (`shaFns` function table + `eval.evalArgs`/`bindArgs` reduction)
+   that lets extracted `rotr(...)` calls inside the sigmas reduce to
+   `rotr_refines`. Every SHA-256 round *function* now refines its spec.)*
 4. **`block_to_words_refines_spec`** — the first real proof using the pattern +
    `eval_while_count`. This validates what kind of obligation contracts must
    generate.
@@ -166,8 +169,9 @@ ghost values erase; the compiled binary is unchanged.
 | Spec layer (`Concrete/Sha256Spec.lean`) | **shipped** |
 | Refinement pattern: extracted `PExpr` refines spec, ∀ inputs | **shipped** for the Boolean round functions (`ch_refines` / `maj_refines`) |
 | First **loop** refinement: `block_to_words_refines_spec` (∀ 64 bytes, via `eval_while_count`) | **shipped** (`Concrete/Sha256Refine.lean`) |
+| `rotr` + four sigma refinements (incl. `32−n` shift) + `rotr_call` call/bind scaffolding | **shipped** (`Concrete/Sha256Refine.lean`) |
 | Evidence classes `proved` / `enforced` / `reported` / `assumed` + `concrete audit` | **shipped** |
-| `rotr` / σ / schedule / compression / `hash` / `hmac` refinement | **next** (ROADMAP Phase 8 / bar #2) |
+| `sha256_round` / `sha256_schedule` / `sha256_compress` / `hash` / `hmac` refinement | **next** (ROADMAP Phase 8 / bar #2) |
 | `#[requires/ensures/invariant/decreases]`, `ghost`, `assume`, `contract` | **design** (ROADMAP Phase 4) |
 | VC generator; `proved_by_kernel_decision` / `proved_by_smt` / `solver_trusted` / `runtime_checked` classes; external SMT; gradual mode | **design** (ROADMAP Phase 5) |
 

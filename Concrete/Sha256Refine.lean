@@ -352,4 +352,134 @@ theorem block_to_words_refines_spec (b : Nat → BitVec 8) (fuel : Nat) :
   rw [← wList_zero b]
   exact loop_eval b fuel
 
+
+-- ==================================================================
+-- SHA-256 round FUNCTIONS refine their spec (task #20, part 1):
+-- rotation, the four sigmas, and the function-call/bind scaffolding
+-- that lets extracted `rotr(...)`/`ch(...)`/`maj(...)`/`sigma(...)`
+-- calls reduce cleanly. The Boolean functions (ch/maj) are above;
+-- here we add `rotr` (with its `32 - n` shift amount) and the sigmas.
+-- ==================================================================
+
+/-- Extracted `rotr(x, n) = (x >> n) | (x << (32 - n))` (FIPS 180-4
+    §3.2). The `32 - n` shift amount is the construct that the Boolean
+    functions did not exercise. -/
+def rotrExpr : PExpr :=
+  .binOp (.bitor 32 false)
+    (.binOp (.shr 32 false) (.var "x") (.var "n"))
+    (.binOp (.shl 32 false) (.var "x") (.binOp .sub (.lit (.int 32)) (.var "n")))
+
+set_option linter.unusedSimpArgs false in
+/-- `rotrExpr` refines `Sha256Spec.rotr` for all words and all shift
+    amounts `n ≤ 32`. (`rotrExpr` contains no calls, so this holds in
+    any function table.) -/
+theorem rotr_refines (fns : FnTable) (X : BitVec 32) (n : Nat) (hn : n ≤ 32) (fuel : Nat) :
+    eval fns ((Env.empty.bind "x" (.int X.toNat)).bind "n" (.int (n:Int))) (fuel + 1) rotrExpr
+      = some (.int (Sha256Spec.rotr X n).toNat) := by
+  simp only [rotrExpr, eval, Env.bind, evalBinOp, Sha256Spec.rotr,
+    beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    ofInt_natCast_toNat]
+  rw [show ((n:Int)).toNat = n by omega, show ((32:Int) - (n:Int)).toNat = 32 - n by omega]
+  simp only [Option.some.injEq, PVal.int.injEq, Int.ofNat_eq_natCast, Int.natCast_inj,
+    BitVec.toNat_inj, ofInt_natCast_toNat, ofInt_ofNat_toNat]
+
+def bigSigma0Expr : PExpr :=
+  .binOp (.bitxor 32 false)
+    (.binOp (.bitxor 32 false)
+      (.call "rotr" [.var "x", .lit (.int 2)]) (.call "rotr" [.var "x", .lit (.int 13)]))
+    (.call "rotr" [.var "x", .lit (.int 22)])
+def bigSigma1Expr : PExpr :=
+  .binOp (.bitxor 32 false)
+    (.binOp (.bitxor 32 false)
+      (.call "rotr" [.var "x", .lit (.int 6)]) (.call "rotr" [.var "x", .lit (.int 11)]))
+    (.call "rotr" [.var "x", .lit (.int 25)])
+def smallSigma0Expr : PExpr :=
+  .binOp (.bitxor 32 false)
+    (.binOp (.bitxor 32 false)
+      (.call "rotr" [.var "x", .lit (.int 7)]) (.call "rotr" [.var "x", .lit (.int 18)]))
+    (.binOp (.shr 32 false) (.var "x") (.lit (.int 3)))
+def smallSigma1Expr : PExpr :=
+  .binOp (.bitxor 32 false)
+    (.binOp (.bitxor 32 false)
+      (.call "rotr" [.var "x", .lit (.int 17)]) (.call "rotr" [.var "x", .lit (.int 19)]))
+    (.binOp (.shr 32 false) (.var "x") (.lit (.int 10)))
+
+/-- The SHA-256 helper function table: the extracted bodies of `rotr`,
+    `ch`, `maj`, and the four sigmas, keyed by their source names. -/
+def shaFns : FnTable
+  | "rotr"         => some ⟨"rotr",         ["x", "n"],      rotrExpr⟩
+  | "ch"           => some ⟨"ch",           ["x", "y", "z"], chExpr⟩
+  | "maj"          => some ⟨"maj",          ["x", "y", "z"], majExpr⟩
+  | "big_sigma0"   => some ⟨"big_sigma0",   ["x"],           bigSigma0Expr⟩
+  | "big_sigma1"   => some ⟨"big_sigma1",   ["x"],           bigSigma1Expr⟩
+  | "small_sigma0" => some ⟨"small_sigma0", ["x"],           smallSigma0Expr⟩
+  | "small_sigma1" => some ⟨"small_sigma1", ["x"],           smallSigma1Expr⟩
+  | _              => none
+
+/-- A call `rotr(xe, c)` where `xe` evaluates to `X` and the literal
+    `c = n` reduces to `Sha256Spec.rotr X n`. The bridge from source
+    call sites to `rotr_refines`. -/
+theorem rotr_call (X : BitVec 32) (n : Nat) (c : Int) (hc : c = (n:Int)) (hn : n ≤ 32)
+    (env : Env) (xe : PExpr) (fuel : Nat)
+    (hx : eval shaFns env (fuel + 1) xe = some (.int (X.toNat : Int))) :
+    eval shaFns env (fuel + 2) (.call "rotr" [xe, .lit (.int c)])
+      = some (.int (Sha256Spec.rotr X n).toNat) := by
+  subst hc
+  simp only [eval, shaFns, eval.evalArgs, hx, bindArgs]
+  exact rotr_refines shaFns X n hn fuel
+
+set_option linter.unusedSimpArgs false in
+theorem big_sigma0_refines (X : BitVec 32) (fuel : Nat) :
+    eval shaFns (Env.empty.bind "x" (.int X.toNat)) (fuel + 2) bigSigma0Expr
+      = some (.int (Sha256Spec.bigSigma0 X).toNat) := by
+  have hx : eval shaFns (Env.empty.bind "x" (.int X.toNat)) (fuel + 1) (.var "x")
+      = some (.int (X.toNat : Int)) := by simp [eval, Env.bind]
+  have h2 := rotr_call X 2 2 (by omega) (by omega) _ _ fuel hx
+  have h13 := rotr_call X 13 13 (by omega) (by omega) _ _ fuel hx
+  have h22 := rotr_call X 22 22 (by omega) (by omega) _ _ fuel hx
+  simp only [bigSigma0Expr, eval, h2, h13, h22, evalBinOp, Sha256Spec.bigSigma0,
+    Option.some.injEq, PVal.int.injEq, Int.ofNat_eq_natCast, Int.natCast_inj,
+    BitVec.toNat_inj, ofInt_natCast_toNat, ofInt_ofNat_toNat]
+
+set_option linter.unusedSimpArgs false in
+theorem big_sigma1_refines (X : BitVec 32) (fuel : Nat) :
+    eval shaFns (Env.empty.bind "x" (.int X.toNat)) (fuel + 2) bigSigma1Expr
+      = some (.int (Sha256Spec.bigSigma1 X).toNat) := by
+  have hx : eval shaFns (Env.empty.bind "x" (.int X.toNat)) (fuel + 1) (.var "x")
+      = some (.int (X.toNat : Int)) := by simp [eval, Env.bind]
+  have h6 := rotr_call X 6 6 (by omega) (by omega) _ _ fuel hx
+  have h11 := rotr_call X 11 11 (by omega) (by omega) _ _ fuel hx
+  have h25 := rotr_call X 25 25 (by omega) (by omega) _ _ fuel hx
+  simp only [bigSigma1Expr, eval, h6, h11, h25, evalBinOp, Sha256Spec.bigSigma1,
+    Option.some.injEq, PVal.int.injEq, Int.ofNat_eq_natCast, Int.natCast_inj,
+    BitVec.toNat_inj, ofInt_natCast_toNat, ofInt_ofNat_toNat]
+
+set_option linter.unusedSimpArgs false in
+theorem small_sigma0_refines (X : BitVec 32) (fuel : Nat) :
+    eval shaFns (Env.empty.bind "x" (.int X.toNat)) (fuel + 2) smallSigma0Expr
+      = some (.int (Sha256Spec.smallSigma0 X).toNat) := by
+  have hx : eval shaFns (Env.empty.bind "x" (.int X.toNat)) (fuel + 1) (.var "x")
+      = some (.int (X.toNat : Int)) := by simp [eval, Env.bind]
+  have h7 := rotr_call X 7 7 (by omega) (by omega) _ _ fuel hx
+  have h18 := rotr_call X 18 18 (by omega) (by omega) _ _ fuel hx
+  simp only [smallSigma0Expr, eval, h7, h18, evalBinOp, Sha256Spec.smallSigma0,
+    Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    Option.some.injEq, PVal.int.injEq, Int.ofNat_eq_natCast, Int.natCast_inj,
+    BitVec.toNat_inj, ofInt_natCast_toNat, ofInt_ofNat_toNat]
+  rw [show ((3:Int)).toNat = 3 by omega]
+
+set_option linter.unusedSimpArgs false in
+theorem small_sigma1_refines (X : BitVec 32) (fuel : Nat) :
+    eval shaFns (Env.empty.bind "x" (.int X.toNat)) (fuel + 2) smallSigma1Expr
+      = some (.int (Sha256Spec.smallSigma1 X).toNat) := by
+  have hx : eval shaFns (Env.empty.bind "x" (.int X.toNat)) (fuel + 1) (.var "x")
+      = some (.int (X.toNat : Int)) := by simp [eval, Env.bind]
+  have h17 := rotr_call X 17 17 (by omega) (by omega) _ _ fuel hx
+  have h19 := rotr_call X 19 19 (by omega) (by omega) _ _ fuel hx
+  simp only [smallSigma1Expr, eval, h17, h19, evalBinOp, Sha256Spec.smallSigma1,
+    Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    Option.some.injEq, PVal.int.injEq, Int.ofNat_eq_natCast, Int.natCast_inj,
+    BitVec.toNat_inj, ofInt_natCast_toNat, ofInt_ofNat_toNat]
+  rw [show ((10:Int)).toNat = 10 by omega]
+
 end Concrete.Proof
