@@ -2583,4 +2583,81 @@ def specs : List (String × PExpr) :=
   , ("test_drift.simple_add",        driftTestSpec)
   ]
 
+-- ============================================================
+-- Reusable verification library (the proof ladder)
+-- ============================================================
+--
+-- These lemmas turn flagship proofs from heroic one-off `simp`
+-- scripts into a reusable layer.  Rung 1 (array update lemmas) is
+-- the backbone for byte/word packing, schedule expansion, and
+-- state updates; the loop-induction keystone (below) lets the
+-- 64-round / 64-word SHA loops be proved by induction rather than
+-- by unfolding the body 64 times (which does not scale — see
+-- examples/hmac_sha256/AUDIT.md bar #2).
+
+-- ---- Rung 1: array update lemmas (over eval.lookupIndex / List.set) ----
+
+/-- Reading the just-written index returns the written value. -/
+theorem lookupIndex_set_self (l : List PVal) (i : Nat) (v : PVal)
+    (h : i < l.length) : eval.lookupIndex (l.set i v) i = some v := by
+  induction l generalizing i with
+  | nil => simp at h
+  | cons x xs ih =>
+    cases i with
+    | zero => simp [eval.lookupIndex]
+    | succ j =>
+      simp only [List.set, eval.lookupIndex]
+      exact ih j (by simp only [List.length_cons] at h; omega)
+
+/-- Reading a different index is unaffected by the write. -/
+theorem lookupIndex_set_ne (l : List PVal) (i j : Nat) (v : PVal)
+    (h : i ≠ j) : eval.lookupIndex (l.set i v) j = eval.lookupIndex l j := by
+  induction l generalizing i j with
+  | nil => cases i <;> cases j <;> simp [eval.lookupIndex]
+  | cons x xs ih =>
+    cases i with
+    | zero =>
+      cases j with
+      | zero => exact absurd rfl h
+      | succ jj => simp [eval.lookupIndex]
+    | succ ii =>
+      cases j with
+      | zero => simp [eval.lookupIndex]
+      | succ jj =>
+        simp only [List.set, eval.lookupIndex]
+        exact ih ii jj (by omega)
+
+/-- A functional update keeps the array length (so subsequent
+    in-bounds reads/writes stay in bounds). -/
+theorem length_set (l : List PVal) (i : Nat) (v : PVal) :
+    (l.set i v).length = l.length := List.length_set ..
+
+-- ---- Rung 2: generic while_ unfolding (the loop-induction base) ----
+--
+-- `eval` on `while_` is structurally recursive on fuel, so it does
+-- not reduce by `rfl` against a symbolic fuel.  These two lemmas
+-- expose the two transitions as STABLE rewrite rules, so a loop
+-- proof can do induction on the iteration count / fuel WITHOUT
+-- unfolding the 64-round body by brute force.
+
+/-- Loop exit: when the guard is false, the loop falls through to
+    `cont` (one fuel unit is consumed re-testing the guard). -/
+theorem eval_while_false (fns : FnTable) (env : Env) (fuel : Nat)
+    (cond : PExpr) (assigns : List (String × PExpr)) (cont : PExpr)
+    (h : eval fns env fuel cond = some (.bool false)) :
+    eval fns env (fuel + 1) (.while_ cond assigns cont)
+      = eval fns env fuel cont := by
+  simp only [eval, h]
+
+/-- Loop step: when the guard is true and the body's assignments
+    succeed with env', one iteration peels off and the loop
+    continues from env' with one less fuel. -/
+theorem eval_while_true (fns : FnTable) (env env' : Env) (fuel : Nat)
+    (cond : PExpr) (assigns : List (String × PExpr)) (cont : PExpr)
+    (hc : eval fns env fuel cond = some (.bool true))
+    (ha : eval.evalAssigns fns env fuel assigns = some env') :
+    eval fns env (fuel + 1) (.while_ cond assigns cont)
+      = eval fns env' fuel (.while_ cond assigns cont) := by
+  simp only [eval, hc, ha]
+
 end Concrete.Proof
