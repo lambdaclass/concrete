@@ -534,4 +534,102 @@ theorem round_refines (S0 S1 S2 S3 S4 S5 S6 S7 K W : BitVec 32) (fuel : Nat) :
   simp only [hnot]
   bv_decide
 
+
+-- ==================================================================
+-- Spec-side schedule recurrence (task #20, part 3a): the message
+-- schedule `Sha256Spec.expandSchedule` (defined imperatively via
+-- `Id.run`/`for`) satisfies the FIPS 180-4 §6.2 recurrence
+--   W[i] = sigma1(W[i-2]) + W[i-7] + sigma0(W[i-15]) + W[i-16].
+-- Proved independently of the evaluator by converting the for-loop to
+-- a `List.range'` fold and inducting (append-only ⇒ prefix-stable).
+-- This is the refinement target's recurrence that the loop proof
+-- (`sha256_schedule_refines_spec`) feeds each iteration.
+-- ==================================================================
+
+private abbrev schedW := BitVec 32
+private def newword (w : List schedW) (i : Nat) : schedW :=
+  Sha256Spec.smallSigma1 (w.getD (i-2) 0) + w.getD (i-7) 0 + Sha256Spec.smallSigma0 (w.getD (i-15) 0) + w.getD (i-16) 0
+private def estep (w : List schedW) (i : Nat) : List schedW := w ++ [newword w i]
+private def sched (w16 : List schedW) (n : Nat) : List schedW := (List.range' 16 n).foldl estep w16
+
+set_option maxHeartbeats 1000000 in
+private theorem expandSchedule_eq_sched (w16 : List schedW) :
+    Sha256Spec.expandSchedule w16 = sched w16 48 := by
+  unfold Sha256Spec.expandSchedule sched
+  simp only [Id.run, bind_pure_comp, pure_bind, map_pure,
+    Std.Legacy.Range.forIn_eq_forIn_range', Std.Legacy.Range.size,
+    List.forIn_pure_yield_eq_foldl, Nat.reduceDiv, Nat.reduceSub, Nat.reduceAdd]
+  rfl
+
+private theorem sched_succ (w16 : List schedW) (n : Nat) :
+    sched w16 (n+1) = estep (sched w16 n) (16 + n) := by
+  unfold sched
+  rw [List.range'_concat, List.foldl_append]
+  simp only [List.foldl_cons, List.foldl_nil, Nat.one_mul]
+
+private theorem sched_length (w16 : List schedW) (hlen : w16.length = 16) (n : Nat) :
+    (sched w16 n).length = 16 + n := by
+  induction n with
+  | zero => simpa [sched]
+  | succ m ih =>
+    rw [sched_succ, estep]
+    simp only [List.length_append, List.length_cons, List.length_nil, ih]; omega
+
+private theorem sched_prefix (w16 : List schedW) (n d : Nat) :
+    ∃ tail, sched w16 (n + d) = sched w16 n ++ tail := by
+  induction d with
+  | zero => exact ⟨[], by simp⟩
+  | succ e ih =>
+    obtain ⟨tail, ht⟩ := ih
+    refine ⟨tail ++ [newword (sched w16 (n+e)) (16 + (n+e))], ?_⟩
+    rw [show n + (e+1) = (n+e)+1 by omega, sched_succ, estep, ht, List.append_assoc]
+
+private theorem sched_getD_stable (w16 : List schedW) (hlen : w16.length = 16) (n d j : Nat)
+    (hj : j < 16 + n) :
+    (sched w16 (n + d)).getD j 0 = (sched w16 n).getD j 0 := by
+  obtain ⟨tail, ht⟩ := sched_prefix w16 n d
+  rw [ht, List.getD_eq_getElem?_getD, List.getD_eq_getElem?_getD,
+      List.getElem?_append_left (by rw [sched_length w16 hlen]; omega)]
+
+private theorem sched_getD_new (w16 : List schedW) (hlen : w16.length = 16) (k : Nat) :
+    (sched w16 (k+1)).getD (16+k) 0 = newword (sched w16 k) (16+k) := by
+  have hl : (sched w16 k).length = 16 + k := sched_length w16 hlen k
+  rw [sched_succ, estep, List.getD_eq_getElem?_getD,
+      List.getElem?_append_right (by omega), hl]
+  simp
+
+private theorem sched_lt16 (w16 : List schedW) (hlen : w16.length = 16) (n j : Nat) (hj : j < 16) :
+    (sched w16 n).getD j 0 = w16.getD j 0 := by
+  rw [show n = 0 + n by omega, sched_getD_stable w16 hlen 0 n j (by omega)]
+  rfl
+
+private theorem sched_getD_48 (w16 : List schedW) (hlen : w16.length = 16) (k j : Nat)
+    (hk : k ≤ 48) (hj : j < 16 + k) :
+    (sched w16 48).getD j 0 = (sched w16 k).getD j 0 := by
+  rw [show (48:Nat) = k + (48 - k) by omega, sched_getD_stable w16 hlen k (48-k) j hj]
+
+set_option maxHeartbeats 1000000 in
+theorem expandSchedule_recurrence (w16 : List schedW) (hlen : w16.length = 16) (k : Nat) (hk : k < 48) :
+    (Sha256Spec.expandSchedule w16).getD (16+k) 0
+      = Sha256Spec.smallSigma1 ((Sha256Spec.expandSchedule w16).getD (14+k) 0)
+        + (Sha256Spec.expandSchedule w16).getD (9+k) 0
+        + Sha256Spec.smallSigma0 ((Sha256Spec.expandSchedule w16).getD (1+k) 0)
+        + (Sha256Spec.expandSchedule w16).getD k 0 := by
+  rw [expandSchedule_eq_sched,
+      sched_getD_48 w16 hlen (k+1) (16+k) (by omega) (by omega), sched_getD_new w16 hlen]
+  unfold newword
+  rw [show 16+k-2 = 14+k by omega, show 16+k-7 = 9+k by omega,
+      show 16+k-15 = 1+k by omega, show 16+k-16 = k by omega,
+      sched_getD_48 w16 hlen k (14+k) (by omega) (by omega),
+      sched_getD_48 w16 hlen k (9+k) (by omega) (by omega),
+      sched_getD_48 w16 hlen k (1+k) (by omega) (by omega),
+      sched_getD_48 w16 hlen k k (by omega) (by omega)]
+
+theorem expandSchedule_length (w16 : List schedW) (hlen : w16.length = 16) :
+    (Sha256Spec.expandSchedule w16).length = 64 := by
+  rw [expandSchedule_eq_sched, sched_length w16 hlen]
+
+theorem expandSchedule_lt16 (w16 : List schedW) (hlen : w16.length = 16) (j : Nat) (hj : j < 16) :
+    (Sha256Spec.expandSchedule w16).getD j 0 = w16.getD j 0 := by
+  rw [expandSchedule_eq_sched, sched_lt16 w16 hlen 48 j hj]
 end Concrete.Proof
