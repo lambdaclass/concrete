@@ -2660,4 +2660,84 @@ theorem eval_while_true (fns : FnTable) (env env' : Env) (fuel : Nat)
       = eval fns env' fuel (.while_ cond assigns cont) := by
   simp only [eval, hc, ha]
 
+-- ---- Rung 2 keystone: evaluator fuel monotonicity ----
+--
+-- `eval` consumes fuel and its termination is lexicographic on
+-- (fuel, expr) — `binOp`/`letIn-val`/`arrayIndex` recurse at the
+-- SAME fuel on smaller exprs.  So a loop proof can't just induct on
+-- fuel; relating two fuel levels needs this theorem.  Once it
+-- exists, the counter-loop induction lemma can evaluate everything
+-- at a single large fuel and drop all per-iteration fuel
+-- bookkeeping.  Proved by the 7-motive functional induction over
+-- `eval` and its mutually recursive helpers (evalArgs, evalElems,
+-- evalAssigns, evalFields, evalArms, evalWhileStep).
+
+/-- The one delicate case of fuel monotonicity, extracted so it can
+    be proved by explicit unfolding rather than broad `simp` search:
+    the `while_step` Cont-recursion.  Unfold the step evaluator once,
+    rewrite the guard/step results at both fuels, and finish with the
+    recursive monotonicity hypothesis. -/
+theorem evalWhileStep_succ_cont (fns : FnTable) (env : Env) (fuel : Nat)
+    (cond : PExpr) (carried : List String) (step cont : PExpr)
+    (updates : List (String × PVal)) (r : PVal)
+    (hcF : eval fns env fuel cond = some (.bool true))
+    (hsF : eval fns env fuel step = some (.enum_ "LoopStep" "Cont" updates))
+    (hcS : eval fns env (fuel + 1) cond = some (.bool true))
+    (hsS : eval fns env (fuel + 1) step = some (.enum_ "LoopStep" "Cont" updates))
+    (ihrec : ∀ v,
+      eval fns (updates.foldl (fun e x => match x with | (name, val) => e.bind name val) env)
+        fuel (.while_step cond carried step cont) = some v →
+      eval fns (updates.foldl (fun e x => match x with | (name, val) => e.bind name val) env)
+        (fuel + 1) (.while_step cond carried step cont) = some v)
+    (hr : eval.evalWhileStep fns env fuel cond carried step cont = some r) :
+    eval.evalWhileStep fns env (fuel + 1) cond carried step cont = some r := by
+  unfold eval.evalWhileStep at hr ⊢
+  rw [hcF, hsF] at hr
+  rw [hcS, hsS]
+  exact ihrec r hr
+
+set_option maxHeartbeats 8000000 in
+set_option linter.unusedSimpArgs false in
+/-- **Evaluator fuel monotonicity (successor form).**  If an
+    expression evaluates to `some v` with `fuel`, it evaluates to the
+    same `v` with `fuel + 1`.  Holds over `eval` and every mutually
+    recursive helper; 22 of the 23 functional-induction cases close
+    by `simp` with the eval equation lemmas, and the `while_step`
+    Cont-recursion closes via `evalWhileStep_succ_cont`. -/
+theorem eval_fuel_succ (fns : FnTable) :
+    ∀ (env : Env) (fuel : Nat) (e : PExpr),
+      ∀ v, eval fns env fuel e = some v → eval fns env (fuel + 1) e = some v := by
+  intro env fuel e
+  induction env, fuel, e using eval.induct fns with
+  | motive1 env fuel es => exact ∀ vs, eval.evalArgs fns env fuel es = some vs → eval.evalArgs fns env (fuel+1) es = some vs
+  | motive3 env fuel c ca st co => exact ∀ r, eval.evalWhileStep fns env fuel c ca st co = some r → eval.evalWhileStep fns env (fuel+1) c ca st co = some r
+  | motive4 env fuel as => exact ∀ r, eval.evalAssigns fns env fuel as = some r → eval.evalAssigns fns env (fuel+1) as = some r
+  | motive5 env fuel es => exact ∀ vs, eval.evalElems fns env fuel es = some vs → eval.evalElems fns env (fuel+1) es = some vs
+  | motive6 env fuel sv ar => exact ∀ r, eval.evalArms fns env fuel sv ar = some r → eval.evalArms fns env (fuel+1) sv ar = some r
+  | motive7 env fuel as => exact ∀ r, eval.evalFields fns env fuel as = some r → eval.evalFields fns env (fuel+1) as = some r
+  | _ =>
+    intro r hr
+    first
+      | (simp_all [eval, eval.evalArgs, eval.evalElems, eval.evalAssigns,
+                   eval.evalFields, eval.evalArms, eval.evalWhileStep]; done)
+      | (simp only [eval, eval.evalArgs, eval.evalElems, eval.evalAssigns,
+                    eval.evalFields, eval.evalArms, eval.evalWhileStep] at hr ⊢ <;>
+         simp_all [eval, eval.evalArgs, eval.evalElems, eval.evalAssigns,
+                   eval.evalFields, eval.evalArms, eval.evalWhileStep]; done)
+      | (apply evalWhileStep_succ_cont <;> solve_by_elim)
+
+/-- **Evaluator fuel monotonicity (general form).**  More fuel never
+    changes a successful result.  Immediate from `eval_fuel_succ` by
+    induction on the extra fuel; this is the form loop proofs use to
+    evaluate everything at one large fuel. -/
+theorem eval_fuel_le (fns : FnTable) (env : Env) (fuel extra : Nat)
+    (e : PExpr) (v : PVal) (h : eval fns env fuel e = some v) :
+    eval fns env (fuel + extra) e = some v := by
+  induction extra with
+  | zero => exact h
+  | succ k ih =>
+    have heq : fuel + (k + 1) = (fuel + k) + 1 := by omega
+    rw [heq]
+    exact eval_fuel_succ fns env (fuel + k) e v ih
+
 end Concrete.Proof
