@@ -2591,4 +2591,85 @@ theorem kp_if (khFn : Nat → BitVec 8) (key : List Sha256Spec.Byte) (hlen : key
   unfold Sha256Spec.keyPrep
   simp only [if_pos hlen, hash_length]
 
+-- ==================================================================
+-- HMAC assembly scaffolding (task #21): the forced local helpers for
+-- wiring hmac_sha256_refines_spec — zero-buffer / env-reshape lemmas
+-- (arrN_zfn, xorEnv_self, copyEnv_self), the linear-body expression
+-- (hmacLinearExpr) + its loop conds/assigns, and the monotone
+-- (fixed-fuel) hash-call wrapper sha256_hash_call_at, which discharges
+-- the symbolic-nb fuel so the two nested sha256_hash calls thread at a
+-- clean fuel (nb ≤ 6 for len ≤ 375, via eval_fuel_le).
+-- ==================================================================
+
+theorem arrN_zfn (n : Nat) : arrN n zfn = List.replicate n (PVal.int 0) := by
+  apply List.ext_getElem (by simp [arrN])
+  intro j h1 _
+  simp only [arrN, List.length_map, List.length_range] at h1
+  simp [arrN, List.getElem_replicate, zfn]
+theorem bufArr_zfn : bufArr zfn = List.replicate 384 (PVal.int 0) := arrN_zfn 384
+theorem bufArr_eq (f : Nat → BitVec 8) : bufArr f = arrN 384 f := rfl
+
+theorem xorEnv_self (e : Env) (kpFn : Nat → BitVec 8)
+    (hin : e "inner" = some (.array_ (bufArr zfn))) (hout : e "outer" = some (.array_ (bufArr zfn)))
+    (hkp : e "kp" = some (.array_ (arrN 64 kpFn))) (hi : e "i" = some (.int 0)) :
+    xorEnv e kpFn 0 = e := by
+  funext n
+  simp only [xorEnv, Env.bind, copyFn_zero]
+  by_cases h1 : n = "i" <;> by_cases h2 : n = "kp" <;> by_cases h3 : n = "outer" <;>
+    by_cases h4 : n = "inner" <;> simp_all [beq_iff_eq]
+theorem copyEnv_self (dstNm srcNm iNm : String) (e : Env) (dn sn off : Nat)
+    (dstFn srcFn : Nat → BitVec 8)
+    (hd : e dstNm = some (.array_ (arrN dn dstFn))) (hs : e srcNm = some (.array_ (arrN sn srcFn)))
+    (hi : e iNm = some (.int 0)) :
+    copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn 0 = e := by
+  funext n
+  simp only [copyEnv, Env.bind, copyFn_zero]
+  by_cases h1 : n = iNm <;> by_cases h2 : n = srcNm <;> by_cases h3 : n = dstNm <;>
+    simp_all [beq_iff_eq]
+
+def condMsg : PExpr := .binOp .lt (.var "i") (.var "m_len")
+def msgAssigns : List (String × PExpr) :=
+  [ ("inner", .arraySet (.var "inner") (.binOp .add (.lit (.int 64)) (.var "i"))
+      (.arrayIndex (.var "m") (.var "i"))), ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def condIh : PExpr := .binOp .lt (.var "i") (.lit (.int 32))
+def ihAssigns : List (String × PExpr) :=
+  [ ("outer", .arraySet (.var "outer") (.binOp .add (.lit (.int 64)) (.var "i"))
+      (.arrayIndex (.var "ih") (.var "i"))), ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def hmacLinearExpr : PExpr :=
+  .letIn "inner" (.arrayLit (List.replicate 384 (.lit (.int 0))))
+  (.letIn "outer" (.arrayLit (List.replicate 384 (.lit (.int 0))))
+  (.letIn "i" (.lit (.int 0))
+  (.while_ condX xorAssigns
+  (.letIn "i" (.lit (.int 0))
+  (.while_ condMsg msgAssigns
+  (.letIn "ih" (.call "sha256_hash" [.var "inner", .binOp .add (.lit (.int 64)) (.var "m_len")])
+  (.letIn "i" (.lit (.int 0))
+  (.while_ condIh ihAssigns
+  (.call "sha256_hash" [.var "outer", .lit (.int 96)])))))))))
+theorem arrayLit_zeros384 (fns : FnTable) (env : Env) (fuel : Nat) :
+    eval fns env (fuel + 2) (.arrayLit (List.replicate 384 (.lit (.int 0))))
+      = some (.array_ (List.replicate 384 (PVal.int 0))) := by
+  simp only [eval, evalElems_replicate_lit]
+
+-- a length-N list equals arrN N of its getD
+theorem map_toNat_eq_arrN (L : List (BitVec 8)) :
+    L.map (fun b => PVal.int ↑b.toNat) = arrN L.length (fun j => L.getD j 0) := by
+  apply List.ext_getElem (by simp [arrN])
+  intro j h1 _
+  simp only [List.length_map] at h1
+  simp only [arrN, List.getElem_map, List.getElem_range]
+  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h1, Option.getD_some]
+
+theorem sha256_hash_call_at (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 375)
+    (hz : ∀ i, len ≤ i → df i = 0) (env : Env) (dataE lenE : PExpr) (G : Nat) (hG : 97 ≤ G)
+    (hdata : eval shaFns env G dataE = some (.array_ (bufArr df)))
+    (hlenv : eval shaFns env G lenE = some (.int (len : Int))) :
+    eval shaFns env (G + 1) (.call "sha256_hash" [dataE, lenE])
+      = some (.array_ ((Sha256Spec.hash ((List.range len).map df)).map (fun b => PVal.int b.toNat))) := by
+  have hnb6 : (len + 9 + 63) / 64 ≤ 6 := by omega
+  have key : G = (G - 91 - (len + 9 + 63) / 64) + 91 + (len + 9 + 63) / 64 := by omega
+  have h := sha256_hash_call df len hlen hz env dataE lenE (G - 91 - (len + 9 + 63) / 64)
+      (by rw [← key]; exact hdata) (by rw [← key]; exact hlenv)
+  rwa [← key] at h
+
 end Concrete.Proof
