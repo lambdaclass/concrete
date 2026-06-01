@@ -496,6 +496,26 @@ def sha256_compressAtExpr : PExpr :=
   .letIn "w" (.call "sha256_schedule" [.call "block_to_words_at" [.var "buf", .var "off"]])
     (.letIn "k" (.call "sha256_k" []) compressBodyExpr)
 
+-- state_to_bytes / sha256_init expression data, relocated above `shaFns`
+-- so both are table entries the `sha256_hash` body and its return resolve.
+def sbStore (s : Nat) : PExpr :=
+  .cast (.binOp (.bitand 32 false)
+    (.binOp (.shr 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int (s:Int))))
+    (.lit (.int 255)))
+def sbStore3 : PExpr :=
+  .cast (.binOp (.bitand 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int 255)))
+def oIdx0 : PExpr := .binOp .mul (.var "i") (.lit (.int 4))
+def oIdxK (k : Int) : PExpr := .binOp .add oIdx0 (.lit (.int k))
+def condS : PExpr := .binOp .lt (.var "i") (.lit (.int 8))
+def assignsS : List (String × PExpr) :=
+  [ ("out", .arraySet (.var "out") oIdx0 (sbStore 24))
+  , ("out", .arraySet (.var "out") (oIdxK 1) (sbStore 16))
+  , ("out", .arraySet (.var "out") (oIdxK 2) (sbStore 8))
+  , ("out", .arraySet (.var "out") (oIdxK 3) sbStore3)
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def stateToBytesExpr : PExpr :=
+  .letIn "out" (.arrayLit (List.replicate 32 (.lit (.int 0))))
+    (.letIn "i" (.lit (.int 0)) (.while_ condS assignsS (.var "out")))
 def shaFns : FnTable
   | "rotr"         => some ⟨"rotr",         ["x", "n"],         rotrExpr⟩
   | "ch"           => some ⟨"ch",           ["x", "y", "z"],    chExpr⟩
@@ -510,6 +530,8 @@ def shaFns : FnTable
   | "sha256_k"          => some ⟨"sha256_k",          [],                   sha256kExpr⟩
   | "block_to_words_at" => some ⟨"block_to_words_at", ["buf", "off"],      blockToWordsAtExpr⟩
   | "sha256_compress_at" => some ⟨"sha256_compress_at", ["state", "buf", "off"], sha256_compressAtExpr⟩
+  | "sha256_init"        => some ⟨"sha256_init",        [],                   sha256_initExpr⟩
+  | "state_to_bytes"     => some ⟨"state_to_bytes",     ["state"],            stateToBytesExpr⟩
   | _                   => none
 
 /-- Completeness: the unified table resolves every function
@@ -1890,12 +1912,6 @@ theorem obAt_32 (state : List Sha256Spec.W) (h8 : 8 ≤ state.length) :
       stateToBytes_getD state j h1]
 
 -- store-value: the shifted+masked byte (r=0,1,2) and the masked-only byte (r=3)
-def sbStore (s : Nat) : PExpr :=
-  .cast (.binOp (.bitand 32 false)
-    (.binOp (.shr 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int (s:Int))))
-    (.lit (.int 255)))
-def sbStore3 : PExpr :=
-  .cast (.binOp (.bitand 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int 255)))
 
 theorem and255_lo (y : BitVec 32) : (y &&& BitVec.ofInt 32 255).toNat = (BitVec.setWidth 8 y).toNat := by
   have h : y &&& BitVec.ofInt 32 255 = (BitVec.setWidth 8 y).setWidth 32 := by bv_decide
@@ -1939,15 +1955,6 @@ theorem sbyte_at (state : List Sha256Spec.W) (i r : Nat) (hr : r < 4) :
     sbyte state (4 * i + r) = (state.getD i 0 >>> (8 * (3 - r))).setWidth 8 := by
   simp only [sbyte, show (4 * i + r) / 4 = i by omega, show (4 * i + r) % 4 = r by omega]
 
-def oIdx0 : PExpr := .binOp .mul (.var "i") (.lit (.int 4))
-def oIdxK (k : Int) : PExpr := .binOp .add oIdx0 (.lit (.int k))
-def condS : PExpr := .binOp .lt (.var "i") (.lit (.int 8))
-def assignsS : List (String × PExpr) :=
-  [ ("out", .arraySet (.var "out") oIdx0 (sbStore 24))
-  , ("out", .arraySet (.var "out") (oIdxK 1) (sbStore 16))
-  , ("out", .arraySet (.var "out") (oIdxK 2) (sbStore 8))
-  , ("out", .arraySet (.var "out") (oIdxK 3) sbStore3)
-  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
 
 -- one array store advancing obAt by one position `p`
 theorem store_eval (e : Env) (state : List Sha256Spec.W) (m p : Nat) (hp : p < 32)
@@ -2046,9 +2053,6 @@ theorem arrayLit_zeros32_eval (fns : FnTable) (env : Env) (fuel : Nat) :
       = some (.array_ (List.replicate 32 (PVal.int 0))) := by
   simp only [eval, evalElems_replicate_lit]
 
-def stateToBytesExpr : PExpr :=
-  .letIn "out" (.arrayLit (List.replicate 32 (.lit (.int 0))))
-    (.letIn "i" (.lit (.int 0)) (.while_ condS assignsS (.var "out")))
 
 theorem state_to_bytes_refines_spec (e : Env) (state : List Sha256Spec.W) (h8 : state.length = 8)
     (fuel : Nat) :
