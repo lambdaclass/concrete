@@ -1498,4 +1498,56 @@ theorem block_to_words_at_call (bf : Nat → BitVec 8) (off : Nat) (hoff : off +
       = some (.array_ ((Sha256Spec.blockToWords (sliceAt bf off)).map (fun w => PVal.int w.toNat))) := by
   simp only [eval, shaFns, eval.evalArgs, hbuf, hoffe, bindArgs]
   exact block_to_words_at_refines_spec shaFns bf off hoff fuel
+
+-- ==================================================================
+-- sha256_compress_at refines its spec (task #21, sha256_hash step 4):
+-- the OFFSET compression `w = schedule(block_to_words_at(buf,off)); k;
+-- 64-round body` computes exactly Sha256Spec.compress of the 64-byte
+-- slice at off. Mirrors sha256_compress with the nested
+-- schedule∘block_to_words_at call. This is the per-block step the
+-- multi-block sha256_hash loop invokes.
+-- ==================================================================
+
+def cWfAt (bf : Nat → BitVec 8) (off : Nat) : Nat → BitVec 32 :=
+  fun j => (Sha256Spec.blockToWords (sliceAt bf off)).getD j 0
+theorem cWfAt_w16of (bf : Nat → BitVec 8) (off : Nat) :
+    w16of (cWfAt bf off) = Sha256Spec.blockToWords (sliceAt bf off) := by
+  show (List.range 16).map (cWfAt bf off) = Sha256Spec.blockToWords (sliceAt bf off)
+  rw [show (16:Nat) = (Sha256Spec.blockToWords (sliceAt bf off)).length
+        from (blockToWords_length _).symm]
+  exact list_self_rangeGetD _
+
+def cEnv0At (state0 : List (BitVec 32)) (bf : Nat → BitVec 8) (off : Nat) : Env :=
+  ((Env.empty.bind "state" (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind
+    "buf" (.array_ (bufArr bf))).bind "off" (.int (off:Int))
+
+theorem env_reshapeAt (state0 : List (BitVec 32)) (bf : Nat → BitVec 8) (off : Nat) (wv kv : PVal) :
+    ((cEnv0At state0 bf off).bind "w" wv).bind "k" kv
+      = ((((cEnv0At state0 bf off).bind "state"
+            (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind "w" wv).bind "k" kv) := by
+  funext n
+  by_cases hk : n = "k" <;> by_cases hw : n = "w" <;> by_cases hst : n = "state" <;>
+    by_cases hb : n = "buf" <;> by_cases ho : n = "off" <;> simp_all [cEnv0At, Env.bind]
+
+def sha256_compressAtExpr : PExpr :=
+  .letIn "w" (.call "sha256_schedule" [.call "block_to_words_at" [.var "buf", .var "off"]])
+    (.letIn "k" (.call "sha256_k" []) compressBodyExpr)
+
+set_option maxHeartbeats 2000000 in
+theorem sha256_compress_at_refines_spec (state0 : List (BitVec 32)) (h0 : state0.length = 8)
+    (bf : Nat → BitVec 8) (off : Nat) (hoff : off + 64 ≤ 384) (fuel : Nat) :
+    eval shaFns (cEnv0At state0 bf off) (fuel + 78) sha256_compressAtExpr
+      = some (.array_ ((Sha256Spec.compress state0 (sliceAt bf off)).map (fun x => PVal.int x.toNat))) := by
+  have hwe : eval shaFns (cEnv0At state0 bf off) (fuel + 77)
+      (.call "block_to_words_at" [.var "buf", .var "off"]) = some (w16arr (cWfAt bf off)) := by
+    rw [block_to_words_at_call bf off hoff (cEnv0At state0 bf off) (.var "buf") (.var "off")
+        (fuel + 52) (by simp [cEnv0At, eval, Env.bind]) (by simp [cEnv0At, eval, Env.bind])]
+    simp only [w16arr, cWfAt]
+    rw [mapEnc_eq_rangeGetD, blockToWords_length]
+  rw [sha256_compressAtExpr, show fuel + 78 = (fuel + 77) + 1 by omega,
+      eval_letIn _ _ _ _ _ _ _ (schedule_call (cWfAt bf off) _ _ (fuel + 2) hwe)]
+  rw [show fuel + 77 = (fuel + 76) + 1 by omega,
+      eval_letIn _ _ _ _ _ _ _ (sha256_k_call _ (fuel + 74))]
+  rw [cWfAt_w16of, env_reshapeAt]
+  exact compress_body_refines_spec (cEnv0At state0 bf off) state0 h0 (sliceAt bf off) fuel
 end Concrete.Proof
