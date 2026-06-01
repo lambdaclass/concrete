@@ -429,6 +429,29 @@ def roundExpr : PExpr :=
       (.arrayLit [ addwE (.var "t1") (.var "t2"), stateAt 0, stateAt 1, stateAt 2,
                    addwE (stateAt 3) (.var "t1"), stateAt 4, stateAt 5, stateAt 6 ]))
 
+-- Schedule / k / round expression data, relocated above `shaFns` so the
+-- unified table can name every callee `sha256_compress` reaches.
+def addwS (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
+def wIdx (c : Int) : PExpr := .arrayIndex (.var "w") (.binOp .sub (.var "i") (.lit (.int c)))
+def expansionExpr : PExpr :=
+  addwS (addwS (addwS (.call "small_sigma1" [wIdx 2]) (wIdx 7))
+          (.call "small_sigma0" [wIdx 15])) (wIdx 16)
+def assigns1 : List (String × PExpr) :=
+  [ ("w", .arraySet (.var "w") (.var "i") (.arrayIndex (.var "w16") (.var "i")))
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def assigns2 : List (String × PExpr) :=
+  [ ("w", .arraySet (.var "w") (.var "i") expansionExpr)
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def condE (bound : Int) : PExpr := .binOp .lt (.var "i") (.lit (.int bound))
+def scheduleExpr : PExpr :=
+  .letIn "w" (.arrayLit (List.replicate 64 (.lit (.int 0))))
+    (.letIn "i" (.lit (.int 0))
+      (.while_ (condE 16) assigns1
+        (.letIn "i" (.lit (.int 16))
+          (.while_ (condE 64) assigns2 (.var "w")))))
+/-- Extracted `sha256_k()` body: the 64 round constants K[0..63]. -/
+def sha256kExpr : PExpr := .arrayLit [.lit (.int 0x428a2f98), .lit (.int 0x71374491), .lit (.int 0xb5c0fbcf), .lit (.int 0xe9b5dba5), .lit (.int 0x3956c25b), .lit (.int 0x59f111f1), .lit (.int 0x923f82a4), .lit (.int 0xab1c5ed5), .lit (.int 0xd807aa98), .lit (.int 0x12835b01), .lit (.int 0x243185be), .lit (.int 0x550c7dc3), .lit (.int 0x72be5d74), .lit (.int 0x80deb1fe), .lit (.int 0x9bdc06a7), .lit (.int 0xc19bf174), .lit (.int 0xe49b69c1), .lit (.int 0xefbe4786), .lit (.int 0xfc19dc6), .lit (.int 0x240ca1cc), .lit (.int 0x2de92c6f), .lit (.int 0x4a7484aa), .lit (.int 0x5cb0a9dc), .lit (.int 0x76f988da), .lit (.int 0x983e5152), .lit (.int 0xa831c66d), .lit (.int 0xb00327c8), .lit (.int 0xbf597fc7), .lit (.int 0xc6e00bf3), .lit (.int 0xd5a79147), .lit (.int 0x6ca6351), .lit (.int 0x14292967), .lit (.int 0x27b70a85), .lit (.int 0x2e1b2138), .lit (.int 0x4d2c6dfc), .lit (.int 0x53380d13), .lit (.int 0x650a7354), .lit (.int 0x766a0abb), .lit (.int 0x81c2c92e), .lit (.int 0x92722c85), .lit (.int 0xa2bfe8a1), .lit (.int 0xa81a664b), .lit (.int 0xc24b8b70), .lit (.int 0xc76c51a3), .lit (.int 0xd192e819), .lit (.int 0xd6990624), .lit (.int 0xf40e3585), .lit (.int 0x106aa070), .lit (.int 0x19a4c116), .lit (.int 0x1e376c08), .lit (.int 0x2748774c), .lit (.int 0x34b0bcb5), .lit (.int 0x391c0cb3), .lit (.int 0x4ed8aa4a), .lit (.int 0x5b9cca4f), .lit (.int 0x682e6ff3), .lit (.int 0x748f82ee), .lit (.int 0x78a5636f), .lit (.int 0x84c87814), .lit (.int 0x8cc70208), .lit (.int 0x90befffa), .lit (.int 0xa4506ceb), .lit (.int 0xbef9a3f7), .lit (.int 0xc67178f2)]
+
 /-- The SHA-256 helper function table: the extracted bodies of `rotr`,
     `ch`, `maj`, the four sigmas, and the compression `round`, keyed by
     their source names. -/
@@ -440,8 +463,24 @@ def shaFns : FnTable
   | "big_sigma1"   => some ⟨"big_sigma1",   ["x"],              bigSigma1Expr⟩
   | "small_sigma0" => some ⟨"small_sigma0", ["x"],              smallSigma0Expr⟩
   | "small_sigma1" => some ⟨"small_sigma1", ["x"],              smallSigma1Expr⟩
-  | "sha256_round" => some ⟨"sha256_round", ["state", "k", "w"], roundExpr⟩
-  | _              => none
+  | "sha256_round"    => some ⟨"sha256_round",    ["state", "k", "w"], roundExpr⟩
+  | "block_to_words"  => some ⟨"block_to_words",  ["block"],            blockToWordsExpr⟩
+  | "sha256_schedule" => some ⟨"sha256_schedule", ["w16"],             scheduleExpr⟩
+  | "sha256_k"        => some ⟨"sha256_k",        [],                  sha256kExpr⟩
+  | _                 => none
+
+/-- Completeness: the unified table resolves every function
+    `sha256_compress` reaches, directly (`block_to_words`,
+    `sha256_schedule`, `sha256_k`, `sha256_round`) and transitively
+    (`ch`/`maj`/`rotr` and the four sigmas). No call bottoms out at a
+    missing callee. -/
+theorem shaFns_resolves_compress_calls :
+    (shaFns "block_to_words").isSome ∧ (shaFns "sha256_schedule").isSome ∧
+    (shaFns "sha256_k").isSome ∧ (shaFns "sha256_round").isSome ∧
+    (shaFns "ch").isSome ∧ (shaFns "maj").isSome ∧ (shaFns "rotr").isSome ∧
+    (shaFns "big_sigma0").isSome ∧ (shaFns "big_sigma1").isSome ∧
+    (shaFns "small_sigma0").isSome ∧ (shaFns "small_sigma1").isSome := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> rfl
 
 /-- A call `rotr(xe, c)` where `xe` evaluates to `X` and the literal
     `c = n` reduces to `Sha256Spec.rotr X n`. The bridge from source
@@ -727,12 +766,6 @@ abbrev w16arr (wf : Nat → BitVec 32) : PVal :=
 def st2 (wf : Nat → BitVec 32) (k : Nat) : Env :=
   ((Env.empty.bind "w16" (w16arr wf)).bind
     "w" (.array_ (wschedList wf (16+k)))).bind "i" (.int ((16+k:Nat):Int))
-def addwS (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
-def wIdx (c : Int) : PExpr := .arrayIndex (.var "w") (.binOp .sub (.var "i") (.lit (.int c)))
-def expansionExpr : PExpr :=
-  addwS (addwS (addwS (.call "small_sigma1" [wIdx 2]) (wIdx 7))
-          (.call "small_sigma0" [wIdx 15])) (wIdx 16)
-
 theorem idxSub_eval (k c : Nat) (hc : c ≤ 16) (env : Env) (F : Nat)
     (hi : env "i" = some (.int ((16+k:Nat):Int))) :
     eval shaFns env (F + 1) (.binOp .sub (.var "i") (.lit (.int (c:Int))))
@@ -774,10 +807,6 @@ theorem expansion_value (wf : Nat → BitVec 32) (k : Nat) (hk : k < 48) (fuel :
     Int.ofNat_eq_natCast, Int.natCast_inj, BitVec.toNat_inj]
   rw [swd_rec wf k hk]
 
-def assigns2 : List (String × PExpr) :=
-  [ ("w", .arraySet (.var "w") (.var "i") expansionExpr)
-  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
-
 theorem expansion_step (wf : Nat → BitVec 32) (k : Nat) (hk : k < 48) (fuel : Nat) :
     eval.evalAssigns shaFns (st2 wf k) (fuel + 6) assigns2 = some (st2 wf (k + 1)) := by
   have hw : (st2 wf k) "w" = some (.array_ (wschedList wf (16+k))) := by simp [st2, Env.bind]
@@ -808,10 +837,6 @@ theorem expansion_step (wf : Nat → BitVec 32) (k : Nat) (hk : k < 48) (fuel : 
 def st1 (wf : Nat → BitVec 32) (k : Nat) : Env :=
   ((Env.empty.bind "w16" (w16arr wf)).bind
     "w" (.array_ (wschedList wf k))).bind "i" (.int (k:Int))
-def assigns1 : List (String × PExpr) :=
-  [ ("w", .arraySet (.var "w") (.var "i") (.arrayIndex (.var "w16") (.var "i")))
-  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
-def condE (bound : Int) : PExpr := .binOp .lt (.var "i") (.lit (.int bound))
 
 theorem copy_step (wf : Nat → BitVec 32) (k : Nat) (hk : k < 16) (fuel : Nat) :
     eval.evalAssigns shaFns (st1 wf k) (fuel + 6) assigns1 = some (st1 wf (k + 1)) := by
@@ -890,13 +915,6 @@ theorem st1_16_bind_eq (wf) : (st1 wf 16).bind "i" (.int 16) = st2 wf 0 := by
   funext n
   simp only [st1, st2, Env.bind]
   by_cases h : (n == "i") = true <;> simp_all
-
-def scheduleExpr : PExpr :=
-  .letIn "w" (.arrayLit (List.replicate 64 (.lit (.int 0))))
-    (.letIn "i" (.lit (.int 0))
-      (.while_ (condE 16) assigns1
-        (.letIn "i" (.lit (.int 16))
-          (.while_ (condE 64) assigns2 (.var "w")))))
 
 theorem arrayLit64_eval (env : Env) (fuel : Nat) :
     eval shaFns env (fuel + 2) (.arrayLit (List.replicate 64 (.lit (.int 0))))
