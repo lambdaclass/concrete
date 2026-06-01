@@ -2166,4 +2166,134 @@ theorem var_read (E : Env) (nm : String) (val : PVal) (F : Nat) (h : E nm = some
     eval shaFns E (F + 1) (.var nm) = some val := by
   simp only [eval]; exact h
 
+-- ==================================================================
+-- sha256_hash refines its spec (task #21, sha256_hash END-TO-END):
+-- the full `sha256_hash(data, len)` — copy buffer, 0x80 marker, FIPS
+-- length stores at the computed plen indices, multi-block compress loop,
+-- digest unpack — computes exactly `Sha256Spec.hash` of the message, for
+-- ANY len ≤ 375 with a zero-padded buffer (data[len..] = 0). Assembles
+-- the store-chain (bufArr_set x5 -> padFn), the symbolic-index sdiv
+-- bridge, the multi-block loop (hash_loop_eval via sliceAt_padFn), and
+-- state_to_bytes. HMAC bar #2 for sha256_hash is closed.
+-- ==================================================================
+
+theorem nblocks_eval (E : Env) (len : Nat) (hlen : len ≤ 375) (G nbv : Nat)
+    (hnbv : (len + 9 + 63) / 64 = nbv) (hle : E "len" = some (.int (len : Int))) :
+    eval shaFns E (G + 1) (.binOp (.div 32 true)
+        (.binOp .add (.binOp .add (.var "len") (.lit (.int 9))) (.lit (.int 63))) (.lit (.int 64)))
+      = some (.int ((nbv : Nat) : Int)) := by
+  subst hnbv
+  simp only [eval, evalBinOp, var_read E "len" (.int (len:Int)) G hle]
+  rw [if_neg (show ¬ ((64:Int) = 0) by decide)]
+  rw [show (len + 9 + 63) = (len + 72) by omega, sdiv64_bridge len hlen]
+
+theorem plen_eval (E : Env) (nbv : Nat) (G : Nat) (hn : E "nblocks" = some (.int (nbv : Int))) :
+    eval shaFns E (G + 1) (.binOp .mul (.var "nblocks") (.lit (.int 64)))
+      = some (.int ((nbv * 64 : Nat) : Int)) := by
+  simp only [eval, evalBinOp, var_read E "nblocks" (.int (nbv:Int)) G hn,
+    Option.some.injEq, PVal.int.injEq]; omega
+
+theorem hsEnv_self (E : Env) (bff : Nat → BitVec 8) (padded : List Sha256Spec.Byte) (nbv : Nat)
+    (hst : E "state" = some (.array_ ((hashFold padded 0).map (fun x => PVal.int x.toNat))))
+    (hbf : E "buf" = some (.array_ (bufArr bff)))
+    (hnn : E "nblocks" = some (.int (nbv : Int))) (hbk : E "blk" = some (.int 0)) :
+    hsEnv E bff padded nbv 0 = E := by
+  funext n
+  simp only [hsEnv, Env.bind]
+  by_cases h1 : n = "blk" <;> by_cases h2 : n = "state" <;> by_cases h3 : n = "buf" <;>
+    by_cases h4 : n = "nblocks" <;> simp_all [beq_iff_eq]
+
+set_option maxHeartbeats 16000000 in
+theorem sha256_hash_refines_spec (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 375)
+    (hz : ∀ i, len ≤ i → df i = 0) (e : Env) (fuel : Nat)
+    (hdata : e "data" = some (.array_ (bufArr df)))
+    (hlenv : e "len" = some (.int (len : Int))) :
+    eval shaFns e (fuel + 91 + (len + 9 + 63) / 64) sha256_hashExpr
+      = some (.array_ ((Sha256Spec.hash ((List.range len).map df)).map (fun b => PVal.int b.toNat))) := by
+  have hple : plenOf len ≥ len + 9 := plen_ge len
+  have hpb : plenOf len ≤ 384 := by unfold plenOf; omega
+  generalize hnbe : (len + 9 + 63) / 64 = nb
+  have hplnb : plenOf len = nb * 64 := by rw [show plenOf len = (len+9+63)/64*64 from rfl, hnbe]
+  have hnbb : nb * 64 ≤ 384 := by rw [← hplnb]; exact hpb
+  have hidxk : ∀ (E : Env) (k G : Nat), k ≤ 4 → E "plen" = some (.int ((nb * 64 : Nat) : Int)) →
+      eval shaFns E (G + 1) (.binOp .sub (.var "plen") (.lit (.int (k : Int))))
+        = some (.int ((plenOf len - k : Nat) : Int)) := by
+    intro E k G hk hp
+    simp only [eval, evalBinOp, var_read E "plen" (.int ((nb*64:Nat):Int)) G hp,
+      Option.some.injEq, PVal.int.injEq]; omega
+  rw [sha256_hashExpr]
+  rw [show fuel + 91 + nb = (fuel + 90 + nb) + 1 by omega,
+      eval_letIn _ _ (fuel + 90 + nb) _ _ _ _ (var_read e "data" _ (fuel + 90 + nb) hdata)]
+  rw [show fuel + 90 + nb = ((fuel + 88 + nb) + 1) + 1 by omega,
+      eval_letIn _ _ ((fuel + 88 + nb) + 1) _ _ _ _
+        (buf_store df _ (fuel + 88 + nb) (.var "len") (.lit (.int 128)) len (128 : BitVec 8)
+          (by simp [Env.bind]) (var_read _ "len" (.int (len:Int)) (fuel + 88 + nb) (by simpa [Env.bind] using hlenv))
+          (by simp [eval]) (by omega)),
+      show (fuel + 88 + nb) + 1 = fuel + 89 + nb by omega]
+  rw [show fuel + 89 + nb = (fuel + 88 + nb) + 1 by omega,
+      eval_letIn _ _ (fuel + 88 + nb) _ _ _ (.int (nb : Int))
+        (nblocks_eval _ len hlen (fuel + 88 + nb) nb hnbe (by simpa [Env.bind] using hlenv))]
+  rw [show fuel + 88 + nb = (fuel + 87 + nb) + 1 by omega,
+      eval_letIn _ _ (fuel + 87 + nb) _ _ _ (.int ((nb * 64 : Nat) : Int))
+        (plen_eval _ nb (fuel + 87 + nb) (by simp [Env.bind]))]
+  rw [show fuel + 87 + nb = ((fuel + 85 + nb) + 1) + 1 by omega,
+      eval_letIn _ _ ((fuel + 85 + nb) + 1) _ _ _ _
+        (bits_val _ len (by simpa [Env.bind] using hlenv) (fuel + 85 + nb)),
+      show (fuel + 85 + nb) + 1 = fuel + 86 + nb by omega]
+  rw [show fuel + 86 + nb = ((fuel + 84 + nb) + 1) + 1 by omega,
+      eval_letIn _ _ ((fuel + 84 + nb) + 1) _ _ _ _
+        (buf_store (bufUpd df len 128) _ (fuel + 84 + nb) (.binOp .sub (.var "plen") (.lit (.int 1))) lenStore0
+          (plenOf len - 1) (lenByte len 0) (by simp [Env.bind])
+          (hidxk _ 1 (fuel + 84 + nb) (by omega) (by simp [Env.bind]))
+          (by rw [show (fuel + 84 + nb) + 1 = (fuel + 83 + nb) + 2 by omega]
+              exact lenStore0_eval _ (fuel + 83 + nb) len (by simp [Env.bind])) (by omega)),
+      show (fuel + 84 + nb) + 1 = fuel + 85 + nb by omega]
+  rw [show fuel + 85 + nb = ((fuel + 83 + nb) + 1) + 1 by omega,
+      eval_letIn _ _ ((fuel + 83 + nb) + 1) _ _ _ _
+        (buf_store (bufUpd (bufUpd df len 128) (plenOf len - 1) (lenByte len 0)) _ (fuel + 83 + nb)
+          (.binOp .sub (.var "plen") (.lit (.int 2))) (lenStoreS 8)
+          (plenOf len - 2) (lenByte len 1) (by simp [Env.bind])
+          (hidxk _ 2 (fuel + 83 + nb) (by omega) (by simp [Env.bind]))
+          (by rw [show (fuel + 83 + nb) + 1 = (fuel + 81 + nb) + 3 by omega]
+              exact lenStoreS_eval _ (fuel + 81 + nb) len 1 (by simp [Env.bind])) (by omega)),
+      show (fuel + 83 + nb) + 1 = fuel + 84 + nb by omega]
+  rw [show fuel + 84 + nb = ((fuel + 82 + nb) + 1) + 1 by omega,
+      eval_letIn _ _ ((fuel + 82 + nb) + 1) _ _ _ _
+        (buf_store (bufUpd (bufUpd (bufUpd df len 128) (plenOf len - 1) (lenByte len 0)) (plenOf len - 2) (lenByte len 1)) _ (fuel + 82 + nb)
+          (.binOp .sub (.var "plen") (.lit (.int 3))) (lenStoreS 16)
+          (plenOf len - 3) (lenByte len 2) (by simp [Env.bind])
+          (hidxk _ 3 (fuel + 82 + nb) (by omega) (by simp [Env.bind]))
+          (by rw [show (fuel + 82 + nb) + 1 = (fuel + 80 + nb) + 3 by omega]
+              exact lenStoreS_eval _ (fuel + 80 + nb) len 2 (by simp [Env.bind])) (by omega)),
+      show (fuel + 82 + nb) + 1 = fuel + 83 + nb by omega]
+  rw [show fuel + 83 + nb = ((fuel + 81 + nb) + 1) + 1 by omega,
+      eval_letIn _ _ ((fuel + 81 + nb) + 1) _ _ _ _
+        (buf_store (bufUpd (bufUpd (bufUpd (bufUpd df len 128) (plenOf len - 1) (lenByte len 0)) (plenOf len - 2) (lenByte len 1)) (plenOf len - 3) (lenByte len 2)) _ (fuel + 81 + nb)
+          (.binOp .sub (.var "plen") (.lit (.int 4))) (lenStoreS 24)
+          (plenOf len - 4) (lenByte len 3) (by simp [Env.bind])
+          (hidxk _ 4 (fuel + 81 + nb) (by omega) (by simp [Env.bind]))
+          (by rw [show (fuel + 81 + nb) + 1 = (fuel + 79 + nb) + 3 by omega]
+              exact lenStoreS_eval _ (fuel + 79 + nb) len 3 (by simp [Env.bind])) (by omega)),
+      show (fuel + 81 + nb) + 1 = fuel + 82 + nb by omega]
+  rw [show fuel + 82 + nb = ((fuel + 79 + nb) + 2) + 1 by omega,
+      eval_letIn _ _ ((fuel + 79 + nb) + 2) _ _ _ _ (sha256_init_call _ (fuel + 79 + nb)),
+      show (fuel + 79 + nb) + 2 = fuel + 81 + nb by omega]
+  rw [show fuel + 81 + nb = (fuel + 80 + nb) + 1 by omega,
+      eval_letIn _ _ (fuel + 80 + nb) _ _ _ (.int 0) (by simp [eval])]
+  rw [← hsEnv_self (((((((((((e.bind "buf" (.array_ (bufArr df))).bind "buf" (.array_ (bufArr (bufUpd df len 128)))).bind "nblocks" (.int (nb:Int))).bind "plen" (.int ((nb*64:Nat):Int))).bind "bits" (.int ((len*8:Nat):Int))).bind "buf" (.array_ (bufArr (bufUpd (bufUpd df len 128) (plenOf len - 1) (lenByte len 0))))).bind "buf" (.array_ (bufArr (bufUpd (bufUpd (bufUpd df len 128) (plenOf len - 1) (lenByte len 0)) (plenOf len - 2) (lenByte len 1))))).bind "buf" (.array_ (bufArr (bufUpd (bufUpd (bufUpd (bufUpd df len 128) (plenOf len - 1) (lenByte len 0)) (plenOf len - 2) (lenByte len 1)) (plenOf len - 3) (lenByte len 2))))).bind "buf" (.array_ (bufArr (bufUpd (bufUpd (bufUpd (bufUpd (bufUpd df len 128) (plenOf len - 1) (lenByte len 0)) (plenOf len - 2) (lenByte len 1)) (plenOf len - 3) (lenByte len 2)) (plenOf len - 4) (lenByte len 3))))).bind "state" (.array_ (Sha256Spec.initState.map (fun x => PVal.int x.toNat)))).bind "blk" (.int 0)) (padFn df len) (Sha256Spec.padMessage ((List.range len).map df)) nb
+        (by simp [Env.bind, hashFold]) (by simp [Env.bind, padFn])
+        (by simp [Env.bind]) (by simp [Env.bind])]
+  rw [show fuel + 80 + nb = (fuel + 79) + nb + 1 by omega,
+      hash_loop_eval _ (padFn df len) (Sha256Spec.padMessage ((List.range len).map df)) nb hnbb
+        (fun blk hblk => sliceAt_padFn df len hlen hz blk (by rw [hplnb]; omega)) _ fuel]
+  have hml : (Sha256Spec.padMessage ((List.range len).map df)).length = plenOf len := by
+    rw [padMessage_length]; simp
+  have hfeq : hashFold (Sha256Spec.padMessage ((List.range len).map df)) nb
+      = Sha256Spec.hashState ((List.range len).map df) := by
+    rw [hashState_eq_fold, hml]; congr 1; omega
+  rw [state_to_bytes_call (hashFold (Sha256Spec.padMessage ((List.range len).map df)) nb)
+        (hashFold_length _ _) _ (.var "state") (fuel + 62)
+        (var_read _ "state" (.array_ ((hashFold (Sha256Spec.padMessage ((List.range len).map df)) nb).map (fun x => PVal.int x.toNat))) (fuel + 77) (by simp only [hsEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]))]
+  rw [hfeq, Sha256Spec.hash]
+
 end Concrete.Proof
