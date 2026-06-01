@@ -919,4 +919,38 @@ theorem sha256_schedule_refines_spec (wf : Nat → BitVec 32) (fuel : Nat) :
       show fuel + 55 = (fuel + 6) + 48 + 1 by omega,
       exp_loop_eval wf _ fuel]
   simp [eval, st2, Env.bind]
+
+-- ==================================================================
+-- Spec-side compression recurrence (task #20, part 4a): the 64-round
+-- Davies-Meyer body of Sha256Spec.compress reduces to a sequential
+-- fold whose step is exactly one Sha256Spec.round, and compress is that
+-- fold followed by the feed-forward add. Independent of the evaluator
+-- (build-order: spec recurrence before the loop proof). Simpler than
+-- the schedule (no self-reference — the fold accumulator IS the state).
+-- ==================================================================
+
+/-- Working state after `n` compression rounds over schedule `w`. -/
+def compressFold (state0 w : List (BitVec 32)) (n : Nat) : List (BitVec 32) :=
+  (List.range' 0 n).foldl
+    (fun s i => Sha256Spec.round s (Sha256Spec.k.getD i 0) (w.getD i 0)) state0
+
+theorem compressFold_succ (state0 w : List (BitVec 32)) (n : Nat) :
+    compressFold state0 w (n+1)
+      = Sha256Spec.round (compressFold state0 w n) (Sha256Spec.k.getD n 0) (w.getD n 0) := by
+  unfold compressFold
+  rw [List.range'_concat, List.foldl_append]
+  simp [Nat.one_mul]
+
+set_option maxHeartbeats 1000000 in
+/-- `Sha256Spec.compress` is the round fold (`compressFold .. 64`) followed by
+    the Davies-Meyer feed-forward `state[j] + s[j]`. -/
+theorem compress_eq_feedforward (state0 : List (BitVec 32)) (block : List Sha256Spec.Byte) :
+    Sha256Spec.compress state0 block
+      = (List.range 8).map (fun j => state0.getD j 0
+          + (compressFold state0 (Sha256Spec.expandSchedule (Sha256Spec.blockToWords block)) 64).getD j 0) := by
+  unfold Sha256Spec.compress compressFold
+  simp only [Id.run, bind_pure_comp, pure_bind, map_pure,
+    Std.Legacy.Range.forIn_eq_forIn_range', Std.Legacy.Range.size,
+    List.forIn_pure_yield_eq_foldl, Nat.reduceDiv, Nat.reduceSub, Nat.reduceAdd]
+  rfl
 end Concrete.Proof
