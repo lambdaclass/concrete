@@ -171,8 +171,9 @@ ghost values erase; the compiled binary is unchanged.
 | First **loop** refinement: `block_to_words_refines_spec` (∀ 64 bytes, via `eval_while_count`) | **shipped** (`Concrete/Sha256Refine.lean`) |
 | `rotr` + four sigma refinements (incl. `32−n` shift) + `rotr_call` call/bind scaffolding | **shipped** (`Concrete/Sha256Refine.lean`) |
 | `sha256_round` refinement (Σ/Ch/Maj + wrapping-`addw` chain, state reads, helper calls) | **shipped** (`round_refines`) |
+| `sha256_schedule` refinement — two loops incl. the **self-referential** 48-round expansion, via `expandSchedule_recurrence` + `eval_while_count` | **shipped** (`sha256_schedule_refines_spec`) |
 | Evidence classes `proved` / `enforced` / `reported` / `assumed` + `concrete audit` | **shipped** |
-| `sha256_schedule` / `sha256_compress` / `hash` / `hmac` refinement | **next** (ROADMAP Phase 8 / bar #2) |
+| `sha256_compress` / `hash` / `hmac` refinement | **next** (ROADMAP Phase 8 / bar #2) |
 | `#[requires/ensures/invariant/decreases]`, `ghost`, `assume`, `contract` | **design** (ROADMAP Phase 4) |
 | VC generator; `proved_by_kernel_decision` / `proved_by_smt` / `solver_trusted` / `runtime_checked` classes; external SMT; gradual mode | **design** (ROADMAP Phase 5) |
 

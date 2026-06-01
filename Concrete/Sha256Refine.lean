@@ -632,4 +632,291 @@ theorem expandSchedule_length (w16 : List schedW) (hlen : w16.length = 16) :
 theorem expandSchedule_lt16 (w16 : List schedW) (hlen : w16.length = 16) (j : Nat) (hj : j < 16) :
     (Sha256Spec.expandSchedule w16).getD j 0 = w16.getD j 0 := by
   rw [expandSchedule_eq_sched, sched_lt16 w16 hlen 48 j hj]
+
+-- ==================================================================
+-- sha256_schedule refines its spec (task #20, part 3b): the message
+-- schedule's two loops (copy 0..15, then the self-referential
+-- expansion 16..63) compute exactly Sha256Spec.expandSchedule for ALL
+-- inputs. Copy loop + expansion loop each via eval_while_count; reads
+-- of earlier schedule words via prefix structure (wread); small_sigma
+-- calls via unary_call + small_sigma*_refines; per-step value via the
+-- committed expandSchedule_recurrence.
+-- ==================================================================
+
+-- input words as a list
+abbrev w16of (wf : Nat → BitVec 32) : List (BitVec 32) := (List.range 16).map wf
+
+theorem w16of_length (wf) : (w16of wf).length = 16 := by simp [w16of]
+theorem w16of_getD (wf) (j : Nat) (hj : j < 16) : (w16of wf).getD j 0 = wf j := by
+  rw [List.getD_eq_getElem?_getD]; simp [w16of, hj]
+
+-- the j-th schedule word
+def swd (wf : Nat → BitVec 32) (j : Nat) : BitVec 32 :=
+  (Sha256Spec.expandSchedule (w16of wf)).getD j 0
+
+theorem swd_lt16 (wf) (j : Nat) (hj : j < 16) : swd wf j = wf j := by
+  unfold swd
+  rw [expandSchedule_lt16 (w16of wf) (w16of_length wf) j hj, w16of_getD wf j hj]
+
+theorem swd_rec (wf) (k : Nat) (hk : k < 48) :
+    swd wf (16+k)
+      = Sha256Spec.smallSigma1 (swd wf (14+k)) + swd wf (9+k)
+        + Sha256Spec.smallSigma0 (swd wf (1+k)) + swd wf k := by
+  unfold swd
+  exact expandSchedule_recurrence (w16of wf) (w16of_length wf) k hk
+
+-- working array after the first m schedule words are filled
+def wschedList (wf : Nat → BitVec 32) (m : Nat) : List PVal :=
+  (List.range 64).map (fun j => if j < m then PVal.int ↑(swd wf j).toNat else PVal.int 0)
+
+theorem wschedList_length (wf) (m) : (wschedList wf m).length = 64 := by simp [wschedList]
+
+theorem wschedList_set (wf) (m : Nat) :
+    (wschedList wf m).set m (PVal.int ↑(swd wf m).toNat) = wschedList wf (m + 1) := by
+  apply List.ext_getElem (by simp [wschedList])
+  intro i h1 _
+  by_cases hmi : m = i
+  · subst hmi
+    simp only [wschedList, List.getElem_set_self, List.getElem_map, List.getElem_range]
+    simp
+  · rw [List.getElem_set_ne hmi]
+    simp only [wschedList, List.getElem_map, List.getElem_range]
+    rcases Nat.lt_or_ge i m with h | h
+    · rw [if_pos h, if_pos (by omega)]
+    · rw [if_neg (by omega), if_neg (by omega)]
+
+-- read from the working array: index value j < M gives schedule word swd j
+theorem wread (wf : Nat → BitVec 32) (M : Nat) (env : Env) (fuel : Nat) (j : Nat) (hj : j < M)
+    (hM : M ≤ 64)
+    (hw : env "w" = some (.array_ (wschedList wf M)))
+    (idxE : PExpr) (hidx : eval shaFns env (fuel + 1) idxE = some (.int (j:Int))) :
+    eval shaFns env (fuel + 1) (.arrayIndex (.var "w") idxE) = some (.int (swd wf j).toNat) := by
+  simp only [eval, hw, hidx, wschedList]
+  rw [if_neg (by omega), show ((j:Int)).toNat = j by omega,
+      lookupIndex_range_map _ 64 j (by omega)]
+  simp [hj]
+
+-- read from the input array w16: index value j < 16 gives wf j
+theorem w16read (wf : Nat → BitVec 32) (env : Env) (fuel : Nat) (j : Nat) (hj : j < 16)
+    (hw16 : env "w16" = some (.array_ ((List.range 16).map (fun k => PVal.int ↑(wf k).toNat))))
+    (idxE : PExpr) (hidx : eval shaFns env (fuel + 1) idxE = some (.int (j:Int))) :
+    eval shaFns env (fuel + 1) (.arrayIndex (.var "w16") idxE) = some (.int (wf j).toNat) := by
+  simp only [eval, hw16, hidx]
+  rw [if_neg (by omega), show ((j:Int)).toNat = j by omega,
+      lookupIndex_range_map _ 16 j hj]
+
+-- generic unary helper call (sigmas)
+theorem unary_call (name : String) (body : PExpr) (specf : BitVec 32 → BitVec 32)
+    (hfn : shaFns name = some ⟨name, ["x"], body⟩)
+    (href : ∀ (Y : BitVec 32) (f : Nat),
+      eval shaFns (Env.empty.bind "x" (.int Y.toNat)) (f + 2) body = some (.int (specf Y).toNat))
+    (X : BitVec 32) (env : Env) (xe : PExpr) (fuel : Nat)
+    (hx : eval shaFns env (fuel + 2) xe = some (.int (X.toNat : Int))) :
+    eval shaFns env (fuel + 3) (.call name [xe]) = some (.int (specf X).toNat) := by
+  simp only [eval, hfn, eval.evalArgs, hx, bindArgs]
+  exact href X fuel
+
+abbrev w16arr (wf : Nat → BitVec 32) : PVal :=
+  .array_ ((List.range 16).map (fun k => PVal.int ↑(wf k).toNat))
+def st2 (wf : Nat → BitVec 32) (k : Nat) : Env :=
+  ((Env.empty.bind "w16" (w16arr wf)).bind
+    "w" (.array_ (wschedList wf (16+k)))).bind "i" (.int ((16+k:Nat):Int))
+def addwS (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
+def wIdx (c : Int) : PExpr := .arrayIndex (.var "w") (.binOp .sub (.var "i") (.lit (.int c)))
+def expansionExpr : PExpr :=
+  addwS (addwS (addwS (.call "small_sigma1" [wIdx 2]) (wIdx 7))
+          (.call "small_sigma0" [wIdx 15])) (wIdx 16)
+
+theorem idxSub_eval (k c : Nat) (hc : c ≤ 16) (env : Env) (F : Nat)
+    (hi : env "i" = some (.int ((16+k:Nat):Int))) :
+    eval shaFns env (F + 1) (.binOp .sub (.var "i") (.lit (.int (c:Int))))
+      = some (.int ((16+k-c : Nat):Int)) := by
+  simp only [eval, hi, evalBinOp, Option.some.injEq, PVal.int.injEq]
+  omega
+
+set_option maxHeartbeats 1000000 in
+theorem expansion_value (wf : Nat → BitVec 32) (k : Nat) (hk : k < 48) (fuel : Nat) :
+    eval shaFns (st2 wf k) (fuel + 5) expansionExpr = some (.int (swd wf (16+k)).toNat) := by
+  have hw : (st2 wf k) "w" = some (.array_ (wschedList wf (16+k))) := by simp [st2, Env.bind]
+  have hi : (st2 wf k) "i" = some (.int ((16+k:Nat):Int)) := by simp [st2, Env.bind]
+  -- index sub-expressions
+  have hx2 := idxSub_eval k 2 (by omega) (st2 wf k) (fuel+3) hi
+  have hx7 := idxSub_eval k 7 (by omega) (st2 wf k) (fuel+4) hi
+  have hx15 := idxSub_eval k 15 (by omega) (st2 wf k) (fuel+3) hi
+  have hx16 := idxSub_eval k 16 (by omega) (st2 wf k) (fuel+4) hi
+  -- reads (call args at fuel+4, direct reads at fuel+5)
+  have ra2 : eval shaFns (st2 wf k) (fuel+4) (wIdx 2) = some (.int (swd wf (14+k)).toNat) :=
+    wread wf (16+k) (st2 wf k) (fuel+3) (14+k) (by omega) (by omega) hw _
+      (by rw [show (14+k:Nat) = 16+k-2 by omega]; exact hx2)
+  have ra15 : eval shaFns (st2 wf k) (fuel+4) (wIdx 15) = some (.int (swd wf (1+k)).toNat) :=
+    wread wf (16+k) (st2 wf k) (fuel+3) (1+k) (by omega) (by omega) hw _
+      (by rw [show (1+k:Nat) = 16+k-15 by omega]; exact hx15)
+  have ra7 : eval shaFns (st2 wf k) (fuel+5) (wIdx 7) = some (.int (swd wf (9+k)).toNat) :=
+    wread wf (16+k) (st2 wf k) (fuel+4) (9+k) (by omega) (by omega) hw _
+      (by rw [show (9+k:Nat) = 16+k-7 by omega]; exact hx7)
+  have ra16 : eval shaFns (st2 wf k) (fuel+5) (wIdx 16) = some (.int (swd wf k).toNat) :=
+    wread wf (16+k) (st2 wf k) (fuel+4) k (by omega) (by omega) hw _
+      (by have h := hx16; rw [show 16+k-16 = k by omega] at h; exact h)
+  -- sigma calls
+  have hsm1 := unary_call "small_sigma1" smallSigma1Expr Sha256Spec.smallSigma1 rfl
+    small_sigma1_refines (swd wf (14+k)) (st2 wf k) (wIdx 2) (fuel+2) ra2
+  have hsm0 := unary_call "small_sigma0" smallSigma0Expr Sha256Spec.smallSigma0 rfl
+    small_sigma0_refines (swd wf (1+k)) (st2 wf k) (wIdx 15) (fuel+2) ra15
+  -- combine
+  simp only [expansionExpr, addwS, eval, hsm1, ra7, hsm0, ra16, evalBinOp,
+    ofInt_natCast_toNat, ofInt_ofNat_toNat, Option.some.injEq, PVal.int.injEq,
+    Int.ofNat_eq_natCast, Int.natCast_inj, BitVec.toNat_inj]
+  rw [swd_rec wf k hk]
+
+def assigns2 : List (String × PExpr) :=
+  [ ("w", .arraySet (.var "w") (.var "i") expansionExpr)
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+
+theorem expansion_step (wf : Nat → BitVec 32) (k : Nat) (hk : k < 48) (fuel : Nat) :
+    eval.evalAssigns shaFns (st2 wf k) (fuel + 6) assigns2 = some (st2 wf (k + 1)) := by
+  have hw : (st2 wf k) "w" = some (.array_ (wschedList wf (16+k))) := by simp [st2, Env.bind]
+  have hi : (st2 wf k) "i" = some (.int ((16+k:Nat):Int)) := by simp [st2, Env.bind]
+  have hwv : eval shaFns (st2 wf k) (fuel + 5) (.var "w")
+      = some (.array_ (wschedList wf (16+k))) := by simp [eval, st2, Env.bind]
+  have hiv : eval shaFns (st2 wf k) (fuel + 5) (.var "i")
+      = some (.int ((16+k:Nat):Int)) := by simp [eval, st2, Env.bind]
+  have hev := expansion_value wf k hk fuel
+  have harr : eval shaFns (st2 wf k) (fuel + 6)
+      (.arraySet (.var "w") (.var "i") expansionExpr)
+      = some (.array_ (wschedList wf (16 + (k+1)))) := by
+    rw [eval_arraySet_lemma shaFns (st2 wf k) (fuel + 5)
+        (.var "w") (.var "i") expansionExpr (wschedList wf (16+k)) ((16+k:Nat):Int)
+        (.int (swd wf (16+k)).toNat) hwv hiv hev (by omega)
+        (by rw [wschedList_length]; omega)]
+    rw [show ((16+k:Nat):Int).toNat = 16+k by omega, wschedList_set wf (16+k),
+        show 16 + k + 1 = 16 + (k+1) by omega]
+  simp only [assigns2, eval.evalAssigns, harr]
+  simp only [eval, evalBinOp, Env.bind, st2,
+    beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    Option.some.injEq]
+  funext n
+  by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "w") = true <;>
+    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+      reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
+
+def st1 (wf : Nat → BitVec 32) (k : Nat) : Env :=
+  ((Env.empty.bind "w16" (w16arr wf)).bind
+    "w" (.array_ (wschedList wf k))).bind "i" (.int (k:Int))
+def assigns1 : List (String × PExpr) :=
+  [ ("w", .arraySet (.var "w") (.var "i") (.arrayIndex (.var "w16") (.var "i")))
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def condE (bound : Int) : PExpr := .binOp .lt (.var "i") (.lit (.int bound))
+
+theorem copy_step (wf : Nat → BitVec 32) (k : Nat) (hk : k < 16) (fuel : Nat) :
+    eval.evalAssigns shaFns (st1 wf k) (fuel + 6) assigns1 = some (st1 wf (k + 1)) := by
+  have hw : (st1 wf k) "w" = some (.array_ (wschedList wf k)) := by simp [st1, Env.bind]
+  have hwv : eval shaFns (st1 wf k) (fuel + 5) (.var "w")
+      = some (.array_ (wschedList wf k)) := by simp [eval, st1, Env.bind]
+  have hiv : eval shaFns (st1 wf k) (fuel + 5) (.var "i") = some (.int (k:Int)) := by
+    simp [eval, st1, Env.bind]
+  have hw16 : (st1 wf k) "w16"
+      = some (.array_ ((List.range 16).map (fun j => PVal.int ↑(wf j).toNat))) := by
+    simp [st1, Env.bind, w16arr]
+  have hcv : eval shaFns (st1 wf k) (fuel + 5) (.arrayIndex (.var "w16") (.var "i"))
+      = some (.int (swd wf k).toNat) := by
+    rw [swd_lt16 wf k hk]
+    exact w16read wf (st1 wf k) (fuel + 4) k hk hw16 (.var "i") hiv
+  have harr : eval shaFns (st1 wf k) (fuel + 6)
+      (.arraySet (.var "w") (.var "i") (.arrayIndex (.var "w16") (.var "i")))
+      = some (.array_ (wschedList wf (k+1))) := by
+    rw [eval_arraySet_lemma shaFns (st1 wf k) (fuel + 5)
+        (.var "w") (.var "i") (.arrayIndex (.var "w16") (.var "i"))
+        (wschedList wf k) (k:Int) (.int (swd wf k).toNat) hwv hiv hcv (by omega)
+        (by rw [wschedList_length]; omega)]
+    rw [show ((k:Int)).toNat = k by omega, wschedList_set wf k]
+  simp only [assigns1, eval.evalAssigns, harr]
+  simp only [eval, evalBinOp, Env.bind, st1,
+    beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq, reduceCtorEq,
+    Option.some.injEq]
+  funext n
+  by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "w") = true <;>
+    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+      reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
+
+theorem cond_copy_true (wf) (k : Nat) (hk : k < 16) (F : Nat) :
+    eval shaFns (st1 wf k) (F + 1) (condE 16) = some (.bool true) := by
+  simp only [condE, st1, eval, Env.bind, evalBinOp]; simp; omega
+theorem cond_copy_false (wf) (F : Nat) :
+    eval shaFns (st1 wf 16) (F + 1) (condE 16) = some (.bool false) := by
+  simp only [condE, st1, eval, Env.bind, evalBinOp]; simp
+theorem cond_exp_true (wf) (k : Nat) (hk : k < 48) (F : Nat) :
+    eval shaFns (st2 wf k) (F + 1) (condE 64) = some (.bool true) := by
+  simp only [condE, st2, eval, Env.bind, evalBinOp]; simp; omega
+theorem cond_exp_false (wf) (F : Nat) :
+    eval shaFns (st2 wf 48) (F + 1) (condE 64) = some (.bool false) := by
+  simp only [condE, st2, eval, Env.bind, evalBinOp]; simp
+
+theorem wschedList_zero (wf) : wschedList wf 0 = List.replicate 64 (PVal.int 0) := by
+  simp [wschedList]; rfl
+
+theorem wschedList_64_spec (wf : Nat → BitVec 32) :
+    wschedList wf 64
+      = (Sha256Spec.expandSchedule (w16of wf)).map (fun w => PVal.int w.toNat) := by
+  apply List.ext_getElem
+  · rw [List.length_map, expandSchedule_length (w16of wf) (w16of_length wf)]; simp [wschedList]
+  · intro j h1 _
+    simp only [wschedList, List.length_map, List.length_range] at h1
+    have hlen : j < (Sha256Spec.expandSchedule (w16of wf)).length := by
+      rw [expandSchedule_length (w16of wf) (w16of_length wf)]; omega
+    simp only [wschedList, List.getElem_map, List.getElem_range, if_pos h1, swd,
+      List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hlen, Option.getD_some]
+
+theorem copy_loop_eval (wf : Nat → BitVec 32) (cont : PExpr) (base : Nat) :
+    eval shaFns (st1 wf 0) ((base + 6) + 16 + 1) (.while_ (condE 16) assigns1 cont)
+      = eval shaFns (st1 wf 16) (base + 6) cont :=
+  eval_while_count shaFns (condE 16) assigns1 cont (st1 wf) 16 (base + 6)
+    (fun k hk => ⟨cond_copy_true wf k hk (base + 5), copy_step wf k hk base⟩)
+    (cond_copy_false wf (base + 5))
+
+theorem exp_loop_eval (wf : Nat → BitVec 32) (cont : PExpr) (base : Nat) :
+    eval shaFns (st2 wf 0) ((base + 6) + 48 + 1) (.while_ (condE 64) assigns2 cont)
+      = eval shaFns (st2 wf 48) (base + 6) cont :=
+  eval_while_count shaFns (condE 64) assigns2 cont (st2 wf) 48 (base + 6)
+    (fun k hk => ⟨cond_exp_true wf k hk (base + 5), expansion_step wf k hk base⟩)
+    (cond_exp_false wf (base + 5))
+
+theorem st1_16_bind_eq (wf) : (st1 wf 16).bind "i" (.int 16) = st2 wf 0 := by
+  funext n
+  simp only [st1, st2, Env.bind]
+  by_cases h : (n == "i") = true <;> simp_all
+
+def scheduleExpr : PExpr :=
+  .letIn "w" (.arrayLit (List.replicate 64 (.lit (.int 0))))
+    (.letIn "i" (.lit (.int 0))
+      (.while_ (condE 16) assigns1
+        (.letIn "i" (.lit (.int 16))
+          (.while_ (condE 64) assigns2 (.var "w")))))
+
+theorem arrayLit64_eval (env : Env) (fuel : Nat) :
+    eval shaFns env (fuel + 2) (.arrayLit (List.replicate 64 (.lit (.int 0))))
+      = some (.array_ (List.replicate 64 (PVal.int 0))) := by
+  simp only [eval, evalElems_replicate_lit]
+
+theorem st1_zero_eq (wf) :
+    ((Env.empty.bind "w16" (w16arr wf)).bind "w" (.array_ (wschedList wf 0))).bind "i" (.int 0)
+      = st1 wf 0 := rfl
+
+set_option maxHeartbeats 1000000 in
+theorem sha256_schedule_refines_spec (wf : Nat → BitVec 32) (fuel : Nat) :
+    eval shaFns (Env.empty.bind "w16" (w16arr wf)) (fuel + 75) scheduleExpr
+      = some (.array_ ((Sha256Spec.expandSchedule (w16of wf)).map (fun w => PVal.int w.toNat))) := by
+  rw [← wschedList_64_spec, scheduleExpr,
+      show fuel + 75 = (fuel + 74) + 1 by omega,
+      eval_letIn _ _ _ _ _ _ _ (arrayLit64_eval _ (fuel + 73)),
+      show fuel + 74 = (fuel + 73) + 1 by omega,
+      eval_letIn _ _ _ _ _ _ (PVal.int 0) (by simp [eval]),
+      ← wschedList_zero wf, st1_zero_eq wf,
+      show fuel + 73 = ((fuel + 50) + 6) + 16 + 1 by omega,
+      copy_loop_eval wf _ (fuel + 50),
+      show (fuel + 50) + 6 = (fuel + 55) + 1 by omega,
+      eval_letIn _ _ _ _ _ _ (PVal.int 16) (by simp [eval]),
+      st1_16_bind_eq wf,
+      show fuel + 55 = (fuel + 6) + 48 + 1 by omega,
+      exp_loop_eval wf _ fuel]
+  simp [eval, st2, Env.bind]
 end Concrete.Proof
