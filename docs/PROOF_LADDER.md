@@ -175,7 +175,8 @@ ghost values erase; the compiled binary is unchanged.
 | `sha256_compress` **body** refinement — `compressFold` recurrence + 64-round `eval_while_count` (state invariant `s = compressFold m`, `round_call` lifts `round_refines` to the opaque 8-word state) + Davies-Meyer feed-forward | **shipped** (`compress_body_refines_spec`) |
 | Generic counter-loop frame lemma (`set_in_counter_map`) dedup'ing per-construct frame proofs | **shipped** |
 | Evidence classes `proved` / `enforced` / `reported` / `assumed` + `concrete audit` | **shipped** |
-| Full `sha256_compress(state, block)` setup-call wiring (`block_to_words`/`schedule`/`k`), then `hash` / `hmac` | **next** (ROADMAP Phase 8 / bar #2; composes with #21) |
+| Full `sha256_compress(state, block)` refines `Sha256Spec.compress` (setup calls + body, end-to-end) | **shipped** (`sha256_compress_refines_spec`) |
+| `sha256_hash` (multi-block + padding) / `hmac_sha256` | **next** (ROADMAP Phase 8 / bar #2) |
 | `#[requires/ensures/invariant/decreases]`, `ghost`, `assume`, `contract` | **design** (ROADMAP Phase 4) |
 | VC generator; `proved_by_kernel_decision` / `proved_by_smt` / `solver_trusted` / `runtime_checked` classes; external SMT; gradual mode | **design** (ROADMAP Phase 5) |
 

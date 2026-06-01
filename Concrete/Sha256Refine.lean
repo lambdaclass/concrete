@@ -1236,4 +1236,83 @@ theorem sha256_k_call (env : Env) (fuel : Nat) :
       = some (.array_ (Sha256Spec.k.map (fun x => PVal.int x.toNat))) := by
   simp only [eval, shaFns, eval.evalArgs, bindArgs]
   exact sha256_k_refines Env.empty fuel
+
+-- ==================================================================
+-- sha256_compress refines its spec (task #21, step 4 — COMPLETE): the
+-- full extracted sha256_compress(state, block) — w16=block_to_words(block);
+-- w=sha256_schedule(w16); k=sha256_k(); 64-round Davies-Meyer body —
+-- computes exactly Sha256Spec.compress. Threads the three setup CALLS
+-- (block_to_words_call/schedule_call/sha256_k_call) + the list->function
+-- glue (cWf/w16_glue/cWf_w16of) and applies compress_body_refines_spec at
+-- the right base env (env_reshape) — no eval_env_congr needed, thanks to
+-- the base-env generalization of the compress-body chain.
+-- ==================================================================
+
+theorem list_self_rangeGetD (L : List (BitVec 32)) :
+    (List.range L.length).map (fun j => L.getD j 0) = L := by
+  apply List.ext_getElem (by simp)
+  intro j h1 _
+  simp only [List.length_map, List.length_range] at h1
+  simp only [List.getElem_map, List.getElem_range]
+  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h1, Option.getD_some]
+
+theorem blockToWords_length (bb : List Sha256Spec.Byte) :
+    (Sha256Spec.blockToWords bb).length = 16 := by simp [Sha256Spec.blockToWords]
+
+def cWf (b : Nat → BitVec 8) : Nat → BitVec 32 :=
+  fun j => (Sha256Spec.blockToWords ((List.range 64).map b)).getD j 0
+theorem cWf_w16of (b : Nat → BitVec 8) :
+    w16of (cWf b) = Sha256Spec.blockToWords ((List.range 64).map b) := by
+  show (List.range 16).map (cWf b) = Sha256Spec.blockToWords ((List.range 64).map b)
+  rw [show (16:Nat) = (Sha256Spec.blockToWords ((List.range 64).map b)).length
+        from (blockToWords_length _).symm]
+  exact list_self_rangeGetD _
+
+def cEnv0 (state0 : List (BitVec 32)) (b : Nat → BitVec 8) : Env :=
+  (Env.empty.bind "state" (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind
+    "block" (.array_ (blockArr b))
+
+theorem w16_glue (b : Nat → BitVec 8) (env : Env) (fuel : Nat)
+    (h : env "w16" = some (.array_ ((Sha256Spec.blockToWords ((List.range 64).map b)).map
+          (fun x => PVal.int x.toNat)))) :
+    eval shaFns env (fuel + 1) (.var "w16") = some (w16arr (cWf b)) := by
+  simp only [eval, h, w16arr, cWf]
+  rw [mapEnc_eq_rangeGetD, blockToWords_length]
+
+theorem env_reshape (state0 : List (BitVec 32)) (b : Nat → BitVec 8) (w16v wv kv : PVal) :
+    (((cEnv0 state0 b).bind "w16" w16v).bind "w" wv).bind "k" kv
+      = (((((cEnv0 state0 b).bind "w16" w16v).bind "state"
+            (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind "w" wv).bind "k" kv) := by
+  funext n
+  by_cases hk : n = "k" <;> by_cases hw : n = "w" <;> by_cases hst : n = "state" <;>
+    by_cases hw16 : n = "w16" <;> by_cases hbl : n = "block" <;> simp_all [cEnv0, Env.bind]
+
+def sha256_compressExpr : PExpr :=
+  .letIn "w16" (.call "block_to_words" [.var "block"])
+    (.letIn "w" (.call "sha256_schedule" [.var "w16"])
+      (.letIn "k" (.call "sha256_k" []) compressBodyExpr))
+
+set_option maxHeartbeats 2000000 in
+theorem sha256_compress_refines_spec (state0 : List (BitVec 32)) (h0 : state0.length = 8)
+    (b : Nat → BitVec 8) (fuel : Nat) :
+    eval shaFns (cEnv0 state0 b) (fuel + 79) sha256_compressExpr
+      = some (.array_ ((Sha256Spec.compress state0 ((List.range 64).map b)).map
+          (fun x => PVal.int x.toNat))) := by
+  have hwe : eval shaFns ((cEnv0 state0 b).bind "w16"
+        (.array_ ((Sha256Spec.blockToWords ((List.range 64).map b)).map (fun x => PVal.int x.toNat))))
+      (fuel + 77) (.var "w16") = some (w16arr (cWf b)) :=
+    w16_glue b _ (fuel + 76) (by simp [cEnv0, Env.bind])
+  rw [sha256_compressExpr, show fuel + 79 = (fuel + 78) + 1 by omega,
+      eval_letIn _ _ _ _ _ _ _
+        (block_to_words_call b (cEnv0 state0 b) (.var "block") (fuel + 54)
+          (by simp [cEnv0, eval, Env.bind]))]
+  rw [show fuel + 78 = (fuel + 77) + 1 by omega,
+      eval_letIn _ _ _ _ _ _ _ (schedule_call (cWf b) _ (.var "w16") (fuel + 2) hwe)]
+  rw [show fuel + 77 = (fuel + 76) + 1 by omega,
+      eval_letIn _ _ _ _ _ _ _ (sha256_k_call _ (fuel + 74))]
+  rw [cWf_w16of, env_reshape state0 b]
+  exact compress_body_refines_spec
+    ((cEnv0 state0 b).bind "w16"
+      (.array_ ((Sha256Spec.blockToWords ((List.range 64).map b)).map (fun x => PVal.int x.toNat))))
+    state0 h0 ((List.range 64).map b) fuel
 end Concrete.Proof
