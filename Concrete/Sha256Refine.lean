@@ -2565,4 +2565,30 @@ theorem copyFn_zfn_map (srcFn : Nat → BitVec 8) (k_len T : Nat) (h : k_len ≤
   · rw [dif_neg (by simp only [List.length_map, List.length_range]; omega)]
     simp only [List.getElem_replicate, copyFn, zfn, if_neg (show ¬ (0 ≤ j ∧ j < 0 + k_len) by omega)]
 
+-- ==================================================================
+-- HMAC key-prep correspondence (task #21): the post-branch kp buffer
+-- equals Sha256Spec.keyPrep of the key — both branches. kp_else (short
+-- key: copy then zero-pad to 64); kp_if (long key: hash then zero-pad).
+-- Plus the digest length facts (hashState = 8 words, hash = 32 bytes).
+-- ==================================================================
+
+theorem hashState_length (msg : List Sha256Spec.Byte) : (Sha256Spec.hashState msg).length = 8 := by
+  rw [hashState_eq_fold]; exact hashFold_length _ _
+
+theorem hash_length (msg : List Sha256Spec.Byte) : (Sha256Spec.hash msg).length = 32 := by
+  rw [Sha256Spec.hash]; exact stateToBytes_length _ (Nat.le_of_eq (hashState_length msg).symm)
+
+theorem kp_else (kFn : Nat → BitVec 8) (k_len : Nat) (h : k_len ≤ 64) :
+    (List.range 64).map (copyFn zfn kFn 0 k_len) = Sha256Spec.keyPrep ((List.range k_len).map kFn) := by
+  rw [copyFn_zfn_map kFn k_len 64 h]
+  unfold Sha256Spec.keyPrep
+  simp only [List.length_map, List.length_range, gt_iff_lt, if_neg (by omega : ¬ (64 < k_len))]
+
+theorem kp_if (khFn : Nat → BitVec 8) (key : List Sha256Spec.Byte) (hlen : key.length > 64)
+    (hkh : (List.range 32).map khFn = Sha256Spec.hash key) :
+    (List.range 64).map (copyFn zfn khFn 0 32) = Sha256Spec.keyPrep key := by
+  rw [copyFn_zfn_map khFn 32 64 (by omega), hkh]
+  unfold Sha256Spec.keyPrep
+  simp only [if_pos hlen, hash_length]
+
 end Concrete.Proof
