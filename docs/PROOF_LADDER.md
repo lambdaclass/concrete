@@ -176,7 +176,12 @@ ghost values erase; the compiled binary is unchanged.
 | Generic counter-loop frame lemma (`set_in_counter_map`) dedup'ing per-construct frame proofs | **shipped** |
 | Evidence classes `proved` / `enforced` / `reported` / `assumed` + `concrete audit` | **shipped** |
 | Full `sha256_compress(state, block)` refines `Sha256Spec.compress` (setup calls + body, end-to-end) | **shipped** (`sha256_compress_refines_spec`) |
-| `sha256_hash` (multi-block + padding) / `hmac_sha256` | **next** (ROADMAP Phase 8 / bar #2) |
+| Offset compression `sha256_compress_at(state, buf, off)` refines `Sha256Spec.compress` of the slice at `off` | **shipped** (`sha256_compress_at_refines_spec`; now a `shaFns` table entry) |
+| FIPS-180-4 **padding**: post-store buffer agrees with `Sha256Spec.padMessage` on `[0, plen)` (region characterization + be64↔u32 length-byte bridge, `bv_decide`); `bufArr_set` buffer-update model; `sliceAt = blockAt` block view | **shipped** (`padFn_eq`, `pad_getD`, `sliceAt_padFn`) |
+| **Multi-block hash loop** refines `hashState`: the `sha256_compress_at` fold over every padded block, via `eval_while_count` (state invariant `state = hashFold padded blk`) | **shipped** (`hash_loop_eval`) |
+| `state_to_bytes` refines `Sha256Spec.stateToBytes` — first **multi-store-per-iteration** loop (4 byte writes/word, `obAt` boundary invariant), bytes matched by `bv_decide` | **shipped** (`state_to_bytes_refines_spec`) |
+| `sha256_hash` **store-chain glue** (the five padding stores' computed `i32` indices `nblocks=(len+9+63)/64`, `plen-1..plen-4`) + end-to-end `sha256_hash` assembly | **next** (needs a symbolic `BitVec.sdiv`→`Nat`-div bridge under `len ≤ 375`; the spec-side, buffer model, loop, and digest unpack it composes are all shipped above) |
+| `hmac_sha256` (key-prep + ipad/opad + three `sha256_hash` calls) refines `Sha256Spec.hmac` | **next** (ROADMAP Phase 8 / bar #2) |
 | `#[requires/ensures/invariant/decreases]`, `ghost`, `assume`, `contract` | **design** (ROADMAP Phase 4) |
 | VC generator; `proved_by_kernel_decision` / `proved_by_smt` / `solver_trusted` / `runtime_checked` classes; external SMT; gradual mode | **design** (ROADMAP Phase 5) |
 
