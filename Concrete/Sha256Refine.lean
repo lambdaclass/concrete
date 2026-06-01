@@ -2071,4 +2071,99 @@ theorem state_to_bytes_refines_spec (e : Env) (state : List Sha256Spec.W) (h8 : 
       show (4 * 8 : Nat) = 32 from rfl]
   simp only [eval, envL, Env.bind, beq_self_eq_true, if_true, obAt_32 state (by omega)]
 
+-- ==================================================================
+-- sha256_hash store-chain components (task #21, sha256_hash glue):
+-- the sdiv/Nat.div bridge for the symbolic i32 nblocks index
+-- (sdiv64_bridge), the generic buffer store (buf_store, via bufArr_set),
+-- the four length-byte store values (lenStore*, matched by bv_decide),
+-- the sha256_init / state_to_bytes call wrappers, and sha256_hashExpr.
+-- ==================================================================
+
+-- sdiv bridge (verified earlier)
+theorem ofNat32_msb_false (a : Nat) (ha : a < 2^31) : (BitVec.ofNat 32 a).msb = false := by
+  rw [BitVec.msb_eq_false_iff_two_mul_lt, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]; omega
+
+theorem sdiv64_bridge (L : Nat) (hL : L ≤ 375) :
+    ((BitVec.ofInt 32 ((L:Int) + 9 + 63)).sdiv (BitVec.ofInt 32 64)).toInt
+      = (((L + 72) / 64 : Nat) : Int) := by
+  rw [show (L:Int) + 9 + 63 = ((L + 72 : Nat) : Int) by omega,
+      show (64 : Int) = ((64 : Nat) : Int) by rfl,
+      BitVec.ofInt_natCast, BitVec.ofInt_natCast,
+      BitVec.sdiv_eq, ofNat32_msb_false (L + 72) (by omega), ofNat32_msb_false 64 (by omega),
+      BitVec.udiv_eq]
+  rw [BitVec.toInt_eq_toNat_of_lt (by
+        rw [BitVec.toNat_udiv, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
+            Nat.mod_eq_of_lt (show L + 72 < 2^32 by omega), Nat.mod_eq_of_lt (show 64 < 2^32 by omega)]
+        omega)]
+  rw [BitVec.toNat_udiv, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
+      Nat.mod_eq_of_lt (show L + 72 < 2^32 by omega), Nat.mod_eq_of_lt (show 64 < 2^32 by omega)]
+
+theorem sha256_init_call (env : Env) (fuel : Nat) :
+    eval shaFns env (fuel + 3) (.call "sha256_init" [])
+      = some (.array_ (Sha256Spec.initState.map (fun x => PVal.int x.toNat))) := by
+  simp only [eval, shaFns, eval.evalArgs, bindArgs]
+  simp [eval, sha256_initExpr, eval.evalElems, Sha256Spec.initState]
+
+theorem state_to_bytes_call (state : List Sha256Spec.W) (h8 : state.length = 8) (env : Env)
+    (stateE : PExpr) (fuel : Nat)
+    (hstate : eval shaFns env (fuel + 16) stateE = some (.array_ (state.map (fun x => PVal.int x.toNat)))) :
+    eval shaFns env (fuel + 17) (.call "state_to_bytes" [stateE])
+      = some (.array_ ((Sha256Spec.stateToBytes state).map (fun b => PVal.int b.toNat))) := by
+  simp only [eval, shaFns, eval.evalArgs, hstate, bindArgs]
+  exact state_to_bytes_refines_spec Env.empty state h8 fuel
+
+def lenStore0 : PExpr := .cast (.binOp (.bitand 32 false) (.var "bits") (.lit (.int 255)))
+def lenStoreS (sh : Nat) : PExpr :=
+  .cast (.binOp (.bitand 32 false)
+    (.binOp (.shr 32 false) (.var "bits") (.lit (.int (sh:Int)))) (.lit (.int 255)))
+
+theorem lenStore0_eval (env : Env) (fuel len : Nat)
+    (hb : env "bits" = some (.int ((len * 8 : Nat) : Int))) :
+    eval shaFns env (fuel + 2) lenStore0 = some (.int (lenByte len 0).toNat) := by
+  simp only [lenStore0, eval, hb, evalBinOp, ofInt_natCast_toNat, ofInt_ofNat_toNat,
+    Option.some.injEq, PVal.int.injEq, and255_lo, Int.ofNat_eq_natCast, lenByte, BitVec.ofInt_natCast,
+    Nat.mul_zero, BitVec.ushiftRight_zero]
+theorem lenStoreS_eval (env : Env) (fuel len s : Nat)
+    (hb : env "bits" = some (.int ((len * 8 : Nat) : Int))) :
+    eval shaFns env (fuel + 3) (lenStoreS (8 * s)) = some (.int (lenByte len s).toNat) := by
+  simp only [lenStoreS, eval, hb, evalBinOp, ofInt_natCast_toNat, ofInt_ofNat_toNat,
+    Int.toNat_natCast, Option.some.injEq, PVal.int.injEq, and255_lo, Int.ofNat_eq_natCast, lenByte, BitVec.ofInt_natCast, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+
+def sha256_hashExpr : PExpr :=
+  .letIn "buf" (.var "data")
+  (.letIn "buf" (.arraySet (.var "buf") (.var "len") (.lit (.int 128)))
+  (.letIn "nblocks" (.binOp (.div 32 true)
+      (.binOp .add (.binOp .add (.var "len") (.lit (.int 9))) (.lit (.int 63))) (.lit (.int 64)))
+  (.letIn "plen" (.binOp .mul (.var "nblocks") (.lit (.int 64)))
+  (.letIn "bits" (.cast (.binOp .mul (.var "len") (.lit (.int 8))))
+  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 1))) lenStore0)
+  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 2))) (lenStoreS 8))
+  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 3))) (lenStoreS 16))
+  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 4))) (lenStoreS 24))
+  (.letIn "state" (.call "sha256_init" [])
+  (.letIn "blk" (.lit (.int 0))
+  (.while_ condH assignsH (.call "state_to_bytes" [.var "state"]))))))))))))
+
+-- helper: bits binding value
+theorem bits_val (e : Env) (len : Nat) (hlenv : e "len" = some (.int (len : Int))) (fuel : Nat) :
+    eval shaFns e (fuel + 2) (.cast (.binOp .mul (.var "len") (.lit (.int 8))))
+      = some (.int ((len * 8 : Nat) : Int)) := by
+  simp only [eval, hlenv, evalBinOp, Option.some.injEq, PVal.int.injEq]; omega
+
+theorem bufArr_length (bf : Nat → BitVec 8) : (bufArr bf).length = 384 := by simp [bufArr]
+
+theorem buf_store (df : Nat → BitVec 8) (E : Env) (L : Nat) (idxE valE : PExpr) (idx : Nat) (v : BitVec 8)
+    (hbuf : E "buf" = some (.array_ (bufArr df))) (hidx : eval shaFns E (L + 1) idxE = some (.int (idx : Int)))
+    (hval : eval shaFns E (L + 1) valE = some (.int (v.toNat : Int))) (hb : idx < 384) :
+    eval shaFns E (L + 2) (.arraySet (.var "buf") idxE valE)
+      = some (.array_ (bufArr (bufUpd df idx v))) := by
+  rw [eval_arraySet_lemma shaFns E (L + 1) (.var "buf") idxE valE (bufArr df) (idx : Int) (.int (v.toNat : Int))
+      (by simp only [eval, hbuf]) hidx hval (by omega)
+      (by rw [show ((idx : Int)).toNat = idx by omega, bufArr_length]; omega)]
+  rw [show ((idx : Int)).toNat = idx by omega, bufArr_set]
+
+theorem var_read (E : Env) (nm : String) (val : PVal) (F : Nat) (h : E nm = some val) :
+    eval shaFns E (F + 1) (.var nm) = some val := by
+  simp only [eval]; exact h
+
 end Concrete.Proof
