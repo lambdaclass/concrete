@@ -2348,4 +2348,75 @@ theorem copyFn_step (dstFn srcFn : Nat → BitVec 8) (off m : Nat) :
     · rw [if_pos h2, if_pos (by omega)]
     · rw [if_neg h2, if_neg (by omega)]
 
+-- ==================================================================
+-- Generic copy loop (task #21, hmac): `for i in 0..N { dst[off+i] = src[i] }`
+-- refines `copyFn` — fills dst at [off, off+N) from src. Reused for hmac's
+-- key copy, key-hash-digest copy, message copy, and inner-digest copy.
+-- ==================================================================
+
+def copyEnv (dstNm srcNm iNm : String) (e : Env) (dn sn off : Nat)
+    (dstFn srcFn : Nat → BitVec 8) (m : Nat) : Env :=
+  ((e.bind dstNm (.array_ (arrN dn (copyFn dstFn srcFn off m)))).bind srcNm
+    (.array_ (arrN sn srcFn))).bind iNm (.int (m : Int))
+
+theorem cpy_step (dstNm srcNm iNm : String)
+    (hds : dstNm ≠ srcNm) (hdi : dstNm ≠ iNm) (hsi : srcNm ≠ iNm)
+    (e : Env) (dn sn off : Nat) (dstFn srcFn : Nat → BitVec 8) (m : Nat)
+    (hdsn : off + m < dn) (hsm : m < sn) (idxE : PExpr) (fuel : Nat)
+    (hidx : eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (fuel + 1) idxE
+      = some (.int ((off + m : Nat) : Int))) :
+    eval.evalAssigns shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (fuel + 2)
+      [ (dstNm, .arraySet (.var dstNm) idxE (.arrayIndex (.var srcNm) (.var iNm)))
+      , (iNm, .binOp .add (.var iNm) (.lit (.int 1))) ]
+      = some (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn (m + 1)) := by
+  have e_id : (iNm == dstNm) = false := beq_false_of_ne (Ne.symm hdi)
+  have e_di : (dstNm == iNm) = false := beq_false_of_ne hdi
+  have e_ds : (dstNm == srcNm) = false := beq_false_of_ne hds
+  have e_sd : (srcNm == dstNm) = false := beq_false_of_ne (Ne.symm hds)
+  have e_si : (srcNm == iNm) = false := beq_false_of_ne hsi
+  have e_is : (iNm == srcNm) = false := beq_false_of_ne (Ne.symm hsi)
+  have hdb : (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) dstNm
+      = some (.array_ (arrN dn (copyFn dstFn srcFn off m))) := by
+    simp [copyEnv, Env.bind, e_di, e_ds]
+  have hsv : eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (fuel + 1)
+      (.arrayIndex (.var srcNm) (.var iNm)) = some (.int ↑(srcFn m).toNat) := by
+    simp only [eval, copyEnv, Env.bind, e_si, e_is, if_false, if_true,
+      beq_self_eq_true, beq_iff_eq, reduceCtorEq]
+    exact arrN_read sn srcFn (m : Int) m rfl hsm
+  have harr : eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (fuel + 2)
+      (.arraySet (.var dstNm) idxE (.arrayIndex (.var srcNm) (.var iNm)))
+      = some (.array_ (arrN dn (copyFn dstFn srcFn off (m + 1)))) := by
+    rw [eval_arraySet_lemma shaFns _ (fuel + 1) (.var dstNm) idxE _
+        (arrN dn (copyFn dstFn srcFn off m)) ((off + m : Nat) : Int) (.int ↑(srcFn m).toNat)
+        (by simp only [eval]; exact hdb) hidx hsv (by omega)
+        (by rw [show ((off + m : Nat) : Int).toNat = off + m by omega, arrN_length]; omega)]
+    rw [show ((off + m : Nat) : Int).toNat = off + m by omega, arrN_set, copyFn_step]
+  simp only [eval.evalAssigns, harr]
+  simp only [eval, evalBinOp, Env.bind, copyEnv, e_id, e_di, e_ds, e_sd, e_si, e_is,
+    beq_self_eq_true, if_true, beq_iff_eq, if_false, reduceCtorEq, Option.some.injEq]
+  funext n
+  by_cases h1 : (n == iNm) = true <;> by_cases h2 : (n == dstNm) = true <;>
+    simp_all [Env.bind, copyEnv, beq_iff_eq, Option.some.injEq, PVal.int.injEq] <;> omega
+
+theorem copy_loop (dstNm srcNm iNm : String)
+    (hds : dstNm ≠ srcNm) (hdi : dstNm ≠ iNm) (hsi : srcNm ≠ iNm)
+    (e : Env) (dn sn off : Nat) (dstFn srcFn : Nat → BitVec 8) (N : Nat)
+    (hdn : off + N ≤ dn) (hsn : N ≤ sn) (condE idxE cont : PExpr) (base : Nat)
+    (hidx : ∀ m, m < N → eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (base + 1) idxE
+        = some (.int ((off + m : Nat) : Int)))
+    (hct : ∀ m, m < N → eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (base + 2) condE
+        = some (.bool true))
+    (hcf : eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn N) (base + 2) condE
+        = some (.bool false)) :
+    eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn 0) ((base + 2) + N + 1)
+      (.while_ condE
+        [ (dstNm, .arraySet (.var dstNm) idxE (.arrayIndex (.var srcNm) (.var iNm)))
+        , (iNm, .binOp .add (.var iNm) (.lit (.int 1))) ] cont)
+      = eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn N) (base + 2) cont :=
+  eval_while_count shaFns condE _ cont (fun m => copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m)
+    N (base + 2)
+    (fun m hm => ⟨hct m hm, cpy_step dstNm srcNm iNm hds hdi hsi e dn sn off dstFn srcFn m
+      (by omega) (by omega) idxE base (hidx m hm)⟩)
+    hcf
+
 end Concrete.Proof
