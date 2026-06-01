@@ -164,10 +164,10 @@ def packExpr : PExpr :=
 set_option linter.unusedSimpArgs false in
 /-- The loop body's packing expression evaluates to the spec packed
     word `pwd b k`, in any env that binds `block` and `i` suitably. -/
-theorem packExpr_eval (b : Nat → BitVec 8) (env : Env) (k : Nat) (hk : k < 16) (fuel : Nat)
+theorem packExpr_eval (fns : FnTable) (b : Nat → BitVec 8) (env : Env) (k : Nat) (hk : k < 16) (fuel : Nat)
     (hb : env "block" = some (.array_ (blockArr b)))
     (hi : env "i" = some (.int (k:Int))) :
-    eval (fun _ => none) env (fuel + 4) packExpr
+    eval fns env (fuel + 4) packExpr
       = some (.int (pwd b k).toNat) := by
   simp only [packExpr, idx0, idxO, blockArr, pwd, eval, evalBinOp, hb, hi]
   rw [show ((k:Int) * 4 + 1) = ((4*k+1 : Nat) : Int) by omega,
@@ -232,13 +232,13 @@ def assigns_e : List (String × PExpr) :=
   [ ("w", .arraySet (.var "w") (.var "i") packExpr)
   , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
 
-theorem cond_true (b : Nat → BitVec 8) (k : Nat) (hk : k < 16) (base : Nat) :
-    eval (fun _ => none) (stEnv b k) (base + 1) cond_e = some (.bool true) := by
+theorem cond_true (fns : FnTable) (b : Nat → BitVec 8) (k : Nat) (hk : k < 16) (base : Nat) :
+    eval fns (stEnv b k) (base + 1) cond_e = some (.bool true) := by
   simp only [cond_e, stEnv, eval, Env.bind, evalBinOp]
   simp; omega
 
-theorem cond_false (b : Nat → BitVec 8) (base : Nat) :
-    eval (fun _ => none) (stEnv b 16) (base + 1) cond_e = some (.bool false) := by
+theorem cond_false (fns : FnTable) (b : Nat → BitVec 8) (base : Nat) :
+    eval fns (stEnv b 16) (base + 1) cond_e = some (.bool false) := by
   simp only [cond_e, stEnv, eval, Env.bind, evalBinOp]
   simp
 
@@ -256,24 +256,24 @@ theorem eval_arraySet_lemma (fns : FnTable) (env : Env) (fuel : Nat)
   simp only [eval, ea, ei, ev]
   rw [if_neg (by omega), if_neg (by omega)]
 
-theorem assigns_step (b : Nat → BitVec 8) (k : Nat) (hk : k < 16) (fuel : Nat) :
-    eval.evalAssigns (fun _ => none) (stEnv b k) (fuel + 5) assigns_e
+theorem assigns_step (fns : FnTable) (b : Nat → BitVec 8) (k : Nat) (hk : k < 16) (fuel : Nat) :
+    eval.evalAssigns fns (stEnv b k) (fuel + 5) assigns_e
       = some (stEnv b (k + 1)) := by
   have hb : (stEnv b k) "block" = some (.array_ (blockArr b)) := by
     simp [stEnv, Env.bind]
   have hi : (stEnv b k) "i" = some (.int (k:Int)) := by
     simp [stEnv, Env.bind]
-  have hpack : eval (fun _ => none) (stEnv b k) (fuel + 4) packExpr
-      = some (.int (pwd b k).toNat) := packExpr_eval b (stEnv b k) k hk fuel hb hi
-  have hwv : eval (fun _ => none) (stEnv b k) (fuel + 4) (.var "w")
+  have hpack : eval fns (stEnv b k) (fuel + 4) packExpr
+      = some (.int (pwd b k).toNat) := packExpr_eval fns b (stEnv b k) k hk fuel hb hi
+  have hwv : eval fns (stEnv b k) (fuel + 4) (.var "w")
       = some (.array_ (wList b k)) := by simp [eval, stEnv, Env.bind]
-  have hiv : eval (fun _ => none) (stEnv b k) (fuel + 4) (.var "i")
+  have hiv : eval fns (stEnv b k) (fuel + 4) (.var "i")
       = some (.int (k:Int)) := by simp [eval, stEnv, Env.bind]
   -- the `w := packExpr` assignment
-  have harr : eval (fun _ => none) (stEnv b k) (fuel + 5)
+  have harr : eval fns (stEnv b k) (fuel + 5)
       (.arraySet (.var "w") (.var "i") packExpr)
       = some (.array_ (wList b (k + 1))) := by
-    rw [eval_arraySet_lemma (fun _ => none) (stEnv b k) (fuel + 4)
+    rw [eval_arraySet_lemma fns (stEnv b k) (fuel + 4)
         (.var "w") (.var "i") packExpr (wList b k) (k:Int) (.int (pwd b k).toNat)
         hwv hiv hpack (by omega) (by rw [wList_length]; simp; omega)]
     rw [show ((k:Int)).toNat = k by omega, wList_set b k]
@@ -333,13 +333,13 @@ theorem wList16_spec (b : Nat → BitVec 8) :
   rw [getD_range_map b (4*j) (by omega), getD_range_map b (4*j+1) (by omega),
       getD_range_map b (4*j+2) (by omega), getD_range_map b (4*j+3) (by omega)]
 
-theorem loop_eval (b : Nat → BitVec 8) (fuel : Nat) :
-    eval (fun _ => none) (stEnv b 0) (fuel + 22) (.while_ cond_e assigns_e (.var "w"))
+theorem loop_eval (fns : FnTable) (b : Nat → BitVec 8) (fuel : Nat) :
+    eval fns (stEnv b 0) (fuel + 22) (.while_ cond_e assigns_e (.var "w"))
       = some (.array_ (wList b 16)) := by
-  have hwc := eval_while_count (fun _ => none) cond_e assigns_e (.var "w") (stEnv b)
+  have hwc := eval_while_count fns cond_e assigns_e (.var "w") (stEnv b)
       16 (fuel + 5)
-      (fun k hk => ⟨cond_true b k hk (fuel + 4), assigns_step b k hk fuel⟩)
-      (cond_false b (fuel + 4))
+      (fun k hk => ⟨cond_true fns b k hk (fuel + 4), assigns_step fns b k hk fuel⟩)
+      (cond_false fns b (fuel + 4))
   rw [show fuel + 22 = (fuel + 5) + 16 + 1 by omega, hwc]
   simp [eval, stEnv, Env.bind]
 
@@ -350,8 +350,8 @@ set_option linter.unusedSimpArgs false in
     refinement of a Concrete *loop* against an independent spec —
     combining `eval_while_count`, the array set/get lemmas, the `bv_decide`
     packing fact, and the spec layer. -/
-theorem block_to_words_refines_spec (b : Nat → BitVec 8) (fuel : Nat) :
-    eval (fun _ => none)
+theorem block_to_words_refines_spec (fns : FnTable) (b : Nat → BitVec 8) (fuel : Nat) :
+    eval fns
       (Env.empty.bind "block" (.array_ (blockArr b)))
       (fuel + 24) blockToWordsExpr
     = some (.array_ ((Sha256Spec.blockToWords ((List.range 64).map b)).map
@@ -362,7 +362,7 @@ theorem block_to_words_refines_spec (b : Nat → BitVec 8) (fuel : Nat) :
   rw [show fuel + 23 = (fuel + 22) + 1 by omega,
       eval_letIn _ _ _ _ _ _ (PVal.int 0) (by simp [eval])]
   rw [← wList_zero b]
-  exact loop_eval b fuel
+  exact loop_eval fns b fuel
 
 
 -- ==================================================================
