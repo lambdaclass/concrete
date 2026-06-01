@@ -2528,4 +2528,41 @@ theorem sha256_hash_call (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 375
   simp only [eval, shaFns, eval.evalArgs, hdata, hlenv, bindArgs]
   exact sha256_hash_refines_spec df len hlen hz _ fuel (by simp [Env.bind]) (by simp [Env.bind])
 
+-- ==================================================================
+-- HMAC spec-side correspondences (task #21): a copyFn-built buffer's
+-- prefix splits as `dst-prefix ++ src` (copyFn_map_append) — matching the
+-- spec's `(kp^pad) ++ message` shape — and a copy into zeros is
+-- `src ++ zeros` (copyFn_zfn_map) — matching keyPrep's 64-byte padding.
+-- ==================================================================
+
+theorem copyFn_map_append (dstFn srcFn : Nat → BitVec 8) (off N : Nat) :
+    (List.range (off + N)).map (copyFn dstFn srcFn off N)
+      = ((List.range off).map dstFn) ++ ((List.range N).map srcFn) := by
+  apply List.ext_getElem (by simp)
+  intro j h1 _
+  simp only [List.length_map, List.length_range] at h1
+  rw [List.getElem_map, List.getElem_range, List.getElem_append]
+  by_cases hj : j < off
+  · rw [dif_pos (by simp only [List.length_map, List.length_range]; exact hj)]
+    simp only [List.getElem_map, List.getElem_range, copyFn,
+      if_neg (show ¬ (off ≤ j ∧ j < off + N) by omega)]
+  · rw [dif_neg (by simp only [List.length_map, List.length_range]; omega)]
+    simp only [List.length_map, List.length_range, List.getElem_map, List.getElem_range, copyFn,
+      if_pos (show off ≤ j ∧ j < off + N by omega)]
+
+/-- A `copyFn` into a zero buffer, viewed over `[0, T)`, is the copied prefix
+    followed by zeros — exactly the shape of `keyPrep`. -/
+theorem copyFn_zfn_map (srcFn : Nat → BitVec 8) (k_len T : Nat) (h : k_len ≤ T) :
+    (List.range T).map (copyFn zfn srcFn 0 k_len)
+      = ((List.range k_len).map srcFn) ++ List.replicate (T - k_len) 0 := by
+  apply List.ext_getElem (by simp; omega)
+  intro j h1 _
+  simp only [List.length_map, List.length_range] at h1
+  rw [List.getElem_map, List.getElem_range, List.getElem_append]
+  by_cases hj : j < k_len
+  · rw [dif_pos (by simp only [List.length_map, List.length_range]; exact hj)]
+    simp only [List.getElem_map, List.getElem_range, copyFn, Nat.sub_zero, if_pos (show 0 ≤ j ∧ j < 0 + k_len by omega)]
+  · rw [dif_neg (by simp only [List.length_map, List.length_range]; omega)]
+    simp only [List.getElem_replicate, copyFn, zfn, if_neg (show ¬ (0 ≤ j ∧ j < 0 + k_len) by omega)]
+
 end Concrete.Proof
