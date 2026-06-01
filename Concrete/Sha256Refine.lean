@@ -1341,4 +1341,147 @@ theorem hashState_eq_fold (message : List Sha256Spec.Byte) :
     Sha256Spec.hashState message
       = hashFold (Sha256Spec.padMessage message)
           ((Sha256Spec.padMessage message).length / 64) := rfl
+
+-- ==================================================================
+-- block_to_words_at refines its spec (task #21, sha256_hash step 2):
+-- the OFFSET variant — w[k] = pack(buf[off+k*4 .. off+k*4+3]) — refines
+-- Sha256Spec.blockToWords of the 64-byte slice at off, for any in-range
+-- buffer and offset. Mirrors block_to_words (same eval_while_count +
+-- the GENERIC set_in_counter_map frame lemma), with the offset threaded
+-- through the packing reads. Foundation for sha256_compress_at.
+-- ==================================================================
+
+def bufArr (bf : Nat → BitVec 8) : List PVal := (List.range 384).map (fun j => PVal.int ↑(bf j).toNat)
+def pwdAt (bf : Nat → BitVec 8) (off k : Nat) : BitVec 32 :=
+  Sha256Spec.packWord (bf (off+4*k)) (bf (off+4*k+1)) (bf (off+4*k+2)) (bf (off+4*k+3))
+
+theorem readNbuf (bf : Nat → BitVec 8) (c : Int) (m : Nat) (hc : c = (m:Int)) (hm : m < 384) :
+    (if c < 0 then (none : Option PVal) else eval.lookupIndex (bufArr bf) c.toNat)
+      = some (.int ↑(bf m).toNat) := by
+  subst hc
+  rw [if_neg (by omega), show ((m:Int)).toNat = m by omega]
+  simp only [bufArr]; exact lookupIndex_range_map _ 384 m hm
+
+def bIdx0 : PExpr := .binOp .add (.var "off") (.binOp .mul (.var "i") (.lit (.int 4)))
+def bIdxO (o : Int) : PExpr := .binOp .add bIdx0 (.lit (.int o))
+def packExprAt : PExpr :=
+  .binOp (.bitor 32 false)
+    (.binOp (.bitor 32 false)
+      (.binOp (.bitor 32 false)
+        (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "buf") bIdx0)) (.lit (.int 24)))
+        (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "buf") (bIdxO 1))) (.lit (.int 16))))
+      (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "buf") (bIdxO 2))) (.lit (.int 8))))
+    (.cast (.arrayIndex (.var "buf") (bIdxO 3)))
+
+set_option linter.unusedSimpArgs false in
+theorem packExprAt_eval (bf : Nat → BitVec 8) (env : Env) (off k : Nat)
+    (hk : k < 16) (hoff : off + 64 ≤ 384) (fuel : Nat)
+    (hb : env "buf" = some (.array_ (bufArr bf)))
+    (hoffv : env "off" = some (.int (off:Int)))
+    (hi : env "i" = some (.int (k:Int))) :
+    eval (fun _ => none) env (fuel + 4) packExprAt
+      = some (.int (pwdAt bf off k).toNat) := by
+  simp only [packExprAt, bIdx0, bIdxO, eval, evalBinOp, hb, hoffv, hi]
+  rw [readNbuf bf ((off:Int) + (k:Int)*4) (off+4*k) (by omega) (by omega),
+      readNbuf bf ((off:Int) + (k:Int)*4 + 1) (off+4*k+1) (by omega) (by omega),
+      readNbuf bf ((off:Int) + (k:Int)*4 + 2) (off+4*k+2) (by omega) (by omega),
+      readNbuf bf ((off:Int) + (k:Int)*4 + 3) (off+4*k+3) (by omega) (by omega)]
+  simp only [pwdAt, Sha256Spec.packWord, ofInt32_byte, ofInt32_byte_cast,
+    ofInt_ofNat_toNat, ofInt_natCast_toNat, Option.some.injEq, PVal.int.injEq,
+    Int.ofNat_eq_natCast, Int.natCast_inj, BitVec.toNat_inj]
+  bv_decide
+
+def sliceAt (bf : Nat → BitVec 8) (off : Nat) : List Sha256Spec.Byte :=
+  (List.range 64).map (fun j => bf (off + j))
+theorem sliceAt_getD (bf) (off m : Nat) (hm : m < 64) : (sliceAt bf off).getD m 0 = bf (off + m) := by
+  rw [List.getD_eq_getElem?_getD]; simp [sliceAt, hm]
+
+def wListAt (bf : Nat → BitVec 8) (off m : Nat) : List PVal :=
+  (List.range 16).map (fun j => if j < m then PVal.int ↑(pwdAt bf off j).toNat else PVal.int 0)
+theorem wListAt_length (bf off m) : (wListAt bf off m).length = 16 := by simp [wListAt]
+theorem wListAt_set (bf : Nat → BitVec 8) (off m : Nat) :
+    (wListAt bf off m).set m (PVal.int ↑(pwdAt bf off m).toNat) = wListAt bf off (m + 1) :=
+  set_in_counter_map 16 (fun j => PVal.int ↑(pwdAt bf off j).toNat) (PVal.int 0) m
+theorem wListAt_zero (bf off) : wListAt bf off 0 = List.replicate 16 (PVal.int 0) := by
+  simp [wListAt]; rfl
+theorem wListAt16_spec (bf : Nat → BitVec 8) (off : Nat) :
+    wListAt bf off 16 = (Sha256Spec.blockToWords (sliceAt bf off)).map (fun w => PVal.int w.toNat) := by
+  apply List.ext_getElem (by simp [wListAt, Sha256Spec.blockToWords])
+  intro j h1 _
+  simp only [wListAt, List.length_map, List.length_range] at h1
+  simp only [wListAt, Sha256Spec.blockToWords, List.getElem_map, List.getElem_range, if_pos h1, pwdAt]
+  rw [sliceAt_getD bf off (4*j) (by omega), sliceAt_getD bf off (4*j+1) (by omega),
+      sliceAt_getD bf off (4*j+2) (by omega), sliceAt_getD bf off (4*j+3) (by omega)]
+  congr 2 <;> omega
+
+def stEnvAt (bf : Nat → BitVec 8) (off m : Nat) : Env :=
+  (((Env.empty.bind "buf" (.array_ (bufArr bf))).bind "off" (.int (off:Int))).bind
+    "w" (.array_ (wListAt bf off m))).bind "i" (.int (m:Int))
+def condAt : PExpr := .binOp .lt (.var "i") (.lit (.int 16))
+def assignsAt : List (String × PExpr) :=
+  [ ("w", .arraySet (.var "w") (.var "i") packExprAt)
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+
+theorem stepAt (bf : Nat → BitVec 8) (off m : Nat) (hm : m < 16) (hoff : off + 64 ≤ 384) (fuel : Nat) :
+    eval.evalAssigns (fun _ => none) (stEnvAt bf off m) (fuel + 5) assignsAt
+      = some (stEnvAt bf off (m + 1)) := by
+  have hbf : (stEnvAt bf off m) "buf" = some (.array_ (bufArr bf)) := by simp [stEnvAt, Env.bind]
+  have hoffv : (stEnvAt bf off m) "off" = some (.int (off:Int)) := by simp [stEnvAt, Env.bind]
+  have hi : (stEnvAt bf off m) "i" = some (.int (m:Int)) := by simp [stEnvAt, Env.bind]
+  have hpack := packExprAt_eval bf (stEnvAt bf off m) off m hm hoff fuel hbf hoffv hi
+  have hwv : eval (fun _ => none) (stEnvAt bf off m) (fuel + 4) (.var "w")
+      = some (.array_ (wListAt bf off m)) := by simp [eval, stEnvAt, Env.bind]
+  have hiv : eval (fun _ => none) (stEnvAt bf off m) (fuel + 4) (.var "i")
+      = some (.int (m:Int)) := by simp [eval, stEnvAt, Env.bind]
+  have harr : eval (fun _ => none) (stEnvAt bf off m) (fuel + 5)
+      (.arraySet (.var "w") (.var "i") packExprAt) = some (.array_ (wListAt bf off (m+1))) := by
+    rw [eval_arraySet_lemma (fun _ => none) (stEnvAt bf off m) (fuel + 4)
+        (.var "w") (.var "i") packExprAt (wListAt bf off m) (m:Int) (.int (pwdAt bf off m).toNat)
+        hwv hiv hpack (by omega) (by rw [wListAt_length]; simp; omega)]
+    rw [show ((m:Int)).toNat = m by omega, wListAt_set bf off m]
+  simp only [assignsAt, eval.evalAssigns, harr]
+  simp only [eval, evalBinOp, Env.bind, stEnvAt, beq_self_eq_true, if_true, beq_iff_eq, if_false,
+    String.reduceEq, reduceCtorEq, Option.some.injEq]
+  funext n
+  by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "w") = true <;>
+    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+      reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
+
+theorem condAt_true (bf off m) (hm : m < 16) (F) :
+    eval (fun _ => none) (stEnvAt bf off m) (F + 1) condAt = some (.bool true) := by
+  simp only [condAt, stEnvAt, eval, Env.bind, evalBinOp]; simp; omega
+theorem condAt_false (bf off) (F) :
+    eval (fun _ => none) (stEnvAt bf off 16) (F + 1) condAt = some (.bool false) := by
+  simp only [condAt, stEnvAt, eval, Env.bind, evalBinOp]; simp
+
+theorem loop_evalAt (bf : Nat → BitVec 8) (off : Nat) (hoff : off + 64 ≤ 384) (cont : PExpr) (base : Nat) :
+    eval (fun _ => none) (stEnvAt bf off 0) ((base + 5) + 16 + 1) (.while_ condAt assignsAt cont)
+      = eval (fun _ => none) (stEnvAt bf off 16) (base + 5) cont :=
+  eval_while_count (fun _ => none) condAt assignsAt cont (stEnvAt bf off) 16 (base + 5)
+    (fun m hm => ⟨condAt_true bf off m hm (base + 4), stepAt bf off m hm hoff base⟩)
+    (condAt_false bf off (base + 4))
+
+def blockToWordsAtExpr : PExpr :=
+  .letIn "w" (.arrayLit (List.replicate 16 (.lit (.int 0))))
+    (.letIn "i" (.lit (.int 0)) (.while_ condAt assignsAt (.var "w")))
+
+theorem stAt_zero_eq (bf : Nat → BitVec 8) (off : Nat) :
+    (((((Env.empty.bind "buf" (.array_ (bufArr bf))).bind "off" (.int (off:Int))).bind
+      "w" (.array_ (wListAt bf off 0))).bind "i" (.int 0)))
+      = stEnvAt bf off 0 := rfl
+
+set_option maxHeartbeats 1000000 in
+theorem block_to_words_at_refines_spec (bf : Nat → BitVec 8) (off : Nat)
+    (hoff : off + 64 ≤ 384) (fuel : Nat) :
+    eval (fun _ => none)
+      ((Env.empty.bind "buf" (.array_ (bufArr bf))).bind "off" (.int (off:Int)))
+      (fuel + 24) blockToWordsAtExpr
+    = some (.array_ ((Sha256Spec.blockToWords (sliceAt bf off)).map (fun w => PVal.int w.toNat))) := by
+  rw [← wListAt16_spec, blockToWordsAtExpr, show fuel + 24 = (fuel + 23) + 1 by omega,
+      eval_letIn _ _ _ _ _ _ _ (arrayLit_zeros_eval _ _ (fuel + 22))]
+  rw [show fuel + 23 = (fuel + 22) + 1 by omega, eval_letIn _ _ _ _ _ _ (PVal.int 0) (by simp [eval])]
+  rw [← wListAt_zero bf off]
+  rw [stAt_zero_eq]
+  rw [show fuel + 22 = ((fuel + 5) + 16 + 1) by omega, loop_evalAt bf off hoff _ fuel]
+  simp [eval, stEnvAt, Env.bind]
 end Concrete.Proof
