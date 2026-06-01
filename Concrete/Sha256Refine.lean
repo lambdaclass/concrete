@@ -1720,4 +1720,90 @@ theorem sliceAt_padFn (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 375)
     rw [padFn_eq df len hlen hz (blk * 64 + j) hidx,
         getD_eq_getElem_mem _ _ (by rw [hplen]; exact hidx)]
 
+-- ==================================================================
+-- Multi-block hash loop (task #21, sha256_hash step 4): the
+-- `for blk in 0..nblocks { state = sha256_compress_at(state, buf, blk*64) }`
+-- loop folds `Sha256Spec.compress` over every padded block, producing
+-- `hashFold padded nblocks = Sha256Spec.hashState`. Proved with
+-- `eval_while_count` (state invariant `state = hashFold padded blk`,
+-- `sha256_compress_at_call` lifting the per-block refinement, and the
+-- `sliceAt = blockAt` hypothesis discharged later by `sliceAt_padFn`).
+-- ==================================================================
+
+theorem compress_length (s : List Sha256Spec.W) (b : List Sha256Spec.Byte) :
+    (Sha256Spec.compress s b).length = 8 := by
+  simp [Sha256Spec.compress]
+
+theorem hashFold_length (padded : List Sha256Spec.Byte) (n : Nat) :
+    (hashFold padded n).length = 8 := by
+  cases n with
+  | zero => rfl
+  | succ k => rw [hashFold_succ]; exact compress_length _ _
+
+theorem sha256_compress_at_call (state0 : List (BitVec 32)) (h0 : state0.length = 8)
+    (bf : Nat → BitVec 8) (off : Nat) (hoff : off + 64 ≤ 384)
+    (env : Env) (stateE bufE offE : PExpr) (fuel : Nat)
+    (hstate : eval shaFns env (fuel + 78) stateE = some (.array_ (state0.map (fun x => PVal.int x.toNat))))
+    (hbuf : eval shaFns env (fuel + 78) bufE = some (.array_ (bufArr bf)))
+    (hoffe : eval shaFns env (fuel + 78) offE = some (.int (off:Int))) :
+    eval shaFns env (fuel + 79) (.call "sha256_compress_at" [stateE, bufE, offE])
+      = some (.array_ ((Sha256Spec.compress state0 (sliceAt bf off)).map (fun x => PVal.int x.toNat))) := by
+  simp only [eval, shaFns, eval.evalArgs, hstate, hbuf, hoffe, bindArgs]
+  exact sha256_compress_at_refines_spec state0 h0 bf off hoff fuel
+
+-- ---- multi-block hash loop ----
+def condH : PExpr := .binOp .lt (.var "blk") (.var "nblocks")
+def assignsH : List (String × PExpr) :=
+  [ ("state", .call "sha256_compress_at"
+      [.var "state", .var "buf", .binOp .mul (.var "blk") (.lit (.int 64))])
+  , ("blk", .binOp .add (.var "blk") (.lit (.int 1))) ]
+
+def hsEnv (e : Env) (bff : Nat → BitVec 8) (padded : List Sha256Spec.Byte) (nblocks blk : Nat) : Env :=
+  (((e.bind "state" (.array_ ((hashFold padded blk).map (fun x => PVal.int x.toNat)))).bind
+    "buf" (.array_ (bufArr bff))).bind "nblocks" (.int (nblocks:Int))).bind "blk" (.int (blk:Int))
+
+theorem hstep (e : Env) (bff : Nat → BitVec 8) (padded : List Sha256Spec.Byte) (nblocks blk : Nat)
+    (hblk : blk < nblocks) (hbound : nblocks * 64 ≤ 384)
+    (hslice : sliceAt bff (blk * 64) = Sha256Spec.blockAt padded blk) (fuel : Nat) :
+    eval.evalAssigns shaFns (hsEnv e bff padded nblocks blk) (fuel + 79) assignsH
+      = some (hsEnv e bff padded nblocks (blk + 1)) := by
+  have h8 : (hashFold padded blk).length = 8 := hashFold_length padded blk
+  have hsv : eval shaFns (hsEnv e bff padded nblocks blk) (fuel + 78) (.var "state")
+      = some (.array_ ((hashFold padded blk).map (fun x => PVal.int x.toNat))) := by simp [eval, hsEnv, Env.bind]
+  have hbv : eval shaFns (hsEnv e bff padded nblocks blk) (fuel + 78) (.var "buf")
+      = some (.array_ (bufArr bff)) := by simp [eval, hsEnv, Env.bind]
+  have hoffv : eval shaFns (hsEnv e bff padded nblocks blk) (fuel + 78)
+      (.binOp .mul (.var "blk") (.lit (.int 64))) = some (.int ((blk * 64 : Nat) : Int)) := by
+    simp only [eval, hsEnv, Env.bind, evalBinOp, beq_self_eq_true, if_true, beq_iff_eq, if_false,
+      String.reduceEq, reduceCtorEq, Option.some.injEq, PVal.int.injEq]; omega
+  have hoffbound : blk * 64 + 64 ≤ 384 := by omega
+  have hcompress := sha256_compress_at_call (hashFold padded blk) h8 bff (blk * 64) hoffbound
+    (hsEnv e bff padded nblocks blk) _ _ _ fuel hsv hbv hoffv
+  rw [hslice, ← hashFold_succ] at hcompress
+  simp only [assignsH, eval.evalAssigns, hcompress]
+  simp only [eval, evalBinOp, Env.bind, hsEnv, beq_self_eq_true, if_true, beq_iff_eq, if_false,
+    String.reduceEq, reduceCtorEq, Option.some.injEq]
+  funext n
+  by_cases h1 : (n == "blk") = true <;> by_cases h2 : (n == "state") = true <;>
+    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+      reduceCtorEq, Option.some.injEq, PVal.int.injEq]
+
+theorem cond_h_true (e bff padded nblocks blk) (hblk : blk < nblocks) (F : Nat) :
+    eval shaFns (hsEnv e bff padded nblocks blk) (F + 1) condH = some (.bool true) := by
+  simp only [condH, hsEnv, eval, Env.bind, evalBinOp]; simp; omega
+theorem cond_h_false (e bff padded nblocks) (F : Nat) :
+    eval shaFns (hsEnv e bff padded nblocks nblocks) (F + 1) condH = some (.bool false) := by
+  simp only [condH, hsEnv, eval, Env.bind, evalBinOp]; simp
+
+theorem hash_loop_eval (e : Env) (bff : Nat → BitVec 8) (padded : List Sha256Spec.Byte) (nblocks : Nat)
+    (hbound : nblocks * 64 ≤ 384)
+    (hslice : ∀ blk, blk < nblocks → sliceAt bff (blk * 64) = Sha256Spec.blockAt padded blk)
+    (cont : PExpr) (base : Nat) :
+    eval shaFns (hsEnv e bff padded nblocks 0) ((base + 79) + nblocks + 1) (.while_ condH assignsH cont)
+      = eval shaFns (hsEnv e bff padded nblocks nblocks) (base + 79) cont :=
+  eval_while_count shaFns condH assignsH cont (hsEnv e bff padded nblocks) nblocks (base + 79)
+    (fun m hm => ⟨cond_h_true e bff padded nblocks m hm (base + 78),
+                  hstep e bff padded nblocks m hm hbound (hslice m hm) base⟩)
+    (cond_h_false e bff padded nblocks (base + 78))
+
 end Concrete.Proof
