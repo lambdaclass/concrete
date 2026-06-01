@@ -1550,4 +1550,169 @@ theorem sha256_compress_at_refines_spec (state0 : List (BitVec 32)) (h0 : state0
       eval_letIn _ _ _ _ _ _ _ (sha256_k_call _ (fuel + 74))]
   rw [cWfAt_w16of, env_reshapeAt]
   exact compress_body_refines_spec (cEnv0At state0 bf off) state0 h0 (sliceAt bf off) fuel
+-- ==================================================================
+-- FIPS 180-4 padding (task #21, sha256_hash steps 1-3): the byte
+-- function after sha256_hash's five padding stores agrees, on the
+-- whole padded prefix [0, plen), with Sha256Spec.padMessage. This is
+-- the spec-side + buffer-update model. `bufArr_set` bridges the
+-- evaluator's List.set to a point-update on the byte function;
+-- `padFn`/`padFn_eq` characterize the post-store buffer; `sliceAt_padFn`
+-- delivers each 64-byte block in the exact `blockAt` shape the
+-- multi-block hash loop (via sha256_compress_at) consumes.
+-- ==================================================================
+
+def bufUpd (bf : Nat → BitVec 8) (i : Nat) (v : BitVec 8) : Nat → BitVec 8 :=
+  fun j => if j = i then v else bf j
+
+theorem bufArr_set (bf : Nat → BitVec 8) (i : Nat) (v : BitVec 8) :
+    (bufArr bf).set i (PVal.int v.toNat) = bufArr (bufUpd bf i v) := by
+  apply List.ext_getElem (by simp [bufArr])
+  intro m h1 _
+  simp only [bufArr, List.length_map, List.length_range] at h1
+  rw [List.getElem_set]
+  simp only [bufArr, List.getElem_map, List.getElem_range, bufUpd]
+  by_cases hmi : m = i
+  · simp [hmi]
+  · simp [hmi, Ne.symm hmi]
+
+-- ---- spec-side padding scaffolding ----
+def plenOf (len : Nat) : Nat := ((len + 9 + 63) / 64) * 64
+
+theorem plen_ge (len : Nat) : plenOf len ≥ len + 9 := by unfold plenOf; omega
+
+theorem ofNat64_eq_setWidth32 (n : Nat) (h : n < 2^32) :
+    BitVec.ofNat 64 n = (BitVec.ofNat 32 n).setWidth 64 := by
+  apply BitVec.toNat_inj.mp
+  simp only [BitVec.toNat_ofNat, BitVec.toNat_setWidth]
+  omega
+
+theorem be64_getD (n i : Nat) (hi : i < 8) :
+    (Sha256Spec.be64 n).getD i 0 = (BitVec.ofNat 64 n >>> (8 * (7 - i))).setWidth 8 := by
+  simp [Sha256Spec.be64, List.getD_eq_getElem?_getD, List.getElem?_range, hi]
+
+theorem be64_high_zero (n : Nat) (hn : n < 2^32) (i : Nat) (hi : i < 4) :
+    (Sha256Spec.be64 n).getD i 0 = 0 := by
+  rw [be64_getD n i (by omega), ofNat64_eq_setWidth32 n hn]
+  have : i = 0 ∨ i = 1 ∨ i = 2 ∨ i = 3 := by omega
+  rcases this with rfl|rfl|rfl|rfl <;> bv_decide
+
+theorem be64_low_byte (n : Nat) (hn : n < 2^32) (s : Nat) (hs : s < 4) :
+    (Sha256Spec.be64 n).getD (4 + s) 0 = ((BitVec.ofNat 32 n) >>> (8 * (3 - s))).setWidth 8 := by
+  rw [be64_getD n (4 + s) (by omega), ofNat64_eq_setWidth32 n hn]
+  have : s = 0 ∨ s = 1 ∨ s = 2 ∨ s = 3 := by omega
+  rcases this with rfl|rfl|rfl|rfl <;> bv_decide
+
+-- ---- structural characterization of padMessage's bytes by region ----
+theorem pad_getD (df : Nat → BitVec 8) (len i : Nat) (hi : i < plenOf len) :
+    (Sha256Spec.padMessage ((List.range len).map df)).getD i 0 =
+      (if i < len then df i
+       else if i = len then 128
+       else if i < plenOf len - 8 then 0
+       else (Sha256Spec.be64 (len * 8)).getD (i - (plenOf len - 8)) 0) := by
+  have hpg := plen_ge len
+  rw [List.getD_eq_getElem?_getD, Sha256Spec.padMessage]
+  simp only [List.length_map, List.length_range,
+    show ((len + 9 + 63) / 64) * 64 = plenOf len from rfl]
+  simp only [List.getElem?_append, List.length_map, List.length_range, List.length_append,
+    List.length_cons, List.length_nil, List.length_replicate]
+  by_cases h1 : i < len
+  · rw [if_pos (show i < len + (0+1) + (plenOf len - len - 9) by omega),
+        if_pos (show i < len + (0+1) by omega), if_pos h1, List.getElem?_map,
+        List.getElem?_range h1, if_pos h1]
+    rfl
+  · by_cases h2 : i = len
+    · subst h2
+      rw [if_pos (show i < i + (0+1) + (plenOf i - i - 9) by omega),
+          if_pos (show i < i + (0+1) by omega), if_neg (show ¬ i < i by omega),
+          if_neg h1, if_pos rfl]
+      simp [Nat.sub_self]
+    · by_cases h3 : i < plenOf len - 8
+      · rw [if_pos (show i < len + (0+1) + (plenOf len - len - 9) by omega),
+            if_neg (show ¬ i < len + (0+1) by omega), List.getElem?_replicate,
+            if_pos (show i - (len + (0+1)) < plenOf len - len - 9 by omega),
+            if_neg h1, if_neg h2, if_pos h3]
+        rfl
+      · rw [if_neg (show ¬ i < len + (0+1) + (plenOf len - len - 9) by omega),
+            if_neg h1, if_neg h2, if_neg h3, List.getD_eq_getElem?_getD,
+            show i - (len + (0+1) + (plenOf len - len - 9)) = i - (plenOf len - 8) by omega]
+
+-- ---- the post-store buffer function and its agreement with padMessage ----
+/-- The `s`-th big-endian length byte the source writes (`(bits >>> 8s) as u8`),
+    `bits = (len*8) : u32`. -/
+def lenByte (len s : Nat) : BitVec 8 := ((BitVec.ofNat 32 (len * 8)) >>> (8 * s)).setWidth 8
+
+/-- The byte function after `sha256_hash`'s five padding stores: the `0x80`
+    marker at `len`, and the four low length bytes at `plen-1 .. plen-4`. -/
+def padFn (df : Nat → BitVec 8) (len : Nat) : Nat → BitVec 8 :=
+  let plen := plenOf len
+  bufUpd (bufUpd (bufUpd (bufUpd (bufUpd df len 128)
+    (plen - 1) (lenByte len 0)) (plen - 2) (lenByte len 1)) (plen - 3) (lenByte len 2))
+    (plen - 4) (lenByte len 3)
+
+theorem padFn_eq (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 375)
+    (hz : ∀ i, len ≤ i → df i = 0) (i : Nat) (hi : i < plenOf len) :
+    padFn df len i = (Sha256Spec.padMessage ((List.range len).map df)).getD i 0 := by
+  have hpg : plenOf len ≥ len + 9 := plen_ge len
+  have hb : len * 8 < 2 ^ 32 := by omega
+  rw [pad_getD df len i hi]
+  simp only [padFn, bufUpd, lenByte]
+  by_cases e4 : i = plenOf len - 4
+  · rw [if_pos e4, if_neg (show ¬ i < len by omega), if_neg (show ¬ i = len by omega),
+      if_neg (show ¬ i < plenOf len - 8 by omega),
+      show i - (plenOf len - 8) = 4 + 0 by omega, be64_low_byte (len * 8) hb 0 (by omega)]
+  · by_cases e3 : i = plenOf len - 3
+    · rw [if_neg e4, if_pos e3, if_neg (show ¬ i < len by omega),
+        if_neg (show ¬ i = len by omega), if_neg (show ¬ i < plenOf len - 8 by omega),
+        show i - (plenOf len - 8) = 4 + 1 by omega, be64_low_byte (len * 8) hb 1 (by omega)]
+    · by_cases e2 : i = plenOf len - 2
+      · rw [if_neg e4, if_neg e3, if_pos e2, if_neg (show ¬ i < len by omega),
+          if_neg (show ¬ i = len by omega), if_neg (show ¬ i < plenOf len - 8 by omega),
+          show i - (plenOf len - 8) = 4 + 2 by omega, be64_low_byte (len * 8) hb 2 (by omega)]
+      · by_cases e1 : i = plenOf len - 1
+        · rw [if_neg e4, if_neg e3, if_neg e2, if_pos e1, if_neg (show ¬ i < len by omega),
+            if_neg (show ¬ i = len by omega), if_neg (show ¬ i < plenOf len - 8 by omega),
+            show i - (plenOf len - 8) = 4 + 3 by omega, be64_low_byte (len * 8) hb 3 (by omega)]
+        · rw [if_neg e4, if_neg e3, if_neg e2, if_neg e1]
+          by_cases hl : i < len
+          · rw [if_neg (show ¬ i = len by omega), if_pos hl]
+          · by_cases he : i = len
+            · rw [if_pos he, if_neg hl, if_pos he]
+            · rw [if_neg he, if_neg hl, if_neg he]
+              by_cases h8 : i < plenOf len - 8
+              · rw [if_pos h8, hz i (by omega)]
+              · rw [if_neg h8, be64_high_zero (len * 8) hb (i - (plenOf len - 8)) (by omega),
+                  hz i (by omega)]
+
+-- ---- bridge to the spec's block view ----
+theorem padMessage_length (msg : List Sha256Spec.Byte) :
+    (Sha256Spec.padMessage msg).length = plenOf msg.length := by
+  have hpg : plenOf msg.length ≥ msg.length + 9 := plen_ge msg.length
+  simp only [Sha256Spec.padMessage, Sha256Spec.be64, List.length_append, List.length_cons,
+    List.length_nil, List.length_replicate, List.length_map, List.length_range]
+  show msg.length + (0 + 1) + (plenOf msg.length - msg.length - 9) + 8 = plenOf msg.length
+  omega
+
+theorem getD_eq_getElem_mem (l : List Sha256Spec.Byte) (k : Nat) (h : k < l.length) :
+    l.getD k 0 = l[k] := by
+  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h]; rfl
+
+theorem sliceAt_padFn (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 375)
+    (hz : ∀ i, len ≤ i → df i = 0) (blk : Nat) (hblk : blk < plenOf len / 64) :
+    sliceAt (padFn df len) (blk * 64)
+      = Sha256Spec.blockAt (Sha256Spec.padMessage ((List.range len).map df)) blk := by
+  have hdvd : plenOf len % 64 = 0 := by unfold plenOf; omega
+  have hplen : (Sha256Spec.padMessage ((List.range len).map df)).length = plenOf len := by
+    rw [padMessage_length]; simp
+  have hb1 : (blk + 1) * 64 ≤ plenOf len := by omega
+  apply List.ext_getElem
+  · simp only [sliceAt, List.length_map, List.length_range, Sha256Spec.blockAt,
+      List.length_take, List.length_drop, hplen]; omega
+  · intro j h1 _
+    have hj : j < 64 := by simpa only [sliceAt, List.length_map, List.length_range] using h1
+    have hidx : blk * 64 + j < plenOf len := by omega
+    simp only [sliceAt, List.getElem_map, List.getElem_range]
+    simp only [Sha256Spec.blockAt, List.getElem_take, List.getElem_drop]
+    rw [padFn_eq df len hlen hz (blk * 64 + j) hidx,
+        getD_eq_getElem_mem _ _ (by rw [hplen]; exact hidx)]
+
 end Concrete.Proof
