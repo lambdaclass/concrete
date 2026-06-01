@@ -2296,4 +2296,56 @@ theorem sha256_hash_refines_spec (df : Nat → BitVec 8) (len : Nat) (hlen : len
         (var_read _ "state" (.array_ ((hashFold (Sha256Spec.padMessage ((List.range len).map df)) nb).map (fun x => PVal.int x.toNat))) (fuel + 77) (by simp only [hsEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]))]
   rw [hfeq, Sha256Spec.hash]
 
+-- ==================================================================
+-- HMAC infrastructure (task #21, hmac_sha256 composition): a
+-- size-generic buffer model `arrN n` (generalizing `bufArr` = `arrN 384`)
+-- for the differently-sized hmac buffers (kp:64, k:128, m:256), with the
+-- set/read lemmas; and `copyFn`/`copyFn_step`, the byte-function frame for
+-- the `for i in 0..N { dst[off+i] = src[i] }` copy loops hmac runs four
+-- times (key copy, digest copy, message copy, inner-digest copy).
+-- ==================================================================
+
+def arrN (n : Nat) (bf : Nat → BitVec 8) : List PVal :=
+  (List.range n).map (fun j => PVal.int ↑(bf j).toNat)
+
+theorem arrN_length (n : Nat) (bf : Nat → BitVec 8) : (arrN n bf).length = n := by simp [arrN]
+
+theorem arrN_set (n : Nat) (bf : Nat → BitVec 8) (i : Nat) (v : BitVec 8) :
+    (arrN n bf).set i (PVal.int v.toNat) = arrN n (bufUpd bf i v) := by
+  apply List.ext_getElem (by simp [arrN])
+  intro m h1 _
+  simp only [arrN, List.length_map, List.length_range] at h1
+  rw [List.getElem_set]
+  simp only [arrN, List.getElem_map, List.getElem_range, bufUpd]
+  by_cases hmi : m = i
+  · simp [hmi]
+  · simp [hmi, Ne.symm hmi]
+
+theorem arrN_read (n : Nat) (bf : Nat → BitVec 8) (c : Int) (m : Nat) (hc : c = (m:Int)) (hm : m < n) :
+    (if c < 0 then (none : Option PVal) else eval.lookupIndex (arrN n bf) c.toNat)
+      = some (.int ↑(bf m).toNat) := by
+  subst hc
+  rw [if_neg (by omega), show ((m:Int)).toNat = m by omega]
+  simp only [arrN]; exact lookupIndex_range_map _ n m hm
+
+/-- The byte function after copying `src[0..m)` into `dst` at offset `off`. -/
+def copyFn (dstFn srcFn : Nat → BitVec 8) (off m : Nat) : Nat → BitVec 8 :=
+  fun j => if off ≤ j ∧ j < off + m then srcFn (j - off) else dstFn j
+
+theorem copyFn_zero (dstFn srcFn off) : copyFn dstFn srcFn off 0 = dstFn := by
+  funext j; simp only [copyFn, Nat.add_zero]; rw [if_neg (by omega)]
+
+theorem copyFn_step (dstFn srcFn : Nat → BitVec 8) (off m : Nat) :
+    bufUpd (copyFn dstFn srcFn off m) (off + m) (srcFn m) = copyFn dstFn srcFn off (m + 1) := by
+  funext j
+  simp only [bufUpd, copyFn]
+  by_cases h : j = off + m
+  · subst h
+    rw [if_pos rfl, if_pos (show off ≤ off + m ∧ off + m < off + (m + 1) by omega),
+        Nat.add_sub_cancel_left]
+  · rw [if_neg h]
+    by_cases h2 : off ≤ j ∧ j < off + m
+    · rw [if_pos h2, if_pos (by omega)]
+    · rw [if_neg h2, if_neg (by omega)]
+
 end Concrete.Proof
