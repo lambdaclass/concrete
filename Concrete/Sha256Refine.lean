@@ -1315,4 +1315,30 @@ theorem sha256_compress_refines_spec (state0 : List (BitVec 32)) (h0 : state0.le
     ((cEnv0 state0 b).bind "w16"
       (.array_ ((Sha256Spec.blockToWords ((List.range 64).map b)).map (fun x => PVal.int x.toNat))))
     state0 h0 ((List.range 64).map b) fuel
+
+-- ==================================================================
+-- Spec-side multi-block hash fold (task #21, sha256_hash step 1): the
+-- independent risk-check. Sha256Spec.hashState is a foldl of `compress`
+-- over the padded blocks; its recurrence (hashFold_succ) falls out of
+-- List.range_succ + foldl_append. (The HARD remaining part of
+-- sha256_hash is the EVAL side: the offset compress_at variant, the
+-- data-dependent block-count loop, and the padding writes at
+-- data-dependent indices — not this spec fold.)
+-- ==================================================================
+
+def hashFold (padded : List Sha256Spec.Byte) (n : Nat) : List (BitVec 32) :=
+  (List.range n).foldl (fun st blk => Sha256Spec.compress st (Sha256Spec.blockAt padded blk))
+    Sha256Spec.initState
+
+theorem hashFold_succ (padded : List Sha256Spec.Byte) (n : Nat) :
+    hashFold padded (n+1)
+      = Sha256Spec.compress (hashFold padded n) (Sha256Spec.blockAt padded n) := by
+  unfold hashFold
+  rw [List.range_succ, List.foldl_append]
+  rfl
+
+theorem hashState_eq_fold (message : List Sha256Spec.Byte) :
+    Sha256Spec.hashState message
+      = hashFold (Sha256Spec.padMessage message)
+          ((Sha256Spec.padMessage message).length / 64) := rfl
 end Concrete.Proof
