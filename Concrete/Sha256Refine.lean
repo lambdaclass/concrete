@@ -2672,4 +2672,118 @@ theorem sha256_hash_call_at (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 
       (by rw [← key]; exact hdata) (by rw [← key]; exact hlenv)
   rwa [← key] at h
 
+-- ==================================================================
+-- HMAC linear composition (task #21): given kp = keyPrep(key), the body
+-- after key-prep — ipad/opad xor, message copy, inner sha256_hash, digest
+-- copy, outer sha256_hash — computes exactly Sha256Spec.hmac key message.
+-- The full eval assembly threaded through the loop/call lemmas, folded to
+-- the spec via copyFn_map_append + copyFn_zfn_map + the keyPrep bridge.
+-- ==================================================================
+
+theorem ofInt8_const54 : BitVec.ofInt 8 54 = (54 : BitVec 8) := by decide
+theorem ofInt8_const92 : BitVec.ofInt 8 92 = (92 : BitVec 8) := by decide
+
+-- the [0,64) prefix of a copy-into-zeros over [0,64) is just the source map
+theorem ipad_prefix (kpFn : Nat → BitVec 8) (c : Int) :
+    (List.range 64).map (copyFn zfn (ipadFn kpFn c) 0 64) = (List.range 64).map (ipadFn kpFn c) := by
+  rw [show (64 : Nat) = 0 + 64 by omega, copyFn_map_append]; simp
+theorem list_eq_rangeGetD (L : List Sha256Spec.Byte) :
+    (List.range L.length).map (fun j => L.getD j 0) = L := by
+  apply List.ext_getElem (by simp)
+  intro j h1 _
+  simp only [List.getElem_map, List.getElem_range]
+  exact getD_eq_getElem_mem L j (by simp only [List.length_map, List.length_range] at h1; exact h1)
+
+set_option maxRecDepth 8000 in
+set_option maxHeartbeats 4000000 in
+theorem hmac_linear (kpFn mFn : Nat → BitVec 8) (KEY : List Sha256Spec.Byte) (m_len : Nat)
+    (hml : m_len ≤ 256) (hkp : (List.range 64).map kpFn = Sha256Spec.keyPrep KEY)
+    (e : Env) (fuel : Nat)
+    (hkpv : e "kp" = some (.array_ (arrN 64 kpFn)))
+    (hmv : e "m" = some (.array_ (arrN 256 mFn)))
+    (hmlen : e "m_len" = some (.int (m_len : Int))) :
+    eval shaFns e (fuel + 203 + m_len) hmacLinearExpr
+      = some (.array_ ((Sha256Spec.hmac KEY ((List.range m_len).map mFn)).map (fun b => PVal.int b.toNat))) := by
+  rw [hmacLinearExpr]
+  -- init letIns
+  rw [show fuel + 203 + m_len = ((fuel + 201 + m_len) + 1) + 1 by omega,
+      eval_letIn _ _ ((fuel + 201 + m_len) + 1) _ _ _ _ (arrayLit_zeros384 _ _ (fuel + 201 + m_len)),
+      show (fuel + 201 + m_len) + 1 = fuel + 202 + m_len by omega]
+  rw [show fuel + 202 + m_len = ((fuel + 200 + m_len) + 1) + 1 by omega,
+      eval_letIn _ _ ((fuel + 200 + m_len) + 1) _ _ _ _ (arrayLit_zeros384 _ _ (fuel + 200 + m_len)),
+      show (fuel + 200 + m_len) + 1 = fuel + 201 + m_len by omega]
+  rw [show fuel + 201 + m_len = (fuel + 200 + m_len) + 1 by omega,
+      eval_letIn _ _ (fuel + 200 + m_len) _ _ _ (.int 0) (by simp [eval])]
+  -- xor loop
+  rw [← xorEnv_self (((e.bind "inner" (.array_ (List.replicate 384 (PVal.int 0)))).bind "outer" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) kpFn
+        (by simp only [Env.bind, bufArr_zfn, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
+        (by simp only [Env.bind, bufArr_zfn, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
+        (by simp only [Env.bind, beq_self_eq_true, if_true, String.reduceEq, reduceCtorEq, if_false]; exact hkpv)
+        (by simp only [Env.bind, beq_self_eq_true, if_true])]
+  rw [show fuel + 200 + m_len = ((fuel + 132 + m_len) + 3) + 64 + 1 by omega, xor_loop _ kpFn _ (fuel + 132 + m_len)]
+  -- stage 2: reset i + message copy
+  rw [show fuel + 132 + m_len + 3 = (fuel + 134 + m_len) + 1 by omega,
+      eval_letIn _ _ (fuel + 134 + m_len) _ _ _ (.int 0) (by simp [eval])]
+  rw [← copyEnv_self "inner" "m" "i" ((xorEnv (((e.bind "inner" (.array_ (List.replicate 384 (PVal.int 0)))).bind "outer" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) kpFn 64).bind "i" (.int 0)) 384 256 64 (copyFn zfn (ipadFn kpFn 54) 0 64) mFn
+        (by simp only [Env.bind, xorEnv, bufArr_eq, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
+        (by simp only [Env.bind, xorEnv, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
+  simp only [msgAssigns]
+  rw [show fuel + 134 + m_len = (fuel + 131 + 2) + m_len + 1 by omega,
+      copy_loop "inner" "m" "i" (by decide) (by decide) (by decide) _ 384 256 64
+        (copyFn zfn (ipadFn kpFn 54) 0 64) mFn m_len (by omega) hml condMsg
+        (.binOp .add (.lit (.int 64)) (.var "i")) _ (fuel + 131)
+        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
+        (fun mm hmm => by simp only [condMsg, eval, evalBinOp, copyEnv, xorEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hmlen]; simp; omega)
+        (by simp only [condMsg, eval, evalBinOp, copyEnv, xorEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hmlen]; simp)]
+  -- stage 3: inner hash
+  rw [show fuel + 133 = (fuel + 132) + 1 by omega,
+      eval_letIn _ _ (fuel + 132) _ _ _ _
+        (sha256_hash_call_at (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len) (64 + m_len) (by omega)
+          (fun i hi => by simp only [copyFn, zfn]; rw [if_neg (by omega), if_neg (by omega)])
+          (copyEnv "inner" "m" "i" ((xorEnv (((e.bind "inner" (.array_ (List.replicate 384 (PVal.int 0)))).bind "outer" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) kpFn 64).bind "i" (.int 0)) 384 256 64 (copyFn zfn (ipadFn kpFn 54) 0 64) mFn m_len) (.var "inner") (.binOp .add (.lit (.int 64)) (.var "m_len")) (fuel + 132) (by omega)
+          (by simp only [eval, copyEnv, Env.bind, bufArr_eq, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
+          (by simp only [eval, evalBinOp, copyEnv, xorEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hmlen, Option.some.injEq, PVal.int.injEq]; omega))]
+  rw [map_toNat_eq_arrN, hash_length]
+  -- stage 4: reset i + ih copy into outer
+  rw [show fuel + 132 = (fuel + 131) + 1 by omega,
+      eval_letIn _ _ (fuel + 131) _ _ _ (.int 0) (by simp [eval])]
+  rw [← copyEnv_self "outer" "ih" "i" (((copyEnv "inner" "m" "i" ((xorEnv (((e.bind "inner" (.array_ (List.replicate 384 (PVal.int 0)))).bind "outer" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) kpFn 64).bind "i" (.int 0)) 384 256 64 (copyFn zfn (ipadFn kpFn 54) 0 64) mFn m_len).bind "ih" (.array_ (arrN 32 (fun j => (Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len))).getD j 0)))).bind "i" (.int 0)) 384 32 64 (copyFn zfn (ipadFn kpFn 92) 0 64) (fun j => (Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len))).getD j 0)
+        (by simp only [Env.bind, copyEnv, xorEnv, bufArr_eq, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
+        (by simp only [Env.bind, copyEnv, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
+  simp only [ihAssigns]
+  rw [show fuel + 131 = (fuel + 96 + 2) + 32 + 1 by omega,
+      copy_loop "outer" "ih" "i" (by decide) (by decide) (by decide) _ 384 32 64
+        (copyFn zfn (ipadFn kpFn 92) 0 64) (fun j => (Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len))).getD j 0) 32 (by omega) (by omega) condIh
+        (.binOp .add (.lit (.int 64)) (.var "i")) _ (fuel + 96)
+        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
+        (fun mm hmm => by simp only [condIh, eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; simp; omega)
+        (by simp only [condIh, eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; simp)]
+  -- stage 5: outer hash
+  rw [show fuel + 98 = (fuel + 97) + 1 by omega,
+      sha256_hash_call_at (copyFn (copyFn zfn (ipadFn kpFn 92) 0 64) (fun j => (Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len))).getD j 0) 64 32) 96 (by omega)
+        (fun i hi => by simp only [copyFn, zfn]; rw [if_neg (by omega), if_neg (by omega)])
+        _ (.var "outer") (.lit (.int 96)) (fuel + 97) (by omega)
+        (by simp only [eval, copyEnv, Env.bind, bufArr_eq, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
+        (by simp [eval])]
+  -- fold to hmac
+  have hkp54 : (Sha256Spec.keyPrep KEY).map (fun b => b ^^^ 54) = (List.range 64).map (ipadFn kpFn 54) := by
+    rw [← hkp, List.map_map]; apply List.map_congr_left; intro j _
+    simp only [ipadFn, ofInt8_const54, Function.comp]
+  have hkp92 : (Sha256Spec.keyPrep KEY).map (fun b => b ^^^ 92) = (List.range 64).map (ipadFn kpFn 92) := by
+    rw [← hkp, List.map_map]; apply List.map_congr_left; intro j _
+    simp only [ipadFn, ofInt8_const92, Function.comp]
+  have hihlist : (List.range 32).map (fun j => (Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len))).getD j 0)
+      = Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len)) := by
+    rw [show (32:Nat) = (Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len))).length from (hash_length _).symm]
+    exact list_eq_rangeGetD _
+  have hinner : (List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len)
+      = (Sha256Spec.keyPrep KEY).map (fun b => b ^^^ 54) ++ (List.range m_len).map mFn := by
+    rw [copyFn_map_append, ipad_prefix, hkp54]
+  have houter : (List.range 96).map (copyFn (copyFn zfn (ipadFn kpFn 92) 0 64) (fun j => (Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len))).getD j 0) 64 32)
+      = (Sha256Spec.keyPrep KEY).map (fun b => b ^^^ 92)
+        ++ Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len)) := by
+    rw [show (96:Nat) = 64 + 32 by omega, copyFn_map_append, ipad_prefix, hkp92, hihlist]
+  rw [houter, hinner]
+  rfl
+
 end Concrete.Proof
