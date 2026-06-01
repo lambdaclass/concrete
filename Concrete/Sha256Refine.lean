@@ -2419,4 +2419,100 @@ theorem copy_loop (dstNm srcNm iNm : String)
       (by omega) (by omega) idxE base (hidx m hm)⟩)
     hcf
 
+-- ==================================================================
+-- ipad/opad xor loop (task #21, hmac): the two-buffer loop
+-- `for i in 0..64 { inner[i] = kp[i]^0x36; outer[i] = kp[i]^0x5c }` fills
+-- inner/outer with the key XORed against the FIPS pads (= copyFn from the
+-- xored key into a zero buffer). copyFn_step0 (off=0), xorval_eval
+-- (the per-byte xor, bridged by ofInt8_natCast_toNat).
+-- ==================================================================
+
+theorem ofInt8_natCast_toNat (b : BitVec 8) : BitVec.ofInt 8 (↑b.toNat) = b := by
+  rw [BitVec.ofInt_natCast, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+
+theorem xorval_eval (kpFn : Nat → BitVec 8) (env : Env) (i : Nat) (c : Int) (hi : i < 64) (fuel : Nat)
+    (hkp : env "kp" = some (.array_ (arrN 64 kpFn))) (hiv : env "i" = some (.int (i : Int))) :
+    eval shaFns env (fuel + 2)
+      (.binOp (.bitxor 8 false) (.arrayIndex (.var "kp") (.var "i")) (.lit (.int c)))
+      = some (.int (kpFn i ^^^ BitVec.ofInt 8 c).toNat) := by
+  have hr : eval shaFns env (fuel + 2) (.arrayIndex (.var "kp") (.var "i"))
+      = some (.int ↑(kpFn i).toNat) := by
+    simp only [eval, hkp, hiv]
+    exact arrN_read 64 kpFn (i : Int) i rfl hi
+  simp only [eval, hr, evalBinOp, ofInt8_natCast_toNat, Option.some.injEq, PVal.int.injEq, Int.ofNat_eq_natCast]
+
+theorem copyFn_step0 (dstFn srcFn : Nat → BitVec 8) (m : Nat) :
+    bufUpd (copyFn dstFn srcFn 0 m) m (srcFn m) = copyFn dstFn srcFn 0 (m + 1) := by
+  have h := copyFn_step dstFn srcFn 0 m; rwa [Nat.zero_add] at h
+
+def zfn : Nat → BitVec 8 := fun _ => 0
+def ipadFn (kpFn : Nat → BitVec 8) (c : Int) : Nat → BitVec 8 := fun j => kpFn j ^^^ BitVec.ofInt 8 c
+
+def xorEnv (e : Env) (kpFn : Nat → BitVec 8) (m : Nat) : Env :=
+  ((((e.bind "inner" (.array_ (bufArr (copyFn zfn (ipadFn kpFn 54) 0 m)))).bind
+     "outer" (.array_ (bufArr (copyFn zfn (ipadFn kpFn 92) 0 m)))).bind
+     "kp" (.array_ (arrN 64 kpFn))).bind "i" (.int (m : Int)))
+
+def xorE (c : Int) : PExpr := .binOp (.bitxor 8 false) (.arrayIndex (.var "kp") (.var "i")) (.lit (.int c))
+def xorAssigns : List (String × PExpr) :=
+  [ ("inner", .arraySet (.var "inner") (.var "i") (xorE 54))
+  , ("outer", .arraySet (.var "outer") (.var "i") (xorE 92))
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+
+set_option maxHeartbeats 1000000 in
+theorem xor_step (e : Env) (kpFn : Nat → BitVec 8) (m : Nat) (hm : m < 64) (fuel : Nat) :
+    eval.evalAssigns shaFns (xorEnv e kpFn m) (fuel + 3) xorAssigns = some (xorEnv e kpFn (m + 1)) := by
+  have hkp : (xorEnv e kpFn m) "kp" = some (.array_ (arrN 64 kpFn)) := by simp [xorEnv, Env.bind]
+  have hiv : (xorEnv e kpFn m) "i" = some (.int (m : Int)) := by simp [xorEnv, Env.bind]
+  have hinner : eval shaFns (xorEnv e kpFn m) (fuel + 2) (.var "inner")
+      = some (.array_ (bufArr (copyFn zfn (ipadFn kpFn 54) 0 m))) := by simp [eval, xorEnv, Env.bind]
+  -- inner store
+  have harr1 : eval shaFns (xorEnv e kpFn m) (fuel + 3)
+      (.arraySet (.var "inner") (.var "i") (xorE 54))
+      = some (.array_ (bufArr (copyFn zfn (ipadFn kpFn 54) 0 (m + 1)))) := by
+    rw [eval_arraySet_lemma shaFns _ (fuel + 2) (.var "inner") (.var "i") (xorE 54)
+        (bufArr (copyFn zfn (ipadFn kpFn 54) 0 m)) (m : Int) (.int (kpFn m ^^^ BitVec.ofInt 8 54).toNat)
+        hinner (by simp [eval, hiv]) (xorval_eval kpFn _ m 54 hm fuel hkp hiv) (by omega)
+        (by rw [show ((m:Int)).toNat = m by omega, bufArr]; simp; omega)]
+    rw [show ((m:Int)).toNat = m by omega,
+        show (kpFn m ^^^ BitVec.ofInt 8 54) = ipadFn kpFn 54 m from rfl, bufArr_set, copyFn_step0]
+  -- outer store, under the env with "inner" already updated
+  have harr2 : eval shaFns ((xorEnv e kpFn m).bind "inner"
+        (.array_ (bufArr (copyFn zfn (ipadFn kpFn 54) 0 (m + 1))))) (fuel + 3)
+      (.arraySet (.var "outer") (.var "i") (xorE 92))
+      = some (.array_ (bufArr (copyFn zfn (ipadFn kpFn 92) 0 (m + 1)))) := by
+    have ho : eval shaFns ((xorEnv e kpFn m).bind "inner"
+          (.array_ (bufArr (copyFn zfn (ipadFn kpFn 54) 0 (m + 1))))) (fuel + 2) (.var "outer")
+        = some (.array_ (bufArr (copyFn zfn (ipadFn kpFn 92) 0 m))) := by simp [eval, xorEnv, Env.bind]
+    rw [eval_arraySet_lemma shaFns _ (fuel + 2) (.var "outer") (.var "i") (xorE 92)
+        (bufArr (copyFn zfn (ipadFn kpFn 92) 0 m)) (m : Int) (.int (kpFn m ^^^ BitVec.ofInt 8 92).toNat)
+        ho (by simp [eval, xorEnv, Env.bind])
+        (xorval_eval kpFn _ m 92 hm fuel (by simp [xorEnv, Env.bind]) (by simp [xorEnv, Env.bind])) (by omega)
+        (by rw [show ((m:Int)).toNat = m by omega, bufArr]; simp; omega)]
+    rw [show ((m:Int)).toNat = m by omega,
+        show (kpFn m ^^^ BitVec.ofInt 8 92) = ipadFn kpFn 92 m from rfl, bufArr_set, copyFn_step0]
+  simp only [xorAssigns, eval.evalAssigns, harr1, harr2]
+  simp only [eval, evalBinOp, Env.bind, xorEnv, beq_self_eq_true, if_true, beq_iff_eq, if_false,
+    String.reduceEq, reduceCtorEq, Option.some.injEq]
+  funext n
+  by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "outer") = true <;>
+    by_cases h3 : (n == "inner") = true <;>
+    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+      reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
+
+def condX : PExpr := .binOp .lt (.var "i") (.lit (.int 64))
+theorem condX_true (e : Env) (kpFn : Nat → BitVec 8) (m : Nat) (hm : m < 64) (F : Nat) :
+    eval shaFns (xorEnv e kpFn m) (F + 1) condX = some (.bool true) := by
+  simp only [condX, xorEnv, eval, Env.bind, evalBinOp]; simp; omega
+theorem condX_false (e : Env) (kpFn : Nat → BitVec 8) (F : Nat) :
+    eval shaFns (xorEnv e kpFn 64) (F + 1) condX = some (.bool false) := by
+  simp only [condX, xorEnv, eval, Env.bind, evalBinOp]; simp
+
+theorem xor_loop (e : Env) (kpFn : Nat → BitVec 8) (cont : PExpr) (base : Nat) :
+    eval shaFns (xorEnv e kpFn 0) ((base + 3) + 64 + 1) (.while_ condX xorAssigns cont)
+      = eval shaFns (xorEnv e kpFn 64) (base + 3) cont :=
+  eval_while_count shaFns condX xorAssigns cont (fun m => xorEnv e kpFn m) 64 (base + 3)
+    (fun m hm => ⟨condX_true e kpFn m hm (base + 2), xor_step e kpFn m hm base⟩)
+    (condX_false e kpFn (base + 2))
+
 end Concrete.Proof
