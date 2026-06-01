@@ -1042,8 +1042,8 @@ theorem arr_read (L : List (BitVec 32)) (env : Env) (fuel : Nat) (j : Nat) (hj :
       List.getElem?_map, List.getElem?_eq_getElem hj]
   simp [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hj]
 
-def stc (state0 wlist : List (BitVec 32)) (m : Nat) : Env :=
-  ((((Env.empty.bind "state" (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind
+def stc (e : Env) (state0 wlist : List (BitVec 32)) (m : Nat) : Env :=
+  ((((e.bind "state" (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind
     "w" (.array_ (wlist.map (fun x => PVal.int x.toNat)))).bind
     "k" (.array_ (Sha256Spec.k.map (fun x => PVal.int x.toNat)))).bind
     "s" (.array_ ((compressFold state0 wlist m).map (fun x => PVal.int x.toNat)))).bind "i" (.int (m:Int))
@@ -1052,32 +1052,32 @@ def assignsC : List (String × PExpr) :=
                                 .arrayIndex (.var "w") (.var "i")])
   , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
 
-theorem cstep (state0 wlist : List (BitVec 32)) (h0 : state0.length = 8) (hwl : wlist.length = 64)
+theorem cstep (e : Env) (state0 wlist : List (BitVec 32)) (h0 : state0.length = 8) (hwl : wlist.length = 64)
     (m : Nat) (hm : m < 64) (fuel : Nat) :
-    eval.evalAssigns shaFns (stc state0 wlist m) (fuel + 9) assignsC
-      = some (stc state0 wlist (m + 1)) := by
+    eval.evalAssigns shaFns (stc e state0 wlist m) (fuel + 9) assignsC
+      = some (stc e state0 wlist (m + 1)) := by
   have hslen : (compressFold state0 wlist m).length = 8 := compressFold_length state0 wlist h0 m
-  have hkbind : (stc state0 wlist m) "k" = some (.array_ (Sha256Spec.k.map (fun x => PVal.int x.toNat))) := by
+  have hkbind : (stc e state0 wlist m) "k" = some (.array_ (Sha256Spec.k.map (fun x => PVal.int x.toNat))) := by
     simp [stc, Env.bind]
-  have hwbind : (stc state0 wlist m) "w" = some (.array_ (wlist.map (fun x => PVal.int x.toNat))) := by
+  have hwbind : (stc e state0 wlist m) "w" = some (.array_ (wlist.map (fun x => PVal.int x.toNat))) := by
     simp [stc, Env.bind]
-  have hiv : eval shaFns (stc state0 wlist m) (fuel + 8) (.var "i") = some (.int (m:Int)) := by
+  have hiv : eval shaFns (stc e state0 wlist m) (fuel + 8) (.var "i") = some (.int (m:Int)) := by
     simp [eval, stc, Env.bind]
-  have hsv : eval shaFns (stc state0 wlist m) (fuel + 8) (.var "s")
+  have hsv : eval shaFns (stc e state0 wlist m) (fuel + 8) (.var "s")
       = some (.array_ ((compressFold state0 wlist m).map (fun x => PVal.int x.toNat))) := by simp [eval, stc, Env.bind]
-  have hke : eval shaFns (stc state0 wlist m) (fuel + 8) (.arrayIndex (.var "k") (.var "i"))
+  have hke : eval shaFns (stc e state0 wlist m) (fuel + 8) (.arrayIndex (.var "k") (.var "i"))
       = some (.int (Sha256Spec.k.getD m 0).toNat) :=
-    arr_read Sha256Spec.k (stc state0 wlist m) (fuel + 7) m (by simp [Sha256Spec.k]; omega)
+    arr_read Sha256Spec.k (stc e state0 wlist m) (fuel + 7) m (by simp [Sha256Spec.k]; omega)
       "k" hkbind _ hiv
-  have hwe : eval shaFns (stc state0 wlist m) (fuel + 8) (.arrayIndex (.var "w") (.var "i"))
+  have hwe : eval shaFns (stc e state0 wlist m) (fuel + 8) (.arrayIndex (.var "w") (.var "i"))
       = some (.int (wlist.getD m 0).toNat) :=
-    arr_read wlist (stc state0 wlist m) (fuel + 7) m (by omega) "w" hwbind _ hiv
-  have hround : eval shaFns (stc state0 wlist m) (fuel + 9)
+    arr_read wlist (stc e state0 wlist m) (fuel + 7) m (by omega) "w" hwbind _ hiv
+  have hround : eval shaFns (stc e state0 wlist m) (fuel + 9)
       (.call "sha256_round" [.var "s", .arrayIndex (.var "k") (.var "i"),
                              .arrayIndex (.var "w") (.var "i")])
       = some (.array_ ((compressFold state0 wlist (m+1)).map (fun x => PVal.int x.toNat))) := by
     rw [round_call (compressFold state0 wlist m) hslen (Sha256Spec.k.getD m 0) (wlist.getD m 0)
-        (stc state0 wlist m) _ _ _ (fuel + 0) (by simpa using hsv) (by simpa using hke)
+        (stc e state0 wlist m) _ _ _ (fuel + 0) (by simpa using hsv) (by simpa using hke)
         (by simpa using hwe)]
     rw [← compressFold_succ]
   simp only [assignsC, eval.evalAssigns, hround]
@@ -1089,20 +1089,20 @@ theorem cstep (state0 wlist : List (BitVec 32)) (h0 : state0.length = 8) (hwl : 
       reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
 
 def condC : PExpr := .binOp .lt (.var "i") (.lit (.int 64))
-theorem cond_c_true (state0 wlist) (m : Nat) (hm : m < 64) (F : Nat) :
-    eval shaFns (stc state0 wlist m) (F + 1) condC = some (.bool true) := by
+theorem cond_c_true (e : Env) (state0 wlist) (m : Nat) (hm : m < 64) (F : Nat) :
+    eval shaFns (stc e state0 wlist m) (F + 1) condC = some (.bool true) := by
   simp only [condC, stc, eval, Env.bind, evalBinOp]; simp; omega
-theorem cond_c_false (state0 wlist) (F : Nat) :
-    eval shaFns (stc state0 wlist 64) (F + 1) condC = some (.bool false) := by
+theorem cond_c_false (e : Env) (state0 wlist) (F : Nat) :
+    eval shaFns (stc e state0 wlist 64) (F + 1) condC = some (.bool false) := by
   simp only [condC, stc, eval, Env.bind, evalBinOp]; simp
 
-theorem compress_loop_eval (state0 wlist : List (BitVec 32))
+theorem compress_loop_eval (e : Env) (state0 wlist : List (BitVec 32))
     (h0 : state0.length = 8) (hwl : wlist.length = 64) (cont : PExpr) (base : Nat) :
-    eval shaFns (stc state0 wlist 0) ((base + 9) + 64 + 1) (.while_ condC assignsC cont)
-      = eval shaFns (stc state0 wlist 64) (base + 9) cont :=
-  eval_while_count shaFns condC assignsC cont (stc state0 wlist) 64 (base + 9)
-    (fun m hm => ⟨cond_c_true state0 wlist m hm (base + 8), cstep state0 wlist h0 hwl m hm base⟩)
-    (cond_c_false state0 wlist (base + 8))
+    eval shaFns (stc e state0 wlist 0) ((base + 9) + 64 + 1) (.while_ condC assignsC cont)
+      = eval shaFns (stc e state0 wlist 64) (base + 9) cont :=
+  eval_while_count shaFns condC assignsC cont (stc e state0 wlist) 64 (base + 9)
+    (fun m hm => ⟨cond_c_true e state0 wlist m hm (base + 8), cstep e state0 wlist h0 hwl m hm base⟩)
+    (cond_c_false e state0 wlist (base + 8))
 
 def aw2 (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
 def ix (nm : String) (j : Nat) : PExpr := .arrayIndex (.var nm) (.lit (.int (j : Int)))
@@ -1113,22 +1113,22 @@ def feedforwardExpr : PExpr :=
               aw2 (ix "state" 6) (ix "s" 6), aw2 (ix "state" 7) (ix "s" 7) ]
 
 set_option maxHeartbeats 1000000 in
-theorem ff_eval (state0 wlist : List (BitVec 32)) (h0 : state0.length = 8) (fuel : Nat) :
-    eval shaFns (stc state0 wlist 64) (fuel + 2) feedforwardExpr
+theorem ff_eval (e : Env) (state0 wlist : List (BitVec 32)) (h0 : state0.length = 8) (fuel : Nat) :
+    eval shaFns (stc e state0 wlist 64) (fuel + 2) feedforwardExpr
       = some (.array_ ((List.range 8).map (fun j =>
           PVal.int (state0.getD j 0 + (compressFold state0 wlist 64).getD j 0).toNat))) := by
   have hsl : (compressFold state0 wlist 64).length = 8 := compressFold_length state0 wlist h0 64
-  have hst : (stc state0 wlist 64) "state"
+  have hst : (stc e state0 wlist 64) "state"
       = some (.array_ (state0.map (fun x => PVal.int x.toNat))) := by simp [stc, Env.bind]
-  have hsb : (stc state0 wlist 64) "s"
+  have hsb : (stc e state0 wlist 64) "s"
       = some (.array_ ((compressFold state0 wlist 64).map (fun x => PVal.int x.toNat))) := by
     simp [stc, Env.bind]
   have rst : ∀ j : Nat, j < 8 →
-      eval shaFns (stc state0 wlist 64) (fuel + 1) (ix "state" j)
+      eval shaFns (stc e state0 wlist 64) (fuel + 1) (ix "state" j)
         = some (.int (state0.getD j 0).toNat) := fun j hj =>
     arr_read state0 _ fuel j (by omega) "state" hst _ (by simp [ix, eval])
   have rsf : ∀ j : Nat, j < 8 →
-      eval shaFns (stc state0 wlist 64) (fuel + 1) (ix "s" j)
+      eval shaFns (stc e state0 wlist 64) (fuel + 1) (ix "s" j)
         = some (.int ((compressFold state0 wlist 64).getD j 0).toNat) := fun j hj =>
     arr_read (compressFold state0 wlist 64) _ fuel j (by omega) "s" hsb _ (by simp [ix, eval])
   simp only [feedforwardExpr, aw2, eval, eval.evalElems, evalBinOp,
@@ -1144,18 +1144,18 @@ def compressBodyExpr : PExpr :=
   .letIn "s" (.var "state")
     (.letIn "i" (.lit (.int 0)) (.while_ condC assignsC feedforwardExpr))
 
-theorem stc_zero_eq (state0 wlist : List (BitVec 32)) :
-    ((((Env.empty.bind "state" (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind
+theorem stc_zero_eq (e : Env) (state0 wlist : List (BitVec 32)) :
+    ((((e.bind "state" (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind
       "w" (.array_ (wlist.map (fun x => PVal.int x.toNat)))).bind
       "k" (.array_ (Sha256Spec.k.map (fun x => PVal.int x.toNat)))).bind
       "s" (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind "i" (.int 0)
-      = stc state0 wlist 0 := rfl
+      = stc e state0 wlist 0 := rfl
 
 set_option maxHeartbeats 1000000 in
-theorem compress_body_refines (state0 wlist : List (BitVec 32))
+theorem compress_body_refines (e : Env) (state0 wlist : List (BitVec 32))
     (h0 : state0.length = 8) (hwl : wlist.length = 64) (fuel : Nat) :
     eval shaFns
-      (((Env.empty.bind "state" (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind
+      (((e.bind "state" (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind
         "w" (.array_ (wlist.map (fun x => PVal.int x.toNat)))).bind
         "k" (.array_ (Sha256Spec.k.map (fun x => PVal.int x.toNat))))
       (fuel + 76) compressBodyExpr
@@ -1167,18 +1167,18 @@ theorem compress_body_refines (state0 wlist : List (BitVec 32))
           = some (.array_ (state0.map (fun x => PVal.int x.toNat)))),
       show fuel + 75 = (fuel + 74) + 1 by omega,
       eval_letIn _ _ _ _ _ _ (PVal.int 0) (by simp [eval]),
-      stc_zero_eq state0 wlist,
+      stc_zero_eq e state0 wlist,
       show fuel + 74 = ((fuel + 0) + 9) + 64 + 1 by omega,
-      compress_loop_eval state0 wlist h0 hwl _ (fuel + 0)]
-  exact ff_eval state0 wlist h0 (fuel + 7)
+      compress_loop_eval e state0 wlist h0 hwl _ (fuel + 0)]
+  exact ff_eval e state0 wlist h0 (fuel + 7)
 
 /-- The compression body (`s := state; 64 rounds; Davies-Meyer feed-forward`)
     computes exactly `Sha256Spec.compress`, given the schedule `w` and round
     constants `k` already in scope. -/
-theorem compress_body_refines_spec (state0 : List (BitVec 32)) (h0 : state0.length = 8)
+theorem compress_body_refines_spec (e : Env) (state0 : List (BitVec 32)) (h0 : state0.length = 8)
     (block : List Sha256Spec.Byte) (fuel : Nat) :
     eval shaFns
-      (((Env.empty.bind "state" (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind
+      (((e.bind "state" (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind
         "w" (.array_ ((Sha256Spec.expandSchedule (Sha256Spec.blockToWords block)).map
               (fun x => PVal.int x.toNat)))).bind
         "k" (.array_ (Sha256Spec.k.map (fun x => PVal.int x.toNat))))
@@ -1187,7 +1187,7 @@ theorem compress_body_refines_spec (state0 : List (BitVec 32)) (h0 : state0.leng
   rw [compress_eq_feedforward, List.map_map]
   have hwl : (Sha256Spec.expandSchedule (Sha256Spec.blockToWords block)).length = 64 :=
     expandSchedule_length _ (by simp [Sha256Spec.blockToWords])
-  have := compress_body_refines state0 (Sha256Spec.expandSchedule (Sha256Spec.blockToWords block))
+  have := compress_body_refines e state0 (Sha256Spec.expandSchedule (Sha256Spec.blockToWords block))
     h0 hwl fuel
   rw [this]
   rfl
