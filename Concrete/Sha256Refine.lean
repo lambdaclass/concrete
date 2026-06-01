@@ -198,21 +198,33 @@ theorem wList_zero (b : Nat → BitVec 8) :
   simp [wList]
   rfl
 
-/-- Setting slot `k` of `wList b k` to the packed word `pwd b k` gives
-    `wList b (k+1)` — the loop's array invariant advances by one word. -/
-theorem wList_set (b : Nat → BitVec 8) (k : Nat) :
-    (wList b k).set k (PVal.int ↑(pwd b k).toNat) = wList b (k + 1) := by
-  apply List.ext_getElem (by simp [wList])
+/-- Generic counter-loop array-update **frame lemma**: setting slot `m` of a
+    "first-`m`-cells-filled" range-map to its `m`-th value extends it to
+    "first-`m+1`-filled". The frame — every cell `i ≠ m` is unchanged — is the
+    single `i ≠ m` branch below, proven ONCE here and reused for every
+    iteration of every such loop (`wList_set`, `wschedList_set`, …) via
+    `eval_while_count`. This is why the SHA-256 loop proofs do not pay a
+    per-index / per-iteration frame cost; see ROADMAP "Frame inference" for the
+    heavier separation-logic story that a flat-heap model would need. -/
+theorem set_in_counter_map {α : Type} (n : Nat) (f : Nat → α) (z : α) (m : Nat) :
+    ((List.range n).map (fun j => if j < m then f j else z)).set m (f m)
+      = (List.range n).map (fun j => if j < m + 1 then f j else z) := by
+  apply List.ext_getElem (by simp)
   intro i h1 _
-  by_cases hki : k = i
-  · subst hki
-    simp only [wList, List.getElem_set_self, List.getElem_map, List.getElem_range]
-    simp
-  · rw [List.getElem_set_ne hki]
-    simp only [wList, List.getElem_map, List.getElem_range]
-    rcases Nat.lt_or_ge i k with h | h
+  by_cases hmi : m = i
+  · subst hmi
+    simp only [List.getElem_set_self, List.getElem_map, List.getElem_range]; simp
+  · rw [List.getElem_set_ne hmi]
+    simp only [List.getElem_map, List.getElem_range]
+    rcases Nat.lt_or_ge i m with h | h
     · rw [if_pos h, if_pos (by omega)]
     · rw [if_neg (by omega), if_neg (by omega)]
+
+/-- Setting slot `k` of `wList b k` to the packed word `pwd b k` gives
+    `wList b (k+1)` — instance of the generic frame lemma. -/
+theorem wList_set (b : Nat → BitVec 8) (k : Nat) :
+    (wList b k).set k (PVal.int ↑(pwd b k).toNat) = wList b (k + 1) :=
+  set_in_counter_map 16 (fun j => PVal.int ↑(pwd b j).toNat) (PVal.int 0) k
 
 -- ===== the loop expression =====
 def cond_e : PExpr := .binOp .lt (.var "i") (.lit (.int 16))
@@ -671,19 +683,11 @@ def wschedList (wf : Nat → BitVec 32) (m : Nat) : List PVal :=
 
 theorem wschedList_length (wf) (m) : (wschedList wf m).length = 64 := by simp [wschedList]
 
+/-- Setting slot `m` of `wschedList wf m` to schedule word `swd wf m` gives
+    `wschedList wf (m+1)` — instance of the generic frame lemma. -/
 theorem wschedList_set (wf) (m : Nat) :
-    (wschedList wf m).set m (PVal.int ↑(swd wf m).toNat) = wschedList wf (m + 1) := by
-  apply List.ext_getElem (by simp [wschedList])
-  intro i h1 _
-  by_cases hmi : m = i
-  · subst hmi
-    simp only [wschedList, List.getElem_set_self, List.getElem_map, List.getElem_range]
-    simp
-  · rw [List.getElem_set_ne hmi]
-    simp only [wschedList, List.getElem_map, List.getElem_range]
-    rcases Nat.lt_or_ge i m with h | h
-    · rw [if_pos h, if_pos (by omega)]
-    · rw [if_neg (by omega), if_neg (by omega)]
+    (wschedList wf m).set m (PVal.int ↑(swd wf m).toNat) = wschedList wf (m + 1) :=
+  set_in_counter_map 64 (fun j => PVal.int ↑(swd wf j).toNat) (PVal.int 0) m
 
 -- read from the working array: index value j < M gives schedule word swd j
 theorem wread (wf : Nat → BitVec 32) (M : Nat) (env : Env) (fuel : Nat) (j : Nat) (hj : j < M)

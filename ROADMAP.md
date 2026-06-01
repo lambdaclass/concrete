@@ -379,6 +379,25 @@ lemmas, and actionable failure diagnostics.
    constant-time source shape.
 11. Add AI-assisted proof repair only after artifacts, statuses, and replay are
    stable enough to validate suggestions mechanically.
+12. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
+   establish not just what an iteration *changes* but what it *preserves* — the
+   frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
+   "a proof mentioning only its footprint preserves everything else"). Today
+   this is handled *cheaply* and *implicitly*: mutation is functional
+   (`List.set` / `Env.bind`), loop invariants are total index-predicates
+   (`fun j => if j < m then word j else 0`), and the frame is discharged ONCE as
+   the generic `set_in_counter_map` lemma and applied O(1)/iteration via
+   `eval_while_count` — so `block_to_words` / `schedule` / `compress` pay no
+   per-cell frame cost. This holds only while updates stay single-cell and
+   arrays stay non-aliasing. It will NOT scale to scattered/multi-cell updates
+   per iteration, multiple aliasing mutable arrays, invariants that are not
+   index-predicates, or a future flat mutable-heap / pointer model. Before any
+   of those land, design a frame-like annotation or inference pass into
+   ProofCore (separation-logic-style footprints, or a `#[frame]`/`modifies`
+   clause that auto-derives preservation) so frame conditions never become the
+   majority of proof work. Gate: do not build it until a second update shape
+   actually forces it (per the operating rules) — the current functional-list
+   model gets framing for free.
 
 ## Phase 7: Audit Commands And Review Artifacts
 
