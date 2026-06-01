@@ -474,6 +474,28 @@ def blockToWordsAtExpr : PExpr :=
 /-- The SHA-256 helper function table: the extracted bodies of `rotr`,
     `ch`, `maj`, the four sigmas, and the compression `round`, keyed by
     their source names. -/
+-- Compression-body / offset-compression expression data, relocated above
+-- `shaFns` so `sha256_compress_at` can be a table entry the multi-block
+-- `sha256_hash` loop resolves. (Their refinement theorems remain below.)
+def assignsC : List (String × PExpr) :=
+  [ ("s", .call "sha256_round" [.var "s", .arrayIndex (.var "k") (.var "i"),
+                                .arrayIndex (.var "w") (.var "i")])
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def condC : PExpr := .binOp .lt (.var "i") (.lit (.int 64))
+def aw2 (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
+def ix (nm : String) (j : Nat) : PExpr := .arrayIndex (.var nm) (.lit (.int (j : Int)))
+def feedforwardExpr : PExpr :=
+  .arrayLit [ aw2 (ix "state" 0) (ix "s" 0), aw2 (ix "state" 1) (ix "s" 1),
+              aw2 (ix "state" 2) (ix "s" 2), aw2 (ix "state" 3) (ix "s" 3),
+              aw2 (ix "state" 4) (ix "s" 4), aw2 (ix "state" 5) (ix "s" 5),
+              aw2 (ix "state" 6) (ix "s" 6), aw2 (ix "state" 7) (ix "s" 7) ]
+def compressBodyExpr : PExpr :=
+  .letIn "s" (.var "state")
+    (.letIn "i" (.lit (.int 0)) (.while_ condC assignsC feedforwardExpr))
+def sha256_compressAtExpr : PExpr :=
+  .letIn "w" (.call "sha256_schedule" [.call "block_to_words_at" [.var "buf", .var "off"]])
+    (.letIn "k" (.call "sha256_k" []) compressBodyExpr)
+
 def shaFns : FnTable
   | "rotr"         => some ⟨"rotr",         ["x", "n"],         rotrExpr⟩
   | "ch"           => some ⟨"ch",           ["x", "y", "z"],    chExpr⟩
@@ -487,6 +509,7 @@ def shaFns : FnTable
   | "sha256_schedule" => some ⟨"sha256_schedule", ["w16"],             scheduleExpr⟩
   | "sha256_k"          => some ⟨"sha256_k",          [],                   sha256kExpr⟩
   | "block_to_words_at" => some ⟨"block_to_words_at", ["buf", "off"],      blockToWordsAtExpr⟩
+  | "sha256_compress_at" => some ⟨"sha256_compress_at", ["state", "buf", "off"], sha256_compressAtExpr⟩
   | _                   => none
 
 /-- Completeness: the unified table resolves every function
@@ -1067,10 +1090,6 @@ def stc (e : Env) (state0 wlist : List (BitVec 32)) (m : Nat) : Env :=
     "w" (.array_ (wlist.map (fun x => PVal.int x.toNat)))).bind
     "k" (.array_ (Sha256Spec.k.map (fun x => PVal.int x.toNat)))).bind
     "s" (.array_ ((compressFold state0 wlist m).map (fun x => PVal.int x.toNat)))).bind "i" (.int (m:Int))
-def assignsC : List (String × PExpr) :=
-  [ ("s", .call "sha256_round" [.var "s", .arrayIndex (.var "k") (.var "i"),
-                                .arrayIndex (.var "w") (.var "i")])
-  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
 
 theorem cstep (e : Env) (state0 wlist : List (BitVec 32)) (h0 : state0.length = 8) (hwl : wlist.length = 64)
     (m : Nat) (hm : m < 64) (fuel : Nat) :
@@ -1108,7 +1127,6 @@ theorem cstep (e : Env) (state0 wlist : List (BitVec 32)) (h0 : state0.length = 
     simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
       reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
 
-def condC : PExpr := .binOp .lt (.var "i") (.lit (.int 64))
 theorem cond_c_true (e : Env) (state0 wlist) (m : Nat) (hm : m < 64) (F : Nat) :
     eval shaFns (stc e state0 wlist m) (F + 1) condC = some (.bool true) := by
   simp only [condC, stc, eval, Env.bind, evalBinOp]; simp; omega
@@ -1124,13 +1142,6 @@ theorem compress_loop_eval (e : Env) (state0 wlist : List (BitVec 32))
     (fun m hm => ⟨cond_c_true e state0 wlist m hm (base + 8), cstep e state0 wlist h0 hwl m hm base⟩)
     (cond_c_false e state0 wlist (base + 8))
 
-def aw2 (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
-def ix (nm : String) (j : Nat) : PExpr := .arrayIndex (.var nm) (.lit (.int (j : Int)))
-def feedforwardExpr : PExpr :=
-  .arrayLit [ aw2 (ix "state" 0) (ix "s" 0), aw2 (ix "state" 1) (ix "s" 1),
-              aw2 (ix "state" 2) (ix "s" 2), aw2 (ix "state" 3) (ix "s" 3),
-              aw2 (ix "state" 4) (ix "s" 4), aw2 (ix "state" 5) (ix "s" 5),
-              aw2 (ix "state" 6) (ix "s" 6), aw2 (ix "state" 7) (ix "s" 7) ]
 
 set_option maxHeartbeats 1000000 in
 theorem ff_eval (e : Env) (state0 wlist : List (BitVec 32)) (h0 : state0.length = 8) (fuel : Nat) :
@@ -1160,9 +1171,6 @@ theorem ff_eval (e : Env) (state0 wlist : List (BitVec 32)) (h0 : state0.length 
     List.map_nil, PVal.array_.injEq, List.cons.injEq, PVal.int.injEq, BitVec.toNat_inj,
     Int.ofNat_eq_natCast]
 
-def compressBodyExpr : PExpr :=
-  .letIn "s" (.var "state")
-    (.letIn "i" (.lit (.int 0)) (.while_ condC assignsC feedforwardExpr))
 
 theorem stc_zero_eq (e : Env) (state0 wlist : List (BitVec 32)) :
     ((((e.bind "state" (.array_ (state0.map (fun x => PVal.int x.toNat)))).bind
@@ -1529,9 +1537,6 @@ theorem env_reshapeAt (state0 : List (BitVec 32)) (bf : Nat → BitVec 8) (off :
   by_cases hk : n = "k" <;> by_cases hw : n = "w" <;> by_cases hst : n = "state" <;>
     by_cases hb : n = "buf" <;> by_cases ho : n = "off" <;> simp_all [cEnv0At, Env.bind]
 
-def sha256_compressAtExpr : PExpr :=
-  .letIn "w" (.call "sha256_schedule" [.call "block_to_words_at" [.var "buf", .var "off"]])
-    (.letIn "k" (.call "sha256_k" []) compressBodyExpr)
 
 set_option maxHeartbeats 2000000 in
 theorem sha256_compress_at_refines_spec (state0 : List (BitVec 32)) (h0 : state0.length = 8)
