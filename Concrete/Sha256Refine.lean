@@ -1191,4 +1191,49 @@ theorem compress_body_refines_spec (state0 : List (BitVec 32)) (h0 : state0.leng
     h0 hwl fuel
   rw [this]
   rfl
+
+-- ==================================================================
+-- Compress composition wrappers (task #21, step 4 — part 1): the
+-- function-call lemmas + glue that wire the proven refinements into a
+-- full sha256_compress. Each call gets a clean bindArgs env, so these
+-- have no env-shadowing issue; the final assembly (running the body
+-- under an env that still carries the w16/block locals) needs an
+-- eval-env-congruence lemma, tracked separately.
+-- ==================================================================
+
+set_option maxHeartbeats 1000000 in
+theorem sha256_k_refines (env : Env) (fuel : Nat) :
+    eval shaFns env (fuel + 2) sha256kExpr
+      = some (.array_ (Sha256Spec.k.map (fun x => PVal.int x.toNat))) := by
+  simp [sha256kExpr, eval, eval.evalElems, Sha256Spec.k]
+
+theorem mapEnc_eq_rangeGetD (L : List (BitVec 32)) :
+    L.map (fun x => PVal.int x.toNat)
+      = (List.range L.length).map (fun j => PVal.int (L.getD j 0).toNat) := by
+  apply List.ext_getElem (by simp)
+  intro j h1 _
+  simp only [List.length_map] at h1
+  simp only [List.getElem_map, List.getElem_range,
+    List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h1, Option.getD_some]
+
+theorem block_to_words_call (b : Nat → BitVec 8) (env : Env) (be : PExpr) (fuel : Nat)
+    (hbe : eval shaFns env (fuel + 24) be = some (.array_ (blockArr b))) :
+    eval shaFns env (fuel + 25) (.call "block_to_words" [be])
+      = some (.array_ ((Sha256Spec.blockToWords ((List.range 64).map b)).map
+          (fun x => PVal.int x.toNat))) := by
+  simp only [eval, shaFns, eval.evalArgs, hbe, bindArgs]
+  exact block_to_words_refines_spec shaFns b fuel
+
+theorem schedule_call (wf : Nat → BitVec 32) (env : Env) (we : PExpr) (fuel : Nat)
+    (hwe : eval shaFns env (fuel + 75) we = some (w16arr wf)) :
+    eval shaFns env (fuel + 76) (.call "sha256_schedule" [we])
+      = some (.array_ ((Sha256Spec.expandSchedule (w16of wf)).map (fun x => PVal.int x.toNat))) := by
+  simp only [eval, shaFns, eval.evalArgs, hwe, bindArgs]
+  exact sha256_schedule_refines_spec wf fuel
+
+theorem sha256_k_call (env : Env) (fuel : Nat) :
+    eval shaFns env (fuel + 3) (.call "sha256_k" [])
+      = some (.array_ (Sha256Spec.k.map (fun x => PVal.int x.toNat))) := by
+  simp only [eval, shaFns, eval.evalArgs, bindArgs]
+  exact sha256_k_refines Env.empty fuel
 end Concrete.Proof
