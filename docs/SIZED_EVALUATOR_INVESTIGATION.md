@@ -2,7 +2,7 @@
 
 Status: research note, not a committed design.
 
-Roadmap reference: Phase 14 research-gated extensions.
+Roadmap reference: Phase 16 research-gated extensions.
 
 ## Why this exists
 
@@ -75,7 +75,8 @@ Potential wins:
 
 - less fuel bookkeeping in generated proof stubs;
 - simpler loop and composition proofs;
-- cleaner Phase 12 evaluator/source-semantics preservation statements;
+- cleaner compiler-soundness bridge evaluator/source-semantics preservation
+  statements;
 - fewer ad hoc `fuel + N` constants in theorem statements;
 - better proof ergonomics for users who should not think about evaluator fuel.
 
@@ -105,8 +106,8 @@ Good triggers:
 
 - generated loop proofs repeatedly need hand-written fuel plumbing;
 - contract/VC-generated proof stubs become dominated by fuel constants;
-- Phase 12 source/evaluator preservation proofs repeatedly duplicate
-  fuel-monotonicity arguments;
+- compiler-soundness bridge source/evaluator preservation proofs repeatedly
+  duplicate fuel-monotonicity arguments;
 - proof authors report that fuel, not program invariants, is the main obstacle.
 
 Bad triggers:
@@ -128,4 +129,3 @@ Bad triggers:
 Track this as ProofCore v2 research. Keep using the current fuel-indexed
 evaluator until real proof work shows that the fuel layer is still a repeated
 tax after the reusable lemmas are applied.
-

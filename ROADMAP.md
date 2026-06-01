@@ -254,30 +254,44 @@ solver-assisted.
    parameters, `result`, literals, comparisons, boolean operators, simple
    arithmetic, fixed array lengths, and named pure predicates where explicitly
    supported.
-3. Store source contracts through Parse/Resolve/Check/Core and report them with
+3. Add a contract design fixture corpus before implementation:
+   straight-line `ch`, bounds-only `get16`, loop-shaped `ct_compare`, and an
+   HMAC-style `ensures result == spec(...)` example. These fixtures define the
+   expected parse, Core, VC, and audit shapes before the parser/compiler work
+   hardens them.
+4. Store source contracts through Parse/Resolve/Check/Core and report them with
    source spans.
-4. Generate verification-condition seeds for each source contract: caller-side
+5. Generate verification-condition seeds for each source contract: caller-side
    preconditions, callee-side postconditions, and assumptions needed by the
    expression language.
-5. Add `--report contracts` with evidence statuses and links to generated
+6. Add `--report contracts` with evidence statuses and links to generated
    obligations and VC ids.
-6. Connect contracts to the proof registry: a theorem can discharge a specific
+7. Connect contracts to the proof registry: a theorem can discharge a specific
    source contract id.
-7. Add contract negative examples: unmet precondition at call site, missing
+8. Map existing proof-registry entries to generated source-contract obligations
+   where possible, so current Lean theorems migrate forward instead of being
+   discarded when contracts become the primary proof surface.
+9. Add contract negative examples: unmet precondition at call site, missing
    postcondition proof, weakened postcondition, invalid contract expression.
-8. Add loop attributes:
+10. Add proof-only source forms:
+   `ghost let`, `assert`, and `assume`. `ghost` erases before codegen;
+   `assert` creates an obligation; `assume` is a tainted, audit-loud
+   assumption, never a proof.
+11. Add loop attributes:
    `#[invariant(...)]` and `#[variant(...)]`.
-9. Generate loop-invariant obligations: initialization, preservation, variant
+12. Generate loop-invariant obligations: initialization, preservation, variant
    decrease, and exit-implies-postcondition.
-10. Add source contract soundness work to the compiler soundness bridge: parsing
+13. Add source contract soundness work to the compiler soundness bridge: parsing
    preserves meaning, generated obligations correspond to contract semantics,
    discharged obligations imply the advertised contract claim.
-11. Add contract diagnostics that explain whether the failure is caller-side
+14. Add contract diagnostics that explain whether the failure is caller-side
     precondition, callee-side postcondition, loop invariant initialization,
     invariant preservation, or variant decrease.
-12. Add contract stability rules: weakening a precondition, strengthening a
+15. Add contract stability rules: weakening a precondition, strengthening a
     postcondition, or changing a public invariant is a semantic API change.
-13. Add one contract-bearing flagship retrofit after the machinery is real.
+16. Add one contract-bearing flagship retrofit after the machinery is real:
+    `constant_time_tag` first, then `hmac_sha256` once its refinement theorem
+    has graduated.
 
 ## Phase 5: Verification Conditions And SMT Assistance
 
@@ -315,24 +329,24 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
    `proved_by_kernel_decision` (kernel-checked), `proved_by_smt` /
    `solver_trusted` (external), `unknown`, `counterexample`, `timeout`,
    `solver_error`.
-7. Surface counterexamples in source terms where possible: function inputs,
+8. Surface counterexamples in source terms where possible: function inputs,
    loop variables, failing index, failing arithmetic side condition, and the
    contract/obligation that failed.
-8. Add CI gates for solver determinism and replay: same VC, same solver
+9. Add CI gates for solver determinism and replay: same VC, same solver
    configuration, same result class, with timeouts treated as non-proofs.
-9. Add Lean replay for the simplest SMT-discharged fragments where practical:
+10. Add Lean replay for the simplest SMT-discharged fragments where practical:
    propositional/linear integer facts, bounds arithmetic, and trivial BitVec
    identities. Results without replay remain explicitly solver-trusted.
-10. Add policy controls: projects can require `proved_by_lean`, allow
+11. Add policy controls: projects can require `proved_by_lean`, allow
     `proved_by_smt`, or permit `solver_trusted` only under named assumptions.
-11. Add SMT negative examples: false postcondition, missing invariant,
+12. Add SMT negative examples: false postcondition, missing invariant,
     overflow counterexample, OOB counterexample, div-zero counterexample,
     solver timeout, and unsupported theory.
-12. Retrofit one flagship with source contracts whose easy VCs discharge
+13. Retrofit one flagship with source contracts whose easy VCs discharge
     automatically, while the meaningful theorem remains Lean-checked.
-13. Update audit/release bundles so VC results appear beside proof registry,
+14. Update audit/release bundles so VC results appear beside proof registry,
     assumptions, runtime obligations, and proof coverage classification.
-14. Add soundness documentation for the SMT path: trusted solver binary,
+15. Add soundness documentation for the SMT path: trusted solver binary,
     encoding assumptions, unsupported theories, replayed fragments, and how a
     solver bug affects each claim class.
 
@@ -352,15 +366,18 @@ lemmas, and actionable failure diagnostics.
    Option, and bounded-buffer invariants.
 5. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
    fixed buffers, Result/Option, loops, and source contracts.
-6. Add proof minimization/debugging UX: show the smallest extracted expression
+6. Add `concrete prove <function>`: generate the proof stub, list the source
+   contracts and VCs, show the registry/spec target, and print the current
+   failing obligation with replay commands.
+7. Add proof minimization/debugging UX: show the smallest extracted expression
    or lemma surface related to a failed proof.
-7. Add proof replay/caching once proof artifacts and fingerprints are stable.
-8. Add simple auto-discharge for structural obligations that do not need human
+8. Add proof replay/caching once proof artifacts and fingerprints are stable.
+9. Add simple auto-discharge for structural obligations that do not need human
    proof search.
-9. Add a small verified/spec-checked standard proof library for common
+10. Add a small verified/spec-checked standard proof library for common
    predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
    constant-time source shape.
-10. Add AI-assisted proof repair only after artifacts, statuses, and replay are
+11. Add AI-assisted proof repair only after artifacts, statuses, and replay are
    stable enough to validate suggestions mechanically.
 
 ## Phase 7: Audit Commands And Review Artifacts
@@ -387,16 +404,18 @@ four graduated flagships and one package-scale example.
 6. Add semantic trust diff gates: capability widening, allocation change,
    trusted boundary addition, stale proof, weakened/missing obligation,
    assumption widening.
-7. Add an artifact viewer CLI/TUI over facts, obligations, proofs,
+7. Add `concrete audit --json`: machine-readable audit output for CI,
+   dashboards, editor tooling, and release bundles.
+8. Add an artifact viewer CLI/TUI over facts, obligations, proofs,
    assumptions, release bundles, and diffs.
-8. Ensure every release bundle includes an evidence replay command.
-9. Add evidence-level monotonicity checks to audit/diff output.
-10. Add one AI-audit demo where an agent answers authority/proof/trust
+9. Ensure every release bundle includes an evidence replay command.
+10. Add evidence-level monotonicity checks to audit/diff output.
+11. Add one AI-audit demo where an agent answers authority/proof/trust
     questions using compiler facts rather than source guesses.
-11. Add review checklists generated from facts: what changed, what widened,
+12. Add review checklists generated from facts: what changed, what widened,
     what became trusted, what lost proof, what gained assumptions, and which
     obligations remain open.
-12. Add artifact redaction/stability rules so release bundles can be shared
+13. Add artifact redaction/stability rules so release bundles can be shared
     publicly without leaking local paths, secrets, or machine-specific noise.
 
 ## Phase 8: Flagship Depth And Examples
@@ -406,6 +425,13 @@ internally coherent.
 
 Done when: the showcase set includes a serious security/crypto or protocol
 example with proof/evidence strong enough to anchor the public pitch.
+
+Immediate HMAC rule: finish `hmac_sha256` before building the source-contract
+language. Contracts/VCs should be designed against a refinement proof that has
+actually been discharged, not against an imagined obligation shape. After HMAC
+graduates, resume Phase 4 through Phase 7 in order: source contracts, VC
+generation, discharge classification, a flagship retrofit, `concrete prove`,
+optional external SMT, and editor/LSP surfaces.
 
 1. Maintain the four graduated flagships and keep their evidence bundles green:
    `parse_validate`, `crypto_verify`, `fixed_capacity`, `constant_time_tag`.
@@ -419,18 +445,26 @@ example with proof/evidence strong enough to anchor the public pitch.
    Ed25519 verification subset.
 6. Add only the ProofCore surface that candidate forces: shifts, bitand, u32
    compound loops, rotations, byte-to-word packing, and multi-round invariants.
-7. Graduate one stronger real-crypto candidate with honest assumptions and an
-   oracle.
-8. Graduate one runtime-error-obligation flagship: parser/protocol example with
+7. For `hmac_sha256`, complete the remaining refinement chain in order:
+   `sha256_schedule_refines_spec`, `sha256_compress_refines_spec`,
+   `sha256_hash_refines_spec`, and `hmac_sha256_refines_spec`.
+8. Graduate `hmac_sha256` only after bar #2 is closed: update manifest,
+   README/status text, release bundle, proof-status table, changelog, and
+   roadmap notes.
+9. After `hmac_sha256` graduates, update the paper and website to use HMAC as
+   the running example for source, spec, proof status, assumptions, oracle,
+   limits, and trusted boundaries. Do not make HMAC the public center before
+   the refinement claim is real.
+10. Graduate one runtime-error-obligation flagship: parser/protocol example with
    no OOB/div-zero/overflow obligations discharged.
-9. Graduate one authority/capability flagship: a privilege-separated tool whose
+11. Graduate one authority/capability flagship: a privilege-separated tool whose
    trusted core cannot touch files/network/processes except through named
    wrappers.
-10. Graduate one FFI-wrapper flagship: trusted C boundary, safe pure core,
+12. Graduate one FFI-wrapper flagship: trusted C boundary, safe pure core,
     explicit assumptions, layout/ABI evidence.
-11. Graduate one ownership-heavy resource flagship: explicit cleanup,
+13. Graduate one ownership-heavy resource flagship: explicit cleanup,
     borrow-heavy APIs, no leaks/double-use, and evidence explaining why.
-12. Keep the curated showcase balanced: parser/protocol, bounded state,
+14. Keep the curated showcase balanced: parser/protocol, bounded state,
     crypto/security, authority, FFI/trust, ownership-heavy.
 
 ## Phase 9: Compiler Soundness Bridge
@@ -501,7 +535,119 @@ and incremental build contracts are explicit enough for release evidence.
 12. Keep QBE/WASM/second backend deferred until evidence attachment,
     optimization policy, and backend trust boundaries are trustworthy.
 
-## Phase 11: Public Release Bar
+## Phase 11: Language Usability And Daily Workflow
+
+Goal: make Concrete usable as a normal experimental language, independent of
+whether a user is writing proofs.
+
+Done when: a new user can format, build, run, test, diagnose, inspect, and
+debug small Concrete programs with predictable commands and useful errors.
+
+1. Add `concrete fmt`: stable formatting for source files, examples, docs
+   snippets, and generated fixtures. Formatting must not churn semantic
+   fingerprints.
+2. Improve diagnostics for parser, resolver, type checker, ownership, linearity,
+   capability, unsupported-construct, and codegen/interpreter mismatch errors:
+   every diagnostic has a source span, reason, and next action.
+3. Add basic LSP/editor diagnostics early: parse/type errors, capability
+   summaries, hover for inferred types, and jump-to-definition. Deeper
+   proof/evidence LSP features remain in the later editor phase.
+4. Stabilize modules and imports before packages grow: module names, file
+   layout, visibility, import resolution, cycle diagnostics, and generated
+   interface summaries.
+5. Decide the v1 iteration protocol before broad stdlib work. Evaluate and
+   document the replacement for closures/trait-object iterators:
+   index-based `for i in 0..len { xs[i] }`, explicit cursor/iterator structs
+   with `next() -> Option<T>`, and monomorphized `for_each`-style helpers. The
+   decision must cover `Vec`, slices, maps, parser cursors, and interpreter
+   workloads, and must explain how authority and allocation remain visible.
+6. Decide capability polymorphism for higher-order stdlib functions before
+   adding `map`/`fold`/`for_each` families or structured concurrency. The
+   design must avoid a combinatorial split like `map`, `map_file`,
+   `map_alloc`; the expected shape is explicit capability-set polymorphism such
+   as `fn map<T, U, C>(xs, f: fn(T) with(C) -> U) with(C) -> ...`, grounded in
+   `research/language/capability-polymorphism.md`.
+7. Define stdlib v1 for daily programs: fixed arrays/slices, bytes/string
+   basics, `Result`/`Option`, numeric helpers, and capability-scoped Console,
+   File, Network, and Alloc APIs. Each stdlib item must declare its evidence
+   class (`trusted`, `enforced`, `proved`, `reported`, or `assumed`).
+8. Design user-facing testing framework UX before `std.test` hardens:
+   test discovery (`#[test]` versus naming convention), expected failures,
+   capability-scoped fixtures, temp files without ambient authority, oracle
+   tests, interpreter-vs-compiled tests, proof-status interaction, and how test
+   failures appear in `concrete audit`.
+9. Add `concrete test`: discover and run user tests, example tests,
+   expected-failure tests, interpreter-vs-compiled differential tests,
+   snapshot tests, oracle tests, and policy/assumption gates through one
+   command.
+10. Add debug/trace mode: `concrete run --trace`, interpreter step traces, Core /
+   lowered-IR dumps, source spans in runtime errors, and stable replay commands
+   for report/debug failures.
+11. Add a minimal project model before full packages: `Concrete.toml` fields for
+   name, entry points, tests, policies, assumptions, source roots, and build
+   profiles.
+12. Normalize the CLI around predictable verbs:
+   `concrete build`, `concrete run`, `concrete test`, `concrete fmt`,
+   `concrete audit`, `concrete prove`, `concrete doc`, and `concrete clean`.
+13. Add `concrete doc`: generate basic API/reference docs from source,
+    capabilities, modules, and public comments without depending on proof
+    infrastructure.
+14. Add a first-user tutorial path that does not start with proofs: install,
+    hello world, ownership, capabilities, arrays, modules, tests, audit, then
+    proof-bearing examples.
+15. Add useful non-proof examples: a small CLI tool, a protocol decoder, a
+    bounded cache, and a capability-scoped file/console program.
+16. Add basic benchmarking UX: run small benchmarks, compare interpreter versus
+    compiled performance, and detect obvious generated-code regressions.
+17. Document the memory model for ordinary users: move/copy/drop behavior,
+    cleanup, borrows, linear values, trusted/Unsafe escape hatches, and what is
+    rejected.
+18. Add cross-platform build sanity for the supported host set: macOS and Linux
+    first, with CI coverage, reproducible commands, and documented toolchain
+    expectations.
+
+## Phase 12: Freestanding And Embedded Target
+
+Goal: make Concrete's hosted-vs-freestanding boundary explicit enough for
+embedded, kernel, and audit-critical targets without destabilizing the hosted
+language.
+
+Prerequisite: the hosted stdlib/runtime boundary, allocator story, target model,
+and daily workflow in Phase 10 and Phase 11 must be stable. Freestanding is not
+a second backend escape hatch; it is a target profile with fewer assumptions.
+
+Trigger: start this phase when at least one serious workload needs no libc,
+explicit allocator/runtime setup, or embedded/kernel-style startup, and the
+hosted evidence pipeline can already explain what will be removed.
+
+Done when: a freestanding Concrete program can build under a named target
+profile, with no ambient hosted stdlib assumptions, explicit allocator/startup
+choices, and an audit report naming every remaining target/runtime assumption.
+
+1. Define `hosted` versus `freestanding` target profiles: libc, startup,
+   allocator, panic/abort behavior, stack assumptions, I/O availability,
+   floating-point assumptions, and supported capabilities.
+2. Split stdlib modules by target profile: core no-alloc/no-OS modules,
+   allocator-backed modules, hosted OS modules, and explicitly unavailable
+   modules.
+3. Define freestanding capability policy: no ambient `File`, `Network`,
+   `Console`, or `Process`; target-specific capabilities must be declared and
+   audited.
+4. Add explicit allocator/runtime hooks for freestanding builds, including
+   ownership of allocation failure behavior and cleanup expectations.
+5. Add linker/startup configuration: entry symbol, no-main mode, target triple,
+   data layout, linker script hooks, and section/layout assumptions.
+6. Add freestanding diagnostics: reject hosted APIs, hidden allocation, libc
+   calls, unsupported target features, and unavailable capabilities.
+7. Add one freestanding example: bounded parser, small checksum/hash kernel, or
+   fixed-capacity state machine with no allocation and no hosted I/O.
+8. Add one embedded-style audit bundle naming all remaining target assumptions:
+   stack, interrupt model if any, allocator/runtime hooks, endian/layout, and
+   backend/toolchain boundary.
+9. Keep WASM, QBE, and additional backends deferred until freestanding target
+   profiles prove the current LLVM path is not enough.
+
+## Phase 13: Public Release Bar
 
 Goal: make Concrete understandable and usable by someone who did not build the
 compiler.
@@ -517,23 +663,32 @@ inspect its audit bundle, and understand the claim matrix in under ten minutes.
 3. Add release claim freeze: README, `CLAIMS_TODAY.md`, roadmap, showcase
    manifest, and release bundles must agree.
 4. Add compatibility policy for proof artifacts and fact schemas.
-5. Add public security/soundness disclosure policy: compiler/proof pipeline
+5. Add compatibility policy for generated contract/VC obligation IDs:
+   obligation IDs should stay stable across harmless formatting and local
+   refactors, and any unavoidable churn should be reported as artifact churn,
+   not hidden under ordinary proof drift.
+6. Define release/showcase evidence policy by class:
+   `proved_by_lean` and `proved_by_kernel_decision` are strong evidence;
+   `tested_by_oracle` is supporting evidence; `proved_by_smt` /
+   `solver_trusted` require explicit policy approval; `open` and unreviewed
+   `assumed` are forbidden for release claims.
+7. Add public security/soundness disclosure policy: compiler/proof pipeline
    bugs are security-relevant.
-6. Publish `THREAT_MODEL.md` and keep it linked from README, release bundles,
+8. Publish `THREAT_MODEL.md` and keep it linked from README, release bundles,
    showcase manifests, and assumptions docs.
-7. Add first-user workflow CI: install compiler, create/run one example,
+9. Add first-user workflow CI: install compiler, create/run one example,
    inspect one audit bundle without repo-local assumptions.
-8. Improve onboarding, tutorial, and docs around `proved` / `enforced` /
+10. Improve onboarding, tutorial, and docs around `proved` / `enforced` /
    `reported` / `assumed` / `trusted`.
-9. Add positioning page against Rust, Zig, Lean, SPARK/Ada, Austral, Dafny,
+11. Add positioning page against Rust, Zig, Lean, SPARK/Ada, Austral, Dafny,
    F*, Why3.
-10. Add migration/adoption playbook: what C/Rust/Zig code moves first, how to
+12. Add migration/adoption playbook: what C/Rust/Zig code moves first, how to
    wrap libraries honestly, what stays outside Concrete.
-11. Add release/install distribution matrix: host triples, checksums/signing,
+13. Add release/install distribution matrix: host triples, checksums/signing,
     install paths, supported/deferred channels.
-12. Ship the first narrow public release only after the above are green.
+14. Ship the first narrow public release only after the above are green.
 
-## Phase 12: Packages And Dependency Evidence
+## Phase 14: Packages And Dependency Evidence
 
 Goal: let package users inspect proof, trust, capability, and assumption facts
 before adopting a dependency.
@@ -558,7 +713,7 @@ policies, provenance, and registry protocol.
 11. Add package provenance and publishing model.
 12. Add package registry server protocol and trust model.
 
-## Phase 13: Editor And Human Tooling
+## Phase 15: Editor And Human Tooling
 
 Goal: make evidence visible where developers work.
 
@@ -579,7 +734,7 @@ reports without inventing a second truth source.
 8. Add language/versioning/deprecation policy across syntax, stdlib, proof/fact
    artifacts.
 
-## Phase 14: Concurrency And Research-Gated Extensions
+## Phase 16: Concurrency And Research-Gated Extensions
 
 Goal: keep speculative ideas gated until Concrete's proof/evidence foundation
 can contain them honestly.
