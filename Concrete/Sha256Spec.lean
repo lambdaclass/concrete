@@ -128,10 +128,87 @@ def compress (state : List W) (block : List Byte) : List W := Id.run do
     s := round s (k.getD i 0) (w.getD i 0)
   return (List.range 8).map (fun j => state.getD j 0 + s.getD j 0)
 
--- TODO (#21): multi-block padded `hash (message : List Byte) : List W`
--- (FIPS 180-4 § 5.1.1 padding + a fold of `compress`) and the
--- `hmac (key message : List Byte) : List Byte` construction (RFC 2104).
--- Defined alongside their refinement proofs, where the padding details
--- are pinned, rather than guessed here.
+-- ------------------------------------------------------------------
+-- Multi-block hash (FIPS 180-4 § 5.1.1 padding + § 6.2 chaining)
+-- ------------------------------------------------------------------
+
+/-- The 8-byte big-endian encoding of a 64-bit count. -/
+def be64 (n : Nat) : List Byte :=
+  (List.range 8).map (fun i => ((BitVec.ofNat 64 n) >>> (8 * (7 - i))).setWidth 8)
+
+/-- FIPS 180-4 § 5.1.1 padding: append `0x80`, then zeros, then the
+    64-bit big-endian message bit-length, to the next 64-byte multiple. -/
+def padMessage (message : List Byte) : List Byte :=
+  let len := message.length
+  let paddedLen := ((len + 9 + 63) / 64) * 64
+  message ++ [128] ++ List.replicate (paddedLen - len - 9) 0 ++ be64 (len * 8)
+
+/-- The 64-byte block at index `blk`. -/
+def blockAt (bytes : List Byte) (blk : Nat) : List Byte :=
+  (bytes.drop (blk * 64)).take 64
+
+/-- The 8-word state after compressing every padded block, from H(0). -/
+def hashState (message : List Byte) : List W :=
+  let padded := padMessage message
+  (List.range (padded.length / 64)).foldl
+    (fun st blk => compress st (blockAt padded blk)) initState
+
+/-- Big-endian unpack of a word into 4 bytes. -/
+def wordToBytes (x : W) : List Byte :=
+  [(x >>> 24).setWidth 8, (x >>> 16).setWidth 8, (x >>> 8).setWidth 8, x.setWidth 8]
+
+/-- Big-endian unpack of the 8-word state into the 32-byte digest. -/
+def stateToBytes (state : List W) : List Byte := (state.take 8).flatMap wordToBytes
+
+/-- SHA-256 of a byte message (FIPS 180-4). -/
+def hash (message : List Byte) : List Byte := stateToBytes (hashState message)
+
+-- ------------------------------------------------------------------
+-- HMAC-SHA256 (RFC 2104)
+-- ------------------------------------------------------------------
+
+/-- Normalize a key to a 64-byte block `K'`: hash it first if it is
+    longer than the block, then zero-pad to 64 bytes. -/
+def keyPrep (key : List Byte) : List Byte :=
+  let k0 := if key.length > 64 then hash key else key
+  k0 ++ List.replicate (64 - k0.length) 0
+
+/-- `HMAC(key, m) = H((K' ⊕ opad) ‖ H((K' ⊕ ipad) ‖ m))`,
+    ipad = `0x36`×64, opad = `0x5c`×64 (RFC 2104). -/
+def hmac (key message : List Byte) : List Byte :=
+  let kp := keyPrep key
+  hash ((kp.map (fun b => b ^^^ 92)) ++ hash ((kp.map (fun b => b ^^^ 54)) ++ message))
+
+-- ------------------------------------------------------------------
+-- Vector validation (FIPS 180-4 App. B / RFC 4231) — checks the spec
+-- is the right mathematics before any refinement proof relies on it.
+-- ------------------------------------------------------------------
+
+/-- SHA-256("abc") = ba7816bf…f20015ad (FIPS 180-4 Appendix B.1). -/
+example : hash [0x61, 0x62, 0x63] =
+    [0xba,0x78,0x16,0xbf,0x8f,0x01,0xcf,0xea,0x41,0x41,0x40,0xde,0x5d,0xae,0x22,0x23,
+     0xb0,0x03,0x61,0xa3,0x96,0x17,0x7a,0x9c,0xb4,0x10,0xff,0x61,0xf2,0x00,0x15,0xad] := by
+  native_decide
+
+/-- SHA-256("") = e3b0c442…7852b855. -/
+example : hash [] =
+    [0xe3,0xb0,0xc4,0x42,0x98,0xfc,0x1c,0x14,0x9a,0xfb,0xf4,0xc8,0x99,0x6f,0xb9,0x24,
+     0x27,0xae,0x41,0xe4,0x64,0x9b,0x93,0x4c,0xa4,0x95,0x99,0x1b,0x78,0x52,0xb8,0x55] := by
+  native_decide
+
+/-- HMAC-SHA256 RFC 4231 Test Case 1: key = 0x0b×20, data = "Hi There". -/
+example : hmac (List.replicate 20 0x0b)
+    [0x48,0x69,0x20,0x54,0x68,0x65,0x72,0x65] =
+    [0xb0,0x34,0x4c,0x61,0xd8,0xdb,0x38,0x53,0x5c,0xa8,0xaf,0xce,0xaf,0x0b,0xf1,0x2b,
+     0x88,0x1d,0xc2,0x00,0xc9,0x83,0x3d,0xa7,0x26,0xe9,0x37,0x6c,0x2e,0x32,0xcf,0xf7] := by
+  native_decide
+
+/-- HMAC-SHA256 RFC 4231 Test Case 2: key = "Jefe", data = "what do ya want for nothing?". -/
+example : hmac [0x4a,0x65,0x66,0x65]
+    [0x77,0x68,0x61,0x74,0x20,0x64,0x6f,0x20,0x79,0x61,0x20,0x77,0x61,0x6e,0x74,0x20,
+     0x66,0x6f,0x72,0x20,0x6e,0x6f,0x74,0x68,0x69,0x6e,0x67,0x3f] =
+    [0x5b,0xdc,0xc1,0x46,0xbf,0x60,0x75,0x4e,0x6a,0x04,0x24,0x26,0x08,0x95,0x75,0xc7,
+     0x5a,0x00,0x3f,0x08,0x9d,0x27,0x39,0x83,0x9d,0xec,0x58,0xb9,0x64,0xec,0x38,0x43] := by
+  native_decide
 
 end Concrete.Sha256Spec
