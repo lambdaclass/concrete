@@ -1806,4 +1806,265 @@ theorem hash_loop_eval (e : Env) (bff : Nat → BitVec 8) (padded : List Sha256S
                   hstep e bff padded nblocks m hm hbound (hslice m hm) base⟩)
     (cond_h_false e bff padded nblocks (base + 78))
 
+-- ==================================================================
+-- state_to_bytes refines its spec (task #21, sha256_hash step 5): the
+-- 8-iteration loop that writes 4 big-endian bytes per state word refines
+-- Sha256Spec.stateToBytes. The first MULTI-store-per-iteration loop:
+-- each iteration advances the byte-fill boundary by 4 (obAt invariant +
+-- set_in_counter_map applied four times via a threaded env), with the
+-- per-byte (>>>k)&255 store value matched to the spec byte by bv_decide.
+-- flatMap_getD_4 indexes the spec's flatMap digest.
+-- ==================================================================
+
+theorem wordToBytes_length (x : Sha256Spec.W) : (Sha256Spec.wordToBytes x).length = 4 := rfl
+
+theorem flatMap_getD_4 (L : List Sha256Spec.W) (i r : Nat) (hr : r < 4) :
+    (L.flatMap Sha256Spec.wordToBytes).getD (4 * i + r) 0
+      = (Sha256Spec.wordToBytes (L.getD i 0)).getD r 0 := by
+  induction L generalizing i with
+  | nil =>
+    simp only [List.flatMap_nil, List.getD_nil, List.getD_eq_getElem?_getD]
+    rcases (by omega : r = 0 ∨ r = 1 ∨ r = 2 ∨ r = 3) with rfl|rfl|rfl|rfl <;>
+      simp [Sha256Spec.wordToBytes]
+  | cons x xs ih =>
+    rw [List.flatMap_cons]
+    cases i with
+    | zero =>
+      simp only [Nat.mul_zero, Nat.zero_add, List.getD_eq_getElem?_getD,
+        List.getElem?_append_left (by rw [wordToBytes_length]; omega : r < (Sha256Spec.wordToBytes x).length),
+        List.getD_cons_zero]
+      rfl
+    | succ i' =>
+      have h4 : 4 * (i' + 1) + r = (Sha256Spec.wordToBytes x).length + (4 * i' + r) := by
+        rw [wordToBytes_length]; omega
+      rw [List.getD_eq_getElem?_getD, h4, List.getElem?_append_right (by omega),
+          Nat.add_sub_cancel_left, ← List.getD_eq_getElem?_getD, ih i']
+      rfl
+
+theorem wordToBytes_getD (y : Sha256Spec.W) (r : Nat) (hr : r < 4) :
+    (Sha256Spec.wordToBytes y).getD r 0 = (y >>> (8 * (3 - r))).setWidth 8 := by
+  rcases (by omega : r = 0 ∨ r = 1 ∨ r = 2 ∨ r = 3) with rfl|rfl|rfl|rfl <;>
+    simp [Sha256Spec.wordToBytes]
+
+def sbyte (state : List Sha256Spec.W) (j : Nat) : BitVec 8 :=
+  (state.getD (j / 4) 0 >>> (8 * (3 - j % 4))).setWidth 8
+
+theorem stateToBytes_length (state : List Sha256Spec.W) (h8 : 8 ≤ state.length) :
+    (Sha256Spec.stateToBytes state).length = 32 := by
+  have ht : (state.take 8).length = 8 := by rw [List.length_take]; omega
+  simp only [Sha256Spec.stateToBytes, List.length_flatMap]
+  rw [show (List.map (fun a => (Sha256Spec.wordToBytes a).length) (state.take 8))
+        = List.replicate 8 4 by
+      apply List.ext_getElem (by simp [List.length_map, List.length_replicate, List.length_take]; omega)
+      intro n h1 _
+      rw [List.getElem_map, List.getElem_replicate, wordToBytes_length]]
+  decide
+
+theorem stateToBytes_getD (state : List Sha256Spec.W) (j : Nat) (hj : j < 32) :
+    (Sha256Spec.stateToBytes state).getD j 0 = sbyte state j := by
+  have hjr : 4 * (j / 4) + j % 4 = j := by omega
+  have hq : j / 4 < 8 := by omega
+  rw [Sha256Spec.stateToBytes, ← hjr,
+      flatMap_getD_4 (state.take 8) (j / 4) (j % 4) (by omega),
+      wordToBytes_getD _ _ (by omega)]
+  rw [show (state.take 8).getD (j / 4) 0 = state.getD (j / 4) 0 by
+        rw [List.getD_eq_getElem?_getD, List.getD_eq_getElem?_getD, List.getElem?_take, if_pos hq]]
+  rw [hjr]; rfl
+
+-- ---- eval side: invariant array, store values ----
+def obAt (state : List Sha256Spec.W) (m : Nat) : List PVal :=
+  (List.range 32).map (fun j => if j < m then PVal.int (sbyte state j).toNat else PVal.int 0)
+theorem obAt_length (state m) : (obAt state m).length = 32 := by simp [obAt]
+theorem obAt_set (state : List Sha256Spec.W) (m : Nat) :
+    (obAt state m).set m (PVal.int (sbyte state m).toNat) = obAt state (m + 1) :=
+  set_in_counter_map 32 (fun j => PVal.int (sbyte state j).toNat) (PVal.int 0) m
+theorem obAt_zero (state) : obAt state 0 = List.replicate 32 (PVal.int 0) := by
+  simp [obAt]; rfl
+theorem obAt_32 (state : List Sha256Spec.W) (h8 : 8 ≤ state.length) :
+    obAt state 32 = (Sha256Spec.stateToBytes state).map (fun b => PVal.int b.toNat) := by
+  apply List.ext_getElem (by simp [obAt, stateToBytes_length state h8])
+  intro j h1 _
+  simp only [obAt, List.length_map, List.length_range] at h1
+  simp only [obAt, List.getElem_map, List.getElem_range, if_pos h1]
+  rw [← getD_eq_getElem_mem _ j (by rw [stateToBytes_length state h8]; exact h1),
+      stateToBytes_getD state j h1]
+
+-- store-value: the shifted+masked byte (r=0,1,2) and the masked-only byte (r=3)
+def sbStore (s : Nat) : PExpr :=
+  .cast (.binOp (.bitand 32 false)
+    (.binOp (.shr 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int (s:Int))))
+    (.lit (.int 255)))
+def sbStore3 : PExpr :=
+  .cast (.binOp (.bitand 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int 255)))
+
+theorem and255_lo (y : BitVec 32) : (y &&& BitVec.ofInt 32 255).toNat = (BitVec.setWidth 8 y).toNat := by
+  have h : y &&& BitVec.ofInt 32 255 = (BitVec.setWidth 8 y).setWidth 32 := by bv_decide
+  rw [h, BitVec.toNat_setWidth,
+    Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le (BitVec.setWidth 8 y).isLt (by decide))]
+
+theorem sb_shr_eval (state : List Sha256Spec.W) (i : Nat) (env : Env) (fuel s : Nat) (hi : i < 8)
+    (h8 : 8 ≤ state.length)
+    (hst : env "state" = some (.array_ (state.map (fun x => PVal.int x.toNat))))
+    (hiv : env "i" = some (.int (i:Int))) :
+    eval shaFns env (fuel + 3) (sbStore s)
+      = some (.int ((state.getD i 0 >>> s).setWidth 8).toNat) := by
+  have hre : eval shaFns env (fuel + 2) (.arrayIndex (.var "state") (.var "i"))
+      = some (.int (state.getD i 0).toNat) :=
+    arr_read state env (fuel + 1) i (by omega) "state" hst _ (by simp [eval, hiv])
+  simp only [sbStore, eval, hre, evalBinOp, ofInt_natCast_toNat, ofInt_ofNat_toNat,
+    Int.toNat_natCast, Option.some.injEq, PVal.int.injEq, and255_lo, Int.ofNat_eq_natCast]
+
+theorem sb_and_eval (state : List Sha256Spec.W) (i : Nat) (env : Env) (fuel : Nat) (hi : i < 8)
+    (h8 : 8 ≤ state.length)
+    (hst : env "state" = some (.array_ (state.map (fun x => PVal.int x.toNat))))
+    (hiv : env "i" = some (.int (i:Int))) :
+    eval shaFns env (fuel + 3) sbStore3
+      = some (.int ((state.getD i 0).setWidth 8).toNat) := by
+  have hre : eval shaFns env (fuel + 2) (.arrayIndex (.var "state") (.var "i"))
+      = some (.int (state.getD i 0).toNat) :=
+    arr_read state env (fuel + 1) i (by omega) "state" hst _ (by simp [eval, hiv])
+  simp only [sbStore3, eval, hre, evalBinOp, ofInt_natCast_toNat, ofInt_ofNat_toNat,
+    Option.some.injEq, PVal.int.injEq, and255_lo, Int.ofNat_eq_natCast]
+
+-- ---- 4-stores-per-iteration step + loop ----
+theorem bind_shadow (env : Env) (k : String) (a b : PVal) :
+    (env.bind k a).bind k b = env.bind k b := by
+  funext n; simp only [Env.bind]; by_cases h : (n == k) = true <;> simp [h]
+
+def envL (e : Env) (state : List Sha256Spec.W) (i_m : Nat) (L : List PVal) : Env :=
+  ((e.bind "state" (.array_ (state.map (fun x => PVal.int x.toNat)))).bind
+    "i" (.int (i_m:Int))).bind "out" (.array_ L)
+
+theorem sbyte_at (state : List Sha256Spec.W) (i r : Nat) (hr : r < 4) :
+    sbyte state (4 * i + r) = (state.getD i 0 >>> (8 * (3 - r))).setWidth 8 := by
+  simp only [sbyte, show (4 * i + r) / 4 = i by omega, show (4 * i + r) % 4 = r by omega]
+
+def oIdx0 : PExpr := .binOp .mul (.var "i") (.lit (.int 4))
+def oIdxK (k : Int) : PExpr := .binOp .add oIdx0 (.lit (.int k))
+def condS : PExpr := .binOp .lt (.var "i") (.lit (.int 8))
+def assignsS : List (String × PExpr) :=
+  [ ("out", .arraySet (.var "out") oIdx0 (sbStore 24))
+  , ("out", .arraySet (.var "out") (oIdxK 1) (sbStore 16))
+  , ("out", .arraySet (.var "out") (oIdxK 2) (sbStore 8))
+  , ("out", .arraySet (.var "out") (oIdxK 3) sbStore3)
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+
+-- one array store advancing obAt by one position `p`
+theorem store_eval (e : Env) (state : List Sha256Spec.W) (m p : Nat) (hp : p < 32)
+    (idxE valE : PExpr) (fuel : Nat)
+    (hidx : eval shaFns (envL e state m (obAt state p)) (fuel + 4) idxE
+      = some (.int ((p : Nat) : Int)))
+    (hval : eval shaFns (envL e state m (obAt state p)) (fuel + 4) valE
+      = some (.int (sbyte state p).toNat)) :
+    eval shaFns (envL e state m (obAt state p)) (fuel + 5)
+      (.arraySet (.var "out") idxE valE)
+      = some (.array_ (obAt state (p + 1))) := by
+  have hout : eval shaFns (envL e state m (obAt state p)) (fuel + 4) (.var "out")
+      = some (.array_ (obAt state p)) := by simp [eval, envL, Env.bind]
+  rw [eval_arraySet_lemma shaFns _ (fuel + 4) (.var "out") idxE valE
+      (obAt state p) ((p : Nat) : Int) (.int (sbyte state p).toNat)
+      hout hidx hval (by omega) (by rw [obAt_length]; omega)]
+  rw [show (((p : Nat) : Int)).toNat = p by omega, obAt_set]
+
+theorem envL_rebind (e : Env) (state : List Sha256Spec.W) (m : Nat) (L L' : List PVal) :
+    (envL e state m L).bind "out" (.array_ L') = envL e state m L' := by
+  simp only [envL]; rw [bind_shadow]
+
+theorem idx0_eval (e : Env) (state : List Sha256Spec.W) (m : Nat) (L : List PVal) (fuel : Nat) :
+    eval shaFns (envL e state m L) (fuel + 4) oIdx0 = some (.int ((4 * m : Nat) : Int)) := by
+  simp only [oIdx0, eval, envL, Env.bind, evalBinOp, beq_self_eq_true, if_true, beq_iff_eq,
+    if_false, String.reduceEq, reduceCtorEq, Option.some.injEq, PVal.int.injEq]; omega
+theorem idxK_eval (e : Env) (state : List Sha256Spec.W) (m : Nat) (L : List PVal) (fuel k : Nat) :
+    eval shaFns (envL e state m L) (fuel + 4) (oIdxK (k : Int)) = some (.int ((4 * m + k : Nat) : Int)) := by
+  simp only [oIdxK, oIdx0, eval, envL, Env.bind, evalBinOp, beq_self_eq_true, if_true, beq_iff_eq,
+    if_false, String.reduceEq, reduceCtorEq, Option.some.injEq, PVal.int.injEq]; omega
+
+theorem val_shr (e : Env) (state : List Sha256Spec.W) (m r : Nat) (hr : r < 3) (hm : m < 8)
+    (h8 : 8 ≤ state.length) (L : List PVal) (fuel : Nat) :
+    eval shaFns (envL e state m L) (fuel + 4) (sbStore (8 * (3 - r)))
+      = some (.int (sbyte state (4 * m + r)).toNat) := by
+  rw [sbyte_at state m r (by omega)]
+  exact sb_shr_eval state m (envL e state m L) (fuel + 1) (8 * (3 - r)) hm h8
+    (by simp [envL, Env.bind]) (by simp [envL, Env.bind])
+theorem val_and (e : Env) (state : List Sha256Spec.W) (m : Nat) (hm : m < 8)
+    (h8 : 8 ≤ state.length) (L : List PVal) (fuel : Nat) :
+    eval shaFns (envL e state m L) (fuel + 4) sbStore3
+      = some (.int (sbyte state (4 * m + 3)).toNat) := by
+  rw [sbyte_at state m 3 (by omega), show 8 * (3 - 3) = 0 by rfl]
+  have := sb_and_eval state m (envL e state m L) (fuel + 1) hm h8
+    (by simp [envL, Env.bind]) (by simp [envL, Env.bind])
+  simpa using this
+
+theorem val_shr0 (e : Env) (state : List Sha256Spec.W) (m : Nat) (hm : m < 8)
+    (h8 : 8 ≤ state.length) (L : List PVal) (fuel : Nat) :
+    eval shaFns (envL e state m L) (fuel + 4) (sbStore 24)
+      = some (.int (sbyte state (4 * m)).toNat) := by
+  rw [show sbyte state (4 * m) = (state.getD m 0 >>> 24).setWidth 8 by
+        simp only [sbyte, show 4 * m / 4 = m by omega, show 4 * m % 4 = 0 by omega]]
+  exact sb_shr_eval state m (envL e state m L) (fuel + 1) 24 hm h8
+    (by simp [envL, Env.bind]) (by simp [envL, Env.bind])
+
+set_option maxHeartbeats 1000000 in
+theorem stb_step (e : Env) (state : List Sha256Spec.W) (m : Nat) (hm : m < 8)
+    (h8 : 8 ≤ state.length) (fuel : Nat) :
+    eval.evalAssigns shaFns (envL e state m (obAt state (4 * m))) (fuel + 5) assignsS
+      = some (envL e state (m + 1) (obAt state (4 * (m + 1)))) := by
+  have s0 := store_eval e state m (4 * m) (by omega) oIdx0 (sbStore 24) fuel
+    (idx0_eval e state m _ fuel) (val_shr0 e state m hm h8 _ fuel)
+  have s1 := store_eval e state m (4 * m + 1) (by omega) (oIdxK 1) (sbStore 16) fuel
+    (idxK_eval e state m _ fuel 1) (val_shr e state m 1 (by omega) hm h8 _ fuel)
+  have s2 := store_eval e state m (4 * m + 2) (by omega) (oIdxK 2) (sbStore 8) fuel
+    (idxK_eval e state m _ fuel 2) (val_shr e state m 2 (by omega) hm h8 _ fuel)
+  have s3 := store_eval e state m (4 * m + 3) (by omega) (oIdxK 3) sbStore3 fuel
+    (idxK_eval e state m _ fuel 3) (val_and e state m hm h8 _ fuel)
+  simp only [assignsS, eval.evalAssigns, s0, envL_rebind, s1, s2, s3,
+    show 4 * m + 1 = 4 * m + 1 from rfl]
+  simp only [eval, envL, Env.bind, evalBinOp, beq_self_eq_true, if_true, beq_iff_eq, if_false,
+    String.reduceEq, reduceCtorEq, Option.some.injEq]
+  funext n
+  by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "out") = true <;>
+    simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
+      reduceCtorEq, Option.some.injEq, PVal.int.injEq, show 4 * (m + 1) = 4 * m + 3 + 1 by omega]
+
+theorem condS_true (e : Env) (state : List Sha256Spec.W) (m : Nat) (L : List PVal) (hm : m < 8) (F : Nat) :
+    eval shaFns (envL e state m L) (F + 1) condS = some (.bool true) := by
+  simp only [condS, envL, eval, Env.bind, evalBinOp]; simp; omega
+theorem condS_false (e : Env) (state : List Sha256Spec.W) (L : List PVal) (F : Nat) :
+    eval shaFns (envL e state 8 L) (F + 1) condS = some (.bool false) := by
+  simp only [condS, envL, eval, Env.bind, evalBinOp]; simp
+
+theorem stb_loop (e : Env) (state : List Sha256Spec.W) (h8 : 8 ≤ state.length)
+    (cont : PExpr) (base : Nat) :
+    eval shaFns (envL e state 0 (obAt state (4 * 0))) ((base + 5) + 8 + 1) (.while_ condS assignsS cont)
+      = eval shaFns (envL e state 8 (obAt state (4 * 8))) (base + 5) cont :=
+  eval_while_count shaFns condS assignsS cont (fun m => envL e state m (obAt state (4 * m))) 8 (base + 5)
+    (fun m hm => ⟨condS_true e state m _ hm (base + 4), stb_step e state m hm h8 base⟩)
+    (condS_false e state _ (base + 4))
+
+theorem arrayLit_zeros32_eval (fns : FnTable) (env : Env) (fuel : Nat) :
+    eval fns env (fuel + 2) (.arrayLit (List.replicate 32 (.lit (.int 0))))
+      = some (.array_ (List.replicate 32 (PVal.int 0))) := by
+  simp only [eval, evalElems_replicate_lit]
+
+def stateToBytesExpr : PExpr :=
+  .letIn "out" (.arrayLit (List.replicate 32 (.lit (.int 0))))
+    (.letIn "i" (.lit (.int 0)) (.while_ condS assignsS (.var "out")))
+
+theorem state_to_bytes_refines_spec (e : Env) (state : List Sha256Spec.W) (h8 : state.length = 8)
+    (fuel : Nat) :
+    eval shaFns (e.bind "state" (.array_ (state.map (fun x => PVal.int x.toNat)))) (fuel + 16) stateToBytesExpr
+      = some (.array_ ((Sha256Spec.stateToBytes state).map (fun b => PVal.int b.toNat))) := by
+  rw [stateToBytesExpr, show fuel + 16 = (fuel + 15) + 1 by omega,
+      eval_letIn _ _ _ _ _ _ _ (arrayLit_zeros32_eval _ _ (fuel + 14))]
+  rw [show fuel + 15 = (fuel + 14) + 1 by omega, eval_letIn _ _ _ _ _ _ (PVal.int 0) (by simp [eval])]
+  rw [← obAt_zero state,
+      show (((e.bind "state" (.array_ (state.map (fun x => PVal.int x.toNat)))).bind
+            "out" (.array_ (obAt state 0))).bind "i" (.int 0))
+          = envL e state 0 (obAt state (4 * 0)) by
+        funext n; simp only [envL, Env.bind, Nat.mul_zero]
+        by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "out") = true <;> simp_all]
+  rw [show fuel + 14 = (fuel + 5) + 8 + 1 by omega, stb_loop e state (by omega) _ fuel,
+      show (4 * 8 : Nat) = 32 from rfl]
+  simp only [eval, envL, Env.bind, beq_self_eq_true, if_true, obAt_32 state (by omega)]
+
 end Concrete.Proof
