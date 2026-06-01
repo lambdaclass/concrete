@@ -2786,4 +2786,184 @@ theorem hmac_linear (kpFn mFn : Nat → BitVec 8) (KEY : List Sha256Spec.Byte) (
   rw [houter, hinner]
   rfl
 
+-- ==================================================================
+-- hmac_sha256 refines its spec (task #21, HMAC bar #2 CLOSED):
+-- the full hmac_sha256(k, k_len, m, m_len) — key-prep (if k_len>64: hash
+-- the key; else copy), ipad/opad, message, and the three sha256_hash calls
+-- — computes exactly Sha256Spec.hmac key message, for k_len ≤ 128 and
+-- m_len ≤ 256. Composes hmac_linear (post-key-prep body) with the
+-- if-branch (kpCopyElse_eval / thenE_eval) via kp_else / kp_if.
+-- ==================================================================
+
+def kpCopyElse : PExpr :=
+  .letIn "i" (.lit (.int 0))
+  (.while_ (.binOp .lt (.var "i") (.var "k_len"))
+    [ ("kp", .arraySet (.var "kp") (.var "i") (.arrayIndex (.var "k") (.var "i")))
+    , ("i", .binOp .add (.var "i") (.lit (.int 1))) ] (.var "kp"))
+
+set_option maxRecDepth 8000 in
+theorem kpCopyElse_eval (kFn : Nat → BitVec 8) (k_len : Nat) (hkl : k_len ≤ 64) (e : Env) (base : Nat)
+    (hkp0 : e "kp" = some (.array_ (arrN 64 zfn))) (hkv : e "k" = some (.array_ (arrN 128 kFn)))
+    (hklv : e "k_len" = some (.int (k_len : Int))) :
+    eval shaFns e ((base + 2) + k_len + 1 + 1) kpCopyElse
+      = some (.array_ (arrN 64 (copyFn zfn kFn 0 k_len))) := by
+  rw [kpCopyElse, show (base + 2) + k_len + 1 + 1 = ((base + 2) + k_len + 1) + 1 by omega,
+      eval_letIn _ _ ((base + 2) + k_len + 1) _ _ _ (.int 0) (by simp [eval])]
+  rw [← copyEnv_self "kp" "k" "i" (e.bind "i" (.int 0)) 64 128 0 zfn kFn
+        (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkp0)
+        (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkv)
+        (by simp only [Env.bind, beq_self_eq_true, if_true])]
+  rw [copy_loop "kp" "k" "i" (by decide) (by decide) (by decide) (e.bind "i" (.int 0)) 64 128 0 zfn kFn k_len
+        (by omega) (by omega) (.binOp .lt (.var "i") (.var "k_len")) (.var "i") (.var "kp") base
+        (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
+        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]; simp; omega)
+        (by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]; simp)]
+  simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]
+
+theorem key_copyFn (kFn : Nat → BitVec 8) (k_len : Nat) :
+    (List.range k_len).map (copyFn zfn kFn 0 k_len) = (List.range k_len).map kFn := by
+  apply List.map_congr_left; intro j hj
+  simp only [List.mem_range] at hj
+  simp only [copyFn, if_pos (show 0 ≤ j ∧ j < 0 + k_len by omega), Nat.sub_zero]
+
+def thenE : PExpr :=
+  .letIn "kbuf" (.arrayLit (List.replicate 384 (.lit (.int 0))))
+  (.letIn "i" (.lit (.int 0))
+  (.while_ (.binOp .lt (.var "i") (.var "k_len"))
+    [ ("kbuf", .arraySet (.var "kbuf") (.var "i") (.arrayIndex (.var "k") (.var "i")))
+    , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+  (.letIn "kh" (.call "sha256_hash" [.var "kbuf", .var "k_len"])
+  (.letIn "i" (.lit (.int 0))
+  (.while_ (.binOp .lt (.var "i") (.lit (.int 32)))
+    [ ("kp", .arraySet (.var "kp") (.var "i") (.arrayIndex (.var "kh") (.var "i")))
+    , ("i", .binOp .add (.var "i") (.lit (.int 1))) ] (.var "kp"))))))
+
+theorem arrayLit_z384 (fns : FnTable) (env : Env) (fuel : Nat) :
+    eval fns env (fuel + 2) (.arrayLit (List.replicate 384 (.lit (.int 0))))
+      = some (.array_ (List.replicate 384 (PVal.int 0))) := by
+  simp only [eval, evalElems_replicate_lit]
+
+set_option maxRecDepth 8000 in
+set_option maxHeartbeats 2000000 in
+theorem thenE_eval (kFn : Nat → BitVec 8) (k_len : Nat) (hkl : k_len ≤ 128) (e : Env) (base : Nat)
+    (hkp0 : e "kp" = some (.array_ (arrN 64 zfn))) (hkv : e "k" = some (.array_ (arrN 128 kFn)))
+    (hklv : e "k_len" = some (.int (k_len : Int))) :
+    eval shaFns e (base + 145 + k_len) thenE
+      = some (.array_ (arrN 64 (copyFn zfn
+          (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 0 32))) := by
+  rw [thenE]
+  -- letIn kbuf
+  rw [show base + 145 + k_len = ((base + 143 + k_len) + 1) + 1 by omega,
+      eval_letIn _ _ ((base + 143 + k_len) + 1) _ _ _ _ (arrayLit_z384 _ _ (base + 143 + k_len)),
+      show (base + 143 + k_len) + 1 = base + 144 + k_len by omega]
+  -- letIn i
+  rw [show base + 144 + k_len = (base + 143 + k_len) + 1 by omega,
+      eval_letIn _ _ (base + 143 + k_len) _ _ _ (.int 0) (by simp [eval])]
+  rw [← copyEnv_self "kbuf" "k" "i" ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn
+        (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; rw [← arrN_zfn 384])
+        (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkv) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
+  rw [show base + 143 + k_len = (base + 140 + 2) + k_len + 1 by omega,
+      copy_loop "kbuf" "k" "i" (by decide) (by decide) (by decide) ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len
+        (by omega) (by omega) (.binOp .lt (.var "i") (.var "k_len")) (.var "i") _ (base + 140)
+        (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
+        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]; simp; omega)
+        (by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]; simp)]
+  -- kh letIn (hash of kbuf)
+  rw [show base + 142 = (base + 141) + 1 by omega,
+      eval_letIn _ _ (base + 141) _ _ _ _
+        (sha256_hash_call_at (copyFn zfn kFn 0 k_len) k_len (by omega)
+          (fun i hi => by simp only [copyFn, zfn]; rw [if_neg (by omega)])
+          (copyEnv "kbuf" "k" "i" ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len) (.var "kbuf") (.var "k_len") (base + 141) (by omega)
+          (by simp only [eval, copyEnv, Env.bind, bufArr_eq, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
+          (by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]))]
+  rw [key_copyFn, map_toNat_eq_arrN, hash_length]
+  -- reset i + kp copy from kh
+  rw [show base + 141 = (base + 140) + 1 by omega,
+      eval_letIn _ _ (base + 140) _ _ _ (.int 0) (by simp [eval])]
+  rw [← copyEnv_self "kp" "kh" "i" (((copyEnv "kbuf" "k" "i" ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len).bind "kh" (.array_ (arrN 32 (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0)))).bind "i" (.int 0)) 64 32 0 zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0)
+        (by simp only [Env.bind, copyEnv, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkp0)
+        (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
+  rw [show base + 140 = (base + 105 + 2) + 32 + 1 by omega,
+      copy_loop "kp" "kh" "i" (by decide) (by decide) (by decide) (((copyEnv "kbuf" "k" "i" ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len).bind "kh" (.array_ (arrN 32 (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0)))).bind "i" (.int 0)) 64 32 0 zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 32
+        (by omega) (by omega) (.binOp .lt (.var "i") (.lit (.int 32))) (.var "i") (.var "kp") (base + 105)
+        (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
+        (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; simp; omega)
+        (by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; simp)]
+  simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]
+
+theorem arrayLit_z64 (fns : FnTable) (env : Env) (fuel : Nat) :
+    eval fns env (fuel + 2) (.arrayLit (List.replicate 64 (.lit (.int 0))))
+      = some (.array_ (List.replicate 64 (PVal.int 0))) := by
+  simp only [eval, evalElems_replicate_lit]
+
+def hmac_sha256Expr : PExpr :=
+  .letIn "kp" (.arrayLit (List.replicate 64 (.lit (.int 0))))
+  (.letIn "kp" (.ifThenElse (.binOp .lt (.lit (.int 64)) (.var "k_len")) thenE kpCopyElse)
+   hmacLinearExpr)
+
+theorem eval_ite_true (fns : FnTable) (env : Env) (fuel : Nat) (cond t el : PExpr) (v : PVal)
+    (hc : eval fns env (fuel + 1) cond = some (.bool true)) (ht : eval fns env fuel t = some v) :
+    eval fns env (fuel + 1) (.ifThenElse cond t el) = some v := by
+  simp only [eval, hc, ht]
+theorem eval_ite_false (fns : FnTable) (env : Env) (fuel : Nat) (cond t el : PExpr) (v : PVal)
+    (hc : eval fns env (fuel + 1) cond = some (.bool false)) (he : eval fns env fuel el = some v) :
+    eval fns env (fuel + 1) (.ifThenElse cond t el) = some v := by
+  simp only [eval, hc, he]
+
+set_option maxRecDepth 8000 in
+set_option maxHeartbeats 4000000 in
+theorem hmac_sha256_refines_spec (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat)
+    (hkl : k_len ≤ 128) (hml : m_len ≤ 256) (e : Env) (fuel : Nat)
+    (hkv : e "k" = some (.array_ (arrN 128 kFn)))
+    (hklv : e "k_len" = some (.int (k_len : Int)))
+    (hmv : e "m" = some (.array_ (arrN 256 mFn)))
+    (hmlen : e "m_len" = some (.int (m_len : Int))) :
+    eval shaFns e (fuel + 350 + k_len + m_len) hmac_sha256Expr
+      = some (.array_ ((Sha256Spec.hmac ((List.range k_len).map kFn) ((List.range m_len).map mFn)).map
+          (fun b => PVal.int b.toNat))) := by
+  rw [hmac_sha256Expr]
+  rw [show fuel + 350 + k_len + m_len = ((fuel + 348 + k_len + m_len) + 1) + 1 by omega,
+      eval_letIn _ _ ((fuel + 348 + k_len + m_len) + 1) _ _ _ _ (arrayLit_z64 _ _ (fuel + 348 + k_len + m_len)),
+      show (fuel + 348 + k_len + m_len) + 1 = fuel + 349 + k_len + m_len by omega]
+  have hkp0 : (e.bind "kp" (.array_ (List.replicate 64 (PVal.int 0)))) "kp" = some (.array_ (arrN 64 zfn)) := by
+    rw [← arrN_zfn 64]; simp [Env.bind]
+  have hkv' : (e.bind "kp" (.array_ (List.replicate 64 (PVal.int 0)))) "k" = some (.array_ (arrN 128 kFn)) := by
+    simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkv
+  have hklv' : (e.bind "kp" (.array_ (List.replicate 64 (PVal.int 0)))) "k_len" = some (.int (k_len:Int)) := by
+    simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hklv
+  by_cases hk : 64 < k_len
+  · -- long key: hash it
+    rw [show fuel + 349 + k_len + m_len = (fuel + 348 + k_len + m_len) + 1 by omega,
+        eval_letIn _ _ (fuel + 348 + k_len + m_len) _ _ _ _
+          (show eval shaFns _ ((fuel + 348 + k_len + m_len) + 1) (.ifThenElse _ thenE kpCopyElse)
+              = some (.array_ (arrN 64 (copyFn zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 0 32))) by
+            exact eval_ite_true _ _ _ _ _ _ _
+              (by simp only [eval, evalBinOp, hklv']; simp; omega)
+              (by rw [show fuel + 348 + k_len + m_len = (fuel + 203 + m_len) + 145 + k_len by omega]
+                  exact thenE_eval kFn k_len hkl _ (fuel + 203 + m_len) hkp0 hkv' hklv'))]
+    have hkp : (List.range 64).map (copyFn zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 0 32)
+        = Sha256Spec.keyPrep ((List.range k_len).map kFn) := by
+      apply kp_if _ _ (by simp; omega)
+      rw [show (32:Nat) = (Sha256Spec.hash ((List.range k_len).map kFn)).length from (hash_length _).symm]
+      exact list_eq_rangeGetD _
+    rw [show fuel + 348 + k_len + m_len = (fuel + 145 + k_len) + 203 + m_len by omega]
+    exact hmac_linear (copyFn zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 0 32) mFn ((List.range k_len).map kFn) m_len hml hkp _ (fuel + 145 + k_len)
+      (by simp [Env.bind]) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv)
+      (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmlen)
+  · -- short key: copy
+    rw [show fuel + 349 + k_len + m_len = (fuel + 348 + k_len + m_len) + 1 by omega,
+        eval_letIn _ _ (fuel + 348 + k_len + m_len) _ _ _ _
+          (show eval shaFns _ ((fuel + 348 + k_len + m_len) + 1) (.ifThenElse _ thenE kpCopyElse)
+              = some (.array_ (arrN 64 (copyFn zfn kFn 0 k_len))) by
+            exact eval_ite_false _ _ _ _ _ _ _
+              (by simp only [eval, evalBinOp, hklv']; simp; omega)
+              (by rw [show fuel + 348 + k_len + m_len = (fuel + 344 + m_len) + 2 + k_len + 1 + 1 by omega]
+                  exact kpCopyElse_eval kFn k_len (by omega) _ (fuel + 344 + m_len) hkp0 hkv' hklv'))]
+    have hkp : (List.range 64).map (copyFn zfn kFn 0 k_len) = Sha256Spec.keyPrep ((List.range k_len).map kFn) :=
+      kp_else kFn k_len (by omega)
+    rw [show fuel + 348 + k_len + m_len = (fuel + 145 + k_len) + 203 + m_len by omega]
+    exact hmac_linear (copyFn zfn kFn 0 k_len) mFn ((List.range k_len).map kFn) m_len hml hkp _ (fuel + 145 + k_len)
+      (by simp [Env.bind]) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv)
+      (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmlen)
+
 end Concrete.Proof
