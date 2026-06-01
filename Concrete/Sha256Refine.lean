@@ -516,6 +516,32 @@ def assignsS : List (String × PExpr) :=
 def stateToBytesExpr : PExpr :=
   .letIn "out" (.arrayLit (List.replicate 32 (.lit (.int 0))))
     (.letIn "i" (.lit (.int 0)) (.while_ condS assignsS (.var "out")))
+-- sha256_hash expression data, relocated above `shaFns` so the hmac body
+-- can call sha256_hash.  (Its refinement theorems remain below.)
+def condH : PExpr := .binOp .lt (.var "blk") (.var "nblocks")
+def assignsH : List (String × PExpr) :=
+  [ ("state", .call "sha256_compress_at"
+      [.var "state", .var "buf", .binOp .mul (.var "blk") (.lit (.int 64))])
+  , ("blk", .binOp .add (.var "blk") (.lit (.int 1))) ]
+def lenStore0 : PExpr := .cast (.binOp (.bitand 32 false) (.var "bits") (.lit (.int 255)))
+def lenStoreS (sh : Nat) : PExpr :=
+  .cast (.binOp (.bitand 32 false)
+    (.binOp (.shr 32 false) (.var "bits") (.lit (.int (sh:Int)))) (.lit (.int 255)))
+def sha256_hashExpr : PExpr :=
+  .letIn "buf" (.var "data")
+  (.letIn "buf" (.arraySet (.var "buf") (.var "len") (.lit (.int 128)))
+  (.letIn "nblocks" (.binOp (.div 32 true)
+      (.binOp .add (.binOp .add (.var "len") (.lit (.int 9))) (.lit (.int 63))) (.lit (.int 64)))
+  (.letIn "plen" (.binOp .mul (.var "nblocks") (.lit (.int 64)))
+  (.letIn "bits" (.cast (.binOp .mul (.var "len") (.lit (.int 8))))
+  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 1))) lenStore0)
+  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 2))) (lenStoreS 8))
+  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 3))) (lenStoreS 16))
+  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 4))) (lenStoreS 24))
+  (.letIn "state" (.call "sha256_init" [])
+  (.letIn "blk" (.lit (.int 0))
+  (.while_ condH assignsH (.call "state_to_bytes" [.var "state"]))))))))))))
+
 def shaFns : FnTable
   | "rotr"         => some ⟨"rotr",         ["x", "n"],         rotrExpr⟩
   | "ch"           => some ⟨"ch",           ["x", "y", "z"],    chExpr⟩
@@ -532,6 +558,7 @@ def shaFns : FnTable
   | "sha256_compress_at" => some ⟨"sha256_compress_at", ["state", "buf", "off"], sha256_compressAtExpr⟩
   | "sha256_init"        => some ⟨"sha256_init",        [],                   sha256_initExpr⟩
   | "state_to_bytes"     => some ⟨"state_to_bytes",     ["state"],            stateToBytesExpr⟩
+  | "sha256_hash"        => some ⟨"sha256_hash",        ["data", "len"],      sha256_hashExpr⟩
   | _                   => none
 
 /-- Completeness: the unified table resolves every function
@@ -1774,11 +1801,6 @@ theorem sha256_compress_at_call (state0 : List (BitVec 32)) (h0 : state0.length 
   exact sha256_compress_at_refines_spec state0 h0 bf off hoff fuel
 
 -- ---- multi-block hash loop ----
-def condH : PExpr := .binOp .lt (.var "blk") (.var "nblocks")
-def assignsH : List (String × PExpr) :=
-  [ ("state", .call "sha256_compress_at"
-      [.var "state", .var "buf", .binOp .mul (.var "blk") (.lit (.int 64))])
-  , ("blk", .binOp .add (.var "blk") (.lit (.int 1))) ]
 
 def hsEnv (e : Env) (bff : Nat → BitVec 8) (padded : List Sha256Spec.Byte) (nblocks blk : Nat) : Env :=
   (((e.bind "state" (.array_ ((hashFold padded blk).map (fun x => PVal.int x.toNat)))).bind
@@ -2112,10 +2134,6 @@ theorem state_to_bytes_call (state : List Sha256Spec.W) (h8 : state.length = 8) 
   simp only [eval, shaFns, eval.evalArgs, hstate, bindArgs]
   exact state_to_bytes_refines_spec Env.empty state h8 fuel
 
-def lenStore0 : PExpr := .cast (.binOp (.bitand 32 false) (.var "bits") (.lit (.int 255)))
-def lenStoreS (sh : Nat) : PExpr :=
-  .cast (.binOp (.bitand 32 false)
-    (.binOp (.shr 32 false) (.var "bits") (.lit (.int (sh:Int)))) (.lit (.int 255)))
 
 theorem lenStore0_eval (env : Env) (fuel len : Nat)
     (hb : env "bits" = some (.int ((len * 8 : Nat) : Int))) :
@@ -2129,20 +2147,6 @@ theorem lenStoreS_eval (env : Env) (fuel len s : Nat)
   simp only [lenStoreS, eval, hb, evalBinOp, ofInt_natCast_toNat, ofInt_ofNat_toNat,
     Int.toNat_natCast, Option.some.injEq, PVal.int.injEq, and255_lo, Int.ofNat_eq_natCast, lenByte, BitVec.ofInt_natCast, BitVec.ofNat_toNat, BitVec.setWidth_eq]
 
-def sha256_hashExpr : PExpr :=
-  .letIn "buf" (.var "data")
-  (.letIn "buf" (.arraySet (.var "buf") (.var "len") (.lit (.int 128)))
-  (.letIn "nblocks" (.binOp (.div 32 true)
-      (.binOp .add (.binOp .add (.var "len") (.lit (.int 9))) (.lit (.int 63))) (.lit (.int 64)))
-  (.letIn "plen" (.binOp .mul (.var "nblocks") (.lit (.int 64)))
-  (.letIn "bits" (.cast (.binOp .mul (.var "len") (.lit (.int 8))))
-  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 1))) lenStore0)
-  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 2))) (lenStoreS 8))
-  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 3))) (lenStoreS 16))
-  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 4))) (lenStoreS 24))
-  (.letIn "state" (.call "sha256_init" [])
-  (.letIn "blk" (.lit (.int 0))
-  (.while_ condH assignsH (.call "state_to_bytes" [.var "state"]))))))))))))
 
 -- helper: bits binding value
 theorem bits_val (e : Env) (len : Nat) (hlenv : e "len" = some (.int (len : Int))) (fuel : Nat) :
@@ -2514,5 +2518,14 @@ theorem xor_loop (e : Env) (kpFn : Nat → BitVec 8) (cont : PExpr) (base : Nat)
   eval_while_count shaFns condX xorAssigns cont (fun m => xorEnv e kpFn m) 64 (base + 3)
     (fun m hm => ⟨condX_true e kpFn m hm (base + 2), xor_step e kpFn m hm base⟩)
     (condX_false e kpFn (base + 2))
+
+theorem sha256_hash_call (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 375)
+    (hz : ∀ i, len ≤ i → df i = 0) (env : Env) (dataE lenE : PExpr) (fuel : Nat)
+    (hdata : eval shaFns env (fuel + 91 + (len + 9 + 63) / 64) dataE = some (.array_ (bufArr df)))
+    (hlenv : eval shaFns env (fuel + 91 + (len + 9 + 63) / 64) lenE = some (.int (len : Int))) :
+    eval shaFns env ((fuel + 91 + (len + 9 + 63) / 64) + 1) (.call "sha256_hash" [dataE, lenE])
+      = some (.array_ ((Sha256Spec.hash ((List.range len).map df)).map (fun b => PVal.int b.toNat))) := by
+  simp only [eval, shaFns, eval.evalArgs, hdata, hlenv, bindArgs]
+  exact sha256_hash_refines_spec df len hlen hz _ fuel (by simp [Env.bind]) (by simp [Env.bind])
 
 end Concrete.Proof
