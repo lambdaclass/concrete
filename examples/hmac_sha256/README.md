@@ -34,20 +34,26 @@ exactly which parts are *proved*, *enforced*, *assumed*, and *tested*.
   cryptographic assumption about SHA-256, not something Concrete proves
   (Layer 3). We prove *functional correctness against the spec*, not
   *security against an adversary*.
-- **Not yet fully proved end-to-end.** Two functions carry kernel
-  theorems today; the rest are proof-*eligible* and runtime-verified.
-  See "Proof status" and "The honest gap" below.
+- **Proved end-to-end (functional correctness, bounded inputs).** The
+  entire SHA-256/HMAC composition chain carries kernel theorems tied to
+  the extracted source through the spec-drift gate — 11 registered
+  proofs, `check-proofs` = 11 verified, 0 failed. The proofs hold for
+  inputs within the documented bounds (`k_len ≤ 128`, `m_len ≤ 256`,
+  hashed `len ≤ 375`); they say nothing about machine-level timing or
+  PRF security (Layers 3–4). See "Proof status" below.
 
 ## The four-layer trust model
 
 This is the load-bearing honesty of the example. See `assumptions.toml`
 for the machine-checked versions.
 
-1. **Functional correctness (proved / in progress).** Lean theorems,
-   kernel-checked, tied to the *extracted* source (not a hand-written
-   parallel model). Two are attached today (see below); the rest are
-   established at runtime against RFC/FIPS vectors and awaiting their
-   theorems.
+1. **Functional correctness (proved).** Lean theorems, kernel-checked,
+   tied to the *extracted* source (not a hand-written parallel model)
+   through the spec-drift gate. The whole chain is proved — the
+   composition theorem `hmac_sha256_refines_spec` shows the extracted
+   body computes exactly `Sha256Spec.hmac` for all inputs in the
+   documented bounds; the RFC/FIPS vectors and the oracle differential
+   cross-check the BitVec reference spec.
 2. **Source-level structural discipline (statically enforced).** No
    allocation, no FFI, no capabilities in the core, compile-time-bounded
    loops, branch-free Boolean round functions, constant-time tag compare
@@ -62,19 +68,32 @@ for the machine-checked versions.
 
 `concrete examples/hmac_sha256/src/main.con --report check-proofs`
 
-| Function | Status | Theorem |
+11 registered proofs, all kernel-verified (`check-proofs` = 11 verified,
+0 failed; spec-drift gate = 0 drift, 0 stale):
+
+| Function | Coverage | Theorem |
 |---|---|---|
-| `sha256_init` | **proved** (point) | `sha256_init_correct` — returns the FIPS H(0) constants |
-| `ch` | **proved** (point) | `ch_selects_high` — `Ch(0xFFFFFFFF, y, z) = y`, over the forced u32 `bitand`/`bitxor` |
-| all other eligible fns | `missing` | extractable; runtime-verified; theorem pending |
+| `sha256_init` | point | `sha256_init_correct` — returns the FIPS H(0) constants |
+| `ch` | point | `ch_selects_high` — `Ch(0xFFFFFFFF, y, z) = y`, over the forced u32 `bitand`/`bitxor` |
+| `block_to_words` | full_contract | `block_to_words_refines_spec` — big-endian word packing |
+| `block_to_words_at` | full_contract | `block_to_words_at_refines_spec` — offset variant |
+| `sha256_schedule` | full_contract | `sha256_schedule_refines_spec` — 64-word message schedule |
+| `sha256_round` | full_contract | `round_refines_list` — one compression round |
+| `sha256_compress` | full_contract | `sha256_compress_refines_spec` — 64-round block compression |
+| `sha256_compress_at` | full_contract | `sha256_compress_at_refines_spec` — offset block compression |
+| `state_to_bytes` | full_contract | `state_to_bytes_refines_spec` — digest serialization |
+| `sha256_hash` | full_contract | `sha256_hash_refines_spec` — multi-block padded hash |
+| `hmac_sha256` | full_contract | `hmac_sha256_refines_spec` — full HMAC (ipad/opad + key-prep branch) |
 | `main` | ineligible | by design (holds `Console`) |
 
-`sha256_init_correct` was the first attached theorem (no PBinOp
-dependency — it pins the array-of-u32 shape and the body-fingerprint
-mechanism). `ch_selects_high` is the first over the *forced u32 bitwise
-surface*. Both are tied to the source through extraction + a registered
-body fingerprint + the spec-drift gate, so editing the source either
-keeps the proof valid or surfaces it as `stale`/drifted in CI.
+Each `full_contract` theorem proves the extracted source body equals an
+independent BitVec spec (`Sha256Spec.hash`/`compress`/`schedule`/…, and
+`Sha256Spec.hmac` at the top) for all inputs in the documented bounds,
+by `eval_while_count` loop induction + `bv_decide` (not 64× unfolding).
+All 11 are registered with the spec equal to the source-extracted PExpr
+(`Concrete.Proof.specs`) and tied through the spec-drift gate: editing a
+source body turns the proof `stale`/drifted in CI (regression-verified —
+perturbing the ipad constant flips proof-status to "10 proved, 1 stale").
 
 ## How ProvableV1 conformance was earned
 
@@ -98,23 +117,28 @@ badge. `u32` arithmetic wraps identically across three semantics — the
 proof model (BitVec), the interpreter (`maskWidth`), and the compiled
 binary (LLVM) — verified by the oracle differential.
 
-## The honest gap (and why end-to-end is a milestone, not a chore)
+## The headline proof milestone (closed)
 
 Full end-to-end correctness — *for all bounded keys/messages,
-`hmac_sha256` returns the RFC digest* — is achievable but is a serious
-proof-engineering project, not the next cleanup. Point proofs by pure
-kernel evaluation do **not** scale: a `while_` with `arraySet` updates
-already strains `simp`'s recursion limit at two iterations, so reducing
-a 64-round compression (let alone a multi-block HMAC) by evaluation is
-impractical. The real path is *universal* theorems via loop induction
-(the `while_step` preservation machinery), bottom-up:
+`hmac_sha256` returns the RFC digest* — is **done**. It was a serious
+proof-engineering project: point proofs by pure kernel evaluation do
+**not** scale (a `while_` with `arraySet` updates strains `simp`'s
+recursion limit at two iterations), so the chain is proved by *universal*
+theorems via loop induction (`eval_while_count`) + `bv_decide`,
+bottom-up:
 
 1. universal `ch`/`maj`/`rotr`/σ correctness (BitVec lemmas),
 2. universal `sha256_compress` over one block (64-round induction),
-3. universal `sha256_hash` over bounded messages (block-loop induction),
-4. universal `hmac_sha256`.
+3. universal `sha256_hash` over bounded messages (multi-block loop
+   induction + data-dependent padding stores),
+4. universal `hmac_sha256` (the `k_len > 64` key-prep branch + ipad/opad).
 
-That is the flagship's headline proof milestone.
+Each step is registered and tied to the exact extracted source through
+the spec-drift gate — the proof is about the literal extracted body, not
+a hand model — so the thesis holds end to end: *source extracts to this
+ProofCore body, this body refines the spec, and drift breaks the claim.*
+The bounds (`k_len ≤ 128`, `m_len ≤ 256`, `len ≤ 375`) are limits, not
+full generality; the oracle differential (600 cases) covers the tail.
 
 ## Run it
 
