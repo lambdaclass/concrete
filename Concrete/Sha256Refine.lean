@@ -29,6 +29,7 @@ import Std.Tactic.BVDecide
 import Concrete.Proof
 import Concrete.ProofKit.Eval
 import Concrete.ProofKit.BitVec
+import Concrete.ProofKit.Array
 import Concrete.Sha256Spec
 
 namespace Concrete.Proof
@@ -166,27 +167,8 @@ theorem wList_zero (b : Nat → BitVec 8) :
   simp [wList]
   rfl
 
-/-- Generic counter-loop array-update **frame lemma**: setting slot `m` of a
-    "first-`m`-cells-filled" range-map to its `m`-th value extends it to
-    "first-`m+1`-filled". The frame — every cell `i ≠ m` is unchanged — is the
-    single `i ≠ m` branch below, proven ONCE here and reused for every
-    iteration of every such loop (`wList_set`, `wschedList_set`, …) via
-    `eval_while_count`. This is why the SHA-256 loop proofs do not pay a
-    per-index / per-iteration frame cost; see ROADMAP "Frame inference" for the
-    heavier separation-logic story that a flat-heap model would need. -/
-theorem set_in_counter_map {α : Type} (n : Nat) (f : Nat → α) (z : α) (m : Nat) :
-    ((List.range n).map (fun j => if j < m then f j else z)).set m (f m)
-      = (List.range n).map (fun j => if j < m + 1 then f j else z) := by
-  apply List.ext_getElem (by simp)
-  intro i h1 _
-  by_cases hmi : m = i
-  · subst hmi
-    simp only [List.getElem_set_self, List.getElem_map, List.getElem_range]; simp
-  · rw [List.getElem_set_ne hmi]
-    simp only [List.getElem_map, List.getElem_range]
-    rcases Nat.lt_or_ge i m with h | h
-    · rw [if_pos h, if_pos (by omega)]
-    · rw [if_neg (by omega), if_neg (by omega)]
+-- `set_in_counter_map` (generic counter-loop array-update frame lemma)
+-- relocated to `Concrete.ProofKit.Array` (Proof Kit v1).
 
 /-- Setting slot `k` of `wList b k` to the packed word `pwd b k` gives
     `wList b (k+1)` — instance of the generic frame lemma. -/
@@ -205,20 +187,7 @@ theorem cond_false (fns : FnTable) (b : Nat → BitVec 8) (base : Nat) :
   simp only [cond_e, stEnv, eval, Env.bind, evalBinOp]
   simp
 
-/-- Generic single-step `arraySet` evaluation, given the three sub-eval
-    results.  Keeps `packExpr` opaque (it enters as `ev`) so its proof is
-    not re-derived. -/
-theorem eval_arraySet_lemma (fns : FnTable) (env : Env) (fuel : Nat)
-    (arr idx val : PExpr) (es : List PVal) (i : Int) (v : PVal)
-    (ea : eval fns env fuel arr = some (.array_ es))
-    (ei : eval fns env fuel idx = some (.int i))
-    (ev : eval fns env fuel val = some v)
-    (hi0 : 0 ≤ i) (hib : i.toNat < es.length) :
-    eval fns env (fuel + 1) (.arraySet arr idx val)
-      = some (.array_ (es.set i.toNat v)) := by
-  simp only [eval, ea, ei, ev]
-  rw [if_neg (by omega), if_neg (by omega)]
-
+-- `eval_arraySet_lemma` relocated to `Concrete.ProofKit.Array` (Proof Kit v1).
 theorem assigns_step (fns : FnTable) (b : Nat → BitVec 8) (k : Nat) (hk : k < 16) (fuel : Nat) :
     eval.evalAssigns fns (stEnv b k) (fuel + 5) assigns_e
       = some (stEnv b (k + 1)) := by
@@ -1458,8 +1427,7 @@ theorem sha256_compress_at_refines_spec (state0 : List (BitVec 32)) (h0 : state0
 -- multi-block hash loop (via sha256_compress_at) consumes.
 -- ==================================================================
 
-def bufUpd (bf : Nat → BitVec 8) (i : Nat) (v : BitVec 8) : Nat → BitVec 8 :=
-  fun j => if j = i then v else bf j
+-- `bufUpd` relocated to `Concrete.ProofKit.Array` (Proof Kit v1).
 
 theorem bufArr_set (bf : Nat → BitVec 8) (i : Nat) (v : BitVec 8) :
     (bufArr bf).set i (PVal.int v.toNat) = bufArr (bufUpd bf i v) := by
@@ -2152,28 +2120,8 @@ theorem sha256_hash_refines_spec (df : Nat → BitVec 8) (len : Nat) (hlen : len
 -- times (key copy, digest copy, message copy, inner-digest copy).
 -- ==================================================================
 
-def arrN (n : Nat) (bf : Nat → BitVec 8) : List PVal :=
-  (List.range n).map (fun j => PVal.int ↑(bf j).toNat)
-
-theorem arrN_length (n : Nat) (bf : Nat → BitVec 8) : (arrN n bf).length = n := by simp [arrN]
-
-theorem arrN_set (n : Nat) (bf : Nat → BitVec 8) (i : Nat) (v : BitVec 8) :
-    (arrN n bf).set i (PVal.int v.toNat) = arrN n (bufUpd bf i v) := by
-  apply List.ext_getElem (by simp [arrN])
-  intro m h1 _
-  simp only [arrN, List.length_map, List.length_range] at h1
-  rw [List.getElem_set]
-  simp only [arrN, List.getElem_map, List.getElem_range, bufUpd]
-  by_cases hmi : m = i
-  · simp [hmi]
-  · simp [hmi, Ne.symm hmi]
-
-theorem arrN_read (n : Nat) (bf : Nat → BitVec 8) (c : Int) (m : Nat) (hc : c = (m:Int)) (hm : m < n) :
-    (if c < 0 then (none : Option PVal) else eval.lookupIndex (arrN n bf) c.toNat)
-      = some (.int ↑(bf m).toNat) := by
-  subst hc
-  rw [if_neg (by omega), show ((m:Int)).toNat = m by omega]
-  simp only [arrN]; exact lookupIndex_range_map _ n m hm
+-- `arrN`, `arrN_length`, `arrN_set`, `arrN_read` relocated to
+-- `Concrete.ProofKit.Array` (Proof Kit v1).
 
 /-- The byte function after copying `src[0..m)` into `dst` at offset `off`. -/
 def copyFn (dstFn srcFn : Nat → BitVec 8) (off m : Nat) : Nat → BitVec 8 :=
@@ -2291,7 +2239,7 @@ theorem copyFn_step0 (dstFn srcFn : Nat → BitVec 8) (m : Nat) :
     bufUpd (copyFn dstFn srcFn 0 m) m (srcFn m) = copyFn dstFn srcFn 0 (m + 1) := by
   have h := copyFn_step dstFn srcFn 0 m; rwa [Nat.zero_add] at h
 
-def zfn : Nat → BitVec 8 := fun _ => 0
+-- `zfn` relocated to `Concrete.ProofKit.Array` (Proof Kit v1).
 def ipadFn (kpFn : Nat → BitVec 8) (c : Int) : Nat → BitVec 8 := fun j => kpFn j ^^^ BitVec.ofInt 8 c
 
 def xorEnv (e : Env) (kpFn : Nat → BitVec 8) (m : Nat) : Env :=
@@ -2438,11 +2386,7 @@ theorem kp_if (khFn : Nat → BitVec 8) (key : List Sha256Spec.Byte) (hlen : key
 -- clean fuel (nb ≤ 6 for len ≤ 375, via eval_fuel_le).
 -- ==================================================================
 
-theorem arrN_zfn (n : Nat) : arrN n zfn = List.replicate n (PVal.int 0) := by
-  apply List.ext_getElem (by simp [arrN])
-  intro j h1 _
-  simp only [arrN, List.length_map, List.length_range] at h1
-  simp [arrN, List.getElem_replicate, zfn]
+-- `arrN_zfn` relocated to `Concrete.ProofKit.Array` (Proof Kit v1).
 theorem bufArr_zfn : bufArr zfn = List.replicate 384 (PVal.int 0) := arrN_zfn 384
 theorem bufArr_eq (f : Nat → BitVec 8) : bufArr f = arrN 384 f := rfl
 

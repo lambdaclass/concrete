@@ -27,6 +27,7 @@ import Concrete.ProofCore
 import Concrete.Proof
 import Concrete.ProofKit.Eval
 import Concrete.ProofKit.BitVec
+import Concrete.ProofKit.Array
 import Concrete.ProofSoundness
 import Concrete.Sha256Spec
 import Concrete.Sha256Refine
