@@ -252,6 +252,7 @@ structure FnDef where
   isTrusted : Bool := false        -- trusted fn: allows raw ptr ops without Unsafe
   isEntryPoint : Bool := false     -- tagged by Check when name == mainFnName
   capSet : CapSet := .empty        -- with(File, Network, ...)
+  ensures : List Expr := []        -- #[ensures(...)] postconditions (source contracts; erased metadata, no codegen)
   span : Span := default
 
 structure ConstDef where
@@ -282,6 +283,17 @@ structure ExternFnDecl where
   retTy : Ty
   isPublic : Bool := false
   isTrusted : Bool := false
+  span : Span := default
+  deriving Repr
+
+/-- `spec fn name(params) -> ret;` — an erased pure specification function:
+    no body, no codegen, no runtime. Names a mathematical spec that source
+    contracts (`#[ensures(...)]`) can refer to. Source-contracts thin slice. -/
+structure SpecFnDecl where
+  name : String
+  params : List Param
+  retTy : Ty
+  isPublic : Bool := false
   span : Span := default
   deriving Repr
 
@@ -337,6 +349,7 @@ structure Module where
   typeAliases : List TypeAlias := []
   capAliases : List CapAlias := []
   externFns : List ExternFnDecl := []
+  specFns : List SpecFnDecl := []
   newtypes : List NewtypeDef := []
   submodules : List Module := []
 

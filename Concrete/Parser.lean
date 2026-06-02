@@ -1613,12 +1613,19 @@ structure ReprOpts where
 
 /-- Parse an attribute like #[repr(C, align(16), packed)], #[intrinsic = "sizeof"], or #[foo].
     Returns (key, optional value, optional repr opts). -/
-partial def parseAttribute : ParseM (String × Option String × Option ReprOpts) := do
+partial def parseAttribute : ParseM (String × Option String × Option ReprOpts × Option Expr) := do
   expect .hash
   expect .lbracket
   let key ← expectIdent
   let tk ← peek
-  if tk == .assign then
+  if tk == .lparen && key == "ensures" then
+    -- #[ensures(EXPR)] — a source-contract postcondition over `result` and params
+    advance
+    let e ← parseExpr
+    expect .rparen
+    expect .rbracket
+    return ("ensures", none, none, some e)
+  else if tk == .assign then
     -- #[key = "value"]
     advance
     let valTk ← peek
@@ -1628,7 +1635,7 @@ partial def parseAttribute : ParseM (String × Option String × Option ReprOpts)
         let sp ← peekSpan
         throwParse "expected string literal in attribute value" (span := some sp)
     expect .rbracket
-    return (key, some val, none)
+    return (key, some val, none, none)
   else if tk == .lparen && key == "repr" then
     -- #[repr(C, align(16), packed)]
     advance
@@ -1658,17 +1665,17 @@ partial def parseAttribute : ParseM (String × Option String × Option ReprOpts)
       if tk2 == .comma then advance; tk2 ← peek
     expect .rparen
     expect .rbracket
-    return ("repr", none, some opts)
+    return ("repr", none, some opts, none)
   else if tk == .lparen then
     -- #[key(value)]
     advance
     let val ← expectIdent
     expect .rparen
     expect .rbracket
-    return (key, some val, none)
+    return (key, some val, none, none)
   else
     expect .rbracket
-    return (key, none, none)
+    return (key, none, none, none)
 
 /-- Parse a newtype definition: newtype Name = Type; or newtype Name<T> = Type; -/
 partial def parseNewtypeDef : ParseM NewtypeDef := do
@@ -1733,17 +1740,22 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
   let mut newtypes : List NewtypeDef := []
   let mut capAliases : List CapAlias := []
   let mut submodules : List Module := []
+  let mut specFns : List SpecFnDecl := []
   let mut pendingRepr : Option ReprOpts := none
   let mut pendingIsTest : Bool := false
+  let mut pendingEnsures : List Expr := []
   let mut tk ← peek
   while tk != stopToken && tk != .eof do
     -- Parse attributes (but don't continue — let the next token be parsed)
     if tk == .hash then
-      let (key, _, reprOpts) ← parseAttribute
+      let (key, _, reprOpts, ensExpr) ← parseAttribute
       if key == "repr" then
         pendingRepr := reprOpts
       if key == "test" then
         pendingIsTest := true
+      match ensExpr with
+      | some e => pendingEnsures := pendingEnsures ++ [e]
+      | none => pure ()
       tk ← peek
     if tk == .import_ then
       if pendingRepr.isSome then
@@ -1776,11 +1788,14 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           let sp ← peekSpan
           throwParse "'trusted' can only be applied to fn or impl" (span := some sp)
         -- Attribute before a declaration (after pub)
-        let (key, _, reprOpts) ← parseAttribute
+        let (key, _, reprOpts, ensExpr) ← parseAttribute
         if key == "repr" then
           pendingRepr := reprOpts
         if key == "test" then
           pendingIsTest := true
+        match ensExpr with
+        | some e => pendingEnsures := pendingEnsures ++ [e]
+        | none => pure ()
       else
         -- Any non-struct declaration: reject dangling #[repr(...)]
         if pendingRepr.isSome then
@@ -1854,13 +1869,27 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
             -- "mod other;" - module declaration
             expect .semicolon
             submodules := submodules ++ [{ name := subName, structs := [], enums := [], functions := [] }]
+        else if tk == .ident "spec" then
+          -- `spec fn name(params) -> ret;` — erased pure specification function
+          advance  -- consume 'spec'
+          let sp ← peekSpan
+          expect .fn
+          let name ← expectIdent
+          expect .lparen
+          let params ← parseParamList
+          expect .rparen
+          let tkr ← peek
+          let retTy ← if tkr == .arrow then advance; parseType else pure .unit
+          expect .semicolon
+          specFns := specFns ++ [{ name, params, retTy, isPublic := isPub, span := sp }]
         else if tk == .fn then
           -- Check if function has a body or is body-less (intrinsic/declaration)
           let f ← parseFnDefOrDecl
           match f with
-          | .inl fnDef => fns := fns ++ [{ fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted }]
+          | .inl fnDef => fns := fns ++ [{ fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, ensures := pendingEnsures }]
           | .inr extDef => externFns := externFns ++ [{ extDef with isPublic := isPub }]
           pendingIsTest := false
+          pendingEnsures := []
         else if tk == .ident "union" then
           -- Parse union as a struct (all fields share memory)
           advance  -- consume 'union'
@@ -1883,7 +1912,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           throwParse s!"unexpected token {tk}" (span := some sp)
     tk ← peek
   return { name := "", structs, enums, functions := fns, imports, implBlocks, traits,
-           traitImpls, constants, typeAliases, capAliases, externFns, newtypes, submodules }
+           traitImpls, constants, typeAliases, capAliases, externFns, specFns, newtypes, submodules }
 
 partial def parseModule : ParseM Module := do
   expect .«mod»

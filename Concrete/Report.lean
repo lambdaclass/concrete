@@ -7,6 +7,7 @@ import Concrete.Proof
 import Concrete.ProofCore
 import Concrete.SSA
 import Concrete.Diagnostic
+import Concrete.Format
 
 namespace Concrete
 namespace Report
@@ -557,6 +558,32 @@ private def interfaceModule (name : String) (fs : FileSummary) : String :=
         s!"    newtype {nt.name}({tyToStr nt.innerTy})"
       lines
   s!"{header}\n{"\n".intercalate lines}"
+
+/-- `--report contracts`: list discovered source contracts — `spec fn`
+    declarations (erased pure specs) and `#[ensures(...)]` postconditions,
+    rendered as per-function obligations. The audit report links each
+    obligation to its discharge evidence; this report just surfaces the claims
+    written in source. -/
+partial def contractsReport (modules : List Module) : String := Id.run do
+  let rec go (m : Module) (acc : String) : String := Id.run do
+    let mut out := acc
+    let pfx := if m.name.isEmpty then "" else m.name ++ "."
+    for sf in m.specFns do
+      let ps := ", ".intercalate (sf.params.map (fun p => s!"{p.name}: {Concrete.fmtTy p.ty}"))
+      out := out ++ s!"\nspec fn {pfx}{sf.name}({ps}) -> {Concrete.fmtTy sf.retTy}"
+    for f in m.functions do
+      if !f.ensures.isEmpty then
+        out := out ++ s!"\n\n{pfx}{f.name}"
+        let mut i := 1
+        for e in f.ensures do
+          out := out ++ s!"\n  O{i}  ensures {Concrete.fmtExpr e}"
+          i := i + 1
+    for sub in m.submodules do
+      out := go sub out
+    return out
+  let body := modules.foldl (fun acc m => go m acc) ""
+  let body := if body.isEmpty then "\n(no spec fns or #[ensures] contracts found)" else body
+  return s!"=== Source Contracts ==={body}\n"
 
 def interfaceReport (summaryTable : List (String × FileSummary)) : String :=
   let header := "=== Interface Summary ==="
