@@ -146,20 +146,9 @@ def pwd (b : Nat → BitVec 8) (j : Nat) : BitVec 32 :=
 def blockArr (b : Nat → BitVec 8) : List PVal :=
   (List.range 64).map (fun j => PVal.int ↑(b j).toNat)
 
-private def idx0 : PExpr := .binOp .mul (.var "i") (.lit (.int 4))
-private def idxO (o : Int) : PExpr := .binOp .add idx0 (.lit (.int o))
-
-/-- The big-endian word-packing expression in `block_to_words`'s loop
-    body: `(block[i*4]<<24) | (block[i*4+1]<<16) | (block[i*4+2]<<8) |
-    block[i*4+3]`, each byte cast to u32. -/
-def packExpr : PExpr :=
-  .binOp (.bitor 32 false)
-    (.binOp (.bitor 32 false)
-      (.binOp (.bitor 32 false)
-        (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "block") idx0)) (.lit (.int 24)))
-        (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "block") (idxO 1))) (.lit (.int 16))))
-      (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "block") (idxO 2))) (.lit (.int 8))))
-    (.cast (.arrayIndex (.var "block") (idxO 3)))
+-- `idx0`, `idxO`, `packExpr`, `cond_e`, `assigns_e`, `blockToWordsExpr`
+-- are now defined in `Concrete.Proof` (relocated for the spec-drift gate,
+-- task #22) in exact extracted shape — `idxO o = add (lit o) (mul i 4)`.
 
 set_option linter.unusedSimpArgs false in
 /-- The loop body's packing expression evaluates to the spec packed
@@ -170,9 +159,9 @@ theorem packExpr_eval (fns : FnTable) (b : Nat → BitVec 8) (env : Env) (k : Na
     eval fns env (fuel + 4) packExpr
       = some (.int (pwd b k).toNat) := by
   simp only [packExpr, idx0, idxO, blockArr, pwd, eval, evalBinOp, hb, hi]
-  rw [show ((k:Int) * 4 + 1) = ((4*k+1 : Nat) : Int) by omega,
-     show ((k:Int) * 4 + 2) = ((4*k+2 : Nat) : Int) by omega,
-     show ((k:Int) * 4 + 3) = ((4*k+3 : Nat) : Int) by omega,
+  rw [show ((1:Int) + (k:Int) * 4) = ((4*k+1 : Nat) : Int) by omega,
+     show ((2:Int) + (k:Int) * 4) = ((4*k+2 : Nat) : Int) by omega,
+     show ((3:Int) + (k:Int) * 4) = ((4*k+3 : Nat) : Int) by omega,
      show ((k:Int) * 4) = ((4*k : Nat) : Int) by omega]
   rw [readN b (4*k) (by omega), readN b (4*k+1) (by omega),
       readN b (4*k+2) (by omega), readN b (4*k+3) (by omega)]
@@ -226,12 +215,7 @@ theorem wList_set (b : Nat → BitVec 8) (k : Nat) :
     (wList b k).set k (PVal.int ↑(pwd b k).toNat) = wList b (k + 1) :=
   set_in_counter_map 16 (fun j => PVal.int ↑(pwd b j).toNat) (PVal.int 0) k
 
--- ===== the loop expression =====
-def cond_e : PExpr := .binOp .lt (.var "i") (.lit (.int 16))
-def assigns_e : List (String × PExpr) :=
-  [ ("w", .arraySet (.var "w") (.var "i") packExpr)
-  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
-
+-- ===== the loop expression (cond_e/assigns_e relocated to Concrete.Proof) =====
 theorem cond_true (fns : FnTable) (b : Nat → BitVec 8) (k : Nat) (hk : k < 16) (base : Nat) :
     eval fns (stEnv b k) (base + 1) cond_e = some (.bool true) := by
   simp only [cond_e, stEnv, eval, Env.bind, evalBinOp]
@@ -288,12 +272,7 @@ theorem assigns_step (fns : FnTable) (b : Nat → BitVec 8) (k : Nat) (hk : k < 
   by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "w") = true <;>
     simp_all [Option.some.injEq, PVal.int.injEq] <;> omega
 
--- ===== assembling the full loop =====
-def blockToWordsExpr : PExpr :=
-  .letIn "w" (.arrayLit (List.replicate 16 (.lit (.int 0))))
-    (.letIn "i" (.lit (.int 0))
-      (.while_ cond_e assigns_e (.var "w")))
-
+-- ===== assembling the full loop (blockToWordsExpr relocated to Concrete.Proof) =====
 theorem eval_letIn (fns : FnTable) (env : Env) (fuel : Nat)
     (name : String) (val body : PExpr) (v : PVal)
     (hv : eval fns env (fuel + 1) val = some v) :
@@ -416,131 +395,31 @@ def smallSigma1Expr : PExpr :=
       (.call "rotr" [.var "x", .lit (.int 17)]) (.call "rotr" [.var "x", .lit (.int 19)]))
     (.binOp (.shr 32 false) (.var "x") (.lit (.int 10)))
 
-private def addwE (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
-private def stateAt (i : Int) : PExpr := .arrayIndex (.var "state") (.lit (.int i))
-
-/-- Extracted `sha256_round(state, k, w)` body. -/
-def roundExpr : PExpr :=
-  .letIn "t1"
-    (addwE (addwE (addwE (addwE (stateAt 7) (.call "big_sigma1" [stateAt 4]))
-              (.call "ch" [stateAt 4, stateAt 5, stateAt 6])) (.var "k")) (.var "w"))
-    (.letIn "t2"
-      (addwE (.call "big_sigma0" [stateAt 0]) (.call "maj" [stateAt 0, stateAt 1, stateAt 2]))
-      (.arrayLit [ addwE (.var "t1") (.var "t2"), stateAt 0, stateAt 1, stateAt 2,
-                   addwE (stateAt 3) (.var "t1"), stateAt 4, stateAt 5, stateAt 6 ]))
-
--- Schedule / k / round expression data, relocated above `shaFns` so the
--- unified table can name every callee `sha256_compress` reaches.
-def addwS (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
-def wIdx (c : Int) : PExpr := .arrayIndex (.var "w") (.binOp .sub (.var "i") (.lit (.int c)))
-def expansionExpr : PExpr :=
-  addwS (addwS (addwS (.call "small_sigma1" [wIdx 2]) (wIdx 7))
-          (.call "small_sigma0" [wIdx 15])) (wIdx 16)
-def assigns1 : List (String × PExpr) :=
-  [ ("w", .arraySet (.var "w") (.var "i") (.arrayIndex (.var "w16") (.var "i")))
-  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
-def assigns2 : List (String × PExpr) :=
-  [ ("w", .arraySet (.var "w") (.var "i") expansionExpr)
-  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
-def condE (bound : Int) : PExpr := .binOp .lt (.var "i") (.lit (.int bound))
-def scheduleExpr : PExpr :=
-  .letIn "w" (.arrayLit (List.replicate 64 (.lit (.int 0))))
-    (.letIn "i" (.lit (.int 0))
-      (.while_ (condE 16) assigns1
-        (.letIn "i" (.lit (.int 16))
-          (.while_ (condE 64) assigns2 (.var "w")))))
+-- `addwE`, `stateAt`, `roundExpr` (sha256_round) and `addwS`, `wIdx`,
+-- `expansionExpr`, `assigns1`, `assigns2`, `condE`, `scheduleExpr`
+-- (sha256_schedule) are relocated to `Concrete.Proof` (task #22, verbatim —
+-- exact extracted shape). `sha256kExpr` (a leaf, called by name) stays here.
 /-- Extracted `sha256_k()` body: the 64 round constants K[0..63]. -/
 def sha256kExpr : PExpr := .arrayLit [.lit (.int 0x428a2f98), .lit (.int 0x71374491), .lit (.int 0xb5c0fbcf), .lit (.int 0xe9b5dba5), .lit (.int 0x3956c25b), .lit (.int 0x59f111f1), .lit (.int 0x923f82a4), .lit (.int 0xab1c5ed5), .lit (.int 0xd807aa98), .lit (.int 0x12835b01), .lit (.int 0x243185be), .lit (.int 0x550c7dc3), .lit (.int 0x72be5d74), .lit (.int 0x80deb1fe), .lit (.int 0x9bdc06a7), .lit (.int 0xc19bf174), .lit (.int 0xe49b69c1), .lit (.int 0xefbe4786), .lit (.int 0xfc19dc6), .lit (.int 0x240ca1cc), .lit (.int 0x2de92c6f), .lit (.int 0x4a7484aa), .lit (.int 0x5cb0a9dc), .lit (.int 0x76f988da), .lit (.int 0x983e5152), .lit (.int 0xa831c66d), .lit (.int 0xb00327c8), .lit (.int 0xbf597fc7), .lit (.int 0xc6e00bf3), .lit (.int 0xd5a79147), .lit (.int 0x6ca6351), .lit (.int 0x14292967), .lit (.int 0x27b70a85), .lit (.int 0x2e1b2138), .lit (.int 0x4d2c6dfc), .lit (.int 0x53380d13), .lit (.int 0x650a7354), .lit (.int 0x766a0abb), .lit (.int 0x81c2c92e), .lit (.int 0x92722c85), .lit (.int 0xa2bfe8a1), .lit (.int 0xa81a664b), .lit (.int 0xc24b8b70), .lit (.int 0xc76c51a3), .lit (.int 0xd192e819), .lit (.int 0xd6990624), .lit (.int 0xf40e3585), .lit (.int 0x106aa070), .lit (.int 0x19a4c116), .lit (.int 0x1e376c08), .lit (.int 0x2748774c), .lit (.int 0x34b0bcb5), .lit (.int 0x391c0cb3), .lit (.int 0x4ed8aa4a), .lit (.int 0x5b9cca4f), .lit (.int 0x682e6ff3), .lit (.int 0x748f82ee), .lit (.int 0x78a5636f), .lit (.int 0x84c87814), .lit (.int 0x8cc70208), .lit (.int 0x90befffa), .lit (.int 0xa4506ceb), .lit (.int 0xbef9a3f7), .lit (.int 0xc67178f2)]
 
--- block_to_words_at expression data, relocated above shaFns for the table entry.
-def bIdx0 : PExpr := .binOp .add (.var "off") (.binOp .mul (.var "i") (.lit (.int 4)))
-def bIdxO (o : Int) : PExpr := .binOp .add bIdx0 (.lit (.int o))
-def packExprAt : PExpr :=
-  .binOp (.bitor 32 false)
-    (.binOp (.bitor 32 false)
-      (.binOp (.bitor 32 false)
-        (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "buf") bIdx0)) (.lit (.int 24)))
-        (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "buf") (bIdxO 1))) (.lit (.int 16))))
-      (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "buf") (bIdxO 2))) (.lit (.int 8))))
-    (.cast (.arrayIndex (.var "buf") (bIdxO 3)))
-def condAt : PExpr := .binOp .lt (.var "i") (.lit (.int 16))
-def assignsAt : List (String × PExpr) :=
-  [ ("w", .arraySet (.var "w") (.var "i") packExprAt)
-  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
-def blockToWordsAtExpr : PExpr :=
-  .letIn "w" (.arrayLit (List.replicate 16 (.lit (.int 0))))
-    (.letIn "i" (.lit (.int 0)) (.while_ condAt assignsAt (.var "w")))
+-- `bIdx0`, `bIdxO`, `packExprAt`, `condAt`, `assignsAt`, `blockToWordsAtExpr`
+-- relocated to `Concrete.Proof` (task #22) in exact extracted shape: the
+-- source loop variable is `k` and the offset index is lit-first
+-- (`bIdxO o = add (lit o) (add off (mul k 4))`).
 
 /-- The SHA-256 helper function table: the extracted bodies of `rotr`,
     `ch`, `maj`, the four sigmas, and the compression `round`, keyed by
     their source names. -/
--- Compression-body / offset-compression expression data, relocated above
--- `shaFns` so `sha256_compress_at` can be a table entry the multi-block
--- `sha256_hash` loop resolves. (Their refinement theorems remain below.)
-def assignsC : List (String × PExpr) :=
-  [ ("s", .call "sha256_round" [.var "s", .arrayIndex (.var "k") (.var "i"),
-                                .arrayIndex (.var "w") (.var "i")])
-  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
-def condC : PExpr := .binOp .lt (.var "i") (.lit (.int 64))
-def aw2 (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
-def ix (nm : String) (j : Nat) : PExpr := .arrayIndex (.var nm) (.lit (.int (j : Int)))
-def feedforwardExpr : PExpr :=
-  .arrayLit [ aw2 (ix "state" 0) (ix "s" 0), aw2 (ix "state" 1) (ix "s" 1),
-              aw2 (ix "state" 2) (ix "s" 2), aw2 (ix "state" 3) (ix "s" 3),
-              aw2 (ix "state" 4) (ix "s" 4), aw2 (ix "state" 5) (ix "s" 5),
-              aw2 (ix "state" 6) (ix "s" 6), aw2 (ix "state" 7) (ix "s" 7) ]
-def compressBodyExpr : PExpr :=
-  .letIn "s" (.var "state")
-    (.letIn "i" (.lit (.int 0)) (.while_ condC assignsC feedforwardExpr))
-def sha256_compressAtExpr : PExpr :=
-  .letIn "w" (.call "sha256_schedule" [.call "block_to_words_at" [.var "buf", .var "off"]])
-    (.letIn "k" (.call "sha256_k" []) compressBodyExpr)
+-- `assignsC`, `condC`, `aw2`, `ix`, `feedforwardExpr`, `compressBodyExpr`,
+-- `sha256_compressExpr`, `sha256_compressAtExpr` relocated to `Concrete.Proof`
+-- (task #22, verbatim). The compress body is shared by both variants.
 
 -- state_to_bytes / sha256_init expression data, relocated above `shaFns`
 -- so both are table entries the `sha256_hash` body and its return resolve.
-def sbStore (s : Nat) : PExpr :=
-  .cast (.binOp (.bitand 32 false)
-    (.binOp (.shr 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int (s:Int))))
-    (.lit (.int 255)))
-def sbStore3 : PExpr :=
-  .cast (.binOp (.bitand 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int 255)))
-def oIdx0 : PExpr := .binOp .mul (.var "i") (.lit (.int 4))
-def oIdxK (k : Int) : PExpr := .binOp .add oIdx0 (.lit (.int k))
-def condS : PExpr := .binOp .lt (.var "i") (.lit (.int 8))
-def assignsS : List (String × PExpr) :=
-  [ ("out", .arraySet (.var "out") oIdx0 (sbStore 24))
-  , ("out", .arraySet (.var "out") (oIdxK 1) (sbStore 16))
-  , ("out", .arraySet (.var "out") (oIdxK 2) (sbStore 8))
-  , ("out", .arraySet (.var "out") (oIdxK 3) sbStore3)
-  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
-def stateToBytesExpr : PExpr :=
-  .letIn "out" (.arrayLit (List.replicate 32 (.lit (.int 0))))
-    (.letIn "i" (.lit (.int 0)) (.while_ condS assignsS (.var "out")))
--- sha256_hash expression data, relocated above `shaFns` so the hmac body
--- can call sha256_hash.  (Its refinement theorems remain below.)
-def condH : PExpr := .binOp .lt (.var "blk") (.var "nblocks")
-def assignsH : List (String × PExpr) :=
-  [ ("state", .call "sha256_compress_at"
-      [.var "state", .var "buf", .binOp .mul (.var "blk") (.lit (.int 64))])
-  , ("blk", .binOp .add (.var "blk") (.lit (.int 1))) ]
-def lenStore0 : PExpr := .cast (.binOp (.bitand 32 false) (.var "bits") (.lit (.int 255)))
-def lenStoreS (sh : Nat) : PExpr :=
-  .cast (.binOp (.bitand 32 false)
-    (.binOp (.shr 32 false) (.var "bits") (.lit (.int (sh:Int)))) (.lit (.int 255)))
-def sha256_hashExpr : PExpr :=
-  .letIn "buf" (.var "data")
-  (.letIn "buf" (.arraySet (.var "buf") (.var "len") (.lit (.int 128)))
-  (.letIn "nblocks" (.binOp (.div 32 true)
-      (.binOp .add (.binOp .add (.var "len") (.lit (.int 9))) (.lit (.int 63))) (.lit (.int 64)))
-  (.letIn "plen" (.binOp .mul (.var "nblocks") (.lit (.int 64)))
-  (.letIn "bits" (.cast (.binOp .mul (.var "len") (.lit (.int 8))))
-  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 1))) lenStore0)
-  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 2))) (lenStoreS 8))
-  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 3))) (lenStoreS 16))
-  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 4))) (lenStoreS 24))
-  (.letIn "state" (.call "sha256_init" [])
-  (.letIn "blk" (.lit (.int 0))
-  (.while_ condH assignsH (.call "state_to_bytes" [.var "state"]))))))))))))
+-- `sbStore`, `sbStore3`, `oIdx0`, `oIdxK`, `condS`, `assignsS`,
+-- `stateToBytesExpr` (state_to_bytes) and `condH`, `assignsH`, `lenStore0`,
+-- `lenStoreS`, `sha256_hashExpr` (sha256_hash) relocated to `Concrete.Proof`
+-- (task #22, verbatim).
 
 def shaFns : FnTable
   | "rotr"         => some ⟨"rotr",         ["x", "n"],         rotrExpr⟩
@@ -1364,10 +1243,7 @@ theorem env_reshape (state0 : List (BitVec 32)) (b : Nat → BitVec 8) (w16v wv 
   by_cases hk : n = "k" <;> by_cases hw : n = "w" <;> by_cases hst : n = "state" <;>
     by_cases hw16 : n = "w16" <;> by_cases hbl : n = "block" <;> simp_all [cEnv0, Env.bind]
 
-def sha256_compressExpr : PExpr :=
-  .letIn "w16" (.call "block_to_words" [.var "block"])
-    (.letIn "w" (.call "sha256_schedule" [.var "w16"])
-      (.letIn "k" (.call "sha256_k" []) compressBodyExpr))
+-- `sha256_compressExpr` relocated to `Concrete.Proof` (task #22, verbatim).
 
 set_option maxHeartbeats 2000000 in
 theorem sha256_compress_refines_spec (state0 : List (BitVec 32)) (h0 : state0.length = 8)
@@ -1445,14 +1321,14 @@ theorem packExprAt_eval (fns : FnTable) (bf : Nat → BitVec 8) (env : Env) (off
     (hk : k < 16) (hoff : off + 64 ≤ 384) (fuel : Nat)
     (hb : env "buf" = some (.array_ (bufArr bf)))
     (hoffv : env "off" = some (.int (off:Int)))
-    (hi : env "i" = some (.int (k:Int))) :
+    (hi : env "k" = some (.int (k:Int))) :
     eval fns env (fuel + 4) packExprAt
       = some (.int (pwdAt bf off k).toNat) := by
   simp only [packExprAt, bIdx0, bIdxO, eval, evalBinOp, hb, hoffv, hi]
   rw [readNbuf bf ((off:Int) + (k:Int)*4) (off+4*k) (by omega) (by omega),
-      readNbuf bf ((off:Int) + (k:Int)*4 + 1) (off+4*k+1) (by omega) (by omega),
-      readNbuf bf ((off:Int) + (k:Int)*4 + 2) (off+4*k+2) (by omega) (by omega),
-      readNbuf bf ((off:Int) + (k:Int)*4 + 3) (off+4*k+3) (by omega) (by omega)]
+      readNbuf bf ((1:Int) + ((off:Int) + (k:Int)*4)) (off+4*k+1) (by omega) (by omega),
+      readNbuf bf ((2:Int) + ((off:Int) + (k:Int)*4)) (off+4*k+2) (by omega) (by omega),
+      readNbuf bf ((3:Int) + ((off:Int) + (k:Int)*4)) (off+4*k+3) (by omega) (by omega)]
   simp only [pwdAt, Sha256Spec.packWord, ofInt32_byte, ofInt32_byte_cast,
     ofInt_ofNat_toNat, ofInt_natCast_toNat, Option.some.injEq, PVal.int.injEq,
     Int.ofNat_eq_natCast, Int.natCast_inj, BitVec.toNat_inj]
@@ -1483,30 +1359,30 @@ theorem wListAt16_spec (bf : Nat → BitVec 8) (off : Nat) :
 
 def stEnvAt (bf : Nat → BitVec 8) (off m : Nat) : Env :=
   (((Env.empty.bind "buf" (.array_ (bufArr bf))).bind "off" (.int (off:Int))).bind
-    "w" (.array_ (wListAt bf off m))).bind "i" (.int (m:Int))
+    "w" (.array_ (wListAt bf off m))).bind "k" (.int (m:Int))
 
 theorem stepAt (fns : FnTable) (bf : Nat → BitVec 8) (off m : Nat) (hm : m < 16) (hoff : off + 64 ≤ 384) (fuel : Nat) :
     eval.evalAssigns fns (stEnvAt bf off m) (fuel + 5) assignsAt
       = some (stEnvAt bf off (m + 1)) := by
   have hbf : (stEnvAt bf off m) "buf" = some (.array_ (bufArr bf)) := by simp [stEnvAt, Env.bind]
   have hoffv : (stEnvAt bf off m) "off" = some (.int (off:Int)) := by simp [stEnvAt, Env.bind]
-  have hi : (stEnvAt bf off m) "i" = some (.int (m:Int)) := by simp [stEnvAt, Env.bind]
+  have hi : (stEnvAt bf off m) "k" = some (.int (m:Int)) := by simp [stEnvAt, Env.bind]
   have hpack := packExprAt_eval fns bf (stEnvAt bf off m) off m hm hoff fuel hbf hoffv hi
   have hwv : eval fns (stEnvAt bf off m) (fuel + 4) (.var "w")
       = some (.array_ (wListAt bf off m)) := by simp [eval, stEnvAt, Env.bind]
-  have hiv : eval fns (stEnvAt bf off m) (fuel + 4) (.var "i")
+  have hiv : eval fns (stEnvAt bf off m) (fuel + 4) (.var "k")
       = some (.int (m:Int)) := by simp [eval, stEnvAt, Env.bind]
   have harr : eval fns (stEnvAt bf off m) (fuel + 5)
-      (.arraySet (.var "w") (.var "i") packExprAt) = some (.array_ (wListAt bf off (m+1))) := by
+      (.arraySet (.var "w") (.var "k") packExprAt) = some (.array_ (wListAt bf off (m+1))) := by
     rw [eval_arraySet_lemma fns (stEnvAt bf off m) (fuel + 4)
-        (.var "w") (.var "i") packExprAt (wListAt bf off m) (m:Int) (.int (pwdAt bf off m).toNat)
+        (.var "w") (.var "k") packExprAt (wListAt bf off m) (m:Int) (.int (pwdAt bf off m).toNat)
         hwv hiv hpack (by omega) (by rw [wListAt_length]; simp; omega)]
     rw [show ((m:Int)).toNat = m by omega, wListAt_set bf off m]
   simp only [assignsAt, eval.evalAssigns, harr]
   simp only [eval, evalBinOp, Env.bind, stEnvAt, beq_self_eq_true, if_true, beq_iff_eq, if_false,
     String.reduceEq, reduceCtorEq, Option.some.injEq]
   funext n
-  by_cases h1 : (n == "i") = true <;> by_cases h2 : (n == "w") = true <;>
+  by_cases h1 : (n == "k") = true <;> by_cases h2 : (n == "w") = true <;>
     simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
       reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
 
@@ -1527,7 +1403,7 @@ theorem loop_evalAt (fns : FnTable) (bf : Nat → BitVec 8) (off : Nat) (hoff : 
 
 theorem stAt_zero_eq (bf : Nat → BitVec 8) (off : Nat) :
     (((((Env.empty.bind "buf" (.array_ (bufArr bf))).bind "off" (.int (off:Int))).bind
-      "w" (.array_ (wListAt bf off 0))).bind "i" (.int 0)))
+      "w" (.array_ (wListAt bf off 0))).bind "k" (.int 0)))
       = stEnvAt bf off 0 := rfl
 
 set_option maxHeartbeats 1000000 in
@@ -2457,12 +2333,7 @@ def xorEnv (e : Env) (kpFn : Nat → BitVec 8) (m : Nat) : Env :=
      "outer" (.array_ (bufArr (copyFn zfn (ipadFn kpFn 92) 0 m)))).bind
      "kp" (.array_ (arrN 64 kpFn))).bind "i" (.int (m : Int)))
 
-def xorE (c : Int) : PExpr := .binOp (.bitxor 8 false) (.arrayIndex (.var "kp") (.var "i")) (.lit (.int c))
-def xorAssigns : List (String × PExpr) :=
-  [ ("inner", .arraySet (.var "inner") (.var "i") (xorE 54))
-  , ("outer", .arraySet (.var "outer") (.var "i") (xorE 92))
-  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
-
+-- `xorE`, `xorAssigns` relocated to `Concrete.Proof` (task #22).
 set_option maxHeartbeats 1000000 in
 theorem xor_step (e : Env) (kpFn : Nat → BitVec 8) (m : Nat) (hm : m < 64) (fuel : Nat) :
     eval.evalAssigns shaFns (xorEnv e kpFn m) (fuel + 3) xorAssigns = some (xorEnv e kpFn (m + 1)) := by
@@ -2504,7 +2375,7 @@ theorem xor_step (e : Env) (kpFn : Nat → BitVec 8) (m : Nat) (hm : m < 64) (fu
     simp_all [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, if_false, String.reduceEq,
       reduceCtorEq, Option.some.injEq, PVal.int.injEq] <;> omega
 
-def condX : PExpr := .binOp .lt (.var "i") (.lit (.int 64))
+-- `condX` relocated to `Concrete.Proof` (task #22).
 theorem condX_true (e : Env) (kpFn : Nat → BitVec 8) (m : Nat) (hm : m < 64) (F : Nat) :
     eval shaFns (xorEnv e kpFn m) (F + 1) condX = some (.bool true) := by
   simp only [condX, xorEnv, eval, Env.bind, evalBinOp]; simp; omega
@@ -2627,25 +2498,8 @@ theorem copyEnv_self (dstNm srcNm iNm : String) (e : Env) (dn sn off : Nat)
   by_cases h1 : n = iNm <;> by_cases h2 : n = srcNm <;> by_cases h3 : n = dstNm <;>
     simp_all [beq_iff_eq]
 
-def condMsg : PExpr := .binOp .lt (.var "i") (.var "m_len")
-def msgAssigns : List (String × PExpr) :=
-  [ ("inner", .arraySet (.var "inner") (.binOp .add (.lit (.int 64)) (.var "i"))
-      (.arrayIndex (.var "m") (.var "i"))), ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
-def condIh : PExpr := .binOp .lt (.var "i") (.lit (.int 32))
-def ihAssigns : List (String × PExpr) :=
-  [ ("outer", .arraySet (.var "outer") (.binOp .add (.lit (.int 64)) (.var "i"))
-      (.arrayIndex (.var "ih") (.var "i"))), ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
-def hmacLinearExpr : PExpr :=
-  .letIn "inner" (.arrayLit (List.replicate 384 (.lit (.int 0))))
-  (.letIn "outer" (.arrayLit (List.replicate 384 (.lit (.int 0))))
-  (.letIn "i" (.lit (.int 0))
-  (.while_ condX xorAssigns
-  (.letIn "i" (.lit (.int 0))
-  (.while_ condMsg msgAssigns
-  (.letIn "ih" (.call "sha256_hash" [.var "inner", .binOp .add (.lit (.int 64)) (.var "m_len")])
-  (.letIn "i" (.lit (.int 0))
-  (.while_ condIh ihAssigns
-  (.call "sha256_hash" [.var "outer", .lit (.int 96)])))))))))
+-- `condMsg`, `msgAssigns`, `condIh`, `ihAssigns`, `hmacLinearExpr` relocated
+-- to `Concrete.Proof` (task #22).
 theorem arrayLit_zeros384 (fns : FnTable) (env : Env) (fuel : Nat) :
     eval fns env (fuel + 2) (.arrayLit (List.replicate 384 (.lit (.int 0))))
       = some (.array_ (List.replicate 384 (PVal.int 0))) := by
@@ -2795,30 +2649,37 @@ theorem hmac_linear (kpFn mFn : Nat → BitVec 8) (KEY : List Sha256Spec.Byte) (
 -- if-branch (kpCopyElse_eval / thenE_eval) via kp_else / kp_if.
 -- ==================================================================
 
-def kpCopyElse : PExpr :=
-  .letIn "i" (.lit (.int 0))
-  (.while_ (.binOp .lt (.var "i") (.var "k_len"))
-    [ ("kp", .arraySet (.var "kp") (.var "i") (.arrayIndex (.var "k") (.var "i")))
-    , ("i", .binOp .add (.var "i") (.lit (.int 1))) ] (.var "kp"))
-
+-- `elseBranch` (the `k_len ≤ 64` branch, with the HMAC continuation inlined
+-- as the loop's `cont`) is defined in `Concrete.Proof`. Evaluating it copies
+-- the key into `kp` (copy_loop, cont-generic) then runs the continuation
+-- (`hmac_linear`), yielding `Sha256Spec.hmac` directly.
 set_option maxRecDepth 8000 in
-theorem kpCopyElse_eval (kFn : Nat → BitVec 8) (k_len : Nat) (hkl : k_len ≤ 64) (e : Env) (base : Nat)
+theorem elseBranch_eval (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat)
+    (hkl : k_len ≤ 64) (hml : m_len ≤ 256) (e : Env) (base : Nat) (hb : 201 + m_len ≤ base)
     (hkp0 : e "kp" = some (.array_ (arrN 64 zfn))) (hkv : e "k" = some (.array_ (arrN 128 kFn)))
-    (hklv : e "k_len" = some (.int (k_len : Int))) :
-    eval shaFns e ((base + 2) + k_len + 1 + 1) kpCopyElse
-      = some (.array_ (arrN 64 (copyFn zfn kFn 0 k_len))) := by
-  rw [kpCopyElse, show (base + 2) + k_len + 1 + 1 = ((base + 2) + k_len + 1) + 1 by omega,
+    (hklv : e "k_len" = some (.int (k_len : Int)))
+    (hmv : e "m" = some (.array_ (arrN 256 mFn)))
+    (hmlen : e "m_len" = some (.int (m_len : Int))) :
+    eval shaFns e ((base + 2) + k_len + 1 + 1) elseBranch
+      = some (.array_ ((Sha256Spec.hmac ((List.range k_len).map kFn) ((List.range m_len).map mFn)).map
+          (fun b => PVal.int b.toNat))) := by
+  rw [elseBranch, show (base + 2) + k_len + 1 + 1 = ((base + 2) + k_len + 1) + 1 by omega,
       eval_letIn _ _ ((base + 2) + k_len + 1) _ _ _ (.int 0) (by simp [eval])]
   rw [← copyEnv_self "kp" "k" "i" (e.bind "i" (.int 0)) 64 128 0 zfn kFn
         (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkp0)
         (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkv)
         (by simp only [Env.bind, beq_self_eq_true, if_true])]
   rw [copy_loop "kp" "k" "i" (by decide) (by decide) (by decide) (e.bind "i" (.int 0)) 64 128 0 zfn kFn k_len
-        (by omega) (by omega) (.binOp .lt (.var "i") (.var "k_len")) (.var "i") (.var "kp") base
+        (by omega) (by omega) (.binOp .lt (.var "i") (.var "k_len")) (.var "i") hmacLinearExpr base
         (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
         (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]; simp; omega)
         (by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]; simp)]
-  simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]
+  rw [show base + 2 = (base - 201 - m_len) + 203 + m_len by omega]
+  exact hmac_linear (copyFn zfn kFn 0 k_len) mFn ((List.range k_len).map kFn) m_len hml
+    (kp_else kFn k_len (by omega)) _ (base - 201 - m_len)
+    (by simp only [copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
+    (by simp only [copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv)
+    (by simp only [copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmlen)
 
 theorem key_copyFn (kFn : Nat → BitVec 8) (k_len : Nat) :
     (List.range k_len).map (copyFn zfn kFn 0 k_len) = (List.range k_len).map kFn := by
@@ -2826,18 +2687,8 @@ theorem key_copyFn (kFn : Nat → BitVec 8) (k_len : Nat) :
   simp only [List.mem_range] at hj
   simp only [copyFn, if_pos (show 0 ≤ j ∧ j < 0 + k_len by omega), Nat.sub_zero]
 
-def thenE : PExpr :=
-  .letIn "kbuf" (.arrayLit (List.replicate 384 (.lit (.int 0))))
-  (.letIn "i" (.lit (.int 0))
-  (.while_ (.binOp .lt (.var "i") (.var "k_len"))
-    [ ("kbuf", .arraySet (.var "kbuf") (.var "i") (.arrayIndex (.var "k") (.var "i")))
-    , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
-  (.letIn "kh" (.call "sha256_hash" [.var "kbuf", .var "k_len"])
-  (.letIn "i" (.lit (.int 0))
-  (.while_ (.binOp .lt (.var "i") (.lit (.int 32)))
-    [ ("kp", .arraySet (.var "kp") (.var "i") (.arrayIndex (.var "kh") (.var "i")))
-    , ("i", .binOp .add (.var "i") (.lit (.int 1))) ] (.var "kp"))))))
-
+-- `thenBranch` (the `k_len > 64` branch, with the HMAC continuation inlined
+-- as the inner loop's `cont`) is defined in `Concrete.Proof`.
 theorem arrayLit_z384 (fns : FnTable) (env : Env) (fuel : Nat) :
     eval fns env (fuel + 2) (.arrayLit (List.replicate 384 (.lit (.int 0))))
       = some (.array_ (List.replicate 384 (PVal.int 0))) := by
@@ -2845,13 +2696,16 @@ theorem arrayLit_z384 (fns : FnTable) (env : Env) (fuel : Nat) :
 
 set_option maxRecDepth 8000 in
 set_option maxHeartbeats 2000000 in
-theorem thenE_eval (kFn : Nat → BitVec 8) (k_len : Nat) (hkl : k_len ≤ 128) (e : Env) (base : Nat)
+theorem thenBranch_eval (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat)
+    (hkl : k_len ≤ 128) (hk : 64 < k_len) (hml : m_len ≤ 256) (e : Env) (base : Nat) (hb : 96 + m_len ≤ base)
     (hkp0 : e "kp" = some (.array_ (arrN 64 zfn))) (hkv : e "k" = some (.array_ (arrN 128 kFn)))
-    (hklv : e "k_len" = some (.int (k_len : Int))) :
-    eval shaFns e (base + 145 + k_len) thenE
-      = some (.array_ (arrN 64 (copyFn zfn
-          (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 0 32))) := by
-  rw [thenE]
+    (hklv : e "k_len" = some (.int (k_len : Int)))
+    (hmv : e "m" = some (.array_ (arrN 256 mFn)))
+    (hmlen : e "m_len" = some (.int (m_len : Int))) :
+    eval shaFns e (base + 145 + k_len) thenBranch
+      = some (.array_ ((Sha256Spec.hmac ((List.range k_len).map kFn) ((List.range m_len).map mFn)).map
+          (fun b => PVal.int b.toNat))) := by
+  rw [thenBranch]
   -- letIn kbuf
   rw [show base + 145 + k_len = ((base + 143 + k_len) + 1) + 1 by omega,
       eval_letIn _ _ ((base + 143 + k_len) + 1) _ _ _ _ (arrayLit_z384 _ _ (base + 143 + k_len)),
@@ -2885,21 +2739,31 @@ theorem thenE_eval (kFn : Nat → BitVec 8) (k_len : Nat) (hkl : k_len ≤ 128) 
         (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
   rw [show base + 140 = (base + 105 + 2) + 32 + 1 by omega,
       copy_loop "kp" "kh" "i" (by decide) (by decide) (by decide) (((copyEnv "kbuf" "k" "i" ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len).bind "kh" (.array_ (arrN 32 (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0)))).bind "i" (.int 0)) 64 32 0 zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 32
-        (by omega) (by omega) (.binOp .lt (.var "i") (.lit (.int 32))) (.var "i") (.var "kp") (base + 105)
+        (by omega) (by omega) (.binOp .lt (.var "i") (.lit (.int 32))) (.var "i") hmacLinearExpr (base + 105)
         (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
         (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; simp; omega)
         (by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; simp)]
-  simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]
+  -- post key-prep: kp = hash(key); run the HMAC continuation via hmac_linear
+  have hkp : (List.range 64).map (copyFn zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 0 32)
+      = Sha256Spec.keyPrep ((List.range k_len).map kFn) := by
+    apply kp_if _ _ (by simp; omega)
+    rw [show (32:Nat) = (Sha256Spec.hash ((List.range k_len).map kFn)).length from (hash_length _).symm]
+    exact list_eq_rangeGetD _
+  rw [show base + 105 + 2 = (base - 96 - m_len) + 203 + m_len by omega]
+  exact hmac_linear (copyFn zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 0 32)
+    mFn ((List.range k_len).map kFn) m_len hml hkp _ (base - 96 - m_len)
+    (by simp only [copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])
+    (by simp only [copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv)
+    (by simp only [copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmlen)
 
 theorem arrayLit_z64 (fns : FnTable) (env : Env) (fuel : Nat) :
     eval fns env (fuel + 2) (.arrayLit (List.replicate 64 (.lit (.int 0))))
       = some (.array_ (List.replicate 64 (PVal.int 0))) := by
   simp only [eval, evalElems_replicate_lit]
 
-def hmac_sha256Expr : PExpr :=
-  .letIn "kp" (.arrayLit (List.replicate 64 (.lit (.int 0))))
-  (.letIn "kp" (.ifThenElse (.binOp .lt (.lit (.int 64)) (.var "k_len")) thenE kpCopyElse)
-   hmacLinearExpr)
+-- `hmac_sha256Expr` is defined in `Concrete.Proof` in EXACT extracted shape:
+-- `letIn kp zeros (ifThenElse (gt k_len 64) thenBranch elseBranch)` — the `if`
+-- duplicates the HMAC continuation into both branches, as the source extracts.
 
 theorem eval_ite_true (fns : FnTable) (env : Env) (fuel : Nat) (cond t el : PExpr) (v : PVal)
     (hc : eval fns env (fuel + 1) cond = some (.bool true)) (ht : eval fns env fuel t = some v) :
@@ -2931,39 +2795,25 @@ theorem hmac_sha256_refines_spec (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat
     simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkv
   have hklv' : (e.bind "kp" (.array_ (List.replicate 64 (PVal.int 0)))) "k_len" = some (.int (k_len:Int)) := by
     simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hklv
+  have hmv' : (e.bind "kp" (.array_ (List.replicate 64 (PVal.int 0)))) "m" = some (.array_ (arrN 256 mFn)) := by
+    simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv
+  have hmlen' : (e.bind "kp" (.array_ (List.replicate 64 (PVal.int 0)))) "m_len" = some (.int (m_len:Int)) := by
+    simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmlen
+  -- The extracted `if (k_len > 64)` duplicates the continuation into both
+  -- branches; each branch is closed by thenBranch_eval / elseBranch_eval.
+  rw [show fuel + 349 + k_len + m_len = (fuel + 348 + k_len + m_len) + 1 by omega]
   by_cases hk : 64 < k_len
-  · -- long key: hash it
-    rw [show fuel + 349 + k_len + m_len = (fuel + 348 + k_len + m_len) + 1 by omega,
-        eval_letIn _ _ (fuel + 348 + k_len + m_len) _ _ _ _
-          (show eval shaFns _ ((fuel + 348 + k_len + m_len) + 1) (.ifThenElse _ thenE kpCopyElse)
-              = some (.array_ (arrN 64 (copyFn zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 0 32))) by
-            exact eval_ite_true _ _ _ _ _ _ _
-              (by simp only [eval, evalBinOp, hklv']; simp; omega)
-              (by rw [show fuel + 348 + k_len + m_len = (fuel + 203 + m_len) + 145 + k_len by omega]
-                  exact thenE_eval kFn k_len hkl _ (fuel + 203 + m_len) hkp0 hkv' hklv'))]
-    have hkp : (List.range 64).map (copyFn zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 0 32)
-        = Sha256Spec.keyPrep ((List.range k_len).map kFn) := by
-      apply kp_if _ _ (by simp; omega)
-      rw [show (32:Nat) = (Sha256Spec.hash ((List.range k_len).map kFn)).length from (hash_length _).symm]
-      exact list_eq_rangeGetD _
-    rw [show fuel + 348 + k_len + m_len = (fuel + 145 + k_len) + 203 + m_len by omega]
-    exact hmac_linear (copyFn zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 0 32) mFn ((List.range k_len).map kFn) m_len hml hkp _ (fuel + 145 + k_len)
-      (by simp [Env.bind]) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv)
-      (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmlen)
-  · -- short key: copy
-    rw [show fuel + 349 + k_len + m_len = (fuel + 348 + k_len + m_len) + 1 by omega,
-        eval_letIn _ _ (fuel + 348 + k_len + m_len) _ _ _ _
-          (show eval shaFns _ ((fuel + 348 + k_len + m_len) + 1) (.ifThenElse _ thenE kpCopyElse)
-              = some (.array_ (arrN 64 (copyFn zfn kFn 0 k_len))) by
-            exact eval_ite_false _ _ _ _ _ _ _
-              (by simp only [eval, evalBinOp, hklv']; simp; omega)
-              (by rw [show fuel + 348 + k_len + m_len = (fuel + 344 + m_len) + 2 + k_len + 1 + 1 by omega]
-                  exact kpCopyElse_eval kFn k_len (by omega) _ (fuel + 344 + m_len) hkp0 hkv' hklv'))]
-    have hkp : (List.range 64).map (copyFn zfn kFn 0 k_len) = Sha256Spec.keyPrep ((List.range k_len).map kFn) :=
-      kp_else kFn k_len (by omega)
-    rw [show fuel + 348 + k_len + m_len = (fuel + 145 + k_len) + 203 + m_len by omega]
-    exact hmac_linear (copyFn zfn kFn 0 k_len) mFn ((List.range k_len).map kFn) m_len hml hkp _ (fuel + 145 + k_len)
-      (by simp [Env.bind]) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv)
-      (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmlen)
+  · -- long key: hash it, then continuation
+    refine eval_ite_true shaFns _ (fuel + 348 + k_len + m_len)
+      (.binOp .gt (.var "k_len") (.lit (.int 64))) thenBranch elseBranch _ ?_ ?_
+    · simp only [eval, evalBinOp, hklv']; simp; omega
+    · rw [show fuel + 348 + k_len + m_len = (fuel + 203 + m_len) + 145 + k_len by omega]
+      exact thenBranch_eval kFn mFn k_len m_len hkl hk hml _ (fuel + 203 + m_len) (by omega) hkp0 hkv' hklv' hmv' hmlen'
+  · -- short key: copy, then continuation
+    refine eval_ite_false shaFns _ (fuel + 348 + k_len + m_len)
+      (.binOp .gt (.var "k_len") (.lit (.int 64))) thenBranch elseBranch _ ?_ ?_
+    · simp only [eval, evalBinOp, hklv']; simp; omega
+    · rw [show fuel + 348 + k_len + m_len = (fuel + 344 + m_len) + 2 + k_len + 1 + 1 by omega]
+      exact elseBranch_eval kFn mFn k_len m_len (by omega) hml _ (fuel + 344 + m_len) (by omega) hkp0 hkv' hklv' hmv' hmlen'
 
 end Concrete.Proof

@@ -2508,6 +2508,214 @@ theorem ch_selects_high (fuel : Nat) :
   simp [chExpr, eval, Env.bind, evalBinOp]
 
 -- ============================================================
+-- Relocated SHA-256/HMAC chain spec exprs (task #22).
+--
+-- These are the registered specs for the hmac_sha256 flagship's
+-- internal chain. They live HERE (not in Sha256Refine) because the
+-- `specs` table below — consulted by the spec-drift gate in
+-- `ProofCore.validateRegistry` — can only reference exprs in this
+-- module. Each is the EXACT extracted source body (`concrete
+-- examples/hmac_sha256/src/main.con --report lean-stubs`), so the
+-- gate passes by identity, not merely by normalization. The
+-- refinement THEOREMS about them remain in `Concrete.Sha256Refine`
+-- (reachable for `check-proofs` via the `Concrete` umbrella import).
+-- ============================================================
+
+-- ---- block_to_words ----
+def idx0 : PExpr := .binOp .mul (.var "i") (.lit (.int 4))
+/-- Extraction emits the offset literal FIRST: `block[o + i*4]`. -/
+def idxO (o : Int) : PExpr := .binOp .add (.lit (.int o)) idx0
+def packExpr : PExpr :=
+  .binOp (.bitor 32 false)
+    (.binOp (.bitor 32 false)
+      (.binOp (.bitor 32 false)
+        (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "block") idx0)) (.lit (.int 24)))
+        (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "block") (idxO 1))) (.lit (.int 16))))
+      (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "block") (idxO 2))) (.lit (.int 8))))
+    (.cast (.arrayIndex (.var "block") (idxO 3)))
+def cond_e : PExpr := .binOp .lt (.var "i") (.lit (.int 16))
+def assigns_e : List (String × PExpr) :=
+  [ ("w", .arraySet (.var "w") (.var "i") packExpr)
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def blockToWordsExpr : PExpr :=
+  .letIn "w" (.arrayLit (List.replicate 16 (.lit (.int 0))))
+    (.letIn "i" (.lit (.int 0))
+      (.while_ cond_e assigns_e (.var "w")))
+
+-- ---- block_to_words_at (source loop var is `k`; offset-first index) ----
+def bIdx0 : PExpr := .binOp .add (.var "off") (.binOp .mul (.var "k") (.lit (.int 4)))
+def bIdxO (o : Int) : PExpr := .binOp .add (.lit (.int o)) bIdx0
+def packExprAt : PExpr :=
+  .binOp (.bitor 32 false)
+    (.binOp (.bitor 32 false)
+      (.binOp (.bitor 32 false)
+        (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "buf") bIdx0)) (.lit (.int 24)))
+        (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "buf") (bIdxO 1))) (.lit (.int 16))))
+      (.binOp (.shl 32 false) (.cast (.arrayIndex (.var "buf") (bIdxO 2))) (.lit (.int 8))))
+    (.cast (.arrayIndex (.var "buf") (bIdxO 3)))
+def condAt : PExpr := .binOp .lt (.var "k") (.lit (.int 16))
+def assignsAt : List (String × PExpr) :=
+  [ ("w", .arraySet (.var "w") (.var "k") packExprAt)
+  , ("k", .binOp .add (.var "k") (.lit (.int 1))) ]
+def blockToWordsAtExpr : PExpr :=
+  .letIn "w" (.arrayLit (List.replicate 16 (.lit (.int 0))))
+    (.letIn "k" (.lit (.int 0)) (.while_ condAt assignsAt (.var "w")))
+
+-- ---- sha256_round ----
+def addwE (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
+def stateAt (i : Int) : PExpr := .arrayIndex (.var "state") (.lit (.int i))
+def roundExpr : PExpr :=
+  .letIn "t1"
+    (addwE (addwE (addwE (addwE (stateAt 7) (.call "big_sigma1" [stateAt 4]))
+              (.call "ch" [stateAt 4, stateAt 5, stateAt 6])) (.var "k")) (.var "w"))
+    (.letIn "t2"
+      (addwE (.call "big_sigma0" [stateAt 0]) (.call "maj" [stateAt 0, stateAt 1, stateAt 2]))
+      (.arrayLit [ addwE (.var "t1") (.var "t2"), stateAt 0, stateAt 1, stateAt 2,
+                   addwE (stateAt 3) (.var "t1"), stateAt 4, stateAt 5, stateAt 6 ]))
+
+-- ---- sha256_schedule ----
+def addwS (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
+def wIdx (c : Int) : PExpr := .arrayIndex (.var "w") (.binOp .sub (.var "i") (.lit (.int c)))
+def expansionExpr : PExpr :=
+  addwS (addwS (addwS (.call "small_sigma1" [wIdx 2]) (wIdx 7))
+          (.call "small_sigma0" [wIdx 15])) (wIdx 16)
+def assigns1 : List (String × PExpr) :=
+  [ ("w", .arraySet (.var "w") (.var "i") (.arrayIndex (.var "w16") (.var "i")))
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def assigns2 : List (String × PExpr) :=
+  [ ("w", .arraySet (.var "w") (.var "i") expansionExpr)
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def condE (bound : Int) : PExpr := .binOp .lt (.var "i") (.lit (.int bound))
+def scheduleExpr : PExpr :=
+  .letIn "w" (.arrayLit (List.replicate 64 (.lit (.int 0))))
+    (.letIn "i" (.lit (.int 0))
+      (.while_ (condE 16) assigns1
+        (.letIn "i" (.lit (.int 16))
+          (.while_ (condE 64) assigns2 (.var "w")))))
+
+-- ---- sha256_compress / sha256_compress_at (shared body) ----
+def assignsC : List (String × PExpr) :=
+  [ ("s", .call "sha256_round" [.var "s", .arrayIndex (.var "k") (.var "i"),
+                                .arrayIndex (.var "w") (.var "i")])
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def condC : PExpr := .binOp .lt (.var "i") (.lit (.int 64))
+def aw2 (a b : PExpr) : PExpr := .binOp (.addw 32 false) a b
+def ix (nm : String) (j : Nat) : PExpr := .arrayIndex (.var nm) (.lit (.int (j : Int)))
+def feedforwardExpr : PExpr :=
+  .arrayLit [ aw2 (ix "state" 0) (ix "s" 0), aw2 (ix "state" 1) (ix "s" 1),
+              aw2 (ix "state" 2) (ix "s" 2), aw2 (ix "state" 3) (ix "s" 3),
+              aw2 (ix "state" 4) (ix "s" 4), aw2 (ix "state" 5) (ix "s" 5),
+              aw2 (ix "state" 6) (ix "s" 6), aw2 (ix "state" 7) (ix "s" 7) ]
+def compressBodyExpr : PExpr :=
+  .letIn "s" (.var "state")
+    (.letIn "i" (.lit (.int 0)) (.while_ condC assignsC feedforwardExpr))
+def sha256_compressExpr : PExpr :=
+  .letIn "w16" (.call "block_to_words" [.var "block"])
+    (.letIn "w" (.call "sha256_schedule" [.var "w16"])
+      (.letIn "k" (.call "sha256_k" []) compressBodyExpr))
+def sha256_compressAtExpr : PExpr :=
+  .letIn "w" (.call "sha256_schedule" [.call "block_to_words_at" [.var "buf", .var "off"]])
+    (.letIn "k" (.call "sha256_k" []) compressBodyExpr)
+
+-- ---- state_to_bytes ----
+def sbStore (s : Nat) : PExpr :=
+  .cast (.binOp (.bitand 32 false)
+    (.binOp (.shr 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int (s:Int))))
+    (.lit (.int 255)))
+def sbStore3 : PExpr :=
+  .cast (.binOp (.bitand 32 false) (.arrayIndex (.var "state") (.var "i")) (.lit (.int 255)))
+def oIdx0 : PExpr := .binOp .mul (.var "i") (.lit (.int 4))
+def oIdxK (k : Int) : PExpr := .binOp .add oIdx0 (.lit (.int k))
+def condS : PExpr := .binOp .lt (.var "i") (.lit (.int 8))
+def assignsS : List (String × PExpr) :=
+  [ ("out", .arraySet (.var "out") oIdx0 (sbStore 24))
+  , ("out", .arraySet (.var "out") (oIdxK 1) (sbStore 16))
+  , ("out", .arraySet (.var "out") (oIdxK 2) (sbStore 8))
+  , ("out", .arraySet (.var "out") (oIdxK 3) sbStore3)
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def stateToBytesExpr : PExpr :=
+  .letIn "out" (.arrayLit (List.replicate 32 (.lit (.int 0))))
+    (.letIn "i" (.lit (.int 0)) (.while_ condS assignsS (.var "out")))
+
+-- ---- sha256_hash ----
+def condH : PExpr := .binOp .lt (.var "blk") (.var "nblocks")
+def assignsH : List (String × PExpr) :=
+  [ ("state", .call "sha256_compress_at"
+      [.var "state", .var "buf", .binOp .mul (.var "blk") (.lit (.int 64))])
+  , ("blk", .binOp .add (.var "blk") (.lit (.int 1))) ]
+def lenStore0 : PExpr := .cast (.binOp (.bitand 32 false) (.var "bits") (.lit (.int 255)))
+def lenStoreS (sh : Nat) : PExpr :=
+  .cast (.binOp (.bitand 32 false)
+    (.binOp (.shr 32 false) (.var "bits") (.lit (.int (sh:Int)))) (.lit (.int 255)))
+def sha256_hashExpr : PExpr :=
+  .letIn "buf" (.var "data")
+  (.letIn "buf" (.arraySet (.var "buf") (.var "len") (.lit (.int 128)))
+  (.letIn "nblocks" (.binOp (.div 32 true)
+      (.binOp .add (.binOp .add (.var "len") (.lit (.int 9))) (.lit (.int 63))) (.lit (.int 64)))
+  (.letIn "plen" (.binOp .mul (.var "nblocks") (.lit (.int 64)))
+  (.letIn "bits" (.cast (.binOp .mul (.var "len") (.lit (.int 8))))
+  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 1))) lenStore0)
+  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 2))) (lenStoreS 8))
+  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 3))) (lenStoreS 16))
+  (.letIn "buf" (.arraySet (.var "buf") (.binOp .sub (.var "plen") (.lit (.int 4))) (lenStoreS 24))
+  (.letIn "state" (.call "sha256_init" [])
+  (.letIn "blk" (.lit (.int 0))
+  (.while_ condH assignsH (.call "state_to_bytes" [.var "state"]))))))))))))
+
+-- ---- hmac_sha256 ----
+-- The HMAC continuation (ipad/opad build, message copy, inner+outer hash),
+-- shared (DUPLICATED) by both `if` branches in the extracted source.
+def xorE (c : Int) : PExpr := .binOp (.bitxor 8 false) (.arrayIndex (.var "kp") (.var "i")) (.lit (.int c))
+def xorAssigns : List (String × PExpr) :=
+  [ ("inner", .arraySet (.var "inner") (.var "i") (xorE 54))
+  , ("outer", .arraySet (.var "outer") (.var "i") (xorE 92))
+  , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def condX : PExpr := .binOp .lt (.var "i") (.lit (.int 64))
+def condMsg : PExpr := .binOp .lt (.var "i") (.var "m_len")
+def msgAssigns : List (String × PExpr) :=
+  [ ("inner", .arraySet (.var "inner") (.binOp .add (.lit (.int 64)) (.var "i"))
+      (.arrayIndex (.var "m") (.var "i"))), ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def condIh : PExpr := .binOp .lt (.var "i") (.lit (.int 32))
+def ihAssigns : List (String × PExpr) :=
+  [ ("outer", .arraySet (.var "outer") (.binOp .add (.lit (.int 64)) (.var "i"))
+      (.arrayIndex (.var "ih") (.var "i"))), ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+def hmacLinearExpr : PExpr :=
+  .letIn "inner" (.arrayLit (List.replicate 384 (.lit (.int 0))))
+  (.letIn "outer" (.arrayLit (List.replicate 384 (.lit (.int 0))))
+  (.letIn "i" (.lit (.int 0))
+  (.while_ condX xorAssigns
+  (.letIn "i" (.lit (.int 0))
+  (.while_ condMsg msgAssigns
+  (.letIn "ih" (.call "sha256_hash" [.var "inner", .binOp .add (.lit (.int 64)) (.var "m_len")])
+  (.letIn "i" (.lit (.int 0))
+  (.while_ condIh ihAssigns
+  (.call "sha256_hash" [.var "outer", .lit (.int 96)])))))))))
+
+-- The `k_len > 64` branch: hash the key into `kp`, then the continuation.
+def thenBranch : PExpr :=
+  .letIn "kbuf" (.arrayLit (List.replicate 384 (.lit (.int 0))))
+  (.letIn "i" (.lit (.int 0))
+  (.while_ (.binOp .lt (.var "i") (.var "k_len"))
+    [ ("kbuf", .arraySet (.var "kbuf") (.var "i") (.arrayIndex (.var "k") (.var "i")))
+    , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+  (.letIn "kh" (.call "sha256_hash" [.var "kbuf", .var "k_len"])
+  (.letIn "i" (.lit (.int 0))
+  (.while_ (.binOp .lt (.var "i") (.lit (.int 32)))
+    [ ("kp", .arraySet (.var "kp") (.var "i") (.arrayIndex (.var "kh") (.var "i")))
+    , ("i", .binOp .add (.var "i") (.lit (.int 1))) ] hmacLinearExpr)))))
+
+-- The `k_len ≤ 64` branch: copy the key into `kp`, then the continuation.
+def elseBranch : PExpr :=
+  .letIn "i" (.lit (.int 0))
+  (.while_ (.binOp .lt (.var "i") (.var "k_len"))
+    [ ("kp", .arraySet (.var "kp") (.var "i") (.arrayIndex (.var "k") (.var "i")))
+    , ("i", .binOp .add (.var "i") (.lit (.int 1))) ] hmacLinearExpr)
+
+def hmac_sha256Expr : PExpr :=
+  .letIn "kp" (.arrayLit (List.replicate 64 (.lit (.int 0))))
+  (.ifThenElse (.binOp .gt (.var "k_len") (.lit (.int 64))) thenBranch elseBranch)
+
+-- ============================================================
 -- Registered spec table (Phase 4 item 2 — spec/body drift gate)
 -- ============================================================
 
@@ -2576,9 +2784,19 @@ def specs : List (String × PExpr) :=
   , ("fixed_capacity.compute_tag",   fcTagExpr)
     -- constant_time_tag
   , ("constant_time_tag.ct_compare", ctCompareExpr)
-    -- hmac_sha256
+    -- hmac_sha256 (bar #1 leaves)
   , ("hmac_sha256.sha256_init",      sha256_initExpr)
   , ("hmac_sha256.ch",               chExpr)
+    -- hmac_sha256 (bar #2 chain — refinement-tied, task #22)
+  , ("hmac_sha256.block_to_words",     blockToWordsExpr)
+  , ("hmac_sha256.block_to_words_at",  blockToWordsAtExpr)
+  , ("hmac_sha256.sha256_schedule",    scheduleExpr)
+  , ("hmac_sha256.sha256_round",       roundExpr)
+  , ("hmac_sha256.sha256_compress",    sha256_compressExpr)
+  , ("hmac_sha256.sha256_compress_at", sha256_compressAtExpr)
+  , ("hmac_sha256.state_to_bytes",     stateToBytesExpr)
+  , ("hmac_sha256.sha256_hash",        sha256_hashExpr)
+  , ("hmac_sha256.hmac_sha256",        hmac_sha256Expr)
     -- adversarial spec-drift fixture (deliberately wrong)
   , ("test_drift.simple_add",        driftTestSpec)
   ]
