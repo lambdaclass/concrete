@@ -30,6 +30,7 @@ import Concrete.Proof
 import Concrete.ProofKit.Eval
 import Concrete.ProofKit.BitVec
 import Concrete.ProofKit.Array
+import Concrete.ProofKit.Refinement
 import Concrete.Sha256Spec
 
 namespace Concrete.Proof
@@ -1557,10 +1558,7 @@ theorem padMessage_length (msg : List Sha256Spec.Byte) :
   show msg.length + (0 + 1) + (plenOf msg.length - msg.length - 9) + 8 = plenOf msg.length
   omega
 
-theorem getD_eq_getElem_mem (l : List Sha256Spec.Byte) (k : Nat) (h : k < l.length) :
-    l.getD k 0 = l[k] := by
-  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h]; rfl
-
+-- `getD_eq_getElem_mem` relocated to `Concrete.ProofKit.Refinement` (Proof Kit v1).
 theorem sliceAt_padFn (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 375)
     (hz : ∀ i, len ≤ i → df i = 0) (blk : Nat) (hblk : blk < plenOf len / 64) :
     sliceAt (padFn df len) (blk * 64)
@@ -2416,13 +2414,7 @@ theorem arrayLit_zeros384 (fns : FnTable) (env : Env) (fuel : Nat) :
   simp only [eval, evalElems_replicate_lit]
 
 -- a length-N list equals arrN N of its getD
-theorem map_toNat_eq_arrN (L : List (BitVec 8)) :
-    L.map (fun b => PVal.int ↑b.toNat) = arrN L.length (fun j => L.getD j 0) := by
-  apply List.ext_getElem (by simp [arrN])
-  intro j h1 _
-  simp only [List.length_map] at h1
-  simp only [arrN, List.getElem_map, List.getElem_range]
-  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h1, Option.getD_some]
+-- `map_toNat_eq_arrN` relocated to `Concrete.ProofKit.Refinement` (Proof Kit v1).
 
 theorem sha256_hash_call_at (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 375)
     (hz : ∀ i, len ≤ i → df i = 0) (env : Env) (dataE lenE : PExpr) (G : Nat) (hG : 97 ≤ G)
@@ -2451,12 +2443,7 @@ theorem ofInt8_const92 : BitVec.ofInt 8 92 = (92 : BitVec 8) := by decide
 theorem ipad_prefix (kpFn : Nat → BitVec 8) (c : Int) :
     (List.range 64).map (copyFn zfn (ipadFn kpFn c) 0 64) = (List.range 64).map (ipadFn kpFn c) := by
   rw [show (64 : Nat) = 0 + 64 by omega, copyFn_map_append]; simp
-theorem list_eq_rangeGetD (L : List Sha256Spec.Byte) :
-    (List.range L.length).map (fun j => L.getD j 0) = L := by
-  apply List.ext_getElem (by simp)
-  intro j h1 _
-  simp only [List.getElem_map, List.getElem_range]
-  exact getD_eq_getElem_mem L j (by simp only [List.length_map, List.length_range] at h1; exact h1)
+-- `list_eq_rangeGetD` relocated to `Concrete.ProofKit.Refinement` (Proof Kit v1).
 
 set_option maxRecDepth 8000 in
 set_option maxHeartbeats 4000000 in
