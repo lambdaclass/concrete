@@ -1,0 +1,27 @@
+// Adversarial test: Copy variables from outer scope CAN be used inside loops.
+// Only linear variables are restricted.
+
+struct Copy Point {
+    x: Int,
+    y: Int,
+}
+
+fn use_point(p: Point) -> Int {
+    return p.x + p.y;
+}
+
+fn copy_outer_in_loop() -> Int {
+    let p: Point = Point { x: 10, y: 20 };
+    let mut sum: Int = 0;
+    let mut i: Int = 0;
+    while i < 3 {
+        // p is Copy — can use it in every iteration
+        sum = sum + use_point(p);
+        i = i + 1;
+    }
+    return sum;
+}
+
+fn main() -> Int {
+    return copy_outer_in_loop();
+}

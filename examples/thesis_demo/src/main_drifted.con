@@ -1,0 +1,54 @@
+// Concrete Thesis Demo — DRIFTED variant for drift testing
+//
+// Changes from original (3 attacks):
+//   1. AUTHORITY ESCALATION: validate gains with(File) — was pure
+//   2. PROOF SEMANTIC DRIFT: parse_byte uses subtraction (breaks proofs)
+//   3. RESOURCE DRIFT: validate uses unbounded while loop (breaks predictable)
+//
+// The original had: 2 proved, 2 enforced, 0 trusted-assumption, 1 reported
+// The drifted version should trigger:
+//   - snapshot/diff exit code 1 (trust weakened)
+//   - parse_byte: proved → stale (body fingerprint changed)
+//   - validate: enforced → reported (gains capability + unbounded loop)
+//   - predictable check: additional failures
+
+// ---- DRIFTED: subtraction instead of addition (breaks proof) ----
+
+fn parse_byte(data: Int, offset: Int) -> Int {
+    return data - offset;
+}
+
+fn check_length(len: Int) -> Int {
+    if len < 10 { return 1; }
+    return 0;
+}
+
+// ---- DRIFTED: with(File) added + unbounded while loop ----
+// Was pure and predictable. Now:
+//   - authority escalation (File capability)
+//   - resource drift (unbounded loop breaks predictable profile)
+
+fn validate(data: Int, len: Int) with(File) -> Int {
+    if check_length(len) != 0 { return 1; }
+    let mut checksum: Int = 0;
+    let mut i: Int = 0;
+    while i < len {
+        checksum = checksum + parse_byte(data, i);
+        i = i + 1;
+    }
+    if checksum == 0 { return 2; }
+    return 0;
+}
+
+// ---- Unchanged ----
+
+fn report(result: Int) with(Console) {
+    if result == 0 { println("ok"); }
+    else { println("fail"); }
+}
+
+pub fn main() with(Std) -> Int {
+    let result: Int = validate(42, 10);
+    report(result);
+    return result;
+}

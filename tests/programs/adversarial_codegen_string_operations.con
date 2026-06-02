@@ -1,0 +1,18 @@
+// Test: create strings, pass them to functions, verify values survive.
+// Verifies string passing across function boundaries.
+// Expected output:
+// hello world
+// 11
+
+fn print_and_measure(s: &String) with(Std) -> Int {
+    println(s);
+    return string_length(s);
+}
+
+pub fn main() with(Std) {
+    let mut s: String = "hello";
+    string_append(&mut s, &" world");
+    let len: Int = print_and_measure(&s);
+    println(len);
+    drop_string(s);
+}

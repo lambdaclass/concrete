@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "proofs": [
+    {
+      "function": "main.check_nonce",
+      "body_fingerprint": "[(if (binop Concrete.BinOp.lt (var nonce) (int 0)) [(ret (int 1))] [(if (binop Concrete.BinOp.gt (var nonce) (var max_nonce)) [(ret (int 2))] [(ret (int 0))])])]",
+      "proof": "Concrete.Proof.check_nonce_correct",
+      "spec": "check_nonce.spec"
+    },
+    {
+      "function": "main.check_nonce",
+      "body_fingerprint": "[(if (binop Concrete.BinOp.lt (var nonce) (int 0)) [(ret (int 1))] [(if (binop Concrete.BinOp.gt (var nonce) (var max_nonce)) [(ret (int 2))] [(ret (int 0))])])]",
+      "proof": "Concrete.Proof.check_nonce_v2",
+      "spec": "check_nonce_v2.spec"
+    }
+  ]
+}

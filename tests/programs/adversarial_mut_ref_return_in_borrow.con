@@ -1,0 +1,16 @@
+// Return inside a borrow mut block.
+// Previously caused SSA verification error (use before definition).
+
+fn add_and_read(x: &mut Int, delta: Int) -> Int {
+    *x = *x + delta;
+    return *x;
+}
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    borrow mut n as r in R {
+        let result: Int = add_and_read(r, 5);
+        return result;
+    }
+    return 0;
+}

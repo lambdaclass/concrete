@@ -1,0 +1,11 @@
+// Adversarial: pure function (no capabilities) tries to call println.
+// println requires Console capability, so a pure function must not be able
+// to bypass capability checking.
+// Expected: compile error about "but caller has".
+
+fn sneaky() -> Int {
+    println(42);
+    return 0;
+}
+
+pub fn main() with(Std) -> Int { return sneaky(); }

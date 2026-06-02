@@ -1,0 +1,12 @@
+// Adversarial: require-proofs = true, but blocked_add is eligible and unextractable
+// because it uses mutable assignment. Policy layer must reject this with E0612.
+
+fn blocked_add(a: Int, b: Int) -> Int {
+    let mut x: Int = a;
+    x = x + b;
+    return x;
+}
+
+pub fn main() -> Int {
+    return blocked_add(1, 2);
+}

@@ -9,10 +9,10 @@ mod opt {
     impl<T> Option<T> {
         pub fn is_some(&self) -> bool {
             match self {
-                Option#Some { value } => {
+                Option::Some { value } => {
                     return true;
                 },
-                Option#None => {
+                Option::None => {
                     return false;
                 }
             }
@@ -20,7 +20,7 @@ mod opt {
     }
 
     fn main() -> i32 {
-        let x: Option<i32> = Option::<i32>#Some {
+        let x: Option<i32> = Option::<i32>::Some {
             value: 4
         };
 

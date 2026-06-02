@@ -1,0 +1,19 @@
+=== Type Layout Report ===
+
+struct MsgBuf  (size: 260, align: 4)
+    offset    0  size  256  align  1  data: [u8; 256]
+    offset  256  size    4  align  4  len: i32
+
+struct RingBuf  (size: 72, align: 4)
+    offset   0  size  64  align  4  data: [i32; 16]
+    offset  64  size   4  align  4  head: i32
+    offset  68  size   4  align  4  count: i32
+
+struct ValidateResult  (size: 16, align: 4)
+    offset   0  size  4  align  4  error: i32
+    offset   4  size  4  align  4  msg_type: i32
+    offset   8  size  4  align  4  seq_num: i32
+    offset  12  size  4  align  4  payload_len: i32
+
+Totals: 3 structs, 0 enums
+

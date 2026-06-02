@@ -1,0 +1,17 @@
+// Continue must not skip unconsumed linear variables declared in the loop body.
+
+struct Resource { value: Int }
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn main() -> Int {
+    let mut i: Int = 0;
+    while i < 3 {
+        let r: Resource = Resource { value: i };
+        i = i + 1;
+        continue;
+    }
+    return 0;
+}

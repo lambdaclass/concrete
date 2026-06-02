@@ -1,0 +1,14 @@
+// Borrow mut, pass to exactly one function call.
+// Single use of borrow-block ref is valid.
+
+fn increment(x: &mut Int) {
+    *x = *x + 1;
+}
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    borrow mut n as r in R {
+        increment(r);
+    }
+    return n;
+}

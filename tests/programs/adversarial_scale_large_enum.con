@@ -1,0 +1,45 @@
+// Hostile workload: enum with 25 variants.
+// Stresses match exhaustiveness, tag generation, and large discriminated unions.
+// Expected: 42
+
+enum Copy Color {
+    Red {}, Orange {}, Yellow {}, Green {}, Blue {},
+    Indigo {}, Violet {}, Black {}, White {}, Gray {},
+    Brown {}, Pink {}, Cyan {}, Magenta {}, Lime {},
+    Teal {}, Navy {}, Maroon {}, Olive {}, Silver {},
+    Gold {}, Coral {}, Salmon {}, Crimson {}, Turquoise {},
+}
+
+fn color_value(c: Color) -> Int {
+    match c {
+        Color::Red {} => { return 1; },
+        Color::Orange {} => { return 2; },
+        Color::Yellow {} => { return 3; },
+        Color::Green {} => { return 4; },
+        Color::Blue {} => { return 5; },
+        Color::Indigo {} => { return 6; },
+        Color::Violet {} => { return 7; },
+        Color::Black {} => { return 8; },
+        Color::White {} => { return 9; },
+        Color::Gray {} => { return 10; },
+        Color::Brown {} => { return 11; },
+        Color::Pink {} => { return 12; },
+        Color::Cyan {} => { return 13; },
+        Color::Magenta {} => { return 14; },
+        Color::Lime {} => { return 15; },
+        Color::Teal {} => { return 16; },
+        Color::Navy {} => { return 17; },
+        Color::Maroon {} => { return 18; },
+        Color::Olive {} => { return 19; },
+        Color::Silver {} => { return 20; },
+        Color::Gold {} => { return 21; },
+        Color::Coral {} => { return 22; },
+        Color::Salmon {} => { return 23; },
+        Color::Crimson {} => { return 24; },
+        Color::Turquoise {} => { return 25; },
+    }
+}
+
+pub fn main() -> Int {
+    return color_value(Color::Gold {}) + color_value(Color::Gold {});
+}

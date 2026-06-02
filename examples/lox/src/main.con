@@ -23,7 +23,6 @@
 
 mod Lox {
     import std.fs.{read_to_string, FsError};
-    import std.result.{Result};
     import std.args.{count, get};
     import std.vec.{Vec};
 
@@ -974,7 +973,7 @@ mod Lox {
             let val: RVal = eval_node(nd.data,eid,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums,envs,ebs,closures,rvs);
             if val.tag==5 { return val; }
             print_rval(val,sp_chars,sp_meta,nums);
-            print_char(10);
+            println("");
             return rv_nil();
         }
         // EXPR_STMT
@@ -1113,8 +1112,8 @@ mod Lox {
         filename.drop();
 
         let source: String = match result {
-            Result#Ok { value } => value,
-            Result#Err { error } => {
+            Result::Ok { value } => value,
+            Result::Err { error } => {
                 println("Error: could not read file");
                 return 1;
             }

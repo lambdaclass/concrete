@@ -1,0 +1,33 @@
+// Adversarial lowering: enum variants with different-sized payloads.
+// Tests discriminated union layout with empty, small, and large payloads.
+// Expected: 42
+
+struct Copy BigPayload {
+    a: Int,
+    b: Int,
+    c: Int,
+    d: Int,
+    e: Int,
+}
+
+enum Copy Packet {
+    Empty {},
+    Small { v: Int },
+    Large { payload: BigPayload },
+}
+
+fn extract(p: Packet) -> Int {
+    match p {
+        Packet::Empty {} => { return 0; },
+        Packet::Small { v } => { return v; },
+        Packet::Large { payload } => { return payload.a + payload.b + payload.c + payload.d + payload.e; },
+    }
+}
+
+pub fn main() -> Int {
+    let p1: Packet = Packet::Empty {};
+    let p2: Packet = Packet::Small { v: 12 };
+    let p3: Packet = Packet::Large { payload: BigPayload { a: 1, b: 2, c: 3, d: 4, e: 20 } };
+    // 0 + 12 + 30 = 42
+    return extract(p1) + extract(p2) + extract(p3);
+}

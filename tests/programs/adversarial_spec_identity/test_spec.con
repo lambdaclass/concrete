@@ -1,0 +1,16 @@
+// Test program for spec identity tests.
+// Used with proof-registry.json to verify spec attachment flows through ProofCore.
+
+fn pure_add(a: i64, b: i64) -> i64 {
+    return a + b;
+}
+
+fn pure_mul(a: i64, b: i64) -> i64 {
+    return a * b;
+}
+
+fn main() -> i64 {
+    let x: i64 = pure_add(1, 2);
+    let y: i64 = pure_mul(3, 4);
+    return x + y;
+}

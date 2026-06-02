@@ -1,0 +1,27 @@
+// Test: validated-wrapper convention per docs/VALIDATED_WRAPPERS.md
+// Demonstrates the free-function try_new shape without inherent impl.
+// Both this shape and the inherent `impl Port { fn try_new ... }` shape
+// (used by std.numeric / std.text) lower cleanly on the native/SSA path
+// after the 2026-04-24 newtype layout fix. The convention is the same
+// either way: return Option / Result, never panic.
+
+newtype Port = u16;
+
+fn port_try_new(value: u16) -> u16 {
+    if value == 0 {
+        return 1;
+    }
+    return value;
+}
+
+fn takes_port(p: Port) -> u16 {
+    return p.0;
+}
+
+fn main() -> Int {
+    let good: Port = Port(port_try_new(8080));
+    let rescued: Port = Port(port_try_new(0));
+    let a: u16 = good.0;
+    let b: u16 = takes_port(rescued);
+    return (a as Int) + (b as Int);
+}

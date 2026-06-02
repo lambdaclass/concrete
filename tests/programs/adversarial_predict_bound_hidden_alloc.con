@@ -1,0 +1,21 @@
+// Adversarial: allocation hidden behind a 3-level call chain.
+// pure_looking -> wrapper -> deep_alloc (has Alloc cap).
+// Expected: all 3 callers fail predictable — transitive alloc gate.
+
+fn deep_alloc() with(Alloc) -> i32 {
+    return 42;
+}
+
+fn wrapper() with(Alloc) -> i32 {
+    return deep_alloc() + 1;
+}
+
+fn pure_looking() with(Alloc) -> i32 {
+    return wrapper() + 1;
+}
+
+fn main() with(Alloc) -> i32 {
+    let r: i32 = pure_looking();
+    if r == 44 { return 0; }
+    return 1;
+}

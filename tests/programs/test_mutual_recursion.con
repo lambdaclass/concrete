@@ -1,0 +1,38 @@
+// Test: mutual recursion detection
+// is_even and is_odd call each other.
+
+mod mutual_rec {
+    fn is_even(n: i32) -> i32 {
+        if n == 0 { return 1; }
+        return is_odd(n - 1);
+    }
+
+    fn is_odd(n: i32) -> i32 {
+        if n == 0 { return 0; }
+        return is_even(n - 1);
+    }
+
+    // Direct recursion for comparison
+    fn factorial(n: i32) -> i32 {
+        if n <= 1 { return 1; }
+        return n * factorial(n - 1);
+    }
+
+    // Non-recursive helper
+    fn add(a: i32, b: i32) -> i32 {
+        return a + b;
+    }
+
+    pub fn main() with(Std) -> Int {
+        let e: i32 = is_even(4);
+        let o: i32 = is_odd(3);
+        let f: i32 = factorial(5);
+        let s: i32 = add(e, o);
+        if s == 2 {
+            if f == 120 {
+                return 0;
+            }
+        }
+        return 1;
+    }
+}

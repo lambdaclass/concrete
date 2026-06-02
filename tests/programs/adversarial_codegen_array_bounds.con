@@ -1,0 +1,10 @@
+// Test: array indexed at the last valid position.
+// Verifies bounds aren't off by one.
+// Expected output: 77
+
+pub fn main() with(Std) {
+    let mut arr: [Int; 8] = [0; 8];
+    arr[7] = 77;
+    let val: Int = arr[7];
+    println(val);
+}

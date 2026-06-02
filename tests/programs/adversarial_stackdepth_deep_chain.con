@@ -1,0 +1,19 @@
+// Adversarial: 12-function deep call chain to stress max call depth reporting.
+// Expected: leaf has depth 0, main has depth 12, stack bound accumulates all frames.
+
+fn step_12() -> i32 { return 1; }
+fn step_11() -> i32 { return step_12(); }
+fn step_10() -> i32 { return step_11(); }
+fn step_09() -> i32 { return step_10(); }
+fn step_08() -> i32 { return step_09(); }
+fn step_07() -> i32 { return step_08(); }
+fn step_06() -> i32 { return step_07(); }
+fn step_05() -> i32 { return step_06(); }
+fn step_04() -> i32 { return step_05(); }
+fn step_03() -> i32 { return step_04(); }
+fn step_02() -> i32 { return step_03(); }
+fn step_01() -> i32 { return step_02(); }
+
+fn main() -> i32 {
+    return step_01();
+}

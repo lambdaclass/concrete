@@ -76,6 +76,9 @@ structure SModule where
   globals : List (String × String)
   /-- Maps local alias name → original linker symbol for aliased imports. -/
   linkerAliases : List (String × String) := []
+  /-- Newtype definitions, threaded into Layout.Ctx so tySize/tyAlign can
+      unwrap newtype names that survived elaboration (e.g. in Option<Port>). -/
+  newtypes : List NewtypeDef := []
 
 -- ============================================================
 -- SVal.ty accessor

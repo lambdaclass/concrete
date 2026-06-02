@@ -1,0 +1,20 @@
+// Regression: constant integer literals stored into a narrow
+// (u8) array element must be coerced to the element type, not
+// stored at the literal's i64 width.  The earlier bug emitted
+// `store i64 <lit>` into a u8 slot, writing past the element and
+// corrupting the array — so the compiled binary disagreed with
+// the interpreter.  Exercises low, middle, and LAST indices.
+mod m {
+    pub fn main() -> Int {
+        let mut b: [u8; 8] = [0; 8];
+        b[0] = 97;
+        b[3] = 128;
+        b[7] = 24;          // last index — the original failure
+        let mut acc: Int = 0;
+        for (let mut i: i32 = 0; i < 8; i = i + 1) {
+            acc = acc * 256 + (b[i] as Int);
+        }
+        // 97*256^7 + 128*256^4 + 24  =  big-endian pack of the bytes
+        return acc;
+    }
+}

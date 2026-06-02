@@ -13,10 +13,10 @@ enum Option<T> {
 }
 ```
 
-Variants are named with `Type#Variant`:
+Variants are named with `Type::Variant`:
 
 ```rust
-let x: Option<Int> = Option#Some { value: 3 };
+let x: Option<Int> = Option::Some { value: 3 };
 ```
 
 ## Matching Over Variants
@@ -24,10 +24,10 @@ let x: Option<Int> = Option#Some { value: 3 };
 ```rust
 fn unwrap_or_zero(x: Option<Int>) -> Int {
     match x {
-        Option#Some { value } => {
+        Option::Some { value } => {
             return value;
         },
-        Option#None => {
+        Option::None => {
             return 0;
         }
     }

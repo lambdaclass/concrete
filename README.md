@@ -11,167 +11,175 @@
 
 </div>
 
->Most ideas come from previous ideas - Alan C. Kay, The Early History Of Smalltalk
+> Most ideas come from previous ideas — Alan C. Kay, *The Early History Of Smalltalk*
 
-Concrete is a systems language where capability requirements, trust boundaries, and ownership are visible in every function signature — written in Lean 4 so the compiler itself can be a proof target.
+**A small systems language with linear types, no GC, and a compiler written in Lean — so that the same kernel that compiles your code can check theorems about it.**
 
-## The Core Idea
+Concrete combines Rust-like ownership, Zig-like explicit systems control, Austral-like capability discipline, and Lean 4 kernel-checked proofs. It is not a proof assistant; it is a no-GC systems language Lean can reason about. The compiler is written in Lean 4 and the long-term aim is to prove selected compiler properties in the same kernel — but that work is gated, see "Where Concrete is honest" below.
 
-In mainstream systems languages, function signatures usually do not tell you whether code may read files, use the network, or allocate memory. In Concrete, those effects are declared:
+## Where Concrete sits
+
+| | Rust | Zig | SPARK / Ada | Lean 4 | Austral | **Concrete** |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| No GC | ✓ | ✓ | ✓ | ✗ | ✓ | **✓** |
+| Linear types | ⚠ borrow-checker | ✗ | ✗ | ✗ | ✓ | **✓** |
+| Capability-visible effects | ✗ | ✗ | ⚠ contracts | ✗ | ✓ | **✓** |
+| Kernel-checked user proofs | ✗ | ✗ | ✓ (SMT) | ✓ | ✗ | **✓ (Lean)** |
+| Compiler written in same kernel | ✗ | ✗ | ✗ | n/a | ✗ | **✓** |
+| Systems target | ✓ | ✓ | ✓ | ✗ | ✓ | **✓** |
+
+The empty cell is the bet: no GC + linear + capability-visible effects + kernel-checked user proofs + compiler written in the same kernel + systems target.
+
+## What Others Can Do
+
+Concrete is not claiming every piece is unique. The unusual part is the
+combination.
+
+- **Rust / Zig / C / C++** are great systems languages, but proofs are mostly external. You can test, fuzz, use sanitizers, or model-check pieces, but the compiler does not normally track "this function has a theorem attached and the theorem drifted when the body changed."
+- **SPARK / Ada, Dafny, F*, Why3** have strong verification stories, but they are not trying to feel like a small C/Rust/Zig-style systems language with Lean as the compiler/proof substrate.
+- **Lean / Coq / Isabelle** are excellent proof systems, but writing normal low-level systems code there is not the primary path.
+- **Austral** is closer on linear types and safety, but it does not have the same Lean-backed proof/evidence pipeline.
+
+Concrete's useful bet is: systems-language shape, compiler-enforced discipline,
+Lean-backed theorem attachment, drift gates, and evidence bundles in one toolchain.
+
+## The Thesis
+
+Most systems languages give you safety **or** control. Concrete is trying to make four things visible at the function boundary:
+
+1. **what authority** a function has (capabilities)
+2. **whether it allocates, blocks, recurses, or runs unboundedly** (predictable-execution profile)
+3. **where it crosses trust boundaries** (`trusted`, `unsafe`)
+4. **whether those claims are reported, enforced, or proved**
+
+A reviewer should be able to audit a function from its signature plus the compiler's reports, without reading the implementation and without trusting convention. That same discipline makes the code unusually legible to LLM tools — the model can ask the compiler what code is allowed to do instead of guessing from source.
+
+## The Language
+
+- **No garbage collector.** Memory is managed through ownership and borrowing, checked at compile time. No runtime GC, no hidden reference counting.
+- **Linear type system.** Every non-`Copy` value must be consumed exactly once. Programs that leak, double-free, or use-after-move are rejected.
+- **Copy vs linear.** Types are `Copy` (integers, small structs that opt in) or linear (heap-owning by default).
+- **Capability-based effects.** Side effects are declared in signatures: `with(File)`, `with(Console)`, `with(Alloc)`. A function with no capabilities is pure — no I/O, no allocation, no FFI.
+- **Predictable-execution profile.** The compiler can reject functions that recurse, allocate, block, cross FFI, or run unbounded loops. Per-function, not whole-program.
+- **Explicit trust boundaries.** `trusted` marks code the compiler cannot fully verify (pointer arithmetic, FFI). Everything else is checked. The boundary is visible.
+- **Lean-backed proofs.** Selected pure functions can carry Lean 4 theorems. `make build` runs the kernel; drift in source revokes the `proved` evidence automatically.
+
+## What This Looks Like
+
+The first graduated flagship, [examples/parse_validate](examples/parse_validate/), is the example to read first.  Its [`README.md`](examples/parse_validate/README.md) follows the honest framing the rest of the project tries to live up to: what is proved, what is enforced (statically and by CI), what is reported, what is assumed, and **what is not yet done**.  Four later flagships ([crypto_verify](examples/crypto_verify/), [fixed_capacity](examples/fixed_capacity/), [constant_time_tag](examples/constant_time_tag/), [hmac_sha256](examples/hmac_sha256/)) reuse the same template across different systems domains.
+
+For the minimal effects-report shape, here is [examples/thesis_demo](examples/thesis_demo/src/main.con):
 
 ```con
-fn parse_json(input: &String) with(Alloc) -> JsonValue { ... }
-fn serve(port: u16) with(Network, Alloc, Console) -> Int { ... }
-fn sha256(data: &Bytes) with(Alloc) -> String { ... }
-```
+fn parse_byte(data: Int, offset: Int) -> Int { return data + offset; }
+fn check_length(len: Int) -> Int { if len < 10 { return 1; } return 0; }
 
-`parse_json` can allocate but can't touch the filesystem or network. `sha256` can allocate but provably never reads a file. This isn't a convention — the compiler enforces it. A function can only call functions whose capabilities are a subset of its own.
-
-The real payoff shows up in something like an artifact verifier: `sha256() with(Alloc)` cannot touch the filesystem. `read_file() with(File, Alloc)` cannot leak to the console. `report() with(Console)` cannot read files. An auditor can verify the authority boundaries from the signatures alone, without first reading the function bodies.
-
-### The three-way trust split
-
-Rust has one keyword: `unsafe`. Concrete splits this into three distinct things:
-
-1. **Capabilities** (`with(File, Network)`) — semantic effects visible to callers. "This function does I/O."
-2. **`trusted`** — containment of pointer-level tricks behind a safe API. Only permits pointer arithmetic, raw deref, raw assignment, pointer casts. Does NOT permit FFI calls, does NOT suppress capabilities, does NOT relax ownership.
-3. **`with(Unsafe)`** — authority to cross foreign boundaries (FFI, transmute). Required even inside `trusted` code.
-
-In Rust, when you see `unsafe`, you don't know if it's "pointer arithmetic I've proven correct" or "calling into C code that might do anything." In Concrete, those are syntactically and semantically different, and the compiler reports on them separately.
-
-### The compiler as an audit machine
-
-Concrete has 8 built-in report modes:
-
-- `--report caps` — per-function capabilities
-- `--report authority` — for each capability, which functions require it and through which call chain
-- `--report unsafe` — where are the trust boundaries, extern functions, and unsafe crossings?
-- `--report alloc` — where does allocation happen, and where is cleanup?
-- `--report proof` — which functions are pure enough to be formally proved?
-- `--report layout` — struct sizes, alignment, and field offsets
-- `--report interface` — public API surface
-- `--report mono` — which monomorphized generic code actually exists
-
-These are structured compiler outputs derived from the same semantic analysis that type-checks the code. Not linting — real facts about the program.
-
-## What Concrete Looks Like
-
-Pure decision core — no capabilities needed, testable on its own:
-
-```con
-fn allow_command(cmd: Command, policy: Policy) -> Decision {
-    if cmd.target > policy.max_target {
-        return Decision#Deny;
+fn validate(data: Int, len: Int) -> Int {
+    if check_length(len) != 0 { return 1; }
+    let mut checksum: Int = 0;
+    for (let mut i: Int = 0; i < len; i = i + 1) {
+        checksum = checksum + parse_byte(data, i);
     }
-    if cmd.remote && policy.allow_remote == false {
-        return Decision#Deny;
-    }
-    return Decision#Allow;
+    if checksum == 0 { return 2; }
+    return 0;
+}
+
+fn report(result: Int) with(Console) {
+    if result == 0 { println("ok"); } else { println("fail"); }
+}
+
+pub fn main() with(Std) -> Int {
+    let result: Int = validate(42, 10);
+    report(result);
+    return result;
 }
 ```
 
-Trusted wrapper — pointer unsafety contained behind a safe API:
+`concrete --report effects` on this file produces, today:
 
-```con
-trusted fn load_policy(path: &String) with(File, Alloc) -> Policy {
-    let result: Result<String, FsError> = read_to_string(path);
-    // ... parse the file contents into a Policy ...
-}
+```
+parse_byte     caps: (pure)     loops: no     evidence: proved
+check_length   caps: (pure)     loops: no     evidence: proved
+validate       caps: (pure)     loops: bounded evidence: enforced
+report         caps: Console    loops: no     evidence: enforced
+pub main       caps: File,Network,Clock,Env,Random,Process,Console,Alloc
+                                              evidence: reported
 ```
 
-Callers see `load_policy(path) with(File, Alloc)` — they know it reads files and allocates, but the raw pointer work is invisible to them. The `trusted` boundary is one declaration, not ambient privilege.
+Read the signatures. `parse_byte`, `check_length`, `validate` are pure. `report` can write to the console and nothing else. `main` has `Std` because it is the entry point. The split between bounded core and effectful shell is the point — Concrete does not pretend the whole program is predictable; it makes the boundary explicit.
 
-Explicit resource cleanup:
+## What the compiler reports
 
-```con
-fn process_request(stream: TcpStream, root: &String) with(Std) {
-    let buf: [u8; 4096] = [0; 4096];
-    let n: i64 = stream.read(&buf as *mut u8, 4096);
-    // ... handle request ...
-    stream.close();
-}
-```
+Evidence levels:
 
-Cleanup is written in the function body. No hidden destructors, no runtime finalization. Ownership is explicit and the compiler enforces linearity — forgetting to consume a resource is a compile error.
+- **proved** — a linked Lean 4 theorem backs the claim.
+- **enforced** — the compiler can reject violations (passes all 5 predictable gates).
+- **reported** — the compiler classifies it but cannot enforce.
+- **trusted-assumption** — claim depends on an explicit trust boundary.
 
-## The Proof Story
+The predictable profile (`--check predictable`) rejects functions that recurse, contain unbounded loops, allocate (or declare `Alloc`), cross FFI, or block through file/network/process capabilities. Per-function.
 
-The compiler is written in Lean 4. This enables two layers of proof:
+Reports that run cleanly today: `caps`, `unsafe`, `layout`, `interface`, `alloc`, `mono`, `authority`, `proof`, `eligibility`, `proof-status`, `obligations`, `stack-depth`, `fingerprints`, `effects`, `recursion`, `consistency`, `verify`.
 
-1. **Prove the compiler** — type soundness, ownership coherence, capability preservation, Core→SSA lowering correctness. This is proving the language rules are right.
-2. **Prove user programs** — through formalized Core semantics, a Concrete function's behavior can be stated and proved as a Lean theorem. This means you could write a hash function in Concrete (real systems language, real FFI, real memory layout) and prove it correct in Lean (real theorem prover).
+## Where Concrete is honest
 
-The architecture keeps proof tooling separate from compilation. The compiler produces stable artifacts (`ValidatedCore`, `ProofCore`); proof tools consume them. This avoids pushing proof search into the normal compile path.
+The README discipline this project tries to live up to: state what is true today, name what is not, do not sell harder than the AUDITs allow.
 
-Currently: 17 proven theorems over a pure Core fragment. The formalization is narrow but the architecture is designed to grow.
+**The compiler is written in Lean 4. It is not yet proved in Lean 4.** That distinction matters. Phase 12 of the roadmap is where compiler-correctness work happens; today the compiler is well-tested (1575 positive tests, drift-detection gates including the spec-drift gate that prevents typo'd specs from silently "proving," 5 graduated flagships' worth of oracle differentials totaling ~3000 cases) but not Lean-verified.  Every Phase 4 extraction rule names the Phase 12 preservation obligation it creates; see `docs/PROOF_OBLIGATIONS_REGISTER.md`.  The 4-layer trust map: (1) Lean kernel checks the user's theorem; (2) Concrete compiler extracts the property — trusted; (3) LLVM/clang/linker — trusted; (4) host kernel + libc — trusted. See [docs/TRUSTED_COMPUTING_BASE.md](docs/TRUSTED_COMPUTING_BASE.md).
 
-## Research Directions
+**"Every function provable" is the long-term aim, not the current state.** Today ProofCore covers integer/bool, if-then-else (including early-return desugaring), function calls, let-bindings, struct + enum literals, pattern matching, array reads and functional array updates, bounded `while` loops (flat-assign body, including array-element writes) and richer `while_step` loops (Cont/Break enum), casts, and width-tagged arithmetic/bitwise ops — `mod`/`div`, `bitand`/`bitor`/`bitxor`, logical `shl`/`shr`, and `u32` wrapping `add` — at i32/u32/u8 widths with signed and unsigned result modes (the HMAC-SHA256 forcing surface, R-22…R-28).  It does NOT yet cover references/borrows or arbitrary (non-counter) loop invariants.  **Refinement against an independent spec** has now started: an independent `BitVec`-valued SHA-256 spec ships ([`Concrete/Sha256Spec.lean`](Concrete/Sha256Spec.lean)), and the extracted code is proved to *refine* it for ALL inputs — `ch_refines` / `maj_refines` (Boolean round functions, word-level core via `bv_decide`, kernel-checked) and `block_to_words_refines_spec` (the 16-iteration big-endian packing **loop**, via `eval_while_count` + array set/get lemmas), all in [`Concrete/Sha256Refine.lean`](Concrete/Sha256Refine.lean).  This crosses from straight-line helper refinement to looping crypto-state refinement.  The remaining refinements (rotations/sigmas, the message schedule, compression, and the full `hash`/`hmac` composition) reuse this machinery and are the gate for HMAC bar #2.  A reusable proof layer makes loop/array proofs systematic (fuel monotonicity + bounded counter-loop induction); see [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).  Per-construct register: `docs/PROOF_OBLIGATIONS_REGISTER.md`; mutation model: `docs/PROOF_STATE_MODEL.md`.
 
-The most developed ideas in the [research/](research/) directory are roadmap and research directions, not already-landed product surfaces:
+**Five graduated Phase 7 flagships as of 2026-06-02:**
+- [parse_validate](examples/parse_validate/) — capability-pure validation core, Lean composition theorem, drift-enforced negative pair.
+- [crypto_verify](examples/crypto_verify/) — toy proof-scaffolding for authenticated-tag verification (explicitly NOT real crypto).
+- [fixed_capacity](examples/fixed_capacity/) — bounded ring buffer + message validator with iteration-counted composition theorem over mutable state.
+- [constant_time_tag](examples/constant_time_tag/) — fixed-size byte-array comparison with universal same-tag theorem and honest machine-level-timing gap.
+- [hmac_sha256](examples/hmac_sha256/) — first real cryptographic primitive (FIPS 180-4 + RFC 4231); the **entire** SHA-256/HMAC composition chain is kernel-verified (11 registered proofs) and every link is tied to the exact extracted source through the spec-drift gate.
 
-**Authority budgets** — capabilities already tell you what each function requires. Budgets would make this enforceable at module and package scope: "this module may only use `Alloc`." If any function inside transitively reaches `Network`, the build would fail. The transitive capability set is already computed; budget checking is set containment. ([research/packages-tooling/authority-budgets.md](research/packages-tooling/authority-budgets.md))
+Each is in `tests/showcase/manifest.toml` with 10 of 10 graduation bars met; `make test-showcase` walks all five and asserts CI gates + release bundle capture cleanly.
 
-**Allocation budgets** — `with(Alloc)` is currently binary. The proposal classifies functions as NoAlloc / Bounded / Unbounded by walking the call graph. This would push allocation reporting into a stricter audit surface. ([research/stdlib-runtime/allocation-budgets.md](research/stdlib-runtime/allocation-budgets.md))
+`hmac_sha256` (graduated 2026-06-02) is the deepest proof artifact: `hmac_sha256_refines_spec` proves the extracted body computes exactly an independent BitVec model (`Sha256Spec.hmac`) for all inputs in the documented bounds (`k_len ≤ 128`, `m_len ≤ 256`, `len ≤ 375`), composing nine full-contract chain refinements (block-to-words, schedule, round, single/offset compress, state serialization, multi-block padded hash, outer HMAC) by `eval_while_count` loop induction + `bv_decide` — not 64× unfolding. It realizes the thesis end to end: *source extracts to this ProofCore body, this body refines the spec, and drift breaks the claim.* The proof infrastructure was then harvested into a reusable, `fns`-generic **Proof Kit** (`Concrete/ProofKit/*`); the [docs/PROOFKIT_GUIDE.md](docs/PROOFKIT_GUIDE.md) teaches the path on `ch` → `block_to_words` → `state_to_bytes` → `sha256_compress` → `hmac_sha256`. See also [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).
 
-**Execution cost tracking** — structural classification of functions as bounded or unbounded (loops, recursion, call depth). For bounded functions, compute abstract operation counts via IPET. Concrete is unusually tractable here: no dynamic dispatch, no closures, no hidden allocation. ([research/stdlib-runtime/execution-cost.md](research/stdlib-runtime/execution-cost.md))
+**Async / concurrency / threads / channels are not implemented.** The research direction is documented (evidence-bearing structured concurrency, `with(Async)` vs `with(Concurrent)`, linear task handles, deterministic simulation as a future backend) but no code exists. See [research/stdlib-runtime/async-concurrency-evidence.md](research/stdlib-runtime/async-concurrency-evidence.md).
 
-**Semantic diff and trust drift** — diff trust-relevant properties across two versions: authority changes, new trusted boundaries, allocation shifts. Not source text diffs — semantic fact diffs. ([research/compiler/semantic-diff-and-trust-drift.md](research/compiler/semantic-diff-and-trust-drift.md))
+**Other things not implemented:** broad proof coverage, bounded-capacity types, incremental compilation, package manager / workspaces, second backend (QBE/WASM/etc.), LSP / editor support, REPL / playground. See [ROADMAP.md](ROADMAP.md) for priorities.
 
-**Proof addon architecture** — the compiler produces stable proof-facing artifacts; proof tooling is a separate consumer (SMT, symbolic execution, Lean export). This avoids fusing proof search into compilation. ([research/proof-evidence/proof-addon-architecture.md](research/proof-evidence/proof-addon-architecture.md))
+**The audience is narrow.** Systems engineers who want Lean-backed proofs on selected functions, willing to accept linearity discipline, working in a domain where no-GC matters. If you want broad memory safety with low ceremony, Rust is more mature. If you want fast iteration on low-level code without proof story, Zig is simpler. Concrete is for the case where all four of those constraints bind.
 
-**AI-assisted optimization** — the report system produces structured semantic facts (authority, allocation, purity, trust boundaries), not just pass/fail. This creates a tight feedback loop for automated agents: try a refactoring, check whether the compiler's structured report changed in the intended direction ("did this function become NoAlloc?", "did the authority set shrink?", "did more functions become proof-eligible?"). Semantic guardrails mean an agent can verify that a faster version didn't silently grow its trust surface.
+## Research Direction: Evidence-Bearing Concurrency
 
-## Where Concrete Fits
+Sketched as future work; not in scope for the first release. The interesting target is not Rust-style async/await but **evidence-bearing structured concurrency**:
 
-Concrete is not trying to replace Rust, Zig, or C for general-purpose systems programming. Its case is narrower: software that must be small, explicit, reviewable, and honest about power.
+- `with(Async)` for order-independent work that may safely run sequentially
+- `with(Concurrent)` for work requiring real concurrent progress for correctness
+- structured scopes; child tasks cannot outlive their parent
+- linear task handles; tasks cannot leak
+- owned-value transfer instead of `Send` contagion
+- bounded channels, race/select, cooperative cancellation only if they fit the linear/evidence model
+- deterministic simulation as a future backend — scheduler bugs reproducible from a seed
 
-The most compelling targets are high-consequence components with narrow authority:
+`Async` vs `Concurrent` is the key distinction. If two operations are merely independent, sequential fallback is correct. If both must make progress or the program deadlocks, the type system should say so. "Missing concurrency" becomes a type-system issue, not a scheduler accident.
 
-- boot, update, and artifact verification tools
-- key-handling and cryptographic policy helpers
-- safety/security guard processes with tightly bounded behavior
-- industrial control safety interlocks, medical-device policy kernels
-- audited wrappers around critical C libraries or hardware interfaces
+See [research/stdlib-runtime/async-concurrency-evidence.md](research/stdlib-runtime/async-concurrency-evidence.md).
 
-**Compared to Rust:** Smaller surface, less abstraction, more explicit authority. Rust's `unsafe` covers everything Concrete splits into three checkable surfaces. Rust has no way to declare that a crate may not do network I/O.
-
-**Compared to Zig:** Shares the low-level explicitness, but pushes harder on ownership, capability tracking, and proof-oriented structure.
-
-**Compared to verification languages (F\*, SPARK):** Keeps low-level runtime, FFI, layout, and ownership first-class instead of treating them as escape hatches.
-
-## Current State
-
-The compiler implements the full pipeline: `Parse → Resolve → Check → Elab → CoreCheck → Mono → Lower → EmitSSA → LLVM IR`.
-
-What exists: centralized ABI/layout, 8 report modes with 59 assertions, `trusted`/capability boundaries, a real stdlib (vec, string, io, bytes, fs, net, hash, time, parse, test, and 8 collection types), `#[test]` execution, `concrete build`/`test`/`run`, and 12 example programs that have pressure-tested parsers, interpreters, storage, networking, and integrity workloads.
-
-What doesn't exist yet: incremental compilation, third-party dependencies, backend plurality, broad formalization, a runtime.
-
-For priorities, see [ROADMAP.md](ROADMAP.md). For landed milestones, see [CHANGELOG.md](CHANGELOG.md).
-
-## Try It
+## Try it
 
 ```bash
 make build
-.lake/build/bin/concrete examples/snippets/hello_world.con -o /tmp/hello && /tmp/hello
-```
 
-The compiler enforces linearity — forgetting or reusing a resource is a compile error:
+# The pilot example — read its README first
+.lake/build/bin/concrete examples/parse_validate/src/main.con --report effects
+.lake/build/bin/concrete examples/parse_validate/src/main.con --report proof-status
+.lake/build/bin/concrete examples/parse_validate/src/main.con --check predictable
 
-```
-struct Resource { value: Int }
+# CI gates that enforce the showcase contract
+make test-policy          # enforced budgets in Concrete.toml [policy]
+make test-assumptions     # declared trust surface in assumptions.toml
+make test-catches         # "Concrete catches this" negative cases
+make test-verify-gates    # pass-by-pass compiler self-checks
 
-fn consume(r: Resource) -> Int {
-    return r.value;
-}
-
-fn main() -> Int {
-    let r: Resource = Resource { value: 42 };
-    let v: Int = consume(r);  // r is consumed here
-    // Using r again: "linear variable 'r' used after move"
-    // Forgetting r: "linear variable 'r' was never consumed"
-    return v;
-}
+# A simpler example
+.lake/build/bin/concrete examples/thesis_demo/src/main.con --report effects
 ```
 
 ## Building
@@ -179,19 +187,22 @@ fn main() -> Int {
 Requires [Lean 4](https://leanprover.github.io/lean4/doc/setup.html) (v4.28.0+) and clang.
 
 ```bash
-make build    # or: lake build
-make test     # runs the full test suite
-make clean    # or: lake clean
+make build
+make test
+make clean
 ```
 
 ## Doc Map
 
-- [docs/IDENTITY.md](docs/IDENTITY.md) — project identity and vision
-- [docs/SAFETY.md](docs/SAFETY.md) — the three-way trust model
-- [ROADMAP.md](ROADMAP.md) — what's next
-- [CHANGELOG.md](CHANGELOG.md) — what's landed
-- [research/](research/) — design research and future directions
-- [docs/](docs/README.md) — full documentation index
+**Start here:** [examples/parse_validate/README.md](examples/parse_validate/README.md) — the first graduated flagship, with the honest framing template all five flagships share.
+
+**Discipline:** [docs/WRONG_CODE_CORPUS.md](docs/WRONG_CODE_CORPUS.md), [docs/REDUCER_WORKFLOW.md](docs/REDUCER_WORKFLOW.md), [docs/BUG_BUNDLE.md](docs/BUG_BUNDLE.md), [docs/VERIFY_GATES.md](docs/VERIFY_GATES.md), [docs/ASSUMPTION_FILES.md](docs/ASSUMPTION_FILES.md), [docs/POLICY_FILES.md](docs/POLICY_FILES.md), [docs/INTERPRETER_TRUST.md](docs/INTERPRETER_TRUST.md).
+
+**Identity / claims:** [docs/IDENTITY.md](docs/IDENTITY.md), [docs/PRINCIPLES.md](docs/PRINCIPLES.md), [docs/CLAIMS_TODAY.md](docs/CLAIMS_TODAY.md), [docs/PROOF_STORY_MATRIX.md](docs/PROOF_STORY_MATRIX.md), [docs/PROVABLE_V1.md](docs/PROVABLE_V1.md), [docs/TRUSTED_COMPUTING_BASE.md](docs/TRUSTED_COMPUTING_BASE.md), [docs/PROFILES.md](docs/PROFILES.md), [docs/INFLUENCES.md](docs/INFLUENCES.md).
+
+**Proof system:** [docs/PROOFKIT_GUIDE.md](docs/PROOFKIT_GUIDE.md) ("prove your first Concrete function" — the reusable, `fns`-generic proof kit harvested from HMAC), [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md) (discharge tiers + the shipped reusable proof layer), [docs/CONTRACTS_AND_VCS.md](docs/CONTRACTS_AND_VCS.md) (the planned claim→obligation→evidence→audit pipeline and source contracts), [docs/PROOF_OBLIGATIONS_REGISTER.md](docs/PROOF_OBLIGATIONS_REGISTER.md), [docs/PROOF_WORKFLOW.md](docs/PROOF_WORKFLOW.md).
+
+**Direction:** [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), [research/](research/).
 
 ## License
 

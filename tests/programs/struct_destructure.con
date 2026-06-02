@@ -1,0 +1,42 @@
+// Test irrefutable struct destructuring let
+
+mod struct_destructure {
+    struct Copy Point {
+        x: i32,
+        y: i32,
+    }
+
+    fn sum_point(p: Point) -> i32 {
+        let Point { x, y } = p;
+        return x + y;
+    }
+
+    struct Copy Triple {
+        a: i32,
+        b: i32,
+        c: i32,
+    }
+
+    fn sum_triple(t: Triple) -> i32 {
+        let Triple { a, b, c } = t;
+        return a + b + c;
+    }
+
+    pub fn main() -> Int {
+        // Test 1: basic struct destructure
+        let p: Point = Point { x: 10, y: 20 };
+        if sum_point(p) != 30 { return 1; }
+
+        // Test 2: three fields
+        let t: Triple = Triple { a: 1, b: 2, c: 3 };
+        if sum_triple(t) != 6 { return 2; }
+
+        // Test 3: inline destructure
+        let p2: Point = Point { x: 5, y: 7 };
+        let Point { x, y } = p2;
+        if x != 5 { return 3; }
+        if y != 7 { return 4; }
+
+        return 0;
+    }
+}

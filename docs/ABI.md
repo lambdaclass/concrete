@@ -2,6 +2,8 @@
 
 This document describes Concrete's current ABI stability, FFI safety model, platform assumptions, and what is intentionally left unstable.
 
+For the exploratory design direction behind the source-facing `repr` surface, see [../research/language/layout-contract-surface.md](../research/language/layout-contract-surface.md).
+
 ## Stability Summary
 
 | Area | Status | Stable? |
@@ -158,6 +160,20 @@ These are not hypothetical — they are current implementation gaps that affect 
 
 2. **Struct return flattening limited to ≤ 8 bytes.** Extern fns returning repr(C) structs ≤ 8 bytes have the return value correctly flattened to i64. Larger struct returns still use pointer indirection, which may not match the C ABI for 9-16 byte structs.
 
+## Desired Source-Level Contract Surface
+
+Before Concrete freezes its first public stdlib and FFI story, the source-level layout contract should become smaller and sharper than the current implementation accident.
+
+The intended direction is:
+
+- explicit `repr` forms define the stable layout surface; unannotated structs stay compiler-controlled
+- `#[repr(C)]`, `#[repr(packed)]`, and `#[repr(align(N))]` remain the only first-class guaranteed layout forms unless a later note justifies more
+- transparent wrappers should only land if the wrapper/newtype story stays simple and obviously zero-cost
+- enums remain intentionally out of the stable FFI layout surface
+- reports and package/interface artifacts should say whether a type's layout is guaranteed or opaque, not force reviewers to infer it from context
+
+The language should not promise a large Rust-style menu of representation tricks unless each one clears the same audit and proof bar as the rest of the surface.
+
 ## What We Intentionally Do Not Promise
 
 1. **ABI compatibility across compiler versions.** Recompile everything when the compiler changes.
@@ -185,16 +201,16 @@ The following table shows the layout properties assumed by `Layout.lean`. These 
 
 | Property | Value | Verified by |
 |----------|-------|-------------|
-| `sizeof(Int)` = 8 | Compile-time constant | `PipelineTest.lean` layout test, `Layout.lean tySize .int = 8` |
-| `sizeof(i32)` = 4 | Compile-time constant | `PipelineTest.lean` layout test, `Layout.lean tySize .i32 = 4` |
-| `sizeof(ptr)` = 8 | Compile-time constant | `PipelineTest.lean` layout test, `Layout.lean tySize (.ref _) = 8` |
-| `sizeof(String)` = 24 | Compile-time constant | `PipelineTest.lean` builtin size test |
-| `sizeof(Vec)` = 24 | Compile-time constant | `PipelineTest.lean` builtin size test |
+| `sizeof(Int)` = 8 | Compile-time constant | `Concrete/PipelineTest.lean` layout test, `Layout.lean tySize .int = 8` |
+| `sizeof(i32)` = 4 | Compile-time constant | `Concrete/PipelineTest.lean` layout test, `Layout.lean tySize .i32 = 4` |
+| `sizeof(ptr)` = 8 | Compile-time constant | `Concrete/PipelineTest.lean` layout test, `Layout.lean tySize (.ref _) = 8` |
+| `sizeof(String)` = 24 | Compile-time constant | `Concrete/PipelineTest.lean` builtin size test |
+| `sizeof(Vec)` = 24 | Compile-time constant | `Concrete/PipelineTest.lean` builtin size test |
 | `alignof(i64)` = 8 | Compile-time constant | `Layout.lean tyAlign .int = 8` |
 | `alignof(i32)` = 4 | Compile-time constant | `Layout.lean tyAlign .i32 = 4` |
 | Enum tag = i32 | Compile-time constant | `Layout.lean alignUp 4 payloadAlign` |
-| repr(C) field order | Declaration order | `fieldOffset` iterates in declaration order; tested in `PipelineTest.lean` |
-| repr(packed) no padding | Consecutive offsets | `fieldOffset` sums sizes without alignment; tested in `PipelineTest.lean` |
-| Pass-by-ptr for structs | All named types | `isPassByPtr` returns true for named types; tested in `PipelineTest.lean` |
+| repr(C) field order | Declaration order | `fieldOffset` iterates in declaration order; tested in `Concrete/PipelineTest.lean` |
+| repr(packed) no padding | Consecutive offsets | `fieldOffset` sums sizes without alignment; tested in `Concrete/PipelineTest.lean` |
+| Pass-by-ptr for structs | All named types | `isPassByPtr` returns true for named types; tested in `Concrete/PipelineTest.lean` |
 
 **What this does not verify:** emitted LLVM IR signatures, actual runtime struct layout on target hardware, or foreign interop correctness. The tests confirm the layout model is internally consistent, not that it produces correct binaries on all targets. Empirical cross-target validation (compiling and running FFI tests on x86_64 and aarch64) is future work.

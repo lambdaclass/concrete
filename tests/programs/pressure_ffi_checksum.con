@@ -1,0 +1,160 @@
+// Pressure: Checksum computation with trusted/pure split
+//
+// Implements a FNV-1a-like hash over a fixed byte buffer.
+// Trusted code: raw pointer reads for byte-level access.
+// Pure code: accumulator logic, validation.
+//
+// Reveals:
+//   - Raw pointer read patterns in trusted wrappers
+//   - Byte-level trusted wrappers for data access
+//   - Trusted/pure split for computation
+//   - Bitwise operations in trusted context
+//   - Cast patterns (u8 -> u32, u32 -> i32)
+
+// === Layer 1: Trusted byte readers ===
+
+trusted fn read_byte(buf: *const u8, offset: u64) -> u8 {
+    let p: *const u8 = buf + offset;
+    return *(p as *mut u8);
+}
+
+// === Layer 2: Checksum computation (trusted for pointer access) ===
+
+// FNV-1a-like hash: offset_basis XOR each byte, then multiply by prime.
+// Uses 32-bit arithmetic. Bounded loop: exactly `len` iterations.
+trusted fn fnv1a_hash(data: *const u8, len: u64) -> u32 {
+    let mut hash: u32 = 2166136261;   // FNV offset basis
+    let prime: u32 = 16777619;         // FNV prime
+    for (let mut i: u64 = 0; i < len; i = i + 1) {
+        let byte: u8 = read_byte(data, i);
+        hash = hash ^ (byte as u32);
+        hash = hash * prime;
+    }
+    return hash;
+}
+
+// Simple additive checksum for cross-validation.
+// Sum of all bytes mod 2^32.
+trusted fn additive_checksum(data: *const u8, len: u64) -> u32 {
+    let mut sum: u32 = 0;
+    for (let mut i: u64 = 0; i < len; i = i + 1) {
+        let byte: u8 = read_byte(data, i);
+        sum = sum + (byte as u32);
+    }
+    return sum;
+}
+
+// XOR checksum — XOR of all bytes.
+trusted fn xor_checksum(data: *const u8, len: u64) -> u8 {
+    let mut acc: u8 = 0;
+    for (let mut i: u64 = 0; i < len; i = i + 1) {
+        let byte: u8 = read_byte(data, i);
+        acc = acc ^ byte;
+    }
+    return acc;
+}
+
+// === Layer 3: Pure validation (no capabilities, no trusted) ===
+
+// Validate that two hashes of the same data are equal
+fn validate_deterministic(hash1: u32, hash2: u32) -> i32 {
+    if hash1 == hash2 { return 0; }
+    return 1;
+}
+
+// Validate that hashes of different data differ (not guaranteed, but likely)
+fn validate_different(hash1: u32, hash2: u32) -> i32 {
+    if hash1 != hash2 { return 0; }
+    return 1;
+}
+
+// Validate additive checksum for a known pattern
+fn validate_additive(data_sum: u32, expected: u32) -> i32 {
+    if data_sum == expected { return 0; }
+    return 1;
+}
+
+// === Entry point ===
+
+pub fn main() with(Console) -> Int {
+    let mut failures: i32 = 0;
+
+    // Test data: known byte patterns
+    let data1: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let data2: [u8; 8] = [8, 7, 6, 5, 4, 3, 2, 1];
+    let data3: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];  // same as data1
+
+    // --- Test 1: FNV hash is deterministic ---
+    let h1a: u32 = fnv1a_hash(&data1 as *const u8, 8);
+    let h1b: u32 = fnv1a_hash(&data3 as *const u8, 8);
+    let v1: i32 = validate_deterministic(h1a, h1b);
+    if v1 != 0 {
+        println("FAIL: fnv1a deterministic");
+        failures = failures + 1;
+    } else {
+        println("OK: fnv1a deterministic");
+    }
+
+    // --- Test 2: FNV hash differs for different input ---
+    let h2: u32 = fnv1a_hash(&data2 as *const u8, 8);
+    let v2: i32 = validate_different(h1a, h2);
+    if v2 != 0 {
+        println("FAIL: fnv1a different inputs");
+        failures = failures + 1;
+    } else {
+        println("OK: fnv1a different inputs");
+    }
+
+    // --- Test 3: additive checksum of [1..8] = 36 ---
+    let sum1: u32 = additive_checksum(&data1 as *const u8, 8);
+    let v3: i32 = validate_additive(sum1, 36);
+    if v3 != 0 {
+        println("FAIL: additive checksum [1..8]");
+        failures = failures + 1;
+    } else {
+        println("OK: additive checksum [1..8]");
+    }
+
+    // --- Test 4: additive checksum of [8..1] = 36 (same sum) ---
+    let sum2: u32 = additive_checksum(&data2 as *const u8, 8);
+    let v4: i32 = validate_additive(sum2, 36);
+    if v4 != 0 {
+        println("FAIL: additive checksum [8..1]");
+        failures = failures + 1;
+    } else {
+        println("OK: additive checksum [8..1]");
+    }
+
+    // --- Test 5: XOR checksum of [1..8] ---
+    // 1^2^3^4^5^6^7^8 = 8 ^ (1^2^3^4^5^6^7)
+    // 1^2=3, 3^3=0, 0^4=4, 4^5=1, 1^6=7, 7^7=0, 0^8=8
+    // Expected: (((((((1^2)^3)^4)^5)^6)^7)^8) = 8
+    //   1^2=3, 3^3=0, 0^4=4, 4^5=1, 1^6=7, 7^7=0, 0^8=8
+    let xor1: u8 = xor_checksum(&data1 as *const u8, 8);
+    if xor1 != 8 {
+        println("FAIL: xor checksum [1..8]");
+        failures = failures + 1;
+    } else {
+        println("OK: xor checksum [1..8]");
+    }
+
+    // --- Test 6: FNV hash of empty data should be offset basis ---
+    let empty: [u8; 1] = [0];
+    let h_empty: u32 = fnv1a_hash(&empty as *const u8, 0);
+    if h_empty != 2166136261 {
+        println("FAIL: fnv1a empty = offset_basis");
+        failures = failures + 1;
+    } else {
+        println("OK: fnv1a empty = offset_basis");
+    }
+
+    // --- Summary ---
+    if failures == 0 {
+        println("All 6 checksum tests passed.");
+    } else {
+        print(failures as Int);
+        println(" checksum test(s) failed.");
+    }
+
+    return failures as Int;
+}

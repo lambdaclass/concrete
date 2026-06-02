@@ -2,7 +2,6 @@ mod vec {
     import std.mem.{sizeof};
     import std.alloc.{grow,dealloc};
     import std.math.{max};
-    import std.option.{Option};
 
     pub struct Vec<T> {
         ptr: *mut T,
@@ -32,20 +31,20 @@ mod vec {
 
         pub fn pop(&mut self) -> Option<T> {
             if self.len == 0 {
-                return Option::<T>#None;
+                return Option::<T>::None;
             }
             self.len = self.len - 1;
             let target_ptr: *mut T = self.ptr + self.len;
-            return Option::<T>#Some { value: *target_ptr };
+            return Option::<T>::Some { value: *target_ptr };
         }
 
         /// Bounds-checked access. Returns None if index is out of bounds.
         pub fn get(&self, at: u64) -> Option<&T> {
             if at >= self.len {
-                return Option::<&T>#None;
+                return Option::<&T>::None;
             }
             let target_ptr: *mut T = self.ptr + at;
-            return Option::<&T>#Some { value: target_ptr as &T };
+            return Option::<&T>::Some { value: target_ptr as &T };
         }
 
         /// Unchecked access. Caller must ensure index is within bounds.
@@ -134,26 +133,26 @@ mod vec {
         v.push(20);
         let r: Option<&i32> = v.get(0);
         match r {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if *value != 10 {
                     v.drop();
                     return 1;
                 }
             },
-            Option#None => {
+            Option::None => {
                 v.drop();
                 return 1;
             }
         }
         let r2: Option<&i32> = v.get(1);
         match r2 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if *value != 20 {
                     v.drop();
                     return 1;
                 }
             },
-            Option#None => {
+            Option::None => {
                 v.drop();
                 return 1;
             }
@@ -168,11 +167,11 @@ mod vec {
         v.push(10);
         let r: Option<&i32> = v.get(5);
         match r {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 v.drop();
                 return 1;
             },
-            Option#None => {
+            Option::None => {
                 v.drop();
                 return 0;
             }
@@ -184,11 +183,11 @@ mod vec {
         let v: Vec<i32> = Vec::<i32>::new();
         let r: Option<&i32> = v.get(0);
         match r {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 v.drop();
                 return 1;
             },
-            Option#None => {
+            Option::None => {
                 v.drop();
                 return 0;
             }
@@ -201,13 +200,13 @@ mod vec {
         v.push(42);
         let r: Option<i32> = v.pop();
         match r {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 42 {
                     v.drop();
                     return 1;
                 }
             },
-            Option#None => {
+            Option::None => {
                 v.drop();
                 return 1;
             }
@@ -221,11 +220,11 @@ mod vec {
         let mut v: Vec<i32> = Vec::<i32>::new();
         let r: Option<i32> = v.pop();
         match r {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 v.drop();
                 return 1;
             },
-            Option#None => {
+            Option::None => {
                 v.drop();
                 return 0;
             }
@@ -244,10 +243,10 @@ mod vec {
         // verify the value changed
         let r: Option<&i32> = v.get(1);
         match r {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if *value != 99 { v.drop(); return 1; }
             },
-            Option#None => { v.drop(); return 1; }
+            Option::None => { v.drop(); return 1; }
         }
         // set out-of-bounds should return false
         let bad: bool = v.set(10, 0);
@@ -271,10 +270,10 @@ mod vec {
         if v.len() != 1 { v.drop(); return 1; }
         let r: Option<&i32> = v.get(0);
         match r {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if *value != 42 { v.drop(); return 1; }
             },
-            Option#None => { v.drop(); return 1; }
+            Option::None => { v.drop(); return 1; }
         }
         v.drop();
         return 0;
@@ -293,13 +292,13 @@ mod vec {
         // Verify first and last
         let r0: Option<&i32> = v.get(0);
         match r0 {
-            Option#Some { value } => { if *value != 0 { v.drop(); return 1; } },
-            Option#None => { v.drop(); return 1; }
+            Option::Some { value } => { if *value != 0 { v.drop(); return 1; } },
+            Option::None => { v.drop(); return 1; }
         }
         let r99: Option<&i32> = v.get(99);
         match r99 {
-            Option#Some { value } => { if *value != 99 { v.drop(); return 1; } },
-            Option#None => { v.drop(); return 1; }
+            Option::Some { value } => { if *value != 99 { v.drop(); return 1; } },
+            Option::None => { v.drop(); return 1; }
         }
         v.drop();
         return 0;
@@ -314,24 +313,24 @@ mod vec {
         // Pop all three — should get 3, 2, 1 (LIFO)
         let r1: Option<i32> = v.pop();
         match r1 {
-            Option#Some { value } => { if value != 3 { v.drop(); return 1; } },
-            Option#None => { v.drop(); return 1; }
+            Option::Some { value } => { if value != 3 { v.drop(); return 1; } },
+            Option::None => { v.drop(); return 1; }
         }
         let r2: Option<i32> = v.pop();
         match r2 {
-            Option#Some { value } => { if value != 2 { v.drop(); return 1; } },
-            Option#None => { v.drop(); return 1; }
+            Option::Some { value } => { if value != 2 { v.drop(); return 1; } },
+            Option::None => { v.drop(); return 1; }
         }
         let r3: Option<i32> = v.pop();
         match r3 {
-            Option#Some { value } => { if value != 1 { v.drop(); return 1; } },
-            Option#None => { v.drop(); return 1; }
+            Option::Some { value } => { if value != 1 { v.drop(); return 1; } },
+            Option::None => { v.drop(); return 1; }
         }
         // Now empty
         let r4: Option<i32> = v.pop();
         match r4 {
-            Option#Some { value } => { v.drop(); return 1; },
-            Option#None => {}
+            Option::Some { value } => { v.drop(); return 1; },
+            Option::None => {}
         }
         if v.is_empty() == false { v.drop(); return 1; }
         v.drop();

@@ -1,0 +1,8 @@
+=== Interface Summary ===
+
+module fixed_capacity (1 exports):
+  public API:
+    fn main() -> Int  [Console]
+
+Totals: 1 modules, 1 public exports
+

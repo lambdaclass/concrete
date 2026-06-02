@@ -1,0 +1,21 @@
+// ERROR TEST: trusted fn body still enforces linearity.
+// Use-after-move inside trusted must be rejected.
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+trusted fn bad_trusted_double_use() -> Int {
+    let r: Resource = Resource { value: 42 };
+    let _x: Int = consume(r);
+    let _y: Int = consume(r);  // ERROR: used after move, even in trusted
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_trusted_double_use();
+}

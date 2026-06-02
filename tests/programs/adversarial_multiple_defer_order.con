@@ -1,0 +1,25 @@
+// Adversarial test: multiple defers execute in LIFO order.
+// Each deferred function can read its reserved variable.
+
+struct A { val: Int }
+struct B { val: Int }
+struct C { val: Int }
+
+fn close_a(a: A) -> Int { return a.val; }
+fn close_b(b: B) -> Int { return b.val; }
+fn close_c(c: C) -> Int { return c.val; }
+
+fn triple_defer() -> Int {
+    let a: A = A { val: 1 };
+    defer close_a(a);
+    let b: B = B { val: 2 };
+    defer close_b(b);
+    let c: C = C { val: 3 };
+    defer close_c(c);
+    // All three reserved — can read fields
+    return a.val + b.val + c.val;
+}
+
+fn main() -> Int {
+    return triple_defer();
+}

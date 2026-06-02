@@ -1,0 +1,59 @@
+// Adversarial: 20 functions in one file — stress report generation.
+// Tests that --report effects, --report caps, --report authority all handle
+// large function counts without truncation or confusion.
+// Mix of pure, capability-bearing, and trusted functions.
+// Expected: 42
+
+fn pure1(x: Int) -> Int { return x + 1; }
+fn pure2(x: Int) -> Int { return x + 2; }
+fn pure3(x: Int) -> Int { return x + 3; }
+fn pure4(x: Int) -> Int { return x + 4; }
+fn pure5(x: Int) -> Int { return x + 5; }
+fn pure6(x: Int) -> Int { return x + 6; }
+fn pure7(x: Int) -> Int { return x + 7; }
+fn pure8(x: Int) -> Int { return x + 8; }
+fn pure9(x: Int) -> Int { return x + 9; }
+fn pure10(x: Int) -> Int { return x + 10; }
+
+fn io1(x: Int) with(Console) { println(x); }
+fn io2(x: Int) with(Console) { println(x); }
+fn io3(x: Int) with(Console) { println(x); }
+
+trusted fn trusted1(x: Int) -> Int { return x; }
+trusted fn trusted2(x: Int) -> Int { return x; }
+
+struct HeapBox { value: Int }
+
+fn alloc1(x: Int) with(Alloc) -> Int {
+    let p: Heap<HeapBox> = alloc(HeapBox { value: x });
+    let v: Int = p->value;
+    free(p);
+    return v;
+}
+
+fn alloc2(x: Int) with(Alloc) -> Int {
+    let p: Heap<HeapBox> = alloc(HeapBox { value: x + 1 });
+    let v: Int = p->value;
+    free(p);
+    return v;
+}
+
+fn mixed_cap(x: Int) with(Std) -> Int {
+    println(x);
+    return x;
+}
+
+fn pure_chain(x: Int) -> Int {
+    return pure1(pure2(pure3(x)));
+}
+
+pub fn main() with(Std) -> Int {
+    let a: Int = pure_chain(0);
+    // pure_chain(0) = pure1(pure2(pure3(0))) = pure1(pure2(3)) = pure1(5) = 6
+    let b: Int = pure4(0) + pure5(0) + pure6(0) + pure7(0) + pure8(0);
+    // b = 4+5+6+7+8 = 30
+    let c: Int = trusted1(3) + trusted2(3);
+    // c = 6
+    // a + b + c = 6 + 30 + 6 = 42
+    return a + b + c;
+}

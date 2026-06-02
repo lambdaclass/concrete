@@ -1,0 +1,17 @@
+// Pressure: sequential &mut operations — deref read, deref write, then call.
+// Tests that deref does not consume but call does for borrow-block refs.
+
+fn add_to(r: &mut Int, amount: Int) {
+    *r = *r + amount;
+}
+
+fn main() -> Int {
+    let mut x: Int = 0;
+    borrow mut x as r in R {
+        *r = 10;
+        let v: Int = *r;
+        *r = v + 5;
+        add_to(r, 3);
+    }
+    return x;
+}

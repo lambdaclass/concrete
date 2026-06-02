@@ -5,6 +5,14 @@ mod slice {
     }
 
     trusted impl<T> Slice<T> {
+        pub fn get(&self, at: u64) -> Option<&T> {
+            if at >= self.len {
+                return Option::<&T>::None;
+            }
+            let target_ptr: *const T = self.ptr + at;
+            return Option::<&T>::Some { value: target_ptr as &T };
+        }
+
         pub fn get_unchecked(&self, at: u64) -> &T {
             let target_ptr: *const T = self.ptr + at;
             return target_ptr as &T;
@@ -25,9 +33,26 @@ mod slice {
     }
 
     trusted impl<T> MutSlice<T> {
+        pub fn get(&self, at: u64) -> Option<&T> {
+            if at >= self.len {
+                return Option::<&T>::None;
+            }
+            let target_ptr: *mut T = self.ptr + at;
+            return Option::<&T>::Some { value: target_ptr as &T };
+        }
+
         pub fn get_unchecked(&self, at: u64) -> &T {
             let target_ptr: *mut T = self.ptr + at;
             return target_ptr as &T;
+        }
+
+        pub fn set(&mut self, at: u64, value: T) -> bool {
+            if at >= self.len {
+                return false;
+            }
+            let target_ptr: *mut T = self.ptr + at;
+            *target_ptr = value;
+            return true;
         }
 
         pub fn set_unchecked(&mut self, at: u64, value: T) {
@@ -43,7 +68,6 @@ mod slice {
             return self.len == 0;
         }
     }
-
     import std.vec.{Vec};
     import std.test.{assert_eq, assert_true};
 
@@ -97,6 +121,102 @@ mod slice {
         let r2: &i32 = ms.get_unchecked(2);
         if !assert_eq::<i32>(*r0, 100, "slot 0 should be 100") { v.drop(); return 1; }
         if !assert_eq::<i32>(*r2, 300, "slot 2 should be 300") { v.drop(); return 1; }
+        v.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_slice_get_checked() with(Alloc, Unsafe) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(10);
+        v.push(20);
+        v.push(30);
+        let s: Slice<i32> = Slice::<i32> { ptr: v.ptr as *const i32, len: v.len() };
+
+        // In-bounds access should return Some
+        let r0: Option<&i32> = s.get(0);
+        match r0 {
+            Option::Some { value } => {
+                if !assert_eq::<i32>(*value, 10, "get(0) should be 10") { v.drop(); return 1; }
+            },
+            Option::None => { v.drop(); return 2; },
+        }
+        let r2: Option<&i32> = s.get(2);
+        match r2 {
+            Option::Some { value } => {
+                if !assert_eq::<i32>(*value, 30, "get(2) should be 30") { v.drop(); return 1; }
+            },
+            Option::None => { v.drop(); return 3; },
+        }
+
+        // Out-of-bounds access should return None
+        let oob: Option<&i32> = s.get(3);
+        match oob {
+            Option::Some { value } => { v.drop(); return 4; },
+            Option::None => {},
+        }
+        let oob2: Option<&i32> = s.get(100);
+        match oob2 {
+            Option::Some { value } => { v.drop(); return 5; },
+            Option::None => {},
+        }
+
+        v.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_mutslice_get_checked() with(Alloc, Unsafe) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(42);
+        v.push(43);
+        let mut ms: MutSlice<i32> = MutSlice::<i32> { ptr: v.ptr, len: v.len() };
+
+        // In-bounds get
+        let r0: Option<&i32> = ms.get(0);
+        match r0 {
+            Option::Some { value } => {
+                if !assert_eq::<i32>(*value, 42, "get(0) should be 42") { v.drop(); return 1; }
+            },
+            Option::None => { v.drop(); return 2; },
+        }
+
+        // Out-of-bounds get
+        let oob: Option<&i32> = ms.get(2);
+        match oob {
+            Option::Some { value } => { v.drop(); return 3; },
+            Option::None => {},
+        }
+
+        v.drop();
+        return 0;
+    }
+
+    #[test]
+    fn test_mutslice_set_checked() with(Alloc, Unsafe) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(0);
+        v.push(0);
+        let mut ms: MutSlice<i32> = MutSlice::<i32> { ptr: v.ptr, len: v.len() };
+
+        // In-bounds set should succeed
+        let ok1: bool = ms.set(0, 77);
+        if !assert_true(ok1, "set(0) should succeed") { v.drop(); return 1; }
+        let ok2: bool = ms.set(1, 88);
+        if !assert_true(ok2, "set(1) should succeed") { v.drop(); return 1; }
+
+        // Verify values
+        let r0: &i32 = ms.get_unchecked(0);
+        if !assert_eq::<i32>(*r0, 77, "slot 0 should be 77") { v.drop(); return 2; }
+        let r1: &i32 = ms.get_unchecked(1);
+        if !assert_eq::<i32>(*r1, 88, "slot 1 should be 88") { v.drop(); return 2; }
+
+        // Out-of-bounds set should fail
+        let bad: bool = ms.set(2, 99);
+        if !assert_true(!bad, "set(2) should fail") { v.drop(); return 3; }
+        let bad2: bool = ms.set(100, 99);
+        if !assert_true(!bad2, "set(100) should fail") { v.drop(); return 3; }
+
         v.drop();
         return 0;
     }

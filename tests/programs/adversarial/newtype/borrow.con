@@ -1,0 +1,24 @@
+// Methods with &self / &mut self / self on a newtype. Tests that
+// borrow auto-deref still finds the wrapper's inherent impl, that
+// Self resolves correctly inside the impl, and that .0 access works
+// across the borrow boundary.
+// Expected: 8080
+
+newtype Port = u16;
+
+impl Port {
+    pub fn get_value(&self) -> u16 {
+        return self.0;
+    }
+
+    pub fn double(&self) -> u32 {
+        return (self.0 as u32) * (2 as u32);
+    }
+}
+
+fn main() -> Int {
+    let p: Port = Port(4040);
+    let v: u16 = p.get_value();
+    let d: u32 = p.double();
+    return d as Int;
+}

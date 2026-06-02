@@ -1,0 +1,20 @@
+// Method with &mut self on a borrow-block ref — consumes the ref.
+// Second method call is use-after-move.
+// Expected error: linear variable 'r' used after move
+
+struct Counter { val: Int }
+
+impl Counter {
+    fn inc(&mut self) {
+        self.val = self.val + 1;
+    }
+}
+
+fn main() -> Int {
+    let mut c: Counter = Counter { val: 10 };
+    borrow mut c as r in R {
+        r.inc();
+        r.inc();  // error: r consumed by first inc()
+    }
+    return c.val;
+}

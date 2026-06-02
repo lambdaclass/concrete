@@ -1,0 +1,11 @@
+// Adversarial boundary: predictable = true but code is fully predictable.
+// No recursion, no unbounded loops, no allocation, no FFI, no blocking I/O.
+// Expected: compiler accepts — pure bounded computation is allowed.
+
+pub fn add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+pub fn main() -> Int {
+    return add(20, 22);
+}

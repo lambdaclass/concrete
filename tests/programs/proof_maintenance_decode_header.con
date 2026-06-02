@@ -1,0 +1,39 @@
+// Proof maintenance test: decode_header refactored
+//
+// Semantics-preserving refactor:
+//   1. Extracted version validation into check_version helper
+//   2. Inlined check_length guard differently (same logic)
+//   3. Reordered payload check after version check (same behavior)
+//
+// Expected: decode_header drops from "proved" to "enforced (proof stale: body changed)"
+// because the body fingerprint changed even though semantics are preserved.
+// check_version is a new function — no proof registered, stays "enforced".
+// parse_byte and check_length are unchanged — stay "proved".
+
+fn parse_byte(data: Int, offset: Int) -> Int {
+    return data + offset;
+}
+
+fn check_length(len: Int) -> Int {
+    if len < 10 { return 1; }
+    return 0;
+}
+
+fn check_version(version: Int) -> Int {
+    if version < 1 { return 1; }
+    if version > 2 { return 1; }
+    return 0;
+}
+
+fn decode_header(data: Int, len: Int) -> Int {
+    if check_length(len) != 0 { return 1; }
+    let version: Int = parse_byte(data, 0);
+    if check_version(version) != 0 { return 2; }
+    let payload_len: Int = parse_byte(data, 1);
+    if payload_len > len - 10 { return 3; }
+    return 0;
+}
+
+pub fn main() -> Int {
+    return decode_header(1, 20);
+}

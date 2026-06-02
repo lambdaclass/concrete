@@ -1,0 +1,16 @@
+// Pass borrow-block ref to function, then try to read through it.
+// Expected error: linear variable 'r' used after move
+
+fn increment(x: &mut Int) {
+    *x = *x + 1;
+}
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    let mut result: Int = 0;
+    borrow mut n as r in R {
+        increment(r);
+        result = *r;  // error: r consumed
+    }
+    return result;
+}

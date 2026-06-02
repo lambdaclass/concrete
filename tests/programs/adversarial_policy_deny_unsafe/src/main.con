@@ -1,0 +1,11 @@
+// Adversarial: deny = ["Unsafe"] policy active, but code uses with(Unsafe).
+// The function correctly declares Unsafe so type-checking passes,
+// but the policy layer must reject it with E0611 (denied capability).
+
+pub fn do_unsafe_thing() with(Unsafe) -> Int {
+    return 1;
+}
+
+pub fn main() with(Unsafe) -> Int {
+    return do_unsafe_thing();
+}

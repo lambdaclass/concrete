@@ -1,0 +1,22 @@
+// Test: variadic append(&mut buf, ...) desugar per docs/FORMATTING_OUTPUT.md §2.2.
+// Exercises: string ref arg, int arg, string-literal (owned) arg, bool arg, char arg.
+// Expected output: 0
+
+fn main() with(Alloc) -> Int {
+    let mut out: String = "";
+    let name: String = "ans";
+    let flag: bool = true;
+
+    append(&mut out, &name, ": ", 42, " ok=", flag, " ", 'x');
+
+    // "ans: 42 ok=true x" = 17 chars
+    if !string_eq(&out, &"ans: 42 ok=true x") {
+        drop_string(out);
+        drop_string(name);
+        return 1;
+    }
+
+    drop_string(out);
+    drop_string(name);
+    return 0;
+}

@@ -1,0 +1,19 @@
+// Adversarial: unbounded loop disguised with comparison condition
+//
+// A while loop with a comparison condition but no step clause is still
+// unbounded because there's no guaranteed progress toward termination.
+// The predictable profile should reject this.
+//
+// Expected: predictable profile fails (unbounded loop)
+
+fn spin(x: Int) -> Int {
+    let mut i: Int = 0;
+    while i < x {
+        i = i;
+    }
+    return i;
+}
+
+pub fn main() -> Int {
+    return spin(10);
+}

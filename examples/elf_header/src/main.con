@@ -1,0 +1,229 @@
+// ELF header validator — flagship proof-backed example
+//
+// Reads a real file from disk, extracts the first 7 bytes of the
+// ELF identification header (e_ident[0..6]), and validates each
+// field against the ELF specification.
+//
+// Architecture:
+//   Trusted FFI shell   — reads file bytes via POSIX fopen/fread (with(File))
+//   Pure validator core — checks fields as integers, no I/O, no capabilities
+//   Lean-backed proofs  — 6 theorems cover soundness and completeness
+//
+// What the proofs cover:
+//   If validate_header returns 1, then every field check passed:
+//   magic bytes are 0x7F 'E' 'L' 'F', class is 1 or 2, data encoding
+//   is 1 or 2, and ELF version is 1. The biconditional theorem
+//   (validate_header_correct) proves both directions.
+//
+// What the proofs do NOT cover:
+//   The trusted FFI functions (fopen, fread, fclose, pointer reads)
+//   are outside the proof boundary. The proofs reason about the pure
+//   validator core only. The file-reading shell is trusted code whose
+//   correctness depends on the C runtime and OS.
+//
+// Byte model limitation:
+//   Concrete does not yet have byte arrays in the proof path.
+//   The shell extracts individual bytes via trusted pointer reads
+//   and passes them as Int to the pure core. The proof covers the
+//   pure core; the byte-extraction boundary is trusted.
+
+// === Trusted FFI boundary (POSIX file I/O) ===
+//
+// These extern declarations are the only OS contact points.
+// An auditor sees: trusted + with(File) = reads a file, nothing else.
+
+trusted extern fn fopen(path: *const u8, mode: *const u8) -> *const u8;
+trusted extern fn fread(buf: *mut u8, size: u64, count: u64, fp: *const u8) -> u64;
+trusted extern fn fclose(fp: *const u8) -> i32;
+
+// === Trusted FFI boundary (command-line args) ===
+
+trusted extern fn __concrete_get_argc() -> i32;
+trusted extern fn __concrete_get_argv(idx: i32) -> *const u8;
+
+// Read the first `count` bytes of the file at `path` into `buf`.
+// Returns the number of bytes actually read, or 0 on failure.
+trusted fn read_header_bytes(path: *const u8, buf: *mut u8, count: u64) with(File) -> u64 {
+    let mode: [u8; 3] = [114, 98, 0]; // "rb\0"
+    let fp: *const u8 = fopen(path, &mode as *const u8);
+    if fp == (0 as *const u8) {
+        return 0;
+    }
+    let n: u64 = fread(buf, 1, count, fp);
+    fclose(fp);
+    return n;
+}
+
+// Read a single byte from a buffer at the given offset.
+// Trusted: raw pointer dereference, no capabilities.
+trusted fn read_byte(buf: *const u8, offset: u64) -> u8 {
+    let p: *const u8 = buf + offset;
+    return *(p as *mut u8);
+}
+
+// === Provable core (pure, no capabilities) ===
+//
+// These five functions have zero capabilities, no I/O, no allocation.
+// Their bodies are fingerprinted and matched against Lean theorems
+// via the proof-registry. Any change to a body invalidates the proof.
+
+// Check ELF magic bytes: 0x7F (127), 0x45 ('E'), 0x4C ('L'), 0x46 ('F').
+// Returns 1 if all four bytes match, 0 otherwise.
+fn check_magic(b0: Int, b1: Int, b2: Int, b3: Int) -> Int {
+    if b0 == 127 {
+        if b1 == 69 {
+            if b2 == 76 {
+                if b3 == 70 {
+                    return 1;
+                } else {
+                    return 0;
+                }
+            } else {
+                return 0;
+            }
+        } else {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+}
+
+// Check ELF class field: 1 = 32-bit, 2 = 64-bit.
+// Returns 1 if valid, 0 otherwise.
+fn check_class(cls: Int) -> Int {
+    if cls == 1 {
+        return 1;
+    } else {
+        if cls == 2 {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+}
+
+// Check ELF data encoding: 1 = little-endian, 2 = big-endian.
+// Returns 1 if valid, 0 otherwise.
+fn check_data(encoding: Int) -> Int {
+    if encoding == 1 {
+        return 1;
+    } else {
+        if encoding == 2 {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+}
+
+// Check ELF version: must be 1 (EV_CURRENT).
+// Returns 1 if valid, 0 otherwise.
+fn check_version(ver: Int) -> Int {
+    if ver == 1 {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+// Validate all ELF header fields.
+// Returns 1 only if every individual check passes.
+fn validate_header(b0: Int, b1: Int, b2: Int, b3: Int,
+                   cls: Int, encoding: Int, ver: Int) -> Int {
+    let magic_ok: Int = check_magic(b0, b1, b2, b3);
+    if magic_ok == 1 {
+        let cls_ok: Int = check_class(cls);
+        if cls_ok == 1 {
+            let enc_ok: Int = check_data(encoding);
+            if enc_ok == 1 {
+                let ver_ok: Int = check_version(ver);
+                if ver_ok == 1 {
+                    return 1;
+                } else {
+                    return 0;
+                }
+            } else {
+                return 0;
+            }
+        } else {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+}
+
+// === Entry point (with(Std) — full standard capabilities) ===
+//
+// Reads a file path from command-line args, opens the file,
+// extracts the first 7 bytes, and validates them as an ELF header.
+// The pure validator core is called with individual byte values.
+
+fn main() with(Std) -> Int {
+    let argc: i32 = __concrete_get_argc();
+    if argc < 2 {
+        println("Usage: elf_header <file>");
+        println("Validates the first 7 bytes of an ELF file header.");
+        return 1;
+    }
+
+    let path: *const u8 = __concrete_get_argv(1);
+
+    // Read the first 7 bytes of the ELF identification header
+    let buf: [u8; 16] = [0; 16];
+    let n: u64 = read_header_bytes(path, &buf as *mut u8, 7);
+    if n < 7 {
+        println("error: file too short (need at least 7 bytes for ELF e_ident)");
+        return 1;
+    }
+
+    // Extract individual bytes from the trusted buffer read
+    // This is the boundary between trusted I/O and the pure core.
+    let b0: Int = read_byte(&buf as *const u8, 0) as Int;
+    let b1: Int = read_byte(&buf as *const u8, 1) as Int;
+    let b2: Int = read_byte(&buf as *const u8, 2) as Int;
+    let b3: Int = read_byte(&buf as *const u8, 3) as Int;
+    let cls: Int = read_byte(&buf as *const u8, 4) as Int;
+    let encoding: Int = read_byte(&buf as *const u8, 5) as Int;
+    let ver: Int = read_byte(&buf as *const u8, 6) as Int;
+
+    // === Pure validated core — all calls below are proved correct ===
+    println("=== ELF Header Validator ===");
+
+    let magic_ok: Int = check_magic(b0, b1, b2, b3);
+    let cls_ok: Int = check_class(cls);
+    let enc_ok: Int = check_data(encoding);
+    let ver_ok: Int = check_version(ver);
+    let all_ok: Int = validate_header(b0, b1, b2, b3, cls, encoding, ver);
+
+    // Report individual field results
+    print("  magic:    ");
+    if magic_ok == 1 { println("valid (7f 45 4c 46)"); } else { println("INVALID"); }
+
+    print("  class:    ");
+    if cls_ok == 1 {
+        if cls == 1 { println("valid (32-bit)"); } else { println("valid (64-bit)"); }
+    } else {
+        println("INVALID");
+    }
+
+    print("  data:     ");
+    if enc_ok == 1 {
+        if encoding == 1 { println("valid (little-endian)"); } else { println("valid (big-endian)"); }
+    } else {
+        println("INVALID");
+    }
+
+    print("  version:  ");
+    if ver_ok == 1 { println("valid (1)"); } else { println("INVALID"); }
+
+    println("");
+    if all_ok == 1 {
+        println("Result: valid ELF header");
+        return 0;
+    } else {
+        println("Result: INVALID ELF header");
+        return 1;
+    }
+}

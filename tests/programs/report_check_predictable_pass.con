@@ -1,0 +1,24 @@
+// Test: --check predictable should pass for pure bounded functions
+// All functions here are: no recursion, bounded loops, no alloc, no FFI, no blocking
+
+fn add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+fn sum_range(n: Int) -> Int {
+    let mut total: Int = 0;
+    for (let mut i: Int = 0; i < n; i = i + 1) {
+        total = total + i;
+    }
+    return total;
+}
+
+fn clamp(x: Int, lo: Int, hi: Int) -> Int {
+    if x < lo { return lo; }
+    if x > hi { return hi; }
+    return x;
+}
+
+fn main() -> Int {
+    return add(sum_range(10), clamp(5, 0, 100));
+}

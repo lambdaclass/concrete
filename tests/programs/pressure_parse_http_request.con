@@ -1,0 +1,524 @@
+// pressure_parse_http_request — HTTP request line parser
+//
+// Parses HTTP request lines like "GET /path HTTP/1.1\r\n" from a fixed byte buffer.
+// Extracts: method (GET/POST/PUT/DELETE), path, and HTTP version.
+//
+// Uses fixed-size arrays for method/path/version storage. No heap, no strings.
+// Reveals: byte comparison patterns, delimiter scanning, multi-field extraction.
+//
+// Policy: predictable = true
+
+mod pressure_parse_http_request {
+
+    // ---- Types ----
+
+    // Method codes: 0=Unknown, 1=GET, 2=POST, 3=PUT, 4=DELETE, 5=HEAD
+    struct Copy HttpMethod {
+        code: i32,
+    }
+
+    struct Copy HttpPath {
+        bytes: [u8; 64],
+        len: i32,
+    }
+
+    struct Copy HttpVersion {
+        major: i32,
+        minor: i32,
+    }
+
+    struct Copy HttpRequestLine {
+        method: HttpMethod,
+        path: HttpPath,
+        version: HttpVersion,
+        error: i32,
+        // error codes: 0=ok, 1=empty, 2=bad_method, 3=no_space_after_method,
+        //              4=no_path, 5=no_space_after_path, 6=bad_version
+    }
+
+    struct Copy Cursor {
+        data: [u8; 256],
+        len: i32,
+        pos: i32,
+    }
+
+    // ---- Cursor operations ----
+
+    fn cursor_new(data: [u8; 256], len: i32) -> Cursor {
+        return Cursor { data: data, len: len, pos: 0 };
+    }
+
+    fn cursor_peek(c: Cursor) -> u8 {
+        if c.pos >= c.len { return 0; }
+        return c.data[c.pos];
+    }
+
+    fn cursor_at(c: Cursor, offset: i32) -> u8 {
+        let idx: i32 = c.pos + offset;
+        if idx >= c.len { return 0; }
+        return c.data[idx];
+    }
+
+    fn cursor_advance(c: Cursor) -> Cursor {
+        return Cursor { data: c.data, len: c.len, pos: c.pos + 1 };
+    }
+
+    fn cursor_advance_n(c: Cursor, n: i32) -> Cursor {
+        return Cursor { data: c.data, len: c.len, pos: c.pos + n };
+    }
+
+    fn cursor_remaining(c: Cursor) -> i32 {
+        return c.len - c.pos;
+    }
+
+    // ---- Method parsing ----
+    // Match known method strings byte-by-byte
+
+    fn try_match_get(c: Cursor) -> i32 {
+        // "GET" = [71, 69, 84]
+        if cursor_remaining(c) < 3 { return 0; }
+        if cursor_at(c, 0) != 71 { return 0; }
+        if cursor_at(c, 1) != 69 { return 0; }
+        if cursor_at(c, 2) != 84 { return 0; }
+        return 1;
+    }
+
+    fn try_match_post(c: Cursor) -> i32 {
+        // "POST" = [80, 79, 83, 84]
+        if cursor_remaining(c) < 4 { return 0; }
+        if cursor_at(c, 0) != 80 { return 0; }
+        if cursor_at(c, 1) != 79 { return 0; }
+        if cursor_at(c, 2) != 83 { return 0; }
+        if cursor_at(c, 3) != 84 { return 0; }
+        return 1;
+    }
+
+    fn try_match_put(c: Cursor) -> i32 {
+        // "PUT" = [80, 85, 84]
+        if cursor_remaining(c) < 3 { return 0; }
+        if cursor_at(c, 0) != 80 { return 0; }
+        if cursor_at(c, 1) != 85 { return 0; }
+        if cursor_at(c, 2) != 84 { return 0; }
+        return 1;
+    }
+
+    fn try_match_delete(c: Cursor) -> i32 {
+        // "DELETE" = [68, 69, 76, 69, 84, 69]
+        if cursor_remaining(c) < 6 { return 0; }
+        if cursor_at(c, 0) != 68 { return 0; }
+        if cursor_at(c, 1) != 69 { return 0; }
+        if cursor_at(c, 2) != 76 { return 0; }
+        if cursor_at(c, 3) != 69 { return 0; }
+        if cursor_at(c, 4) != 84 { return 0; }
+        if cursor_at(c, 5) != 69 { return 0; }
+        return 1;
+    }
+
+    fn try_match_head(c: Cursor) -> i32 {
+        // "HEAD" = [72, 69, 65, 68]
+        if cursor_remaining(c) < 4 { return 0; }
+        if cursor_at(c, 0) != 72 { return 0; }
+        if cursor_at(c, 1) != 69 { return 0; }
+        if cursor_at(c, 2) != 65 { return 0; }
+        if cursor_at(c, 3) != 68 { return 0; }
+        return 1;
+    }
+
+    struct Copy MethodResult {
+        cursor: Cursor,
+        method: HttpMethod,
+        ok: i32,
+    }
+
+    fn parse_method(c: Cursor) -> MethodResult {
+        if try_match_get(c) == 1 {
+            return MethodResult { cursor: cursor_advance_n(c, 3), method: HttpMethod { code: 1 }, ok: 1 };
+        }
+        if try_match_post(c) == 1 {
+            return MethodResult { cursor: cursor_advance_n(c, 4), method: HttpMethod { code: 2 }, ok: 1 };
+        }
+        if try_match_put(c) == 1 {
+            return MethodResult { cursor: cursor_advance_n(c, 3), method: HttpMethod { code: 3 }, ok: 1 };
+        }
+        if try_match_delete(c) == 1 {
+            return MethodResult { cursor: cursor_advance_n(c, 6), method: HttpMethod { code: 4 }, ok: 1 };
+        }
+        if try_match_head(c) == 1 {
+            return MethodResult { cursor: cursor_advance_n(c, 4), method: HttpMethod { code: 5 }, ok: 1 };
+        }
+        return MethodResult { cursor: c, method: HttpMethod { code: 0 }, ok: 0 };
+    }
+
+    // ---- Path parsing (scan to next space) ----
+
+    struct Copy PathResult {
+        cursor: Cursor,
+        path: HttpPath,
+        ok: i32,
+    }
+
+    fn parse_path(c: Cursor) -> PathResult {
+        let mut path_bytes: [u8; 64] = [0; 64];
+        let mut plen: i32 = 0;
+        let mut cur: Cursor = c;
+
+        for (let mut i: i32 = 0; i < 64; i = i + 1) {
+            if cur.pos >= cur.len { break; }
+            let b: u8 = cursor_peek(cur);
+            if b == 32 { break; }   // space = end of path
+            if b == 13 { break; }   // CR = end of line
+            if b == 10 { break; }   // LF = end of line
+            if plen < 64 {
+                path_bytes[plen] = b;
+                plen = plen + 1;
+            }
+            cur = cursor_advance(cur);
+        }
+
+        if plen == 0 {
+            return PathResult {
+                cursor: c,
+                path: HttpPath { bytes: [0; 64], len: 0 },
+                ok: 0,
+            };
+        }
+
+        return PathResult {
+            cursor: cur,
+            path: HttpPath { bytes: path_bytes, len: plen },
+            ok: 1,
+        };
+    }
+
+    // ---- Version parsing: "HTTP/X.Y" ----
+
+    struct Copy VersionResult {
+        cursor: Cursor,
+        version: HttpVersion,
+        ok: i32,
+    }
+
+    fn try_match_http_prefix(c: Cursor) -> i32 {
+        // "HTTP/" = [72, 84, 84, 80, 47]
+        if cursor_remaining(c) < 5 { return 0; }
+        if cursor_at(c, 0) != 72 { return 0; }
+        if cursor_at(c, 1) != 84 { return 0; }
+        if cursor_at(c, 2) != 84 { return 0; }
+        if cursor_at(c, 3) != 80 { return 0; }
+        if cursor_at(c, 4) != 47 { return 0; }
+        return 1;
+    }
+
+    fn is_digit(b: u8) -> i32 {
+        if b >= 48 {
+            if b <= 57 { return 1; }
+        }
+        return 0;
+    }
+
+    fn parse_version(c: Cursor) -> VersionResult {
+        if try_match_http_prefix(c) == 0 {
+            return VersionResult { cursor: c, version: HttpVersion { major: 0, minor: 0 }, ok: 0 };
+        }
+
+        let mut cur: Cursor = cursor_advance_n(c, 5);  // skip "HTTP/"
+
+        // Parse major version digit
+        if cursor_remaining(cur) < 1 {
+            return VersionResult { cursor: c, version: HttpVersion { major: 0, minor: 0 }, ok: 0 };
+        }
+        let maj_byte: u8 = cursor_peek(cur);
+        if is_digit(maj_byte) == 0 {
+            return VersionResult { cursor: c, version: HttpVersion { major: 0, minor: 0 }, ok: 0 };
+        }
+        let major: i32 = (maj_byte as i32) - 48;
+        cur = cursor_advance(cur);
+
+        // Expect '.'
+        if cursor_remaining(cur) < 1 {
+            return VersionResult { cursor: c, version: HttpVersion { major: 0, minor: 0 }, ok: 0 };
+        }
+        if cursor_peek(cur) != 46 {  // '.'
+            return VersionResult { cursor: c, version: HttpVersion { major: 0, minor: 0 }, ok: 0 };
+        }
+        cur = cursor_advance(cur);
+
+        // Parse minor version digit
+        if cursor_remaining(cur) < 1 {
+            return VersionResult { cursor: c, version: HttpVersion { major: 0, minor: 0 }, ok: 0 };
+        }
+        let min_byte: u8 = cursor_peek(cur);
+        if is_digit(min_byte) == 0 {
+            return VersionResult { cursor: c, version: HttpVersion { major: 0, minor: 0 }, ok: 0 };
+        }
+        let minor: i32 = (min_byte as i32) - 48;
+        cur = cursor_advance(cur);
+
+        return VersionResult {
+            cursor: cur,
+            version: HttpVersion { major: major, minor: minor },
+            ok: 1,
+        };
+    }
+
+    // ---- Expect a single space ----
+
+    fn expect_space(c: Cursor) -> Cursor {
+        if c.pos >= c.len { return c; }
+        if cursor_peek(c) == 32 {
+            return cursor_advance(c);
+        }
+        return c;
+    }
+
+    // ---- Full request line parser ----
+
+    fn parse_request_line(data: [u8; 256], len: i32) -> HttpRequestLine {
+        let mut cur: Cursor = cursor_new(data, len);
+
+        if len == 0 {
+            return HttpRequestLine {
+                method: HttpMethod { code: 0 },
+                path: HttpPath { bytes: [0; 64], len: 0 },
+                version: HttpVersion { major: 0, minor: 0 },
+                error: 1,
+            };
+        }
+
+        // Parse method
+        let mr: MethodResult = parse_method(cur);
+        if mr.ok == 0 {
+            return HttpRequestLine {
+                method: HttpMethod { code: 0 },
+                path: HttpPath { bytes: [0; 64], len: 0 },
+                version: HttpVersion { major: 0, minor: 0 },
+                error: 2,
+            };
+        }
+        cur = mr.cursor;
+
+        // Expect space
+        let old_pos: i32 = cur.pos;
+        cur = expect_space(cur);
+        if cur.pos == old_pos {
+            return HttpRequestLine {
+                method: mr.method,
+                path: HttpPath { bytes: [0; 64], len: 0 },
+                version: HttpVersion { major: 0, minor: 0 },
+                error: 3,
+            };
+        }
+
+        // Parse path
+        let pr: PathResult = parse_path(cur);
+        if pr.ok == 0 {
+            return HttpRequestLine {
+                method: mr.method,
+                path: HttpPath { bytes: [0; 64], len: 0 },
+                version: HttpVersion { major: 0, minor: 0 },
+                error: 4,
+            };
+        }
+        cur = pr.cursor;
+
+        // Expect space
+        let old_pos2: i32 = cur.pos;
+        cur = expect_space(cur);
+        if cur.pos == old_pos2 {
+            return HttpRequestLine {
+                method: mr.method,
+                path: pr.path,
+                version: HttpVersion { major: 0, minor: 0 },
+                error: 5,
+            };
+        }
+
+        // Parse version
+        let vr: VersionResult = parse_version(cur);
+        if vr.ok == 0 {
+            return HttpRequestLine {
+                method: mr.method,
+                path: pr.path,
+                version: HttpVersion { major: 0, minor: 0 },
+                error: 6,
+            };
+        }
+
+        return HttpRequestLine {
+            method: mr.method,
+            path: pr.path,
+            version: vr.version,
+            error: 0,
+        };
+    }
+
+    // ---- Path comparison helper ----
+
+    fn path_equals(p: HttpPath, expected: [u8; 64], expected_len: i32) -> i32 {
+        if p.len != expected_len { return 0; }
+        for (let mut i: i32 = 0; i < 64; i = i + 1) {
+            if i >= p.len { return 1; }
+            if p.bytes[i] != expected[i] { return 0; }
+        }
+        return 1;
+    }
+
+    // ---- Build test request lines ----
+
+    // "GET / HTTP/1.1\r\n"
+    trusted fn build_get_root() -> [u8; 256] {
+        let mut buf: [u8; 256] = [0; 256];
+        // G E T   /   H T T P / 1 . 1 \r \n
+        buf[0] = 71; buf[1] = 69; buf[2] = 84; buf[3] = 32;
+        buf[4] = 47;  // /
+        buf[5] = 32;
+        buf[6] = 72; buf[7] = 84; buf[8] = 84; buf[9] = 80; buf[10] = 47;  // HTTP/
+        buf[11] = 49; buf[12] = 46; buf[13] = 49;  // 1.1
+        buf[14] = 13; buf[15] = 10;  // \r\n
+        return buf;
+    }
+
+    // "POST /api/data HTTP/1.0\r\n"
+    trusted fn build_post_api() -> [u8; 256] {
+        let mut buf: [u8; 256] = [0; 256];
+        // P O S T
+        buf[0] = 80; buf[1] = 79; buf[2] = 83; buf[3] = 84;
+        buf[4] = 32;  // space
+        // /api/data = [47, 97, 112, 105, 47, 100, 97, 116, 97]
+        buf[5] = 47; buf[6] = 97; buf[7] = 112; buf[8] = 105;
+        buf[9] = 47; buf[10] = 100; buf[11] = 97; buf[12] = 116; buf[13] = 97;
+        buf[14] = 32;  // space
+        // HTTP/1.0
+        buf[15] = 72; buf[16] = 84; buf[17] = 84; buf[18] = 80; buf[19] = 47;
+        buf[20] = 49; buf[21] = 46; buf[22] = 48;  // 1.0
+        buf[23] = 13; buf[24] = 10;
+        return buf;
+    }
+
+    // "DELETE /items/42 HTTP/2.0\r\n"
+    trusted fn build_delete_item() -> [u8; 256] {
+        let mut buf: [u8; 256] = [0; 256];
+        // D E L E T E
+        buf[0] = 68; buf[1] = 69; buf[2] = 76; buf[3] = 69; buf[4] = 84; buf[5] = 69;
+        buf[6] = 32;
+        // /items/42 = [47, 105, 116, 101, 109, 115, 47, 52, 50]
+        buf[7] = 47; buf[8] = 105; buf[9] = 116; buf[10] = 101;
+        buf[11] = 109; buf[12] = 115; buf[13] = 47; buf[14] = 52; buf[15] = 50;
+        buf[16] = 32;
+        // HTTP/2.0
+        buf[17] = 72; buf[18] = 84; buf[19] = 84; buf[20] = 80; buf[21] = 47;
+        buf[22] = 50; buf[23] = 46; buf[24] = 48;
+        buf[25] = 13; buf[26] = 10;
+        return buf;
+    }
+
+    // "HEAD /health HTTP/1.1\r\n"
+    trusted fn build_head_health() -> [u8; 256] {
+        let mut buf: [u8; 256] = [0; 256];
+        // H E A D
+        buf[0] = 72; buf[1] = 69; buf[2] = 65; buf[3] = 68;
+        buf[4] = 32;
+        // /health = [47, 104, 101, 97, 108, 116, 104]
+        buf[5] = 47; buf[6] = 104; buf[7] = 101; buf[8] = 97;
+        buf[9] = 108; buf[10] = 116; buf[11] = 104;
+        buf[12] = 32;
+        // HTTP/1.1
+        buf[13] = 72; buf[14] = 84; buf[15] = 84; buf[16] = 80; buf[17] = 47;
+        buf[18] = 49; buf[19] = 46; buf[20] = 49;
+        buf[21] = 13; buf[22] = 10;
+        return buf;
+    }
+
+    // Build expected path bytes helper
+    fn make_path_slash() -> [u8; 64] {
+        let mut p: [u8; 64] = [0; 64];
+        p[0] = 47;  // /
+        return p;
+    }
+
+    fn make_path_api_data() -> [u8; 64] {
+        let mut p: [u8; 64] = [0; 64];
+        // /api/data = [47, 97, 112, 105, 47, 100, 97, 116, 97]
+        p[0] = 47; p[1] = 97; p[2] = 112; p[3] = 105;
+        p[4] = 47; p[5] = 100; p[6] = 97; p[7] = 116; p[8] = 97;
+        return p;
+    }
+
+    fn make_path_items_42() -> [u8; 64] {
+        let mut p: [u8; 64] = [0; 64];
+        // /items/42 = [47, 105, 116, 101, 109, 115, 47, 52, 50]
+        p[0] = 47; p[1] = 105; p[2] = 116; p[3] = 101;
+        p[4] = 109; p[5] = 115; p[6] = 47; p[7] = 52; p[8] = 50;
+        return p;
+    }
+
+    fn make_path_health() -> [u8; 64] {
+        let mut p: [u8; 64] = [0; 64];
+        // /health = [47, 104, 101, 97, 108, 116, 104]
+        p[0] = 47; p[1] = 104; p[2] = 101; p[3] = 97;
+        p[4] = 108; p[5] = 116; p[6] = 104;
+        return p;
+    }
+
+    // ---- Tests ----
+
+    pub fn main() -> Int {
+        // Test 1: "GET / HTTP/1.1"
+        let buf1: [u8; 256] = build_get_root();
+        let r1: HttpRequestLine = parse_request_line(buf1, 16);
+        if r1.error != 0 { return 10; }
+        if r1.method.code != 1 { return 11; }  // GET
+        if path_equals(r1.path, make_path_slash(), 1) != 1 { return 12; }
+        if r1.version.major != 1 { return 13; }
+        if r1.version.minor != 1 { return 14; }
+
+        // Test 2: "POST /api/data HTTP/1.0"
+        let buf2: [u8; 256] = build_post_api();
+        let r2: HttpRequestLine = parse_request_line(buf2, 25);
+        if r2.error != 0 { return 20; }
+        if r2.method.code != 2 { return 21; }  // POST
+        if path_equals(r2.path, make_path_api_data(), 9) != 1 { return 22; }
+        if r2.version.major != 1 { return 23; }
+        if r2.version.minor != 0 { return 24; }
+
+        // Test 3: "DELETE /items/42 HTTP/2.0"
+        let buf3: [u8; 256] = build_delete_item();
+        let r3: HttpRequestLine = parse_request_line(buf3, 27);
+        if r3.error != 0 { return 30; }
+        if r3.method.code != 4 { return 31; }  // DELETE
+        if path_equals(r3.path, make_path_items_42(), 9) != 1 { return 32; }
+        if r3.version.major != 2 { return 33; }
+        if r3.version.minor != 0 { return 34; }
+
+        // Test 4: "HEAD /health HTTP/1.1"
+        let buf4: [u8; 256] = build_head_health();
+        let r4: HttpRequestLine = parse_request_line(buf4, 23);
+        if r4.error != 0 { return 40; }
+        if r4.method.code != 5 { return 41; }  // HEAD
+        if path_equals(r4.path, make_path_health(), 7) != 1 { return 42; }
+        if r4.version.major != 1 { return 43; }
+        if r4.version.minor != 1 { return 44; }
+
+        // Test 5: Empty buffer -> error 1
+        let empty: [u8; 256] = [0; 256];
+        let r5: HttpRequestLine = parse_request_line(empty, 0);
+        if r5.error != 1 { return 50; }
+
+        // Test 6: Bad method "PATCH" -> error 2
+        let mut bad_method: [u8; 256] = [0; 256];
+        // "PATCH" is not recognized
+        bad_method[0] = 88;  // X (not a known method start)
+        let r6: HttpRequestLine = parse_request_line(bad_method, 10);
+        if r6.error != 2 { return 60; }
+
+        // Test 7: GET without space -> error 3
+        let mut no_space: [u8; 256] = [0; 256];
+        // "GET/" — no space between method and path
+        no_space[0] = 71; no_space[1] = 69; no_space[2] = 84; no_space[3] = 47;
+        let r7: HttpRequestLine = parse_request_line(no_space, 4);
+        if r7.error != 3 { return 70; }
+
+        // All tests passed
+        return 0;
+    }
+}

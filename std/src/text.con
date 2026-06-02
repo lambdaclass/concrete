@@ -1,4 +1,33 @@
 mod text {
+
+    // ============================================================
+    // AsciiText — canonical validated wrapper (docs/VALIDATED_WRAPPERS.md §4).
+    //
+    // Invariant: every byte in the inner String is in 0..=127. Validation
+    // runs once in try_new; .0 extraction is zero-cost after that.
+    // Instance methods on newtypes now work, but AsciiText keeps the
+    // constructor-only public surface intentionally small.
+    // ============================================================
+
+    pub newtype AsciiText = String;
+
+    trusted impl AsciiText {
+        pub fn try_new(s: String) with(Alloc) -> Option<AsciiText> {
+            let n: u64 = s.len;
+            let mut i: u64 = 0;
+            while i < n {
+                let pb: *const u8 = s.ptr as *const u8 + i;
+                let b: u8 = *(pb as *mut u8);
+                if b > (127 as u8) {
+                    s.drop();
+                    return Option::<AsciiText>::None;
+                }
+                i = i + 1;
+            }
+            return Option::<AsciiText>::Some { value: AsciiText(s) };
+        }
+    }
+
     pub struct Text {
         ptr: *const u8,
         len: u64,
@@ -83,6 +112,43 @@ mod text {
         s2.drop();
         s3.drop();
         return 0;
+    }
+
+    #[test]
+    fn test_ascii_text_try_new_happy() with(Alloc) -> i32 {
+        let s: String = "hello";
+        match AsciiText::try_new(s) {
+            Option::Some { value } => {
+                if !assert_eq::<u64>(value.0.len, 5, "AsciiText wraps String of len 5") {
+                    value.0.drop();
+                    return 1;
+                }
+                value.0.drop();
+                return 0;
+            }
+            Option::None => { return 2; }
+        }
+    }
+
+    #[test]
+    fn test_ascii_text_try_new_empty_ok() with(Alloc) -> i32 {
+        let s: String = String::new();
+        match AsciiText::try_new(s) {
+            Option::Some { value } => { value.0.drop(); return 0; }
+            Option::None => { return 1; }
+        }
+    }
+
+    #[test]
+    fn test_ascii_text_try_new_rejects_non_ascii() with(Alloc) -> i32 {
+        let mut s: String = String::new();
+        s.push_char(72);
+        s.push_char(200);
+        s.push_char(105);
+        match AsciiText::try_new(s) {
+            Option::Some { value } => { value.0.drop(); return 1; }
+            Option::None => { return 0; }
+        }
     }
 
     #[test]

@@ -1,0 +1,25 @@
+// Adversarial test: returning a linear value consumes it.
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn create_and_return() -> Resource {
+    let r: Resource = Resource { value: 77 };
+    return r;  // consumes r — no scope-exit error
+}
+
+fn pass_through(r: Resource) -> Resource {
+    return r;  // consumes r and returns new ownership
+}
+
+fn main() -> Int {
+    let r1: Resource = create_and_return();
+    let r2: Resource = pass_through(r1);
+    let result: Int = consume(r2);
+    return result;
+}

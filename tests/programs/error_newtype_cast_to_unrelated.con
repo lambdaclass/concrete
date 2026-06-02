@@ -1,0 +1,11 @@
+// Error: casting a newtype to an unrelated type bypasses the wrapper
+// contract. Only the inner type is a legitimate cast target (and `.0`
+// is the canonical unwrap form). Expected: rejection at CoreCheck.
+newtype Port = u16;
+
+fn main() -> Int {
+    let p: Port = Port(8080);
+    let x: bool = p as bool;
+    if x { return 1; }
+    return 0;
+}

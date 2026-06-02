@@ -1,0 +1,23 @@
+// ERROR TEST: consuming outer linear variable in a loop — must be rejected.
+
+struct Resource {
+    id: Int,
+}
+
+fn consume_resource(r: Resource) -> Int {
+    return r.id;
+}
+
+fn bad_loop_consume() -> Int {
+    let r: Resource = Resource { id: 1 };
+    let mut i: Int = 0;
+    while i < 3 {
+        let _x: Int = consume_resource(r);
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_loop_consume();
+}

@@ -1,0 +1,19 @@
+// Pressure: nested linear structs — outer consumed, inner extracted.
+// Tests that consuming the outer struct properly handles inner linear fields.
+
+struct Inner { x: Int }
+struct Outer { inner: Inner, tag: Int }
+
+fn consume_inner(i: Inner) -> Int {
+    return i.x;
+}
+
+fn consume_outer(o: Outer) -> Int {
+    return o.tag;
+}
+
+fn main() -> Int {
+    let o: Outer = Outer { inner: Inner { x: 42 }, tag: 7 };
+    let result: Int = consume_outer(o);
+    return result;
+}

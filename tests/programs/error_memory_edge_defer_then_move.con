@@ -1,0 +1,25 @@
+// ERROR TEST: moving a variable after defer reserves it — must be rejected.
+
+struct Handle {
+    fd: Int,
+}
+
+fn close_handle(h: Handle) -> Int {
+    return h.fd;
+}
+
+fn consume_handle(h: Handle) -> Int {
+    return h.fd;
+}
+
+fn bad_move_after_defer() -> Int {
+    let h: Handle = Handle { fd: 1 };
+    defer close_handle(h);
+    // h is reserved — cannot move it
+    let _x: Int = consume_handle(h);
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_move_after_defer();
+}

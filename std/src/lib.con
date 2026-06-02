@@ -17,6 +17,7 @@ mod std {
     mod path;
     mod fmt;
     mod parse;
+    mod numeric;
     mod ascii;
     mod hex;
     mod sha256;

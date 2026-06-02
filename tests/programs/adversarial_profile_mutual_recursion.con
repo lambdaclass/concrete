@@ -1,0 +1,17 @@
+// Adversarial: mutual recursion disguised across functions.
+// Neither function directly calls itself, but they form a cycle.
+// The predictable profile must detect this via Tarjan's SCC.
+
+fn ping(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    return pong(n - 1);
+}
+
+fn pong(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    return ping(n - 1);
+}
+
+pub fn main() -> Int {
+    return ping(10);
+}

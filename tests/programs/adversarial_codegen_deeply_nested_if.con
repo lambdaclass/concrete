@@ -1,0 +1,57 @@
+// Test: 5+ levels of nested if/else, each branch computes differently.
+// Verifies correct branch selection at every nesting depth.
+// Expected output: 42
+
+fn classify(a: Int, b: Int, c: Int, d: Int, e: Int) -> Int {
+    if a > 0 {
+        if b > 10 {
+            if c > 20 {
+                if d > 30 {
+                    if e > 40 {
+                        return 42;
+                    } else {
+                        return 5;
+                    }
+                } else {
+                    if e > 100 {
+                        return 6;
+                    } else {
+                        return 7;
+                    }
+                }
+            } else {
+                if d > 0 {
+                    return 8;
+                } else {
+                    return 9;
+                }
+            }
+        } else {
+            if c > 0 {
+                if d > 0 {
+                    return 10;
+                } else {
+                    return 11;
+                }
+            } else {
+                return 12;
+            }
+        }
+    } else {
+        if b > 0 {
+            if c > 0 {
+                return 13;
+            } else {
+                return 14;
+            }
+        } else {
+            return 15;
+        }
+    }
+}
+
+pub fn main() with(Std) {
+    // a=1 > 0, b=11 > 10, c=21 > 20, d=31 > 30, e=41 > 40 => 42
+    let result: Int = classify(1, 11, 21, 31, 41);
+    println(result);
+}

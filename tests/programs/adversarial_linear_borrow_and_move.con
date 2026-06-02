@@ -1,0 +1,20 @@
+// Adversarial test: borrow a variable then try to move it while the borrow
+// is live. Inside the borrow block, x is frozen; attempting to move it into
+// consume() should be rejected.
+// Expected: compile error about variable frozen by borrow block.
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn main() -> Int {
+    let mut r: Resource = Resource { value: 3 };
+    borrow r as ref in R {
+        let stolen: Int = consume(r);
+    }
+    return 0;
+}

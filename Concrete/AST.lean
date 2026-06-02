@@ -151,6 +151,10 @@ inductive Stmt where
   | defer (span : Span) (body : Expr)           -- defer expr;
   | borrowIn (span : Span) (var : String) (ref : String) (region : String) (isMut : Bool) (body : List Stmt)
   | arrowAssign (span : Span) (obj : Expr) (field : String) (value : Expr)  -- p->x = val
+  -- let...else and irrefutable destructuring let (desugared to match before Elab)
+  | letDestructure (span : Span) (enumName : String) (variant : String) (bindings : List String) (value : Expr) (elseBody : Option (List Stmt))
+  -- struct destructuring let (desugared to field-access lets before Elab)
+  | letStructDestructure (span : Span) (structName : String) (bindings : List String) (value : Expr)
 end
 
 def Expr.getSpan : Expr → Span
@@ -170,6 +174,7 @@ def Stmt.getSpan : Stmt → Span
   | .fieldAssign sp _ _ _ | .derefAssign sp _ _ | .arrayIndexAssign sp _ _ _ => sp
   | .break_ sp _ _ | .continue_ sp _ | .defer sp _ => sp
   | .borrowIn sp _ _ _ _ _ | .arrowAssign sp _ _ _ => sp
+  | .letDestructure sp _ _ _ _ _ | .letStructDestructure sp _ _ _ => sp
 
 structure ImportSymbol where
   name : String
@@ -494,10 +499,49 @@ partial def collectFreeVarsStmts (stmts : List Stmt) (bound : List String) : Lis
         (collectFreeVarsExpr (.ident default var) bound ++ collectFreeVarsStmts body bound, bound)
       | .arrowAssign _ obj _ value =>
         (collectFreeVarsExpr obj bound ++ collectFreeVarsExpr value bound, bound)
+      | .letDestructure _ _ _ bindings value elseBody =>
+        let valueFree := collectFreeVarsExpr value bound
+        let elseFree := match elseBody with
+          | some body => collectFreeVarsStmts body bound
+          | none => []
+        (valueFree ++ elseFree, bindings ++ bound)
+      | .letStructDestructure _ _ bindings value =>
+        (collectFreeVarsExpr value bound, bindings ++ bound)
     freeVars ++ collectFreeVarsStmts rest newBound
 end
 
 def collectFreeVars (stmts : List Stmt) (paramNames : List String) : List String :=
   (collectFreeVarsStmts stmts paramNames).eraseDups
+
+/-- Desugar destructuring let statements into match/field-access.
+    Must be applied before Check and Elab, since both pattern-match on Stmt. -/
+partial def desugarStmts : List Stmt → List Stmt
+  | [] => []
+  | (.letDestructure sp enumName variant bindings value (some elseBody)) :: rest =>
+    let continuation := desugarStmts rest
+    let successArm := MatchArm.mk sp enumName variant bindings continuation
+    let wildcardArm := MatchArm.varArm sp "_" elseBody
+    [Stmt.expr sp (Expr.match_ sp value [successArm, wildcardArm])]
+  | (.letDestructure sp enumName variant bindings value none) :: rest =>
+    let continuation := desugarStmts rest
+    let successArm := MatchArm.mk sp enumName variant bindings continuation
+    [Stmt.expr sp (Expr.match_ sp value [successArm])]
+  | (.letStructDestructure sp structName bindings value) :: rest =>
+    let tmpName := "__destr_" ++ structName
+    let tmpLet := Stmt.letDecl sp tmpName false none value
+    let fieldLets := bindings.map fun b =>
+      Stmt.letDecl sp b false none (Expr.fieldAccess sp (Expr.ident sp tmpName) b)
+    [tmpLet] ++ fieldLets ++ desugarStmts rest
+  | s :: rest => s :: desugarStmts rest
+
+/-- Apply desugaring to all function bodies in a module. -/
+partial def desugarModule (m : Module) : Module :=
+  { m with
+    functions := m.functions.map fun f => { f with body := desugarStmts f.body }
+    submodules := m.submodules.map desugarModule }
+
+/-- Apply desugaring to all modules. -/
+def desugarProgram (modules : List Module) : List Module :=
+  modules.map desugarModule
 
 end Concrete

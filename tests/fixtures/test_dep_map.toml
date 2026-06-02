@@ -1,0 +1,252 @@
+# Dependency Map: compiler source → affected test sections
+#
+# This file is read by scripts/tests/run_tests.sh --affected to select test sections
+# based on which compiler files changed. The runner parses the
+# [source."<path>"] blocks and extracts the `sections` array for each
+# changed file.
+#
+# The mapping is conservative: when in doubt, include more sections.
+# Files not listed here cause the full suite to run (safe fallback).
+# The [always] block lists sections that run on any compiler change.
+
+[always]
+# These always run regardless of what changed
+sections = ["passlevel"]
+categories = ["regression"]
+
+# ============================================================
+# Frontend passes
+# ============================================================
+
+[source."Concrete/Parser.lean"]
+description = "Parser (source → AST)"
+sections = ["positive", "negative", "passlevel"]
+categories = ["unit", "semantic", "integration"]
+owner_pass = "parse"
+
+[source."Concrete/Lexer.lean"]
+description = "Lexer (source → tokens)"
+sections = ["positive", "negative", "passlevel"]
+categories = ["unit", "semantic"]
+owner_pass = "parse"
+
+[source."Concrete/Token.lean"]
+description = "Token definitions"
+sections = ["positive", "negative", "passlevel"]
+categories = ["unit", "semantic"]
+owner_pass = "parse"
+
+[source."Concrete/AST.lean"]
+description = "AST type definitions"
+sections = ["positive", "negative", "testflag", "report", "codegen", "passlevel"]
+categories = ["unit", "semantic", "codegen", "report", "integration"]
+owner_pass = "parse"
+
+[source."Concrete/FileSummary.lean"]
+description = "Cross-module summary table"
+sections = ["positive", "negative", "stdlib", "passlevel"]
+categories = ["unit", "semantic"]
+owner_pass = "summary"
+# Multi-module tests especially affected
+test_patterns = ["module_*", "summary_*", "error_module_*", "error_import_*"]
+
+[source."Concrete/Resolve.lean"]
+description = "Name resolution"
+sections = ["positive", "negative", "passlevel"]
+categories = ["unit", "semantic"]
+owner_pass = "resolve"
+test_patterns = ["error_resolve_*", "module_*", "summary_*"]
+
+# ============================================================
+# Semantic passes
+# ============================================================
+
+[source."Concrete/Check.lean"]
+description = "Type/capability/linearity checking"
+sections = ["positive", "negative", "passlevel"]
+categories = ["unit", "semantic"]
+owner_pass = "check"
+test_patterns = [
+    "error_type_*", "error_cap_*", "error_borrow_*", "error_linear_*",
+    "error_unconsumed*", "error_use_after_*", "error_branch_*",
+    "error_loop_*", "error_no_else_*", "error_deref_*",
+    "linear_*", "cap_*", "borrow_*", "copy_*", "destroy_*"
+]
+
+[source."Concrete/Elab.lean"]
+description = "Elaboration (AST → Core IR)"
+sections = ["positive", "negative", "passlevel", "report"]
+categories = ["unit", "semantic", "report"]
+owner_pass = "elab"
+test_patterns = [
+    "trait_*", "generic_*", "impl_*", "error_trait_*", "error_generic_*"
+]
+
+[source."Concrete/CoreCanonicalize.lean"]
+description = "Core IR canonicalization"
+sections = ["positive", "passlevel", "codegen"]
+categories = ["unit", "codegen"]
+owner_pass = "elab"
+
+[source."Concrete/CoreCheck.lean"]
+description = "Post-elaboration Core validation"
+sections = ["positive", "negative", "passlevel"]
+categories = ["unit", "semantic"]
+owner_pass = "core_check"
+test_patterns = ["error_ptr_*", "error_trusted_*", "trusted_*"]
+
+[source."Concrete/Core.lean"]
+description = "Core IR type definitions"
+sections = ["positive", "negative", "passlevel", "report", "codegen"]
+categories = ["unit", "semantic", "codegen", "report"]
+owner_pass = "elab"
+
+# ============================================================
+# Backend passes
+# ============================================================
+
+[source."Concrete/Mono.lean"]
+description = "Monomorphization"
+sections = ["positive", "passlevel", "report"]
+categories = ["unit", "integration"]
+owner_pass = "mono"
+test_patterns = ["generic_*", "trait_dispatch_*", "trait_bound_*"]
+
+[source."Concrete/Lower.lean"]
+description = "Core → SSA lowering"
+sections = ["positive", "passlevel", "codegen", "O2"]
+categories = ["unit", "codegen", "integration", "regression"]
+owner_pass = "lower"
+test_patterns = [
+    "struct_*", "enum_*", "while_*", "if_*", "defer_*",
+    "borrow_*", "heap_*", "regress_*"
+]
+
+[source."Concrete/SSA.lean"]
+description = "SSA IR type definitions"
+sections = ["positive", "passlevel", "codegen", "O2"]
+categories = ["unit", "codegen"]
+owner_pass = "lower"
+
+[source."Concrete/SSAVerify.lean"]
+description = "SSA invariant verification"
+sections = ["positive", "passlevel", "codegen"]
+categories = ["unit", "codegen", "regression"]
+owner_pass = "ssa_verify"
+test_patterns = ["regress_void_phi*", "struct_loop_*", "struct_if_else_*", "struct_match_*"]
+
+[source."Concrete/SSACleanup.lean"]
+description = "SSA optimization passes"
+sections = ["positive", "passlevel", "codegen", "O2"]
+categories = ["unit", "codegen"]
+owner_pass = "ssa_cleanup"
+test_patterns = ["codegen_constfold*", "codegen_strength*"]
+
+[source."Concrete/EmitSSA.lean"]
+description = "SSA → LLVM IR emission"
+sections = ["positive", "passlevel", "codegen", "O2"]
+categories = ["unit", "codegen", "integration"]
+owner_pass = "emit_ssa"
+
+[source."Concrete/EmitLLVM.lean"]
+description = "LLVM IR structured types"
+sections = ["positive", "codegen"]
+categories = ["codegen"]
+owner_pass = "emit_ssa"
+
+[source."Concrete/LLVM.lean"]
+description = "LLVM IR data structures"
+sections = ["positive", "codegen"]
+categories = ["codegen"]
+owner_pass = "emit_ssa"
+
+# ============================================================
+# Support modules
+# ============================================================
+
+[source."Concrete/Layout.lean"]
+description = "Memory layout and ABI"
+sections = ["positive", "report", "codegen"]
+categories = ["unit", "codegen", "report"]
+owner_pass = "elab"
+test_patterns = ["repr_*", "sizeof_*", "alignof_*", "report_layout_*"]
+
+[source."Concrete/Intrinsic.lean"]
+description = "Builtin intrinsic operations"
+sections = ["positive", "negative", "stdlib"]
+categories = ["unit", "semantic", "stdlib"]
+owner_pass = "elab"
+
+[source."Concrete/BuiltinSigs.lean"]
+description = "Builtin function signatures"
+sections = ["positive", "negative"]
+categories = ["unit"]
+owner_pass = "check"
+
+[source."Concrete/Diagnostic.lean"]
+description = "Error/diagnostic formatting"
+sections = ["negative"]
+categories = ["semantic"]
+owner_pass = "check"
+
+[source."Concrete/Format.lean"]
+description = "Source code formatter"
+sections = ["positive"]
+categories = ["property"]
+owner_pass = "format"
+test_patterns = ["fmt_*"]
+
+[source."Concrete/ProofCore.lean"]
+description = "Proof obligation pipeline, diagnostics, taxonomy"
+sections = ["evidence", "taxonomy", "workflow", "bundle"]
+categories = ["proof"]
+owner_pass = "proof"
+test_patterns = ["proof_pressure/*"]
+
+[source."Concrete/Report.lean"]
+description = "Audit report generation"
+sections = ["report", "taxonomy", "workflow", "bundle"]
+categories = ["report"]
+owner_pass = "report"
+test_patterns = ["report_*"]
+
+[source."Concrete/Shared.lean"]
+description = "Shared utilities"
+sections = ["positive", "negative", "passlevel"]
+categories = ["unit", "semantic"]
+owner_pass = "check"
+
+[source."Concrete/Pipeline.lean"]
+description = "Pipeline orchestration"
+sections = ["positive", "negative", "passlevel", "report", "codegen", "stdlib"]
+categories = ["unit", "semantic", "codegen", "report", "integration", "stdlib"]
+owner_pass = "all"
+
+# ============================================================
+# Non-compiler sources
+# ============================================================
+
+[source."Main.lean"]
+description = "CLI entry point"
+sections = ["positive", "negative", "testflag", "report", "codegen", "stdlib"]
+categories = ["unit", "semantic", "codegen", "report", "integration", "stdlib"]
+owner_pass = "all"
+
+[source."Concrete/PipelineTest.lean"]
+description = "Pass-level test harness"
+sections = ["passlevel"]
+categories = ["unit"]
+owner_pass = "all"
+
+[source."std/src/*"]
+description = "Standard library modules"
+sections = ["stdlib", "collection"]
+categories = ["stdlib"]
+owner_pass = "runtime"
+
+[source."scripts/tests/run_tests.sh"]
+description = "Test runner"
+sections = []
+categories = []
+owner_pass = "none"
+note = "Changes to the runner itself don't require re-running tests, but a sanity check is recommended"

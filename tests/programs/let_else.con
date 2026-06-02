@@ -1,0 +1,27 @@
+// Test let...else destructuring with diverging else
+
+mod let_else {
+    enum Copy Result {
+        Ok { value: i32 },
+        Err { code: i32 },
+    }
+
+    fn try_unwrap(r: Result) -> i32 {
+        let Result::Ok { value } = r else {
+            return -1;
+        };
+        return value;
+    }
+
+    pub fn main() -> Int {
+        // Test 1: successful match extracts value
+        let ok: Result = Result::Ok { value: 42 };
+        if try_unwrap(ok) != 42 { return 1; }
+
+        // Test 2: else branch taken on mismatch
+        let err: Result = Result::Err { code: 5 };
+        if try_unwrap(err) != -1 { return 2; }
+
+        return 0;
+    }
+}

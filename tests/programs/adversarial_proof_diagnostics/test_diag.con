@@ -1,0 +1,54 @@
+// Test program for proof-oriented diagnostics.
+// Exercises: eligible-but-unextractable, source vs profile exclusion,
+// registry proof on unextractable, unsupported construct diagnostics.
+
+// 1. Eligible but unextractable: passes profile but uses mutable assignment
+fn eligible_but_blocked(a: i64, b: i64) -> i64 {
+    let mut x: i64 = a;
+    x = x + b;
+    return x;
+}
+
+// 2a. Source exclusion: has capabilities
+fn source_excluded(path: i64) with(File) -> i64 {
+    return path + 1;
+}
+
+// 2b. Profile exclusion: uses allocation
+fn profile_excluded(n: i64) with(Alloc) -> i64 {
+    return n + 1;
+}
+
+// 3. Registry proof on unextractable function (see proof-registry.json)
+fn registry_unextractable(a: i64, b: i64) -> i64 {
+    let mut result: i64 = a;
+    result = result + b;
+    return result;
+}
+
+// 4. Eligible with unsupported struct literal
+fn has_unsupported_deref(a: i64, b: i64) -> i64 {
+    let mut x: i64 = a;
+    x = b;
+    return x;
+}
+
+// Clean extractable function for contrast
+fn pure_add(a: i64, b: i64) -> i64 {
+    return a + b;
+}
+
+trusted fn trusted_helper(x: i64) -> i64 {
+    return x;
+}
+
+fn main() with(File, Alloc) -> i64 {
+    let a: i64 = eligible_but_blocked(1, 2);
+    let b: i64 = source_excluded(3);
+    let c: i64 = profile_excluded(4);
+    let d: i64 = registry_unextractable(5, 6);
+    let e: i64 = has_unsupported_deref(7, 8);
+    let f: i64 = pure_add(9, 10);
+    let g: i64 = trusted_helper(11);
+    return a + b + c + d + e + f + g;
+}

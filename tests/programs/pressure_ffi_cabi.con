@@ -1,0 +1,247 @@
+// Pressure: C-ABI compatible library example
+//
+// Defines functions with C-compatible signatures (i32 params, i32 return),
+// uses Copy structs for C-interop data layout, and exposes public functions.
+//
+// Reveals:
+//   - ABI compatibility for function signatures
+//   - Copy struct layout for FFI (can they be passed to/from C?)
+//   - Public API exposure patterns
+//   - Trusted code with struct pointer access
+//   - Whether the compiler handles C-like function signatures correctly
+//   - Struct field access and construction patterns in trusted context
+
+// === C-ABI compatible structs ===
+
+// A simple 2D point — all i32 fields, Copy, stack-allocated.
+// In a C world: struct Point { int32_t x; int32_t y; };
+struct Copy Point {
+    x: i32,
+    y: i32,
+}
+
+// A rectangle defined by two points.
+// In C: struct Rect { Point origin; Point size; };
+struct Copy Rect {
+    ox: i32,
+    oy: i32,
+    w: i32,
+    h: i32,
+}
+
+// Result of a computation with error code.
+// In C: struct Result { int32_t value; int32_t error; };
+struct Copy CalcResult {
+    value: i32,
+    error: i32,
+}
+
+// === Pure C-ABI compatible functions (no capabilities) ===
+
+// Add two points component-wise
+fn point_add(ax: i32, ay: i32, bx: i32, by: i32) -> Point {
+    return Point { x: ax + bx, y: ay + by };
+}
+
+// Compute the area of a rectangle
+fn rect_area(r: Rect) -> i32 {
+    return r.w * r.h;
+}
+
+// Compute the perimeter of a rectangle
+fn rect_perimeter(r: Rect) -> i32 {
+    return 2 * (r.w + r.h);
+}
+
+// Check if a point is inside a rectangle
+fn point_in_rect(px: i32, py: i32, r: Rect) -> i32 {
+    if px >= r.ox {
+        if px < r.ox + r.w {
+            if py >= r.oy {
+                if py < r.oy + r.h {
+                    return 1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+// Safe division returning CalcResult (error=1 on divide-by-zero)
+fn safe_div(a: i32, b: i32) -> CalcResult {
+    if b == 0 {
+        return CalcResult { value: 0, error: 1 };
+    }
+    return CalcResult { value: a / b, error: 0 };
+}
+
+// Manhattan distance between two points
+fn manhattan_distance(ax: i32, ay: i32, bx: i32, by: i32) -> i32 {
+    let dx: i32 = ax - bx;
+    let dy: i32 = ay - by;
+    // abs without trusted: conditional
+    let adx: i32 = if dx < 0 { 0 - dx } else { dx };
+    let ady: i32 = if dy < 0 { 0 - dy } else { dy };
+    return adx + ady;
+}
+
+// === Trusted: raw struct access through pointers ===
+
+// Read a Point from a raw byte buffer (trusted: pointer arithmetic)
+trusted fn read_point_from_buf(buf: *const u8, offset: u64) -> Point {
+    let p: *const u8 = buf + offset;
+    // Read x as 4 bytes little-endian i32
+    let b0: i32 = *(p as *mut u8) as i32;
+    let b1: i32 = *((p + 1) as *mut u8) as i32;
+    let b2: i32 = *((p + 2) as *mut u8) as i32;
+    let b3: i32 = *((p + 3) as *mut u8) as i32;
+    let x: i32 = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+
+    let q: *const u8 = buf + offset + 4;
+    let c0: i32 = *(q as *mut u8) as i32;
+    let c1: i32 = *((q + 1) as *mut u8) as i32;
+    let c2: i32 = *((q + 2) as *mut u8) as i32;
+    let c3: i32 = *((q + 3) as *mut u8) as i32;
+    let y: i32 = c0 | (c1 << 8) | (c2 << 16) | (c3 << 24);
+
+    return Point { x: x, y: y };
+}
+
+// Write a Point into a raw byte buffer (trusted: pointer writes)
+trusted fn write_point_to_buf(buf: *mut u8, offset: u64, pt: Point) {
+    let p: *mut u8 = buf + offset;
+    *p = (pt.x & 255) as u8;
+    *(p + 1) = ((pt.x >> 8) & 255) as u8;
+    *(p + 2) = ((pt.x >> 16) & 255) as u8;
+    *(p + 3) = ((pt.x >> 24) & 255) as u8;
+
+    let q: *mut u8 = buf + offset + 4;
+    *q = (pt.y & 255) as u8;
+    *(q + 1) = ((pt.y >> 8) & 255) as u8;
+    *(q + 2) = ((pt.y >> 16) & 255) as u8;
+    *(q + 3) = ((pt.y >> 24) & 255) as u8;
+}
+
+// === Entry point ===
+
+pub fn main() with(Console) -> Int {
+    let mut failures: i32 = 0;
+
+    // --- Test 1: point_add ---
+    let p1: Point = point_add(3, 4, 10, 20);
+    if p1.x != 13 {
+        println("FAIL: point_add x");
+        failures = failures + 1;
+    } else if p1.y != 24 {
+        println("FAIL: point_add y");
+        failures = failures + 1;
+    } else {
+        println("OK: point_add");
+    }
+
+    // --- Test 2: rect_area ---
+    let r1: Rect = Rect { ox: 0, oy: 0, w: 5, h: 10 };
+    let a1: i32 = rect_area(r1);
+    if a1 != 50 {
+        println("FAIL: rect_area");
+        failures = failures + 1;
+    } else {
+        println("OK: rect_area");
+    }
+
+    // --- Test 3: rect_perimeter ---
+    let peri: i32 = rect_perimeter(r1);
+    if peri != 30 {
+        println("FAIL: rect_perimeter");
+        failures = failures + 1;
+    } else {
+        println("OK: rect_perimeter");
+    }
+
+    // --- Test 4: point inside rect ---
+    let inside: i32 = point_in_rect(2, 3, r1);
+    if inside != 1 {
+        println("FAIL: point_in_rect (inside)");
+        failures = failures + 1;
+    } else {
+        println("OK: point_in_rect (inside)");
+    }
+
+    // --- Test 5: point outside rect ---
+    let outside: i32 = point_in_rect(10, 3, r1);
+    if outside != 0 {
+        println("FAIL: point_in_rect (outside)");
+        failures = failures + 1;
+    } else {
+        println("OK: point_in_rect (outside)");
+    }
+
+    // --- Test 6: safe_div normal ---
+    let d1: CalcResult = safe_div(42, 7);
+    if d1.error != 0 {
+        println("FAIL: safe_div error");
+        failures = failures + 1;
+    } else if d1.value != 6 {
+        println("FAIL: safe_div value");
+        failures = failures + 1;
+    } else {
+        println("OK: safe_div(42,7)");
+    }
+
+    // --- Test 7: safe_div by zero ---
+    let d2: CalcResult = safe_div(42, 0);
+    if d2.error != 1 {
+        println("FAIL: safe_div by zero");
+        failures = failures + 1;
+    } else {
+        println("OK: safe_div by zero");
+    }
+
+    // --- Test 8: manhattan distance ---
+    let md: i32 = manhattan_distance(1, 2, 4, 6);
+    if md != 7 {
+        println("FAIL: manhattan_distance");
+        failures = failures + 1;
+    } else {
+        println("OK: manhattan_distance");
+    }
+
+    // --- Test 9: write/read point through raw buffer ---
+    let buf: [u8; 16] = [0; 16];
+    let pt_write: Point = Point { x: 42, y: 99 };
+    write_point_to_buf(&buf as *mut u8, 0, pt_write);
+    let pt_read: Point = read_point_from_buf(&buf as *const u8, 0);
+    if pt_read.x != 42 {
+        println("FAIL: roundtrip point x");
+        failures = failures + 1;
+    } else if pt_read.y != 99 {
+        println("FAIL: roundtrip point y");
+        failures = failures + 1;
+    } else {
+        println("OK: roundtrip point through buffer");
+    }
+
+    // --- Test 10: write/read negative values ---
+    let pt_neg: Point = Point { x: 0 - 100, y: 0 - 200 };
+    write_point_to_buf(&buf as *mut u8, 0, pt_neg);
+    let pt_neg_read: Point = read_point_from_buf(&buf as *const u8, 0);
+    if pt_neg_read.x != (0 - 100) {
+        println("FAIL: roundtrip negative x");
+        failures = failures + 1;
+    } else if pt_neg_read.y != (0 - 200) {
+        println("FAIL: roundtrip negative y");
+        failures = failures + 1;
+    } else {
+        println("OK: roundtrip negative point");
+    }
+
+    // --- Summary ---
+    if failures == 0 {
+        println("All 10 C-ABI tests passed.");
+    } else {
+        print(failures as Int);
+        println(" C-ABI test(s) failed.");
+    }
+
+    return failures as Int;
+}

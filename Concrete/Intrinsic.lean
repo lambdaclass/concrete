@@ -36,6 +36,8 @@ inductive IntrinsicId where
   | printString | printInt | printChar | printBool
   -- Mixed-arg print (variadic, desugared in elaboration)
   | print | println
+  -- Mixed-arg buffer append (variadic, desugared in elaboration)
+  | append
 
   -- Timing
   | clockMonotonicNs
@@ -100,6 +102,7 @@ def resolveIntrinsic (name : String) : Option IntrinsicId :=
   | "print_bool"   => some .printBool
   | "print"        => some .print
   | "println"      => some .println
+  | "append"       => some .append
 
   -- Timing
   | "clock_monotonic_ns" => some .clockMonotonicNs
@@ -160,6 +163,7 @@ def IntrinsicId.canonicalName : IntrinsicId → String
   | .printBool => "print_bool"
   | .print => "print"
   | .println => "println"
+  | .append => "append"
   | .clockMonotonicNs => "clock_monotonic_ns"
   | .getArgs => "get_args"
   | .abort => "abort"
@@ -174,7 +178,7 @@ def IntrinsicId.capability : IntrinsicId → Option String
   -- Alloc
   | .alloc | .free
   | .vecNew | .vecPush | .vecPop | .vecFree
-  | .stringReserve => some "Alloc"
+  | .stringReserve | .append => some "Alloc"
   -- Console
   | .printString | .printInt | .printChar | .printBool
   | .print | .println => some "Console"
@@ -269,7 +273,7 @@ def reservedFnNames : List String :=
     are NOT in `resolveIntrinsic`.  These are compiler-emitted helpers
     or legacy names that user code may call but not redefine. -/
 def extraBuiltinFnNames : List String :=
-  ["print", "println", "to_string", "deref", "deref_mut", "add"]
+  ["print", "println", "append", "to_string", "deref", "deref_mut", "add"]
 
 /-- Built-in type names known to the compiler.
     These are always in scope without an explicit import. -/

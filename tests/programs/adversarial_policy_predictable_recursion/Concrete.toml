@@ -1,0 +1,6 @@
+[package]
+name = "adversarial_policy_predictable_recursion"
+version = "0.1.0"
+
+[policy]
+predictable = true

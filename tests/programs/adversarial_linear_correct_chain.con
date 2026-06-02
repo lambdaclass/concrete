@@ -1,0 +1,32 @@
+// Adversarial test (positive): correctly chain linear values through functions.
+// Each function takes ownership of a linear Resource, uses it, and returns a
+// new Resource. The value is never duplicated or leaked.
+// Expected: compiles and runs, prints 30.
+
+struct Resource {
+    value: Int,
+}
+
+fn make(v: Int) -> Resource {
+    return Resource { value: v };
+}
+
+fn add_ten(r: Resource) -> Resource {
+    return Resource { value: r.value + 10 };
+}
+
+fn double(r: Resource) -> Resource {
+    return Resource { value: r.value * 2 };
+}
+
+fn finish(r: Resource) -> Int {
+    return r.value;
+}
+
+pub fn main() with(Std) {
+    let r: Resource = make(5);
+    let r: Resource = add_ten(r);
+    let r: Resource = double(r);
+    let result: Int = finish(r);
+    println(result);
+}

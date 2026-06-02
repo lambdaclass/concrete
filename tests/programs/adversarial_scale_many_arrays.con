@@ -1,0 +1,22 @@
+// Hostile workload: many array operations — creation, indexing, loop iteration.
+// Stresses array lowering and bounds-related GEP generation.
+// Expected: 42
+
+fn sum_arr(a: [Int; 10]) -> Int {
+    let mut acc: Int = 0;
+    for (let mut i: Int = 0; i < 10; i = i + 1) {
+        acc = acc + a[i];
+    }
+    return acc;
+}
+
+fn first_last(a: [Int; 5]) -> Int {
+    return a[0] + a[4];
+}
+
+pub fn main() -> Int {
+    let a: [Int; 10] = [1, 2, 3, 4, 5, 1, 2, 3, 4, 5];
+    let b: [Int; 5] = [3, 0, 0, 0, 9];
+    // sum_arr(a) = 30, first_last(b) = 3+9 = 12, total = 42
+    return sum_arr(a) + first_last(b);
+}

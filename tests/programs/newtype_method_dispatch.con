@@ -1,0 +1,25 @@
+// Test: instance-method dispatch on a newtype resolves against the
+// newtype's inherent impl first, only falling through to the inner
+// type if no method matches. Closes the VALIDATED_WRAPPERS.md §8 gap.
+// Expected: 8080
+
+newtype Port = u16;
+
+impl Port {
+    pub fn value(self) -> u16 {
+        return self.0;
+    }
+
+    pub fn is_privileged(self) -> bool {
+        return self.0 < 1024;
+    }
+}
+
+fn main() -> Int {
+    let p: Port = Port(8080);
+    let v: u16 = p.value();
+    if p.is_privileged() {
+        return 0;
+    }
+    return v as Int;
+}

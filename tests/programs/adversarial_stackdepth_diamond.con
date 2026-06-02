@@ -1,0 +1,17 @@
+// Adversarial: diamond call pattern A->B, A->C, B->D, C->D.
+// Expected: A has depth 2, B and C have depth 1, D has depth 0.
+// D should not be counted twice in the depth calculation.
+
+fn node_d() -> i32 { return 10; }
+
+fn node_b() -> i32 { return node_d() + 1; }
+
+fn node_c() -> i32 { return node_d() + 2; }
+
+fn node_a() -> i32 { return node_b() + node_c(); }
+
+fn main() -> i32 {
+    let r: i32 = node_a();
+    if r == 23 { return 0; }
+    return 1;
+}

@@ -1,0 +1,31 @@
+// Test: struct containing struct containing array.
+// Build inner array with mutations, nest it in structs, verify values survive.
+// Stress-tests nested aggregate codegen (struct -> struct -> array).
+// Expected output: 37
+
+struct Inner {
+    data: [Int; 3],
+    tag: Int,
+}
+
+struct Outer {
+    inner: Inner,
+    id: Int,
+}
+
+fn read_inner(o: Outer) -> Int {
+    return o.inner.data[0] + o.inner.data[1] + o.inner.data[2] + o.inner.tag + o.id;
+}
+
+pub fn main() with(Std) {
+    // Build array with mutations first (avoids struct.field[i] = v bug)
+    let mut data: [Int; 3] = [1, 2, 3];
+    data[0] = 5;
+    data[2] = 15;
+    // data = [5, 2, 15]
+    let inner: Inner = Inner { data: data, tag: 10 };
+    let outer: Outer = Outer { inner: inner, id: 5 };
+    // sum = 5 + 2 + 15 + 10 + 5 = 37
+    let result: Int = read_inner(outer);
+    println(result);
+}

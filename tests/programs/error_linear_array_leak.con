@@ -1,0 +1,15 @@
+// ERROR TEST: array of linear elements leaked at scope exit.
+
+struct Resource {
+    value: Int,
+}
+
+fn bad_leak() -> Int {
+    let arr: [Resource; 2] = [Resource { value: 1 }, Resource { value: 2 }];
+    // arr is never consumed — linear array leak
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_leak();
+}

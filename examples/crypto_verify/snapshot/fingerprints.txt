@@ -1,0 +1,7 @@
+=== Body Fingerprints ===
+  main.compute_tag: "[(ret (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var key) (var message)) (var nonce)))]"
+  main.verify_tag: "[(let computed (call compute_tag (var key) (var message) (var nonce))) (if (binop Concrete.BinOp.eq (var computed) (var expected_tag)) [(ret (int 1))] [(ret (int 0))])]"
+  main.check_nonce: "[(if (binop Concrete.BinOp.gt (var nonce) (int 0)) [(if (binop Concrete.BinOp.leq (var nonce) (var max_nonce)) [(ret (int 1))] [(ret (int 0))])] [(ret (int 0))])]"
+  main.verify_message: "[(if (binop Concrete.BinOp.neq (call verify_tag (var key) (var message) (var nonce) (var expected_tag)) (int 1)) [(ret (int 0))]) (if (binop Concrete.BinOp.neq (call check_nonce (var nonce) (var max_nonce)) (int 1)) [(ret (int 0))]) (ret (int 1))]"
+  main.main: "[(let key (int 42)) (let msg (int 100)) (let nonce (int 7)) (let tag (call compute_tag (var key) (var msg) (var nonce))) (let valid (call verify_tag (var key) (var msg) (var nonce) (var tag))) (let bad (call verify_tag (var key) (var msg) (var nonce) (int 9999))) (let nonce_ok (call check_nonce (var nonce) (int 1000))) (let ok (call verify_message (var key) (var msg) (var nonce) (var tag) (int 1000))) (ret (int 0))]"
+

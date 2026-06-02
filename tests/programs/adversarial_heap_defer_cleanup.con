@@ -1,0 +1,15 @@
+// Adversarial test: Heap<T> with defer cleanup pattern.
+// This is the standard ownership pattern: alloc, defer free, use, scope exit.
+
+struct Data {
+    x: Int,
+    y: Int,
+}
+
+fn main() with(Std) -> Int {
+    let p: Heap<Data> = alloc(Data { x: 100, y: 200 });
+    defer free(p);
+    // p is reserved by defer — can read via arrow but not move
+    let result: Int = p->x + p->y;
+    return result;
+}

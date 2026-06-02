@@ -1,0 +1,34 @@
+// Adversarial test: defer/reserved state interaction.
+
+struct Handle {
+    fd: Int,
+}
+
+fn close_handle(h: Handle) -> Int {
+    return h.fd;
+}
+
+// defer reserves the variable — can read but not move
+fn defer_reserves_allows_read() -> Int {
+    let h: Handle = Handle { fd: 42 };
+    defer close_handle(h);
+    // h is reserved — can read fields
+    let fd: Int = h.fd;
+    return fd;
+}
+
+// Multiple defers in LIFO order
+fn multiple_defers() -> Int {
+    let h1: Handle = Handle { fd: 1 };
+    defer close_handle(h1);
+    let h2: Handle = Handle { fd: 2 };
+    defer close_handle(h2);
+    // Both reserved, both readable
+    return h1.fd + h2.fd;
+}
+
+fn main() -> Int {
+    let r1: Int = defer_reserves_allows_read();
+    let r2: Int = multiple_defers();
+    return r1 + r2;
+}

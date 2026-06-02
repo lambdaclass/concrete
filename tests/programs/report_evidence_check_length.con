@@ -1,0 +1,12 @@
+// Test: check_length has a Lean proof → evidence: proved
+// Models the bounds guard from decode_header.
+// The Lean proof shows: len < 10 → returns 1, len >= 10 → returns 0.
+
+fn check_length(len: Int) -> Int {
+    if len < 10 { return 1; }
+    return 0;
+}
+
+pub fn main() -> Int {
+    return check_length(5);
+}

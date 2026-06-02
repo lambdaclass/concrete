@@ -1,0 +1,12 @@
+// Attempt to rebind borrow-block &mut ref to another variable.
+// Escape analysis prevents borrow refs from being stored into other bindings.
+// Expected error: reference 'r' cannot escape its borrow block
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    borrow mut n as r in R {
+        let r2: &mut Int = r;  // error: escape
+        *r2 = 99;
+    }
+    return n;
+}

@@ -1,0 +1,18 @@
+// Newtype on the heap, accessed via arrow-deref. Tests that
+// Heap<Newtype-bearing-struct> layout is correct and field reads
+// through a heap pointer survive the wrapper.
+// Expected: 7777
+
+newtype Code = i32;
+
+struct Copy Box {
+    code: Code,
+    flag: u8,
+}
+
+fn main() with(Alloc) -> Int {
+    let p: Heap<Box> = alloc(Box { code: Code(7777), flag: 1 });
+    let raw: i32 = p->code.0;
+    free(p);
+    return raw as Int;
+}

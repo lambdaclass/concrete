@@ -1,0 +1,16 @@
+// Regression: p->n = 100 where n is i32 elaborates 100 as Int (i64)
+// because the arrowAssign path in Elab.lean omits the field-type hint
+// that the direct fieldAssign path uses. Codegen emits `store i64 100`
+// to a 4-byte field; -O2 deletes the UB store and the field stays at
+// its initial value, while the adjacent field gets clobbered.
+// Expected: 100 (with adjacent field b still readable as 7)
+
+struct Copy Pair { a: i32, b: i32 }
+
+fn main() with(Std) -> Int {
+    let mut p: Heap<Pair> = alloc(Pair { a: 0, b: 7 });
+    p->a = 100;
+    let total: Int = (p->a as Int) + (p->b as Int);
+    free(p);
+    return total;
+}

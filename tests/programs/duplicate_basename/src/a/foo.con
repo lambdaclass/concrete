@@ -1,0 +1,5 @@
+mod foo {
+    pub fn from_a(x: i64) -> i64 {
+        return x + 100;
+    }
+}

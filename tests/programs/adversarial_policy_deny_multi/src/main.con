@@ -1,0 +1,15 @@
+// Adversarial: deny = ["File", "Network"] policy active, code uses both.
+// Functions correctly declare their capabilities (core-check passes),
+// but policy rejects with E0611 for each denied capability.
+
+pub fn read_file() with(File) -> Int {
+    return 1;
+}
+
+pub fn send_data() with(Network) -> Int {
+    return 2;
+}
+
+pub fn main() with(File, Network) -> Int {
+    return read_file() + send_data();
+}

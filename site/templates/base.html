@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% if page and page.title %}{{ page.title }} | {% elif section and section.title %}{{ section.title }} | {% endif %}{{ config.title }}</title>
   <meta name="description" content="{{ config.description }}">
-  <link rel="stylesheet" href="{{ get_url(path='site.css') }}">
+  <link rel="stylesheet" href="{{ get_url(path='site.css') }}?v=paper2">
+  <link rel="stylesheet" href="/site.css?v=paper2">
 </head>
 <body>
   <header class="site-header">

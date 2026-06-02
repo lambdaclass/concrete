@@ -1,0 +1,16 @@
+// Adversarial: mutual recursion (A->B->A) must fail predictable.
+// Tests that indirect recursion is caught by the no-recursion gate.
+
+fn ping(n: i32) -> i32 {
+    if n <= 0 { return 0; }
+    return pong(n - 1);
+}
+
+fn pong(n: i32) -> i32 {
+    if n <= 0 { return 0; }
+    return ping(n - 1);
+}
+
+fn main() -> i32 {
+    return ping(4);
+}

@@ -7,17 +7,17 @@ enum Node {
 }
 
 fn push(head: Heap<Node>, value: Int) with(Alloc) -> Heap<Node> {
-    return alloc(Node#Cons { value: value, next: head });
+    return alloc(Node::Cons { value: value, next: head });
 }
 
 fn sum_list(head: Heap<Node>) with(Alloc) -> Int {
     let node: Node = *head;
     match node {
-        Node#Cons { value, next } => {
+        Node::Cons { value, next } => {
             let rest: Int = sum_list(next);
             return value + rest;
         },
-        Node#Nil {} => {
+        Node::Nil {} => {
             return 0;
         },
     }
@@ -26,11 +26,11 @@ fn sum_list(head: Heap<Node>) with(Alloc) -> Int {
 fn length(head: Heap<Node>) with(Alloc) -> Int {
     let node: Node = *head;
     match node {
-        Node#Cons { value, next } => {
+        Node::Cons { value, next } => {
             let rest: Int = length(next);
             return 1 + rest;
         },
-        Node#Nil {} => {
+        Node::Nil {} => {
             return 0;
         },
     }
@@ -38,7 +38,7 @@ fn length(head: Heap<Node>) with(Alloc) -> Int {
 
 fn main() with(Std) -> Int {
     // Build list: 10 -> 20 -> 30 -> Nil
-    let list: Heap<Node> = alloc(Node#Nil {});
+    let list: Heap<Node> = alloc(Node::Nil {});
     let list: Heap<Node> = push(list, 30);
     let list: Heap<Node> = push(list, 20);
     let list: Heap<Node> = push(list, 10);

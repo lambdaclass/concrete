@@ -1,0 +1,25 @@
+// Trait method dispatched through a generic function with a bound.
+// Tests that the type-param trait bound resolves to the concrete
+// impl method at the call site.
+// Expected: 84
+
+trait Doubler {
+    fn doubled(&self) -> i32;
+}
+
+struct Copy Wrap { n: i32 }
+
+impl Doubler for Wrap {
+    fn doubled(&self) -> i32 {
+        return self.n + self.n;
+    }
+}
+
+fn call_doubled<T: Doubler>(t: T) -> i32 {
+    return t.doubled();
+}
+
+fn main() -> Int {
+    let w: Wrap = Wrap { n: 42 };
+    return call_doubled::<Wrap>(w) as Int;
+}

@@ -1,0 +1,12 @@
+// Adversarial: call a private function from outside its module.
+// The function `hidden` is not pub, so importing it should fail.
+// Expected: compile error about "is not public".
+
+mod Secret {
+    fn hidden() -> Int { return 42; }
+}
+
+mod Main {
+    import Secret.{ hidden };
+    pub fn main() -> Int { return hidden(); }
+}

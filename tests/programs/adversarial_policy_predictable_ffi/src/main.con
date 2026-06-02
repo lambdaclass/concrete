@@ -1,0 +1,14 @@
+// Adversarial: predictable = true policy active, code calls extern function.
+// The function declares Unsafe (required for extern calls), but predictable
+// profile forbids extern/FFI calls regardless.
+// Expected: compiler rejects with E0610 (calls extern).
+
+extern fn external_function() -> Int;
+
+pub fn call_extern() with(Unsafe) -> Int {
+    return external_function();
+}
+
+pub fn main() with(Unsafe) -> Int {
+    return call_extern();
+}

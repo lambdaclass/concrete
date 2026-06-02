@@ -1,0 +1,29 @@
+// Adversarial monomorphization: generic enum with 3 type instantiations.
+// Stresses enum specialization in Mono.lean.
+// Expected: 42
+
+enum Copy Maybe<T> {
+    Just { val: T },
+    Nothing {},
+}
+
+fn extract_int(m: Maybe<Int>, default: Int) -> Int {
+    match m {
+        Maybe::Just { val } => { return val; },
+        Maybe::Nothing {} => { return default; },
+    }
+}
+
+fn extract_i32(m: Maybe<i32>, default: i32) -> i32 {
+    match m {
+        Maybe::Just { val } => { return val; },
+        Maybe::Nothing {} => { return default; },
+    }
+}
+
+pub fn main() -> Int {
+    let a: Maybe<Int> = Maybe::<Int>::Just { val: 20 };
+    let b: Maybe<i32> = Maybe::<i32>::Just { val: 12 };
+    let c: Maybe<Int> = Maybe::<Int>::Nothing {};
+    return extract_int(a, 0) + (extract_i32(b, 0) as Int) + extract_int(c, 10);
+}

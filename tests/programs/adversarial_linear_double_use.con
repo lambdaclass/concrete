@@ -1,0 +1,20 @@
+// Adversarial test: use a linear variable twice.
+// The struct Resource is linear (no Copy marker), so passing it to consume()
+// moves it. The second call to consume(r) should be rejected because r was
+// already consumed on line 11.
+// Expected: compile error about consumed/moved variable.
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { value: 7 };
+    let a: Int = consume(r);
+    let b: Int = consume(r);
+    return a + b;
+}

@@ -1,0 +1,23 @@
+// ERROR TEST: cannot borrow a variable that has already been consumed (moved).
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn bad_borrow_after_move() -> Int {
+    let mut r: Resource = Resource { value: 42 };
+    let _x: Int = consume(r);  // r is consumed
+    let mut val: Int = 0;
+    borrow r as ref in R {  // ERROR: r is consumed
+        val = ref.value;
+    }
+    return val;
+}
+
+fn main() -> Int {
+    return bad_borrow_after_move();
+}

@@ -63,19 +63,19 @@ mod Types {
 
 mod IO {
     pub fn put_char(c: i32) with(Console) {
-        print_char(c as Int);
+        print(c as char);
     }
 
     pub fn put_str(s: &String) with(Console) {
-        print_string(s);
+        print(s);
     }
 
     pub fn put_int(n: i32) with(Console) {
-        print_int(n as Int);
+        print(n as Int);
     }
 
     pub fn put_newline() with(Console) {
-        print_char(10);
+        println("");
     }
 }
 

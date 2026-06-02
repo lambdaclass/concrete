@@ -1,0 +1,22 @@
+// ERROR TEST: moving a borrowed variable — must be rejected.
+
+struct Data {
+    value: Int,
+}
+
+fn consume_data(d: Data) -> Int {
+    return d.value;
+}
+
+fn bad_move_while_borrowed() -> Int {
+    let mut d: Data = Data { value: 42 };
+    borrow d as ref in R {
+        // d is frozen — cannot move it
+        let _x: Int = consume_data(d);
+    }
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_move_while_borrowed();
+}

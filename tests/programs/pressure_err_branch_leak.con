@@ -1,0 +1,19 @@
+// Pressure error: linear consumed in one branch but leaked in the other.
+// Should fail: consumed in one branch but not the other.
+
+struct Token { id: Int }
+
+fn consume(t: Token) -> Int {
+    return t.id;
+}
+
+fn main() -> Int {
+    let t: Token = Token { id: 7 };
+    let cond: Bool = true;
+    if cond {
+        let v: Int = consume(t);
+        return v;
+    } else {
+        return 0;
+    }
+}

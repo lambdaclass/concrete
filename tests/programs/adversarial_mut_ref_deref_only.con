@@ -1,0 +1,10 @@
+// Borrow mut, only use via deref read/write (no function call).
+// Deref does not consume the ref. Valid program.
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    borrow mut n as r in R {
+        *r = *r + 5;
+    }
+    return n;
+}

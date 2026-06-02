@@ -1,0 +1,25 @@
+// Pressure: defer in a function called from a loop.
+// Each iteration creates a linear, defers its destroy, then returns.
+// Tests per-call-frame defer cleanup.
+
+struct Token { id: Int }
+
+impl Destroy for Token {
+    fn destroy(&self) { }
+}
+
+fn process(v: Int) -> Int {
+    let t: Token = Token { id: v };
+    defer destroy(t);
+    return t.id * 2;
+}
+
+fn main() -> Int {
+    let mut total: Int = 0;
+    let mut i: Int = 0;
+    while i < 5 {
+        total = total + process(i);
+        i = i + 1;
+    }
+    return total;
+}

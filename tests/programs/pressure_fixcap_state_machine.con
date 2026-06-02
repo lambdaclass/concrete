@@ -1,0 +1,338 @@
+// Pressure test: enum-driven state machine for protocol parsing.
+//
+// Models a simple protocol state machine:
+//   States: Idle, WaitSync, Header, Payload, Done, Error
+//   Events: SyncByte, HeaderByte, DataByte, EndMarker, Timeout, Reset
+//
+// Processes a sequence of events, tracks state history in a fixed buffer.
+// Validates that the state machine follows expected transitions.
+//
+// Reveals: enum-driven state machines, match on enum with payloads,
+//          bounded history tracking, transition table patterns,
+//          struct containing enum field.
+//
+// All data on the stack. All loops bounded. No recursion. No allocation.
+
+// ---- State enum ----
+
+enum Copy State {
+    Idle,
+    WaitSync { retries: i32 },
+    Header { bytes_read: i32 },
+    Payload { bytes_read: i32, expected: i32 },
+    Done { total_bytes: i32 },
+    Error { code: i32 },
+}
+
+// ---- Event enum ----
+
+enum Copy Event {
+    SyncByte,
+    HeaderByte { val: i32 },
+    DataByte { val: i32 },
+    EndMarker,
+    Timeout,
+    Reset,
+}
+
+// ---- State history ----
+
+struct Copy History {
+    states: [i32; 32],
+    count: i32,
+}
+
+fn history_new() -> History {
+    return History { states: [0; 32], count: 0 };
+}
+
+fn state_code(s: State) -> i32 {
+    match s {
+        State::Idle => { return 0; },
+        State::WaitSync { retries } => { return 1; },
+        State::Header { bytes_read } => { return 2; },
+        State::Payload { bytes_read, expected } => { return 3; },
+        State::Done { total_bytes } => { return 4; },
+        State::Error { code } => { return 5; },
+    }
+}
+
+fn history_push(h: History, s: State) -> History {
+    if h.count >= 32 { return h; }
+    let mut st: [i32; 32] = h.states;
+    st[h.count] = state_code(s);
+    return History { states: st, count: h.count + 1 };
+}
+
+fn history_get(h: History, idx: i32) -> i32 {
+    return h.states[idx];
+}
+
+// ---- Transition function ----
+// Pure function: (State, Event) -> State. No side effects.
+
+fn transition(s: State, e: Event) -> State {
+    match s {
+        State::Idle => {
+            match e {
+                Event::SyncByte => { return State::WaitSync { retries: 0 }; },
+                Event::Reset => { return State::Idle; },
+                Event::Timeout => { return State::Error { code: 1 }; },
+                Event::HeaderByte { val } => { return State::Error { code: 10 }; },
+                Event::DataByte { val } => { return State::Error { code: 10 }; },
+                Event::EndMarker => { return State::Error { code: 10 }; },
+            }
+        },
+        State::WaitSync { retries } => {
+            match e {
+                Event::SyncByte => { return State::Header { bytes_read: 0 }; },
+                Event::Timeout => {
+                    if retries >= 3 {
+                        return State::Error { code: 2 };
+                    }
+                    return State::WaitSync { retries: retries + 1 };
+                },
+                Event::Reset => { return State::Idle; },
+                Event::HeaderByte { val } => { return State::Error { code: 11 }; },
+                Event::DataByte { val } => { return State::Error { code: 11 }; },
+                Event::EndMarker => { return State::Error { code: 11 }; },
+            }
+        },
+        State::Header { bytes_read } => {
+            match e {
+                Event::HeaderByte { val } => {
+                    let new_read: i32 = bytes_read + 1;
+                    if new_read >= 4 {
+                        // Header complete (4 bytes). val is payload length.
+                        return State::Payload { bytes_read: 0, expected: val };
+                    }
+                    return State::Header { bytes_read: new_read };
+                },
+                Event::Timeout => { return State::Error { code: 3 }; },
+                Event::Reset => { return State::Idle; },
+                Event::SyncByte => { return State::Error { code: 12 }; },
+                Event::DataByte { val } => { return State::Error { code: 12 }; },
+                Event::EndMarker => { return State::Error { code: 12 }; },
+            }
+        },
+        State::Payload { bytes_read, expected } => {
+            match e {
+                Event::DataByte { val } => {
+                    let new_read: i32 = bytes_read + 1;
+                    if new_read >= expected {
+                        return State::Done { total_bytes: 4 + expected };
+                    }
+                    return State::Payload { bytes_read: new_read, expected: expected };
+                },
+                Event::EndMarker => {
+                    if bytes_read == expected {
+                        return State::Done { total_bytes: 4 + expected };
+                    }
+                    return State::Error { code: 4 };
+                },
+                Event::Timeout => { return State::Error { code: 5 }; },
+                Event::Reset => { return State::Idle; },
+                Event::SyncByte => { return State::Error { code: 13 }; },
+                Event::HeaderByte { val } => { return State::Error { code: 13 }; },
+            }
+        },
+        State::Done { total_bytes } => {
+            match e {
+                Event::Reset => { return State::Idle; },
+                Event::SyncByte => { return State::Error { code: 14 }; },
+                Event::HeaderByte { val } => { return State::Error { code: 14 }; },
+                Event::DataByte { val } => { return State::Error { code: 14 }; },
+                Event::EndMarker => { return State::Error { code: 14 }; },
+                Event::Timeout => { return State::Error { code: 14 }; },
+            }
+        },
+        State::Error { code } => {
+            match e {
+                Event::Reset => { return State::Idle; },
+                Event::SyncByte => { return State::Error { code: code }; },
+                Event::HeaderByte { val } => { return State::Error { code: code }; },
+                Event::DataByte { val } => { return State::Error { code: code }; },
+                Event::EndMarker => { return State::Error { code: code }; },
+                Event::Timeout => { return State::Error { code: code }; },
+            }
+        },
+    }
+}
+
+// ---- Process a fixed event sequence using an event array ----
+
+struct Copy EventBuf {
+    events: [i32; 32],
+    args: [i32; 32],
+    len: i32,
+}
+
+fn make_event(kind: i32, arg: i32) -> Event {
+    // kind: 0=SyncByte, 1=HeaderByte, 2=DataByte, 3=EndMarker, 4=Timeout, 5=Reset
+    if kind == 0 { return Event::SyncByte; }
+    if kind == 1 { return Event::HeaderByte { val: arg }; }
+    if kind == 2 { return Event::DataByte { val: arg }; }
+    if kind == 3 { return Event::EndMarker; }
+    if kind == 4 { return Event::Timeout; }
+    return Event::Reset;
+}
+
+// ---- Tests ----
+
+pub fn main() -> Int {
+    // === Test 1: happy path — full protocol cycle ===
+    // Idle -> SyncByte -> WaitSync -> SyncByte -> Header
+    // -> 3x HeaderByte -> HeaderByte(payload_len=2) -> Payload
+    // -> 2x DataByte -> Done
+    let mut s: State = State::Idle;
+    let mut h: History = history_new();
+
+    h = history_push(h, s);  // [Idle]
+
+    s = transition(s, Event::SyncByte);
+    h = history_push(h, s);  // [Idle, WaitSync]
+    if state_code(s) != 1 { return 1; }
+
+    s = transition(s, Event::SyncByte);
+    h = history_push(h, s);  // [.., Header]
+    if state_code(s) != 2 { return 2; }
+
+    // 3 header bytes (not enough yet)
+    s = transition(s, Event::HeaderByte { val: 0 });
+    if state_code(s) != 2 { return 3; }
+    s = transition(s, Event::HeaderByte { val: 0 });
+    if state_code(s) != 2 { return 4; }
+    s = transition(s, Event::HeaderByte { val: 0 });
+    if state_code(s) != 2 { return 5; }
+
+    // 4th header byte triggers payload, val=3 is payload length
+    s = transition(s, Event::HeaderByte { val: 3 });
+    h = history_push(h, s);
+    if state_code(s) != 3 { return 6; }  // Payload
+
+    // 2 data bytes (not enough yet)
+    s = transition(s, Event::DataByte { val: 42 });
+    if state_code(s) != 3 { return 7; }
+    s = transition(s, Event::DataByte { val: 43 });
+    if state_code(s) != 3 { return 8; }
+
+    // 3rd data byte completes payload
+    s = transition(s, Event::DataByte { val: 44 });
+    h = history_push(h, s);
+    if state_code(s) != 4 { return 9; }  // Done
+
+    // Verify Done payload has correct total
+    match s {
+        State::Done { total_bytes } => {
+            if total_bytes != 7 { return 10; }  // 4 header + 3 payload
+        },
+        State::Idle => { return 10; },
+        State::WaitSync { retries } => { return 10; },
+        State::Header { bytes_read } => { return 10; },
+        State::Payload { bytes_read, expected } => { return 10; },
+        State::Error { code } => { return 10; },
+    }
+
+    // Verify history
+    if h.count != 5 { return 11; }
+    if history_get(h, 0) != 0 { return 12; }  // Idle
+    if history_get(h, 1) != 1 { return 13; }  // WaitSync
+    if history_get(h, 2) != 2 { return 14; }  // Header
+    if history_get(h, 3) != 3 { return 15; }  // Payload
+    if history_get(h, 4) != 4 { return 16; }  // Done
+
+    // === Test 2: timeout in WaitSync with retries ===
+    s = State::Idle;
+    s = transition(s, Event::SyncByte);  // -> WaitSync(0)
+    s = transition(s, Event::Timeout);   // -> WaitSync(1)
+    if state_code(s) != 1 { return 17; }
+    s = transition(s, Event::Timeout);   // -> WaitSync(2)
+    s = transition(s, Event::Timeout);   // -> WaitSync(3)
+    s = transition(s, Event::Timeout);   // retries >= 3 -> Error(2)
+    if state_code(s) != 5 { return 18; }
+    match s {
+        State::Error { code } => {
+            if code != 2 { return 19; }
+        },
+        State::Idle => { return 19; },
+        State::WaitSync { retries } => { return 19; },
+        State::Header { bytes_read } => { return 19; },
+        State::Payload { bytes_read, expected } => { return 19; },
+        State::Done { total_bytes } => { return 19; },
+    }
+
+    // === Test 3: reset from any state returns to Idle ===
+    s = State::Error { code: 99 };
+    s = transition(s, Event::Reset);
+    if state_code(s) != 0 { return 20; }  // Idle
+
+    s = State::Payload { bytes_read: 5, expected: 10 };
+    s = transition(s, Event::Reset);
+    if state_code(s) != 0 { return 21; }
+
+    s = State::Done { total_bytes: 100 };
+    s = transition(s, Event::Reset);
+    if state_code(s) != 0 { return 22; }
+
+    // === Test 4: invalid event in state -> Error ===
+    s = State::Idle;
+    s = transition(s, Event::DataByte { val: 0 });
+    if state_code(s) != 5 { return 23; }  // Error
+    match s {
+        State::Error { code } => {
+            if code != 10 { return 24; }
+        },
+        State::Idle => { return 24; },
+        State::WaitSync { retries } => { return 24; },
+        State::Header { bytes_read } => { return 24; },
+        State::Payload { bytes_read, expected } => { return 24; },
+        State::Done { total_bytes } => { return 24; },
+    }
+
+    // === Test 5: error is sticky (stays in error until reset) ===
+    s = State::Error { code: 42 };
+    s = transition(s, Event::SyncByte);
+    if state_code(s) != 5 { return 25; }
+    s = transition(s, Event::DataByte { val: 0 });
+    if state_code(s) != 5 { return 26; }
+    s = transition(s, Event::Timeout);
+    if state_code(s) != 5 { return 27; }
+    // Only reset escapes
+    s = transition(s, Event::Reset);
+    if state_code(s) != 0 { return 28; }
+
+    // === Test 6: EndMarker completes payload when count matches ===
+    s = State::Payload { bytes_read: 5, expected: 5 };
+    s = transition(s, Event::EndMarker);
+    if state_code(s) != 4 { return 29; }  // Done
+
+    // === Test 7: EndMarker with wrong count -> Error ===
+    s = State::Payload { bytes_read: 3, expected: 5 };
+    s = transition(s, Event::EndMarker);
+    if state_code(s) != 5 { return 30; }  // Error
+    match s {
+        State::Error { code } => {
+            if code != 4 { return 31; }
+        },
+        State::Idle => { return 31; },
+        State::WaitSync { retries } => { return 31; },
+        State::Header { bytes_read } => { return 31; },
+        State::Payload { bytes_read, expected } => { return 31; },
+        State::Done { total_bytes } => { return 31; },
+    }
+
+    // === Test 8: process sequence via make_event ===
+    s = State::Idle;
+    // Sequence: SyncByte(0), SyncByte(0), HeaderByte(1,0), HeaderByte(1,0),
+    //           HeaderByte(1,0), HeaderByte(1,2), DataByte(2,10), DataByte(2,20)
+    let kinds: [i32; 8] = [0, 0, 1, 1, 1, 1, 2, 2];
+    let args: [i32; 8] = [0, 0, 0, 0, 0, 2, 10, 20];
+    for (let mut i: i32 = 0; i < 8; i = i + 1) {
+        let ev: Event = make_event(kinds[i], args[i]);
+        s = transition(s, ev);
+    }
+    if state_code(s) != 4 { return 32; }  // Done
+
+    // All tests passed
+    return 0;
+}

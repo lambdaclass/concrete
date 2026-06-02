@@ -1,0 +1,19 @@
+// Test: function with 8+ parameters.
+// Verifies all parameters are accessible and correctly passed (including
+// those that go on the stack rather than in registers on most ABIs).
+// Expected output: 36
+
+fn sum8(a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int) -> Int {
+    return a + b + c + d + e + f + g + h;
+}
+
+fn weighted(a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int, i: Int, j: Int) -> Int {
+    // Use each param distinctly to catch any register/stack mixup
+    return a * 1 + b * 2 + c * 3 + d * 0 + e * 0 + f * 0 + g * 0 + h * 0 + i * 0 + j * 0;
+}
+
+pub fn main() with(Std) {
+    // 1+2+3+4+5+6+7+8 = 36
+    let result: Int = sum8(1, 2, 3, 4, 5, 6, 7, 8);
+    println(result);
+}

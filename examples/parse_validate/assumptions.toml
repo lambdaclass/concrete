@@ -1,0 +1,38 @@
+# Assumption file for the parse_validate flagship.
+# Schema: docs/ASSUMPTION_FILES.md
+#
+# parse_validate is the pull-through pilot for ROADMAP Active Dependency
+# Order rule 2. The values below are the declared trust surface; the
+# CI gate `make test-assumptions` enforces that the compiler's reports
+# agree with these values. Any drift fails the gate.
+
+schema_version = 1
+
+[target]
+host      = "any"
+toolchain = "llvm"
+runtime   = "hosted-libc"
+
+[arithmetic]
+overflow       = "wrapping"
+divide_by_zero = "trap"
+shift_oversize = "wrap"
+
+[allocation]
+heap            = "none"
+stack_max_bytes = 400
+
+[authority]
+required  = []
+forbidden = ["Alloc", "File", "Net", "Unsafe", "Console", "Clock"]
+
+[ffi]
+externs = []
+
+[trusted]
+functions = []
+shells    = []
+
+[proof]
+provable_subset = "predictable-pure-int"
+trust_anchor    = "Lean kernel + Concrete.Proof.*"

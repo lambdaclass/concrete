@@ -12,7 +12,6 @@
 
 mod cgrep {
     import std.fs.{read_to_string, FsError};
-    import std.result.{Result};
     import std.args.{count, get};
 
     // --- String helpers ---
@@ -86,8 +85,7 @@ mod cgrep {
                                 string_push_char(&mut out, 58);  // ':'
                             }
                             out.append(&line);
-                            print_string(&out);
-                            print_char(10);
+                            println(out);
                             out.drop();
                         }
                     }
@@ -106,8 +104,7 @@ mod cgrep {
                 string_push_char(&mut count_out, 58);  // ':'
             }
             count_out.append_int(match_count as Int);
-            print_string(&count_out);
-            print_char(10);
+            println(count_out);
             count_out.drop();
         }
 
@@ -166,7 +163,7 @@ mod cgrep {
         // Need at least pattern + one file
         let remaining: Int = argc - pattern_idx;
         if remaining < 2 {
-            print_string(&"Usage: cgrep [-n] [-c] [-v] [-i] <pattern> <file>...\n");
+            println("Usage: cgrep [-n] [-c] [-v] [-i] <pattern> <file>...");
             return 1;
         }
 
@@ -181,7 +178,7 @@ mod cgrep {
             let filename: String = get(fi);
             let result: Result<String, FsError> = read_to_string(&filename);
             match result {
-                Result#Ok { value } => {
+                Result::Ok { value } => {
                     let content_len: Int = string_length(&value);
                     if content_len > 0 {
                         let matches: i32 = grep_content(&value, &pattern, &filename,
@@ -191,11 +188,11 @@ mod cgrep {
                     }
                     value.drop();
                 },
-                Result#Err { error } => {
+                Result::Err { error } => {
                     let mut err: String = "cgrep: cannot open '";
                     err.append(&filename);
-                    err.append(&"'\n");
-                    print_string(&err);
+                    err.append(&"'");
+                    println(err);
                     err.drop();
                 }
             }

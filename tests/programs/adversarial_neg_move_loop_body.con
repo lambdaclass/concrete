@@ -1,0 +1,23 @@
+// Adversarial: consume a linear value inside a loop body.
+// The compiler must reject this because the value would be consumed on the
+// first iteration and used-after-move on subsequent iterations.
+// Expected: compile error about consuming inside a loop.
+
+struct Unique {
+    id: Int,
+}
+
+fn take(u: Unique) -> Int {
+    return u.id;
+}
+
+pub fn main() -> Int {
+    let u: Unique = Unique { id: 7 };
+    let mut sum: Int = 0;
+    let mut i: Int = 0;
+    while i < 3 {
+        sum = sum + take(u);
+        i = i + 1;
+    }
+    return sum;
+}

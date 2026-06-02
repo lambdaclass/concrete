@@ -1,0 +1,30 @@
+// Adversarial lowering: create and consume structs inside a loop body.
+// Stresses SSA alloca/phi for aggregates across loop iterations.
+// Expected: 42
+
+struct Copy Pair { x: Int, y: Int }
+
+fn accumulate() -> Int {
+    let mut acc: Int = 0;
+    for (let mut i: Int = 0; i < 7; i = i + 1) {
+        let p: Pair = Pair { x: i, y: i + 1 };
+        acc = acc + p.x + p.y;
+    }
+    // i=0: 0+1=1, i=1: 1+2=3, i=2: 2+3=5, i=3: 3+4=7, i=4: 4+5=9, i=5: 5+6=11, i=6: 6+7=13
+    // sum = 1+3+5+7+9+11+13 = 49... need 42
+    return acc;
+}
+
+fn accumulate2() -> Int {
+    let mut acc: Int = 0;
+    for (let mut i: Int = 1; i <= 6; i = i + 1) {
+        let p: Pair = Pair { x: i, y: i };
+        acc = acc + p.x;
+    }
+    // 1+2+3+4+5+6 = 21
+    return acc;
+}
+
+pub fn main() -> Int {
+    return accumulate2() + accumulate2();
+}

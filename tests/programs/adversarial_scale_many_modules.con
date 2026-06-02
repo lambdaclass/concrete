@@ -1,0 +1,23 @@
+// Hostile workload: 12 sibling modules, each with 2 functions.
+// Stresses module resolution, name table scaling, and report generation
+// across many module boundaries.
+// Expected: 42
+
+mod m01 { pub fn a() -> Int { return 1; } pub fn b() -> Int { return 2; } }
+mod m02 { pub fn a() -> Int { return 3; } pub fn b() -> Int { return 4; } }
+mod m03 { pub fn a() -> Int { return 5; } pub fn b() -> Int { return 6; } }
+mod m04 { pub fn a() -> Int { return 7; } pub fn b() -> Int { return 0; } }
+mod m05 { pub fn a() -> Int { return 0; } pub fn b() -> Int { return 0; } }
+mod m06 { pub fn a() -> Int { return 0; } pub fn b() -> Int { return 0; } }
+mod m07 { pub fn a() -> Int { return 0; } pub fn b() -> Int { return 0; } }
+mod m08 { pub fn a() -> Int { return 0; } pub fn b() -> Int { return 0; } }
+mod m09 { pub fn a() -> Int { return 0; } pub fn b() -> Int { return 0; } }
+mod m10 { pub fn a() -> Int { return 0; } pub fn b() -> Int { return 14; } }
+mod m11 { pub fn a() -> Int { return 0; } pub fn b() -> Int { return 0; } }
+mod m12 { pub fn a() -> Int { return 0; } pub fn b() -> Int { return 0; } }
+
+pub fn main() -> Int {
+    // 1+2+3+4+5+6+7+14 = 42, rest are 0
+    return m01::a() + m01::b() + m02::a() + m02::b() +
+           m03::a() + m03::b() + m04::a() + m10::b();
+}

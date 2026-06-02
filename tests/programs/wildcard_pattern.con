@@ -1,0 +1,53 @@
+// Test _ wildcard pattern in match arms
+
+mod wildcard_pattern {
+    enum Copy Color {
+        Red,
+        Green,
+        Blue,
+    }
+
+    fn is_red(c: Color) -> bool {
+        match c {
+            Color::Red => { return true; },
+            _ => { return false; },
+        }
+    }
+
+    enum Copy Result {
+        Ok { value: i32 },
+        Err { code: i32 },
+    }
+
+    fn unwrap_or(r: Result, default: i32) -> i32 {
+        match r {
+            Result::Ok { value } => { return value; },
+            _ => { return default; },
+        }
+    }
+
+    pub fn main() -> Int {
+        // Test 1: wildcard catches non-Red
+        if !is_red(Color::Red) { return 1; }
+        if is_red(Color::Green) { return 2; }
+        if is_red(Color::Blue) { return 3; }
+
+        // Test 2: wildcard with enum payload
+        let ok: Result = Result::Ok { value: 42 };
+        if unwrap_or(ok, 0) != 42 { return 4; }
+
+        let err: Result = Result::Err { code: 1 };
+        if unwrap_or(err, 99) != 99 { return 5; }
+
+        // Test 3: wildcard in integer match
+        let x: i32 = 7;
+        let y: i32 = match x {
+            1 => { 10 },
+            2 => { 20 },
+            _ => { 0 },
+        };
+        if y != 0 { return 6; }
+
+        return 0;
+    }
+}

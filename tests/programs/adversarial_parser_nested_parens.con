@@ -1,0 +1,15 @@
+// Adversarial parser: deeply nested parenthesized expressions.
+// Stresses recursive descent parsing of grouped expressions.
+// Expected: 42
+
+fn compute() -> Int {
+    return ((((((((((((((((42))))))))))))))));
+}
+
+fn compute2(a: Int, b: Int) -> Int {
+    return (((a + b) * (a - b)) + ((a * b) - (a + b))) + (((a)));
+}
+
+pub fn main() -> Int {
+    return compute();
+}

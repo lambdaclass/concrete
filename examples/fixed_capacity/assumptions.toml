@@ -1,0 +1,50 @@
+# Assumption file for the fixed_capacity flagship candidate.
+# Schema: docs/ASSUMPTION_FILES.md
+#
+# Active pull-through candidate (slot opened 2026-05-23).
+# fixed_capacity is the strategic candidate that surfaces every
+# Phase 4 ProofCore extractor gap the real-cryptography flagship
+# slot is gated on (see AUDIT.md §8).
+
+schema_version = 1
+
+[target]
+host      = "any"
+toolchain = "llvm"
+runtime   = "hosted-libc"
+
+[arithmetic]
+# i32 throughout for header fields; u8 for raw bytes. Wrapping
+# arithmetic is the predictable-profile default.
+overflow       = "wrapping"
+divide_by_zero = "trap"
+shift_oversize = "wrap"
+
+[allocation]
+# Zero heap. Everything stack-allocated, including the 256-byte
+# MsgBuf and 16-slot RingBuf.
+heap            = "none"
+stack_max_bytes = 3000   # actual max: 2960 (main)
+
+[authority]
+# Entry points (main + run_test) use Std for print output. The
+# validation core is pure; trusted shells are limited to four
+# raw-byte-write helpers used only by adversarial test
+# construction.
+required  = ["Std"]
+forbidden = ["File", "Net", "Unsafe"]
+
+[ffi]
+externs = []
+
+[trusted]
+# Four trusted functions in the test-driver section: each writes
+# raw bytes into a &mut [u8; 256] for adversarial test packet
+# construction. Confined to test setup, never reached from the
+# validation core.
+functions = ["build_msg", "build_payload_overflow", "build_bad_version", "build_bad_type"]
+shells    = []
+
+[proof]
+provable_subset = "predictable-pure-int"
+trust_anchor    = "Lean kernel + Concrete.Proof.*"

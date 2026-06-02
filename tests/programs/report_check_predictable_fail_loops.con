@@ -1,0 +1,12 @@
+// Test: --check predictable should fail for unbounded while loop
+fn spin(n: Int) -> Int {
+    let mut i: Int = 0;
+    while i < n {
+        i = i + 1;
+    }
+    return i;
+}
+
+fn main() -> Int {
+    return spin(10);
+}

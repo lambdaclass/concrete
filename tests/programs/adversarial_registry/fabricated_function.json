@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "proofs": [
+    {
+      "function": "main.nonexistent_function",
+      "body_fingerprint": "[(ret (int 42))]",
+      "proof": "Concrete.Proof.nonexistent_correct",
+      "spec": "nonexistent.spec"
+    }
+  ]
+}

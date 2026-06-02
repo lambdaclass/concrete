@@ -6,7 +6,6 @@
 
 mod fcheck {
     import std.fs.{read_file, read_to_string, write_file, FsError};
-    import std.result.{Result};
     import std.bytes.{Bytes};
     import std.args.{count, get};
     import std.map.{HashMap};
@@ -26,11 +25,11 @@ mod fcheck {
     trusted fn read_file_raw(path: &String) with(File, Alloc) -> FileData {
         let result: Result<Bytes, FsError> = read_file(path);
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 let fd: FileData = FileData { ptr: value.ptr, len: value.len };
                 return fd;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return FileData { ptr: 0 as *mut u8, len: 0 };
             }
         }
@@ -69,8 +68,8 @@ mod fcheck {
     trusted fn write_bytes_to_file(mpath: &String, data: &Bytes) with(File, Alloc) -> bool {
         let result: Result<u64, FsError> = write_file(mpath, data);
         match result {
-            Result#Ok { value } => { return true; },
-            Result#Err { error } => { return false; }
+            Result::Ok { value } => { return true; },
+            Result::Err { error } => { return false; }
         }
     }
 
@@ -108,10 +107,10 @@ mod fcheck {
     fn read_manifest_file(path: &String) with(File, Alloc) -> String {
         let result: Result<String, FsError> = read_to_string(path);
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 return value;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return "";
             }
         }
@@ -119,46 +118,30 @@ mod fcheck {
 
     // Reporting
 
-    fn report_status(label: &String, path: &String) with(Console, Alloc) {
-        let mut msg: String = String::new();
-        msg.append(&"  ");
-        msg.append(label);
-        msg.append(path);
-        print_string(&msg);
-        print_char(10);
-        msg.drop();
+    fn report_status(label: &String, path: &String) with(Console) {
+        println("  ", label, path);
     }
 
-    fn report_scan_line(path: &String, hash: &String) with(Console, Alloc) {
-        let mut msg: String = String::new();
-        msg.append(&"  ");
-        msg.append(hash);
-        msg.append(&"  ");
-        msg.append(path);
-        print_string(&msg);
-        print_char(10);
-        msg.drop();
+    fn report_scan_line(path: &String, hash: &String) with(Console) {
+        println("  ", hash, "  ", path);
     }
 
-    fn report_file_error(path: &String) with(Console, Alloc) {
-        let mut msg: String = String::new();
-        msg.append(&"  ERROR    ");
-        msg.append(path);
-        msg.append(&": cannot read file");
-        print_string(&msg);
-        print_char(10);
-        msg.drop();
+    fn report_file_error(path: &String) with(Console) {
+        println("  ERROR    ", path, ": cannot read file");
     }
 
     pub fn main() with(Std) -> Int {
         let argc: Int = count();
 
         if argc < 4 {
-            print_string(&"fcheck - file integrity checker\n\nUsage:\n");
-            print_string(&"  fcheck scan  <manifest> <file1> [file2] ...\n");
-            print_string(&"    Hash files with SHA-256, write manifest.\n\n");
-            print_string(&"  fcheck check <manifest> <file1> [file2] ...\n");
-            print_string(&"    Compare files against manifest, report changes.\n");
+            println("fcheck - file integrity checker");
+            println("");
+            println("Usage:");
+            println("  fcheck scan  <manifest> <file1> [file2] ...");
+            println("    Hash files with SHA-256, write manifest.");
+            println("");
+            println("  fcheck check <manifest> <file1> [file2] ...");
+            println("    Compare files against manifest, report changes.");
             return 1;
         }
 
@@ -181,7 +164,7 @@ mod fcheck {
             let mut scan_errors: Int = 0;
             let mut nfiles: Int = 0;
 
-            print_string(&"Scanning files...\n");
+            println("Scanning files...");
 
             let mut fi: Int = 3;
             while fi < argc {
@@ -213,11 +196,11 @@ mod fcheck {
                     wm.append(&manifest_path);
                     wm.append(&" (");
                     wm.append_int(nfiles);
-                    wm.append(&" files)\n");
-                    print_string(&wm);
+                    wm.append(&" files)");
+                    println(wm);
                     wm.drop();
                 } else {
-                    print_string(&"fcheck: error writing manifest\n");
+                    println("fcheck: error writing manifest");
                     scan_errors = scan_errors + 1;
                 }
             }
@@ -234,13 +217,13 @@ mod fcheck {
                 let mut em: String = String::new();
                 em.append(&"fcheck: cannot read manifest '");
                 em.append(&manifest_path);
-                em.append(&"' (empty or missing)\n");
-                print_string(&em);
+                em.append(&"' (empty or missing)");
+                println(em);
                 em.drop();
             }
 
             if !manifest_ok {
-                print_string(&"Checking files...\n");
+                println("Checking files...");
 
                 let mut cnt_ok: Int = 0;
                 let mut cnt_add: Int = 0;
@@ -266,11 +249,11 @@ mod fcheck {
                     } else {
                         let stored_opt: Option<&String> = manifest_map.get(&cpath);
                         match stored_opt {
-                            Option#None => {
+                            Option::None => {
                                 report_status(&"ADDED    ", &cpath);
                                 cnt_add = cnt_add + 1;
                             },
-                            Option#Some { value } => {
+                            Option::Some { value } => {
                                 let cpath_copy: String = cpath.clone();
                                 checked.insert(cpath_copy);
 
@@ -304,7 +287,7 @@ mod fcheck {
                 }
 
                 // Summary
-                print_char(10);
+                println("");
                 let mut sum: String = String::new();
                 sum.append(&"Summary: ");
                 sum.append_int(cnt_ok);
@@ -317,8 +300,7 @@ mod fcheck {
                 sum.append(&" removed, ");
                 sum.append_int(cnt_err);
                 sum.append(&" errors");
-                print_string(&sum);
-                print_char(10);
+                println(sum);
                 sum.drop();
 
                 manifest_paths.drop();
@@ -337,8 +319,8 @@ mod fcheck {
             let mut err: String = String::new();
             err.append(&"fcheck: unknown command '");
             err.append(&command);
-            err.append(&"'. Use 'scan' or 'check'.\n");
-            print_string(&err);
+            err.append(&"'. Use 'scan' or 'check'.");
+            println(err);
             err.drop();
             exit_code = 1;
         }

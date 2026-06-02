@@ -1,0 +1,21 @@
+// Adversarial module: 10 sibling modules each with same-named function.
+// Tests that same-name functions across modules don't collide in LLVM IR.
+// Expected: 42
+
+mod M1 { pub fn v() -> Int { return 1; } }
+mod M2 { pub fn v() -> Int { return 2; } }
+mod M3 { pub fn v() -> Int { return 3; } }
+mod M4 { pub fn v() -> Int { return 4; } }
+mod M5 { pub fn v() -> Int { return 5; } }
+mod M6 { pub fn v() -> Int { return 6; } }
+mod M7 { pub fn v() -> Int { return 7; } }
+mod M8 { pub fn v() -> Int { return 8; } }
+mod M9 { pub fn v() -> Int { return 6; } }
+mod M10 { pub fn v() -> Int { return 0; } }
+
+mod Main {
+    import M1.{ v };
+    fn main() -> Int {
+        return v() + 41;
+    }
+}

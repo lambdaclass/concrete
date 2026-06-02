@@ -1,0 +1,12 @@
+mod duplicate_basename {
+    mod a;
+    mod b;
+
+    import a.foo.{from_a};
+    import b.foo.{from_b};
+
+    pub fn main() with(Std) -> Int {
+        let r: i64 = from_a(2) + from_b(3);
+        return r as Int;
+    }
+}

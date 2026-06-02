@@ -1,0 +1,20 @@
+// Adversarial test: array of linear elements is itself linear.
+// The array must be consumed at scope exit.
+
+struct Resource {
+    value: Int,
+}
+
+fn consume_array(arr: [Resource; 2]) -> Int {
+    return 0;
+}
+
+fn linear_array_consumed() -> Int {
+    let arr: [Resource; 2] = [Resource { value: 1 }, Resource { value: 2 }];
+    let _x: Int = consume_array(arr);
+    return 0;
+}
+
+fn main() -> Int {
+    return linear_array_consumed();
+}

@@ -1,6 +1,7 @@
 import Concrete.Core
 import Concrete.Shared
 import Concrete.Layout
+import Concrete.Diagnostic
 
 namespace Concrete
 
@@ -315,7 +316,7 @@ structure MonoState where
   /-- Already-generated mono names (avoid duplicates). -/
   generated : List String := []
 
-abbrev MonoM := ExceptT String (StateM MonoState)
+abbrev MonoM := ExceptT Diagnostics (StateM MonoState)
 
 private def lookupFn (name : String) : MonoM (Option CFnDef) := do
   let st ← get
@@ -818,7 +819,7 @@ private partial def monoStructsInProgram (modules : List CModule) : List CModule
 -- Entry point
 -- ============================================================
 
-def monoProgram (modules : List CModule) : Except String (List CModule) :=
+def monoProgram (modules : List CModule) : Except Diagnostics (List CModule) :=
   let allFns := modules.foldl (fun acc m => acc ++ collectAllModuleFns m) []
   let allAliases := modules.foldl (fun acc m => acc ++ collectAllModuleAliases m) []
   let initState : MonoState := { allFns := allFns, linkerAliases := allAliases }

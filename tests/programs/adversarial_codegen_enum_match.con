@@ -1,0 +1,35 @@
+// Test: enum with 4+ variants, match on each.
+// Verifies correct variant selection and payload extraction.
+// Expected output:
+// 10
+// 25
+// 30
+// 42
+
+enum Copy Direction {
+    North { speed: Int },
+    South { speed: Int },
+    East { speed: Int },
+    West { speed: Int },
+}
+
+fn travel_cost(d: Direction) -> Int {
+    match d {
+        Direction::North { speed } => { return speed * 1; },
+        Direction::South { speed } => { return speed * 5; },
+        Direction::East { speed } => { return speed * 3; },
+        Direction::West { speed } => { return speed * 42; },
+    }
+}
+
+pub fn main() with(Std) {
+    let n: Direction = Direction::North { speed: 10 };
+    let s: Direction = Direction::South { speed: 5 };
+    let e: Direction = Direction::East { speed: 10 };
+    let w: Direction = Direction::West { speed: 1 };
+
+    println(travel_cost(n));
+    println(travel_cost(s));
+    println(travel_cost(e));
+    println(travel_cost(w));
+}

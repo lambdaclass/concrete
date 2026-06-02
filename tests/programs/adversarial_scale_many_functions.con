@@ -1,0 +1,50 @@
+// Hostile workload: 40 functions in a single file.
+// Stresses name resolution, report generation, and function table scaling.
+// Each function calls the next in a chain.
+// Expected: 42
+
+fn f01(x: Int) -> Int { return x + 1; }
+fn f02(x: Int) -> Int { return f01(x) + 1; }
+fn f03(x: Int) -> Int { return f02(x) + 1; }
+fn f04(x: Int) -> Int { return f03(x) + 1; }
+fn f05(x: Int) -> Int { return f04(x) + 1; }
+fn f06(x: Int) -> Int { return f05(x) + 1; }
+fn f07(x: Int) -> Int { return f06(x) + 1; }
+fn f08(x: Int) -> Int { return f07(x) + 1; }
+fn f09(x: Int) -> Int { return f08(x) + 1; }
+fn f10(x: Int) -> Int { return f09(x) + 1; }
+fn f11(x: Int) -> Int { return f10(x) + 1; }
+fn f12(x: Int) -> Int { return f11(x) + 1; }
+fn f13(x: Int) -> Int { return f12(x) + 1; }
+fn f14(x: Int) -> Int { return f13(x) + 1; }
+fn f15(x: Int) -> Int { return f14(x) + 1; }
+fn f16(x: Int) -> Int { return f15(x) + 1; }
+fn f17(x: Int) -> Int { return f16(x) + 1; }
+fn f18(x: Int) -> Int { return f17(x) + 1; }
+fn f19(x: Int) -> Int { return f18(x) + 1; }
+fn f20(x: Int) -> Int { return f19(x) + 1; }
+fn f21(x: Int) -> Int { return f20(x) + 1; }
+fn f22(x: Int) -> Int { return f21(x) + 1; }
+fn f23(x: Int) -> Int { return f22(x) + 1; }
+fn f24(x: Int) -> Int { return f23(x) + 1; }
+fn f25(x: Int) -> Int { return f24(x) + 1; }
+fn f26(x: Int) -> Int { return f25(x) + 1; }
+fn f27(x: Int) -> Int { return f26(x) + 1; }
+fn f28(x: Int) -> Int { return f27(x) + 1; }
+fn f29(x: Int) -> Int { return f28(x) + 1; }
+fn f30(x: Int) -> Int { return f29(x) + 1; }
+fn f31(x: Int) -> Int { return f30(x) + 1; }
+fn f32fn(x: Int) -> Int { return f31(x) + 1; }
+fn f33(x: Int) -> Int { return f32fn(x) + 1; }
+fn f34(x: Int) -> Int { return f33(x) + 1; }
+fn f35(x: Int) -> Int { return f34(x) + 1; }
+fn f36(x: Int) -> Int { return f35(x) + 1; }
+fn f37(x: Int) -> Int { return f36(x) + 1; }
+fn f38(x: Int) -> Int { return f37(x) + 1; }
+fn f39(x: Int) -> Int { return f38(x) + 1; }
+fn f40(x: Int) -> Int { return f39(x) + 1; }
+
+// f40(2) = 2 + 40 = 42
+pub fn main() -> Int {
+    return f40(2);
+}

@@ -1,0 +1,36 @@
+// Adversarial test: Heap<T> ownership rules.
+// - alloc consumes the argument
+// - p->field does NOT consume the pointer
+// - free consumes the pointer
+// - multiple arrow accesses on same pointer are OK
+
+struct Point {
+    x: Int,
+    y: Int,
+}
+
+fn heap_arrow_no_consume() with(Std) -> Int {
+    let p: Heap<Point> = alloc(Point { x: 10, y: 20 });
+    // Multiple arrow accesses — pointer is NOT consumed
+    let x: Int = p->x;
+    let y: Int = p->y;
+    let sum: Int = p->x + p->y;
+    free(p);
+    return x + y + sum;
+}
+
+fn heap_arrow_assign_no_consume() with(Std) -> Int {
+    let p: Heap<Point> = alloc(Point { x: 1, y: 2 });
+    // Arrow assign doesn't consume the pointer either
+    p->x = 100;
+    p->y = 200;
+    let result: Int = p->x + p->y;
+    free(p);
+    return result;
+}
+
+fn main() with(Std) -> Int {
+    let r1: Int = heap_arrow_no_consume();
+    let r2: Int = heap_arrow_assign_no_consume();
+    return r1 + r2;
+}

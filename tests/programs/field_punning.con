@@ -1,0 +1,52 @@
+// Test field punning: { name } means { name: name }
+
+mod field_punning {
+    struct Copy Point {
+        x: i32,
+        y: i32,
+    }
+
+    enum Copy Shape {
+        Circle { radius: i32 },
+        Rect { w: i32, h: i32 },
+    }
+
+    pub fn main() -> Int {
+        // Struct construction with field punning
+        let x: i32 = 10;
+        let y: i32 = 20;
+        let p: Point = Point { x, y };
+        if p.x != 10 { return 1; }
+        if p.y != 20 { return 2; }
+
+        // Mixed: some punned, some explicit
+        let w: i32 = 5;
+        let p2: Point = Point { x: w, y };
+        if p2.x != 5 { return 3; }
+        if p2.y != 20 { return 4; }
+
+        // Enum construction with field punning
+        let radius: i32 = 42;
+        let s: Shape = Shape::Circle { radius };
+        match s {
+            Shape::Circle { radius } => {
+                if radius != 42 { return 5; }
+            },
+            Shape::Rect { w, h } => { return 6; },
+        }
+
+        // Enum with multiple punned fields
+        let w: i32 = 3;
+        let h: i32 = 4;
+        let r: Shape = Shape::Rect { w, h };
+        match r {
+            Shape::Circle { radius } => { return 7; },
+            Shape::Rect { w, h } => {
+                if w != 3 { return 8; }
+                if h != 4 { return 9; }
+            },
+        }
+
+        return 0;
+    }
+}

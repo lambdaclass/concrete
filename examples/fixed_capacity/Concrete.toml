@@ -1,0 +1,20 @@
+[package]
+name = "fixed_capacity"
+
+# Enforceable budgets per docs/POLICY_FILES.md.
+# CI gate: make test-policy.
+#
+# Note vs parse_validate / crypto_verify: this example has
+# (a) Std-bearing entry points (main, run_test) that print test
+# results, and (b) 4 trusted shells for adversarial test packet
+# construction (raw byte writes through &mut [u8; 256]). Both are
+# deliberate; the policy does NOT set no_unsafe/no_trusted to
+# match. The trusted list is enumerated in assumptions.toml so a
+# new trusted shell would surface as drift.
+[policy]
+predictable            = true
+no_alloc               = true
+no_externs             = true
+max_stack_bytes        = 3000
+forbidden_capabilities = ["File", "Net", "Unsafe"]
+allowed_capabilities   = ["Std"]

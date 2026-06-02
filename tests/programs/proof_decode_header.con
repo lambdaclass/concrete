@@ -1,0 +1,39 @@
+// decode_header — first proved parser-core function
+//
+// Pure packet header decoder that:
+//   1. Rejects short packets via check_length (bounds guard)
+//   2. Extracts and validates a version field
+//   3. Extracts and validates a payload length field
+//   4. Returns 0 on success, positive error code on failure
+//
+// Error codes: 1=too_short, 2=bad_version, 3=payload_overflow
+//
+// All functions have machine-checked Lean 4 proofs:
+//   parse_byte   — ∀ a b, parse_byte(a,b) = a+b
+//   check_length — rejects iff len < 10
+//   decode_header — rejects short/bad-version/overflow, correct on valid input
+//
+// Expected: evidence: proved for parse_byte, check_length, decode_header
+
+fn parse_byte(data: Int, offset: Int) -> Int {
+    return data + offset;
+}
+
+fn check_length(len: Int) -> Int {
+    if len < 10 { return 1; }
+    return 0;
+}
+
+fn decode_header(data: Int, len: Int) -> Int {
+    if check_length(len) != 0 { return 1; }
+    let version: Int = parse_byte(data, 0);
+    if version < 1 { return 2; }
+    if version > 2 { return 2; }
+    let payload_len: Int = parse_byte(data, 1);
+    if payload_len > len - 10 { return 3; }
+    return 0;
+}
+
+pub fn main() -> Int {
+    return decode_header(1, 20);
+}

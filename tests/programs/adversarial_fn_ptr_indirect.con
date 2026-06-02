@@ -1,0 +1,20 @@
+// Adversarial: indirect call through function pointer
+//
+// A function stored as a pointer and called indirectly cannot be
+// statically resolved for capability checking or proof attachment.
+// The predictable profile should not claim "proved" for functions
+// that use indirect calls, since the call target is unknown.
+//
+// Expected: compiles, evidence at most "enforced" (not proved)
+
+fn add_one(x: Int) -> Int {
+    return x + 1;
+}
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+    return f(x);
+}
+
+pub fn main() -> Int {
+    return apply(add_one, 5);
+}

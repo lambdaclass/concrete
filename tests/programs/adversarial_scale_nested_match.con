@@ -1,0 +1,39 @@
+// Hostile workload: 3 levels of nested match.
+// Stresses branch lowering with combinatorial match arm paths.
+// Expected: 42
+
+enum Copy Outer { A {}, B {}, C {} }
+enum Copy Inner { X {}, Y {}, Z {} }
+
+fn classify(o: Outer, i: Inner) -> Int {
+    match o {
+        Outer::A {} => {
+            match i {
+                Inner::X {} => { return 1; },
+                Inner::Y {} => { return 2; },
+                Inner::Z {} => { return 3; },
+            }
+        },
+        Outer::B {} => {
+            match i {
+                Inner::X {} => { return 10; },
+                Inner::Y {} => { return 20; },
+                Inner::Z {} => { return 30; },
+            }
+        },
+        Outer::C {} => {
+            match i {
+                Inner::X {} => { return 100; },
+                Inner::Y {} => { return 200; },
+                Inner::Z {} => { return 300; },
+            }
+        },
+    }
+}
+
+pub fn main() -> Int {
+    return classify(Outer::B {}, Inner::Y {}) + classify(Outer::B {}, Inner::X {}) +
+           classify(Outer::A {}, Inner::Z {}) + classify(Outer::A {}, Inner::Y {}) +
+           classify(Outer::A {}, Inner::X {}) + classify(Outer::A {}, Inner::Z {}) +
+           classify(Outer::A {}, Inner::Z {});
+}

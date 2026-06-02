@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "proofs": [
+    {
+      "function": "left.add",
+      "body_fingerprint": "[(ret (binop Concrete.BinOp.add (var a) (var b)))]",
+      "proof": "Concrete.Proof.left_add_correct",
+      "spec": "left_add_spec"
+    },
+    {
+      "function": "right.add",
+      "body_fingerprint": "[(ret (binop Concrete.BinOp.add (var a) (var b)))]",
+      "proof": "Concrete.Proof.right_add_correct",
+      "spec": "right_add_spec"
+    }
+  ]
+}

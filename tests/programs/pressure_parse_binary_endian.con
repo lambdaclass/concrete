@@ -1,0 +1,406 @@
+// pressure_parse_binary_endian — Binary protocol parser with explicit endian handling
+//
+// Parses a binary protocol frame from a byte buffer:
+//   Header (16 bytes):
+//     Bytes 0-3:   Magic number (big-endian u32, must be 0xDEADBEEF)
+//     Bytes 4:     Version (u8, must be 1 or 2)
+//     Byte  5:     Flags (u8, bitfield: bit0=compressed, bit1=encrypted, bit2=checksummed)
+//     Bytes 6-7:   Sequence number (big-endian u16)
+//     Bytes 8-11:  Payload length (little-endian u32 — tests mixed endianness)
+//     Bytes 12-15: Checksum (big-endian u32, XOR fold of bytes 0-11)
+//
+// Tests both big-endian and little-endian multi-byte reads at u16 and u32 widths.
+// Validates magic number, version, payload bounds, and checksum.
+//
+// Reveals: endian API gaps, multi-width integer handling, bounds-checked cursor patterns.
+//
+// Policy: predictable = true
+
+mod pressure_parse_binary_endian {
+
+    // ---- Types ----
+
+    struct Copy FrameFlags {
+        compressed: i32,
+        encrypted: i32,
+        checksummed: i32,
+    }
+
+    struct Copy FrameHeader {
+        magic: i32,
+        version: i32,
+        flags: FrameFlags,
+        seq_num: i32,
+        payload_len: i32,
+        checksum: i32,
+    }
+
+    struct Copy FrameParseResult {
+        header: FrameHeader,
+        payload_offset: i32,
+        error: i32,
+        // error codes: 0=ok, 1=too_short, 2=bad_magic, 3=bad_version,
+        //              4=payload_overflow, 5=truncated, 6=bad_checksum
+    }
+
+    // ---- Endian reading functions ----
+
+    // Big-endian u16 from byte buffer
+    fn read_u16_be(buf: [u8; 256], offset: i32) -> i32 {
+        let hi: i32 = buf[offset] as i32;
+        let lo: i32 = buf[offset + 1] as i32;
+        return (hi << 8) | lo;
+    }
+
+    // Little-endian u16 from byte buffer
+    fn read_u16_le(buf: [u8; 256], offset: i32) -> i32 {
+        let lo: i32 = buf[offset] as i32;
+        let hi: i32 = buf[offset + 1] as i32;
+        return (hi << 8) | lo;
+    }
+
+    // Big-endian u32 from byte buffer (stored in i32, watch sign bit)
+    // Returns value as i32 — for values up to 2^31-1 this is fine.
+    // For 0xDEADBEEF (> 2^31), we use the raw bit pattern in i32.
+    fn read_u32_be(buf: [u8; 256], offset: i32) -> i32 {
+        let b0: i32 = buf[offset] as i32;
+        let b1: i32 = buf[offset + 1] as i32;
+        let b2: i32 = buf[offset + 2] as i32;
+        let b3: i32 = buf[offset + 3] as i32;
+        return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+    }
+
+    // Little-endian u32 from byte buffer
+    fn read_u32_le(buf: [u8; 256], offset: i32) -> i32 {
+        let b0: i32 = buf[offset] as i32;
+        let b1: i32 = buf[offset + 1] as i32;
+        let b2: i32 = buf[offset + 2] as i32;
+        let b3: i32 = buf[offset + 3] as i32;
+        return (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
+    }
+
+    // ---- Write functions (for building test data) ----
+
+    trusted fn write_u16_be(buf: [u8; 256], offset: i32, val: i32) -> [u8; 256] {
+        let mut out: [u8; 256] = buf;
+        out[offset] = ((val >> 8) & 0xFF) as u8;
+        out[offset + 1] = (val & 0xFF) as u8;
+        return out;
+    }
+
+    trusted fn write_u16_le(buf: [u8; 256], offset: i32, val: i32) -> [u8; 256] {
+        let mut out: [u8; 256] = buf;
+        out[offset] = (val & 0xFF) as u8;
+        out[offset + 1] = ((val >> 8) & 0xFF) as u8;
+        return out;
+    }
+
+    trusted fn write_u32_be(buf: [u8; 256], offset: i32, val: i32) -> [u8; 256] {
+        let mut out: [u8; 256] = buf;
+        out[offset] = ((val >> 24) & 0xFF) as u8;
+        out[offset + 1] = ((val >> 16) & 0xFF) as u8;
+        out[offset + 2] = ((val >> 8) & 0xFF) as u8;
+        out[offset + 3] = (val & 0xFF) as u8;
+        return out;
+    }
+
+    trusted fn write_u32_le(buf: [u8; 256], offset: i32, val: i32) -> [u8; 256] {
+        let mut out: [u8; 256] = buf;
+        out[offset] = (val & 0xFF) as u8;
+        out[offset + 1] = ((val >> 8) & 0xFF) as u8;
+        out[offset + 2] = ((val >> 16) & 0xFF) as u8;
+        out[offset + 3] = ((val >> 24) & 0xFF) as u8;
+        return out;
+    }
+
+    // ---- Flag extraction ----
+
+    fn parse_flags(raw: u8) -> FrameFlags {
+        let r: i32 = raw as i32;
+        return FrameFlags {
+            compressed: r & 1,
+            encrypted: (r >> 1) & 1,
+            checksummed: (r >> 2) & 1,
+        };
+    }
+
+    fn assemble_flags(f: FrameFlags) -> u8 {
+        let val: i32 = f.compressed | (f.encrypted << 1) | (f.checksummed << 2);
+        return val as u8;
+    }
+
+    // ---- Checksum: XOR fold of bytes 0 through 11 ----
+
+    fn compute_checksum(buf: [u8; 256]) -> i32 {
+        // XOR all 12 header bytes (0-11), then read as u32 BE from a 4-byte accumulator.
+        // Simpler approach: XOR fold as 3 u32-BE values (bytes 0-3, 4-7, 8-11)
+        let w0: i32 = read_u32_be(buf, 0);
+        let w1: i32 = read_u32_be(buf, 4);
+        let w2: i32 = read_u32_be(buf, 8);
+        return w0 ^ w1 ^ w2;
+    }
+
+    // ---- Empty header for error returns ----
+
+    fn empty_header() -> FrameHeader {
+        return FrameHeader {
+            magic: 0,
+            version: 0,
+            flags: FrameFlags { compressed: 0, encrypted: 0, checksummed: 0 },
+            seq_num: 0,
+            payload_len: 0,
+            checksum: 0,
+        };
+    }
+
+    fn err_result(code: i32) -> FrameParseResult {
+        return FrameParseResult { header: empty_header(), payload_offset: 0, error: code };
+    }
+
+    // ---- Magic number constant ----
+    // 0xDEADBEEF in two's complement i32 = -559038737
+    // We compute it from bytes instead of relying on literal.
+
+    fn magic_from_bytes() -> i32 {
+        let mut tmp: [u8; 256] = [0; 256];
+        tmp[0] = 0xDE;
+        tmp[1] = 0xAD;
+        tmp[2] = 0xBE;
+        tmp[3] = 0xEF;
+        return read_u32_be(tmp, 0);
+    }
+
+    // ---- Full frame parser ----
+
+    fn parse_frame(buf: [u8; 256], len: i32) -> FrameParseResult {
+        // Need at least 16 bytes for header
+        if len < 16 {
+            return err_result(1);
+        }
+
+        // Check magic number
+        let magic: i32 = read_u32_be(buf, 0);
+        let expected_magic: i32 = magic_from_bytes();
+        if magic != expected_magic {
+            return err_result(2);
+        }
+
+        // Check version
+        let version: i32 = buf[4] as i32;
+        if version < 1 {
+            return err_result(3);
+        }
+        if version > 2 {
+            return err_result(3);
+        }
+
+        // Parse flags
+        let flags: FrameFlags = parse_flags(buf[5]);
+
+        // Parse sequence number (big-endian u16)
+        let seq_num: i32 = read_u16_be(buf, 6);
+
+        // Parse payload length (LITTLE-endian u32 — mixed endianness!)
+        let payload_len: i32 = read_u32_le(buf, 8);
+
+        // Validate payload length (max 224 bytes since buffer is 256 and header is 16)
+        if payload_len < 0 {
+            return err_result(4);
+        }
+        if payload_len > 224 {
+            return err_result(4);
+        }
+
+        // Check total buffer has enough data
+        if len < 16 + payload_len {
+            return err_result(5);
+        }
+
+        // Verify checksum
+        let computed_cs: i32 = compute_checksum(buf);
+        let stored_cs: i32 = read_u32_be(buf, 12);
+        if computed_cs != stored_cs {
+            return err_result(6);
+        }
+
+        return FrameParseResult {
+            header: FrameHeader {
+                magic: magic,
+                version: version,
+                flags: flags,
+                seq_num: seq_num,
+                payload_len: payload_len,
+                checksum: stored_cs,
+            },
+            payload_offset: 16,
+            error: 0,
+        };
+    }
+
+    // ---- Build valid test frames ----
+
+    trusted fn build_valid_frame_v1(seq: i32, plen: i32, compressed: i32) -> [u8; 256] {
+        let mut buf: [u8; 256] = [0; 256];
+
+        // Magic: 0xDEADBEEF
+        buf[0] = 0xDE; buf[1] = 0xAD; buf[2] = 0xBE; buf[3] = 0xEF;
+        // Version: 1
+        buf[4] = 1;
+        // Flags: compressed bit
+        buf[5] = compressed as u8;
+        // Sequence (BE u16)
+        buf = write_u16_be(buf, 6, seq);
+        // Payload length (LE u32)
+        buf = write_u32_le(buf, 8, plen);
+
+        // Compute checksum: XOR fold of u32-BE at offsets 0, 4, 8
+        let w0: i32 = read_u32_be(buf, 0);
+        let w1: i32 = read_u32_be(buf, 4);
+        let w2: i32 = read_u32_be(buf, 8);
+        let cs: i32 = w0 ^ w1 ^ w2;
+        buf = write_u32_be(buf, 12, cs);
+
+        // Fill payload with pattern
+        for (let mut i: i32 = 0; i < plen; i = i + 1) {
+            buf[16 + i] = ((i * 7 + 3) & 0xFF) as u8;
+        }
+
+        return buf;
+    }
+
+    trusted fn build_valid_frame_v2(seq: i32, plen: i32) -> [u8; 256] {
+        let mut buf: [u8; 256] = [0; 256];
+
+        buf[0] = 0xDE; buf[1] = 0xAD; buf[2] = 0xBE; buf[3] = 0xEF;
+        buf[4] = 2;     // version 2
+        buf[5] = 0x07;  // all flags set (compressed + encrypted + checksummed)
+        buf = write_u16_be(buf, 6, seq);
+        buf = write_u32_le(buf, 8, plen);
+
+        let w0: i32 = read_u32_be(buf, 0);
+        let w1: i32 = read_u32_be(buf, 4);
+        let w2: i32 = read_u32_be(buf, 8);
+        let cs: i32 = w0 ^ w1 ^ w2;
+        buf = write_u32_be(buf, 12, cs);
+
+        return buf;
+    }
+
+    // ---- Tests ----
+
+    pub fn main() -> Int {
+        // Test 1: Endian read round-trip for u16
+        let mut tbuf: [u8; 256] = [0; 256];
+        tbuf = write_u16_be(tbuf, 0, 0x1234);
+        tbuf = write_u16_le(tbuf, 2, 0x1234);
+        let be16: i32 = read_u16_be(tbuf, 0);
+        let le16: i32 = read_u16_le(tbuf, 2);
+        if be16 != 0x1234 { return 10; }
+        if le16 != 0x1234 { return 11; }
+        // Verify bytes are different (endian matters)
+        if tbuf[0] == tbuf[2] {
+            if tbuf[1] == tbuf[3] {
+                // Both bytes same means the value is a palindrome — skip this check
+                // 0x1234 is not palindrome, so this should not happen
+                return 12;
+            }
+        }
+
+        // Test 2: Endian read round-trip for u32
+        tbuf = write_u32_be(tbuf, 0, 0x12345678);
+        tbuf = write_u32_le(tbuf, 4, 0x12345678);
+        let be32: i32 = read_u32_be(tbuf, 0);
+        let le32: i32 = read_u32_le(tbuf, 4);
+        if be32 != 0x12345678 { return 20; }
+        if le32 != 0x12345678 { return 21; }
+        // BE: [12, 34, 56, 78], LE: [78, 56, 34, 12] — first bytes differ
+        if tbuf[0] == tbuf[4] { return 22; }
+
+        // Test 3: Valid frame v1, no payload
+        let f1: [u8; 256] = build_valid_frame_v1(42, 0, 0);
+        let r1: FrameParseResult = parse_frame(f1, 16);
+        if r1.error != 0 { return 30; }
+        if r1.header.version != 1 { return 31; }
+        if r1.header.seq_num != 42 { return 32; }
+        if r1.header.payload_len != 0 { return 33; }
+        if r1.header.flags.compressed != 0 { return 34; }
+        if r1.payload_offset != 16 { return 35; }
+
+        // Test 4: Valid frame v1, with payload, compressed
+        let f2: [u8; 256] = build_valid_frame_v1(100, 32, 1);
+        let r2: FrameParseResult = parse_frame(f2, 48);
+        if r2.error != 0 { return 40; }
+        if r2.header.seq_num != 100 { return 41; }
+        if r2.header.payload_len != 32 { return 42; }
+        if r2.header.flags.compressed != 1 { return 43; }
+
+        // Test 5: Valid frame v2, all flags
+        let f3: [u8; 256] = build_valid_frame_v2(65535, 10);
+        let r3: FrameParseResult = parse_frame(f3, 26);
+        if r3.error != 0 { return 50; }
+        if r3.header.version != 2 { return 51; }
+        if r3.header.seq_num != 65535 { return 52; }
+        if r3.header.flags.compressed != 1 { return 53; }
+        if r3.header.flags.encrypted != 1 { return 54; }
+        if r3.header.flags.checksummed != 1 { return 55; }
+
+        // Test 6: Too short -> error 1
+        let short: [u8; 256] = [0; 256];
+        let r6: FrameParseResult = parse_frame(short, 10);
+        if r6.error != 1 { return 60; }
+
+        // Test 7: Bad magic -> error 2
+        let mut bad_magic: [u8; 256] = [0; 256];
+        bad_magic[0] = 0xFF; bad_magic[1] = 0xFF; bad_magic[2] = 0xFF; bad_magic[3] = 0xFF;
+        let r7: FrameParseResult = parse_frame(bad_magic, 16);
+        if r7.error != 2 { return 70; }
+
+        // Test 8: Bad version (0) -> error 3
+        let mut bad_ver: [u8; 256] = [0; 256];
+        bad_ver[0] = 0xDE; bad_ver[1] = 0xAD; bad_ver[2] = 0xBE; bad_ver[3] = 0xEF;
+        bad_ver[4] = 0;  // bad version
+        let r8: FrameParseResult = parse_frame(bad_ver, 16);
+        if r8.error != 3 { return 80; }
+
+        // Test 9: Bad version (3) -> error 3
+        let mut bad_ver2: [u8; 256] = [0; 256];
+        bad_ver2[0] = 0xDE; bad_ver2[1] = 0xAD; bad_ver2[2] = 0xBE; bad_ver2[3] = 0xEF;
+        bad_ver2[4] = 3;  // bad version
+        let r9: FrameParseResult = parse_frame(bad_ver2, 16);
+        if r9.error != 3 { return 90; }
+
+        // Test 10: Flag assembly round-trip
+        let fl: FrameFlags = FrameFlags { compressed: 1, encrypted: 0, checksummed: 1 };
+        let assembled: u8 = assemble_flags(fl);
+        let parsed_back: FrameFlags = parse_flags(assembled);
+        if parsed_back.compressed != 1 { return 101; }
+        if parsed_back.encrypted != 0 { return 102; }
+        if parsed_back.checksummed != 1 { return 103; }
+
+        // Test 11: Mixed endian - verify LE payload length is actually different bytes
+        // Write 256 (0x100) as LE u32: bytes = [00, 01, 00, 00]
+        // Write 256 (0x100) as BE u32: bytes = [00, 00, 01, 00]
+        let mut mix: [u8; 256] = [0; 256];
+        mix = write_u32_le(mix, 0, 256);
+        mix = write_u32_be(mix, 4, 256);
+        // LE[0] should be 0x00, LE[1] should be 0x01
+        if (mix[0] as i32) != 0 { return 111; }
+        if (mix[1] as i32) != 1 { return 112; }
+        // BE[4] should be 0x00, BE[5] should be 0x00, BE[6] should be 0x01
+        if (mix[4] as i32) != 0 { return 113; }
+        if (mix[5] as i32) != 0 { return 114; }
+        if (mix[6] as i32) != 1 { return 115; }
+        // Both read back as 256
+        if read_u32_le(mix, 0) != 256 { return 116; }
+        if read_u32_be(mix, 4) != 256 { return 117; }
+
+        // Test 12: Large sequence number (u16 max = 65535)
+        let f12: [u8; 256] = build_valid_frame_v1(65535, 0, 0);
+        let r12: FrameParseResult = parse_frame(f12, 16);
+        if r12.error != 0 { return 120; }
+        if r12.header.seq_num != 65535 { return 121; }
+
+        // All tests passed
+        return 0;
+    }
+}

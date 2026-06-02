@@ -1,0 +1,12 @@
+// Adversarial: pure function (no capabilities) tries to call println.
+// println requires Console capability, so a pure function must not be able to use it.
+// Expected: compile error (pure function lacks Console cap for println).
+
+fn pure_greeting() -> Int {
+    println(42);
+    return 0;
+}
+
+fn main() with(Std) -> Int {
+    return pure_greeting();
+}

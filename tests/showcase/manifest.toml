@@ -1,0 +1,531 @@
+# Curated Phase 7 showcase manifest.
+#
+# Each entry is a graduated flagship example: an example that has met
+# every bar in its own AUDIT.md, carries a Lean-backed property, an
+# assumption file, an enforced policy, a "Concrete catches this"
+# negative pair, snapshot baselines, an oracle, an honest README, and
+# a release evidence bundle is capturable on demand.
+#
+# Adding an example requires AUDIT.md to show 10 of 10 bars met.
+# Removing an example is allowed only with a roadmap note explaining
+# why (e.g., language churn forced retirement; in that case the
+# example moves to an "archived" section).
+#
+# CI gate: scripts/tests/check_showcase.sh (make test-showcase)
+# walks every entry, runs its drift-enforced CI gates
+# (policy/assumptions/catches/snapshots), and asserts the release
+# bundle still captures cleanly. Drift is a real signal.
+
+schema_version = 1
+
+[[flagship]]
+example     = "parse_validate"
+path        = "examples/parse_validate"
+graduated   = "2026-05-22"
+audit       = "examples/parse_validate/AUDIT.md"
+readme      = "examples/parse_validate/README.md"
+thesis_role = "Capability-pure, predictable validation core with one Lean composition theorem and a drift-enforced negative pair."
+
+# Bars met (must be 10/10 to be listed here).
+[flagship.bars]
+proved_property        = true   # bar #1
+composition_property   = true   # bar #2
+assumption_file        = true   # bar #3
+policy_file            = true   # bar #4
+oracle_beyond_handwritten = true   # bar #5
+negative_pair          = true   # bar #6
+release_bundle         = true   # bar #7
+honest_readme          = true   # bar #8
+snapshot_baseline      = true   # bar #9
+on_showcase_manifest   = true   # bar #10 — this entry
+
+# Evidence pointers — what a reviewer reads to audit the claims.
+[flagship.evidence]
+proof_registry = "examples/parse_validate/src/proof-registry.json"
+proofs         = ["Concrete.Proof.validate_version_correct",
+                  "Concrete.Proof.validate_header_fields_success",
+                  "Concrete.Proof.parse_header_too_short"]
+# Proof coverage classification per registered theorem.  See
+# `Concrete.ProofRegistryEntry.allCoverageKinds`.  "No hidden green":
+# any reviewer reading `proved` for this flagship should be able to
+# tell which theorems are point proofs vs. one-direction vs. iff.
+proof_coverage = { "Concrete.Proof.validate_version_correct" = "iff",
+                   "Concrete.Proof.validate_header_fields_success" = "one_direction",
+                   "Concrete.Proof.parse_header_too_short" = "one_direction" }
+# ProvableV1 conformance — see docs/PROVABLE_V1.md.  "full" = every
+# proof-eligible function in this flagship fits the ProvableV1
+# eligibility gates and supported-construct surface.  Entry points
+# and trusted impls are excluded by the profile itself, not counted
+# against conformance.  "partial" would name the proof-eligible
+# functions that fall outside.
+provable_v1_conformance = "full"
+assumptions    = "examples/parse_validate/assumptions.toml"
+policy         = "examples/parse_validate/Concrete.toml"
+catches        = "examples/parse_validate/catches/"
+catches_doc    = "examples/parse_validate/CATCHES.md"
+snapshots      = "examples/parse_validate/snapshot/"
+oracle         = "examples/parse_validate/oracle/"
+
+# CI gates that enforce this entry's contract. Drift fails the gate.
+[flagship.gates]
+policy       = "make test-policy"
+assumptions  = "make test-assumptions"
+catches      = "make test-catches"
+snapshots    = "make test-snapshots"
+oracle       = "make test-pv-oracle"
+verify_gates = "make test-verify-gates"
+release_bundle = "make test-release-bundle"
+
+# Known limits — honest framing.
+[flagship.limits]
+proofs = """
+Two attached theorems: validate_version (full correctness) and
+validate_header_fields_success (positive direction of the
+composition). The Result-returning parse_header on the array input
+is blocked on Phase 4 ProofCore extensions (array indexing, enum
+construction, struct construction). The composition iff
+(failure direction with return code matching the first failing
+check) is left as future work — the 256-branch case split exhausts
+heartbeats today.
+"""
+oracle = """
+Reference implementation is in Python, not Lean. Two independent
+implementations of the same spec, agreeing across 600 cases (three
+seeds). Stronger oracle (Lean equivalence proof) waits on the
+ProofCore extensions above.
+"""
+audience = """
+This is the first graduated flagship. The audience that benefits
+from parse_validate's evidence today is narrow: reviewers auditing
+a pure-int validator under wrapping i32 arithmetic on a hosted-libc
+target. Broader systems audiences need the flagship corpus to
+grow.
+"""
+
+[[flagship]]
+example     = "crypto_verify"
+path        = "examples/crypto_verify"
+graduated   = "2026-05-23"
+audit       = "examples/crypto_verify/AUDIT.md"
+readme      = "examples/crypto_verify/README.md"
+thesis_role = """
+Toy authenticated-tag model demonstrating PROOF SCAFFOLDING for
+authentication, not real cryptographic security. The tag function
+key*message+nonce is invertible and offers no secrecy. The
+graduation is of the proof-composition pattern, the
+allocation/capability discipline, and the honest-assumption story
+— NOT of the underlying algorithm. A future flagship using a real
+HMAC / Ed25519 / constant-time primitive would be a sibling entry,
+not a replacement; this entry exists so the proof scaffolding has
+a registered home today.
+"""
+
+[flagship.bars]
+proved_property        = true   # bar #1 — 4 functions proved
+composition_property   = true   # bar #2 — verify_message_composed_correct
+assumption_file        = true   # bar #3
+policy_file            = true   # bar #4 — 8 enforced fields
+oracle_beyond_handwritten = true   # bar #5 — 600 differential cases
+negative_pair          = true   # bar #6 — alloc-in-pure-core
+release_bundle         = true   # bar #7
+honest_readme          = true   # bar #8
+snapshot_baseline      = true   # bar #9 — 16 reports
+on_showcase_manifest   = true   # bar #10 — this entry
+
+[flagship.evidence]
+proof_registry = "examples/crypto_verify/src/proof-registry.json"
+proofs         = ["Concrete.Proof.compute_tag_correct",
+                  "Concrete.Proof.verify_tag_correct",
+                  "Concrete.Proof.check_nonce_correct",
+                  "Concrete.Proof.verify_message_composed_correct"]
+proof_coverage = { "Concrete.Proof.compute_tag_correct" = "iff",
+                   "Concrete.Proof.verify_tag_correct" = "one_direction",
+                   "Concrete.Proof.check_nonce_correct" = "iff",
+                   "Concrete.Proof.verify_message_composed_correct" = "one_direction" }
+provable_v1_conformance = "full"
+assumptions    = "examples/crypto_verify/assumptions.toml"
+policy         = "examples/crypto_verify/Concrete.toml"
+catches        = "examples/crypto_verify/catches/"
+catches_doc    = "examples/crypto_verify/CATCHES.md"
+snapshots      = "examples/crypto_verify/snapshot/"
+oracle         = "examples/crypto_verify/oracle/"
+
+[flagship.gates]
+policy         = "make test-policy"
+assumptions    = "make test-assumptions"
+catches        = "make test-catches"
+snapshots      = "make test-snapshots"
+oracle         = "make test-cv-oracle"
+verify_gates   = "make test-verify-gates"
+release_bundle = "make test-release-bundle"
+
+[flagship.limits]
+algorithm = """
+NOT real cryptography. compute_tag(k, m, n) = k * m + n is
+invertible; the "key" offers no secrecy. The source docstring,
+README, AUDIT, and CATCHES all state this directly. This is a
+demonstrator of proof STRUCTURE, not of cryptographic security.
+
+A real flagship using HMAC-SHA256, Ed25519 verification, or
+constant-time tag comparison would be a separate entry. Such a
+flagship is gated on Phase 4 ProofCore extensions (array indexing,
+bounded while loops, struct construction) — without those, the
+algorithm's inner loop cannot extract into ProofCore, and the
+proof story would be no better than the toy.
+"""
+proofs = """
+Four attached theorems all surface as `proved`. The composition
+theorem proves the success direction (both validators succeed →
+returns 1); the failure direction is per-failure follow-up
+theorems, same shape as parse_validate's composition.
+"""
+oracle = """
+Python reference implementation, not Lean. 600 differential cases
+across three seeds agree with the Concrete binary. A Lean
+equivalence proof would be stronger but waits on the same Phase 4
+extensions named above.
+"""
+audience = """
+Reviewers wanting to see the proof scaffolding pattern that a real
+cryptographic primitive flagship would use. The audience for
+crypto_verify's evidence today is engineers evaluating Concrete's
+PROOF WORKFLOW, not engineers needing a verified MAC for
+production. The Phase 7 catalog graduates the scaffolding; the
+algorithm catalog waits for Phase 4.
+"""
+
+[[flagship]]
+example     = "fixed_capacity"
+path        = "examples/fixed_capacity"
+graduated   = "2026-05-28"
+audit       = "examples/fixed_capacity/AUDIT.md"
+readme      = "examples/fixed_capacity/README.md"
+thesis_role = """
+Bounded / no-allocation systems flagship: ring buffer, message
+validator, XOR-fold tag. Carries the substantive proof-side
+claim of the Phase 7 corpus — an iteration-counted composition
+theorem over bounded mutable state ('push then contains finds
+the value'), kernel-checked through the state-model surface
+(arraySet + while_step + LoopStep enum).
+"""
+
+[flagship.bars]
+proved_property        = true   # bar #1 — 4 attached theorems
+composition_property   = true   # bar #2 — ring_push_then_contains_correct
+assumption_file        = true   # bar #3
+policy_file            = true   # bar #4
+oracle_beyond_handwritten = true   # bar #5 — 600 differential cases
+negative_pair          = true   # bar #6 — alloc-in-bounded-core
+release_bundle         = true   # bar #7
+honest_readme          = true   # bar #8
+snapshot_baseline      = true   # bar #9 — 16 reports
+on_showcase_manifest   = true   # bar #10 — this entry
+
+[flagship.evidence]
+proof_registry = "examples/fixed_capacity/src/proof-registry.json"
+proofs         = ["Concrete.Proof.ring_new_correct",
+                  "Concrete.Proof.compute_tag_zero_correct",
+                  "Concrete.Proof.ring_push_zero_correct",
+                  "Concrete.Proof.ring_push_then_contains_correct"]
+# All four are point proofs (concrete-input cases) — universal /
+# multi-iteration generalizations are open follow-ups named in
+# [flagship.limits].proofs.
+proof_coverage = { "Concrete.Proof.ring_new_correct" = "point",
+                   "Concrete.Proof.compute_tag_zero_correct" = "point",
+                   "Concrete.Proof.ring_push_zero_correct" = "point",
+                   "Concrete.Proof.ring_push_then_contains_correct" = "point" }
+provable_v1_conformance = "full"
+assumptions    = "examples/fixed_capacity/assumptions.toml"
+policy         = "examples/fixed_capacity/Concrete.toml"
+catches        = "examples/fixed_capacity/catches/"
+catches_doc    = "examples/fixed_capacity/CATCHES.md"
+snapshots      = "examples/fixed_capacity/snapshot/"
+oracle         = "examples/fixed_capacity/oracle/"
+
+[flagship.gates]
+policy         = "make test-policy"
+assumptions    = "make test-assumptions"
+catches        = "make test-catches"
+snapshots      = "make test-snapshots"
+oracle         = "make test-fc-oracle"
+verify_gates   = "make test-verify-gates"
+release_bundle = "make test-release-bundle"
+
+[flagship.limits]
+proofs = """
+Four attached theorems exercise the full state-model surface
+end-to-end. The composition theorem
+(ring_push_then_contains_correct) holds for the canonical
+1-element ring; multi-iteration generalizations (e.g. "after K
+pushes ring_contains finds value if it was pushed") require
+multi-iteration while_step reasoning and are Phase 4 follow-up
+work. The 5 scalar validators extract cleanly but have no
+attached theorems (their proofs would copy verbatim from
+parse_validate's shape). The full validate_message composition
+across arbitrary input is also future work.
+"""
+oracle = """
+Python reference implementation, not Lean. 600 differential
+cases across three seeds (200 per seed) agree with the Concrete
+binary on every error path (1..7) plus the OK case with replay
+detection. A Lean equivalence proof against the reference would
+be stronger but waits on the multi-iteration extensions named
+above.
+"""
+audience = """
+Third graduated flagship. Targets reviewers evaluating
+Concrete's bounded-state / no-allocation discipline on small
+systems data structures (ring buffers, message validators,
+fixed parser state machines, bounded-state controllers). The
+iteration-counted composition theorem is the strongest
+substantive proof-side claim in the Phase 7 corpus to date —
+it covers a 2-function chain over mutable state, not just a
+sequence of scalar validations.
+"""
+
+[[flagship]]
+example     = "constant_time_tag"
+path        = "examples/constant_time_tag"
+graduated   = "2026-05-30"
+audit       = "examples/constant_time_tag/AUDIT.md"
+readme      = "examples/constant_time_tag/README.md"
+thesis_role = """
+First real-crypto flagship: a fixed-size byte-array
+comparison helper with source-level constant-time
+discipline.  Smallest real-crypto artifact that forces the
+distinction Concrete should be good at — the code is
+simple, but the claim is subtle.  Universal same-tag
+theorem (ct_compare(a, a) = 1 for any 16-byte input)
+exercises u8 bitxor + u8 bitor + bounded 16-iteration
+while_ end-to-end under the Lean kernel.  Honest about
+the gaps (full iff, machine-level timing) it does not
+yet cover.
+"""
+
+[flagship.bars]
+proved_property        = true   # bar #1 — ct_compare_equal_zeros_correct
+composition_property   = true   # bar #2 — ct_compare_same_tag_correct (universal)
+assumption_file        = true   # bar #3
+policy_file            = true   # bar #4 — stricter than other flagships
+oracle_beyond_handwritten = true   # bar #5 — 600 differential cases
+negative_pair          = true   # bar #6 — alloc-in-compare-core + named timing gap
+release_bundle         = true   # bar #7
+honest_readme          = true   # bar #8
+snapshot_baseline      = true   # bar #9 — 16 reports
+on_showcase_manifest   = true   # bar #10 — this entry
+
+[flagship.evidence]
+proof_registry = "examples/constant_time_tag/src/proof-registry.json"
+proofs         = ["Concrete.Proof.ct_compare_equal_zeros_correct",
+                  "Concrete.Proof.ct_compare_same_tag_correct",
+                  "Concrete.Proof.bitxor_u8_self_zero"]
+# Note ct_compare's REGISTERED proof is ct_compare_same_tag_correct
+# (one_direction: universal over byte values, positive direction
+# only).  The zeros theorem is a sanity corollary kept
+# kernel-checked.  bitxor_u8_self_zero is a helper lemma supporting
+# future iff work.  The full iff direction is open — named in
+# [flagship.limits].proofs.
+proof_coverage = { "Concrete.Proof.ct_compare_equal_zeros_correct" = "point",
+                   "Concrete.Proof.ct_compare_same_tag_correct" = "one_direction",
+                   "Concrete.Proof.bitxor_u8_self_zero" = "invariant" }
+provable_v1_conformance = "full"
+assumptions    = "examples/constant_time_tag/assumptions.toml"
+policy         = "examples/constant_time_tag/Concrete.toml"
+catches        = "examples/constant_time_tag/catches/"
+catches_doc    = "examples/constant_time_tag/CATCHES.md"
+snapshots      = "examples/constant_time_tag/snapshot/"
+oracle         = "examples/constant_time_tag/oracle/"
+
+[flagship.gates]
+policy         = "make test-policy"
+assumptions    = "make test-assumptions"
+catches        = "make test-catches"
+snapshots      = "make test-snapshots"
+oracle         = "make test-ct-oracle"
+verify_gates   = "make test-verify-gates"
+release_bundle = "make test-release-bundle"
+
+[flagship.limits]
+proofs = """
+Two attached theorems on ct_compare plus one helper lemma.
+The universal same-tag theorem (ct_compare a a = 1 for any
+16-byte input) closes both bar #1 and bar #2.  The full iff
+direction (ct_compare a b = 1 ⟹ a = b) is open as a
+stretch theorem — needs an inductive argument over byte
+positions for the negative direction.  Helpers
+(bitxor_u8_self_zero, bitor_u8_zero_zero,
+ct_loop_iteration_invariant) are landed for the work.  The
+oracle (see below) closes the negative direction
+empirically until the theorem catches up.
+"""
+oracle = """
+Python reference + differential harness.  600 cases across
+three seeds (200 per seed); ~48 return 1 (equal), ~152
+return 0 (differ).  Covers per-position single-byte diffs
+(positions 0, 15, random middle), multiple-byte diffs,
+all-byte-diffs, high-bit-only diffs.  Exercises the
+negative direction the theorem does NOT yet cover.
+"""
+constant_time = """
+THIS IS THE LOAD-BEARING LIMIT.  Source-level structural
+constant-time discipline (no early exit, fixed loop bound,
+no content-dependent branch inside the loop) is enforced by
+manual review and by the source body fingerprint check; it
+is NOT proved as a Concrete static guarantee today (no
+constant_time profile exists; would require Phase 3 work).
+Machine-level constant time is NEITHER proved NOR enforced
+— LLVM may rewrite the branch-free idiom, target CPUs leak
+through cache/branch predictor.  assumptions.toml's
+[claims.machine_level_constant_time] entry records this as
+assumed_not_proved.  Do not deploy ct_compare as your
+auth-tag check; use a vetted crypto library.
+"""
+audience = """
+Fourth graduated flagship; FIRST real-crypto flagship per
+the explicit slot crypto_verify's toy-MAC graduation
+reserved.  Targets reviewers evaluating Concrete's proof
+workflow on crypto-adjacent code where the security claim
+is subtle but the implementation is small.  NOT intended
+for deployment — the README, CATCHES, and assumptions all
+state this directly.  The pattern (small surface, subtle
+property, honest backend assumption) is the template for
+future real-crypto candidates (HMAC-SHA256, Ed25519 verify
+subset).
+"""
+
+[[flagship]]
+example     = "hmac_sha256"
+path        = "examples/hmac_sha256"
+graduated   = "2026-06-02"
+audit       = "examples/hmac_sha256/AUDIT.md"
+readme      = "examples/hmac_sha256/README.md"
+thesis_role = """
+Fifth flagship and the deepest proof artifact: a full
+HMAC-SHA256 (FIPS 180-4 + RFC 4231) whose ENTIRE
+composition chain is kernel-verified and tied to the
+extracted source through the spec-drift gate.  Eleven
+registered proofs — the two bar-#1 point theorems plus
+nine full-contract refinements covering block_to_words,
+the message schedule, the round function, single- and
+offset-block compression, state serialization, the
+multi-block padded hash, and the outer HMAC ipad/opad
+construction.  The composition theorem
+(hmac_sha256_refines_spec) proves the extracted body
+computes exactly an independent BitVec model
+(Sha256Spec.hmac) for all inputs in the documented bounds.
+This is the first flagship where the proof is about the
+EXACT extracted source body (not a hand model): the
+registered spec equals the source-extracted PExpr, so a
+source edit turns the proof stale.  The loop-induction
+milestone (eval_while_count over 64-round / multi-block
+loops, not 64x unfolding) the earlier flagships pointed at.
+"""
+
+[flagship.bars]
+proved_property        = true   # bar #1 — sha256_init_correct + ch_selects_high (point)
+composition_property   = true   # bar #2 — hmac_sha256_refines_spec (full chain, spec-drift-tied)
+assumption_file        = true   # bar #3
+policy_file            = true   # bar #4 — no_trusted, Alloc forbidden
+oracle_beyond_handwritten = true   # bar #5 — 600 differential cases vs Python hmac
+negative_pair          = true   # bar #6 — alloc-in-core + ambient-key-read
+release_bundle         = true   # bar #7
+honest_readme          = true   # bar #8
+snapshot_baseline      = true   # bar #9 — 16 reports
+on_showcase_manifest   = true   # bar #10 — this entry
+
+[flagship.evidence]
+proof_registry = "examples/hmac_sha256/src/proof-registry.json"
+proofs         = ["Concrete.Proof.sha256_init_correct",
+                  "Concrete.Proof.ch_selects_high",
+                  "Concrete.Proof.block_to_words_refines_spec",
+                  "Concrete.Proof.block_to_words_at_refines_spec",
+                  "Concrete.Proof.sha256_schedule_refines_spec",
+                  "Concrete.Proof.round_refines_list",
+                  "Concrete.Proof.sha256_compress_refines_spec",
+                  "Concrete.Proof.sha256_compress_at_refines_spec",
+                  "Concrete.Proof.state_to_bytes_refines_spec",
+                  "Concrete.Proof.sha256_hash_refines_spec",
+                  "Concrete.Proof.hmac_sha256_refines_spec"]
+# The two bar-#1 theorems are point proofs (sha256_init, ch).  The
+# other nine are full-contract refinements: each proves the extracted
+# source body equals an independent BitVec spec for all inputs in the
+# documented bounds.  All eleven are registered AND spec-drift-tied
+# (Concrete.Proof.specs): the registered spec equals the
+# source-extracted PExpr, enforced by validateRegistry.
+# `--report check-proofs` = 11 verified, 0 failed; 0 spec-drift, 0 stale.
+proof_coverage = { "Concrete.Proof.sha256_init_correct" = "point",
+                   "Concrete.Proof.ch_selects_high" = "point",
+                   "Concrete.Proof.block_to_words_refines_spec" = "full_contract",
+                   "Concrete.Proof.block_to_words_at_refines_spec" = "full_contract",
+                   "Concrete.Proof.sha256_schedule_refines_spec" = "full_contract",
+                   "Concrete.Proof.round_refines_list" = "full_contract",
+                   "Concrete.Proof.sha256_compress_refines_spec" = "full_contract",
+                   "Concrete.Proof.sha256_compress_at_refines_spec" = "full_contract",
+                   "Concrete.Proof.state_to_bytes_refines_spec" = "full_contract",
+                   "Concrete.Proof.sha256_hash_refines_spec" = "full_contract",
+                   "Concrete.Proof.hmac_sha256_refines_spec" = "full_contract" }
+provable_v1_conformance = "full"
+assumptions    = "examples/hmac_sha256/assumptions.toml"
+policy         = "examples/hmac_sha256/Concrete.toml"
+catches        = "examples/hmac_sha256/catches/"
+catches_doc    = "examples/hmac_sha256/CATCHES.md"
+snapshots      = "examples/hmac_sha256/snapshot/"
+oracle         = "examples/hmac_sha256/oracle/"
+
+[flagship.gates]
+policy         = "make test-policy"
+assumptions    = "make test-assumptions"
+catches        = "make test-catches"
+snapshots      = "make test-snapshots"
+oracle         = "make test-hmac-oracle"
+verify_gates   = "make test-verify-gates"
+release_bundle = "make test-release-bundle"
+
+[flagship.limits]
+proofs = """
+Eleven kernel-verified registered proofs covering the full
+chain (see [flagship.evidence].proofs).  The refinement
+theorems hold for inputs within documented bounds: key
+length k_len <= 128, message length m_len <= 256, and the
+hashed buffer len <= 375 (one to six 64-byte blocks) — the
+bound under which the multi-block count nblocks <= 6 and the
+fixed-fuel evaluation closes.  These bounds cover the RFC
+4231 test-vector regimes and the oracle's case space; they
+are LIMITS, not full generality (an unbounded-length proof
+would need a fuel-parametric induction over nblocks).  The
+proofs are over the interpreter's eval semantics of the
+extracted PExpr against an independent BitVec spec
+(Sha256Spec); the BitVec spec itself is the trusted
+reference (cross-checked against the RFC vectors and the
+Python oracle), not separately proved equal to a third
+model.
+"""
+oracle = """
+Python hmac.new(...) differential harness.  200 cases/seed
+x 3 seeds = 600 total, across all length regimes (empty,
+short, block-boundary, long-key > 64 forcing the key-hash
+branch, multi-block message).  Covers the input space the
+bounded refinement theorems are stated over and the long
+tail beyond it.
+"""
+deployment = """
+THE LOAD-BEARING LIMIT.  This is a teaching/showcase
+artifact, NOT a deployment-grade crypto library.  The proofs
+establish functional correctness (output equals the FIPS/RFC
+math) of the extracted source under the interpreter
+semantics; they say NOTHING about machine-level constant
+time, side channels, or the LLVM backend's lowering.  Do not
+use this for real authentication; use a vetted library
+(libsodium, ring, the platform crypto).  assumptions.toml
+records the trusted edges.
+"""
+audience = """
+Fifth graduated flagship; the deepest proof artifact and the
+realization of the loop-induction / composition milestone the
+earlier flagships pointed at.  Targets reviewers evaluating
+whether Concrete's evidence-carrying thesis holds at the
+scale of a real, multi-function crypto primitive: not just
+"a theorem is attached" but "the whole call graph is proved
+and every link is tied to the exact source through the
+spec-drift gate."
+"""

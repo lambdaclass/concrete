@@ -14,7 +14,7 @@ mod assoc {
     }
 
     fn main() -> i32 {
-        let x: Test = Test#new();
+        let x: Test = Test::new();
 
         return x.a;
     }

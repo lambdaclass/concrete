@@ -1,0 +1,695 @@
+mod numeric {
+
+    // ============================================================
+    // Canonical validated wrappers — see docs/VALIDATED_WRAPPERS.md §4.
+    //
+    // Canonical construction is try_new / try_from_*; .0 remains the
+    // representation-level extraction path. Instance methods on newtypes
+    // are now supported, but these wrappers intentionally keep a small,
+    // explicit surface.
+    // ============================================================
+
+    pub newtype NonZeroU32 = u32;
+    pub newtype NonZeroU64 = u64;
+    pub newtype Port = u16;
+
+    impl NonZeroU32 {
+        pub fn try_new(value: u32) -> Option<NonZeroU32> {
+            if value == 0 { return Option::<NonZeroU32>::None; }
+            return Option::<NonZeroU32>::Some { value: NonZeroU32(value) };
+        }
+
+        pub fn try_from_u64(value: u64) -> Option<NonZeroU32> {
+            if value == 0 { return Option::<NonZeroU32>::None; }
+            if value > 4294967295 { return Option::<NonZeroU32>::None; }
+            return Option::<NonZeroU32>::Some { value: NonZeroU32(value as u32) };
+        }
+    }
+
+    impl NonZeroU64 {
+        pub fn try_new(value: u64) -> Option<NonZeroU64> {
+            if value == 0 { return Option::<NonZeroU64>::None; }
+            return Option::<NonZeroU64>::Some { value: NonZeroU64(value) };
+        }
+    }
+
+    impl Port {
+        pub fn try_new(value: u16) -> Option<Port> {
+            if value == 0 { return Option::<Port>::None; }
+            return Option::<Port>::Some { value: Port(value) };
+        }
+
+        pub fn try_from_u32(value: u32) -> Option<Port> {
+            if value == 0 { return Option::<Port>::None; }
+            if value > 65535 { return Option::<Port>::None; }
+            return Option::<Port>::Some { value: Port(value as u16) };
+        }
+    }
+
+    // ---- CursorError ----
+
+    pub enum Copy CursorError {
+        UnexpectedEnd,
+        InvalidData,
+    }
+
+    // ---- ByteCursor: non-owning, positioned, bounds-checked reader ----
+
+    pub struct Copy ByteCursor {
+        ptr: *const u8,
+        len: u64,
+        pos: u64,
+    }
+
+    trusted impl ByteCursor {
+        /// Create a cursor from a raw pointer and length.
+        /// Caller must ensure the pointer is valid for `len` bytes.
+        pub fn from_raw(data: *const u8, len: u64) -> ByteCursor {
+            return ByteCursor { ptr: data, len: len, pos: 0 };
+        }
+
+        /// Create a cursor from a borrowed Bytes buffer.
+        pub fn from_bytes(b: &Bytes) -> ByteCursor {
+            return ByteCursor { ptr: b.ptr as *const u8, len: b.len, pos: 0 };
+        }
+
+        // ---- Position queries ----
+
+        pub fn pos(&self) -> u64 {
+            return self.pos;
+        }
+
+        pub fn remaining(&self) -> u64 {
+            return self.len - self.pos;
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.pos >= self.len;
+        }
+
+        // ---- Single byte ----
+
+        pub fn read_u8(&mut self) -> Result<u8, CursorError> {
+            if self.pos >= self.len {
+                return Result::<u8, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let p: *const u8 = self.ptr + self.pos;
+            let val: u8 = *(p as *mut u8);
+            self.pos = self.pos + 1;
+            return Result::<u8, CursorError>::Ok { value: val };
+        }
+
+        pub fn peek_u8(&self) -> Result<u8, CursorError> {
+            if self.pos >= self.len {
+                return Result::<u8, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let p: *const u8 = self.ptr + self.pos;
+            let val: u8 = *(p as *mut u8);
+            return Result::<u8, CursorError>::Ok { value: val };
+        }
+
+        // ---- Skip ----
+
+        pub fn skip(&mut self, n: u64) -> Result<u64, CursorError> {
+            if self.pos + n > self.len {
+                return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            self.pos = self.pos + n;
+            return Result::<u64, CursorError>::Ok { value: self.pos };
+        }
+
+        // ---- Big-endian reads ----
+
+        pub fn read_u16_be(&mut self) -> Result<u16, CursorError> {
+            if self.pos + 2 > self.len {
+                return Result::<u16, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let p: *const u8 = self.ptr + self.pos;
+            let b0: u16 = (*(p as *mut u8)) as u16;
+            let p1: *const u8 = p + 1;
+            let b1: u16 = (*(p1 as *mut u8)) as u16;
+            self.pos = self.pos + 2;
+            return Result::<u16, CursorError>::Ok { value: (b0 << 8) | b1 };
+        }
+
+        pub fn read_u32_be(&mut self) -> Result<u32, CursorError> {
+            if self.pos + 4 > self.len {
+                return Result::<u32, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let p: *const u8 = self.ptr + self.pos;
+            let b0: u32 = (*(p as *mut u8)) as u32;
+            let p1: *const u8 = p + 1;
+            let b1: u32 = (*(p1 as *mut u8)) as u32;
+            let p2: *const u8 = p + 2;
+            let b2: u32 = (*(p2 as *mut u8)) as u32;
+            let p3: *const u8 = p + 3;
+            let b3: u32 = (*(p3 as *mut u8)) as u32;
+            self.pos = self.pos + 4;
+            return Result::<u32, CursorError>::Ok { value: (b0 << 24) | (b1 << 16) | (b2 << 8) | b3 };
+        }
+
+        pub fn read_u64_be(&mut self) -> Result<u64, CursorError> {
+            if self.pos + 8 > self.len {
+                return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let p: *const u8 = self.ptr + self.pos;
+            let b0: u64 = (*(p as *mut u8)) as u64;
+            let p1: *const u8 = p + 1;
+            let b1: u64 = (*(p1 as *mut u8)) as u64;
+            let p2: *const u8 = p + 2;
+            let b2: u64 = (*(p2 as *mut u8)) as u64;
+            let p3: *const u8 = p + 3;
+            let b3: u64 = (*(p3 as *mut u8)) as u64;
+            let p4: *const u8 = p + 4;
+            let b4: u64 = (*(p4 as *mut u8)) as u64;
+            let p5: *const u8 = p + 5;
+            let b5: u64 = (*(p5 as *mut u8)) as u64;
+            let p6: *const u8 = p + 6;
+            let b6: u64 = (*(p6 as *mut u8)) as u64;
+            let p7: *const u8 = p + 7;
+            let b7: u64 = (*(p7 as *mut u8)) as u64;
+            self.pos = self.pos + 8;
+            return Result::<u64, CursorError>::Ok { value: (b0 << 56) | (b1 << 48) | (b2 << 40) | (b3 << 32) | (b4 << 24) | (b5 << 16) | (b6 << 8) | b7 };
+        }
+
+        // ---- Little-endian reads ----
+
+        pub fn read_u16_le(&mut self) -> Result<u16, CursorError> {
+            if self.pos + 2 > self.len {
+                return Result::<u16, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let p: *const u8 = self.ptr + self.pos;
+            let b0: u16 = (*(p as *mut u8)) as u16;
+            let p1: *const u8 = p + 1;
+            let b1: u16 = (*(p1 as *mut u8)) as u16;
+            self.pos = self.pos + 2;
+            return Result::<u16, CursorError>::Ok { value: b0 | (b1 << 8) };
+        }
+
+        pub fn read_u32_le(&mut self) -> Result<u32, CursorError> {
+            if self.pos + 4 > self.len {
+                return Result::<u32, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let p: *const u8 = self.ptr + self.pos;
+            let b0: u32 = (*(p as *mut u8)) as u32;
+            let p1: *const u8 = p + 1;
+            let b1: u32 = (*(p1 as *mut u8)) as u32;
+            let p2: *const u8 = p + 2;
+            let b2: u32 = (*(p2 as *mut u8)) as u32;
+            let p3: *const u8 = p + 3;
+            let b3: u32 = (*(p3 as *mut u8)) as u32;
+            self.pos = self.pos + 4;
+            return Result::<u32, CursorError>::Ok { value: b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) };
+        }
+
+        pub fn read_u64_le(&mut self) -> Result<u64, CursorError> {
+            if self.pos + 8 > self.len {
+                return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let p: *const u8 = self.ptr + self.pos;
+            let b0: u64 = (*(p as *mut u8)) as u64;
+            let p1: *const u8 = p + 1;
+            let b1: u64 = (*(p1 as *mut u8)) as u64;
+            let p2: *const u8 = p + 2;
+            let b2: u64 = (*(p2 as *mut u8)) as u64;
+            let p3: *const u8 = p + 3;
+            let b3: u64 = (*(p3 as *mut u8)) as u64;
+            let p4: *const u8 = p + 4;
+            let b4: u64 = (*(p4 as *mut u8)) as u64;
+            let p5: *const u8 = p + 5;
+            let b5: u64 = (*(p5 as *mut u8)) as u64;
+            let p6: *const u8 = p + 6;
+            let b6: u64 = (*(p6 as *mut u8)) as u64;
+            let p7: *const u8 = p + 7;
+            let b7: u64 = (*(p7 as *mut u8)) as u64;
+            self.pos = self.pos + 8;
+            return Result::<u64, CursorError>::Ok { value: b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) | (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56) };
+        }
+    }
+
+    // ---- Standalone endian functions (no cursor needed) ----
+
+    trusted fn read_be16_at(data: *const u8, offset: u64) -> u64 {
+        let p: *const u8 = data + offset;
+        let b0: u64 = (*(p as *mut u8)) as u64;
+        let p1: *const u8 = p + 1;
+        let b1: u64 = (*(p1 as *mut u8)) as u64;
+        return (b0 << 8) | b1;
+    }
+
+    trusted fn read_be32_at(data: *const u8, offset: u64) -> u64 {
+        let p: *const u8 = data + offset;
+        let b0: u64 = (*(p as *mut u8)) as u64;
+        let p1: *const u8 = p + 1;
+        let b1: u64 = (*(p1 as *mut u8)) as u64;
+        let p2: *const u8 = p + 2;
+        let b2: u64 = (*(p2 as *mut u8)) as u64;
+        let p3: *const u8 = p + 3;
+        let b3: u64 = (*(p3 as *mut u8)) as u64;
+        return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+    }
+
+    trusted fn read_le32_at(data: *const u8, offset: u64) -> u64 {
+        let p: *const u8 = data + offset;
+        let b0: u64 = (*(p as *mut u8)) as u64;
+        let p1: *const u8 = p + 1;
+        let b1: u64 = (*(p1 as *mut u8)) as u64;
+        let p2: *const u8 = p + 2;
+        let b2: u64 = (*(p2 as *mut u8)) as u64;
+        let p3: *const u8 = p + 3;
+        let b3: u64 = (*(p3 as *mut u8)) as u64;
+        return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+    }
+
+    // ---- ByteWriter: positioned writer into a mutable byte buffer ----
+
+    pub struct Copy ByteWriter {
+        ptr: *mut u8,
+        len: u64,
+        pos: u64,
+    }
+
+    trusted impl ByteWriter {
+        /// Create a writer over a raw mutable pointer and length.
+        /// Caller must ensure the pointer is valid for `len` bytes.
+        pub fn from_raw(data: *mut u8, len: u64) -> ByteWriter {
+            return ByteWriter { ptr: data, len: len, pos: 0 };
+        }
+
+        pub fn pos(&self) -> u64 {
+            return self.pos;
+        }
+
+        pub fn remaining(&self) -> u64 {
+            return self.len - self.pos;
+        }
+
+        // ---- Single byte write ----
+
+        pub fn write_u8(&mut self, val: u8) -> Result<u64, CursorError> {
+            if self.pos >= self.len {
+                return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let p: *mut u8 = self.ptr + self.pos;
+            *p = val;
+            self.pos = self.pos + 1;
+            return Result::<u64, CursorError>::Ok { value: self.pos };
+        }
+
+        // ---- Big-endian writes ----
+
+        pub fn write_u16_be(&mut self, val: u16) -> Result<u64, CursorError> {
+            if self.pos + 2 > self.len {
+                return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let v: u64 = val as u64;
+            let p: *mut u8 = self.ptr + self.pos;
+            *p = ((v >> 8) & 0xFF) as u8;
+            let p1: *mut u8 = p + 1;
+            *p1 = (v & 0xFF) as u8;
+            self.pos = self.pos + 2;
+            return Result::<u64, CursorError>::Ok { value: self.pos };
+        }
+
+        pub fn write_u32_be(&mut self, val: u32) -> Result<u64, CursorError> {
+            if self.pos + 4 > self.len {
+                return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let v: u64 = val as u64;
+            let p: *mut u8 = self.ptr + self.pos;
+            *p = ((v >> 24) & 0xFF) as u8;
+            let p1: *mut u8 = p + 1;
+            *p1 = ((v >> 16) & 0xFF) as u8;
+            let p2: *mut u8 = p + 2;
+            *p2 = ((v >> 8) & 0xFF) as u8;
+            let p3: *mut u8 = p + 3;
+            *p3 = (v & 0xFF) as u8;
+            self.pos = self.pos + 4;
+            return Result::<u64, CursorError>::Ok { value: self.pos };
+        }
+
+        pub fn write_u64_be(&mut self, val: u64) -> Result<u64, CursorError> {
+            if self.pos + 8 > self.len {
+                return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let p: *mut u8 = self.ptr + self.pos;
+            *p = ((val >> 56) & 0xFF) as u8;
+            let p1: *mut u8 = p + 1;
+            *p1 = ((val >> 48) & 0xFF) as u8;
+            let p2: *mut u8 = p + 2;
+            *p2 = ((val >> 40) & 0xFF) as u8;
+            let p3: *mut u8 = p + 3;
+            *p3 = ((val >> 32) & 0xFF) as u8;
+            let p4: *mut u8 = p + 4;
+            *p4 = ((val >> 24) & 0xFF) as u8;
+            let p5: *mut u8 = p + 5;
+            *p5 = ((val >> 16) & 0xFF) as u8;
+            let p6: *mut u8 = p + 6;
+            *p6 = ((val >> 8) & 0xFF) as u8;
+            let p7: *mut u8 = p + 7;
+            *p7 = (val & 0xFF) as u8;
+            self.pos = self.pos + 8;
+            return Result::<u64, CursorError>::Ok { value: self.pos };
+        }
+
+        // ---- Little-endian writes ----
+
+        pub fn write_u16_le(&mut self, val: u16) -> Result<u64, CursorError> {
+            if self.pos + 2 > self.len {
+                return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let v: u64 = val as u64;
+            let p: *mut u8 = self.ptr + self.pos;
+            *p = (v & 0xFF) as u8;
+            let p1: *mut u8 = p + 1;
+            *p1 = ((v >> 8) & 0xFF) as u8;
+            self.pos = self.pos + 2;
+            return Result::<u64, CursorError>::Ok { value: self.pos };
+        }
+
+        pub fn write_u32_le(&mut self, val: u32) -> Result<u64, CursorError> {
+            if self.pos + 4 > self.len {
+                return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let v: u64 = val as u64;
+            let p: *mut u8 = self.ptr + self.pos;
+            *p = (v & 0xFF) as u8;
+            let p1: *mut u8 = p + 1;
+            *p1 = ((v >> 8) & 0xFF) as u8;
+            let p2: *mut u8 = p + 2;
+            *p2 = ((v >> 16) & 0xFF) as u8;
+            let p3: *mut u8 = p + 3;
+            *p3 = ((v >> 24) & 0xFF) as u8;
+            self.pos = self.pos + 4;
+            return Result::<u64, CursorError>::Ok { value: self.pos };
+        }
+
+        pub fn write_u64_le(&mut self, val: u64) -> Result<u64, CursorError> {
+            if self.pos + 8 > self.len {
+                return Result::<u64, CursorError>::Err { error: CursorError::UnexpectedEnd };
+            }
+            let p: *mut u8 = self.ptr + self.pos;
+            *p = (val & 0xFF) as u8;
+            let p1: *mut u8 = p + 1;
+            *p1 = ((val >> 8) & 0xFF) as u8;
+            let p2: *mut u8 = p + 2;
+            *p2 = ((val >> 16) & 0xFF) as u8;
+            let p3: *mut u8 = p + 3;
+            *p3 = ((val >> 24) & 0xFF) as u8;
+            let p4: *mut u8 = p + 4;
+            *p4 = ((val >> 32) & 0xFF) as u8;
+            let p5: *mut u8 = p + 5;
+            *p5 = ((val >> 40) & 0xFF) as u8;
+            let p6: *mut u8 = p + 6;
+            *p6 = ((val >> 48) & 0xFF) as u8;
+            let p7: *mut u8 = p + 7;
+            *p7 = ((val >> 56) & 0xFF) as u8;
+            self.pos = self.pos + 8;
+            return Result::<u64, CursorError>::Ok { value: self.pos };
+        }
+    }
+
+    // ---- Tests ----
+
+    import std.test.{assert_eq, assert_true};
+
+    #[test]
+    trusted fn test_cursor_read_u8() with(Unsafe) -> i32 {
+        let buf: [u8; 4] = [0xDE, 0xAD, 0xBE, 0xEF];
+        let mut cur: ByteCursor = ByteCursor::from_raw(&buf as *const u8, 4);
+        if !assert_eq::<u64>(cur.remaining(), 4, "remaining should be 4") { return 1; }
+
+        let r0: Result<u8, CursorError> = cur.read_u8();
+        match r0 {
+            Result::Ok { value } => {
+                if !assert_eq::<u8>(value, 0xDE, "first byte should be 0xDE") { return 1; }
+            },
+            Result::Err { error } => { return 2; }
+        }
+        if !assert_eq::<u64>(cur.remaining(), 3, "remaining should be 3") { return 3; }
+        return 0;
+    }
+
+    #[test]
+    trusted fn test_cursor_read_u16_be() with(Unsafe) -> i32 {
+        let buf: [u8; 4] = [0x12, 0x34, 0x56, 0x78];
+        let mut cur: ByteCursor = ByteCursor::from_raw(&buf as *const u8, 4);
+
+        let r: Result<u16, CursorError> = cur.read_u16_be();
+        match r {
+            Result::Ok { value } => {
+                if !assert_eq::<u16>(value, 0x1234, "u16 BE should be 0x1234") { return 1; }
+            },
+            Result::Err { error } => { return 2; }
+        }
+        if !assert_eq::<u64>(cur.pos(), 2, "pos should be 2") { return 3; }
+        return 0;
+    }
+
+    #[test]
+    trusted fn test_cursor_read_u16_le() with(Unsafe) -> i32 {
+        let buf: [u8; 4] = [0x34, 0x12, 0x00, 0x00];
+        let mut cur: ByteCursor = ByteCursor::from_raw(&buf as *const u8, 4);
+
+        let r: Result<u16, CursorError> = cur.read_u16_le();
+        match r {
+            Result::Ok { value } => {
+                if !assert_eq::<u16>(value, 0x1234, "u16 LE should be 0x1234") { return 1; }
+            },
+            Result::Err { error } => { return 2; }
+        }
+        return 0;
+    }
+
+    #[test]
+    trusted fn test_cursor_read_u32_be() with(Unsafe) -> i32 {
+        let buf: [u8; 4] = [0x12, 0x34, 0x56, 0x78];
+        let mut cur: ByteCursor = ByteCursor::from_raw(&buf as *const u8, 4);
+
+        let r: Result<u32, CursorError> = cur.read_u32_be();
+        match r {
+            Result::Ok { value } => {
+                if !assert_eq::<u32>(value, 0x12345678, "u32 BE should be 0x12345678") { return 1; }
+            },
+            Result::Err { error } => { return 2; }
+        }
+        if !assert_true(cur.is_empty(), "cursor should be empty") { return 3; }
+        return 0;
+    }
+
+    #[test]
+    trusted fn test_cursor_read_u32_le() with(Unsafe) -> i32 {
+        let buf: [u8; 4] = [0x78, 0x56, 0x34, 0x12];
+        let mut cur: ByteCursor = ByteCursor::from_raw(&buf as *const u8, 4);
+
+        let r: Result<u32, CursorError> = cur.read_u32_le();
+        match r {
+            Result::Ok { value } => {
+                if !assert_eq::<u32>(value, 0x12345678, "u32 LE should be 0x12345678") { return 1; }
+            },
+            Result::Err { error } => { return 2; }
+        }
+        return 0;
+    }
+
+    #[test]
+    trusted fn test_cursor_bounds_check() with(Unsafe) -> i32 {
+        let buf: [u8; 2] = [0x12, 0x34];
+        let mut cur: ByteCursor = ByteCursor::from_raw(&buf as *const u8, 2);
+
+        // Reading u32 from 2-byte buffer should fail
+        let r: Result<u32, CursorError> = cur.read_u32_be();
+        match r {
+            Result::Ok { value } => { return 1; },
+            Result::Err { error } => {
+                // Expected: UnexpectedEnd
+            }
+        }
+        // Position should not have advanced
+        if !assert_eq::<u64>(cur.pos(), 0, "pos should still be 0") { return 2; }
+        return 0;
+    }
+
+    #[test]
+    trusted fn test_cursor_skip() with(Unsafe) -> i32 {
+        let buf: [u8; 8] = [0, 1, 2, 3, 4, 5, 6, 7];
+        let mut cur: ByteCursor = ByteCursor::from_raw(&buf as *const u8, 8);
+
+        let skip_r: Result<u64, CursorError> = cur.skip(4);
+        match skip_r {
+            Result::Ok { value } => {},
+            Result::Err { error } => { return 1; }
+        }
+        if !assert_eq::<u64>(cur.pos(), 4, "pos should be 4 after skip") { return 2; }
+        if !assert_eq::<u64>(cur.remaining(), 4, "remaining should be 4") { return 3; }
+
+        // Skip past end should fail
+        let skip_r2: Result<u64, CursorError> = cur.skip(5);
+        match skip_r2 {
+            Result::Ok { value } => { return 4; },
+            Result::Err { error } => {}
+        }
+        // Position unchanged
+        if !assert_eq::<u64>(cur.pos(), 4, "pos should still be 4") { return 5; }
+        return 0;
+    }
+
+    #[test]
+    trusted fn test_writer_roundtrip() with(Unsafe) -> i32 {
+        let mut buf: [u8; 16] = [0; 16];
+        let mut w: ByteWriter = ByteWriter::from_raw(&mut buf as *mut u8, 16);
+
+        // Write BE u16
+        let wr1: Result<u64, CursorError> = w.write_u16_be(0x1234 as u16);
+        match wr1 {
+            Result::Ok { value } => {},
+            Result::Err { error } => { return 1; }
+        }
+
+        // Write LE u32
+        let wr2: Result<u64, CursorError> = w.write_u32_le(0x12345678 as u32);
+        match wr2 {
+            Result::Ok { value } => {},
+            Result::Err { error } => { return 2; }
+        }
+
+        // Read back
+        let mut cur: ByteCursor = ByteCursor::from_raw(&buf as *const u8, 16);
+        let rd1: Result<u16, CursorError> = cur.read_u16_be();
+        match rd1 {
+            Result::Ok { value } => {
+                if !assert_eq::<u16>(value, 0x1234, "roundtrip u16 BE") { return 3; }
+            },
+            Result::Err { error } => { return 4; }
+        }
+        let rd2: Result<u32, CursorError> = cur.read_u32_le();
+        match rd2 {
+            Result::Ok { value } => {
+                if !assert_eq::<u32>(value, 0x12345678, "roundtrip u32 LE") { return 5; }
+            },
+            Result::Err { error } => { return 6; }
+        }
+        return 0;
+    }
+
+    #[test]
+    trusted fn test_mixed_endian_parse() with(Unsafe) -> i32 {
+        // Simulate a mini protocol header:
+        // bytes 0-1: BE u16 magic (0xCAFE)
+        // bytes 2-5: LE u32 length (100)
+        // byte 6: version (2)
+        let mut buf: [u8; 16] = [0; 16];
+        let mut w: ByteWriter = ByteWriter::from_raw(&mut buf as *mut u8, 16);
+
+        let _: Result<u64, CursorError> = w.write_u16_be(0xCAFE as u16);
+        let _: Result<u64, CursorError> = w.write_u32_le(100 as u32);
+        let _: Result<u64, CursorError> = w.write_u8(2);
+
+        // Parse it back
+        let mut cur: ByteCursor = ByteCursor::from_raw(&buf as *const u8, 16);
+
+        let magic_r: Result<u16, CursorError> = cur.read_u16_be();
+        match magic_r {
+            Result::Ok { value } => {
+                if value != 0xCAFE { return 1; }
+            },
+            Result::Err { error } => { return 2; }
+        }
+
+        let len_r: Result<u32, CursorError> = cur.read_u32_le();
+        match len_r {
+            Result::Ok { value } => {
+                if value != 100 { return 3; }
+            },
+            Result::Err { error } => { return 4; }
+        }
+
+        let ver_r: Result<u8, CursorError> = cur.read_u8();
+        match ver_r {
+            Result::Ok { value } => {
+                if (value as u64) != 2 { return 5; }
+            },
+            Result::Err { error } => { return 6; }
+        }
+
+        if !assert_eq::<u64>(cur.pos(), 7, "pos should be 7") { return 7; }
+        return 0;
+    }
+
+    // ============================================================
+    // Validated wrapper tests (NonZeroU32, NonZeroU64, Port)
+    // ============================================================
+
+    #[test]
+    fn test_non_zero_u32_try_new_happy() -> i32 {
+        match NonZeroU32::try_new(42) {
+            Option::Some { value } => {
+                if !assert_eq::<u32>(value.0, 42, "NonZeroU32(42).0 should be 42") { return 1; }
+                return 0;
+            }
+            Option::None => { return 2; }
+        }
+    }
+
+    #[test]
+    fn test_non_zero_u32_try_new_zero() -> i32 {
+        match NonZeroU32::try_new(0) {
+            Option::Some { value } => { return 1; }
+            Option::None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_non_zero_u32_try_from_u64_overflow() -> i32 {
+        match NonZeroU32::try_from_u64(4294967296) {
+            Option::Some { value } => { return 1; }
+            Option::None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_non_zero_u64_try_new_happy() -> i32 {
+        match NonZeroU64::try_new(1000000000000) {
+            Option::Some { value } => {
+                if !assert_eq::<u64>(value.0, 1000000000000, "round-trip") { return 1; }
+                return 0;
+            }
+            Option::None => { return 2; }
+        }
+    }
+
+    #[test]
+    fn test_non_zero_u64_try_new_zero() -> i32 {
+        match NonZeroU64::try_new(0) {
+            Option::Some { value } => { return 1; }
+            Option::None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_port_try_new_happy() -> i32 {
+        match Port::try_new(8080) {
+            Option::Some { value } => {
+                if !assert_eq::<u16>(value.0, 8080, "Port round-trip") { return 1; }
+                return 0;
+            }
+            Option::None => { return 2; }
+        }
+    }
+
+    #[test]
+    fn test_port_try_new_zero() -> i32 {
+        match Port::try_new(0) {
+            Option::Some { value } => { return 1; }
+            Option::None => { return 0; }
+        }
+    }
+
+    #[test]
+    fn test_port_try_from_u32_overflow() -> i32 {
+        match Port::try_from_u32(70000) {
+            Option::Some { value } => { return 1; }
+            Option::None => { return 0; }
+        }
+    }
+}

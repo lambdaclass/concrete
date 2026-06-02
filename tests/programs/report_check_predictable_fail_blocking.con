@@ -1,0 +1,8 @@
+// Test: --check predictable should fail for blocking I/O (File/Network/Process)
+fn read_something() with(File) -> Int {
+    return 0;
+}
+
+fn main() with(File) -> Int {
+    return read_something();
+}

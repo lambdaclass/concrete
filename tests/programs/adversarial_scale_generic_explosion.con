@@ -1,0 +1,24 @@
+// Hostile workload: one generic struct instantiated with many type combinations.
+// Stresses monomorphization table scaling.
+// Expected: 42
+
+struct Copy Pair<A, B> { first: A, second: B }
+
+fn sum_ii(p: Pair<Int, Int>) -> Int { return p.first + p.second; }
+fn sum_ii2(p: Pair<Int, Int>) -> Int { return p.first + p.second; }
+fn sum_ii3(p: Pair<Int, Int>) -> Int { return p.first + p.second; }
+fn sum_ii4(p: Pair<Int, Int>) -> Int { return p.first + p.second; }
+fn sum_ii5(p: Pair<Int, Int>) -> Int { return p.first + p.second; }
+fn sum_ii6(p: Pair<Int, Int>) -> Int { return p.first + p.second; }
+
+pub fn main() -> Int {
+    let p1: Pair<Int, Int> = Pair::<Int, Int> { first: 10, second: 5 };
+    let p2: Pair<Int, Int> = Pair::<Int, Int> { first: 3, second: 4 };
+    let p3: Pair<Int, Int> = Pair::<Int, Int> { first: 2, second: 3 };
+    let p4: Pair<Int, Int> = Pair::<Int, Int> { first: 6, second: 1 };
+    let p5: Pair<Int, Int> = Pair::<Int, Int> { first: 2, second: 3 };
+    let p6: Pair<Int, Int> = Pair::<Int, Int> { first: 1, second: 2 };
+    // 15 + 7 + 5 + 7 + 5 + 3 = 42
+    return sum_ii(p1) + sum_ii2(p2) + sum_ii3(p3) +
+           sum_ii4(p4) + sum_ii5(p5) + sum_ii6(p6);
+}

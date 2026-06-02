@@ -1,0 +1,15 @@
+// Adversarial test: arrays are treated as single values.
+// Borrowing an array freezes the entire array.
+
+fn array_index_read() -> Int {
+    let arr: [Int; 3] = [10, 20, 30];
+    // Array indexing returns the element type
+    // Int is Copy, so arr is not consumed by indexing
+    let x: Int = arr[0];
+    let y: Int = arr[1];
+    return x + y;
+}
+
+fn main() -> Int {
+    return array_index_read();
+}

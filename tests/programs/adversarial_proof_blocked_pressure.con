@@ -1,0 +1,57 @@
+// Adversarial: proof blocked (unsupported construct) pressure test.
+// Each function is eligible but uses exactly one unsupported construct.
+// The diagnostic must name the specific construct, not just "blocked".
+//
+// Expected:
+//   uses_struct      → blocked: struct literal
+//   uses_match       → blocked: match expression (+ no return statement)
+//   uses_mut         → blocked: mutable assignment
+//   uses_string      → blocked: string literal
+//   uses_if_no_else  → blocked: if without else
+//   extractable_fn   → eligible, extractable (control: should be missing)
+
+struct Copy Point {
+    x: Int,
+    y: Int,
+}
+
+enum Color {
+    Red,
+    Blue,
+}
+
+fn uses_struct(x: Int, y: Int) -> Point {
+    return Point { x: x, y: y };
+}
+
+fn uses_match(c: Color) -> Int {
+    match c {
+        Color::Red => { return 1; },
+        Color::Blue => { return 2; },
+    }
+}
+
+fn uses_mut(x: Int) -> Int {
+    let mut r: Int = x;
+    r = r + 1;
+    return r;
+}
+
+fn uses_string() -> String {
+    return "hello";
+}
+
+fn uses_if_no_else(x: Int) -> Int {
+    if x > 0 {
+        return x;
+    }
+    return 0;
+}
+
+fn extractable_fn(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+pub fn main() -> Int {
+    return extractable_fn(1, 2);
+}

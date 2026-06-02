@@ -1,138 +1,179 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="hero hero-main">
-  <p class="eyebrow">Concrete</p>
-  <h2>Concrete keeps authority, ownership, and trust boundaries visible.</h2>
-  <p class="lede">
-    If a function allocates, reaches the filesystem or network, crosses into foreign code, or depends on
-    trusted internals, Concrete wants that fact to remain visible. The language is for programs whose
-    behavior needs to stay legible under review, not for hiding operational reality behind convenience.
-  </p>
-  <ul class="hero-tags">
-    <li>visible authority</li>
-    <li>visible ownership</li>
-    <li>explicit trust boundaries</li>
-    <li>small runtime</li>
-  </ul>
-</section>
+<div class="whitepaper-home">
+  <aside class="paper-sidebar" aria-label="Homepage table of contents">
+    <p class="sidebar-title">Concrete</p>
+    <nav>
+      <a href="#abstract">1. Abstract</a>
+      <a href="#model">2. Evidence Model</a>
+      <a href="#example">3. Running Example</a>
+      <a href="#status">4. Current Status</a>
+      <a href="#hmac">5. HMAC Work</a>
+      <a href="#limits">6. Limits</a>
+      <a href="#read">7. Read Next</a>
+    </nav>
+    <div class="sidebar-links">
+      <a href="{{ get_url(path='@/paper.md') }}">Paper</a>
+      <a href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">Roadmap</a>
+      <a href="{{ config.extra.repo_url }}">Repository</a>
+    </div>
+  </aside>
 
-<section class="home-example">
-  <article class="example-card">
-    <h3>Visible In The Source</h3>
-    <pre><code>fn fetch_manifest(url: &String, cache_path: &String)
-with(Network, File, Alloc) -&gt; Manifest {
-    let body: String = http::get_text(url)?;
-    defer drop_string(body);
+  <article class="paper-document">
+    <header class="paper-title">
+      <p class="eyebrow">Concrete documentation</p>
+      <h2>Concrete</h2>
+      <p class="paper-subtitle">
+        A small systems language where source code carries evidence about
+        authority, assumptions, tests, and Lean-checked proofs.
+      </p>
+      <p class="paper-meta">
+        Project status: experimental. Compiler correctness and backend
+        correctness are not fully proved today.
+      </p>
+    </header>
 
-    let hash: Hash = sha256_text(&body);
-    verify_manifest_hash(&body, &hash)?;
+    <section id="abstract" class="paper-section">
+      <h3>1. Abstract</h3>
+      <p>
+        Concrete is a no-GC systems language with linear ownership and explicit
+        capabilities. Its compiler is written in Lean and maintains a registry
+        connecting source functions to proof artifacts, assumptions, test
+        oracles, policy files, and drift checks.
+      </p>
+      <p>
+        The immediate claim is narrow: the toolchain should not let evidence
+        silently lie. If a function body changes, authority widens, allocation
+        appears, or a proof no longer matches the source, normal reports and CI
+        gates should show that change.
+      </p>
+    </section>
 
-    fs::write_string(cache_path, &body)?;
-    return parse_manifest(&body)?;
-}
-</code></pre>
-    <p class="card-copy">
-      From the signature and body alone, a reviewer can already see network authority, file authority,
-      allocation, cleanup, verification, and persistence.
-    </p>
+    <section id="model" class="paper-section">
+      <h3>2. Evidence Model</h3>
+      <p>
+        Concrete separates claim classes instead of reducing everything to one
+        green badge. The current audit vocabulary is deliberately explicit:
+      </p>
+      <div class="paper-table-wrap">
+        <table class="paper-table">
+          <thead>
+            <tr><th>Claim</th><th>Status class</th><th>Current meaning</th></tr>
+          </thead>
+          <tbody>
+            <tr><th>Capabilities</th><td>enforced</td><td>Function authority is tracked and reported.</td></tr>
+            <tr><th>User theorems</th><td>Lean kernel</td><td>Attached theorems are checked by Lean.</td></tr>
+            <tr><th>Proof drift</th><td>CI gated</td><td>Body/spec fingerprints downgrade stale proofs.</td></tr>
+            <tr><th>Oracle behavior</th><td>tested</td><td>Flagships carry differential or reference tests.</td></tr>
+            <tr><th>Extraction soundness</th><td>partial</td><td>Some source-to-ProofCore rules are proved; work continues.</td></tr>
+            <tr><th>LLVM/backend</th><td>trusted</td><td>Generated binary correctness is still in the trusted base.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="example" class="paper-section">
+      <h3>3. Running Example</h3>
+      <p>
+        The narrow real-crypto example is a constant-time tag comparison. Its
+        proof does not claim machine-level constant time. It proves a source
+        property and names the remaining timing assumptions.
+      </p>
+      <figure class="listing">
+        <pre><code>fn ct_compare(a: [u8; 16], b: [u8; 16]) -&gt; Int {
+    let diff: u8 = 0;
+    let i: Int = 0;
+
+    while i &lt; 16 {
+        set diff = diff | (a[i] ^ b[i]);
+        set i = i + 1;
+    }
+
+    if diff == 0 { return 1; }
+    return 0;
+}</code></pre>
+        <figcaption>
+          Listing 1. Source code stays ordinary: fixed arrays, byte operations,
+          bounded loop, no allocation, no ambient authority.
+        </figcaption>
+      </figure>
+      <figure class="listing">
+        <pre><code>$ concrete audit examples/constant_time_tag/src/main.con
+
+proof:
+  ct_compare_same_tag_correct: proved_by_lean
+  coverage: one_direction
+
+authority:
+  capabilities: none
+  allocation: none
+  trusted code: none
+
+assumptions:
+  machine-level constant-time: assumed
+  backend timing preservation: trusted</code></pre>
+        <figcaption>
+          Listing 2. Audit output keeps proved facts separate from assumptions
+          and trusted backend behavior.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section id="status" class="paper-section">
+      <h3>4. Current Status</h3>
+      <div class="paper-table-wrap">
+        <table class="paper-table">
+          <thead>
+            <tr><th>Example</th><th>Status</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr><th>parse_validate</th><td>graduated</td><td>Parser/protocol validation evidence.</td></tr>
+            <tr><th>crypto_verify</th><td>graduated</td><td>Authentication scaffolding with a toy MAC.</td></tr>
+            <tr><th>fixed_capacity</th><td>graduated</td><td>Bounded mutable state and array-update proofs.</td></tr>
+            <tr><th>constant_time_tag</th><td>graduated</td><td>Narrow real-crypto source proof with timing assumptions.</td></tr>
+            <tr><th>hmac_sha256</th><td>candidate</td><td>Larger SHA-256/HMAC refinement target.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="hmac" class="paper-section">
+      <h3>5. HMAC Work</h3>
+      <p>
+        HMAC-SHA256 is the active proof target. The implementation and oracle
+        tests exist; the remaining graduation work is the refinement chain from
+        extracted Concrete code to an independent SHA-256/HMAC specification.
+      </p>
+      <ol class="paper-list">
+        <li>Round-function refinements: started.</li>
+        <li>Block-to-words loop refinement: done.</li>
+        <li>Schedule refinement: in progress.</li>
+        <li>Compression, hash, and HMAC composition: open.</li>
+      </ol>
+    </section>
+
+    <section id="limits" class="paper-section">
+      <h3>6. What Concrete Does Not Claim Yet</h3>
+      <p>
+        Concrete is not a verified compiler today. It does not yet prove
+        generated binary correctness, whole-program constant-time behavior, or
+        every source-to-ProofCore extraction rule. Source contracts, generated
+        verification conditions, SMT assistance, ghost state, and gradual
+        runtime checks are roadmap work, not shipped language features.
+      </p>
+    </section>
+
+    <section id="read" class="paper-section read-next">
+      <h3>7. Read Next</h3>
+      <ul class="paper-links">
+        <li><a href="{{ get_url(path='@/guide/getting_started.md') }}">Getting started</a><span>Build the compiler and run a program.</span></li>
+        <li><a href="{{ get_url(path='@/reference/PROVABLE_SUBSET.md') }}">Provable subset</a><span>What can carry Lean-backed evidence today.</span></li>
+        <li><a href="{{ get_url(path='@/reference/SAFETY.md') }}">Safety</a><span>Capabilities, trusted code, Unsafe, and proof boundaries.</span></li>
+        <li><a href="{{ get_url(path='@/paper.md') }}">Paper</a><span>Research-style statement and build notes.</span></li>
+        <li><a href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">Roadmap</a><span>Active sequencing and open proof work.</span></li>
+      </ul>
+    </section>
   </article>
-
-  <div class="report-inline">
-    <h4>And The Compiler Can Report The Same Distinction</h4>
-    <pre class="report-block"><code>verify_manifest:
-  caps: none
-  alloc: no
-  trusted: no
-
-fetch_manifest:
-  caps: Network, Alloc
-  alloc: yes
-  trusted: no
-</code></pre>
-    <p class="card-copy">
-      Concrete is designed so these distinctions are not just present in the source, but mechanically
-      reportable. That makes authority drift and allocation drift easier to review than in languages
-      where those facts are mostly conventional rather than first-class.
-    </p>
-  </div>
-</section>
-
-<section class="home-intro">
-  <article class="prose-card">
-    <h3>Why This Matters</h3>
-    <p>
-      Concrete is aimed at systems code where hidden authority, hidden cleanup, and fuzzy trust boundaries
-      make review harder than it should be. It is for people auditing systems code, security-sensitive
-      tools, and infrastructure where hidden costs or hidden authority make review materially worse.
-    </p>
-    <p>
-      That means explicit capabilities instead of ambient authority, explicit ownership and cleanup instead
-      of hidden runtime machinery, and explicit trust boundaries between ordinary safe code, trusted
-      internals, foreign code, and proof-oriented subsets.
-    </p>
-  </article>
-
-  <article class="prose-card">
-    <h3>Why It Is Different</h3>
-    <p>
-      Concrete is not trying to maximize convenience by erasing operational facts. It is not moving toward
-      GC, invisible finalization, or a large managed runtime. It is not a proof-only project, and it does
-      not blur together safe code, trusted implementation techniques, and foreign unsafety.
-    </p>
-    <p>
-      Low-level pointer manipulation and foreign calls can exist, but they stay isolated behind `trusted`
-      and `with(Unsafe)` boundaries instead of disappearing into ordinary code.
-    </p>
-  </article>
-</section>
-
-<section class="start-card">
-  <h3>Start Here</h3>
-  <ul class="index-list">
-    <li><a href="{{ get_url(path='@/guide/landing.md') }}">why_concrete</a><span>project motivation and positioning</span></li>
-    <li><a href="{{ get_url(path='@/guide/getting_started.md') }}">getting_started</a><span>build the compiler and run a program</span></li>
-    <li><a href="{{ get_url(path='@/reference/STDLIB.md') }}">stdlib</a><span>current standard library direction</span></li>
-    <li><a href="{{ get_url(path='@/reference/SAFETY.md') }}">safety</a><span>capabilities, trusted, Unsafe, proof boundary</span></li>
-    <li><a href="{{ get_url(path='@/paper.md') }}">paper</a><span>research paper, build notes, and source links</span></li>
-    <li><a href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">roadmap</a><span>active work and sequencing</span></li>
-  </ul>
-</section>
-
-<section class="home-panels">
-  <article class="mini-panel">
-    <h3>Docs</h3>
-    <p>
-      Stable reference material for the language model, compiler pipeline, safety rules, ABI,
-      diagnostics, testing, and stdlib direction.
-    </p>
-    <ul class="index-list compact-index">
-      <li><a href="{{ get_url(path='@/reference/_index.md') }}">reference</a><span>stable contracts and implementation boundaries</span></li>
-      <li><a href="{{ get_url(path='@/guide/_index.md') }}">guide</a><span>narrative walkthrough for language and tooling</span></li>
-      <li><a href="{{ get_url(path='@/reference/STDLIB.md') }}">stdlib</a><span>current module direction and priorities</span></li>
-    </ul>
-  </article>
-
-  <article class="mini-panel">
-    <h3>Paper</h3>
-    <p>
-      A compact research-style statement of the project thesis, architecture, and current evidence.
-    </p>
-    <ul class="index-list compact-index">
-      <li><a href="{{ get_url(path='@/paper.md') }}">paper</a><span>paper landing page and build notes</span></li>
-      <li><a href="https://github.com/unbalancedparentheses/concrete2/blob/main/paper/main.typ">paper_source</a><span>Typst source in the repository</span></li>
-    </ul>
-  </article>
-
-  <article class="mini-panel">
-    <h3>Status</h3>
-    <p>
-      Concrete is active and still evolving. Use the roadmap and changelog for the current state of the tree.
-    </p>
-    <ul class="index-list compact-index">
-      <li><a href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">roadmap</a><span>active work and sequencing</span></li>
-      <li><a href="https://github.com/unbalancedparentheses/concrete2/blob/main/CHANGELOG.md">changelog</a><span>landed milestones and project history</span></li>
-    </ul>
-  </article>
-</section>
+</div>
 {% endblock content %}

@@ -1,0 +1,39 @@
+// Adversarial lowering: match on enum with 20 variants.
+// Stresses branch lowering, tag comparison chains, and basic block generation.
+// Expected: 42
+
+enum Copy BigEnum {
+    V0 {}, V1 {}, V2 {}, V3 {}, V4 {},
+    V5 {}, V6 {}, V7 {}, V8 {}, V9 {},
+    V10 {}, V11 {}, V12 {}, V13 {}, V14 {},
+    V15 {}, V16 {}, V17 {}, V18 {}, V19 {},
+}
+
+fn value_of(e: BigEnum) -> Int {
+    match e {
+        BigEnum::V0 {} => { return 0; },
+        BigEnum::V1 {} => { return 1; },
+        BigEnum::V2 {} => { return 2; },
+        BigEnum::V3 {} => { return 3; },
+        BigEnum::V4 {} => { return 4; },
+        BigEnum::V5 {} => { return 5; },
+        BigEnum::V6 {} => { return 6; },
+        BigEnum::V7 {} => { return 7; },
+        BigEnum::V8 {} => { return 8; },
+        BigEnum::V9 {} => { return 9; },
+        BigEnum::V10 {} => { return 10; },
+        BigEnum::V11 {} => { return 11; },
+        BigEnum::V12 {} => { return 12; },
+        BigEnum::V13 {} => { return 13; },
+        BigEnum::V14 {} => { return 14; },
+        BigEnum::V15 {} => { return 15; },
+        BigEnum::V16 {} => { return 16; },
+        BigEnum::V17 {} => { return 17; },
+        BigEnum::V18 {} => { return 18; },
+        BigEnum::V19 {} => { return 19; },
+    }
+}
+
+pub fn main() -> Int {
+    return value_of(BigEnum::V19 {}) + value_of(BigEnum::V18 {}) + value_of(BigEnum::V5 {});
+}

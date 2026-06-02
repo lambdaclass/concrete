@@ -1,0 +1,11 @@
+// Test: chain of type casts: i32 -> i64 -> u64 -> i32.
+// Verifies value survives round-trip through multiple cast operations.
+// Expected output: 42
+
+pub fn main() with(Std) {
+    let a: i32 = 42;
+    let b: i64 = a as i64;
+    let c: u64 = b as u64;
+    let d: i32 = c as i32;
+    println(d as Int);
+}

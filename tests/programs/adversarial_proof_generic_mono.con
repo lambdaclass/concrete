@@ -1,0 +1,20 @@
+// Adversarial: generic function with proof — monomorphization must not confuse
+// proof identity across different instantiations.
+// The generic identity<T> has one proof. After mono, identity_Int and
+// identity_i32 are separate functions — only the original qualified name
+// should retain proof status.
+// Expected: 42
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+fn add_ints(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+pub fn main() -> Int {
+    let a: Int = identity::<Int>(40);
+    let b: i32 = identity::<i32>(2);
+    return a + (b as Int);
+}

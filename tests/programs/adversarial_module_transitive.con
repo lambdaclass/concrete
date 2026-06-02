@@ -1,0 +1,24 @@
+// Adversarial module: transitive call chain A -> B -> C via imports.
+// Tests resolution across module boundaries through intermediate modules.
+// Expected: 42
+
+mod Source {
+    pub fn origin() -> Int { return 42; }
+}
+
+mod Middle {
+    import Source.{ origin };
+    pub fn relay() -> Int { return origin(); }
+}
+
+mod Top {
+    import Middle.{ relay };
+    pub fn fetch() -> Int { return relay(); }
+}
+
+mod Main {
+    import Top.{ fetch };
+    fn main() -> Int {
+        return fetch();
+    }
+}

@@ -83,11 +83,29 @@ def SSAVerifyError.message : SSAVerifyError → String
   | .aggregatePhi block dst ty => s!"block '{block}': phi %{dst} has aggregate type {ty} — use alloca+store instead"
   | .binopTypeMismatch block dst lTy rTy => s!"block '{block}': binop %{dst} has mismatched operand types: {lTy} vs {rTy}"
 
-private def addError (ctx : VerifyCtx) (msg : String) : VerifyCtx :=
-  { ctx with errors := ctx.errors ++ [{ severity := .error, message := s!"{ctx.fnName}: {msg}", pass := "ssa-verify", span := none, hint := none }] }
+def SSAVerifyError.code : SSAVerifyError → String
+  | .duplicateRegDef _ _ => "E0700"
+  | .functionHasNoBlocks => "E0701"
+  | .useBeforeDef _ _ => "E0702"
+  | .useInNonDominatingBlock _ _ _ => "E0703"
+  | .undefinedRegister _ _ => "E0704"
+  | .branchToUnknownLabel _ _ => "E0705"
+  | .phiMissingPredecessor _ _ => "E0706"
+  | .phiExtraPredecessor _ _ => "E0707"
+  | .phiNotDominatedBySrc _ _ _ _ => "E0708"
+  | .phiUndefinedRegister _ _ => "E0709"
+  | .phiTypeMismatch _ _ _ _ => "E0710"
+  | .callArityMismatch _ _ _ _ => "E0711"
+  | .retVoidInNonVoidFn _ _ => "E0712"
+  | .retValueInVoidFn _ _ => "E0713"
+  | .aggregatePhi _ _ _ => "E0714"
+  | .binopTypeMismatch _ _ _ _ => "E0715"
+
+private def addError (ctx : VerifyCtx) (msg : String) (code : String := "") : VerifyCtx :=
+  { ctx with errors := ctx.errors ++ [{ severity := .error, message := s!"{ctx.fnName}: {msg}", pass := "ssa-verify", span := none, hint := none, code := code }] }
 
 private def addSSAError (ctx : VerifyCtx) (e : SSAVerifyError) : VerifyCtx :=
-  addError ctx e.message
+  addError ctx e.message e.code
 
 -- ============================================================
 -- Collect defined registers

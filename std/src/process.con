@@ -1,7 +1,6 @@
 mod process {
     import std.libc.{exit as libc_exit, getpid as libc_getpid, fork as libc_fork, kill as libc_kill, waitpid as libc_waitpid, execvp as libc_execvp};
     import std.alloc.{grow,dealloc};
-    import std.result.{Result};
 
     pub enum ProcessError {
         ForkFailed,
@@ -37,20 +36,20 @@ mod process {
     pub fn process_fork() with(Unsafe, Process) -> ForkResult {
         let pid: i32 = libc_fork();
         if pid < 0 {
-            return ForkResult#Err { error: ProcessError#ForkFailed };
+            return ForkResult::Err { error: ProcessError::ForkFailed };
         }
         if pid == 0 {
-            return ForkResult#Child;
+            return ForkResult::Child;
         }
-        return ForkResult#Parent { child_pid: pid };
+        return ForkResult::Parent { child_pid: pid };
     }
 
     pub fn process_kill(pid: i32, sig: i32) with(Unsafe, Process) -> Result<bool, ProcessError> {
         let ret: i32 = libc_kill(pid, sig);
         if ret != 0 {
-            return Result::<bool, ProcessError>#Err { error: ProcessError#KillFailed };
+            return Result::<bool, ProcessError>::Err { error: ProcessError::KillFailed };
         }
-        return Result::<bool, ProcessError>#Ok { value: true };
+        return Result::<bool, ProcessError>::Ok { value: true };
     }
 
     pub struct Child {
@@ -72,23 +71,23 @@ mod process {
             let status_ptr: *mut i32 = &status as *mut i32;
             let ret: i32 = libc_waitpid(self.pid, status_ptr as *mut i32, 0);
             if ret < 0 {
-                return Result::<ExitStatus, ProcessError>#Err { error: ProcessError#WaitFailed };
+                return Result::<ExitStatus, ProcessError>::Err { error: ProcessError::WaitFailed };
             }
             // WIFEXITED: (status & 0x7F) == 0
             let low: i32 = status & 127;
             if low == 0 {
                 // WEXITSTATUS: (status >> 8) & 0xFF
                 let code: i32 = (status >> 8) & 255;
-                return Result::<ExitStatus, ProcessError>#Ok { value: ExitStatus#Exited { code: code } };
+                return Result::<ExitStatus, ProcessError>::Ok { value: ExitStatus::Exited { code: code } };
             }
-            return Result::<ExitStatus, ProcessError>#Ok { value: ExitStatus#Signaled { raw: status } };
+            return Result::<ExitStatus, ProcessError>::Ok { value: ExitStatus::Signaled { raw: status } };
         }
     }
 
     pub fn spawn(cmd: &String, args: *const *const u8) with(Unsafe, Process) -> Result<Child, ProcessError> {
         let pid: i32 = libc_fork();
         if pid < 0 {
-            return Result::<Child, ProcessError>#Err { error: ProcessError#SpawnFailed };
+            return Result::<Child, ProcessError>::Err { error: ProcessError::SpawnFailed };
         }
         if pid == 0 {
             // Child process: exec
@@ -96,10 +95,10 @@ mod process {
             // If execvp returns, it failed
             libc_exit(127);
             // unreachable
-            return Result::<Child, ProcessError>#Err { error: ProcessError#SpawnFailed };
+            return Result::<Child, ProcessError>::Err { error: ProcessError::SpawnFailed };
         }
         let c: Child = Child { pid: pid };
-        return Result::<Child, ProcessError>#Ok { value: c };
+        return Result::<Child, ProcessError>::Ok { value: c };
     }
 
     #[test]
@@ -108,10 +107,10 @@ mod process {
         let child: Child = Child::new(99999);
         let result: Result<ExitStatus, ProcessError> = child.wait();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 return 1;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return 0;
             }
         }
@@ -122,10 +121,10 @@ mod process {
         // kill with nonexistent pid should return Err
         let result: Result<bool, ProcessError> = process_kill(99999, 0);
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 return 1;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return 0;
             }
         }
@@ -136,33 +135,33 @@ mod process {
     fn test_fork_returns_typed() with(Unsafe, Process, Alloc) -> i32 {
         let result: ForkResult = process_fork();
         match result {
-            ForkResult#Parent { child_pid } => {
+            ForkResult::Parent { child_pid } => {
                 // Parent: wait for child
                 let child: Child = Child::new(child_pid);
                 let wait_result: Result<ExitStatus, ProcessError> = child.wait();
                 match wait_result {
-                    Result#Ok { value } => {
+                    Result::Ok { value } => {
                         match value {
-                            ExitStatus#Exited { code } => {
+                            ExitStatus::Exited { code } => {
                                 // Child exits with 0
                                 return code;
                             },
-                            ExitStatus#Signaled { raw } => {
+                            ExitStatus::Signaled { raw } => {
                                 return 1;
                             }
                         }
                     },
-                    Result#Err { error } => {
+                    Result::Err { error } => {
                         return 1;
                     }
                 }
             },
-            ForkResult#Child => {
+            ForkResult::Child => {
                 // Child: exit cleanly
                 process_exit(0);
                 return 0;
             },
-            ForkResult#Err { error } => {
+            ForkResult::Err { error } => {
                 return 1;
             }
         }
@@ -177,29 +176,29 @@ mod process {
         let result: Result<Child, ProcessError> = spawn(&cmd, &args as *const *const u8);
         cmd.drop();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 // Child was forked, but execvp failed — child exits 127
                 let wr: Result<ExitStatus, ProcessError> = value.wait();
                 match wr {
-                    Result#Ok { value } => {
+                    Result::Ok { value } => {
                         match value {
-                            ExitStatus#Exited { code } => {
+                            ExitStatus::Exited { code } => {
                                 if code == 127 {
                                     return 0;
                                 }
                                 return 1;
                             },
-                            ExitStatus#Signaled { raw } => {
+                            ExitStatus::Signaled { raw } => {
                                 return 1;
                             }
                         }
                     },
-                    Result#Err { error } => {
+                    Result::Err { error } => {
                         return 1;
                     }
                 }
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 // Fork itself failed — also acceptable
                 return 0;
             }
@@ -237,8 +236,8 @@ mod process {
         let pid: i32 = process_getpid();
         let result: Result<bool, ProcessError> = process_kill(pid, 0);
         match result {
-            Result#Ok { value } => { return 0; },
-            Result#Err { error } => { return 1; }
+            Result::Ok { value } => { return 0; },
+            Result::Err { error } => { return 1; }
         }
     }
 
@@ -248,8 +247,8 @@ mod process {
         let pid: i32 = process_getpid();
         let result: Result<bool, ProcessError> = process_kill(pid, 99999);
         match result {
-            Result#Ok { value } => { return 1; },
-            Result#Err { error } => { return 0; }
+            Result::Ok { value } => { return 1; },
+            Result::Err { error } => { return 0; }
         }
     }
 
@@ -259,11 +258,11 @@ mod process {
         let child: Child = Child::new(-1);
         let result: Result<ExitStatus, ProcessError> = child.wait();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 // If somehow succeeds (e.g. zombie child), accept it
                 return 0;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return 0;
             }
         }
@@ -274,8 +273,8 @@ mod process {
         // kill(0, 0) sends signal 0 to the entire process group — should succeed
         let result: Result<bool, ProcessError> = process_kill(0, 0);
         match result {
-            Result#Ok { value } => { return 0; },
-            Result#Err { error } => { return 1; }
+            Result::Ok { value } => { return 0; },
+            Result::Err { error } => { return 1; }
         }
     }
 }

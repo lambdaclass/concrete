@@ -39,6 +39,7 @@ structure EmitSSAState where
   moduleDeclarations : Array LLVMFnDecl := #[]
   structDefs : List CStructDef := []
   enumDefs : List CEnumDef := []
+  newtypes : List NewtypeDef := []
   stringLitCounter : Nat := 0
   localCounter : Nat := 0
   /-- Registers known to be LLVM pointers (alloca/gep/struct params). -/
@@ -58,6 +59,12 @@ structure EmitSSAState where
   vecElemSpecs : List (Nat × Nat) := []
   /-- Names of extern functions (for C ABI calling convention at call sites). -/
   externFnNames : List String := []
+  /-- Set of bare function names that collide across modules. -/
+  collidingNames : List String := []
+  /-- Per-module linker aliases (reset per module, used before global aliases). -/
+  localAliases : List (String × String) := []
+  /-- Set of all LLVM function names that will be emitted (for direct-match resolution). -/
+  definedFnNames : List String := []
   /-- Alloca instructions to hoist to the function entry block.
       Allocas emitted inside loop bodies would otherwise grow the stack
       on every iteration; collecting them here and prepending to the
@@ -103,7 +110,7 @@ private def isKnownPtr (s : EmitSSAState) (v : SVal) : Bool :=
 
 /-- Build a Layout.Ctx from the current emit state. -/
 private def layoutCtxOf (s : EmitSSAState) : Layout.Ctx :=
-  { structDefs := s.structDefs, enumDefs := s.enumDefs }
+  { structDefs := s.structDefs, enumDefs := s.enumDefs, newtypes := s.newtypes }
 
 private def ssaLookupStruct (s : EmitSSAState) (name : String) : Option CStructDef :=
   Layout.lookupStruct (layoutCtxOf s) name
@@ -133,10 +140,16 @@ partial def tyToLLVMTy (s : EmitSSAState) : Ty → LLVMTy
   | .generic "HeapArray" _ | .heapArray _ => .ptr
   | .generic "Vec" _ => .struct_ "Vec"
   | .generic "HashMap" _ => .struct_ "HashMap"
-  | .generic name _ =>
+  | .generic name args =>
     match ssaLookupEnum s name with
     | some _ => .enum_ name
-    | none => .struct_ name
+    | none =>
+      match ssaLookupStruct s name with
+      | some _ => .struct_ name
+      | none =>
+        match Layout.lookupNewtype (layoutCtxOf s) name with
+        | some _ => tyToLLVMTy s (Layout.resolveNewtype (layoutCtxOf s) (.generic name args))
+        | none => .struct_ name
   | .typeVar _ => .i64
   | .array elem n => .array n (tyToLLVMTy s elem)
   | .fn_ _ _ _ => .ptr
@@ -148,7 +161,10 @@ partial def tyToLLVMTy (s : EmitSSAState) : Ty → LLVMTy
       match ssaLookupEnum s name with
       | some _ => .enum_ name
       | none =>
-        panic! s!"EmitSSA.tyToLLVMTy: unknown named type '{name}'"
+        match Layout.lookupNewtype (layoutCtxOf s) name with
+        | some _ => tyToLLVMTy s (Layout.resolveNewtype (layoutCtxOf s) (.named name))
+        | none =>
+          panic! s!"EmitSSA.tyToLLVMTy: unknown named type '{name}'"
 
 /-- Map integer Concrete type to structured LLVM type. -/
 private def intTyToLLVMTy : Ty → LLVMTy
@@ -171,9 +187,14 @@ private def svalToOperand (s : EmitSSAState) (v : SVal) : LLVMOperand :=
     if name.startsWith "@fnref." then
       let bareName := (name.drop 7).toString
       -- Resolve linker aliases for function pointer references (e.g., hash_i32 → hash_hash_i32)
-      let resolved := match s.linkerAliases.lookup bareName with
-        | some orig => orig
-        | none => bareName
+      let resolved := if s.definedFnNames.contains bareName then bareName
+        else match s.localAliases.lookup bareName with
+          | some orig => orig
+          | none => match s.linkerAliases.lookup bareName with
+            | some orig => match s.localAliases.lookup orig with
+              | some qual => qual
+              | none => orig
+            | none => bareName
       .global resolved
     else .reg name
   | .intConst val _ => .intLit val
@@ -311,7 +332,9 @@ private def ssaEscapeStringForLLVM (str : String) : String :=
 /-- Materialize a string constant as a %struct.String pointer.
     Allocates a %struct.String, stores {ptr to chars, length}, returns ptr. -/
 private def materializeStrConst (s : EmitSSAState) (name : String) : EmitSSAState × String :=
-  let strLen := (s.stringLengths.find? fun (n, _) => n == name).map (·.2) |>.getD 0
+  let strLen : Nat := match s.stringLengths.find? fun (n, _) => n == name with
+    | some (_, n) => n
+    | none => panic! s!"internal error: string constant '{name}' not found in stringLengths table"
   let arrLen := strLen + 1  -- includes null terminator in the global
   -- GEP into the global char array
   let (s, gepTmp) := freshLocal s
@@ -335,7 +358,7 @@ private def materializeStrConst (s : EmitSSAState) (name : String) : EmitSSAStat
   let (s, lenField) := freshLocal s
   let lenFieldName := (lenField.drop 1).toString
   let s := emitStructured s (.gep lenFieldName (.struct_ "String") (.reg strName) [(.i32, .intLit 0), (.i32, .intLit 1)])
-  let s := emitStructured s (.store .i64 (.intLit strLen) (.reg lenFieldName))
+  let s := emitStructured s (.store .i64 (.intLit (Int.ofNat strLen)) (.reg lenFieldName))
   -- Store cap field (index 2)
   let (s, capField) := freshLocal s
   let capFieldName := (capField.drop 1).toString
@@ -347,7 +370,9 @@ private def materializeStrConst (s : EmitSSAState) (name : String) : EmitSSAStat
     Points directly at the global constant — no malloc, no memcpy.
     Cap is set to 0 to signal this is not a heap-owned buffer. -/
 private def materializeStrConstRef (s : EmitSSAState) (name : String) : EmitSSAState × String :=
-  let strLen := (s.stringLengths.find? fun (n, _) => n == name).map (·.2) |>.getD 0
+  let strLen : Nat := match s.stringLengths.find? fun (n, _) => n == name with
+    | some (_, n) => n
+    | none => panic! s!"internal error: string constant '{name}' not found in stringLengths table"
   let arrLen := strLen + 1
   -- GEP into the global char array (read-only pointer)
   let (s, gepTmp) := freshLocal s
@@ -366,7 +391,7 @@ private def materializeStrConstRef (s : EmitSSAState) (name : String) : EmitSSAS
   let (s, lenField) := freshLocal s
   let lenFieldName := (lenField.drop 1).toString
   let s := emitStructured s (.gep lenFieldName (.struct_ "String") (.reg strName) [(.i32, .intLit 0), (.i32, .intLit 1)])
-  let s := emitStructured s (.store .i64 (.intLit strLen) (.reg lenFieldName))
+  let s := emitStructured s (.store .i64 (.intLit (Int.ofNat strLen)) (.reg lenFieldName))
   -- Store cap field (index 2) — 0 signals non-owned / non-freeable
   let (s, capField) := freshLocal s
   let capFieldName := (capField.drop 1).toString
@@ -650,10 +675,19 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
       || (s.fnParams.any fun (n, t) =>
         n == fn && match t with | .fn_ _ _ _ => true | _ => false)
       || s.fnTypeRegs.contains fn
-    -- Resolve aliased imports to their real linker symbol
-    let linkerFn := match s.linkerAliases.lookup fn with
-      | some orig => orig
-      | none => fn
+    -- Resolve aliased imports to their real linker symbol.
+    -- If the call target already matches a defined function, use it directly
+    -- (avoids alias chains that would de-qualify a qualified colliding name).
+    -- Otherwise: check per-module aliases first, then global aliases,
+    -- chaining through local aliases if the linker alias target also collides.
+    let linkerFn := if s.definedFnNames.contains fn then fn
+      else match s.localAliases.lookup fn with
+        | some orig => orig
+        | none => match s.linkerAliases.lookup fn with
+          | some orig => match s.localAliases.lookup orig with
+            | some qual => qual
+            | none => orig
+          | none => fn
     let callTarget : LLVMOperand := if isIndirect then
       if fn.startsWith "%" then .reg (fn.drop 1).toString
       else .reg fn
@@ -732,9 +766,21 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     let dstLLTy := tyToLLVMTy s targetTy
     let valOp := svalToOperand s val
     if srcLLTy == dstLLTy then
-      -- Same type, just alias
-      if srcLLTy == .ptr then emitStructured s (.gep dst .i8 valOp [(.i32, .intLit 0)])
-      else emitStructured s (.binOp dst .add srcLLTy valOp (.intLit 0))
+      -- Same LLVM type, just alias. The `add 0` trick works for scalar
+      -- numeric types but not for first-class aggregates (struct/array/enum):
+      -- LLVM rejects `add %struct.X, 0`. For aggregates, round-trip through
+      -- a stack slot. For pointers, an offset-0 gep is the canonical alias.
+      match srcLLTy with
+      | .ptr =>
+        emitStructured s (.gep dst .i8 valOp [(.i32, .intLit 0)])
+      | .struct_ _ | .array _ _ | .enum_ _ =>
+        let (s, tmp) := freshLocal s
+        let tmpName := (tmp.drop 1).toString
+        let s := emitEntryAlloca s (.alloca tmpName srcLLTy)
+        let s := emitStructured s (.store srcLLTy valOp (.reg tmpName))
+        emitStructured s (.load dst dstLLTy (.reg tmpName))
+      | _ =>
+        emitStructured s (.binOp dst .add srcLLTy valOp (.intLit 0))
     else if srcLLTy == .ptr || dstLLTy == .ptr then
       if srcLLTy == .ptr && isIntegerTy targetTy then
         emitStructured s (.cast dst .ptrtoint .ptr valOp dstLLTy)
@@ -799,9 +845,9 @@ private def emitSTerm (s : EmitSSAState) (t : STerm) : EmitSSAState × LLVMTerm 
     let llTy := tyToLLVMTy s v.ty
     if llTy == .void then (s, .ret .void none)
     else match v with
-    | .strConst _ =>
+    | .strConst name =>
       -- String constant: materialize as struct, load, return by value
-      let (s, ptr) := materializeStrConst s (match v with | .strConst n => n | _ => "")
+      let (s, ptr) := materializeStrConst s name
       let (s, tmp) := freshLocal s
       let tmpName := (tmp.drop 1).toString
       let s := emitStructured s (.load tmpName llTy (.reg (ptr.drop 1).toString))
@@ -852,9 +898,16 @@ private def emitSBlock (s : EmitSSAState) (b : SBlock) : EmitSSAState :=
     currentInstrs := #[]
   }
 
+/-- Compute the LLVM function name for an SSA function, qualifying with modulePath
+    when the bare name collides across modules. -/
+private def llvmFnName (s : EmitSSAState) (f : SFnDef) : String :=
+  if s.collidingNames.contains f.name && !f.modulePath.isEmpty then
+    f.modulePath.replace "." "_" ++ "_" ++ f.name
+  else f.name
+
 private def emitSFnDef (s : EmitSSAState) (f : SFnDef) (isUserMain : Bool) : EmitSSAState :=
   let retTy := tyToLLVMTy s f.retTy
-  let fnName := if isUserMain then "user_main" else f.name
+  let fnName := if isUserMain then "user_main" else llvmFnName s f
   let params := f.params.map fun (n, t) => (n, paramTyToLLVMTy s t)
   -- Reset per-function state
   let s := { s with currentBlocks := #[], fnParams := f.params, entryAllocas := #[] }
@@ -1051,6 +1104,7 @@ private def collectSInstTys (inst : SInst) : List Ty :=
 
 def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : EmitSSAState :=
   let s := { s with structDefs := s.structDefs ++ m.structs, enumDefs := s.enumDefs ++ m.enums,
+                     newtypes := s.newtypes ++ m.newtypes,
                      linkerAliases := s.linkerAliases ++ m.linkerAliases,
                      externFnNames := s.externFnNames ++ m.externFns.map (·.1) }
   -- Collect all types from this module's functions for generic type arg lookup
@@ -1106,6 +1160,28 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
     { s with stringLengths := s.stringLengths ++ [(name, val.length)] }
   ) s
   -- Functions
+  -- Build per-module local aliases for colliding function names:
+  -- For each function in this module whose bare name collides across modules,
+  -- map bareName → modulePath_bareName so internal calls resolve correctly.
+  -- Also resolve colliding names through existing linker aliases (for imports).
+  let selfQualAliases := m.functions.foldl (fun acc f =>
+    if s.collidingNames.contains f.name && !f.modulePath.isEmpty then
+      let qualName := f.modulePath.replace "." "_" ++ "_" ++ f.name
+      acc ++ [(f.name, qualName)]
+    else acc
+  ) ([] : List (String × String))
+  -- For imported functions (via linker aliases), resolve bare → qualified
+  -- e.g., if linker alias says Alpha_compute → compute and compute collides,
+  -- reverse to: compute → Alpha_compute (the qualified def name)
+  let importQualAliases := m.linkerAliases.foldl (fun acc (qualCall, bareDef) =>
+    if s.collidingNames.contains bareDef then
+      -- qualCall is e.g. "Alpha_compute", bareDef is "compute"
+      -- The definition will be "Alpha_compute" after qualification
+      acc ++ [(bareDef, qualCall)]
+    else acc
+  ) ([] : List (String × String))
+  -- Local aliases: import aliases take priority (they specify which module was imported)
+  let s := { s with localAliases := importQualAliases ++ selfQualAliases }
   let hasMain := m.functions.any fun f => f.isEntryPoint
   let s := m.functions.foldl (fun s f =>
     emitSFnDef s f f.isEntryPoint
@@ -1195,20 +1271,22 @@ private def emitTestRunner (s : EmitSSAState) (modules : List SModule) (moduleFi
   else
     -- Emit globals for test name strings
     let s := testFns.foldl (fun s f =>
-      let nameLen := f.name.length + 1
-      let escaped := ssaEscapeStringForLLVM f.name
-      emitGlobal s { name := s!"test.name.{f.name}", ty := .array nameLen .i8, value := s!"c\"{escaped}\\00\"" }
+      let llName := llvmFnName s f
+      let nameLen := llName.length + 1
+      let escaped := ssaEscapeStringForLLVM llName
+      emitGlobal s { name := s!"test.name.{llName}", ty := .array nameLen .i8, value := s!"c\"{escaped}\\00\"" }
     ) s
     -- Emit format string globals
     let s := emitGlobal s { name := "fmt.test.pass", ty := .array 10 .i8, value := "c\"PASS: %s\\0A\\00\"" }
     let s := emitGlobal s { name := "fmt.test.fail", ty := .array 10 .i8, value := "c\"FAIL: %s\\0A\\00\"" }
     -- Helper: build test dispatch instructions for a given test at index i
     let mkTestDispatch (f : SFnDef) (i : String) : List LLVMInstr :=
-      let nameLen := f.name.length + 1
-      [ .comment s!"Test: {f.name}",
-        .call (some s!"result.{i}") .i32 (.global f.name) [],
+      let llName := llvmFnName s f
+      let nameLen := llName.length + 1
+      [ .comment s!"Test: {llName}",
+        .call (some s!"result.{i}") .i32 (.global llName) [],
         .binOp s!"is_pass.{i}" .icmpEq .i32 (.reg s!"result.{i}") (.intLit 0),
-        gep32 s!"name.{i}" (.array nameLen .i8) (.global s!"test.name.{f.name}") ]
+        gep32 s!"name.{i}" (.array nameLen .i8) (.global s!"test.name.{llName}") ]
     -- Build all blocks via fold over (remaining tests, index, accumulated blocks)
     -- Entry block gets alloca + store + first test dispatch
     let (blocks, _, _) := testFns.foldl (fun (acc, idx, rest) _f =>
@@ -1261,6 +1339,7 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   -- Collect all structs and enums for type resolution
   let allStructs := modules.foldl (fun acc m => acc ++ m.structs) []
   let allEnums := modules.foldl (fun acc m => acc ++ m.enums) []
+  let allNewtypes := modules.foldl (fun acc m => acc ++ m.newtypes) []
   -- Canonical builtin enum definitions with type parameters
   let optionDef : CEnumDef :=
     { name := optionEnumName, typeParams := ["T"],
@@ -1268,10 +1347,10 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
       builtinId := some .option }
   let resultDef : CEnumDef :=
     { name := resultEnumName, typeParams := ["T", "E"],
-      variants := [(okVariantName, [("value", .typeVar "T")]), (errVariantName, [("value", .typeVar "E")])],
+      variants := [(okVariantName, [("value", .typeVar "T")]), (errVariantName, [("error", .typeVar "E")])],
       builtinId := some .result }
   let builtinEnums : List CEnumDef := [optionDef, resultDef]
-  let s := { s with structDefs := allStructs, enumDefs := builtinEnums ++ allEnums }
+  let s := { s with structDefs := allStructs, enumDefs := builtinEnums ++ allEnums, newtypes := allNewtypes }
   -- Header
   let s := { s with moduleHeader := s.moduleHeader.push "; Generated by Concrete compiler (SSA path)" }
   -- Emit target triple so LLVM applies the correct ABI (struct passing, alignment, etc.)
@@ -1309,6 +1388,23 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   let allExternFns := modules.foldl (fun acc m => acc ++ m.externFns) []
   let allDefinedFns := modules.foldl (fun acc m => acc ++ m.functions.map (·.name)) []
   let s := emitExternDecls s allExternFns allDefinedFns
+  -- Detect function name collisions across modules: find bare names defined in 2+ module paths
+  -- Use f.modulePath (set by Lower) instead of m.name to handle flattened submodules correctly
+  let fnNamesByModule := modules.foldl (fun acc m =>
+    acc ++ (m.functions.map fun f => (f.name, if f.modulePath.isEmpty then m.name else f.modulePath))
+  ) ([] : List (String × String))
+  let collidingNames := fnNamesByModule.foldl (fun acc (name, mod1) =>
+    if acc.contains name then acc
+    else if fnNamesByModule.any fun (n, mod2) => n == name && mod2 != mod1 then
+      acc ++ [name]
+    else acc
+  ) ([] : List String)
+  let s := { s with collidingNames := collidingNames }
+  -- Build set of all LLVM function names (post-collision-qualification)
+  let definedFnNames := modules.foldl (fun acc m =>
+    acc ++ m.functions.map fun f => llvmFnName { s with collidingNames := collidingNames } f
+  ) ([] : List String)
+  let s := { s with definedFnNames := definedFnNames }
   -- Emit each module
   let s := modules.foldl (fun s m => emitSModule s m testMode) s
   -- In test mode, emit the test runner instead of the normal main wrapper

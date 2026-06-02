@@ -1,0 +1,21 @@
+// Pressure: linear variables created and consumed within branches.
+// Both branches create a local linear and consume it — tests scope cleanup.
+
+struct Res { val: Int }
+
+fn consume(r: Res) -> Int {
+    return r.val;
+}
+
+fn main() -> Int {
+    let cond: Bool = true;
+    if cond {
+        let r: Res = Res { val: 10 };
+        let v: Int = consume(r);
+        return v;
+    } else {
+        let r: Res = Res { val: 20 };
+        let v: Int = consume(r);
+        return v;
+    }
+}

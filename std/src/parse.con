@@ -1,10 +1,9 @@
 mod parse {
-    import std.option.{Option};
     import std.string.{digit_to_int};
 
     pub fn parse_uint(s: &String) -> Option<u64> {
         if s.len == 0 {
-            return Option::<u64>#None;
+            return Option::<u64>::None;
         }
 
         let result: u64 = 0;
@@ -12,20 +11,20 @@ mod parse {
         while i < s.len {
             let c: char = s.get_unchecked(i);
             if c < '0' {
-                return Option::<u64>#None;
+                return Option::<u64>::None;
             }
             if c > '9' {
-                return Option::<u64>#None;
+                return Option::<u64>::None;
             }
             result = result * 10 + digit_to_int::<u64>(c);
             i = i + 1;
         }
-        return Option::<u64>#Some { value: result };
+        return Option::<u64>::Some { value: result };
     }
 
     pub fn parse_int(s: &String) -> Option<i64> {
         if s.len == 0 {
-            return Option::<i64>#None;
+            return Option::<i64>::None;
         }
 
         let negative: bool = false;
@@ -35,7 +34,7 @@ mod parse {
             negative = true;
             start = 1;
             if s.len == 1 {
-                return Option::<i64>#None;
+                return Option::<i64>::None;
             }
         }
 
@@ -44,10 +43,10 @@ mod parse {
         while i < s.len {
             let c: char = s.get_unchecked(i);
             if c < '0' {
-                return Option::<i64>#None;
+                return Option::<i64>::None;
             }
             if c > '9' {
-                return Option::<i64>#None;
+                return Option::<i64>::None;
             }
             result = result * 10 + digit_to_int::<i64>(c);
             i = i + 1;
@@ -56,7 +55,7 @@ mod parse {
         if negative {
             result = 0 - result;
         }
-        return Option::<i64>#Some { value: result };
+        return Option::<i64>::Some { value: result };
     }
 
     fn hex_char_value(c: char) -> i64 {
@@ -80,7 +79,7 @@ mod parse {
 
     pub fn parse_hex(s: &String) -> Option<u64> {
         if s.len == 0 {
-            return Option::<u64>#None;
+            return Option::<u64>::None;
         }
 
         let start: u64 = 0;
@@ -98,7 +97,7 @@ mod parse {
         }
 
         if start >= s.len {
-            return Option::<u64>#None;
+            return Option::<u64>::None;
         }
 
         let result: u64 = 0;
@@ -106,17 +105,17 @@ mod parse {
         while i < s.len {
             let val: i64 = hex_char_value(s.get_unchecked(i));
             if val < 0 {
-                return Option::<u64>#None;
+                return Option::<u64>::None;
             }
             result = (result << 4) + (val as u64);
             i = i + 1;
         }
-        return Option::<u64>#Some { value: result };
+        return Option::<u64>::Some { value: result };
     }
 
     pub fn parse_bin(s: &String) -> Option<u64> {
         if s.len == 0 {
-            return Option::<u64>#None;
+            return Option::<u64>::None;
         }
 
         let start: u64 = 0;
@@ -134,7 +133,7 @@ mod parse {
         }
 
         if start >= s.len {
-            return Option::<u64>#None;
+            return Option::<u64>::None;
         }
 
         let result: u64 = 0;
@@ -147,17 +146,17 @@ mod parse {
                 if c == '1' {
                     result = (result << 1) + 1;
                 } else {
-                    return Option::<u64>#None;
+                    return Option::<u64>::None;
                 }
             }
             i = i + 1;
         }
-        return Option::<u64>#Some { value: result };
+        return Option::<u64>::Some { value: result };
     }
 
     pub fn parse_oct(s: &String) -> Option<u64> {
         if s.len == 0 {
-            return Option::<u64>#None;
+            return Option::<u64>::None;
         }
 
         let start: u64 = 0;
@@ -175,7 +174,7 @@ mod parse {
         }
 
         if start >= s.len {
-            return Option::<u64>#None;
+            return Option::<u64>::None;
         }
 
         let result: u64 = 0;
@@ -183,15 +182,15 @@ mod parse {
         while i < s.len {
             let c: char = s.get_unchecked(i);
             if c < '0' {
-                return Option::<u64>#None;
+                return Option::<u64>::None;
             }
             if c > '7' {
-                return Option::<u64>#None;
+                return Option::<u64>::None;
             }
             result = (result << 3) + digit_to_int::<u64>(c);
             i = i + 1;
         }
-        return Option::<u64>#Some { value: result };
+        return Option::<u64>::Some { value: result };
     }
 
     pub fn parse_bool(s: &String) -> Option<bool> {
@@ -200,7 +199,7 @@ mod parse {
                 if s.get_unchecked(1) == 'r' {
                     if s.get_unchecked(2) == 'u' {
                         if s.get_unchecked(3) == 'e' {
-                            return Option::<bool>#Some { value: true };
+                            return Option::<bool>::Some { value: true };
                         }
                     }
                 }
@@ -212,14 +211,14 @@ mod parse {
                     if s.get_unchecked(2) == 'l' {
                         if s.get_unchecked(3) == 's' {
                             if s.get_unchecked(4) == 'e' {
-                                return Option::<bool>#Some { value: false };
+                                return Option::<bool>::Some { value: false };
                             }
                         }
                     }
                 }
             }
         }
-        return Option::<bool>#None;
+        return Option::<bool>::None;
     }
 
     // Cursor for structured parsing
@@ -253,20 +252,20 @@ mod parse {
 
         pub fn peek(&self) -> Option<char> {
             if self.pos >= self.len {
-                return Option::<char>#None;
+                return Option::<char>::None;
             }
             let p: *const u8 = self.data + self.pos;
-            return Option::<char>#Some { value: (*(p as *mut u8)) as char };
+            return Option::<char>::Some { value: (*(p as *mut u8)) as char };
         }
 
         pub fn advance(&mut self) -> Option<char> {
             if self.pos >= self.len {
-                return Option::<char>#None;
+                return Option::<char>::None;
             }
             let p: *const u8 = self.data + self.pos;
             let c: char = (*(p as *mut u8)) as char;
             self.pos = self.pos + 1;
-            return Option::<char>#Some { value: c };
+            return Option::<char>::Some { value: c };
         }
 
         pub fn skip_whitespace(&mut self) {
@@ -317,13 +316,13 @@ mod parse {
         let result: Option<i64> = parse_int(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 12345 {
                     return 1;
                 }
                 return 0;
             },
-            Option#None => {
+            Option::None => {
                 return 1;
             }
         }
@@ -335,13 +334,13 @@ mod parse {
         let result: Option<i64> = parse_int(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != -42 {
                     return 1;
                 }
                 return 0;
             },
-            Option#None => {
+            Option::None => {
                 return 1;
             }
         }
@@ -353,13 +352,13 @@ mod parse {
         let result: Option<i64> = parse_int(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 0 {
                     return 1;
                 }
                 return 0;
             },
-            Option#None => {
+            Option::None => {
                 return 1;
             }
         }
@@ -371,10 +370,10 @@ mod parse {
         let result: Option<i64> = parse_int(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 return 1;
             },
-            Option#None => {
+            Option::None => {
                 return 0;
             }
         }
@@ -386,10 +385,10 @@ mod parse {
         let result: Option<i64> = parse_int(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 return 1;
             },
-            Option#None => {
+            Option::None => {
                 return 0;
             }
         }
@@ -401,13 +400,13 @@ mod parse {
         let result: Option<u64> = parse_uint(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 999 {
                     return 1;
                 }
                 return 0;
             },
-            Option#None => {
+            Option::None => {
                 return 1;
             }
         }
@@ -419,13 +418,13 @@ mod parse {
         let result: Option<u64> = parse_hex(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 255 {
                     return 1;
                 }
                 return 0;
             },
-            Option#None => {
+            Option::None => {
                 return 1;
             }
         }
@@ -437,13 +436,13 @@ mod parse {
         let result: Option<u64> = parse_hex(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 255 {
                     return 1;
                 }
                 return 0;
             },
-            Option#None => {
+            Option::None => {
                 return 1;
             }
         }
@@ -455,13 +454,13 @@ mod parse {
         let result: Option<u64> = parse_bin(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 10 {
                     return 1;
                 }
                 return 0;
             },
-            Option#None => {
+            Option::None => {
                 return 1;
             }
         }
@@ -473,13 +472,13 @@ mod parse {
         let result: Option<u64> = parse_oct(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 15 {
                     return 1;
                 }
                 return 0;
             },
-            Option#None => {
+            Option::None => {
                 return 1;
             }
         }
@@ -491,13 +490,13 @@ mod parse {
         let result: Option<bool> = parse_bool(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if !value {
                     return 1;
                 }
                 return 0;
             },
-            Option#None => {
+            Option::None => {
                 return 1;
             }
         }
@@ -509,13 +508,13 @@ mod parse {
         let result: Option<bool> = parse_bool(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value {
                     return 1;
                 }
                 return 0;
             },
-            Option#None => {
+            Option::None => {
                 return 1;
             }
         }
@@ -527,10 +526,10 @@ mod parse {
         let result: Option<bool> = parse_bool(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 return 1;
             },
-            Option#None => {
+            Option::None => {
                 return 0;
             }
         }
@@ -550,13 +549,13 @@ mod parse {
         }
         let ch: Option<char> = cur.advance();
         match ch {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 'h' {
                     s.drop();
                     return 1;
                 }
             },
-            Option#None => {
+            Option::None => {
                 s.drop();
                 return 1;
             }
@@ -580,13 +579,13 @@ mod parse {
         }
         let ch: Option<char> = cur.peek();
         match ch {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 'h' {
                     s.drop();
                     return 1;
                 }
             },
-            Option#None => {
+            Option::None => {
                 s.drop();
                 return 1;
             }
@@ -624,8 +623,8 @@ mod parse {
         let result: Option<i64> = parse_int(&s);
         s.drop();
         match result {
-            Option#Some { value } => { return 1; },
-            Option#None => { return 0; }
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
         }
     }
 
@@ -635,8 +634,8 @@ mod parse {
         let result: Option<i64> = parse_int(&s);
         s.drop();
         match result {
-            Option#Some { value } => { return 1; },
-            Option#None => { return 0; }
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
         }
     }
 
@@ -647,8 +646,8 @@ mod parse {
         let result: Option<u64> = parse_uint(&s);
         s.drop();
         match result {
-            Option#Some { value } => { return 1; },
-            Option#None => { return 0; }
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
         }
     }
 
@@ -658,8 +657,8 @@ mod parse {
         let result: Option<u64> = parse_hex(&s);
         s.drop();
         match result {
-            Option#Some { value } => { return 1; },
-            Option#None => { return 0; }
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
         }
     }
 
@@ -669,8 +668,8 @@ mod parse {
         let result: Option<u64> = parse_hex(&s);
         s.drop();
         match result {
-            Option#Some { value } => { return 1; },
-            Option#None => { return 0; }
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
         }
     }
 
@@ -680,13 +679,13 @@ mod parse {
         let result: Option<u64> = parse_hex(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 171 {
                     return 1;
                 }
                 return 0;
             },
-            Option#None => { return 1; }
+            Option::None => { return 1; }
         }
     }
 
@@ -696,8 +695,8 @@ mod parse {
         let result: Option<u64> = parse_bin(&s);
         s.drop();
         match result {
-            Option#Some { value } => { return 1; },
-            Option#None => { return 0; }
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
         }
     }
 
@@ -707,8 +706,8 @@ mod parse {
         let result: Option<u64> = parse_oct(&s);
         s.drop();
         match result {
-            Option#Some { value } => { return 1; },
-            Option#None => { return 0; }
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
         }
     }
 
@@ -718,13 +717,13 @@ mod parse {
         let result: Option<u64> = parse_oct(&s);
         s.drop();
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 15 {
                     return 1;
                 }
                 return 0;
             },
-            Option#None => { return 1; }
+            Option::None => { return 1; }
         }
     }
 
@@ -734,8 +733,8 @@ mod parse {
         let result: Option<bool> = parse_bool(&s);
         s.drop();
         match result {
-            Option#Some { value } => { return 1; },
-            Option#None => { return 0; }
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
         }
     }
 
@@ -746,8 +745,8 @@ mod parse {
         let result: Option<bool> = parse_bool(&s);
         s.drop();
         match result {
-            Option#Some { value } => { return 1; },
-            Option#None => { return 0; }
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
         }
     }
 
@@ -762,20 +761,20 @@ mod parse {
         // peek at EOF should return None
         let pk: Option<char> = cur.peek();
         match pk {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 s.drop();
                 return 1;
             },
-            Option#None => {}
+            Option::None => {}
         }
         // advance at EOF should return None
         let adv: Option<char> = cur.advance();
         match adv {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 s.drop();
                 return 1;
             },
-            Option#None => {}
+            Option::None => {}
         }
         // expect_char at EOF should return false
         if cur.expect_char('x') {
@@ -794,36 +793,36 @@ mod parse {
         let c2: Option<char> = cur.advance();
         let c3: Option<char> = cur.advance();
         match c1 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 'a' {
                     s.drop();
                     return 1;
                 }
             },
-            Option#None => {
+            Option::None => {
                 s.drop();
                 return 1;
             }
         }
         match c2 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 'b' {
                     s.drop();
                     return 1;
                 }
             },
-            Option#None => {
+            Option::None => {
                 s.drop();
                 return 1;
             }
         }
         // c3 should be None (past end)
         match c3 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 s.drop();
                 return 1;
             },
-            Option#None => {}
+            Option::None => {}
         }
         if !(cur.is_eof()) {
             s.drop();

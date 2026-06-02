@@ -1,0 +1,18 @@
+// Pressure error: move a linear after it's been reserved by defer.
+// Should fail: variable reserved by defer cannot be consumed.
+
+struct Resource { val: Int }
+
+impl Destroy for Resource {
+    fn destroy(&self) { }
+}
+
+fn consume(r: Resource) -> Int {
+    return r.val;
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { val: 42 };
+    defer destroy(r);
+    return consume(r);
+}

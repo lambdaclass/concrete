@@ -1,6 +1,5 @@
 mod ordered_set {
     import std.ordered_map.{OrderedMap};
-    import std.option.{Option};
 
     pub struct OrderedSet<K> {
         inner: OrderedMap<K, u8>,
@@ -17,8 +16,8 @@ mod ordered_set {
         pub fn insert(&mut self, key: K) with(Alloc) -> bool {
             let old: Option<u8> = self.inner.insert(key, 0);
             match old {
-                Option#Some { value } => { return false; },
-                Option#None => { return true; }
+                Option::Some { value } => { return false; },
+                Option::None => { return true; }
             }
         }
 
@@ -29,8 +28,8 @@ mod ordered_set {
         pub fn remove(&mut self, key: &K) -> bool {
             let old: Option<u8> = self.inner.remove(key);
             match old {
-                Option#Some { value } => { return true; },
-                Option#None => { return false; }
+                Option::Some { value } => { return true; },
+                Option::None => { return false; }
             }
         }
 
@@ -116,18 +115,18 @@ mod ordered_set {
 
         let mn: Option<&i32> = s.min();
         match mn {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if *value != 10 { s.drop(); return 1; }
             },
-            Option#None => { s.drop(); return 1; }
+            Option::None => { s.drop(); return 1; }
         }
 
         let mx: Option<&i32> = s.max();
         match mx {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if *value != 50 { s.drop(); return 1; }
             },
-            Option#None => { s.drop(); return 1; }
+            Option::None => { s.drop(); return 1; }
         }
 
         s.drop();
@@ -189,17 +188,17 @@ mod ordered_set {
         // min should be 10, max should be 50
         let mn: Option<&i32> = s.min();
         match mn {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if *value != 10 { s.drop(); return 1; }
             },
-            Option#None => { s.drop(); return 1; }
+            Option::None => { s.drop(); return 1; }
         }
         let mx: Option<&i32> = s.max();
         match mx {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if *value != 50 { s.drop(); return 1; }
             },
-            Option#None => { s.drop(); return 1; }
+            Option::None => { s.drop(); return 1; }
         }
 
         // Removed keys should be absent

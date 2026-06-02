@@ -1,0 +1,11 @@
+// Adversarial: predictable = true policy active, but code uses File capability.
+// Function correctly declares File, but predictable profile forbids blocking I/O.
+// Expected: compiler rejects with E0610.
+
+pub fn read_something() with(File) -> Int {
+    return 1;
+}
+
+pub fn main() with(File) -> Int {
+    return read_something();
+}

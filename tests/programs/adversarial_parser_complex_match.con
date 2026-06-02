@@ -1,0 +1,55 @@
+// Adversarial parser: match with 15 arms on a large enum.
+// Stresses match parsing and exhaustiveness checking.
+// Expected: 42
+
+enum Copy Token {
+    Plus {},
+    Minus {},
+    Star {},
+    Slash {},
+    Eq {},
+    Neq {},
+    Lt {},
+    Gt {},
+    Leq {},
+    Geq {},
+    And {},
+    Or {},
+    Not {},
+    LParen {},
+    RParen {},
+}
+
+fn priority(t: Token) -> Int {
+    match t {
+        Token::Plus {} => { return 1; },
+        Token::Minus {} => { return 1; },
+        Token::Star {} => { return 2; },
+        Token::Slash {} => { return 2; },
+        Token::Eq {} => { return 3; },
+        Token::Neq {} => { return 3; },
+        Token::Lt {} => { return 4; },
+        Token::Gt {} => { return 4; },
+        Token::Leq {} => { return 4; },
+        Token::Geq {} => { return 4; },
+        Token::And {} => { return 5; },
+        Token::Or {} => { return 5; },
+        Token::Not {} => { return 6; },
+        Token::LParen {} => { return 7; },
+        Token::RParen {} => { return 7; },
+    }
+}
+
+pub fn main() -> Int {
+    let a: Int = priority(Token::RParen {});
+    let b: Int = priority(Token::LParen {});
+    let c: Int = priority(Token::Not {});
+    let d: Int = priority(Token::Or {});
+    let e: Int = priority(Token::And {});
+    let f: Int = priority(Token::Geq {});
+    let g: Int = priority(Token::Lt {});
+    let h: Int = priority(Token::Neq {});
+    let i: Int = priority(Token::Plus {});
+    // 7+7+6+5+5+4+4+3+1 = 42
+    return a + b + c + d + e + f + g + h + i;
+}

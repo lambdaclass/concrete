@@ -1,0 +1,40 @@
+// Adversarial test: &T is Copy — shared reference can be passed to multiple functions.
+
+struct Data {
+    x: Int,
+    y: Int,
+}
+
+fn read_x(d: &Data) -> Int {
+    return d.x;
+}
+
+fn read_y(d: &Data) -> Int {
+    return d.y;
+}
+
+fn sum_fields(d: &Data) -> Int {
+    return d.x + d.y;
+}
+
+fn consume_data(d: Data) -> Int {
+    return d.x + d.y;
+}
+
+fn shared_ref_multiple_calls() -> Int {
+    let mut d: Data = Data { x: 10, y: 20 };
+    let mut result: Int = 0;
+    borrow d as ref in R {
+        // ref is &Data (Copy) — pass to multiple functions
+        let a: Int = read_x(ref);
+        let b: Int = read_y(ref);
+        let c: Int = sum_fields(ref);
+        result = a + b + c;
+    }
+    let _z: Int = consume_data(d);
+    return result;
+}
+
+fn main() -> Int {
+    return shared_ref_multiple_calls();
+}

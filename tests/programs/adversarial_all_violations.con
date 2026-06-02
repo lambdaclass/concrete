@@ -1,0 +1,18 @@
+// Adversarial: one function that triggers ALL 5 predictable profile violations.
+// Must show all 5 violation reasons in the report.
+
+extern fn external_call(x: Int) -> Int;
+
+fn everything_bad(n: Int) with(File, Alloc, Unsafe) -> Int {
+    if n <= 0 { return 0; }
+    let x: Int = external_call(n);
+    let mut sum: Int = 0;
+    while sum < x {
+        sum = sum + 1;
+    }
+    return everything_bad(n - 1) + sum;
+}
+
+pub fn main() with(File, Alloc, Unsafe) -> Int {
+    return everything_bad(10);
+}

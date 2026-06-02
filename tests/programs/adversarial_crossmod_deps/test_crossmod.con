@@ -1,0 +1,30 @@
+// Cross-module dependency identity test.
+// Two modules each have a function named "add" — proved via registry.
+// A caller in one module uses "add" from the same module.
+// The dependency must use the correct qualified name.
+
+mod left {
+    pub fn add(a: i64, b: i64) -> i64 {
+        return a + b;
+    }
+
+    pub fn use_add(x: i64) -> i64 {
+        return add(x, 1);
+    }
+}
+
+mod right {
+    pub fn add(a: i64, b: i64) -> i64 {
+        return a + b;
+    }
+
+    pub fn use_add(x: i64) -> i64 {
+        return add(x, 2);
+    }
+}
+
+fn main() -> i64 {
+    let a: i64 = left::use_add(10);
+    let b: i64 = right::use_add(20);
+    return a + b;
+}

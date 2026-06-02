@@ -449,71 +449,71 @@ mod Printer {
                      kvpairs: &mut Vec<KVPair>,
                      vals: &mut Vec<Val>) with(Console, Alloc) {
         if v.tag == 0 {
-            print_string(&"null");
+            print("null");
             return;
         }
         if v.tag == 1 {
             if v.data == 1 {
-                print_string(&"true");
+                print("true");
             } else {
-                print_string(&"false");
+                print("false");
             }
             return;
         }
         if v.tag == 2 {
-            print_int(v.data as Int);
+            print(v.data as Int);
             return;
         }
         if v.tag == 3 {
-            print_char(34); // "
+            print("\"");
             let s: String = vec_get::<String>(strings, v.data as Int);
             defer s.drop();
-            print_string(&s);
-            print_char(34); // "
+            print(s);
+            print("\"");
             return;
         }
         if v.tag == 4 {
             let desc: ArrayDesc = vec_get::<ArrayDesc>(arrays, v.data as Int);
-            print_char(91); // [
+            print("[");
             let mut i: i32 = 0;
             while i < desc.len {
                 if i > 0 {
-                    print_char(44); // ,
+                    print(",");
                 }
                 let elem: Val = vec_get::<Val>(vals, (desc.start + i) as Int);
                 print_val(elem, strings, arrays, objects, kvpairs, vals);
                 i = i + 1;
             }
-            print_char(93); // ]
+            print("]");
             return;
         }
         if v.tag == 5 {
             let desc: ObjDesc = vec_get::<ObjDesc>(objects, v.data as Int);
-            print_char(123); // {
+            print("{");
             let mut i: i32 = 0;
             while i < desc.len {
                 if i > 0 {
-                    print_char(44); // ,
+                    print(",");
                 }
                 let kv: KVPair = vec_get::<KVPair>(kvpairs, (desc.start + i) as Int);
-                print_char(34); // "
+                print("\"");
                 let k: String = vec_get::<String>(strings, kv.key as Int);
                 defer k.drop();
-                print_string(&k);
-                print_char(34); // "
-                print_char(58); // :
+                print(k);
+                print("\"");
+                print(":");
                 let val: Val = Val { tag: kv.val_tag, data: kv.val_data };
                 print_val(val, strings, arrays, objects, kvpairs, vals);
                 i = i + 1;
             }
-            print_char(125); // }
+            print("}");
             return;
         }
         if v.tag == 6 {
             let mut msg: String = "ERROR@";
             defer msg.drop();
             msg.append_int(v.data as Int);
-            print_string(&msg);
+            print(msg);
             return;
         }
     }
@@ -565,8 +565,7 @@ mod Main {
             msg.append_int(expected_tag as Int);
             msg.append(&" got ");
             msg.append_int(v.tag as Int);
-            print_string(&msg);
-            print_char(10);
+            println(msg);
             return err_code;
         }
         return 0;
@@ -593,8 +592,7 @@ mod Main {
             msg.append(&",");
             msg.append_int(v.data as Int);
             msg.append(&")");
-            print_string(&msg);
-            print_char(10);
+            println(msg);
             return err_code;
         }
         return 0;

@@ -1,0 +1,9 @@
+// Test: --check predictable should fail for recursive function
+fn countdown(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    return countdown(n - 1);
+}
+
+fn main() -> Int {
+    return countdown(10);
+}

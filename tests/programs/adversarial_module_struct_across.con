@@ -1,0 +1,23 @@
+// Adversarial module: struct defined in one module, used across boundary.
+// Tests cross-module type visibility for struct construction and field access.
+// Expected: 42
+
+mod Types {
+    pub struct Copy Pair { x: Int, y: Int }
+}
+
+mod Logic {
+    import Types.{ Pair };
+    pub fn sum_pair(p: Pair) -> Int {
+        return p.x + p.y;
+    }
+}
+
+mod Main {
+    import Types.{ Pair };
+    import Logic.{ sum_pair };
+    fn main() -> Int {
+        let p: Pair = Pair { x: 20, y: 22 };
+        return sum_pair(p);
+    }
+}

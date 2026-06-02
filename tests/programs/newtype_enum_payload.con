@@ -1,0 +1,13 @@
+// Regression: newtype as enum payload type must round-trip through match binding.
+// Historical bug: enum payload slot was sized by declared field type (u16 = 2 bytes),
+// but the payload store used the constructor arg's inferred type (Int = 8 bytes),
+// clobbering adjacent stack and returning 0 on readout.
+newtype Port = u16;
+
+fn main() -> Int {
+    let maybe: Option<Port> = Option::<Port>::Some { value: Port(8080) };
+    match maybe {
+        Option::Some { value } => { return value.0 as Int; }
+        Option::None => { return 0; }
+    }
+}

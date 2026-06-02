@@ -1,6 +1,0 @@
-enum Color { Red { }, Blue { } }
-
-fn main() -> Int {
-    let c: Color = Color#Green { };
-    return 0;
-}

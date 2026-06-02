@@ -1,0 +1,25 @@
+// Adversarial test: borrow block ends, then variable can be consumed.
+// Verifies that unfreezing actually works.
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn borrow_then_consume() -> Int {
+    let mut r: Resource = Resource { value: 42 };
+    let mut snapshot: Int = 0;
+    borrow r as ref in R {
+        snapshot = ref.value;
+    }
+    // r is unfrozen — can now consume it
+    let final_val: Int = consume(r);
+    return snapshot + final_val;
+}
+
+fn main() -> Int {
+    return borrow_then_consume();
+}

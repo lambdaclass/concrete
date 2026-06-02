@@ -1,0 +1,252 @@
+# Wrong-code regression corpus manifest.
+#
+# Operative contract: docs/WRONG_CODE_CORPUS.md
+# Operations guide: tests/wrong-code/README.md
+#
+# Every wrong-code regression — miscompile, codegen divergence,
+# verifier-trigger, fact/report mismatch, proof/evidence regression,
+# crasher, or error-emission bug — is registered here. The manifest
+# is a registry, not a relocation: existing repros stay where they
+# are, and the `repro` field points at them.
+
+[[case]]
+id          = "WC-0001"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/adversarial/newtype/chained.con"
+kind        = "runtime"
+expected    = "42"
+discovered  = "66d8736"
+fixed       = "66d8736"
+notes       = "tests/wrong-code/cases/WC-0001.md"
+
+[[case]]
+id          = "WC-0002"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/adversarial/newtype/borrow.con"
+kind        = "runtime"
+expected    = "8080"
+discovered  = "66d8736"
+fixed       = "66d8736"
+notes       = "tests/wrong-code/cases/WC-0002.md"
+
+[[case]]
+id          = "WC-0003"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_field_assign_narrow_field.con"
+kind        = "runtime"
+expected    = "100"
+discovered  = "66d8736"
+fixed       = "66d8736"
+notes       = "tests/wrong-code/cases/WC-0003.md"
+
+[[case]]
+id          = "WC-0004"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/wrong-code/cases/WC-0004/program.con"
+kind        = "runtime"
+expected    = "0"
+discovered  = "parse_validate phase-3 work (CHANGELOG entry — original code E0703, candidate-minimization symptom E0708)"
+fixed       = "WC-0004 fix in Concrete/Lower.lean match merge"
+notes       = "tests/wrong-code/cases/WC-0004.md"
+
+# ----------------------------------------------------------------------
+# Bulk registration of historical bug_*.con cases (Phase D bulk import).
+# Each entry registers an existing repro under tests/programs/bug_*.con
+# in its current state. Per-case notes summarize the symptom, expected
+# behavior, and historical context. Cases are listed in alphabetical
+# order of the repro path.
+# ----------------------------------------------------------------------
+
+[[case]]
+id          = "WC-0005"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_array_struct_field_mutation.con"
+kind        = "runtime"
+expected    = "99\n0"
+discovered  = "historical (pre-corpus)"
+notes       = "tests/wrong-code/cases/WC-0005.md"
+
+[[case]]
+id          = "WC-0006"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_array_var_index_assign.con"
+kind        = "runtime"
+expected    = "42"
+discovered  = "historical Bug 004 — Lower.lean arrayIndexAssign element-type GEP"
+notes       = "tests/wrong-code/cases/WC-0006.md"
+
+[[case]]
+id          = "WC-0007"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_arrow_assign_narrow_field.con"
+kind        = "runtime"
+expected    = "107"
+discovered  = "38ce7f5 (sibling to WC-0003 in the field-assign narrow-int family)"
+fixed       = "38ce7f5"
+notes       = "tests/wrong-code/cases/WC-0007.md"
+
+[[case]]
+id          = "WC-0008"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_clock_builtin.con"
+kind        = "runtime"
+expected    = "0"
+discovered  = "historical Bug 012 — clock_monotonic_ns builtin landing"
+notes       = "tests/wrong-code/cases/WC-0008.md"
+
+[[case]]
+id          = "WC-0009"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_cross_module_mut_borrow.con"
+kind        = "runtime"
+expected    = "42"
+discovered  = "historical — &mut Vec<T> across module boundary consumed the borrow"
+notes       = "tests/wrong-code/cases/WC-0009.md"
+
+[[case]]
+id          = "WC-0010"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_cross_module_struct_field.con"
+kind        = "runtime"
+expected    = "42"
+discovered  = "historical — cross-module struct fields all read offset 0"
+notes       = "tests/wrong-code/cases/WC-0010.md"
+
+[[case]]
+id          = "WC-0011"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_enum_in_struct.con"
+kind        = "runtime"
+expected    = "0"
+discovered  = "historical Bug 005 — enum-in-struct alignment + Vec<T> integration"
+notes       = "tests/wrong-code/cases/WC-0011.md"
+
+[[case]]
+id          = "WC-0012"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_i32_literal_type.con"
+kind        = "runtime"
+expected    = "42"
+discovered  = "historical — `0 - a` where a:i32 emitted sub i64 0, %i32 (type mismatch)"
+notes       = "tests/wrong-code/cases/WC-0012.md"
+
+[[case]]
+id          = "WC-0013"
+category    = "error-regression"
+status      = "fixed"
+repro       = "tests/programs/bug_if_expression.con"
+kind        = "runtime"
+expected    = "0"
+discovered  = "historical Bug 008 — if-else as expression rejected; now accepted"
+notes       = "tests/wrong-code/cases/WC-0013.md"
+
+[[case]]
+id          = "WC-0014"
+category    = "error-regression"
+status      = "fixed"
+repro       = "tests/programs/bug_int_match_consume.con"
+kind        = "runtime"
+expected    = "0"
+discovered  = "historical Bug 020 — int match arms not propagating consumption state"
+notes       = "tests/wrong-code/cases/WC-0014.md"
+
+[[case]]
+id          = "WC-0015"
+category    = "error-regression"
+status      = "fixed"
+repro       = "tests/programs/bug_int_match_disagree.con"
+kind        = "compile-error"
+expected    = "E0209"
+discovered  = "historical Bug 021 — int match arms not checking consumption agreement"
+notes       = "tests/wrong-code/cases/WC-0015.md"
+
+[[case]]
+id          = "WC-0016"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_print_builtins.con"
+kind        = "runtime"
+expected    = "hello 42\n0"
+discovered  = "historical Bug 007 — print_string / print_int / print_char landing"
+notes       = "tests/wrong-code/cases/WC-0016.md"
+
+[[case]]
+id          = "WC-0017"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_stack_array_borrow_copy.con"
+kind        = "runtime"
+expected    = "42"
+discovered  = "historical Bug 018 — borrowing stack array as *mut wrote into a copy"
+notes       = "tests/wrong-code/cases/WC-0017.md"
+
+[[case]]
+id          = "WC-0018"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/bug_string_building.con"
+kind        = "runtime"
+expected    = "0"
+discovered  = "historical Bug 011 — string_push_char + string_append in-place mutation"
+notes       = "tests/wrong-code/cases/WC-0018.md"
+
+# ----------------------------------------------------------------------
+# Selected adversarial coverage of high-risk compiler boundaries.
+# Curated, not exhaustive: only cases that exercise known-fragile
+# layouts (newtype layout in option/heap positions), the match+borrow
+# interaction that produced WC-0004, or recently-shipped features
+# (trait dispatch). Generic adversarial coverage stays in
+# tests/programs/adversarial/<area>/ without a manifest entry.
+# ----------------------------------------------------------------------
+
+[[case]]
+id          = "WC-0019"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/adversarial/newtype/heap_pattern.con"
+kind        = "runtime"
+expected    = "7777"
+discovered  = "66d8736 adversarial sweep (high-risk: heap + arrow-deref + newtype layout)"
+notes       = "tests/wrong-code/cases/WC-0019.md"
+
+[[case]]
+id          = "WC-0020"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/adversarial/newtype/in_option_chain.con"
+kind        = "runtime"
+expected    = "200"
+discovered  = "66d8736 adversarial sweep (high-risk: Option<Newtype> payload layout, the same surface as the older newtype-in-enum-payload codegen bug)"
+notes       = "tests/wrong-code/cases/WC-0020.md"
+
+[[case]]
+id          = "WC-0021"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/adversarial/borrow/mut_borrow_through_match.con"
+kind        = "runtime"
+expected    = "100"
+discovered  = "66d8736 adversarial sweep (high-risk: same match+borrow interaction surface as WC-0004)"
+notes       = "tests/wrong-code/cases/WC-0021.md"
+
+[[case]]
+id          = "WC-0022"
+category    = "miscompile"
+status      = "fixed"
+repro       = "tests/programs/adversarial/trait_dispatch/trait_method_via_bound.con"
+kind        = "runtime"
+expected    = "84"
+discovered  = "66d8736 adversarial sweep (high-risk: trait dispatch via bound, recently-shipped feature)"
+notes       = "tests/wrong-code/cases/WC-0022.md"

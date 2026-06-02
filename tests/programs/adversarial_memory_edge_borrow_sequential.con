@@ -1,0 +1,54 @@
+// Adversarial test: sequential borrows of the same variable.
+// After one borrow block ends, another should work.
+
+struct Data {
+    x: Int,
+    y: Int,
+}
+
+fn consume_data(d: Data) -> Int {
+    return d.x + d.y;
+}
+
+fn sequential_borrows() -> Int {
+    let mut d: Data = Data { x: 10, y: 20 };
+    let mut sum: Int = 0;
+
+    // First borrow — shared
+    borrow d as r1 in R1 {
+        sum = r1.x;
+    }
+
+    // Second borrow — also shared (d should be unfrozen)
+    borrow d as r2 in R2 {
+        sum = sum + r2.y;
+    }
+
+    // d is still available
+    let _z: Int = consume_data(d);
+    return sum;
+}
+
+fn sequential_shared_then_mut() -> Int {
+    let mut d: Data = Data { x: 5, y: 15 };
+    let mut val: Int = 0;
+
+    // Shared borrow first
+    borrow d as r1 in R1 {
+        val = r1.x;
+    }
+
+    // Then mutable borrow (d is unfrozen, should be fine)
+    borrow mut d as r2 in R2 {
+        *r2 = Data { x: 100, y: 200 };
+    }
+
+    let result: Int = consume_data(d);
+    return val + result;
+}
+
+fn main() -> Int {
+    let r1: Int = sequential_borrows();
+    let r2: Int = sequential_shared_then_mut();
+    return r1 + r2;
+}

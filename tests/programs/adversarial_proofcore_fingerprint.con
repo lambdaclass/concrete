@@ -1,0 +1,29 @@
+// Adversarial: ProofCore fingerprint properties.
+// Tests that fingerprints are deterministic and body-dependent.
+//
+// Expected:
+//   add_v1 and add_v2: identical bodies → same fingerprint
+//   add_v1 and sub_v1: different bodies → different fingerprints
+//   add_with_comment: same body as add_v1 (comments don't survive parse) → same fingerprint
+
+fn add_v1(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+fn add_v2(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+fn sub_v1(a: Int, b: Int) -> Int {
+    return a - b;
+}
+
+// This function has a comment above it but the body is a + b.
+// Comments are stripped by the parser so fingerprint = add_v1.
+fn add_with_comment(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+pub fn main() -> Int {
+    return add_v1(1, 2) + sub_v1(3, 1);
+}

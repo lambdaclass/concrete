@@ -1,0 +1,42 @@
+name: site
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Zola
+        run: |
+          tag=$(curl -sSL 'https://api.github.com/repos/getzola/zola/releases/latest' | jq -r '.tag_name')
+          url="https://github.com/getzola/zola/releases/download/${tag}/zola-${tag}-x86_64-unknown-linux-gnu.tar.gz"
+          mkdir zola
+          curl -sSL "$url" | tar -xz --directory=./zola
+          echo "$(pwd)/zola" >> "$GITHUB_PATH"
+
+      - name: Build Site
+        run: |
+          zola --root site build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './site/public/'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

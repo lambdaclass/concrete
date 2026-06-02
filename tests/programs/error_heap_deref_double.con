@@ -1,0 +1,18 @@
+// ERROR TEST: *p on Heap<T> consumes the pointer — second deref is use-after-move.
+
+struct Wrapper {
+    value: Int,
+}
+
+fn consume_wrapper(w: Wrapper) -> Int {
+    return w.value;
+}
+
+fn main() with(Std) -> Int {
+    let p: Heap<Wrapper> = alloc(Wrapper { value: 42 });
+    let w1: Wrapper = *p;  // consumes p
+    let _x: Int = consume_wrapper(w1);
+    let w2: Wrapper = *p;  // ERROR: use after move
+    let _y: Int = consume_wrapper(w2);
+    return 0;
+}

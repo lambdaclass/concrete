@@ -1,0 +1,210 @@
+=== Proof Status Report ===
+
+-- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:57
+
+  `fixed_capacity.ok_result` passes the predictable profile but has no registered proof.
+
+ 57 |     fn ok_result(msg_type: i32, seq: i32, plen: i32) -> ValidateResult {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (struct ValidateResult error=(int 0) msg_type=(var msg_type) seq_num=(var seq) payload_len=(var plen)))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:61
+
+  `fixed_capacity.err_result` passes the predictable profile but has no registered proof.
+
+ 61 |     fn err_result(code: i32) -> ValidateResult {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (struct ValidateResult error=(var code) msg_type=(int 0) seq_num=(int 0) payload_len=(int 0)))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:70
+
+  `fixed_capacity.validate_version` passes the predictable profile but has no registered proof.
+
+ 70 |     fn validate_version(v: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.eq (var v) (int 1)) [(ret (int 0))]) (ret (int 2))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:75
+
+  `fixed_capacity.validate_msg_type` passes the predictable profile but has no registered proof.
+
+ 75 |     fn validate_msg_type(t: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.geq (var t) (int 1)) [(if (binop Concrete.BinOp.leq (var t) (int 4)) [(ret (int 0))])]) (ret (int 3))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:82
+
+  `fixed_capacity.validate_payload_len` passes the predictable profile but has no registered proof.
+
+ 82 |     fn validate_payload_len(plen: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.geq (var plen) (int 0)) [(if (binop Concrete.BinOp.leq (var plen) (int 240)) [(ret (int 0))])]) (ret (int 4))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:89
+
+  `fixed_capacity.validate_total_len` passes the predictable profile but has no registered proof.
+
+ 89 |     fn validate_total_len(total_len: i32, header_size: i32, payload_len: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.geq (var total_len) (binop Concrete.BinOp.add (var header_size) (var payload_len))) [(ret (int 0))]) (ret (int 5))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:94
+
+  `fixed_capacity.validate_tag` passes the predictable profile but has no registered proof.
+
+ 94 |     fn validate_tag(computed: i32, expected: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.eq (var computed) (var expected)) [(ret (int 0))]) (ret (int 6))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:103
+
+  `fixed_capacity.read_u8` passes the predictable profile but has no registered proof.
+
+ 103 |     fn read_u8(buf: MsgBuf, offset: i32) -> i32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(ret (cast (index (field (var buf) data) (var offset)) Concrete.Ty.i32))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:107
+
+  `fixed_capacity.read_u16_be` passes the predictable profile but has no registered proof.
+
+ 107 |     fn read_u16_be(buf: MsgBuf, offset: i32) -> i32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(let hi (cast (index (field (var buf) data) (var offset)) Concrete.Ty.i32)) (let lo (cast (index (field (var buf) data) (binop Concrete.BinOp.add (var offset) (int 1))) Concrete.Ty.i32)) (ret (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var hi) (int 256)) (var lo)))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:115
+
+  ✓ `fixed_capacity.ring_new` — proof matches current body.
+
+ 115 |     fn ring_new() -> RingBuf {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  coverage: point
+
+-- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:122
+
+  ✓ `fixed_capacity.ring_contains` — proof matches current body.
+
+ 122 |     fn ring_contains(rb: RingBuf, val: i32) -> i32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  coverage: point
+
+-- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:133
+
+  ✓ `fixed_capacity.ring_push` — proof matches current body.
+
+ 133 |     fn ring_push(rb: RingBuf, val: i32) -> RingBuf {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  coverage: point
+
+-- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:145
+
+  ✓ `fixed_capacity.compute_tag` — proof matches current body.
+
+ 145 |     fn compute_tag(buf: MsgBuf) -> i32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  coverage: point
+
+-- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:155
+
+  `fixed_capacity.validate_message` passes the predictable profile but has no registered proof.
+
+ 155 |     fn validate_message(buf: MsgBuf, ring: RingBuf) -> ValidateResult {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.lt (field (var buf) len) (int 8)) [(ret (call err_result (int 1)))]) (let version (call read_u8 (var buf) (int 0))) (let msg_type (call read_u8 (var buf) (int 1))) (let seq_num (call read_u16_be (var buf) (int 2))) (let payload_len (call read_u16_be (var buf) (int 4))) (let tag (call read_u16_be (var buf) (int 6))) (let e1 (call validate_version (var version))) (if (binop Concrete.BinOp.neq (var e1) (int 0)) [(ret (call err_result (var e1)))]) (let e2 (call validate_msg_type (var msg_type))) (if (binop Concrete.BinOp.neq (var e2) (int 0)) [(ret (call err_result (var e2)))]) (let e3 (call validate_payload_len (var payload_len))) (if (binop Concrete.BinOp.neq (var e3) (int 0)) [(ret (call err_result (var e3)))]) (let e4 (call validate_total_len (field (var buf) len) (int 8) (var payload_len))) (if (binop Concrete.BinOp.neq (var e4) (int 0)) [(ret (call err_result (var e4)))]) (let computed (call compute_tag (var buf))) (let e5 (call validate_tag (var computed) (var tag))) (if (binop Concrete.BinOp.neq (var e5) (int 0)) [(ret (call err_result (var e5)))]) (let seen (call ring_contains (var ring) (var seq_num))) (if (binop Concrete.BinOp.eq (var seen) (int 1)) [(ret (call err_result (int 7)))]) (ret (call ok_result (var msg_type) (var seq_num) (var payload_len)))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- trusted ------------------------------------------------ examples/fixed_capacity/src/main.con:194
+
+  `fixed_capacity.build_msg` is marked trusted — proof is bypassed (trusted assumption).
+
+ 194 |     trusted fn build_msg(msg_type: u8, seq: u16, payload_len: u16) -> MsgBuf {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+-- trusted ------------------------------------------------ examples/fixed_capacity/src/main.con:220
+
+  `fixed_capacity.build_bad_version` is marked trusted — proof is bypassed (trusted assumption).
+
+ 220 |     trusted fn build_bad_version() -> MsgBuf {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+-- trusted ------------------------------------------------ examples/fixed_capacity/src/main.con:226
+
+  `fixed_capacity.build_bad_type` is marked trusted — proof is bypassed (trusted assumption).
+
+ 226 |     trusted fn build_bad_type() -> MsgBuf {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+-- trusted ------------------------------------------------ examples/fixed_capacity/src/main.con:236
+
+  `fixed_capacity.build_payload_overflow` is marked trusted — proof is bypassed (trusted assumption).
+
+ 236 |     trusted fn build_payload_overflow() -> MsgBuf {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+-- not eligible ------------------------------------------- examples/fixed_capacity/src/main.con:250
+
+  `fixed_capacity.report` cannot be proved: fails predictable profile (has capabilities: Console).
+
+ 250 |     fn report(label: Int, r: ValidateResult) with(Console) {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  reasons: has capabilities: Console
+
+  hint: Address these constraints to make this function eligible for proof.
+
+-- not eligible ------------------------------------------- examples/fixed_capacity/src/main.con:270
+
+  `fixed_capacity.main` cannot be proved: fails predictable profile (has capabilities: Console, is entry point (main)).
+
+ 270 |     pub fn main() with(Console) -> Int {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  reasons: has capabilities: Console, is entry point (main)
+
+  hint: Address these constraints to make this function eligible for proof.
+
+Totals: 20 functions — 4 proved, 0 stale, 10 unproved, 0 blocked, 2 ineligible, 4 trusted
+

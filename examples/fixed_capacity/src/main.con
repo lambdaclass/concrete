@@ -1,0 +1,339 @@
+// fixed_capacity — bounded message processor with no allocation
+//
+// Demonstrates fixed-capacity patterns for predictable code:
+//   1. Ring buffer as Copy struct with array field (safe, no pointers)
+//   2. Message validation (pure, proof-eligible core)
+//   3. Array indexing with arr[i] syntax (safe, no trusted needed)
+//   4. All data on the stack — zero heap allocation
+//   5. All loops bounded by capacity constants
+//   6. Trust boundary: only test packet construction uses trusted (raw byte writes)
+//
+// Policy: predictable = true (no recursion, bounded loops, no alloc, no FFI)
+//
+// Message format (8-byte fixed header stored in MsgBuf):
+//   Byte 0:     version (must be 1)
+//   Byte 1:     message type (1=data, 2=heartbeat, 3=reset, 4=status)
+//   Bytes 2-3:  sequence number (big-endian u16)
+//   Bytes 4-5:  payload length (big-endian u16, max 240)
+//   Bytes 6-7:  tag (XOR fold of bytes 0-5, big-endian u16)
+//
+// Validation:
+//   - version must be 1
+//   - message type must be 1-4
+//   - payload length must not exceed 240
+//   - total length must be >= header + payload
+//   - tag must match computed XOR fold
+//   - sequence number must not repeat (ring buffer, last 16)
+
+mod fixed_capacity {
+
+    // ---- Fixed-capacity types (Copy, stack-only) ----
+
+    // Message buffer: fixed 256-byte array with length.
+    // Copy struct with array field — no allocation, safe indexing.
+    struct Copy MsgBuf {
+        data: [u8; 256],
+        len: i32,
+    }
+
+    // Ring buffer for replay detection: 16 i32 slots.
+    // Copy struct returned by value — no mutation through pointers.
+    struct Copy RingBuf {
+        data: [i32; 16],
+        head: i32,
+        count: i32,
+    }
+
+    // Validation result.
+    // 0=ok, 1=too_short, 2=bad_version, 3=bad_type, 4=payload_overflow,
+    // 5=truncated, 6=bad_tag, 7=replay
+    struct Copy ValidateResult {
+        error: i32,
+        msg_type: i32,
+        seq_num: i32,
+        payload_len: i32,
+    }
+
+    fn ok_result(msg_type: i32, seq: i32, plen: i32) -> ValidateResult {
+        return ValidateResult { error: 0, msg_type: msg_type, seq_num: seq, payload_len: plen };
+    }
+
+    fn err_result(code: i32) -> ValidateResult {
+        return ValidateResult { error: code, msg_type: 0, seq_num: 0, payload_len: 0 };
+    }
+
+    // ---- Pure validation core (no capabilities, no trusted) ----
+    //
+    // These functions use only safe array indexing and arithmetic.
+    // They are proof-eligible (pure, not trusted, not entry point).
+
+    fn validate_version(v: i32) -> i32 {
+        if v == 1 { return 0; }
+        return 2;
+    }
+
+    fn validate_msg_type(t: i32) -> i32 {
+        if t >= 1 {
+            if t <= 4 { return 0; }
+        }
+        return 3;
+    }
+
+    fn validate_payload_len(plen: i32) -> i32 {
+        if plen >= 0 {
+            if plen <= 240 { return 0; }
+        }
+        return 4;
+    }
+
+    fn validate_total_len(total_len: i32, header_size: i32, payload_len: i32) -> i32 {
+        if total_len >= header_size + payload_len { return 0; }
+        return 5;
+    }
+
+    fn validate_tag(computed: i32, expected: i32) -> i32 {
+        if computed == expected { return 0; }
+        return 6;
+    }
+
+    // ---- Safe byte reading (no trusted, no pointers) ----
+    //
+    // These read from MsgBuf using arr[i] — safe array indexing.
+
+    fn read_u8(buf: MsgBuf, offset: i32) -> i32 {
+        return buf.data[offset] as i32;
+    }
+
+    fn read_u16_be(buf: MsgBuf, offset: i32) -> i32 {
+        let hi: i32 = buf.data[offset] as i32;
+        let lo: i32 = buf.data[offset + 1] as i32;
+        return (hi * 256) + lo;
+    }
+
+    // ---- Ring buffer operations (safe, Copy, no pointers) ----
+
+    fn ring_new() -> RingBuf {
+        let data: [i32; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        return RingBuf { data: data, head: 0, count: 0 };
+    }
+
+    // Check if val exists in the ring buffer.
+    // Bounded loop: at most 16 iterations.
+    fn ring_contains(rb: RingBuf, val: i32) -> i32 {
+        let cap: i32 = 16;
+        let scan: i32 = if rb.count < cap { rb.count } else { cap };
+        for (let mut i: i32 = 0; i < scan; i = i + 1) {
+            let idx: i32 = ((rb.head - rb.count + i) + cap * 2) % cap;
+            if rb.data[idx] == val { return 1; }
+        }
+        return 0;
+    }
+
+    // Push val into the ring buffer. Returns new RingBuf (value semantics).
+    fn ring_push(rb: RingBuf, val: i32) -> RingBuf {
+        let cap: i32 = 16;
+        let mut d: [i32; 16] = rb.data;
+        d[rb.head % cap] = val;
+        let new_head: i32 = (rb.head + 1) % cap;
+        let new_count: i32 = if rb.count < cap { rb.count + 1 } else { cap };
+        return RingBuf { data: d, head: new_head, count: new_count };
+    }
+
+    // ---- Tag computation (safe, bounded) ----
+
+    // XOR fold of header bytes 0-5. Bounded: exactly 6 iterations.
+    fn compute_tag(buf: MsgBuf) -> i32 {
+        let mut acc: i32 = 0;
+        for (let mut i: i32 = 0; i < 6; i = i + 1) {
+            acc = acc ^ (buf.data[i] as i32);
+        }
+        return acc;
+    }
+
+    // ---- Full message validator (safe, no trusted) ----
+
+    fn validate_message(buf: MsgBuf, ring: RingBuf) -> ValidateResult {
+        if buf.len < 8 {
+            return err_result(1);
+        }
+
+        let version: i32 = read_u8(buf, 0);
+        let msg_type: i32 = read_u8(buf, 1);
+        let seq_num: i32 = read_u16_be(buf, 2);
+        let payload_len: i32 = read_u16_be(buf, 4);
+        let tag: i32 = read_u16_be(buf, 6);
+
+        let e1: i32 = validate_version(version);
+        if e1 != 0 { return err_result(e1); }
+
+        let e2: i32 = validate_msg_type(msg_type);
+        if e2 != 0 { return err_result(e2); }
+
+        let e3: i32 = validate_payload_len(payload_len);
+        if e3 != 0 { return err_result(e3); }
+
+        let e4: i32 = validate_total_len(buf.len, 8, payload_len);
+        if e4 != 0 { return err_result(e4); }
+
+        let computed: i32 = compute_tag(buf);
+        let e5: i32 = validate_tag(computed, tag);
+        if e5 != 0 { return err_result(e5); }
+
+        let seen: i32 = ring_contains(ring, seq_num);
+        if seen == 1 { return err_result(7); }
+
+        return ok_result(msg_type, seq_num, payload_len);
+    }
+
+    // ---- Test packet construction ----
+    //
+    // These use trusted for raw byte writes into the MsgBuf.
+    // This is the only trusted code in the example — the validation
+    // core, ring buffer, and byte readers are entirely safe.
+
+    trusted fn build_msg(msg_type: u8, seq: u16, payload_len: u16) -> MsgBuf {
+        let mut buf: [u8; 256] = [0; 256];
+        buf[0] = 1;                         // version = 1
+        buf[1] = msg_type;
+        buf[2] = (seq >> 8) as u8;          // seq high byte
+        buf[3] = (seq & 255) as u8;         // seq low byte
+        buf[4] = (payload_len >> 8) as u8;  // payload_len high byte
+        buf[5] = (payload_len & 255) as u8; // payload_len low byte
+
+        // XOR fold of bytes 0-5 for tag
+        let mut tag: u8 = 0;
+        for (let mut i: i32 = 0; i < 6; i = i + 1) {
+            tag = tag ^ buf[i];
+        }
+        buf[6] = 0;       // tag high byte (fits in low byte for small values)
+        buf[7] = tag;      // tag low byte
+
+        // Fill payload with ascending bytes
+        for (let mut i: i32 = 0; i < (payload_len as i32); i = i + 1) {
+            buf[8 + i] = ((i & 255) as u8);
+        }
+
+        let total: i32 = 8 + (payload_len as i32);
+        return MsgBuf { data: buf, len: total };
+    }
+
+    trusted fn build_bad_version() -> MsgBuf {
+        let mut buf: [u8; 256] = [0; 256];
+        buf[0] = 99;  // bad version
+        return MsgBuf { data: buf, len: 10 };
+    }
+
+    trusted fn build_bad_type() -> MsgBuf {
+        let mut buf: [u8; 256] = [0; 256];
+        buf[0] = 1;   // valid version
+        buf[1] = 0;   // bad type (0)
+        // Need valid tag: XOR fold of bytes 0-5
+        let tag: u8 = 1 ^ 0 ^ 0 ^ 0 ^ 0 ^ 0;
+        buf[7] = tag;
+        return MsgBuf { data: buf, len: 10 };
+    }
+
+    trusted fn build_payload_overflow() -> MsgBuf {
+        let mut buf: [u8; 256] = [0; 256];
+        buf[0] = 1;   // valid version
+        buf[1] = 1;   // data type
+        buf[4] = 0;
+        buf[5] = 241; // payload_len = 241 > 240 max
+        // tag: XOR fold
+        let tag: u8 = 1 ^ 1 ^ 0 ^ 0 ^ 0 ^ 241;
+        buf[7] = tag;
+        return MsgBuf { data: buf, len: 256 };
+    }
+
+    // ---- Reporting (Console only) ----
+
+    fn report(label: Int, r: ValidateResult) with(Console) {
+        print("Test ");
+        print(label);
+        print(": ");
+        if r.error == 0 {
+            print("OK type=");
+            print(r.msg_type as Int);
+            print(" seq=");
+            print(r.seq_num as Int);
+            print(" payload=");
+            print(r.payload_len as Int);
+            println("");
+        } else {
+            print("FAIL error=");
+            println(r.error as Int);
+        }
+    }
+
+    // ---- Entry point ----
+
+    pub fn main() with(Console) -> Int {
+        println("=== Fixed-Capacity Message Validator ===");
+        println("");
+
+        let mut ring: RingBuf = ring_new();
+        let mut failures: i32 = 0;
+
+        // Test 1: valid data message, seq=1
+        let m1: MsgBuf = build_msg(1, 1, 16);
+        let r1: ValidateResult = validate_message(m1, ring);
+        report(1, r1);
+        if r1.error != 0 { failures = failures + 1; }
+        ring = ring_push(ring, r1.seq_num);
+
+        // Test 2: valid heartbeat, seq=2
+        let m2: MsgBuf = build_msg(2, 2, 0);
+        let r2: ValidateResult = validate_message(m2, ring);
+        report(2, r2);
+        if r2.error != 0 { failures = failures + 1; }
+        ring = ring_push(ring, r2.seq_num);
+
+        // Test 3: valid reset, seq=3
+        let m3: MsgBuf = build_msg(3, 3, 4);
+        let r3: ValidateResult = validate_message(m3, ring);
+        report(3, r3);
+        if r3.error != 0 { failures = failures + 1; }
+        ring = ring_push(ring, r3.seq_num);
+
+        // Test 4: replay of seq=1 — should fail with error 7
+        let m4: MsgBuf = build_msg(1, 1, 8);
+        let r4: ValidateResult = validate_message(m4, ring);
+        report(4, r4);
+        if r4.error != 7 { failures = failures + 1; }
+
+        // Test 5: too short (3 bytes)
+        let short: MsgBuf = MsgBuf { data: [0; 256], len: 3 };
+        let r5: ValidateResult = validate_message(short, ring);
+        report(5, r5);
+        if r5.error != 1 { failures = failures + 1; }
+
+        // Test 6: bad version
+        let m6: MsgBuf = build_bad_version();
+        let r6: ValidateResult = validate_message(m6, ring);
+        report(6, r6);
+        if r6.error != 2 { failures = failures + 1; }
+
+        // Test 7: bad message type (0)
+        let m7: MsgBuf = build_bad_type();
+        let r7: ValidateResult = validate_message(m7, ring);
+        report(7, r7);
+        if r7.error != 3 { failures = failures + 1; }
+
+        // Test 8: payload overflow (241 > 240 max)
+        let m8: MsgBuf = build_payload_overflow();
+        let r8: ValidateResult = validate_message(m8, ring);
+        report(8, r8);
+        if r8.error != 4 { failures = failures + 1; }
+
+        // Summary
+        println("");
+        if failures == 0 {
+            println("All 8 tests passed.");
+        } else {
+            print(failures as Int);
+            println(" test(s) failed.");
+        }
+
+        return failures as Int;
+    }
+}

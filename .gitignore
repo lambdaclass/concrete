@@ -1,0 +1,94 @@
+# Lean 4
+/.lake
+/lake-packages
+
+# Build artifacts
+build/
+*.so
+*.a
+*.mlir
+*.ast
+*.ll
+*.ir
+*.facts.json
+
+# Editor
+.vscode/
+.env
+.direnv/
+.cache/
+
+# Compiled example binaries (extensionless, built by `concrete build`)
+examples/grep/cgrep
+examples/verify/conhash
+examples/project/project
+examples/json/main
+examples/toml/toml_parser
+examples/integrity/fcheck
+examples/kvstore/kvstore
+examples/kvstore/kvstore.log
+examples/http/http_server
+examples/lox/lox
+examples/vm/vm
+examples/mal/mal
+examples/policy_engine/policy_engine
+examples/elf_header/elf_header
+examples/packet/packet
+examples/fixed_capacity/fixed_capacity
+examples/crypto_verify/crypto_verify
+examples/parse_validate/parse_validate
+examples/proof_pressure/proof_pressure
+examples/service_errors/service_errors
+
+# C benchmark binaries (compiled from bench_c.c)
+examples/grep/cgrep_c
+examples/json/bench_c
+examples/verify/conhash_c
+examples/vm/bench_c
+examples/mal/bench_c
+examples/policy_engine/bench_c
+
+# Compiled test binaries (keep .con sources, ignore extensionless binaries)
+tests/programs/builtin_method_no_import/builtin_method_no_import
+tests/programs/adversarial_module_newtype_across
+tests/programs/adversarial_newtype_consume
+tests/programs/bug_field_assign_narrow_field
+tests/programs/newtype_basic
+tests/programs/newtype_copy
+tests/programs/newtype_enum_payload
+tests/programs/newtype_generic
+tests/programs/newtype_linear
+tests/programs/newtype_method_dispatch
+tests/programs/newtype_struct_copy_field
+tests/programs/newtype_validated
+tests/programs/summary_import_pub_newtype
+# Compiled adversarial test binaries (one per .con under each area folder)
+tests/programs/adversarial/*/[!.]*
+!tests/programs/adversarial/*/*.con
+
+lean_tests/trait_numeric_abs
+lean_tests/cap_alias_basic
+lean_tests/cap_alias_pub
+lean_tests/union_basic
+*.con.test
+
+# Compiled checker binaries
+scripts/check_ll1
+scripts/check_ll1_rs
+
+# Test failure artifacts
+.test-failures/
+
+# Performance baselines (machine-specific)
+.perf-baseline
+
+# Temporary
+/tmp/
+
+# Release bundles (regenerable via scripts/tests/capture_release_bundle.sh)
+out/release/
+
+# Generated paper artifacts
+paper/*.pdf
+site/public/
+tmp/

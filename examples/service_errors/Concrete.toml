@@ -1,0 +1,5 @@
+[package]
+name = "service_errors"
+
+[policy]
+predictable = true

@@ -1,0 +1,13 @@
+// ERROR TEST: Heap<T> double free — second free is use-after-move.
+
+struct Point {
+    x: Int,
+    y: Int,
+}
+
+fn main() with(Std) -> Int {
+    let p: Heap<Point> = alloc(Point { x: 1, y: 2 });
+    free(p);
+    free(p);  // ERROR: use after move
+    return 0;
+}

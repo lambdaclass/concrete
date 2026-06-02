@@ -1,0 +1,21 @@
+[package]
+name = "hmac_sha256"
+
+# Enforceable budgets per docs/POLICY_FILES.md.
+# CI gate: make test-policy.
+#
+# Same discipline as constant_time_tag: NO trusted shells and NO
+# Alloc anywhere (forbidden_capabilities includes Alloc explicitly).
+# The SHA-256 / HMAC core is pure; the entry point uses Console only
+# for println.  Stack budget is set above the measured maximum
+# (5312 bytes, main — the SHA-256 core plus HMAC's 384-byte ipad
+# /opad work buffers) with headroom.
+[policy]
+predictable            = true
+no_alloc               = true
+no_externs             = true
+no_unsafe              = true
+no_trusted             = true
+max_stack_bytes        = 8192
+forbidden_capabilities = ["File", "Net", "Unsafe", "Alloc"]
+allowed_capabilities   = ["Console"]

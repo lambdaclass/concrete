@@ -1,0 +1,10 @@
+// Adversarial: pure function calls another pure function which calls a function
+// requiring File capability. Capability escalation via call chain.
+// The compiler must enforce that relay() cannot call needs_file() without
+// declaring the File capability itself.
+// Expected: compile error about "but caller has".
+
+fn needs_file() with(File) -> Int { return 1; }
+fn relay() -> Int { return needs_file(); }
+
+pub fn main() -> Int { return relay(); }

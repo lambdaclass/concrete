@@ -29,7 +29,6 @@
 
 mod toml_parser {
     import std.fs.{read_to_string, FsError};
-    import std.result.{Result};
     import std.args.{count, get};
     import std.vec.{Vec};
 
@@ -122,7 +121,7 @@ mod toml_parser {
         let slen: i32 = *meta.get_unchecked((idx * 2 + 1) as u64);
         if slen > 0 {
             let s: String = string_slice(buf, off as Int, (off + slen) as Int);
-            print_string(&s);
+            print(s);
             s.drop();
         }
     }
@@ -739,10 +738,10 @@ mod toml_parser {
 
     // ---- Printer: with(Console, Alloc) ----
 
-    fn print_indent(depth: i32) with(Console, Alloc) {
+    fn print_indent(depth: i32) with(Console) {
         let mut i: i32 = 0;
         while i < depth {
-            print_string(&"  ");
+            print("  ");
             i = i + 1;
         }
     }
@@ -755,73 +754,71 @@ mod toml_parser {
                  kvpairs: &Vec<KVPair>,
                  vals: &Vec<Val>) with(Console, Alloc) {
         if v.tag == 0 {
-            print_char(34);
+            print("\"");
             pool_print(pool_buf, pool_meta, v.data);
-            print_char(34);
+            print("\"");
             return;
         }
         if v.tag == 1 {
-            print_int(v.data as Int);
+            print(v.data as Int);
             return;
         }
         if v.tag == 2 {
             if v.data == 1 {
-                print_string(&"true");
+                print("true");
             } else {
-                print_string(&"false");
+                print("false");
             }
             return;
         }
         if v.tag == 3 {
             let desc: ArrayDesc = *arrays.get_unchecked(v.data as u64);
             if desc.len == 0 {
-                print_string(&"[]");
+                print("[]");
                 return;
             }
-            print_char(91);
-            print_char(10);
+            println("[");
             let mut i: i32 = 0;
             while i < desc.len {
                 print_indent(depth + 1);
                 let elem: Val = *vals.get_unchecked((desc.start + i) as u64);
                 print_val(elem, depth + 1, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
                 if i < desc.len - 1 {
-                    print_char(44);
+                    print(",");
                 }
-                print_char(10);
+                println("");
                 i = i + 1;
             }
             print_indent(depth);
-            print_char(93);
+            print("]");
             return;
         }
         if v.tag == 4 {
             let desc: TableDesc = *tables.get_unchecked(v.data as u64);
             if desc.len == 0 {
-                print_string(&"{}");
+                print("{}");
                 return;
             }
-            print_char(123);
-            print_char(10);
+            println("{");
             let mut i: i32 = 0;
             while i < desc.len {
                 let kv: KVPair = *kvpairs.get_unchecked((desc.start + i) as u64);
                 print_indent(depth + 1);
                 pool_print(pool_buf, pool_meta, kv.key);
-                print_string(&" = ");
+                print(" = ");
                 let inner_val: Val = Val { tag: kv.val_tag, data: kv.val_data };
                 print_val(inner_val, depth + 1, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
-                print_char(10);
+                println("");
                 i = i + 1;
             }
             print_indent(depth);
-            print_char(125);
+            print("}");
             return;
         }
         if v.tag == 5 {
             let mut msg: String = "ERROR at line ";
             msg.append_int(v.data as Int);
-            print_string(&msg);
+            print(msg);
             msg.drop();
             return;
         }
@@ -847,10 +844,8 @@ mod toml_parser {
         let argc: Int = count();
 
         if argc < 2 {
-            print_string(&"Usage: toml_parser <file.toml>");
-            print_char(10);
-            print_string(&"  Parses a TOML file and prints the parsed structure.");
-            print_char(10);
+            println("Usage: toml_parser <file.toml>");
+            println("  Parses a TOML file and prints the parsed structure.");
             return 1;
         }
 
@@ -858,7 +853,7 @@ mod toml_parser {
         let result: Result<String, FsError> = read_to_string(&filename);
 
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 let mut pool_buf: String = "";
                 string_reserve(&mut pool_buf, 1024);
                 let mut pool_meta: Vec<i32> = Vec::<i32>::new();
@@ -873,8 +868,7 @@ mod toml_parser {
                 if is_error(root) {
                     let mut errmsg: String = "Parse error at line ";
                     errmsg.append_int(root.data as Int);
-                    print_string(&errmsg);
-                    print_char(10);
+                    println(errmsg);
                     errmsg.drop();
                     value.drop();
                     filename.drop();
@@ -882,22 +876,20 @@ mod toml_parser {
                     return 1;
                 }
 
-                print_string(&"--- Parsed TOML ---");
-                print_char(10);
+                println("--- Parsed TOML ---");
                 print_val(root, 0, &pool_buf, &pool_meta, &arrays, &tables, &kvpairs, &vals);
-                print_char(10);
+                println("");
 
                 value.drop();
                 filename.drop();
                 cleanup(pool_buf, pool_meta, arrays, tables, kvpairs, vals);
                 return 0;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 let mut errmsg: String = "Error: cannot open '";
                 errmsg.append(&filename);
                 errmsg.append(&"'");
-                print_string(&errmsg);
-                print_char(10);
+                println(errmsg);
                 errmsg.drop();
                 filename.drop();
                 return 1;

@@ -1,0 +1,25 @@
+// Linear value where both branches of an if must consume it. Tests
+// that linearity check sees both arms and requires consume in each
+// path, mirroring the canonical "branch_create_consume" pressure
+// test but with explicit consume helpers.
+// Expected: 5
+
+struct Resource { id: i32 }
+
+fn unwrap_id(r: Resource) -> i32 {
+    return r.id;
+}
+
+fn use_or_drop(r: Resource, flag: bool) -> i32 {
+    if flag {
+        return unwrap_id(r);
+    } else {
+        let _: i32 = unwrap_id(r);
+        return 0;
+    }
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { id: 5 };
+    return use_or_drop(r, true) as Int;
+}

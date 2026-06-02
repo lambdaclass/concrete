@@ -1,0 +1,44 @@
+// Adversarial: deeply nested match with many branches, all pure.
+// Expected: passes predictable — complex but bounded control flow is fine.
+
+enum Copy Color { Red, Green, Blue, Yellow }
+enum Copy Size { Small, Medium, Large }
+
+fn classify(c: Color, s: Size) -> i32 {
+    match c {
+        Color::Red => {
+            match s {
+                Size::Small => { return 1; },
+                Size::Medium => { return 2; },
+                Size::Large => { return 3; },
+            }
+        },
+        Color::Green => {
+            match s {
+                Size::Small => { return 4; },
+                Size::Medium => { return 5; },
+                Size::Large => { return 6; },
+            }
+        },
+        Color::Blue => {
+            match s {
+                Size::Small => { return 7; },
+                Size::Medium => { return 8; },
+                Size::Large => { return 9; },
+            }
+        },
+        Color::Yellow => {
+            match s {
+                Size::Small => { return 10; },
+                Size::Medium => { return 11; },
+                Size::Large => { return 12; },
+            }
+        },
+    }
+}
+
+fn main() -> i32 {
+    let r: i32 = classify(Color::Blue, Size::Medium);
+    if r == 8 { return 0; }
+    return 1;
+}

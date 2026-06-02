@@ -1,0 +1,67 @@
+// catches/01_alloc_in_bounded_core.con
+//
+// "Concrete catches this" companion to examples/fixed_capacity.
+//
+// Demonstrates: bounded-allocation discipline.  fixed_capacity's
+// thesis is that the ring buffer, message buffer, and validation
+// core run entirely on stack-allocated, fixed-size storage.  The
+// policy (Concrete.toml) sets no_alloc=true; the ring buffer is
+// a Copy struct with a [i32; 16] field, not a Vec.
+//
+// The hazard this catches in C/Rust without effect tracking:
+// someone "improves" ring_push to grow the buffer on overflow.
+// In a real bounded-state controller this changes the failure
+// mode from "drop oldest entry" to "OOM under load."  In
+// Concrete the capability checker refuses the edit at the
+// signature level: a function that allocates must say so.
+//
+// What changed from the accepted fixed_capacity: ring_push now
+// calls a hypothetical `audit_log` helper that needs Alloc.  The
+// signature on ring_push has NOT been widened to declare it.
+//
+// Concrete refuses: audit_log requires Alloc but ring_push's
+// caller surface is purely pure-eligible.  Either the signature
+// widens (deliberate, visible in git diff and in --report caps)
+// or the allocation does not happen.  There is no silent path.
+//
+// catches: E0520
+// catches-substring: requires Alloc but caller has (none)
+
+mod fixed_capacity_catch {
+
+    // Hypothetical audit-log helper.  It happens to need Alloc
+    // (imagine appending to a Vec<Int>).  The body doesn't matter
+    // — declaring `with(Alloc)` is the signature claim that this
+    // function may allocate.
+    fn audit_log(seq: i32) with(Alloc) -> i32 {
+        return seq;
+    }
+
+    // Same ring-push shape as the accepted example.  Now it calls
+    // audit_log() inside the bounded core.  audit_log() declares
+    // with(Alloc); ring_push does not.  The capability checker
+    // refuses.
+    struct Copy RingBuf {
+        data: [i32; 16],
+        head: i32,
+        count: i32,
+    }
+
+    fn ring_push(rb: RingBuf, val: i32) -> RingBuf {
+        // <<< The one line that breaks the bounded-state surface. >>>
+        let _logged: i32 = audit_log(val);
+
+        let cap: i32 = 16;
+        let mut d: [i32; 16] = rb.data;
+        d[rb.head % cap] = val;
+        let new_head: i32 = (rb.head + 1) % cap;
+        let new_count: i32 = if rb.count < cap { rb.count + 1 } else { cap };
+        return RingBuf { data: d, head: new_head, count: new_count };
+    }
+
+    fn main() -> i32 {
+        let rb: RingBuf = RingBuf { data: [0; 16], head: 0, count: 0 };
+        let _new_rb: RingBuf = ring_push(rb, 42);
+        return 0;
+    }
+}

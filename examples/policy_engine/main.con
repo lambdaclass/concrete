@@ -137,8 +137,7 @@ mod Gate {
         out.append(&a_name);
         out.append(&" ");
         out.append(&r_name);
-        print_string(&out);
-        print_char(10);
+        println(out);
         out.drop();
         p_name.drop();
         r_name.drop();

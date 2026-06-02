@@ -1,0 +1,37 @@
+// Adversarial: ProofCore eligibility classification.
+// Each function exercises a different eligibility gate.
+//
+// Expected eligibility report:
+//   pure_eligible  → eligible (pure, not trusted, not entry)
+//   trusted_fn     → trusted (proof bypassed)
+//   file_fn        → excluded, source: File caps, profile: blocking I/O
+//   recursive_fn   → excluded, profile: recursion (direct)
+//   ffi_caller     → excluded, source: Unsafe caps, profile: FFI
+//   main           → excluded, source: Std caps + entry, profile: allocation + blocking I/O
+
+extern fn external_op(x: Int) -> Int;
+
+fn pure_eligible(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+trusted fn trusted_fn(x: Int) -> Int {
+    return x * 2;
+}
+
+fn file_fn(path: Int) with(File) -> Int {
+    return path + 1;
+}
+
+fn recursive_fn(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    return recursive_fn(n - 1) + 1;
+}
+
+fn ffi_caller(x: Int) with(Unsafe) -> Int {
+    return external_op(x);
+}
+
+pub fn main() with(Std, Unsafe) -> Int {
+    return pure_eligible(1, 2);
+}

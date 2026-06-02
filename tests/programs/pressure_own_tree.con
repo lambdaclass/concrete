@@ -1,0 +1,238 @@
+// Pressure: array-backed binary tree using Copy structs.
+//
+// Encodes a binary tree as a fixed-size array of nodes (heap-array layout):
+//   - Index 0 is root, index i has children at 2*i+1 and 2*i+2.
+//   - Each node stores a value and an "occupied" flag.
+//   - Capacity: 15 nodes (depth 0-3, a complete 4-level tree).
+//
+// Operations tested:
+//   1. Insert values (BST-style: left < parent, right >= parent)
+//   2. Lookup (search by value)
+//   3. In-order traversal sum via iterative stack
+//   4. Count occupied nodes
+//
+// Reveals: how to build tree-like structures without heap allocation,
+// array-of-struct mutation, index arithmetic, ownership for recursive-like data.
+//
+// Expected: return 0 on success.
+
+struct Copy TreeNode {
+    value: Int,
+    occupied: Int,
+}
+
+struct Copy Tree {
+    nodes: [TreeNode; 15],
+    count: Int,
+}
+
+fn tree_new() -> Tree {
+    let empty: TreeNode = TreeNode { value: 0, occupied: 0 };
+    let nodes: [TreeNode; 15] = [
+        empty, empty, empty, empty, empty,
+        empty, empty, empty, empty, empty,
+        empty, empty, empty, empty, empty,
+    ];
+    return Tree { nodes: nodes, count: 0 };
+}
+
+// Insert a value into the BST. Walk from root following BST rule.
+// If slot is unoccupied, place it there. If occupied, go left or right.
+// Returns the updated tree.
+fn tree_insert(t: Tree, val: Int) -> Tree {
+    let mut nodes: [TreeNode; 15] = t.nodes;
+    let mut count: Int = t.count;
+    let mut idx: Int = 0;
+
+    // Walk the tree: bounded by depth (max 15 iterations for safety)
+    for (let mut step: Int = 0; step < 15; step = step + 1) {
+        if idx >= 15 {
+            // Out of capacity, stop
+            return Tree { nodes: nodes, count: count };
+        }
+        if nodes[idx].occupied == 0 {
+            // Found empty slot, place here
+            nodes[idx] = TreeNode { value: val, occupied: 1 };
+            count = count + 1;
+            return Tree { nodes: nodes, count: count };
+        }
+        // Slot occupied, go left or right
+        if val < nodes[idx].value {
+            idx = 2 * idx + 1; // left child
+        } else {
+            idx = 2 * idx + 2; // right child
+        }
+    }
+
+    return Tree { nodes: nodes, count: count };
+}
+
+// Lookup a value in the BST. Returns 1 if found, 0 if not.
+fn tree_contains(t: Tree, val: Int) -> Int {
+    let mut idx: Int = 0;
+    for (let mut step: Int = 0; step < 15; step = step + 1) {
+        if idx >= 15 {
+            return 0;
+        }
+        if t.nodes[idx].occupied == 0 {
+            return 0;
+        }
+        if t.nodes[idx].value == val {
+            return 1;
+        }
+        if val < t.nodes[idx].value {
+            idx = 2 * idx + 1;
+        } else {
+            idx = 2 * idx + 2;
+        }
+    }
+    return 0;
+}
+
+// Count occupied nodes.
+fn tree_count(t: Tree) -> Int {
+    let mut c: Int = 0;
+    for (let mut i: Int = 0; i < 15; i = i + 1) {
+        if t.nodes[i].occupied != 0 {
+            c = c + 1;
+        }
+    }
+    return c;
+}
+
+// Sum all values in the tree (iterate over array, sum occupied).
+fn tree_sum(t: Tree) -> Int {
+    let mut s: Int = 0;
+    for (let mut i: Int = 0; i < 15; i = i + 1) {
+        if t.nodes[i].occupied != 0 {
+            s = s + t.nodes[i].value;
+        }
+    }
+    return s;
+}
+
+// Verify BST property: for each occupied node, if left child exists it must be < parent,
+// if right child exists it must be >= parent.
+fn tree_is_bst(t: Tree) -> Int {
+    for (let mut i: Int = 0; i < 15; i = i + 1) {
+        if t.nodes[i].occupied != 0 {
+            let left: Int = 2 * i + 1;
+            let right: Int = 2 * i + 2;
+            if left < 15 {
+                if t.nodes[left].occupied != 0 {
+                    if t.nodes[left].value >= t.nodes[i].value {
+                        return 0; // BST violation
+                    }
+                }
+            }
+            if right < 15 {
+                if t.nodes[right].occupied != 0 {
+                    if t.nodes[right].value < t.nodes[i].value {
+                        return 0; // BST violation
+                    }
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+// Iterative in-order traversal using an explicit stack (array-based).
+// Returns the sum of values in-order (same as tree_sum but tests stack pattern).
+fn tree_inorder_sum(t: Tree) -> Int {
+    // Stack of indices for traversal
+    let mut stack: [Int; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let mut sp: Int = 0;  // stack pointer
+    let mut sum: Int = 0;
+    let mut cur: Int = 0; // current index
+
+    // Iterative in-order: push left spine, visit, go right
+    // Bounded iterations
+    for (let mut iter: Int = 0; iter < 60; iter = iter + 1) {
+        // Push left spine
+        if cur < 15 {
+            if t.nodes[cur].occupied != 0 {
+                stack[sp] = cur;
+                sp = sp + 1;
+                cur = 2 * cur + 1; // go left
+            } else {
+                // Current is empty, pop from stack if possible
+                if sp > 0 {
+                    sp = sp - 1;
+                    let node_idx: Int = stack[sp];
+                    sum = sum + t.nodes[node_idx].value;
+                    cur = 2 * node_idx + 2; // go right
+                } else {
+                    return sum; // done
+                }
+            }
+        } else {
+            // Past array bounds, pop
+            if sp > 0 {
+                sp = sp - 1;
+                let node_idx: Int = stack[sp];
+                sum = sum + t.nodes[node_idx].value;
+                cur = 2 * node_idx + 2;
+            } else {
+                return sum;
+            }
+        }
+    }
+    return sum;
+}
+
+pub fn main() -> Int {
+    // Build a BST: insert 50, 30, 70, 20, 40, 60, 80
+    let mut t: Tree = tree_new();
+    t = tree_insert(t, 50);
+    t = tree_insert(t, 30);
+    t = tree_insert(t, 70);
+    t = tree_insert(t, 20);
+    t = tree_insert(t, 40);
+    t = tree_insert(t, 60);
+    t = tree_insert(t, 80);
+
+    // Test 1: count should be 7
+    if tree_count(t) != 7 { return 1; }
+
+    // Test 2: all inserted values should be found
+    if tree_contains(t, 50) != 1 { return 10; }
+    if tree_contains(t, 30) != 1 { return 11; }
+    if tree_contains(t, 70) != 1 { return 12; }
+    if tree_contains(t, 20) != 1 { return 13; }
+    if tree_contains(t, 40) != 1 { return 14; }
+    if tree_contains(t, 60) != 1 { return 15; }
+    if tree_contains(t, 80) != 1 { return 16; }
+
+    // Test 3: values NOT inserted should not be found
+    if tree_contains(t, 10) != 0 { return 20; }
+    if tree_contains(t, 55) != 0 { return 21; }
+    if tree_contains(t, 90) != 0 { return 22; }
+
+    // Test 4: sum should be 50+30+70+20+40+60+80 = 350
+    if tree_sum(t) != 350 { return 30; }
+
+    // Test 5: BST property should hold
+    if tree_is_bst(t) != 1 { return 40; }
+
+    // Test 6: in-order traversal sum should also be 350
+    if tree_inorder_sum(t) != 350 { return 50; }
+
+    // Test 7: tree structure check
+    // Root should be 50
+    if t.nodes[0].value != 50 { return 60; }
+    // Left child of root (idx 1) should be 30
+    if t.nodes[1].value != 30 { return 61; }
+    // Right child of root (idx 2) should be 70
+    if t.nodes[2].value != 70 { return 62; }
+    // Left child of 30 (idx 3) should be 20
+    if t.nodes[3].value != 20 { return 63; }
+    // Right child of 30 (idx 4) should be 40
+    if t.nodes[4].value != 40 { return 64; }
+    // Left child of 70 (idx 5) should be 60
+    if t.nodes[5].value != 60 { return 65; }
+    // Right child of 70 (idx 6) should be 80
+    if t.nodes[6].value != 80 { return 66; }
+
+    return 0;
+}

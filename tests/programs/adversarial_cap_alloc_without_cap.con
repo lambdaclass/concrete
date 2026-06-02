@@ -1,0 +1,15 @@
+// Adversarial: heap allocation without Alloc capability.
+// Tries to use Vec (which requires Alloc) from a function with no capabilities.
+// Expected: compile error (missing Alloc cap).
+
+fn sneaky_alloc() -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    vec_push(&mut v, 42);
+    let val: Int = vec_get(&v, 0);
+    vec_free(v);
+    return val;
+}
+
+fn main() with(Std) -> Int {
+    return sneaky_alloc();
+}

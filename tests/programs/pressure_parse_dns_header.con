@@ -1,0 +1,197 @@
+// pressure_parse_dns_header — Parse DNS packet header from byte buffer
+//
+// DNS header is 12 bytes:
+//   - ID (2 bytes, big-endian)
+//   - Flags (2 bytes: QR, Opcode, AA, TC, RD, RA, Z, RCODE)
+//   - QDCOUNT (2 bytes), ANCOUNT (2 bytes), NSCOUNT (2 bytes), ARCOUNT (2 bytes)
+//
+// Exercises: big-endian byte reading, bitfield extraction, fixed buffer parsing.
+//
+// Policy: predictable = true
+
+mod pressure_parse_dns_header {
+
+    struct Copy DnsHeader {
+        id: i32,
+        is_response: i32,   // QR bit
+        opcode: i32,        // 4 bits
+        authoritative: i32,  // AA bit
+        truncated: i32,      // TC bit
+        recursion_desired: i32,   // RD bit
+        recursion_avail: i32,     // RA bit
+        rcode: i32,          // 4 bits
+        qd_count: i32,
+        an_count: i32,
+        ns_count: i32,
+        ar_count: i32,
+        error: i32,
+    }
+
+    fn empty_header() -> DnsHeader {
+        return DnsHeader {
+            id: 0, is_response: 0, opcode: 0, authoritative: 0,
+            truncated: 0, recursion_desired: 0, recursion_avail: 0,
+            rcode: 0, qd_count: 0, an_count: 0, ns_count: 0, ar_count: 0,
+            error: 0,
+        };
+    }
+
+    // Read big-endian u16 from buf[offset..offset+2]
+    fn read_u16_be(buf: [u8; 64], offset: i32) -> i32 {
+        let hi: i32 = buf[offset] as i32;
+        let lo: i32 = buf[offset + 1] as i32;
+        return hi * 256 + lo;
+    }
+
+    // Extract single bit from a byte
+    fn bit_at(val: i32, bit: i32) -> i32 {
+        // bit 7 = MSB, bit 0 = LSB
+        let mut v: i32 = val;
+        for (let mut i: i32 = 0; i < 16; i = i + 1) {
+            if i == bit {
+                return v - ((v / 2) * 2);  // v % 2
+            }
+            v = v / 2;
+        }
+        return 0;
+    }
+
+    // Extract n bits starting at position 'start' (from LSB)
+    fn bits_range(val: i32, start: i32, count: i32) -> i32 {
+        let mut v: i32 = val;
+        // Shift right by 'start'
+        for (let mut i: i32 = 0; i < 16; i = i + 1) {
+            if i >= start { break; }
+            v = v / 2;
+        }
+        // Mask to 'count' bits
+        let mut mask: i32 = 1;
+        for (let mut i: i32 = 0; i < 16; i = i + 1) {
+            if i + 1 >= count { break; }
+            mask = mask * 2 + 1;
+        }
+        return v - ((v / (mask + 1)) * (mask + 1));  // v % (mask+1)
+    }
+
+    fn parse_dns_header(buf: [u8; 64], len: i32) -> DnsHeader {
+        if len < 12 {
+            return DnsHeader {
+                id: 0, is_response: 0, opcode: 0, authoritative: 0,
+                truncated: 0, recursion_desired: 0, recursion_avail: 0,
+                rcode: 0, qd_count: 0, an_count: 0, ns_count: 0, ar_count: 0,
+                error: 1,
+            };
+        }
+
+        let id: i32 = read_u16_be(buf, 0);
+        let flags: i32 = read_u16_be(buf, 2);
+
+        // Flags byte 0 (high byte): QR(1) Opcode(4) AA(1) TC(1) RD(1)
+        // Flags byte 1 (low byte): RA(1) Z(3) RCODE(4)
+        let qr: i32 = bit_at(flags, 15);
+        let opcode: i32 = bits_range(flags, 11, 4);
+        let aa: i32 = bit_at(flags, 10);
+        let tc: i32 = bit_at(flags, 9);
+        let rd: i32 = bit_at(flags, 8);
+        let ra: i32 = bit_at(flags, 7);
+        let rcode: i32 = bits_range(flags, 0, 4);
+
+        let qd: i32 = read_u16_be(buf, 4);
+        let an: i32 = read_u16_be(buf, 6);
+        let ns: i32 = read_u16_be(buf, 8);
+        let ar: i32 = read_u16_be(buf, 10);
+
+        return DnsHeader {
+            id: id, is_response: qr, opcode: opcode, authoritative: aa,
+            truncated: tc, recursion_desired: rd, recursion_avail: ra,
+            rcode: rcode, qd_count: qd, an_count: an, ns_count: ns, ar_count: ar,
+            error: 0,
+        };
+    }
+
+    pub fn main() -> Int {
+        // Test 1: Standard query header
+        // ID=0x1234, Flags=0x0100 (RD=1, QR=0, standard query)
+        // QDCOUNT=1, ANCOUNT=0, NSCOUNT=0, ARCOUNT=0
+        let mut buf: [u8; 64] = [0; 64];
+        buf[0] = 18;   // 0x12
+        buf[1] = 52;   // 0x34 → ID = 0x1234 = 4660
+        buf[2] = 1;    // flags high: 0000 0001 → RD=1
+        buf[3] = 0;    // flags low: 0000 0000
+        buf[4] = 0; buf[5] = 1;   // QDCOUNT = 1
+        buf[6] = 0; buf[7] = 0;   // ANCOUNT = 0
+        buf[8] = 0; buf[9] = 0;   // NSCOUNT = 0
+        buf[10] = 0; buf[11] = 0; // ARCOUNT = 0
+
+        let h1: DnsHeader = parse_dns_header(buf, 12);
+        if h1.error != 0 { return 10; }
+        if h1.id != 4660 { return 11; }  // 0x1234
+        if h1.is_response != 0 { return 12; }
+        if h1.recursion_desired != 1 { return 13; }
+        if h1.qd_count != 1 { return 14; }
+        if h1.an_count != 0 { return 15; }
+
+        // Test 2: Standard response header
+        // ID=0xABCD, Flags=0x8180 (QR=1, RD=1, RA=1)
+        // QDCOUNT=1, ANCOUNT=2
+        let mut buf2: [u8; 64] = [0; 64];
+        buf2[0] = 171;  // 0xAB
+        buf2[1] = 205;  // 0xCD → ID = 0xABCD = 43981
+        buf2[2] = 129;  // 0x81 → QR=1, Opcode=0, AA=0, TC=0, RD=1
+        buf2[3] = 128;  // 0x80 → RA=1, Z=0, RCODE=0
+        buf2[4] = 0; buf2[5] = 1;   // QDCOUNT = 1
+        buf2[6] = 0; buf2[7] = 2;   // ANCOUNT = 2
+        buf2[8] = 0; buf2[9] = 0;
+        buf2[10] = 0; buf2[11] = 0;
+
+        let h2: DnsHeader = parse_dns_header(buf2, 12);
+        if h2.error != 0 { return 20; }
+        if h2.id != 43981 { return 21; }
+        if h2.is_response != 1 { return 22; }
+        if h2.recursion_desired != 1 { return 23; }
+        if h2.recursion_avail != 1 { return 24; }
+        if h2.qd_count != 1 { return 25; }
+        if h2.an_count != 2 { return 26; }
+
+        // Test 3: Too-short buffer should fail
+        let short: [u8; 64] = [0; 64];
+        let h3: DnsHeader = parse_dns_header(short, 4);
+        if h3.error != 1 { return 30; }
+
+        // Test 4: NXDOMAIN response (RCODE=3)
+        // Flags=0x8183 (QR=1, RD=1, RA=1, RCODE=3)
+        let mut buf4: [u8; 64] = [0; 64];
+        buf4[0] = 0; buf4[1] = 1;  // ID = 1
+        buf4[2] = 129;  // 0x81
+        buf4[3] = 131;  // 0x83 → RA=1, RCODE=3
+        buf4[4] = 0; buf4[5] = 1;
+        buf4[6] = 0; buf4[7] = 0;
+        buf4[8] = 0; buf4[9] = 0;
+        buf4[10] = 0; buf4[11] = 0;
+
+        let h4: DnsHeader = parse_dns_header(buf4, 12);
+        if h4.error != 0 { return 40; }
+        if h4.rcode != 3 { return 41; }
+        if h4.is_response != 1 { return 42; }
+
+        // Test 5: Authoritative answer with truncation
+        // Flags=0x8600 (QR=1, AA=1, TC=1)
+        let mut buf5: [u8; 64] = [0; 64];
+        buf5[0] = 0; buf5[1] = 99;
+        buf5[2] = 134;  // 0x86 → QR=1, Opcode=0, AA=1, TC=1, RD=0
+        buf5[3] = 0;
+        buf5[4] = 0; buf5[5] = 1;
+        buf5[6] = 0; buf5[7] = 3;  // ANCOUNT = 3
+        buf5[8] = 0; buf5[9] = 0;
+        buf5[10] = 0; buf5[11] = 1; // ARCOUNT = 1
+
+        let h5: DnsHeader = parse_dns_header(buf5, 12);
+        if h5.error != 0 { return 50; }
+        if h5.authoritative != 1 { return 51; }
+        if h5.truncated != 1 { return 52; }
+        if h5.an_count != 3 { return 53; }
+        if h5.ar_count != 1 { return 54; }
+
+        return 0;
+    }
+}

@@ -1,0 +1,28 @@
+// Adversarial test for qualified call graph identity.
+// Two submodules with same-name functions must not collide.
+
+mod alpha {
+    fn helper(x: i64) -> i64 {
+        return x + 1;
+    }
+
+    pub fn caller() -> i64 {
+        return helper(10);
+    }
+}
+
+mod beta {
+    fn helper(x: i64) -> i64 {
+        return x * 2;
+    }
+
+    pub fn caller() -> i64 {
+        return helper(5);
+    }
+}
+
+fn main() -> i64 {
+    let a: i64 = alpha::caller();
+    let b: i64 = beta::caller();
+    return a + b;
+}

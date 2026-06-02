@@ -1,0 +1,77 @@
+// Adversarial: 5-function error propagation chain.
+// Each function calls the next and propagates errors upward via match.
+// Tests that long error chains compile and run correctly.
+
+enum Copy ChainError { TooSmall, TooBig, Invalid }
+
+enum Copy ChainResult {
+    Ok { val: i32 },
+    Err { error: ChainError },
+}
+
+fn step5(x: i32) -> ChainResult {
+    if x < 0 { return ChainResult::Err { error: ChainError::TooSmall }; }
+    return ChainResult::Ok { val: x + 1 };
+}
+
+fn step4(x: i32) -> ChainResult {
+    match step5(x) {
+        ChainResult::Ok { val } => { return ChainResult::Ok { val: val + 1 }; },
+        ChainResult::Err { error } => { return ChainResult::Err { error: error }; },
+    }
+}
+
+fn step3(x: i32) -> ChainResult {
+    if x > 100 { return ChainResult::Err { error: ChainError::TooBig }; }
+    match step4(x) {
+        ChainResult::Ok { val } => { return ChainResult::Ok { val: val + 1 }; },
+        ChainResult::Err { error } => { return ChainResult::Err { error: error }; },
+    }
+}
+
+fn step2(x: i32) -> ChainResult {
+    match step3(x) {
+        ChainResult::Ok { val } => { return ChainResult::Ok { val: val + 1 }; },
+        ChainResult::Err { error } => { return ChainResult::Err { error: error }; },
+    }
+}
+
+fn step1(x: i32) -> ChainResult {
+    if x == 42 { return ChainResult::Err { error: ChainError::Invalid }; }
+    match step2(x) {
+        ChainResult::Ok { val } => { return ChainResult::Ok { val: val + 1 }; },
+        ChainResult::Err { error } => { return ChainResult::Err { error: error }; },
+    }
+}
+
+fn error_code(e: ChainError) -> i32 {
+    match e {
+        ChainError::TooSmall => { return 1; },
+        ChainError::TooBig => { return 2; },
+        ChainError::Invalid => { return 3; },
+    }
+}
+
+fn main() -> i32 {
+    // Success: 10 + 5 increments = 15
+    match step1(10) {
+        ChainResult::Ok { val } => { if val != 15 { return 1; } },
+        ChainResult::Err { error } => { return 2; },
+    }
+    // Error at bottom: -1 -> TooSmall
+    match step1(0 - 1) {
+        ChainResult::Ok { val } => { return 3; },
+        ChainResult::Err { error } => { if error_code(error) != 1 { return 4; } },
+    }
+    // Error in middle: 200 -> TooBig (caught at step3)
+    match step1(200) {
+        ChainResult::Ok { val } => { return 5; },
+        ChainResult::Err { error } => { if error_code(error) != 2 { return 6; } },
+    }
+    // Error at top: 42 -> Invalid
+    match step1(42) {
+        ChainResult::Ok { val } => { return 7; },
+        ChainResult::Err { error } => { if error_code(error) != 3 { return 8; } },
+    }
+    return 0;
+}

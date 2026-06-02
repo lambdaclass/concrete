@@ -1,0 +1,76 @@
+// Adversarial error-flow: Copy enum with 12 error variants, match on all of them.
+// Stresses match exhaustiveness with many arms and error-code mapping.
+// Expected: 0
+
+enum Copy ErrKind {
+    NotFound,
+    PermDenied,
+    Timeout,
+    BadInput,
+    Overflow,
+    Underflow,
+    Disconnected,
+    InvalidState,
+    OutOfBounds,
+    AlreadyExists,
+    ParseFailed,
+    ChecksumMismatch,
+}
+
+fn error_code(e: ErrKind) -> Int {
+    match e {
+        ErrKind::NotFound => { return 1; },
+        ErrKind::PermDenied => { return 2; },
+        ErrKind::Timeout => { return 3; },
+        ErrKind::BadInput => { return 4; },
+        ErrKind::Overflow => { return 5; },
+        ErrKind::Underflow => { return 6; },
+        ErrKind::Disconnected => { return 7; },
+        ErrKind::InvalidState => { return 8; },
+        ErrKind::OutOfBounds => { return 9; },
+        ErrKind::AlreadyExists => { return 10; },
+        ErrKind::ParseFailed => { return 11; },
+        ErrKind::ChecksumMismatch => { return 12; },
+    }
+}
+
+fn is_recoverable(e: ErrKind) -> Int {
+    match e {
+        ErrKind::NotFound => { return 1; },
+        ErrKind::PermDenied => { return 0; },
+        ErrKind::Timeout => { return 1; },
+        ErrKind::BadInput => { return 0; },
+        ErrKind::Overflow => { return 0; },
+        ErrKind::Underflow => { return 0; },
+        ErrKind::Disconnected => { return 1; },
+        ErrKind::InvalidState => { return 0; },
+        ErrKind::OutOfBounds => { return 0; },
+        ErrKind::AlreadyExists => { return 1; },
+        ErrKind::ParseFailed => { return 0; },
+        ErrKind::ChecksumMismatch => { return 0; },
+    }
+}
+
+pub fn main() -> Int {
+    // Verify each variant maps to the correct error code
+    if error_code(ErrKind::NotFound) != 1 { return 1; }
+    if error_code(ErrKind::PermDenied) != 2 { return 2; }
+    if error_code(ErrKind::Timeout) != 3 { return 3; }
+    if error_code(ErrKind::BadInput) != 4 { return 4; }
+    if error_code(ErrKind::Overflow) != 5 { return 5; }
+    if error_code(ErrKind::Underflow) != 6 { return 6; }
+    if error_code(ErrKind::Disconnected) != 7 { return 7; }
+    if error_code(ErrKind::InvalidState) != 8 { return 8; }
+    if error_code(ErrKind::OutOfBounds) != 9 { return 9; }
+    if error_code(ErrKind::AlreadyExists) != 10 { return 10; }
+    if error_code(ErrKind::ParseFailed) != 11 { return 11; }
+    if error_code(ErrKind::ChecksumMismatch) != 12 { return 12; }
+
+    // Verify recoverable classification
+    if is_recoverable(ErrKind::Timeout) != 1 { return 13; }
+    if is_recoverable(ErrKind::PermDenied) != 0 { return 14; }
+    if is_recoverable(ErrKind::AlreadyExists) != 1 { return 15; }
+    if is_recoverable(ErrKind::Overflow) != 0 { return 16; }
+
+    return 0;
+}

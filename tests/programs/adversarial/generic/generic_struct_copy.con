@@ -1,0 +1,15 @@
+// Generic Copy struct passed by value. Tests that monomorphization
+// preserves the Copy bound across instantiations and that pass-by-
+// value across a function boundary works.
+// Expected: 30
+
+struct Copy Pair<A, B> { a: A, b: B }
+
+fn first<A, B>(p: Pair<A, B>) -> A {
+    return p.a;
+}
+
+fn main() -> Int {
+    let p: Pair<i32, i32> = Pair::<i32, i32> { a: 30, b: 12 };
+    return first::<i32, i32>(p) as Int;
+}

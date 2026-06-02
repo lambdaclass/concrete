@@ -1,0 +1,81 @@
+// Adversarial tests for PExpr normalization pass.
+// Each function targets a specific normalization rewrite rule.
+
+// 1. Dead let elimination: let x = 5; y should drop the let
+fn dead_let(y: i64) -> i64 {
+    let x: i64 = 5;
+    return y;
+}
+
+// 2. Algebraic identity: x + 0 → x
+fn add_zero(x: i64) -> i64 {
+    return x + 0;
+}
+
+// 3. Algebraic identity: 0 + x → x
+fn zero_add(x: i64) -> i64 {
+    return 0 + x;
+}
+
+// 4. Algebraic identity: x * 1 → x
+fn mul_one(x: i64) -> i64 {
+    return x * 1;
+}
+
+// 5. Algebraic identity: 1 * x → x
+fn one_mul(x: i64) -> i64 {
+    return 1 * x;
+}
+
+// 6. Algebraic identity: x * 0 → 0
+fn mul_zero(x: i64) -> i64 {
+    return x * 0;
+}
+
+// 7. Algebraic identity: x - 0 → x
+fn sub_zero(x: i64) -> i64 {
+    return x - 0;
+}
+
+// 8. Commutative canonicalization: add(lit, var) → add(var, lit)
+fn comm_add(a: i64) -> i64 {
+    return 3 + a;
+}
+
+// 9. Commutative canonicalization: mul(lit, var) → mul(var, lit)
+fn comm_mul(b: i64) -> i64 {
+    return 7 * b;
+}
+
+// 10. Commutative canonicalization: add(b, a) → add(a, b)  (alphabetical)
+fn comm_alpha(b: i64, a: i64) -> i64 {
+    return b + a;
+}
+
+// 11. Boolean short-circuit: if true then x else y → x
+fn if_true(x: i64, y: i64) -> i64 {
+    if true {
+        return x;
+    } else {
+        return y;
+    }
+}
+
+// 12. Boolean short-circuit: if false then x else y → y
+fn if_false(x: i64, y: i64) -> i64 {
+    if false {
+        return x;
+    } else {
+        return y;
+    }
+}
+
+// 13. No-op: non-trivial expression should survive normalization
+fn no_simplify(a: i64, b: i64) -> i64 {
+    let c: i64 = a + b;
+    return c * 2;
+}
+
+fn main() -> i64 {
+    return 0;
+}

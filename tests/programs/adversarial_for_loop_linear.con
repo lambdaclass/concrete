@@ -1,0 +1,26 @@
+// Adversarial test: for-loop with linear variables declared inside the loop body.
+// Each iteration creates and consumes its own linear value.
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn for_loop_local_linear() -> Int {
+    let mut sum: Int = 0;
+    let mut i: Int = 0;
+    while i < 5 {
+        let r: Resource = Resource { value: i };
+        let v: Int = consume(r);
+        sum = sum + v;
+        i = i + 1;
+    }
+    return sum;
+}
+
+fn main() -> Int {
+    return for_loop_local_linear();
+}

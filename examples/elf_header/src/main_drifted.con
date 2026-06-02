@@ -1,0 +1,149 @@
+// ELF header validator — DRIFTED variant for drift testing
+//
+// Changes from original:
+//   1. check_magic accepts 0x00 instead of 0x7F as first byte (breaks ELF magic)
+//   2. check_version accepts version 0 and 1 (weakens version check)
+//   3. All other functions unchanged (including the I/O shell)
+
+// === Trusted FFI boundary (POSIX file I/O) ===
+
+trusted extern fn fopen(path: *const u8, mode: *const u8) -> *const u8;
+trusted extern fn fread(buf: *mut u8, size: u64, count: u64, fp: *const u8) -> u64;
+trusted extern fn fclose(fp: *const u8) -> i32;
+
+trusted extern fn __concrete_get_argc() -> i32;
+trusted extern fn __concrete_get_argv(idx: i32) -> *const u8;
+
+trusted fn read_header_bytes(path: *const u8, buf: *mut u8, count: u64) with(File) -> u64 {
+    let mode: [u8; 3] = [114, 98, 0];
+    let fp: *const u8 = fopen(path, &mode as *const u8);
+    if fp == (0 as *const u8) {
+        return 0;
+    }
+    let n: u64 = fread(buf, 1, count, fp);
+    fclose(fp);
+    return n;
+}
+
+trusted fn read_byte(buf: *const u8, offset: u64) -> u8 {
+    let p: *const u8 = buf + offset;
+    return *(p as *mut u8);
+}
+
+// === Provable core (pure, no capabilities) ===
+
+// DRIFTED: first byte check changed from 127 to 0
+fn check_magic(b0: Int, b1: Int, b2: Int, b3: Int) -> Int {
+    if b0 == 0 {
+        if b1 == 69 {
+            if b2 == 76 {
+                if b3 == 70 {
+                    return 1;
+                } else {
+                    return 0;
+                }
+            } else {
+                return 0;
+            }
+        } else {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+}
+
+fn check_class(cls: Int) -> Int {
+    if cls == 1 {
+        return 1;
+    } else {
+        if cls == 2 {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+}
+
+fn check_data(encoding: Int) -> Int {
+    if encoding == 1 {
+        return 1;
+    } else {
+        if encoding == 2 {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+}
+
+// DRIFTED: accepts version 0 in addition to 1
+fn check_version(ver: Int) -> Int {
+    if ver == 1 {
+        return 1;
+    } else {
+        if ver == 0 {
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+}
+
+fn validate_header(b0: Int, b1: Int, b2: Int, b3: Int,
+                   cls: Int, encoding: Int, ver: Int) -> Int {
+    let magic_ok: Int = check_magic(b0, b1, b2, b3);
+    if magic_ok == 1 {
+        let cls_ok: Int = check_class(cls);
+        if cls_ok == 1 {
+            let enc_ok: Int = check_data(encoding);
+            if enc_ok == 1 {
+                let ver_ok: Int = check_version(ver);
+                if ver_ok == 1 {
+                    return 1;
+                } else {
+                    return 0;
+                }
+            } else {
+                return 0;
+            }
+        } else {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+}
+
+fn main() with(Std) -> Int {
+    let argc: i32 = __concrete_get_argc();
+    if argc < 2 {
+        println("Usage: elf_header <file>");
+        return 1;
+    }
+
+    let path: *const u8 = __concrete_get_argv(1);
+    let buf: [u8; 16] = [0; 16];
+    let n: u64 = read_header_bytes(path, &buf as *mut u8, 7);
+    if n < 7 {
+        println("error: file too short");
+        return 1;
+    }
+
+    let b0: Int = read_byte(&buf as *const u8, 0) as Int;
+    let b1: Int = read_byte(&buf as *const u8, 1) as Int;
+    let b2: Int = read_byte(&buf as *const u8, 2) as Int;
+    let b3: Int = read_byte(&buf as *const u8, 3) as Int;
+    let cls: Int = read_byte(&buf as *const u8, 4) as Int;
+    let encoding: Int = read_byte(&buf as *const u8, 5) as Int;
+    let ver: Int = read_byte(&buf as *const u8, 6) as Int;
+
+    let all_ok: Int = validate_header(b0, b1, b2, b3, cls, encoding, ver);
+    if all_ok == 1 {
+        println("Result: valid ELF header");
+        return 0;
+    } else {
+        println("Result: INVALID ELF header");
+        return 1;
+    }
+}

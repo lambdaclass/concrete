@@ -1,0 +1,26 @@
+// Regression test: integer match rejects consumption disagreement.
+// Only one arm consumes r — the checker must reject this.
+// (Bug 021: originally the value-pattern match handler did not check agreement.)
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn int_match_disagree(x: Int) -> Int {
+    let r: Resource = Resource { value: 100 };
+    match x {
+        1 => { let _v: Int = consume(r); },
+        _ => { let _v: Int = 0; },
+    }
+    // r might or might not be consumed depending on runtime value
+    // The checker should reject this, but the int-match path resets to envBefore
+    return 0;
+}
+
+fn main() -> Int {
+    return int_match_disagree(1);
+}

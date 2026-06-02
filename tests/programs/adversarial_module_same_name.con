@@ -1,0 +1,22 @@
+// Adversarial module: 3 modules with identically-named functions.
+// Tests that module function names don't collide in LLVM IR.
+// Expected: 42
+
+mod Alpha {
+    pub fn compute(x: Int) -> Int { return x + 10; }
+}
+
+mod Beta {
+    pub fn compute(x: Int) -> Int { return x + 20; }
+}
+
+mod Gamma {
+    pub fn compute(x: Int) -> Int { return x + 12; }
+}
+
+mod Main {
+    import Alpha.{ compute };
+    fn main() -> Int {
+        return compute(0) + 32;
+    }
+}

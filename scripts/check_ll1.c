@@ -54,6 +54,10 @@ typedef struct {
 static Rule rules[MAX_RULES];
 static int  n_rules;
 
+static void copy_name(char dst[MAX_NAME], const char *src) {
+    snprintf(dst, MAX_NAME, "%s", src);
+}
+
 /* ── Terminal set ────────────────────────────────────────────────── */
 
 typedef struct {
@@ -71,7 +75,7 @@ static bool tset_contains(const TermSet *s, const char *name) {
 
 static void tset_add(TermSet *s, const char *name) {
     if (!tset_contains(s, name) && s->count < MAX_TERMINALS)
-        strncpy(s->names[s->count++], name, MAX_NAME - 1);
+        copy_name(s->names[s->count++], name);
 }
 
 static void tset_intersect(TermSet *dst, const TermSet *a, const TermSet *b) {
@@ -100,13 +104,13 @@ static Node *alloc_node(NodeKind kind) {
 
 static Node *mk_terminal(const char *name) {
     Node *n = alloc_node(NODE_TERMINAL);
-    strncpy(n->name, name, MAX_NAME - 1);
+    copy_name(n->name, name);
     return n;
 }
 
 static Node *mk_nonterminal(const char *name) {
     Node *n = alloc_node(NODE_NONTERMINAL);
-    strncpy(n->name, name, MAX_NAME - 1);
+    copy_name(n->name, name);
     return n;
 }
 
@@ -175,7 +179,7 @@ static void tokenize(const char *text) {
             /* Wrap in quotes for display */
             char tmp[MAX_NAME];
             snprintf(tmp, MAX_NAME, "'%s'", t->val);
-            strncpy(t->val, tmp, MAX_NAME - 1);
+            copy_name(t->val, tmp);
             n_toks++;
             i = j + 1;
             continue;
@@ -303,7 +307,7 @@ static void parse_rules(void) {
         Node *body = parse_alternation();
         expect(T_SEMI);
         if (n_rules >= MAX_RULES) { fprintf(stderr, "error: too many rules\n"); exit(2); }
-        strncpy(rules[n_rules].name, name->val, MAX_NAME - 1);
+        copy_name(rules[n_rules].name, name->val);
         rules[n_rules].body = body;
         n_rules++;
     }

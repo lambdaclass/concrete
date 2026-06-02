@@ -532,7 +532,7 @@ Structural boundedness means the compiler can statically determine resource usag
 
 ## Concurrency and Execution Model
 
-Concrete does not yet implement concurrency. This section documents the intended direction so that runtime, capability, and ownership decisions made now remain compatible with the concurrency model.
+Concrete does not yet implement concurrency. This section documents the intended direction so that runtime, capability, and ownership decisions made now remain compatible with the concurrency model. The more specific async/evidence research direction lives in [../research/stdlib-runtime/async-concurrency-evidence.md](../research/stdlib-runtime/async-concurrency-evidence.md).
 
 ### Design principles
 
@@ -540,9 +540,9 @@ Concrete does not yet implement concurrency. This section documents the intended
 2. **Structured over detached.** Concurrent work should belong to explicit scopes with defined lifetimes. Fire-and-forget spawning should be rare and marked.
 3. **Threads first, async later.** OS threads are the base primitive. Evented I/O and executor-driven async are specialized later additions, not the default.
 4. **Ownership across threads.** Values moved into spawned threads are consumed (linear move). Shared mutable state requires explicit synchronization types.
-5. **Capability-gated.** Spawning threads requires a `Spawn` (or `Concurrency`) capability. Blocking requires `Block`. These are separate from `Network`/`Process`/`Random`.
+5. **Capability-gated.** Spawning, blocking, waiting, synchronization, time, and eventual async/evented I/O should be visible as capabilities or explicit runtime values. The current research candidates include `Async`, `Concurrent`, `Sync`, `Clock`, and `Cancellable`; exact names are not implemented or frozen.
 
-### First concurrency model (designed in Phase E, implemented in Phase J)
+### First concurrency model (future Phase 12 work)
 
 The initial model targets hosted environments only:
 
@@ -553,13 +553,13 @@ The initial model targets hosted environments only:
 | Join API | `handle.join() -> T` — blocks until thread completes |
 | Ownership | Arguments to `spawn` are moved (consumed). Return value is moved back via `join`. |
 | Channels | `channel::new<T>() -> (Sender<T>, Receiver<T>)` — bounded MPSC |
-| Capabilities | `with(Spawn)` to create threads, `with(Block)` to join or receive |
+| Capabilities | Thread creation, blocking, and channel operations must be capability-gated. Exact capability names are still research. |
 | Shared state | Not in first model. Mutex/atomics are Stage 2. |
 
-### What the capability system provides
+### What the capability system should provide
 
 ```
-fn process_batch(data: Vec<Work>) with(Spawn, Block, Alloc) -> Vec<Result> {
+fn process_batch(data: Vec<Work>) with(Concurrent, Alloc) -> Vec<Result> {
     let (tx, rx) = channel::new::<Result>(data.len());
     for item in data {
         thread::spawn(fn(item: Work, tx: Sender<Result>) with(Alloc) {
@@ -570,17 +570,22 @@ fn process_batch(data: Vec<Work>) with(Spawn, Block, Alloc) -> Vec<Result> {
 }
 ```
 
-The signature makes visible: this function spawns threads, may block, and allocates. `--report caps` would show exactly which functions in a module require `Spawn` or `Block`.
+This is illustrative, not current syntax. The intended signature makes visible:
+this function creates concurrent work and allocates. `--report caps` should
+eventually show exactly which functions in a module require optional overlap
+(`Async`), required concurrent progress (`Concurrent`), synchronization
+(`Sync`), clock access (`Clock`), or cancellation (`Cancellable`).
 
 ### Staging
 
 | Stage | Scope | Phase |
 |-------|-------|-------|
 | 1 | OS threads, spawn/join, channels, move ownership | J |
-| 2 | `Send`/`Sync`-like type bounds, mutex, atomics | J |
+| 2 | cross-task transfer rules, synchronized shared-state types, mutex, atomics | J |
 | 3 | Audit/report integration (where threads spawn, where blocking occurs) | J |
-| 4 | Structured concurrency scopes (nursery/task-group style) | J+ |
-| 5 | Evented I/O runtime (specialized, not default) | J+ |
+| 4 | structured concurrency scopes, linear handles, deadlines, race/select | J+ |
+| 5 | deterministic simulation backend and concurrency evidence artifacts | J+ |
+| 6 | evented I/O runtime (specialized, not default) | J+ |
 
 ### What concurrency does NOT change
 
@@ -596,8 +601,9 @@ The signature makes visible: this function spawns threads, may block, and alloca
 - Hidden executors or schedulers in stdlib
 - Function coloring that forces non-concurrent code into async signatures
 - Ambient concurrency — spawning should be as visible as allocation
+- Detached tasks outside a structured scope as the default lifecycle model
 
-See `research/stdlib-runtime/concurrency.md` for the full near-term design and `research/stdlib-runtime/long-term-concurrency.md` for the long-term layered model.
+See [../research/stdlib-runtime/concurrency.md](../research/stdlib-runtime/concurrency.md) for the full near-term design, [../research/stdlib-runtime/long-term-concurrency.md](../research/stdlib-runtime/long-term-concurrency.md) for the long-term layered model, and [../research/stdlib-runtime/async-concurrency-evidence.md](../research/stdlib-runtime/async-concurrency-evidence.md) for the evidence-bearing async/concurrency research direction.
 
 ---
 
@@ -620,4 +626,4 @@ See `research/stdlib-runtime/concurrency.md` for the full near-term design and `
 | FFI ownership | Linear types consumed by-value; raw pointers untracked | Verified FFI envelopes, ownership annotations |
 | FFI calling convention | `#[repr(C)]` structs passed by value for extern fn | Already implemented |
 | Boundedness | Capability reports show allocation/unsafe usage | Static allocation/stack analysis, `--report boundedness` |
-| Concurrency | Not yet implemented; direction documented | OS threads, spawn/join, channels, capability-gated |
+| Concurrency | Not yet implemented; research documented | OS threads first, structured scopes, capability-gated concurrency, simulation-backed evidence later |

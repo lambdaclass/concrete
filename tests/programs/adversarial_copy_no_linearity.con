@@ -1,0 +1,41 @@
+// Adversarial test: Copy types skip linearity entirely.
+// Can be used multiple times, reassigned, and don't need scope-exit consumption.
+
+struct Copy Point {
+    x: Int,
+    y: Int,
+}
+
+fn use_point(p: Point) -> Int {
+    return p.x + p.y;
+}
+
+fn copy_multiple_use() -> Int {
+    let p: Point = Point { x: 10, y: 20 };
+    // Use p multiple times — no error
+    let a: Int = use_point(p);
+    let b: Int = use_point(p);
+    let c: Int = p.x + p.y;
+    return a + b + c;
+}
+
+fn copy_reassign() -> Int {
+    let mut p: Point = Point { x: 1, y: 2 };
+    let a: Int = p.x;
+    p = Point { x: 100, y: 200 };
+    let b: Int = p.x;
+    return a + b;
+}
+
+fn copy_no_scope_exit_error() -> Int {
+    let _p: Point = Point { x: 5, y: 10 };
+    // _p is never consumed — OK because Point is Copy
+    return 42;
+}
+
+fn main() -> Int {
+    let r1: Int = copy_multiple_use();
+    let r2: Int = copy_reassign();
+    let r3: Int = copy_no_scope_exit_error();
+    return r1 + r2 + r3;
+}

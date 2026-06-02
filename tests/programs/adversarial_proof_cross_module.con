@@ -1,0 +1,25 @@
+// Adversarial: same-named function in different module must NOT inherit proof
+//
+// main.parse_byte has a registered proof. But main.inner.parse_byte is
+// in a different module — even with an identical body, the qualified
+// identity prevents proof inheritance.
+//
+// Expected: 1 proved (main.parse_byte), inner.parse_byte enforced
+
+fn parse_byte(data: Int, offset: Int) -> Int {
+    return data + offset;
+}
+
+mod inner {
+    fn parse_byte(data: Int, offset: Int) -> Int {
+        return data + offset;
+    }
+
+    pub fn decode(data: Int) -> Int {
+        return parse_byte(data, 0);
+    }
+}
+
+pub fn main() -> Int {
+    return parse_byte(1, 2) + inner::decode(3);
+}

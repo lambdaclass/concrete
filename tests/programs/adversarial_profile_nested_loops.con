@@ -1,0 +1,20 @@
+// Adversarial: nested for loops, both bounded.
+// Two nested for-loops with explicit init/cond/step are both bounded.
+// The predictable profile should accept this — nested bounded loops
+// are still bounded.
+//
+// Expected: passes predictable profile, loops classified as "bounded".
+
+fn matrix_sum(rows: Int, cols: Int) -> Int {
+    let mut total: Int = 0;
+    for (let mut i: Int = 0; i < rows; i = i + 1) {
+        for (let mut j: Int = 0; j < cols; j = j + 1) {
+            total = total + i + j;
+        }
+    }
+    return total;
+}
+
+pub fn main() -> Int {
+    return matrix_sum(3, 4);
+}

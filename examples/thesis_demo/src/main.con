@@ -1,0 +1,74 @@
+// ============================================================
+// Concrete Thesis Demo — capability-visible, predictable, proved
+// ============================================================
+//
+// This file demonstrates the three pillars of the Concrete thesis:
+//
+//   1. CAPABILITY-VISIBLE SEPARATION
+//      Pure functions have no capabilities in their signature.
+//      I/O functions declare exactly which capabilities they need.
+//      A reviewer reads signatures, not bodies.
+//
+//   2. PREDICTABLE EXECUTION (--check predictable)
+//      The parsing core passes all 5 gates:
+//        - no recursion
+//        - bounded loops only
+//        - no heap allocation
+//        - no FFI
+//        - no blocking I/O
+//      Only `main` fails (blocking I/O through Std) — and that is correct.
+//
+//   3. FORMAL PROOF (evidence: proved)
+//      parse_byte and check_length have machine-checked Lean 4 proofs.
+//      The compiler reports their evidence level as "proved" in
+//      --report effects, meaning a Lean theorem backs the function.
+//
+// Run:
+//   concrete src/main.con --report effects
+//   concrete src/main.con --check predictable
+//
+// Expected evidence levels:
+//   parse_byte    → proved            (Lean theorem: ∀ a b, parse_byte(a,b) = a+b)
+//   check_length  → proved            (Lean theorem: rejects iff len < 10)
+//   validate      → enforced          (passes all 5 gates, no proof yet)
+//   report        → enforced          (Console-only, passes profile)
+//   main          → reported          (blocking I/O — correct separation)
+
+// ---- Proved: Lean theorem backs this function ----
+
+fn parse_byte(data: Int, offset: Int) -> Int {
+    return data + offset;
+}
+
+fn check_length(len: Int) -> Int {
+    if len < 10 { return 1; }
+    return 0;
+}
+
+// ---- Enforced: passes all 5 predictable gates ----
+
+fn validate(data: Int, len: Int) -> Int {
+    if check_length(len) != 0 { return 1; }
+    let mut checksum: Int = 0;
+    for (let mut i: Int = 0; i < len; i = i + 1) {
+        checksum = checksum + parse_byte(data, i);
+    }
+    if checksum == 0 { return 2; }
+    return 0;
+}
+
+// ---- Enforced: Console capability only (no blocking) ----
+
+fn report(result: Int) with(Console) {
+    if result == 0 { println("ok"); }
+    else { println("fail"); }
+}
+
+// ---- Reported: main uses Std (blocking I/O) ----
+// This is the correct boundary. The compiler makes it visible.
+
+pub fn main() with(Std) -> Int {
+    let result: Int = validate(42, 10);
+    report(result);
+    return result;
+}

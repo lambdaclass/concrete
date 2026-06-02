@@ -1,0 +1,25 @@
+// ERROR TEST: branch disagreement on linear consumption.
+// One branch consumes, the other does not — must be rejected.
+
+struct Resource {
+    id: Int,
+}
+
+fn consume_resource(r: Resource) -> Int {
+    return r.id;
+}
+
+fn bad_branch(cond: Bool) -> Int {
+    let r: Resource = Resource { id: 1 };
+    if cond {
+        let _x: Int = consume_resource(r);
+    } else {
+        // NOT consumed here — disagreement!
+        let _x: Int = 0;
+    }
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_branch(true);
+}

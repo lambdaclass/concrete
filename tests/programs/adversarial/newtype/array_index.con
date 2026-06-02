@@ -1,0 +1,13 @@
+// Array indexed by newtype-resolved-to-int. Tests that arithmetic on
+// the inner type (via .0) round-trips and that array access works
+// with the resulting Int.
+// Expected: 30
+
+newtype Idx = u32;
+
+fn main() -> Int {
+    let arr: [i32; 4] = [10, 20, 30, 40];
+    let i: Idx = Idx(2);
+    let raw: u32 = i.0;
+    return arr[raw as Int] as Int;
+}

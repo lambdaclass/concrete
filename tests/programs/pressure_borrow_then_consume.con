@@ -1,0 +1,22 @@
+// Pressure: borrow a linear value for inspection, then consume it.
+// Tests that borrow block properly unfreezes the owner for later consumption.
+
+struct Data { x: Int, y: Int }
+
+fn sum_fields(d: &Data) -> Int {
+    return (*d).x + (*d).y;
+}
+
+fn consume_data(d: Data) -> Int {
+    return d.x * d.y;
+}
+
+fn main() -> Int {
+    let d: Data = Data { x: 3, y: 7 };
+    let mut total: Int = 0;
+    borrow d as ref in R {
+        total = sum_fields(ref);
+    }
+    let product: Int = consume_data(d);
+    return total + product;
+}

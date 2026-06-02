@@ -1,0 +1,258 @@
+// parse_validate — canonical error-flow example for the predictable subset
+//
+// Demonstrates explicit error propagation with no hidden runtime behavior:
+//   1. Custom Copy error enum with named failure categories
+//   2. Stdlib Result<Header, ParseError> — standard Ok/Err propagation
+//   3. Pure validation functions — no capabilities, no allocation, no trusted
+//   4. Match-based error propagation — every error path visible in source
+//   5. All functions pass --check predictable (predictable = true policy)
+//   6. No abort, no OOM, no exceptions, no hidden control flow
+//
+// Error taxonomy (6 categories):
+//   TooShort       — input buffer too small for header
+//   BadVersion     — version field is not 1
+//   BadType        — message type not in range 1-4
+//   PayloadTooBig  — payload length exceeds maximum (240)
+//   Truncated      — total length less than header + payload
+//   BadChecksum    — XOR checksum does not match
+//
+// Message format (5-field i32 array):
+//   Field 0: version (must be 1)
+//   Field 1: message type (1=data, 2=heartbeat, 3=reset, 4=status)
+//   Field 2: payload length (0-240)
+//   Field 3: reserved (unused, included in checksum)
+//   Field 4: checksum (XOR of fields 0-3)
+//   Fields 5+: payload (not validated, just length-checked)
+//
+// Policy: predictable = true (no recursion, bounded loops, no alloc, no FFI)
+
+mod parse_validate {
+
+    // ---- Error type ----
+
+    enum Copy ParseError {
+        TooShort,
+        BadVersion,
+        BadType,
+        PayloadTooBig,
+        Truncated,
+        BadChecksum,
+    }
+
+    // ---- Parsed header ----
+
+    struct Copy Header {
+        version: i32,
+        msg_type: i32,
+        payload_len: i32,
+        checksum: i32,
+    }
+
+    // ---- Individual validators ----
+    // Each returns 0 for success, nonzero for failure.
+    // Pure: no capabilities, no allocation, no trusted.
+
+    fn validate_version(v: i32) -> i32 {
+        if v == 1 { return 0; }
+        return 1;
+    }
+
+    fn validate_msg_type(t: i32) -> i32 {
+        if t >= 1 {
+            if t <= 4 { return 0; }
+        }
+        return 1;
+    }
+
+    fn validate_payload_len(plen: i32, max_len: i32) -> i32 {
+        if plen >= 0 {
+            if plen <= max_len { return 0; }
+        }
+        return 1;
+    }
+
+    fn validate_total_len(actual: i32, needed: i32) -> i32 {
+        if actual >= needed { return 0; }
+        return 1;
+    }
+
+    fn compute_checksum(data: [i32; 8], count: i32) -> i32 {
+        let mut acc: i32 = 0;
+        for (let mut i: i32 = 0; i < count; i = i + 1) {
+            acc = acc ^ data[i];
+        }
+        return acc;
+    }
+
+    fn validate_checksum(expected: i32, computed: i32) -> i32 {
+        if expected == computed { return 0; }
+        return 1;
+    }
+
+    // ---- Composition over scalar inputs (proof-friendly) ----
+    //
+    // parse_header below composes the same validators on an array
+    // input, returning Result<Header, ParseError>. That version
+    // exercises constructs (array indexing, enum construction,
+    // struct construction) that ProofCore does not yet extract —
+    // future Phase 4 work.
+    //
+    // validate_header_fields composes the same logic on scalar
+    // inputs, returning an int status: 0 on success or the index
+    // (1..6) of the first failing check. This shape is in the
+    // ProofCore-extractable subset today, and is the function that
+    // carries the composition theorem `validate_header_fields_correct`
+    // in Concrete/Proof.lean.
+
+    fn validate_header_fields(
+        v: i32, t: i32, plen: i32,
+        total_len: i32, cs_expected: i32, cs_computed: i32
+    ) -> i32 {
+        if validate_total_len(total_len, 5) != 0 { return 1; }
+        if validate_version(v) != 0 { return 2; }
+        if validate_msg_type(t) != 0 { return 3; }
+        if validate_payload_len(plen, 240) != 0 { return 4; }
+        if validate_total_len(total_len, 4 + plen) != 0 { return 5; }
+        if validate_checksum(cs_expected, cs_computed) != 0 { return 6; }
+        return 0;
+    }
+
+    // ---- Composite parser ----
+    // Calls validators in sequence. Each failure returns immediately
+    // with the specific error category. No hidden control flow —
+    // every early return is an explicit if-then-return.
+
+    fn parse_header(data: [i32; 8], len: i32) -> Result<Header, ParseError> {
+        // Gate: minimum 5 fields needed
+        if validate_total_len(len, 5) != 0 {
+            return Result::<Header, ParseError>::Err { error: ParseError::TooShort };
+        }
+
+        // Field 0: version (must be 1)
+        if validate_version(data[0]) != 0 {
+            return Result::<Header, ParseError>::Err { error: ParseError::BadVersion };
+        }
+
+        // Field 1: message type (1-4)
+        if validate_msg_type(data[1]) != 0 {
+            return Result::<Header, ParseError>::Err { error: ParseError::BadType };
+        }
+
+        // Field 2: payload length (0-240)
+        if validate_payload_len(data[2], 240) != 0 {
+            return Result::<Header, ParseError>::Err { error: ParseError::PayloadTooBig };
+        }
+
+        // Check total length covers header + payload
+        if validate_total_len(len, 4 + data[2]) != 0 {
+            return Result::<Header, ParseError>::Err { error: ParseError::Truncated };
+        }
+
+        // Field 4: checksum (XOR fold of fields 0-3)
+        let computed: i32 = compute_checksum(data, 4);
+        if validate_checksum(data[4], computed) != 0 {
+            return Result::<Header, ParseError>::Err { error: ParseError::BadChecksum };
+        }
+
+        return Result::<Header, ParseError>::Ok { value: Header {
+            version: data[0],
+            msg_type: data[1],
+            payload_len: data[2],
+            checksum: data[4],
+        } };
+    }
+
+    // ---- Error classification ----
+
+    fn error_code(e: ParseError) -> i32 {
+        match e {
+            ParseError::TooShort => { return 1; },
+            ParseError::BadVersion => { return 2; },
+            ParseError::BadType => { return 3; },
+            ParseError::PayloadTooBig => { return 4; },
+            ParseError::Truncated => { return 5; },
+            ParseError::BadChecksum => { return 6; },
+        }
+    }
+
+    // ---- Tests ----
+
+    pub fn main() -> Int {
+        // Test 1: valid header [ver=1, type=2, plen=0, pad=0, cs=1^2^0^0=3]
+        let good: [i32; 8] = [1, 2, 0, 0, 3, 0, 0, 0];
+        match parse_header(good, 5) {
+            Result::Ok { value } => {
+                if value.version != 1 { return 11; }
+                if value.msg_type != 2 { return 12; }
+                if value.payload_len != 0 { return 13; }
+                if value.checksum != 3 { return 14; }
+            },
+            Result::Err { error } => { return 10; },
+        }
+
+        // Test 2: bad version (99) → BadVersion (code 2)
+        let bad_ver: [i32; 8] = [99, 2, 0, 0, 0, 0, 0, 0];
+        match parse_header(bad_ver, 5) {
+            Result::Ok { value } => { return 20; },
+            Result::Err { error } => {
+                if error_code(error) != 2 { return 21; }
+            },
+        }
+
+        // Test 3: bad type (0) → BadType (code 3)
+        let bad_type: [i32; 8] = [1, 0, 0, 0, 0, 0, 0, 0];
+        match parse_header(bad_type, 5) {
+            Result::Ok { value } => { return 30; },
+            Result::Err { error } => {
+                if error_code(error) != 3 { return 31; }
+            },
+        }
+
+        // Test 4: too short (len=2) → TooShort (code 1)
+        let short: [i32; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+        match parse_header(short, 2) {
+            Result::Ok { value } => { return 40; },
+            Result::Err { error } => {
+                if error_code(error) != 1 { return 41; }
+            },
+        }
+
+        // Test 5: payload overflow (241 > 240) → PayloadTooBig (code 4)
+        let overflow: [i32; 8] = [1, 1, 241, 0, 0, 0, 0, 0];
+        match parse_header(overflow, 5) {
+            Result::Ok { value } => { return 50; },
+            Result::Err { error } => {
+                if error_code(error) != 4 { return 51; }
+            },
+        }
+
+        // Test 6: bad checksum → BadChecksum (code 6)
+        let bad_cs: [i32; 8] = [1, 2, 0, 0, 99, 0, 0, 0];
+        match parse_header(bad_cs, 5) {
+            Result::Ok { value } => { return 60; },
+            Result::Err { error } => {
+                if error_code(error) != 6 { return 61; }
+            },
+        }
+
+        // Test 7: valid with payload [ver=1, type=1, plen=3, pad=0, cs=1^1^3^0=3]
+        let with_payload: [i32; 8] = [1, 1, 3, 0, 3, 10, 20, 30];
+        match parse_header(with_payload, 8) {
+            Result::Ok { value } => {
+                if value.payload_len != 3 { return 71; }
+            },
+            Result::Err { error } => { return 70; },
+        }
+
+        // Test 8: truncated (plen=3 but only 5 fields total, need 7) → Truncated (code 5)
+        let trunc: [i32; 8] = [1, 1, 3, 0, 3, 0, 0, 0];
+        match parse_header(trunc, 5) {
+            Result::Ok { value } => { return 80; },
+            Result::Err { error } => {
+                if error_code(error) != 5 { return 81; }
+            },
+        }
+
+        return 0;
+    }
+}

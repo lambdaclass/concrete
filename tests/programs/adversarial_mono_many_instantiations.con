@@ -1,0 +1,17 @@
+// Adversarial monomorphization: one generic function instantiated with 5 types.
+// Stresses Mono.lean by requiring many specializations of the same template.
+// Expected: 42
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+pub fn main() -> Int {
+    let a: Int = identity::<Int>(10);
+    let b: i32 = identity::<i32>(8);
+    let c: i64 = identity::<i64>(7);
+    let d: u64 = identity::<u64>(9);
+    let e: Int = identity::<Int>(8);
+    // 10+8+7+9+8 = 42
+    return a + (b as Int) + (c as Int) + (d as Int) + e;
+}

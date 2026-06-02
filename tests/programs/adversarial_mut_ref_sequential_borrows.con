@@ -1,0 +1,17 @@
+// Multiple sequential borrow blocks on same variable, each with one call.
+// Each borrow block creates a fresh ref. Valid program.
+
+fn increment(x: &mut Int) {
+    *x = *x + 1;
+}
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    borrow mut n as r1 in R1 {
+        increment(r1);
+    }
+    borrow mut n as r2 in R2 {
+        increment(r2);
+    }
+    return n;
+}

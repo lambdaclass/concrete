@@ -1,0 +1,16 @@
+=== Capability Summary ===
+
+module parse_validate:
+      validate_version : (pure)
+      validate_msg_type : (pure)
+      validate_payload_len : (pure)
+      validate_total_len : (pure)
+      compute_checksum : (pure)
+      validate_checksum : (pure)
+      validate_header_fields : (pure)
+      parse_header : (pure)
+      error_code : (pure)
+  pub main : (pure)
+
+Totals: 10 functions (10 pure), 0 externs
+

@@ -1,0 +1,30 @@
+// Test program for mechanical obligation generation.
+// Exercises all 5 obligation statuses: proved, stale, missing, ineligible, trusted.
+
+fn pure_add(a: i64, b: i64) -> i64 {
+    return a + b;
+}
+
+fn pure_stale(a: i64, b: i64) -> i64 {
+    return a - b;
+}
+
+fn pure_no_spec(a: i64, b: i64) -> i64 {
+    return a * b;
+}
+
+fn uses_alloc(n: i64) with(Alloc) -> i64 {
+    return n + 1;
+}
+
+trusted fn trusted_op(x: i64) -> i64 {
+    return x + 1;
+}
+
+fn main() -> i64 {
+    let x: i64 = pure_add(1, 2);
+    let y: i64 = pure_stale(3, 4);
+    let w: i64 = pure_no_spec(5, 6);
+    let z: i64 = trusted_op(x);
+    return y + z + w;
+}

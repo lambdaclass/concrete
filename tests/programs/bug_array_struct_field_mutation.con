@@ -1,0 +1,28 @@
+// Bug: array extracted from struct field cannot be mutated
+//
+// let mut d: [i32; 4] = b.data;
+// d[0] = 99;
+// return d[0];  // returns 0 instead of 99
+//
+// Direct array init works: let mut d: [i32; 4] = [0; 4]; d[0] = 99; → 99
+// But extracting from struct field and mutating doesn't: → 0
+//
+// Expected output: 99
+
+struct Buf {
+    data: [i32; 4],
+    len: u64,
+}
+
+fn test_from_struct(b: Buf) -> i32 {
+    let mut d: [i32; 4] = b.data;
+    d[0] = 99;
+    return d[0];
+}
+
+pub fn main() with(Std) -> Int {
+    let b: Buf = Buf { data: [0; 4], len: 0 };
+    let result: i32 = test_from_struct(b);
+    println(result);
+    return 0;
+}

@@ -1,0 +1,55 @@
+=== Combined Effects Report ===
+
+module hmac_sha256:
+      sha256_init
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:57
+      sha256_k
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:65
+      ch
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:96
+      maj
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:101
+      rotr
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:106
+      big_sigma0
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:111
+      big_sigma1
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:116
+      small_sigma0
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:121
+      small_sigma1
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:126
+      ct_compare_32
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:143
+      block_to_words
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:163
+      sha256_schedule
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:177
+      sha256_round
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:195
+      sha256_compress
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:206
+      block_to_words_at
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:224
+      sha256_compress_at
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:237
+      state_to_bytes
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:250
+      sha256_hash
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:274
+      hmac_sha256
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:299
+      verify_hmac
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:327
+      abc_block
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:337
+      rfc4231_tc1_tag
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:349
+      rfc4231_tc2_tag
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:355
+  pub main
+    caps: Console  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:372
+
+Totals: 24 functions, 23 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
+Evidence: 11 proved, 13 enforced, 0 trusted-assumption, 0 reported
+

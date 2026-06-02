@@ -1,0 +1,15 @@
+// Adversarial parser: single expression with 50+ binary operators.
+// Stresses expression parsing and operator precedence handling.
+// Expected: 50
+
+fn compute() -> Int {
+    return 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 +
+           1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 +
+           1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 +
+           1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 +
+           1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1;
+}
+
+pub fn main() with(Std) {
+    println(compute());
+}

@@ -1,0 +1,43 @@
+// Adversarial parser: 30 local variable declarations in one function.
+// Stresses name resolution table and scope tracking.
+// Expected: 42
+
+fn compute() -> Int {
+    let a01: Int = 1;
+    let a02: Int = 1;
+    let a03: Int = 1;
+    let a04: Int = 1;
+    let a05: Int = 1;
+    let a06: Int = 1;
+    let a07: Int = 1;
+    let a08: Int = 1;
+    let a09: Int = 1;
+    let a10: Int = 1;
+    let a11: Int = 1;
+    let a12: Int = 1;
+    let a13: Int = 1;
+    let a14: Int = 1;
+    let a15: Int = 1;
+    let a16: Int = 1;
+    let a17: Int = 1;
+    let a18: Int = 1;
+    let a19: Int = 1;
+    let a20: Int = 1;
+    let a21: Int = 1;
+    let a22: Int = 1;
+    let a23: Int = 1;
+    let a24: Int = 1;
+    let a25: Int = 1;
+    let a26: Int = 1;
+    let a27: Int = 1;
+    let a28: Int = 1;
+    let a29: Int = 1;
+    let a30: Int = 13;
+    return a01 + a02 + a03 + a04 + a05 + a06 + a07 + a08 + a09 + a10 +
+           a11 + a12 + a13 + a14 + a15 + a16 + a17 + a18 + a19 + a20 +
+           a21 + a22 + a23 + a24 + a25 + a26 + a27 + a28 + a29 + a30;
+}
+
+pub fn main() -> Int {
+    return compute();
+}

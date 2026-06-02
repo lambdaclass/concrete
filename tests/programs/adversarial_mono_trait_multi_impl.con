@@ -1,0 +1,35 @@
+// Adversarial monomorphization: trait with 3 impls, generic function dispatching.
+// Stresses Mono.lean trait-to-impl resolution during specialization.
+// Expected: 42
+
+trait Scorer {
+    fn score(&self) -> Int;
+}
+
+struct Copy Player { points: Int }
+struct Copy Enemy { threat: Int }
+struct Copy Neutral { id: Int }
+
+impl Scorer for Player {
+    fn score(&self) -> Int { return self.points * 2; }
+}
+
+impl Scorer for Enemy {
+    fn score(&self) -> Int { return self.threat * 3; }
+}
+
+impl Scorer for Neutral {
+    fn score(&self) -> Int { return self.id; }
+}
+
+fn evaluate<T: Scorer>(entity: &T) -> Int {
+    return entity.score();
+}
+
+pub fn main() -> Int {
+    let p: Player = Player { points: 10 };
+    let e: Enemy = Enemy { threat: 4 };
+    let n: Neutral = Neutral { id: 10 };
+    // 20 + 12 + 10 = 42
+    return evaluate::<Player>(&p) + evaluate::<Enemy>(&e) + evaluate::<Neutral>(&n);
+}

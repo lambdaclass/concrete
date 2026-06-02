@@ -1,0 +1,13 @@
+// Test: --check predictable should fail for allocating function
+struct Box { value: Int }
+
+fn heap_op() with(Alloc) -> Int {
+    let p: Heap<Box> = alloc(Box { value: 42 });
+    let v: Int = p->value;
+    free(p);
+    return v;
+}
+
+fn main() with(Alloc) -> Int {
+    return heap_op();
+}

@@ -16,6 +16,10 @@ The goal is not to copy Rust async. The goal is to build a concurrency model tha
 - capability-tracked
 - easier to reason about than today's mainstream async ecosystems
 
+For the stronger long-term async/evented target, including the `Async` versus
+`Concurrent` capability split, structured scopes, linear task handles, and
+simulation-backed evidence, see [async-concurrency-evidence.md](async-concurrency-evidence.md).
+
 ## Why This Matters
 
 Concurrency is one of the easiest places for a low-level language to become harder to read than the business logic it is supposed to express.
@@ -231,6 +235,12 @@ Only after the thread model is well understood should Concrete evaluate:
 - any eventual async syntax
 
 Those additions should be justified by clear needs, not by imitation.
+
+The current best candidate for that later stage is not generic async/await.
+It is capability-typed structured concurrency: optional overlap through
+`with(Async)`, required concurrent progress through `with(Concurrent)`, scoped
+tasks, linear handles, and deterministic simulation as an evidence-producing
+backend.
 
 ## High-Leverage Areas Where Concrete Could Be Better
 

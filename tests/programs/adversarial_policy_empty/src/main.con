@@ -1,0 +1,17 @@
+// Adversarial boundary: empty [policy] section with no keys set.
+// Code uses recursion and capabilities — should all be allowed since no policy is enforced.
+// Expected: compiler accepts — empty policy means no restrictions.
+
+pub fn recursive_sum(n: Int) with(Console) -> Int {
+    if n <= 0 {
+        println(0);
+        return 0;
+    }
+    return n + recursive_sum(n - 1);
+}
+
+pub fn main() with(Console) -> Int {
+    let result: Int = recursive_sum(5);
+    println(result);
+    return 0;
+}

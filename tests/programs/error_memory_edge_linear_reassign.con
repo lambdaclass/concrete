@@ -1,0 +1,20 @@
+// ERROR TEST: linear variable reassignment — must be rejected.
+
+struct Resource {
+    id: Int,
+}
+
+fn consume_resource(r: Resource) -> Int {
+    return r.id;
+}
+
+fn bad_reassign() -> Int {
+    let mut r: Resource = Resource { id: 1 };
+    r = Resource { id: 2 };
+    let _x: Int = consume_resource(r);
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_reassign();
+}

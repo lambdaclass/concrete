@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "function": "multi_file_registry.add_one",
+      "spec": "AddOne.spec",
+      "proof": "AddOne.add_one_correct",
+      "body_fingerprint": "[(ret (binop Concrete.BinOp.add (var x) (int 1)))]"
+    }
+  ]
+}

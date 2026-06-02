@@ -19,8 +19,6 @@
 
 mod kvstore {
     import std.fs.{read_to_string, write_file, append_file, file_exists, FsError};
-    import std.result.{Result};
-    import std.option.{Option};
     import std.args.{count, get};
     import std.bytes.{Bytes};
     import std.map.{HashMap};
@@ -96,10 +94,10 @@ mod kvstore {
         }
         let pk: Option<String> = keys.pop();
         match pk {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 forget_string(value);
             },
-            Option#None => {}
+            Option::None => {}
         }
     }
 
@@ -108,10 +106,10 @@ mod kvstore {
         let key_for_vec: String = clone_string(&key);
         let old: Option<String> = map.insert(key, val);
         match old {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 value.drop();
             },
-            Option#None => {}
+            Option::None => {}
         }
         if existed {
             key_for_vec.drop();
@@ -123,12 +121,12 @@ mod kvstore {
     trusted fn kv_delete(map: &mut HashMap<String, String>, keys: &mut Vec<String>, key: &String) with(Alloc) -> bool {
         let removed: Option<String> = map.remove(key);
         match removed {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 value.drop();
                 keys_remove(keys, key);
                 return true;
             },
-            Option#None => {
+            Option::None => {
                 return false;
             }
         }
@@ -145,8 +143,8 @@ mod kvstore {
         let path: String = log_path();
         let result: Result<u64, FsError> = append_file(&path, &data);
         match result {
-            Result#Ok { value } => {},
-            Result#Err { error } => {
+            Result::Ok { value } => {},
+            Result::Err { error } => {
                 println("Error: could not write to log file");
             }
         }
@@ -164,8 +162,8 @@ mod kvstore {
         let path: String = log_path();
         let result: Result<u64, FsError> = append_file(&path, &data);
         match result {
-            Result#Ok { value } => {},
-            Result#Err { error } => {
+            Result::Ok { value } => {},
+            Result::Err { error } => {
                 println("Error: could not write to log file");
             }
         }
@@ -243,11 +241,11 @@ mod kvstore {
         let result: Result<String, FsError> = read_to_string(&path);
         path.drop();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 parse_log_content(&value, map, keys);
                 value.drop();
             },
-            Result#Err { error } => {}
+            Result::Err { error } => {}
         }
     }
 
@@ -270,10 +268,10 @@ mod kvstore {
         let path: String = log_path();
         let result: Result<u64, FsError> = write_file(&path, &data);
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 println("Compacted log file");
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 println("Error: could not write compacted log file");
             }
         }
@@ -287,24 +285,17 @@ mod kvstore {
         let val: String = clone_string(val_arg);
         log_set(key_arg, val_arg);
         kv_set_tracked(map, keys, key, val);
-        print("Set '");
-        print_string(key_arg);
-        print("' = '");
-        print_string(val_arg);
-        println("'");
+        println("Set '", key_arg, "' = '", val_arg, "'");
     }
 
     fn cmd_get(map: &mut HashMap<String, String>, key_arg: &String) with(Std) {
         let val_opt: Option<&String> = map.get(key_arg);
         match val_opt {
-            Option#Some { value } => {
-                print_string(value);
-                print_char(10);
+            Option::Some { value } => {
+                println(value);
             },
-            Option#None => {
-                print("Key '");
-                print_string(key_arg);
-                println("' not found");
+            Option::None => {
+                println("Key '", key_arg, "' not found");
             }
         }
     }
@@ -313,13 +304,9 @@ mod kvstore {
         let deleted: bool = kv_delete(map, keys, key_arg);
         if deleted {
             log_del(key_arg);
-            print("Deleted '");
-            print_string(key_arg);
-            println("'");
+            println("Deleted '", key_arg, "'");
         } else {
-            print("Key '");
-            print_string(key_arg);
-            println("' not found");
+            println("Key '", key_arg, "' not found");
         }
     }
 
@@ -341,7 +328,7 @@ mod kvstore {
 
         let mut init: String = "";
         let out: String = map.fold::<String>(init, build_list_line);
-        print_string(&out);
+        print(out);
         out.drop();
     }
 
@@ -404,9 +391,7 @@ mod kvstore {
         } else if str_eq(&cmd, &"compact") {
             compact(&mut map, &mut keys);
         } else {
-            print("Unknown command: ");
-            print_string(&cmd);
-            print_char(10);
+            println("Unknown command: ", cmd);
             print_usage();
             exit_code = 1;
         }

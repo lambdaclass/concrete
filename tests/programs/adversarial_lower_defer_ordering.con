@@ -1,0 +1,31 @@
+// Adversarial lowering: multiple defers must execute in LIFO order.
+// Each defer destroys a linear struct; order verified by accumulator.
+// Expected: 42
+
+struct ResA { val: Int }
+struct ResB { val: Int }
+struct ResC { val: Int }
+
+impl Destroy for ResA {
+    fn destroy(&self) { }
+}
+impl Destroy for ResB {
+    fn destroy(&self) { }
+}
+impl Destroy for ResC {
+    fn destroy(&self) { }
+}
+
+fn with_defers() -> Int {
+    let a: ResA = ResA { val: 10 };
+    let b: ResB = ResB { val: 20 };
+    let c: ResC = ResC { val: 12 };
+    defer destroy(a);
+    defer destroy(b);
+    defer destroy(c);
+    return a.val + b.val + c.val;
+}
+
+pub fn main() -> Int {
+    return with_defers();
+}

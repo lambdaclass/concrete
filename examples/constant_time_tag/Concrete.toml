@@ -1,0 +1,19 @@
+[package]
+name = "constant_time_tag"
+
+# Enforceable budgets per docs/POLICY_FILES.md.
+# CI gate: make test-policy.
+#
+# Stricter than fixed_capacity: this candidate has NO trusted
+# shells and NO Alloc anywhere (forbidden_capabilities includes
+# Alloc explicitly).  The pure ct_compare core uses no
+# capabilities; the entry point uses Std only for println.
+[policy]
+predictable            = true
+no_alloc               = true
+no_externs             = true
+no_unsafe              = true
+no_trusted             = true
+max_stack_bytes        = 256
+forbidden_capabilities = ["File", "Net", "Unsafe", "Alloc"]
+allowed_capabilities   = ["Console"]

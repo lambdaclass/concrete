@@ -1,0 +1,20 @@
+// Adversarial: 10 pure proof-eligible functions in one file.
+// Tests that ProofCore handles many eligible functions without confusion,
+// extraction works for all, and fingerprints are distinct.
+// Expected: 55 (1+2+3+4+5+6+7+8+9+10)
+
+fn f1(x: Int) -> Int { return x + 1; }
+fn f2(x: Int) -> Int { return x + 2; }
+fn f3(x: Int) -> Int { return x + 3; }
+fn f4(x: Int) -> Int { return x + 4; }
+fn f5(x: Int) -> Int { return x + 5; }
+fn f6(x: Int) -> Int { return x + 6; }
+fn f7(x: Int) -> Int { return x + 7; }
+fn f8(x: Int) -> Int { return x + 8; }
+fn f9(x: Int) -> Int { return x + 9; }
+fn f10(x: Int) -> Int { return x + 10; }
+
+pub fn main() -> Int {
+    return f1(0) + f2(0) + f3(0) + f4(0) + f5(0) +
+           f6(0) + f7(0) + f8(0) + f9(0) + f10(0);
+}

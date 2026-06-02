@@ -1,0 +1,18 @@
+// Nested borrow blocks: inner ref consumed, outer variable untouched.
+// After inner block, outer variable resumes.
+
+fn increment(x: &mut Int) {
+    *x = *x + 1;
+}
+
+fn main() -> Int {
+    let mut a: Int = 10;
+    let mut b: Int = 20;
+    borrow mut a as ra in RA {
+        increment(ra);
+    }
+    borrow mut b as rb in RB {
+        increment(rb);
+    }
+    return a + b;
+}

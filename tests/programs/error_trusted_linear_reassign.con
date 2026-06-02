@@ -1,0 +1,20 @@
+// ERROR TEST: trusted code cannot reassign linear variables either.
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+trusted fn bad_trusted_reassign() -> Int {
+    let mut r: Resource = Resource { value: 1 };
+    r = Resource { value: 2 };  // ERROR: cannot reassign linear, even in trusted
+    let _x: Int = consume(r);
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_trusted_reassign();
+}

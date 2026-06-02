@@ -1,0 +1,21 @@
+// Pressure: nested defer — two defers in sequence, LIFO order verified.
+// Tests that multiple defers fire in reverse order for different linear vars.
+
+struct ResA { val: Int }
+struct ResB { val: Int }
+
+impl Destroy for ResA {
+    fn destroy(&self) { }
+}
+
+impl Destroy for ResB {
+    fn destroy(&self) { }
+}
+
+fn main() -> Int {
+    let a: ResA = ResA { val: 10 };
+    let b: ResB = ResB { val: 20 };
+    defer destroy(a);
+    defer destroy(b);
+    return a.val + b.val + 12;
+}

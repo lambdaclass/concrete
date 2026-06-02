@@ -1,0 +1,13 @@
+// Adversarial: parse_byte has DIFFERENT semantics than the proved version.
+// The Lean proof says parse_byte(a, b) = a + b.
+// This version does a * b. The report should still say "proved" because
+// the registry only checks names — this is a known limitation.
+// This test documents the gap so it can be closed later.
+
+fn parse_byte(data: Int, offset: Int) -> Int {
+    return data * offset;
+}
+
+pub fn main() -> Int {
+    return parse_byte(10, 3);
+}

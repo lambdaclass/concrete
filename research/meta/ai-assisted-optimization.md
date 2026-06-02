@@ -13,6 +13,17 @@ The interesting property is not generic "AI for code." It is that Concrete alrea
 
 This gives an optimization loop a better oracle than raw benchmarks alone.
 
+## Concrete Missing Artifact
+
+AI-assisted optimization needs an agent-readable performance research packet,
+not an open-ended instruction to "look around the repo."
+
+See [../compiler/performance-research-packets.md](../compiler/performance-research-packets.md).
+
+That packet should collect benchmark history, compiler reports, IR/binary size,
+allocation/effects facts, known hypotheses, and safety/evidence guardrails in
+one place.
+
 ## Promising Directions
 
 ### Allocation minimization
@@ -65,8 +76,10 @@ Concrete is relatively tractable for this style of automated work because it has
 
 This is not a phase by itself. It becomes more practical as:
 
-- machine-readable reports mature in **Phase L1**
-- authority budgets mature in **Phase J / L1**
-- allocation classification matures in **Phase N**
+- machine-readable reports mature
+- authority budgets and policy gates mature
+- allocation classification matures
+- source locations become available in reports
+- performance packets make the current state easy for humans and LLM agents to inspect
 
 Near-term experiments could still happen with current text reports, but the stronger version depends on later report/output maturity.

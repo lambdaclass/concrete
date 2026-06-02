@@ -1,0 +1,26 @@
+// Adversarial test: reading a field of a linear struct does NOT consume it.
+// The struct must still be explicitly consumed at scope exit.
+
+struct Pair {
+    first: Int,
+    second: Int,
+}
+
+fn consume_pair(p: Pair) -> Int {
+    return p.first + p.second;
+}
+
+fn read_then_consume() -> Int {
+    let p: Pair = Pair { first: 10, second: 20 };
+    // These reads do NOT consume p
+    let a: Int = p.first;
+    let b: Int = p.second;
+    let c: Int = p.first + p.second;
+    // Must still consume p
+    let d: Int = consume_pair(p);
+    return a + b + c + d;
+}
+
+fn main() -> Int {
+    return read_then_consume();
+}

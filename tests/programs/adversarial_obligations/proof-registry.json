@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "proofs": [
+    {
+      "function": "main.pure_add",
+      "body_fingerprint": "[(ret (binop Concrete.BinOp.add (var a) (var b)))]",
+      "proof": "Concrete.Proof.pure_add_correct",
+      "spec": "add_commutativity"
+    },
+    {
+      "function": "main.pure_stale",
+      "body_fingerprint": "STALE_FINGERPRINT_intentionally_wrong",
+      "proof": "Concrete.Proof.pure_sub_correct",
+      "spec": "sub_identity"
+    }
+  ]
+}

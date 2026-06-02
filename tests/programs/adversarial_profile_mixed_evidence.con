@@ -1,0 +1,32 @@
+// Adversarial: all four evidence levels in one file.
+//   parse_byte  — proved (matches Lean proof: return data + offset)
+//   validate    — enforced (pure, no effects, pub-reachable)
+//   spin        — reported (unbounded loop, cannot be enforced)
+//   raw_add     — trusted-assumption (trusted function)
+//
+// Expected effects report shows exactly one of each evidence level.
+
+fn parse_byte(data: Int, offset: Int) -> Int {
+    return data + offset;
+}
+
+fn validate(x: Int) -> Int {
+    if x < 0 { return 0; }
+    return x;
+}
+
+fn spin() -> Int {
+    let mut x: Int = 0;
+    while true {
+        x = x + 1;
+    }
+    return x;
+}
+
+trusted fn raw_add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+pub fn main() -> Int {
+    return validate(parse_byte(1, 2));
+}

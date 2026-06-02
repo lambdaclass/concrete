@@ -1,0 +1,39 @@
+// Adversarial test: nested borrow blocks on different variables.
+
+struct A {
+    val: Int,
+}
+
+struct B {
+    val: Int,
+}
+
+fn consume_a(a: A) -> Int {
+    return a.val;
+}
+
+fn consume_b(b: B) -> Int {
+    return b.val;
+}
+
+fn nested_different_owners() -> Int {
+    let mut a: A = A { val: 10 };
+    let mut b: B = B { val: 20 };
+    let mut result: Int = 0;
+    borrow a as ra in R1 {
+        // a is frozen, b is free
+        borrow b as rb in R2 {
+            // both a and b are frozen
+            result = ra.val + rb.val;
+        }
+        // b is unfrozen, a is still frozen
+    }
+    // both unfrozen
+    let _x: Int = consume_a(a);
+    let _y: Int = consume_b(b);
+    return result;
+}
+
+fn main() -> Int {
+    return nested_different_owners();
+}

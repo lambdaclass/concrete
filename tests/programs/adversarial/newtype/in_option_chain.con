@@ -1,0 +1,23 @@
+// Option<Newtype> threaded through multiple match arms with nested
+// constructions. Tests payload layout, generic enum scan, and pattern
+// matching identity preservation across re-wrap.
+// Expected: 200
+
+newtype Score = i32;
+
+fn double_if_positive(s: Score) -> Option<Score> {
+    let raw: i32 = s.0;
+    if raw > 0 {
+        return Option::<Score>::Some { value: Score(raw + raw) };
+    }
+    return Option::<Score>::None;
+}
+
+fn main() -> Int {
+    let s: Score = Score(100);
+    let result: Option<Score> = double_if_positive(s);
+    match result {
+        Option::Some { value } => { return value.0 as Int; }
+        Option::None => { return 0; }
+    }
+}

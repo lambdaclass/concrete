@@ -1,0 +1,13 @@
+// ERROR TEST: Heap<T> use after free — arrow access after free.
+
+struct Point {
+    x: Int,
+    y: Int,
+}
+
+fn main() with(Std) -> Int {
+    let p: Heap<Point> = alloc(Point { x: 10, y: 20 });
+    free(p);
+    let x: Int = p->x;  // ERROR: use after move
+    return x;
+}

@@ -1,0 +1,40 @@
+// Adversarial test: field access does NOT consume the struct,
+// but borrowing the struct freezes all fields.
+
+struct Pair {
+    a: Int,
+    b: Int,
+}
+
+fn consume_pair(p: Pair) -> Int {
+    return p.a + p.b;
+}
+
+// Field access should NOT consume the struct
+fn field_access_no_consume() -> Int {
+    let p: Pair = Pair { a: 1, b: 2 };
+    let x: Int = p.a;
+    let y: Int = p.b;
+    // p is still alive — must consume it
+    let _z: Int = consume_pair(p);
+    return x + y;
+}
+
+// Borrow freezes the ENTIRE struct, not just one field
+fn borrow_freezes_all_fields() -> Int {
+    let mut p: Pair = Pair { a: 10, b: 20 };
+    let mut result: Int = 0;
+    borrow p as ref in R {
+        // ref is &Pair — can read fields through ref
+        result = ref.a;
+    }
+    // p is unfrozen after borrow block
+    let _z: Int = consume_pair(p);
+    return result;
+}
+
+fn main() -> Int {
+    let r1: Int = field_access_no_consume();
+    let r2: Int = borrow_freezes_all_fields();
+    return r1 + r2;
+}

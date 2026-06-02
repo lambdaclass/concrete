@@ -1,0 +1,13 @@
+// Adversarial test: create a linear struct and never consume it.
+// Resource is linear (no Copy marker). The variable r is bound but never
+// passed to a consuming function, returned, or destroyed, so it leaks.
+// Expected: compile error about unconsumed linear variable.
+
+struct Resource {
+    value: Int,
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { value: 99 };
+    return 0;
+}

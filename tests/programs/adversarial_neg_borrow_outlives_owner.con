@@ -1,0 +1,19 @@
+// Adversarial: consume the owner while a borrow is active.
+// Inside the borrow block, r is frozen; passing it to consume() should be rejected.
+// Expected: compile error about variable frozen by borrow.
+
+struct Data {
+    x: Int,
+}
+
+fn consume(d: Data) -> Int {
+    return d.x;
+}
+
+pub fn main() -> Int {
+    let d: Data = Data { x: 5 };
+    borrow d as ref in R {
+        let _gone: Int = consume(d);
+    }
+    return 0;
+}

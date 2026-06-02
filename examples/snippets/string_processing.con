@@ -14,8 +14,8 @@ fn parse_and_sum(input: String) with(Std) -> Int {
             let part: String = string_slice(&input, start, i);
             let parsed: Result<Int, Int> = string_to_int(&part);
             match parsed {
-                Result#Ok { value } => { sum = sum + value; },
-                Result#Err { value } => {},
+                Result::Ok { value } => { sum = sum + value; },
+                Result::Err { error } => {},
             }
             part.drop();
             start = i + 1;
@@ -28,8 +28,8 @@ fn parse_and_sum(input: String) with(Std) -> Int {
         let last: String = string_slice(&input, start, len);
         let parsed: Result<Int, Int> = string_to_int(&last);
         match parsed {
-            Result#Ok { value } => { sum = sum + value; },
-            Result#Err { value } => {},
+            Result::Ok { value } => { sum = sum + value; },
+            Result::Err { error } => {},
         }
         last.drop();
     }

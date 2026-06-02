@@ -1,0 +1,15 @@
+// Regression: c.n = 100 where n is i32 used to elaborate 100 as Int
+// (i64) and codegen emitted `store i64 100` to a 4-byte field. clang
+// -O2 deleted the UB store and the field stayed at its initial value.
+// LLI happened to round-trip the low 4 bytes, so the bug only showed
+// at native build time. Fix: pass the field's declared type as the
+// value hint to elabExpr in fieldAssign.
+// Expected: 100
+
+struct Copy C { n: i32 }
+
+fn main() -> Int {
+    let mut c: C = C { n: 0 };
+    c.n = 100;
+    return c.n as Int;
+}

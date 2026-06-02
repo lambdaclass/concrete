@@ -1,0 +1,21 @@
+// Chained newtypes: Outer wraps Middle wraps Inner.
+// Layout.resolveNewtype must recurse to find the primitive size,
+// and method dispatch must resolve at each level distinctly.
+// Expected: 42
+
+newtype Inner = i32;
+newtype Middle = Inner;
+newtype Outer = Middle;
+
+impl Outer {
+    pub fn unwrap_all(self) -> i32 {
+        let m: Middle = self.0;
+        let i: Inner = m.0;
+        return i.0;
+    }
+}
+
+fn main() -> Int {
+    let o: Outer = Outer(Middle(Inner(42)));
+    return o.unwrap_all() as Int;
+}

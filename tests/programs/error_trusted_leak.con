@@ -1,0 +1,20 @@
+// ERROR TEST: trusted fn body still enforces scope-exit.
+// Forgotten linear value inside trusted must be rejected.
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+trusted fn bad_trusted_leak() -> Int {
+    let r: Resource = Resource { value: 42 };
+    // r is never consumed — scope exit error even in trusted
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_trusted_leak();
+}

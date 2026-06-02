@@ -92,8 +92,30 @@ def ElabError.hint : ElabError → Option String
   | .methodCallOnNonNamedType => some "method calls require a named type"
   | _ => none
 
+def ElabError.code : ElabError → String
+  | .selfOutsideImpl => "E0400"
+  | .undeclaredVariable _ => "E0401"
+  | .undeclaredFunction _ => "E0402"
+  | .unknownFunctionRef _ => "E0403"
+  | .assignToUndeclaredVariable _ => "E0404"
+  | .borrowUndeclaredVariable _ => "E0405"
+  | .unknownStructType _ => "E0406"
+  | .arrowAccessUnknownStruct _ => "E0407"
+  | .structHasNoField _ _ => "E0408"
+  | .fieldAccessNonStruct => "E0409"
+  | .unknownEnumType _ => "E0410"
+  | .unknownVariant _ _ => "E0411"
+  | .missingFieldInVariant _ _ _ => "E0412"
+  | .noMethodOnTypeVar _ _ => "E0413"
+  | .noMethodOnType _ _ => "E0414"
+  | .methodCallOnNonNamedType => "E0415"
+  | .arrayLiteralEmpty => "E0416"
+  | .inSubmodule _ _ => "E0417"
+  | .unknownModule _ => "E0418"
+  | .notPublicInModule _ _ => "E0419"
+
 def throwElab (e : ElabError) (span : Option Span := none) : ElabM α :=
-  throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint }]
+  throw [{ severity := .error, message := e.message, pass := "elab", span := span, hint := e.hint, code := e.code }]
 
 private def getEnv : ElabM ElabEnv := get
 private def setEnv (env : ElabEnv) : ElabM Unit := set env
@@ -118,6 +140,40 @@ private def isFloatType : Ty → Bool
 private def isPointerType : Ty → Bool
   | .ptrMut _ | .ptrConst _ => true
   | _ => false
+
+/-- Pure newtype erasure: resolve any `.named` / `.generic` whose name matches a newtype
+    to its (possibly substituted) inner type. Used when building Core struct/enum definitions
+    so that layout, copy-checking, and lowering see the erased type. -/
+private partial def eraseNewtypeTy (newtypes : List NewtypeDef) : Ty → Ty
+  | .named name =>
+    match newtypes.find? fun nt => nt.name == name with
+    | some nt => eraseNewtypeTy newtypes nt.innerTy
+    | none => .named name
+  | .generic name args =>
+    let args' := args.map (eraseNewtypeTy newtypes)
+    match newtypes.find? fun nt => nt.name == name with
+    | some nt =>
+      let mapping := nt.typeParams.zip args'
+      let rec subst : Ty → Ty
+        | .named n => match mapping.lookup n with | some t => t | none => .named n
+        | .typeVar n => match mapping.lookup n with | some t => t | none => .typeVar n
+        | .ref i => .ref (subst i)
+        | .refMut i => .refMut (subst i)
+        | .ptrMut i => .ptrMut (subst i)
+        | .ptrConst i => .ptrConst (subst i)
+        | .array e n => .array (subst e) n
+        | .generic n as => .generic n (as.map subst)
+        | .fn_ ps c r => .fn_ (ps.map subst) c (subst r)
+        | t => t
+      eraseNewtypeTy newtypes (subst nt.innerTy)
+    | none => .generic name args'
+  | .ref inner => .ref (eraseNewtypeTy newtypes inner)
+  | .refMut inner => .refMut (eraseNewtypeTy newtypes inner)
+  | .ptrMut inner => .ptrMut (eraseNewtypeTy newtypes inner)
+  | .ptrConst inner => .ptrConst (eraseNewtypeTy newtypes inner)
+  | .array elem n => .array (eraseNewtypeTy newtypes elem) n
+  | .fn_ ps c r => .fn_ (ps.map (eraseNewtypeTy newtypes)) c (eraseNewtypeTy newtypes r)
+  | t => t
 
 /-- Substitute type variables in a type. -/
 private def substTy (mapping : List (String × Ty)) : Ty → Ty
@@ -147,10 +203,14 @@ private partial def resolveTypeE (ty : Ty) : ElabM Ty := do
       match env.typeAliases.lookup name with
       | some resolved => return resolved
       | none =>
-        -- Erase newtypes: resolve to inner type
-        match env.newtypes.find? fun nt => nt.name == name with
-        | some nt => resolveTypeE nt.innerTy
-        | none => return ty
+        -- Newtypes are NOT erased here: type identity is preserved through
+        -- elaboration so `p.value()` on `p: Port` resolves against `Port`'s
+        -- inherent impl, not the inner `u16`. Layout resolves through
+        -- newtypes natively (Layout.Ctx.newtypes), so codegen still sees
+        -- the right size/alignment. eraseNewtypeTy is still applied at
+        -- module-build time to struct/enum field types so CoreCheck's
+        -- Copy/repr invariants run on the inner type as before.
+        return ty
   | .ref inner => return .ref (← resolveTypeE inner)
   | .refMut inner => return .refMut (← resolveTypeE inner)
   | .ptrMut inner => return .ptrMut (← resolveTypeE inner)
@@ -159,13 +219,9 @@ private partial def resolveTypeE (ty : Ty) : ElabM Ty := do
   | .generic "Heap" [inner] => return .heap (← resolveTypeE inner)
   | .generic "HeapArray" [inner] => return .heapArray (← resolveTypeE inner)
   | .generic name args =>
-    let env ← getEnv
-    match env.newtypes.find? fun nt => nt.name == name with
-    | some nt =>
-      let resolvedArgs ← args.mapM resolveTypeE
-      let mapping := nt.typeParams.zip resolvedArgs
-      resolveTypeE (substTy mapping nt.innerTy)
-    | none => return .generic name (← args.mapM resolveTypeE)
+    -- Same: newtype generics survive here so method dispatch on
+    -- e.g. `Wrapper<T>` instances reaches `Wrapper`'s inherent impls.
+    return .generic name (← args.mapM resolveTypeE)
   | .fn_ params capSet retTy =>
     return .fn_ (← params.mapM resolveTypeE) capSet (← resolveTypeE retTy)
   | _ => return ty
@@ -377,6 +433,7 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
   | .structLit _ name typeArgs fields =>
     match ← lookupStruct name with
     | some sd =>
+      let typeArgs ← typeArgs.mapM resolveTypeE
       let mapping := sd.typeParams.zip typeArgs
       let mut cFields : List (String × CExpr) := []
       for sf in sd.fields do
@@ -400,6 +457,12 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
       | .generic n args => (n, args)
       | .string => ("String", [])
       | _ => ("", [])
+    -- For `.0` on a borrowed newtype (`&Port`, `&mut Port`), deref to the
+    -- newtype value first so the rebrand cast is `Newtype -> Inner`, not
+    -- `&Newtype -> Inner` (which fails CoreCheck and confuses codegen).
+    let isBorrowed := match objTy with | .ref _ | .refMut _ => true | _ => false
+    let derefIfBorrowed (cObj : CExpr) (newtypeTy : Ty) : CExpr :=
+      if isBorrowed then CExpr.deref cObj newtypeTy else cObj
     match ← lookupStruct structName with
     | some sd =>
       let mapping := sd.typeParams.zip typeArgs
@@ -409,17 +472,38 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
         let fieldTy ← resolveTypeE fieldTy
         return .fieldAccess cObj field fieldTy
       | none =>
-        -- Erased newtype wrapping a struct: .0 is identity
-        if field == newtypeFieldName then return cObj
+        -- Newtype wrapping a struct: .0 unwraps to the inner type.
+        if field == newtypeFieldName then
+          let env ← getEnv
+          match env.newtypes.find? fun nt => nt.name == structName with
+          | some nt =>
+            let mapping := nt.typeParams.zip typeArgs
+            let innerTy ← resolveTypeE (substTy mapping nt.innerTy)
+            let newtypeTy : Ty := if typeArgs.isEmpty then .named structName
+                                   else .generic structName typeArgs
+            return .cast (derefIfBorrowed cObj newtypeTy) innerTy
+          | none => return cObj
         else throwElab (.structHasNoField structName field) (some e.getSpan)
     | none =>
-      -- Erased newtype: .0 on a primitive type is identity
-      if field == newtypeFieldName then return cObj
+      -- Newtype over a primitive (or any non-struct inner type): .0 unwraps.
+      -- For generic newtypes (`Wrapper<T> = T;`), substitute the obj's
+      -- type args so the unwrapped value carries the concrete inner type.
+      if field == newtypeFieldName then
+        let env ← getEnv
+        match env.newtypes.find? fun nt => nt.name == structName with
+        | some nt =>
+          let mapping := nt.typeParams.zip typeArgs
+          let innerTy ← resolveTypeE (substTy mapping nt.innerTy)
+          let newtypeTy : Ty := if typeArgs.isEmpty then .named structName
+                                 else .generic structName typeArgs
+          return .cast (derefIfBorrowed cObj newtypeTy) innerTy
+        | none => return cObj
       else throwElab .fieldAccessNonStruct (some e.getSpan)
 
   | .enumLit _ enumName variant typeArgs fields =>
     match ← lookupEnum enumName with
     | some ed =>
+      let typeArgs ← typeArgs.mapM resolveTypeE
       let effectiveTypeArgs := if typeArgs.isEmpty && !ed.typeParams.isEmpty then
         match hint with
         | some (.generic n args) => if n == enumName then args else []
@@ -477,7 +561,7 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
             let cBody ← elabStmts body
             cArms := cArms ++ [.litArm cVal cBody]
           | .varArm _ binding body =>
-            addVar binding innerTyR
+            if binding != "_" then addVar binding innerTyR
             let cBody ← elabStmts body
             cArms := cArms ++ [.varArm binding innerTyR cBody]
         setEnv envBefore
@@ -491,7 +575,7 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
             let cBody ← elabStmts body
             cArms := cArms ++ [.litArm cVal cBody]
           | .varArm _ binding body =>
-            addVar binding innerTyR
+            if binding != "_" then addVar binding innerTyR
             let cBody ← elabStmts body
             cArms := cArms ++ [.varArm binding innerTyR cBody]
           | .mk _ en v _ body =>
@@ -508,7 +592,7 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
           let cBody ← elabStmts body
           cArms := cArms ++ [.litArm cVal cBody]
         | .varArm _ binding body =>
-          addVar binding innerTyR
+          if binding != "_" then addVar binding innerTyR
           let cBody ← elabStmts body
           cArms := cArms ++ [.varArm binding innerTyR cBody]
         | .mk _ en v _ body =>
@@ -581,6 +665,7 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
 
   | .methodCall _ obj methodName typeArgs args =>
     -- Desugar: obj.method(args) → Type_method(&obj, args) or Type_method(&mut obj, args)
+    let typeArgs ← typeArgs.mapM resolveTypeE
     let cObj ← elabExpr obj
     let objTy := cObj.ty
     let innerTy := match objTy with
@@ -659,7 +744,8 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
 
 /-- Elaborate a function call (regular, builtins, intercepted). -/
 partial def elabCall (fnName : String) (typeArgs : List Ty) (args : List Expr)
-    (_hint : Option Ty) (span : Option Span := none) : ElabM CExpr := do
+    (hint : Option Ty) (span : Option Span := none) : ElabM CExpr := do
+  let typeArgs ← typeArgs.mapM resolveTypeE
   let intrinsic := resolveIntrinsic fnName
   -- Intercept abort()
   if intrinsic == some .abort then
@@ -682,13 +768,28 @@ partial def elabCall (fnName : String) (typeArgs : List Ty) (args : List Expr)
     let cArg ← elabExpr arg
     let innerTy := match cArg.ty with | .heap t => t | _ => .placeholder
     return .call "free" [] [cArg] innerTy
-  -- Intercept newtype constructor: erase to inner expression
+  -- Intercept newtype constructor: keep the wrapper's name in the type so
+  -- `obj.method()` later resolves against the wrapper's inherent impl, not
+  -- the inner type. The runtime representation is identical to the inner
+  -- value (.cast is a no-op at codegen time once Layout resolves through
+  -- the newtype), so this is purely a type-level distinction. For generic
+  -- newtypes, infer type args from explicit `::<...>` first, otherwise
+  -- from the call hint (`let w: Wrapper<Int> = Wrapper(100);`).
   let env ← getEnv
   match env.newtypes.find? fun nt => nt.name == fnName with
-  | some _nt =>
+  | some nt =>
     let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
-    let cArg ← elabExpr arg
-    return cArg  -- newtype erasure: just return the inner value
+    let effectiveTypeArgs :=
+      if !typeArgs.isEmpty then typeArgs
+      else match hint with
+        | some (.generic n args) => if n == fnName then args else []
+        | _ => []
+    let mapping := nt.typeParams.zip effectiveTypeArgs
+    let innerTy ← resolveTypeE (substTy mapping nt.innerTy)
+    let cArg ← elabExpr arg (some innerTy)
+    let resultTy := if effectiveTypeArgs.isEmpty then Ty.named fnName
+                     else Ty.generic fnName effectiveTypeArgs
+    return .cast cArg resultTy
   | none => pure ()
   -- Intercept unwrap(x): erase to inner expression (only if not a user-defined function)
   if intrinsic == some .unwrap && args.length == 1 then
@@ -894,7 +995,7 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
     let env ← getEnv
     return [.return_ none env.currentRetTy]
 
-  | .expr _ (.call _sp fnName _typeArgs args) =>
+  | .expr sp (.call _sp fnName _typeArgs args) =>
     -- Desugar print/println into individual typed print calls
     -- Only if not shadowed by a user/stdlib function with the same name
     let existingFn ← lookupFnSig fnName
@@ -921,6 +1022,47 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
       if fnName == "println" then
         stmts := stmts ++ [CStmt.expr (CExpr.call "print_char" [] [CExpr.intLit 10 .int] .unit)]
       return stmts
+    -- Desugar variadic append(&mut buf, ...) into typed string_append calls.
+    -- Only fires if (a) not shadowed by a user fn, (b) at least one arg,
+    -- (c) first arg elaborates to &mut String. Otherwise fall through and
+    -- let normal elaboration produce the usual "undeclared function" error.
+    else if existingFn.isNone && fnName == "append" then
+    match args with
+    | bufArg :: rest =>
+      let cBuf ← elabExpr bufArg
+      match cBuf.ty with
+      | .refMut .string =>
+        let mut stmts : List CStmt := []
+        for arg in rest do
+          let cArg ← elabExpr arg
+          let call ← match cArg.ty with
+            | .string =>
+              pure (CStmt.expr (CExpr.call "string_append" [] [cBuf, CExpr.borrow cArg (.ref .string)] .unit))
+            | .ref .string | .refMut .string =>
+              pure (CStmt.expr (CExpr.call "string_append" [] [cBuf, cArg] .unit))
+            | .int =>
+              pure (CStmt.expr (CExpr.call "string_append_int" [] [cBuf, cArg] .unit))
+            | .uint | .i32 | .i16 | .i8 | .u32 | .u16 | .u8 =>
+              pure (CStmt.expr (CExpr.call "string_append_int" [] [cBuf, CExpr.cast cArg .int] .unit))
+            | .bool =>
+              pure (CStmt.expr (CExpr.call "string_append_bool" [] [cBuf, cArg] .unit))
+            | .char =>
+              pure (CStmt.expr (CExpr.call "string_push_char" [] [cBuf, CExpr.cast cArg .int] .unit))
+            | _ =>
+              throw [{ severity := .error
+                     , message := s!"append() argument has unsupported type; expected String/&String/&mut String, Int/Uint/i8..i32/u8..u32, bool, or char"
+                     , pass := "elab"
+                     , span := some sp
+                     , hint := some "pass primitive values or string references; complex values must be formatted first"
+                     , code := "E0420" }]
+          stmts := stmts ++ [call]
+        return stmts
+      | _ =>
+        let cE ← elabExpr (.call _sp fnName _typeArgs args)
+        return [.expr cE]
+    | [] =>
+      let cE ← elabExpr (.call _sp fnName _typeArgs args)
+      return [.expr cE]
     else
       let cE ← elabExpr (.call _sp fnName _typeArgs args)
       return [.expr cE]
@@ -961,7 +1103,28 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
 
   | .fieldAssign _ obj field value =>
     let cObj ← elabExpr obj
-    let cVal ← elabExpr value
+    -- Pass the field's declared type as the value hint so integer literals
+    -- pick the right width. Without this, `c.n = 100` where `n: i32` would
+    -- elaborate `100` as `Int` (i64) and codegen would emit `store i64 100`
+    -- to a 4-byte field — UB that the LLVM optimiser deletes at -O2.
+    let innerObjTy := match cObj.ty with
+      | .ref t | .refMut t | .ptrMut t | .ptrConst t => t
+      | t => t
+    let (sName, tArgs) := match innerObjTy with
+      | .named n => (n, ([] : List Ty))
+      | .generic n a => (n, a)
+      | _ => ("", [])
+    let env ← getEnv
+    let fieldTy : Option Ty :=
+      match env.structs.find? fun s => s.name == sName with
+      | some sd =>
+        match sd.fields.find? fun f => f.name == field with
+        | some f =>
+          let mapping := sd.typeParams.zip tArgs
+          some (substTy mapping f.ty)
+        | none => none
+      | none => none
+    let cVal ← elabExpr value fieldTy
     return [.fieldAssign cObj field cVal]
 
   | .derefAssign _ target value =>
@@ -1011,8 +1174,34 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
       | .ref (.heap t) => t | .refMut (.heap t) => t
       | _ => .placeholder
     let cDeref := CExpr.deref cObj innerTy
-    let cVal ← elabExpr value
+    -- Pass the field's declared type as the value hint so integer literals
+    -- pick the right width (mirrors the direct .fieldAssign path above).
+    -- Without this, `p->n = 100` with `n: i32` elaborates `100` as Int (i64)
+    -- and codegen emits `store i64 100` to a 4-byte field, clobbering the
+    -- adjacent field at -O2.
+    let (sName, tArgs) := match innerTy with
+      | .named n => (n, ([] : List Ty))
+      | .generic n a => (n, a)
+      | _ => ("", [])
+    let env ← getEnv
+    let fieldTy : Option Ty :=
+      match env.structs.find? fun s => s.name == sName with
+      | some sd =>
+        match sd.fields.find? fun f => f.name == field with
+        | some f =>
+          let mapping := sd.typeParams.zip tArgs
+          some (substTy mapping f.ty)
+        | none => none
+      | none => none
+    let cVal ← elabExpr value fieldTy
     return [.fieldAssign cDeref field cVal]
+
+  -- These are desugared by desugarStmts before elabStmt is called.
+  -- Catch-all for exhaustiveness — should never fire.
+  | .letDestructure sp _ _ _ _ _ =>
+    throwElab (.unknownEnumType "internal: letDestructure not desugared") (some sp)
+  | .letStructDestructure sp _ _ _ =>
+    throwElab (.unknownStructType "internal: letStructDestructure not desugared") (some sp)
 
 partial def elabStmts (stmts : List Stmt) : ElabM (List CStmt) := do
   let mut result : List CStmt := []
@@ -1263,7 +1452,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
     name := resultEnumName, typeParams := ["T", "E"],
     variants := [
       { name := okVariantName, fields := [{ name := "value", ty := .typeVar "T" }] },
-      { name := errVariantName, fields := [{ name := "value", ty := .typeVar "E" }] }
+      { name := errVariantName, fields := [{ name := "error", ty := .typeVar "E" }] }
     ], isCopy := false, builtinId := some .result
   }
   let hasUserResult := m.enums.any fun ed => ed.name == resultEnumName
@@ -1292,7 +1481,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
     constants := constantsMap
     traits := allTraits
     allFnSigPairs := fnSigPairs
-    newtypes := m.newtypes
+    newtypes := m.newtypes ++ imports.newtypes
   }
   -- Elaborate only LOCAL functions (imported impl bodies are already elaborated in their module)
   let regularFns := m.functions.map fun f => (f, (none : Option Ty))
@@ -1330,14 +1519,16 @@ partial def elabModule (m : Module) (summary : FileSummary)
       pure { cfn with name := finalName, trustedImplOrigin := implOrigin } : ElabM CFnDef).run env' |>.run
     match result with
     | (.ok cfn, finalEnv) => (acc ++ [cfn], errs, finalEnv)
-    | (.error ds, _) => (acc, errs ++ ds, env)
+    | (.error ds, _) => (acc, errs ++ ds.addContext s!"while elaborating function '{f.name}'", env)
   ) (([] : List CFnDef), ([] : Diagnostics), initEnv)
   if !fnErrors.isEmpty then .error fnErrors
   else
-  -- Build Core structs (local definitions)
+  -- Build Core structs (local definitions). Erase newtypes in field types so that
+  -- layout, copy-checking, and lowering see the wrapper's inner type.
+  let eraseTy := eraseNewtypeTy m.newtypes
   let cStructs := m.structs.map fun sd =>
     { name := sd.name, typeParams := sd.typeParams,
-      fields := sd.fields.map fun f => (f.name, f.ty),
+      fields := sd.fields.map fun f => (f.name, eraseTy f.ty),
       isPublic := sd.isPublic, isCopy := sd.isCopy, isReprC := sd.isReprC,
       isPacked := sd.isPacked, reprAlign := sd.reprAlign : CStructDef }
   -- Also convert imported structs so cross-module field offsets work in Lower/Layout
@@ -1345,7 +1536,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let cImportedStructs := (imports.structs.filter fun sd =>
       !(localStructNames.contains sd.name)).map fun sd =>
     { name := sd.name, typeParams := sd.typeParams,
-      fields := sd.fields.map fun f => (f.name, f.ty),
+      fields := sd.fields.map fun f => (f.name, eraseTy f.ty),
       isPublic := sd.isPublic, isCopy := sd.isCopy, isReprC := sd.isReprC,
       isPacked := sd.isPacked, reprAlign := sd.reprAlign : CStructDef }
   -- Build extern fns
@@ -1374,9 +1565,10 @@ partial def elabModule (m : Module) (summary : FileSummary)
       let subSummary := match summary.submoduleSummaries.find? fun (n, _) => n == sub.name with
         | some (_, s) => s
         | none => buildFileSummary sub
-      let subImports := match liftStringError "elab" (resolveImports sub.imports summaryTable
+      let subImports := match resolveImports sub.imports summaryTable
           (fun modName => ElabError.message (.unknownModule modName))
-          (fun sym modName => ElabError.message (.notPublicInModule sym modName))) with
+          (fun sym modName => ElabError.message (.notPublicInModule sym modName))
+          (pass := "elab") with
         | .ok imp => imp
         | .error _ => {}
       -- Inject sibling module types so submodules can reference each other's types
@@ -1437,12 +1629,13 @@ partial def elabModule (m : Module) (summary : FileSummary)
     enums := allEnums.map fun ed =>
       { name := ed.name, typeParams := ed.typeParams,
         variants := ed.variants.map fun v =>
-          (v.name, v.fields.map fun f => (f.name, f.ty)),
+          (v.name, v.fields.map fun f => (f.name, eraseTy f.ty)),
         isPublic := ed.isPublic, isCopy := ed.isCopy, builtinId := ed.builtinId : CEnumDef }
     functions := fns
     externFns := cExterns
     constants := cConstants
     submodules := subs
+    newtypes := m.newtypes ++ imports.newtypes
     traitDefs := m.traits.map fun td =>
       { name := td.name,
         methods := td.methods.map fun sig =>
@@ -1542,9 +1735,10 @@ def elabProgram (resolved : List ResolvedModule)
     let summary := match moduleSummaryList.find? fun (n, _) => n == m.name with
       | some (_, s) => s
       | none => buildFileSummary m
-    match liftStringError "elab" (resolveImports m.imports summaryTable
+    match resolveImports m.imports summaryTable
         (fun modName => ElabError.message (.unknownModule modName))
-        (fun sym modName => ElabError.message (.notPublicInModule sym modName))) with
+        (fun sym modName => ElabError.message (.notPublicInModule sym modName))
+        (pass := "elab") with
     | .error ds => (acc, errs ++ ds)
     | .ok imports =>
       -- Inject sibling module functions for qualified :: access
@@ -1566,7 +1760,7 @@ def elabProgram (resolved : List ResolvedModule)
         linkerAliases := imports.linkerAliases ++ siblingAliases }
       match elabModule m summary imports summaryTable with
       | .ok cm => (acc ++ [cm], errs)
-      | .error ds => (acc, errs ++ ds)
+      | .error ds => (acc, errs ++ ds.addContext s!"while elaborating module '{m.name}'")
   ) (([] : List CModule), ([] : Diagnostics))
   if allErrors.isEmpty then .ok cms else .error allErrors
 

@@ -1,0 +1,44 @@
+// Adversarial test: match arms must agree on linear consumption (enum match).
+
+enum Copy Choice {
+    A,
+    B,
+    C,
+}
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+// All arms consume the variable — valid
+fn match_all_consume(x: Choice) -> Int {
+    let r: Resource = Resource { value: 100 };
+    match x {
+        Choice::A => { let _v: Int = consume(r); },
+        Choice::B => { let _v: Int = consume(r); },
+        Choice::C => { let _v: Int = consume(r); },
+    }
+    return 0;
+}
+
+// No arms consume the variable — valid
+fn match_none_consume(x: Choice) -> Int {
+    let r: Resource = Resource { value: 200 };
+    match x {
+        Choice::A => { let _v: Int = 1; },
+        Choice::B => { let _v: Int = 2; },
+        Choice::C => { let _v: Int = 3; },
+    }
+    let _z: Int = consume(r);
+    return 0;
+}
+
+fn main() -> Int {
+    let r1: Int = match_all_consume(Choice::A);
+    let r2: Int = match_none_consume(Choice::B);
+    return r1 + r2;
+}

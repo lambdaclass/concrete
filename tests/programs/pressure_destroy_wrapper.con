@@ -1,0 +1,16 @@
+// Pressure: linear struct with Destroy trait — destroy consumes it.
+// Tests that Destroy-based cleanup satisfies linearity.
+
+struct Resource { val: Int }
+
+impl Destroy for Resource {
+    fn destroy(self) {
+    }
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { val: 42 };
+    let v: Int = r.val;
+    destroy(r);
+    return v;
+}

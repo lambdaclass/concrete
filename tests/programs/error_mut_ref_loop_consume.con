@@ -1,0 +1,18 @@
+// Try to consume borrow-block &mut ref inside a loop.
+// Expected error: cannot consume linear variable inside a loop
+
+fn increment(x: &mut Int) {
+    *x = *x + 1;
+}
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    borrow mut n as r in R {
+        let mut i: Int = 0;
+        while i < 3 {
+            increment(r);
+            i = i + 1;
+        }
+    }
+    return n;
+}

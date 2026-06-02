@@ -1,0 +1,6 @@
+[package]
+name = "adversarial_policy_deny_multi"
+version = "0.1.0"
+
+[policy]
+deny = ["File", "Network"]

@@ -1,0 +1,9 @@
+// ERROR TEST: cannot assign to a Copy variable while it has active borrows.
+
+fn main() -> Int {
+    let mut x: Int = 10;
+    borrow x as ref in R {
+        x = 20;  // ERROR: x is frozen by borrow block
+    }
+    return x;
+}

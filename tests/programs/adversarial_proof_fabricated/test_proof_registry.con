@@ -1,0 +1,13 @@
+// Adversarial test: fabricated proof name
+// Registry claims a Lean theorem that does not exist.
+// The system currently grants "proved" because it only checks fingerprints,
+// not whether the proof name resolves to a real Lean declaration.
+// This is a known limitation documented in this test.
+
+fn pure_add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+fn main() -> i32 {
+    return 0;
+}

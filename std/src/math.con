@@ -27,6 +27,13 @@ mod math {
         }
     }
 
+    pub fn abs(value: i64) -> i64 {
+        if value < 0 {
+            return 0 - value;
+        }
+        return value;
+    }
+
     pub fn clamp<T>(value: T, lo: T, hi: T) -> T {
         if value < lo {
             return lo;

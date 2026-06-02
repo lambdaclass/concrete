@@ -1,0 +1,13 @@
+// Adversarial: predictable = true policy active, but code uses recursion.
+// Expected: compiler rejects with E0610 (recursion forbidden in predictable mode).
+
+pub fn countdown(n: Int) -> Int {
+    if n <= 0 {
+        return 0;
+    }
+    return countdown(n - 1);
+}
+
+pub fn main() -> Int {
+    return countdown(10);
+}

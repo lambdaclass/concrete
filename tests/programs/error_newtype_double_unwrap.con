@@ -1,0 +1,24 @@
+// ERROR TEST: linear newtype .0 extraction consumes — second unwrap is error.
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+newtype Wrapped = Resource;
+
+fn bad_double_unwrap() -> Int {
+    let w: Wrapped = Wrapped(Resource { value: 99 });
+    let inner1: Resource = w.0;  // consumes w
+    let inner2: Resource = w.0;  // ERROR: use after move
+    let _x: Int = consume(inner1);
+    let _y: Int = consume(inner2);
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_double_unwrap();
+}

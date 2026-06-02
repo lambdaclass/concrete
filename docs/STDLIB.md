@@ -28,7 +28,7 @@ For low-level internals, the split is now:
 - pointer-level implementation unsafety is contained by `trusted fn` / `trusted impl`
 - foreign boundaries (`extern fn`) remain under `with(Unsafe)` even inside trusted code
 
-See [SAFETY.md](SAFETY.md) for the full safety model and [../research/language/trusted-boundary.md](../research/language/trusted-boundary.md) for the exploratory design notes.
+See [SAFETY.md](SAFETY.md) for the full safety model and [../research/language/trusted-boundary.md](../research/language/trusted-boundary.md) for the exploratory design notes. For active design work on checked access, slice views, and validated wrapper types, see [../research/language/checked-indexing-and-slice-views.md](../research/language/checked-indexing-and-slice-views.md) and [../research/language/opaque-validated-types.md](../research/language/opaque-validated-types.md).
 
 **Capability aliases** (e.g., `cap IO = File + Console;`) can reduce signature repetition in stdlib and user code. See [FFI.md](FFI.md).
 
@@ -79,6 +79,36 @@ The core principles are:
 
 6. **Collections should be few but excellent.**
    It is better to have a small number of deeply-tested, explicit, low-level collections than a broad and inconsistent collection zoo.
+
+## Near-Term First-Release Additions
+
+The next high-value stdlib improvements should sharpen the language's explicitness rather than broaden it.
+
+### Checked indexing and slice views
+
+The core collection and buffer types should converge on one obvious checked/unchecked split:
+
+- checked access is the default public path
+- unchecked access stays available but named honestly
+- owned buffers and borrowed views use the same vocabulary where possible
+- subviews and slicing stay allocation-free and borrow-honest
+
+The goal is to make parser and fixed-capacity code stop choosing between hand-rolled bounds checks and raw/trusted workarounds.
+
+### Validated wrappers and fallible conversions
+
+Concrete should support a small, explicit vocabulary for domain-validated values:
+
+- zero-cost wrapper types for IDs, lengths, ports, and similar values
+- smart constructors or validation functions at the boundary
+- no implicit coercions in either direction
+- explicit `try_from`-style and parse/narrowing conversions
+
+This keeps validation at the edges while letting the core carry a sharper type than a raw integer or string.
+
+### Arithmetic policy is part of the public surface
+
+The stdlib should not quietly assume one overflow story while docs and proofs assume another. Numeric helpers, narrowing operations, and parser/byte APIs should make it clear whether they expect checked or wrapping behavior, and the surrounding docs should use the same vocabulary as the language profile and report surfaces.
 
 ## Execution Model Alignment
 
@@ -235,6 +265,8 @@ Borrowed contiguous views:
 - immutable slice
 - mutable slice
 - explicit pointer + length semantics
+- checked indexing and subview operations as the normal safe-facing API
+- explicitly named unchecked fast paths where they are justified
 
 ### `std.text`
 

@@ -1,0 +1,22 @@
+// Adversarial test: consume a linear variable in only one branch of an if.
+// Resource is linear. It is consumed in the true branch via consume(r) but
+// not in the else branch, leaving the linearity checker unable to guarantee
+// the value is consumed on all paths.
+// Expected: compile error (must be consumed in all branches or none).
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { value: 5 };
+    if true {
+        let x: Int = consume(r);
+    } else {
+    }
+    return 0;
+}

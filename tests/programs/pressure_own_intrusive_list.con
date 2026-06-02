@@ -1,0 +1,390 @@
+// Pressure: doubly-linked list using array indices instead of pointers.
+//
+// Array-backed doubly-linked list where each "node" is an entry in a fixed
+// array, with prev/next fields storing indices (not pointers). Uses a
+// sentinel value (-1) for null.
+//
+// Operations tested:
+//   1. Push front (insert at head)
+//   2. Push back (insert at tail)
+//   3. Remove by index
+//   4. Iterate forward (head to tail)
+//   5. Iterate backward (tail to head)
+//   6. Forward sum / backward sum consistency
+//   7. Free list management (reuse deleted slots)
+//
+// Reveals: simulated pointer patterns, bidirectional traversal with ownership,
+// index-based linking, free list reuse, complex struct mutation patterns.
+//
+// Expected: return 0 on success.
+
+struct Copy ListNode {
+    value: Int,
+    prev: Int,   // -1 = null
+    next: Int,   // -1 = null
+    active: Int,  // 1 = in use, 0 = on free list
+}
+
+struct Copy DList {
+    nodes: [ListNode; 16],
+    head: Int,      // index of first node, -1 if empty
+    tail: Int,      // index of last node, -1 if empty
+    len: Int,       // number of active nodes
+    free_head: Int, // head of free list, -1 if no free slots
+    capacity: Int,  // how many slots have been initialized
+}
+
+fn dlist_new() -> DList {
+    let empty: ListNode = ListNode { value: 0, prev: 0 - 1, next: 0 - 1, active: 0 };
+    let nodes: [ListNode; 16] = [
+        empty, empty, empty, empty, empty, empty, empty, empty,
+        empty, empty, empty, empty, empty, empty, empty, empty,
+    ];
+    return DList {
+        nodes: nodes,
+        head: 0 - 1,
+        tail: 0 - 1,
+        len: 0,
+        free_head: 0 - 1,
+        capacity: 0,
+    };
+}
+
+// Allocate a slot: prefer free list, else take next capacity slot.
+// Returns (list_with_slot_reserved, slot_index).
+// Since we can't return tuples, we store the allocated index in the returned
+// list's capacity field trick -- actually let's just use a helper struct.
+struct Copy AllocResult {
+    list: DList,
+    idx: Int,
+}
+
+fn alloc_slot(dl: DList) -> AllocResult {
+    let mut nodes: [ListNode; 16] = dl.nodes;
+    let mut free_head: Int = dl.free_head;
+    let mut capacity: Int = dl.capacity;
+
+    if free_head >= 0 {
+        // Reuse from free list
+        let idx: Int = free_head;
+        let new_free: Int = nodes[idx].next; // free list uses next as chain
+        return AllocResult {
+            list: DList {
+                nodes: nodes,
+                head: dl.head,
+                tail: dl.tail,
+                len: dl.len,
+                free_head: new_free,
+                capacity: capacity,
+            },
+            idx: idx,
+        };
+    }
+    // Allocate fresh slot
+    if capacity < 16 {
+        let idx: Int = capacity;
+        capacity = capacity + 1;
+        return AllocResult {
+            list: DList {
+                nodes: nodes,
+                head: dl.head,
+                tail: dl.tail,
+                len: dl.len,
+                free_head: free_head,
+                capacity: capacity,
+            },
+            idx: idx,
+        };
+    }
+    // No space
+    return AllocResult {
+        list: dl,
+        idx: 0 - 1,
+    };
+}
+
+// Push a value to the front of the list.
+fn dlist_push_front(dl: DList, value: Int) -> DList {
+    let ar: AllocResult = alloc_slot(dl);
+    let idx: Int = ar.idx;
+    if idx < 0 {
+        return ar.list; // no space
+    }
+    let mut d: DList = ar.list;
+    let mut nodes: [ListNode; 16] = d.nodes;
+
+    nodes[idx] = ListNode { value: value, prev: 0 - 1, next: d.head, active: 1 };
+
+    if d.head >= 0 {
+        // Update old head's prev
+        let old_head: Int = d.head;
+        nodes[old_head] = ListNode {
+            value: nodes[old_head].value,
+            prev: idx,
+            next: nodes[old_head].next,
+            active: nodes[old_head].active,
+        };
+    }
+
+    let new_head: Int = idx;
+    let new_tail: Int = if d.tail < 0 { idx } else { d.tail };
+
+    return DList {
+        nodes: nodes,
+        head: new_head,
+        tail: new_tail,
+        len: d.len + 1,
+        free_head: d.free_head,
+        capacity: d.capacity,
+    };
+}
+
+// Push a value to the back of the list.
+fn dlist_push_back(dl: DList, value: Int) -> DList {
+    let ar: AllocResult = alloc_slot(dl);
+    let idx: Int = ar.idx;
+    if idx < 0 {
+        return ar.list;
+    }
+    let mut d: DList = ar.list;
+    let mut nodes: [ListNode; 16] = d.nodes;
+
+    nodes[idx] = ListNode { value: value, prev: d.tail, next: 0 - 1, active: 1 };
+
+    if d.tail >= 0 {
+        let old_tail: Int = d.tail;
+        nodes[old_tail] = ListNode {
+            value: nodes[old_tail].value,
+            prev: nodes[old_tail].prev,
+            next: idx,
+            active: nodes[old_tail].active,
+        };
+    }
+
+    let new_tail: Int = idx;
+    let new_head: Int = if d.head < 0 { idx } else { d.head };
+
+    return DList {
+        nodes: nodes,
+        head: new_head,
+        tail: new_tail,
+        len: d.len + 1,
+        free_head: d.free_head,
+        capacity: d.capacity,
+    };
+}
+
+// Remove a node by its array index. Adds the slot to the free list.
+fn dlist_remove(dl: DList, idx: Int) -> DList {
+    let mut nodes: [ListNode; 16] = dl.nodes;
+    let node: ListNode = nodes[idx];
+
+    if node.active == 0 {
+        return dl; // not active, no-op
+    }
+
+    let p: Int = node.prev;
+    let n: Int = node.next;
+
+    // Update prev's next
+    if p >= 0 {
+        nodes[p] = ListNode {
+            value: nodes[p].value,
+            prev: nodes[p].prev,
+            next: n,
+            active: nodes[p].active,
+        };
+    }
+
+    // Update next's prev
+    if n >= 0 {
+        nodes[n] = ListNode {
+            value: nodes[n].value,
+            prev: p,
+            next: nodes[n].next,
+            active: nodes[n].active,
+        };
+    }
+
+    // Update head/tail
+    let new_head: Int = if dl.head == idx { n } else { dl.head };
+    let new_tail: Int = if dl.tail == idx { p } else { dl.tail };
+
+    // Add to free list: store free_head in next field
+    nodes[idx] = ListNode { value: 0, prev: 0 - 1, next: dl.free_head, active: 0 };
+
+    return DList {
+        nodes: nodes,
+        head: new_head,
+        tail: new_tail,
+        len: dl.len - 1,
+        free_head: idx,
+        capacity: dl.capacity,
+    };
+}
+
+// Iterate forward from head, summing values. Bounded by 16 iterations.
+fn dlist_sum_forward(dl: DList) -> Int {
+    let mut sum: Int = 0;
+    let mut cur: Int = dl.head;
+    for (let mut step: Int = 0; step < 16; step = step + 1) {
+        if cur < 0 {
+            return sum;
+        }
+        sum = sum + dl.nodes[cur].value;
+        cur = dl.nodes[cur].next;
+    }
+    return sum;
+}
+
+// Iterate backward from tail, summing values. Bounded by 16 iterations.
+fn dlist_sum_backward(dl: DList) -> Int {
+    let mut sum: Int = 0;
+    let mut cur: Int = dl.tail;
+    for (let mut step: Int = 0; step < 16; step = step + 1) {
+        if cur < 0 {
+            return sum;
+        }
+        sum = sum + dl.nodes[cur].value;
+        cur = dl.nodes[cur].prev;
+    }
+    return sum;
+}
+
+// Count nodes by forward traversal.
+fn dlist_count_forward(dl: DList) -> Int {
+    let mut count: Int = 0;
+    let mut cur: Int = dl.head;
+    for (let mut step: Int = 0; step < 16; step = step + 1) {
+        if cur < 0 {
+            return count;
+        }
+        count = count + 1;
+        cur = dl.nodes[cur].next;
+    }
+    return count;
+}
+
+// Collect forward-traversal values into an array (for order checking).
+fn dlist_to_array(dl: DList) -> [Int; 16] {
+    let mut arr: [Int; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let mut cur: Int = dl.head;
+    let mut i: Int = 0;
+    for (let mut step: Int = 0; step < 16; step = step + 1) {
+        if cur < 0 {
+            return arr;
+        }
+        arr[i] = dl.nodes[cur].value;
+        i = i + 1;
+        cur = dl.nodes[cur].next;
+    }
+    return arr;
+}
+
+pub fn main() -> Int {
+    let mut dl: DList = dlist_new();
+
+    // Test 1: push_back 10, 20, 30
+    dl = dlist_push_back(dl, 10);
+    dl = dlist_push_back(dl, 20);
+    dl = dlist_push_back(dl, 30);
+
+    if dl.len != 3 { return 1; }
+    if dlist_sum_forward(dl) != 60 { return 2; }
+    if dlist_sum_backward(dl) != 60 { return 3; }
+
+    // Test 2: check order forward: [10, 20, 30]
+    let arr1: [Int; 16] = dlist_to_array(dl);
+    if arr1[0] != 10 { return 10; }
+    if arr1[1] != 20 { return 11; }
+    if arr1[2] != 30 { return 12; }
+
+    // Test 3: push_front 5
+    dl = dlist_push_front(dl, 5);
+    if dl.len != 4 { return 20; }
+    // Order: [5, 10, 20, 30]
+    let arr2: [Int; 16] = dlist_to_array(dl);
+    if arr2[0] != 5 { return 21; }
+    if arr2[1] != 10 { return 22; }
+    if arr2[2] != 20 { return 23; }
+    if arr2[3] != 30 { return 24; }
+
+    // Test 4: push_front 1
+    dl = dlist_push_front(dl, 1);
+    // Order: [1, 5, 10, 20, 30]
+    if dl.len != 5 { return 30; }
+    if dlist_sum_forward(dl) != 66 { return 31; }
+    if dlist_sum_backward(dl) != 66 { return 32; }
+
+    // Test 5: remove middle node (node with value 10)
+    // We need to find which index holds value 10.
+    // Allocation order: push_back(10)=idx0, push_back(20)=idx1, push_back(30)=idx2,
+    // push_front(5)=idx3, push_front(1)=idx4
+    // So idx 0 has value 10.
+    dl = dlist_remove(dl, 0);
+    if dl.len != 4 { return 40; }
+    // Order: [1, 5, 20, 30]
+    let arr3: [Int; 16] = dlist_to_array(dl);
+    if arr3[0] != 1 { return 41; }
+    if arr3[1] != 5 { return 42; }
+    if arr3[2] != 20 { return 43; }
+    if arr3[3] != 30 { return 44; }
+    if dlist_sum_forward(dl) != 56 { return 45; }
+    if dlist_sum_backward(dl) != 56 { return 46; }
+
+    // Test 6: remove head
+    // head is idx 4 (value 1)
+    dl = dlist_remove(dl, 4);
+    if dl.len != 3 { return 50; }
+    // Order: [5, 20, 30]
+    let arr4: [Int; 16] = dlist_to_array(dl);
+    if arr4[0] != 5 { return 51; }
+    if arr4[1] != 20 { return 52; }
+    if arr4[2] != 30 { return 53; }
+
+    // Test 7: remove tail
+    // tail is idx 2 (value 30)
+    dl = dlist_remove(dl, 2);
+    if dl.len != 2 { return 60; }
+    // Order: [5, 20]
+    let arr5: [Int; 16] = dlist_to_array(dl);
+    if arr5[0] != 5 { return 61; }
+    if arr5[1] != 20 { return 62; }
+    if dlist_count_forward(dl) != 2 { return 63; }
+
+    // Test 8: free list reuse - push_back should reuse freed slots
+    // Free list has: idx2 -> idx4 -> idx0 (most recently freed first)
+    dl = dlist_push_back(dl, 99);
+    if dl.len != 3 { return 70; }
+    // The slot should be reused (idx 2 was most recently freed)
+    // Check value is correct
+    let arr6: [Int; 16] = dlist_to_array(dl);
+    if arr6[0] != 5 { return 71; }
+    if arr6[1] != 20 { return 72; }
+    if arr6[2] != 99 { return 73; }
+
+    // Test 9: remove all, then rebuild
+    dl = dlist_remove(dl, dl.head);
+    dl = dlist_remove(dl, dl.head);
+    dl = dlist_remove(dl, dl.head);
+    if dl.len != 0 { return 80; }
+    if dl.head != 0 - 1 { return 81; }
+    if dl.tail != 0 - 1 { return 82; }
+
+    // Rebuild: alternating push_front and push_back
+    dl = dlist_push_back(dl, 100);
+    dl = dlist_push_front(dl, 50);
+    dl = dlist_push_back(dl, 150);
+    dl = dlist_push_front(dl, 25);
+    // Order: [25, 50, 100, 150]
+    if dl.len != 4 { return 90; }
+    let arr7: [Int; 16] = dlist_to_array(dl);
+    if arr7[0] != 25 { return 91; }
+    if arr7[1] != 50 { return 92; }
+    if arr7[2] != 100 { return 93; }
+    if arr7[3] != 150 { return 94; }
+    if dlist_sum_forward(dl) != 325 { return 95; }
+    if dlist_sum_backward(dl) != 325 { return 96; }
+
+    return 0;
+}

@@ -1,0 +1,22 @@
+// Newtype passed across multiple function boundaries with type
+// identity preserved each hop. Tests that the wrapper survives ABI
+// pass-by-value, by-ref, and back.
+// Expected: 168
+
+newtype Tag = i32;
+
+fn double(t: Tag) -> Tag {
+    return Tag(t.0 + t.0);
+}
+
+fn add_one(t: &Tag) -> Tag {
+    return Tag(t.0 + 1);
+}
+
+fn main() -> Int {
+    let a: Tag = Tag(83);
+    let b: Tag = double(a);     // 166
+    let c: Tag = add_one(&b);   // 167
+    let d: Tag = Tag(c.0 + 1);  // 168
+    return d.0 as Int;
+}

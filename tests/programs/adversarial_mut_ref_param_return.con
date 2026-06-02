@@ -1,0 +1,16 @@
+// Function receives &mut T param, uses it multiple times, returns a value.
+// Parameter refs are reborrowable — multiple deref is fine.
+
+fn add_and_read(x: &mut Int, delta: Int) -> Int {
+    *x = *x + delta;
+    return *x;
+}
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    let mut result: Int = 0;
+    borrow mut n as r in R {
+        result = add_and_read(r, 5);
+    }
+    return result;
+}

@@ -1,0 +1,40 @@
+// Test: chain of functions that each take a struct, modify a field, and return it.
+// Verify the final struct has all modifications.
+// Expected output: 10
+
+struct Copy Quad {
+    a: Int,
+    b: Int,
+    c: Int,
+    d: Int,
+}
+
+fn set_a(q: Quad, v: Int) -> Quad {
+    return Quad { a: v, b: q.b, c: q.c, d: q.d };
+}
+
+fn set_b(q: Quad, v: Int) -> Quad {
+    return Quad { a: q.a, b: v, c: q.c, d: q.d };
+}
+
+fn set_c(q: Quad, v: Int) -> Quad {
+    return Quad { a: q.a, b: q.b, c: v, d: q.d };
+}
+
+fn set_d(q: Quad, v: Int) -> Quad {
+    return Quad { a: q.a, b: q.b, c: q.c, d: v };
+}
+
+fn sum_quad(q: Quad) -> Int {
+    return q.a + q.b + q.c + q.d;
+}
+
+pub fn main() with(Std) {
+    let q: Quad = Quad { a: 0, b: 0, c: 0, d: 0 };
+    let q: Quad = set_a(q, 1);
+    let q: Quad = set_b(q, 2);
+    let q: Quad = set_c(q, 3);
+    let q: Quad = set_d(q, 4);
+    let result: Int = sum_quad(q);
+    println(result);
+}

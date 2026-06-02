@@ -1,0 +1,114 @@
+=== Proof Status Report ===
+
+-- proved [iff] ------------------------------------------------ examples/parse_validate/src/main.con:55
+
+  ✓ `parse_validate.validate_version` — proof matches current body.
+
+ 55 |     fn validate_version(v: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  coverage: iff
+
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:60
+
+  `parse_validate.validate_msg_type` passes the predictable profile but has no registered proof.
+
+ 60 |     fn validate_msg_type(t: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.geq (var t) (int 1)) [(if (binop Concrete.BinOp.leq (var t) (int 4)) [(ret (int 0))])]) (ret (int 1))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:67
+
+  `parse_validate.validate_payload_len` passes the predictable profile but has no registered proof.
+
+ 67 |     fn validate_payload_len(plen: i32, max_len: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.geq (var plen) (int 0)) [(if (binop Concrete.BinOp.leq (var plen) (var max_len)) [(ret (int 0))])]) (ret (int 1))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:74
+
+  `parse_validate.validate_total_len` passes the predictable profile but has no registered proof.
+
+ 74 |     fn validate_total_len(actual: i32, needed: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.geq (var actual) (var needed)) [(ret (int 0))]) (ret (int 1))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:79
+
+  `parse_validate.compute_checksum` passes the predictable profile but has no registered proof.
+
+ 79 |     fn compute_checksum(data: [i32; 8], count: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(let acc (int 0)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (var count)) [(set acc (binop Concrete.BinOp.bitxor (var acc) (index (var data) (var i)))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (var acc))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:87
+
+  `parse_validate.validate_checksum` passes the predictable profile but has no registered proof.
+
+ 87 |     fn validate_checksum(expected: i32, computed: i32) -> i32 {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(if (binop Concrete.BinOp.eq (var expected) (var computed)) [(ret (int 0))]) (ret (int 1))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- proved [one_direction] ------------------------------------------------ examples/parse_validate/src/main.con:107
+
+  ✓ `parse_validate.validate_header_fields` — proof matches current body.
+
+ 107 |     fn validate_header_fields(
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  coverage: one_direction
+
+-- proved [one_direction] ------------------------------------------------ examples/parse_validate/src/main.con:125
+
+  ✓ `parse_validate.parse_header` — proof matches current body.
+
+ 125 |     fn parse_header(data: [i32; 8], len: i32) -> Result<Header, ParseError> {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  coverage: one_direction
+
+-- no proof ----------------------------------------------- examples/parse_validate/src/main.con:167
+
+  `parse_validate.error_code` passes the predictable profile but has no registered proof.
+
+ 167 |     fn error_code(e: ParseError) -> i32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  current fingerprint:
+    [(match (var e) (arm ParseError::TooShort [] [(ret (int 1))]) (arm ParseError::BadVersion [] [(ret (int 2))]) (arm ParseError::BadType [] [(ret (int 3))]) (arm ParseError::PayloadTooBig [] [(ret (int 4))]) (arm ParseError::Truncated [] [(ret (int 5))]) (arm ParseError::BadChecksum [] [(ret (int 6))]))]
+
+  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
+
+-- not eligible ------------------------------------------- examples/parse_validate/src/main.con:180
+
+  `parse_validate.main` cannot be proved: fails predictable profile (is entry point (main)).
+
+ 180 |     pub fn main() -> Int {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  reasons: is entry point (main)
+
+  hint: Address these constraints to make this function eligible for proof.
+
+Totals: 10 functions — 3 proved, 0 stale, 6 unproved, 0 blocked, 1 ineligible, 0 trusted
+

@@ -1,0 +1,15 @@
+// Adversarial monomorphization: nested generic structs.
+// Pair<Pair<Int, Int>, Int> forces Mono.lean to specialize nested type params.
+// Expected: 42
+
+struct Copy Pair<A, B> { first: A, second: B }
+
+fn sum_inner(p: Pair<Int, Int>) -> Int {
+    return p.first + p.second;
+}
+
+pub fn main() -> Int {
+    let inner: Pair<Int, Int> = Pair::<Int, Int> { first: 30, second: 5 };
+    let outer: Pair<Pair<Int, Int>, Int> = Pair::<Pair<Int, Int>, Int> { first: inner, second: 7 };
+    return sum_inner(outer.first) + outer.second;
+}

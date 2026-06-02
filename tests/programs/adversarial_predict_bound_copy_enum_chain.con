@@ -1,0 +1,35 @@
+// Adversarial: chain of Copy enum construction, matching, reconstruction.
+// Expected: passes predictable — enum-heavy code stays pure and bounded.
+
+enum Copy Step { A, B, C, D, Done }
+
+fn advance(s: Step) -> Step {
+    match s {
+        Step::A => { return Step::B; },
+        Step::B => { return Step::C; },
+        Step::C => { return Step::D; },
+        Step::D => { return Step::Done; },
+        Step::Done => { return Step::Done; },
+    }
+}
+
+fn step_value(s: Step) -> i32 {
+    match s {
+        Step::A => { return 1; },
+        Step::B => { return 2; },
+        Step::C => { return 3; },
+        Step::D => { return 4; },
+        Step::Done => { return 5; },
+    }
+}
+
+fn main() -> i32 {
+    let s0: Step = Step::A;
+    let s1: Step = advance(s0);
+    let s2: Step = advance(s1);
+    let s3: Step = advance(s2);
+    let s4: Step = advance(s3);
+    let v: i32 = step_value(s4);
+    if v == 5 { return 0; }
+    return 1;
+}

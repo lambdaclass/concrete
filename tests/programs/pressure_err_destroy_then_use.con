@@ -1,0 +1,14 @@
+// Pressure error: use a linear after it has been consumed by destroy().
+// Should fail: use after move.
+
+struct Resource { val: Int }
+
+impl Destroy for Resource {
+    fn destroy(&self) { }
+}
+
+fn main() -> Int {
+    let r: Resource = Resource { val: 42 };
+    destroy(r);
+    return r.val;
+}

@@ -1,0 +1,28 @@
+// Test: --check predictable thesis demo — predictable core, non-predictable shell
+// The parsing core should pass. The I/O shell should fail.
+// This is the canonical pattern: separation is compiler-visible.
+
+fn parse_byte(data: Int, offset: Int) -> Int {
+    return data + offset;
+}
+
+fn validate(data: Int, len: Int) -> Int {
+    if len < 4 { return 1; }
+    let mut checksum: Int = 0;
+    for (let mut i: Int = 0; i < len; i = i + 1) {
+        checksum = checksum + parse_byte(data, i);
+    }
+    if checksum == 0 { return 2; }
+    return 0;
+}
+
+fn report(result: Int) with(Console) {
+    if result == 0 { println("ok"); }
+    else { println("fail"); }
+}
+
+pub fn main() with(Std) -> Int {
+    let result: Int = validate(42, 10);
+    report(result);
+    return result;
+}

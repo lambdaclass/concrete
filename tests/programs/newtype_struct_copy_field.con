@@ -1,0 +1,13 @@
+// Regression: a Copy struct with a newtype field whose inner type is Copy
+// must itself pass the Copy field check (previously failed because CoreCheck
+// didn't look through newtypes when propagating the Copy trait).
+newtype Port = u16;
+
+struct Copy Endpoint {
+    port: Port,
+}
+
+fn main() -> Int {
+    let e: Endpoint = Endpoint { port: Port(443) };
+    return e.port.0 as Int;
+}

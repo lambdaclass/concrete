@@ -1,0 +1,11 @@
+// Test: proof registry artifact loading
+// A pure function whose proof status comes from proof-registry.json
+
+fn pure_add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+fn main() -> i32 {
+    let _x: Int = pure_add(1, 2);
+    return 0;
+}

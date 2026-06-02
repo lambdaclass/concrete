@@ -1,0 +1,15 @@
+=== Unsafe Signature Summary ===
+
+module fixed_capacity:
+  Trust boundary analysis:
+    trusted fn build_msg:
+      wraps: (safe body — no raw ops detected)
+    trusted fn build_bad_version:
+      wraps: (safe body — no raw ops detected)
+    trusted fn build_bad_type:
+      wraps: (safe body — no raw ops detected)
+    trusted fn build_payload_overflow:
+      wraps: (safe body — no raw ops detected)
+
+Totals: 4 unsafe-related signatures (4 trusted)
+

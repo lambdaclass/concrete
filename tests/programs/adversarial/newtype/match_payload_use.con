@@ -1,0 +1,23 @@
+// Match on Option<Newtype> where the bound `value` is then used in
+// arithmetic via `.0`. Tests that the bound binding has the wrapper
+// type (so `.value()` would work) but `.0` still unwraps.
+// Expected: 2046
+
+newtype Mask = u16;
+
+fn split(m: Option<Mask>) -> Int {
+    match m {
+        Option::Some { value } => {
+            // value: Mask — use the wrapper-typed binding
+            let raw: u16 = value.0;
+            let doubled: u16 = raw + raw;
+            return doubled as Int;
+        }
+        Option::None => { return -1; }
+    }
+}
+
+fn main() -> Int {
+    let m: Option<Mask> = Option::<Mask>::Some { value: Mask(1023) };
+    return split(m);
+}

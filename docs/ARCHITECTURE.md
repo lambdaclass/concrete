@@ -21,6 +21,37 @@ Source -> Parse -> Resolve -> Check -> Elab -> CoreCanonicalize -> CoreCheck -> 
 
 The old AST backend is gone. The current compiler goes through the full Core -> SSA pipeline, with structured diagnostics across the semantic passes.
 
+## Target Proof/Audit Pipeline
+
+The backend path and the proof/audit path are intentionally separate.
+The backend path keeps producing executable code through Core, Mono,
+Lower, SSA, and LLVM. The proof/audit path should become:
+
+```text
+Source
+  -> Parse
+  -> Resolve
+  -> Check
+  -> CheckedProgram
+  -> Core
+  -> Normalized Core
+  -> ProofCore
+  -> Obligations / proof reports / proof registry
+```
+
+This target shape is documented in
+[PROOF_AUDIT_PIPELINE.md](PROOF_AUDIT_PIPELINE.md). The short version:
+
+- `CheckedProgram` is the stable post-checking artifact.
+- `Core` remains the semantic authority.
+- `Normalized Core` regularizes proof/audit targets before extraction.
+- `ProofCore` is the small Lean-facing proof IR.
+- reports, policies, assumptions, snapshots, release bundles, and
+  showcase manifests should render from one shared fact layer.
+
+The current active architecture track is to make this path explicit
+without turning ProofCore into a second semantic authority.
+
 Recent architecture-level cleanups worth calling out:
 
 - parser save/restore backtracking sites were removed so the implementation now matches the language's strict LL(1) goal
@@ -75,25 +106,32 @@ This is the right place because:
 - the object is still close to source meaning
 - backend-oriented lowering has not started yet
 
-The intended long-term shape is:
+The current proof boundary is `ValidatedCore`. The intended
+proof/audit shape is broader and is tracked in
+[PROOF_AUDIT_PIPELINE.md](PROOF_AUDIT_PIPELINE.md):
 
 ```text
 Source
   -> Parse
   -> Resolve
   -> Check
+  -> CheckedProgram
   -> Elab
   -> CoreCanonicalize
   -> CoreCheck
   -> ValidatedCore artifact
-  -> optional proof-oriented export for selected functions
+  -> Normalized Core
+  -> ProofCore
+  -> obligations / proof reports / proof registry
   -> Mono
   -> Lower
   -> SSA ...
 ```
 
 This does not require a separate "verification compiler."
-The goal is to treat validated Core as the semantic authority and let a proof-oriented view of that artifact serve Lean-side reasoning.
+The goal is to treat validated Core as the semantic authority, add
+a normalized proof/audit view of that artifact, and let ProofCore
+serve Lean-side reasoning.
 
 Remaining architecture changes:
 
@@ -121,7 +159,8 @@ Still change:
 
 - preserve source-to-Core traceability (span tracking)
 - add export support for selected Concrete functions to Lean proof workflows
-- extend proof fragment to cover structs, enums, match, and recursive functions
+- make `CheckedProgram` / normalized Core either real artifacts or explicit rejections
+- extend proof fragment to cover arrays, bounded loops, structs, enums, match, casts, and field-heavy code
 - keep proof scopes staged: pure first, then effects, then runtime
 
 Fine for now:
@@ -276,7 +315,14 @@ Excludes:
 
 ### Proof-Oriented Core Direction
 
-`ProofCore` (`Concrete/ProofCore.lean`) is a restricted, proof-oriented view of `ValidatedCore`.  It is a filter, not a separate IR — the semantic authority remains CoreCheck. See [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md) for the full definition of the proof-eligible subset.
+`ProofCore` (`Concrete/ProofCore.lean`) is a restricted,
+proof-oriented view of validated Core. It is the Lean-facing proof
+IR, but it is not a separate semantic authority — the semantic
+authority remains CoreCheck / validated Core. See
+[PROVABLE_SUBSET.md](PROVABLE_SUBSET.md) for the current
+proof-eligible subset and
+[PROOF_AUDIT_PIPELINE.md](PROOF_AUDIT_PIPELINE.md) for the target
+pipeline.
 
 **Currently included** (via `extractProofCore`):
 
@@ -299,8 +345,10 @@ Excludes:
 
 **Next extensions:**
 
-- Structs, enums, and match expressions in the proof fragment
-- Recursive functions with termination proofs
+- Array indexing and bounded while loops
+- Struct and enum construction
+- Pattern matching, casts, and field-heavy code
+- Recursive functions with termination proofs, later
 - Source-to-Core traceability for selected-function export
 
 ## Boundary Rules

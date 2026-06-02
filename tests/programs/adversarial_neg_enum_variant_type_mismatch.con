@@ -1,0 +1,17 @@
+// Adversarial: construct enum variant with wrong payload type.
+// Shape::Circle expects Int radius but receives a Bool.
+// Expected: compile error about type mismatch.
+
+enum Shape { Circle { radius: Int }, Square { side: Int } }
+
+fn area(s: Shape) -> Int {
+    match s {
+        Shape::Circle { radius } => { return radius * radius; },
+        Shape::Square { side } => { return side * side; },
+    }
+}
+
+pub fn main() -> Int {
+    let s: Shape = Shape::Circle { radius: true };
+    return area(s);
+}

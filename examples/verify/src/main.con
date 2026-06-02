@@ -20,7 +20,6 @@
 
 mod conhash {
     import std.fs.{read_file, FsError};
-    import std.result.{Result};
     import std.bytes.{Bytes};
     import std.args.{count, get};
     import std.vec.{Vec};
@@ -37,11 +36,11 @@ mod conhash {
     trusted fn read_file_raw(path: &String) with(File, Alloc) -> FileData {
         let result: Result<Bytes, FsError> = read_file(path);
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 let fd: FileData = FileData { ptr: value.ptr, len: value.len };
                 return fd;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return FileData { ptr: 0 as *mut u8, len: 0 };
             }
         }
@@ -56,26 +55,21 @@ mod conhash {
     // --- Reporting: with(Console) — can output, cannot read files ---
 
     fn report_hash(filename: &String, hex: &String) with(Console) {
-        print_string(hex);
-        print_string(&"  ");
-        print_string(filename);
-        print_char(10);
+        println(hex, "  ", filename);
     }
 
     fn report_ok(filename: &String) with(Console) {
-        print_string(filename);
-        print_string(&": OK\n");
+        println(filename, ": OK");
     }
 
     fn report_fail(filename: &String, expected: &String, actual: &String) with(Console, Alloc) {
-        print_string(filename);
         let mut msg: String = String::new();
+        msg.append(filename);
         msg.append(&": FAILED\n  expected: ");
         msg.append(expected);
         msg.append(&"\n  actual:   ");
         msg.append(actual);
-        msg.push_char(10 as char);
-        print_string(&msg);
+        println(msg);
         msg.drop();
     }
 
@@ -85,8 +79,7 @@ mod conhash {
         msg.append(filename);
         msg.append(&": ");
         msg.append(reason);
-        msg.push_char(10 as char);
-        print_string(&msg);
+        println(msg);
         msg.drop();
     }
 
@@ -134,8 +127,9 @@ mod conhash {
         let argc: Int = count();
 
         if argc < 2 {
-            print_string(&"Usage: conhash <file> [expected_sha256]\n");
-            print_string(&"  Without expected hash: prints SHA-256 of file\n  With expected hash: verifies file integrity\n");
+            println("Usage: conhash <file> [expected_sha256]");
+            println("  Without expected hash: prints SHA-256 of file");
+            println("  With expected hash: verifies file integrity");
             return 1;
         }
 
@@ -150,8 +144,8 @@ mod conhash {
         let mut timing: String = String::new();
         timing.append(&"(");
         timing.append_int(elapsed_ms);
-        timing.append(&" ms)\n");
-        print_string(&timing);
+        timing.append(&" ms)");
+        println(timing);
         timing.drop();
 
         expected.drop();

@@ -1,0 +1,10 @@
+// Adversarial: require-proofs = true, but pure_add is eligible and unproved.
+// Policy layer must reject this with E0612 (missing proof).
+
+fn pure_add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+pub fn main() -> Int {
+    return pure_add(1, 2);
+}

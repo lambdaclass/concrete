@@ -1,0 +1,51 @@
+// Adversarial: multiple different error enums coexisting in same file,
+// with conversion functions between them.
+// Tests that multiple Copy enums don't interfere.
+
+enum Copy IoError { NotFound, PermDenied, Timeout }
+enum Copy ParseError { BadSyntax, Overflow }
+enum Copy AppError { Io { code: i32 }, Parse { code: i32 }, Unknown }
+
+fn io_code(e: IoError) -> i32 {
+    match e {
+        IoError::NotFound => { return 1; },
+        IoError::PermDenied => { return 2; },
+        IoError::Timeout => { return 3; },
+    }
+}
+
+fn parse_code(e: ParseError) -> i32 {
+    match e {
+        ParseError::BadSyntax => { return 10; },
+        ParseError::Overflow => { return 11; },
+    }
+}
+
+fn io_to_app(e: IoError) -> AppError {
+    return AppError::Io { code: io_code(e) };
+}
+
+fn parse_to_app(e: ParseError) -> AppError {
+    return AppError::Parse { code: parse_code(e) };
+}
+
+fn app_code(e: AppError) -> i32 {
+    match e {
+        AppError::Io { code } => { return code; },
+        AppError::Parse { code } => { return 100 + code; },
+        AppError::Unknown => { return 999; },
+    }
+}
+
+fn main() -> i32 {
+    let e1: AppError = io_to_app(IoError::Timeout);
+    if app_code(e1) != 3 { return 1; }
+
+    let e2: AppError = parse_to_app(ParseError::Overflow);
+    if app_code(e2) != 111 { return 2; }
+
+    let e3: AppError = AppError::Unknown;
+    if app_code(e3) != 999 { return 3; }
+
+    return 0;
+}

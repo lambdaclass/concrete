@@ -1,0 +1,40 @@
+// Adversarial: blocked/ineligible boundary and registry pressure test.
+// Tests edge cases where registry entries target functions that are
+// blocked or ineligible, and combined scenarios.
+//
+// Expected:
+//   pure_fn         → eligible, extractable (control)
+//   blocked_fn      → blocked (struct literal) — registry entry should produce error
+//   ineligible_fn   → ineligible (File cap) — registry entry should produce error
+//   combo_source    → ineligible (trusted + has capabilities)
+//   combo_profile   → ineligible (recursion + allocation)
+
+struct Copy Pair {
+    x: Int,
+    y: Int,
+}
+
+fn pure_fn(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+fn blocked_fn(x: Int, y: Int) -> Pair {
+    return Pair { x: x, y: y };
+}
+
+fn ineligible_fn(x: Int) with(File) -> Int {
+    return x + 1;
+}
+
+trusted fn combo_source(x: Int) with(Unsafe) -> Int {
+    return x * 2;
+}
+
+fn combo_profile(n: Int) with(Alloc) -> Int {
+    if n <= 0 { return 0; }
+    return combo_profile(n - 1) + 1;
+}
+
+pub fn main() with(Std, Unsafe) -> Int {
+    return pure_fn(1, 2);
+}

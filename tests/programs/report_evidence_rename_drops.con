@@ -1,0 +1,11 @@
+// Test: renaming a proved function drops evidence from "proved" to "enforced"
+// parse_byte has a Lean proof, but read_byte (same body) does not.
+// The report must not claim a proof exists for a renamed function.
+
+fn read_byte(data: Int, offset: Int) -> Int {
+    return data + offset;
+}
+
+pub fn main() -> Int {
+    return read_byte(10, 3);
+}

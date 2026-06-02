@@ -1,0 +1,17 @@
+// Negative test: generic Copy struct instantiated with non-Copy type.
+// Box<T> is declared Copy, but MyResource is not Copy.
+// After monomorphization, Box<MyResource> must lose its Copy status
+// and the compiler should reject the move-after-use.
+// Expected: error about use after move (MyResource is linear/non-Copy)
+
+struct Copy Box<T> { val: T }
+
+struct MyResource { data: Int }
+
+pub fn main() -> Int {
+    let r: MyResource = MyResource { data: 42 };
+    let b: Box<MyResource> = Box::<MyResource> { val: r };
+    let b2: Box<MyResource> = b;   // move
+    let b3: Box<MyResource> = b;   // use after move — should fail
+    return b2.val.data + b3.val.data;
+}

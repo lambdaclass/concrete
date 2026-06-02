@@ -1,0 +1,38 @@
+// Hostile workload: 20-deep non-recursive call chain with struct passing.
+// Tests stack depth, struct passing, and lowering of long call sequences.
+// Expected: 42
+
+struct Copy Val { x: Int, y: Int }
+
+fn step1(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step2(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step3(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step4(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step5(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step6(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step7(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step8(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step9(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step10(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step11(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step12(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step13(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step14(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step15(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step16(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step17(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step18(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step19(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+fn step20(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 1 }; }
+
+fn run5(v: Val) -> Val { return step5(step4(step3(step2(step1(v))))); }
+fn run10(v: Val) -> Val { return step10(step9(step8(step7(step6(run5(v)))))); }
+fn run15(v: Val) -> Val { return step15(step14(step13(step12(step11(run10(v)))))); }
+fn run20(v: Val) -> Val { return step20(step19(step18(step17(step16(run15(v)))))); }
+
+pub fn main() -> Int {
+    let v: Val = Val { x: 1, y: 1 };
+    let result: Val = run20(v);
+    // x = 1+20 = 21, y = 1+20 = 21, 21+21 = 42
+    return result.x + result.y;
+}

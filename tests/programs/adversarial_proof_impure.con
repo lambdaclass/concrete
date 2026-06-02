@@ -1,0 +1,12 @@
+// Adversarial: parse_byte exists but the function has capabilities.
+// A function with capabilities should NOT be "proved" even if the
+// name matches — the proof only covers the pure version.
+// Expected: evidence should be "reported" (fails profile due to blocking).
+
+fn parse_byte(data: Int, offset: Int) with(File) -> Int {
+    return data + offset;
+}
+
+pub fn main() with(File) -> Int {
+    return parse_byte(10, 3);
+}

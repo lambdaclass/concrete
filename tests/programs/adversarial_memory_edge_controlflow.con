@@ -1,0 +1,51 @@
+// Adversarial test: control-flow join rules for linear variables.
+
+struct Resource {
+    id: Int,
+}
+
+fn consume_resource(r: Resource) -> Int {
+    return r.id;
+}
+
+// Both branches must agree on consumption
+fn branch_both_consume(cond: Bool) -> Int {
+    let r: Resource = Resource { id: 1 };
+    if cond {
+        let _x: Int = consume_resource(r);
+    } else {
+        let _x: Int = consume_resource(r);
+    }
+    return 0;
+}
+
+// Neither branch consumes — variable survives
+fn branch_neither_consumes(cond: Bool) -> Int {
+    let r: Resource = Resource { id: 2 };
+    if cond {
+        let _x: Int = 1;
+    } else {
+        let _y: Int = 2;
+    }
+    let _z: Int = consume_resource(r);
+    return 0;
+}
+
+// Loop cannot consume outer linear variable
+fn loop_cannot_consume_outer() -> Int {
+    let mut i: Int = 0;
+    while i < 5 {
+        // Cannot consume a linear variable from outer scope here
+        let inner: Resource = Resource { id: i };
+        let _x: Int = consume_resource(inner);
+        i = i + 1;
+    }
+    return i;
+}
+
+fn main() -> Int {
+    let r1: Int = branch_both_consume(true);
+    let r2: Int = branch_neither_consumes(false);
+    let r3: Int = loop_cannot_consume_outer();
+    return r1 + r2 + r3;
+}

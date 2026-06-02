@@ -1,0 +1,23 @@
+// Test: push values, pop, check Option Some/None
+enum Option<T> {
+    Some { value: T },
+    None
+}
+
+fn extract_or(opt: Option<Int>, default: Int) -> Int {
+    match opt {
+        Option::Some { value } => { return value; },
+        Option::None {} => { return default; },
+    }
+}
+
+fn main() with(Std) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    vec_push(&mut v, 42);
+    let result: Option<Int> = vec_pop(&mut v);
+    let val: Int = extract_or(result, 0);
+    let empty: Option<Int> = vec_pop(&mut v);
+    let none_val: Int = extract_or(empty, 0);
+    vec_free(v);
+    return val + none_val;
+}

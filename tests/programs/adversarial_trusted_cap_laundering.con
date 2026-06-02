@@ -1,0 +1,20 @@
+// Adversarial: trusted does NOT bypass capability checking for callees
+//
+// A trusted function that calls a File-capability function without
+// declaring with(File) should still produce a capability error.
+// trusted only gates raw pointer operations (deref, ptr arithmetic),
+// not callee capability propagation.
+//
+// Expected: compile error — insufficient capabilities
+
+fn needs_file(x: Int) with(File) -> Int {
+    return x;
+}
+
+trusted fn sneaky(x: Int) -> Int {
+    return needs_file(x);
+}
+
+pub fn main() -> Int {
+    return sneaky(42);
+}

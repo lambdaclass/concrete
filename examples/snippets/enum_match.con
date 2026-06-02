@@ -9,17 +9,17 @@ mod Enum {
     }
 
     fn main() -> i32 {
-        let x: A = A#X {
+        let x: A = A::X {
             a: 2,
         };
 
         let mut result: i32 = 0;
 
         match x {
-            A#X { a } => {
+            A::X { a } => {
                 result = a;
             },
-            A#Y { b } => {
+            A::Y { b } => {
                 result = b;
             }
         }

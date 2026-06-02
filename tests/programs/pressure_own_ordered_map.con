@@ -1,0 +1,250 @@
+// Pressure: sorted key-value map using a fixed-size array of entries.
+//
+// Operations tested:
+//   1. Insert (maintaining sorted order by key, shifting elements right)
+//   2. Lookup by key (binary search)
+//   3. Delete by key (shifting elements left)
+//   4. Update value for existing key
+//   5. Iteration (sum of all values)
+//
+// Reveals: how ownership works with mutable arrays, move/copy semantics
+// for compound values in collections, shift-based insert/delete patterns.
+//
+// Expected: return 0 on success.
+
+struct Copy Entry {
+    key: Int,
+    val: Int,
+    occupied: Int,
+}
+
+struct Copy OrderedMap {
+    entries: [Entry; 16],
+    len: Int,
+}
+
+fn map_new() -> OrderedMap {
+    let empty: Entry = Entry { key: 0, val: 0, occupied: 0 };
+    let entries: [Entry; 16] = [
+        empty, empty, empty, empty, empty, empty, empty, empty,
+        empty, empty, empty, empty, empty, empty, empty, empty,
+    ];
+    return OrderedMap { entries: entries, len: 0 };
+}
+
+// Find the index where key should be inserted (first index where entries[i].key >= key).
+// Returns len if key is larger than all existing keys.
+fn find_insert_pos(m: OrderedMap, key: Int) -> Int {
+    for (let mut i: Int = 0; i < m.len; i = i + 1) {
+        if m.entries[i].key >= key {
+            return i;
+        }
+    }
+    return m.len;
+}
+
+// Binary search for a key. Returns the index if found, -1 if not found.
+fn binary_search(m: OrderedMap, key: Int) -> Int {
+    let mut lo: Int = 0;
+    let mut hi: Int = m.len;
+    for (let mut iter: Int = 0; iter < 20; iter = iter + 1) {
+        if lo >= hi {
+            return 0 - 1;
+        }
+        let mid: Int = lo + (hi - lo) / 2;
+        if m.entries[mid].key == key {
+            return mid;
+        }
+        if m.entries[mid].key < key {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    return 0 - 1;
+}
+
+// Insert a key-value pair. If key already exists, update the value.
+// Otherwise, shift entries right and insert at sorted position.
+fn map_insert(m: OrderedMap, key: Int, val: Int) -> OrderedMap {
+    let mut entries: [Entry; 16] = m.entries;
+    let mut len: Int = m.len;
+
+    // Check if key already exists
+    let existing: Int = binary_search(m, key);
+    if existing >= 0 {
+        // Update existing entry
+        entries[existing] = Entry { key: key, val: val, occupied: 1 };
+        return OrderedMap { entries: entries, len: len };
+    }
+
+    // Find insertion position
+    let pos: Int = find_insert_pos(m, key);
+
+    // Shift right from end to pos
+    if len < 16 {
+        let mut i: Int = len;
+        for (let mut step: Int = 0; step < 16; step = step + 1) {
+            if i <= pos {
+                // Done shifting
+                entries[pos] = Entry { key: key, val: val, occupied: 1 };
+                len = len + 1;
+                return OrderedMap { entries: entries, len: len };
+            }
+            entries[i] = entries[i - 1];
+            i = i - 1;
+        }
+        // Fallthrough: pos == 0 edge case
+        entries[pos] = Entry { key: key, val: val, occupied: 1 };
+        len = len + 1;
+    }
+
+    return OrderedMap { entries: entries, len: len };
+}
+
+// Lookup a key. Returns the value if found, -1 if not found.
+fn map_get(m: OrderedMap, key: Int) -> Int {
+    let idx: Int = binary_search(m, key);
+    if idx >= 0 {
+        return m.entries[idx].val;
+    }
+    return 0 - 1;
+}
+
+// Delete a key. Shifts elements left to fill the gap.
+fn map_delete(m: OrderedMap, key: Int) -> OrderedMap {
+    let mut entries: [Entry; 16] = m.entries;
+    let mut len: Int = m.len;
+
+    let idx: Int = binary_search(m, key);
+    if idx < 0 {
+        // Key not found, return unchanged
+        return OrderedMap { entries: entries, len: len };
+    }
+
+    // Shift left from idx+1 to len-1
+    for (let mut i: Int = idx; i < len - 1; i = i + 1) {
+        entries[i] = entries[i + 1];
+    }
+    // Clear the last slot
+    if len > 0 {
+        entries[len - 1] = Entry { key: 0, val: 0, occupied: 0 };
+        len = len - 1;
+    }
+
+    return OrderedMap { entries: entries, len: len };
+}
+
+// Sum all values in the map.
+fn map_sum_values(m: OrderedMap) -> Int {
+    let mut s: Int = 0;
+    for (let mut i: Int = 0; i < m.len; i = i + 1) {
+        s = s + m.entries[i].val;
+    }
+    return s;
+}
+
+// Sum all keys in the map.
+fn map_sum_keys(m: OrderedMap) -> Int {
+    let mut s: Int = 0;
+    for (let mut i: Int = 0; i < m.len; i = i + 1) {
+        s = s + m.entries[i].key;
+    }
+    return s;
+}
+
+// Check that keys are in strictly ascending order.
+fn map_is_sorted(m: OrderedMap) -> Int {
+    for (let mut i: Int = 0; i < m.len - 1; i = i + 1) {
+        if m.entries[i].key >= m.entries[i + 1].key {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+pub fn main() -> Int {
+    let mut m: OrderedMap = map_new();
+
+    // Test 1: insert and lookup
+    m = map_insert(m, 30, 300);
+    m = map_insert(m, 10, 100);
+    m = map_insert(m, 50, 500);
+    m = map_insert(m, 20, 200);
+    m = map_insert(m, 40, 400);
+
+    if m.len != 5 { return 1; }
+
+    // Test 2: sorted order check
+    if map_is_sorted(m) != 1 { return 2; }
+
+    // Test 3: keys should be [10, 20, 30, 40, 50]
+    if m.entries[0].key != 10 { return 10; }
+    if m.entries[1].key != 20 { return 11; }
+    if m.entries[2].key != 30 { return 12; }
+    if m.entries[3].key != 40 { return 13; }
+    if m.entries[4].key != 50 { return 14; }
+
+    // Test 4: lookup each key
+    if map_get(m, 10) != 100 { return 20; }
+    if map_get(m, 20) != 200 { return 21; }
+    if map_get(m, 30) != 300 { return 22; }
+    if map_get(m, 40) != 400 { return 23; }
+    if map_get(m, 50) != 500 { return 24; }
+
+    // Test 5: lookup nonexistent key
+    if map_get(m, 25) != 0 - 1 { return 30; }
+    if map_get(m, 0) != 0 - 1 { return 31; }
+    if map_get(m, 99) != 0 - 1 { return 32; }
+
+    // Test 6: sum values = 100+200+300+400+500 = 1500
+    if map_sum_values(m) != 1500 { return 40; }
+
+    // Test 7: sum keys = 10+20+30+40+50 = 150
+    if map_sum_keys(m) != 150 { return 41; }
+
+    // Test 8: update existing key
+    m = map_insert(m, 30, 999);
+    if m.len != 5 { return 50; }
+    if map_get(m, 30) != 999 { return 51; }
+    // Other values unchanged
+    if map_get(m, 10) != 100 { return 52; }
+    if map_get(m, 50) != 500 { return 53; }
+
+    // Test 9: delete middle key
+    m = map_delete(m, 30);
+    if m.len != 4 { return 60; }
+    if map_get(m, 30) != 0 - 1 { return 61; }
+    if map_is_sorted(m) != 1 { return 62; }
+    // Remaining keys: [10, 20, 40, 50]
+    if m.entries[0].key != 10 { return 63; }
+    if m.entries[1].key != 20 { return 64; }
+    if m.entries[2].key != 40 { return 65; }
+    if m.entries[3].key != 50 { return 66; }
+
+    // Test 10: delete first key
+    m = map_delete(m, 10);
+    if m.len != 3 { return 70; }
+    if m.entries[0].key != 20 { return 71; }
+
+    // Test 11: delete last key
+    m = map_delete(m, 50);
+    if m.len != 2 { return 80; }
+    if m.entries[m.len - 1].key != 40 { return 81; }
+
+    // Test 12: delete nonexistent key (should be no-op)
+    m = map_delete(m, 99);
+    if m.len != 2 { return 90; }
+
+    // Test 13: delete all remaining
+    m = map_delete(m, 20);
+    m = map_delete(m, 40);
+    if m.len != 0 { return 100; }
+
+    // Test 14: insert after emptying
+    m = map_insert(m, 5, 55);
+    if m.len != 1 { return 110; }
+    if map_get(m, 5) != 55 { return 111; }
+
+    return 0;
+}

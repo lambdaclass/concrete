@@ -1,0 +1,14 @@
+// Adversarial: predictable = true AND deny = ["Unsafe"] both active.
+// Code violates both: recursion (predictable) and Unsafe capability (deny).
+// Expected: compiler rejects with both E0610 and E0611.
+
+pub fn recursive_unsafe(n: Int) with(Unsafe) -> Int {
+    if n <= 0 {
+        return 0;
+    }
+    return recursive_unsafe(n - 1);
+}
+
+pub fn main() with(Unsafe) -> Int {
+    return recursive_unsafe(5);
+}

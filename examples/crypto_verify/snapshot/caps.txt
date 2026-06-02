@@ -1,0 +1,11 @@
+=== Capability Summary ===
+
+module main:
+      compute_tag : (pure)
+      verify_tag : (pure)
+      check_nonce : (pure)
+      verify_message : (pure)
+      main : (pure)
+
+Totals: 5 functions (5 pure), 0 externs
+

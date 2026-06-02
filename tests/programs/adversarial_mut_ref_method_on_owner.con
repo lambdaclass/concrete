@@ -1,0 +1,22 @@
+// Method with &mut self on an owned value — auto-borrows, does NOT consume.
+// Multiple calls on the same owned variable are valid.
+
+struct Counter { val: Int }
+
+impl Counter {
+    fn inc(&mut self) {
+        self.val = self.val + 1;
+    }
+}
+
+fn consume(c: Counter) -> Int {
+    return c.val;
+}
+
+fn main() -> Int {
+    let mut c: Counter = Counter { val: 10 };
+    c.inc();
+    c.inc();
+    c.inc();
+    return consume(c);
+}

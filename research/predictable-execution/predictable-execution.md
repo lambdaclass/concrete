@@ -28,6 +28,7 @@ Predictable execution in Concrete should mean:
 3. some profile rules can be enforced rather than left as convention
 4. concurrency and FFI are treated as explicit analysis boundaries
 5. claims are staged: structural boundedness first, stronger timing claims only where justified
+6. determinism and cleanup cost are not silently ignored when labeling code as predictable
 
 It should not mean:
 
@@ -77,6 +78,10 @@ Core report categories:
 5. FFI boundary present / absent
 6. concurrency boundary present / absent
 7. stack-growth risks where structurally visible
+8. indirect-call presence / absence where it affects call-graph trust
+9. determinism sources present / absent (time, randomness, unordered iteration, external nondeterminism)
+10. cleanup-cost risks where `defer`, drop, or failure handling can allocate, block, or do unbounded work
+11. host-call opacity where stdlib/libc/syscall-backed operations are not timing-transparent
 
 The first win is visibility. Enforcement can follow.
 
@@ -89,6 +94,7 @@ Some predictable-execution properties are structurally enforceable:
 3. no FFI
 4. no blocking calls in selected profiles
 5. restricted stdlib surface
+6. no indirect-call escape in the analyzed profile unless classified explicitly
 
 Some are harder and may begin as report-only:
 
@@ -98,6 +104,16 @@ Some are harder and may begin as report-only:
 4. target-specific timing bounds
 
 Concrete should separate these clearly.
+
+The project also needs explicit answers on several invariants that are easy to miss:
+
+1. whether lowering or code generation can introduce hidden allocation not visible at the source level
+2. whether any language feature can introduce indirect calls that weaken static call-graph analysis
+3. what boundedness guarantees hold on failure paths, especially around `defer`, cleanup, and abort semantics
+4. where source/compiler claims end and LLVM/backend timing assumptions begin
+5. whether deterministic behavior is part of the first analyzable profile or a separate stronger profile
+6. whether success-path cleanup costs need their own report and profile classification
+7. how stdlib/libc/syscall-backed operations are classified so hosted code does not masquerade as timing-transparent
 
 There should likely be two stages:
 

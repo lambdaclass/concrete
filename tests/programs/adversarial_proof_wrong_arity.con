@@ -1,0 +1,15 @@
+// Adversarial: function with same name but different arity should not be proved
+//
+// main.parse_byte has a registered proof for (data: Int, offset: Int) -> Int.
+// This file defines parse_byte with only one parameter. The body fingerprint
+// will differ because the body references different variables.
+//
+// Expected: parse_byte → enforced (proof stale or just enforced, not proved)
+
+fn parse_byte(x: Int) -> Int {
+    return x + 1;
+}
+
+pub fn main() -> Int {
+    return parse_byte(5);
+}

@@ -1,0 +1,11 @@
+// Pressure: heap struct with deferred free — arrow access while reserved.
+// Tests that defer free(ptr) reserves ptr but arrow access still works.
+
+struct Pair { a: Int, b: Int }
+
+fn main() with(Std) -> Int {
+    let ptr: Heap<Pair> = alloc(Pair { a: 19, b: 23 });
+    defer free(ptr);
+    let v: Int = ptr->a + ptr->b;
+    return v;
+}

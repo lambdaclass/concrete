@@ -1,0 +1,20 @@
+// Adversarial: mutual recursion through exactly two functions.
+// A calls B, B calls A — forming a 2-node cycle.
+// Neither function calls itself directly, but Tarjan's SCC
+// must detect the cycle.
+//
+// Expected: both detected as mutual recursion, both fail predictable.
+
+fn alpha(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    return beta(n - 1) + 1;
+}
+
+fn beta(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    return alpha(n - 1) + 1;
+}
+
+pub fn main() -> Int {
+    return alpha(5);
+}

@@ -1,0 +1,16 @@
+// Borrow-block exclusive refs (&mut T) are consumed on function call.
+// Double use of the same borrow-block ref is a use-after-move error.
+// Expected error: linear variable 'r' used after move
+
+fn increment(x: &mut Int) {
+    *x = *x + 1;
+}
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    borrow mut n as r in R {
+        increment(r);
+        increment(r);  // error: r consumed by first call
+    }
+    return n;
+}

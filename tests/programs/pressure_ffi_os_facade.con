@@ -1,0 +1,147 @@
+// Pressure: OS call facade — multi-layer trust boundary
+//
+// Wraps low-level OS operations (write to stdout via POSIX write(),
+// getpid for a constant) through trusted extern fn + trusted wrapper
+// + pure validation.
+//
+// Reveals:
+//   - Syscall wrapping patterns (POSIX write, getpid)
+//   - Capability propagation through multi-layer trust
+//   - trusted fn with(Console) interaction
+//   - Whether capabilities on trusted wrappers are correctly enforced
+//   - Raw pointer passing from arrays to C functions
+
+// === Layer 1: FFI declarations (POSIX) ===
+
+// POSIX write: fd, buf, count -> bytes written
+trusted extern fn write(fd: i32, buf: *const u8, count: u64) -> i64;
+
+// POSIX getpid: returns process ID
+trusted extern fn getpid() -> i32;
+
+// === Layer 2: Trusted wrappers ===
+
+// Write a fixed byte buffer to stdout (fd=1).
+// Needs Console capability because it produces visible output.
+trusted fn write_stdout(buf: *const u8, len: u64) with(Console) -> i64 {
+    return write(1, buf, len);
+}
+
+// Write a fixed byte buffer to stderr (fd=2).
+// Also Console — it's visible output.
+trusted fn write_stderr(buf: *const u8, len: u64) with(Console) -> i64 {
+    return write(2, buf, len);
+}
+
+// Get process ID — no capabilities needed (pure OS query).
+trusted fn get_pid() -> i32 {
+    return getpid();
+}
+
+// Write a newline to stdout
+trusted fn write_newline() with(Console) -> i64 {
+    let nl: [u8; 1] = [10];
+    return write(1, &nl as *const u8, 1);
+}
+
+// === Layer 3: Pure validation (no capabilities, no trusted) ===
+
+// Validate that write returned the expected number of bytes
+fn validate_write(expected: u64, actual: i64) -> i32 {
+    if actual < 0 { return 1; }
+    if (actual as u64) == expected { return 0; }
+    return 2;
+}
+
+// Validate that PID is positive (all real PIDs are > 0)
+fn validate_pid(pid: i32) -> i32 {
+    if pid > 0 { return 0; }
+    return 1;
+}
+
+// Validate that two PID calls return the same value (deterministic)
+fn validate_pid_stable(pid1: i32, pid2: i32) -> i32 {
+    if pid1 == pid2 { return 0; }
+    return 1;
+}
+
+// === Entry point ===
+
+pub fn main() with(Console) -> Int {
+    let mut failures: i32 = 0;
+
+    // --- Test 1: write a known string to stdout ---
+    let msg1: [u8; 20] = [116, 101, 115, 116, 49, 58, 32, 115, 116, 100,
+                           111, 117, 116, 32, 119, 114, 105, 116, 101, 10];
+    let w1: i64 = write_stdout(&msg1 as *const u8, 20);
+    let v1: i32 = validate_write(20, w1);
+    if v1 != 0 {
+        println("FAIL: stdout write");
+        failures = failures + 1;
+    } else {
+        println("OK: stdout write");
+    }
+
+    // --- Test 2: write to stderr ---
+    let msg2: [u8; 14] = [116, 101, 115, 116, 50, 58, 32, 115, 116, 100,
+                           101, 114, 114, 10];
+    let w2: i64 = write_stderr(&msg2 as *const u8, 14);
+    let v2: i32 = validate_write(14, w2);
+    if v2 != 0 {
+        println("FAIL: stderr write");
+        failures = failures + 1;
+    } else {
+        println("OK: stderr write");
+    }
+
+    // --- Test 3: getpid returns positive ---
+    let pid1: i32 = get_pid();
+    let v3: i32 = validate_pid(pid1);
+    if v3 != 0 {
+        println("FAIL: getpid positive");
+        failures = failures + 1;
+    } else {
+        println("OK: getpid positive");
+    }
+
+    // --- Test 4: getpid is deterministic within a process ---
+    let pid2: i32 = get_pid();
+    let v4: i32 = validate_pid_stable(pid1, pid2);
+    if v4 != 0 {
+        println("FAIL: getpid stable");
+        failures = failures + 1;
+    } else {
+        println("OK: getpid stable");
+    }
+
+    // --- Test 5: write_newline works ---
+    let w5: i64 = write_newline();
+    let v5: i32 = validate_write(1, w5);
+    if v5 != 0 {
+        println("FAIL: write_newline");
+        failures = failures + 1;
+    } else {
+        println("OK: write_newline");
+    }
+
+    // --- Test 6: zero-length write should succeed ---
+    let empty: [u8; 1] = [0];
+    let w6: i64 = write_stdout(&empty as *const u8, 0);
+    let v6: i32 = validate_write(0, w6);
+    if v6 != 0 {
+        println("FAIL: zero-length write");
+        failures = failures + 1;
+    } else {
+        println("OK: zero-length write");
+    }
+
+    // --- Summary ---
+    if failures == 0 {
+        println("All 6 OS facade tests passed.");
+    } else {
+        print(failures as Int);
+        println(" OS facade test(s) failed.");
+    }
+
+    return failures as Int;
+}

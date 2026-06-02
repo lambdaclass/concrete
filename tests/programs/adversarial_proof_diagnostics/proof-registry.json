@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "proofs": [
+    {
+      "function": "main.registry_unextractable",
+      "body_fingerprint": "[(let result (var a)) (set result (binop Concrete.BinOp.add (var result) (var b))) (ret (var result))]",
+      "proof": "Concrete.Proof.registry_unextractable_correct",
+      "spec": "unextractable_spec"
+    },
+    {
+      "function": "main.trusted_helper",
+      "body_fingerprint": "[(ret (var x))]",
+      "proof": "Concrete.Proof.trusted_helper_correct",
+      "spec": "trusted_spec"
+    },
+    {
+      "function": "main.profile_excluded",
+      "body_fingerprint": "[(ret (binop Concrete.BinOp.add (var n) (int 1)))]",
+      "proof": "Concrete.Proof.profile_excluded_correct",
+      "spec": "profile_excluded_spec"
+    },
+    {
+      "function": "main.pure_add",
+      "body_fingerprint": "[(ret (binop Concrete.BinOp.add (var a) (var b)))]",
+      "proof": "Concrete.Proof.pure_add_correct",
+      "spec": "add_commutativity"
+    }
+  ]
+}

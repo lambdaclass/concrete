@@ -1,0 +1,25 @@
+// Adversarial: pure function A calls B calls C calls D.
+// All pure, no loops, no recursion, no allocation, no FFI.
+// This is a deep but acyclic call chain — not recursion.
+//
+// Expected: all pass predictable profile, all "enforced".
+
+fn d(x: Int) -> Int {
+    return x + 1;
+}
+
+fn c(x: Int) -> Int {
+    return d(x) + 2;
+}
+
+fn b(x: Int) -> Int {
+    return c(x) + 3;
+}
+
+fn a(x: Int) -> Int {
+    return b(x) + 4;
+}
+
+pub fn main() -> Int {
+    return a(10);
+}

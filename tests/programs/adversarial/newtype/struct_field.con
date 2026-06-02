@@ -1,0 +1,17 @@
+// Newtype as a field of a Copy struct (different from "newtype wrapping
+// a struct"). Tests that struct field offsets compute correctly when a
+// field's type is a newtype that resolves to a primitive.
+// Expected: 88
+
+newtype Port = u16;
+
+struct Copy Endpoint {
+    p: Port,
+    q: Port,
+    flags: u8,
+}
+
+fn main() -> Int {
+    let e: Endpoint = Endpoint { p: Port(80), q: Port(8), flags: 1 };
+    return (e.p.0 as Int) + (e.q.0 as Int);
+}

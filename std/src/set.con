@@ -1,6 +1,5 @@
 mod set {
     import std.map.{HashMap};
-    import std.option.{Option};
     import std.hash.{hash_i32, eq_i32};
 
     // HashSet<K> — thin wrapper around HashMap<K, u8>.
@@ -21,10 +20,10 @@ mod set {
         pub fn insert(&mut self, key: K) with(Alloc, Unsafe) -> bool {
             let result: Option<u8> = self.inner.insert(key, 0);
             match result {
-                Option#Some { value } => {
+                Option::Some { value } => {
                     return false;
                 },
-                Option#None => {
+                Option::None => {
                     return true;
                 }
             }
@@ -37,10 +36,10 @@ mod set {
         pub fn remove(&mut self, key: &K) with(Alloc, Unsafe) -> bool {
             let result: Option<u8> = self.inner.remove(key);
             match result {
-                Option#Some { value } => {
+                Option::Some { value } => {
                     return true;
                 },
-                Option#None => {
+                Option::None => {
                     return false;
                 }
             }

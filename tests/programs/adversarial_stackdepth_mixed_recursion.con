@@ -1,0 +1,29 @@
+// Adversarial: mix of recursive and non-recursive functions in same module.
+// Expected: recursive functions show "unbounded", non-recursive show real depths.
+
+fn pure_leaf() -> i32 { return 42; }
+
+fn pure_caller() -> i32 { return pure_leaf() + 1; }
+
+fn recurse(n: i32) -> i32 {
+    if n <= 0 { return 0; }
+    return recurse(n - 1) + 1;
+}
+
+fn mutual_a(n: i32) -> i32 {
+    if n <= 0 { return 0; }
+    return mutual_b(n - 1);
+}
+
+fn mutual_b(n: i32) -> i32 {
+    if n <= 0 { return 0; }
+    return mutual_a(n - 1);
+}
+
+fn main() -> i32 {
+    let a: i32 = pure_caller();
+    let b: i32 = recurse(5);
+    let c: i32 = mutual_a(3);
+    if a == 43 { if b == 5 { if c == 0 { return 0; } } }
+    return 1;
+}

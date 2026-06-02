@@ -1,0 +1,25 @@
+// Adversarial: while loop in otherwise pure code.
+// Expected: fails predictable — while loops are unbounded.
+
+fn pure_add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+fn count_up(limit: i32) -> i32 {
+    let mut i: i32 = 0;
+    let mut sum: i32 = 0;
+    while i < limit {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
+}
+
+fn main() -> i32 {
+    let a: i32 = pure_add(3, 4);
+    let b: i32 = count_up(5);
+    if a == 7 {
+        if b == 10 { return 0; }
+    }
+    return 1;
+}

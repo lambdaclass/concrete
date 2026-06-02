@@ -1,0 +1,8 @@
+[
+  {
+    "function": "main.pure_add",
+    "body_fingerprint": "WRONG_FINGERPRINT_old_body",
+    "proof": "PureAdd.add_comm",
+    "spec": "PureAdd.spec_add"
+  }
+]

@@ -1,0 +1,18 @@
+// Pressure: linear value consumed through a helper chain.
+// Tests that multi-hop consumption (main → process → consume) satisfies linearity.
+
+struct Token { id: Int }
+
+fn consume_token(t: Token) -> Int {
+    return t.id;
+}
+
+fn process(t: Token) -> Int {
+    let result: Int = consume_token(t);
+    return result * 2;
+}
+
+fn main() -> Int {
+    let t: Token = Token { id: 21 };
+    return process(t);
+}

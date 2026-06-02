@@ -1,0 +1,9 @@
+=== Capability Summary ===
+
+module constant_time_tag:
+      ct_compare : (pure)
+  pub main : Console
+    Console    <- calls print_string (intrinsic), print_char (intrinsic)
+
+Totals: 2 functions (1 pure), 0 externs
+

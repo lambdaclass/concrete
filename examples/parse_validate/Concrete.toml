@@ -1,0 +1,14 @@
+[package]
+name = "parse_validate"
+
+# Enforceable budgets per docs/POLICY_FILES.md. The CI gate
+# `make test-policy` verifies every field below holds.
+[policy]
+predictable            = true
+no_alloc               = true
+no_unsafe              = true
+no_trusted             = true
+no_externs             = true
+max_stack_bytes        = 400
+forbidden_capabilities = ["Alloc", "File", "Net", "Unsafe", "Console", "Clock"]
+allowed_capabilities   = []

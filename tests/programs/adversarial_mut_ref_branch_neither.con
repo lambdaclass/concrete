@@ -1,0 +1,15 @@
+// Neither branch consumes, both use deref only.
+// Branch agreement: neither consume. Valid program.
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    let cond: Bool = true;
+    borrow mut n as r in R {
+        if cond {
+            *r = *r + 5;
+        } else {
+            *r = *r - 5;
+        }
+    }
+    return n;
+}

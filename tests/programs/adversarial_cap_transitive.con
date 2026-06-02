@@ -1,0 +1,16 @@
+// Adversarial: transitive capability escalation.
+// Function A has NO capabilities but calls B which requires Console.
+// The compiler MUST reject this -- A cannot delegate a capability it does not hold.
+// Expected: compile error (A lacks Console cap).
+
+fn B() with(Console) -> Int {
+    return 1;
+}
+
+fn A() -> Int {
+    return B();
+}
+
+fn main() with(Std) -> Int {
+    return A();
+}

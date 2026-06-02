@@ -1,0 +1,24 @@
+// Adversarial: one function calling 8 independent leaf functions.
+// Expected: main has depth 1 (not 8), because depth is max not sum.
+
+fn leaf_a() -> i32 { return 1; }
+fn leaf_b() -> i32 { return 2; }
+fn leaf_c() -> i32 { return 3; }
+fn leaf_d() -> i32 { return 4; }
+fn leaf_e() -> i32 { return 5; }
+fn leaf_f() -> i32 { return 6; }
+fn leaf_g() -> i32 { return 7; }
+fn leaf_h() -> i32 { return 8; }
+
+fn main() -> i32 {
+    let a: i32 = leaf_a();
+    let b: i32 = leaf_b();
+    let c: i32 = leaf_c();
+    let d: i32 = leaf_d();
+    let e: i32 = leaf_e();
+    let f: i32 = leaf_f();
+    let g: i32 = leaf_g();
+    let h: i32 = leaf_h();
+    if a + b + c + d + e + f + g + h == 36 { return 0; }
+    return 1;
+}

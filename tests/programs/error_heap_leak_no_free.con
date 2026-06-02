@@ -1,0 +1,13 @@
+// ERROR TEST: Heap<T> leaked — never freed or consumed.
+
+struct Point {
+    x: Int,
+    y: Int,
+}
+
+fn main() with(Std) -> Int {
+    let p: Heap<Point> = alloc(Point { x: 1, y: 2 });
+    let x: Int = p->x;
+    // p is never freed — linear leak error
+    return x;
+}

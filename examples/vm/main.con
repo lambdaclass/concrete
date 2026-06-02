@@ -201,8 +201,7 @@ fn vm_run(program: &mut Vec<i32>) with(Console, Alloc) -> i32 {
             // PRINT
             let sp: i32 = vec_len::<i32>(&mut stack) as i32;
             let top: i32 = vec_get::<i32>(&mut stack, (sp - 1) as Int);
-            print_int(top as Int);
-            print_char(10);
+            println(top as Int);
             ip = ip + 1;
         } else if instr == 21 {
             // NEG
@@ -354,8 +353,8 @@ fn main() with(Std) -> Int {
 
     let mut m0: String = "arith test: ";
     m0.append_int(arith_result as Int);
-    m0.append(&" (expected 21)\n");
-    print_string(&m0);
+    m0.append(&" (expected 21)");
+    println(m0);
     m0.drop();
 
     // Benchmark: fib(35) via recursive VM calls
@@ -371,8 +370,8 @@ fn main() with(Std) -> Int {
     m1.append_int(fib_result as Int);
     m1.append(&", vm time: ");
     m1.append_int(elapsed_ms);
-    m1.append(&" ms\n");
-    print_string(&m1);
+    m1.append(&" ms");
+    println(m1);
     m1.drop();
 
     return 0;

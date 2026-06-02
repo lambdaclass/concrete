@@ -1,0 +1,298 @@
+// Pressure test: bounded-state PID-like controller.
+//
+// Fixed history of N=16 measurements, running average, error tracking,
+// output clamping. All arithmetic on i32 (integer approximation).
+//
+// Models a feedback controller:
+//   - Setpoint: target value
+//   - Measurement history: ring buffer of last 16 readings
+//   - Running average: sum of history / count
+//   - Error: setpoint - average
+//   - Integral: bounded accumulator of errors (clamped to [-1000, 1000])
+//   - Derivative: current_error - previous_error
+//   - Output: Kp*error + Ki*integral + Kd*derivative, clamped to [-500, 500]
+//
+// Reveals: sliding window patterns, bounded accumulator, multi-field
+//          struct mutation, clamping arithmetic, ring buffer reuse.
+//
+// All data on the stack. All loops bounded. No recursion. No allocation.
+
+// ---- Measurement ring buffer (16 slots) ----
+
+struct Copy MeasRing {
+    data: [i32; 16],
+    head: i32,
+    count: i32,
+    sum: i32,
+}
+
+fn meas_new() -> MeasRing {
+    return MeasRing { data: [0; 16], head: 0, count: 0, sum: 0 };
+}
+
+fn meas_push(r: MeasRing, val: i32) -> MeasRing {
+    let cap: i32 = 16;
+    let mut d: [i32; 16] = r.data;
+    let mut new_sum: i32 = r.sum;
+
+    if r.count == cap {
+        // Subtract the oldest value being overwritten
+        new_sum = new_sum - d[r.head];
+    }
+
+    d[r.head] = val;
+    new_sum = new_sum + val;
+
+    let new_head: i32 = (r.head + 1) % cap;
+    let new_count: i32 = if r.count < cap { r.count + 1 } else { cap };
+
+    return MeasRing { data: d, head: new_head, count: new_count, sum: new_sum };
+}
+
+fn meas_average(r: MeasRing) -> i32 {
+    if r.count == 0 { return 0; }
+    return r.sum / r.count;
+}
+
+fn meas_count(r: MeasRing) -> i32 {
+    return r.count;
+}
+
+// ---- Clamping helpers ----
+
+fn clamp(val: i32, lo: i32, hi: i32) -> i32 {
+    if val < lo { return lo; }
+    if val > hi { return hi; }
+    return val;
+}
+
+fn abs_i32(val: i32) -> i32 {
+    if val < 0 { return 0 - val; }
+    return val;
+}
+
+// ---- Controller state ----
+
+struct Copy Controller {
+    setpoint: i32,
+    kp: i32,          // proportional gain (scaled x10)
+    ki: i32,          // integral gain (scaled x10)
+    kd: i32,          // derivative gain (scaled x10)
+    integral: i32,    // bounded accumulator
+    prev_error: i32,  // for derivative
+    output: i32,      // last computed output
+    measurements: MeasRing,
+    step_count: i32,
+}
+
+fn ctrl_new(setpoint: i32, kp: i32, ki: i32, kd: i32) -> Controller {
+    return Controller {
+        setpoint: setpoint,
+        kp: kp,
+        ki: ki,
+        kd: kd,
+        integral: 0,
+        prev_error: 0,
+        output: 0,
+        measurements: meas_new(),
+        step_count: 0,
+    };
+}
+
+// Step the controller with a new measurement.
+// Returns updated controller with new output computed.
+fn ctrl_step(c: Controller, measurement: i32) -> Controller {
+    // Push measurement into ring buffer
+    let new_meas: MeasRing = meas_push(c.measurements, measurement);
+
+    // Compute error (setpoint - current average)
+    let avg: i32 = meas_average(new_meas);
+    let error: i32 = c.setpoint - avg;
+
+    // Update integral (bounded to [-1000, 1000])
+    let new_integral: i32 = clamp(c.integral + error, -1000, 1000);
+
+    // Compute derivative
+    let derivative: i32 = error - c.prev_error;
+
+    // Compute output: (Kp*error + Ki*integral + Kd*derivative) / 10
+    // Gains are scaled x10 to avoid needing floats.
+    let raw_output: i32 = (c.kp * error + c.ki * new_integral + c.kd * derivative) / 10;
+
+    // Clamp output to [-500, 500]
+    let clamped_output: i32 = clamp(raw_output, -500, 500);
+
+    return Controller {
+        setpoint: c.setpoint,
+        kp: c.kp,
+        ki: c.ki,
+        kd: c.kd,
+        integral: new_integral,
+        prev_error: error,
+        output: clamped_output,
+        measurements: new_meas,
+        step_count: c.step_count + 1,
+    };
+}
+
+fn ctrl_output(c: Controller) -> i32 {
+    return c.output;
+}
+
+fn ctrl_error(c: Controller) -> i32 {
+    return c.setpoint - meas_average(c.measurements);
+}
+
+fn ctrl_integral(c: Controller) -> i32 {
+    return c.integral;
+}
+
+fn ctrl_step_count(c: Controller) -> i32 {
+    return c.step_count;
+}
+
+// ---- Tests ----
+
+pub fn main() -> Int {
+    // === Test 1: basic measurement ring buffer ===
+    let mut mr: MeasRing = meas_new();
+    if meas_count(mr) != 0 { return 1; }
+    if meas_average(mr) != 0 { return 2; }
+
+    mr = meas_push(mr, 100);
+    if meas_count(mr) != 1 { return 3; }
+    if meas_average(mr) != 100 { return 4; }
+
+    mr = meas_push(mr, 200);
+    if meas_count(mr) != 2 { return 5; }
+    if meas_average(mr) != 150 { return 6; }  // (100+200)/2
+
+    mr = meas_push(mr, 300);
+    if meas_average(mr) != 200 { return 7; }  // (100+200+300)/3
+
+    // === Test 2: ring buffer wrap-around with running sum ===
+    mr = meas_new();
+    // Fill all 16 slots with value 10
+    for (let mut i: i32 = 0; i < 16; i = i + 1) {
+        mr = meas_push(mr, 10);
+    }
+    if meas_count(mr) != 16 { return 8; }
+    if meas_average(mr) != 10 { return 9; }
+    if mr.sum != 160 { return 10; }
+
+    // Push a new value (20) which overwrites oldest (10)
+    mr = meas_push(mr, 20);
+    // sum should be 160 - 10 + 20 = 170
+    if mr.sum != 170 { return 11; }
+    if meas_count(mr) != 16 { return 12; }
+    // average = 170/16 = 10 (integer division)
+    if meas_average(mr) != 10 { return 13; }
+
+    // Push 15 more 20s to replace all 10s
+    for (let mut i: i32 = 0; i < 15; i = i + 1) {
+        mr = meas_push(mr, 20);
+    }
+    if mr.sum != 320 { return 14; }  // 16 * 20
+    if meas_average(mr) != 20 { return 15; }
+
+    // === Test 3: clamp helper ===
+    if clamp(50, 0, 100) != 50 { return 16; }
+    if clamp(-10, 0, 100) != 0 { return 17; }
+    if clamp(200, 0, 100) != 100 { return 18; }
+    if clamp(0, -50, 50) != 0 { return 19; }
+    if clamp(-100, -50, 50) != -50 { return 20; }
+
+    // === Test 4: controller initialization ===
+    let mut ctrl: Controller = ctrl_new(100, 10, 5, 2);
+    if ctrl.setpoint != 100 { return 21; }
+    if ctrl_output(ctrl) != 0 { return 22; }
+    if ctrl_step_count(ctrl) != 0 { return 23; }
+
+    // === Test 5: first step — measurement below setpoint ===
+    // setpoint=100, measurement=50, error = 100-50 = 50
+    // integral = clamp(0+50, -1000, 1000) = 50
+    // derivative = 50 - 0 = 50
+    // raw = (10*50 + 5*50 + 2*50) / 10 = (500+250+100)/10 = 85
+    ctrl = ctrl_step(ctrl, 50);
+    if ctrl_step_count(ctrl) != 1 { return 24; }
+    if ctrl_output(ctrl) != 85 { return 25; }
+    if ctrl_integral(ctrl) != 50 { return 26; }
+
+    // === Test 6: second step — measurement closer to setpoint ===
+    // measurement=80, avg=(50+80)/2=65, error=100-65=35
+    // integral = clamp(50+35, -1000, 1000) = 85
+    // derivative = 35 - 50 = -15
+    // raw = (10*35 + 5*85 + 2*(-15)) / 10 = (350+425-30)/10 = 74
+    ctrl = ctrl_step(ctrl, 80);
+    if ctrl_output(ctrl) != 74 { return 27; }
+
+    // === Test 7: step until error is small ===
+    // Feed values approaching setpoint
+    let readings: [i32; 8] = [90, 95, 98, 100, 100, 100, 100, 100];
+    for (let mut i: i32 = 0; i < 8; i = i + 1) {
+        ctrl = ctrl_step(ctrl, readings[i]);
+    }
+    // After many steps near setpoint, error should be small
+    let final_err: i32 = abs_i32(ctrl_error(ctrl));
+    if final_err > 10 { return 28; }
+
+    // === Test 8: output clamping — large error saturates output ===
+    let mut ctrl2: Controller = ctrl_new(1000, 50, 20, 10);
+    // measurement=0, error=1000
+    // raw = (50*1000 + 20*1000 + 10*1000) / 10 = 80000/10 = 8000
+    // clamped to 500
+    ctrl2 = ctrl_step(ctrl2, 0);
+    if ctrl_output(ctrl2) != 500 { return 29; }
+
+    // === Test 9: negative error — measurement above setpoint ===
+    let mut ctrl3: Controller = ctrl_new(50, 10, 5, 2);
+    ctrl3 = ctrl_step(ctrl3, 200);
+    // error = 50 - 200 = -150
+    // output should be negative (clamped)
+    if ctrl_output(ctrl3) >= 0 { return 30; }
+
+    // === Test 10: integral windup clamping ===
+    let mut ctrl4: Controller = ctrl_new(500, 10, 10, 0);
+    // Feed many zeros to build up integral
+    for (let mut i: i32 = 0; i < 32; i = i + 1) {
+        ctrl4 = ctrl_step(ctrl4, 0);
+    }
+    // Integral should be clamped at 1000, not 500*32=16000
+    if ctrl4.integral != 1000 { return 31; }
+
+    // === Test 11: integral can go negative ===
+    let mut ctrl5: Controller = ctrl_new(0, 10, 10, 0);
+    // Feed high values to drive error negative
+    for (let mut i: i32 = 0; i < 32; i = i + 1) {
+        ctrl5 = ctrl_step(ctrl5, 500);
+    }
+    // Integral should be clamped at -1000
+    if ctrl5.integral != -1000 { return 32; }
+
+    // === Test 12: derivative responds to change ===
+    let mut ctrl6: Controller = ctrl_new(100, 0, 0, 100);  // only Kd active
+    ctrl6 = ctrl_step(ctrl6, 50);   // error=50, deriv=50-0=50
+    let out1: i32 = ctrl_output(ctrl6);
+    // raw = (0 + 0 + 100*50)/10 = 500
+    if out1 != 500 { return 33; }
+
+    ctrl6 = ctrl_step(ctrl6, 50);   // avg=(50+50)/2=50, error=50, deriv=50-50=0
+    let out2: i32 = ctrl_output(ctrl6);
+    // raw = (0 + 0 + 100*0)/10 = 0
+    if out2 != 0 { return 34; }
+
+    // === Test 13: many steps stress test ===
+    let mut ctrl7: Controller = ctrl_new(100, 10, 5, 2);
+    for (let mut i: i32 = 0; i < 64; i = i + 1) {
+        // Oscillating input
+        let val: i32 = 80 + (i % 8) * 5;
+        ctrl7 = ctrl_step(ctrl7, val);
+    }
+    // Just verify it doesn't crash and step count is correct
+    if ctrl_step_count(ctrl7) != 64 { return 35; }
+    // Measurement ring should be full
+    if meas_count(ctrl7.measurements) != 16 { return 36; }
+
+    // All tests passed
+    return 0;
+}

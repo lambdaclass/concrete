@@ -1,0 +1,31 @@
+// Adversarial lowering: 10 functions calling each other in a chain,
+// each transforming a struct. Stresses struct passing through deep call chains.
+// Expected: 42
+
+struct Copy Val { x: Int, y: Int }
+
+fn t1(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 2 }; }
+fn t2(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 2 }; }
+fn t3(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 2 }; }
+fn t4(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 2 }; }
+fn t5(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 2 }; }
+fn t6(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 2 }; }
+fn t7(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 2 }; }
+fn t8(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 2 }; }
+fn t9(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 2 }; }
+fn t10(v: Val) -> Val { return Val { x: v.x + 1, y: v.y + 2 }; }
+
+fn chain(v: Val) -> Val {
+    return t10(t9(t8(t7(t6(t5(t4(t3(t2(t1(v))))))))));
+}
+
+pub fn main() -> Int {
+    let v: Val = chain(Val { x: 1, y: 1 });
+    // x = 1 + 10 = 11, y = 1 + 20 = 21
+    // 11 + 21 = 32... need 42
+    let v2: Val = chain(Val { x: 0, y: 0 });
+    // x = 10, y = 20, total = 30...
+    // Use: chain(Val{x:1,y:1}).x + chain(Val{x:1,y:1}).y = 11+21 = 32
+    // + 10 = 42
+    return v.x + v.y + v2.x;
+}

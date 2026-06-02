@@ -1,20 +1,11 @@
 mod result {
-    pub enum Result<T, E> {
-        Ok {
-            value: T,
-        },
-        Err {
-            error: E
-        },
-    }
-
     impl<T, E> Result<T, E> {
         pub fn is_ok(&self) -> bool {
             match self {
-                Result#Ok { value } => {
+                Result::Ok { value } => {
                     return true;
                 },
-                Result#Err => {
+                Result::Err => {
                     return false;
                 }
             }
@@ -23,13 +14,34 @@ mod result {
         pub fn is_err(&self) -> bool {
             return !(self.is_ok());
         }
+
+        pub fn unwrap_or(self, default: T) -> T {
+            match self {
+                Result::Ok { value } => { return value; },
+                Result::Err { error } => { return default; },
+            }
+        }
+
+        pub fn ok(self) -> Option<T> {
+            match self {
+                Result::Ok { value } => { return Option::<T>::Some { value: value }; },
+                Result::Err { error } => { return Option::<T>::None; },
+            }
+        }
+
+        pub fn err(self) -> Option<E> {
+            match self {
+                Result::Ok { value } => { return Option::<E>::None; },
+                Result::Err { error } => { return Option::<E>::Some { value: error }; },
+            }
+        }
     }
 
     import std.test.{assert_true, assert_eq};
 
     #[test]
     fn test_result_ok() -> i32 {
-        let r: Result<i32, i32> = Result::<i32, i32>#Ok { value: 42 };
+        let r: Result<i32, i32> = Result::<i32, i32>::Ok { value: 42 };
         if !assert_true(r.is_ok(), "should be ok") { return 1; }
         if !assert_true(!(r.is_err()), "should not be err") { return 1; }
         return 0;
@@ -37,7 +49,7 @@ mod result {
 
     #[test]
     fn test_result_err() -> i32 {
-        let r: Result<i32, i32> = Result::<i32, i32>#Err { error: 99 };
+        let r: Result<i32, i32> = Result::<i32, i32>::Err { error: 99 };
         if !assert_true(r.is_err(), "should be err") { return 1; }
         if !assert_true(!(r.is_ok()), "should not be ok") { return 1; }
         return 0;
@@ -45,12 +57,12 @@ mod result {
 
     #[test]
     fn test_result_match() -> i32 {
-        let r: Result<i32, i32> = Result::<i32, i32>#Ok { value: 5 };
+        let r: Result<i32, i32> = Result::<i32, i32>::Ok { value: 5 };
         match r {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 if !assert_eq::<i32>(value, 5, "value should be 5") { return 1; }
             },
-            Result#Err { error } => { return 1; }
+            Result::Err { error } => { return 1; }
         }
         return 0;
     }

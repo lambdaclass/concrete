@@ -1,0 +1,445 @@
+// hmac_sha256 — HMAC-SHA256 (RFC 2104 over SHA-256, FIPS 180-4)
+//
+// FIFTH flagship candidate; first cryptographic-PRIMITIVE flagship.
+// See AUDIT.md for the full contract and the four-layer threat model.
+//
+// ============================================================
+// HMAC-SHA256 implemented; runtime-verified vs FIPS 180-4 + RFC 4231.
+// ============================================================
+// The forcing-surface commits (AUDIT.md § 5; register R-22..R-26)
+// put u32 `bitand`/`shr`/`shl`/`bitor` and wrapping `add` into
+// ProvableV1, and the interpreter masks u32 the same way
+// (maskWidth) — so u32 arithmetic agrees across the proof model
+// (BitVec), the interpreter, and the compiled binary.
+//
+// On that base the WHOLE primitive is now real and verified:
+//   * SHA-256 compression (block_to_words -> schedule -> 64 rounds
+//     -> feed-forward) and multi-block hashing with FIPS padding;
+//   * HMAC key normalization, ipad/opad, inner+outer hash.
+// `main` checks SHA-256("abc") against FIPS 180-4 and HMAC-SHA256
+// against RFC 4231 Test Case 1 (multi-block inner) and Test Case 2
+// (multi-byte key, multi-block message) — green in BOTH the
+// compiled binary and `--interp`.
+//
+// Conformance reads `Status: FULL` — every proof-eligible
+// function fits ProvableV1; only `main` is excluded by design
+// (it has the Console capability).  The gate walked
+// partial -> full (trivial stubs) -> partial (real array-store
+// loops) -> full again, tracking each proof obligation precisely
+// the whole way.  The last function, sha256_hash, was unblocked
+// by two changes: u32 `div` joined ProvableV1 (register R-28, for
+// the padded-block count), and its inner block-copy loop was
+// replaced by sha256_compress_at reading straight out of the work
+// buffer, so every loop body is flat (no nested loops).
+//
+// The FIRST kernel theorem is attached: `sha256_init_correct`
+// (AUDIT.md § 6 bar #1) is kernel-verified — `concrete <file>
+// --report proof-status` shows `sha256_init` as `proved [point]`,
+// and --report check-proofs reports "1 verified, 0 failed".  The
+// remaining eligible functions show `missing` (extractable, no
+// theorem yet); their functional correctness is established at
+// RUNTIME (RFC/FIPS vectors).  Next: the bar #2 composition
+// theorems (block_to_words / compress / an RFC-vector point
+// proof) — now unblocked for every function in the pipeline.
+//
+// This is NOT a vetted crypto library.  Do not deploy.  See § 4
+// of AUDIT.md and assumptions.toml for the trust boundaries.
+
+mod hmac_sha256 {
+
+    // ============================================================
+    // Constant tables (pure data — `in` ProvableV1)
+    // ============================================================
+
+    // SHA-256 initial hash value H(0): the first 32 bits of the
+    // fractional parts of the square roots of the first 8 primes.
+    // FIPS 180-4 § 5.3.3.
+    fn sha256_init() -> [u32; 8] {
+        return [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+                0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    }
+
+    // SHA-256 round constants K[0..63]: the first 32 bits of the
+    // fractional parts of the cube roots of the first 64 primes.
+    // FIPS 180-4 § 4.2.2.
+    fn sha256_k() -> [u32; 64] {
+        return [
+            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+            0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+            0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+            0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+            0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+            0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+            0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+            0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+            0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+            0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+            0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+            0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+    }
+
+    // ============================================================
+    // Bitwise helpers (proof-eligible, EXTRACTION-BLOCKED today)
+    //
+    // These are the forcing surface (AUDIT.md § 5).  Each is a
+    // single branch-free expression.  `~x` is expressed as
+    // `x ^ 0xFFFFFFFF` and rotation as `(x >> n) | (x << (32-n))`
+    // so the PBinOp surface stays append-only (AUDIT.md § 5
+    // decisions): no dedicated `bitnot` or `rotr` constructor.
+    // ============================================================
+
+    // Ch(x, y, z) = (x AND y) XOR ((NOT x) AND z).  FIPS 180-4 § 4.1.2.
+    fn ch(x: u32, y: u32, z: u32) -> u32 {
+        return (x & y) ^ ((x ^ 0xFFFFFFFF) & z);
+    }
+
+    // Maj(x, y, z) = (x AND y) XOR (x AND z) XOR (y AND z).
+    fn maj(x: u32, y: u32, z: u32) -> u32 {
+        return (x & y) ^ (x & z) ^ (y & z);
+    }
+
+    // ROTR^n(x): circular right rotation by n (0 < n < 32).
+    fn rotr(x: u32, n: u32) -> u32 {
+        return (x >> n) | (x << (32 - n));
+    }
+
+    // Sigma0(x) = ROTR^2(x) XOR ROTR^13(x) XOR ROTR^22(x).
+    fn big_sigma0(x: u32) -> u32 {
+        return rotr(x, 2) ^ rotr(x, 13) ^ rotr(x, 22);
+    }
+
+    // Sigma1(x) = ROTR^6(x) XOR ROTR^11(x) XOR ROTR^25(x).
+    fn big_sigma1(x: u32) -> u32 {
+        return rotr(x, 6) ^ rotr(x, 11) ^ rotr(x, 25);
+    }
+
+    // sigma0(x) = ROTR^7(x) XOR ROTR^18(x) XOR SHR^3(x).
+    fn small_sigma0(x: u32) -> u32 {
+        return rotr(x, 7) ^ rotr(x, 18) ^ (x >> 3);
+    }
+
+    // sigma1(x) = ROTR^17(x) XOR ROTR^19(x) XOR SHR^10(x).
+    fn small_sigma1(x: u32) -> u32 {
+        return rotr(x, 17) ^ rotr(x, 19) ^ (x >> 10);
+    }
+
+    // ============================================================
+    // Constant-time tag comparison (inlined, NOT cross-imported)
+    //
+    // AUDIT.md § 2 decision: inline a ct_compare_32 over [u8; 32]
+    // rather than depend on constant_time_tag's [u8; 16] version.
+    // Same OR-accumulate discipline: no early exit, fixed bound,
+    // no content-dependent branch.  This sits `in` ProvableV1
+    // already — u8 bitor/bitxor are supported (AUDIT.md § 5).
+    // What is still pending is the multi-iteration while_step
+    // CORRECTNESS PROOF, not extraction.
+    // ============================================================
+
+    // Returns 1 iff a and b are byte-equal at all 32 positions.
+    fn ct_compare_32(a: [u8; 32], b: [u8; 32]) -> i32 {
+        let mut diff: u8 = 0;
+        for (let mut i: i32 = 0; i < 32; i = i + 1) {
+            diff = diff | (a[i] ^ b[i]);
+        }
+        if diff == 0 { return 1; }
+        return 0;
+    }
+
+    // ============================================================
+    // SHA-256 / HMAC pipeline — STUBS
+    //
+    // Signatures are final (match AUDIT.md § 2).  Bodies return
+    // placeholder zeros until the forcing surface (§ 5) lands and
+    // the per-construct commits (§ 9) fill them in.  KEY_MAX = 128,
+    // MSG_MAX = 256 (AUDIT.md § 10 decision 1), written as literal
+    // array sizes here since the pilot does not introduce consts.
+    // ============================================================
+
+    // Big-endian pack of a 64-byte block into 16 u32 words.
+    fn block_to_words(block: [u8; 64]) -> [u32; 16] {
+        let mut w: [u32; 16] = [0; 16];
+        for (let mut i: i32 = 0; i < 16; i = i + 1) {
+            w[i] = ((block[i * 4] as u32) << 24)
+                 | ((block[i * 4 + 1] as u32) << 16)
+                 | ((block[i * 4 + 2] as u32) << 8)
+                 | (block[i * 4 + 3] as u32);
+        }
+        return w;
+    }
+
+    // Message-schedule expansion: W[0..15] = block words, then
+    // W[i] = sigma1(W[i-2]) + W[i-7] + sigma0(W[i-15]) + W[i-16]
+    // for i in 16..63 (all additions mod 2^32).
+    fn sha256_schedule(w16: [u32; 16]) -> [u32; 64] {
+        let mut w: [u32; 64] = [0; 64];
+        for (let mut i: i32 = 0; i < 16; i = i + 1) {
+            w[i] = w16[i];
+        }
+        for (let mut i: i32 = 16; i < 64; i = i + 1) {
+            w[i] = small_sigma1(w[i - 2]) + w[i - 7]
+                 + small_sigma0(w[i - 15]) + w[i - 16];
+        }
+        return w;
+    }
+
+    // One SHA-256 compression round on the working state
+    // [a, b, c, d, e, f, g, h] = state[0..7] with round constant k
+    // and schedule word w.  Returns the next working state.
+    //   T1 = h + Sigma1(e) + Ch(e,f,g) + k + w
+    //   T2 = Sigma0(a) + Maj(a,b,c)
+    //   next = [T1+T2, a, b, c, d+T1, e, f, g]
+    fn sha256_round(state: [u32; 8], k: u32, w: u32) -> [u32; 8] {
+        let t1: u32 = state[7] + big_sigma1(state[4])
+            + ch(state[4], state[5], state[6]) + k + w;
+        let t2: u32 = big_sigma0(state[0]) + maj(state[0], state[1], state[2]);
+        return [t1 + t2, state[0], state[1], state[2],
+                state[3] + t1, state[4], state[5], state[6]];
+    }
+
+    // SHA-256 block compression: 64 rounds over the expanded
+    // schedule, then add the working state into the input state
+    // (Davies-Meyer feed-forward), all mod 2^32.
+    fn sha256_compress(state: [u32; 8], block: [u8; 64]) -> [u32; 8] {
+        let w16: [u32; 16] = block_to_words(block);
+        let w: [u32; 64] = sha256_schedule(w16);
+        let k: [u32; 64] = sha256_k();
+        let mut s: [u32; 8] = state;
+        for (let mut i: i32 = 0; i < 64; i = i + 1) {
+            s = sha256_round(s, k[i], w[i]);
+        }
+        return [state[0] + s[0], state[1] + s[1], state[2] + s[2],
+                state[3] + s[3], state[4] + s[4], state[5] + s[5],
+                state[6] + s[6], state[7] + s[7]];
+    }
+
+    // Big-endian pack of the 64-byte block at `off` in a 384-byte
+    // buffer into 16 u32 words.  Offset variant of block_to_words:
+    // lets sha256_hash compress straight out of its work buffer
+    // without an inner copy loop, keeping every loop body flat (so
+    // extraction stays in ProvableV1 — no nested loops).
+    fn block_to_words_at(buf: [u8; 384], off: i32) -> [u32; 16] {
+        let mut w: [u32; 16] = [0; 16];
+        for (let mut k: i32 = 0; k < 16; k = k + 1) {
+            w[k] = ((buf[off + k * 4] as u32) << 24)
+                 | ((buf[off + k * 4 + 1] as u32) << 16)
+                 | ((buf[off + k * 4 + 2] as u32) << 8)
+                 | (buf[off + k * 4 + 3] as u32);
+        }
+        return w;
+    }
+
+    // Compress the 64-byte block at `off` in `buf` into `state`.
+    // Offset variant of sha256_compress (same Davies-Meyer body).
+    fn sha256_compress_at(state: [u32; 8], buf: [u8; 384], off: i32) -> [u32; 8] {
+        let w: [u32; 64] = sha256_schedule(block_to_words_at(buf, off));
+        let k: [u32; 64] = sha256_k();
+        let mut s: [u32; 8] = state;
+        for (let mut i: i32 = 0; i < 64; i = i + 1) {
+            s = sha256_round(s, k[i], w[i]);
+        }
+        return [state[0] + s[0], state[1] + s[1], state[2] + s[2],
+                state[3] + s[3], state[4] + s[4], state[5] + s[5],
+                state[6] + s[6], state[7] + s[7]];
+    }
+
+    // Big-endian unpack of the 8-word state into 32 bytes.
+    fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
+        let mut out: [u8; 32] = [0; 32];
+        for (let mut i: i32 = 0; i < 8; i = i + 1) {
+            out[i * 4]     = ((state[i] >> 24) & 255) as u8;
+            out[i * 4 + 1] = ((state[i] >> 16) & 255) as u8;
+            out[i * 4 + 2] = ((state[i] >> 8) & 255) as u8;
+            out[i * 4 + 3] = (state[i] & 255) as u8;
+        }
+        return out;
+    }
+
+    // Full SHA-256 of `len` bytes held in a zero-padded work buffer
+    // (the caller guarantees data[len..] = 0).  Applies FIPS 180-4
+    // padding (0x80 marker, zero fill, 64-bit big-endian bit length)
+    // in a local copy, then compresses each 64-byte block straight
+    // out of the buffer via sha256_compress_at, chaining the state.
+    // HASH_CAP = 384 = ceil((64 + 256 + 9) / 64) * 64 — large enough
+    // for the longest HMAC inner input (one block of key material +
+    // MSG_MAX message + padding).
+    //
+    // Every loop body here is FLAT (the block loop is a single
+    // `state = sha256_compress_at(...)` scalar assign — no inner
+    // copy loop), and the block count uses `/` (register R-28), so
+    // the whole function is proof-extractable (ProvableV1).
+    fn sha256_hash(data: [u8; 384], len: i32) -> [u8; 32] {
+        let mut buf: [u8; 384] = data;
+        buf[len] = 128;                          // 0x80 marker
+        let nblocks: i32 = (len + 9 + 63) / 64;  // blocks after padding
+        let plen: i32 = nblocks * 64;
+        // Length in bits as u32 so the byte-extraction below uses
+        // u32 bitand/shr (which ProvableV1 supports) rather than
+        // i32 bitwise ops (which it does not).
+        let bits: u32 = (len * 8) as u32;        // message length in bits
+        buf[plen - 1] = (bits & 255) as u8;
+        buf[plen - 2] = ((bits >> 8) & 255) as u8;
+        buf[plen - 3] = ((bits >> 16) & 255) as u8;
+        buf[plen - 4] = ((bits >> 24) & 255) as u8;
+        // bytes plen-5..plen-8 stay 0 (bit length < 2^32 here)
+        let mut state: [u32; 8] = sha256_init();
+        for (let mut blk: i32 = 0; blk < nblocks; blk = blk + 1) {
+            state = sha256_compress_at(state, buf, blk * 64);
+        }
+        return state_to_bytes(state);
+    }
+
+    // HMAC-SHA256(key, message) -> 32-byte tag (RFC 2104).
+    //   K' = key padded to 64 bytes (hashed first if longer than the
+    //        block), then HMAC = H((K' ^ opad) || H((K' ^ ipad) || m)).
+    // KEY_MAX = 128, MSG_MAX = 256.
+    fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
+        // 1. Normalize the key to a 64-byte block K'.
+        let mut kp: [u8; 64] = [0; 64];
+        if k_len > 64 {
+            let mut kbuf: [u8; 384] = [0; 384];
+            for (let mut i: i32 = 0; i < k_len; i = i + 1) { kbuf[i] = k[i]; }
+            let kh: [u8; 32] = sha256_hash(kbuf, k_len);
+            for (let mut i: i32 = 0; i < 32; i = i + 1) { kp[i] = kh[i]; }
+        } else {
+            for (let mut i: i32 = 0; i < k_len; i = i + 1) { kp[i] = k[i]; }
+        }
+        // 2. Build the ipad/opad blocks (K' XOR 0x36 / 0x5c).
+        let mut inner: [u8; 384] = [0; 384];
+        let mut outer: [u8; 384] = [0; 384];
+        for (let mut i: i32 = 0; i < 64; i = i + 1) {
+            inner[i] = kp[i] ^ 54;   // ipad 0x36
+            outer[i] = kp[i] ^ 92;   // opad 0x5c
+        }
+        // 3. inner hash = H((K' ^ ipad) || m).
+        for (let mut i: i32 = 0; i < m_len; i = i + 1) { inner[64 + i] = m[i]; }
+        let ih: [u8; 32] = sha256_hash(inner, 64 + m_len);
+        // 4. tag = H((K' ^ opad) || inner).
+        for (let mut i: i32 = 0; i < 32; i = i + 1) { outer[64 + i] = ih[i]; }
+        return sha256_hash(outer, 96);
+    }
+
+    // Verify a tag against the expected value using the constant-time
+    // compare (no early exit on mismatch).
+    fn verify_hmac(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32,
+                   expected: [u8; 32]) -> i32 {
+        let tag: [u8; 32] = hmac_sha256(k, k_len, m, m_len);
+        return ct_compare_32(tag, expected);
+    }
+
+    // The canonical single-block SHA-256 test block for the
+    // message "abc" (FIPS 180-4 Appendix B.1): the 3 message bytes,
+    // the 0x80 padding marker, zero padding, and the 64-bit big-
+    // endian bit-length (24 = 0x18) in the final byte.
+    fn abc_block() -> [u8; 64] {
+        let mut b: [u8; 64] = [0; 64];
+        b[0] = 97;    // 'a'
+        b[1] = 98;    // 'b'
+        b[2] = 99;    // 'c'
+        b[3] = 128;   // 0x80 padding marker
+        b[63] = 24;   // message length in bits = 24
+        return b;
+    }
+
+    // RFC 4231 expected HMAC-SHA256 tags.
+    // Test Case 1: key = 0x0b x 20, data = "Hi There".
+    fn rfc4231_tc1_tag() -> [u8; 32] {
+        return [176, 52, 76, 97, 216, 219, 56, 83, 92, 168, 175, 206,
+                175, 11, 241, 43, 136, 29, 194, 0, 201, 131, 61, 167,
+                38, 233, 55, 108, 46, 50, 207, 247];
+    }
+    // Test Case 2: key = "Jefe", data = "what do ya want for nothing?".
+    fn rfc4231_tc2_tag() -> [u8; 32] {
+        return [91, 220, 193, 70, 191, 96, 117, 78, 106, 4, 36, 38,
+                8, 149, 117, 199, 90, 0, 63, 8, 157, 39, 57, 131,
+                157, 236, 88, 185, 100, 236, 56, 67];
+    }
+
+    // ============================================================
+    // Entry point
+    // ============================================================
+    //
+    // Exercises the constant tables, the Boolean round functions, a
+    // byte-exact single-block SHA-256("abc") against FIPS 180-4, and
+    // — now that HMAC is implemented — the RFC 4231 HMAC-SHA256 test
+    // vectors (Test Case 1 single-block-key/short-message and Test
+    // Case 2 multi-byte-key/multi-block-message) via verify_hmac's
+    // constant-time compare.
+
+    pub fn main() with(Console) -> i32 {
+        let mut failures: i32 = 0;
+
+        // 1. Initial hash value H(0)[0] is the canonical constant.
+        let h: [u32; 8] = sha256_init();
+        if h[0] != 0x6a09e667 { failures = failures + 1; }
+
+        // 2. Round constant K[0] is the canonical constant.
+        let k: [u32; 64] = sha256_k();
+        if k[0] != 0x428a2f98 { failures = failures + 1; }
+
+        // 3. Ch(0xFFFFFFFF, y, z) = y.
+        if ch(0xFFFFFFFF, 0x12345678, 0x9abcdef0) != 0x12345678 {
+            failures = failures + 1;
+        }
+
+        // 4. Maj(x, x, z) = x.
+        if maj(0x0f0f0f0f, 0x0f0f0f0f, 0x00000000) != 0x0f0f0f0f {
+            failures = failures + 1;
+        }
+
+        // 5. SHA-256("abc") = ba7816bf 8f01cfea 414140de 5dae2223
+        //                     b00361a3 96177a9c b410ff61 f20015ad
+        //    (FIPS 180-4 Appendix B.1).  Full pipeline: block_to_words
+        //    -> schedule -> 64 compression rounds -> feed-forward.
+        let d: [u32; 8] = sha256_compress(sha256_init(), abc_block());
+        if d[0] != 0xba7816bf { failures = failures + 1; }
+        if d[1] != 0x8f01cfea { failures = failures + 1; }
+        if d[2] != 0x414140de { failures = failures + 1; }
+        if d[3] != 0x5dae2223 { failures = failures + 1; }
+        if d[4] != 0xb00361a3 { failures = failures + 1; }
+        if d[5] != 0x96177a9c { failures = failures + 1; }
+        if d[6] != 0xb410ff61 { failures = failures + 1; }
+        if d[7] != 0xf20015ad { failures = failures + 1; }
+
+        // 6. state_to_bytes round-trips the first digest byte (0xba).
+        let bytes: [u8; 32] = state_to_bytes(d);
+        if bytes[0] != 186 { failures = failures + 1; }
+
+        // 7. RFC 4231 Test Case 1: HMAC-SHA256(0x0b x 20, "Hi There").
+        //    Inner input is 72 bytes (one key block + 8 message bytes),
+        //    so this exercises MULTI-BLOCK SHA-256 and key zero-padding.
+        let mut k1: [u8; 128] = [0; 128];
+        for (let mut i: i32 = 0; i < 20; i = i + 1) { k1[i] = 11; }   // 0x0b
+        let mut m1: [u8; 256] = [0; 256];
+        m1[0] = 72; m1[1] = 105; m1[2] = 32; m1[3] = 84;             // "Hi T"
+        m1[4] = 104; m1[5] = 101; m1[6] = 114; m1[7] = 101;          // "here"
+        if verify_hmac(k1, 20, m1, 8, rfc4231_tc1_tag()) != 1 {
+            failures = failures + 1;
+        }
+
+        // 8. RFC 4231 Test Case 2: HMAC-SHA256("Jefe",
+        //    "what do ya want for nothing?") — 4-byte key, 28-byte
+        //    multi-block message.
+        let mut k2: [u8; 128] = [0; 128];
+        k2[0] = 74; k2[1] = 101; k2[2] = 102; k2[3] = 101;          // "Jefe"
+        let mut m2: [u8; 256] = [0; 256];
+        let d2: [u8; 28] = [119, 104, 97, 116, 32, 100, 111, 32, 121, 97, 32,
+                            119, 97, 110, 116, 32, 102, 111, 114, 32, 110, 111,
+                            116, 104, 105, 110, 103, 63];
+        for (let mut i: i32 = 0; i < 28; i = i + 1) { m2[i] = d2[i]; }
+        if verify_hmac(k2, 4, m2, 28, rfc4231_tc2_tag()) != 1 {
+            failures = failures + 1;
+        }
+
+        if failures == 0 {
+            println("hmac_sha256: SHA-256(\"abc\") matches FIPS 180-4 and");
+            println("HMAC-SHA256 matches RFC 4231 TC1+TC2; all checks passed.");
+            return 0;
+        }
+        println("hmac_sha256: checks FAILED.");
+        return failures;
+    }
+}

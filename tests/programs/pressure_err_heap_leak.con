@@ -1,0 +1,7 @@
+// Pressure error: heap allocation without free — must be caught as leak.
+// Should fail: heap pointer never consumed.
+
+fn main() with(Std) -> Int {
+    let ptr: Heap<Int> = alloc(100);
+    return 0;
+}

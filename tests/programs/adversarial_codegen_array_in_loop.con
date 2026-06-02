@@ -1,0 +1,13 @@
+// Test: build an array inside a for loop (set each element to i*10), then sum it.
+// Verifies loop + array mutation codegen.
+// Expected output: 100
+
+pub fn main() with(Std) {
+    let mut arr: [Int; 5] = [0; 5];
+    for (let mut i: Int = 0; i < 5; i = i + 1) {
+        arr[i] = i * 10;
+    }
+    // arr = [0, 10, 20, 30, 40]
+    let sum: Int = arr[0] + arr[1] + arr[2] + arr[3] + arr[4];
+    println(sum);
+}

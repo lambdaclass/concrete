@@ -1,0 +1,14 @@
+// Deref (no consumption) then function call (consumption). Valid program.
+
+fn increment(x: &mut Int) {
+    *x = *x + 1;
+}
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    borrow mut n as r in R {
+        *r = *r + 5;
+        increment(r);
+    }
+    return n;
+}

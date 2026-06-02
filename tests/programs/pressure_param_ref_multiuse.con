@@ -1,0 +1,26 @@
+// Pressure: function parameter &mut ref used in many operations.
+// Parameter refs are reborrowable — this should all succeed.
+
+fn triple_increment(r: &mut Int) {
+    *r = *r + 1;
+    *r = *r + 1;
+    *r = *r + 1;
+}
+
+fn double(r: &mut Int) {
+    *r = *r * 2;
+}
+
+fn apply_all(r: &mut Int) {
+    triple_increment(r);
+    double(r);
+    triple_increment(r);
+}
+
+fn main() -> Int {
+    let mut x: Int = 0;
+    borrow mut x as r in R {
+        apply_all(r);
+    }
+    return x;
+}

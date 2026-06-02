@@ -2,7 +2,6 @@ mod string {
     import std.alloc.{grow,dealloc};
     import std.libc.{memcmp, memcpy};
     import std.math.{max};
-    import std.option.{Option};
 
     #[langitem = "String"]
     pub struct String {
@@ -45,10 +44,10 @@ mod string {
         /// Bounds-checked access. Returns None if index is out of bounds.
         pub fn get(&self, at: u64) -> Option<char> {
             if at >= self.len {
-                return Option::<char>#None;
+                return Option::<char>::None;
             }
             let target_ptr: *mut u8 = self.ptr + at;
-            return Option::<char>#Some { value: (*target_ptr) as char };
+            return Option::<char>::Some { value: (*target_ptr) as char };
         }
 
         /// Unchecked access. Caller must ensure index is within bounds.
@@ -211,13 +210,13 @@ mod string {
         let s: String = "hello";
         let result: Option<char> = s.get(0);
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 'h' {
                     s.drop();
                     return 1;
                 }
             },
-            Option#None => {
+            Option::None => {
                 s.drop();
                 return 1;
             }
@@ -231,11 +230,11 @@ mod string {
         let s: String = "hi";
         let result: Option<char> = s.get(10);
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 s.drop();
                 return 1;
             },
-            Option#None => {
+            Option::None => {
                 s.drop();
                 return 0;
             }
@@ -247,11 +246,11 @@ mod string {
         let s: String = String::new();
         let result: Option<char> = s.get(0);
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 s.drop();
                 return 1;
             },
-            Option#None => {
+            Option::None => {
                 s.drop();
                 return 0;
             }

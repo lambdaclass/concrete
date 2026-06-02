@@ -1,0 +1,26 @@
+// Adversarial: three modules each with identically-named functions,
+// plus a top-level main using qualified calls (alpha::compute).
+// Tests that ProofCore does not merge or confuse them.
+// Expected: 60 (10+20+30)
+
+mod alpha {
+    pub fn compute(x: Int) -> Int {
+        return x + 10;
+    }
+}
+
+mod beta {
+    pub fn compute(x: Int) -> Int {
+        return x + 20;
+    }
+}
+
+mod gamma {
+    pub fn compute(x: Int) -> Int {
+        return x + 30;
+    }
+}
+
+pub fn main() -> Int {
+    return alpha::compute(0) + beta::compute(0) + gamma::compute(0);
+}

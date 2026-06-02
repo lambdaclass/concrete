@@ -1,0 +1,29 @@
+// Adversarial: spec-drift gate (regression for commit f371cc1).
+//
+// `simple_add` here has its source body matching the registered
+// `body_fingerprint` in proof-registry.json (so the existing
+// stale-fingerprint check does NOT fire).  The registered spec
+// `Concrete.Proof.driftTestSpec`, however, evaluates to a PExpr
+// that does NOT match the source-extracted PExpr.
+//
+// The spec-drift gate must:
+//   1. Detect the mismatch — produce a `specDrift` registry
+//      issue with the exact diagnostic substring.
+//   2. Downgrade the obligation status from `proved` to `stale`.
+//
+// Tested by scripts/tests/run_tests.sh — search "spec_drift".
+//
+// This is a CHECKED-IN broken state on purpose.  Do not "fix"
+// driftTestSpec to match the source; that defeats the gate.
+
+mod test_drift {
+
+    fn simple_add(a: i32, b: i32) -> i32 {
+        return a + b;
+    }
+
+    pub fn main() -> i32 {
+        let _: i32 = simple_add(1, 2);
+        return 0;
+    }
+}

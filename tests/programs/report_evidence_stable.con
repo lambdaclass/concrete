@@ -1,0 +1,18 @@
+// Test: parse_byte retains "proved" evidence after unrelated changes
+// Adding functions around it must not break the proof connection.
+
+fn helper(x: Int) -> Int {
+    return x * 2;
+}
+
+fn parse_byte(data: Int, offset: Int) -> Int {
+    return data + offset;
+}
+
+fn transform(x: Int) -> Int {
+    return helper(parse_byte(x, 1));
+}
+
+pub fn main() -> Int {
+    return transform(5);
+}

@@ -71,6 +71,21 @@ The two should be designed together:
 
 The constraint flows both ways.
 
+## Relationship To Async/Concurrent Capabilities
+
+The long-term direction in [../stdlib-runtime/async-concurrency-evidence.md](../stdlib-runtime/async-concurrency-evidence.md)
+separates optional overlap from required concurrent progress:
+
+1. `with(Async)` means order-independent work may run sequentially.
+2. `with(Concurrent)` means real concurrent progress is required.
+
+That distinction helps this profile because it gives the checker a local way to
+reject code whose correctness depends on concurrency. The first predictable
+profile should still reject both capabilities. A later analyzable concurrent
+profile can consider admitting a restricted subset of `Concurrent` only when the
+task set, channel capacities, waits, and scheduler assumptions are all bounded
+and reportable.
+
 ## Relationship To Other Notes
 
 1. [predictable-execution.md](predictable-execution.md) — umbrella

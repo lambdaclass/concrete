@@ -1,0 +1,15 @@
+// Adversarial: try to construct a struct from another module without importing it.
+// Expected: compile error about unknown type.
+
+mod Secret {
+    struct Hidden { value: Int }
+    pub fn make() -> Int { return 42; }
+}
+
+mod Main {
+    import Secret.{ make };
+    pub fn main() -> Int {
+        let h: Hidden = Hidden { value: 1 };
+        return h.value;
+    }
+}

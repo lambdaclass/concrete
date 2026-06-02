@@ -1,18 +1,11 @@
 mod option {
-    pub enum Option<T> {
-        Some {
-            value: T,
-        },
-        None,
-    }
-
     impl<T> Option<T> {
         pub fn is_some(&self) -> bool {
             match self {
-                Option#Some { value } => {
+                Option::Some { value } => {
                     return true;
                 },
-                Option#None => {
+                Option::None => {
                     return false;
                 }
             }
@@ -21,13 +14,27 @@ mod option {
         pub fn is_none(&self) -> bool {
             return !(self.is_some());
         }
+
+        pub fn unwrap_or(self, default: T) -> T {
+            match self {
+                Option::Some { value } => { return value; },
+                Option::None => { return default; },
+            }
+        }
+
+        pub fn ok_or<E>(self, err: E) -> Result<T, E> {
+            match self {
+                Option::Some { value } => { return Result::<T, E>::Ok { value: value }; },
+                Option::None => { return Result::<T, E>::Err { error: err }; },
+            }
+        }
     }
 
     import std.test.{assert_true, assert_eq};
 
     #[test]
     fn test_option_some() -> i32 {
-        let o: Option<i32> = Option::<i32>#Some { value: 42 };
+        let o: Option<i32> = Option::<i32>::Some { value: 42 };
         if !assert_true(o.is_some(), "should be some") { return 1; }
         if !assert_true(!(o.is_none()), "should not be none") { return 1; }
         return 0;
@@ -35,7 +42,7 @@ mod option {
 
     #[test]
     fn test_option_none() -> i32 {
-        let o: Option<i32> = Option::<i32>#None;
+        let o: Option<i32> = Option::<i32>::None;
         if !assert_true(o.is_none(), "should be none") { return 1; }
         if !assert_true(!(o.is_some()), "should not be some") { return 1; }
         return 0;
@@ -43,12 +50,12 @@ mod option {
 
     #[test]
     fn test_option_match() -> i32 {
-        let o: Option<i32> = Option::<i32>#Some { value: 7 };
+        let o: Option<i32> = Option::<i32>::Some { value: 7 };
         match o {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if !assert_eq::<i32>(value, 7, "value should be 7") { return 1; }
             },
-            Option#None => { return 1; }
+            Option::None => { return 1; }
         }
         return 0;
     }

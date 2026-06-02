@@ -1,0 +1,24 @@
+// Pressure: match arms each consuming a pre-existing linear variable.
+// All arms must agree on consumption.
+
+struct Res { val: Int }
+
+fn consume(r: Res) -> Int {
+    return r.val;
+}
+
+fn main() -> Int {
+    let r: Res = Res { val: 42 };
+    let tag: Int = 1;
+    match tag {
+        0 => {
+            return consume(r);
+        }
+        1 => {
+            return consume(r);
+        }
+        _ => {
+            return consume(r);
+        }
+    }
+}

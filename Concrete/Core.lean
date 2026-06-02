@@ -132,6 +132,11 @@ structure CModule where
   traitImpls : List CTraitImpl := []
   /-- Maps local alias name → original linker symbol for aliased imports. -/
   linkerAliases : List (String × String) := []
+  /-- Newtype definitions from this module. Layout resolves these so that
+      newtype names reaching SSA/codegen are transparently unwrapped. Elab
+      erases newtypes inside struct/enum fields, but function bodies still
+      carry the wrapper names (e.g. `Option<Port>`), so Layout needs them. -/
+  newtypes : List NewtypeDef := []
 
 -- ============================================================
 -- CExpr.ty accessor

@@ -14,10 +14,8 @@
 mod http_server {
     import std.net.{TcpListener, TcpStream, NetError};
     import std.fs.{read_to_string, file_exists, FsError};
-    import std.result.{Result};
     import std.args.{count, get};
     import std.parse.{parse_uint};
-    import std.option.{Option};
     trusted extern fn malloc(size: u64) -> *mut u8;
     trusted extern fn free(ptr: *mut u8);
 
@@ -26,12 +24,12 @@ mod http_server {
     fn drop_net_error(err: NetError) {
         // NetError is a fieldless enum; consuming it satisfies linearity.
         match err {
-            NetError#SocketFailed => {},
-            NetError#SetsockoptFailed => {},
-            NetError#AddressFailed => {},
-            NetError#BindFailed => {},
-            NetError#ConnectFailed => {},
-            NetError#AcceptFailed => {}
+            NetError::SocketFailed => {},
+            NetError::SetsockoptFailed => {},
+            NetError::AddressFailed => {},
+            NetError::BindFailed => {},
+            NetError::ConnectFailed => {},
+            NetError::AcceptFailed => {}
         }
     }
 
@@ -125,10 +123,10 @@ mod http_server {
     fn read_file_body(file_path: &String) with(Alloc) -> String {
         let result: Result<String, FsError> = read_to_string(file_path);
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 return value;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return "";
             }
         }
@@ -331,10 +329,10 @@ mod http_server {
             let port_arg: String = get(1);
             let parsed: Option<u64> = parse_uint(&port_arg);
             match parsed {
-                Option#Some { value } => {
+                Option::Some { value } => {
                     port = value as u16;
                 },
-                Option#None => {
+                Option::None => {
                     println("Invalid port, using default 8080");
                 }
             }
@@ -352,7 +350,7 @@ mod http_server {
         addr.drop();
 
         match bind_result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 let listener: TcpListener = value;
 
                 // Accept loop
@@ -360,11 +358,11 @@ mod http_server {
                 while running {
                     let accept_result: Result<TcpStream, NetError> = listener.accept();
                     match accept_result {
-                        Result#Ok { value } => {
+                        Result::Ok { value } => {
                             let client: TcpStream = value;
                             handle_client(client, &root);
                         },
-                        Result#Err { error } => {
+                        Result::Err { error } => {
                             drop_net_error(error);
                             println("Accept error, continuing...");
                         }
@@ -374,7 +372,7 @@ mod http_server {
                 listener.close();
                 root.drop();
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 drop_net_error(error);
                 println("Failed to bind to port. Is it already in use?");
                 root.drop();

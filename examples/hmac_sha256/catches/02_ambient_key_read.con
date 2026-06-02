@@ -1,0 +1,46 @@
+// catches/02_ambient_key_read.con
+//
+// "Concrete catches this" companion to examples/hmac_sha256.
+//
+// Demonstrates: the HMAC key must be an EXPLICIT input, never read
+// from ambient state.  hmac_sha256's policy forbids the File
+// capability and the pure core takes the key as a [u8; 128]
+// argument.  A correctness/security proof over hmac_sha256 is only
+// meaningful if the function cannot secretly read a key (or
+// anything else) from the environment.
+//
+// The hazard this catches: someone "conveniently" loads the key
+// from a file or env var inside the core ("so callers don't have to
+// pass it"), turning a pure keyed function into one whose output
+// depends on ambient filesystem state — unprovable, untestable,
+// and a key-exfiltration / confused-deputy surface.
+//
+// What changed: a `load_key_byte` helper declared `with(File)` is
+// called from the keying path.  The core's signature does NOT
+// declare File.
+//
+// Concrete refuses: load_key_byte requires File but the caller is
+// pure.  The key stays an argument, or the effect is visible in the
+// signature and --report caps.
+//
+// catches: E0520
+// catches-substring: requires File but caller has (none)
+
+mod hmac_sha256_catch {
+
+    fn load_key_byte(i: i32) with(File) -> u8 {
+        return 0;
+    }
+
+    // A keying helper that should take the key as an argument, but
+    // instead reads it from ambient I/O.
+    fn derive_key_byte(i: i32) -> u8 {
+        // <<< Ambient read: the key is no longer an explicit input. >>>
+        return load_key_byte(i);
+    }
+
+    fn main() -> i32 {
+        let _k0: u8 = derive_key_byte(0);
+        return 0;
+    }
+}

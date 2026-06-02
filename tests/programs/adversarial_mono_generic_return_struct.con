@@ -1,0 +1,18 @@
+// Adversarial monomorphization: generic function returning generic struct.
+// Called with 4 types to force multiple return-type specializations.
+// Expected: 42
+
+struct Copy Box<T> { val: T }
+
+fn make_box<T>(v: T) -> Box<T> {
+    return Box::<T> { val: v };
+}
+
+pub fn main() -> Int {
+    let b1: Box<Int> = make_box::<Int>(10);
+    let b2: Box<Int> = make_box::<Int>(12);
+    let b3: Box<Int> = make_box::<Int>(8);
+    let b4: Box<Int> = make_box::<Int>(12);
+    // 10 + 12 + 8 + 12 = 42
+    return b1.val + b2.val + b3.val + b4.val;
+}

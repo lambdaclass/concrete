@@ -1,0 +1,211 @@
+// Pressure test: fixed-capacity ring buffers with different element sizes.
+//
+// Tests two ring buffers:
+//   1. IntRing: ring buffer for i32 values, 16 slots
+//   2. MsgRing: ring buffer for Copy structs (Msg), 8 slots
+//
+// Operations: push, pop, peek, full check, wrap-around.
+// Reveals: struct-of-array patterns, capacity management, wrap-around arithmetic,
+//          struct-in-array-in-struct nesting, value-semantics mutation chains.
+//
+// All data on the stack. All loops bounded. No recursion. No allocation.
+
+// ---- i32 Ring Buffer (16 slots) ----
+
+struct Copy IntRing {
+    data: [i32; 16],
+    head: i32,
+    tail: i32,
+    count: i32,
+}
+
+fn int_ring_new() -> IntRing {
+    return IntRing { data: [0; 16], head: 0, tail: 0, count: 0 };
+}
+
+fn int_ring_full(r: IntRing) -> i32 {
+    if r.count == 16 { return 1; }
+    return 0;
+}
+
+fn int_ring_empty(r: IntRing) -> i32 {
+    if r.count == 0 { return 1; }
+    return 0;
+}
+
+fn int_ring_push(r: IntRing, val: i32) -> IntRing {
+    let mut d: [i32; 16] = r.data;
+    d[r.head] = val;
+    let new_head: i32 = (r.head + 1) % 16;
+    if r.count == 16 {
+        let new_tail: i32 = (r.tail + 1) % 16;
+        return IntRing { data: d, head: new_head, tail: new_tail, count: 16 };
+    }
+    return IntRing { data: d, head: new_head, tail: r.tail, count: r.count + 1 };
+}
+
+struct Copy IntPopResult {
+    value: i32,
+    ring: IntRing,
+    ok: i32,
+}
+
+fn int_ring_pop(r: IntRing) -> IntPopResult {
+    if r.count == 0 {
+        return IntPopResult { value: 0, ring: r, ok: 0 };
+    }
+    let val: i32 = r.data[r.tail];
+    let new_tail: i32 = (r.tail + 1) % 16;
+    let new_ring: IntRing = IntRing { data: r.data, head: r.head, tail: new_tail, count: r.count - 1 };
+    return IntPopResult { value: val, ring: new_ring, ok: 1 };
+}
+
+fn int_ring_peek(r: IntRing) -> i32 {
+    return r.data[r.tail];
+}
+
+// ---- Msg struct and Msg Ring Buffer (8 slots) ----
+
+struct Copy Msg {
+    id: i32,
+    kind: i32,
+    payload: i32,
+}
+
+struct Copy MsgRing {
+    data: [Msg; 8],
+    head: i32,
+    tail: i32,
+    count: i32,
+}
+
+fn msg_ring_new() -> MsgRing {
+    let empty: Msg = Msg { id: 0, kind: 0, payload: 0 };
+    return MsgRing { data: [empty; 8], head: 0, tail: 0, count: 0 };
+}
+
+fn msg_ring_full(r: MsgRing) -> i32 {
+    if r.count == 8 { return 1; }
+    return 0;
+}
+
+fn msg_ring_push(r: MsgRing, m: Msg) -> MsgRing {
+    let mut d: [Msg; 8] = r.data;
+    d[r.head] = m;
+    let new_head: i32 = (r.head + 1) % 8;
+    if r.count == 8 {
+        let new_tail: i32 = (r.tail + 1) % 8;
+        return MsgRing { data: d, head: new_head, tail: new_tail, count: 8 };
+    }
+    return MsgRing { data: d, head: new_head, tail: r.tail, count: r.count + 1 };
+}
+
+struct Copy MsgPopResult {
+    value: Msg,
+    ring: MsgRing,
+    ok: i32,
+}
+
+fn msg_ring_pop(r: MsgRing) -> MsgPopResult {
+    let empty: Msg = Msg { id: 0, kind: 0, payload: 0 };
+    if r.count == 0 {
+        return MsgPopResult { value: empty, ring: r, ok: 0 };
+    }
+    let val: Msg = r.data[r.tail];
+    let new_tail: i32 = (r.tail + 1) % 8;
+    let new_ring: MsgRing = MsgRing { data: r.data, head: r.head, tail: new_tail, count: r.count - 1 };
+    return MsgPopResult { value: val, ring: new_ring, ok: 1 };
+}
+
+fn msg_ring_peek_id(r: MsgRing) -> i32 {
+    return r.data[r.tail].id;
+}
+
+// ---- Tests ----
+
+pub fn main() -> Int {
+    let mut ir: IntRing = int_ring_new();
+    if int_ring_empty(ir) != 1 { return 1; }
+    if int_ring_full(ir) != 0 { return 2; }
+
+    ir = int_ring_push(ir, 100);
+    ir = int_ring_push(ir, 200);
+    ir = int_ring_push(ir, 300);
+    ir = int_ring_push(ir, 400);
+    ir = int_ring_push(ir, 500);
+    if ir.count != 5 { return 3; }
+    if int_ring_peek(ir) != 100 { return 4; }
+
+    let pop1: IntPopResult = int_ring_pop(ir);
+    if pop1.ok != 1 { return 5; }
+    if pop1.value != 100 { return 6; }
+    ir = pop1.ring;
+
+    let pop2: IntPopResult = int_ring_pop(ir);
+    if pop2.ok != 1 { return 7; }
+    if pop2.value != 200 { return 8; }
+    ir = pop2.ring;
+
+    if ir.count != 3 { return 9; }
+    if int_ring_peek(ir) != 300 { return 10; }
+
+    for (let mut i: i32 = 0; i < 13; i = i + 1) {
+        ir = int_ring_push(ir, 1000 + i);
+    }
+    if ir.count != 16 { return 11; }
+    if int_ring_full(ir) != 1 { return 12; }
+
+    ir = int_ring_push(ir, 9999);
+    if ir.count != 16 { return 13; }
+    if int_ring_peek(ir) != 400 { return 14; }
+
+    for (let mut i: i32 = 0; i < 16; i = i + 1) {
+        let p: IntPopResult = int_ring_pop(ir);
+        if p.ok != 1 { return 15; }
+        ir = p.ring;
+    }
+    if int_ring_empty(ir) != 1 { return 16; }
+
+    let empty_pop: IntPopResult = int_ring_pop(ir);
+    if empty_pop.ok != 0 { return 17; }
+
+    // === MsgRing tests ===
+    let mut mr: MsgRing = msg_ring_new();
+    if mr.count != 0 { return 18; }
+
+    mr = msg_ring_push(mr, Msg { id: 1, kind: 10, payload: 100 });
+    mr = msg_ring_push(mr, Msg { id: 2, kind: 20, payload: 200 });
+    mr = msg_ring_push(mr, Msg { id: 3, kind: 30, payload: 300 });
+    mr = msg_ring_push(mr, Msg { id: 4, kind: 40, payload: 400 });
+    if mr.count != 4 { return 19; }
+    if msg_ring_peek_id(mr) != 1 { return 20; }
+
+    let mp1: MsgPopResult = msg_ring_pop(mr);
+    if mp1.ok != 1 { return 21; }
+    if mp1.value.id != 1 { return 22; }
+    if mp1.value.kind != 10 { return 23; }
+    if mp1.value.payload != 100 { return 24; }
+    mr = mp1.ring;
+
+    mr = msg_ring_push(mr, Msg { id: 5, kind: 50, payload: 500 });
+    mr = msg_ring_push(mr, Msg { id: 6, kind: 60, payload: 600 });
+    mr = msg_ring_push(mr, Msg { id: 7, kind: 70, payload: 700 });
+    mr = msg_ring_push(mr, Msg { id: 8, kind: 80, payload: 800 });
+    mr = msg_ring_push(mr, Msg { id: 9, kind: 90, payload: 900 });
+    if mr.count != 8 { return 25; }
+    if msg_ring_full(mr) != 1 { return 26; }
+
+    mr = msg_ring_push(mr, Msg { id: 99, kind: 99, payload: 9999 });
+    if mr.count != 8 { return 27; }
+    if msg_ring_peek_id(mr) != 3 { return 28; }
+
+    let mp_drain: MsgPopResult = msg_ring_pop(mr);
+    if mp_drain.value.id != 3 { return 29; }
+    mr = mp_drain.ring;
+
+    let mp_drain2: MsgPopResult = msg_ring_pop(mr);
+    if mp_drain2.value.id != 4 { return 30; }
+    mr = mp_drain2.ring;
+
+    return 0;
+}

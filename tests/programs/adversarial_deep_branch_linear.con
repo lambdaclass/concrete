@@ -1,0 +1,52 @@
+// Adversarial test: nested if/else with linear consumption must agree at every level.
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn deep_nested_both_consume(a: Bool, b: Bool) -> Int {
+    let r: Resource = Resource { value: 100 };
+    if a {
+        if b {
+            let _x: Int = consume(r);
+        } else {
+            let _x: Int = consume(r);
+        }
+    } else {
+        if b {
+            let _x: Int = consume(r);
+        } else {
+            let _x: Int = consume(r);
+        }
+    }
+    return 0;
+}
+
+fn deep_nested_none_consume(a: Bool, b: Bool) -> Int {
+    let r: Resource = Resource { value: 200 };
+    if a {
+        if b {
+            let _x: Int = 1;
+        } else {
+            let _x: Int = 2;
+        }
+    } else {
+        if b {
+            let _x: Int = 3;
+        } else {
+            let _x: Int = 4;
+        }
+    }
+    let _z: Int = consume(r);
+    return 0;
+}
+
+fn main() -> Int {
+    let r1: Int = deep_nested_both_consume(true, false);
+    let r2: Int = deep_nested_none_consume(false, true);
+    return r1 + r2;
+}

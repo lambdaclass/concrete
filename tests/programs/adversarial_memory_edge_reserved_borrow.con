@@ -1,0 +1,25 @@
+// Adversarial test: can we borrow a reserved (defer'd) variable?
+// The semantics doc says reserved allows reads and borrow.
+
+struct Resource {
+    value: Int,
+}
+
+fn cleanup(r: Resource) -> Int {
+    return r.value;
+}
+
+fn borrow_reserved_variable() -> Int {
+    let mut r: Resource = Resource { value: 42 };
+    defer cleanup(r);
+    // r is reserved — can we borrow it?
+    let mut result: Int = 0;
+    borrow r as ref in R {
+        result = ref.value;
+    }
+    return result;
+}
+
+fn main() -> Int {
+    return borrow_reserved_variable();
+}

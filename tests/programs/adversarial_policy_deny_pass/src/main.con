@@ -1,0 +1,7 @@
+// Adversarial boundary: deny = ["Unsafe"] but code only uses Console (safe cap).
+// Expected: compiler accepts — Console is not denied, program runs normally.
+
+pub fn main() with(Console) -> Int {
+    println(42);
+    return 0;
+}

@@ -5,6 +5,13 @@ Status: stable reference
 This document is the central reference for Concrete's safety model. It defines the organizing principles, explains how the pieces fit together, and points to the detailed references for each subsystem.
 
 For ownership and linearity, see [VALUE_MODEL.md](VALUE_MODEL.md).
+For the current safe-memory guarantee boundary, see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md).
+For named profiles (`safe`, `predictable`, `provable`, `high-integrity`), see [PROFILES.md](PROFILES.md).
+For the short public claim surface, see [CLAIMS_TODAY.md](CLAIMS_TODAY.md).
+For explicit trusted-computing-base accounting, see [TRUSTED_COMPUTING_BASE.md](TRUSTED_COMPUTING_BASE.md).
+For effect/trust proof boundaries, see [EFFECT_PROOF_BOUNDARIES.md](EFFECT_PROOF_BOUNDARIES.md).
+For the precise public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATEMENT.md).
+For the proof-claim taxonomy, see [CLAIM_TAXONOMY.md](CLAIM_TAXONOMY.md).
 For FFI, trusted boundaries, and capability aliases, see [FFI.md](FFI.md).
 For diagnostics and error recovery, see [DIAGNOSTICS.md](DIAGNOSTICS.md).
 For pass contracts and report modes, see [PASSES.md](PASSES.md).
@@ -99,6 +106,18 @@ Concrete uses linear types by default for structs and enums. This provides compi
 - `Heap<T>` is linear — must be freed, cannot be silently dropped
 
 Primitives, `&T`, raw pointers, and function pointers are Copy. See [VALUE_MODEL.md](VALUE_MODEL.md) for the full value category table.
+
+### Current Claim Boundary
+
+Concrete already enforces a real ownership/borrow discipline in the checker:
+
+- linear ownership
+- borrow conflict checking
+- borrow escape checking
+- explicit cleanup scheduling
+- trusted/unsafe separation without relaxing linearity
+
+What is not yet fully closed as a public language claim is the final centralized semantics for all reference/aliasing edge cases and the proof-facing statement that turns those checker rules into one explicit safe-memory guarantee. That remaining closure work is tracked in the roadmap's memory/reference-model item.
 
 ## Audit Reports
 

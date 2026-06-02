@@ -1,0 +1,23 @@
+// Both branches of if/else consume the borrow-block ref.
+// Branch agreement: both consume. Valid program.
+
+fn increment(x: &mut Int) {
+    *x = *x + 1;
+}
+
+fn decrement(x: &mut Int) {
+    *x = *x - 1;
+}
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    let cond: Bool = true;
+    borrow mut n as r in R {
+        if cond {
+            increment(r);
+        } else {
+            decrement(r);
+        }
+    }
+    return n;
+}

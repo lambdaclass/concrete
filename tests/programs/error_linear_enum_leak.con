@@ -1,0 +1,16 @@
+// ERROR TEST: linear enum forgotten at scope exit.
+
+enum Outcome {
+    Success { value: Int },
+    Failure { code: Int },
+}
+
+fn bad_enum_leak() -> Int {
+    let o: Outcome = Outcome::Success { value: 42 };
+    // o is never consumed
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_enum_leak();
+}

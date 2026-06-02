@@ -1,7 +1,6 @@
 mod bytes {
     import std.alloc.{grow,dealloc};
     import std.math.{max};
-    import std.option.{Option};
 
     pub struct Bytes {
         ptr: *mut u8,
@@ -40,10 +39,10 @@ mod bytes {
 
         pub fn get(&self, at: u64) -> Option<u8> {
             if at >= self.len {
-                return Option::<u8>#None;
+                return Option::<u8>::None;
             }
             let target_ptr: *mut u8 = self.ptr + at;
-            return Option::<u8>#Some { value: *target_ptr };
+            return Option::<u8>::Some { value: *target_ptr };
         }
 
         pub fn get_unchecked(&self, at: u64) -> u8 {
@@ -85,6 +84,20 @@ mod bytes {
             let new_cap: u64 = max::<u64>(self.cap, 4) * 2;
             self.ptr = grow::<u8>(self.ptr, new_cap);
             self.cap = new_cap;
+        }
+
+        pub fn eq(&self, other: &Bytes) -> bool {
+            if self.len != other.len {
+                return false;
+            }
+            let i: u64 = 0;
+            while i < self.len {
+                if self.get_unchecked(i) != other.get_unchecked(i) {
+                    return false;
+                }
+                i = i + 1;
+            }
+            return true;
         }
 
         pub fn append_bytes(&mut self, other: &Bytes) with(Alloc) {
@@ -199,13 +212,13 @@ mod bytes {
         b.push(42);
         let result: Option<u8> = b.get(0);
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 42 {
                     b.drop();
                     return 1;
                 }
             },
-            Option#None => {
+            Option::None => {
                 b.drop();
                 return 1;
             }
@@ -219,11 +232,11 @@ mod bytes {
         let b: Bytes = Bytes::new();
         let result: Option<u8> = b.get(0);
         match result {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 b.drop();
                 return 1;
             },
-            Option#None => {
+            Option::None => {
                 b.drop();
                 return 0;
             }

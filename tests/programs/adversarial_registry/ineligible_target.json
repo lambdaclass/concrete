@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "proofs": [
+    {
+      "function": "main.format_result",
+      "body_fingerprint": "[(ret (int 0))]",
+      "proof": "Concrete.Proof.format_result_correct",
+      "spec": "format_result.spec"
+    }
+  ]
+}

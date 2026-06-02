@@ -1,0 +1,38 @@
+// Adversarial monomorphization: trait with 3 methods, 2 impls, generic dispatch.
+// Tests breadth of method resolution during specialization.
+// Expected: 42
+
+trait Processor {
+    fn step1(&self) -> Int;
+    fn step2(&self) -> Int;
+    fn step3(&self) -> Int;
+}
+
+struct Copy Alpha { a: Int }
+struct Copy Beta { b: Int }
+
+impl Processor for Alpha {
+    fn step1(&self) -> Int { return self.a; }
+    fn step2(&self) -> Int { return self.a + 1; }
+    fn step3(&self) -> Int { return self.a + 2; }
+}
+
+impl Processor for Beta {
+    fn step1(&self) -> Int { return self.b * 2; }
+    fn step2(&self) -> Int { return self.b * 3; }
+    fn step3(&self) -> Int { return self.b * 4; }
+}
+
+fn run_all<T: Processor>(item: &T) -> Int {
+    return item.step1() + item.step2() + item.step3();
+}
+
+pub fn main() -> Int {
+    let a: Alpha = Alpha { a: 5 };
+    let b: Beta = Beta { b: 2 };
+    // run_all(&a) = 5+6+7 = 18
+    // run_all(&b) = 4+6+8 = 18
+    // b2.step1() = 3*2 = 6
+    let b2: Beta = Beta { b: 3 };
+    return run_all::<Alpha>(&a) + run_all::<Beta>(&b) + b2.step1();
+}

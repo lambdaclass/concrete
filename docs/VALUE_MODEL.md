@@ -5,6 +5,7 @@ Status: stable reference
 Concrete uses a strict value/reference model with linear types by default.
 
 For the full safety model (capabilities, trusted boundaries, `Unsafe`), see [SAFETY.md](SAFETY.md).
+For the current safe-memory guarantee boundary, see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md).
 For FFI and trust boundaries, see [FFI.md](FFI.md).
 
 ## Value Categories
@@ -25,6 +26,18 @@ For FFI and trust boundaries, see [FFI.md](FFI.md).
 
 - **Copy types** can be used multiple times and can be reassigned freely. Primitives, `&T`, raw pointers, and function pointers are always Copy. Structs and enums opt in with a `Copy` marker.
 - **Linear types** must be consumed exactly once. All structs and enums are linear by default. Branches must agree on consumption. Loops cannot consume linear variables from outer scope. **Linear variables cannot be reassigned** — one binding, one resource. Use a new binding instead.
+
+## Current Guarantee Boundary
+
+Today the language already relies on the checker to enforce the core ownership/borrow model:
+
+- no use-after-move for linear values
+- no forgotten linear values at scope exit
+- no mutable-vs-shared borrow conflicts in safe code
+- no borrow escape from borrow blocks
+- explicit cleanup instead of implicit destructors
+
+What is still being consolidated is the single public semantics document and theorem-like guarantee statement for the full safe-memory subset, especially around harder aliasing/reference edge cases.
 
 ## Borrowed String Literals
 

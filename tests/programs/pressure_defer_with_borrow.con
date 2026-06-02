@@ -1,0 +1,21 @@
+// Pressure: defer combined with borrow — borrow reads, defer cleans up.
+// Tests that defer reservation and borrow freezing coexist.
+
+struct Data { x: Int, y: Int }
+
+impl Destroy for Data {
+    fn destroy(&self) { }
+}
+
+fn sum_fields(d: &Data) -> Int {
+    return (*d).x + (*d).y;
+}
+
+fn main() -> Int {
+    let d: Data = Data { x: 15, y: 27 };
+    defer destroy(d);
+    borrow d as ref in R {
+        return sum_fields(ref);
+    }
+    return 0;
+}

@@ -32,6 +32,7 @@ structure CoreCheckEnv where
   fnSigs : List (String × CapSet × List (String × Ty) × Ty)
   structDefs : List CStructDef
   enumDefs : List CEnumDef
+  newtypes : List NewtypeDef := []
   vars : List (String × Ty)
   currentCapSet : CapSet
   currentRetTy : Ty
@@ -160,12 +161,63 @@ private def capSetToString : CapSet → String
   | .var name => name
   | .union a b => s!"{capSetToString a} + {capSetToString b}"
 
-private def addError (msg : String) (hint : Option String := none) : StateM CoreCheckEnv Unit := do
+def CoreCheckError.code : CoreCheckError → String
+  -- Type consistency (E0500–E0519)
+  | .typeMismatchVariable _ _ _ => "E0500"
+  | .arithmeticOnNonNumeric _ => "E0501"
+  | .binaryOperandMismatch _ _ => "E0502"
+  | .comparisonOperandMismatch _ _ => "E0503"
+  | .comparisonResultNotBool _ => "E0504"
+  | .logicalOnNonBool _ _ => "E0505"
+  | .bitwiseOnNonInteger _ => "E0506"
+  | .negationOnNonNumeric _ => "E0507"
+  | .logicalNotOnNonBool _ => "E0508"
+  | .bitwiseNotOnNonInteger _ => "E0509"
+  -- Capability discipline (E0520–E0529)
+  | .insufficientCapabilities _ _ _ => "E0520"
+  | .missingCapability _ _ _ => "E0521"
+  | .argCountMismatch _ _ _ => "E0522"
+  -- Match coverage (E0530–E0539)
+  | .matchMissingVariant _ _ => "E0530"
+  | .matchArmWrongEnum _ _ => "E0531"
+  | .duplicateMatchArm _ => "E0532"
+  | .variantFieldCountMismatch _ _ _ => "E0533"
+  | .matchNonEnumNoDefault => "E0534"
+  -- Control flow (E0540–E0549)
+  | .whileCondNotBool _ => "E0540"
+  | .ifCondNotBool _ => "E0541"
+  | .breakOutsideLoop => "E0542"
+  | .continueOutsideLoop => "E0543"
+  -- Type legality (E0550–E0559)
+  | .arrayLiteralEmpty => "E0550"
+  | .arrayIndexNotInteger _ => "E0551"
+  | .indexingNonArray _ => "E0552"
+  | .cannotCast _ _ => "E0553"
+  | .cannotDerefNonRef _ => "E0554"
+  | .cannotAssignThroughNonMutRef _ => "E0555"
+  -- Return type (E0560)
+  | .returnTypeMismatch _ _ => "E0560"
+  -- Module-level validation (E0570–E0589)
+  | .copyDestroyConflict _ => "E0570"
+  | .copyFieldNotCopy _ _ => "E0571"
+  | .reprCHasGenerics _ => "E0572"
+  | .reprCFieldNotFFISafe _ _ _ => "E0573"
+  | .externFnParamNotFFISafe _ _ _ => "E0574"
+  | .externFnReturnNotFFISafe _ _ => "E0575"
+  | .reprPackedAndAlignConflict _ => "E0576"
+  | .reprAlignNotPowerOfTwo _ _ => "E0577"
+  | .reservedFnName _ => "E0578"
+  | .builtinTraitRedeclared => "E0579"
+  | .unknownTrait _ => "E0580"
+  | .missingTraitMethod _ _ => "E0581"
+  | .traitMethodRetTyMismatch _ _ _ => "E0582"
+
+private def addError (msg : String) (hint : Option String := none) (code : String := "") : StateM CoreCheckEnv Unit := do
   let env ← getEnv
-  setEnv { env with errors := env.errors ++ [{ severity := .error, message := msg, pass := "core-check", span := none, hint := hint }] }
+  setEnv { env with errors := env.errors ++ [{ severity := .error, message := msg, pass := "core-check", span := none, hint := hint, code := code }] }
 
 private def addCCError (e : CoreCheckError) : StateM CoreCheckEnv Unit :=
-  addError e.message e.hint
+  addError e.message e.hint e.code
 
 private def addVar (name : String) (ty : Ty) : StateM CoreCheckEnv Unit := do
   let env ← getEnv
@@ -410,9 +462,58 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       (isPtr innerTy && isRef targetTy) ||
       (isRef innerTy && isPtr targetTy) ||
       (innerTy == targetTy)
-    -- Skip cast validation for type variables / named generic params
-    let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false
-    if !valid && !hasTypeVar innerTy && !hasTypeVar targetTy then
+    -- Skip cast validation for true type parameters and unresolved names.
+    -- A `.named n` is a concrete user-defined type when `n` matches a known
+    -- struct, enum, or newtype — those participate in the validity table and
+    -- must not get a free pass. The historical broad skip on `.named _` was
+    -- a loophole that made every newtype-involving cast accepted.
+    let env ← getEnv
+    let isKnownConcrete := fun (n : String) =>
+      env.structDefs.any (fun sd => sd.name == n)
+        || env.enumDefs.any (fun ed => ed.name == n)
+        || env.newtypes.any (fun nt => nt.name == n)
+    let hasTypeVar := fun (t : Ty) => match t with
+      | .typeVar _ => true
+      | .named n => !isKnownConcrete n
+      | _ => false
+    -- Newtype wrap/unwrap: Elab inserts a `.cast` at the newtype constructor
+    -- and at `.0` field access to carry the wrapper name through type-level
+    -- without changing the runtime representation. Allow those — and ONLY
+    -- those — past the cast-validity table. Specifically: one side must
+    -- name a newtype `N`, and the other side must equal `N`'s ONE-STEP
+    -- inner type (after generic substitution) — not the fully resolved
+    -- primitive. For chained newtypes (`Outer = Middle = Inner = i32`)
+    -- the constructor `Middle(Inner(...))` is one rep step from Inner to
+    -- Middle, not all the way from i32 to Outer. Using full resolution
+    -- here would either accept everything across the chain (loose) or
+    -- reject only the single-step constructors Elab actually emits (tight
+    -- and incorrect). The single-step rule is the precise match.
+    let oneStepInner := fun (t : Ty) => match t with
+      | .named n =>
+        match env.newtypes.find? fun nt => nt.name == n with
+        | some nt => some nt.innerTy
+        | none => none
+      | .generic n args =>
+        match env.newtypes.find? fun nt => nt.name == n with
+        | some nt =>
+          let mapping := nt.typeParams.zip args
+          some (Layout.ntSubstTy mapping nt.innerTy)
+        | none => none
+      | _ => none
+    -- Try both directions independently: a rep cast is `Inner → Newtype`
+    -- (constructor) OR `Newtype → Inner` (`.0` unwrap). When both sides
+    -- name a newtype (e.g. `Outer → Middle`, where Outer wraps Middle),
+    -- only one direction matches but the other still has to be tried.
+    let wrapMatches :=
+      match oneStepInner targetTy with
+      | some innerOfTarget => innerOfTarget == innerTy
+      | none => false
+    let unwrapMatches :=
+      match oneStepInner innerTy with
+      | some innerOfInner => innerOfInner == targetTy
+      | none => false
+    let isNewtypeRebrand := wrapMatches || unwrapMatches
+    if !valid && !hasTypeVar innerTy && !hasTypeVar targetTy && !isNewtypeRebrand then
       addCCError (.cannotCast (toString (repr innerTy)) (toString (repr targetTy)))
     -- Unsafe capability check for pointer-involving casts (except safe ref-to-ptr)
     let isRefToPtr := isRef innerTy && isPtr targetTy
@@ -594,12 +695,16 @@ private def isCopyTy (allStructs : List CStructDef) (allEnums : List CEnumDef) (
   | .bool | .float64 | .float32 | .char | .unit => true
   | .ref _ | .ptrMut _ | .ptrConst _ | .never => true
   | .fn_ _ _ _ => true
+  -- Type parameters are assumed Copy at definition time; concrete types are
+  -- validated after monomorphization when the type variable is substituted.
+  | .typeVar _ => true
   | .named name =>
     match allStructs.find? fun sd => sd.name == name with
     | some sd => sd.isCopy
     | none => match allEnums.find? fun ed => ed.name == name with
       | some ed => ed.isCopy
       | none => false
+  | .array elem _ => isCopyTy allStructs allEnums elem
   | _ => false
 
 private def mkDeclDiag (e : CoreCheckError) : Diagnostic :=
@@ -609,14 +714,20 @@ def ccCheckModuleDecls (m : CModule)
     (allStructs : List CStructDef) (allEnums : List CEnumDef) : Diagnostics :=
   Id.run do
   let mut errors : Diagnostics := []
-  let lctx : Layout.Ctx := { structDefs := allStructs, enumDefs := allEnums }
+  let allNewtypes := m.newtypes
+  let lctx : Layout.Ctx := { structDefs := allStructs, enumDefs := allEnums, newtypes := allNewtypes }
   -- 1. Copy/Destroy conflict + Copy field check for structs
   for sd in m.structs do
     if sd.isCopy then
       if m.traitImpls.any fun ti => ti.builtinTraitId == some .destroy && ti.typeName == sd.name then
         errors := errors ++ [mkDeclDiag (.copyDestroyConflict sd.name)]
       for (fname, fty) in sd.fields do
-        if !isCopyTy allStructs allEnums fty then
+        -- Skip Copy check for fields whose type is a type parameter of this struct.
+        -- After monomorphization, concrete types will be checked.
+        let isTypeParam := match fty with
+          | .named n => sd.typeParams.contains n
+          | _ => false
+        if !isTypeParam && !isCopyTy allStructs allEnums fty then
           errors := errors ++ [mkDeclDiag (.copyFieldNotCopy sd.name fname)]
   -- 2. Copy/Destroy conflict for enums
   for ed in m.enums do
@@ -708,6 +819,7 @@ partial def ccCheckModule (m : CModule)
     fnSigs := fnSigs ++ externSigs
     structDefs := m.structs
     enumDefs := m.enums
+    newtypes := m.newtypes
     vars := []
     currentCapSet := .empty
     currentRetTy := .unit

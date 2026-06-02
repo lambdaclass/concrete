@@ -1,0 +1,79 @@
+// Adversarial test cases for --query why-capability authority tracing.
+// Tests: mutual recursion cycle, diamond dependency, deep chain, trusted extern.
+
+// --- Mutual recursion cycle: ping and pong both allocate ---
+fn ping(n: Int) with(Alloc) -> Int {
+    if n <= 0 { return 0; }
+    let h: Heap<Int> = alloc(n);
+    let v: Int = pong(n - 1);
+    free(h);
+    return v;
+}
+
+fn pong(n: Int) with(Alloc) -> Int {
+    if n <= 0 { return 0; }
+    let h: Heap<Int> = alloc(n);
+    let v: Int = ping(n - 1);
+    free(h);
+    return v;
+}
+
+// --- Diamond dependency: both arms lead to vec_new ---
+fn left_arm() with(Alloc) -> Int {
+    let mut v: Vec<i32> = vec_new::<i32>();
+    vec_free::<i32>(v);
+    return 1;
+}
+
+fn right_arm() with(Alloc) -> Int {
+    let mut v: Vec<i32> = vec_new::<i32>();
+    vec_free::<i32>(v);
+    return 2;
+}
+
+fn diamond(x: Int) with(Alloc) -> Int {
+    let a: Int = left_arm();
+    let b: Int = right_arm();
+    return a + b;
+}
+
+// --- Deep chain: entry → mid1 → mid2 → leaf (intrinsic) ---
+fn leaf() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(42);
+    free(h);
+    return 42;
+}
+
+fn mid2() with(Alloc) -> Int {
+    return leaf();
+}
+
+fn mid1() with(Alloc) -> Int {
+    return mid2();
+}
+
+fn entry() with(Alloc) -> Int {
+    return mid1();
+}
+
+// --- Trusted extern: should not contribute Unsafe ---
+trusted extern fn safe_math(x: Int) -> Int;
+
+fn uses_trusted(x: Int) -> Int {
+    return safe_math(x);
+}
+
+// --- Extern (untrusted): contributes Unsafe ---
+extern fn raw_op(x: Int) -> Int;
+
+fn uses_raw(x: Int) with(Unsafe) -> Int {
+    return raw_op(x);
+}
+
+fn main() with(Alloc) -> i32 {
+    let _a: Int = ping(3);
+    let _b: Int = diamond(1);
+    let _c: Int = entry();
+    let _d: Int = uses_trusted(5);
+    return 0;
+}

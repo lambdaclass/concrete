@@ -1,0 +1,34 @@
+// Adversarial test: newtype .0 extraction consumes the newtype (if linear).
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+newtype Wrapped = Resource;
+
+fn unwrap_consumes() -> Int {
+    let w: Wrapped = Wrapped(Resource { value: 99 });
+    let inner: Resource = w.0;  // consumes w
+    let result: Int = consume(inner);
+    return result;
+}
+
+// Copy newtype can be used multiple times
+newtype CopyId = Int;
+
+fn copy_newtype_reuse() -> Int {
+    let id: CopyId = CopyId(42);
+    let a: Int = id.0;
+    let b: Int = id.0;  // OK: CopyId wraps Int which is Copy
+    return a + b;
+}
+
+fn main() -> Int {
+    let r1: Int = unwrap_consumes();
+    let r2: Int = copy_newtype_reuse();
+    return r1 + r2;
+}

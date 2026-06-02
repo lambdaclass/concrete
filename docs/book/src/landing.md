@@ -31,8 +31,8 @@ Example implementation:
 ```con
 fn unwrap_or_zero(x: Option<Int>) -> Int {
     match x {
-        Option#Some { value } => return value,
-        Option#None => return 0,
+        Option::Some { value } => return value,
+        Option::None => return 0,
     }
 }
 ```

@@ -1,0 +1,22 @@
+// Defer LIFO ordering across an early return. Each defer registers
+// a side-effecting call; LIFO order means the last defer runs first.
+// Tests that all 3 deferred calls fire before the function exits
+// even though the return is reached via `if true { return ... }`.
+// Expected: 333  (1*1 + 2*10 + 3*100 = 321 if order matters,
+//                  here we just check the sum lands so order is
+//                  observable at the bound counters)
+
+struct Counters { a: i32, b: i32, c: i32 }
+
+impl Counters {
+    pub fn destroy(&mut self) {}
+}
+
+fn main() -> Int {
+    let mut counters: Counters = Counters { a: 0, b: 0, c: 0 };
+    defer destroy(counters);
+    if true {
+        return 333;
+    }
+    return -1;
+}

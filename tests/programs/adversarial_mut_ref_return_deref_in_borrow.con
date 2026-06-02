@@ -1,0 +1,11 @@
+// Return a deref read from inside a borrow mut block.
+// Tests that early return with deref works correctly.
+
+fn main() -> Int {
+    let mut n: Int = 42;
+    borrow mut n as r in R {
+        *r = *r + 1;
+        return *r;
+    }
+    return 0;
+}

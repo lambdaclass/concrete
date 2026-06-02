@@ -1,0 +1,33 @@
+// Hostile workload: 5 different enums, each matched in a function.
+// Stresses simultaneous tag-space management for multiple discriminated unions.
+// Expected: 42
+
+enum Copy Color { Red {}, Green {}, Blue {} }
+enum Copy Dir { Up {}, Down {}, Left {}, Right {} }
+enum Copy Size { Small {}, Medium {}, Large {} }
+enum Copy Level { Low {}, Mid {}, High {} }
+enum Copy Mode { Fast {}, Slow {} }
+
+fn color_val(c: Color) -> Int {
+    match c { Color::Red {} => { return 1; }, Color::Green {} => { return 2; }, Color::Blue {} => { return 3; }, }
+}
+
+fn dir_val(d: Dir) -> Int {
+    match d { Dir::Up {} => { return 10; }, Dir::Down {} => { return 20; }, Dir::Left {} => { return 30; }, Dir::Right {} => { return 40; }, }
+}
+
+fn size_val(s: Size) -> Int {
+    match s { Size::Small {} => { return 1; }, Size::Medium {} => { return 2; }, Size::Large {} => { return 3; }, }
+}
+
+fn level_val(l: Level) -> Int {
+    match l { Level::Low {} => { return 100; }, Level::Mid {} => { return 200; }, Level::High {} => { return 300; }, }
+}
+
+fn mode_val(m: Mode) -> Int {
+    match m { Mode::Fast {} => { return 5; }, Mode::Slow {} => { return 10; }, }
+}
+
+pub fn main() -> Int {
+    return dir_val(Dir::Right {}) + color_val(Color::Green {});
+}

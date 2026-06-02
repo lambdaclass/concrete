@@ -1,0 +1,15 @@
+// Adversarial test: cross-function fingerprint swap
+// The registry has pure_add's fingerprint attached to pure_mul's entry.
+// This should NOT make pure_mul "proved" — the fingerprint won't match.
+
+fn pure_add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+fn pure_mul(a: Int, b: Int) -> Int {
+    return a * b;
+}
+
+fn main() -> i32 {
+    return 0;
+}

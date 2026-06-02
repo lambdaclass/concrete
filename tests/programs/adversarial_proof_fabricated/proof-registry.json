@@ -1,0 +1,8 @@
+[
+  {
+    "function": "main.pure_add",
+    "body_fingerprint": "[(ret (binop Concrete.BinOp.add (var a) (var b)))]",
+    "proof": "Nonexistent.Module.totally_fake_theorem",
+    "spec": "Nonexistent.Module.fake_spec"
+  }
+]

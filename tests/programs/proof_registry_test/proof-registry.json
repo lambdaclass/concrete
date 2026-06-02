@@ -1,0 +1,8 @@
+[
+  {
+    "function": "main.pure_add",
+    "body_fingerprint": "[(ret (binop Concrete.BinOp.add (var a) (var b)))]",
+    "proof": "PureAdd.add_comm",
+    "spec": "PureAdd.spec_add"
+  }
+]

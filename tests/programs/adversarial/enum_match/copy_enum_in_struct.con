@@ -1,0 +1,24 @@
+// Copy enum embedded in a Copy struct, then matched after a
+// pass-by-value to another function. Tests that enum-as-field layout
+// matches enum-as-payload, and that match doesn't move when the
+// scrutinee is a Copy struct field.
+// Expected: 5
+
+enum Copy Op { Add { x: i32, y: i32 }, Neg { z: i32 } }
+
+struct Copy Cell {
+    op: Op,
+    tag: u8,
+}
+
+fn evaluate(c: Cell) -> Int {
+    match c.op {
+        Op::Add { x, y } => { return (x + y) as Int; }
+        Op::Neg { z } => { return -z as Int; }
+    }
+}
+
+fn main() -> Int {
+    let c: Cell = Cell { op: Op::Add { x: 2, y: 3 }, tag: 1 };
+    return evaluate(c);
+}

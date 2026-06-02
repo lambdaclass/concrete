@@ -1,0 +1,237 @@
+// Pressure test: bounded FIFO queue with priority.
+//
+// Fixed-size array of 16 entries. Each entry has a value and priority level.
+// Enqueue appends to tail. Dequeue scans for highest priority, removes it
+// by shifting remaining elements down (in-place compaction).
+//
+// Reveals: in-place array scanning, bounded shifting/compaction, multi-field
+//          struct-in-array mutation, priority management without heap.
+//
+// All data on the stack. All loops bounded. No recursion. No allocation.
+
+struct Copy Entry {
+    val: i32,
+    pri: i32,
+    active: i32,
+}
+
+struct Copy PQueue {
+    data: [Entry; 16],
+    count: i32,
+}
+
+fn pq_new() -> PQueue {
+    let empty: Entry = Entry { val: 0, pri: 0, active: 0 };
+    return PQueue { data: [empty; 16], count: 0 };
+}
+
+fn pq_size(q: PQueue) -> i32 {
+    return q.count;
+}
+
+fn pq_full(q: PQueue) -> i32 {
+    if q.count == 16 { return 1; }
+    return 0;
+}
+
+fn pq_empty(q: PQueue) -> i32 {
+    if q.count == 0 { return 1; }
+    return 0;
+}
+
+// Enqueue: append at position count. Returns new queue.
+// If full, returns unchanged queue (caller should check).
+fn pq_enqueue(q: PQueue, val: i32, pri: i32) -> PQueue {
+    if q.count == 16 { return q; }
+    let mut d: [Entry; 16] = q.data;
+    d[q.count] = Entry { val: val, pri: pri, active: 1 };
+    return PQueue { data: d, count: q.count + 1 };
+}
+
+// Find index of highest-priority entry. Bounded scan (max 16).
+// On tie, returns first (FIFO among same priority).
+fn pq_find_max(q: PQueue) -> i32 {
+    let mut best_idx: i32 = 0;
+    let mut best_pri: i32 = -1;
+    for (let mut i: i32 = 0; i < 16; i = i + 1) {
+        if i < q.count {
+            if q.data[i].pri > best_pri {
+                best_pri = q.data[i].pri;
+                best_idx = i;
+            }
+        }
+    }
+    return best_idx;
+}
+
+// Dequeue: remove highest-priority entry by compacting array.
+struct Copy DeqResult {
+    val: i32,
+    pri: i32,
+    queue: PQueue,
+    ok: i32,
+}
+
+fn pq_dequeue(q: PQueue) -> DeqResult {
+    if q.count == 0 {
+        return DeqResult { val: 0, pri: 0, queue: q, ok: 0 };
+    }
+    let idx: i32 = pq_find_max(q);
+    let out_val: i32 = q.data[idx].val;
+    let out_pri: i32 = q.data[idx].pri;
+
+    // Compact: shift elements after idx down by one
+    let mut d: [Entry; 16] = q.data;
+    for (let mut i: i32 = 0; i < 15; i = i + 1) {
+        if i >= idx {
+            if i + 1 < q.count {
+                d[i] = d[i + 1];
+            }
+        }
+    }
+    // Clear the last slot
+    d[q.count - 1] = Entry { val: 0, pri: 0, active: 0 };
+    let new_q: PQueue = PQueue { data: d, count: q.count - 1 };
+    return DeqResult { val: out_val, pri: out_pri, queue: new_q, ok: 1 };
+}
+
+// Peek: return highest-priority entry without removing.
+fn pq_peek_val(q: PQueue) -> i32 {
+    let idx: i32 = pq_find_max(q);
+    return q.data[idx].val;
+}
+
+fn pq_peek_pri(q: PQueue) -> i32 {
+    let idx: i32 = pq_find_max(q);
+    return q.data[idx].pri;
+}
+
+// Sum all values in queue (for verification). Bounded loop.
+fn pq_sum_vals(q: PQueue) -> i32 {
+    let mut acc: i32 = 0;
+    for (let mut i: i32 = 0; i < 16; i = i + 1) {
+        if i < q.count {
+            acc = acc + q.data[i].val;
+        }
+    }
+    return acc;
+}
+
+// ---- Tests ----
+
+pub fn main() -> Int {
+    // Test 1: new queue is empty
+    let mut q: PQueue = pq_new();
+    if pq_empty(q) != 1 { return 1; }
+    if pq_full(q) != 0 { return 2; }
+    if pq_size(q) != 0 { return 3; }
+
+    // Test 2: enqueue 4 items with different priorities
+    q = pq_enqueue(q, 10, 1);  // val=10, pri=1 (low)
+    q = pq_enqueue(q, 20, 3);  // val=20, pri=3 (high)
+    q = pq_enqueue(q, 30, 2);  // val=30, pri=2 (medium)
+    q = pq_enqueue(q, 40, 1);  // val=40, pri=1 (low)
+    if pq_size(q) != 4 { return 4; }
+
+    // Test 3: peek should return highest priority (pri=3, val=20)
+    if pq_peek_val(q) != 20 { return 5; }
+    if pq_peek_pri(q) != 3 { return 6; }
+
+    // Test 4: sum all values
+    if pq_sum_vals(q) != 100 { return 7; }  // 10+20+30+40
+
+    // Test 5: dequeue should remove pri=3 first
+    let d1: DeqResult = pq_dequeue(q);
+    if d1.ok != 1 { return 8; }
+    if d1.val != 20 { return 9; }
+    if d1.pri != 3 { return 10; }
+    q = d1.queue;
+    if pq_size(q) != 3 { return 11; }
+
+    // Test 6: next dequeue should remove pri=2 (val=30)
+    let d2: DeqResult = pq_dequeue(q);
+    if d2.ok != 1 { return 12; }
+    if d2.val != 30 { return 13; }
+    if d2.pri != 2 { return 14; }
+    q = d2.queue;
+
+    // Test 7: two pri=1 items remain, FIFO order: val=10 first
+    let d3: DeqResult = pq_dequeue(q);
+    if d3.ok != 1 { return 15; }
+    if d3.val != 10 { return 16; }
+    q = d3.queue;
+
+    let d4: DeqResult = pq_dequeue(q);
+    if d4.ok != 1 { return 17; }
+    if d4.val != 40 { return 18; }
+    q = d4.queue;
+
+    // Test 8: queue is now empty
+    if pq_empty(q) != 1 { return 19; }
+
+    // Test 9: dequeue from empty returns ok=0
+    let d5: DeqResult = pq_dequeue(q);
+    if d5.ok != 0 { return 20; }
+
+    // Test 10: fill to capacity (16 entries)
+    for (let mut i: i32 = 0; i < 16; i = i + 1) {
+        q = pq_enqueue(q, i * 10, i % 4);
+    }
+    if pq_full(q) != 1 { return 21; }
+    if pq_size(q) != 16 { return 22; }
+
+    // Test 11: enqueue on full queue does not change count
+    let q_before: PQueue = q;
+    q = pq_enqueue(q, 999, 99);
+    if pq_size(q) != 16 { return 23; }
+
+    // Test 12: dequeue from full queue removes highest (pri=3 entries: i=3,7,11,15)
+    // i=3: val=30,pri=3; i=7: val=70,pri=3; i=11: val=110,pri=3; i=15: val=150,pri=3
+    // First among them (FIFO) is val=30
+    let d6: DeqResult = pq_dequeue(q);
+    if d6.ok != 1 { return 24; }
+    if d6.pri != 3 { return 25; }
+    if d6.val != 30 { return 26; }
+    q = d6.queue;
+
+    // Test 13: drain remaining 15, verify count goes to 0
+    for (let mut i: i32 = 0; i < 15; i = i + 1) {
+        let dr: DeqResult = pq_dequeue(q);
+        if dr.ok != 1 { return 27; }
+        q = dr.queue;
+    }
+    if pq_empty(q) != 1 { return 28; }
+
+    // Test 14: interleaved enqueue/dequeue stress
+    q = pq_new();
+    q = pq_enqueue(q, 1, 5);
+    q = pq_enqueue(q, 2, 10);
+    q = pq_enqueue(q, 3, 1);
+    // Dequeue highest (pri=10, val=2)
+    let di1: DeqResult = pq_dequeue(q);
+    if di1.val != 2 { return 29; }
+    q = di1.queue;
+    // Enqueue more
+    q = pq_enqueue(q, 4, 8);
+    q = pq_enqueue(q, 5, 3);
+    // Dequeue highest (pri=8, val=4)
+    let di2: DeqResult = pq_dequeue(q);
+    if di2.val != 4 { return 30; }
+    q = di2.queue;
+    // Next highest: pri=5, val=1
+    let di3: DeqResult = pq_dequeue(q);
+    if di3.val != 1 { return 31; }
+    q = di3.queue;
+    // Next: pri=3, val=5
+    let di4: DeqResult = pq_dequeue(q);
+    if di4.val != 5 { return 32; }
+    q = di4.queue;
+    // Last: pri=1, val=3
+    let di5: DeqResult = pq_dequeue(q);
+    if di5.val != 3 { return 33; }
+    q = di5.queue;
+    if pq_empty(q) != 1 { return 34; }
+
+    // All tests passed
+    return 0;
+}

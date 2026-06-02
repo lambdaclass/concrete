@@ -1,6 +1,7 @@
 import Concrete.AST
 import Concrete.Shared
 import Concrete.Intrinsic
+import Concrete.Diagnostic
 
 namespace Concrete
 
@@ -80,6 +81,7 @@ structure ResolvedImports where
   traitImpls     : List ImplTraitBlock := []
   implMethodSigs : List (String × FnSummary) := []  -- pre-computed, Self preserved
   typeAliases    : List (String × Ty) := []
+  newtypes       : List NewtypeDef := []
   /-- Maps local alias name → original linker symbol for aliased imports. -/
   linkerAliases  : List (String × String) := []
 
@@ -173,12 +175,14 @@ partial def buildFileSummary (m : Module) : FileSummary :=
   let pubExterns := m.externFns.filter (·.isPublic) |>.map (·.name)
   let pubConstants := m.constants.filter (·.isPublic) |>.map (·.name)
   let pubAliases := m.typeAliases.filter (·.isPublic) |>.map (·.name)
+  let pubNewtypes := m.newtypes.filter (·.isPublic) |>.map (·.name)
   let pubImplMethods := m.implBlocks.foldl (fun acc ib =>
     acc ++ (ib.methods.filter (·.isPublic)).map (fun f => ib.typeName ++ "_" ++ f.name)) []
   let pubTraitImplMethods := m.traitImpls.foldl (fun acc ti =>
     acc ++ (ti.methods.filter (·.isPublic)).map (fun f => ti.typeName ++ "_" ++ f.name)) []
   let publicNames := pubFns ++ pubStructs ++ pubEnums ++ pubTraits ++ pubExterns
-                     ++ pubConstants ++ pubAliases ++ pubImplMethods ++ pubTraitImplMethods
+                     ++ pubConstants ++ pubAliases ++ pubNewtypes
+                     ++ pubImplMethods ++ pubTraitImplMethods
   let externFnSigs := m.externFns.map fun ef =>
     let capSet := if ef.isTrusted then CapSet.empty else CapSet.concrete ["Unsafe"]
     let sig : FnSummary := {
@@ -232,15 +236,17 @@ def resolveImports (imports : List ImportDecl)
     (summaryTable : List (String × FileSummary))
     (unknownModuleMsg : String → String)
     (notPublicMsg : String → String → String)
-    : Except String ResolvedImports := do
+    (pass : String := "resolve")
+    : Except Diagnostics ResolvedImports := do
   let resolved ← imports.foldlM (init := ({} : ResolvedImports)) fun acc imp =>
     match summaryTable.lookup imp.moduleName with
-    | none => .error (unknownModuleMsg imp.moduleName)
+    | none => .error [{ severity := .error, message := unknownModuleMsg imp.moduleName, pass := pass, span := none, hint := none }]
     | some summary =>
-      -- Build alias map from the exporting module's type aliases and newtypes
-      -- (newtypes are erased at module boundaries for imported signatures)
-      let aliasMap := (summary.typeAliases.map fun ta => (ta.name, ta.targetTy))
-        ++ (summary.newtypes.map fun nt => (nt.name, nt.innerTy))
+      -- Build alias map from the exporting module's type aliases only.
+      -- Newtypes are NOT erased at the module boundary anymore: Layout
+      -- resolves newtype names directly via Layout.Ctx, and erasing here
+      -- would break type identity (Option<Port> would arrive as Option<u16>).
+      let aliasMap := summary.typeAliases.map fun ta => (ta.name, ta.targetTy)
       let pubFns := summary.functions ++ summary.externFnSigs
       imp.symbols.foldlM (init := acc) fun acc sym =>
         let origName := sym.name
@@ -274,7 +280,25 @@ def resolveImports (imports : List ImportDecl)
             | none =>
               match summary.typeAliases.find? fun ta => ta.isPublic && ta.name == origName with
               | some ta => .ok { acc with typeAliases := acc.typeAliases ++ [(localName, ta.targetTy)] }
-              | none => .error (notPublicMsg origName imp.moduleName)
+              | none =>
+                match summary.newtypes.find? fun nt => nt.isPublic && nt.name == origName with
+                | some nt =>
+                  -- Pull along inherent impl methods on the newtype, mirroring
+                  -- the struct path. This keeps `Wrap::try_new(...)` callable
+                  -- after `import Wrap.{Port}`.
+                  let newtypeImpls := summary.implBlocks.filter fun ib => ib.typeName == origName
+                  let newtypeTraitImpls := summary.traitImpls.filter fun tb => tb.typeName == origName
+                  let mangledNames := newtypeImpls.foldl (fun ns ib =>
+                    ns ++ (ib.methods.filter (·.isPublic)).map fun f => ib.typeName ++ "_" ++ f.name) []
+                    ++ newtypeTraitImpls.foldl (fun ns tb =>
+                    ns ++ (tb.methods.filter (·.isPublic)).map fun f => tb.typeName ++ "_" ++ f.name) []
+                  let matchingSigs := summary.implMethodSigs.filter fun (name, _) =>
+                    mangledNames.contains name
+                  .ok { acc with newtypes := acc.newtypes ++ [nt],
+                                 implBlocks := acc.implBlocks ++ newtypeImpls,
+                                 traitImpls := acc.traitImpls ++ newtypeTraitImpls,
+                                 implMethodSigs := acc.implMethodSigs ++ matchingSigs }
+                | none => .error [{ severity := .error, message := notPublicMsg origName imp.moduleName, pass := pass, span := none, hint := none }]
   -- Auto-include impl methods for builtin types (String, Vec, etc.) from all
   -- loaded modules, so methods like String.drop() work without explicit import.
   let builtinNames := builtinTypeNames

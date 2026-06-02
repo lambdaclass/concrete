@@ -1,0 +1,11 @@
+// Test: for loop with 0 iterations (i < 0). Loop body never executes.
+// Verifies the initial value is preserved when the loop runs zero times.
+// Expected output: 99
+
+pub fn main() with(Std) {
+    let mut sum: Int = 99;
+    for (let mut i: Int = 0; i < 0; i = i + 1) {
+        sum = 0;
+    }
+    println(sum);
+}

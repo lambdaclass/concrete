@@ -1,0 +1,30 @@
+// Adversarial module: 5 levels of nested modules.
+// Stresses recursive module resolution and qualified name handling.
+// Expected: 42
+
+mod Inner {
+    pub fn value() -> Int {
+        return 42;
+    }
+}
+
+mod Middle {
+    import Inner.{ value };
+    pub fn relay() -> Int {
+        return value();
+    }
+}
+
+mod Outer {
+    import Middle.{ relay };
+    pub fn fetch() -> Int {
+        return relay();
+    }
+}
+
+mod Main {
+    import Outer.{ fetch };
+    fn main() -> Int {
+        return fetch();
+    }
+}

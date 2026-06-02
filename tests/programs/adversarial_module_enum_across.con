@@ -1,0 +1,30 @@
+// Adversarial module: enum defined in one module, matched in another.
+// Tests cross-module enum variant resolution and pattern matching.
+// Expected: 42
+
+mod Types {
+    pub enum Copy Status {
+        Ok { val: Int },
+        Err { code: Int },
+    }
+}
+
+mod Logic {
+    import Types.{ Status };
+    pub fn unwrap_or(s: Status, default: Int) -> Int {
+        match s {
+            Status::Ok { val } => { return val; },
+            Status::Err { code } => { return default; },
+        }
+    }
+}
+
+mod Main {
+    import Types.{ Status };
+    import Logic.{ unwrap_or };
+    fn main() -> Int {
+        let a: Status = Status::Ok { val: 42 };
+        let b: Status = Status::Err { code: 99 };
+        return unwrap_or(a, 0) + unwrap_or(b, 0);
+    }
+}

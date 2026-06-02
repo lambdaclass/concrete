@@ -1,0 +1,20 @@
+// Adversarial (positive): correct capability propagation through a call chain.
+// main with(Std) -> A with(Console) -> B with(Console).
+// Std is a superset of Console, so main can call A; A and B share Console.
+// Expected: compiles and runs successfully, returning 0.
+
+fn B() with(Console) -> Int {
+    return 42;
+}
+
+fn A() with(Console) -> Int {
+    return B();
+}
+
+fn main() with(Std) -> Int {
+    let x: Int = A();
+    if x == 42 {
+        return 0;
+    }
+    return 1;
+}

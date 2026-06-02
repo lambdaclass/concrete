@@ -1,0 +1,9 @@
+// Pressure error: linear struct goes out of scope without consumption or destroy.
+// Should fail: linear variable never consumed.
+
+struct Handle { fd: Int }
+
+fn main() -> Int {
+    let h: Handle = Handle { fd: 3 };
+    return 0;
+}

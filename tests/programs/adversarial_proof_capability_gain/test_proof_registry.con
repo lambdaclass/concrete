@@ -1,0 +1,16 @@
+// Adversarial test: proved function gains a capability
+// pure_add has a matching fingerprint in the hardcoded provedFunctions,
+// but here it calls an impure function, which should make it ineligible.
+
+fn side_effect() -> Int {
+    return 42;
+}
+
+fn impure_add(a: Int, b: Int) -> Int {
+    let _unused: Int = side_effect();
+    return a + b;
+}
+
+fn main() -> i32 {
+    return 0;
+}

@@ -2,6 +2,7 @@ import Concrete.Core
 import Concrete.SSA
 import Concrete.Layout
 import Concrete.Intrinsic
+import Concrete.Diagnostic
 
 namespace Concrete
 
@@ -63,6 +64,7 @@ structure LowerState where
   stringLits : List (String × String)
   structDefs : List CStructDef
   enumDefs : List CEnumDef
+  newtypes : List NewtypeDef := []
   loopStack : List LoopInfo
   constants : List (String × Ty × CExpr) := []
   /-- Allocas that must be hoisted to the function entry block.
@@ -73,8 +75,14 @@ structure LowerState where
       the alloca instead of phi-transporting whole struct values. -/
   promotedAllocas : List (String × String × Ty) := []
   scopeStack : List ScopeFrame := []
+  /-- True after terminateBlock, cleared by startBlock. Used to detect
+      dead code after early returns inside borrow blocks. -/
+  blockTerminated : Bool := false
 
-abbrev LowerM := ExceptT String (StateM LowerState)
+abbrev LowerM := ExceptT Diagnostics (StateM LowerState)
+
+private def throwLower (msg : String) : LowerM α :=
+  throw [{ severity := .error, message := msg, pass := "lower", span := none, hint := none, code := "E0602" }]
 
 private def getState : LowerM LowerState := get
 private def setState (s : LowerState) : LowerM Unit := set s
@@ -114,11 +122,11 @@ private def insertStoreBeforeTerm (blockLabel : String) (val : SVal) (dst : SVal
 private def terminateBlock (term : STerm) : LowerM Unit := do
   let s ← getState
   let block : SBlock := { label := s.currentLabel, insts := s.currentInsts, term := term }
-  setState { s with blocks := s.blocks ++ [block], currentInsts := [] }
+  setState { s with blocks := s.blocks ++ [block], currentInsts := [], blockTerminated := true }
 
 private def startBlock (label : String) : LowerM Unit := do
   let s ← getState
-  setState { s with currentLabel := label }
+  setState { s with currentLabel := label, blockTerminated := false }
 
 private def setVar (name : String) (val : SVal) : LowerM Unit := do
   let s ← getState
@@ -184,7 +192,7 @@ private def lookupStructFields (tyName : String) : LowerM (List (String × Ty)) 
   match s.structDefs.find? fun sd => sd.name == tyName with
   | some sd => return sd.fields
   | none =>
-    throw s!"Lower.lookupStructFields: struct '{tyName}' not found in struct defs"
+    throwLower s!"Lower.lookupStructFields: struct '{tyName}' not found in struct defs"
 
 /-- Get field index within a struct definition. Returns 0 if not found. -/
 private def fieldIndex (tyName : String) (fieldName : String) : LowerM Nat := do
@@ -192,7 +200,7 @@ private def fieldIndex (tyName : String) (fieldName : String) : LowerM Nat := do
   match (enumerate fields).find? fun (_, (n, _)) => n == fieldName with
   | some (idx, _) => return idx
   | none =>
-    throw s!"Lower.fieldIndex: field '{fieldName}' not found in struct '{tyName}'"
+    throwLower s!"Lower.fieldIndex: field '{fieldName}' not found in struct '{tyName}'"
 
 /-- Get variant index within an enum definition. Returns 0 if not found. -/
 private def variantIndex (enumName : String) (variantName : String) : LowerM Nat := do
@@ -202,9 +210,9 @@ private def variantIndex (enumName : String) (variantName : String) : LowerM Nat
     match (enumerate ed.variants).find? fun (_, (vn, _)) => vn == variantName with
     | some (idx, _) => return idx
     | none =>
-      throw s!"Lower.variantIndex: variant '{variantName}' not found in enum '{enumName}'"
+      throwLower s!"Lower.variantIndex: variant '{variantName}' not found in enum '{enumName}'"
   | none =>
-    throw s!"Lower.variantIndex: enum '{enumName}' not found in enum defs"
+    throwLower s!"Lower.variantIndex: enum '{enumName}' not found in enum defs"
 
 /-- Get variant fields within an enum definition. -/
 private def variantFields (enumName : String) (variantName : String) (typeArgs : List Ty := []) : LowerM (List (String × Ty)) := do
@@ -215,9 +223,9 @@ private def variantFields (enumName : String) (variantName : String) (typeArgs :
     match ed.variants.find? fun (vn, _) => vn == variantName with
     | some (_, fields) => return fields
     | none =>
-      throw s!"Lower.variantFields: variant '{variantName}' not found in enum '{enumName}'"
+      throwLower s!"Lower.variantFields: variant '{variantName}' not found in enum '{enumName}'"
   | none =>
-    throw s!"Lower.variantFields: enum '{enumName}' not found in enum defs"
+    throwLower s!"Lower.variantFields: enum '{enumName}' not found in enum defs"
 
 /-- Extract struct type name from a Ty, unwrapping references/pointers. -/
 private def structNameFromTy (ty : Ty) : LowerM String :=
@@ -227,12 +235,12 @@ private def structNameFromTy (ty : Ty) : LowerM String :=
   | .string => return "String"
   | .ref inner | .refMut inner | .ptrMut inner | .ptrConst inner => structNameFromTy inner
   | other =>
-    throw s!"Lower.structNameFromTy: unhandled type '{repr other}'"
+    throwLower s!"Lower.structNameFromTy: unhandled type '{repr other}'"
 
 /-- Build a Layout.Ctx from the current LowerState. -/
 private def getLayoutCtx : LowerM Layout.Ctx := do
   let s ← getState
-  return { structDefs := s.structDefs, enumDefs := s.enumDefs }
+  return { structDefs := s.structDefs, enumDefs := s.enumDefs, newtypes := s.newtypes }
 
 /-- Compute byte size of a type (for malloc). Delegates to Layout.tySize. -/
 private def computeTySize (ty : Ty) : LowerM Nat := do
@@ -662,7 +670,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         | .varArm binding _bindTy body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
-          setVar binding scrVal
+          if binding != "_" then setVar binding scrVal
           lowerStmts body
           let bodyVal ← lastExprVal body ty
           -- Cast if arm result type differs from expected type (e.g., Int → i32)
@@ -749,7 +757,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         | .varArm binding _bindTy body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
-          setVar binding scrVal
+          if binding != "_" then setVar binding scrVal
           lowerStmts body
           let bodyVal ← lastExprVal body ty
           -- Cast if arm result type differs from expected type (e.g., Int → i32)
@@ -830,13 +838,39 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
             let phiReg ← freshReg "match.phi."
             emit (.phi phiReg incoming varTy)
             setVar name (.reg phiReg varTy)
+      -- WC-0004: arm-local enum-payload bindings (e.g. `Check::Fail { code }`)
+      -- enter the var-table via `setVar` inside the arm body. After merge,
+      -- those bindings are out of scope but still leak into vars; the next
+      -- match's preMatchVars snapshot then sees them, builds a phi across
+      -- arms that don't all bind them, and produces a dominator violation
+      -- (E0708) when an arm without the binding pulls a value defined
+      -- inside a different arm. Restrict vars back to preMatchVars's name
+      -- set; merged updates from the phi pass survive because we just
+      -- wrote them via `setVar`.
+      let st ← getState
+      let cleaned := preMatchVars.map fun (n, preVal) =>
+        match st.vars.find? fun (vn, _) => vn == n with
+        | some (_, v) => (n, v)
+        | none => (n, preVal)
+      setState { st with vars := cleaned }
     else if liveSnapshots.length == 1 then
-      -- Only one arm reached merge — use its vars directly
+      -- Only one arm reached merge — use its vars directly, then drop
+      -- arm-local bindings (same WC-0004 leakage applies).
       match liveSnapshots with
       | [(endVars, _, _)] =>
         let st ← getState
-        setState { st with vars := endVars }
+        let cleaned := preMatchVars.map fun (n, preVal) =>
+          match endVars.find? fun (vn, _) => vn == n with
+          | some (_, v) => (n, v)
+          | none => (n, preVal)
+        setState { st with vars := cleaned }
       | _ => pure ()
+    else
+      -- All arms terminated; merge is unreachable. Restore vars so any
+      -- accidental downstream read sees the pre-match state instead of
+      -- the last arm's leaked bindings.
+      let st ← getState
+      setState { st with vars := preMatchVars }
     -- Handle the match result value phi
     -- Filter out .unit values (arms that produce no result, e.g. side-effect blocks)
     let realPhiIncoming := phiIncoming.filter fun (v, _) => match v with | .unit => false | _ => true
@@ -1278,9 +1312,19 @@ private partial def emitDeferredUntilLoop : LowerM Unit := do
 
 partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
   match stmt with
-  | .letDecl name _mutable _ty value =>
+  | .letDecl name mutable ty value =>
     let val ← lowerExpr value
-    setVar name val
+    -- Mutable arrays need a stable alloca so index-assignment works on a pointer.
+    -- Without this, `let mut d = b.data; d[0] = 99;` would try to GEP/store
+    -- into a value register instead of a stack allocation.
+    match mutable, ty with
+    | true, .array _ _ =>
+      let allocaReg ← freshReg s!"{name}.arr."
+      emit (.alloca allocaReg ty)
+      emit (.store val (.reg allocaReg ty))
+      addPromotedAlloca name allocaReg ty
+    | _, _ =>
+      setVar name val
 
   | .assign name value =>
     let val ← lowerExpr value
@@ -1658,7 +1702,18 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let elemTy := match arr.ty with | .array t _ => t | _ => value.ty
     let gepDst ← freshReg
     emit (.gep gepDst aVal [iVal] elemTy)
-    emit (.store vVal (.reg gepDst elemTy))
+    -- Coerce the value to the element type before storing.  Without
+    -- this, an int literal (typed `Int`/i64) assigned to a narrower
+    -- slot (e.g. `b[i] = 9` where b : [u8; N]) would emit
+    -- `store i64 9` into a u8 cell, writing 8 bytes past the element
+    -- and corrupting the array.  Runtime values already carry the
+    -- slot type, so this only inserts a (truncating) cast for the
+    -- literal/width-mismatch case.
+    let storeVal ← if value.ty == elemTy then pure vVal else do
+      let castDst ← freshReg
+      emit (.cast castDst vVal elemTy)
+      pure (SVal.reg castDst elemTy)
+    emit (.store storeVal (.reg gepDst elemTy))
 
   | .break_ value breakLabel =>
     match ← findLoopByLabel breakLabel with
@@ -1691,23 +1746,31 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     addDeferredToCurrentScope body
 
   | .borrowIn var ref _region isMut refTy body =>
-    -- Create a memory slot for the borrowed variable, set ref to point to it
+    -- Create a memory slot for the borrowed variable, set ref to point to it.
+    -- The ref variable is stored with the full reference type (refMut T / ref T)
+    -- so that when passed as a function argument, the correct pointer type is emitted.
+    -- The alloca is hoisted to the entry block so it dominates all uses, including
+    -- across early returns inside the borrow block body.
     let curVal ← lookupVar var
     let innerTy := match refTy with
       | .ref t | .refMut t | .ptrMut t | .ptrConst t => t
       | _ => refTy
     let slot ← freshReg "borrow."
-    emit (.alloca slot innerTy)
+    emitEntryAlloca (.alloca slot innerTy)
     match curVal with
     | some cv => emit (.store cv (.reg slot innerTy))
     | none => pure ()
-    setVar ref (.reg slot innerTy)
+    setVar ref (.reg slot refTy)
     lowerStmts body
-    -- For mutable borrows, load back the value and update the original variable
+    -- For mutable borrows, load back the value and update the original variable.
+    -- Skip write-back if the body terminated early (return/break) — the write-back
+    -- would be dead code and reference registers from non-dominating blocks.
     if isMut then
-      let loadBack ← freshReg "wb."
-      emit (.load loadBack (.reg slot innerTy) innerTy)
-      setVar var (.reg loadBack innerTy)
+      let s ← getState
+      if !s.blockTerminated then
+        let loadBack ← freshReg "wb."
+        emit (.load loadBack (.reg slot innerTy) innerTy)
+        setVar var (.reg loadBack innerTy)
 
 partial def lowerStmts (stmts : List CStmt) : LowerM Unit := do
   pushScope .block
@@ -1730,7 +1793,8 @@ end
 -- ============================================================
 
 def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDef)
-    (constants : List (String × Ty × CExpr) := []) : Except String (SFnDef × List (String × String)) :=
+    (constants : List (String × Ty × CExpr) := [])
+    (newtypes : List NewtypeDef := []) : Except Diagnostics (SFnDef × List (String × String)) :=
   let initState : LowerState := {
     blocks := []
     currentLabel := "entry"
@@ -1741,6 +1805,7 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
     stringLits := []
     structDefs := structDefs
     enumDefs := enumDefs
+    newtypes := newtypes
     loopStack := []
     constants := constants
     scopeStack := [{ kind := .function }]
@@ -1809,6 +1874,11 @@ private partial def collectAllLinkerAliases (m : CModule) : List (String × Stri
   let sub := m.submodules.foldl (fun acc s => acc ++ collectAllLinkerAliases s) []
   m.linkerAliases ++ sub
 
+private partial def collectAllNewtypes (m : CModule) : List NewtypeDef :=
+  let own := m.newtypes
+  let sub := m.submodules.foldl (fun acc s => acc ++ collectAllNewtypes s) []
+  own ++ sub
+
 private def renameSVal (rmap : List (String × String)) : SVal → SVal
   | .strConst name => match rmap.lookup name with
     | some newName => .strConst newName
@@ -1835,7 +1905,7 @@ private def renameStrConstsInTerm (rmap : List (String × String)) : STerm → S
   | .condBr cond tl el => .condBr (renameSVal rmap cond) tl el
   | other => other
 
-def lowerModule (m : CModule) : Except String SModule := do
+def lowerModule (m : CModule) : Except Diagnostics SModule := do
   let allFunctionsWithPath := collectAllFunctionsWithPath m
   -- Add synthetic String struct so fieldOffset can compute offsets for built-in .string type
   let syntheticStringDef : CStructDef := { name := "String", fields := [("ptr", .ptrMut .u8), ("len", .uint), ("cap", .uint)] }
@@ -1843,13 +1913,14 @@ def lowerModule (m : CModule) : Except String SModule := do
   let allEnums := collectAllEnums m
   let allExterns := collectAllExterns m
   let allConstants := collectAllConstants m
+  let allNewtypes := collectAllNewtypes m
   -- Skip generic functions (non-empty typeParams); only their monomorphized
   -- specializations should be lowered.
   let concreteFns := allFunctionsWithPath.filter fun (f, _) => f.typeParams.isEmpty
   let results ← concreteFns.foldlM (init := []) fun acc (f, path) =>
-    match lowerFn f allStructs allEnums allConstants with
+    match lowerFn f allStructs allEnums allConstants allNewtypes with
     | .ok (sfn, lits) => .ok (acc ++ [({ sfn with modulePath := path }, lits)])
-    | .error e => .error s!"Lower.lowerModule: failed to lower function '{f.name}': {e}"
+    | .error ds => .error (ds.map (·.addContext s!"while lowering function '{f.name}'"))
   -- Build deduplicated globals list (by string value)
   -- Prefix with module name to avoid collisions across modules
   let globals := results.foldl (fun deduped (_, lits) =>
@@ -1879,6 +1950,7 @@ def lowerModule (m : CModule) : Except String SModule := do
     externFns := allExterns
     globals := globals
     linkerAliases := collectAllLinkerAliases m
+    newtypes := allNewtypes
   }
   return result
 

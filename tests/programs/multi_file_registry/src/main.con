@@ -1,0 +1,14 @@
+mod multi_file_registry {
+    mod other;
+
+    import other.{double};
+
+    pub fn add_one(x: i64) -> i64 {
+        return x + 1;
+    }
+
+    pub fn main() with(Std) -> Int {
+        let r: i64 = add_one(double(20));
+        return r as Int;
+    }
+}

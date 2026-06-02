@@ -1,0 +1,11 @@
+// Adversarial: return wrong type from function.
+// get_value declares return type Int but returns a Bool.
+// Expected: compile error about type mismatch.
+
+fn get_value() -> Int {
+    return true;
+}
+
+pub fn main() -> Int {
+    return get_value();
+}

@@ -1,0 +1,11 @@
+// Cannot take a mutable borrow of an immutable variable.
+
+fn increment(r: &mut Int) {
+    *r = *r + 1;
+}
+
+fn main() -> Int {
+    let x: Int = 10;
+    increment(&mut x);
+    return x;
+}

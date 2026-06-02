@@ -2,7 +2,6 @@ mod fs {
     import std.alloc.{grow,dealloc};
     import std.libc.{fopen, fclose, fwrite, fread, fseek, ftell};
     import std.bytes.{Bytes};
-    import std.result.{Result};
 
     pub enum Copy FsError {
         OpenFailed,
@@ -16,10 +15,10 @@ mod fs {
         pub fn open(path: &String, mode: &String) with(Unsafe, Alloc) -> Result<File, FsError> {
             let h: *const u8 = fopen(path.ptr, mode.ptr);
             if h == (0 as *const u8) {
-                return Result::<File, FsError>#Err { error: FsError#OpenFailed };
+                return Result::<File, FsError>::Err { error: FsError::OpenFailed };
             }
             let f: File = File { handle: h };
-            return Result::<File, FsError>#Ok { value: f };
+            return Result::<File, FsError>::Ok { value: f };
         }
 
         pub fn create(path: &String) with(Unsafe, Alloc) -> Result<File, FsError> {
@@ -27,10 +26,10 @@ mod fs {
             let h: *const u8 = fopen(path.ptr, mode.ptr);
             mode.drop();
             if h == (0 as *const u8) {
-                return Result::<File, FsError>#Err { error: FsError#OpenFailed };
+                return Result::<File, FsError>::Err { error: FsError::OpenFailed };
             }
             let f: File = File { handle: h };
-            return Result::<File, FsError>#Ok { value: f };
+            return Result::<File, FsError>::Ok { value: f };
         }
 
         pub fn write_bytes(&self, buf: *const u8, len: u64) with(Unsafe) -> u64 {
@@ -60,7 +59,7 @@ mod fs {
         mode.drop();
 
         if handle == (0 as *const u8) {
-            return Result::<Bytes, FsError>#Err { error: FsError#OpenFailed };
+            return Result::<Bytes, FsError>::Err { error: FsError::OpenFailed };
         }
 
         // Seek to end to get size
@@ -76,7 +75,7 @@ mod fs {
         buf.len = n;
 
         fclose(handle);
-        return Result::<Bytes, FsError>#Ok { value: buf };
+        return Result::<Bytes, FsError>::Ok { value: buf };
     }
 
     pub trusted fn write_file(path: &String, data: &Bytes) with(Unsafe, Alloc) -> Result<u64, FsError> {
@@ -85,12 +84,12 @@ mod fs {
         mode.drop();
 
         if handle == (0 as *const u8) {
-            return Result::<u64, FsError>#Err { error: FsError#OpenFailed };
+            return Result::<u64, FsError>::Err { error: FsError::OpenFailed };
         }
 
         let written: u64 = fwrite(data.ptr as *const u8, 1, data.len, handle);
         fclose(handle);
-        return Result::<u64, FsError>#Ok { value: written };
+        return Result::<u64, FsError>::Ok { value: written };
     }
 
     pub trusted fn append_file(path: &String, data: &Bytes) with(Unsafe, Alloc) -> Result<u64, FsError> {
@@ -99,12 +98,12 @@ mod fs {
         mode.drop();
 
         if handle == (0 as *const u8) {
-            return Result::<u64, FsError>#Err { error: FsError#OpenFailed };
+            return Result::<u64, FsError>::Err { error: FsError::OpenFailed };
         }
 
         let written: u64 = fwrite(data.ptr as *const u8, 1, data.len, handle);
         fclose(handle);
-        return Result::<u64, FsError>#Ok { value: written };
+        return Result::<u64, FsError>::Ok { value: written };
     }
 
     pub trusted fn file_exists(path: &String) with(Unsafe, Alloc) -> bool {
@@ -124,7 +123,7 @@ mod fs {
         mode.drop();
 
         if handle == (0 as *const u8) {
-            return Result::<String, FsError>#Err { error: FsError#OpenFailed };
+            return Result::<String, FsError>::Err { error: FsError::OpenFailed };
         }
 
         // Seek to end to get size
@@ -144,23 +143,23 @@ mod fs {
         }
 
         fclose(handle);
-        return Result::<String, FsError>#Ok { value: s };
+        return Result::<String, FsError>::Ok { value: s };
     }
 
     // Test helpers: unwrap write/append to bool to avoid match-binding type conflicts
     fn write_file_ok(path: &String, data: &Bytes) with(Unsafe, Alloc) -> bool {
         let r: Result<u64, FsError> = write_file(path, data);
         match r {
-            Result#Ok { value } => { return true; },
-            Result#Err { error } => { return false; }
+            Result::Ok { value } => { return true; },
+            Result::Err { error } => { return false; }
         }
     }
 
     fn append_file_ok(path: &String, data: &Bytes) with(Unsafe, Alloc) -> bool {
         let r: Result<u64, FsError> = append_file(path, data);
         match r {
-            Result#Ok { value } => { return true; },
-            Result#Err { error } => { return false; }
+            Result::Ok { value } => { return true; },
+            Result::Err { error } => { return false; }
         }
     }
 
@@ -190,11 +189,11 @@ mod fs {
         let wr: Result<u64, FsError> = write_file(&path, &data);
         data.drop();
         match wr {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 let rr: Result<Bytes, FsError> = read_file(&path);
                 path.drop();
                 match rr {
-                    Result#Ok { value } => {
+                    Result::Ok { value } => {
                         if value.len != 2 {
                             value.drop();
                             return 1;
@@ -210,12 +209,12 @@ mod fs {
                         value.drop();
                         return 0;
                     },
-                    Result#Err { error } => {
+                    Result::Err { error } => {
                         return 1;
                     }
                 }
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 path.drop();
                 return 1;
             }
@@ -230,11 +229,11 @@ mod fs {
         path.drop();
         mode.drop();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 value.close();
                 return 1;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return 0;
             }
         }
@@ -246,11 +245,11 @@ mod fs {
         let result: Result<File, FsError> = File::create(&path);
         path.drop();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 value.close();
                 return 1;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return 0;
             }
         }
@@ -262,11 +261,11 @@ mod fs {
         let result: Result<Bytes, FsError> = read_file(&path);
         path.drop();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 value.drop();
                 return 1;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return 0;
             }
         }
@@ -281,7 +280,7 @@ mod fs {
         path.drop();
         mode.drop();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 // Writing to a read-only file should return 0 bytes written
                 let data: String = "hello";
                 let n: u64 = value.write_bytes(data.ptr as *const u8, data.len);
@@ -292,7 +291,7 @@ mod fs {
                 }
                 return 1;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return 1;
             }
         }
@@ -306,10 +305,10 @@ mod fs {
         path.drop();
         data.drop();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 return 1;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return 0;
             }
         }
@@ -326,12 +325,12 @@ mod fs {
         let rr: Result<Bytes, FsError> = read_file(&path);
         path.drop();
         match rr {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 if value.len != 0 { value.drop(); return 1; }
                 value.drop();
                 return 0;
             },
-            Result#Err { error } => { return 1; }
+            Result::Err { error } => { return 1; }
         }
     }
 
@@ -354,7 +353,7 @@ mod fs {
         let rr: Result<Bytes, FsError> = read_file(&path);
         path.drop();
         match rr {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 if value.len != 4 { value.drop(); return 1; }
                 if value.get_unchecked(0) != 65 { value.drop(); return 1; }
                 if value.get_unchecked(1) != 66 { value.drop(); return 1; }
@@ -363,7 +362,7 @@ mod fs {
                 value.drop();
                 return 0;
             },
-            Result#Err { error } => { return 1; }
+            Result::Err { error } => { return 1; }
         }
     }
 
@@ -385,14 +384,14 @@ mod fs {
         path.drop();
         mode.drop();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 value.seek(3, 0); // SEEK_SET = 0
                 let pos: i64 = value.tell();
                 value.close();
                 if pos != 3 { return 1; }
                 return 0;
             },
-            Result#Err { error } => { return 1; }
+            Result::Err { error } => { return 1; }
         }
     }
 
@@ -402,8 +401,8 @@ mod fs {
         let result: Result<String, FsError> = read_to_string(&path);
         path.drop();
         match result {
-            Result#Ok { value } => { value.drop(); return 1; },
-            Result#Err { error } => { return 0; }
+            Result::Ok { value } => { value.drop(); return 1; },
+            Result::Err { error } => { return 0; }
         }
     }
 
@@ -420,12 +419,12 @@ mod fs {
         let rr: Result<String, FsError> = read_to_string(&path);
         path.drop();
         match rr {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 if value.len != 2 { value.drop(); return 1; }
                 value.drop();
                 return 0;
             },
-            Result#Err { error } => { return 1; }
+            Result::Err { error } => { return 1; }
         }
     }
 
@@ -437,8 +436,8 @@ mod fs {
         path.drop();
         data.drop();
         match result {
-            Result#Ok { value } => { return 1; },
-            Result#Err { error } => { return 0; }
+            Result::Ok { value } => { return 1; },
+            Result::Err { error } => { return 0; }
         }
     }
 
@@ -457,11 +456,11 @@ mod fs {
         // Confirm file is 3 bytes via read_file
         let check: Result<Bytes, FsError> = read_file(&path);
         match check {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 if value.len != 3 { value.drop(); path.drop(); return 1; }
                 value.drop();
             },
-            Result#Err { error } => { path.drop(); return 1; }
+            Result::Err { error } => { path.drop(); return 1; }
         }
         // Now open and read more than the file contains
         let mode: String = "r";
@@ -469,7 +468,7 @@ mod fs {
         path.drop();
         mode.drop();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 let buf: [u8; 64] = [0; 64];
                 let n: u64 = value.read_bytes(&buf as *mut u8, 64);
                 value.close();
@@ -480,7 +479,7 @@ mod fs {
                 if n > 3 { return 1; }
                 return 0;
             },
-            Result#Err { error } => { return 1; }
+            Result::Err { error } => { return 1; }
         }
     }
 
@@ -503,7 +502,7 @@ mod fs {
         path.drop();
         mode.drop();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 value.seek(100, 0); // SEEK_SET past end
                 let pos: i64 = value.tell();
                 // Read should return 0 bytes from beyond EOF
@@ -514,7 +513,7 @@ mod fs {
                 if n != 0 { return 1; }
                 return 0;
             },
-            Result#Err { error } => { return 1; }
+            Result::Err { error } => { return 1; }
         }
     }
 
@@ -529,12 +528,12 @@ mod fs {
         let rr: Result<String, FsError> = read_to_string(&path);
         path.drop();
         match rr {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 if value.len != 0 { value.drop(); return 1; }
                 value.drop();
                 return 0;
             },
-            Result#Err { error } => { return 1; }
+            Result::Err { error } => { return 1; }
         }
     }
 }

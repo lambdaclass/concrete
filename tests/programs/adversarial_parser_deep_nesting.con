@@ -1,0 +1,41 @@
+// Adversarial parser: 15 levels of nested if/else.
+// Stresses parser stack depth for nested expressions.
+// Expected: 42
+
+fn classify(x: Int) -> Int {
+    if x > 0 {
+        if x > 1 {
+            if x > 2 {
+                if x > 3 {
+                    if x > 4 {
+                        if x > 5 {
+                            if x > 6 {
+                                if x > 7 {
+                                    if x > 8 {
+                                        if x > 9 {
+                                            if x > 10 {
+                                                if x > 11 {
+                                                    if x > 12 {
+                                                        if x > 13 {
+                                                            if x > 14 {
+                                                                return 42;
+                                                            } else { return 15; }
+                                                        } else { return 14; }
+                                                    } else { return 13; }
+                                                } else { return 12; }
+                                            } else { return 11; }
+                                        } else { return 10; }
+                                    } else { return 9; }
+                                } else { return 8; }
+                            } else { return 7; }
+                        } else { return 6; }
+                    } else { return 5; }
+                } else { return 4; }
+            } else { return 3; }
+        } else { return 2; }
+    } else { return 1; }
+}
+
+pub fn main() -> Int {
+    return classify(100);
+}

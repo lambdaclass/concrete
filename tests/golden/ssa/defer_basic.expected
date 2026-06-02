@@ -1,0 +1,22 @@
+; module main
+define i64 @use_resource() {
+entry:
+  %t0 = alloca %Resource
+  store i64 10, %t0
+  %t2 = load %Resource, %t0
+  %t4 = load i64, %t2
+  call void @Resource_destroy(%Resource %t2)
+  ret i64 %t4
+}
+
+define i64 @main() {
+entry:
+  %t0 = call i64 @use_resource()
+  ret i64 %t0
+}
+
+define void @Resource_destroy(ptr(%Resource) %self) {
+entry:
+
+  ret void
+}

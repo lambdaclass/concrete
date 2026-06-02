@@ -1,0 +1,49 @@
+// Toy authenticated-tag model — DRIFTED variant for drift testing
+//
+// Changes from original:
+//   1. compute_tag uses subtraction instead of addition (breaks tag computation)
+//   2. check_nonce accepts nonce == 0 (off-by-one, weakens validation)
+//   3. verify_tag is unchanged
+
+// === Provable core (pure, no capabilities) ===
+
+// DRIFTED: changed + to - (breaks tag computation)
+fn compute_tag(key: Int, message: Int, nonce: Int) -> Int {
+    return key * message - nonce;
+}
+
+// Unchanged from original
+fn verify_tag(key: Int, message: Int, nonce: Int, expected_tag: Int) -> Int {
+    let computed: Int = compute_tag(key, message, nonce);
+    if computed == expected_tag {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+// DRIFTED: accepts nonce == 0 (>= instead of >)
+fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
+    if nonce >= 0 {
+        if nonce <= max_nonce {
+            return 1;
+        } else {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+}
+
+// === Shell (with capabilities) ===
+
+fn main() -> i32 {
+    let key: Int = 42;
+    let msg: Int = 100;
+    let nonce: Int = 7;
+    let tag: Int = compute_tag(key, msg, nonce);
+    let valid: Int = verify_tag(key, msg, nonce, tag);
+    let bad: Int = verify_tag(key, msg, nonce, 9999);
+    let nonce_ok: Int = check_nonce(nonce, 1000);
+    return 0;
+}

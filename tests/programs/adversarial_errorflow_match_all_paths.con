@@ -1,0 +1,108 @@
+// Adversarial error-flow: a function where every match arm returns a different
+// error variant, ensuring exhaustive coverage with early returns.
+// Tests that the compiler handles all-error-returning match arms correctly.
+// Expected: 0
+
+enum Copy Category {
+    Alpha,
+    Beta,
+    Gamma,
+    Delta,
+    Epsilon,
+}
+
+enum Copy Verdict {
+    Approved { score: Int },
+    Rejected { reason: Int },
+}
+
+fn classify(cat: Category, threshold: Int) -> Verdict {
+    match cat {
+        Category::Alpha => {
+            if threshold > 80 {
+                return Verdict::Approved { score: 100 };
+            }
+            return Verdict::Rejected { reason: 1 };
+        },
+        Category::Beta => {
+            if threshold > 60 {
+                return Verdict::Approved { score: 80 };
+            }
+            return Verdict::Rejected { reason: 2 };
+        },
+        Category::Gamma => {
+            if threshold > 40 {
+                return Verdict::Approved { score: 60 };
+            }
+            return Verdict::Rejected { reason: 3 };
+        },
+        Category::Delta => {
+            if threshold > 20 {
+                return Verdict::Approved { score: 40 };
+            }
+            return Verdict::Rejected { reason: 4 };
+        },
+        Category::Epsilon => {
+            if threshold > 0 {
+                return Verdict::Approved { score: 20 };
+            }
+            return Verdict::Rejected { reason: 5 };
+        },
+    }
+}
+
+// Every arm returns an error (used to stress all-error paths)
+fn always_reject(cat: Category) -> Verdict {
+    match cat {
+        Category::Alpha => { return Verdict::Rejected { reason: 10 }; },
+        Category::Beta => { return Verdict::Rejected { reason: 20 }; },
+        Category::Gamma => { return Verdict::Rejected { reason: 30 }; },
+        Category::Delta => { return Verdict::Rejected { reason: 40 }; },
+        Category::Epsilon => { return Verdict::Rejected { reason: 50 }; },
+    }
+}
+
+fn verdict_value(v: Verdict) -> Int {
+    match v {
+        Verdict::Approved { score } => { return score; },
+        Verdict::Rejected { reason } => { return 0 - reason; },
+    }
+}
+
+pub fn main() -> Int {
+    // Test 1: Alpha approved (threshold=90 > 80)
+    if verdict_value(classify(Category::Alpha, 90)) != 100 { return 11; }
+
+    // Test 2: Alpha rejected (threshold=50 <= 80)
+    if verdict_value(classify(Category::Alpha, 50)) != 0 - 1 { return 12; }
+
+    // Test 3: Beta approved
+    if verdict_value(classify(Category::Beta, 70)) != 80 { return 13; }
+
+    // Test 4: Beta rejected
+    if verdict_value(classify(Category::Beta, 30)) != 0 - 2 { return 14; }
+
+    // Test 5: Gamma boundary (threshold=41 > 40)
+    if verdict_value(classify(Category::Gamma, 41)) != 60 { return 15; }
+
+    // Test 6: Gamma rejected (threshold=40, not > 40)
+    if verdict_value(classify(Category::Gamma, 40)) != 0 - 3 { return 16; }
+
+    // Test 7: Delta approved
+    if verdict_value(classify(Category::Delta, 21)) != 40 { return 17; }
+
+    // Test 8: Epsilon approved (threshold=1 > 0)
+    if verdict_value(classify(Category::Epsilon, 1)) != 20 { return 18; }
+
+    // Test 9: Epsilon rejected (threshold=0, not > 0)
+    if verdict_value(classify(Category::Epsilon, 0)) != 0 - 5 { return 19; }
+
+    // Test 10-14: always_reject returns different reasons per variant
+    if verdict_value(always_reject(Category::Alpha)) != 0 - 10 { return 20; }
+    if verdict_value(always_reject(Category::Beta)) != 0 - 20 { return 21; }
+    if verdict_value(always_reject(Category::Gamma)) != 0 - 30 { return 22; }
+    if verdict_value(always_reject(Category::Delta)) != 0 - 40 { return 23; }
+    if verdict_value(always_reject(Category::Epsilon)) != 0 - 50 { return 24; }
+
+    return 0;
+}

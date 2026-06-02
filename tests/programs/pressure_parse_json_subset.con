@@ -1,0 +1,554 @@
+// pressure_parse_json_subset — JSON-subset parser (integers, booleans, flat objects)
+//
+// Parses a fixed byte buffer containing a JSON-like subset:
+//   - Integers: sequences of ASCII digits, optionally preceded by '-'
+//   - Booleans: "true" / "false"
+//   - Flat objects: { "key": value, "key": value } (string keys, int/bool values)
+//
+// Uses fixed-size arrays for tokens. No heap, no string type.
+// Reveals: byte-level parsing gaps, string comparison needs, cursor tracking patterns.
+//
+// Policy: predictable = true
+
+mod pressure_parse_json_subset {
+
+    // ---- Types ----
+
+    // Token types: 0=None, 1=Int, 2=Bool, 3=String(key), 4=Colon, 5=Comma,
+    //              6=LBrace, 7=RBrace
+    struct Copy Token {
+        kind: i32,
+        int_val: i32,
+        bool_val: i32,
+        // For string keys: store first 8 bytes and length
+        key_bytes: [u8; 8],
+        key_len: i32,
+    }
+
+    struct Copy TokenList {
+        tokens: [Token; 32],
+        count: i32,
+    }
+
+    struct Copy Cursor {
+        data: [u8; 256],
+        len: i32,
+        pos: i32,
+    }
+
+    // Key-value pair extracted from an object
+    struct Copy KVPair {
+        key_bytes: [u8; 8],
+        key_len: i32,
+        is_int: i32,
+        int_val: i32,
+        bool_val: i32,
+    }
+
+    struct Copy ParsedObject {
+        pairs: [KVPair; 8],
+        count: i32,
+        error: i32,
+    }
+
+    // ---- Character classification (pure) ----
+
+    fn is_digit(b: u8) -> i32 {
+        if b >= 48 {
+            if b <= 57 { return 1; }
+        }
+        return 0;
+    }
+
+    fn is_whitespace(b: u8) -> i32 {
+        if b == 32 { return 1; }   // space
+        if b == 9 { return 1; }    // tab
+        if b == 10 { return 1; }   // newline
+        if b == 13 { return 1; }   // carriage return
+        return 0;
+    }
+
+    fn empty_token() -> Token {
+        return Token {
+            kind: 0,
+            int_val: 0,
+            bool_val: 0,
+            key_bytes: [0; 8],
+            key_len: 0,
+        };
+    }
+
+    fn empty_kv() -> KVPair {
+        return KVPair {
+            key_bytes: [0; 8],
+            key_len: 0,
+            is_int: 0,
+            int_val: 0,
+            bool_val: 0,
+        };
+    }
+
+    // ---- Cursor operations ----
+
+    fn cursor_new(data: [u8; 256], len: i32) -> Cursor {
+        return Cursor { data: data, len: len, pos: 0 };
+    }
+
+    fn cursor_peek(c: Cursor) -> u8 {
+        if c.pos >= c.len { return 0; }
+        return c.data[c.pos];
+    }
+
+    fn cursor_advance(c: Cursor) -> Cursor {
+        return Cursor { data: c.data, len: c.len, pos: c.pos + 1 };
+    }
+
+    fn cursor_done(c: Cursor) -> i32 {
+        if c.pos >= c.len { return 1; }
+        return 0;
+    }
+
+    // Skip whitespace, return new cursor
+    fn skip_ws(c: Cursor) -> Cursor {
+        let mut cur: Cursor = c;
+        for (let mut i: i32 = 0; i < 256; i = i + 1) {
+            if cursor_done(cur) == 1 { return cur; }
+            if is_whitespace(cursor_peek(cur)) == 0 { return cur; }
+            cur = cursor_advance(cur);
+        }
+        return cur;
+    }
+
+    // ---- Parse integer (sequence of digits, optional leading minus) ----
+
+    struct Copy IntResult {
+        cursor: Cursor,
+        value: i32,
+        ok: i32,
+    }
+
+    fn parse_int(c: Cursor) -> IntResult {
+        let mut cur: Cursor = c;
+        let mut sign: i32 = 1;
+        let mut val: i32 = 0;
+        let mut digits: i32 = 0;
+
+        // Check for minus sign
+        if cursor_done(cur) == 0 {
+            if cursor_peek(cur) == 45 {
+                sign = 0 - 1;
+                cur = cursor_advance(cur);
+            }
+        }
+
+        // Parse digits
+        for (let mut i: i32 = 0; i < 20; i = i + 1) {
+            if cursor_done(cur) == 1 { break; }
+            let b: u8 = cursor_peek(cur);
+            if is_digit(b) == 0 { break; }
+            val = val * 10 + ((b as i32) - 48);
+            digits = digits + 1;
+            cur = cursor_advance(cur);
+        }
+
+        if digits == 0 {
+            return IntResult { cursor: c, value: 0, ok: 0 };
+        }
+        return IntResult { cursor: cur, value: val * sign, ok: 1 };
+    }
+
+    // ---- Parse boolean ("true" or "false") ----
+
+    struct Copy BoolResult {
+        cursor: Cursor,
+        value: i32,
+        ok: i32,
+    }
+
+    fn match_bytes_true(c: Cursor) -> i32 {
+        // Check "true" = [116, 114, 117, 101]
+        if c.pos + 4 > c.len { return 0; }
+        if c.data[c.pos] != 116 { return 0; }
+        if c.data[c.pos + 1] != 114 { return 0; }
+        if c.data[c.pos + 2] != 117 { return 0; }
+        if c.data[c.pos + 3] != 101 { return 0; }
+        return 1;
+    }
+
+    fn match_bytes_false(c: Cursor) -> i32 {
+        // Check "false" = [102, 97, 108, 115, 101]
+        if c.pos + 5 > c.len { return 0; }
+        if c.data[c.pos] != 102 { return 0; }
+        if c.data[c.pos + 1] != 97 { return 0; }
+        if c.data[c.pos + 2] != 108 { return 0; }
+        if c.data[c.pos + 3] != 115 { return 0; }
+        if c.data[c.pos + 4] != 101 { return 0; }
+        return 1;
+    }
+
+    fn parse_bool(c: Cursor) -> BoolResult {
+        if match_bytes_true(c) == 1 {
+            let mut cur: Cursor = c;
+            cur = Cursor { data: cur.data, len: cur.len, pos: cur.pos + 4 };
+            return BoolResult { cursor: cur, value: 1, ok: 1 };
+        }
+        if match_bytes_false(c) == 1 {
+            let mut cur: Cursor = c;
+            cur = Cursor { data: cur.data, len: cur.len, pos: cur.pos + 5 };
+            return BoolResult { cursor: cur, value: 0, ok: 1 };
+        }
+        return BoolResult { cursor: c, value: 0, ok: 0 };
+    }
+
+    // ---- Parse quoted string key (store first 8 bytes) ----
+
+    struct Copy StringResult {
+        cursor: Cursor,
+        key_bytes: [u8; 8],
+        key_len: i32,
+        ok: i32,
+    }
+
+    fn parse_string_key(c: Cursor) -> StringResult {
+        let empty: [u8; 8] = [0; 8];
+        if cursor_done(c) == 1 {
+            return StringResult { cursor: c, key_bytes: empty, key_len: 0, ok: 0 };
+        }
+        if cursor_peek(c) != 34 {  // not '"'
+            return StringResult { cursor: c, key_bytes: empty, key_len: 0, ok: 0 };
+        }
+
+        let mut cur: Cursor = cursor_advance(c);  // skip opening quote
+        let mut key: [u8; 8] = [0; 8];
+        let mut klen: i32 = 0;
+
+        for (let mut i: i32 = 0; i < 64; i = i + 1) {
+            if cursor_done(cur) == 1 { break; }
+            let b: u8 = cursor_peek(cur);
+            if b == 34 {  // closing quote
+                cur = cursor_advance(cur);
+                return StringResult { cursor: cur, key_bytes: key, key_len: klen, ok: 1 };
+            }
+            if klen < 8 {
+                key[klen] = b;
+                klen = klen + 1;
+            }
+            cur = cursor_advance(cur);
+        }
+
+        // Unterminated string
+        return StringResult { cursor: c, key_bytes: empty, key_len: 0, ok: 0 };
+    }
+
+    // ---- Tokenizer ----
+
+    fn tokenize(data: [u8; 256], len: i32) -> TokenList {
+        let mut cur: Cursor = cursor_new(data, len);
+        let mut toks: [Token; 32] = [empty_token(); 32];
+        let mut count: i32 = 0;
+
+        for (let mut step: i32 = 0; step < 128; step = step + 1) {
+            cur = skip_ws(cur);
+            if cursor_done(cur) == 1 { break; }
+            if count >= 32 { break; }
+
+            let b: u8 = cursor_peek(cur);
+
+            if b == 123 {  // '{'
+                let mut t: Token = empty_token();
+                t = Token { kind: 6, int_val: 0, bool_val: 0, key_bytes: [0; 8], key_len: 0 };
+                toks[count] = t;
+                count = count + 1;
+                cur = cursor_advance(cur);
+            } else {
+                if b == 125 {  // '}'
+                    let mut t: Token = empty_token();
+                    t = Token { kind: 7, int_val: 0, bool_val: 0, key_bytes: [0; 8], key_len: 0 };
+                    toks[count] = t;
+                    count = count + 1;
+                    cur = cursor_advance(cur);
+                } else {
+                    if b == 58 {  // ':'
+                        let mut t: Token = empty_token();
+                        t = Token { kind: 4, int_val: 0, bool_val: 0, key_bytes: [0; 8], key_len: 0 };
+                        toks[count] = t;
+                        count = count + 1;
+                        cur = cursor_advance(cur);
+                    } else {
+                        if b == 44 {  // ','
+                            let mut t: Token = empty_token();
+                            t = Token { kind: 5, int_val: 0, bool_val: 0, key_bytes: [0; 8], key_len: 0 };
+                            toks[count] = t;
+                            count = count + 1;
+                            cur = cursor_advance(cur);
+                        } else {
+                            if b == 34 {  // '"' — string key
+                                let sr: StringResult = parse_string_key(cur);
+                                if sr.ok == 1 {
+                                    let mut t: Token = empty_token();
+                                    t = Token { kind: 3, int_val: 0, bool_val: 0, key_bytes: sr.key_bytes, key_len: sr.key_len };
+                                    toks[count] = t;
+                                    count = count + 1;
+                                    cur = sr.cursor;
+                                } else {
+                                    break;  // parse error
+                                }
+                            } else {
+                                if b == 116 || b == 102 {  // 't' or 'f' — try bool
+                                    let br: BoolResult = parse_bool(cur);
+                                    if br.ok == 1 {
+                                        let mut t: Token = empty_token();
+                                        t = Token { kind: 2, int_val: 0, bool_val: br.value, key_bytes: [0; 8], key_len: 0 };
+                                        toks[count] = t;
+                                        count = count + 1;
+                                        cur = br.cursor;
+                                    } else {
+                                        break;
+                                    }
+                                } else {
+                                    if is_digit(b) == 1 || b == 45 {  // digit or '-' — int
+                                        let ir: IntResult = parse_int(cur);
+                                        if ir.ok == 1 {
+                                            let mut t: Token = empty_token();
+                                            t = Token { kind: 1, int_val: ir.value, bool_val: 0, key_bytes: [0; 8], key_len: 0 };
+                                            toks[count] = t;
+                                            count = count + 1;
+                                            cur = ir.cursor;
+                                        } else {
+                                            break;
+                                        }
+                                    } else {
+                                        break;  // unknown byte
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return TokenList { tokens: toks, count: count };
+    }
+
+    // ---- Key comparison (byte-by-byte, up to 8 bytes) ----
+
+    fn keys_equal(a: [u8; 8], a_len: i32, b: [u8; 8], b_len: i32) -> i32 {
+        if a_len != b_len { return 0; }
+        for (let mut i: i32 = 0; i < 8; i = i + 1) {
+            if i >= a_len { return 1; }
+            if a[i] != b[i] { return 0; }
+        }
+        return 1;
+    }
+
+    // ---- Object parser (from token list) ----
+    // Expects: LBrace (String Colon Value Comma?)* RBrace
+
+    fn parse_object(tl: TokenList) -> ParsedObject {
+        let mut pairs: [KVPair; 8] = [empty_kv(); 8];
+        let mut pc: i32 = 0;
+        let mut ti: i32 = 0;  // token index
+
+        if tl.count == 0 {
+            return ParsedObject { pairs: pairs, count: 0, error: 1 };
+        }
+
+        // Expect LBrace
+        if tl.tokens[ti].kind != 6 {
+            return ParsedObject { pairs: pairs, count: 0, error: 2 };
+        }
+        ti = ti + 1;
+
+        // Parse key-value pairs
+        for (let mut step: i32 = 0; step < 8; step = step + 1) {
+            if ti >= tl.count { break; }
+
+            // Check for RBrace
+            if tl.tokens[ti].kind == 7 {
+                return ParsedObject { pairs: pairs, count: pc, error: 0 };
+            }
+
+            // Expect String key
+            if tl.tokens[ti].kind != 3 {
+                return ParsedObject { pairs: pairs, count: pc, error: 3 };
+            }
+            let key: Token = tl.tokens[ti];
+            ti = ti + 1;
+
+            // Expect Colon
+            if ti >= tl.count { return ParsedObject { pairs: pairs, count: pc, error: 4 }; }
+            if tl.tokens[ti].kind != 4 {
+                return ParsedObject { pairs: pairs, count: pc, error: 4 };
+            }
+            ti = ti + 1;
+
+            // Expect value (Int or Bool)
+            if ti >= tl.count { return ParsedObject { pairs: pairs, count: pc, error: 5 }; }
+            let val: Token = tl.tokens[ti];
+            ti = ti + 1;
+
+            let mut kv: KVPair = empty_kv();
+            kv = KVPair {
+                key_bytes: key.key_bytes,
+                key_len: key.key_len,
+                is_int: if val.kind == 1 { 1 } else { 0 },
+                int_val: val.int_val,
+                bool_val: val.bool_val,
+            };
+
+            if pc < 8 {
+                pairs[pc] = kv;
+                pc = pc + 1;
+            }
+
+            // Optional comma
+            if ti < tl.count {
+                if tl.tokens[ti].kind == 5 {
+                    ti = ti + 1;
+                }
+            }
+        }
+
+        // Check closing brace
+        if ti < tl.count {
+            if tl.tokens[ti].kind == 7 {
+                return ParsedObject { pairs: pairs, count: pc, error: 0 };
+            }
+        }
+
+        return ParsedObject { pairs: pairs, count: pc, error: 6 };
+    }
+
+    // ---- Helper: build test input in a byte array ----
+
+    // Build test JSON: {"age": 42, "ok": true}
+    // As ASCII bytes
+    trusted fn build_test_json() -> Cursor {
+        let mut buf: [u8; 256] = [0; 256];
+        buf[0] = 123;  // {
+        buf[1] = 34;   // "
+        buf[2] = 97;   // a
+        buf[3] = 103;  // g
+        buf[4] = 101;  // e
+        buf[5] = 34;   // "
+        buf[6] = 58;   // :
+        buf[7] = 32;   // space
+        buf[8] = 52;   // 4
+        buf[9] = 50;   // 2
+        buf[10] = 44;  // ,
+        buf[11] = 32;  // space
+        buf[12] = 34;  // "
+        buf[13] = 111; // o
+        buf[14] = 107; // k
+        buf[15] = 34;  // "
+        buf[16] = 58;  // :
+        buf[17] = 32;  // space
+        buf[18] = 116; // t
+        buf[19] = 114; // r
+        buf[20] = 117; // u
+        buf[21] = 101; // e
+        buf[22] = 125; // }
+        return cursor_new(buf, 23);
+    }
+
+    // Build: 12345
+    trusted fn build_int_json() -> Cursor {
+        let mut buf: [u8; 256] = [0; 256];
+        buf[0] = 49;  // 1
+        buf[1] = 50;  // 2
+        buf[2] = 51;  // 3
+        buf[3] = 52;  // 4
+        buf[4] = 53;  // 5
+        return cursor_new(buf, 5);
+    }
+
+    // Build: -99
+    trusted fn build_neg_int_json() -> Cursor {
+        let mut buf: [u8; 256] = [0; 256];
+        buf[0] = 45;  // -
+        buf[1] = 57;  // 9
+        buf[2] = 57;  // 9
+        return cursor_new(buf, 3);
+    }
+
+    // Build: false
+    trusted fn build_false_json() -> Cursor {
+        let mut buf: [u8; 256] = [0; 256];
+        buf[0] = 102; // f
+        buf[1] = 97;  // a
+        buf[2] = 108; // l
+        buf[3] = 115; // s
+        buf[4] = 101; // e
+        return cursor_new(buf, 5);
+    }
+
+    // ---- Tests ----
+
+    pub fn main() -> Int {
+        // Test 1: Parse positive integer "12345"
+        let ic: Cursor = build_int_json();
+        let ir: IntResult = parse_int(ic);
+        if ir.ok != 1 { return 10; }
+        if ir.value != 12345 { return 11; }
+
+        // Test 2: Parse negative integer "-99"
+        let nc: Cursor = build_neg_int_json();
+        let nr: IntResult = parse_int(nc);
+        if nr.ok != 1 { return 20; }
+        if nr.value != (0 - 99) { return 21; }
+
+        // Test 3: Parse boolean "false"
+        let fc: Cursor = build_false_json();
+        let fr: BoolResult = parse_bool(fc);
+        if fr.ok != 1 { return 30; }
+        if fr.value != 0 { return 31; }
+
+        // Test 4: Tokenize {"age": 42, "ok": true}
+        let tc: Cursor = build_test_json();
+        let tl: TokenList = tokenize(tc.data, tc.len);
+        // Expect: { "age" : 42 , "ok" : true }
+        //         LBrace String Colon Int Comma String Colon Bool RBrace = 9 tokens
+        if tl.count != 9 { return 40; }
+        if tl.tokens[0].kind != 6 { return 41; }  // LBrace
+        if tl.tokens[1].kind != 3 { return 42; }  // String "age"
+        if tl.tokens[2].kind != 4 { return 43; }  // Colon
+        if tl.tokens[3].kind != 1 { return 44; }  // Int 42
+        if tl.tokens[3].int_val != 42 { return 45; }
+        if tl.tokens[4].kind != 5 { return 46; }  // Comma
+        if tl.tokens[5].kind != 3 { return 47; }  // String "ok"
+        if tl.tokens[6].kind != 4 { return 48; }  // Colon
+        if tl.tokens[7].kind != 2 { return 49; }  // Bool true
+        if tl.tokens[7].bool_val != 1 { return 50; }
+        if tl.tokens[8].kind != 7 { return 51; }  // RBrace
+
+        // Test 5: Parse object from tokens
+        let obj: ParsedObject = parse_object(tl);
+        if obj.error != 0 { return 60; }
+        if obj.count != 2 { return 61; }
+
+        // Check first pair: "age" -> 42
+        if obj.pairs[0].is_int != 1 { return 62; }
+        if obj.pairs[0].int_val != 42 { return 63; }
+
+        // Check key "age" = [97, 103, 101]
+        let age_key: [u8; 8] = [97, 103, 101, 0, 0, 0, 0, 0];
+        if keys_equal(obj.pairs[0].key_bytes, obj.pairs[0].key_len, age_key, 3) != 1 { return 64; }
+
+        // Check second pair: "ok" -> true
+        if obj.pairs[1].is_int != 0 { return 65; }
+        if obj.pairs[1].bool_val != 1 { return 66; }
+
+        // Check key "ok" = [111, 107]
+        let ok_key: [u8; 8] = [111, 107, 0, 0, 0, 0, 0, 0];
+        if keys_equal(obj.pairs[1].key_bytes, obj.pairs[1].key_len, ok_key, 2) != 1 { return 67; }
+
+        // Test 6: Empty input should fail tokenization gracefully
+        let empty_buf: [u8; 256] = [0; 256];
+        let etl: TokenList = tokenize(empty_buf, 0);
+        if etl.count != 0 { return 70; }
+
+        // All tests passed
+        return 0;
+    }
+}

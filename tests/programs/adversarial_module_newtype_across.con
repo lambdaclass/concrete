@@ -1,0 +1,37 @@
+// Adversarial module: newtype defined in one module, used in another.
+// Tests that pub newtypes are importable as types and that imported
+// function signatures preserve newtype identity (no inner-type erasure
+// at the module boundary). Layout still has to resolve through the
+// newtype because the inner type is what reaches codegen.
+// Expected: 8080
+
+mod Wrap {
+    pub newtype Port = u16;
+
+    impl Port {
+        pub fn try_new(value: u16) -> Option<Port> {
+            if value == 0 { return Option::<Port>::None; }
+            return Option::<Port>::Some { value: Port(value) };
+        }
+    }
+}
+
+mod App {
+    import Wrap.{Port};
+
+    pub fn run() -> Int {
+        let maybe: Option<Port> = Port::try_new(8080);
+        match maybe {
+            Option::Some { value } => {
+                return value.0 as Int;
+            }
+            Option::None => { return 0; }
+        }
+    }
+}
+
+import App.{run};
+
+fn main() -> Int {
+    return run();
+}

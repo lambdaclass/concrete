@@ -1,0 +1,27 @@
+// Hostile workload: struct with 20 fields.
+// Stresses layout computation, GEP offset generation, and aggregate passing.
+// Expected: 42
+
+struct Copy Huge {
+    f01: Int, f02: Int, f03: Int, f04: Int, f05: Int,
+    f06: Int, f07: Int, f08: Int, f09: Int, f10: Int,
+    f11: Int, f12: Int, f13: Int, f14: Int, f15: Int,
+    f16: Int, f17: Int, f18: Int, f19: Int, f20: Int,
+}
+
+fn sum_all(h: Huge) -> Int {
+    return h.f01 + h.f02 + h.f03 + h.f04 + h.f05 +
+           h.f06 + h.f07 + h.f08 + h.f09 + h.f10 +
+           h.f11 + h.f12 + h.f13 + h.f14 + h.f15 +
+           h.f16 + h.f17 + h.f18 + h.f19 + h.f20;
+}
+
+pub fn main() -> Int {
+    let h: Huge = Huge {
+        f01: 1, f02: 1, f03: 1, f04: 1, f05: 1,
+        f06: 1, f07: 1, f08: 1, f09: 1, f10: 1,
+        f11: 1, f12: 1, f13: 1, f14: 1, f15: 1,
+        f16: 1, f17: 1, f18: 1, f19: 1, f20: 23,
+    };
+    return sum_all(h);
+}

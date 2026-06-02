@@ -1,0 +1,392 @@
+// pressure_parse_dns_packet — DNS header parser
+//
+// Parses the 12-byte DNS header from a byte array:
+//   Bytes 0-1:   Transaction ID (big-endian u16)
+//   Bytes 2-3:   Flags (big-endian u16, with bitfield extraction)
+//     Bit 15:    QR (query=0, response=1)
+//     Bits 14-11: Opcode (0=standard, 1=inverse, 2=status)
+//     Bit 10:    AA (authoritative answer)
+//     Bit 9:     TC (truncation)
+//     Bit 8:     RD (recursion desired)
+//     Bit 7:     RA (recursion available)
+//     Bits 6-4:  Z (reserved, must be 0)
+//     Bits 3-0:  RCODE (0=no error, 1=format error, 2=server fail, 3=name error)
+//   Bytes 4-5:   QDCOUNT (question count, big-endian u16)
+//   Bytes 6-7:   ANCOUNT (answer count, big-endian u16)
+//   Bytes 8-9:   NSCOUNT (authority count, big-endian u16)
+//   Bytes 10-11: ARCOUNT (additional count, big-endian u16)
+//
+// Reveals: endian byte APIs, bitfield extraction, structured binary parsing.
+//
+// Policy: predictable = true
+
+mod pressure_parse_dns_packet {
+
+    // ---- Types ----
+
+    struct Copy DnsFlags {
+        qr: i32,       // 0=query, 1=response
+        opcode: i32,   // 0-15
+        aa: i32,       // authoritative answer
+        tc: i32,       // truncation
+        rd: i32,       // recursion desired
+        ra: i32,       // recursion available
+        z: i32,        // reserved (should be 0)
+        rcode: i32,    // response code
+    }
+
+    struct Copy DnsHeader {
+        id: i32,
+        flags: DnsFlags,
+        qdcount: i32,
+        ancount: i32,
+        nscount: i32,
+        arcount: i32,
+    }
+
+    struct Copy DnsParseResult {
+        header: DnsHeader,
+        error: i32,
+        // error codes: 0=ok, 1=too_short, 2=bad_z_field
+    }
+
+    // ---- Byte reading (big-endian) ----
+
+    fn read_u16_be(buf: [u8; 64], offset: i32) -> i32 {
+        let hi: i32 = buf[offset] as i32;
+        let lo: i32 = buf[offset + 1] as i32;
+        return (hi * 256) + lo;
+    }
+
+    // ---- Bitfield extraction from 16-bit flags ----
+
+    fn extract_qr(flags: i32) -> i32 {
+        // Bit 15: (flags >> 15) & 1
+        return (flags >> 15) & 1;
+    }
+
+    fn extract_opcode(flags: i32) -> i32 {
+        // Bits 14-11: (flags >> 11) & 0xF
+        return (flags >> 11) & 15;
+    }
+
+    fn extract_aa(flags: i32) -> i32 {
+        // Bit 10: (flags >> 10) & 1
+        return (flags >> 10) & 1;
+    }
+
+    fn extract_tc(flags: i32) -> i32 {
+        // Bit 9: (flags >> 9) & 1
+        return (flags >> 9) & 1;
+    }
+
+    fn extract_rd(flags: i32) -> i32 {
+        // Bit 8: (flags >> 8) & 1
+        return (flags >> 8) & 1;
+    }
+
+    fn extract_ra(flags: i32) -> i32 {
+        // Bit 7: (flags >> 7) & 1
+        return (flags >> 7) & 1;
+    }
+
+    fn extract_z(flags: i32) -> i32 {
+        // Bits 6-4: (flags >> 4) & 0x7
+        return (flags >> 4) & 7;
+    }
+
+    fn extract_rcode(flags: i32) -> i32 {
+        // Bits 3-0: flags & 0xF
+        return flags & 15;
+    }
+
+    // ---- Parse flags from raw 16-bit value ----
+
+    fn parse_flags(raw: i32) -> DnsFlags {
+        return DnsFlags {
+            qr: extract_qr(raw),
+            opcode: extract_opcode(raw),
+            aa: extract_aa(raw),
+            tc: extract_tc(raw),
+            rd: extract_rd(raw),
+            ra: extract_ra(raw),
+            z: extract_z(raw),
+            rcode: extract_rcode(raw),
+        };
+    }
+
+    // ---- Build empty header for error returns ----
+
+    fn empty_header() -> DnsHeader {
+        return DnsHeader {
+            id: 0,
+            flags: DnsFlags { qr: 0, opcode: 0, aa: 0, tc: 0, rd: 0, ra: 0, z: 0, rcode: 0 },
+            qdcount: 0,
+            ancount: 0,
+            nscount: 0,
+            arcount: 0,
+        };
+    }
+
+    // ---- Full DNS header parser ----
+
+    fn parse_dns_header(buf: [u8; 64], len: i32) -> DnsParseResult {
+        // DNS header is exactly 12 bytes
+        if len < 12 {
+            return DnsParseResult { header: empty_header(), error: 1 };
+        }
+
+        let id: i32 = read_u16_be(buf, 0);
+        let raw_flags: i32 = read_u16_be(buf, 2);
+        let flags: DnsFlags = parse_flags(raw_flags);
+
+        // Validate Z field (must be 0 in well-formed packets)
+        if flags.z != 0 {
+            return DnsParseResult {
+                header: DnsHeader {
+                    id: id,
+                    flags: flags,
+                    qdcount: 0,
+                    ancount: 0,
+                    nscount: 0,
+                    arcount: 0,
+                },
+                error: 2,
+            };
+        }
+
+        let qdcount: i32 = read_u16_be(buf, 4);
+        let ancount: i32 = read_u16_be(buf, 6);
+        let nscount: i32 = read_u16_be(buf, 8);
+        let arcount: i32 = read_u16_be(buf, 10);
+
+        return DnsParseResult {
+            header: DnsHeader {
+                id: id,
+                flags: flags,
+                qdcount: qdcount,
+                ancount: ancount,
+                nscount: nscount,
+                arcount: arcount,
+            },
+            error: 0,
+        };
+    }
+
+    // ---- Reassemble flags to verify round-trip ----
+
+    fn assemble_flags(f: DnsFlags) -> i32 {
+        let mut val: i32 = 0;
+        val = val | (f.qr << 15);
+        val = val | (f.opcode << 11);
+        val = val | (f.aa << 10);
+        val = val | (f.tc << 9);
+        val = val | (f.rd << 8);
+        val = val | (f.ra << 7);
+        val = val | (f.z << 4);
+        val = val | f.rcode;
+        return val;
+    }
+
+    // ---- Build test DNS packets ----
+
+    // Standard query: ID=0x1234, QR=0, Opcode=0, RD=1, QDCOUNT=1
+    // Flags = 0x0100 (RD=1, everything else 0)
+    trusted fn build_standard_query() -> [u8; 64] {
+        let mut buf: [u8; 64] = [0; 64];
+        // ID = 0x1234
+        buf[0] = 0x12;
+        buf[1] = 0x34;
+        // Flags = 0x0100 (RD=1)
+        buf[2] = 0x01;
+        buf[3] = 0x00;
+        // QDCOUNT = 1
+        buf[4] = 0x00;
+        buf[5] = 0x01;
+        // ANCOUNT = 0
+        buf[6] = 0x00;
+        buf[7] = 0x00;
+        // NSCOUNT = 0
+        buf[8] = 0x00;
+        buf[9] = 0x00;
+        // ARCOUNT = 0
+        buf[10] = 0x00;
+        buf[11] = 0x00;
+        return buf;
+    }
+
+    // Standard response: ID=0xABCD, QR=1, AA=1, RD=1, RA=1, RCODE=0,
+    //                    QDCOUNT=1, ANCOUNT=2
+    // Flags = 0x8580 (QR=1, AA=1, RD=1, RA=1) = 1000 0101 1000 0000
+    trusted fn build_standard_response() -> [u8; 64] {
+        let mut buf: [u8; 64] = [0; 64];
+        // ID = 0xABCD
+        buf[0] = 0xAB;
+        buf[1] = 0xCD;
+        // Flags = 0x8580
+        buf[2] = 0x85;
+        buf[3] = 0x80;
+        // QDCOUNT = 1
+        buf[4] = 0x00;
+        buf[5] = 0x01;
+        // ANCOUNT = 2
+        buf[6] = 0x00;
+        buf[7] = 0x02;
+        // NSCOUNT = 0
+        buf[8] = 0x00;
+        buf[9] = 0x00;
+        // ARCOUNT = 1
+        buf[10] = 0x00;
+        buf[11] = 0x01;
+        return buf;
+    }
+
+    // Error response: ID=0x5678, QR=1, RCODE=3 (NXDOMAIN), RD=1, RA=1
+    // Flags = 0x8183 = 1000 0001 1000 0011
+    trusted fn build_nxdomain_response() -> [u8; 64] {
+        let mut buf: [u8; 64] = [0; 64];
+        // ID = 0x5678
+        buf[0] = 0x56;
+        buf[1] = 0x78;
+        // Flags = 0x8183
+        buf[2] = 0x81;
+        buf[3] = 0x83;
+        // QDCOUNT = 1
+        buf[4] = 0x00;
+        buf[5] = 0x01;
+        // Rest = 0
+        return buf;
+    }
+
+    // Packet with bad Z field (should trigger error 2)
+    trusted fn build_bad_z() -> [u8; 64] {
+        let mut buf: [u8; 64] = [0; 64];
+        buf[0] = 0x00;
+        buf[1] = 0x01;
+        // Flags with Z=7 (bits 6-4 set): 0000 0000 0111 0000 = 0x0070
+        buf[2] = 0x00;
+        buf[3] = 0x70;
+        // Fill rest with 0
+        return buf;
+    }
+
+    // Truncated response: TC=1, QR=1, RD=1, RA=1
+    // Flags = 0x8380 = 1000 0011 1000 0000
+    trusted fn build_truncated_response() -> [u8; 64] {
+        let mut buf: [u8; 64] = [0; 64];
+        buf[0] = 0xFF;
+        buf[1] = 0xFF;
+        // Flags = 0x8380
+        buf[2] = 0x83;
+        buf[3] = 0x80;
+        buf[4] = 0x00;
+        buf[5] = 0x01;
+        buf[6] = 0x00;
+        buf[7] = 0x03;
+        buf[8] = 0x00;
+        buf[9] = 0x00;
+        buf[10] = 0x00;
+        buf[11] = 0x00;
+        return buf;
+    }
+
+    // ---- Tests ----
+
+    pub fn main() -> Int {
+        // Test 1: Standard query
+        let q1: [u8; 64] = build_standard_query();
+        let r1: DnsParseResult = parse_dns_header(q1, 12);
+        if r1.error != 0 { return 10; }
+        if r1.header.id != 0x1234 { return 11; }
+        if r1.header.flags.qr != 0 { return 12; }    // query
+        if r1.header.flags.opcode != 0 { return 13; } // standard
+        if r1.header.flags.rd != 1 { return 14; }     // recursion desired
+        if r1.header.flags.aa != 0 { return 15; }
+        if r1.header.flags.tc != 0 { return 16; }
+        if r1.header.flags.ra != 0 { return 17; }
+        if r1.header.flags.rcode != 0 { return 18; }
+        if r1.header.qdcount != 1 { return 19; }
+        if r1.header.ancount != 0 { return 100; }
+
+        // Test 2: Standard response with AA
+        let q2: [u8; 64] = build_standard_response();
+        let r2: DnsParseResult = parse_dns_header(q2, 12);
+        if r2.error != 0 { return 20; }
+        if r2.header.id != 0xABCD { return 21; }
+        if r2.header.flags.qr != 1 { return 22; }    // response
+        if r2.header.flags.aa != 1 { return 23; }     // authoritative
+        if r2.header.flags.rd != 1 { return 24; }
+        if r2.header.flags.ra != 1 { return 25; }
+        if r2.header.flags.rcode != 0 { return 26; }
+        if r2.header.qdcount != 1 { return 27; }
+        if r2.header.ancount != 2 { return 28; }
+        if r2.header.arcount != 1 { return 29; }
+
+        // Test 3: NXDOMAIN response
+        let q3: [u8; 64] = build_nxdomain_response();
+        let r3: DnsParseResult = parse_dns_header(q3, 12);
+        if r3.error != 0 { return 30; }
+        if r3.header.id != 0x5678 { return 31; }
+        if r3.header.flags.qr != 1 { return 32; }
+        if r3.header.flags.rcode != 3 { return 33; }  // NXDOMAIN
+        if r3.header.flags.rd != 1 { return 34; }
+        if r3.header.flags.ra != 1 { return 35; }
+
+        // Test 4: Bad Z field -> error 2
+        let q4: [u8; 64] = build_bad_z();
+        let r4: DnsParseResult = parse_dns_header(q4, 12);
+        if r4.error != 2 { return 40; }
+
+        // Test 5: Too short -> error 1
+        let short: [u8; 64] = [0; 64];
+        let r5: DnsParseResult = parse_dns_header(short, 6);
+        if r5.error != 1 { return 50; }
+
+        // Test 6: Flags round-trip (assemble then parse)
+        let test_flags: DnsFlags = DnsFlags {
+            qr: 1, opcode: 2, aa: 1, tc: 0, rd: 1, ra: 1, z: 0, rcode: 5,
+        };
+        let assembled: i32 = assemble_flags(test_flags);
+        let parsed_back: DnsFlags = parse_flags(assembled);
+        if parsed_back.qr != 1 { return 61; }
+        if parsed_back.opcode != 2 { return 62; }
+        if parsed_back.aa != 1 { return 63; }
+        if parsed_back.tc != 0 { return 64; }
+        if parsed_back.rd != 1 { return 65; }
+        if parsed_back.ra != 1 { return 66; }
+        if parsed_back.z != 0 { return 67; }
+        if parsed_back.rcode != 5 { return 68; }
+
+        // Test 7: Truncated response
+        let q7: [u8; 64] = build_truncated_response();
+        let r7: DnsParseResult = parse_dns_header(q7, 12);
+        if r7.error != 0 { return 70; }
+        if r7.header.id != 0xFFFF { return 71; }
+        if r7.header.flags.qr != 1 { return 72; }
+        if r7.header.flags.tc != 1 { return 73; }     // truncated
+        if r7.header.flags.ra != 1 { return 74; }
+        if r7.header.ancount != 3 { return 75; }
+
+        // Test 8: Verify all bitfield extraction functions individually
+        // flags = 0xFFFF = all bits set
+        let all_flags: DnsFlags = parse_flags(0xFFFF);
+        if all_flags.qr != 1 { return 81; }
+        if all_flags.opcode != 15 { return 82; }
+        if all_flags.aa != 1 { return 83; }
+        if all_flags.tc != 1 { return 84; }
+        if all_flags.rd != 1 { return 85; }
+        if all_flags.ra != 1 { return 86; }
+        if all_flags.z != 7 { return 87; }
+        if all_flags.rcode != 15 { return 88; }
+
+        // flags = 0x0000 = all bits clear
+        let no_flags: DnsFlags = parse_flags(0x0000);
+        if no_flags.qr != 0 { return 91; }
+        if no_flags.opcode != 0 { return 92; }
+        if no_flags.aa != 0 { return 93; }
+        if no_flags.rcode != 0 { return 94; }
+
+        // All tests passed
+        return 0;
+    }
+}

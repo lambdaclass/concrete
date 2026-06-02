@@ -1,0 +1,46 @@
+// Test: complex boolean expressions with &&, ||, !.
+// Verifies boolean logic produces correct truth values.
+// NOTE: Short-circuit evaluation is BROKEN — both sides of && and || are
+// always evaluated. This test avoids side-effect-dependent short-circuit
+// checks but documents the bug.
+// Expected output: 42
+
+pub fn main() with(Std) {
+    // Test 1: basic && and ||
+    let a: bool = true && false;
+    if a { println(0); return; }
+
+    let b: bool = true || false;
+    if !b { println(1); return; }
+
+    let c: bool = !false && !false;
+    if !c { println(2); return; }
+
+    let d: bool = !(true && false);
+    if !d { println(3); return; }
+
+    // Test 2: false && false
+    let e: bool = false && false;
+    if e { println(4); return; }
+
+    // Test 3: false || false
+    let f: bool = false || false;
+    if f { println(5); return; }
+
+    // Test 4: nested boolean with variables
+    let x: Int = 5;
+    let g: bool = (x > 3) && (x < 10) && !(x == 7);
+    if !g { println(6); return; }
+
+    let h: bool = (x == 1) || (x == 3) || (x == 5);
+    if !h { println(7); return; }
+
+    // Test 5: De Morgan's law: !(a && b) == !a || !b
+    let p: bool = true;
+    let q: bool = false;
+    let lhs: bool = !(p && q);
+    let rhs: bool = !p || !q;
+    if lhs != rhs { println(8); return; }
+
+    println(42);
+}

@@ -1,0 +1,93 @@
+// Adversarial: pipeline where early stages succeed but later fails.
+// Intermediate state struct carries partial results.
+
+struct Copy PartialState { validated: i32, authorized: i32 }
+
+enum Copy PipeErr { ValidationFailed, AuthFailed, ProcessFailed }
+
+enum Copy PipeResult {
+    Ok { val: i32 },
+    Partial { state: PartialState, error: PipeErr },
+}
+
+fn do_validate(x: i32) -> i32 {
+    if x >= 0 { return x; }
+    return 0 - 1;
+}
+
+fn do_auth(x: i32) -> i32 {
+    if x != 99 { return x; }
+    return 0 - 1;
+}
+
+fn do_process(x: i32) -> i32 {
+    if x < 50 { return x * 3; }
+    return 0 - 1;
+}
+
+fn run_pipeline(input: i32) -> PipeResult {
+    let v: i32 = do_validate(input);
+    if v < 0 {
+        return PipeResult::Partial {
+            state: PartialState { validated: 0, authorized: 0 },
+            error: PipeErr::ValidationFailed,
+        };
+    }
+    let a: i32 = do_auth(v);
+    if a < 0 {
+        return PipeResult::Partial {
+            state: PartialState { validated: v, authorized: 0 },
+            error: PipeErr::AuthFailed,
+        };
+    }
+    let p: i32 = do_process(a);
+    if p < 0 {
+        return PipeResult::Partial {
+            state: PartialState { validated: v, authorized: a },
+            error: PipeErr::ProcessFailed,
+        };
+    }
+    return PipeResult::Ok { val: p };
+}
+
+fn pipe_err_code(e: PipeErr) -> i32 {
+    match e {
+        PipeErr::ValidationFailed => { return 1; },
+        PipeErr::AuthFailed => { return 2; },
+        PipeErr::ProcessFailed => { return 3; },
+    }
+}
+
+fn main() -> i32 {
+    // Full success: 10 * 3 = 30
+    match run_pipeline(10) {
+        PipeResult::Ok { val } => { if val != 30 { return 1; } },
+        PipeResult::Partial { state, error } => { return 2; },
+    }
+    // Validation fail: -5
+    match run_pipeline(0 - 5) {
+        PipeResult::Ok { val } => { return 3; },
+        PipeResult::Partial { state, error } => {
+            if pipe_err_code(error) != 1 { return 4; }
+            if state.validated != 0 { return 5; }
+        },
+    }
+    // Auth fail: 99
+    match run_pipeline(99) {
+        PipeResult::Ok { val } => { return 6; },
+        PipeResult::Partial { state, error } => {
+            if pipe_err_code(error) != 2 { return 7; }
+            if state.validated != 99 { return 8; }
+        },
+    }
+    // Process fail: 60 >= 50
+    match run_pipeline(60) {
+        PipeResult::Ok { val } => { return 9; },
+        PipeResult::Partial { state, error } => {
+            if pipe_err_code(error) != 3 { return 10; }
+            if state.validated != 60 { return 11; }
+            if state.authorized != 60 { return 12; }
+        },
+    }
+    return 0;
+}

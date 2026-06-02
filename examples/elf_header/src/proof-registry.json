@@ -1,0 +1,32 @@
+[
+  {
+    "function": "main.check_magic",
+    "body_fingerprint": "[(if (binop Concrete.BinOp.eq (var b0) (int 127)) [(if (binop Concrete.BinOp.eq (var b1) (int 69)) [(if (binop Concrete.BinOp.eq (var b2) (int 76)) [(if (binop Concrete.BinOp.eq (var b3) (int 70)) [(ret (int 1))] [(ret (int 0))])] [(ret (int 0))])] [(ret (int 0))])] [(ret (int 0))])]",
+    "proof": "Concrete.Proof.check_magic_correct",
+    "spec": "Concrete.Proof.checkMagicExpr"
+  },
+  {
+    "function": "main.check_class",
+    "body_fingerprint": "[(if (binop Concrete.BinOp.eq (var cls) (int 1)) [(ret (int 1))] [(if (binop Concrete.BinOp.eq (var cls) (int 2)) [(ret (int 1))] [(ret (int 0))])])]",
+    "proof": "Concrete.Proof.check_class_correct",
+    "spec": "Concrete.Proof.checkClassExpr"
+  },
+  {
+    "function": "main.check_data",
+    "body_fingerprint": "[(if (binop Concrete.BinOp.eq (var encoding) (int 1)) [(ret (int 1))] [(if (binop Concrete.BinOp.eq (var encoding) (int 2)) [(ret (int 1))] [(ret (int 0))])])]",
+    "proof": "Concrete.Proof.check_data_correct",
+    "spec": "Concrete.Proof.checkDataExpr"
+  },
+  {
+    "function": "main.check_version",
+    "body_fingerprint": "[(if (binop Concrete.BinOp.eq (var ver) (int 1)) [(ret (int 1))] [(ret (int 0))])]",
+    "proof": "Concrete.Proof.check_version_correct",
+    "spec": "Concrete.Proof.checkVersionExpr"
+  },
+  {
+    "function": "main.validate_header",
+    "body_fingerprint": "[(let magic_ok (call check_magic (var b0) (var b1) (var b2) (var b3))) (if (binop Concrete.BinOp.eq (var magic_ok) (int 1)) [(let cls_ok (call check_class (var cls))) (if (binop Concrete.BinOp.eq (var cls_ok) (int 1)) [(let enc_ok (call check_data (var encoding))) (if (binop Concrete.BinOp.eq (var enc_ok) (int 1)) [(let ver_ok (call check_version (var ver))) (if (binop Concrete.BinOp.eq (var ver_ok) (int 1)) [(ret (int 1))] [(ret (int 0))])] [(ret (int 0))])] [(ret (int 0))])] [(ret (int 0))])]",
+    "proof": "Concrete.Proof.validate_header_correct",
+    "spec": "Concrete.Proof.validateHeaderExpr"
+  }
+]

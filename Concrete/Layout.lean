@@ -16,12 +16,50 @@ and Ty→LLVM type mappings. Used by both Lower.lean and EmitSSA.lean.
 structure Ctx where
   structDefs : List CStructDef
   enumDefs   : List CEnumDef
+  /-- Newtypes visible to layout. A named/generic type whose name matches a
+      newtype is transparently unwrapped before size/alignment is computed.
+      Elab already erases newtypes inside struct/enum fields; this handles
+      the remaining cases (generic args, function bodies, enum payloads). -/
+  newtypes   : List NewtypeDef := []
 
 def lookupStruct (ctx : Ctx) (name : String) : Option CStructDef :=
   ctx.structDefs.find? fun sd => sd.name == name
 
 def lookupEnum (ctx : Ctx) (name : String) : Option CEnumDef :=
   ctx.enumDefs.find? fun ed => ed.name == name
+
+def lookupNewtype (ctx : Ctx) (name : String) : Option NewtypeDef :=
+  ctx.newtypes.find? fun nt => nt.name == name
+
+/-- Substitute type variables inside a newtype's inner type. -/
+partial def ntSubstTy (mapping : List (String × Ty)) : Ty → Ty
+  | .named n => match mapping.lookup n with | some t => t | none => .named n
+  | .typeVar n => match mapping.lookup n with | some t => t | none => .typeVar n
+  | .ref i => .ref (ntSubstTy mapping i)
+  | .refMut i => .refMut (ntSubstTy mapping i)
+  | .ptrMut i => .ptrMut (ntSubstTy mapping i)
+  | .ptrConst i => .ptrConst (ntSubstTy mapping i)
+  | .heap i => .heap (ntSubstTy mapping i)
+  | .heapArray i => .heapArray (ntSubstTy mapping i)
+  | .array e n => .array (ntSubstTy mapping e) n
+  | .generic n args => .generic n (args.map (ntSubstTy mapping))
+  | .fn_ ps c r => .fn_ (ps.map (ntSubstTy mapping)) c (ntSubstTy mapping r)
+  | t => t
+
+/-- If `ty` is a newtype-named or newtype-generic, unwrap it to its inner type.
+    Recurses to handle newtype-of-newtype. Returns `ty` unchanged otherwise. -/
+partial def resolveNewtype (ctx : Ctx) : Ty → Ty
+  | .named name =>
+    match lookupNewtype ctx name with
+    | some nt => resolveNewtype ctx nt.innerTy
+    | none => .named name
+  | .generic name args =>
+    match lookupNewtype ctx name with
+    | some nt =>
+      let mapping := nt.typeParams.zip args
+      resolveNewtype ctx (ntSubstTy mapping nt.innerTy)
+    | none => .generic name args
+  | t => t
 
 -- ============================================================
 -- Builtin type layout constants
@@ -111,8 +149,14 @@ partial def tyAlign (ctx : Ctx) : Ty → Nat
   | .generic "Heap" _ | .generic "HeapArray" _ => 8
   | .generic "Vec" _ => Builtin.vecAlign
   | .generic "HashMap" _ => Builtin.hashmapAlign
-  | .named name => tyAlign_namedOrGeneric ctx tyAlign name []
-  | .generic name args => tyAlign_namedOrGeneric ctx tyAlign name args
+  | .named name =>
+    match lookupNewtype ctx name with
+    | some _ => tyAlign ctx (resolveNewtype ctx (.named name))
+    | none => tyAlign_namedOrGeneric ctx tyAlign name []
+  | .generic name args =>
+    match lookupNewtype ctx name with
+    | some _ => tyAlign ctx (resolveNewtype ctx (.generic name args))
+    | none => tyAlign_namedOrGeneric ctx tyAlign name args
   | .array elem _ => tyAlign ctx elem
   | .never | .placeholder => 1
   | .typeVar _ => 8
@@ -164,8 +208,14 @@ partial def tySize (ctx : Ctx) : Ty → Nat
   | .generic "Heap" _ | .generic "HeapArray" _ => 8
   | .generic "Vec" _ => Builtin.vecSize
   | .generic "HashMap" _ => Builtin.hashmapSize
-  | .named name => tySize_namedOrGeneric ctx tySize tyAlign name []
-  | .generic name args => tySize_namedOrGeneric ctx tySize tyAlign name args
+  | .named name =>
+    match lookupNewtype ctx name with
+    | some _ => tySize ctx (resolveNewtype ctx (.named name))
+    | none => tySize_namedOrGeneric ctx tySize tyAlign name []
+  | .generic name args =>
+    match lookupNewtype ctx name with
+    | some _ => tySize ctx (resolveNewtype ctx (.generic name args))
+    | none => tySize_namedOrGeneric ctx tySize tyAlign name args
   | .array elem n => tySize ctx elem * n
   | .never | .placeholder => 0
   | .typeVar _ => 8
@@ -226,7 +276,7 @@ def variantFieldOffset (ctx : Ctx) (fields : List (String × Ty)) (idx : Nat) : 
 -- ============================================================
 
 /-- Is this type passed by pointer in function calls? -/
-def isPassByPtr (ctx : Ctx) (ty : Ty) : Bool :=
+partial def isPassByPtr (ctx : Ctx) (ty : Ty) : Bool :=
   match ty with
   | .string => true
   | .ref _ | .refMut _ => true
@@ -239,16 +289,22 @@ def isPassByPtr (ctx : Ctx) (ty : Ty) : Bool :=
       match lookupEnum ctx name with
       | some _ => true
       | none =>
-        panic! s!"Layout.isPassByPtr: unknown named type '{name}'"
+        match lookupNewtype ctx name with
+        | some _ => isPassByPtr ctx (resolveNewtype ctx (.named name))
+        | none =>
+          panic! s!"Layout.isPassByPtr: unknown named type '{name}'"
   | .generic "Vec" _ | .generic "HashMap" _ => true
-  | .generic name _ =>
+  | .generic name args =>
     match lookupStruct ctx name with
     | some _ => true
     | none =>
       match lookupEnum ctx name with
       | some _ => true
       | none =>
-        panic! s!"Layout.isPassByPtr: unknown generic type '{name}'"
+        match lookupNewtype ctx name with
+        | some _ => isPassByPtr ctx (resolveNewtype ctx (.generic name args))
+        | none =>
+          panic! s!"Layout.isPassByPtr: unknown generic type '{name}'"
   | _ => false
 
 -- ============================================================
@@ -256,7 +312,7 @@ def isPassByPtr (ctx : Ctx) (ty : Ty) : Bool :=
 -- ============================================================
 
 /-- Map a Concrete type to its LLVM IR type string. -/
-def tyToLLVM (ctx : Ctx) : Ty → String
+partial def tyToLLVM (ctx : Ctx) : Ty → String
   | .int => "i64"
   | .uint => "i64"
   | .i8 | .u8 => "i8"
@@ -273,10 +329,16 @@ def tyToLLVM (ctx : Ctx) : Ty → String
   | .generic "HeapArray" _ | .heapArray _ => "ptr"
   | .generic "Vec" _ => "%struct.Vec"
   | .generic "HashMap" _ => "%struct.HashMap"
-  | .generic name _ =>
+  | .generic name args =>
     match lookupEnum ctx name with
     | some _ => "%enum." ++ name
-    | none => "%struct." ++ name
+    | none =>
+      match lookupStruct ctx name with
+      | some _ => "%struct." ++ name
+      | none =>
+        match lookupNewtype ctx name with
+        | some _ => tyToLLVM ctx (resolveNewtype ctx (.generic name args))
+        | none => "%struct." ++ name
   | .typeVar _ => "i64"
   | .array elem n => "[" ++ toString n ++ " x " ++ tyToLLVM ctx elem ++ "]"
   | .fn_ _ _ _ => "ptr"
@@ -289,7 +351,10 @@ def tyToLLVM (ctx : Ctx) : Ty → String
       match lookupEnum ctx name with
       | some _ => "%enum." ++ name
       | none =>
-        panic! s!"Layout.tyToLLVM: unknown named type '{name}'"
+        match lookupNewtype ctx name with
+        | some _ => tyToLLVM ctx (resolveNewtype ctx (.named name))
+        | none =>
+          panic! s!"Layout.tyToLLVM: unknown named type '{name}'"
 
 /-- LLVM type for function parameters (pass-by-ptr types become ptr). -/
 def paramTyToLLVM (ctx : Ctx) (ty : Ty) : String :=

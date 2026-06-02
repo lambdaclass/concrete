@@ -1,7 +1,6 @@
 mod heap {
     import std.alloc.{grow,dealloc};
     import std.math.{max};
-    import std.option.{Option};
 
     pub struct BinaryHeap<T> {
         data: *mut T,
@@ -36,12 +35,12 @@ mod heap {
 
         pub fn pop(&mut self) -> Option<T> {
             if self.len == 0 {
-                return Option::<T>#None;
+                return Option::<T>::None;
             }
             if self.len == 1 {
                 self.len = 0;
                 let only_ptr: *mut T = self.data;
-                return Option::<T>#Some { value: *only_ptr };
+                return Option::<T>::Some { value: *only_ptr };
             }
             // Swap first and last
             let root_ptr: *mut T = self.data;
@@ -50,14 +49,14 @@ mod heap {
             let last_ptr: *mut T = self.data + self.len;
             *root_ptr = *last_ptr;
             self.sift_down(0);
-            return Option::<T>#Some { value: first };
+            return Option::<T>::Some { value: first };
         }
 
         pub fn peek(&self) -> Option<&T> {
             if self.len == 0 {
-                return Option::<&T>#None;
+                return Option::<&T>::None;
             }
-            return Option::<&T>#Some { value: self.data as &T };
+            return Option::<&T>::Some { value: self.data as &T };
         }
 
         fn sift_up(&mut self, idx: u64) {
@@ -166,36 +165,36 @@ mod heap {
         // Peek should be max
         let pk: Option<&i32> = h.peek();
         match pk {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if *value != 30 {
                     h.drop();
                     return 1;
                 }
             },
-            Option#None => { h.drop(); return 1; }
+            Option::None => { h.drop(); return 1; }
         }
 
         // Pop in descending order
         let r1: Option<i32> = h.pop();
         match r1 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 30 { h.drop(); return 1; }
             },
-            Option#None => { h.drop(); return 1; }
+            Option::None => { h.drop(); return 1; }
         }
         let r2: Option<i32> = h.pop();
         match r2 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 20 { h.drop(); return 1; }
             },
-            Option#None => { h.drop(); return 1; }
+            Option::None => { h.drop(); return 1; }
         }
         let r3: Option<i32> = h.pop();
         match r3 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 10 { h.drop(); return 1; }
             },
-            Option#None => { h.drop(); return 1; }
+            Option::None => { h.drop(); return 1; }
         }
 
         h.drop();
@@ -211,17 +210,17 @@ mod heap {
 
         let r1: Option<i32> = h.pop();
         match r1 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 10 { h.drop(); return 1; }
             },
-            Option#None => { h.drop(); return 1; }
+            Option::None => { h.drop(); return 1; }
         }
         let r2: Option<i32> = h.pop();
         match r2 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 20 { h.drop(); return 1; }
             },
-            Option#None => { h.drop(); return 1; }
+            Option::None => { h.drop(); return 1; }
         }
 
         h.drop();
@@ -233,8 +232,8 @@ mod heap {
         let mut h: BinaryHeap<i32> = BinaryHeap::<i32>::new(max_cmp);
         let r: Option<i32> = h.pop();
         match r {
-            Option#Some { value } => { h.drop(); return 1; },
-            Option#None => {}
+            Option::Some { value } => { h.drop(); return 1; },
+            Option::None => {}
         }
         h.drop();
         return 0;
@@ -309,35 +308,35 @@ mod heap {
         // Pop max (should be 20)
         let r1: Option<i32> = h.pop();
         match r1 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 20 { h.drop(); return 1; }
             },
-            Option#None => { h.drop(); return 1; }
+            Option::None => { h.drop(); return 1; }
         }
         h.push(15);
         h.push(25);
         // Pop max (should be 25)
         let r2: Option<i32> = h.pop();
         match r2 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 25 { h.drop(); return 1; }
             },
-            Option#None => { h.drop(); return 1; }
+            Option::None => { h.drop(); return 1; }
         }
         // Remaining: 10, 15 — pop should give 15 then 10
         let r3: Option<i32> = h.pop();
         match r3 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 15 { h.drop(); return 1; }
             },
-            Option#None => { h.drop(); return 1; }
+            Option::None => { h.drop(); return 1; }
         }
         let r4: Option<i32> = h.pop();
         match r4 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 10 { h.drop(); return 1; }
             },
-            Option#None => { h.drop(); return 1; }
+            Option::None => { h.drop(); return 1; }
         }
         h.drop();
         return 0;
@@ -348,8 +347,8 @@ mod heap {
         let h: BinaryHeap<i32> = BinaryHeap::<i32>::new(max_cmp);
         let r: Option<&i32> = h.peek();
         match r {
-            Option#Some { value } => { h.drop(); return 1; },
-            Option#None => {}
+            Option::Some { value } => { h.drop(); return 1; },
+            Option::None => {}
         }
         h.drop();
         return 0;
@@ -369,10 +368,10 @@ mod heap {
         if h.len() != 1 { h.drop(); return 1; }
         let r: Option<&i32> = h.peek();
         match r {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if *value != 99 { h.drop(); return 1; }
             },
-            Option#None => { h.drop(); return 1; }
+            Option::None => { h.drop(); return 1; }
         }
         h.drop();
         return 0;

@@ -1,0 +1,80 @@
+// Adversarial: fan-in pattern — multiple independent checks that all must pass.
+// First failure is reported. Tests independent error source identification.
+
+enum Copy CheckErr { NameEmpty, AgeTooLow, AgeTooHigh, ScoreBad }
+
+enum Copy CheckResult {
+    Ok { val: i32 },
+    Err { error: CheckErr },
+}
+
+fn check_name(name_len: i32) -> CheckResult {
+    if name_len <= 0 { return CheckResult::Err { error: CheckErr::NameEmpty }; }
+    return CheckResult::Ok { val: name_len };
+}
+
+fn check_age(age: i32) -> CheckResult {
+    if age < 18 { return CheckResult::Err { error: CheckErr::AgeTooLow }; }
+    if age > 120 { return CheckResult::Err { error: CheckErr::AgeTooHigh }; }
+    return CheckResult::Ok { val: age };
+}
+
+fn check_score(score: i32) -> CheckResult {
+    if score < 0 { return CheckResult::Err { error: CheckErr::ScoreBad }; }
+    if score > 100 { return CheckResult::Err { error: CheckErr::ScoreBad }; }
+    return CheckResult::Ok { val: score };
+}
+
+fn validate_all(name_len: i32, age: i32, score: i32) -> CheckResult {
+    match check_name(name_len) {
+        CheckResult::Err { error } => { return CheckResult::Err { error: error }; },
+        CheckResult::Ok { val } => {},
+    }
+    match check_age(age) {
+        CheckResult::Err { error } => { return CheckResult::Err { error: error }; },
+        CheckResult::Ok { val } => {},
+    }
+    match check_score(score) {
+        CheckResult::Err { error } => { return CheckResult::Err { error: error }; },
+        CheckResult::Ok { val } => {},
+    }
+    return CheckResult::Ok { val: 1 };
+}
+
+fn err_code(e: CheckErr) -> i32 {
+    match e {
+        CheckErr::NameEmpty => { return 1; },
+        CheckErr::AgeTooLow => { return 2; },
+        CheckErr::AgeTooHigh => { return 3; },
+        CheckErr::ScoreBad => { return 4; },
+    }
+}
+
+fn main() -> i32 {
+    // All pass
+    match validate_all(5, 25, 80) {
+        CheckResult::Ok { val } => {},
+        CheckResult::Err { error } => { return 1; },
+    }
+    // Name fails first
+    match validate_all(0, 25, 80) {
+        CheckResult::Ok { val } => { return 2; },
+        CheckResult::Err { error } => { if err_code(error) != 1 { return 3; } },
+    }
+    // Age too low (name passes)
+    match validate_all(5, 10, 80) {
+        CheckResult::Ok { val } => { return 4; },
+        CheckResult::Err { error } => { if err_code(error) != 2 { return 5; } },
+    }
+    // Age too high
+    match validate_all(5, 200, 80) {
+        CheckResult::Ok { val } => { return 6; },
+        CheckResult::Err { error } => { if err_code(error) != 3 { return 7; } },
+    }
+    // Score bad (others pass)
+    match validate_all(5, 25, 0 - 1) {
+        CheckResult::Ok { val } => { return 8; },
+        CheckResult::Err { error } => { if err_code(error) != 4 { return 9; } },
+    }
+    return 0;
+}

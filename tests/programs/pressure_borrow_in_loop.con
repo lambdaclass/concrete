@@ -1,0 +1,14 @@
+// Pressure: fresh borrow block created each loop iteration.
+// Each iteration borrows, mutates via deref, and releases.
+
+fn main() -> Int {
+    let mut total: Int = 0;
+    let mut i: Int = 0;
+    while i < 5 {
+        borrow mut total as r in R {
+            *r = *r + i;
+        }
+        i = i + 1;
+    }
+    return total;
+}

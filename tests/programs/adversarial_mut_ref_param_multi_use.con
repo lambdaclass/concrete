@@ -1,0 +1,19 @@
+// Function parameter &mut T refs are reborrowable.
+// Multiple calls with the same parameter ref are valid.
+
+fn add_one(x: &mut Int) {
+    *x = *x + 1;
+}
+
+fn double_increment(x: &mut Int) {
+    add_one(x);
+    add_one(x);
+}
+
+fn main() -> Int {
+    let mut n: Int = 10;
+    borrow mut n as r in R {
+        double_increment(r);
+    }
+    return n;
+}

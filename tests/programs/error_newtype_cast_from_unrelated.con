@@ -1,0 +1,11 @@
+// Error: constructing a newtype via `as` from an unrelated type
+// bypasses the smart-constructor contract. The only ways to build
+// a Port are the `Port(...)` constructor and `Port::try_*` smart
+// constructors. Expected: rejection at CoreCheck.
+newtype Port = u16;
+
+fn main() -> Int {
+    let b: bool = true;
+    let p: Port = b as Port;
+    return p.0 as Int;
+}

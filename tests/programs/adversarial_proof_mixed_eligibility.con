@@ -1,0 +1,42 @@
+// Adversarial: mix of eligible, ineligible, trusted, and impure functions.
+// Tests that proof eligibility classification handles the full spectrum
+// without misclassifying any function.
+// Expected: 42
+
+// Pure, eligible
+fn pure_add(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+// Pure, eligible (calls another pure)
+fn pure_double(x: Int) -> Int {
+    return pure_add(x, x);
+}
+
+// Has capability — ineligible for proof
+fn print_value(x: Int) with(Std) {
+    println(x);
+}
+
+// Trusted — excluded from proof
+trusted fn trusted_compute(x: Int) -> Int {
+    return x * 2;
+}
+
+// Pure but uses loop — still eligible if bounded
+fn sum_to(n: Int) -> Int {
+    let mut acc: Int = 0;
+    for (let mut i: Int = 0; i < n; i = i + 1) {
+        acc = acc + i;
+    }
+    return acc;
+}
+
+pub fn main() with(Std) -> Int {
+    let a: Int = pure_add(10, 20);
+    let b: Int = pure_double(3);
+    let c: Int = trusted_compute(1);
+    let d: Int = sum_to(3);
+    // a=30, b=6, c=2, d=3 => 30+6+2+3 = 41... need 42
+    return a + b + c + d + 1;
+}

@@ -1,0 +1,14 @@
+// Adversarial: create two simultaneous mutable borrows of the same variable.
+// The compiler must reject double mutable aliasing.
+// Expected: compile error about frozen by borrow.
+
+pub fn main() -> Int {
+    let mut x: Int = 10;
+    borrow mut x as a in A {
+        borrow mut x as b in B {
+            *b = 2;
+        }
+        *a = 1;
+    }
+    return x;
+}

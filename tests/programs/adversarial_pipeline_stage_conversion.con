@@ -1,0 +1,115 @@
+// Adversarial: three stage-specific error enums plus unified AppError.
+// Tests cross-stage error conversion through a 3-stage pipeline.
+
+enum Copy ValidateErr { MissingField, OutOfRange }
+enum Copy AuthErr { BadToken, Expired }
+enum Copy ProcessErr { Overflow, LimitExceeded }
+
+enum Copy AppError {
+    Validate { code: i32 },
+    Auth { code: i32 },
+    Process { code: i32 },
+}
+
+enum Copy AppResult {
+    Ok { val: i32 },
+    Err { error: AppError },
+}
+
+fn validate_code(e: ValidateErr) -> i32 {
+    match e { ValidateErr::MissingField => { return 1; }, ValidateErr::OutOfRange => { return 2; }, }
+}
+
+fn auth_code(e: AuthErr) -> i32 {
+    match e { AuthErr::BadToken => { return 10; }, AuthErr::Expired => { return 11; }, }
+}
+
+fn process_code(e: ProcessErr) -> i32 {
+    match e { ProcessErr::Overflow => { return 20; }, ProcessErr::LimitExceeded => { return 21; }, }
+}
+
+enum Copy ValidateResult { Ok { val: i32 }, Err { error: ValidateErr } }
+enum Copy AuthResult { Ok { val: i32 }, Err { error: AuthErr } }
+enum Copy ProcessResult { Ok { val: i32 }, Err { error: ProcessErr } }
+
+fn validate(input: i32) -> ValidateResult {
+    if input < 0 { return ValidateResult::Err { error: ValidateErr::MissingField }; }
+    if input > 1000 { return ValidateResult::Err { error: ValidateErr::OutOfRange }; }
+    return ValidateResult::Ok { val: input };
+}
+
+fn authorize(token: i32) -> AuthResult {
+    if token == 0 { return AuthResult::Err { error: AuthErr::BadToken }; }
+    if token < 0 { return AuthResult::Err { error: AuthErr::Expired }; }
+    return AuthResult::Ok { val: token };
+}
+
+fn process(val: i32) -> ProcessResult {
+    if val > 500 { return ProcessResult::Err { error: ProcessErr::LimitExceeded }; }
+    return ProcessResult::Ok { val: val * 2 };
+}
+
+fn pipeline_auth(validated: i32, token: i32) -> AppResult {
+    match authorize(token) {
+        AuthResult::Err { error } => {
+            return AppResult::Err { error: AppError::Auth { code: auth_code(error) } };
+        },
+        AuthResult::Ok { val } => {
+            return pipeline_process(validated);
+        },
+    }
+}
+
+fn pipeline_process(validated: i32) -> AppResult {
+    match process(validated) {
+        ProcessResult::Err { error } => {
+            return AppResult::Err { error: AppError::Process { code: process_code(error) } };
+        },
+        ProcessResult::Ok { val } => {
+            return AppResult::Ok { val: val };
+        },
+    }
+}
+
+fn pipeline(input: i32, token: i32) -> AppResult {
+    match validate(input) {
+        ValidateResult::Err { error } => {
+            return AppResult::Err { error: AppError::Validate { code: validate_code(error) } };
+        },
+        ValidateResult::Ok { val } => {
+            return pipeline_auth(val, token);
+        },
+    }
+}
+
+fn app_error_code(e: AppError) -> i32 {
+    match e {
+        AppError::Validate { code } => { return code; },
+        AppError::Auth { code } => { return 100 + code; },
+        AppError::Process { code } => { return 200 + code; },
+    }
+}
+
+fn main() -> i32 {
+    // Success
+    match pipeline(50, 1) {
+        AppResult::Ok { val } => { if val != 100 { return 1; } },
+        AppResult::Err { error } => { return 2; },
+    }
+    // Validate error
+    match pipeline(0 - 1, 1) {
+        AppResult::Ok { val } => { return 3; },
+        AppResult::Err { error } => { if app_error_code(error) != 1 { return 4; } },
+    }
+    // Auth error
+    match pipeline(50, 0) {
+        AppResult::Ok { val } => { return 5; },
+        AppResult::Err { error } => { if app_error_code(error) != 110 { return 6; } },
+    }
+    // Process error
+    match pipeline(600, 1) {
+        AppResult::Ok { val } => { return 7; },
+        AppResult::Err { error } => { if app_error_code(error) != 221 { return 8; } },
+    }
+    return 0;
+}

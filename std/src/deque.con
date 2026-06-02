@@ -2,7 +2,6 @@ mod deque {
     import std.mem.{sizeof};
     import std.alloc.{grow,dealloc};
     import std.math.{max};
-    import std.option.{Option};
 
     pub struct Deque<T> {
         ptr: *mut T,
@@ -44,33 +43,33 @@ mod deque {
 
         pub fn pop_back(&mut self) -> Option<T> {
             if self.len == 0 {
-                return Option::<T>#None;
+                return Option::<T>::None;
             }
             self.len = self.len - 1;
             let tail: u64 = (self.head + self.len) & (self.cap - 1);
             let target: *mut T = self.ptr + tail;
-            return Option::<T>#Some { value: *target };
+            return Option::<T>::Some { value: *target };
         }
 
         pub fn pop_front(&mut self) -> Option<T> {
             if self.len == 0 {
-                return Option::<T>#None;
+                return Option::<T>::None;
             }
             let target: *mut T = self.ptr + self.head;
             let value: T = *target;
             self.head = (self.head + 1) & (self.cap - 1);
             self.len = self.len - 1;
-            return Option::<T>#Some { value: value };
+            return Option::<T>::Some { value: value };
         }
 
         /// Bounds-checked access.
         pub fn get(&self, at: u64) -> Option<&T> {
             if at >= self.len {
-                return Option::<&T>#None;
+                return Option::<&T>::None;
             }
             let idx: u64 = (self.head + at) & (self.cap - 1);
             let target: *mut T = self.ptr + idx;
-            return Option::<&T>#Some { value: target as &T };
+            return Option::<&T>::Some { value: target as &T };
         }
 
         /// Unchecked access.
@@ -138,35 +137,35 @@ mod deque {
 
         let r1: Option<i32> = d.pop_front();
         match r1 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 10 {
                     d.drop();
                     return 1;
                 }
             },
-            Option#None => { d.drop(); return 1; }
+            Option::None => { d.drop(); return 1; }
         }
 
         let r2: Option<i32> = d.pop_front();
         match r2 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 20 {
                     d.drop();
                     return 1;
                 }
             },
-            Option#None => { d.drop(); return 1; }
+            Option::None => { d.drop(); return 1; }
         }
 
         let r3: Option<i32> = d.pop_front();
         match r3 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 30 {
                     d.drop();
                     return 1;
                 }
             },
-            Option#None => { d.drop(); return 1; }
+            Option::None => { d.drop(); return 1; }
         }
 
         d.drop();
@@ -183,24 +182,24 @@ mod deque {
         // Order should be: 30, 20, 10
         let r1: Option<i32> = d.pop_back();
         match r1 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 10 {
                     d.drop();
                     return 1;
                 }
             },
-            Option#None => { d.drop(); return 1; }
+            Option::None => { d.drop(); return 1; }
         }
 
         let r2: Option<i32> = d.pop_back();
         match r2 {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 20 {
                     d.drop();
                     return 1;
                 }
             },
-            Option#None => { d.drop(); return 1; }
+            Option::None => { d.drop(); return 1; }
         }
 
         d.drop();
@@ -212,13 +211,13 @@ mod deque {
         let mut d: Deque<i32> = Deque::<i32>::new();
         let r: Option<i32> = d.pop_front();
         match r {
-            Option#Some { value } => { d.drop(); return 1; },
-            Option#None => {}
+            Option::Some { value } => { d.drop(); return 1; },
+            Option::None => {}
         }
         let r2: Option<i32> = d.pop_back();
         match r2 {
-            Option#Some { value } => { d.drop(); return 1; },
-            Option#None => {}
+            Option::Some { value } => { d.drop(); return 1; },
+            Option::None => {}
         }
         d.drop();
         return 0;
@@ -233,20 +232,20 @@ mod deque {
 
         let r: Option<&i32> = d.get(1);
         match r {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if *value != 200 {
                     d.drop();
                     return 1;
                 }
             },
-            Option#None => { d.drop(); return 1; }
+            Option::None => { d.drop(); return 1; }
         }
 
         // Out of bounds
         let r2: Option<&i32> = d.get(10);
         match r2 {
-            Option#Some { value } => { d.drop(); return 1; },
-            Option#None => {}
+            Option::Some { value } => { d.drop(); return 1; },
+            Option::None => {}
         }
 
         d.drop();
@@ -274,13 +273,13 @@ mod deque {
         while j < 20 {
             let r: Option<i32> = d.pop_front();
             match r {
-                Option#Some { value } => {
+                Option::Some { value } => {
                     if value != j {
                         d.drop();
                         return 1;
                     }
                 },
-                Option#None => { d.drop(); return 1; }
+                Option::None => { d.drop(); return 1; }
             }
             j = j + 1;
         }
@@ -373,10 +372,10 @@ mod deque {
         d.push_back(42);
         let r: Option<i32> = d.pop_front();
         match r {
-            Option#Some { value } => {
+            Option::Some { value } => {
                 if value != 42 { d.drop(); return 1; }
             },
-            Option#None => { d.drop(); return 1; }
+            Option::None => { d.drop(); return 1; }
         }
         d.drop();
         return 0;

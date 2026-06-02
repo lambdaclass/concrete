@@ -1,0 +1,184 @@
+=== Proof Obligations ===
+
+  fixed_capacity.ok_result
+    status:       missing
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(ret (struct ValidateResult error=(int 0) msg_type=(var msg_type) seq_num=(var seq) payload_len=(var plen)))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:57
+
+  fixed_capacity.err_result
+    status:       missing
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(ret (struct ValidateResult error=(var code) msg_type=(int 0) seq_num=(int 0) payload_len=(int 0)))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:61
+
+  fixed_capacity.validate_version
+    status:       missing
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(if (binop Concrete.BinOp.eq (var v) (int 1)) [(ret (int 0))]) (ret (int 2))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:70
+
+  fixed_capacity.validate_msg_type
+    status:       missing
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(if (binop Concrete.BinOp.geq (var t) (int 1)) [(if (binop Concrete.BinOp.leq (var t) (int 4)) [(ret (int 0))])]) (ret (int 3))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:75
+
+  fixed_capacity.validate_payload_len
+    status:       missing
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(if (binop Concrete.BinOp.geq (var plen) (int 0)) [(if (binop Concrete.BinOp.leq (var plen) (int 240)) [(ret (int 0))])]) (ret (int 4))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:82
+
+  fixed_capacity.validate_total_len
+    status:       missing
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(if (binop Concrete.BinOp.geq (var total_len) (binop Concrete.BinOp.add (var header_size) (var payload_len))) [(ret (int 0))]) (ret (int 5))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:89
+
+  fixed_capacity.validate_tag
+    status:       missing
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(if (binop Concrete.BinOp.eq (var computed) (var expected)) [(ret (int 0))]) (ret (int 6))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:94
+
+  fixed_capacity.read_u8
+    status:       missing
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(ret (cast (index (field (var buf) data) (var offset)) Concrete.Ty.i32))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:103
+
+  fixed_capacity.read_u16_be
+    status:       missing
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(let hi (cast (index (field (var buf) data) (var offset)) Concrete.Ty.i32)) (let lo (cast (index (field (var buf) data) (binop Concrete.BinOp.add (var offset) (int 1))) Concrete.Ty.i32)) (ret (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var hi) (int 256)) (var lo)))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:107
+
+  fixed_capacity.ring_new
+    status:       proved
+    spec:         Concrete.Proof.ringNewExpr
+    proof:        Concrete.Proof.ring_new_correct
+    source:       registry
+    fingerprint:  [(let data (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (ret (struct RingBuf data=(var data) head=(int 0) count=(int 0)))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:115
+
+  fixed_capacity.ring_contains
+    status:       proved
+    spec:         Concrete.Proof.ringContainsExpr
+    proof:        Concrete.Proof.ring_push_then_contains_correct
+    source:       registry
+    fingerprint:  [(let cap (int 16)) (let scan (if (binop Concrete.BinOp.lt (field (var rb) count) (var cap)) [(field (var rb) count)] [(var cap)])) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (var scan)) [(let idx (binop Concrete.BinOp.mod (binop Concrete.BinOp.add (binop Concrete.BinOp.add (binop Concrete.BinOp.sub (field (var rb) head) (field (var rb) count)) (var i)) (binop Concrete.BinOp.mul (var cap) (int 2))) (var cap))) (if (binop Concrete.BinOp.eq (index (field (var rb) data) (var idx)) (var val)) [(ret (int 1))]) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (int 0))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:122
+
+  fixed_capacity.ring_push
+    status:       proved
+    spec:         Concrete.Proof.ringPushExpr
+    proof:        Concrete.Proof.ring_push_zero_correct
+    source:       registry
+    fingerprint:  [(let cap (int 16)) (let d (field (var rb) data)) (setindex (var d) (binop Concrete.BinOp.mod (field (var rb) head) (var cap)) (var val)) (let new_head (binop Concrete.BinOp.mod (binop Concrete.BinOp.add (field (var rb) head) (int 1)) (var cap))) (let new_count (if (binop Concrete.BinOp.lt (field (var rb) count) (var cap)) [(binop Concrete.BinOp.add (field (var rb) count) (int 1))] [(var cap)])) (ret (struct RingBuf data=(var d) head=(var new_head) count=(var new_count)))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:133
+
+  fixed_capacity.compute_tag
+    status:       proved
+    spec:         Concrete.Proof.fcTagExpr
+    proof:        Concrete.Proof.compute_tag_zero_correct
+    source:       registry
+    fingerprint:  [(let acc (int 0)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 6)) [(set acc (binop Concrete.BinOp.bitxor (var acc) (cast (index (field (var buf) data) (var i)) Concrete.Ty.i32))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (var acc))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:145
+
+  fixed_capacity.validate_message
+    status:       missing
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(if (binop Concrete.BinOp.lt (field (var buf) len) (int 8)) [(ret (call err_result (int 1)))]) (let version (call read_u8 (var buf) (int 0))) (let msg_type (call read_u8 (var buf) (int 1))) (let seq_num (call read_u16_be (var buf) (int 2))) (let payload_len (call read_u16_be (var buf) (int 4))) (let tag (call read_u16_be (var buf) (int 6))) (let e1 (call validate_version (var version))) (if (binop Concrete.BinOp.neq (var e1) (int 0)) [(ret (call err_result (var e1)))]) (let e2 (call validate_msg_type (var msg_type))) (if (binop Concrete.BinOp.neq (var e2) (int 0)) [(ret (call err_result (var e2)))]) (let e3 (call validate_payload_len (var payload_len))) (if (binop Concrete.BinOp.neq (var e3) (int 0)) [(ret (call err_result (var e3)))]) (let e4 (call validate_total_len (field (var buf) len) (int 8) (var payload_len))) (if (binop Concrete.BinOp.neq (var e4) (int 0)) [(ret (call err_result (var e4)))]) (let computed (call compute_tag (var buf))) (let e5 (call validate_tag (var computed) (var tag))) (if (binop Concrete.BinOp.neq (var e5) (int 0)) [(ret (call err_result (var e5)))]) (let seen (call ring_contains (var ring) (var seq_num))) (if (binop Concrete.BinOp.eq (var seen) (int 1)) [(ret (call err_result (int 7)))]) (ret (call ok_result (var msg_type) (var seq_num) (var payload_len)))]
+    dependencies: fixed_capacity.compute_tag, fixed_capacity.ring_contains
+    loc:          examples/fixed_capacity/src/main.con:155
+
+  fixed_capacity.build_msg
+    status:       trusted
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(let buf (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (setindex (var buf) (int 0) (int 1)) (setindex (var buf) (int 1) (var msg_type)) (setindex (var buf) (int 2) (cast (binop Concrete.BinOp.shr (var seq) (int 8)) Concrete.Ty.u8)) (setindex (var buf) (int 3) (cast (binop Concrete.BinOp.bitand (var seq) (int 255)) Concrete.Ty.u8)) (setindex (var buf) (int 4) (cast (binop Concrete.BinOp.shr (var payload_len) (int 8)) Concrete.Ty.u8)) (setindex (var buf) (int 5) (cast (binop Concrete.BinOp.bitand (var payload_len) (int 255)) Concrete.Ty.u8)) (let tag (int 0)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 6)) [(set tag (binop Concrete.BinOp.bitxor (var tag) (index (var buf) (var i)))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (setindex (var buf) (int 6) (int 0)) (setindex (var buf) (int 7) (var tag)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (cast (var payload_len) Concrete.Ty.i32)) [(setindex (var buf) (binop Concrete.BinOp.add (int 8) (var i)) (cast (binop Concrete.BinOp.bitand (var i) (int 255)) Concrete.Ty.u8)) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (let total (binop Concrete.BinOp.add (int 8) (cast (var payload_len) Concrete.Ty.i32))) (ret (struct MsgBuf data=(var buf) len=(var total)))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:194
+
+  fixed_capacity.build_bad_version
+    status:       trusted
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(let buf (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (setindex (var buf) (int 0) (int 99)) (ret (struct MsgBuf data=(var buf) len=(int 10)))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:220
+
+  fixed_capacity.build_bad_type
+    status:       trusted
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(let buf (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (setindex (var buf) (int 0) (int 1)) (setindex (var buf) (int 1) (int 0)) (let tag (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (int 1) (int 0)) (int 0)) (int 0)) (int 0)) (int 0))) (setindex (var buf) (int 7) (var tag)) (ret (struct MsgBuf data=(var buf) len=(int 10)))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:226
+
+  fixed_capacity.build_payload_overflow
+    status:       trusted
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(let buf (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (setindex (var buf) (int 0) (int 1)) (setindex (var buf) (int 1) (int 1)) (setindex (var buf) (int 4) (int 0)) (setindex (var buf) (int 5) (int 241)) (let tag (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitxor (int 1) (int 1)) (int 0)) (int 0)) (int 0)) (int 241))) (setindex (var buf) (int 7) (var tag)) (ret (struct MsgBuf data=(var buf) len=(int 256)))]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:236
+
+  fixed_capacity.report
+    status:       ineligible
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(call print_string (borrow (str "Test "))) (call print_int (var label)) (call print_string (borrow (str ": "))) (if (binop Concrete.BinOp.eq (field (var r) error) (int 0)) [(call print_string (borrow (str "OK type="))) (call print_int (cast (field (var r) msg_type) Concrete.Ty.int)) (call print_string (borrow (str " seq="))) (call print_int (cast (field (var r) seq_num) Concrete.Ty.int)) (call print_string (borrow (str " payload="))) (call print_int (cast (field (var r) payload_len) Concrete.Ty.int)) (call print_string (borrow (str ""))) (call print_char (int 10))] [(call print_string (borrow (str "FAIL error="))) (call print_int (cast (field (var r) error) Concrete.Ty.int)) (call print_char (int 10))])]
+    dependencies: none
+    loc:          examples/fixed_capacity/src/main.con:250
+
+  fixed_capacity.main
+    status:       ineligible
+    spec:         (none)
+    proof:        (none)
+    source:       none
+    fingerprint:  [(call print_string (borrow (str "=== Fixed-Capacity Message Validator ==="))) (call print_char (int 10)) (call print_string (borrow (str ""))) (call print_char (int 10)) (let ring (call ring_new )) (let failures (int 0)) (let m1 (call build_msg (int 1) (int 1) (int 16))) (let r1 (call validate_message (var m1) (var ring))) (call report (int 1) (var r1)) (if (binop Concrete.BinOp.neq (field (var r1) error) (int 0)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (set ring (call ring_push (var ring) (field (var r1) seq_num))) (let m2 (call build_msg (int 2) (int 2) (int 0))) (let r2 (call validate_message (var m2) (var ring))) (call report (int 2) (var r2)) (if (binop Concrete.BinOp.neq (field (var r2) error) (int 0)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (set ring (call ring_push (var ring) (field (var r2) seq_num))) (let m3 (call build_msg (int 3) (int 3) (int 4))) (let r3 (call validate_message (var m3) (var ring))) (call report (int 3) (var r3)) (if (binop Concrete.BinOp.neq (field (var r3) error) (int 0)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (set ring (call ring_push (var ring) (field (var r3) seq_num))) (let m4 (call build_msg (int 1) (int 1) (int 8))) (let r4 (call validate_message (var m4) (var ring))) (call report (int 4) (var r4)) (if (binop Concrete.BinOp.neq (field (var r4) error) (int 7)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (let short (struct MsgBuf data=(array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0)) len=(int 3))) (let r5 (call validate_message (var short) (var ring))) (call report (int 5) (var r5)) (if (binop Concrete.BinOp.neq (field (var r5) error) (int 1)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (let m6 (call build_bad_version )) (let r6 (call validate_message (var m6) (var ring))) (call report (int 6) (var r6)) (if (binop Concrete.BinOp.neq (field (var r6) error) (int 2)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (let m7 (call build_bad_type )) (let r7 (call validate_message (var m7) (var ring))) (call report (int 7) (var r7)) (if (binop Concrete.BinOp.neq (field (var r7) error) (int 3)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (let m8 (call build_payload_overflow )) (let r8 (call validate_message (var m8) (var ring))) (call report (int 8) (var r8)) (if (binop Concrete.BinOp.neq (field (var r8) error) (int 4)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (call print_string (borrow (str ""))) (call print_char (int 10)) (if (binop Concrete.BinOp.eq (var failures) (int 0)) [(call print_string (borrow (str "All 8 tests passed."))) (call print_char (int 10))] [(call print_int (cast (var failures) Concrete.Ty.int)) (call print_string (borrow (str " test(s) failed."))) (call print_char (int 10))]) (ret (cast (var failures) Concrete.Ty.int))]
+    dependencies: fixed_capacity.ring_new, fixed_capacity.ring_push
+    loc:          examples/fixed_capacity/src/main.con:270
+
+Totals: 20 obligations — 4 proved, 0 stale, 10 missing, 0 blocked, 2 ineligible, 4 trusted
+

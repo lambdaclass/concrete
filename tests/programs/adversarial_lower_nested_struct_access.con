@@ -1,0 +1,20 @@
+// Adversarial lowering: 4-level nested struct field access.
+// Stresses GEP chain generation for deeply nested struct fields.
+// Expected: 42
+
+struct Copy D { value: Int }
+struct Copy C { d: D }
+struct Copy B { c: C }
+struct Copy A { b: B }
+
+fn get_deep(a: A) -> Int {
+    return a.b.c.d.value;
+}
+
+pub fn main() -> Int {
+    let inner: D = D { value: 42 };
+    let c: C = C { d: inner };
+    let b: B = B { c: c };
+    let a: A = A { b: b };
+    return get_deep(a);
+}

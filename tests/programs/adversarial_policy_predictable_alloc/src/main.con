@@ -1,0 +1,11 @@
+// Adversarial: predictable = true policy active, but code uses Alloc capability.
+// Function correctly declares Alloc, but predictable profile forbids allocation.
+// Expected: compiler rejects with E0610.
+
+pub fn allocate_stuff() with(Alloc) -> Int {
+    return 1;
+}
+
+pub fn main() with(Alloc) -> Int {
+    return allocate_stuff();
+}

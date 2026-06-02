@@ -1,0 +1,10 @@
+// Test: --check predictable should fail for extern (FFI) calls
+extern fn abs(x: Int) -> Int;
+
+fn call_extern(x: Int) with(Unsafe) -> Int {
+    return abs(x);
+}
+
+fn main() with(Unsafe) -> Int {
+    return call_extern(-5);
+}

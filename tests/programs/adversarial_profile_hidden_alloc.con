@@ -1,0 +1,15 @@
+// Adversarial: allocation hidden behind a function call.
+// allocator() requires Alloc, so wrapper() should also be flagged.
+// The predictable profile must catch transitive allocation.
+
+fn allocator() with(Alloc) -> Int {
+    return 0;
+}
+
+fn wrapper() with(Alloc) -> Int {
+    return allocator();
+}
+
+pub fn main() with(Alloc) -> Int {
+    return wrapper();
+}

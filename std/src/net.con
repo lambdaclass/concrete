@@ -3,7 +3,6 @@ mod net {
     import std.alloc.{grow,dealloc};
     import std.libc.{fork as libc_fork, exit as libc_exit, waitpid as libc_waitpid};
     import std.bytes.{Bytes};
-    import std.result.{Result};
 
     // AF_INET = 2, SOCK_STREAM = 1
     // SOL_SOCKET: Linux = 1, macOS = 65535
@@ -85,7 +84,7 @@ mod net {
         pub fn bind(addr: &String, port: u16) with(Unsafe, Alloc, Network) -> Result<TcpListener, NetError> {
             let fd: i32 = socket(2, 1, 0);
             if fd < 0 {
-                return Result::<TcpListener, NetError>#Err { error: NetError#SocketFailed };
+                return Result::<TcpListener, NetError>::Err { error: NetError::SocketFailed };
             }
 
             // setsockopt SO_REUSEADDR (platform-aware constants)
@@ -96,7 +95,7 @@ mod net {
             let setsockopt_ret: i32 = setsockopt(fd, sol, so_reuse, one_ptr, 4);
             if setsockopt_ret != 0 {
                 close(fd);
-                return Result::<TcpListener, NetError>#Err { error: NetError#SetsockoptFailed };
+                return Result::<TcpListener, NetError>::Err { error: NetError::SetsockoptFailed };
             }
 
             // Build sockaddr_in (16 bytes, zeroed)
@@ -113,36 +112,36 @@ mod net {
             if pton_ret != 1 {
                 dealloc::<u8>(sa);
                 close(fd);
-                return Result::<TcpListener, NetError>#Err { error: NetError#AddressFailed };
+                return Result::<TcpListener, NetError>::Err { error: NetError::AddressFailed };
             }
 
             let bind_ret: i32 = bind(fd, sa as *const u8, 16);
             if bind_ret != 0 {
                 dealloc::<u8>(sa);
                 close(fd);
-                return Result::<TcpListener, NetError>#Err { error: NetError#BindFailed };
+                return Result::<TcpListener, NetError>::Err { error: NetError::BindFailed };
             }
 
             let listen_ret: i32 = listen(fd, 128);
             if listen_ret != 0 {
                 dealloc::<u8>(sa);
                 close(fd);
-                return Result::<TcpListener, NetError>#Err { error: NetError#BindFailed };
+                return Result::<TcpListener, NetError>::Err { error: NetError::BindFailed };
             }
 
             dealloc::<u8>(sa);
 
             let listener: TcpListener = TcpListener { fd: fd };
-            return Result::<TcpListener, NetError>#Ok { value: listener };
+            return Result::<TcpListener, NetError>::Ok { value: listener };
         }
 
         pub fn accept(&self) with(Unsafe, Network) -> Result<TcpStream, NetError> {
             let client_fd: i32 = accept(self.fd, 0 as *mut u8, 0 as *mut u32);
             if client_fd < 0 {
-                return Result::<TcpStream, NetError>#Err { error: NetError#AcceptFailed };
+                return Result::<TcpStream, NetError>::Err { error: NetError::AcceptFailed };
             }
             let stream: TcpStream = TcpStream { fd: client_fd };
-            return Result::<TcpStream, NetError>#Ok { value: stream };
+            return Result::<TcpStream, NetError>::Ok { value: stream };
         }
 
         pub fn close(self) with(Unsafe, Network) {
@@ -158,7 +157,7 @@ mod net {
         pub fn connect(addr: &String, port: u16) with(Unsafe, Alloc, Network) -> Result<TcpStream, NetError> {
             let fd: i32 = socket(2, 1, 0);
             if fd < 0 {
-                return Result::<TcpStream, NetError>#Err { error: NetError#SocketFailed };
+                return Result::<TcpStream, NetError>::Err { error: NetError::SocketFailed };
             }
 
             // Build sockaddr_in (16 bytes, zeroed)
@@ -175,7 +174,7 @@ mod net {
             if pton_ret != 1 {
                 dealloc::<u8>(sa);
                 close(fd);
-                return Result::<TcpStream, NetError>#Err { error: NetError#AddressFailed };
+                return Result::<TcpStream, NetError>::Err { error: NetError::AddressFailed };
             }
 
             let connect_ret: i32 = connect(fd, sa as *const u8, 16);
@@ -183,11 +182,11 @@ mod net {
 
             if connect_ret != 0 {
                 close(fd);
-                return Result::<TcpStream, NetError>#Err { error: NetError#ConnectFailed };
+                return Result::<TcpStream, NetError>::Err { error: NetError::ConnectFailed };
             }
 
             let stream: TcpStream = TcpStream { fd: fd };
-            return Result::<TcpStream, NetError>#Ok { value: stream };
+            return Result::<TcpStream, NetError>::Ok { value: stream };
         }
 
         pub fn write(&self, data: *const u8, len: u64) with(Unsafe, Network) -> i64 {
@@ -248,7 +247,7 @@ mod net {
         let port: u16 = 39876;
         let bind_result: Result<TcpListener, NetError> = TcpListener::bind(&addr, port);
         match bind_result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 let pid: i32 = libc_fork();
                 if pid < 0 {
                     addr.drop();
@@ -260,13 +259,13 @@ mod net {
                     let stream_result: Result<TcpStream, NetError> = TcpStream::connect(&addr, port);
                     addr.drop();
                     match stream_result {
-                        Result#Ok { value } => {
+                        Result::Ok { value } => {
                             let msg: String = "Hi";
                             value.write(msg.ptr as *const u8, msg.len);
                             msg.drop();
                             value.close();
                         },
-                        Result#Err { error } => {}
+                        Result::Err { error } => {}
                     }
                     libc_exit(0);
                     return 0;
@@ -276,7 +275,7 @@ mod net {
                 value.close();
                 addr.drop();
                 match accept_result {
-                    Result#Ok { value } => {
+                    Result::Ok { value } => {
                         let buf: [u8; 16] = [0; 16];
                         let n: i64 = value.read(&buf as *mut u8, 16);
                         value.close();
@@ -296,7 +295,7 @@ mod net {
                         }
                         return 0;
                     },
-                    Result#Err { error } => {
+                    Result::Err { error } => {
                         // Wait for child
                         let status: i32 = 0;
                         libc_waitpid(pid, &status as *mut i32, 0);
@@ -304,7 +303,7 @@ mod net {
                     }
                 }
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 addr.drop();
                 return 1;
             }
@@ -319,7 +318,7 @@ mod net {
         let port: u16 = 39877;
         let bind_result: Result<TcpListener, NetError> = TcpListener::bind(&addr, port);
         match bind_result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 let pid: i32 = libc_fork();
                 if pid < 0 {
                     addr.drop();
@@ -331,12 +330,12 @@ mod net {
                     let stream_result: Result<TcpStream, NetError> = TcpStream::connect(&addr, port);
                     addr.drop();
                     match stream_result {
-                        Result#Ok { value } => {
+                        Result::Ok { value } => {
                             let data: [u8; 10] = [65; 10]; // 10 'A' bytes
                             value.write_all(&data as *const u8, 10);
                             value.close();
                         },
-                        Result#Err { error } => {}
+                        Result::Err { error } => {}
                     }
                     libc_exit(0);
                     return 0;
@@ -346,7 +345,7 @@ mod net {
                 value.close();
                 addr.drop();
                 match accept_result {
-                    Result#Ok { value } => {
+                    Result::Ok { value } => {
                         let mut buf: Bytes = Bytes::new();
                         let total: i64 = value.read_all(&mut buf);
                         value.close();
@@ -368,14 +367,14 @@ mod net {
                         buf.drop();
                         return 0;
                     },
-                    Result#Err { error } => {
+                    Result::Err { error } => {
                         let status: i32 = 0;
                         libc_waitpid(pid, &status as *mut i32, 0);
                         return 1;
                     }
                 }
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 addr.drop();
                 return 1;
             }
@@ -389,11 +388,11 @@ mod net {
         let result: Result<TcpStream, NetError> = TcpStream::connect(&addr, 1);
         addr.drop();
         match result {
-            Result::<TcpStream, NetError>#Ok { value } => {
+            Result::<TcpStream, NetError>::Ok { value } => {
                 value.close();
                 return 1;
             },
-            Result::<TcpStream, NetError>#Err { error } => {
+            Result::<TcpStream, NetError>::Err { error } => {
                 return 0;
             }
         }
@@ -405,11 +404,11 @@ mod net {
         let result: Result<TcpStream, NetError> = TcpStream::connect(&addr, 1);
         addr.drop();
         match result {
-            Result::<TcpStream, NetError>#Ok { value } => {
+            Result::<TcpStream, NetError>::Ok { value } => {
                 value.close();
                 return 1;
             },
-            Result::<TcpStream, NetError>#Err { error } => {
+            Result::<TcpStream, NetError>::Err { error } => {
                 return 0;
             }
         }
@@ -421,11 +420,11 @@ mod net {
         let result: Result<TcpListener, NetError> = TcpListener::bind(&addr, 9999);
         addr.drop();
         match result {
-            Result::<TcpListener, NetError>#Ok { value } => {
+            Result::<TcpListener, NetError>::Ok { value } => {
                 value.close();
                 return 1;
             },
-            Result::<TcpListener, NetError>#Err { error } => {
+            Result::<TcpListener, NetError>::Err { error } => {
                 return 0;
             }
         }
@@ -438,11 +437,11 @@ mod net {
         let result: Result<TcpStream, NetError> = TcpStream::connect(&addr, 1);
         addr.drop();
         match result {
-            Result::<TcpStream, NetError>#Ok { value } => {
+            Result::<TcpStream, NetError>::Ok { value } => {
                 value.close();
                 return 1;
             },
-            Result::<TcpStream, NetError>#Err { error } => {
+            Result::<TcpStream, NetError>::Err { error } => {
                 return 0;
             }
         }
@@ -455,11 +454,11 @@ mod net {
         let result: Result<TcpListener, NetError> = TcpListener::bind(&addr, 8080);
         addr.drop();
         match result {
-            Result::<TcpListener, NetError>#Ok { value } => {
+            Result::<TcpListener, NetError>::Ok { value } => {
                 value.close();
                 return 1;
             },
-            Result::<TcpListener, NetError>#Err { error } => {
+            Result::<TcpListener, NetError>::Err { error } => {
                 return 0;
             }
         }
@@ -511,23 +510,23 @@ mod net {
         let addr: String = "127.0.0.1";
         let result1: Result<TcpListener, NetError> = TcpListener::bind(&addr, 49321);
         match result1 {
-            Result::<TcpListener, NetError>#Ok { value } => {
+            Result::<TcpListener, NetError>::Ok { value } => {
                 // Try to bind a second listener on the same port
                 let result2: Result<TcpListener, NetError> = TcpListener::bind(&addr, 49321);
                 addr.drop();
                 value.close();
                 match result2 {
-                    Result::<TcpListener, NetError>#Ok { value } => {
+                    Result::<TcpListener, NetError>::Ok { value } => {
                         // SO_REUSEADDR may allow this on some OSes; close and accept either outcome
                         value.close();
                         return 0;
                     },
-                    Result::<TcpListener, NetError>#Err { error } => {
+                    Result::<TcpListener, NetError>::Err { error } => {
                         return 0;
                     }
                 }
             },
-            Result::<TcpListener, NetError>#Err { error } => {
+            Result::<TcpListener, NetError>::Err { error } => {
                 // Port might be in use — that's ok, test is about the double-bind path
                 addr.drop();
                 return 0;

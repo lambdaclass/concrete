@@ -1,0 +1,789 @@
+# Test Manifest — reference metadata for all test cases
+#
+# This file is NOT consumed by scripts/tests/run_tests.sh. Test execution is driven
+# by the shell script's section structure. This manifest captures the
+# metadata that the shell sections encode implicitly, making it
+# queryable and auditable for documentation and future tooling.
+#
+# Used by:
+# - docs/TESTING.md coverage matrix (reference data)
+# - future tooling for test selection and reporting
+#
+# Fields per test entry:
+#   file        — path relative to repo root
+#   category    — semantic category (see categories below)
+#   kind        — execution kind: "run_ok", "run_err", "run_abort", "run_test",
+#                 "check_report", "check_codegen", "check_O2", "lean_pass"
+#   passes      — which compiler passes this test exercises
+#   profile     — run profile: "fast", "slow", "network"
+#   expected    — expected output (exit code, string match, etc.)
+#   owner_pass  — primary compiler pass whose correctness this test defends
+#   needs_clang — whether the test requires clang (false for pass-level/report-only)
+#   multi_module— whether the test uses `mod X;` file imports
+
+# ============================================================
+# Categories
+# ============================================================
+#
+# unit          — single language feature in isolation
+# semantic      — type checking, linearity, capability, name resolution
+# lowering      — Core-to-SSA lowering behavior
+# codegen       — LLVM IR structure, optimization, differential
+# report        — --report mode output verification
+# integration   — multi-feature realistic programs
+# stress        — large/deep programs testing compiler limits
+# stdlib        — stdlib module in-language #[test] coverage
+# regression    — named bug reproductions
+# property      — invariant/round-trip/trace tests
+# fuzz          — random/malformed input crash resistance
+
+# ============================================================
+# Compiler pass names (for passes and owner_pass fields)
+# ============================================================
+#
+# parse         — Concrete.Parser (source → AST)
+# resolve       — Concrete.Resolve (name resolution)
+# check         — Concrete.Check (type/capability/linearity checking)
+# elab          — Concrete.Elab (elaboration to Core IR)
+# core_check    — Concrete.CoreCheck (post-elaboration validation)
+# mono          — Concrete.Mono (monomorphization)
+# lower         — Concrete.Lower (Core → SSA)
+# ssa_verify    — Concrete.SSAVerify (SSA invariant checking)
+# ssa_cleanup   — Concrete.SSACleanup (SSA optimization)
+# emit_ssa      — Concrete.EmitSSA (SSA → LLVM IR)
+# clang         — external clang compilation
+# runtime       — runtime execution behavior
+# summary       — Concrete.FileSummary (cross-module summaries)
+# report        — Concrete.Report (audit report generation)
+# format        — Concrete.Format (source formatter)
+
+# ============================================================
+# Pass-level Lean tests (Concrete/PipelineTest.lean)
+# ============================================================
+
+[[test]]
+file = "Concrete/PipelineTest.lean"
+category = "unit"
+kind = "lean_pass"
+passes = ["parse", "check", "elab", "mono", "lower", "ssa_verify", "ssa_cleanup", "emit_ssa"]
+profile = "fast"
+owner_pass = "all"
+needs_clang = false
+multi_module = false
+description = "19+ pass-level tests exercising individual compiler passes on in-memory source strings"
+
+# ============================================================
+# Positive tests — compile-and-run, expect specific exit code
+# ============================================================
+
+# --- Basics ---
+
+[[test]]
+file = "tests/programs/fib.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "ssa_verify", "ssa_cleanup", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "55"
+owner_pass = "runtime"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/arithmetic.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "65"
+owner_pass = "emit_ssa"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/if_else.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "1"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/while_loop.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "5050"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/recursion.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "479001600"
+owner_pass = "emit_ssa"
+needs_clang = true
+multi_module = false
+
+# --- Structs ---
+
+[[test]]
+file = "tests/programs/struct_basic.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "7"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/struct_field_assign.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "33"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/struct_loop_field_assign.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/struct_loop_break.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/struct_nested_loop.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/struct_if_else_merge.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/struct_match_merge.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/struct_nested.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+# --- Linear ownership ---
+
+[[test]]
+file = "tests/programs/linear_consume.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "check"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/linear_branch_agree.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "check"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/linear_loop_inner.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "3"
+owner_pass = "check"
+needs_clang = true
+multi_module = false
+
+# --- Enums ---
+
+[[test]]
+file = "tests/programs/enum_basic.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "2"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/enum_fields.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "12"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/enum_linear.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "check"
+needs_clang = true
+multi_module = false
+
+# --- Borrows ---
+
+[[test]]
+file = "tests/programs/borrow_read.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "10"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/borrow_mut.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/borrow_no_consume.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "check"
+needs_clang = true
+multi_module = false
+
+# --- Generics ---
+
+[[test]]
+file = "tests/programs/generic_fn.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "mono"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/generic_struct.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "30"
+owner_pass = "mono"
+needs_clang = true
+multi_module = false
+
+# --- Traits ---
+
+[[test]]
+file = "tests/programs/trait_basic.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "30"
+owner_pass = "elab"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/trait_multiple.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "50"
+owner_pass = "elab"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/trait_dispatch_basic.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "30"
+owner_pass = "mono"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/trait_dispatch_multi.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "47"
+owner_pass = "mono"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/trait_dispatch_chain.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "mono"
+needs_clang = true
+multi_module = false
+
+# --- Capabilities ---
+
+[[test]]
+file = "tests/programs/cap_basic.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "0"
+owner_pass = "check"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/cap_poly.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "check"
+needs_clang = true
+multi_module = false
+
+# --- Modules ---
+
+[[test]]
+file = "tests/programs/module_basic.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "resolve", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "resolve"
+needs_clang = true
+multi_module = true
+
+[[test]]
+file = "tests/programs/module_struct.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "resolve", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "30"
+owner_pass = "resolve"
+needs_clang = true
+multi_module = true
+
+[[test]]
+file = "tests/programs/module_file/main.con"
+category = "unit"
+kind = "run_ok"
+passes = ["parse", "resolve", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "resolve"
+needs_clang = true
+multi_module = true
+
+# --- Integration tests ---
+
+[[test]]
+file = "tests/programs/integration_text_processing.con"
+category = "integration"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "0"
+owner_pass = "runtime"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/integration_data_structures.con"
+category = "integration"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "0"
+owner_pass = "runtime"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/integration_error_handling.con"
+category = "integration"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "0"
+owner_pass = "runtime"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/integration_generic_pipeline.con"
+category = "integration"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "mono"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/integration_state_machine.con"
+category = "integration"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+# --- Negative tests (selected representative entries) ---
+
+[[test]]
+file = "tests/programs/error_unconsumed.con"
+category = "semantic"
+kind = "run_err"
+passes = ["parse", "check"]
+profile = "fast"
+expected = "was never consumed"
+owner_pass = "check"
+needs_clang = false
+multi_module = false
+
+[[test]]
+file = "tests/programs/error_use_after_move.con"
+category = "semantic"
+kind = "run_err"
+passes = ["parse", "check"]
+profile = "fast"
+expected = "used after move"
+owner_pass = "check"
+needs_clang = false
+multi_module = false
+
+[[test]]
+file = "tests/programs/error_type_mismatch.con"
+category = "semantic"
+kind = "run_err"
+passes = ["parse", "check"]
+profile = "fast"
+expected = "type mismatch"
+owner_pass = "check"
+needs_clang = false
+multi_module = false
+
+[[test]]
+file = "tests/programs/error_cap_pure.con"
+category = "semantic"
+kind = "run_err"
+passes = ["parse", "check"]
+profile = "fast"
+expected = "but caller has"
+owner_pass = "check"
+needs_clang = false
+multi_module = false
+
+[[test]]
+file = "tests/programs/error_enum_nonexhaustive.con"
+category = "semantic"
+kind = "run_err"
+passes = ["parse", "check"]
+profile = "fast"
+expected = "non-exhaustive match"
+owner_pass = "check"
+needs_clang = false
+multi_module = false
+
+[[test]]
+file = "tests/programs/error_resolve_undeclared_span.con"
+category = "semantic"
+kind = "run_err"
+passes = ["parse", "resolve"]
+profile = "fast"
+expected = "4:12: error[resolve]: undeclared variable"
+owner_pass = "resolve"
+needs_clang = false
+multi_module = false
+
+[[test]]
+file = "tests/programs/error_module_not_found.con"
+category = "semantic"
+kind = "run_err"
+passes = ["parse", "resolve"]
+profile = "fast"
+expected = "module file not found"
+owner_pass = "resolve"
+needs_clang = false
+multi_module = true
+
+[[test]]
+file = "tests/programs/error_trait_missing_method.con"
+category = "semantic"
+kind = "run_err"
+passes = ["parse", "check", "elab"]
+profile = "fast"
+expected = "missing method"
+owner_pass = "elab"
+needs_clang = false
+multi_module = false
+
+[[test]]
+file = "tests/programs/error_ffi_no_unsafe.con"
+category = "semantic"
+kind = "run_err"
+passes = ["parse", "check"]
+profile = "fast"
+expected = "but caller has"
+owner_pass = "check"
+needs_clang = false
+multi_module = false
+
+# --- Report tests ---
+
+[[test]]
+file = "tests/programs/report_integration.con"
+category = "report"
+kind = "check_report"
+passes = ["parse", "check", "elab", "mono", "report"]
+profile = "fast"
+expected = "6 modes verified"
+owner_pass = "report"
+needs_clang = false
+multi_module = false
+
+[[test]]
+file = "tests/programs/integration_collection_pipeline.con"
+category = "report"
+kind = "check_report"
+passes = ["parse", "check", "elab", "mono", "report"]
+profile = "fast"
+expected = "5 modes verified"
+owner_pass = "report"
+needs_clang = false
+multi_module = false
+
+# --- Codegen differential tests ---
+
+[[test]]
+file = "tests/programs/codegen_constfold.con"
+category = "codegen"
+kind = "check_codegen"
+passes = ["parse", "check", "elab", "mono", "lower", "ssa_cleanup", "emit_ssa"]
+profile = "fast"
+expected = "constant folding verified"
+owner_pass = "ssa_cleanup"
+needs_clang = false
+multi_module = false
+
+[[test]]
+file = "tests/programs/codegen_strength.con"
+category = "codegen"
+kind = "check_codegen"
+passes = ["parse", "check", "elab", "mono", "lower", "ssa_cleanup", "emit_ssa"]
+profile = "fast"
+expected = "strength reduction verified"
+owner_pass = "ssa_cleanup"
+needs_clang = false
+multi_module = false
+
+# --- O2 regression tests ---
+
+[[test]]
+file = "tests/programs/struct_loop_field_assign.con"
+category = "regression"
+kind = "check_O2"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang"]
+profile = "fast"
+expected = "42"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+# --- Stdlib tests ---
+
+[[test]]
+file = "std/src/lib.con"
+category = "stdlib"
+kind = "run_test"
+passes = ["parse", "resolve", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "all modules pass"
+owner_pass = "runtime"
+needs_clang = true
+multi_module = true
+description = "189 stdlib #[test] functions across all modules"
+
+# --- Network tests (slow profile) ---
+
+[[test]]
+file = "tests/programs/net_tcp_roundtrip.con"
+category = "integration"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "network"
+expected = "0"
+owner_pass = "runtime"
+needs_clang = true
+multi_module = false
+
+# --- Property / trace tests ---
+
+[[test]]
+file = "tests/programs/fmt_parse_roundtrip.con"
+category = "property"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "0"
+owner_pass = "runtime"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/vec_trace.con"
+category = "property"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "0"
+owner_pass = "runtime"
+needs_clang = true
+multi_module = false
+
+# --- Regression tests ---
+
+[[test]]
+file = "tests/programs/regress_deref_field_precedence.con"
+category = "regression"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/regress_mut_field_writeback.con"
+category = "regression"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "42"
+owner_pass = "lower"
+needs_clang = true
+multi_module = false
+
+[[test]]
+file = "tests/programs/regress_void_phi.con"
+category = "regression"
+kind = "run_ok"
+passes = ["parse", "check", "elab", "mono", "lower", "ssa_verify", "emit_ssa", "clang", "runtime"]
+profile = "fast"
+expected = "0"
+owner_pass = "ssa_verify"
+needs_clang = true
+multi_module = false
+
+# ============================================================
+# NOTE: This manifest includes representative entries for each
+# category. The full set of 350+ test files follows the same
+# patterns. Tests not explicitly listed inherit defaults:
+#   category = "unit"
+#   kind = inferred from scripts/tests/run_tests.sh section
+#   passes = full pipeline
+#   profile = "fast"
+#   owner_pass = inferred from filename prefix
+#   needs_clang = true (for run_ok/run_err), false (for check_*)
+#
+# A complete listing can be generated via:
+#   ./scripts/tests/run_tests.sh --manifest
+# ============================================================

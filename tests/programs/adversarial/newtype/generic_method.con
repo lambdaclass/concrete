@@ -1,0 +1,18 @@
+// Generic method on a generic newtype. Tests that the wrapper's
+// type-param substitution flows through method dispatch and the inner
+// access reaches the right concrete type.
+// Expected: 99
+
+newtype Wrapper<T> = T;
+
+impl<T> Wrapper<T> {
+    pub fn read(self) -> T {
+        return self.0;
+    }
+}
+
+fn main() -> Int {
+    let w: Wrapper<i32> = Wrapper(99);
+    let r: i32 = w.read();
+    return r as Int;
+}

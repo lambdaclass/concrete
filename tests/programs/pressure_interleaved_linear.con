@@ -1,0 +1,23 @@
+// Pressure: two linear variables with interleaved use and consumption.
+// r1 used, r2 consumed, r1 consumed — tests that tracker doesn't confuse them.
+
+struct Res { val: Int }
+
+fn consume(r: Res) -> Int {
+    return r.val;
+}
+
+fn read_val(r: &Res) -> Int {
+    return (*r).val;
+}
+
+fn main() -> Int {
+    let r1: Res = Res { val: 10 };
+    let r2: Res = Res { val: 20 };
+    borrow r1 as ref1 in R1 {
+        let v1: Int = read_val(ref1);
+        let v2: Int = consume(r2);
+        return v1 + v2;
+    }
+    return consume(r1);
+}

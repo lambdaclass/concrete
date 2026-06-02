@@ -1,0 +1,131 @@
+// ============================================================
+// Proof Pressure Set — 6 functions exercising all proof states
+// ============================================================
+//
+// This file is the canonical narrow proof pressure set for Phase 2.
+// Each function targets a specific proof obligation state:
+//
+//   1. check_nonce        → proved     (conditional-heavy validator)
+//   2. validate_header    → proved     (helper-composition, calls check_nonce)
+//   3. compute_checksum   → stale      (registry fingerprint is outdated)
+//   4. format_result      → ineligible (has Console capability)
+//   5. clamp_value        → missing    (pure, extractable, no registry entry)
+//   6. classify_range     → blocked    (pure, eligible, uses struct field access — unsupported)
+//
+// Run:
+//   concrete src/main.con --report proof-status
+//
+// Expected proof status report:
+//   check_nonce       — proved
+//   validate_header   — proved
+//   compute_checksum  — stale
+//   format_result     — not eligible
+//   clamp_value       — not proved (missing)
+//   classify_range    — blocked
+
+// ---- 1. PROVED: conditional-heavy validator ----
+// Checks that a nonce is within a valid range.
+// Registry entry has correct fingerprint.
+
+fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
+    if nonce < 0 {
+        return 1;
+    } else {
+        if nonce > max_nonce {
+            return 2;
+        } else {
+            return 0;
+        }
+    }
+}
+
+// ---- 2. PROVED: helper-composition ----
+// Validates a header by calling check_nonce and checking a version field.
+// Exercises proved-function dependency tracking.
+// Registry entry has correct fingerprint.
+
+fn validate_header(nonce: Int, max_nonce: Int, version: Int) -> Int {
+    let nonce_result: Int = check_nonce(nonce, max_nonce);
+    if nonce_result != 0 {
+        return nonce_result;
+    } else {
+        if version < 1 {
+            return 3;
+        } else {
+            if version > 3 {
+                return 4;
+            } else {
+                return 0;
+            }
+        }
+    }
+}
+
+// ---- 3. STALE: body was changed after proof was registered ----
+// The registry still has the old fingerprint from when the body was:
+//   return key * message + salt
+// But the body has since been changed to add a shift.
+// This must show as "stale".
+
+fn compute_checksum(key: Int, message: Int, salt: Int) -> Int {
+    return key * message + salt + 1;
+}
+
+// ---- 4. INELIGIBLE: has capabilities ----
+// This function requires Console — it is intentionally outside the
+// proof boundary. The compiler must report it as "not eligible".
+
+fn format_result(code: Int) with(Console) {
+    if code == 0 {
+        println("valid");
+    } else {
+        println("invalid");
+    }
+}
+
+// ---- 5. MISSING: eligible, extractable, no proof registered ----
+// Pure function using only extractable constructs (arithmetic, if-else).
+// No registry entry exists. Must show as "not proved" (missing).
+
+fn clamp_value(x: Int, lo: Int, hi: Int) -> Int {
+    if x < lo {
+        return lo;
+    } else {
+        if x > hi {
+            return hi;
+        } else {
+            return x;
+        }
+    }
+}
+
+// ---- 6. BLOCKED: eligible but uses unsupported construct ----
+// Pure function with no capabilities, no recursion, no allocation.
+// But uses struct field access, which the extraction pipeline does
+// not yet support. Must show as "blocked".
+
+struct Copy Bounds { lo: Int, hi: Int }
+
+fn classify_range(b: Bounds, x: Int) -> Int {
+    if x < b.lo {
+        return 1;
+    } else {
+        if x > b.hi {
+            return 2;
+        } else {
+            return 0;
+        }
+    }
+}
+
+// ---- Entry point ----
+
+pub fn main() with(Console) -> Int {
+    let h: Int = validate_header(5, 100, 2);
+    let c: Int = compute_checksum(3, 7, 10);
+    let v: Int = clamp_value(c, 0, 50);
+    let b: Bounds = Bounds { lo: 0, hi: 100 };
+    let r: Int = classify_range(b, c);
+    format_result(h);
+    return v + r;
+}

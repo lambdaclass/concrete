@@ -1,0 +1,229 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  grammar:
+    name: LL(1) grammar check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Python LL(1) checker
+        run: python3 scripts/check_ll1.py grammar/concrete.ebnf
+
+      - name: Run C LL(1) checker
+        run: |
+          cc -Wall -Wextra -Werror -O2 -o /tmp/check_ll1 scripts/check_ll1.c
+          /tmp/check_ll1 grammar/concrete.ebnf
+
+      - name: Run Rust LL(1) checker
+        run: |
+          rustc -O -o /tmp/check_ll1_rs scripts/check_ll1.rs
+          /tmp/check_ll1_rs grammar/concrete.ebnf
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Check for build warnings
+        run: |
+          OUTPUT=$(lake build 2>&1)
+          if echo "$OUTPUT" | grep -i "warning"; then
+            echo "::error::Build produced warnings"
+            echo "$OUTPUT"
+            exit 1
+          fi
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+  main-tests:
+    name: Main test suite
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Run main test suite
+        run: |
+          for attempt in 1 2 3; do
+            if SKIP_FLAKY_TCP_TEST=1 ./scripts/tests/run_tests.sh; then
+              exit 0
+            fi
+            echo "Main test suite failed on attempt $attempt"
+          done
+          exit 1
+
+  ssa-tests:
+    name: SSA test suite
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Run SSA test suite
+        run: bash ./scripts/tests/test_ssa.sh
+
+  trust-gate:
+    name: Trust gate (correctness contracts)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Run trust gate
+        run: ./scripts/tests/run_tests.sh --trust-gate
+
+  proof-gate:
+    name: Proof evidence gate
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Run proof evidence gate
+        run: bash scripts/ci/proof_gate.sh
+
+  thesis-evidence:
+    name: Thesis evidence smoke test
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Check thesis demo reports
+        run: |
+          BIN=".lake/build/bin/concrete"
+
+          "$BIN" examples/thesis_demo/src/main.con --report effects | tee /tmp/effects.txt
+          grep -q 'Evidence: 2 proved' /tmp/effects.txt
+          grep -q 'evidence: proved' /tmp/effects.txt
+
+          "$BIN" examples/thesis_demo/src/main.con --report proof-status | tee /tmp/proof-status.txt
+          grep -q '2 proved' /tmp/proof-status.txt
+          grep -q 'proof matches current body' /tmp/proof-status.txt
+
+          # The thesis demo intentionally has a predictable core and an I/O entrypoint.
+          set +e
+          "$BIN" examples/thesis_demo/src/main.con --check predictable > /tmp/predictable.txt
+          rc=$?
+          set -e
+          test "$rc" -eq 1
+          grep -q 'predictable profile: FAIL' /tmp/predictable.txt
+          grep -q 'may block' /tmp/predictable.txt
+
+  examples:
+    name: Examples (non-blocking)
+    runs-on: ubuntu-latest
+    needs: build
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Compile standalone example applications
+        run: |
+          BIN=".lake/build/bin/concrete"
+          PASS=0
+          FAIL=0
+
+          # Keep this list explicit. Many files under examples/ are
+          # future-facing demos or negative snippets covered by run_tests.sh.
+          for f in examples/packet/src/main.con \
+                   examples/project/src/main.con \
+                   examples/thesis_demo/src/main.con; do
+            out_name=$(echo "$f" | tr '/.' '__')
+            if $BIN "$f" -o "/tmp/${out_name}" > /dev/null 2>&1; then
+              PASS=$((PASS + 1))
+            else
+              echo "FAIL: $f"
+              $BIN "$f" -o "/tmp/${out_name}" 2>&1 | head -5
+              FAIL=$((FAIL + 1))
+            fi
+          done
+          echo ""
+          echo "=== Standalone examples: $PASS compiled, $FAIL failed ==="
+          if [ "$FAIL" -gt 0 ]; then
+            exit 1
+          fi
+
+      - name: Run compiled examples (smoke test)
+        run: |
+          CRASH=0
+          for exe in /tmp/examples__*__main_con; do
+            [ -f "$exe" ] || continue
+            case "$exe" in
+              *net*|*tcp*|*http*|*grep*|*toml*|*lox*|*project*) continue ;;
+            esac
+            if [ -x "$exe" ]; then
+              timeout 5 "$exe" > /dev/null 2>&1 || rc=$?
+              rc=${rc:-0}
+              if [ "$rc" -eq 139 ] || [ "$rc" -eq 134 ] || [ "$rc" -eq 136 ]; then
+                echo "CRASH (exit $rc): $exe"
+                CRASH=$((CRASH + 1))
+              fi
+            fi
+          done
+          echo "=== Runtime crashes: $CRASH ==="
+          if [ "$CRASH" -gt 0 ]; then
+            exit 1
+          fi

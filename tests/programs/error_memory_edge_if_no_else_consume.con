@@ -1,0 +1,21 @@
+// ERROR TEST: if-without-else consuming a linear variable — must be rejected.
+
+struct Resource {
+    id: Int,
+}
+
+fn consume_resource(r: Resource) -> Int {
+    return r.id;
+}
+
+fn bad_if_no_else(cond: Bool) -> Int {
+    let r: Resource = Resource { id: 1 };
+    if cond {
+        let _x: Int = consume_resource(r);
+    }
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_if_no_else(true);
+}

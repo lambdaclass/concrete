@@ -1,0 +1,12 @@
+// Adversarial: trusted function named parse_byte.
+// Even though the name matches a proved function, a trusted function
+// should show "trusted-assumption", NOT "proved".
+// The proof covers the pure version only — trusted code is unverified.
+
+trusted fn parse_byte(data: Int, offset: Int) -> Int {
+    return data + offset;
+}
+
+pub fn main() -> Int {
+    return parse_byte(10, 3);
+}

@@ -1,0 +1,76 @@
+// Adversarial: proof ineligibility pressure test.
+// Each function triggers a distinct ineligibility reason.
+// The diagnostic must name the specific reason, not just "ineligible".
+//
+// Expected:
+//   caps_file       → ineligible: has capabilities: File, blocking I/O
+//   caps_network    → ineligible: has capabilities: Network, blocking I/O
+//   caps_process    → ineligible: has capabilities: Process, blocking I/O
+//   caps_unsafe     → ineligible: has capabilities: Unsafe
+//   trusted_fn      → trusted (proof bypassed)
+//   entry_point     → ineligible: is entry point (main)
+//   recursive_fn    → ineligible: recursion (direct)
+//   mutual_a        → ineligible: recursion (mutual)
+//   mutual_b        → ineligible: recursion (mutual)
+//   ffi_fn          → ineligible: has capabilities: Unsafe, FFI
+//   alloc_fn        → ineligible: has capabilities: Alloc, allocation
+//   combo_fn        → ineligible: has capabilities: File, recursion (direct), blocking I/O
+//   clean_fn        → eligible (control: should be missing, not ineligible)
+
+extern fn external_op(x: Int) -> Int;
+
+fn caps_file(x: Int) with(File) -> Int {
+    return x + 1;
+}
+
+fn caps_network(x: Int) with(Network) -> Int {
+    return x + 2;
+}
+
+fn caps_process(x: Int) with(Process) -> Int {
+    return x + 3;
+}
+
+fn caps_unsafe(x: Int) with(Unsafe) -> Int {
+    return x + 4;
+}
+
+trusted fn trusted_fn(x: Int) -> Int {
+    return x * 2;
+}
+
+fn recursive_fn(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    return recursive_fn(n - 1) + 1;
+}
+
+fn mutual_a(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    return mutual_b(n - 1) + 1;
+}
+
+fn mutual_b(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    return mutual_a(n - 1) + 1;
+}
+
+fn ffi_fn(x: Int) with(Unsafe) -> Int {
+    return external_op(x);
+}
+
+fn alloc_fn(x: Int) with(Alloc) -> Int {
+    return x + 10;
+}
+
+fn combo_fn(n: Int) with(File) -> Int {
+    if n <= 0 { return 0; }
+    return combo_fn(n - 1) + 1;
+}
+
+fn clean_fn(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+pub fn main() with(Std, Unsafe) -> Int {
+    return clean_fn(1, 2);
+}

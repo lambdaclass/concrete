@@ -1,0 +1,6 @@
+VERIFY-GATES: ok (all 4 gates clean)
+  post-elab    ok
+  post-mono    ok
+  post-lower   ok
+  post-cleanup ok
+

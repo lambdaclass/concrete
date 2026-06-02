@@ -1,0 +1,52 @@
+// Adversarial: ProofCore extraction success/failure.
+// Tests which constructs can and cannot be extracted to PExpr.
+//
+// Expected extraction results:
+//   add_simple      → extraction succeeds (simple arithmetic)
+//   uses_struct     → extraction succeeds (Phase 4: struct literal supported)
+//   uses_while      → extraction fails (while loop excluded by eligibility)
+//   uses_match      → extraction succeeds (Phase 4: match expression supported)
+//   uses_mut        → extraction fails, unsupported = "mutable assignment"
+
+struct Copy Pair {
+    x: Int,
+    y: Int,
+}
+
+enum Choice {
+    Left,
+    Right,
+}
+
+fn add_simple(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+fn uses_struct(x: Int, y: Int) -> Pair {
+    return Pair { x: x, y: y };
+}
+
+fn uses_while(n: Int) -> Int {
+    let mut sum: Int = 0;
+    while sum < n {
+        sum = sum + 1;
+    }
+    return sum;
+}
+
+fn uses_match(c: Choice) -> Int {
+    match c {
+        Choice::Left => { return 1; },
+        Choice::Right => { return 2; },
+    }
+}
+
+fn uses_mut(x: Int) -> Int {
+    let mut result: Int = x;
+    result = result + 1;
+    return result;
+}
+
+pub fn main() -> Int {
+    return add_simple(3, 4);
+}

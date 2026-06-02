@@ -1,0 +1,32 @@
+// Adversarial test: linear enum variants must be consumed exactly once.
+
+enum Outcome {
+    Success { value: Int },
+    Failure { code: Int },
+}
+
+fn handle_outcome(o: Outcome) -> Int {
+    match o {
+        Outcome::Success { value } => { return value; },
+        Outcome::Failure { code } => { return code * -1; },
+    }
+}
+
+fn enum_consumed_by_match() -> Int {
+    let o: Outcome = Outcome::Success { value: 42 };
+    // match consumes o (all arms consume)
+    let result: Int = handle_outcome(o);
+    return result;
+}
+
+fn enum_consumed_by_passing() -> Int {
+    let o: Outcome = Outcome::Failure { code: 5 };
+    let result: Int = handle_outcome(o);
+    return result;
+}
+
+fn main() -> Int {
+    let r1: Int = enum_consumed_by_match();
+    let r2: Int = enum_consumed_by_passing();
+    return r1 + r2;
+}

@@ -1,0 +1,27 @@
+=== Stack-Depth Report ===
+
+module parse_validate:
+  validate_version
+    frame: 12 bytes  depth: 0  stack: 12 bytes  @ examples/parse_validate/src/main.con:55
+  validate_msg_type
+    frame: 12 bytes  depth: 0  stack: 12 bytes  @ examples/parse_validate/src/main.con:60
+  validate_payload_len
+    frame: 16 bytes  depth: 0  stack: 16 bytes  @ examples/parse_validate/src/main.con:67
+  validate_total_len
+    frame: 16 bytes  depth: 0  stack: 16 bytes  @ examples/parse_validate/src/main.con:74
+  compute_checksum
+    frame: 52 bytes  depth: 0  stack: 52 bytes  @ examples/parse_validate/src/main.con:79
+  validate_checksum
+    frame: 16 bytes  depth: 0  stack: 16 bytes  @ examples/parse_validate/src/main.con:87
+  validate_header_fields
+    frame: 32 bytes  depth: 1  stack: 48 bytes  @ examples/parse_validate/src/main.con:107
+  parse_header
+    frame: 48 bytes  depth: 1  stack: 100 bytes  @ examples/parse_validate/src/main.con:125
+  error_code
+    frame: 12 bytes  depth: 0  stack: 12 bytes  @ examples/parse_validate/src/main.con:167
+  main
+    frame: 264 bytes  depth: 2  stack: 364 bytes  @ examples/parse_validate/src/main.con:180
+
+Totals: 10 functions, 10 bounded, 0 recursive (unbounded)
+Max stack bound: 364 bytes (main)
+

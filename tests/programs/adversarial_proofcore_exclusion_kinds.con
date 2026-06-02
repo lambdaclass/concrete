@@ -1,0 +1,30 @@
+// Adversarial: ProofCore ExclusionKind classification.
+// Tests each distinct exclusion kind value.
+//
+// Expected:
+//   source_only_fn   → excluded by source only (has File capability, no profile issues)
+//   profile_only_fn  → excluded by profile only (recursion, but pure)
+//   both_fn          → excluded by both (has File capability AND recursion)
+//   clean_fn         → eligible (no source or profile issues)
+
+fn source_only_fn(x: Int) with(Unsafe) -> Int {
+    return x + 1;
+}
+
+fn profile_only_fn(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    return profile_only_fn(n - 1) + 1;
+}
+
+fn both_fn(n: Int) with(File) -> Int {
+    if n <= 0 { return 0; }
+    return both_fn(n - 1) + 1;
+}
+
+fn clean_fn(a: Int, b: Int) -> Int {
+    return a + b;
+}
+
+pub fn main() with(File, Unsafe) -> Int {
+    return source_only_fn(10) + both_fn(5) + clean_fn(1, 2);
+}

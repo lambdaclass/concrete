@@ -1,0 +1,30 @@
+// Adversarial lowering: struct containing an enum field.
+// Stresses layout computation for mixed struct/enum aggregates.
+// Expected: 42
+
+enum Copy Shape {
+    Circle { r: Int },
+    Square { s: Int },
+    Triangle { b: Int },
+}
+
+struct Copy Container {
+    label: Int,
+    shape: Shape,
+}
+
+fn area(c: Container) -> Int {
+    match c.shape {
+        Shape::Circle { r } => { return r * r * 3; },
+        Shape::Square { s } => { return s * s; },
+        Shape::Triangle { b } => { return b * b / 2; },
+    }
+}
+
+pub fn main() -> Int {
+    let c1: Container = Container { label: 1, shape: Shape::Square { s: 6 } };
+    let c2: Container = Container { label: 2, shape: Shape::Circle { r: 1 } };
+    let c3: Container = Container { label: 3, shape: Shape::Circle { r: 1 } };
+    // 36 + 3 + 3 = 42
+    return area(c1) + area(c2) + area(c3);
+}

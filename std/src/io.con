@@ -1,5 +1,4 @@
 mod io {
-    import std.result.{Result};
     import std.libc.{fopen, fclose, fwrite, fread, fflush, write as libc_write, read as libc_read};
 
     pub enum IoError {
@@ -16,19 +15,19 @@ mod io {
             let h: *const u8 = fopen(path.ptr, mode.ptr);
             mode.drop();
             if h == (0 as *const u8) {
-                return Result::<TextFile, IoError>#Err { error: IoError#OpenFailed };
+                return Result::<TextFile, IoError>::Err { error: IoError::OpenFailed };
             }
             let handle: TextFile = TextFile { ptr: h };
-            return Result::<TextFile, IoError>#Ok { value: handle };
+            return Result::<TextFile, IoError>::Ok { value: handle };
         }
 
         pub fn open(path: &String, mode: &String) with(Unsafe) -> Result<TextFile, IoError> {
             let h: *const u8 = fopen(path.ptr, mode.ptr);
             if h == (0 as *const u8) {
-                return Result::<TextFile, IoError>#Err { error: IoError#OpenFailed };
+                return Result::<TextFile, IoError>::Err { error: IoError::OpenFailed };
             }
             let handle: TextFile = TextFile { ptr: h };
-            return Result::<TextFile, IoError>#Ok { value: handle };
+            return Result::<TextFile, IoError>::Ok { value: handle };
         }
 
         pub fn write(&self, data: &String) with(Unsafe) {
@@ -111,11 +110,11 @@ mod io {
         path.drop();
         mode.drop();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 value.close();
                 return 1;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return 0;
             }
         }
@@ -127,11 +126,11 @@ mod io {
         let result: Result<TextFile, IoError> = TextFile::create(&path);
         path.drop();
         match result {
-            Result#Ok { value } => {
+            Result::Ok { value } => {
                 value.close();
                 return 1;
             },
-            Result#Err { error } => {
+            Result::Err { error } => {
                 return 0;
             }
         }

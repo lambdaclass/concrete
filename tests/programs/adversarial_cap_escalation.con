@@ -1,0 +1,15 @@
+// Adversarial: a pure function trying to call a function with capabilities.
+// The compiler MUST reject this — capabilities cannot be escalated.
+// This should fail to compile.
+
+fn dangerous() with(File) -> Int {
+    return 0;
+}
+
+fn innocent() -> Int {
+    return dangerous();
+}
+
+pub fn main() -> Int {
+    return innocent();
+}

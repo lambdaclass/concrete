@@ -1,0 +1,11 @@
+// Adversarial: direct recursion must fail predictable.
+// Even a simple countdown that "looks bounded" fails the no-recursion gate.
+
+fn countdown(n: i32) -> i32 {
+    if n <= 0 { return 0; }
+    return countdown(n - 1) + 1;
+}
+
+fn main() -> i32 {
+    return countdown(5) - 5;
+}

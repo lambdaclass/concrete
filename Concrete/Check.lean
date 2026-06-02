@@ -43,7 +43,6 @@ structure VarInfo where
   isCopy : Bool
   loopDepth : Nat
   borrowCount : Nat := 0
-  mutBorrowed : Bool := false
   borrowedFrom : Option String := none
   mutable : Bool := true  -- whether the variable was declared with mut
   deriving Repr
@@ -64,7 +63,6 @@ structure TypeEnv where
   allFnSummarys : List (String × FnSummary) := []  -- all function signatures for fnRef resolution
   borrowRefs : List String := []          -- names of refs created by borrow blocks (for escape analysis)
   loopBreakTy : Option Ty := none         -- collects type from break-with-value in while-as-expression
-  inDeferBody : Bool := false             -- true when checking inside a defer body
   currentImplType : Option Ty := none     -- the Self type when inside an impl block
   loopLabels : List String := []          -- stack of active loop labels
   traitImpls : List (String × String) := []  -- (typeName, traitName) pairs for bound checking
@@ -97,7 +95,6 @@ inductive CheckError where
   | unknownLoopLabel (label : String)
   | assignToImmutable (name : String)
   | assignToFrozen (name : String)
-  | assignToBorrowed (name : String)
   | assignOverwritesLinear (name : String)
   -- Slice 2: Type mismatch / operator
   | typeMismatch (ctx : String) (expected : String) (actual : String)
@@ -112,12 +109,9 @@ inductive CheckError where
   | cannotBorrowMoved (name : String)
   | cannotBorrowMutablyBorrowed (name : String)
   | cannotMutBorrowAlreadyBorrowed (name : String)
-  | cannotMutBorrowAlreadyMutBorrowed (name : String)
   | cannotMutBorrowImmutable (name : String)
   | referenceEscapesBorrowBlock (name : String)
-  | variableAlreadyMutBorrowed (name : String)
   | cannotMutBorrowImmBorrowed (name : String)
-  | cannotImmBorrowMutBorrowed (name : String)
   -- Slice 4: Capability (only cap-poly resolution, simple checks in CoreCheck)
   | missingCapability (callee : String) (cap : String) (caller : String)
   | traitBoundNotSatisfied (typeName : String) (traitName : String) (context : String)
@@ -153,9 +147,7 @@ inductive CheckError where
   | tryOkNoField (enumName : String)
   -- Slice 6: Control flow/defer
   | breakOutsideLoop
-  | breakInDefer
   | continueOutsideLoop
-  | continueInDefer
   | deferBodyNotCall
   | reservedName (name : String)
   | unknownModule (name : String)
@@ -183,7 +175,6 @@ def CheckError.message : CheckError → String
   | .unknownLoopLabel label => s!"unknown loop label '{label}'"
   | .assignToImmutable name => s!"cannot assign to immutable variable '{name}'"
   | .assignToFrozen name => s!"cannot assign to '{name}': variable is frozen by borrow block"
-  | .assignToBorrowed name => s!"cannot assign to '{name}': variable is borrowed"
   | .assignOverwritesLinear name => s!"cannot reassign linear variable '{name}'"
   -- Slice 2
   | .typeMismatch ctx expected actual => s!"type mismatch in {ctx}: expected {expected}, got {actual}"
@@ -199,12 +190,9 @@ def CheckError.message : CheckError → String
   | .cannotBorrowMoved name => s!"cannot borrow '{name}': already moved"
   | .cannotBorrowMutablyBorrowed name => s!"cannot borrow '{name}': already mutably borrowed"
   | .cannotMutBorrowAlreadyBorrowed name => s!"cannot mutably borrow '{name}': already borrowed"
-  | .cannotMutBorrowAlreadyMutBorrowed name => s!"cannot mutably borrow '{name}': already mutably borrowed"
   | .cannotMutBorrowImmutable name => s!"cannot take mutable borrow of immutable variable '{name}'"
   | .referenceEscapesBorrowBlock name => s!"reference '{name}' cannot escape its borrow block"
-  | .variableAlreadyMutBorrowed name => s!"variable '{name}' is already mutably borrowed"
   | .cannotMutBorrowImmBorrowed name => s!"cannot mutably borrow '{name}': already immutably borrowed"
-  | .cannotImmBorrowMutBorrowed name => s!"cannot immutably borrow '{name}': already mutably borrowed"
   -- Slice 4
   | .missingCapability callee cap caller => s!"function '{callee}' requires capability '{cap}' but '{caller}' does not declare it"
   | .traitBoundNotSatisfied typeName traitName context => s!"type '{typeName}' does not implement trait '{traitName}' required by {context}"
@@ -243,9 +231,7 @@ def CheckError.message : CheckError → String
   | .tryOkNoField enumName => s!"Ok variant of '{enumName}' has no value field"
   -- Slice 6
   | .breakOutsideLoop => "break outside of loop"
-  | .breakInDefer => "break is not allowed inside defer"
   | .continueOutsideLoop => "continue outside of loop"
-  | .continueInDefer => "continue is not allowed inside defer"
   | .deferBodyNotCall => "defer body must be a function call"
   | .reservedName name => s!"'{name}' is a reserved identifier"
   | .unknownModule name => s!"unknown module '{name}'"
@@ -261,14 +247,91 @@ def CheckError.hint : CheckError → Option String
   | .referenceEscapesBorrowBlock _ => some "copy the data before the borrow block ends"
   | .cannotMutBorrowImmutable _ => some "declare with 'let mut' to allow mutable borrowing"
   | .assignToFrozen _ => some "the variable is frozen by an active borrow block"
-  | .assignToBorrowed _ => some "wait for the borrow to end before assigning"
   | .assignOverwritesLinear _ => some "linear variables cannot be reassigned — use a new binding instead"
   | .missingCapability _ cap caller => some s!"add 'with({cap})' to '{caller}', or wrap the call in a function that declares it"
   | .cannotInferCapVariable cap _ => some s!"provide an explicit capability for '{cap}' at the call site"
   | _ => none
 
+def CheckError.code : CheckError → String
+  -- Slice 1: Name/variable/linearity (E0200–E0219)
+  | .selfOutsideImpl => "E0200"
+  | .undeclaredVariable _ => "E0201"
+  | .assignToUndeclaredVariable _ => "E0202"
+  | .variableFrozenByBorrow _ => "E0203"
+  | .cannotMoveLinearBorrowed _ => "E0204"
+  | .variableUsedAfterMove _ => "E0205"
+  | .variableReservedByDefer _ => "E0206"
+  | .cannotConsumeLinearInLoop _ => "E0207"
+  | .linearVariableNeverConsumed _ => "E0208"
+  | .matchConsumptionDisagreement _ => "E0209"
+  | .breakSkipsUnconsumedLinear _ => "E0210"
+  | .continueSkipsUnconsumedLinear _ => "E0211"
+  | .linearConsumedOneBranchNotOther _ => "E0212"
+  | .linearConsumedNoBranch _ _ => "E0213"
+  | .borrowRefShadows _ => "E0214"
+  | .borrowRegionShadows _ => "E0215"
+  | .unknownLoopLabel _ => "E0216"
+  | .assignToImmutable _ => "E0217"
+  | .assignToFrozen _ => "E0218"
+  | .assignOverwritesLinear _ => "E0219"
+  -- Slice 2: Type mismatch (E0220–E0229)
+  | .typeMismatch _ _ _ => "E0220"
+  | .cannotDerefNonRef => "E0221"
+  | .whileBreakTypeMismatch _ _ => "E0222"
+  | .ifCondNotBool _ => "E0223"
+  | .ifBranchTypeMismatch _ _ => "E0224"
+  | .matchArmTypeMismatch _ _ => "E0225"
+  | .breakTypeMismatch _ _ => "E0226"
+  -- Slice 3: Borrow/escape (E0230–E0239)
+  | .cannotBorrowMoved _ => "E0230"
+  | .cannotBorrowMutablyBorrowed _ => "E0231"
+  | .cannotMutBorrowAlreadyBorrowed _ => "E0232"
+  | .cannotMutBorrowImmutable _ => "E0233"
+  | .referenceEscapesBorrowBlock _ => "E0234"
+  | .cannotMutBorrowImmBorrowed _ => "E0235"
+  -- Slice 4: Capability (E0240–E0249)
+  | .missingCapability _ _ _ => "E0240"
+  | .traitBoundNotSatisfied _ _ _ => "E0241"
+  | .cannotInferCapVariable _ _ => "E0242"
+  -- Slice 5: Struct/enum/function (E0250–E0279)
+  | .unknownStructType _ => "E0250"
+  | .structHasNoField _ _ => "E0251"
+  | .missingFieldInLiteral _ _ => "E0252"
+  | .unknownFieldInLiteral _ _ => "E0253"
+  | .fieldAccessNonStruct => "E0254"
+  | .heapAccessRequired _ _ => "E0255"
+  | .arrowAccessNotHeap _ => "E0256"
+  | .arrowAccessNonStruct => "E0257"
+  | .arrowAssignNotHeap _ => "E0258"
+  | .arrowAssignNonStruct => "E0259"
+  | .unknownVariant _ _ => "E0260"
+  | .unknownEnumType _ => "E0261"
+  | .wrongArgCount _ _ _ => "E0262"
+  | .undeclaredFunction _ => "E0263"
+  | .noMethodOnType _ _ => "E0264"
+  | .noMethodOnTypeVar _ _ => "E0265"
+  | .methodCallOnNonNamedType => "E0266"
+  | .unknownFunctionRef _ => "E0267"
+  | .builtinWrongArgCount _ _ => "E0268"
+  | .builtinWrongTypeArgCount _ _ => "E0269"
+  | .builtinWrongFirstArg _ _ _ => "E0270"
+  | .builtinBadKeyType _ _ => "E0271"
+  | .destroyRequiresNamed _ => "E0272"
+  | .typeDoesNotImplDestroy _ => "E0273"
+  | .freeRequiresHeap _ => "E0274"
+  | .tryRequiresResult => "E0275"
+  | .tryRequiresOkErrVariants => "E0276"
+  | .tryOkNoField _ => "E0277"
+  -- Slice 6: Control flow (E0280–E0289)
+  | .breakOutsideLoop => "E0280"
+  | .continueOutsideLoop => "E0281"
+  | .deferBodyNotCall => "E0282"
+  | .reservedName _ => "E0283"
+  | .unknownModule _ => "E0284"
+  | .notPublicInModule _ _ => "E0285"
+
 def throwCheck (e : CheckError) (span : Option Span := none) : CheckM α :=
-  throw [{ severity := .error, message := e.message, pass := "check", span := span, hint := e.hint }]
+  throw [{ severity := .error, message := e.message, pass := "check", span := span, hint := e.hint, code := e.code }]
 
 private def throwCheckMsg (msg : String) (span : Option Span := none) : CheckM α :=
   throw [{ severity := .error, message := msg, pass := "check", span := span, hint := none }]
@@ -973,8 +1036,27 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         | .int | .uint | .i32 | .u32 | .i16 | .u16 | .i8 | .u8 => pure ()
         | .bool => pure ()
         | .char => pure ()
-        | _ => throwCheckMsg s!"{fnName}() argument has unsupported type '{tyToString argTy}'; expected String, Int, u32, i32, bool, or char"
+        | _ => throwCheckMsg s!"{fnName}() argument has unsupported type '{tyToString argTy}'; expected String/&String/&mut String, Int/Uint/i8..i32/u8..u32, bool, or char"
       return .unit
+    -- Intercept append(&mut buf, ...) — variadic mixed-arg buffer append
+    if intrinsic == some .append then
+      match args with
+      | bufArg :: rest =>
+        let bufTy ← checkExpr bufArg
+        match bufTy with
+        | .refMut .string => pure ()
+        | _ => throwCheckMsg s!"append() first argument must be &mut String, got '{tyToString bufTy}'"
+        if rest.isEmpty then throwCheckMsg s!"append() requires at least 2 arguments (&mut String, ...values)"
+        for arg in rest do
+          let argTy ← checkExpr arg
+          match argTy with
+          | .string | .ref .string | .refMut .string => pure ()
+          | .int | .uint | .i32 | .u32 | .i16 | .u16 | .i8 | .u8 => pure ()
+          | .bool => pure ()
+          | .char => pure ()
+          | _ => throwCheckMsg s!"append() argument has unsupported type '{tyToString argTy}'; expected String/&String/&mut String, Int/Uint/i8..i32/u8..u32, bool, or char"
+        return .unit
+      | [] => throwCheckMsg s!"append() requires at least 2 arguments (&mut String, ...values)"
     -- Intercept abort() calls
     if intrinsic == some .abort then
       if args.length != 0 then throwCheck (.builtinWrongArgCount "abort" 0) (some e.getSpan)
@@ -1294,10 +1376,18 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         expectTy pTy argTy s!"argument '{pName}' of '{fnName}'" (some e.getSpan)
         -- If arg is a bare identifier of a linear type, consume it —
         -- but NOT if the parameter type is a reference (borrow, not move).
+        -- Exception: borrow-block exclusive refs (&mut T) must be consumed on call,
+        -- since they are scoped linear views into an alloca.
+        -- Function parameter &mut T refs are reborrowable and not consumed.
         match arg with
         | .ident _ varName =>
           match pTy with
-          | .ref _ | .refMut _ => pure ()  -- borrowed parameter: don't consume
+          | .ref _ => pure ()  -- shared reference: Copy, no consume needed
+          | .refMut _ =>
+            let env ← getEnv
+            if env.borrowRefs.contains varName then
+              consumeVarIfExists varName (some e.getSpan)
+            else pure ()
           | _ => consumeVarIfExists varName (some e.getSpan)
         | _ => pure ()
       return retTy
@@ -1390,16 +1480,16 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
           match fields.find? fun (fn, _) => fn == sf.name with
           | some (_, expr) =>
             let exprTy ← checkExpr expr (some fieldTy)
-            expectTy fieldTy exprTy s!"field '{sf.name}' of {enumName}#{variant}" (some e.getSpan)
+            expectTy fieldTy exprTy s!"field '{sf.name}' of {enumName}::{variant}" (some e.getSpan)
             -- Consume linear variables used as enum fields
             match expr with
             | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
             | _ => pure ()
-          | none => throwCheck (.missingFieldInLiteral sf.name s!"{enumName}#{variant}") (some e.getSpan)
+          | none => throwCheck (.missingFieldInLiteral sf.name s!"{enumName}::{variant}") (some e.getSpan)
         for (fn, _) in fields do
           match ev.fields.find? fun sf => sf.name == fn with
           | some _ => pure ()
-          | none => throwCheck (.unknownFieldInLiteral fn s!"{enumName}#{variant}") (some e.getSpan)
+          | none => throwCheck (.unknownFieldInLiteral fn s!"{enumName}::{variant}") (some e.getSpan)
         if effectiveTypeArgs.isEmpty then return .named enumName
         else return .generic enumName effectiveTypeArgs
       | none => throwCheck (.unknownVariant variant enumName) (some e.getSpan)
@@ -1441,7 +1531,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
             pure body
           | .litArm _ _val body => pure body
           | .varArm _ binding body => do
-            addVar binding innerTyR
+            if binding != "_" then addVar binding innerTyR
             pure body
           -- Check all stmts except the last, then extract type from last
           let bodyInit := body.dropLast
@@ -1508,19 +1598,26 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       let envBefore ← getEnv
       let mut matchResultTy : Ty := .unit
       let mut firstArmDone := false
+      let mut firstArmVars : Option (List (String × VarInfo)) := none
       for arm in arms do
         setEnv envBefore
         let body ← match arm with
         | .litArm _ _val body => pure body
         | .varArm _ binding body => do
-          addVar binding scrTy
+          if binding != "_" then addVar binding scrTy
           pure body
         | .mk _ _ _ _ body => pure body
         -- Check all stmts except the last, then extract type from last
         let bodyInit := body.dropLast
         checkStmts bodyInit envBefore.currentRetTy
         let armTy ← match body.getLast? with
-          | some (.expr _ armExpr) => checkExpr armExpr hint
+          | some (.expr _ armExpr) => do
+            let ty ← checkExpr armExpr hint
+            -- Trailing expression is a value move — consume linear variables
+            match armExpr with
+            | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
+            | _ => pure ()
+            pure ty
           | some (.return_ _ v) =>
             match v with
             | some rv => let _ ← checkExpr rv; pure Ty.never
@@ -1536,7 +1633,33 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
           if armTy != matchResultTy && armTy != .never && matchResultTy != .never then
             throwCheck (.matchArmTypeMismatch (tyToString matchResultTy) (tyToString armTy)) (some e.getSpan)
           if matchResultTy == .never then matchResultTy := armTy
-      setEnv envBefore
+        let envAfterArm ← getEnv
+        match firstArmVars with
+        | none => firstArmVars := some envAfterArm.vars
+        | some firstVars =>
+          -- Check agreement on pre-existing variables
+          for (name, infoBefore) in envBefore.vars do
+            if infoBefore.isCopy then continue
+            let state1 := match firstVars.lookup name with
+              | some info => info.state
+              | none => infoBefore.state
+            let state2 := match envAfterArm.vars.lookup name with
+              | some info => info.state
+              | none => infoBefore.state
+            let consumed1 := state1 == .consumed
+            let consumed2 := state2 == .consumed
+            if consumed1 != consumed2 then
+              throwCheck (.matchConsumptionDisagreement name) (some e.getSpan)
+      -- Apply the final state from first arm (they all agree)
+      match firstArmVars with
+      | some vars =>
+        let env ← getEnv
+        let vars' := env.vars.map fun (n, vi) =>
+          match vars.lookup n with
+          | some info => (n, { vi with state := info.state })
+          | none => (n, vi)
+        setEnv { envBefore with vars := vars' }
+      | none => setEnv envBefore
       return matchResultTy
   | .borrow _ inner =>
     let innerTy ← checkExpr inner
@@ -1549,7 +1672,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
           throwCheck (.cannotBorrowMoved varName) (some e.getSpan)
         let env ← getEnv
         let activeRefs := activeBorrowRefs env varName
-        if info.mutBorrowed || activeRefs.any (fun refInfo => match refInfo.ty with | .refMut _ => true | _ => false) then
+        if activeRefs.any (fun refInfo => match refInfo.ty with | .refMut _ => true | _ => false) then
           throwCheck (.cannotBorrowMutablyBorrowed varName) (some e.getSpan)
       | none => throwCheck (.undeclaredVariable varName) (some e.getSpan)
     | _ => pure ()
@@ -1566,8 +1689,6 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         let activeRefs := activeBorrowRefs env varName
         if info.borrowCount > 0 || activeRefs.any (fun refInfo => match refInfo.ty with | .ref _ | .refMut _ => true | _ => false) then
           throwCheck (.cannotMutBorrowAlreadyBorrowed varName) (some e.getSpan)
-        if info.mutBorrowed then
-          throwCheck (.cannotMutBorrowAlreadyMutBorrowed varName) (some e.getSpan)
         if !info.mutable then
           throwCheck (.cannotMutBorrowImmutable varName) (some e.getSpan)
       | none => throwCheck (.undeclaredVariable varName) (some e.getSpan)
@@ -1703,11 +1824,27 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         match arg with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
         | _ => pure ()
-      -- If self param is by value (not &self/&mut self), consume the receiver
+      -- Consume the receiver when appropriate:
+      -- - &self: never consume (shared ref is Copy)
+      -- - &mut self: consume only if receiver is a borrow-block exclusive ref
+      --   (function param &mut refs are reborrowable; auto-borrowed values don't consume)
+      -- - self (by value): always consume
       match sig.params.head? with
       | some ("self", selfTy) =>
         match selfTy with
-        | .ref _ | .refMut _ => pure ()
+        | .ref _ => pure ()  -- shared reference: Copy, no consume needed
+        | .refMut _ =>
+          -- Only consume borrow-block refs (scoped linear views into an alloca).
+          match objTy with
+          | .refMut _ =>
+            match obj with
+            | .ident _ varName =>
+              let env ← getEnv
+              if env.borrowRefs.contains varName then
+                consumeVarIfExists varName (some e.getSpan)
+              else pure ()
+            | _ => pure ()
+          | _ => pure ()
         | _ =>
           -- Self is by value — this method consumes the receiver
           match obj with
@@ -1787,10 +1924,6 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       -- Linear variables cannot be reassigned. One binding, one resource.
       if !info.isCopy then
         throwCheck (.assignOverwritesLinear name) (some stmt.getSpan)
-      let env ← getEnv
-      let activeRefs := activeBorrowRefs env name
-      if activeRefs.any (fun refInfo => match refInfo.ty with | .ref _ | .refMut _ => true | _ => false) then
-        throwCheck (.assignToBorrowed name) (some stmt.getSpan)
       let valTy ← checkExpr value (some info.ty)
       expectTy info.ty valTy s!"assignment to '{name}'" (some stmt.getSpan)
     | none => throwCheck (.assignToUndeclaredVariable name) (some stmt.getSpan)
@@ -1943,16 +2076,15 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         throwCheck (.borrowRefShadows ref) (some stmt.getSpan)
       if (env.vars.lookup region).isSome then
         throwCheck (.borrowRegionShadows region) (some stmt.getSpan)
+      -- Check if variable is consumed (moved)
+      if !varInfo.isCopy && varInfo.state == .consumed then
+        throwCheck (.cannotBorrowMoved var) (some stmt.getSpan)
       -- Check if variable is frozen (already inside another borrow block)
       if varInfo.state == .frozen then
         throwCheck (.variableFrozenByBorrow var) (some stmt.getSpan)
-      -- Check for mutable borrow conflict: if var is already mutably borrowed, error
-      if isMut && varInfo.mutBorrowed then
-        throwCheck (.variableAlreadyMutBorrowed var) (some stmt.getSpan)
+      -- Check for mutable borrow conflict: if var is already immutably borrowed, error
       if isMut && varInfo.borrowCount > 0 then
         throwCheck (.cannotMutBorrowImmBorrowed var) (some stmt.getSpan)
-      if !isMut && varInfo.mutBorrowed then
-        throwCheck (.cannotImmBorrowMutBorrowed var) (some stmt.getSpan)
       -- Save state and freeze the original variable
       let savedState := varInfo.state
       let vars' := env.vars.map fun (n, vi) =>
@@ -1993,8 +2125,6 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | none => throwCheck (.structHasNoField structName field) (some stmt.getSpan)
   | .break_ _ value lbl =>
     let env ← getEnv
-    if env.inDeferBody then
-      throwCheck .breakInDefer (some stmt.getSpan)
     if env.loopDepth == 0 then
       throwCheck .breakOutsideLoop (some stmt.getSpan)
     -- Validate label if present
@@ -2020,8 +2150,6 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | none => pure ()
   | .continue_ _ lbl =>
     let env ← getEnv
-    if env.inDeferBody then
-      throwCheck .continueInDefer (some stmt.getSpan)
     if env.loopDepth == 0 then
       throwCheck .continueOutsideLoop (some stmt.getSpan)
     -- Validate label if present
@@ -2034,6 +2162,9 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     for (name, info) in env.vars do
       if !info.isCopy && info.state != .consumed && info.state != .reserved && info.loopDepth >= env.loopDepth then
         throwCheck (.continueSkipsUnconsumedLinear name) (some stmt.getSpan)
+  -- These are desugared before reaching Check; should never appear
+  | .letDestructure _ _ _ _ _ _ => pure ()
+  | .letStructDestructure _ _ _ _ => pure ()
 
 partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
   let mut accumulated : Diagnostics := []
@@ -2229,7 +2360,7 @@ def checkModule (m : Module) (summary : FileSummary)
     typeParams := ["T", "E"]
     variants := [
       { name := okVariantName, fields := [{ name := "value", ty := .typeVar "T" }] },
-      { name := errVariantName, fields := [{ name := "value", ty := .typeVar "E" }] }
+      { name := errVariantName, fields := [{ name := "error", ty := .typeVar "E" }] }
     ]
     isCopy := false
     builtinId := some .result
@@ -2244,8 +2375,11 @@ def checkModule (m : Module) (summary : FileSummary)
   let constantsMap : List (String × Ty) := m.constants.map fun c => (c.name, c.ty)
   -- Build trait impl pairs for bound checking
   let traitImplPairs : List (String × String) := allTraitImpls.map fun tb => (tb.typeName, tb.traitName)
-  -- Collect newtypes from module and submodules
-  let allNewtypes := m.newtypes ++ m.submodules.foldl (fun acc sub => acc ++ sub.newtypes) []
+  -- Collect newtypes from module, submodules, and imports.
+  -- Imported newtypes participate in type identity (Port ≠ u16 must hold
+  -- across module boundaries) and reach Layout via the elaborated CModule.
+  let allNewtypes := m.newtypes ++ imports.newtypes
+                     ++ m.submodules.foldl (fun acc sub => acc ++ sub.newtypes) []
   let initEnv : TypeEnv :=
     { vars := [], structs := allStructs, enums := allEnums, functions := allSigs,
       fnNames := allNames, loopDepth := 0, typeAliases := typeAliasMap, constants := constantsMap,
@@ -2292,7 +2426,7 @@ def checkModule (m : Module) (summary : FileSummary)
     let result := (checkFn f).run env' |>.run
     match result with
     | (.ok (), finalEnv) => (errs, finalEnv)
-    | (.error ds, _) => (errs ++ ds, env)
+    | (.error ds, _) => (errs ++ ds.addContext s!"while checking function '{f.name}'", env)
   ) (([] : Diagnostics), initEnv)
   if allErrors.isEmpty then .ok ()
   else .error allErrors
@@ -2313,9 +2447,10 @@ def checkProgram (resolved : List ResolvedModule)
     let summary := match moduleSummaryList.find? fun (n, _) => n == m.name with
       | some (_, s) => s
       | none => buildFileSummary m
-    match liftStringError "check" (resolveImports m.imports summaryTable
+    match resolveImports m.imports summaryTable
         (fun modName => CheckError.message (.unknownModule modName))
-        (fun sym modName => CheckError.message (.notPublicInModule sym modName))) with
+        (fun sym modName => CheckError.message (.notPublicInModule sym modName))
+        (pass := "check") with
     | .error ds => errs ++ ds
     | .ok imports =>
       -- Inject sibling module functions for qualified :: access
@@ -2328,7 +2463,7 @@ def checkProgram (resolved : List ResolvedModule)
       let imports := { imports with functions := imports.functions ++ siblingFns }
       match checkModule m summary imports with
       | .ok () => errs
-      | .error ds => errs ++ ds
+      | .error ds => errs ++ ds.addContext s!"while checking module '{m.name}'"
   ) ([] : Diagnostics)
   if allErrors.isEmpty then .ok () else .error allErrors
 

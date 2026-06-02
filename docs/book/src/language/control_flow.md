@@ -25,10 +25,10 @@ Pattern matching is one of the clearest parts of the language:
 ```rust
 fn unwrap_or_zero(x: Result<Int, Int>) -> Int {
     match x {
-        Result#Ok { value } => {
+        Result::Ok { value } => {
             return value;
         },
-        Result#Err { error } => {
+        Result::Err { error } => {
             return error;
         }
     }

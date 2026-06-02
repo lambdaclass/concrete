@@ -24,6 +24,7 @@
     - [Current Architecture Truth](./architecture_truth.md)
     - [The IR](./internal/ir.md)
     - [The IR builder](./internal/builder.md)
+- [How to Prove a Concrete Function](./proving.md)
 - [How Reports Fit Together](./reports.md)
 - [Why Not X?](./why_not.md)
 - [Reference Docs](./reference.md)

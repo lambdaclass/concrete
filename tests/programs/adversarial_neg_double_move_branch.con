@@ -1,0 +1,20 @@
+// Adversarial: move a linear value in one branch, then use it unconditionally after the if.
+// The compiler must detect that `t` may have been consumed in the true branch
+// and reject the unconditional use after the if.
+// Expected: compile error about consumed in one branch.
+
+struct Token {
+    value: Int,
+}
+
+fn consume(t: Token) -> Int {
+    return t.value;
+}
+
+pub fn main() -> Int {
+    let t: Token = Token { value: 1 };
+    if true {
+        let _x: Int = consume(t);
+    }
+    return t.value;
+}

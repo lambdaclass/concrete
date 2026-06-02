@@ -1,0 +1,24 @@
+// Adversarial module: capability-bearing function in one module,
+// pure function in another. Tests capability checking across module boundaries.
+// Expected: 42
+
+mod Pure {
+    pub fn compute(a: Int, b: Int) -> Int {
+        return a + b;
+    }
+}
+
+mod IO {
+    pub fn greet() with(Std) {
+        println(0);
+    }
+}
+
+mod Main {
+    import Pure.{ compute };
+    import IO.{ greet };
+    fn main() with(Std) -> Int {
+        greet();
+        return compute(20, 22);
+    }
+}

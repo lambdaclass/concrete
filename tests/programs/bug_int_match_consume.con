@@ -1,0 +1,25 @@
+// Regression test: integer match correctly propagates consumption state.
+// All arms consume r — checker must accept this without "never consumed" error.
+// (Bug 020: originally the value-pattern match handler did not propagate state.)
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn int_match_all_consume(x: Int) -> Int {
+    let r: Resource = Resource { value: 100 };
+    match x {
+        1 => { let _v: Int = consume(r); },
+        2 => { let _v: Int = consume(r); },
+        _ => { let _v: Int = consume(r); },
+    }
+    return 0;
+}
+
+fn main() -> Int {
+    return int_match_all_consume(1);
+}

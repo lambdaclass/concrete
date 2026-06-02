@@ -18,6 +18,10 @@ The central claim is:
 Concrete should not aim for one universal concurrency abstraction.
 It should aim for a layered model with one small primary contract.
 
+For a more specific long-term async/evented design, including `Async` versus
+`Concurrent`, linear handles, race/select, deadlines, and simulation-backed
+evidence, see [async-concurrency-evidence.md](async-concurrency-evidence.md).
+
 ## The Recommended Long-Term Shape
 
 The best long-term answer is:
@@ -199,6 +203,8 @@ In the best long-term version of Concrete:
 - most ordinary concurrent programs use structured thread-and-channel patterns
 - high-scale networking can use an evented runtime without infecting the entire language
 - compiler reports can explain where concurrency happens, where blocking occurs, and what runtime authority is required
+- code can distinguish optional parallelism from required concurrent progress
+- deterministic simulation can turn scheduler-dependent failures into reproducible evidence artifacts
 - high-integrity profiles can constrain concurrency deliberately
 - future proofs/reports can reason about concurrency as a small explicit model, not a sprawling ecosystem accident
 

@@ -1,0 +1,29 @@
+// ERROR TEST: nested if/else disagreement — inner branches agree but outer don't.
+
+struct Resource {
+    value: Int,
+}
+
+fn consume(r: Resource) -> Int {
+    return r.value;
+}
+
+fn bad_outer_disagree(a: Bool, b: Bool) -> Int {
+    let r: Resource = Resource { value: 100 };
+    if a {
+        // Both inner branches consume
+        if b {
+            let _x: Int = consume(r);
+        } else {
+            let _x: Int = consume(r);
+        }
+    } else {
+        // Neither inner branch consumes — outer disagrees
+        let _x: Int = 0;
+    }
+    return 0;
+}
+
+fn main() -> Int {
+    return bad_outer_disagree(true, false);
+}

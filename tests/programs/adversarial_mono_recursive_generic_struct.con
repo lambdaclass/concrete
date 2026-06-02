@@ -1,0 +1,19 @@
+// Adversarial monomorphization: Wrapper<Wrapper<Int>> — generic struct containing
+// another instantiation of itself. Tests recursive type instantiation in Mono.lean.
+// Expected: 42
+
+struct Copy Wrapper<T> { inner: T }
+
+fn unwrap_int(w: Wrapper<Int>) -> Int {
+    return w.inner;
+}
+
+fn unwrap_nested(w: Wrapper<Wrapper<Int>>) -> Int {
+    return w.inner.inner;
+}
+
+pub fn main() -> Int {
+    let w1: Wrapper<Int> = Wrapper::<Int> { inner: 20 };
+    let w2: Wrapper<Wrapper<Int>> = Wrapper::<Wrapper<Int>> { inner: Wrapper::<Int> { inner: 22 } };
+    return unwrap_int(w1) + unwrap_nested(w2);
+}

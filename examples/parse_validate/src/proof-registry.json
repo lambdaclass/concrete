@@ -1,0 +1,23 @@
+[
+  {
+    "function": "parse_validate.validate_version",
+    "body_fingerprint": "[(if (binop Concrete.BinOp.eq (var v) (int 1)) [(ret (int 0))]) (ret (int 1))]",
+    "proof": "Concrete.Proof.validate_version_correct",
+    "spec": "Concrete.Proof.validateVersionExpr",
+    "coverage": "iff"
+  },
+  {
+    "function": "parse_validate.validate_header_fields",
+    "body_fingerprint": "[(if (binop Concrete.BinOp.neq (call validate_total_len (var total_len) (int 5)) (int 0)) [(ret (int 1))]) (if (binop Concrete.BinOp.neq (call validate_version (var v)) (int 0)) [(ret (int 2))]) (if (binop Concrete.BinOp.neq (call validate_msg_type (var t)) (int 0)) [(ret (int 3))]) (if (binop Concrete.BinOp.neq (call validate_payload_len (var plen) (int 240)) (int 0)) [(ret (int 4))]) (if (binop Concrete.BinOp.neq (call validate_total_len (var total_len) (binop Concrete.BinOp.add (int 4) (var plen))) (int 0)) [(ret (int 5))]) (if (binop Concrete.BinOp.neq (call validate_checksum (var cs_expected) (var cs_computed)) (int 0)) [(ret (int 6))]) (ret (int 0))]",
+    "proof": "Concrete.Proof.validate_header_fields_success",
+    "spec": "Concrete.Proof.validateHeaderFieldsExpr",
+    "coverage": "one_direction"
+  },
+  {
+    "function": "parse_validate.parse_header",
+    "body_fingerprint": "[(if (binop Concrete.BinOp.neq (call validate_total_len (var len) (int 5)) (int 0)) [(ret (enum Result::Err error=(enum ParseError::TooShort )))]) (if (binop Concrete.BinOp.neq (call validate_version (index (var data) (int 0))) (int 0)) [(ret (enum Result::Err error=(enum ParseError::BadVersion )))]) (if (binop Concrete.BinOp.neq (call validate_msg_type (index (var data) (int 1))) (int 0)) [(ret (enum Result::Err error=(enum ParseError::BadType )))]) (if (binop Concrete.BinOp.neq (call validate_payload_len (index (var data) (int 2)) (int 240)) (int 0)) [(ret (enum Result::Err error=(enum ParseError::PayloadTooBig )))]) (if (binop Concrete.BinOp.neq (call validate_total_len (var len) (binop Concrete.BinOp.add (int 4) (index (var data) (int 2)))) (int 0)) [(ret (enum Result::Err error=(enum ParseError::Truncated )))]) (let computed (call compute_checksum (var data) (int 4))) (if (binop Concrete.BinOp.neq (call validate_checksum (index (var data) (int 4)) (var computed)) (int 0)) [(ret (enum Result::Err error=(enum ParseError::BadChecksum )))]) (ret (enum Result::Ok value=(struct Header version=(index (var data) (int 0)) msg_type=(index (var data) (int 1)) payload_len=(index (var data) (int 2)) checksum=(index (var data) (int 4)))))]",
+    "proof": "Concrete.Proof.parse_header_too_short",
+    "spec": "Concrete.Proof.parseHeaderExpr",
+    "coverage": "one_direction"
+  }
+]

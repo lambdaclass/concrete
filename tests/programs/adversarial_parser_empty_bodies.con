@@ -1,0 +1,27 @@
+// Adversarial parser: minimal/empty-ish function and struct bodies.
+// Tests that the parser handles degenerate but valid constructs.
+// Expected: 42
+
+struct Copy Empty {}
+
+struct Copy Single { val: Int }
+
+fn return_zero() -> Int {
+    return 0;
+}
+
+fn return_arg(x: Int) -> Int {
+    return x;
+}
+
+fn use_empty(e: Empty) -> Int {
+    return 42;
+}
+
+pub fn main() -> Int {
+    let e: Empty = Empty {};
+    let s: Single = Single { val: 10 };
+    let z: Int = return_zero();
+    let a: Int = return_arg(s.val);
+    return use_empty(e);
+}

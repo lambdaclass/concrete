@@ -1,0 +1,17 @@
+// &mut borrow through a match arm. Tests that a borrow-block ref
+// stays alive across the match scope and that mutation through it
+// is observable after the match.
+// Expected: 100
+
+struct Copy Counter { n: i32 }
+
+fn main() -> Int {
+    let mut c: Counter = Counter { n: 0 };
+    let flag: i32 = 1;
+    match flag {
+        0 => { c.n = -1; }
+        1 => { c.n = 100; }
+        _ => { c.n = -2; }
+    }
+    return c.n as Int;
+}

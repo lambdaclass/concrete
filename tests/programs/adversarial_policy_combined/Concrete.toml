@@ -1,0 +1,7 @@
+[package]
+name = "adversarial_policy_combined"
+version = "0.1.0"
+
+[policy]
+predictable = true
+deny = ["Unsafe"]

@@ -1,0 +1,17 @@
+// Adversarial: caller's capability is a strict subset of callee's requirement.
+// Function with(Console) calls function with(Std).
+// Console is contained IN Std, but Console alone does NOT satisfy Std
+// (Std = Console + File + Network + Env + Alloc).
+// Expected: compile error (Console does not cover Std).
+
+fn needs_std() with(Std) -> Int {
+    return 1;
+}
+
+fn only_console() with(Console) -> Int {
+    return needs_std();
+}
+
+fn main() with(Std) -> Int {
+    return only_console();
+}
