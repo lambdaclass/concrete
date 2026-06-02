@@ -30,6 +30,8 @@ import Concrete.Proof
 import Concrete.ProofKit.Eval
 import Concrete.ProofKit.BitVec
 import Concrete.ProofKit.Array
+import Concrete.ProofKit.Loops
+import Concrete.ProofKit.Calls
 import Concrete.ProofKit.Refinement
 import Concrete.Sha256Spec
 
@@ -659,15 +661,8 @@ theorem w16read (wf : Nat → BitVec 32) (env : Env) (fuel : Nat) (j : Nat) (hj 
       lookupIndex_range_map _ 16 j hj]
 
 -- generic unary helper call (sigmas)
-theorem unary_call (name : String) (body : PExpr) (specf : BitVec 32 → BitVec 32)
-    (hfn : shaFns name = some ⟨name, ["x"], body⟩)
-    (href : ∀ (Y : BitVec 32) (f : Nat),
-      eval shaFns (Env.empty.bind "x" (.int Y.toNat)) (f + 2) body = some (.int (specf Y).toNat))
-    (X : BitVec 32) (env : Env) (xe : PExpr) (fuel : Nat)
-    (hx : eval shaFns env (fuel + 2) xe = some (.int (X.toNat : Int))) :
-    eval shaFns env (fuel + 3) (.call name [xe]) = some (.int (specf X).toNat) := by
-  simp only [eval, hfn, eval.evalArgs, hx, bindArgs]
-  exact href X fuel
+-- `unary_call` relocated to `Concrete.ProofKit.Calls` (Proof Kit v1.1),
+-- generalized over an arbitrary `fns : FnTable`.
 
 abbrev w16arr (wf : Nat → BitVec 32) : PVal :=
   .array_ ((List.range 16).map (fun k => PVal.int ↑(wf k).toNat))
@@ -705,9 +700,9 @@ theorem expansion_value (wf : Nat → BitVec 32) (k : Nat) (hk : k < 48) (fuel :
     wread wf (16+k) (st2 wf k) (fuel+4) k (by omega) (by omega) hw _
       (by have h := hx16; rw [show 16+k-16 = k by omega] at h; exact h)
   -- sigma calls
-  have hsm1 := unary_call "small_sigma1" smallSigma1Expr Sha256Spec.smallSigma1 rfl
+  have hsm1 := unary_call shaFns "small_sigma1" smallSigma1Expr Sha256Spec.smallSigma1 rfl
     small_sigma1_refines (swd wf (14+k)) (st2 wf k) (wIdx 2) (fuel+2) ra2
-  have hsm0 := unary_call "small_sigma0" smallSigma0Expr Sha256Spec.smallSigma0 rfl
+  have hsm0 := unary_call shaFns "small_sigma0" smallSigma0Expr Sha256Spec.smallSigma0 rfl
     small_sigma0_refines (swd wf (1+k)) (st2 wf k) (wIdx 15) (fuel+2) ra15
   -- combine
   simp only [expansionExpr, addwS, eval, hsm1, ra7, hsm0, ra16, evalBinOp,
@@ -2121,97 +2116,18 @@ theorem sha256_hash_refines_spec (df : Nat → BitVec 8) (len : Nat) (hlen : len
 -- `arrN`, `arrN_length`, `arrN_set`, `arrN_read` relocated to
 -- `Concrete.ProofKit.Array` (Proof Kit v1).
 
-/-- The byte function after copying `src[0..m)` into `dst` at offset `off`. -/
-def copyFn (dstFn srcFn : Nat → BitVec 8) (off m : Nat) : Nat → BitVec 8 :=
-  fun j => if off ≤ j ∧ j < off + m then srcFn (j - off) else dstFn j
-
-theorem copyFn_zero (dstFn srcFn off) : copyFn dstFn srcFn off 0 = dstFn := by
-  funext j; simp only [copyFn, Nat.add_zero]; rw [if_neg (by omega)]
-
-theorem copyFn_step (dstFn srcFn : Nat → BitVec 8) (off m : Nat) :
-    bufUpd (copyFn dstFn srcFn off m) (off + m) (srcFn m) = copyFn dstFn srcFn off (m + 1) := by
-  funext j
-  simp only [bufUpd, copyFn]
-  by_cases h : j = off + m
-  · subst h
-    rw [if_pos rfl, if_pos (show off ≤ off + m ∧ off + m < off + (m + 1) by omega),
-        Nat.add_sub_cancel_left]
-  · rw [if_neg h]
-    by_cases h2 : off ≤ j ∧ j < off + m
-    · rw [if_pos h2, if_pos (by omega)]
-    · rw [if_neg h2, if_neg (by omega)]
-
+-- `copyFn` (and copy-loop family) relocated to `Concrete.ProofKit.Loops` (v1.1).
+-- `copyFn_zero` (and copy-loop family) relocated to `Concrete.ProofKit.Loops` (v1.1).
+-- `copyFn_step` (and copy-loop family) relocated to `Concrete.ProofKit.Loops` (v1.1).
 -- ==================================================================
 -- Generic copy loop (task #21, hmac): `for i in 0..N { dst[off+i] = src[i] }`
 -- refines `copyFn` — fills dst at [off, off+N) from src. Reused for hmac's
 -- key copy, key-hash-digest copy, message copy, and inner-digest copy.
 -- ==================================================================
 
-def copyEnv (dstNm srcNm iNm : String) (e : Env) (dn sn off : Nat)
-    (dstFn srcFn : Nat → BitVec 8) (m : Nat) : Env :=
-  ((e.bind dstNm (.array_ (arrN dn (copyFn dstFn srcFn off m)))).bind srcNm
-    (.array_ (arrN sn srcFn))).bind iNm (.int (m : Int))
-
-theorem cpy_step (dstNm srcNm iNm : String)
-    (hds : dstNm ≠ srcNm) (hdi : dstNm ≠ iNm) (hsi : srcNm ≠ iNm)
-    (e : Env) (dn sn off : Nat) (dstFn srcFn : Nat → BitVec 8) (m : Nat)
-    (hdsn : off + m < dn) (hsm : m < sn) (idxE : PExpr) (fuel : Nat)
-    (hidx : eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (fuel + 1) idxE
-      = some (.int ((off + m : Nat) : Int))) :
-    eval.evalAssigns shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (fuel + 2)
-      [ (dstNm, .arraySet (.var dstNm) idxE (.arrayIndex (.var srcNm) (.var iNm)))
-      , (iNm, .binOp .add (.var iNm) (.lit (.int 1))) ]
-      = some (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn (m + 1)) := by
-  have e_id : (iNm == dstNm) = false := beq_false_of_ne (Ne.symm hdi)
-  have e_di : (dstNm == iNm) = false := beq_false_of_ne hdi
-  have e_ds : (dstNm == srcNm) = false := beq_false_of_ne hds
-  have e_sd : (srcNm == dstNm) = false := beq_false_of_ne (Ne.symm hds)
-  have e_si : (srcNm == iNm) = false := beq_false_of_ne hsi
-  have e_is : (iNm == srcNm) = false := beq_false_of_ne (Ne.symm hsi)
-  have hdb : (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) dstNm
-      = some (.array_ (arrN dn (copyFn dstFn srcFn off m))) := by
-    simp [copyEnv, Env.bind, e_di, e_ds]
-  have hsv : eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (fuel + 1)
-      (.arrayIndex (.var srcNm) (.var iNm)) = some (.int ↑(srcFn m).toNat) := by
-    simp only [eval, copyEnv, Env.bind, e_si, e_is, if_false, if_true,
-      beq_self_eq_true, beq_iff_eq, reduceCtorEq]
-    exact arrN_read sn srcFn (m : Int) m rfl hsm
-  have harr : eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (fuel + 2)
-      (.arraySet (.var dstNm) idxE (.arrayIndex (.var srcNm) (.var iNm)))
-      = some (.array_ (arrN dn (copyFn dstFn srcFn off (m + 1)))) := by
-    rw [eval_arraySet_lemma shaFns _ (fuel + 1) (.var dstNm) idxE _
-        (arrN dn (copyFn dstFn srcFn off m)) ((off + m : Nat) : Int) (.int ↑(srcFn m).toNat)
-        (by simp only [eval]; exact hdb) hidx hsv (by omega)
-        (by rw [show ((off + m : Nat) : Int).toNat = off + m by omega, arrN_length]; omega)]
-    rw [show ((off + m : Nat) : Int).toNat = off + m by omega, arrN_set, copyFn_step]
-  simp only [eval.evalAssigns, harr]
-  simp only [eval, evalBinOp, Env.bind, copyEnv, e_id, e_di, e_ds, e_sd, e_si, e_is,
-    beq_self_eq_true, if_true, beq_iff_eq, if_false, reduceCtorEq, Option.some.injEq]
-  funext n
-  by_cases h1 : (n == iNm) = true <;> by_cases h2 : (n == dstNm) = true <;>
-    simp_all [Env.bind, copyEnv, beq_iff_eq, Option.some.injEq, PVal.int.injEq] <;> omega
-
-theorem copy_loop (dstNm srcNm iNm : String)
-    (hds : dstNm ≠ srcNm) (hdi : dstNm ≠ iNm) (hsi : srcNm ≠ iNm)
-    (e : Env) (dn sn off : Nat) (dstFn srcFn : Nat → BitVec 8) (N : Nat)
-    (hdn : off + N ≤ dn) (hsn : N ≤ sn) (condE idxE cont : PExpr) (base : Nat)
-    (hidx : ∀ m, m < N → eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (base + 1) idxE
-        = some (.int ((off + m : Nat) : Int)))
-    (hct : ∀ m, m < N → eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m) (base + 2) condE
-        = some (.bool true))
-    (hcf : eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn N) (base + 2) condE
-        = some (.bool false)) :
-    eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn 0) ((base + 2) + N + 1)
-      (.while_ condE
-        [ (dstNm, .arraySet (.var dstNm) idxE (.arrayIndex (.var srcNm) (.var iNm)))
-        , (iNm, .binOp .add (.var iNm) (.lit (.int 1))) ] cont)
-      = eval shaFns (copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn N) (base + 2) cont :=
-  eval_while_count shaFns condE _ cont (fun m => copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn m)
-    N (base + 2)
-    (fun m hm => ⟨hct m hm, cpy_step dstNm srcNm iNm hds hdi hsi e dn sn off dstFn srcFn m
-      (by omega) (by omega) idxE base (hidx m hm)⟩)
-    hcf
-
+-- `copyEnv` (and copy-loop family) relocated to `Concrete.ProofKit.Loops` (v1.1).
+-- `cpy_step` (and copy-loop family) relocated to `Concrete.ProofKit.Loops` (v1.1).
+-- `copy_loop` (and copy-loop family) relocated to `Concrete.ProofKit.Loops` (v1.1).
 -- ==================================================================
 -- ipad/opad xor loop (task #21, hmac): the two-buffer loop
 -- `for i in 0..64 { inner[i] = kp[i]^0x36; outer[i] = kp[i]^0x5c }` fills
@@ -2233,11 +2149,7 @@ theorem xorval_eval (kpFn : Nat → BitVec 8) (env : Env) (i : Nat) (c : Int) (h
     exact arrN_read 64 kpFn (i : Int) i rfl hi
   simp only [eval, hr, evalBinOp, ofInt8_natCast_toNat, Option.some.injEq, PVal.int.injEq, Int.ofNat_eq_natCast]
 
-theorem copyFn_step0 (dstFn srcFn : Nat → BitVec 8) (m : Nat) :
-    bufUpd (copyFn dstFn srcFn 0 m) m (srcFn m) = copyFn dstFn srcFn 0 (m + 1) := by
-  have h := copyFn_step dstFn srcFn 0 m; rwa [Nat.zero_add] at h
-
--- `zfn` relocated to `Concrete.ProofKit.Array` (Proof Kit v1).
+-- `copyFn_step0` (and copy-loop family) relocated to `Concrete.ProofKit.Loops` (v1.1).
 def ipadFn (kpFn : Nat → BitVec 8) (c : Int) : Nat → BitVec 8 := fun j => kpFn j ^^^ BitVec.ofInt 8 c
 
 def xorEnv (e : Env) (kpFn : Nat → BitVec 8) (m : Nat) : Env :=
@@ -2318,36 +2230,8 @@ theorem sha256_hash_call (df : Nat → BitVec 8) (len : Nat) (hlen : len ≤ 375
 -- `src ++ zeros` (copyFn_zfn_map) — matching keyPrep's 64-byte padding.
 -- ==================================================================
 
-theorem copyFn_map_append (dstFn srcFn : Nat → BitVec 8) (off N : Nat) :
-    (List.range (off + N)).map (copyFn dstFn srcFn off N)
-      = ((List.range off).map dstFn) ++ ((List.range N).map srcFn) := by
-  apply List.ext_getElem (by simp)
-  intro j h1 _
-  simp only [List.length_map, List.length_range] at h1
-  rw [List.getElem_map, List.getElem_range, List.getElem_append]
-  by_cases hj : j < off
-  · rw [dif_pos (by simp only [List.length_map, List.length_range]; exact hj)]
-    simp only [List.getElem_map, List.getElem_range, copyFn,
-      if_neg (show ¬ (off ≤ j ∧ j < off + N) by omega)]
-  · rw [dif_neg (by simp only [List.length_map, List.length_range]; omega)]
-    simp only [List.length_map, List.length_range, List.getElem_map, List.getElem_range, copyFn,
-      if_pos (show off ≤ j ∧ j < off + N by omega)]
-
-/-- A `copyFn` into a zero buffer, viewed over `[0, T)`, is the copied prefix
-    followed by zeros — exactly the shape of `keyPrep`. -/
-theorem copyFn_zfn_map (srcFn : Nat → BitVec 8) (k_len T : Nat) (h : k_len ≤ T) :
-    (List.range T).map (copyFn zfn srcFn 0 k_len)
-      = ((List.range k_len).map srcFn) ++ List.replicate (T - k_len) 0 := by
-  apply List.ext_getElem (by simp; omega)
-  intro j h1 _
-  simp only [List.length_map, List.length_range] at h1
-  rw [List.getElem_map, List.getElem_range, List.getElem_append]
-  by_cases hj : j < k_len
-  · rw [dif_pos (by simp only [List.length_map, List.length_range]; exact hj)]
-    simp only [List.getElem_map, List.getElem_range, copyFn, Nat.sub_zero, if_pos (show 0 ≤ j ∧ j < 0 + k_len by omega)]
-  · rw [dif_neg (by simp only [List.length_map, List.length_range]; omega)]
-    simp only [List.getElem_replicate, copyFn, zfn, if_neg (show ¬ (0 ≤ j ∧ j < 0 + k_len) by omega)]
-
+-- `copyFn_map_append` (and copy-loop family) relocated to `Concrete.ProofKit.Loops` (v1.1).
+-- `copyFn_zfn_map` (and copy-loop family) relocated to `Concrete.ProofKit.Loops` (v1.1).
 -- ==================================================================
 -- HMAC key-prep correspondence (task #21): the post-branch kp buffer
 -- equals Sha256Spec.keyPrep of the key — both branches. kp_else (short
@@ -2396,18 +2280,7 @@ theorem xorEnv_self (e : Env) (kpFn : Nat → BitVec 8)
   simp only [xorEnv, Env.bind, copyFn_zero]
   by_cases h1 : n = "i" <;> by_cases h2 : n = "kp" <;> by_cases h3 : n = "outer" <;>
     by_cases h4 : n = "inner" <;> simp_all [beq_iff_eq]
-theorem copyEnv_self (dstNm srcNm iNm : String) (e : Env) (dn sn off : Nat)
-    (dstFn srcFn : Nat → BitVec 8)
-    (hd : e dstNm = some (.array_ (arrN dn dstFn))) (hs : e srcNm = some (.array_ (arrN sn srcFn)))
-    (hi : e iNm = some (.int 0)) :
-    copyEnv dstNm srcNm iNm e dn sn off dstFn srcFn 0 = e := by
-  funext n
-  simp only [copyEnv, Env.bind, copyFn_zero]
-  by_cases h1 : n = iNm <;> by_cases h2 : n = srcNm <;> by_cases h3 : n = dstNm <;>
-    simp_all [beq_iff_eq]
-
--- `condMsg`, `msgAssigns`, `condIh`, `ihAssigns`, `hmacLinearExpr` relocated
--- to `Concrete.Proof` (task #22).
+-- `copyEnv_self` (and copy-loop family) relocated to `Concrete.ProofKit.Loops` (v1.1).
 theorem arrayLit_zeros384 (fns : FnTable) (env : Env) (fuel : Nat) :
     eval fns env (fuel + 2) (.arrayLit (List.replicate 384 (.lit (.int 0))))
       = some (.array_ (List.replicate 384 (PVal.int 0))) := by
@@ -2480,7 +2353,7 @@ theorem hmac_linear (kpFn mFn : Nat → BitVec 8) (KEY : List Sha256Spec.Byte) (
         (by simp only [Env.bind, xorEnv, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hmv) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
   simp only [msgAssigns]
   rw [show fuel + 134 + m_len = (fuel + 131 + 2) + m_len + 1 by omega,
-      copy_loop "inner" "m" "i" (by decide) (by decide) (by decide) _ 384 256 64
+      copy_loop shaFns "inner" "m" "i" (by decide) (by decide) (by decide) _ 384 256 64
         (copyFn zfn (ipadFn kpFn 54) 0 64) mFn m_len (by omega) hml condMsg
         (.binOp .add (.lit (.int 64)) (.var "i")) _ (fuel + 131)
         (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
@@ -2503,7 +2376,7 @@ theorem hmac_linear (kpFn mFn : Nat → BitVec 8) (KEY : List Sha256Spec.Byte) (
         (by simp only [Env.bind, copyEnv, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
   simp only [ihAssigns]
   rw [show fuel + 131 = (fuel + 96 + 2) + 32 + 1 by omega,
-      copy_loop "outer" "ih" "i" (by decide) (by decide) (by decide) _ 384 32 64
+      copy_loop shaFns "outer" "ih" "i" (by decide) (by decide) (by decide) _ 384 32 64
         (copyFn zfn (ipadFn kpFn 92) 0 64) (fun j => (Sha256Spec.hash ((List.range (64 + m_len)).map (copyFn (copyFn zfn (ipadFn kpFn 54) 0 64) mFn 64 m_len))).getD j 0) 32 (by omega) (by omega) condIh
         (.binOp .add (.lit (.int 64)) (.var "i")) _ (fuel + 96)
         (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
@@ -2566,7 +2439,7 @@ theorem elseBranch_eval (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat)
         (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkp0)
         (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkv)
         (by simp only [Env.bind, beq_self_eq_true, if_true])]
-  rw [copy_loop "kp" "k" "i" (by decide) (by decide) (by decide) (e.bind "i" (.int 0)) 64 128 0 zfn kFn k_len
+  rw [copy_loop shaFns "kp" "k" "i" (by decide) (by decide) (by decide) (e.bind "i" (.int 0)) 64 128 0 zfn kFn k_len
         (by omega) (by omega) (.binOp .lt (.var "i") (.var "k_len")) (.var "i") hmacLinearExpr base
         (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
         (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]; simp; omega)
@@ -2614,7 +2487,7 @@ theorem thenBranch_eval (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat)
         (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; rw [← arrN_zfn 384])
         (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkv) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
   rw [show base + 143 + k_len = (base + 140 + 2) + k_len + 1 by omega,
-      copy_loop "kbuf" "k" "i" (by decide) (by decide) (by decide) ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len
+      copy_loop shaFns "kbuf" "k" "i" (by decide) (by decide) (by decide) ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len
         (by omega) (by omega) (.binOp .lt (.var "i") (.var "k_len")) (.var "i") _ (base + 140)
         (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
         (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, hklv]; simp; omega)
@@ -2635,7 +2508,7 @@ theorem thenBranch_eval (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat)
         (by simp only [Env.bind, copyEnv, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; exact hkp0)
         (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]) (by simp only [Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false])]
   rw [show base + 140 = (base + 105 + 2) + 32 + 1 by omega,
-      copy_loop "kp" "kh" "i" (by decide) (by decide) (by decide) (((copyEnv "kbuf" "k" "i" ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len).bind "kh" (.array_ (arrN 32 (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0)))).bind "i" (.int 0)) 64 32 0 zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 32
+      copy_loop shaFns "kp" "kh" "i" (by decide) (by decide) (by decide) (((copyEnv "kbuf" "k" "i" ((e.bind "kbuf" (.array_ (List.replicate 384 (PVal.int 0)))).bind "i" (.int 0)) 384 128 0 zfn kFn k_len).bind "kh" (.array_ (arrN 32 (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0)))).bind "i" (.int 0)) 64 32 0 zfn (fun j => (Sha256Spec.hash ((List.range k_len).map kFn)).getD j 0) 32
         (by omega) (by omega) (.binOp .lt (.var "i") (.lit (.int 32))) (.var "i") hmacLinearExpr (base + 105)
         (fun mm hmm => by simp only [eval, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false, Option.some.injEq, PVal.int.injEq]; omega)
         (fun mm hmm => by simp only [eval, evalBinOp, copyEnv, Env.bind, beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]; simp; omega)

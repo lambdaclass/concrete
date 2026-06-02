@@ -1,10 +1,12 @@
 import Concrete.ProofKit.Eval
 import Concrete.ProofKit.BitVec
 import Concrete.ProofKit.Array
+import Concrete.ProofKit.Loops
+import Concrete.ProofKit.Calls
 import Concrete.ProofKit.Refinement
 
 /-!
-# Concrete Proof Kit (v1)
+# Concrete Proof Kit (v1.1)
 
 Reusable, domain-agnostic proof infrastructure harvested from the HMAC-SHA256
 flagship (`Concrete.Sha256Refine`) so refinement proofs of future Concrete
@@ -15,15 +17,17 @@ Modules:
 - `ProofKit.Eval`       — `eval` semantics: letIn / ifThenElse / arrayLit stepping.
 - `ProofKit.BitVec`     — Int/Nat/BitVec round-trips + indexing for `bv_decide`.
 - `ProofKit.Array`      — size-generic buffer model `arrN`, frame lemma, arraySet eval.
+- `ProofKit.Loops`      — generic copy-into-buffer loop template `copy_loop`/`cpy_step`
+                          + `copyFn` spec, over an arbitrary `fns : FnTable`.
+- `ProofKit.Calls`      — `unary_call` (a `u32→u32` call-site reduction), over `fns`.
 - `ProofKit.Refinement` — List ↔ spec-function bridges (`arrN` / `getD` views).
 
-The loop-induction keystone `eval_while_count` and fuel monotonicity
-`eval_fuel_le` currently live in `Concrete.Proof`'s ladder section and are part
-of the same kit surface.
+Every kit lemma is now `fns`-generic — none assumes the SHA `shaFns` table — so
+the kit teaches the general refinement path. The loop-induction keystone
+`eval_while_count` and fuel monotonicity `eval_fuel_le` live in `Concrete.Proof`'s
+ladder section (already `fns`-generic) and are part of the same surface.
 
-PENDING (v1.1): a `ProofKit.Loops` (the generic copy-into-buffer loop:
-`copy_loop`/`cpy_step`/`copyEnv`) and `ProofKit.Calls` (`unary_call`) module.
-These currently hardcode the SHA `shaFns` table; extracting them requires a
-`shaFns → (fns : FnTable)` generalization plus call-site updates, done as a
-focused follow-up so each step stays green.
+SHA/HMAC-specific wrappers (the ipad/opad two-buffer xor loop, the per-function
+`*_call` reductions, the schedule/compress/hash loop lemmas) remain in
+`Concrete.Sha256Refine` — they instantiate these templates at `shaFns`.
 -/
