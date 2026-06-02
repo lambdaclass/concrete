@@ -701,6 +701,39 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
     | .ok validCore =>
     return Except.ok { validCore, parsed := merged, allSrcMap, tomlContent, mainPath, depNames }
 
+/-- Discharge call-site contract obligations with `bv_decide`. Each candidate is
+    `(index, leanBoolGoal)`; returns the indices that kernel-check. Runs one
+    batched `lake env lean` (all goals), falling back to per-goal runs only if
+    the batch fails. No external SMT — `bv_decide` is a kernel decision procedure. -/
+def bvDischargeCallSites (candidates : List (Nat × String)) : IO (List Nat) := do
+  if candidates.isEmpty then return []
+  let mkSrc (cs : List (Nat × String)) : String :=
+    "import Std.Tactic.BVDecide\n\n"
+      ++ String.join (cs.map (fun (i, g) => s!"theorem cobl_{i} : {g} = true := by bv_decide\n"))
+  let runLean (src : String) : IO UInt32 := do
+    let tmpDir ← IO.Process.output { cmd := "mktemp", args := #["-d"] }
+    let dir := tmpDir.stdout.trimAscii.toString
+    IO.FS.writeFile ⟨dir ++ "/cobl.lean"⟩ src
+    let r ← IO.Process.output { cmd := "lake", args := #["env", "lean", dir ++ "/cobl.lean"],
+                                env := #[("LAKE_TERM_ANSI", "0")] }
+    let _ ← IO.Process.output { cmd := "rm", args := #["-rf", dir] }
+    return r.exitCode
+  if (← runLean (mkSrc candidates)) == 0 then
+    return candidates.map (·.1)
+  else
+    let mut proved : List Nat := []
+    for c in candidates do
+      if (← runLean (mkSrc [c])) == 0 then proved := proved ++ [c.1]
+    return proved
+
+/-- Render the contracts report plus the call-site obligation section, running
+    the `bv_decide` backend on the closed-but-non-literal obligations. -/
+def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.ProofRegistry) : IO String := do
+  let obs := Report.callSiteObligations parsedModules
+  let cands := ((List.range obs.length).zip obs).filterMap fun (i, o) => o.leanGoal.map (fun g => (i, g))
+  let proved ← bvDischargeCallSites cands
+  return Report.contractsReport parsedModules registry ++ Report.renderCallSites obs proved
+
 /-- Run pipeline and check a profile constraint.
     If the input file lives inside a `Concrete.toml` project, route
     through project mode so std and other dependencies resolve. -/
@@ -768,7 +801,7 @@ def compileAndReport (inputPath : String) (reportType : String) : IO UInt32 := d
       IO.eprintln (Concrete.renderRegistryIssue issue)
     let hasRegistryErrors := regIssues.any (·.isError)
     if reportType == "contracts" then
-      IO.println (Report.contractsReport parsed.modules registry)
+      IO.println (← renderContracts parsed.modules registry)
       return 0
     if reportType == "caps" then
       IO.println (Report.capabilityReport validCore.coreModules)
@@ -942,7 +975,7 @@ def compileAndReport (inputPath : String) (reportType : String) : IO UInt32 := d
     if reportType == "audit" then
       IO.println (Report.auditReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc))
       if Report.hasContracts parsed.modules then
-        IO.println (Report.contractsReport parsed.modules registry)
+        IO.println (← renderContracts parsed.modules registry)
       return (if hasRegistryErrors then 1 else 0)
     if reportType == "verify" then
       -- Pass-by-pass verify gates: post-elab, post-mono, post-lower,

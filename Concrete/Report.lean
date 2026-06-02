@@ -639,37 +639,107 @@ partial def allFunctions (m : Module) : List (String × FnDef) :=
   let pfx := if m.name.isEmpty then "" else m.name ++ "."
   m.functions.map (fun f => (pfx, f)) ++ m.submodules.flatMap allFunctions
 
-/-- The call-site obligation section: for each caller, each call to a function
-    with `#[requires]` becomes an obligation (the precondition specialized to the
-    call's arguments), discharged for literal/constant cases. -/
-def callSiteSection (modules : List Module) : String := Id.run do
+/-- Top-level `let NAME = <const>` bindings in a body, as NAME → literal expr.
+    Lets the call-site checker see e.g. `let n = 7; rotr(x, n)`. -/
+def letConstMap (body : List Stmt) : List (String × Expr) :=
+  body.filterMap fun s => match s with
+    | .letDecl _ name _ _ v =>
+      match cEvalInt v with
+      | some k => some (name, .intLit default k)
+      | none => match cEvalBool v with | some b => some (name, .boolLit default b) | none => none
+    | _ => none
+
+/-- No free identifiers remain (every leaf is a literal): the expr is a closed,
+    decidable obligation suitable for a kernel decision procedure. -/
+partial def isClosed : Expr → Bool
+  | .intLit _ _ | .boolLit _ _ => true
+  | .ident _ _ => false
+  | .binOp _ _ l r => isClosed l && isClosed r
+  | .unaryOp _ _ e | .paren _ e => isClosed e
+  | _ => false
+
+/-- Lower a closed contract expr to a Lean `BitVec 32` Bool expression for
+    `bv_decide` (u32 model, unsigned comparisons). `none` if outside the
+    supported subset (int comparisons, &&/||, simple arithmetic). -/
+partial def toLeanBV : Expr → Option String
+  | .intLit _ v => if v < 0 then none else some s!"({v}#32)"
+  | .boolLit _ b => some (if b then "true" else "false")
+  | .paren _ e => toLeanBV e
+  | .binOp _ op l r => do
+    let L ← toLeanBV l
+    let R ← toLeanBV r
+    match op with
+    | .leq => some s!"(BitVec.ule {L} {R})"
+    | .lt  => some s!"(BitVec.ult {L} {R})"
+    | .geq => some s!"(BitVec.ule {R} {L})"
+    | .gt  => some s!"(BitVec.ult {R} {L})"
+    | .eq  => some s!"({L} == {R})"
+    | .neq => some s!"(!({L} == {R}))"
+    | .and_ => some s!"({L} && {R})"
+    | .or_  => some s!"({L} || {R})"
+    | .add => some s!"({L} + {R})"
+    | .sub => some s!"({L} - {R})"
+    | .mul => some s!"({L} * {R})"
+    | _ => none
+  | _ => none
+
+/-- One call-site obligation: a precondition of a callee, specialized to a call. -/
+structure CallObligation where
+  caller     : String
+  callStr    : String          -- e.g. "rotr(x, n)"
+  specExpr   : Expr            -- precondition with the call's args substituted
+  baseStatus : String          -- "proved_at_callsite" | "failed_at_callsite" | "unproven"
+  leanGoal   : Option String   -- bv_decide goal (closed after let-const subst), when baseStatus is unproven
+
+/-- Build the ordered list of call-site obligations across all callers. The fast
+    constant folder classifies the literal/arithmetic cases; obligations it
+    cannot fold but that become closed after substituting caller let-constants
+    carry a `leanGoal` for the `bv_decide` discharge backend (run by Main). -/
+def callSiteObligations (modules : List Module) : List CallObligation := Id.run do
   let fns := modules.flatMap allFunctions
-  -- requires-bearing callees, keyed by bare function name
   let reqMap : List (String × (List Param × List Expr)) :=
     fns.filterMap (fun (_, f) => if f.requires.isEmpty then none else some (f.name, (f.params, f.requires)))
-  if reqMap.isEmpty then return ""
-  let mut out := "\n\n=== Call-site obligations ==="
-  let mut any := false
+  if reqMap.isEmpty then return []
+  let mut obs : List CallObligation := []
   for (pfx, f) in fns do
-    let calls := f.body.flatMap collectCallsS
-    let mut callerHdr := false
-    for (_, fn, args) in calls do
+    let lets := letConstMap f.body
+    for (_, fn, args) in f.body.flatMap collectCallsS do
       match reqMap.find? (·.1 == fn) with
       | none => pure ()
       | some (_, (params, reqs)) =>
-        any := true
-        if !callerHdr then out := out ++ s!"\n\n{pfx}{f.name}"; callerHdr := true
-        let argStr := ", ".intercalate (args.map Concrete.fmtExpr)
-        out := out ++ s!"\n  call {fn}({argStr})"
-        let subst := (params.zip args).map (fun (p, a) => (p.name, a))
+        let argSubst := (params.zip args).map (fun (p, a) => (p.name, a))
+        let callStr := s!"{fn}({", ".intercalate (args.map Concrete.fmtExpr)})"
         for r in reqs do
-          let spec := substContract subst r
-          let status := match cEvalBool spec with
-            | some true  => "proved_at_callsite"
-            | some false => "failed_at_callsite"
-            | none       => "unproven_at_callsite (non-constant; needs a discharge backend)"
-          out := out ++ s!"\n    requires {Concrete.fmtExpr spec}\n    status:  {status}"
-  if !any then "" else out ++ "\n"
+          let spec := substContract argSubst r
+          let (baseStatus, leanGoal) := match cEvalBool spec with
+            | some true  => ("proved_at_callsite", none)
+            | some false => ("failed_at_callsite", none)
+            | none =>
+              -- tier 2: also substitute caller let-constants
+              let spec2 := substContract lets spec
+              match cEvalBool spec2 with
+              | some false => ("failed_at_callsite", none)        -- closed and violated
+              | _ => if isClosed spec2 then ("unproven", toLeanBV spec2)  -- closed → bv_decide candidate
+                     else ("unproven", none)                              -- still has free vars
+          obs := obs ++ [{ caller := pfx ++ f.name, callStr, specExpr := spec, baseStatus, leanGoal }]
+  return obs
+
+/-- Render the call-site obligation section. `provedByBV` is the list of indices
+    (into `obs`) that the `bv_decide` backend kernel-checked. -/
+def renderCallSites (obs : List CallObligation) (provedByBV : List Nat) : String := Id.run do
+  if obs.isEmpty then return ""
+  let mut out := "\n\n=== Call-site obligations ==="
+  let mut curCaller := ""
+  for (i, o) in (List.range obs.length).zip obs do
+    if o.caller != curCaller then out := out ++ s!"\n\n{o.caller}"; curCaller := o.caller
+    out := out ++ s!"\n  call {o.callStr}\n    requires {Concrete.fmtExpr o.specExpr}"
+    let status := match o.baseStatus with
+      | "unproven" =>
+        if provedByBV.contains i then "proved_by_kernel_decision\n    engine:  bv_decide"
+        else "unproven_at_callsite (non-constant; no discharge backend succeeded)"
+      | s => s
+    out := out ++ s!"\n    status:  {status}"
+  return out ++ "\n"
 
 partial def contractsReport (modules : List Module) (registry : ProofRegistry) : String := Id.run do
   -- Discharge status for an obligation on `qual`: a registry entry whose
@@ -704,7 +774,7 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry) :
     return out
   let body := modules.foldl (fun acc m => go m acc) ""
   let body := if body.isEmpty then "\n(no spec fns or #[ensures] contracts found)" else body
-  return s!"=== Source Contracts ==={body}\n{callSiteSection modules}"
+  return s!"=== Source Contracts ==={body}\n"
 
 /-- Whether any module (or submodule) carries a source contract — a `spec fn`
     or an `#[ensures(...)]`. Used to decide whether `audit` appends the
