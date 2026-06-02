@@ -768,7 +768,7 @@ def compileAndReport (inputPath : String) (reportType : String) : IO UInt32 := d
       IO.eprintln (Concrete.renderRegistryIssue issue)
     let hasRegistryErrors := regIssues.any (·.isError)
     if reportType == "contracts" then
-      IO.println (Report.contractsReport parsed.modules)
+      IO.println (Report.contractsReport parsed.modules registry)
       return 0
     if reportType == "caps" then
       IO.println (Report.capabilityReport validCore.coreModules)
@@ -840,6 +840,12 @@ def compileAndReport (inputPath : String) (reportType : String) : IO UInt32 := d
       leanSrc := leanSrc ++ "-- Verifies that referenced Lean theorems exist and type-check.\n\n"
       for (fn, proofName, _, _) in proofNames do
         leanSrc := leanSrc ++ s!"-- {fn}\n#check @{proofName}\n\n"
+      -- Also kernel-check source-contract discharge theorems (the `ensures_proof`
+      -- naming the theorem that proves a `#[ensures(...)]` obligation), so an
+      -- obligation reported `proved_by_lean` is backed by a real kernel check.
+      let ensuresThms := registry.filterMap fun e => e.ensuresProof.map (e.function, ·)
+      for (fn, thm) in ensuresThms do
+        leanSrc := leanSrc ++ s!"-- {fn} (ensures)\n#check @{thm}\n\n"
       IO.FS.writeFile ⟨tmpPath⟩ leanSrc
       -- Invoke lake env lean to check the file
       let result ← IO.Process.output {
@@ -886,6 +892,11 @@ def compileAndReport (inputPath : String) (reportType : String) : IO UInt32 := d
         out := out ++ s!"\n  Failed ({failed.length}):\n"
         for (fn, proofName) in failed do
           out := out ++ s!"    ✗ {fn} — {proofName} (theorem not found)\n"
+      if !ensuresThms.isEmpty then
+        out := out ++ s!"\n  Contract obligations — #[ensures] discharge ({ensuresThms.length}):\n"
+        for (fn, thm) in ensuresThms do
+          let mark := if (combined.splitOn s!"`{thm}`").length != 1 then "✗" else "✓"
+          out := out ++ s!"    {mark} {fn} — ensures discharged by {thm}\n"
       if generalFailure then
         out := out ++ s!"\n  Lean check failed (exit code {result.exitCode}):\n"
         out := out ++ s!"    {combined.take 500}\n"
@@ -930,6 +941,8 @@ def compileAndReport (inputPath : String) (reportType : String) : IO UInt32 := d
       if violations.isEmpty then return 0 else return 1
     if reportType == "audit" then
       IO.println (Report.auditReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc))
+      if Report.hasContracts parsed.modules then
+        IO.println (Report.contractsReport parsed.modules registry)
       return (if hasRegistryErrors then 1 else 0)
     if reportType == "verify" then
       -- Pass-by-pass verify gates: post-elab, post-mono, post-lower,

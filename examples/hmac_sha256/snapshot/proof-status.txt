@@ -21,20 +21,20 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- proved [point] ------------------------------------------------ examples/hmac_sha256/src/main.con:96
+-- proved [point] ------------------------------------------------ examples/hmac_sha256/src/main.con:102
 
   ✓ `hmac_sha256.ch` — proof matches current body.
 
- 96 |     fn ch(x: u32, y: u32, z: u32) -> u32 {
-    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 102 |     fn ch(x: u32, y: u32, z: u32) -> u32 {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: point
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:101
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:107
 
   `hmac_sha256.maj` passes the predictable profile but has no registered proof.
 
- 101 |     fn maj(x: u32, y: u32, z: u32) -> u32 {
+ 107 |     fn maj(x: u32, y: u32, z: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -42,11 +42,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:106
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:112
 
   `hmac_sha256.rotr` passes the predictable profile but has no registered proof.
 
- 106 |     fn rotr(x: u32, n: u32) -> u32 {
+ 112 |     fn rotr(x: u32, n: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -54,11 +54,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:111
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:117
 
   `hmac_sha256.big_sigma0` passes the predictable profile but has no registered proof.
 
- 111 |     fn big_sigma0(x: u32) -> u32 {
+ 117 |     fn big_sigma0(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -66,11 +66,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:116
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:122
 
   `hmac_sha256.big_sigma1` passes the predictable profile but has no registered proof.
 
- 116 |     fn big_sigma1(x: u32) -> u32 {
+ 122 |     fn big_sigma1(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -78,11 +78,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:121
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:127
 
   `hmac_sha256.small_sigma0` passes the predictable profile but has no registered proof.
 
- 121 |     fn small_sigma0(x: u32) -> u32 {
+ 127 |     fn small_sigma0(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -90,11 +90,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:126
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:132
 
   `hmac_sha256.small_sigma1` passes the predictable profile but has no registered proof.
 
- 126 |     fn small_sigma1(x: u32) -> u32 {
+ 132 |     fn small_sigma1(x: u32) -> u32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -102,11 +102,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:143
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:149
 
   `hmac_sha256.ct_compare_32` passes the predictable profile but has no registered proof.
 
- 143 |     fn ct_compare_32(a: [u8; 32], b: [u8; 32]) -> i32 {
+ 149 |     fn ct_compare_32(a: [u8; 32], b: [u8; 32]) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -114,92 +114,92 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:163
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:169
 
   ✓ `hmac_sha256.block_to_words` — proof matches current body.
 
- 163 |     fn block_to_words(block: [u8; 64]) -> [u32; 16] {
+ 169 |     fn block_to_words(block: [u8; 64]) -> [u32; 16] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:177
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:183
 
   ✓ `hmac_sha256.sha256_schedule` — proof matches current body.
 
- 177 |     fn sha256_schedule(w16: [u32; 16]) -> [u32; 64] {
+ 183 |     fn sha256_schedule(w16: [u32; 16]) -> [u32; 64] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:195
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:201
 
   ✓ `hmac_sha256.sha256_round` — proof matches current body.
 
- 195 |     fn sha256_round(state: [u32; 8], k: u32, w: u32) -> [u32; 8] {
+ 201 |     fn sha256_round(state: [u32; 8], k: u32, w: u32) -> [u32; 8] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:206
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:212
 
   ✓ `hmac_sha256.sha256_compress` — proof matches current body.
 
- 206 |     fn sha256_compress(state: [u32; 8], block: [u8; 64]) -> [u32; 8] {
+ 212 |     fn sha256_compress(state: [u32; 8], block: [u8; 64]) -> [u32; 8] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:224
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:230
 
   ✓ `hmac_sha256.block_to_words_at` — proof matches current body.
 
- 224 |     fn block_to_words_at(buf: [u8; 384], off: i32) -> [u32; 16] {
+ 230 |     fn block_to_words_at(buf: [u8; 384], off: i32) -> [u32; 16] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:237
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:243
 
   ✓ `hmac_sha256.sha256_compress_at` — proof matches current body.
 
- 237 |     fn sha256_compress_at(state: [u32; 8], buf: [u8; 384], off: i32) -> [u32; 8] {
+ 243 |     fn sha256_compress_at(state: [u32; 8], buf: [u8; 384], off: i32) -> [u32; 8] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:250
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:256
 
   ✓ `hmac_sha256.state_to_bytes` — proof matches current body.
 
- 250 |     fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
+ 256 |     fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:274
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:280
 
   ✓ `hmac_sha256.sha256_hash` — proof matches current body.
 
- 274 |     fn sha256_hash(data: [u8; 384], len: i32) -> [u8; 32] {
+ 280 |     fn sha256_hash(data: [u8; 384], len: i32) -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:299
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:305
 
   ✓ `hmac_sha256.hmac_sha256` — proof matches current body.
 
- 299 |     fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
+ 305 |     fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:327
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:333
 
   `hmac_sha256.verify_hmac` passes the predictable profile but has no registered proof.
 
- 327 |     fn verify_hmac(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32,
+ 333 |     fn verify_hmac(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32,
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -207,11 +207,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:337
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:343
 
   `hmac_sha256.abc_block` passes the predictable profile but has no registered proof.
 
- 337 |     fn abc_block() -> [u8; 64] {
+ 343 |     fn abc_block() -> [u8; 64] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -219,11 +219,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:349
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:355
 
   `hmac_sha256.rfc4231_tc1_tag` passes the predictable profile but has no registered proof.
 
- 349 |     fn rfc4231_tc1_tag() -> [u8; 32] {
+ 355 |     fn rfc4231_tc1_tag() -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -231,11 +231,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:355
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:361
 
   `hmac_sha256.rfc4231_tc2_tag` passes the predictable profile but has no registered proof.
 
- 355 |     fn rfc4231_tc2_tag() -> [u8; 32] {
+ 361 |     fn rfc4231_tc2_tag() -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -243,11 +243,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- not eligible ------------------------------------------- examples/hmac_sha256/src/main.con:372
+-- not eligible ------------------------------------------- examples/hmac_sha256/src/main.con:378
 
   `hmac_sha256.main` cannot be proved: fails predictable profile (has capabilities: Console, is entry point (main)).
 
- 372 |     pub fn main() with(Console) -> i32 {
+ 378 |     pub fn main() with(Console) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   reasons: has capabilities: Console, is entry point (main)

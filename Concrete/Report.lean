@@ -564,7 +564,15 @@ private def interfaceModule (name : String) (fs : FileSummary) : String :=
     rendered as per-function obligations. The audit report links each
     obligation to its discharge evidence; this report just surfaces the claims
     written in source. -/
-partial def contractsReport (modules : List Module) : String := Id.run do
+partial def contractsReport (modules : List Module) (registry : ProofRegistry) : String := Id.run do
+  -- Discharge status for an obligation on `qual`: a registry entry whose
+  -- `ensures_proof` names the theorem that proves it → proved_by_lean; else missing.
+  let discharge (qual : String) : String :=
+    match registry.find? (fun e => e.function == qual) with
+    | some e => match e.ensuresProof with
+      | some thm => s!"\n     status:  proved_by_lean\n     theorem: {thm}"
+      | none     => "\n     status:  missing (registry entry has no ensures_proof)"
+    | none => "\n     status:  missing (no proof-registry entry for this function)"
   let rec go (m : Module) (acc : String) : String := Id.run do
     let mut out := acc
     let pfx := if m.name.isEmpty then "" else m.name ++ "."
@@ -576,7 +584,7 @@ partial def contractsReport (modules : List Module) : String := Id.run do
         out := out ++ s!"\n\n{pfx}{f.name}"
         let mut i := 1
         for e in f.ensures do
-          out := out ++ s!"\n  O{i}  ensures {Concrete.fmtExpr e}"
+          out := out ++ s!"\n  O{i}  ensures {Concrete.fmtExpr e}{discharge (pfx ++ f.name)}"
           i := i + 1
     for sub in m.submodules do
       out := go sub out
@@ -584,6 +592,13 @@ partial def contractsReport (modules : List Module) : String := Id.run do
   let body := modules.foldl (fun acc m => go m acc) ""
   let body := if body.isEmpty then "\n(no spec fns or #[ensures] contracts found)" else body
   return s!"=== Source Contracts ==={body}\n"
+
+/-- Whether any module (or submodule) carries a source contract — a `spec fn`
+    or an `#[ensures(...)]`. Used to decide whether `audit` appends the
+    contracts section. -/
+partial def hasContracts (modules : List Module) : Bool :=
+  modules.any fun m =>
+    !m.specFns.isEmpty || m.functions.any (fun f => !f.ensures.isEmpty) || hasContracts m.submodules
 
 def interfaceReport (summaryTable : List (String × FileSummary)) : String :=
   let header := "=== Interface Summary ==="

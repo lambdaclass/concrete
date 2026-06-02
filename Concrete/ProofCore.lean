@@ -1333,6 +1333,7 @@ structure ProofRegistryEntry where
   proof           : String  -- Lean proof name, e.g. "Concrete.Proof.parse_byte_correct"
   spec            : String  -- spec name, e.g. "parse_byte_adds_offset"
   coverage        : String  -- point|one_direction|iff|invariant|runtime_error|full_contract|""
+  ensuresProof    : Option String := none  -- theorem discharging the source `#[ensures(...)]` obligation, if any
   deriving Repr, Inhabited
 
 /-- All canonical proof coverage classifications. -/
@@ -1382,6 +1383,7 @@ def parseRegistryJson (input : String) : ProofRegistry × List String :=
     let pr := extractStr block "proof"
     let sp := extractStr block "spec"
     let cv := extractStr block "coverage"
+    let ep := extractStr block "ensures_proof"
     match fn with
     | none => (es, ws ++ ["warning: proof-registry.json entry has missing or malformed \"function\" field"])
     | some fnVal =>
@@ -1400,7 +1402,7 @@ def parseRegistryJson (input : String) : ProofRegistry × List String :=
           ++ (if pr.isNone then [s!"warning: proof-registry.json entry '{fnVal}' has missing \"proof\" field"] else [])
           ++ (if sp.isNone then [s!"warning: proof-registry.json entry '{fnVal}' has missing \"spec\" field"] else [])
           ++ coverageWarn ++ missingCoverageWarn
-        (es ++ [{ function := fnVal, bodyFingerprint := fp.getD "", proof := pr.getD "", spec := sp.getD "", coverage := cvVal }],
+        (es ++ [{ function := fnVal, bodyFingerprint := fp.getD "", proof := pr.getD "", spec := sp.getD "", coverage := cvVal, ensuresProof := ep }],
          ws ++ entryWarns)
   ) (([] : List ProofRegistryEntry), ([] : List String))
   -- Check for duplicates

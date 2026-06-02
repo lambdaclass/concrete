@@ -6,49 +6,49 @@ module hmac_sha256:
       sha256_k
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:65
       ch
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:96
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:102
       maj
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:101
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:107
       rotr
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:106
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:112
       big_sigma0
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:111
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:117
       big_sigma1
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:116
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:122
       small_sigma0
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:121
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:127
       small_sigma1
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:126
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:132
       ct_compare_32
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:143
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:149
       block_to_words
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:163
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:169
       sha256_schedule
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:177
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:183
       sha256_round
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:195
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:201
       sha256_compress
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:206
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:212
       block_to_words_at
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:224
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:230
       sha256_compress_at
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:237
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:243
       state_to_bytes
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:250
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:256
       sha256_hash
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:274
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:280
       hmac_sha256
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:299
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:305
       verify_hmac
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:327
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:333
       abc_block
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:337
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:343
       rfc4231_tc1_tag
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:349
-      rfc4231_tc2_tag
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:355
+      rfc4231_tc2_tag
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:361
   pub main
-    caps: Console  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:372
+    caps: Console  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:378
 
 Totals: 24 functions, 23 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
 Evidence: 11 proved, 13 enforced, 0 trusted-assumption, 0 reported

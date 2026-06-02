@@ -4,49 +4,49 @@
              in provable subset: pure, bounded, no FFI
   eligible   `hmac_sha256.sha256_k`  @ examples/hmac_sha256/src/main.con:65
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.ch`  @ examples/hmac_sha256/src/main.con:96
+  eligible   `hmac_sha256.ch`  @ examples/hmac_sha256/src/main.con:102
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.maj`  @ examples/hmac_sha256/src/main.con:101
+  eligible   `hmac_sha256.maj`  @ examples/hmac_sha256/src/main.con:107
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.rotr`  @ examples/hmac_sha256/src/main.con:106
+  eligible   `hmac_sha256.rotr`  @ examples/hmac_sha256/src/main.con:112
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.big_sigma0`  @ examples/hmac_sha256/src/main.con:111
+  eligible   `hmac_sha256.big_sigma0`  @ examples/hmac_sha256/src/main.con:117
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.big_sigma1`  @ examples/hmac_sha256/src/main.con:116
+  eligible   `hmac_sha256.big_sigma1`  @ examples/hmac_sha256/src/main.con:122
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.small_sigma0`  @ examples/hmac_sha256/src/main.con:121
+  eligible   `hmac_sha256.small_sigma0`  @ examples/hmac_sha256/src/main.con:127
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.small_sigma1`  @ examples/hmac_sha256/src/main.con:126
+  eligible   `hmac_sha256.small_sigma1`  @ examples/hmac_sha256/src/main.con:132
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.ct_compare_32`  @ examples/hmac_sha256/src/main.con:143
+  eligible   `hmac_sha256.ct_compare_32`  @ examples/hmac_sha256/src/main.con:149
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.block_to_words`  @ examples/hmac_sha256/src/main.con:163
+  eligible   `hmac_sha256.block_to_words`  @ examples/hmac_sha256/src/main.con:169
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.sha256_schedule`  @ examples/hmac_sha256/src/main.con:177
+  eligible   `hmac_sha256.sha256_schedule`  @ examples/hmac_sha256/src/main.con:183
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.sha256_round`  @ examples/hmac_sha256/src/main.con:195
+  eligible   `hmac_sha256.sha256_round`  @ examples/hmac_sha256/src/main.con:201
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.sha256_compress`  @ examples/hmac_sha256/src/main.con:206
+  eligible   `hmac_sha256.sha256_compress`  @ examples/hmac_sha256/src/main.con:212
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.block_to_words_at`  @ examples/hmac_sha256/src/main.con:224
+  eligible   `hmac_sha256.block_to_words_at`  @ examples/hmac_sha256/src/main.con:230
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.sha256_compress_at`  @ examples/hmac_sha256/src/main.con:237
+  eligible   `hmac_sha256.sha256_compress_at`  @ examples/hmac_sha256/src/main.con:243
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.state_to_bytes`  @ examples/hmac_sha256/src/main.con:250
+  eligible   `hmac_sha256.state_to_bytes`  @ examples/hmac_sha256/src/main.con:256
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.sha256_hash`  @ examples/hmac_sha256/src/main.con:274
+  eligible   `hmac_sha256.sha256_hash`  @ examples/hmac_sha256/src/main.con:280
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.hmac_sha256`  @ examples/hmac_sha256/src/main.con:299
+  eligible   `hmac_sha256.hmac_sha256`  @ examples/hmac_sha256/src/main.con:305
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.verify_hmac`  @ examples/hmac_sha256/src/main.con:327
+  eligible   `hmac_sha256.verify_hmac`  @ examples/hmac_sha256/src/main.con:333
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.abc_block`  @ examples/hmac_sha256/src/main.con:337
+  eligible   `hmac_sha256.abc_block`  @ examples/hmac_sha256/src/main.con:343
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.rfc4231_tc1_tag`  @ examples/hmac_sha256/src/main.con:349
+  eligible   `hmac_sha256.rfc4231_tc1_tag`  @ examples/hmac_sha256/src/main.con:355
              in provable subset: pure, bounded, no FFI
-  eligible   `hmac_sha256.rfc4231_tc2_tag`  @ examples/hmac_sha256/src/main.con:355
+  eligible   `hmac_sha256.rfc4231_tc2_tag`  @ examples/hmac_sha256/src/main.con:361
              in provable subset: pure, bounded, no FFI
-  excluded   `hmac_sha256.main`  @ examples/hmac_sha256/src/main.con:372
+  excluded   `hmac_sha256.main`  @ examples/hmac_sha256/src/main.con:378
              source: has capabilities: Console, is entry point (main)
 
 Totals: 24 functions — 23 eligible, 1 excluded (1 source, 0 profile, 0 both), 0 trusted

@@ -93,6 +93,12 @@ mod hmac_sha256 {
     // ============================================================
 
     // Ch(x, y, z) = (x AND y) XOR ((NOT x) AND z).  FIPS 180-4 § 4.1.2.
+    // Source-contract slice: `ch_spec` names the abstract Ch (modeled in Lean
+    // as Sha256Spec.ch); the #[ensures] postcondition is discharged by
+    // Concrete.Proof.ch_refines via the registry (see `--report contracts`).
+    spec fn ch_spec(x: u32, y: u32, z: u32) -> u32;
+
+    #[ensures(result == ch_spec(x, y, z))]
     fn ch(x: u32, y: u32, z: u32) -> u32 {
         return (x & y) ^ ((x ^ 0xFFFFFFFF) & z);
     }

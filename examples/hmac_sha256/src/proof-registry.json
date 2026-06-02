@@ -13,7 +13,8 @@
       "body_fingerprint": "[(ret (binop Concrete.BinOp.bitxor (binop Concrete.BinOp.bitand (var x) (var y)) (binop Concrete.BinOp.bitand (binop Concrete.BinOp.bitxor (var x) (int 4294967295)) (var z))))]",
       "proof": "Concrete.Proof.ch_selects_high",
       "spec": "Concrete.Proof.chExpr",
-      "coverage": "point"
+      "coverage": "point",
+      "ensures_proof": "Concrete.Proof.ch_refines"
     },
     {
       "function": "hmac_sha256.block_to_words",
