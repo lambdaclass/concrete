@@ -27,6 +27,8 @@
 -/
 import Std.Tactic.BVDecide
 import Concrete.Proof
+import Concrete.ProofKit.Eval
+import Concrete.ProofKit.BitVec
 import Concrete.Sha256Spec
 
 namespace Concrete.Proof
@@ -39,16 +41,8 @@ namespace Concrete.Proof
 -- (`Int.ofNat`) wrap a `BitVec.toNat`, and both collapse to identity.
 -- ------------------------------------------------------------------
 
-/-- Round-trip through `Nat.cast` (how `eval` binds a `u32` argument). -/
-theorem ofInt_natCast_toNat (W : BitVec 32) :
-    BitVec.ofInt 32 (W.toNat : Int) = W := by
-  apply BitVec.eq_of_toNat_eq; simp
-
-/-- Round-trip through `Int.ofNat` (how `evalBinOp` reconstructs a u32
-    bitwise result). -/
-theorem ofInt_ofNat_toNat (W : BitVec 32) :
-    BitVec.ofInt 32 (Int.ofNat W.toNat) = W := by
-  apply BitVec.eq_of_toNat_eq; simp
+-- `ofInt_natCast_toNat`, `ofInt_ofNat_toNat` relocated to
+-- `Concrete.ProofKit.BitVec` (Proof Kit v1).
 
 -- ------------------------------------------------------------------
 -- Extracted round-function expressions
@@ -111,23 +105,8 @@ theorem maj_refines (X Y Z : BitVec 32) (fuel : Nat) :
 set_option linter.unusedSimpArgs false
 
 -- ===== helper lemmas =====
-theorem lookupIndex_eq (l : List PVal) (m : Nat) : eval.lookupIndex l m = l[m]? := by
-  induction l generalizing m with
-  | nil => simp [eval.lookupIndex]
-  | cons x xs ih => cases m with
-    | zero => simp [eval.lookupIndex]
-    | succ n => simp [eval.lookupIndex, ih]
-
-theorem lookupIndex_range_map (f : Nat → PVal) (n m : Nat) (h : m < n) :
-    eval.lookupIndex ((List.range n).map f) m = some (f m) := by
-  rw [lookupIndex_eq]; simp [h]
-
-theorem ofInt32_byte (B : BitVec 8) :
-    BitVec.ofInt 32 (Int.ofNat B.toNat) = B.setWidth 32 := by
-  apply BitVec.eq_of_toNat_eq; simp [BitVec.toNat_setWidth]
-theorem ofInt32_byte_cast (B : BitVec 8) :
-    BitVec.ofInt 32 (B.toNat : Int) = B.setWidth 32 := by
-  apply BitVec.eq_of_toNat_eq; simp [BitVec.toNat_setWidth]
+-- `lookupIndex_eq`, `lookupIndex_range_map`, `ofInt32_byte`,
+-- `ofInt32_byte_cast` relocated to `Concrete.ProofKit.BitVec` (Proof Kit v1).
 
 theorem readN (b : Nat → BitVec 8) (m : Nat) (hm : m < 64) :
     (if ((m:Int)) < 0 then (none : Option PVal)
@@ -273,25 +252,13 @@ theorem assigns_step (fns : FnTable) (b : Nat → BitVec 8) (k : Nat) (hk : k < 
     simp_all [Option.some.injEq, PVal.int.injEq] <;> omega
 
 -- ===== assembling the full loop (blockToWordsExpr relocated to Concrete.Proof) =====
-theorem eval_letIn (fns : FnTable) (env : Env) (fuel : Nat)
-    (name : String) (val body : PExpr) (v : PVal)
-    (hv : eval fns env (fuel + 1) val = some v) :
-    eval fns env (fuel + 1) (.letIn name val body)
-      = eval fns (env.bind name v) fuel body := by
-  simp only [eval, hv]
-
-theorem evalElems_replicate_lit (fns : FnTable) (env : Env) (fuel : Nat)
-    (n : Nat) (v : PVal) :
-    eval.evalElems fns env (fuel + 1) (List.replicate n (.lit v))
-      = some (List.replicate n v) := by
-  induction n with
-  | zero => simp [List.replicate, eval.evalElems]
-  | succ m ih => simp [List.replicate, eval.evalElems, eval, ih]
-
+-- `eval_letIn`, `evalElems_replicate_lit`, and the generic
+-- `arrayLit_replicate_eval` relocated to `Concrete.ProofKit.Eval` (Proof Kit
+-- v1). The per-size zero-array helpers below are now thin aliases of it.
 theorem arrayLit_zeros_eval (fns : FnTable) (env : Env) (fuel : Nat) :
     eval fns env (fuel + 2) (.arrayLit (List.replicate 16 (.lit (.int 0))))
-      = some (.array_ (List.replicate 16 (PVal.int 0))) := by
-  simp only [eval, evalElems_replicate_lit]
+      = some (.array_ (List.replicate 16 (PVal.int 0))) :=
+  arrayLit_replicate_eval fns env fuel 16 (.int 0)
 
 theorem getD_range_map (b : Nat → BitVec 8) (m : Nat) (hm : m < 64) :
     ((List.range 64).map b).getD m 0 = b m := by
@@ -2307,8 +2274,7 @@ theorem copy_loop (dstNm srcNm iNm : String)
 -- (the per-byte xor, bridged by ofInt8_natCast_toNat).
 -- ==================================================================
 
-theorem ofInt8_natCast_toNat (b : BitVec 8) : BitVec.ofInt 8 (↑b.toNat) = b := by
-  rw [BitVec.ofInt_natCast, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+-- `ofInt8_natCast_toNat` relocated to `Concrete.ProofKit.BitVec` (Proof Kit v1).
 
 theorem xorval_eval (kpFn : Nat → BitVec 8) (env : Env) (i : Nat) (c : Int) (hi : i < 64) (fuel : Nat)
     (hkp : env "kp" = some (.array_ (arrN 64 kpFn))) (hiv : env "i" = some (.int (i : Int))) :
@@ -2691,8 +2657,8 @@ theorem key_copyFn (kFn : Nat → BitVec 8) (k_len : Nat) :
 -- as the inner loop's `cont`) is defined in `Concrete.Proof`.
 theorem arrayLit_z384 (fns : FnTable) (env : Env) (fuel : Nat) :
     eval fns env (fuel + 2) (.arrayLit (List.replicate 384 (.lit (.int 0))))
-      = some (.array_ (List.replicate 384 (PVal.int 0))) := by
-  simp only [eval, evalElems_replicate_lit]
+      = some (.array_ (List.replicate 384 (PVal.int 0))) :=
+  arrayLit_replicate_eval fns env fuel 384 (.int 0)
 
 set_option maxRecDepth 8000 in
 set_option maxHeartbeats 2000000 in
@@ -2758,21 +2724,14 @@ theorem thenBranch_eval (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat)
 
 theorem arrayLit_z64 (fns : FnTable) (env : Env) (fuel : Nat) :
     eval fns env (fuel + 2) (.arrayLit (List.replicate 64 (.lit (.int 0))))
-      = some (.array_ (List.replicate 64 (PVal.int 0))) := by
-  simp only [eval, evalElems_replicate_lit]
+      = some (.array_ (List.replicate 64 (PVal.int 0))) :=
+  arrayLit_replicate_eval fns env fuel 64 (.int 0)
 
 -- `hmac_sha256Expr` is defined in `Concrete.Proof` in EXACT extracted shape:
 -- `letIn kp zeros (ifThenElse (gt k_len 64) thenBranch elseBranch)` — the `if`
 -- duplicates the HMAC continuation into both branches, as the source extracts.
 
-theorem eval_ite_true (fns : FnTable) (env : Env) (fuel : Nat) (cond t el : PExpr) (v : PVal)
-    (hc : eval fns env (fuel + 1) cond = some (.bool true)) (ht : eval fns env fuel t = some v) :
-    eval fns env (fuel + 1) (.ifThenElse cond t el) = some v := by
-  simp only [eval, hc, ht]
-theorem eval_ite_false (fns : FnTable) (env : Env) (fuel : Nat) (cond t el : PExpr) (v : PVal)
-    (hc : eval fns env (fuel + 1) cond = some (.bool false)) (he : eval fns env fuel el = some v) :
-    eval fns env (fuel + 1) (.ifThenElse cond t el) = some v := by
-  simp only [eval, hc, he]
+-- `eval_ite_true`, `eval_ite_false` relocated to `Concrete.ProofKit.Eval`.
 
 set_option maxRecDepth 8000 in
 set_option maxHeartbeats 4000000 in
