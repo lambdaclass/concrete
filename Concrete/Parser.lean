@@ -897,14 +897,15 @@ partial def parseStmt : ParseM Stmt := do
     -- capture the guard + flattened scalar assigns (body ++ for-step) for VC generation
     let scalarAssigns := fun (ss : List Stmt) =>
       ss.filterMap fun s => match s with | .assign _ n v => some (n, v) | _ => none
-    let (guardE, bodyAssigns) := match loopStmt with
-      | .while_ _ c body _ => (some c, scalarAssigns body)
-      | .forLoop _ _ c step body _ =>
+    let (guardE, bodyAssigns, entry) := match loopStmt with
+      | .while_ _ c body _ => (some c, scalarAssigns body, ([] : List (String × Expr)))
+      | .forLoop _ init c step body _ =>
         let stepA := match step with | some (.assign _ n v) => [(n, v)] | _ => []
-        (some c, scalarAssigns body ++ stepA)
-      | _ => (none, [])
+        let initA := match init with | some (.letDecl _ n _ _ v) => [(n, v)] | some (.assign _ n v) => [(n, v)] | _ => []
+        (some c, scalarAssigns body ++ stepA, initA)
+      | _ => (none, [], [])
     modify fun st => { st with loopContracts := st.loopContracts ++
-      [{ line := loopSp.line, invariants := invs, variant := varE, guard := guardE, body := bodyAssigns }] }
+      [{ line := loopSp.line, invariants := invs, variant := varE, guard := guardE, body := bodyAssigns, entrySubst := entry }] }
     return loopStmt
   | .label name =>
     advance

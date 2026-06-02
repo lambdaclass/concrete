@@ -249,6 +249,7 @@ structure LoopContract where
   variant    : Option Expr
   guard      : Option Expr := none           -- the loop condition (for VC generation)
   body       : List (String × Expr) := []    -- flattened scalar assigns (body ++ for-step), for VC generation
+  entrySubst : List (String × Expr) := []    -- loop-entry initializers (e.g. the for-init `i := 0`), for invariant_init
 
 structure FnDef where
   name : String

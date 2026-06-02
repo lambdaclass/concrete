@@ -795,10 +795,45 @@ def genPreservationVC (lc : LoopContract) : Option String := do
     s!"{pad}{guardStr} →      -- guard (assumed)",
     s!"{pad}{conj inv'Strs}      -- invariant' after body [ {bodyDesc} ]" ]
 
+/-- invariant_init VC: the invariant holds in the loop-entry state (the for-init
+    and preceding let-constants substituted). -/
+def genInitVC (lc : LoopContract) (extraLets : List (String × Expr)) : Option String := do
+  if lc.invariants.isEmpty then failure
+  let inits := lc.invariants.map (substContract (lc.entrySubst ++ extraLets))
+  let vars := (inits.flatMap collectIdents).eraseDups
+  let strs ← inits.mapM toLeanProp
+  let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
+  some s!"{binder}{" ∧ ".intercalate strs}"
+
+/-- variant_nonnegative VC: invariant ∧ guard → 0 ≤ variant. -/
+def genVariantNonneg (lc : LoopContract) : Option String := do
+  let v ← lc.variant
+  let g ← lc.guard
+  if lc.invariants.isEmpty then failure
+  let vars := (lc.invariants.flatMap collectIdents ++ collectIdents g ++ collectIdents v).eraseDups
+  let invs ← lc.invariants.mapM toLeanProp
+  let gs ← toLeanProp g
+  let vs ← toLeanProp v
+  some s!"∀ ({" ".intercalate vars} : Int), {" ∧ ".intercalate invs} → {gs} → 0 ≤ {vs}"
+
+/-- variant_decreases VC: invariant ∧ guard → variant[body] < variant. -/
+def genVariantDecreases (lc : LoopContract) : Option String := do
+  let v ← lc.variant
+  let g ← lc.guard
+  if lc.invariants.isEmpty then failure
+  let v' := substContract lc.body v
+  let vars := (lc.invariants.flatMap collectIdents ++ collectIdents g ++ collectIdents v).eraseDups
+  let invs ← lc.invariants.mapM toLeanProp
+  let gs ← toLeanProp g
+  let vs ← toLeanProp v
+  let vs' ← toLeanProp v'
+  some s!"∀ ({" ".intercalate vars} : Int), {" ∧ ".intercalate invs} → {gs} → {vs'} < {vs}"
+
 /-- The loop-contract section: for each `#[invariant]`/`#[variant]`-annotated
-    loop, enumerate the verification obligations it induces. The
-    invariant-preservation obligation now carries a compiler-generated VC shape;
-    discharge is hand-linked via a `coverage: invariant` registry entry. -/
+    loop, enumerate the verification obligations it induces. Every obligation now
+    carries a compiler-generated VC shape; the preservation obligation's
+    discharge is hand-linked via a `coverage: invariant` registry entry, the
+    rest are `planned`. -/
 def loopContractSection (modules : List Module) (registry : ProofRegistry) : String := Id.run do
   let withLoops := (modules.flatMap allFunctions).filter (fun (_, f) => !f.loopContracts.isEmpty)
   if withLoops.isEmpty then return ""
@@ -809,6 +844,7 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry) : Str
       match registry.find? (fun e => e.function == pfx ++ f.name) with
       | some e => if e.coverage == "invariant" && !e.proof.isEmpty then some e.proof else none
       | none => none
+    let extraLets := letConstMap f.body
     for lc in f.loopContracts do
       out := out ++ s!"\n\n{pfx}{f.name}  (loop @ line {lc.line})"
       for inv in lc.invariants do
@@ -817,20 +853,20 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry) : Str
       | some v => out := out ++ s!"\n  variant   {Concrete.fmtExpr v}"
       | none => pure ()
       out := out ++ "\n  obligations:"
-      let planned := "planned (VC generation not yet implemented)"
-      out := out ++ s!"\n    O1 invariant_init          status:  {planned}"
-      -- O2: the compiler-generated preservation VC shape, discharge hand-linked
-      let vcLine := match genPreservationVC lc with
-        | some vc => s!"\n       generated VC:\n         {vc}"
-        | none => ""
+      let planned := "planned (no discharge backend linked yet)"
+      let vc := fun (g : Option String) => match g with | some s => s!"\n       generated VC:  {s}" | none => ""
+      -- O1 invariant_init — generated shape, discharge planned
+      out := out ++ s!"\n    O1 invariant_init          status:  {planned}{vc (genInitVC lc extraLets)}"
+      -- O2 invariant_preservation — generated shape + hand-linked discharge
       match preserveProof with
-      | some thm => out := out ++ s!"\n    O2 invariant_preservation  status:  proved_by_lean\n                                theorem: {thm}{vcLine}"
-      | none     => out := out ++ s!"\n    O2 invariant_preservation  status:  {planned}{vcLine}"
+      | some thm => out := out ++ s!"\n    O2 invariant_preservation  status:  proved_by_lean\n                                theorem: {thm}{vc (genPreservationVC lc)}"
+      | none     => out := out ++ s!"\n    O2 invariant_preservation  status:  {planned}{vc (genPreservationVC lc)}"
+      -- O3 exit_link needs a postcondition; generated when the fn has #[ensures]
       out := out ++ s!"\n    O3 loop_exit_post_link     status:  {planned}"
       match lc.variant with
       | some _ =>
-        out := out ++ s!"\n    O4 variant_nonnegative     status:  {planned}"
-        out := out ++ s!"\n    O5 variant_decreases       status:  {planned}"
+        out := out ++ s!"\n    O4 variant_nonnegative     status:  {planned}{vc (genVariantNonneg lc)}"
+        out := out ++ s!"\n    O5 variant_decreases       status:  {planned}{vc (genVariantDecreases lc)}"
       | none => pure ()
   return out ++ "\n"
 
