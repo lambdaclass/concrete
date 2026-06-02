@@ -1618,13 +1618,14 @@ partial def parseAttribute : ParseM (String × Option String × Option ReprOpts 
   expect .lbracket
   let key ← expectIdent
   let tk ← peek
-  if tk == .lparen && key == "ensures" then
-    -- #[ensures(EXPR)] — a source-contract postcondition over `result` and params
+  if tk == .lparen && (key == "ensures" || key == "requires") then
+    -- #[ensures(EXPR)] / #[requires(EXPR)] — source-contract postcondition /
+    -- precondition over `result` (ensures only) and the parameters
     advance
     let e ← parseExpr
     expect .rparen
     expect .rbracket
-    return ("ensures", none, none, some e)
+    return (key, none, none, some e)
   else if tk == .assign then
     -- #[key = "value"]
     advance
@@ -1744,6 +1745,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
   let mut pendingRepr : Option ReprOpts := none
   let mut pendingIsTest : Bool := false
   let mut pendingEnsures : List Expr := []
+  let mut pendingRequires : List Expr := []
   let mut tk ← peek
   while tk != stopToken && tk != .eof do
     -- Parse attributes (but don't continue — let the next token be parsed)
@@ -1754,7 +1756,8 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
       if key == "test" then
         pendingIsTest := true
       match ensExpr with
-      | some e => pendingEnsures := pendingEnsures ++ [e]
+      | some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
+                  else pendingEnsures := pendingEnsures ++ [e]
       | none => pure ()
       tk ← peek
     if tk == .import_ then
@@ -1794,7 +1797,8 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
         if key == "test" then
           pendingIsTest := true
         match ensExpr with
-        | some e => pendingEnsures := pendingEnsures ++ [e]
+        | some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
+                    else pendingEnsures := pendingEnsures ++ [e]
         | none => pure ()
       else
         -- Any non-struct declaration: reject dangling #[repr(...)]
@@ -1886,10 +1890,11 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           -- Check if function has a body or is body-less (intrinsic/declaration)
           let f ← parseFnDefOrDecl
           match f with
-          | .inl fnDef => fns := fns ++ [{ fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, ensures := pendingEnsures }]
+          | .inl fnDef => fns := fns ++ [{ fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures }]
           | .inr extDef => externFns := externFns ++ [{ extDef with isPublic := isPub }]
           pendingIsTest := false
           pendingEnsures := []
+          pendingRequires := []
         else if tk == .ident "union" then
           -- Parse union as a struct (all fields share memory)
           advance  -- consume 'union'

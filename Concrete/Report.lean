@@ -580,8 +580,14 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry) :
       let ps := ", ".intercalate (sf.params.map (fun p => s!"{p.name}: {Concrete.fmtTy p.ty}"))
       out := out ++ s!"\nspec fn {pfx}{sf.name}({ps}) -> {Concrete.fmtTy sf.retTy}"
     for f in m.functions do
-      if !f.ensures.isEmpty then
+      if !f.ensures.isEmpty || !f.requires.isEmpty then
         out := out ++ s!"\n\n{pfx}{f.name}"
+        -- preconditions: assumed on entry (no call-site checking in this slice)
+        let mut ri := 1
+        for r in f.requires do
+          out := out ++ s!"\n  R{ri}  requires {Concrete.fmtExpr r}\n     status:  assumed_at_entry (callers not yet checked)"
+          ri := ri + 1
+        -- postconditions: discharged by a registered ensures_proof, or missing
         let mut i := 1
         for e in f.ensures do
           out := out ++ s!"\n  O{i}  ensures {Concrete.fmtExpr e}{discharge (pfx ++ f.name)}"

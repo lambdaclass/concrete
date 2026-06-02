@@ -109,6 +109,13 @@ mod hmac_sha256 {
     }
 
     // ROTR^n(x): circular right rotation by n (0 < n < 32).
+    // Source-contract slice: a #[requires] precondition (the shift bound) plus
+    // the #[ensures] postcondition. The precondition is currently classified
+    // `assumed_at_entry` — call-site checking is a later slice.
+    spec fn rotr_spec(x: u32, n: u32) -> u32;
+
+    #[requires(0 <= n && n < 32)]
+    #[ensures(result == rotr_spec(x, n))]
     fn rotr(x: u32, n: u32) -> u32 {
         return (x >> n) | (x << (32 - n));
     }

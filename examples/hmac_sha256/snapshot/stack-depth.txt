@@ -10,45 +10,45 @@ module hmac_sha256:
   maj
     frame: 20 bytes  depth: 0  stack: 20 bytes  @ examples/hmac_sha256/src/main.con:107
   rotr
-    frame: 16 bytes  depth: 0  stack: 16 bytes  @ examples/hmac_sha256/src/main.con:112
+    frame: 16 bytes  depth: 0  stack: 16 bytes  @ examples/hmac_sha256/src/main.con:119
   big_sigma0
-    frame: 12 bytes  depth: 1  stack: 28 bytes  @ examples/hmac_sha256/src/main.con:117
+    frame: 12 bytes  depth: 1  stack: 28 bytes  @ examples/hmac_sha256/src/main.con:124
   big_sigma1
-    frame: 12 bytes  depth: 1  stack: 28 bytes  @ examples/hmac_sha256/src/main.con:122
+    frame: 12 bytes  depth: 1  stack: 28 bytes  @ examples/hmac_sha256/src/main.con:129
   small_sigma0
-    frame: 12 bytes  depth: 1  stack: 28 bytes  @ examples/hmac_sha256/src/main.con:127
+    frame: 12 bytes  depth: 1  stack: 28 bytes  @ examples/hmac_sha256/src/main.con:134
   small_sigma1
-    frame: 12 bytes  depth: 1  stack: 28 bytes  @ examples/hmac_sha256/src/main.con:132
+    frame: 12 bytes  depth: 1  stack: 28 bytes  @ examples/hmac_sha256/src/main.con:139
   ct_compare_32
-    frame: 77 bytes  depth: 0  stack: 77 bytes  @ examples/hmac_sha256/src/main.con:149
+    frame: 77 bytes  depth: 0  stack: 77 bytes  @ examples/hmac_sha256/src/main.con:156
   block_to_words
-    frame: 140 bytes  depth: 0  stack: 140 bytes  @ examples/hmac_sha256/src/main.con:169
+    frame: 140 bytes  depth: 0  stack: 140 bytes  @ examples/hmac_sha256/src/main.con:176
   sha256_schedule
-    frame: 336 bytes  depth: 2  stack: 364 bytes  @ examples/hmac_sha256/src/main.con:183
+    frame: 336 bytes  depth: 2  stack: 364 bytes  @ examples/hmac_sha256/src/main.con:190
   sha256_round
-    frame: 56 bytes  depth: 2  stack: 84 bytes  @ examples/hmac_sha256/src/main.con:201
+    frame: 56 bytes  depth: 2  stack: 84 bytes  @ examples/hmac_sha256/src/main.con:208
   sha256_compress
-    frame: 716 bytes  depth: 3  stack: 1080 bytes  @ examples/hmac_sha256/src/main.con:212
+    frame: 716 bytes  depth: 3  stack: 1080 bytes  @ examples/hmac_sha256/src/main.con:219
   block_to_words_at
-    frame: 464 bytes  depth: 0  stack: 464 bytes  @ examples/hmac_sha256/src/main.con:230
+    frame: 464 bytes  depth: 0  stack: 464 bytes  @ examples/hmac_sha256/src/main.con:237
   sha256_compress_at
-    frame: 976 bytes  depth: 1  stack: 1440 bytes  @ examples/hmac_sha256/src/main.con:243
+    frame: 976 bytes  depth: 1  stack: 1440 bytes  @ examples/hmac_sha256/src/main.con:250
   state_to_bytes
-    frame: 76 bytes  depth: 0  stack: 76 bytes  @ examples/hmac_sha256/src/main.con:256
+    frame: 76 bytes  depth: 0  stack: 76 bytes  @ examples/hmac_sha256/src/main.con:263
   sha256_hash
-    frame: 828 bytes  depth: 2  stack: 2268 bytes  @ examples/hmac_sha256/src/main.con:280
+    frame: 828 bytes  depth: 2  stack: 2268 bytes  @ examples/hmac_sha256/src/main.con:287
   hmac_sha256
-    frame: 1704 bytes  depth: 3  stack: 3972 bytes  @ examples/hmac_sha256/src/main.con:305
+    frame: 1704 bytes  depth: 3  stack: 3972 bytes  @ examples/hmac_sha256/src/main.con:312
   verify_hmac
-    frame: 464 bytes  depth: 4  stack: 4436 bytes  @ examples/hmac_sha256/src/main.con:333
+    frame: 464 bytes  depth: 4  stack: 4436 bytes  @ examples/hmac_sha256/src/main.con:340
   abc_block
-    frame: 72 bytes  depth: 0  stack: 72 bytes  @ examples/hmac_sha256/src/main.con:343
+    frame: 72 bytes  depth: 0  stack: 72 bytes  @ examples/hmac_sha256/src/main.con:350
   rfc4231_tc1_tag
-    frame: 8 bytes  depth: 0  stack: 8 bytes  @ examples/hmac_sha256/src/main.con:355
+    frame: 8 bytes  depth: 0  stack: 8 bytes  @ examples/hmac_sha256/src/main.con:362
   rfc4231_tc2_tag
-    frame: 8 bytes  depth: 0  stack: 8 bytes  @ examples/hmac_sha256/src/main.con:361
+    frame: 8 bytes  depth: 0  stack: 8 bytes  @ examples/hmac_sha256/src/main.con:368
   main
-    frame: 1168 bytes  depth: 5  stack: 5604 bytes  @ examples/hmac_sha256/src/main.con:378
+    frame: 1168 bytes  depth: 5  stack: 5604 bytes  @ examples/hmac_sha256/src/main.con:385
 
 Totals: 24 functions, 24 bounded, 0 recursive (unbounded)
 Max stack bound: 5604 bytes (main)

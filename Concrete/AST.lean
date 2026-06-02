@@ -252,6 +252,7 @@ structure FnDef where
   isTrusted : Bool := false        -- trusted fn: allows raw ptr ops without Unsafe
   isEntryPoint : Bool := false     -- tagged by Check when name == mainFnName
   capSet : CapSet := .empty        -- with(File, Network, ...)
+  requires : List Expr := []       -- #[requires(...)] preconditions (source contracts; erased metadata, no codegen)
   ensures : List Expr := []        -- #[ensures(...)] postconditions (source contracts; erased metadata, no codegen)
   span : Span := default
 
