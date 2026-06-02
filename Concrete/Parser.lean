@@ -29,7 +29,8 @@ structure ParserState where
   tokens : Array Token
   pos : Nat
   pendingGt : Bool := false  -- true when >> was split and one > remains
-  deriving Repr, Inhabited
+  loopContracts : List LoopContract := []  -- accumulator: #[invariant]/#[variant] collected before loops
+  deriving Inhabited
 
 abbrev ParseM := ExceptT Diagnostics (StateM ParserState)
 
@@ -863,6 +864,38 @@ partial def parseStmt : ParseM Stmt := do
   | .if_ => parseIf
   | .while_ => parseWhile none
   | .for_ => parseFor none
+  | .hash =>
+    -- loop contracts: #[invariant(EXPR)] / #[variant(EXPR)] before a while/for.
+    -- Attributes parsed inline (parseAttribute is outside this mutual block).
+    let mut invs : List Expr := []
+    let mut varE : Option Expr := none
+    let mut t ← peek
+    while t == .hash do
+      advance            -- '#'
+      expect .lbracket   -- '['
+      let key ← expectIdent
+      if (← peek) == .lparen then
+        advance          -- '('
+        let e ← parseExpr
+        expect .rparen
+        expect .rbracket
+        if key == "invariant" then invs := invs ++ [e]
+        else if key == "variant" then varE := some e
+      else
+        expect .rbracket  -- bare #[key]: ignored on statements
+      t ← peek
+    let loopSp ← peekSpan
+    let loopStmt ← match (← peek) with
+      | .while_ => parseWhile none
+      | .for_ => parseFor none
+      | .label name => advance; expect .colon
+                       match (← peek) with
+                       | .while_ => parseWhile (some name)
+                       | .for_ => parseFor (some name)
+                       | _ => throwParse "label can only precede while or for loops" (span := some loopSp)
+      | _ => throwParse "#[invariant]/#[variant] can only annotate a while or for loop" (span := some loopSp)
+    modify fun st => { st with loopContracts := st.loopContracts ++ [{ line := loopSp.line, invariants := invs, variant := varE }] }
+    return loopStmt
   | .label name =>
     advance
     expect .colon
@@ -1474,8 +1507,10 @@ partial def parseFnDef : ParseM FnDef := do
     parseType
   else
     pure .unit
+  let before := (← get).loopContracts.length
   let body ← parseBlock
-  return { name, typeParams, typeBounds, capParams, params, retTy, body, capSet, span := sp }
+  let loopContracts := ((← get).loopContracts).drop before
+  return { name, typeParams, typeBounds, capParams, params, retTy, body, capSet, loopContracts, span := sp }
 
 /-- Parse a fn that may have a body ({...}) or be a declaration (;). -/
 partial def parseFnDefOrDecl : ParseM (FnDef ⊕ ExternFnDecl) := do
@@ -1499,8 +1534,10 @@ partial def parseFnDefOrDecl : ParseM (FnDef ⊕ ExternFnDecl) := do
     advance  -- consume ';'
     return .inr { name, params, retTy }
   else
+    let before := (← get).loopContracts.length
     let body ← parseBlock
-    return .inl { name, typeParams, typeBounds, capParams, params, retTy, body, capSet, span := sp }
+    let loopContracts := ((← get).loopContracts).drop before
+    return .inl { name, typeParams, typeBounds, capParams, params, retTy, body, capSet, loopContracts, span := sp }
 
 partial def parseStructDef : ParseM StructDef := do
   expect .struct_
@@ -1618,9 +1655,9 @@ partial def parseAttribute : ParseM (String × Option String × Option ReprOpts 
   expect .lbracket
   let key ← expectIdent
   let tk ← peek
-  if tk == .lparen && (key == "ensures" || key == "requires") then
-    -- #[ensures(EXPR)] / #[requires(EXPR)] — source-contract postcondition /
-    -- precondition over `result` (ensures only) and the parameters
+  if tk == .lparen && (key == "ensures" || key == "requires" || key == "invariant" || key == "variant") then
+    -- source-contract expressions: ensures/requires (function level) and
+    -- invariant/variant (loop level). Each carries one expression.
     advance
     let e ← parseExpr
     expect .rparen

@@ -239,6 +239,15 @@ structure NewtypeDef where
   span : Span := default
   deriving Repr
 
+/-- Loop contract attached to a `while`/`for` inside a function body:
+    `#[invariant(...)]` clauses and an optional `#[variant(...)]` (termination
+    measure). Stored at the function level, keyed by the loop's source line.
+    Erased metadata — no codegen. -/
+structure LoopContract where
+  line       : Nat
+  invariants : List Expr
+  variant    : Option Expr
+
 structure FnDef where
   name : String
   typeParams : List String := []
@@ -254,6 +263,7 @@ structure FnDef where
   capSet : CapSet := .empty        -- with(File, Network, ...)
   requires : List Expr := []       -- #[requires(...)] preconditions (source contracts; erased metadata, no codegen)
   ensures : List Expr := []        -- #[ensures(...)] postconditions (source contracts; erased metadata, no codegen)
+  loopContracts : List LoopContract := []  -- #[invariant]/#[variant] on loops in the body (erased metadata)
   span : Span := default
 
 structure ConstDef where

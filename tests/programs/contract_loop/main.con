@@ -1,0 +1,21 @@
+// Fixture for loop contracts (#[invariant] / #[variant]).
+// `concrete tests/programs/contract_loop/main.con --report contracts`
+// lists the verification obligations each annotated loop induces. This slice
+// only NAMES them (status: planned); VC generation/discharge comes later.
+mod demo {
+    spec fn diff_prefix(a: u32, b: u32, i: u32) -> u32;
+
+    fn count_diff(a: u32, b: u32) -> u32 {
+        let mut i: u32 = 0;
+        let mut diff: u32 = 0;
+        #[invariant(0 <= i && i <= 16)]
+        #[invariant(diff == diff_prefix(a, b, i))]
+        #[variant(16 - i)]
+        while i < 16 {
+            i = i + 1;
+        }
+        return diff;
+    }
+}
+
+pub fn main() with(Std) -> Int { return 0; }
