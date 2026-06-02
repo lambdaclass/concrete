@@ -2579,4 +2579,33 @@ theorem hmac_sha256_refines_spec (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat
     · rw [show fuel + 348 + k_len + m_len = (fuel + 344 + m_len) + 2 + k_len + 1 + 1 by omega]
       exact elseBranch_eval kFn mFn k_len m_len (by omega) hml _ (fuel + 344 + m_len) (by omega) hkp0 hkv' hklv' hmv' hmlen'
 
+-- ==================================================================
+-- First loop-invariant VC (source contracts): the
+-- `invariant_preservation` obligation for `loop_invariant.count_up`'s
+-- counted loop, proved end to end and hand-linked in the registry.
+-- The loop body (exactly the extracted `count_up` while-assigns):
+--   acc := acc + i ; i := i + 1     (guard i < 8)
+-- Invariant: 0 <= i && i <= 8.
+-- ==================================================================
+
+/-- The extracted loop body of `loop_invariant.count_up`. -/
+def count_upBody : List (String × PExpr) :=
+  [ ("acc", .binOp .add (.var "acc") (.var "i"))
+  , ("i",   .binOp .add (.var "i") (.lit (.int 1))) ]
+
+/-- **Invariant preservation** for `count_up`'s loop (invariant `0 <= i && i <= 8`):
+    if the invariant holds and the guard `i < 8` is true, executing the loop body
+    once re-establishes the invariant. This is exactly the per-iteration premise
+    that `eval_while_count` (ProofKit's loop-induction keystone) consumes — the
+    obligation discharged here is the building block that runs the whole loop. -/
+theorem count_up_loop_preserves (fns : FnTable) (env : Env) (k acc0 : Int) (fuel : Nat)
+    (hacc : env "acc" = some (.int acc0)) (hi : env "i" = some (.int k))
+    (hlo : 0 ≤ k) (_hhi : k ≤ 8) (hguard : k < 8) :
+    eval.evalAssigns fns env (fuel + 2) count_upBody
+        = some ((env.bind "acc" (.int (acc0 + k))).bind "i" (.int (k + 1)))
+      ∧ (0 ≤ k + 1 ∧ k + 1 ≤ 8) := by
+  refine ⟨?_, by omega, by omega⟩
+  simp only [count_upBody, eval.evalAssigns, eval, evalBinOp, hacc, hi, Env.bind,
+    beq_self_eq_true, if_true, beq_iff_eq, String.reduceEq, reduceCtorEq, if_false]
+
 end Concrete.Proof

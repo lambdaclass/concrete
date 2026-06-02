@@ -1,0 +1,15 @@
+mod loop_invariant {
+    // A tiny counted loop for the first real loop-invariant VC.
+    // Invariant: the counter stays in range. Variant: 8 - i decreases.
+    fn count_up() -> i32 {
+        let mut acc: i32 = 0;
+        #[invariant(0 <= i && i <= 8)]
+        #[variant(8 - i)]
+        for (let mut i: i32 = 0; i < 8; i = i + 1) {
+            acc = acc + i;
+        }
+        return acc;
+    }
+}
+
+pub fn main() with(Std) -> Int { return 0; }

@@ -744,11 +744,16 @@ def renderCallSites (obs : List CallObligation) (provedByBV : List Nat) : String
 /-- The loop-contract section: for each `#[invariant]`/`#[variant]`-annotated
     loop, enumerate the verification obligations it induces. This slice only
     *names* them (status `planned`) — VC generation and discharge come later. -/
-def loopContractSection (modules : List Module) : String := Id.run do
+def loopContractSection (modules : List Module) (registry : ProofRegistry) : String := Id.run do
   let withLoops := (modules.flatMap allFunctions).filter (fun (_, f) => !f.loopContracts.isEmpty)
   if withLoops.isEmpty then return ""
   let mut out := "\n\n=== Loop contracts ==="
   for (pfx, f) in withLoops do
+    -- a registered `coverage: invariant` proof discharges invariant_preservation
+    let preserveProof : Option String :=
+      match registry.find? (fun e => e.function == pfx ++ f.name) with
+      | some e => if e.coverage == "invariant" && !e.proof.isEmpty then some e.proof else none
+      | none => none
     for lc in f.loopContracts do
       out := out ++ s!"\n\n{pfx}{f.name}  (loop @ line {lc.line})"
       for inv in lc.invariants do
@@ -757,13 +762,16 @@ def loopContractSection (modules : List Module) : String := Id.run do
       | some v => out := out ++ s!"\n  variant   {Concrete.fmtExpr v}"
       | none => pure ()
       out := out ++ "\n  obligations:"
-      out := out ++ "\n    invariant_init          status:  planned (VC generation not yet implemented)"
-      out := out ++ "\n    invariant_preservation  status:  planned"
-      out := out ++ "\n    loop_exit_post_link     status:  planned"
+      let planned := "planned (VC generation not yet implemented)"
+      out := out ++ s!"\n    O1 invariant_init          status:  {planned}"
+      match preserveProof with
+      | some thm => out := out ++ s!"\n    O2 invariant_preservation  status:  proved_by_lean\n                                theorem: {thm}"
+      | none     => out := out ++ s!"\n    O2 invariant_preservation  status:  {planned}"
+      out := out ++ s!"\n    O3 loop_exit_post_link     status:  {planned}"
       match lc.variant with
       | some _ =>
-        out := out ++ "\n    variant_nonnegative     status:  planned"
-        out := out ++ "\n    variant_decreases       status:  planned"
+        out := out ++ s!"\n    O4 variant_nonnegative     status:  {planned}"
+        out := out ++ s!"\n    O5 variant_decreases       status:  {planned}"
       | none => pure ()
   return out ++ "\n"
 
@@ -800,7 +808,7 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry) :
     return out
   let body := modules.foldl (fun acc m => go m acc) ""
   let body := if body.isEmpty then "\n(no spec fns or #[ensures] contracts found)" else body
-  return s!"=== Source Contracts ==={body}\n{loopContractSection modules}"
+  return s!"=== Source Contracts ==={body}\n{loopContractSection modules registry}"
 
 /-- Whether any module (or submodule) carries a source contract — a `spec fn`
     or an `#[ensures(...)]`. Used to decide whether `audit` appends the
