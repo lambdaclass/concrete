@@ -1,164 +1,178 @@
-# hmac_sha256 — HMAC-SHA256, evidence-carrying
+# hmac_sha256
 
-The fifth flagship and the first **cryptographic-primitive** flagship:
-a complete HMAC-SHA256 (RFC 2104 over SHA-256, FIPS 180-4) written in
-ordinary bounded systems-style Concrete — fixed arrays, `u32` wrapping
-arithmetic, bit operations, bounded loops, no allocation, no FFI, no
-ambient effects — that **carries its own machine-checked evidence**.
+`hmac_sha256` is the fifth graduated Concrete flagship. It is a bounded
+HMAC-SHA256 implementation whose proof is tied to the source body that the
+compiler extracts.
 
-The point is not "we computed HMAC." It is that the source code, its
-authority (capabilities), its assumptions, its tests, and its Lean
-proofs move together as one audited artifact, and the compiler reports
-exactly which parts are *proved*, *enforced*, *assumed*, and *tested*.
+The example is intentionally narrow:
 
-## What it is
+- fixed-size arrays;
+- `u32` wrapping arithmetic, shifts, and bit operations;
+- bounded loops;
+- no allocation;
+- no FFI;
+- no ambient authority in the proof-eligible core.
 
-- A real RFC primitive: SHA-256 compression + multi-block hashing with
-  FIPS padding, and the full HMAC construction (key normalization,
-  ipad/opad, inner+outer hash).
-- **Runtime-verified** against the published vectors, in BOTH the
-  compiled binary and the tree-walking interpreter:
-  - `SHA-256("abc")` == FIPS 180-4 Appendix B.1
-  - `HMAC-SHA256(0x0b×20, "Hi There")` == RFC 4231 Test Case 1
-  - `HMAC-SHA256("Jefe", "what do ya want for nothing?")` == RFC 4231 TC2
-- **ProvableV1 `Status: full`**: every proof-eligible function fits the
-  provable subset; only the entry point `main` is excluded (it holds the
-  `Console` capability, by profile design).
+The entry point `main` uses `Console` to print test results and is excluded from
+the proof-eligible core by profile.
 
-## What it is NOT
+## What is proved
 
-- **Not a vetted crypto library. Do not deploy it.** Use libsodium,
-  BoringSSL, or a maintained Rust crate for production authentication.
-- **Not constant-time at the machine level** (see Layer 4 below).
-- **Not a forge-resistance proof**: HMAC's PRF security is a
-  cryptographic assumption about SHA-256, not something Concrete proves
-  (Layer 3). We prove *functional correctness against the spec*, not
-  *security against an adversary*.
-- **Proved end-to-end (functional correctness, bounded inputs).** The
-  entire SHA-256/HMAC composition chain carries kernel theorems tied to
-  the extracted source through the spec-drift gate — 11 registered
-  proofs, `check-proofs` = 11 verified, 0 failed. The proofs hold for
-  inputs within the documented bounds (`k_len ≤ 128`, `m_len ≤ 256`,
-  hashed `len ≤ 375`); they say nothing about machine-level timing or
-  PRF security (Layers 3–4). See "Proof status" below.
+The registered proof chain shows:
 
-## The four-layer trust model
+```text
+Concrete source
+  -> exact extracted ProofCore body
+  -> independent Lean SHA-256/HMAC spec
+```
 
-This is the load-bearing honesty of the example. See `assumptions.toml`
-for the machine-checked versions.
+For all inputs within the documented bounds, the extracted Concrete
+`hmac_sha256` body evaluates to `Sha256Spec.hmac`.
 
-1. **Functional correctness (proved).** Lean theorems, kernel-checked,
-   tied to the *extracted* source (not a hand-written parallel model)
-   through the spec-drift gate. The whole chain is proved — the
-   composition theorem `hmac_sha256_refines_spec` shows the extracted
-   body computes exactly `Sha256Spec.hmac` for all inputs in the
-   documented bounds; the RFC/FIPS vectors and the oracle differential
-   cross-check the BitVec reference spec.
-2. **Source-level structural discipline (statically enforced).** No
-   allocation, no FFI, no capabilities in the core, compile-time-bounded
-   loops, branch-free Boolean round functions, constant-time tag compare
-   (no early exit). Visible in `--report` and gated by CI.
-3. **HMAC / SHA-256 cryptographic security (assumed from RFC).** Out of
-   scope by construction; named, not closed.
-4. **Machine-level constant-time + side channels (assumed, NOT proved).**
-   LLVM and the target CPU may leak via branches, cache, or speculation.
-   The deployer must validate this independently.
+Current bounds:
 
-## Proof status
+- `k_len <= 128`
+- `m_len <= 256`
+- internal `sha256_hash` messages satisfy `len <= 375`
 
-`concrete examples/hmac_sha256/src/main.con --report check-proofs`
+This is a functional-correctness proof, not a cryptographic-security proof and
+not a machine-level constant-time proof.
 
-11 registered proofs, all kernel-verified (`check-proofs` = 11 verified,
-0 failed; spec-drift gate = 0 drift, 0 stale):
+## Registered proofs
+
+Run:
+
+```sh
+.lake/build/bin/concrete examples/hmac_sha256/src/main.con --report check-proofs
+```
+
+Expected status:
+
+```text
+11 verified, 0 failed
+```
+
+Registered proofs:
 
 | Function | Coverage | Theorem |
+|---|---:|---|
+| `sha256_init` | point | `sha256_init_correct` |
+| `ch` | point | `ch_selects_high` |
+| `block_to_words` | full_contract | `block_to_words_refines_spec` |
+| `block_to_words_at` | full_contract | `block_to_words_at_refines_spec` |
+| `sha256_schedule` | full_contract | `sha256_schedule_refines_spec` |
+| `sha256_round` | full_contract | `round_refines_list` |
+| `sha256_compress` | full_contract | `sha256_compress_refines_spec` |
+| `sha256_compress_at` | full_contract | `sha256_compress_at_refines_spec` |
+| `state_to_bytes` | full_contract | `state_to_bytes_refines_spec` |
+| `sha256_hash` | full_contract | `sha256_hash_refines_spec` |
+| `hmac_sha256` | full_contract | `hmac_sha256_refines_spec` |
+
+The `full_contract` entries are refinement theorems against the independent
+`Sha256Spec` model. They are not point checks over the RFC vectors.
+
+## Source tie
+
+The proof is registered against the exact extracted source bodies in
+`Concrete.Proof.specs`. The proof registry stores source fingerprints for each
+function in the chain.
+
+That means a source edit is visible. As a regression check, changing the HMAC
+ipad constant made proof status drop from:
+
+```text
+11 proved, 0 stale
+```
+
+to:
+
+```text
+10 proved, 1 stale
+```
+
+This is the main evidence claim of the example: the proof is about the extracted
+program body, and drift breaks the claim.
+
+## Runtime oracle
+
+The executable is also checked against published and differential tests:
+
+- SHA-256("abc") from FIPS 180-4;
+- HMAC-SHA256 RFC 4231 test cases 1 and 2;
+- 600 generated cases against Python `hmac`/`hashlib`, covering short keys,
+  long keys, empty messages, block boundaries, and multi-block messages.
+
+Run:
+
+```sh
+make test-hmac-oracle
+```
+
+The oracle is regression evidence. It is useful, but it is not counted as a
+proof.
+
+## Trust boundary
+
+| Layer | Status | Meaning |
 |---|---|---|
-| `sha256_init` | point | `sha256_init_correct` — returns the FIPS H(0) constants |
-| `ch` | point | `ch_selects_high` — `Ch(0xFFFFFFFF, y, z) = y`, over the forced u32 `bitand`/`bitxor` |
-| `block_to_words` | full_contract | `block_to_words_refines_spec` — big-endian word packing |
-| `block_to_words_at` | full_contract | `block_to_words_at_refines_spec` — offset variant |
-| `sha256_schedule` | full_contract | `sha256_schedule_refines_spec` — 64-word message schedule |
-| `sha256_round` | full_contract | `round_refines_list` — one compression round |
-| `sha256_compress` | full_contract | `sha256_compress_refines_spec` — 64-round block compression |
-| `sha256_compress_at` | full_contract | `sha256_compress_at_refines_spec` — offset block compression |
-| `state_to_bytes` | full_contract | `state_to_bytes_refines_spec` — digest serialization |
-| `sha256_hash` | full_contract | `sha256_hash_refines_spec` — multi-block padded hash |
-| `hmac_sha256` | full_contract | `hmac_sha256_refines_spec` — full HMAC (ipad/opad + key-prep branch) |
-| `main` | ineligible | by design (holds `Console`) |
+| Functional correctness | proved | Lean kernel checks the extraction-to-spec theorem chain. |
+| Source discipline | enforced | No allocation, no FFI, bounded loops, and capability profile checks are audited. |
+| HMAC/SHA-256 security | assumed | PRF/MAC security is a cryptographic assumption about the construction. |
+| Machine-level timing | trusted/assumed | LLVM and the target CPU are not proved constant-time. |
 
-Each `full_contract` theorem proves the extracted source body equals an
-independent BitVec spec (`Sha256Spec.hash`/`compress`/`schedule`/…, and
-`Sha256Spec.hmac` at the top) for all inputs in the documented bounds,
-by `eval_while_count` loop induction + `bv_decide` (not 64× unfolding).
-All 11 are registered with the spec equal to the source-extracted PExpr
-(`Concrete.Proof.specs`) and tied through the spec-drift gate: editing a
-source body turns the proof `stale`/drifted in CI (regression-verified —
-perturbing the ipad constant flips proof-status to "10 proved, 1 stale").
+Do not use this as a production cryptographic library. Use a maintained crypto
+library for production authentication.
 
-## How ProvableV1 conformance was earned
+## Proof infrastructure produced
 
-HMAC forced a whole sequence of provable-subset extensions, each a
-separate audited commit (see `docs/PROOF_OBLIGATIONS_REGISTER.md`):
+The HMAC proof was not left as a one-off. Its reusable parts were extracted into
+`Concrete/ProofKit`:
 
-| Register | Construct | Unblocked |
+- evaluator stepping and fuel monotonicity;
+- loop induction patterns;
+- array and frame lemmas;
+- `Int`/`Nat`/`BitVec` bridges;
+- call and function-table helpers;
+- refinement scaffolding.
+
+The guide is in `docs/PROOFKIT_GUIDE.md`.
+
+## ProvableV1 pressure
+
+This example forced the following proof-surface additions:
+
+| Register | Construct | Used by |
 |---|---|---|
-| R-22 | u32 `bitand` | `ch`, `maj` |
-| R-23 | u32 `shr` (logical) | the σ functions |
-| R-24/R-25 | u32 `shl` + `bitor` | `rotr` |
-| R-26 | u32 wrapping `add` | the compression rounds |
-| R-27 | array-element assignment in loop bodies | `block_to_words`, schedule, `state_to_bytes`, `hmac_sha256` |
-| R-28 | i32/u32 `div` | `sha256_hash` (block count) |
+| R-22 | `u32` bitand | `ch`, `maj` |
+| R-23 | `u32` logical right shift | sigma functions |
+| R-24/R-25 | `u32` left shift and bitor | rotation and packing |
+| R-26 | `u32` wrapping add | compression rounds |
+| R-27 | array-element assignment in loop bodies | schedule, packing, serialization, HMAC buffers |
+| R-28 | integer division | padded block count |
 
-The conformance gate walked
-`partial → full (stubs) → partial (real loops) → full (R-27) → partial
-(real SHA loops) → full (R-28)` — tracking each proof obligation
-precisely, the gate behaving as a *progress indicator*, not a green
-badge. `u32` arithmetic wraps identically across three semantics — the
-proof model (BitVec), the interpreter (`maskWidth`), and the compiled
-binary (LLVM) — verified by the oracle differential.
-
-## The headline proof milestone (closed)
-
-Full end-to-end correctness — *for all bounded keys/messages,
-`hmac_sha256` returns the RFC digest* — is **done**. It was a serious
-proof-engineering project: point proofs by pure kernel evaluation do
-**not** scale (a `while_` with `arraySet` updates strains `simp`'s
-recursion limit at two iterations), so the chain is proved by *universal*
-theorems via loop induction (`eval_while_count`) + `bv_decide`,
-bottom-up:
-
-1. universal `ch`/`maj`/`rotr`/σ correctness (BitVec lemmas),
-2. universal `sha256_compress` over one block (64-round induction),
-3. universal `sha256_hash` over bounded messages (multi-block loop
-   induction + data-dependent padding stores),
-4. universal `hmac_sha256` (the `k_len > 64` key-prep branch + ipad/opad).
-
-Each step is registered and tied to the exact extracted source through
-the spec-drift gate — the proof is about the literal extracted body, not
-a hand model — so the thesis holds end to end: *source extracts to this
-ProofCore body, this body refines the spec, and drift breaks the claim.*
-The bounds (`k_len ≤ 128`, `m_len ≤ 256`, `len ≤ 375`) are limits, not
-full generality; the oracle differential (600 cases) covers the tail.
+ProvableV1 conformance is now `Status: full` for the proof-eligible core.
 
 ## Run it
 
 ```sh
 nix develop --command bash -c '
-  .lake/build/bin/concrete examples/hmac_sha256/src/main.con -o /tmp/hmac && /tmp/hmac'
-# -> SHA-256("abc") matches FIPS 180-4 and
-#    HMAC-SHA256 matches RFC 4231 TC1+TC2; all checks passed.
+  .lake/build/bin/concrete examples/hmac_sha256/src/main.con -o /tmp/hmac &&
+  /tmp/hmac'
+```
 
-# Evidence reports:
+Evidence reports:
+
+```sh
 .lake/build/bin/concrete examples/hmac_sha256/src/main.con --report audit
 .lake/build/bin/concrete examples/hmac_sha256/src/main.con --report check-proofs
 .lake/build/bin/concrete examples/hmac_sha256/src/main.con --report proof-status
 ```
 
-## See also
+## Related files
 
-- `AUDIT.md` — the pre-implementation contract and the ten graduation bars.
-- `assumptions.toml` — the machine-checked four-layer trust boundary.
-- `Concrete.toml` `[policy]` — enforceable budgets (no alloc/FFI/trusted,
-  bounded stack), CI-gated.
-- `docs/PROVABLE_V1.md` — the provable subset this candidate expanded.
-- `docs/PROOF_OBLIGATIONS_REGISTER.md` — every extension R-22..R-28.
+- `AUDIT.md` — graduation bars and review notes.
+- `assumptions.toml` — machine-checked assumptions.
+- `Concrete.toml` — policy budgets.
+- `src/proof-registry.json` — registered proof entries and fingerprints.
+- `docs/PROOFKIT_GUIDE.md` — how to reuse the proof infrastructure.
+- `docs/PROVABLE_V1.md` — the supported proof subset.
