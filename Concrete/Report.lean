@@ -559,11 +559,118 @@ private def interfaceModule (name : String) (fs : FileSummary) : String :=
       lines
   s!"{header}\n{"\n".intercalate lines}"
 
-/-- `--report contracts`: list discovered source contracts — `spec fn`
-    declarations (erased pure specs) and `#[ensures(...)]` postconditions,
-    rendered as per-function obligations. The audit report links each
-    obligation to its discharge evidence; this report just surfaces the claims
-    written in source. -/
+-- ---- call-site contract obligations (source-contracts slice) ----
+
+/-- Substitute callee parameter names with the actual argument exprs inside a
+    precondition (used to specialize a `#[requires]` at a call site). -/
+partial def substContract (subst : List (String × Expr)) : Expr → Expr
+  | .ident sp name => match subst.find? (·.1 == name) with
+    | some (_, a) => a
+    | none => .ident sp name
+  | .binOp sp op l r => .binOp sp op (substContract subst l) (substContract subst r)
+  | .unaryOp sp op e => .unaryOp sp op (substContract subst e)
+  | .paren sp e => .paren sp (substContract subst e)
+  | .call sp fn ta args => .call sp fn ta (args.map (substContract subst))
+  | e => e
+
+/-- Constant integer evaluation (literal/arithmetic only; `none` if not constant). -/
+partial def cEvalInt : Expr → Option Int
+  | .intLit _ v => some v
+  | .paren _ e => cEvalInt e
+  | .binOp _ op l r => match cEvalInt l, cEvalInt r with
+    | some a, some b => match op with
+      | .add => some (a + b) | .sub => some (a - b) | .mul => some (a * b)
+      | .div => if b == 0 then none else some (a / b)
+      | .mod => if b == 0 then none else some (a % b)
+      | _ => none
+    | _, _ => none
+  | _ => none
+
+/-- Constant boolean evaluation of a (substituted) precondition. `none` when the
+    expression still mentions non-constant values — i.e. `unproven_at_callsite`. -/
+partial def cEvalBool : Expr → Option Bool
+  | .boolLit _ b => some b
+  | .paren _ e => cEvalBool e
+  | .binOp _ op l r =>
+    match op with
+    | .and_ => match cEvalBool l, cEvalBool r with | some a, some b => some (a && b) | _, _ => none
+    | .or_  => match cEvalBool l, cEvalBool r with | some a, some b => some (a || b) | _, _ => none
+    | _ => match cEvalInt l, cEvalInt r with
+      | some a, some b => match op with
+        | .lt => some (decide (a < b)) | .gt => some (decide (a > b))
+        | .leq => some (decide (a ≤ b)) | .geq => some (decide (a ≥ b))
+        | .eq => some (a == b) | .neq => some (a != b)
+        | _ => none
+      | _, _ => none
+  | _ => none
+
+mutual
+  /-- Collect every `(span, fnName, args)` call in an expression. -/
+  partial def collectCallsE : Expr → List (Span × String × List Expr)
+    | .call sp fn _ args => (sp, fn, args) :: args.flatMap collectCallsE
+    | .binOp _ _ l r => collectCallsE l ++ collectCallsE r
+    | .unaryOp _ _ x | .paren _ x | .borrow _ x | .borrowMut _ x | .deref _ x
+    | .try_ _ x | .cast _ x _ | .fieldAccess _ x _ | .arrowAccess _ x _ => collectCallsE x
+    | .arrayLit _ es => es.flatMap collectCallsE
+    | .arrayIndex _ a i => collectCallsE a ++ collectCallsE i
+    | .methodCall _ o _ _ args => collectCallsE o ++ args.flatMap collectCallsE
+    | .staticMethodCall _ _ _ _ args => args.flatMap collectCallsE
+    | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectCallsE fe)
+    | .allocCall _ x a => collectCallsE x ++ collectCallsE a
+    | .ifExpr _ c t el | .whileExpr _ c t el =>
+        collectCallsE c ++ t.flatMap collectCallsS ++ el.flatMap collectCallsS
+    | .match_ _ s _ => collectCallsE s
+    | _ => []
+  /-- Collect every `(span, fnName, args)` call in a statement. -/
+  partial def collectCallsS : Stmt → List (Span × String × List Expr)
+    | .letDecl _ _ _ _ v | .assign _ _ v | .expr _ v | .defer _ v => collectCallsE v
+    | .return_ _ (some v) => collectCallsE v
+    | .ifElse _ c t el => collectCallsE c ++ t.flatMap collectCallsS ++ (el.getD []).flatMap collectCallsS
+    | .while_ _ c b _ => collectCallsE c ++ b.flatMap collectCallsS
+    | .forLoop _ init c step b _ =>
+        (init.map collectCallsS).getD [] ++ collectCallsE c ++ (step.map collectCallsS).getD [] ++ b.flatMap collectCallsS
+    | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v => collectCallsE o ++ collectCallsE v
+    | .arrayIndexAssign _ a i v => collectCallsE a ++ collectCallsE i ++ collectCallsE v
+    | _ => []
+end
+
+/-- `(prefix, fn)` for every function in a module tree (recursing submodules). -/
+partial def allFunctions (m : Module) : List (String × FnDef) :=
+  let pfx := if m.name.isEmpty then "" else m.name ++ "."
+  m.functions.map (fun f => (pfx, f)) ++ m.submodules.flatMap allFunctions
+
+/-- The call-site obligation section: for each caller, each call to a function
+    with `#[requires]` becomes an obligation (the precondition specialized to the
+    call's arguments), discharged for literal/constant cases. -/
+def callSiteSection (modules : List Module) : String := Id.run do
+  let fns := modules.flatMap allFunctions
+  -- requires-bearing callees, keyed by bare function name
+  let reqMap : List (String × (List Param × List Expr)) :=
+    fns.filterMap (fun (_, f) => if f.requires.isEmpty then none else some (f.name, (f.params, f.requires)))
+  if reqMap.isEmpty then return ""
+  let mut out := "\n\n=== Call-site obligations ==="
+  let mut any := false
+  for (pfx, f) in fns do
+    let calls := f.body.flatMap collectCallsS
+    let mut callerHdr := false
+    for (_, fn, args) in calls do
+      match reqMap.find? (·.1 == fn) with
+      | none => pure ()
+      | some (_, (params, reqs)) =>
+        any := true
+        if !callerHdr then out := out ++ s!"\n\n{pfx}{f.name}"; callerHdr := true
+        let argStr := ", ".intercalate (args.map Concrete.fmtExpr)
+        out := out ++ s!"\n  call {fn}({argStr})"
+        let subst := (params.zip args).map (fun (p, a) => (p.name, a))
+        for r in reqs do
+          let spec := substContract subst r
+          let status := match cEvalBool spec with
+            | some true  => "proved_at_callsite"
+            | some false => "failed_at_callsite"
+            | none       => "unproven_at_callsite (non-constant; needs a discharge backend)"
+          out := out ++ s!"\n    requires {Concrete.fmtExpr spec}\n    status:  {status}"
+  if !any then "" else out ++ "\n"
+
 partial def contractsReport (modules : List Module) (registry : ProofRegistry) : String := Id.run do
   -- Discharge status for an obligation on `qual`: a registry entry whose
   -- `ensures_proof` names the theorem that proves it → proved_by_lean; else missing.
@@ -597,7 +704,7 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry) :
     return out
   let body := modules.foldl (fun acc m => go m acc) ""
   let body := if body.isEmpty then "\n(no spec fns or #[ensures] contracts found)" else body
-  return s!"=== Source Contracts ==={body}\n"
+  return s!"=== Source Contracts ==={body}\n{callSiteSection modules}"
 
 /-- Whether any module (or submodule) carries a source contract — a `spec fn`
     or an `#[ensures(...)]`. Used to decide whether `audit` appends the

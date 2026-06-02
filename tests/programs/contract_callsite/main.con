@@ -1,0 +1,21 @@
+// Negative + positive fixture for call-site contract obligations.
+// `concrete tests/programs/contract_callsite/main.con --report contracts`
+// shows the three discharge states for calls into a #[requires]-bearing fn:
+//   good     -> proved_at_callsite   (rotr(x, 13): 0 <= 13 && 13 < 32 is true)
+//   bad      -> failed_at_callsite   (rotr(x, 40): 40 < 32 is false)
+//   unknown  -> unproven_at_callsite (rotr(x, k): non-constant)
+mod demo {
+    spec fn rotr_spec(x: u32, n: u32) -> u32;
+
+    #[requires(0 <= n && n < 32)]
+    #[ensures(result == rotr_spec(x, n))]
+    fn rotr(x: u32, n: u32) -> u32 {
+        return (x >> n) | (x << (32 - n));
+    }
+
+    fn good(x: u32) -> u32 { return rotr(x, 13); }
+    fn bad(x: u32) -> u32 { return rotr(x, 40); }
+    fn unknown(x: u32, k: u32) -> u32 { return rotr(x, k); }
+}
+
+pub fn main() with(Std) -> Int { return 0; }
