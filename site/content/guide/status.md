@@ -25,7 +25,10 @@ The current center of gravity is **Phase D**:
 - stronger SSA/backend contract
 - reusable pipeline artifacts
 - formalization over validated Core
-- the first real Lean 4 proof workflow for selected Concrete functions
+- source-level contracts (`requires`/`ensures`/`invariant`) and
+  verification-condition generation — the next step now that the Lean proof
+  workflow has shipped (refinement proofs + spec-drift gate, demonstrated end to
+  end on HMAC-SHA256) and its reusable machinery is factored into `ProofKit`
 
 ## Not Done Yet
 
@@ -44,31 +47,37 @@ What exists today:
 
 - compiler implemented in Lean 4
 - validated Core after `CoreCheck` as the proof boundary
-- **kernel-checked Lean 4 proofs on selected functions** across the graduated
-  flagships (plus the in-progress `hmac_sha256`), tied to source by body
-  fingerprints with a spec-drift gate
+- **kernel-checked Lean 4 proofs on selected functions** across the five
+  graduated flagships, tied to source by body fingerprints with a spec-drift
+  gate that revokes a `proved` claim when the body changes
 - a documented, additive provable subset (`ProvableV1`, R-1…R-28) covering
   integer/bool, calls, lets, structs/enums, pattern matching, array
   read/update, bounded loops (incl. array-element writes), casts, and
   width-tagged `mod`/`div`/`bitand`/`bitor`/`bitxor`/`shl`/`shr`/wrapping-`add`
 - a **reusable proof layer** (evaluator fuel monotonicity + bounded counter-loop
-  induction) that makes loop/array proofs systematic, and kernel-checked
-  `bv_decide` automation now backing a committed proof
-- the **first refinement proofs against an independent spec**: a `BitVec`-valued
-  SHA-256 spec, proofs that the extracted Boolean round functions (`ch`, `maj`)
-  compute exactly that spec for all inputs (word-level core discharged by
-  `bv_decide`, kernel-checked), and the **first loop refinement** —
-  `block_to_words_refines_spec` proves the 16-iteration big-endian packing loop
-  refines the spec for all 64 input bytes, via the bounded-counter-loop
-  induction lemma
+  induction) that makes loop/array proofs systematic, with kernel-checked
+  `bv_decide` automation
+- **full refinement of a real cryptographic primitive against an independent
+  spec**: a `BitVec`-valued SHA-256/HMAC spec, and a proof that the **entire**
+  extracted SHA-256/HMAC chain refines it for all inputs in documented bounds.
+  The `hmac_sha256` flagship carries **11 registered theorems**, kernel-checked
+  (`--report check-proofs` = 11 verified, 0 failed); nine are full-contract
+  refinements (block-to-words, schedule, round, compression, state
+  serialization, multi-block padded hash, and the outer HMAC). Editing a source
+  body turns the proof `stale` — regression-verified by perturbing the HMAC
+  ipad constant (11 proved/0 stale → 10 proved/1 stale)
+- a reusable, `fns`-generic **Proof Kit** (`Concrete.ProofKit`) harvested from
+  that work, so later proofs import the machinery instead of copying it; see the
+  proof-kit guide
 
 What does not exist yet (planned, not shipped):
 
 - **source-level contracts** (`requires`/`ensures`/`invariant`/`ghost`) and
   automatic verification-condition generation — see the design in the docs
-- **full refinement of a real primitive**: the Boolean round functions refine
-  their spec today, but the rotations/sigmas, the message schedule, compression,
-  and the full `hash`/`hmac` composition (HMAC bar #2) are not yet proved
+- **unbounded / general refinement**: the HMAC chain is proved within documented
+  input bounds (`k_len ≤ 128`, `m_len ≤ 256`, `len ≤ 375`); removing the bounds
+  needs fuel-parametric induction. The proofs are functional-correctness only —
+  not cryptographic security, and not machine-level constant time
 - whole-compiler formal verification
 
 Those last three are active goals, not shipped claims. The discipline is to

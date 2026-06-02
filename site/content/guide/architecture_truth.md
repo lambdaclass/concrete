@@ -38,7 +38,9 @@ That means the main work is:
 - smarter testing infrastructure built on compiler artifacts and dependency information
 - stronger SSA/backend contracts
 - reusable pipeline artifacts
-- the first real Lean 4 proof workflow for selected Concrete functions
+- source-level contracts and verification-condition generation, building on the
+  now-shipped Lean proof workflow (refinement proofs + spec-drift gate,
+  demonstrated end to end on HMAC-SHA256, with reusable `ProofKit` lemmas)
 
 ## What Is Planned
 
