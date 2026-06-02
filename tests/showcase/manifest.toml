@@ -392,3 +392,140 @@ property, honest backend assumption) is the template for
 future real-crypto candidates (HMAC-SHA256, Ed25519 verify
 subset).
 """
+
+[[flagship]]
+example     = "hmac_sha256"
+path        = "examples/hmac_sha256"
+graduated   = "2026-06-02"
+audit       = "examples/hmac_sha256/AUDIT.md"
+readme      = "examples/hmac_sha256/README.md"
+thesis_role = """
+Fifth flagship and the deepest proof artifact: a full
+HMAC-SHA256 (FIPS 180-4 + RFC 4231) whose ENTIRE
+composition chain is kernel-verified and tied to the
+extracted source through the spec-drift gate.  Eleven
+registered proofs — the two bar-#1 point theorems plus
+nine full-contract refinements covering block_to_words,
+the message schedule, the round function, single- and
+offset-block compression, state serialization, the
+multi-block padded hash, and the outer HMAC ipad/opad
+construction.  The composition theorem
+(hmac_sha256_refines_spec) proves the extracted body
+computes exactly an independent BitVec model
+(Sha256Spec.hmac) for all inputs in the documented bounds.
+This is the first flagship where the proof is about the
+EXACT extracted source body (not a hand model): the
+registered spec equals the source-extracted PExpr, so a
+source edit turns the proof stale.  The loop-induction
+milestone (eval_while_count over 64-round / multi-block
+loops, not 64x unfolding) the earlier flagships pointed at.
+"""
+
+[flagship.bars]
+proved_property        = true   # bar #1 — sha256_init_correct + ch_selects_high (point)
+composition_property   = true   # bar #2 — hmac_sha256_refines_spec (full chain, spec-drift-tied)
+assumption_file        = true   # bar #3
+policy_file            = true   # bar #4 — no_trusted, Alloc forbidden
+oracle_beyond_handwritten = true   # bar #5 — 600 differential cases vs Python hmac
+negative_pair          = true   # bar #6 — alloc-in-core + ambient-key-read
+release_bundle         = true   # bar #7
+honest_readme          = true   # bar #8
+snapshot_baseline      = true   # bar #9 — 16 reports
+on_showcase_manifest   = true   # bar #10 — this entry
+
+[flagship.evidence]
+proof_registry = "examples/hmac_sha256/src/proof-registry.json"
+proofs         = ["Concrete.Proof.sha256_init_correct",
+                  "Concrete.Proof.ch_selects_high",
+                  "Concrete.Proof.block_to_words_refines_spec",
+                  "Concrete.Proof.block_to_words_at_refines_spec",
+                  "Concrete.Proof.sha256_schedule_refines_spec",
+                  "Concrete.Proof.round_refines_list",
+                  "Concrete.Proof.sha256_compress_refines_spec",
+                  "Concrete.Proof.sha256_compress_at_refines_spec",
+                  "Concrete.Proof.state_to_bytes_refines_spec",
+                  "Concrete.Proof.sha256_hash_refines_spec",
+                  "Concrete.Proof.hmac_sha256_refines_spec"]
+# The two bar-#1 theorems are point proofs (sha256_init, ch).  The
+# other nine are full-contract refinements: each proves the extracted
+# source body equals an independent BitVec spec for all inputs in the
+# documented bounds.  All eleven are registered AND spec-drift-tied
+# (Concrete.Proof.specs): the registered spec equals the
+# source-extracted PExpr, enforced by validateRegistry.
+# `--report check-proofs` = 11 verified, 0 failed; 0 spec-drift, 0 stale.
+proof_coverage = { "Concrete.Proof.sha256_init_correct" = "point",
+                   "Concrete.Proof.ch_selects_high" = "point",
+                   "Concrete.Proof.block_to_words_refines_spec" = "full_contract",
+                   "Concrete.Proof.block_to_words_at_refines_spec" = "full_contract",
+                   "Concrete.Proof.sha256_schedule_refines_spec" = "full_contract",
+                   "Concrete.Proof.round_refines_list" = "full_contract",
+                   "Concrete.Proof.sha256_compress_refines_spec" = "full_contract",
+                   "Concrete.Proof.sha256_compress_at_refines_spec" = "full_contract",
+                   "Concrete.Proof.state_to_bytes_refines_spec" = "full_contract",
+                   "Concrete.Proof.sha256_hash_refines_spec" = "full_contract",
+                   "Concrete.Proof.hmac_sha256_refines_spec" = "full_contract" }
+provable_v1_conformance = "full"
+assumptions    = "examples/hmac_sha256/assumptions.toml"
+policy         = "examples/hmac_sha256/Concrete.toml"
+catches        = "examples/hmac_sha256/catches/"
+catches_doc    = "examples/hmac_sha256/CATCHES.md"
+snapshots      = "examples/hmac_sha256/snapshot/"
+oracle         = "examples/hmac_sha256/oracle/"
+
+[flagship.gates]
+policy         = "make test-policy"
+assumptions    = "make test-assumptions"
+catches        = "make test-catches"
+snapshots      = "make test-snapshots"
+oracle         = "make test-hmac-oracle"
+verify_gates   = "make test-verify-gates"
+release_bundle = "make test-release-bundle"
+
+[flagship.limits]
+proofs = """
+Eleven kernel-verified registered proofs covering the full
+chain (see [flagship.evidence].proofs).  The refinement
+theorems hold for inputs within documented bounds: key
+length k_len <= 128, message length m_len <= 256, and the
+hashed buffer len <= 375 (one to six 64-byte blocks) — the
+bound under which the multi-block count nblocks <= 6 and the
+fixed-fuel evaluation closes.  These bounds cover the RFC
+4231 test-vector regimes and the oracle's case space; they
+are LIMITS, not full generality (an unbounded-length proof
+would need a fuel-parametric induction over nblocks).  The
+proofs are over the interpreter's eval semantics of the
+extracted PExpr against an independent BitVec spec
+(Sha256Spec); the BitVec spec itself is the trusted
+reference (cross-checked against the RFC vectors and the
+Python oracle), not separately proved equal to a third
+model.
+"""
+oracle = """
+Python hmac.new(...) differential harness.  200 cases/seed
+x 3 seeds = 600 total, across all length regimes (empty,
+short, block-boundary, long-key > 64 forcing the key-hash
+branch, multi-block message).  Covers the input space the
+bounded refinement theorems are stated over and the long
+tail beyond it.
+"""
+deployment = """
+THE LOAD-BEARING LIMIT.  This is a teaching/showcase
+artifact, NOT a deployment-grade crypto library.  The proofs
+establish functional correctness (output equals the FIPS/RFC
+math) of the extracted source under the interpreter
+semantics; they say NOTHING about machine-level constant
+time, side channels, or the LLVM backend's lowering.  Do not
+use this for real authentication; use a vetted library
+(libsodium, ring, the platform crypto).  assumptions.toml
+records the trusted edges.
+"""
+audience = """
+Fifth graduated flagship; the deepest proof artifact and the
+realization of the loop-induction / composition milestone the
+earlier flagships pointed at.  Targets reviewers evaluating
+whether Concrete's evidence-carrying thesis holds at the
+scale of a real, multi-function crypto primitive: not just
+"a theorem is attached" but "the whole call graph is proved
+and every link is tied to the exact source through the
+spec-drift gate."
+"""

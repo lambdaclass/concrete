@@ -32,19 +32,22 @@ runtime failure, byte/text/path boundaries, and proof class must remain visible
 in source or audit output. Do not hide them behind inference-heavy abstractions,
 implicit conversions, ambient lookup, or broad metaprogramming.
 
-## Phase 0: Finish HMAC Refinement
+## Phase 0: Finish HMAC Refinement — DONE (2026-06-02)
 
-This is the current execution track. Finish the `hmac_sha256` bar #2
-refinement chain before implementing the source-contract language. The
-remaining proof order is:
+`hmac_sha256` graduated as the fifth flagship with bar #2 closed the rigorous
+way: the entire composition chain is kernel-verified AND tied to the extracted
+source through the spec-drift gate. `hmac_sha256_refines_spec` proves the
+extracted body computes exactly `Sha256Spec.hmac` for all inputs in the
+documented bounds; the nine chain refinements (`block_to_words(_at)`,
+`sha256_schedule`, `sha256_round`, `sha256_compress(_at)`, `state_to_bytes`,
+`sha256_hash`, `hmac_sha256`) plus the two bar-#1 point proofs are all
+registered with the spec equal to the source-extracted PExpr
+(`Concrete.Proof.specs`), so a source edit turns the proof stale. The thesis
+realized in full: *source extracts to this ProofCore body, this body refines
+the spec, and drift breaks the claim.* `--report check-proofs` = 11 verified,
+0 failed; spec-drift gate = 0 drift, 0 stale.
 
-1. `sha256_schedule_refines_spec`
-2. `sha256_compress_refines_spec`
-3. `sha256_hash_refines_spec`
-4. `hmac_sha256_refines_spec`
-5. graduate `hmac_sha256`
-
-After that, return to Phase 1 through Phase 4: source contracts, VC generation,
+Next: return to Phase 1 through Phase 4: source contracts, VC generation,
 discharge classification, flagship retrofit, proof authoring UX, and audit
 surfaces. Phase 5 through Phase 7 remain hardening gates; pull their items
 forward when they block the Phase 1-4 work or before release. This keeps
@@ -150,33 +153,38 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
    **no TCB growth**). Already validated against the HMAC helper facts. Its
    results are classified `proved_by_kernel_decision`, a kernel-checked class
    distinct from `proved_by_smt`. See [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).
-6. Add an *external* SMT backend behind an explicit flag or policy gate, reached
+6. Centralize arithmetic bridge lemmas before adding more crypto/protocol VCs:
+   `Int` / `Nat` / `BitVec` round trips, division/modulo, shift index
+   arithmetic, byte/word packing, and symbolic bridge cases like the
+   `sdiv`/`Nat.div` proof from HMAC padding. These are proof-library
+   primitives, not one-off flagship lemmas.
+7. Add an *external* SMT backend behind an explicit flag or policy gate, reached
    for only when `bv_decide` cannot (e.g. nonlinear). Start with one solver
    adapter and a stable SMT-LIB output path before adding more solvers. Its
    results are `solver_trusted` (solver enters the TCB) unless a certificate is
    replayed — never collapsed into a kernel-checked class.
-7. Classify solver results in reports and artifacts:
+8. Classify solver results in reports and artifacts:
    `proved_by_kernel_decision` (kernel-checked), `proved_by_smt` /
    `solver_trusted` (external), `unknown`, `counterexample`, `timeout`,
    `solver_error`.
-8. Surface counterexamples in source terms where possible: function inputs,
+9. Surface counterexamples in source terms where possible: function inputs,
    loop variables, failing index, failing arithmetic side condition, and the
    contract/obligation that failed.
-9. Add CI gates for solver determinism and replay: same VC, same solver
+10. Add CI gates for solver determinism and replay: same VC, same solver
    configuration, same result class, with timeouts treated as non-proofs.
-10. Add Lean replay for the simplest SMT-discharged fragments where practical:
+11. Add Lean replay for the simplest SMT-discharged fragments where practical:
    propositional/linear integer facts, bounds arithmetic, and trivial BitVec
    identities. Results without replay remain explicitly solver-trusted.
-11. Add policy controls: projects can require `proved_by_lean`, allow
+12. Add policy controls: projects can require `proved_by_lean`, allow
     `proved_by_smt`, or permit `solver_trusted` only under named assumptions.
-12. Add SMT negative examples: false postcondition, missing invariant,
+13. Add SMT negative examples: false postcondition, missing invariant,
     overflow counterexample, OOB counterexample, div-zero counterexample,
     solver timeout, and unsupported theory.
-13. Retrofit one flagship with source contracts whose easy VCs discharge
+14. Retrofit one flagship with source contracts whose easy VCs discharge
     automatically, while the meaningful theorem remains Lean-checked.
-14. Update audit/release bundles so VC results appear beside proof registry,
+15. Update audit/release bundles so VC results appear beside proof registry,
     assumptions, runtime obligations, and proof coverage classification.
-15. Add soundness documentation for the SMT path: trusted solver binary,
+16. Add soundness documentation for the SMT path: trusted solver binary,
     encoding assumptions, unsupported theories, replayed fragments, and how a
     solver bug affects each claim class.
 
@@ -188,28 +196,74 @@ of one-off `simp` scripts.
 Done when: new flagship proofs can start from useful generated stubs, standard
 lemmas, and actionable failure diagnostics.
 
-1. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
+1. Package the reusable HMAC proof infrastructure as **Concrete Proof Kit v1**:
+   spec/refinement pattern, loop proof kit, array/state proof kit, BitVec
+   automation kit, function-table/call kit, generated proof stubs,
+   failed-obligation/debug UX, and tutorial proof shapes.
+2. After HMAC is tied to the exact extracted source and graduated, split generic
+   proof infrastructure out of `Concrete/Sha256Refine.lean` into dedicated
+   modules:
+   `Concrete/ProofKit/Eval.lean` for fuel and `while_` lemmas,
+   `Concrete/ProofKit/Array.lean` for lookup/set/length/frame lemmas,
+   `Concrete/ProofKit/BitVec.lean` for `Int`/`Nat`/`BitVec` bridges, packing,
+   and `sdiv` patterns,
+   `Concrete/ProofKit/Loops.lean` for copy/xor/multi-store loop templates,
+   `Concrete/ProofKit/Calls.lean` for FnTable and call-wrapper helpers, and
+   `Concrete/ProofKit/Refinement.lean` for generic `PExpr`-refines-spec
+   theorem patterns. `Concrete/Sha256Refine.lean` should then import the kit
+   and contain only SHA/HMAC-specific proofs and buffer/spec shapes.
+3. Make the spec/refinement pattern public: independent Lean spec module,
+   extracted `PExpr` refinement theorem shape, registry/fingerprint wiring,
+   and examples such as `ch_refines`, `block_to_words_refines_spec`,
+   `sha256_compress_refines_spec`, and `sha256_hash_refines_spec`.
+4. Expose the loop proof kit:
+   `eval_fuel_succ`, `eval_fuel_le`, `eval_while_false`,
+   `eval_while_true`, `eval_while_count`, and templates for counter-loop
+   invariants.
+5. Expose the array/state proof kit:
+   `lookupIndex_set_self`, `lookupIndex_set_ne`, `length_set`,
+   `set_in_counter_map`, the multi-store frame pattern from `state_to_bytes`,
+   and the buffer-update model from the padding proof.
+6. Expose the BitVec automation kit:
+   `bv_decide` examples, `Int`/`Nat`/`BitVec` bridge lemmas, u8/u32 packing
+   helpers, wrapping add/shift/rotate helper facts, and symbolic index bridge
+   examples.
+7. Expose the function-table/call kit:
+   FnTable completeness helpers, call-wrapper refinement pattern, callee
+   refinement dependencies, and dependency-ordered table-entry discipline for
+   composed functions.
+8. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
    OOB stuck behavior.
-2. Build reusable lemmas for loop-carried state and `while_step`.
-3. Build reusable lemmas for BitVec operations used by flagships.
-4. Build reusable lemmas for structs, fields, enum construction, match, Result,
+9. Build reusable lemmas for loop-carried state and `while_step`.
+10. Build reusable lemmas for BitVec operations used by flagships.
+11. Build reusable lemmas for structs, fields, enum construction, match, Result,
    Option, and bounded-buffer invariants.
-5. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
-   fixed buffers, Result/Option, loops, and source contracts.
-6. Add `concrete prove <function>`: generate the proof stub, list the source
+12. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
+    fixed buffers, Result/Option, loops, source contracts, and refinement
+    composition. Stubs should emit spec target, `PExpr` body, FnTable skeleton,
+    expected theorem statement, common imports/tactics, and TODO blocks for
+    loop invariants.
+13. Add generated composition scaffolds: FnTable entries, call lemmas, callee
+    refinement dependencies, and composed theorem skeletons.
+14. Add generated loop-invariant templates for common proof shapes:
+    counter loop over array writes, copy loop, fold loop, multi-store loop,
+    offset loop, and block-processing loop.
+15. Add `concrete prove <function>`: generate the proof stub, list the source
    contracts and VCs, show the registry/spec target, and print the current
    failing obligation with replay commands.
-7. Add proof minimization/debugging UX: show the smallest extracted expression
-   or lemma surface related to a failed proof.
-8. Add proof replay/caching once proof artifacts and fingerprints are stable.
-9. Add simple auto-discharge for structural obligations that do not need human
-   proof search.
-10. Add a small verified/spec-checked standard proof library for common
-   predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
-   constant-time source shape.
-11. Add AI-assisted proof repair only after artifacts, statuses, and replay are
-   stable enough to validate suggestions mechanically.
-12. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
+16. Add proof minimization/debugging UX: show the smallest extracted expression
+    or lemma surface related to a failed proof, including messages like
+    "failed to prove index expression equals spec offset under len <= 375" for
+    symbolic arithmetic glue.
+17. Add proof replay/caching once proof artifacts and fingerprints are stable.
+18. Add simple auto-discharge for structural obligations that do not need human
+    proof search.
+19. Add a small verified/spec-checked standard proof library for common
+    predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
+    constant-time source shape.
+20. Add AI-assisted proof repair only after artifacts, statuses, and replay are
+    stable enough to validate suggestions mechanically.
+21. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
    establish not just what an iteration *changes* but what it *preserves* — the
    frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
    "a proof mentioning only its footprint preserves everything else"). Today
@@ -286,18 +340,24 @@ under a stronger badge.
 2. Add proof dependency tracking: if proof/spec for `f` depends on `g`, drift in
    `g` must affect `f`'s proof/evidence status or surface an explicit
    dependency warning.
-3. Add proof debugging output for failed/stale proofs: extracted spec, current
+3. Add per-obligation proof/evidence status. Function-level status is only a
+   summary; padding, block fold, digest serialization, final composition,
+   contract clauses, runtime obligations, oracle checks, and assumptions each
+   carry their own evidence class.
+4. Keep oracle-tested evidence separate from Lean/spec refinement. Oracles are
+   implementation sanity and regression evidence, not proof completion.
+5. Add proof debugging output for failed/stale proofs: extracted spec, current
    fingerprint, registered fingerprint, expected theorem shape, missing callee
    facts, likely missing lemma class.
-4. Add evidence provenance to proof/evidence facts: source file/span, compiler
+6. Add evidence provenance to proof/evidence facts: source file/span, compiler
    commit, theorem name, spec name, policy file, assumption file, tool version,
    and replay command where available.
-5. Add evidence monotonicity checks: a refactor cannot silently present a weaker
+7. Add evidence monotonicity checks: a refactor cannot silently present a weaker
    claim as if it were still stronger (`proved` cannot degrade to `reported`
    while retaining the same badge/summary).
-6. Add assumption lifecycle checks: every assumption has an owner, scope,
+8. Add assumption lifecycle checks: every assumption has an owner, scope,
    rationale, review date, affected claims, and a diff gate when it widens.
-7. Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern,
+9. Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern,
    backend, runtime, and target assumptions in one machine-readable list.
 
 ## Phase 6: Provable And Predictable Subsets
@@ -526,9 +586,9 @@ named surface or public claim.
    Ed25519 verification subset.
 6. Add only the ProofCore surface that candidate forces: shifts, bitand, u32
    compound loops, rotations, byte-to-word packing, and multi-round invariants.
-7. For `hmac_sha256`, complete the remaining refinement chain in order:
-   `sha256_schedule_refines_spec`, `sha256_compress_refines_spec`,
-   `sha256_hash_refines_spec`, and `hmac_sha256_refines_spec`.
+7. For `hmac_sha256`, complete the final composition theorem:
+   `hmac_sha256_refines_spec`. The SHA-256 hash side is already proved through
+   `sha256_hash_refines_spec`; HMAC should not add new proof infrastructure.
 8. Graduate `hmac_sha256` only after bar #2 is closed: update manifest,
    README/status text, release bundle, proof-status table, changelog, and
    roadmap notes.
@@ -589,6 +649,10 @@ machine-readable.
 9. Decide whether deeper source-semantics proofs require a normalized Core
    layer. Add the layer only if the direct rule proofs show repeated semantic
    duplication across at least two forcing examples.
+10. Automate dependency-ordered spec/table generation. Function specs and
+    PExpr bodies should be collected/generated in dependency order together
+    with FnTable completeness and call dependencies, so proof authors do not
+    hand-relocate definitions above tables like `shaFns`.
 
 ## Phase 11: Backend, Target, And Stdlib Contracts
 

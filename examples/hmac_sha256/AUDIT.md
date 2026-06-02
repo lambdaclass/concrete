@@ -1,18 +1,22 @@
 # hmac_sha256 — Candidate Audit
 
-Status: **8 of 10 bars met** (audit landed 2026-05-30; build-out
-2026-05-31). The primitive is implemented and runtime-verified
-(FIPS 180-4 + RFC 4231, compiled and interpreted), ProvableV1
-conformance is `full`, and two kernel theorems are attached
-(`sha256_init_correct`, `ch_selects_high`). Bars met: #1, #3, #4,
-#5, #6, #7, #8, #9. **Remaining: bar #2** (a Lean-backed
-*composition* / RFC-vector theorem — the loop-induction milestone;
-point proofs by evaluation do not scale past a couple of
-iterations, so this needs `while_step` induction, bottom-up
-ch/maj/σ → compress → hash → hmac) and **bar #10** (showcase
-manifest / graduation, gated on bar #2 reaching 10/10). The oracle
-(bar #5) covers correctness empirically until the composition
-theorem catches up.
+Status: **10 of 10 bars met** (audit landed 2026-05-30; build-out
+2026-05-31; bar #2 / graduation 2026-06-02). The primitive is
+implemented and runtime-verified (FIPS 180-4 + RFC 4231, compiled
+and interpreted), ProvableV1 conformance is `full`, and the entire
+composition chain is kernel-verified and spec-drift-tied to the
+extracted source: `sha256_init_correct` and `ch_selects_high`
+(point), plus full-contract refinement theorems for
+`block_to_words(_at)`, `sha256_schedule`, `sha256_round`,
+`sha256_compress(_at)`, `state_to_bytes`, `sha256_hash`, and
+`hmac_sha256` — **11 registered proofs, all kernel-verified
+(`--report check-proofs` = 11 verified, 0 failed), 0 spec-drift,
+0 stale**. Each refinement proves the extracted source body equals
+an independent BitVec spec (`Sha256Spec.hmac` over `Sha256Spec.hash`
+/`compress`/`schedule`/…) for all inputs in the documented bounds,
+and the spec-drift gate enforces that the registered spec equals the
+source-extracted PExpr (`Concrete.Proof.specs`) — so editing the
+source body turns the proof stale. Bars met: #1–#10.
 
 ## Why this example
 
@@ -309,7 +313,7 @@ unprecedented territory.
 | # | Bar | Status |
 |---:|---|---|
 | 1  | Lean-backed property surfaced as `proved` | **MET** — `sha256_init_correct` (point) and `ch_selects_high` (point, over the forced u32 `bitand`/`bitxor`) are kernel-verified; `--report check-proofs` = 2 verified, 0 failed |
-| 2  | Composition property Lean-backed | **OPEN** — the loop-induction milestone. A composition / RFC-vector theorem requires `while_step` induction over compress/hash (point proofs by evaluation hit `simp`'s recursion limit at ~2 array-update iterations, so they do not scale to 64 rounds). Path: universal ch/maj/rotr/σ → `sha256_compress` over one block → `sha256_hash` → `hmac_sha256`. The oracle (bar #5) covers this empirically until the theorem lands |
+| 2  | Composition property Lean-backed | **MET** — `hmac_sha256_refines_spec` is kernel-verified: evaluating the extracted `hmac_sha256` body computes exactly `Sha256Spec.hmac` (an independent BitVec model) for all keys/messages in the documented bounds. It composes the full bottom-up chain — universal `ch`/`maj`/`rotr`/σ → `sha256_round`/`sha256_schedule` → `sha256_compress(_at)` → `sha256_hash` (multi-block loop + data-dependent padding) → `hmac_sha256` (the `k_len>64` key-prep branch + ipad/opad) — each step proved by `eval_while_count` loop induction (not 64× unfolding) and `bv_decide`. All 9 chain refinements + the 2 bar-#1 point proofs are registered (`coverage: full_contract`) and **tied to the source through the spec-drift gate** (`Concrete.Proof.specs`): the registered spec equals the source-extracted PExpr, so a source edit turns the proof stale (verified by regression). `--report check-proofs` = 11 verified, 0 failed |
 | 3  | Assumption file with schema, CI-enforced | **MET** — `assumptions.toml` with the four `[claims.*]` blocks; `make test-assumptions` green |
 | 4  | Policy file with enforceable budgets, CI-enforced | **MET** — `Concrete.toml [policy]`, 8 fields, `no_trusted=true`, Alloc forbidden; `make test-policy` green |
 | 5  | Oracle beyond hand-written tests | **MET** — Python `hmac.new(...)` differential harness, 200 cases/seed × 3 seeds = 600, all length regimes; `make test-hmac-oracle` green |
@@ -317,7 +321,7 @@ unprecedented territory.
 | 7  | Release evidence bundle capturable | **MET** — `scripts/tests/capture_release_bundle.sh examples/hmac_sha256` captures cleanly |
 | 8  | Honest README | **MET** — `README.md`: what-is / what-is-NOT / four-layer trust / proof-status table / R-22..R-28 journey / deployment disclaimer |
 | 9  | Snapshot/diff baseline | **MET** — 16 reports baselined under `snapshot/`; `make test-snapshots` green |
-| 10 | Listed in `tests/showcase/manifest.toml` with full evidence section | **OPEN** — graduation; gated on bar #2 reaching 10/10. Not added until the composition theorem lands (the showcase gate requires "10 of 10 bars met") |
+| 10 | Listed in `tests/showcase/manifest.toml` with full evidence section | **MET** — graduated 2026-06-02; `[[flagship]]` entry with the full bars/evidence/gates/limits section; `make test-showcase` green |
 
 ## 8. Strategic value beyond graduation
 
