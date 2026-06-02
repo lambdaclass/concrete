@@ -894,7 +894,17 @@ partial def parseStmt : ParseM Stmt := do
                        | .for_ => parseFor (some name)
                        | _ => throwParse "label can only precede while or for loops" (span := some loopSp)
       | _ => throwParse "#[invariant]/#[variant] can only annotate a while or for loop" (span := some loopSp)
-    modify fun st => { st with loopContracts := st.loopContracts ++ [{ line := loopSp.line, invariants := invs, variant := varE }] }
+    -- capture the guard + flattened scalar assigns (body ++ for-step) for VC generation
+    let scalarAssigns := fun (ss : List Stmt) =>
+      ss.filterMap fun s => match s with | .assign _ n v => some (n, v) | _ => none
+    let (guardE, bodyAssigns) := match loopStmt with
+      | .while_ _ c body _ => (some c, scalarAssigns body)
+      | .forLoop _ _ c step body _ =>
+        let stepA := match step with | some (.assign _ n v) => [(n, v)] | _ => []
+        (some c, scalarAssigns body ++ stepA)
+      | _ => (none, [])
+    modify fun st => { st with loopContracts := st.loopContracts ++
+      [{ line := loopSp.line, invariants := invs, variant := varE, guard := guardE, body := bodyAssigns }] }
     return loopStmt
   | .label name =>
     advance

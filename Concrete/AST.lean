@@ -247,6 +247,8 @@ structure LoopContract where
   line       : Nat
   invariants : List Expr
   variant    : Option Expr
+  guard      : Option Expr := none           -- the loop condition (for VC generation)
+  body       : List (String × Expr) := []    -- flattened scalar assigns (body ++ for-step), for VC generation
 
 structure FnDef where
   name : String

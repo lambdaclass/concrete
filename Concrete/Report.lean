@@ -741,9 +741,64 @@ def renderCallSites (obs : List CallObligation) (provedByBV : List Nat) : String
     out := out ++ s!"\n    status:  {status}"
   return out ++ "\n"
 
+/-- Free identifiers in an expression (for quantifying the generated VC). -/
+partial def collectIdents : Expr → List String
+  | .ident _ n => [n]
+  | .paren _ e => collectIdents e
+  | .binOp _ _ l r => collectIdents l ++ collectIdents r
+  | .unaryOp _ _ e => collectIdents e
+  | .call _ _ _ args => args.flatMap collectIdents
+  | _ => []
+
+/-- Lower a contract expression to a Lean `Prop`/`Int` term (`&&`→`∧`, `<=`→`≤`,
+    spec-fn calls as applications). `none` if outside the supported subset. -/
+partial def toLeanProp : Expr → Option String
+  | .intLit _ v => some s!"{v}"
+  | .ident _ n => some n
+  | .paren _ e => toLeanProp e
+  | .call _ fn _ args => do
+    let as ← args.mapM toLeanProp
+    some s!"{fn} {" ".intercalate as}"
+  | .binOp _ op l r => do
+    let L ← toLeanProp l
+    let R ← toLeanProp r
+    match op with
+    | .leq => some s!"{L} ≤ {R}" | .lt => some s!"{L} < {R}"
+    | .geq => some s!"{L} ≥ {R}" | .gt => some s!"{L} > {R}"
+    | .eq => some s!"{L} = {R}" | .neq => some s!"{L} ≠ {R}"
+    | .and_ => some s!"({L} ∧ {R})" | .or_ => some s!"({L} ∨ {R})"
+    | .add => some s!"({L} + {R})" | .sub => some s!"({L} - {R})" | .mul => some s!"({L} * {R})"
+    | _ => none
+  | _ => none
+
+/-- **Generate the invariant-preservation VC** from a loop contract: substitute
+    the body's assignments into the invariant (`invariant'`), and state
+    `∀ vars, invariant → guard → invariant'`. The compiler produces the
+    obligation shape; discharge is hand-linked for now. `none` if the contract
+    is outside the lowerable subset. -/
+def genPreservationVC (lc : LoopContract) : Option String := do
+  let guard ← lc.guard
+  if lc.invariants.isEmpty then failure
+  let invs' := lc.invariants.map (substContract lc.body)
+  let vars := (lc.invariants.flatMap collectIdents ++ collectIdents guard
+                ++ lc.body.flatMap (fun (_, e) => collectIdents e)).eraseDups
+  let invStrs ← lc.invariants.mapM toLeanProp
+  let guardStr ← toLeanProp guard
+  let inv'Strs ← invs'.mapM toLeanProp
+  let conj := fun (ss : List String) => " ∧ ".intercalate ss
+  let binder := if vars.isEmpty then "" else s!"({" ".intercalate vars} : Int), "
+  let bodyDesc := "; ".intercalate (lc.body.map (fun (n, e) => s!"{n} := {Concrete.fmtExpr e}"))
+  let pad := "\n           "
+  some <| String.join [
+    s!"∀ {binder}",
+    s!"{pad}{conj invStrs} →      -- invariant (assumed)",
+    s!"{pad}{guardStr} →      -- guard (assumed)",
+    s!"{pad}{conj inv'Strs}      -- invariant' after body [ {bodyDesc} ]" ]
+
 /-- The loop-contract section: for each `#[invariant]`/`#[variant]`-annotated
-    loop, enumerate the verification obligations it induces. This slice only
-    *names* them (status `planned`) — VC generation and discharge come later. -/
+    loop, enumerate the verification obligations it induces. The
+    invariant-preservation obligation now carries a compiler-generated VC shape;
+    discharge is hand-linked via a `coverage: invariant` registry entry. -/
 def loopContractSection (modules : List Module) (registry : ProofRegistry) : String := Id.run do
   let withLoops := (modules.flatMap allFunctions).filter (fun (_, f) => !f.loopContracts.isEmpty)
   if withLoops.isEmpty then return ""
@@ -764,9 +819,13 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry) : Str
       out := out ++ "\n  obligations:"
       let planned := "planned (VC generation not yet implemented)"
       out := out ++ s!"\n    O1 invariant_init          status:  {planned}"
+      -- O2: the compiler-generated preservation VC shape, discharge hand-linked
+      let vcLine := match genPreservationVC lc with
+        | some vc => s!"\n       generated VC:\n         {vc}"
+        | none => ""
       match preserveProof with
-      | some thm => out := out ++ s!"\n    O2 invariant_preservation  status:  proved_by_lean\n                                theorem: {thm}"
-      | none     => out := out ++ s!"\n    O2 invariant_preservation  status:  {planned}"
+      | some thm => out := out ++ s!"\n    O2 invariant_preservation  status:  proved_by_lean\n                                theorem: {thm}{vcLine}"
+      | none     => out := out ++ s!"\n    O2 invariant_preservation  status:  {planned}{vcLine}"
       out := out ++ s!"\n    O3 loop_exit_post_link     status:  {planned}"
       match lc.variant with
       | some _ =>
