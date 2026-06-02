@@ -42,14 +42,14 @@
       #v(0.5em)
       #text(size: 10pt)[Federico Carrone]
       #v(0.18em)
-      #text(size: 9pt, style: "italic")[Draft, March 2026]
+      #text(size: 9pt, style: "italic")[Draft, June 2026]
       #v(0.55em)
     ]
 
     #pad(x: 1.2em)[
       #text(size: 8.5pt)[
         #text(weight: "bold")[Abstract — ]
-        Concrete is an experimental systems language centered on auditability. Authority is visible in function signatures, ownership and cleanup remain explicit, and pointer-level unsafety is isolated by explicit trusted boundaries. The language targets hosted systems programming without a garbage collector, virtual machine, or large hidden runtime. This paper presents the language model, compiler architecture, execution and standard-library direction, and evidence from real-program pressure testing. The main result is not ecosystem breadth; it is that a small language with visible authority and visible ownership can already carry parsers, interpreters, storage tools, integrity tooling, and networked programs while preserving a simpler audit story than abstraction-heavy alternatives.
+        Concrete is an experimental systems language centered on auditability. Authority is visible in function signatures, ownership and cleanup remain explicit, and pointer-level unsafety is isolated by explicit trusted boundaries. The language targets hosted systems programming without a garbage collector, virtual machine, or large hidden runtime. This paper presents the language model, compiler architecture, execution and standard-library direction, and evidence from real-program pressure testing. The main result is not ecosystem breadth; it is that a small language with visible authority and visible ownership can already carry parsers, interpreters, storage tools, integrity tooling, networked programs, and a source-tied HMAC-SHA256 proof while preserving a simpler audit story than abstraction-heavy alternatives.
       ]
     ]
     #v(0.35em)
@@ -68,6 +68,7 @@ This draft advances five claims:
 - Concrete treats authority, ownership, and trust boundaries as first-class audit surfaces.
 - The compiler architecture already exposes stable artifacts and report modes that preserve those surfaces.
 - Evidence from the Phase H workload corpus is strong enough to validate the direction, even though the ecosystem is still early.
+- The proof/evidence pipeline can carry a real bounded cryptographic primitive: HMAC-SHA256 is proved against an independent Lean spec through exact extracted bodies and a spec-drift gate.
 - The most interesting differentiator is report-oriented semantic inspection, not merely syntax.
 - The remaining work is best understood as deepening a coherent model rather than replacing a failed one.
 
@@ -83,6 +84,7 @@ This draft advances five claims:
     [Visible authority], [Audit questions can be answered from signatures rather than reconstructed from bodies], [Capability-structured examples and reports],
     [Explicit cleanup can scale], [A non-GC language fails if explicitness collapses into constant ceremony], [Phase H parser/interpreter workloads plus scoped `defer`],
     [Reports are a real differentiator], [Semantic review becomes workflow rather than convention], [`--report caps`, `unsafe`, `alloc`, `proof`, `layout`],
+    [Proof evidence can stay source-tied], [A theorem should not silently outlive the function it describes], [HMAC-SHA256 exact-extraction refinement + spec-drift gate],
   ),
   caption: [The paper's core claims and where the supporting evidence comes from.],
 )
@@ -364,6 +366,10 @@ The available evidence suggests that Concrete's overhead is not dominated by its
 
 Concrete's most unusual contribution is not raw speed. It is that capability requirements, trusted boundaries, and proof eligibility can already be surfaced through compiler reports over the ordinary compilation pipeline. This creates a tractable inspection story and suggests a future in which semantic regression checks can be built over artifact-level facts rather than over style rules and convention alone.
 
+== Proof evidence
+
+The deepest current proof artifact is `hmac_sha256`: a 445-line bounded HMAC-SHA256 implementation whose exact extracted ProofCore bodies are registered by fingerprint and proved to refine an independent Lean `Sha256Spec` model. The chain has 11 registered proofs: two point theorems and nine full-contract refinements covering block packing, schedule expansion, compression, offset compression, digest serialization, multi-block hashing, and the final HMAC composition. The proof work also produced a reusable `Concrete.ProofKit` layer for evaluator stepping, loop induction, array/frame reasoning, BitVec bridges, call wrappers, and refinement scaffolding. The claim is functional correctness for bounded inputs, not a verified backend, a security proof for HMAC, or a machine-level timing proof.
+
 = Related Work
 
 Concrete sits near several existing lines of work, but does not match any of them exactly.
@@ -392,7 +398,7 @@ The present system still has clear limitations.
 - the standard library still needs deeper systems-module polish and stronger integration coverage
 - some Phase H follow-through items remain open, including collection maturity and remaining string ergonomics
 - the runtime story is intentionally thin today and not yet mature in the sense of concurrency plurality or stricter bounded-allocation profiles
-- the proof story is real but still narrow relative to the full language
+- the proof story is real, including one bounded HMAC-SHA256 flagship, but still narrow relative to the full language and the unverified backend
 
 These are not small details. They define the difference between a strong experimental compiler and a complete language system.
 

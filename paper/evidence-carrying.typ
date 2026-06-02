@@ -41,7 +41,7 @@
       #v(0.5em)
       #text(size: 10pt)[Federico Carrone]
       #v(0.18em)
-      #text(size: 9pt, style: "italic")[Draft, May 2026]
+      #text(size: 9pt, style: "italic")[Draft, June 2026]
       #v(0.55em)
     ]
     #pad(x: 1.2em)[
@@ -54,7 +54,7 @@
     #pad(x: 1.2em)[
       #text(size: 8.5pt)[
         #text(weight: "bold")[Abstract — ]
-        A proof about source code can go stale in a depressingly ordinary way: the function changes, the model or theorem does not, and the build keeps looking green. Concrete is a small no-GC systems language, implemented in Lean 4, that treats this as a compiler problem rather than a documentation problem. The compiler extracts a proof-eligible fragment of checked Core into Lean objects, records attached theorems in a registry keyed by a body fingerprint, and revokes a `proved` claim when the source no longer matches what was proved. The same build also reports authority, allocation, trusted code, assumptions, and proof coverage. The result is not a verified compiler. It is a compiler that keeps evidence current enough for review. The current implementation has three non-toy graduated examples — a header validator, a bounded-state validator, and a fixed-time tag comparison — plus a partially proved extraction bridge. The backend, full language semantics, machine-level constant time, and SPARK-style VC generation remain outside the present claim.
+        A proof about source code can go stale in a depressingly ordinary way: the function changes, the model or theorem does not, and the build keeps looking green. Concrete is a small no-GC systems language, implemented in Lean 4, that treats this as a compiler problem rather than a documentation problem. The compiler extracts a proof-eligible fragment of checked Core into Lean objects, records attached theorems in a registry keyed by a body fingerprint, and revokes a `proved` claim when the source no longer matches what was proved. The same build also reports authority, allocation, trusted code, assumptions, and proof coverage. The result is not a verified compiler. It is a compiler that keeps evidence current enough for review. The current implementation has five graduated examples; the strongest is a bounded HMAC-SHA256 implementation whose exact extracted body is proved to refine an independent Lean SHA-256/HMAC specification. The backend, full language semantics, machine-level constant time, and SPARK-style VC generation remain outside the present claim.
       ]
     ]
     #v(0.35em)
@@ -104,12 +104,12 @@ The negative space is equally important. Concrete does not yet generate SPARK-st
     inset: 4.2pt,
     stroke: 0.35pt + gray,
     table.header([*Quantity*], [*Current value used in this paper*]),
-    [Graduated showcases], [4 total; 3 non-toy case studies evaluated],
-    [Registered production proofs], [8 across the three non-toy case studies],
-    [Proof-status counts], [`parse_validate` 3/10; `fixed_capacity` 4/20; `constant_time_tag` 1/2],
-    [Oracle coverage], [200 randomized cases/seed; `parse_validate` cross-checked across 600 (seeds 0/42/999)],
+    [Graduated showcases], [5 total, including `hmac_sha256`],
+    [Registered HMAC proofs], [11 total; 9 full-contract refinements plus 2 point theorems],
+    [HMAC artifact size], [445 lines of Concrete; 3,253 lines of SHA/HMAC spec, refinement proof, and reusable ProofKit modules],
+    [Oracle coverage], [`hmac_sha256` cross-checked across 600 Python `hmac`/`hashlib` cases (seeds 0/42/999)],
     [Wrong-code corpus], [22 registered cases retained as regressions],
-    [Spec-drift regression], [Checked-in adversarial fixture downgrades proof status],
+    [Spec-drift regression], [Perturbing the HMAC ipad constant downgrades proof status from 11 proved to 10 proved, 1 stale],
     [Extraction rules discharged], [R-01..R-15 (R-05 subsumed by R-04; R-07 partial), R-18, R-19 extraction/eval; R-20 extraction-only],
   ),
   caption: [Evaluation summary. The counts are small; the point is that each one is tied to a compiler artifact or a checked regression.],
@@ -125,7 +125,7 @@ The larger design rule is #emph[no semantically dark constructs]. "Provable lang
 
 = Keeping the theorem attached
 
-Concrete is not proof-carrying code for binaries. It is #emph[evidence-carrying source code]: the source body, compiler facts, extracted proof object, registry entry, assumptions, and release evidence are kept in one compiler-maintained loop. The running example in this paper is `constant_time_tag.ct_compare`, a fixed-size tag comparison whose source-level constant-time shape is simple enough to inspect but subtle enough to require honest assumptions.
+Concrete is not proof-carrying code for binaries. It is #emph[evidence-carrying source code]: the source body, compiler facts, extracted proof object, registry entry, assumptions, and release evidence are kept in one compiler-maintained loop. The running example in this paper is now `hmac_sha256.hmac_sha256`: a bounded implementation of HMAC-SHA256 whose proof is large enough to be worth mistrusting unless the compiler keeps it tied to the exact extracted source.
 
 #figure(
   block(inset: 6pt, stroke: 0.4pt + luma(180), width: 100%)[
@@ -146,7 +146,7 @@ release bundle downgrades the claim
   caption: [Proof revocation is automatic. Once the source body changes, the compiler will not let a theorem proved against the old body keep applying.],
 )
 
-The same example carries the paper's main evidence classes in one place. The function is pure, so proof extraction is allowed. Its theorem says equal tags return `1`. Its oracle exercises equal and unequal tags. Its `assumptions.toml` records that machine-level constant-time behavior is not proved. A reviewer therefore sees one source function with a theorem, a registry entry, an oracle, an assumption file, and a release-bundle claim that all agree about scope.
+The same example carries the paper's main evidence classes in one place. The proof-eligible core is pure, allocation-free, FFI-free, and capability-free; the entry point that prints results is excluded. The theorem `hmac_sha256_refines_spec` proves that the extracted HMAC body evaluates to `Sha256Spec.hmac` for all keys and messages within the documented bounds (`k_len ≤ 128`, `m_len ≤ 256`; internal hash calls use `len ≤ 375`). The oracle checks the compiled implementation against Python `hmac`/`hashlib`. The assumption file records the cryptographic and machine-timing claims Concrete does not prove. A reviewer therefore sees one source function with a theorem chain, a registry, an oracle, assumptions, and release evidence that agree about scope.
 
 Revocation is not hypothetical. A checked-in regression keeps a function whose body still matches its registered fingerprint but whose registered spec no longer matches the extracted body; the compiler reports it as an error and downgrades the status, rather than trusting the stale theorem (@fig-drift). The same gate fires the moment an edit changes the fingerprint at all.
 
@@ -408,11 +408,11 @@ Concrete's evidence is only useful if its trust boundary is explicit. Every clai
   caption: [Claim classes and the trust boundary. Every claim below carries one of these labels.],
 ) <tab-claims>
 
-What "proved" does #emph[not] mean is worth stating plainly: not that the compiled binary is correct (the proof is over `PExpr` with unbounded integers, not the emitted machine code), not that the checker is sound, and not anything about cross-function composition beyond what a stated theorem captures; eligibility is not proof. The checker is exercised by an adversarial suite (1272 trust-gate checks) and the CI proof gate, but not by a mechanized correctness proof.
+What "proved" does #emph[not] mean is worth stating plainly: not that the compiled binary is correct (the proof is over extracted `PExpr` and BitVec models, not the emitted machine code), not that the checker is sound, and not that cryptographic security or machine-level timing follow from functional correctness. The checker is exercised by an adversarial suite and the CI proof gate, but not by a mechanized correctness proof.
 
 = What has been tried
 
-The project currently has four graduated showcase entries. We omit `crypto_verify` from the evaluation table because it is explicitly a toy authentication scaffold; it is useful as proof-pipeline scaffolding, but not as evidence that Concrete handles real cryptographic code. The three case studies below are the non-toy graduated entries — every audit bar met, every drift gate green, listed in the showcase manifest.
+The project currently has five graduated showcase entries. We omit `crypto_verify` from the evaluation table because it is explicitly a toy authentication scaffold; it is useful as proof-pipeline scaffolding, but not as evidence that Concrete handles real cryptographic code. The four case studies below are the non-toy graduated entries — every audit bar met, every drift gate green, listed in the showcase manifest.
 
 Counts and theorem names are read from the live registries and `--report proof-status`, not from prose, and each example states its own scope; we reproduce those caveats rather than smoothing them. The evaluation is therefore about #emph[evidence hygiene] as much as theorem strength: can the compiler say what is proved, what is merely enforced, and what is explicitly assumed?
 
@@ -481,6 +481,30 @@ theorem ring_push_then_contains_correct
 
 A 10-function pure module that parses an 8-field `i32` header and validates six properties against a closed error taxonomy; 3 functions carry registry-bound proofs. Beyond the per-input contract on the leaf version check and the six-validator #emph[success-direction] composition (on a scalar-parameter helper, under wrapping `i32`), the #emph[failure direction is proved on the real `parse_header`] — which consumes an array and returns enum-tagged errors — by a family of per-variant theorems: `parse_header_too_short`, `…bad_version`, `…bad_type`, `…payload_too_big`, `…truncated`. Extraction therefore already reaches array indexing and enum construction; the residual gap is the #emph[success path] of `parse_header`, which requires extracting the `while`-loop body of `compute_checksum`, and the full combined `iff`, a 256-branch split that exhausts the Lean heartbeat budget. The behavioral oracle is a second implementation in Python agreeing across 600 randomized cases over three seeds — not yet a Lean equivalence.
 
+== HMAC-SHA256
+
+The deepest case study is a 445-line bounded HMAC-SHA256 implementation: SHA-256 compression, FIPS padding, multi-block hashing, key normalization, ipad/opad, and the final inner/outer HMAC composition. The executable is tested against FIPS 180-4 and RFC 4231 vectors and against 600 Python `hmac`/`hashlib` cases. The proof is stronger than those tests: 11 registered theorems are checked by Lean, including 9 full-contract refinements from exact extracted bodies to an independent `Sha256Spec` model.
+
+The top theorem is:
+
+#figure(
+  block(inset: 6pt, stroke: 0.4pt + luma(180), width: 100%)[
+```lean
+theorem hmac_sha256_refines_spec
+    (kFn mFn : Nat → BitVec 8) (k_len m_len : Nat)
+    (hk : k_len ≤ 128) (hm : m_len ≤ 256) :
+  eval shaFns (hmacEnv kFn mFn k_len m_len) fuel
+       hmac_sha256Expr
+    = some (bytes (Sha256Spec.hmac ...))
+```
+  ],
+  caption: [Abridged statement of the registered HMAC refinement. The actual theorem is over the exact extracted `hmac_sha256Expr`, whose registry entry carries the current source fingerprint.],
+)
+
+The important part is not only that the theorem exists. It is registered against the exact extracted source body. During graduation, perturbing the source ipad constant changed the proof-status result from 11 proved / 0 stale to 10 proved / 1 stale. That regression is the paper's central workflow claim in its strongest form.
+
+The proof also produced reusable infrastructure rather than only a large one-off. The 3,253 lines of SHA/HMAC specification, refinement proof, and ProofKit modules include `fns`-generic evaluator stepping, loop induction, array/frame lemmas, BitVec bridges, call wrappers, and refinement scaffolding. Those modules are now documented as `Concrete.ProofKit`, and later proofs import them instead of copying HMAC-specific scripts.
+
 #text(size: 7.6pt)[
 #figure(
   table(
@@ -491,6 +515,7 @@ A 10-function pure module that parses an 8-field `i32` header and validates six 
     table.header(
       [*Case study*], [*Proved*], [*Funcs*], [*Strongest checked claim*],
     ),
+    [`hmac_sha256`], [11], [18], [bounded HMAC-SHA256 refines independent spec],
     [`constant_time_tag`], [1], [2], [equal tags always pass, for all 16-byte tags],
     [`fixed_capacity`], [4], [20], [push-then-contains over bounded state],
     [`parse_validate`], [3], [10], [success composition + 5 per-variant error theorems],
@@ -570,33 +595,33 @@ Among practical systems languages, Rust is the nearest relative (no GC, ownershi
 
 The closest active work is the ecosystem for attaching proofs to Rust. Prusti @astrauskas2019prusti adds Viper-based modular specifications; Creusot @denis2022creusot translates Rust's MIR into Why3 and uses prophecy variables to reason about mutable borrows; Verus @lattuada2023verus verifies Rust directly with SMT and linear ghost types; and Kani @kani bounded-model-checks Rust to a fixed unrolling depth. All four express far richer properties than Concrete's eligible fragment, and we make no claim to match their proof power. They differ from Concrete in three respects that mark out this paper's contribution. First, they are external tools layered onto a language and compiler that are themselves unaware of the proof, whereas Concrete makes attachment, eligibility, and staleness ordinary outputs of the compiler that emits the code. Second, none binds a discharged proof to a body fingerprint and revokes it automatically on drift; drift is handled, if at all, by re-running the external tool in CI rather than by the compiler refusing to carry a stale claim. Third, authority and effects are not signature-level facts in Rust, so the capability and trust-boundary half of Concrete's evidence has no direct analogue. Concrete is weaker on proof power and stronger on lifecycle: the compiler, not a satellite tool, is what keeps the evidence current.
 
-Two verified-systems landmarks mark the far end of the spectrum. Cogent @oconnor2016cogent is the closest in spirit — a linear, no-GC systems language whose certifying compiler emits a refinement proof relating the generated C to a functional specification, used for real file-system code. Cogent proves more than Concrete does, but through a specialized pipeline for a restricted language; Concrete keeps a lighter, opt-in attachment in a general-purpose compiler and foregrounds the drift lifecycle instead. seL4 @klein2009sel4, a fully verified OS kernel, is the touchstone for whole-system verification and marks the cost Concrete is not paying: it proves neither its compiler nor its binaries. In cryptography, EverCrypt @protzenko2020evercrypt shows verified, high-performance primitives extracted from F\*; our `constant_time_tag` is a small step toward that domain, honest that it proves equality reasoning rather than the machine-level timing guarantees such work targets. Austral @borretti2024austral demonstrates linear types and capability-secure design for a serious systems language and is closest in spirit; Concrete adds capability signatures, report-oriented workflows, and the validated-Core proof boundary. The Lean 4 kernel and language @demoura2021lean4 are the proof substrate and the implementation language, which is what lets the compiler and the theorem checker share one kernel.
+Two verified-systems landmarks mark the far end of the spectrum. Cogent @oconnor2016cogent is the closest in spirit — a linear, no-GC systems language whose certifying compiler emits a refinement proof relating the generated C to a functional specification, used for real file-system code. Cogent proves more than Concrete does, but through a specialized pipeline for a restricted language; Concrete keeps a lighter, opt-in attachment in a general-purpose compiler and foregrounds the drift lifecycle instead. seL4 @klein2009sel4, a fully verified OS kernel, is the touchstone for whole-system verification and marks the cost Concrete is not paying: it proves neither its compiler nor its binaries. In cryptography, HACL\*/EverCrypt @protzenko2020evercrypt shows verified, high-performance primitives extracted from F\*; Concrete's HMAC flagship is much smaller and bounded, but now reaches the same kind of source-to-spec functional-correctness shape for one real primitive while keeping backend and timing assumptions explicit. Austral @borretti2024austral demonstrates linear types and capability-secure design for a serious systems language and is closest in spirit; Concrete adds capability signatures, report-oriented workflows, and the validated-Core proof boundary. The Lean 4 kernel and language @demoura2021lean4 are the proof substrate and the implementation language, which is what lets the compiler and the theorem checker share one kernel.
 
 = What Failed, and What It Taught Us
 
-Four things shaped the design, and three of them generalize past Concrete. The `partial def` opacity barrier blocked the first extraction-soundness attempt — Lean would not unfold the mutually recursive extractor — and forced a structural-recursion lift; the lasting lesson is that #emph[proof ergonomics, not logical expressiveness, is the bottleneck], since the binding limits throughout were a heartbeat budget on a 256-branch split and recursion-checker frictions, not missing power. Drift gates caught real attachment bugs early — a missing proof-table callee, hand-written spec mismatches — which is why we treat #emph[automatic revocation as the load-bearing feature]: without it, an attached proof is a comment that ages silently. And the toy `crypto_verify` was too weak to carry a crypto-adjacent story, which forced `constant_time_tag`; more generally, #emph[examples force the proof surface, not the reverse] — `fixed_capacity` forced functional array update and the bounded `while_step`, `constant_time_tag` forced `u8` bitwise reasoning. We grew the provable fragment from forcing examples rather than speculatively.
+Four things shaped the design, and three of them generalize past Concrete. The `partial def` opacity barrier blocked the first extraction-soundness attempt — Lean would not unfold the mutually recursive extractor — and forced a structural-recursion lift; the lasting lesson is that #emph[proof ergonomics, not logical expressiveness, is the bottleneck], since the binding limits throughout were a heartbeat budget on a 256-branch split and recursion-checker frictions, not missing power. Drift gates caught real attachment bugs early — a missing proof-table callee, hand-written spec mismatches, and later an HMAC hand-model that was not exactly the extracted source — which is why we treat #emph[automatic revocation as the load-bearing feature]: without it, an attached proof is a comment that ages silently. The toy `crypto_verify` was too weak to carry a crypto-adjacent story, which forced `constant_time_tag`, and then HMAC forced the real proof surface: u32 wrapping add, shifts, rotations, `bitand`, division, array writes in loops, multi-store frames, function-table composition, and bottom-up loop induction. We grew the provable fragment from forcing examples rather than speculatively.
 
 = Cost of the Discipline
 
-A workflow this explicit is only worth it if the overhead is bearable, so we report what it costs. The #emph[machine] cost is small: across the example and demo corpus the proof layer is roughly 2,300 lines of Lean holding 68 kernel-checked theorems plus the `PExpr` specs they reference, and the extraction-soundness layer adds another ~830 lines. These are checked by the Lean kernel on every `make build`; the reporting and drift commands themselves are cheap, with `--report proof-status` returning in about 0.3 s on these modules. Authority, eligibility, and fingerprint checks are deterministic and piggyback on the ordinary compile.
+A workflow this explicit is only worth it if the overhead is bearable, so we report what it costs. The #emph[machine] cost is small enough for CI: the HMAC proof and its extracted ProofKit surface add 3,253 lines of Lean across the SHA/HMAC spec, exact-extraction refinement theorems, and reusable proof modules. These are checked by the Lean kernel on every build; the reporting and drift commands themselves are cheap, with `--report proof-status` returning interactively on these modules. Authority, eligibility, and fingerprint checks are deterministic and piggyback on the ordinary compile.
 
-The #emph[human] cost is the real variable, and it splits in two. Writing a proof ranges from trivial to fiddly: `validate_version` closes in a three-line script (`by_cases` then `simp_all`), while the universal constant-time theorem needs three helper lemmas and a four-million-heartbeat budget to chain its sixteen iterations. Maintaining a proof is where the conservative fingerprint shows its price: because a meaning-preserving structural edit (a commutative reorder, an `x + 0`) flips the status to `stale`, a developer occasionally re-confirms a proof that was never actually broken. We regard that as the right trade — a false `stale` costs a re-check, a false `proved` costs trust — but it is a real friction, and it is the cost a future contract layer would have to keep low to be usable.
+The #emph[human] cost is the real variable, and HMAC changed the story. Point proofs such as `validate_version` or `ch_selects_high` close quickly. The HMAC theorem did not: it required a reusable proof kit, exact extracted expressions, function-table discipline, loop-induction templates, and arithmetic bridge lemmas for `Int`/`Nat`/`BitVec` and division. That cost is acceptable only if it becomes reusable. The harvested ProofKit is the first answer: it turns the next proof from "repeat the HMAC mountain" into choosing a proof shape — straight-line, array loop, state loop, composition, or full refinement — and filling a template. Maintaining a proof is still conservative: a meaning-preserving structural edit may flip status to `stale`, but that is the safer direction.
 
 = Limitations and Threats to Validity
 
-The evidence is real but bounded. The proved fragment is small (pure, loop-free or bounded-state, integer/bytewise) and per-function; many modules prove a minority of their functions (3/10, 4/20, 1/2). Some theorems prove one direction or fixed cases rather than full contracts; this is now surfaced by proof-coverage classes (`point`, `one_direction`, `iff`, etc.), not hidden behind a single green check. The `parse_validate` oracle is a second implementation, not a Lean equivalence. The "easier to audit" claim is supported by signatures and report outputs but is #emph[not] backed by a controlled user study, and remains the least-defended part of the thesis. The empirical corpus, while non-trivial for an early language, is small relative to a mature ecosystem. Finally, every "proved" claim is contingent on the trusted computing base set out above — most consequentially an unproved backend and a compiler-soundness bridge whose extraction/eval coverage is broader than before but whose source-semantics and trust-gate correctness remain incomplete.
+The evidence is real but bounded. HMAC proves functional correctness for bounded inputs, not arbitrary streaming HMAC, PRF security, or machine-level constant-time behavior. The proof is over extracted ProofCore, not over the final LLVM or binary. Several smaller examples still prove one direction or fixed cases rather than full contracts; the coverage class exposes that instead of hiding it behind one green check. The "easier to audit" claim is supported by signatures and report outputs but is #emph[not] backed by a controlled user study, and remains the least-defended part of the thesis. The empirical corpus, while non-trivial for an early language, is small relative to a mature ecosystem. Finally, every "proved" claim is contingent on the trusted computing base set out above — most consequentially an unproved backend and a compiler-soundness bridge whose extraction/eval coverage is broader than before but whose source-semantics and trust-gate correctness remain incomplete.
 
 = Future Work
 
-Following the forcing-example discipline: turn the proof-story matrix into a per-program `concrete audit` view; strengthen the compiler-soundness bridge from extraction/evaluator facts toward source-semantics agreement and trust-gate correctness; add SPARK-like runtime obligations for bounds, division, overflow, casts, and loop variants; introduce source-level contracts only when they can generate obligations with statuses rather than decorative prose; close the success-path and combined-`iff` gaps on `parse_header`; pursue a real-crypto candidate (an HMAC-SHA256 or Ed25519-verify subset) to force u32 wrapping add, shifts, rotations, `bitand`, and multi-iteration inductive invariants; and mature packages and the backend contract. Compiler-correctness proofs remain explicitly downstream of a stable extraction surface, not a precondition for the workflow.
+Following the forcing-example discipline: turn the proof-story matrix into a per-program `concrete audit` view; strengthen the compiler-soundness bridge from extraction/evaluator facts toward source-semantics agreement and trust-gate correctness; add SPARK-like runtime obligations for bounds, division, overflow, casts, and loop variants; introduce source-level contracts only when they can generate obligations with statuses rather than decorative prose; use ProofKit to make generated proof stubs practical; close the success-path and combined-`iff` gaps on `parse_header`; add a second real-world proof flagship outside crypto; and mature packages and the backend contract. Compiler-correctness proofs remain explicitly downstream of a stable extraction surface, not a precondition for the workflow.
 
 = Artifact and Reproducibility
 
-The compiler, the three case studies, the proof registries, the wrong-code corpus, and the spec-drift fixture live in one public repository (`github.com/unbalancedparentheses/concrete2`). `make build` runs the Lean kernel over every attached proof, so a broken proof fails the build. Each number in this paper is regenerable from the command line: `concrete <example> --report proof-status` reproduces the proved-versus-eligible counts, `--report authority` the audit table, `--report proof-bundle` the per-example evidence, and `scripts/ci/proof_gate.sh` the full evidence gate. The drift diagnostic is produced by `tests/programs/adversarial_spec_drift`, and the performance figures by the harnesses under `bench/` and each example's `oracle/`.
+The compiler, the five graduated flagships, the proof registries, the wrong-code corpus, and the spec-drift fixtures live in one public repository (`github.com/unbalancedparentheses/concrete2`). `make build` runs the Lean kernel over every attached proof, so a broken proof fails the build. Each number in this paper is regenerable from the command line: `concrete <example> --report proof-status` reproduces the proved-versus-eligible counts, `--report authority` the audit table, `--report proof-bundle` the per-example evidence, and `scripts/ci/proof_gate.sh` the full evidence gate. HMAC's oracle is `make test-hmac-oracle`; the drift behavior can be reproduced by perturbing one registered source body and re-running proof status. The performance figures are produced by the harnesses under `bench/` and each example's `oracle/`.
 
 = Conclusion
 
-The gap between systems code and machine-checked proof is usually bridged by hand, and the bridge rots without anyone noticing. Concrete takes a different route: a real, Lean-implemented compiler that carries authority, trust boundaries, proof-eligibility, and kernel-checked theorems as ordinary outputs over one validated semantic anchor, and that revokes a proof automatically when the source drifts from what was proved. The implementation is incomplete and the trusted base is large and explicit, but the workflow holds on three graduated case studies whose claims are stated to the exact scope they have earned, and a first extraction-preservation result shows the compiler-side trust boundary is movable, not merely assumed. Concrete is not a verified compiler; it is a compiler that refuses to let its evidence quietly go stale.
+The gap between systems code and machine-checked proof is usually bridged by hand, and the bridge rots without anyone noticing. Concrete takes a different route: a real, Lean-implemented compiler that carries authority, trust boundaries, proof-eligibility, and kernel-checked theorems as ordinary outputs over one validated semantic anchor, and that revokes a proof automatically when the source drifts from what was proved. The implementation is incomplete and the trusted base is large and explicit, but the workflow now holds on a real HMAC-SHA256 flagship: source extracts to this ProofCore body, the body refines an independent spec, and source drift breaks the claim. Concrete is not a verified compiler; it is a compiler that refuses to let its evidence quietly go stale.
 
 #set text(size: 8pt)
 #bibliography("refs.bib", title: "References", style: "ieee")
