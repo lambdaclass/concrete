@@ -2477,6 +2477,171 @@ def leanStubsReport (pc : Concrete.ProofCore)
   "\n".intercalate body ++ "\n"
 
 -- ============================================================
+-- `concrete prove <function>` — per-function proof scaffold
+-- ============================================================
+-- Read-only generator: given a function, print the imports, fingerprint,
+-- extracted PExpr, contract/VC list with current discharge, a theorem
+-- skeleton, ProofKit hints from detected features, and the next obligation.
+-- It writes nothing (the CLI's --out is opt-in) and never auto-proves.
+
+mutual
+/-- Detected proof-relevant features in a Core expression, as tags
+    ("loop", "array", "bitvec", "call") — drives ProofKit hints. -/
+private partial def proveExprFeatures : CExpr → List String
+  | .binOp op l r _ =>
+    (match op with | .bitand | .bitor | .bitxor | .shl | .shr => ["bitvec"] | _ => [])
+      ++ proveExprFeatures l ++ proveExprFeatures r
+  | .call _ _ args _ => "call" :: args.flatMap proveExprFeatures
+  | .arrayIndex a i _ => "array" :: (proveExprFeatures a ++ proveExprFeatures i)
+  | .arrayLit es _ => "array" :: es.flatMap proveExprFeatures
+  | .unaryOp _ e _ | .cast e _ | .fieldAccess e _ _
+  | .borrow e _ | .borrowMut e _ | .deref e _ | .try_ e _ => proveExprFeatures e
+  | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.flatMap (fun (_, e) => proveExprFeatures e)
+  | .match_ s arms _ => proveExprFeatures s ++ arms.flatMap proveArmFeatures
+  | .whileExpr c b eb _ =>
+    "loop" :: (proveExprFeatures c ++ b.flatMap proveStmtFeatures ++ eb.flatMap proveStmtFeatures)
+  | .ifExpr c t e _ =>
+    proveExprFeatures c ++ t.flatMap proveStmtFeatures ++ e.flatMap proveStmtFeatures
+  | .allocCall a b _ => proveExprFeatures a ++ proveExprFeatures b
+  | _ => []
+
+private partial def proveArmFeatures : CMatchArm → List String
+  | .enumArm _ _ _ body | .litArm _ body | .varArm _ _ body => body.flatMap proveStmtFeatures
+
+private partial def proveStmtFeatures : CStmt → List String
+  | .letDecl _ _ _ v | .assign _ v | .expr v => proveExprFeatures v
+  | .return_ (some v) _ => proveExprFeatures v
+  | .return_ none _ => []
+  | .ifElse c t e =>
+    proveExprFeatures c ++ t.flatMap proveStmtFeatures ++ (e.getD []).flatMap proveStmtFeatures
+  | .while_ c b _ step =>
+    "loop" :: (proveExprFeatures c ++ b.flatMap proveStmtFeatures ++ step.flatMap proveStmtFeatures)
+  | _ => []
+end
+
+/-- Render the `concrete prove` scaffold for one resolved function entry.
+    `e` (Core) carries the extracted PExpr / fingerprint / params; `astFn` (AST)
+    carries the source contracts (`requires`/`ensures`/`loopContracts`) since the
+    Core `CFnDef` does not. `provedVCs` are the loop-VC keys the caller's omega
+    pass discharged. -/
+def proveReportEntry (registry : ProofRegistry) (e : ProofCoreEntry)
+    (astFn : FnDef) (provedVCs : List String) : String := Id.run do
+  let f := astFn  -- contracts + loop VC generation operate on the AST function
+  let leanName := leanIdent (e.qualName.splitOn "." |>.getLast!)
+  -- (1) imports
+  let imports := "import Concrete.ProofKit\nimport Concrete.Proof"
+  -- (2) fingerprint, (3) extracted PExpr
+  let pcStr := match e.extracted with | some p => renderPExpr p | none => "(not extracted)"
+  -- (4) contract / VC list
+  let preserveProof : Option String :=
+    match registry.find? (fun re => re.function == e.qualName) with
+    | some re => if re.coverage == "invariant" && !re.proof.isEmpty then some re.proof else none
+    | none => none
+  let mut vcLines : List String := []
+  -- requires / ensures
+  for r in f.requires do
+    vcLines := vcLines ++ [s!"  requires {Concrete.fmtExpr r}    assumed_at_entry"]
+  let ensuresProof : Option String :=
+    (registry.find? (fun re => re.function == e.qualName)).bind (·.ensuresProof)
+  for ens in f.ensures do
+    let st := match ensuresProof with
+      | some thm => s!"linked to Lean theorem {thm}"
+      | none => "missing (no registered ensures_proof)"
+    vcLines := vcLines ++ [s!"  ensures {Concrete.fmtExpr ens}    {st}"]
+  -- loop obligations
+  let extraLets := letConstMap f.body
+  let retExpr := loopExitReturn f.body
+  let mut nextOb : Option (String × String) := none  -- (id, reason)
+  for lc in f.loopContracts do
+    let omegaSt := fun (obl : String) =>
+      if provedVCs.contains (loopVCKey e.qualName lc.line obl) then "discharged by omega" else "PLANNED"
+    if (genInitVC lc extraLets).isSome then
+      vcLines := vcLines ++ [s!"  O1 invariant_init          {omegaSt "O1"}"]
+    -- O2 split: arithmetic (omega) + operational (Lean)
+    let o2arith := omegaSt "O2"
+    let o2op := match preserveProof with
+      | some thm => s!"linked to Lean theorem {thm}"
+      | none => "needs Lean (operational realization)"
+    vcLines := vcLines ++ [s!"  O2 invariant_preservation  arithmetic: {o2arith}; operational: {o2op}"]
+    if preserveProof.isNone && nextOb.isNone then
+      nextOb := some ("O2 invariant_preservation",
+        "operational step: the extracted loop body realizes the state transition; this is an eval-level Lean proof, not pure linear arithmetic")
+    if (genExitVC lc f.ensures retExpr).isSome then
+      vcLines := vcLines ++ [s!"  O3 loop_exit_post_link     {omegaSt "O3"}"]
+    if lc.variant.isSome then
+      vcLines := vcLines ++ [s!"  O4 variant_nonnegative     {omegaSt "O4"}"]
+      vcLines := vcLines ++ [s!"  O5 variant_decreases       {omegaSt "O5"}"]
+  -- function-level status fallback for the "next" pointer
+  if nextOb.isNone then
+    if e.extracted.isNone then
+      nextOb := some ("extraction", s!"function is not extractable: {", ".intercalate e.unsupported}")
+    else if f.ensures.any (fun _ => ensuresProof.isNone) then
+      nextOb := some ("ensures", "state the refinement spec and prove `<fn> refines spec`; no registered theorem yet")
+  let vcSection := if vcLines.isEmpty then "  (no source contracts or loop obligations on this function)"
+                   else "\n".intercalate vcLines
+  -- (5) theorem skeleton
+  let paramSig := " ".intercalate (e.params.map fun p => s!"({p} : Int)")
+  let nextTodo := match nextOb with | some (id, _) => s!"-- TODO: {id}" | none => "-- TODO: state and prove the property"
+  let skeleton :=
+    s!"theorem {leanName}_refines_spec {paramSig} (fuel : Nat) : True := by\n  {nextTodo}\n  trivial"
+  -- (6) ProofKit hints from detected features (scanned over the Core body)
+  let feats := (e.fn.body.flatMap proveStmtFeatures).eraseDups
+  let hasLoop := feats.contains "loop" || !f.loopContracts.isEmpty
+  let mut hints : List String := []
+  if hasLoop then hints := hints ++ ["  loops    → Concrete.ProofKit.Loops: eval_while_count, counter-loop invariants"]
+  if feats.contains "array" then hints := hints ++ ["  arrays   → Concrete.ProofKit.Array: lookupIndex_set_self/ne, length_set"]
+  if feats.contains "bitvec" then hints := hints ++ ["  bitvecs  → bv_decide for closed bitvector goals; Concrete.ProofKit.BitVec bridges"]
+  if feats.contains "call" then hints := hints ++ ["  calls    → Concrete.ProofKit.Calls: FnTable skeleton + call wrappers"]
+  let hintSection := if hints.isEmpty then "  (no loop/array/bitvec/call features detected)" else "\n".intercalate hints
+  -- (7) next obligation
+  let nextSection := match nextOb with
+    | some (id, reason) => s!"next: {id}\nreason: {reason}"
+    | none => "next: nothing outstanding from generated obligations (a full refinement spec may still be unstated)"
+  -- assemble
+  return String.join [
+    s!"=== concrete prove: {e.qualName} ===\n\n",
+    s!"-- (1) suggested imports\n{imports}\n\n",
+    s!"-- (2) body fingerprint\n{e.fingerprint}\n\n",
+    s!"-- (3) extracted ProofCore body\n{pcStr}\n\n",
+    s!"-- (4) contracts / verification conditions\n{vcSection}\n\n",
+    s!"-- (5) theorem skeleton (fill in the spec; replace `True`/`trivial`)\n{skeleton}\n\n",
+    s!"-- (6) ProofKit hints\n{hintSection}\n\n",
+    s!"-- (7) {nextSection}\n" ]
+
+/-- Resolve a `concrete prove` target to a single entry/excluded function.
+    Accepts a fully-qualified name, or a bare name if it is unique. Returns the
+    resolved `qualName`, or an error message listing candidates. -/
+def proveResolve (pc : Concrete.ProofCore) (target : String) : Except String String :=
+  let allNames := pc.entries.map (·.qualName) ++ pc.excluded.map (·.qualName)
+  match allNames.find? (· == target) with
+  | some q => .ok q
+  | none =>
+    let byBare := allNames.filter fun q => (q.splitOn ".").getLast! == target
+    match byBare with
+    | [q] => .ok q
+    | [] => .error s!"no function '{target}'. Known functions:\n  {"\n  ".intercalate allNames}"
+    | many => .error s!"'{target}' is ambiguous; qualify it:\n  {"\n  ".intercalate many}"
+
+/-- Top-level `concrete prove` report for a resolved `qualName`. Looks up the
+    AST function (for source contracts) and the Core entry (for the extracted
+    body); handles the excluded case (prints why, no stub). -/
+def proveReport (pc : Concrete.ProofCore) (registry : ProofRegistry)
+    (modules : List Module) (qualName : String) (provedVCs : List String) : String :=
+  let astFn? := (modules.flatMap allFunctions).find? (fun (pfx, fn) => pfx ++ fn.name == qualName)
+    |>.map Prod.snd
+  match pc.entries.find? (·.qualName == qualName), astFn? with
+  | some e, some astFn => proveReportEntry registry e astFn provedVCs
+  | some e, none =>
+    -- Extracted but no AST match (shouldn't happen): fall back without contracts.
+    proveReportEntry registry e { name := e.bareName, params := [], retTy := .unit, body := [] } provedVCs
+  | none, _ =>
+    match pc.excluded.find? (·.qualName == qualName) with
+    | some x =>
+      let reasons := x.eligibility.sourceReasons ++ x.eligibility.profileReasons
+      s!"=== concrete prove: {qualName} ===\n\nThis function is NOT in the provable subset, so there is no proof to scaffold.\n  reasons: {", ".intercalate reasons}\n\nMake it eligible (remove the listed constraints) or prove it as a trusted boundary."
+    | none => s!"no function '{qualName}' in ProofCore."
+
+-- ============================================================
 -- Source/Core/SSA/LLVM traceability (--report traceability)
 -- ============================================================
 

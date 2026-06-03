@@ -196,6 +196,39 @@ The proof registry (`proof-registry.json`) is how a function is linked to its
 hand-written Lean proof/spec today; it is transitional and will be replaced by
 in-source proof attributes once `concrete prove` lands (ROADMAP Phase 3).
 
+## Generating a proof scaffold: `concrete prove`
+
+When a function needs a hand-written Lean proof, `concrete prove` generates a
+read-only scaffold so you do not start from a blank file:
+
+```sh
+concrete prove path/to/file.con module.function        # print to stdout
+concrete prove path/to/file.con module.function --out proofs/module_function.lean
+```
+
+A bare function name is accepted when it is unique; the qualified
+`module.function` form is recommended. `--out` writes a stub file and **refuses
+to overwrite** unless you pass `--force`. v1 is deliberately conservative: it
+**writes nothing** unless `--out` is given, never edits the proof registry or
+`Concrete/` sources, and never tries to prove anything for you.
+
+It prints, for the chosen function:
+
+1. suggested imports (`Concrete.ProofKit`, `Concrete.Proof`);
+2. the body fingerprint;
+3. the extracted ProofCore body;
+4. the contract/VC list with current discharge — which obligations omega or
+   `bv_decide` already close, which are linked to a Lean theorem, and which are
+   still planned/missing;
+5. a theorem skeleton to fill in;
+6. ProofKit hints from detected features (loops → `eval_while_count`, arrays →
+   `lookupIndex_set_self/ne`/`length_set`, bitvectors → `bv_decide`, calls →
+   FnTable/call wrappers);
+7. the **next** obligation to discharge, with the reason it still needs Lean.
+
+For an excluded function it prints why it is not in the provable subset instead
+of a stub.
+
 ## Reading the evidence
 
 ```sh

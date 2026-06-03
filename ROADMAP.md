@@ -377,9 +377,16 @@ and `concrete prove <function>`.
 14. Add generated loop-invariant templates for common proof shapes:
     counter loop over array writes, copy loop, fold loop, multi-store loop,
     offset loop, and block-processing loop.
-15. Add `concrete prove <function>`: generate the proof stub, list the source
-   contracts and VCs, show the registry/spec target, and print the current
-   failing obligation with replay commands.
+15. [v1 DONE] `concrete prove <file.con> <module.function>`: read-only proof
+   scaffold — suggested imports, body fingerprint, extracted ProofCore body, the
+   contract/VC list with current discharge (omega / `bv_decide` / linked Lean
+   theorem / planned), a theorem skeleton, ProofKit hints from detected features
+   (loops/arrays/bitvecs/calls), and the next obligation with its reason. Prints
+   to stdout; `--out <path>` writes a stub (refuses to overwrite without
+   `--force`); bare name allowed if unique. Deliberately conservative: writes
+   nothing unless `--out`, never edits the registry or `Concrete/` sources,
+   never auto-proves. Remaining: replay commands and richer spec-target wiring
+   once in-source proof attributes land (item 22).
 16. Add proof minimization/debugging UX: show the smallest extracted expression
     or lemma surface related to a failed proof, including messages like
     "failed to prove index expression equals spec offset under len <= 375" for

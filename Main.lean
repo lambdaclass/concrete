@@ -3,7 +3,7 @@ import Concrete
 open Concrete
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--out <path>] [--force]\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -766,7 +766,9 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
 /-- Run pipeline and check a profile constraint.
     If the input file lives inside a `Concrete.toml` project, route
     through project mode so std and other dependencies resolve. -/
-def compileAndReport (inputPath : String) (reportType : String) : IO UInt32 := do
+def compileAndReport (inputPath : String) (reportType : String)
+    (proveTarget : Option String := none) (proveOut : Option String := none)
+    (proveForce : Bool := false) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -829,6 +831,23 @@ def compileAndReport (inputPath : String) (reportType : String) : IO UInt32 := d
     for issue in regIssues do
       IO.eprintln (Concrete.renderRegistryIssue issue)
     let hasRegistryErrors := regIssues.any (·.isError)
+    -- `concrete prove <function>`: read-only per-function proof scaffold.
+    -- Writes nothing unless --out is given (and then refuses to clobber).
+    if let some target := proveTarget then
+      match Report.proveResolve pc target with
+      | .error msg => IO.eprintln msg; return 1
+      | .ok qual =>
+        let provedVCs ← kernelDischargeLoopVCs (Report.loopVCGoals parsed.modules)
+        let report := Report.proveReport pc registry parsed.modules qual provedVCs
+        match proveOut with
+        | none => IO.println report; return 0
+        | some path =>
+          if (← System.FilePath.pathExists path) && !proveForce then
+            IO.eprintln s!"refusing to overwrite '{path}' (pass --force to replace it)"
+            return 1
+          writeFile path report
+          IO.println s!"wrote proof scaffold to {path}"
+          return 0
     if reportType == "contracts" then
       IO.println (← renderContracts parsed.modules registry)
       return 0
@@ -1530,6 +1549,21 @@ def main (args : List String) : IO UInt32 := do
     | [inputPath] => return (← compileAndReport inputPath "audit")
     | _ =>
       IO.eprintln "Usage: concrete audit <file.con>"
+      return 1
+  -- concrete prove <file.con> <module.function> [--out <path>] [--force]
+  --   Read-only proof-scaffold generator. Prints to stdout; --out writes a
+  --   stub file (refusing to overwrite without --force). Never auto-proves.
+  if args.head? == some "prove" then
+    match args.drop 1 with
+    | inputPath :: target :: rest =>
+      let force := rest.contains "--force"
+      let outPath := match rest.dropWhile (· != "--out") with
+        | _ :: p :: _ => some p
+        | _ => none
+      return (← compileAndReport inputPath "prove"
+        (proveTarget := some target) (proveOut := outPath) (proveForce := force))
+    | _ =>
+      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--out <path>] [--force]"
       return 1
   -- concrete --version
   if args == ["--version"] then
