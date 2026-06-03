@@ -632,12 +632,32 @@ debug small Concrete programs with predictable commands and useful errors.
    parser fixtures. This is a syntax reference, not a language-design
    committee.
 6. Close the match/pattern ergonomics gap before broad `Result`/`Option` and
-   protocol-decoder work. Add, or explicitly defer with examples: `_`
-   wildcards, match guards, OR patterns, `if let` / `while let`, nested
-   patterns, tuple types or a deliberate no-tuples rule, and struct update
-   syntax (`..base`). This is one compound usability block: algebraic data
+   protocol-decoder work. This is one compound usability block: algebraic data
    types are already in the language, so the pattern language must be
    expressive enough to use them without stacks of boilerplate matches.
+
+   **Done (first chunk):** `_` wildcard *match arms*
+   (`tests/programs/wildcard_pattern.con`); integer/value patterns (`litArm`)
+   and variable patterns (`varArm`); `let`-destructuring including `let … else`
+   (`letDestructure` with `elseBody`); struct destructuring
+   (`let Struct { fields } = expr;`, `letStructDestructure`).
+
+   **Still open (each: implement, or explicitly defer with examples):**
+   - match guards — `Pattern if condition => …`
+   - OR patterns — `A | B => …`
+   - `if let`
+   - `while let`
+   - nested patterns
+   - tuple types, or a deliberate no-tuples decision (record which)
+   - struct update syntax — `Struct { field: x, ..base }`
+   - `_` wildcard *inside destructuring bindings* (distinct from the `_` match
+     arm, which is done) — still deferred.
+
+   **Suggested order:** `if let` / `let … else` documentation and examples
+   first (they exercise the existing destructuring with the least new
+   machinery), then OR patterns or struct update — whichever hurts more in
+   practice (parser/service code tends to want OR patterns; SHA-style state
+   updates tend to want `..base`).
 7. Define strings, bytes, paths, and OS strings: `Bytes` for raw data, `Text`
    for validated UTF-8, and `Path`/`OsString` for OS-native boundaries. Specify
    literals, ownership, slicing, indexing, formatting, conversions, parser/JSON
