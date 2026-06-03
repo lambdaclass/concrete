@@ -2453,6 +2453,75 @@ theorem ct_compare_equal_zeros_correct (fuel : Nat) :
         eval, eval.evalAssigns, eval.lookupIndex,
         ctTagFns, Env.bind, evalBinOp, List.replicate]
 
+/-- `Nat` bitwise fact: xor is zero iff the operands are equal. Proved by bit
+    extensionality (`Nat.eq_of_testBit_eq` + `Nat.testBit_xor`); no Mathlib. -/
+theorem nat_xor_eq_zero_iff (m n : Nat) : (m ^^^ n = 0) ↔ m = n := by
+  constructor
+  · intro h
+    apply Nat.eq_of_testBit_eq; intro i
+    have hb : (m ^^^ n).testBit i = false := by rw [h]; simp
+    rw [Nat.testBit_xor] at hb
+    revert hb; cases m.testBit i <;> cases n.testBit i <;> simp
+  · intro h; subst h; simp [Nat.xor_self]
+
+/-- `Nat` bitwise fact: lor is zero iff both operands are zero. -/
+theorem nat_lor_eq_zero_iff (a b : Nat) : (a ||| b = 0) ↔ (a = 0 ∧ b = 0) := by
+  constructor
+  · intro h
+    refine ⟨Nat.eq_of_testBit_eq ?_, Nat.eq_of_testBit_eq ?_⟩ <;>
+      (intro i; have hb : (a ||| b).testBit i = false := by rw [h]; simp
+       rw [Nat.testBit_or] at hb; simp at hb; simp [hb])
+  · intro ⟨h1, h2⟩; subst h1; subst h2; rfl
+
+set_option maxRecDepth 8000 in
+set_option maxHeartbeats 8000000 in
+/-- **Universal different-tag theorem** (closes AUDIT bar #2's converse):
+    `ct_compare a b = 0` whenever the two 16-byte tags differ at the u8 level.
+
+    The hypothesis is exactly the u8-level inequality: not all 16 byte slots
+    agree after the `BitVec.ofInt 8` reduction the eval applies (i.e. the tags
+    differ as `[u8; 16]` values). For valid u8 source bytes (0..255), this is
+    just `a ≠ b`.
+
+    Together with `ct_compare_same_tag_correct` (a == a → 1), this gives the
+    full functional-correctness iff: ct_compare returns 1 iff the tags are equal
+    and 0 iff they differ. The OR-accumulated `diff` is nonzero exactly when
+    some byte differs — proved by collapsing the unfolded 16-way OR/XOR chain
+    with `nat_lor_eq_zero_iff` / `nat_xor_eq_zero_iff`. -/
+theorem ct_compare_different_tag_correct
+    (a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 : Int)
+    (b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 : Int)
+    (fuel : Nat)
+    (hne : ¬ ((a0 % 256).toNat % 256 = (b0 % 256).toNat % 256 ∧
+              (a1 % 256).toNat % 256 = (b1 % 256).toNat % 256 ∧
+              (a2 % 256).toNat % 256 = (b2 % 256).toNat % 256 ∧
+              (a3 % 256).toNat % 256 = (b3 % 256).toNat % 256 ∧
+              (a4 % 256).toNat % 256 = (b4 % 256).toNat % 256 ∧
+              (a5 % 256).toNat % 256 = (b5 % 256).toNat % 256 ∧
+              (a6 % 256).toNat % 256 = (b6 % 256).toNat % 256 ∧
+              (a7 % 256).toNat % 256 = (b7 % 256).toNat % 256 ∧
+              (a8 % 256).toNat % 256 = (b8 % 256).toNat % 256 ∧
+              (a9 % 256).toNat % 256 = (b9 % 256).toNat % 256 ∧
+              (a10 % 256).toNat % 256 = (b10 % 256).toNat % 256 ∧
+              (a11 % 256).toNat % 256 = (b11 % 256).toNat % 256 ∧
+              (a12 % 256).toNat % 256 = (b12 % 256).toNat % 256 ∧
+              (a13 % 256).toNat % 256 = (b13 % 256).toNat % 256 ∧
+              (a14 % 256).toNat % 256 = (b14 % 256).toNat % 256 ∧
+              (a15 % 256).toNat % 256 = (b15 % 256).toNat % 256)) :
+    let tagA : PVal := .array_ [.int a0,.int a1,.int a2,.int a3,.int a4,.int a5,.int a6,.int a7,.int a8,.int a9,.int a10,.int a11,.int a12,.int a13,.int a14,.int a15]
+    let tagB : PVal := .array_ [.int b0,.int b1,.int b2,.int b3,.int b4,.int b5,.int b6,.int b7,.int b8,.int b9,.int b10,.int b11,.int b12,.int b13,.int b14,.int b15]
+    eval ctTagFns ((Env.empty.bind "a" tagA).bind "b" tagB) (fuel + 200) ctCompareExpr
+    = some (.int 0) := by
+  simp [ctCompareExpr, eval, eval.evalAssigns, eval.lookupIndex, Env.bind, evalBinOp]
+  split <;>
+    first
+      | rfl
+      | (rename_i h
+         simp only [Option.some.injEq, PVal.bool.injEq, beq_iff_eq, Int.natCast_eq_zero,
+                    nat_lor_eq_zero_iff, nat_xor_eq_zero_iff, and_assoc] at h
+         exact absurd h hne)
+      | simp_all
+
 -- ============================================================
 -- hmac_sha256 (fifth flagship) — first attached theorem
 -- ============================================================

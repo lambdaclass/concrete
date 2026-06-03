@@ -1,13 +1,13 @@
 === Proof Status Report ===
 
--- proved [one_direction] ------------------------------------------------ examples/constant_time_tag/src/main.con:42
+-- proved [iff] ------------------------------------------------ examples/constant_time_tag/src/main.con:42
 
   ✓ `constant_time_tag.ct_compare` — proof matches current body.
 
  42 |     fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  coverage: one_direction
+  coverage: iff
 
 -- not eligible ------------------------------------------- examples/constant_time_tag/src/main.con:61
 

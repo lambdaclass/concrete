@@ -68,10 +68,9 @@ contract. `concrete prove constant_time_tag.ct_compare` and
 `--report contracts` show the layers, each in its own evidence class:
 
 ```
-functional correctness:
-  same-tag direction (a == b → 1):      proved_by_lean
-                                        (ct_compare_same_tag_correct)
-  different-tag direction (a != b → 0): missing / planned  ← next obligation
+functional correctness:  proved_by_lean (full iff)
+  same-tag direction (a == b → 1):      ct_compare_same_tag_correct
+  different-tag direction (a != b → 0): ct_compare_different_tag_correct
 
 loop obligations (the fixed-trip-count discipline, as arithmetic):
   invariant_init:          proved_by_kernel_decision (omega)
@@ -98,9 +97,15 @@ trusted-assumption layers, not in a value postcondition. Keeping them
 separate is the honest Concrete story; collapsing them into one green badge
 would not be.
 
-The different-tag direction is the immediate follow-up (it needs an
-`x ^ y ≠ 0 when x ≠ y` lemma at `u8` plus folding over the 16 bytes);
-proving it upgrades functional correctness to a full-iff `proved_by_lean`.
+Both directions are now proved (2026-06-03). The different-tag direction
+(`ct_compare_different_tag_correct`) was the harder one: the OR-accumulated
+`diff` is nonzero exactly when some byte differs at the u8 level. Its proof
+unfolds the 16-iteration loop, then collapses the resulting Nat OR/XOR chain
+with two bit-extensionality lemmas (`nat_xor_eq_zero_iff` /
+`nat_lor_eq_zero_iff`, proved via `Nat.testBit`). `--report check-proofs`
+verifies both directions; the source `#[ensures]` is `proved_by_lean (full
+iff)`. The constant-time and machine-timing layers are unchanged — only the
+value-semantics layer moved from partial to complete.
 
 ## What this candidate is NOT
 

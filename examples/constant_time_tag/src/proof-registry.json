@@ -4,6 +4,7 @@
     "body_fingerprint": "[(let diff (int 0)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 16)) [(set diff (binop Concrete.BinOp.bitor (var diff) (binop Concrete.BinOp.bitxor (index (var a) (var i)) (index (var b) (var i))))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (if (binop Concrete.BinOp.eq (var diff) (int 0)) [(ret (int 1))]) (ret (int 0))]",
     "proof": "Concrete.Proof.ct_compare_same_tag_correct",
     "spec": "Concrete.Proof.ctCompareExpr",
-    "coverage": "one_direction"
+    "coverage": "iff",
+    "ensures_proof": "Concrete.Proof.ct_compare_different_tag_correct"
   }
 ]

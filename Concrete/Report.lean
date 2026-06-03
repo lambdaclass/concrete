@@ -1011,7 +1011,12 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry)
   let discharge (qual : String) : String :=
     match registry.find? (fun e => e.function == qual) with
     | some e => match e.ensuresProof with
-      | some thm => s!"\n     status:  proved_by_lean\n     theorem: {thm}"
+      | some thm =>
+        -- `iff` coverage with both a `proof` and an `ensures_proof` means the
+        -- two directions of an iff postcondition are each kernel-checked.
+        if e.coverage == "iff" && !e.proof.isEmpty then
+          s!"\n     status:  proved_by_lean (full iff)\n     forward direction:  {e.proof}\n     converse direction: {thm}"
+        else s!"\n     status:  proved_by_lean\n     theorem: {thm}"
       | none =>
         if !e.proof.isEmpty && e.coverage == "one_direction" then
           s!"\n     status:  partial — one direction proved_by_lean, converse outstanding\n     theorem: {e.proof}  (coverage: one_direction)\n     note:    full postcondition not yet discharged; the converse is the next obligation"
@@ -2553,9 +2558,15 @@ def proveReportEntry (registry : ProofRegistry) (e : ProofCoreEntry)
   let oneDir := match regEntry with
     | some re => re.ensuresProof.isNone && !re.proof.isEmpty && re.coverage == "one_direction"
     | none => false
+  let isIff := match regEntry with
+    | some re => re.ensuresProof.isSome && !re.proof.isEmpty && re.coverage == "iff"
+    | none => false
+  let fwdProof := match regEntry with | some re => re.proof | none => "?"
   for ens in f.ensures do
     let st := match ensuresProof with
-      | some thm => s!"linked to Lean theorem {thm}"
+      | some thm =>
+        if isIff then s!"proved_by_lean (full iff): forward {fwdProof}, converse {thm}"
+        else s!"linked to Lean theorem {thm}"
       | none => if oneDir then "partial — one direction proved_by_lean, converse outstanding"
                 else "missing (no registered ensures_proof)"
     vcLines := vcLines ++ [s!"  ensures {Concrete.fmtExpr ens}    {st}"]
