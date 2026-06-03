@@ -14,8 +14,10 @@ loop_invariant.count_up  (loop @ line 8)
     O1 invariant_init          status:  proved_by_kernel_decision
                                 engine:  omega
        generated VC:  (0 ≤ 0 ∧ 0 ≤ 8)
-    O2 invariant_preservation  status:  proved_by_lean
-                                theorem: Concrete.Proof.count_up_loop_preserves
+    O2 invariant_preservation
+       arithmetic step:   proved_by_kernel_decision (omega)
+       operational step:  proved_by_lean
+                          theorem: Concrete.Proof.count_up_loop_preserves
        generated VC:  ∀ (i acc : Int), 
            (0 ≤ i ∧ i ≤ 8) →      -- invariant (assumed)
            i < 8 →      -- guard (assumed)
@@ -35,7 +37,12 @@ loop_invariant.count_to_eight  (loop @ line 23)
     O1 invariant_init          status:  proved_by_kernel_decision
                                 engine:  omega
        generated VC:  (0 ≤ 0 ∧ 0 ≤ 8)
-    O2 invariant_preservation  status:  planned (no discharge backend linked yet)
+    O2 invariant_preservation
+       arithmetic step:   proved_by_kernel_decision (omega)
+       operational step:  planned — needs Lean (operational realization), shape:
+           theorem loop_invariant_count_to_eight_loop_preserves (fns : FnTable) (env : Env) (fuel : Nat) … :
+             eval.evalAssigns fns env fuel <body> = some <env after [ i := i + 1 ]>
+             ∧ (0 <= i && i <= 8)      -- arithmetic half above is omega-discharged
        generated VC:  ∀ (i : Int), 
            (0 ≤ i ∧ i ≤ 8) →      -- invariant (assumed)
            i < 8 →      -- guard (assumed)

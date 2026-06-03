@@ -795,6 +795,40 @@ def genPreservationVC (lc : LoopContract) : Option String := do
     s!"{pad}{guardStr} →      -- guard (assumed)",
     s!"{pad}{conj inv'Strs}      -- invariant' after body [ {bodyDesc} ]" ]
 
+/-- The **arithmetic** half of invariant_preservation as a single-line Lean
+    goal: `∀ vars, (invariant) → guard → (invariant')`. This is the part a
+    kernel decision procedure (`omega`) can close directly — it says the
+    invariant is inductive as arithmetic, independent of how the loop body is
+    realized. The remaining *operational* half (the extracted body actually
+    performs the substitution) is `genPreservationShape` and still needs Lean. -/
+def genPreservationGoal (lc : LoopContract) : Option String := do
+  let guard ← lc.guard
+  if lc.invariants.isEmpty then failure
+  let invs' := lc.invariants.map (substContract lc.body)
+  let vars := (lc.invariants.flatMap collectIdents ++ collectIdents guard
+                ++ lc.body.flatMap (fun (_, e) => collectIdents e)).eraseDups
+  let invStrs ← lc.invariants.mapM toLeanProp
+  let guardStr ← toLeanProp guard
+  let inv'Strs ← invs'.mapM toLeanProp
+  let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
+  some s!"{binder}({" ∧ ".intercalate invStrs}) → {guardStr} → ({" ∧ ".intercalate inv'Strs})"
+
+/-- The **operational** half of invariant_preservation as a Lean theorem
+    *shape* (not a claim): the extracted loop body, evaluated, yields the
+    substituted state, and the invariant is preserved. This is what still needs
+    Lean (a `simp` over `evalAssigns`, as in `count_up_loop_preserves`); the
+    compiler points to the shape so the proof author knows exactly what to
+    write. `none` if the body has no lowerable assignments. -/
+def genPreservationShape (lc : LoopContract) (fnQual : String) : Option String := do
+  if lc.body.isEmpty then failure
+  let name := (fnQual.replace "." "_") ++ "_loop_preserves"
+  let stepDesc := "; ".intercalate (lc.body.map (fun (n, e) => s!"{n} := {Concrete.fmtExpr e}"))
+  let invDesc := " ∧ ".intercalate (lc.invariants.map Concrete.fmtExpr)
+  some <| String.join [
+    s!"theorem {name} (fns : FnTable) (env : Env) (fuel : Nat) … :",
+    s!"\n             eval.evalAssigns fns env fuel <body> = some <env after [ {stepDesc} ]>",
+    s!"\n             ∧ ({invDesc})      -- arithmetic half above is omega-discharged" ]
+
 /-- invariant_init VC: the invariant holds in the loop-entry state (the for-init
     and preceding let-constants substituted). -/
 def genInitVC (lc : LoopContract) (extraLets : List (String × Expr)) : Option String := do
@@ -884,6 +918,10 @@ def loopVCGoals (modules : List Module) : List (String × String) := Id.run do
     for lc in f.loopContracts do
       if let some g := genInitVC lc extraLets then
         out := out ++ [(loopVCKey fq lc.line "O1", g)]
+      -- O2 arithmetic half: invariant is inductive (omega); operational half
+      -- still needs Lean (genPreservationShape).
+      if let some g := genPreservationGoal lc then
+        out := out ++ [(loopVCKey fq lc.line "O2", g)]
       if let some g := genExitVC lc f.ensures retExpr then
         out := out ++ [(loopVCKey fq lc.line "O3", g)]
       if lc.variant.isSome then
@@ -931,10 +969,22 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
         else planned
       -- O1 invariant_init — generated shape, kernel-discharged
       out := out ++ s!"\n    O1 invariant_init          status:  {kstat "O1"}{vc (genInitVC lc extraLets)}"
-      -- O2 invariant_preservation — generated shape + hand-linked discharge
-      match preserveProof with
-      | some thm => out := out ++ s!"\n    O2 invariant_preservation  status:  proved_by_lean\n                                theorem: {thm}{vc (genPreservationVC lc)}"
-      | none     => out := out ++ s!"\n    O2 invariant_preservation  status:  {planned}{vc (genPreservationVC lc)}"
+      -- O2 invariant_preservation — split into the two things it actually
+      -- requires: (1) the arithmetic step (invariant is inductive), now
+      -- auto-discharged by omega; (2) the operational step (the extracted body
+      -- realizes the substitution), which still needs Lean. (1) removes most of
+      -- the hand-linking; (2) points to the theorem shape when unproved.
+      let arithStep :=
+        if provedVCs.contains (loopVCKey fq lc.line "O2")
+        then "proved_by_kernel_decision (omega)" else planned
+      let opStep := match preserveProof with
+        | some thm => s!"proved_by_lean\n                          theorem: {thm}"
+        | none => match genPreservationShape lc fq with
+          | some shape => s!"planned — needs Lean (operational realization), shape:\n           {shape}"
+          | none => planned
+      out := out ++ s!"\n    O2 invariant_preservation"
+      out := out ++ s!"\n       arithmetic step:   {arithStep}"
+      out := out ++ s!"\n       operational step:  {opStep}{vc (genPreservationVC lc)}"
       -- O3 exit_implies_post: bridges loop exit facts (invariant ∧ ¬guard) to
       -- the function #[ensures]. Generated only when there is an ensures and a
       -- clean loop-exit return; kernel-discharged by omega like O1/O4/O5.
