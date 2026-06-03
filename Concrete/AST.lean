@@ -136,7 +136,11 @@ inductive MatchArm where
   | varArm (span : Span) (binding : String) (body : List Stmt)        -- variable pattern: n -> ...
 
 inductive Stmt where
-  | letDecl (span : Span) (name : String) (mutable : Bool) (ty : Option Ty) (value : Expr)
+  -- `isGhost`: a `ghost let` — proof-only binding. Erased before Core/codegen
+  -- (Elab drops it); may be referenced only by contracts/VCs/audit, never by
+  -- runtime code (enforced in Elab). Mirrors the erased-metadata precedent of
+  -- `requires`/`ensures`/`loopContracts` on `FnDef`.
+  | letDecl (span : Span) (name : String) (mutable : Bool) (ty : Option Ty) (value : Expr) (isGhost : Bool)
   | assign (span : Span) (name : String) (value : Expr)
   | return_ (span : Span) (value : Option Expr)
   | expr (span : Span) (e : Expr)
@@ -169,7 +173,7 @@ def Expr.getSpan : Expr → Span
   | .allocCall sp _ _ | .whileExpr sp _ _ _ | .ifExpr sp _ _ _ => sp
 
 def Stmt.getSpan : Stmt → Span
-  | .letDecl sp _ _ _ _ | .assign sp _ _ | .return_ sp _ | .expr sp _ => sp
+  | .letDecl sp _ _ _ _ _ | .assign sp _ _ | .return_ sp _ | .expr sp _ => sp
   | .ifElse sp _ _ _ | .while_ sp _ _ _ | .forLoop sp _ _ _ _ _ => sp
   | .fieldAssign sp _ _ _ | .derefAssign sp _ _ | .arrayIndexAssign sp _ _ _ => sp
   | .break_ sp _ _ | .continue_ sp _ | .defer sp _ => sp
@@ -486,7 +490,7 @@ partial def collectFreeVarsStmts (stmts : List Stmt) (bound : List String) : Lis
   | [] => []
   | stmt :: rest =>
     let (freeVars, newBound) := match stmt with
-      | .letDecl _ name _ _ value =>
+      | .letDecl _ name _ _ value _ =>
         (collectFreeVarsExpr value bound, name :: bound)
       | .assign _ name value =>
         (collectFreeVarsExpr value bound ++ (if bound.contains name then [] else [name]), bound)
@@ -555,9 +559,9 @@ partial def desugarStmts : List Stmt → List Stmt
     [Stmt.expr sp (Expr.match_ sp value [successArm])]
   | (.letStructDestructure sp structName bindings value) :: rest =>
     let tmpName := "__destr_" ++ structName
-    let tmpLet := Stmt.letDecl sp tmpName false none value
+    let tmpLet := Stmt.letDecl sp tmpName false none value false
     let fieldLets := bindings.map fun b =>
-      Stmt.letDecl sp b false none (Expr.fieldAccess sp (Expr.ident sp tmpName) b)
+      Stmt.letDecl sp b false none (Expr.fieldAccess sp (Expr.ident sp tmpName) b) false
     [tmpLet] ++ fieldLets ++ desugarStmts rest
   | s :: rest => s :: desugarStmts rest
 

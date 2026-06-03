@@ -314,12 +314,12 @@ where
         let newArms := removeAt arms i
         if newArms.isEmpty then none
         else some (.return_ sp (some (.match_ msp scrut newArms)))
-    | .letDecl sp name isMut ty (.match_ msp scrut arms) =>
+    | .letDecl sp name isMut ty (.match_ msp scrut arms) isGhost =>
       if arms.length <= 1 then []
       else (List.range arms.length).filterMap fun i =>
         let newArms := removeAt arms i
         if newArms.isEmpty then none
-        else some (.letDecl sp name isMut ty (.match_ msp scrut newArms))
+        else some (.letDecl sp name isMut ty (.match_ msp scrut newArms) isGhost)
     | _ => []
 
 /-- Remove else branches from if statements. -/

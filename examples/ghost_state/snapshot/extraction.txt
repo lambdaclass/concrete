@@ -1,0 +1,16 @@
+=== Source-to-ProofCore Extraction ===
+
+  ghost_state.count_up()
+    status: extracted
+    ProofCore: let acc = 0; let i = 0; while (i < 8) { acc = (acc + i); i = (i + 1) }; acc
+    fingerprint: [(let acc (int 0)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 8)) [(set acc (binop Concrete.BinOp.add (var acc) (var i))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (var acc))]
+    loc: examples/ghost_state/src/main.con:13
+
+  main.main()
+    status: excluded
+    reasons: has capabilities: Alloc, Clock, Console, Env, File, Network, Process, Random, is entry point (main), allocation, blocking I/O
+    fingerprint: [(ret (int 0))]
+    loc: examples/ghost_state/src/main.con:25
+
+Totals: 2 functions — 1 extracted, 0 eligible but not extractable, 1 excluded
+

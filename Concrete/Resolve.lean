@@ -267,7 +267,9 @@ partial def resolveStmts (ctx : ResolveCtx) (stmts : List Stmt) : ResolveCtx :=
 /-- Walk a single statement. -/
 partial def resolveStmt (ctx : ResolveCtx) (stmt : Stmt) : ResolveCtx :=
   match stmt with
-  | .letDecl sp name _mutable ty value =>
+  | .letDecl sp name _mutable ty value _isGhost =>
+    -- A ghost let is in scope here like any binding; its erasure (and the rule
+    -- that runtime code may not read it) is enforced in Elab.
     let ctx := resolveExpr ctx value
     let ctx := match ty with
       | some t => checkTyDeep ctx t (some sp)

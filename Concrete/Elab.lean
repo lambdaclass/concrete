@@ -33,6 +33,11 @@ structure ElabEnv where
   traits : List TraitDef := []
   allFnSigPairs : List (String × FnSummary) := []
   newtypes : List NewtypeDef := []
+  -- Names bound by `ghost let`. Tracked but NOT in `vars`: ghost bindings are
+  -- erased before Core, so a runtime expression referencing one resolves to
+  -- nothing — we report it as a ghost-in-runtime leak rather than a generic
+  -- undeclared variable.
+  ghostVars : List String := []
 
 abbrev ElabM := ExceptT Diagnostics (StateM ElabEnv)
 
@@ -44,6 +49,7 @@ inductive ElabError where
   | unknownFunctionRef (name : String)
   | assignToUndeclaredVariable (name : String)
   | borrowUndeclaredVariable (name : String)
+  | ghostInRuntime (name : String)
   -- Struct/field
   | unknownStructType (name : String)
   | arrowAccessUnknownStruct (name : String)
@@ -71,6 +77,7 @@ def ElabError.message : ElabError → String
   | .unknownFunctionRef name => s!"unknown function '{name}' in function reference"
   | .assignToUndeclaredVariable name => s!"assignment to undeclared variable '{name}'"
   | .borrowUndeclaredVariable name => s!"borrow: undeclared variable '{name}'"
+  | .ghostInRuntime name => s!"ghost value '{name}' cannot be used in runtime code"
   | .unknownStructType name => s!"unknown struct type '{name}'"
   | .arrowAccessUnknownStruct name => s!"arrow access on unknown struct type '{name}'"
   | .structHasNoField structName fieldName => s!"struct '{structName}' has no field '{fieldName}'"
@@ -90,6 +97,7 @@ def ElabError.hint : ElabError → Option String
   | .fieldAccessNonStruct => some "field access requires a struct type"
   | .arrayLiteralEmpty => some "provide at least one element"
   | .methodCallOnNonNamedType => some "method calls require a named type"
+  | .ghostInRuntime _ => some "ghost bindings are proof-only and erased before codegen; reference them only in contracts (#[ensures]/#[invariant]) or other ghost code"
   | _ => none
 
 def ElabError.code : ElabError → String
@@ -99,6 +107,7 @@ def ElabError.code : ElabError → String
   | .unknownFunctionRef _ => "E0403"
   | .assignToUndeclaredVariable _ => "E0404"
   | .borrowUndeclaredVariable _ => "E0405"
+  | .ghostInRuntime _ => "E0420"
   | .unknownStructType _ => "E0406"
   | .arrowAccessUnknownStruct _ => "E0407"
   | .structHasNoField _ _ => "E0408"
@@ -246,6 +255,10 @@ private def addVar (name : String) (ty : Ty) : ElabM Unit := do
   let env ← getEnv
   setEnv { env with vars := (name, ty) :: env.vars }
 
+private def addGhostVar (name : String) : ElabM Unit := do
+  let env ← getEnv
+  setEnv { env with ghostVars := name :: env.ghostVars }
+
 
 
 /-- Unify a pattern type with an actual type to discover type variable bindings. -/
@@ -347,7 +360,12 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
       | some sig =>
         let paramTys := sig.params.map Prod.snd
         return .ident name (.fn_ paramTys sig.capSet sig.retTy)
-      | none => throwElab (.undeclaredVariable name) (some e.getSpan)
+      | none =>
+        -- A name bound by `ghost let` is erased: reading it from runtime code is
+        -- a leak, reported precisely instead of as a generic undeclared var.
+        if env.ghostVars.contains name then
+          throwElab (.ghostInRuntime name) (some e.getSpan)
+        throwElab (.undeclaredVariable name) (some e.getSpan)
 
   | .paren _ inner => elabExpr inner hint
 
@@ -968,14 +986,20 @@ partial def elabCall (fnName : String) (typeArgs : List Ty) (args : List Expr)
 
 partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
   match stmt with
-  | .letDecl _ name mutable ty value =>
+  | .letDecl _ name mutable ty value isGhost =>
     let valHint ← match ty with
       | some t => do let t' ← resolveTypeE t; pure (some t')
       | none => pure none
+    -- Elaborate the RHS for validation (it may read runtime state). For a ghost
+    -- let we then ERASE it: emit no Core, and record the name as ghost rather
+    -- than a runtime var so any later runtime read is reported as a leak.
     let cVal ← elabExpr value valHint
     let finalTy ← match ty with
       | some t => resolveTypeE t
       | none => pure cVal.ty
+    if isGhost then
+      addGhostVar name
+      return []
     addVar name finalTy
     return [.letDecl name mutable finalTy cVal]
 
@@ -1220,7 +1244,7 @@ partial def elabStmts (stmts : List Stmt) : ElabM (List CStmt) := do
       -- so later statements referencing it don't cascade spurious errors.
       setEnv envBefore
       match s with
-      | .letDecl _ name _ ty _ =>
+      | .letDecl _ name _ ty _ _ =>
         let placeholderTy := ty.getD .placeholder
         addVar name placeholderTy
       | _ => pure ()

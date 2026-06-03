@@ -89,7 +89,7 @@ partial def findCallSpan (targets : List String) : List Stmt → Option Span
 where
   findCallSpanExpr (targets : List String) : Stmt → Option Span
     | .expr _ e => findCallSpanInExpr targets e
-    | .letDecl _ _ _ _ e => findCallSpanInExpr targets e
+    | .letDecl _ _ _ _ e _ => findCallSpanInExpr targets e
     | .assign _ _ e => findCallSpanInExpr targets e
     | .return_ _ (some e) => findCallSpanInExpr targets e
     | .ifElse _ cond thenB (some elseB) =>
@@ -623,7 +623,7 @@ mutual
     | _ => []
   /-- Collect every `(span, fnName, args)` call in a statement. -/
   partial def collectCallsS : Stmt → List (Span × String × List Expr)
-    | .letDecl _ _ _ _ v | .assign _ _ v | .expr _ v | .defer _ v => collectCallsE v
+    | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v => collectCallsE v
     | .return_ _ (some v) => collectCallsE v
     | .ifElse _ c t el => collectCallsE c ++ t.flatMap collectCallsS ++ (el.getD []).flatMap collectCallsS
     | .while_ _ c b _ => collectCallsE c ++ b.flatMap collectCallsS
@@ -643,7 +643,7 @@ partial def allFunctions (m : Module) : List (String × FnDef) :=
     Lets the call-site checker see e.g. `let n = 7; rotr(x, n)`. -/
 def letConstMap (body : List Stmt) : List (String × Expr) :=
   body.filterMap fun s => match s with
-    | .letDecl _ name _ _ v =>
+    | .letDecl _ name _ _ v _ =>
       match cEvalInt v with
       | some k => some (name, .intLit default k)
       | none => match cEvalBool v with | some b => some (name, .boolLit default b) | none => none

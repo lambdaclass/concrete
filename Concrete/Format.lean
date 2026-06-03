@@ -195,12 +195,13 @@ partial def fmtMatchArm (baseInd : Nat) (arm : MatchArm) : String :=
 partial def fmtStmt (ind : Nat) (s : Stmt) : String :=
   let pfx := indent ind
   match s with
-  | .letDecl _ name mutable ty value =>
+  | .letDecl _ name mutable ty value isGhost =>
+    let ghostStr := if isGhost then "ghost " else ""
     let mutStr := if mutable then "mut " else ""
     let tyStr := match ty with
       | some t => s!": {fmtTy t}"
       | none => ""
-    s!"{pfx}let {mutStr}{name}{tyStr} = {fmtExprAt ind value};"
+    s!"{pfx}{ghostStr}let {mutStr}{name}{tyStr} = {fmtExprAt ind value};"
   | .assign _ name value => s!"{pfx}{name} = {fmtExprAt ind value};"
   | .return_ _ (some value) => s!"{pfx}return {fmtExprAt ind value};"
   | .return_ _ none => s!"{pfx}return;"
@@ -223,7 +224,7 @@ partial def fmtStmt (ind : Nat) (s : Stmt) : String :=
   | .forLoop _ init cond step body label =>
     let lblStr := match label with | some l => s!"'{l}: " | none => ""
     let initStr := match init with
-      | some (.letDecl _ n m t v) =>
+      | some (.letDecl _ n m t v _) =>
         let mutStr := if m then "mut " else ""
         let tyStr := match t with | some t => s!": {fmtTy t}" | none => ""
         s!"let {mutStr}{n}{tyStr} = {fmtExprAt ind v}"

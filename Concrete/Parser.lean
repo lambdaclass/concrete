@@ -57,6 +57,16 @@ def peekSpan : ParseM Span := do
   else
     return { line := 0, col := 0 }
 
+/-- One-token lookahead (used to recognize the `ghost let` contextual keyword
+    without reserving `ghost`). Ignores the `pendingGt` split-`>>` state, which
+    never precedes `ghost let`. -/
+def peek2 : ParseM TokenKind := do
+  let s ← get
+  if h : s.pos + 1 < s.tokens.size then
+    return s.tokens[s.pos + 1].kind
+  else
+    return .eof
+
 def advance : ParseM Unit := do
   let s ← get
   if s.pendingGt then
@@ -858,6 +868,11 @@ partial def parseStmtList : ParseM (List Stmt) := do
 partial def parseStmt : ParseM Stmt := do
   let sp ← peekSpan
   let tk ← peek
+  -- `ghost let ...` — proof-only binding (contextual keyword; `ghost` stays a
+  -- valid identifier elsewhere). Consume `ghost`, then parse a let as ghost.
+  if tk == .ident "ghost" && (← peek2) == .«let» then
+    advance
+    return (← parseLet (isGhost := true))
   match tk with
   | .«let» => parseLet
   | .return_ => parseReturn
@@ -901,7 +916,7 @@ partial def parseStmt : ParseM Stmt := do
       | .while_ _ c body _ => (some c, scalarAssigns body, ([] : List (String × Expr)))
       | .forLoop _ init c step body _ =>
         let stepA := match step with | some (.assign _ n v) => [(n, v)] | _ => []
-        let initA := match init with | some (.letDecl _ n _ _ v) => [(n, v)] | some (.assign _ n v) => [(n, v)] | _ => []
+        let initA := match init with | some (.letDecl _ n _ _ v _) => [(n, v)] | some (.assign _ n v) => [(n, v)] | _ => []
         (some c, scalarAssigns body ++ stepA, initA)
       | _ => (none, [], [])
     modify fun st => { st with loopContracts := st.loopContracts ++
@@ -973,7 +988,7 @@ partial def parseBindingList : ParseM (List String) := do
   expect .rbrace
   return bindings
 
-partial def parseLet : ParseM Stmt := do
+partial def parseLet (isGhost : Bool := false) : ParseM Stmt := do
   let sp ← peekSpan
   expect .«let»
   let tk ← peek
@@ -985,6 +1000,8 @@ partial def parseLet : ParseM Stmt := do
   --   let StructType { bindings } = expr;                      (struct destructuring)
   let isTypeName := name.length > 0 && (name.toList.head!).isUpper
   let tk ← peek
+  if isGhost && isTypeName && (tk == .doubleColon || tk == .lbrace) then
+    throwParse "ghost destructuring bindings are not supported; use a plain `ghost let name = ...`" (span := some sp)
   if isTypeName && tk == .doubleColon then
     -- Enum destructuring: let Type::Variant { bindings } = expr [else { body }];
     advance
@@ -1022,7 +1039,7 @@ partial def parseLet : ParseM Stmt := do
     expect .assign
     let value ← parseExpr
     expect .semicolon
-    return .letDecl sp name isMut ty value
+    return .letDecl sp name isMut ty value isGhost
 
 partial def parseReturn : ParseM Stmt := do
   let sp ← peekSpan

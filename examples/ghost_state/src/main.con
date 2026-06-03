@@ -1,0 +1,25 @@
+mod ghost_state {
+    // `ghost let` is a proof-only binding. It is ERASED before codegen — it
+    // never reaches Core, the body fingerprint, or LLVM — and may be referenced
+    // only in contracts, VCs, and audit, never in runtime code.
+    //
+    // Here the ghost `bound` snapshots the loop limit so the invariant can name
+    // it: `0 <= i && i <= bound`. Without ghost state, an invariant that wants
+    // to refer to a value the runtime code does not keep around gets awkward;
+    // `ghost let` gives the proof a name without paying for it at runtime.
+    //
+    // Reading `bound` from runtime code is rejected with E0420 — see
+    // catches/ghost_runtime_use.con.
+    fn count_up() -> i32 {
+        ghost let bound: i32 = 8;
+        let mut acc: i32 = 0;
+        #[invariant(0 <= i && i <= bound)]
+        #[variant(bound - i)]
+        for (let mut i: i32 = 0; i < 8; i = i + 1) {
+            acc = acc + i;
+        }
+        return acc;
+    }
+}
+
+pub fn main() with(Std) -> Int { return 0; }

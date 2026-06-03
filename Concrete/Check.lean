@@ -1881,7 +1881,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
 
 partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
   match stmt with
-  | .letDecl _ name mutable ty value =>
+  | .letDecl _ name mutable ty value _isGhost =>
     -- Escape analysis: prevent storing a borrow ref into a new binding
     let env ← getEnv
     match value with
@@ -2180,7 +2180,7 @@ partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
       -- so later statements referencing it don't cascade spurious errors.
       setEnv envBefore
       match stmt with
-      | .letDecl _ name _ ty _ =>
+      | .letDecl _ name _ ty _ _ =>
         let placeholderTy := ty.getD .placeholder
         addVar name placeholderTy false
       | _ => pure ()

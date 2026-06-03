@@ -1,0 +1,22 @@
+// catches/ghost_runtime_use.con
+//
+// "Concrete catches this" companion to examples/ghost_state.
+//
+// Demonstrates: ghost bindings are proof-only. A `ghost let` is erased before
+// codegen and may be referenced only in contracts/VCs/audit. The natural
+// mistake this catches: reading a ghost value from runtime code, which would
+// silently depend on a value that does not exist at runtime. Concrete rejects
+// it at elaboration instead of letting the dependency leak into the binary.
+//
+// catches: E0420
+// catches-substring: ghost value 'bound' cannot be used in runtime code
+mod ghost_state {
+    fn count_up() -> i32 {
+        ghost let bound: i32 = 8;
+        // ERROR: `bound` is ghost — erased before codegen, so it cannot be read
+        // at runtime. Use it only in #[invariant]/#[ensures]/other ghost code.
+        return bound;
+    }
+}
+
+pub fn main() with(Std) -> Int { return 0; }

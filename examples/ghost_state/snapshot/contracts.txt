@@ -1,0 +1,31 @@
+=== Source Contracts ===
+(no spec fns or #[ensures] contracts found)
+
+
+=== Loop contracts ===
+
+ghost_state.count_up  (loop @ line 18)
+  invariant 0 <= i && i <= bound
+  variant   bound - i
+  obligations:
+    O1 invariant_init          status:  proved_by_kernel_decision
+                                engine:  omega
+       generated VC:  (0 ≤ 0 ∧ 0 ≤ 8)
+    O2 invariant_preservation
+       arithmetic step:   planned (no discharge backend linked yet)
+       operational step:  planned — needs Lean (operational realization), shape:
+           theorem ghost_state_count_up_loop_preserves (fns : FnTable) (env : Env) (fuel : Nat) … :
+             eval.evalAssigns fns env fuel <body> = some <env after [ acc := acc + i; i := i + 1 ]>
+             ∧ (0 <= i && i <= bound)      -- arithmetic half above is omega-discharged
+       generated VC:  ∀ (i bound acc : Int), 
+           (0 ≤ i ∧ i ≤ bound) →      -- invariant (assumed)
+           i < 8 →      -- guard (assumed)
+           (0 ≤ (i + 1) ∧ (i + 1) ≤ bound)      -- invariant' after body [ acc := acc + i; i := i + 1 ]
+    O3 loop_exit_post_link     status:  n/a (no #[ensures] postcondition)
+    O4 variant_nonnegative     status:  proved_by_kernel_decision
+                                engine:  omega
+       generated VC:  ∀ (i bound : Int), (0 ≤ i ∧ i ≤ bound) → i < 8 → 0 ≤ (bound - i)
+    O5 variant_decreases       status:  proved_by_kernel_decision
+                                engine:  omega
+       generated VC:  ∀ (i bound : Int), (0 ≤ i ∧ i ≤ bound) → i < 8 → (bound - (i + 1)) < (bound - i)
+
