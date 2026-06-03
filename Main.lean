@@ -726,13 +726,42 @@ def bvDischargeCallSites (candidates : List (Nat × String)) : IO (List Nat) := 
       if (← runLean (mkSrc [c])) == 0 then proved := proved ++ [c.1]
     return proved
 
+/-- Discharge loop init/variant VCs with `omega`. Each candidate is
+    `(key, leanGoal)`; returns the keys that kernel-check. These VCs are linear
+    integer facts over `Int` (the same domain as the preservation proof), so the
+    decision procedure is `omega`, not `bv_decide` (bitvector-only). Batched,
+    falling back per-goal. No external SMT — `omega` is a kernel decision
+    procedure with a checked certificate. -/
+def kernelDischargeLoopVCs (candidates : List (String × String)) : IO (List String) := do
+  if candidates.isEmpty then return []
+  let indexed := (List.range candidates.length).zip candidates
+  let mkSrc (cs : List (Nat × (String × String))) : String :=
+    String.join (cs.map (fun (i, (_, g)) => s!"theorem lvc_{i} : {g} := by intros; omega\n"))
+  let runLean (src : String) : IO UInt32 := do
+    let tmpDir ← IO.Process.output { cmd := "mktemp", args := #["-d"] }
+    let dir := tmpDir.stdout.trimAscii.toString
+    IO.FS.writeFile ⟨dir ++ "/lvc.lean"⟩ src
+    let r ← IO.Process.output { cmd := "lake", args := #["env", "lean", dir ++ "/lvc.lean"],
+                                env := #[("LAKE_TERM_ANSI", "0")] }
+    let _ ← IO.Process.output { cmd := "rm", args := #["-rf", dir] }
+    return r.exitCode
+  if (← runLean (mkSrc indexed)) == 0 then
+    return candidates.map (·.1)
+  else
+    let mut proved : List String := []
+    for c in indexed do
+      if (← runLean (mkSrc [c])) == 0 then proved := proved ++ [c.2.1]
+    return proved
+
 /-- Render the contracts report plus the call-site obligation section, running
-    the `bv_decide` backend on the closed-but-non-literal obligations. -/
+    the `bv_decide` backend on the closed-but-non-literal call-site obligations
+    and `omega` on the loop init/variant VCs. -/
 def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.ProofRegistry) : IO String := do
   let obs := Report.callSiteObligations parsedModules
   let cands := ((List.range obs.length).zip obs).filterMap fun (i, o) => o.leanGoal.map (fun g => (i, g))
   let proved ← bvDischargeCallSites cands
-  return Report.contractsReport parsedModules registry ++ Report.renderCallSites obs proved
+  let provedVCs ← kernelDischargeLoopVCs (Report.loopVCGoals parsedModules)
+  return Report.contractsReport parsedModules registry provedVCs ++ Report.renderCallSites obs proved
 
 /-- Run pipeline and check a profile constraint.
     If the input file lives inside a `Concrete.toml` project, route

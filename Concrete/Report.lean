@@ -829,12 +829,41 @@ def genVariantDecreases (lc : LoopContract) : Option String := do
   let vs' ← toLeanProp v'
   some s!"∀ ({" ".intercalate vars} : Int), {" ∧ ".intercalate invs} → {gs} → {vs'} < {vs}"
 
+/-- Stable identity for one loop obligation, shared by the goal collector and
+    the renderer so discharge results map back to the right line. -/
+def loopVCKey (fnQual : String) (line : Nat) (obl : String) : String :=
+  s!"{fnQual}@{line}#{obl}"
+
+/-- Collect the loop VCs that a kernel decision procedure can discharge:
+    `invariant_init` (O1), `variant_nonnegative` (O4), `variant_decreases` (O5).
+    Each is `(key, leanGoal)` where the goal is the same string the report
+    shows — it is already valid Lean (`∀ (i : Int), … `) provable by
+    `intros; omega`. Preservation (O2) stays hand-linked; exit-link (O3) needs a
+    postcondition. -/
+def loopVCGoals (modules : List Module) : List (String × String) := Id.run do
+  let withLoops := (modules.flatMap allFunctions).filter (fun (_, f) => !f.loopContracts.isEmpty)
+  let mut out : List (String × String) := []
+  for (pfx, f) in withLoops do
+    let extraLets := letConstMap f.body
+    let fq := pfx ++ f.name
+    for lc in f.loopContracts do
+      if let some g := genInitVC lc extraLets then
+        out := out ++ [(loopVCKey fq lc.line "O1", g)]
+      if lc.variant.isSome then
+        if let some g := genVariantNonneg lc then
+          out := out ++ [(loopVCKey fq lc.line "O4", g)]
+        if let some g := genVariantDecreases lc then
+          out := out ++ [(loopVCKey fq lc.line "O5", g)]
+  return out
+
 /-- The loop-contract section: for each `#[invariant]`/`#[variant]`-annotated
     loop, enumerate the verification obligations it induces. Every obligation now
-    carries a compiler-generated VC shape; the preservation obligation's
-    discharge is hand-linked via a `coverage: invariant` registry entry, the
-    rest are `planned`. -/
-def loopContractSection (modules : List Module) (registry : ProofRegistry) : String := Id.run do
+    carries a compiler-generated VC shape. Discharge: preservation (O2) is
+    hand-linked via a `coverage: invariant` registry entry; init/variant
+    (O1/O4/O5) are kernel-discharged by `omega` when their key appears in
+    `provedVCs`; the rest are `planned`. -/
+def loopContractSection (modules : List Module) (registry : ProofRegistry)
+    (provedVCs : List String := []) : String := Id.run do
   let withLoops := (modules.flatMap allFunctions).filter (fun (_, f) => !f.loopContracts.isEmpty)
   if withLoops.isEmpty then return ""
   let mut out := "\n\n=== Loop contracts ==="
@@ -845,6 +874,7 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry) : Str
       | some e => if e.coverage == "invariant" && !e.proof.isEmpty then some e.proof else none
       | none => none
     let extraLets := letConstMap f.body
+    let fq := pfx ++ f.name
     for lc in f.loopContracts do
       out := out ++ s!"\n\n{pfx}{f.name}  (loop @ line {lc.line})"
       for inv in lc.invariants do
@@ -855,8 +885,15 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry) : Str
       out := out ++ "\n  obligations:"
       let planned := "planned (no discharge backend linked yet)"
       let vc := fun (g : Option String) => match g with | some s => s!"\n       generated VC:  {s}" | none => ""
-      -- O1 invariant_init — generated shape, discharge planned
-      out := out ++ s!"\n    O1 invariant_init          status:  {planned}{vc (genInitVC lc extraLets)}"
+      -- Kernel-decision status for an obligation: omega-discharged when its key
+      -- is in `provedVCs`, else planned. `omega` is a kernel decision procedure
+      -- (linear integer arithmetic), no external SMT in the TCB.
+      let kstat := fun (obl : String) =>
+        if provedVCs.contains (loopVCKey fq lc.line obl)
+        then "proved_by_kernel_decision\n                                engine:  omega"
+        else planned
+      -- O1 invariant_init — generated shape, kernel-discharged
+      out := out ++ s!"\n    O1 invariant_init          status:  {kstat "O1"}{vc (genInitVC lc extraLets)}"
       -- O2 invariant_preservation — generated shape + hand-linked discharge
       match preserveProof with
       | some thm => out := out ++ s!"\n    O2 invariant_preservation  status:  proved_by_lean\n                                theorem: {thm}{vc (genPreservationVC lc)}"
@@ -865,12 +902,13 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry) : Str
       out := out ++ s!"\n    O3 loop_exit_post_link     status:  {planned}"
       match lc.variant with
       | some _ =>
-        out := out ++ s!"\n    O4 variant_nonnegative     status:  {planned}{vc (genVariantNonneg lc)}"
-        out := out ++ s!"\n    O5 variant_decreases       status:  {planned}{vc (genVariantDecreases lc)}"
+        out := out ++ s!"\n    O4 variant_nonnegative     status:  {kstat "O4"}{vc (genVariantNonneg lc)}"
+        out := out ++ s!"\n    O5 variant_decreases       status:  {kstat "O5"}{vc (genVariantDecreases lc)}"
       | none => pure ()
   return out ++ "\n"
 
-partial def contractsReport (modules : List Module) (registry : ProofRegistry) : String := Id.run do
+partial def contractsReport (modules : List Module) (registry : ProofRegistry)
+    (provedVCs : List String := []) : String := Id.run do
   -- Discharge status for an obligation on `qual`: a registry entry whose
   -- `ensures_proof` names the theorem that proves it → proved_by_lean; else missing.
   let discharge (qual : String) : String :=
@@ -903,7 +941,7 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry) :
     return out
   let body := modules.foldl (fun acc m => go m acc) ""
   let body := if body.isEmpty then "\n(no spec fns or #[ensures] contracts found)" else body
-  return s!"=== Source Contracts ==={body}\n{loopContractSection modules registry}"
+  return s!"=== Source Contracts ==={body}\n{loopContractSection modules registry provedVCs}"
 
 /-- Whether any module (or submodule) carries a source contract — a `spec fn`
     or an `#[ensures(...)]`. Used to decide whether `audit` appends the
