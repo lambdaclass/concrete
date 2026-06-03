@@ -117,19 +117,54 @@ Name the evidence class before implementing freestanding/embedded targets:
 Once Concrete emits real binaries, source-mapped DWARF / crash traces matter for
 auditability. Tooling/backend item, not first-release proof-critical.
 
-### Contract-VC sequencing caution (see Phase 1/2)
+### Contract-VC stability tiers (dependency edge into Phase 8)
 
-Contracts v1 and VC generation should stay **conservative** until the language
-slab settles — bytes/text/path, the iteration protocol, collections, and
-capability polymorphism (Phase 8). Avoid baking collection/iterator assumptions
-into the VC shape so we don't design VCs around temporary syntax.
+The risk this names: Phase 9 flagships are what exercise contracts, and they
+will keep hitting an un-frozen Phase 8 surface — so any VC/contract IR designed
+in Phases 1-2 against that surface gets reworked when collections and the
+iteration protocol land. The fix is **not** to reorder (that is circular: the
+flagships are what stress-test Phase 8) but to tag each contract/VC construct by
+stability tier and refuse to freeze syntax over the provisional tier. This is
+the same discipline as "let the proof teach the syntax" (Phase 1 preamble),
+made into an explicit dependency.
 
-### External-validation milestone (see Phase 13)
+- **Frozen-safe** — obligations over integers, booleans, `BitVec`, and
+  fixed-size arrays. This is the slab every shipped proof already stands on
+  (HMAC, `ct_compare`, the loop VC). Contract/VC syntax here may be stabilized.
+- **Provisional** — any obligation quantifying over collections, iterators,
+  strings/text, bytes, paths, or capability-polymorphic callees. These depend
+  on **Phase 8 items 4 (module/import stability), 7 (bytes/text/path), 9
+  (collections), 17 (iteration protocol), and 18 (capability polymorphism)**
+  and MUST NOT have their contract syntax or VC shape frozen until those items
+  land. Treat any such construct as "will be reworked," and do not let a
+  flagship bake an iterator/collection assumption into the VC shape.
 
-Before the big build-out, one useful Concrete program should be written, proved,
-or contract-annotated by **someone other than the compiler author**. That is the
-real maturity test for whether ProofKit + contracts + `concrete prove` are
-actually usable.
+### External-validation gate (go / no-go before the back half of Phases 8-15)
+
+This is a **gate, not a note** — promoted out of Phase 13 because validation
+that sits downstream of the build-out it is meant to justify is no validation
+at all. The central bet of the whole project is "evidence-carrying source is
+worth the discipline." Today the only person who has found it worth the cost is
+the person who built it, yet Phases 8-15 (packages, editor, freestanding,
+release) are a large investment fully predicated on that bet. The research under
+`research/` and `thesis-validation/` tests the thesis but is currently orphaned
+from the execution plan; this gate wires it in.
+
+It cannot be "before any Phase 8" — there is a chicken-and-egg floor: an outside
+user needs *some* slab to write anything real. So the gate is:
+
+1. **Define the minimum slab** an external user needs to write and prove one
+   useful program — likely Phase 8 items 4 (module stability), 7 (bytes/text),
+   9 (collections), plus a package/build path.
+2. **Build exactly that** — not the full back half.
+3. **Run the trial and treat the result as an explicit go / no-go on the rest
+   of Phases 8-15.**
+
+**Pass criterion:** at least one person who is **not** the compiler author
+writes, proves, or contract-annotates a useful Concrete program and reports that
+the proof discipline (ProofKit + contracts + `concrete prove`) was worth the
+cost. Until this passes, the back half of Phases 8-15 is flagged **at-risk**,
+not green.
 
 ---
 
