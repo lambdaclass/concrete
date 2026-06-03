@@ -1,11 +1,11 @@
 # ProofCore State Model
 
-Status: design proposal (ROADMAP Phase 4 item 1).
+Status: design proposal (compiler soundness bridge input; see ROADMAP Phase 10).
 
 This document fixes how `PExpr` and `eval` model state for mutation,
 arrays, structs, loops, and failure.  It is the guiding contract for
-all later extraction rules in Phase 4 — array index assignment,
-richer while bodies, struct/field update, bounded buffers.  Without
+all later extraction rules — array index assignment, richer while bodies,
+struct/field update, bounded buffers.  Without
 this contract, each rule would invent its own encoding (the failure
 mode `a93f68f`'s docs commit named).
 
@@ -41,7 +41,7 @@ in-place edits.  No heap.  This is the only encoding that keeps
 Concrete's source-level mutation (`x = e`, `arr[i] = e`,
 `obj.f = e`) extracts to functional-update PExpr shapes.  The
 semantic gap (source has true mutation; PExpr has functional
-updates) is bridged by the Phase 12 preservation obligations
+updates) is bridged by the Phase 10 preservation obligations
 named per-section below.
 
 ## 1. Environment updates
@@ -65,7 +65,7 @@ inside a loop rebinds an already-bound `name` (does NOT introduce
 a new scope); after the loop, the binding established by the last
 iteration's last assign is what `cont` sees.
 
-### Phase 12 obligation
+### Phase 10 obligation
 
 `assignment_preservation`: for every source-level `x = e` in a
 proof-eligible function body, the source's mutation of `x` after
@@ -208,10 +208,10 @@ semantics.
 ## 6. What the state model does NOT decide
 
 - Width / signedness of arithmetic.  That's the multi-width PBinOp
-  item (ROADMAP Phase 4 item 7), independent of this doc.
+  item (see the Phase 10 compiler soundness bridge), independent of this doc.
 - Whether `PVal` becomes typed.  PVal stays dynamically shaped; type
   discipline is enforced by Check on the source side and by the
-  Phase 12 preservation obligations above on the proof side.
+  Phase 10 preservation obligations above on the proof side.
 - Reference semantics.  References are not in PExpr.
 - Atomics / concurrency.  Phase 3 owns concurrency.
 

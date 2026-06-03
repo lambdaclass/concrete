@@ -1,42 +1,42 @@
-# ProofCore Pass Contracts and Phase 12 Obligations Register
+# ProofCore Pass Contracts and Phase 10 Obligations Register
 
-Status: contract document (ROADMAP Phase 4 item 5).
+Status: contract document (compiler soundness bridge input; see ROADMAP Phase 10).
 
-This document is the **per-rule register** of Phase 4's
-extraction surface.  For every PExpr construct, evaluator rule,
+This document is the **per-rule register** of the ProofCore extraction
+surface.  For every PExpr construct, evaluator rule,
 and trust gate, it records:
 
 - What Concrete source construct it covers
 - What assumptions it introduces
 - What it explicitly rejects
 - Which example / regression forced it
-- What Phase 12 preservation / soundness theorem will
+- What Phase 10 preservation / soundness theorem will
   eventually justify it
 
 The purpose is **load-bearing transparency**.  Today the
 compiler extracts source to PExpr and the Lean kernel checks
 theorems against extracted forms.  That chain is only sound if
 every link's contract is honored.  This document is the link
-inventory.  When Phase 12 starts proving preservation, every
+inventory.  When Phase 10 starts proving preservation, every
 entry here gets a corresponding Lean theorem (or an explicit
 "this entry is unsoundable as stated; rethink").
 
 ## Reading the table
 
 Each rule has a stable identifier `R-<NN>` referenced from
-commit messages and Phase 12 obligations.  Entries are
+commit messages and Phase 10 obligations.  Entries are
 chronological (earliest extension first); the register is
 append-only — a removed rule is marked `(retired YYYY-MM-DD)`
 in place, not deleted.
 
-The Phase 12 obligation field names the theorem Concrete owes
+The Phase 10 obligation field names the theorem Concrete owes
 the user.  A blank field means the obligation is unstated
 (should never be blank for a landed rule); `TBD` means stated
 informally below the table but not yet a Lean theorem name.
 
 ## Register
 
-| ID | PExpr shape | Concrete source | Forcing example | Phase 12 obligation |
+| ID | PExpr shape | Concrete source | Forcing example | Phase 10 obligation |
 |---:|---|---|---|---|
 | R-01 | `lit (int n)` | `42`, `0x10`, `-1` | parse_validate | `lit_int_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness`; non-partial wrapper landed same day |
 | R-02 | `lit (bool b)` | `true`, `false` | parse_validate | `lit_bool_preservation` — **fully discharged against `cExprToPExpr` 2026-05-30** in `Concrete.ProofSoundness` |
@@ -509,7 +509,7 @@ Adding a new width (e.g. i64 srem) means:
   1. Add the corresponding `evalBinOp` case.
   2. Add the `binOpToPBinOp` mapping (`.i64` / `.u64` / etc.).
   3. Append a row to this register naming the new obligation.
-The Phase 12 obligations `mod_width_preservation` and
+The Phase 10 obligations `mod_width_preservation` and
 `bitxor_width_preservation` are parameterized over width and
 signedness — one preservation theorem per supported width
 combination.
@@ -630,8 +630,8 @@ but not yet implemented:
   field update.  Source `obj.f = v` extracts to `letIn name
   (structSet (var name) "f" val) rest`.  No flagship yet
   forces it; ring_push only mutates an array field.
-- **Multi-width PBinOp at non-32 / non-u8 widths** (ROADMAP
-  Phase 4 item 7): all width-sensitive constructors are
+- **Multi-width PBinOp at non-32 / non-u8 widths** (Phase 10 compiler
+  soundness bridge): all width-sensitive constructors are
   parameterized (`.mod width signed` / `.bitxor width signed`
   / `.bitor width signed`).  evalBinOp currently supports
   i32/u32 (mod, bitxor), u8 (bitxor, bitor).  Adding u16 /
