@@ -56,6 +56,76 @@ imagined obligation shape.
 
 ---
 
+## Cross-cutting decisions and checkpoints (recorded 2026-06-03)
+
+These are decisions/checkpoints, not yet implementation. Each names the
+evidence class so no construct stays semantically dark.
+
+### Floats: usable now, provable only under an explicit profile
+
+**Decision.** `f32`/`f64` are allowed as runtime types but are **outside
+ProvableV1**. No proof or release claim may be made over float arithmetic until
+a float profile exists.
+
+**Known gap (must fix before any float proof claim).** Today a float-arithmetic
+function with no float *literal* — e.g. `fn fadd(x: f64, y: f64) -> f64 { x + y }`
+— extracts to `(x + y)` and reports `status: extracted`, `eligible`: the float
+`+` is silently modeled as the *integer* `.add`. That is a soundness/honesty
+bug (it violates "no semantically dark constructs") and the first slice of the
+float arc must close it: float-typed params/returns/locals/ops become
+`unsupported_for_proof` and **excluded** from eligibility at the Core level
+(where the float type still exists), audit-loud:
+`float semantics: unprofiled → proof excluded`.
+
+**Provable Float V1 (future, narrow profile — see Phase 6).** A function opts
+into a named profile, e.g. `#[float_profile(ieee754_binary64_nearest_even)]`:
+- IEEE-754 binary32/binary64; round-to-nearest-even only at first.
+- No fast-math; no reassociation; no FMA contraction unless the source names
+  `fma`; no ambient rounding-mode mutation.
+- Explicit NaN / infinity / subnormal / signed-zero policy.
+- **Bit-level semantics first**: model floats as `BitVec 32/64`; add
+  `PVal.float32/64` and float `PBinOp` cases (`fadd`/`fsub`/`fmul`/`fdiv`/`feq`/
+  `flt`/`fle`) carrying width + rounding; interpreter agreement.
+- **Honest trust label.** Lean's `Float` is opaque/native, not bit-level
+  reasoning. The primitive IEEE ops start as a **trusted axiom layer**
+  (`float_semantics_trusted`) or an imported checked library (Flocq-style)
+  until derived. So v1 = "extracted body refines an explicit IEEE-754 bit-spec
+  whose primitive ops are named trusted" — not `proved_by_lean` from first
+  principles. Backend must prove/report `fast_math: forbidden`,
+  `rounding: nearest_even`.
+- First flagship: a small deterministic numeric kernel (clamp/normalize, a
+  fixed-order dot product, a tiny IIR/FIR or PID), proved exact-IEEE — not
+  scientific computing. Real-number ε-bound refinement is a later layer.
+
+### Embedded hardware access: evidence classes (see Phase 12)
+
+Name the evidence class before implementing freestanding/embedded targets:
+- **inline asm** — `trusted`, requires `with(Unsafe)`.
+- **volatile / MMIO** — explicit capability, e.g. `with(Device)` / `with(Mmio)`;
+  reads/writes are audit-visible effects, never silently elided.
+- **interrupt handlers** — a separate trusted/effectful boundary.
+
+### Native debug info (see Phase 11)
+
+Once Concrete emits real binaries, source-mapped DWARF / crash traces matter for
+auditability. Tooling/backend item, not first-release proof-critical.
+
+### Contract-VC sequencing caution (see Phase 1/2)
+
+Contracts v1 and VC generation should stay **conservative** until the language
+slab settles — bytes/text/path, the iteration protocol, collections, and
+capability polymorphism (Phase 8). Avoid baking collection/iterator assumptions
+into the VC shape so we don't design VCs around temporary syntax.
+
+### External-validation milestone (see Phase 13)
+
+Before the big build-out, one useful Concrete program should be written, proved,
+or contract-annotated by **someone other than the compiler author**. That is the
+real maturity test for whether ProofKit + contracts + `concrete prove` are
+actually usable.
+
+---
+
 ## Phase 1: Source Contracts
 
 Goal: let proof-relevant properties live in source code without breaking LL(1),
