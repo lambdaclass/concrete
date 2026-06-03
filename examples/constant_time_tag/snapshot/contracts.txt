@@ -1,0 +1,36 @@
+=== Source Contracts ===
+
+constant_time_tag.ct_compare
+  O1  ensures (a == b && result == 1) || (a != b && result == 0)
+     status:  partial — one direction proved_by_lean, converse outstanding
+     theorem: Concrete.Proof.ct_compare_same_tag_correct  (coverage: one_direction)
+     note:    full postcondition not yet discharged; the converse is the next obligation
+
+
+=== Loop contracts ===
+
+constant_time_tag.ct_compare  (loop @ line 46)
+  invariant 0 <= i && i <= 16
+  variant   16 - i
+  obligations:
+    O1 invariant_init          status:  proved_by_kernel_decision
+                                engine:  omega
+       generated VC:  (0 ≤ 0 ∧ 0 ≤ 16)
+    O2 invariant_preservation
+       arithmetic step:   proved_by_kernel_decision (omega)
+       operational step:  planned — needs Lean (operational realization), shape:
+           theorem constant_time_tag_ct_compare_loop_preserves (fns : FnTable) (env : Env) (fuel : Nat) … :
+             eval.evalAssigns fns env fuel <body> = some <env after [ diff := diff | (a[i] ^ b[i]); i := i + 1 ]>
+             ∧ (0 <= i && i <= 16)      -- arithmetic half above is omega-discharged
+       generated VC:  ∀ (i diff : Int), 
+           (0 ≤ i ∧ i ≤ 16) →      -- invariant (assumed)
+           i < 16 →      -- guard (assumed)
+           (0 ≤ (i + 1) ∧ (i + 1) ≤ 16)      -- invariant' after body [ diff := diff | (a[i] ^ b[i]); i := i + 1 ]
+    O3 loop_exit_post_link     status:  planned (no discharge backend linked yet)
+    O4 variant_nonnegative     status:  proved_by_kernel_decision
+                                engine:  omega
+       generated VC:  ∀ (i : Int), (0 ≤ i ∧ i ≤ 16) → i < 16 → 0 ≤ (16 - i)
+    O5 variant_decreases       status:  proved_by_kernel_decision
+                                engine:  omega
+       generated VC:  ∀ (i : Int), (0 ≤ i ∧ i ≤ 16) → i < 16 → (16 - (i + 1)) < (16 - i)
+

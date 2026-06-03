@@ -2,9 +2,9 @@
 
 module constant_time_tag:
   ct_compare
-    frame: 45 bytes  depth: 0  stack: 45 bytes  @ examples/constant_time_tag/src/main.con:33
+    frame: 45 bytes  depth: 0  stack: 45 bytes  @ examples/constant_time_tag/src/main.con:42
   main
-    frame: 164 bytes  depth: 1  stack: 209 bytes  @ examples/constant_time_tag/src/main.con:50
+    frame: 164 bytes  depth: 1  stack: 209 bytes  @ examples/constant_time_tag/src/main.con:61
 
 Totals: 2 functions, 2 bounded, 0 recursive (unbounded)
 Max stack bound: 209 bytes (main)

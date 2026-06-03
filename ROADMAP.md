@@ -47,12 +47,13 @@ realized in full: *source extracts to this ProofCore body, this body refines
 the spec, and drift breaks the claim.* `--report check-proofs` = 11 verified,
 0 failed; spec-drift gate = 0 drift, 0 stale.
 
-Next: continue the post-HMAC build-out. The first source-contract slices have
-landed (attributes, `spec fn`, `requires`/`ensures`, call-site obligations,
-`bv_decide` discharge, loop contracts, and one kernel-checked loop VC), and
-ProofKit has been harvested into reusable modules. The remaining Phase 1-4
-work is to make those pieces less hand-linked: generated VCs, ghost state,
-proof stubs, audit UX, flagship retrofit, and release-grade review artifacts.
+Next: continue the post-HMAC build-out. The source-contract and proof-authoring
+slab now exists: attributes, `spec fn`, `requires`/`ensures`, call-site
+obligations, `bv_decide` / `omega` discharge, loop contracts, generated loop VC
+shapes, `ghost`, a contracts guide, and `concrete prove` v1. ProofKit has been
+harvested into reusable modules. The remaining Phase 1-4 work is to make the
+first real flagship use source contracts as the primary proof surface, then
+tighten audit UX, registry retirement, and release-grade review artifacts.
 Phase 5 through Phase 7 remain hardening gates; pull their items forward when
 they block the Phase 1-4 work or before release.
 
@@ -192,11 +193,12 @@ solver-assisted.
 
 **Status (2026-06-03).** The contract surface is no longer aspirational:
 `spec fn`, `#[ensures]`, `#[requires]`, call-site obligations, `bv_decide`
-classification, `#[invariant]`/`#[variant]`, and one kernel-checked
-`invariant_preservation` obligation have shipped. The remaining work in this
-phase is to replace hand-linked examples with generated obligations, add
-`ghost`/`assert`/`assume`, and retrofit a flagship so source contracts become
-the primary proof surface rather than a reported overlay.
+classification, `#[invariant]`/`#[variant]`, generated loop VC shapes,
+kernel-checked `omega` discharge for the easy loop VCs, `ghost`, the contracts
+guide, and `concrete prove` v1 have shipped. The remaining work in this phase
+is the first flagship retrofit: make `constant_time_tag` use source contracts
+as its primary proof surface while keeping its constant-time claim as a
+separate audit/security evidence layer.
 
 1. Add LL(1)-safe function attributes:
    `#[requires(...)]` and `#[ensures(...)]`.
@@ -246,8 +248,26 @@ the primary proof surface rather than a reported overlay.
 16. Add contract stability rules: weakening a precondition, strengthening a
     postcondition, or changing a public invariant is a semantic API change.
 17. Add one contract-bearing flagship retrofit after the machinery is real:
-    `constant_time_tag` first, then `hmac_sha256` once its refinement theorem
-    has graduated.
+    `constant_time_tag` first, then `hmac_sha256` only after the smaller
+    retrofit proves the workflow.
+    - **Chosen scope for `constant_time_tag`.** Use layered evidence, not one
+      overloaded claim. The source contract proves value semantics; the
+      constant-time shape remains a structural audit/profile claim; machine
+      timing remains an explicit trusted assumption.
+    - Add an inline postcondition first, not a new named `contract SameTag`
+      syntax. Example shape:
+      `#[ensures((a == b && result == 1) || (a != b && result == 0))]`.
+      Named contract declarations can be revisited only if reuse demands them.
+    - Current proof coverage is intentionally partial: the same-tag direction
+      (`a == b -> result == 1`) is already `proved_by_lean`; the different-tag
+      direction (`a != b -> result == 0`) is a planned Lean theorem. The audit
+      must show the full postcondition as not fully discharged until that
+      theorem lands.
+    - Loop arithmetic leaves should discharge through kernel decision
+      procedures where possible; operational preservation stays linked to Lean
+      when it needs evaluator/loop reasoning.
+    - `concrete prove` should expose the remaining obligation rather than
+      hiding it.
 
 ## Phase 2: Verification Conditions And SMT Assistance
 
@@ -303,8 +323,11 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
 13. Add SMT negative examples: false postcondition, missing invariant,
     overflow counterexample, OOB counterexample, div-zero counterexample,
     solver timeout, and unsupported theory.
-14. Retrofit one flagship with source contracts whose easy VCs discharge
-    automatically, while the meaningful theorem remains Lean-checked.
+14. Retrofit `constant_time_tag` with source contracts whose easy VCs discharge
+    automatically, while the meaningful theorem remains Lean-checked. This is
+    the Phase 1 item 17 workflow test: functional correctness via contracts,
+    constant-time source shape via audit/profile reporting, machine-level timing
+    via explicit assumption.
 15. Update audit/release bundles so VC results appear beside proof registry,
     assumptions, runtime obligations, and proof coverage classification.
 16. Add soundness documentation for the SMT path: trusted solver binary,
@@ -321,9 +344,11 @@ lemmas, and actionable failure diagnostics.
 
 **Status (2026-06-03).** ProofKit v1.1 has shipped as reusable, `fns`-generic
 modules (`Eval`, `BitVec`, `Array`, `Loops`, `Calls`, `Refinement`) with an
-umbrella import and a proof guide. The remaining work is proof authoring UX:
-generated stubs, generated composition scaffolds, failed-obligation debugging,
-and `concrete prove <function>`.
+umbrella import and a proof guide. `concrete prove <function>` v1 has shipped
+as a read-only scaffold generator. The remaining work is richer proof authoring
+UX: generated composition scaffolds, replay commands, failed-obligation
+debugging, and in-source theorem/spec links once the contract retrofit teaches
+the shape.
 
 1. [DONE] Package the reusable HMAC proof infrastructure as **Concrete Proof Kit v1**:
    spec/refinement pattern, loop proof kit, array/state proof kit, BitVec
@@ -428,17 +453,22 @@ and `concrete prove <function>`.
    - **Near term:** auto-discharge removes many entries because obligations
      close from the in-source contract alone — O1/O3/O4/O5 and O2's arithmetic
      half already need no registry entry (omega / `bv_decide`).
-   - **Next:** `concrete prove <function>` teaches the remaining link shape (the
-     residual hand-written-Lean proofs: HMAC chain, point proofs, O2 operational
-     half).
-   - **Later:** in-source proof attributes — e.g. `#[proof_by(thm)]` /
-     `#[spec(name)]` — replace the JSON theorem/spec links, versioned with the
-     code and surfaced in the same audit output as the contract.
+   - **Now:** `concrete prove <function>` v1 teaches the remaining link shape
+     by printing the extracted body, fingerprint, contract/VC list, ProofKit
+     hints, and next missing obligation. Use the `constant_time_tag` retrofit
+     to learn whether this is enough or whether the link syntax needs another
+     field.
+   - **Next:** design in-source proof attributes — e.g. `#[proof_by(thm)]` /
+     `#[spec(name)]` — for residual hand-written-Lean proofs (HMAC chain, point
+     proofs, O2 operational half, `constant_time_tag` converse). These replace
+     the JSON theorem/spec links only after one flagship retrofit validates the
+     workflow.
    - **End state:** `body_fingerprint` is computed from extraction at build
      time (re-extraction already runs), not hand-stored in JSON and rot-prone.
-   - **Rule:** do **not** migrate the registry to a new format before
-     `concrete prove` exists — let the tool teach the syntax (same discipline as
-     the contract-VC stability tiers).
+   - **Rule:** do **not** migrate the registry to a new format until the
+     `constant_time_tag` retrofit has exercised `concrete prove` on a real
+     flagship — let the tool and the retrofit teach the syntax (same discipline
+     as the contract-VC stability tiers).
 
 ## Phase 4: Audit Commands And Review Artifacts
 
@@ -480,6 +510,12 @@ five graduated flagships and one package-scale example.
 14. Keep audit, contracts, obligations, assumptions, policies, manifests, and
     proof-status output on one shared vocabulary. Do not let each artifact grow
     its own mini-language for the same evidence classes.
+15. Keep public-facing docs and website copy grounded in the same evidence
+    vocabulary. Use `docs/WHY_CONCRETE.md` as the source for a C/Rust-oriented
+    "why this exists" page: small systems code, explicit authority, visible
+    evidence classes, spec-drift-tied proofs, named trust boundaries, and what
+    Concrete deliberately avoids. The website should show the end goal and the
+    current honest status, not catchy slogans or one-badge proof claims.
 
 ## Phase 5: Proof Status And Trust Gates
 
@@ -698,64 +734,78 @@ debug small Concrete programs with predictable commands and useful errors.
 15. Add ignored-result diagnostics for fallible APIs: discarding `Result`,
     `Option`, or runtime-check results is a warning/error unless explicitly
     acknowledged with `_ = ...`, `ignore(...)`, or a policy-approved pattern.
-16. Add source style guidance alongside `concrete fmt`: idiomatic layout for
+16. Track accumulating error sets for `Result`-heavy code, without adopting row
+    effects. Protocol parsers and service pipelines repeatedly want "this
+    function may return exactly these error variants" without hand-writing one
+    giant wrapper enum for every stage. First implementation should be a
+    compiler report / audit fact over existing enum-returning functions; only
+    later consider surface syntax if it stays obvious, e.g. a named error-set
+    alias or a restricted union of enum variants. Do **not** introduce general
+    row polymorphism or implicit effect rows.
+17. Evaluate units-of-measure / dimensional annotations for common systems
+    mistakes: bytes vs bits, milliseconds vs seconds, block counts vs byte
+    offsets, protocol lengths, and memory sizes. Start as optional annotations
+    and diagnostics over integer-like values, not full dependent types. Any
+    proof story must be contract/VC-based and audit-visible; unit erasure must
+    not hide conversions or allocation.
+18. Add source style guidance alongside `concrete fmt`: idiomatic layout for
     functions, modules, contracts, matches, error handling, examples, and
     proof-bearing code.
-17. Decide the v1 iteration protocol before broad stdlib work. Evaluate and
+19. Decide the v1 iteration protocol before broad stdlib work. Evaluate and
     document the replacement for closures/trait-object iterators:
     index-based `for i in 0..len { xs[i] }`, explicit cursor/iterator structs
     with `next() -> Option<T>`, and monomorphized `for_each`-style helpers. The
     decision must cover `Vec`, slices, maps, parser cursors, and interpreter
     workloads, and must explain how authority and allocation remain visible.
-18. Decide capability polymorphism for higher-order stdlib functions before
+20. Decide capability polymorphism for higher-order stdlib functions before
     adding `map`/`fold`/`for_each` families or structured concurrency. The
     design must avoid a combinatorial split like `map`, `map_file`,
     `map_alloc`; the expected shape is explicit capability-set polymorphism
     such as `fn map<T, U, C>(xs, f: fn(T) with(C) -> U) with(C) -> ...`,
     grounded in `research/language/capability-polymorphism.md`.
-19. Define stdlib v1 for daily programs: fixed arrays/slices, bytes/string
+21. Define stdlib v1 for daily programs: fixed arrays/slices, bytes/string
     basics, `Result`/`Option`, numeric helpers, and capability-scoped Console,
     File, Network, and Alloc APIs. Each stdlib item must declare its evidence
     class (`trusted`, `enforced`, `proved`, `reported`, or `assumed`).
-20. Design user-facing testing framework UX before `std.test` hardens:
+22. Design user-facing testing framework UX before `std.test` hardens:
     test discovery (`#[test]` versus naming convention), expected failures,
     capability-scoped fixtures, temp files without ambient authority, oracle
     tests, interpreter-vs-compiled tests, proof-status interaction, and how test
     failures appear in `concrete audit`.
-21. Add `concrete test`: discover and run user tests, example tests,
+23. Add `concrete test`: discover and run user tests, example tests,
     expected-failure tests, interpreter-vs-compiled differential tests,
     snapshot tests, oracle tests, and policy/assumption gates through one
     command.
-22. Add debug/trace mode: `concrete run --trace`, interpreter step traces, Core /
+24. Add debug/trace mode: `concrete run --trace`, interpreter step traces, Core /
     lowered-IR dumps, source spans in runtime errors, and stable replay commands
     for report/debug failures.
-23. Add interactive evidence commands for low-ceremony feedback without a live
+25. Add interactive evidence commands for low-ceremony feedback without a live
     mutable REPL: evaluate a function with concrete inputs, inspect Core and
     ProofCore for one function, show the current generated obligation, and
     replay a failing proof/debug report. Target commands include
     `concrete eval`, `concrete inspect --core`, `concrete inspect --proofcore`,
     `concrete prove --show-obligation`, and `concrete run --trace`.
-24. Add a minimal project model before full packages: `Concrete.toml` fields for
+26. Add a minimal project model before full packages: `Concrete.toml` fields for
     name, entry points, tests, policies, assumptions, source roots, and build
     profiles.
-25. Normalize the CLI around predictable verbs:
+27. Normalize the CLI around predictable verbs:
     `concrete build`, `concrete run`, `concrete test`, `concrete fmt`,
     `concrete audit`, `concrete prove`, `concrete eval`, `concrete inspect`,
     `concrete doc`, and `concrete clean`.
-26. Add `concrete doc`: generate basic API/reference docs from source,
+28. Add `concrete doc`: generate basic API/reference docs from source,
     capabilities, modules, and public comments without depending on proof
     infrastructure.
-27. Add a first-user tutorial path that does not start with proofs: install,
+29. Add a first-user tutorial path that does not start with proofs: install,
     hello world, ownership, capabilities, arrays, modules, tests, audit, then
     proof-bearing examples.
-28. Add useful non-proof examples: a small CLI tool, a protocol decoder, a
+30. Add useful non-proof examples: a small CLI tool, a protocol decoder, a
     bounded cache, and a capability-scoped file/console program.
-29. Add basic benchmarking UX: run small benchmarks, compare interpreter versus
+31. Add basic benchmarking UX: run small benchmarks, compare interpreter versus
     compiled performance, and detect obvious generated-code regressions.
-30. Document the memory model for ordinary users: move/copy/drop behavior,
+32. Document the memory model for ordinary users: move/copy/drop behavior,
     cleanup, borrows, linear values, trusted/Unsafe escape hatches, and what is
     rejected.
-31. Add cross-platform build sanity for the supported host set: macOS and Linux
+33. Add cross-platform build sanity for the supported host set: macOS and Linux
     first, with CI coverage, reproducible commands, and documented toolchain
     expectations.
 

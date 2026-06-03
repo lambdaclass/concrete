@@ -1,8 +1,8 @@
 === Proof Eligibility Assessment ===
 
-  eligible   `constant_time_tag.ct_compare`  @ examples/constant_time_tag/src/main.con:33
+  eligible   `constant_time_tag.ct_compare`  @ examples/constant_time_tag/src/main.con:42
              in provable subset: pure, bounded, no FFI
-  excluded   `constant_time_tag.main`  @ examples/constant_time_tag/src/main.con:50
+  excluded   `constant_time_tag.main`  @ examples/constant_time_tag/src/main.con:61
              source: has capabilities: Console, is entry point (main)
 
 Totals: 2 functions — 1 eligible, 1 excluded (1 source, 0 profile, 0 both), 0 trusted

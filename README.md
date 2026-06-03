@@ -17,6 +17,9 @@
 
 Concrete combines Rust-like ownership, Zig-like explicit systems control, Austral-like capability discipline, and Lean 4 kernel-checked proofs. It is not a proof assistant; it is a no-GC systems language Lean can reason about. The compiler is written in Lean 4 and the long-term aim is to prove selected compiler properties in the same kernel — but that work is gated, see "Where Concrete is honest" below.
 
+If you are coming from C or Rust and want the short "why this exists" version,
+read [docs/WHY_CONCRETE.md](docs/WHY_CONCRETE.md).
+
 ## Where Concrete sits
 
 | | Rust | Zig | SPARK / Ada | Lean 4 | Austral | **Concrete** |

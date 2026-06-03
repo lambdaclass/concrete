@@ -30,8 +30,19 @@ mod constant_time_tag {
     //   * no content-dependent branch inside the loop
     // The trailing `if diff == 0` happens once after all 16
     // bytes have been folded.
+    // Functional-correctness postcondition (value semantics): the result is 1
+    // exactly when the tags are equal, 0 otherwise. This is the contract the
+    // proof pipeline discharges. (Constant-time is a SEPARATE structural claim —
+    // see AUDIT.md; it is not expressible as a value-semantics #[ensures].)
+    //
+    // Today the same-tag direction (a == b → 1) is proved in Lean; the
+    // different-tag direction (a != b → 0) is the outstanding obligation
+    // (`concrete prove constant_time_tag.ct_compare` prints it as next).
+    #[ensures((a == b && result == 1) || (a != b && result == 0))]
     fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
         let mut diff: u8 = 0;
+        #[invariant(0 <= i && i <= 16)]
+        #[variant(16 - i)]
         for (let mut i: i32 = 0; i < 16; i = i + 1) {
             diff = diff | (a[i] ^ b[i]);
         }

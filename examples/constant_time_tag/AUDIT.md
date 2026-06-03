@@ -51,6 +51,57 @@ Three claims a reviewer is asked to trust:
    Constant-time at the *machine* level remains a backend /
    target assumption — see § 4.
 
+## Layered evidence (source-contract retrofit, 2026-06-03)
+
+`ct_compare` is the first flagship to use **source contracts as the
+primary proof surface**. It carries an inline functional-correctness
+postcondition plus a loop contract:
+
+```con
+#[ensures((a == b && result == 1) || (a != b && result == 0))]
+#[invariant(0 <= i && i <= 16)]
+#[variant(16 - i)]
+```
+
+This deliberately does **not** flatten the different claim types into one
+contract. `concrete prove constant_time_tag.ct_compare` and
+`--report contracts` show the layers, each in its own evidence class:
+
+```
+functional correctness:
+  same-tag direction (a == b → 1):      proved_by_lean
+                                        (ct_compare_same_tag_correct)
+  different-tag direction (a != b → 0): missing / planned  ← next obligation
+
+loop obligations (the fixed-trip-count discipline, as arithmetic):
+  invariant_init:          proved_by_kernel_decision (omega)
+  invariant_preservation:  arithmetic proved_by_kernel_decision (omega);
+                           operational step needs Lean (theorem shape emitted)
+  variant_nonnegative:     proved_by_kernel_decision (omega)
+  variant_decreases:       proved_by_kernel_decision (omega)
+
+constant-time source shape:  enforced / reported
+  (fixed bound 16, no early return in the loop, no content-dependent
+   branch — a STRUCTURAL/security claim, not a value-semantics #[ensures];
+   surfaced by Concrete's effects/eligibility reports and the catches/ pair)
+
+machine-level timing:        assumed / trusted
+  (LLVM/target may reintroduce branches; out of scope for source proof —
+   named explicitly in assumptions.toml, see § 4)
+```
+
+Why `#[ensures]` carries only functional correctness: it is a
+**value-semantics** statement about the return value. Constant-time is a
+statement about *control-flow structure* and ultimately *machine timing* —
+different claim classes that live in the structural-enforcement and
+trusted-assumption layers, not in a value postcondition. Keeping them
+separate is the honest Concrete story; collapsing them into one green badge
+would not be.
+
+The different-tag direction is the immediate follow-up (it needs an
+`x ^ y ≠ 0 when x ≠ y` lemma at `u8` plus folding over the 16 bytes);
+proving it upgrades functional correctness to a full-iff `proved_by_lean`.
+
 ## What this candidate is NOT
 
 Stated up front so the rest of the audit does not oversell.

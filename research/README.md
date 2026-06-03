@@ -73,6 +73,7 @@ If you want the highest-leverage current research first:
 - [language/cleanup-ergonomics.md](language/cleanup-ergonomics.md) — reducing ownership/cleanup friction without hiding it (`P1`, `Open`)
 - [language/const-generics-comptime.md](language/const-generics-comptime.md) — const generics versus comptime, and where the philosophy line should stay (`P2`, `Research`)
 - [language/derived-equality-design.md](language/derived-equality-design.md) — possible derived structural equality (`P2`, `Open`)
+- [language/graded-modal-types.md](language/graded-modal-types.md) — why graded/modal types are research-only for now; quantitative resource facts should start as contracts/reports, not type-system core (`P2`, `Research`)
 - [language/heap-ownership-design.md](language/heap-ownership-design.md) — chosen `Heap<T>` ownership model (`P1`, `Adopted`)
 - [language/heap-access-revisited.md](language/heap-access-revisited.md) — follow-up on heap access syntax and tradeoffs (`P2`, `Open`)
 - [language/module-qualification.md](language/module-qualification.md) — historical note on qualified access and namespace pressure (`P1`, `Closed`)

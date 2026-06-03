@@ -1003,13 +1003,19 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
 
 partial def contractsReport (modules : List Module) (registry : ProofRegistry)
     (provedVCs : List String := []) : String := Id.run do
-  -- Discharge status for an obligation on `qual`: a registry entry whose
-  -- `ensures_proof` names the theorem that proves it → proved_by_lean; else missing.
+  -- Discharge status for an `#[ensures]` on `qual`. Tiers, honest about partial
+  -- coverage: a registered `ensures_proof` → fully proved_by_lean. Otherwise, a
+  -- registered `proof` with directional coverage (`one_direction`) discharges
+  -- ONE direction of the postcondition — shown as partial, with the converse
+  -- still outstanding — rather than collapsing to a bare "missing".
   let discharge (qual : String) : String :=
     match registry.find? (fun e => e.function == qual) with
     | some e => match e.ensuresProof with
       | some thm => s!"\n     status:  proved_by_lean\n     theorem: {thm}"
-      | none     => "\n     status:  missing (registry entry has no ensures_proof)"
+      | none =>
+        if !e.proof.isEmpty && e.coverage == "one_direction" then
+          s!"\n     status:  partial — one direction proved_by_lean, converse outstanding\n     theorem: {e.proof}  (coverage: one_direction)\n     note:    full postcondition not yet discharged; the converse is the next obligation"
+        else "\n     status:  missing (registry entry has no ensures_proof)"
     | none => "\n     status:  missing (no proof-registry entry for this function)"
   let rec go (m : Module) (acc : String) : String := Id.run do
     let mut out := acc
@@ -2541,17 +2547,31 @@ def proveReportEntry (registry : ProofRegistry) (e : ProofCoreEntry)
   -- requires / ensures
   for r in f.requires do
     vcLines := vcLines ++ [s!"  requires {Concrete.fmtExpr r}    assumed_at_entry"]
-  let ensuresProof : Option String :=
-    (registry.find? (fun re => re.function == e.qualName)).bind (·.ensuresProof)
+  let regEntry := registry.find? (fun re => re.function == e.qualName)
+  let ensuresProof : Option String := regEntry.bind (·.ensuresProof)
+  -- A registered directional proof discharges one direction of the iff.
+  let oneDir := match regEntry with
+    | some re => re.ensuresProof.isNone && !re.proof.isEmpty && re.coverage == "one_direction"
+    | none => false
   for ens in f.ensures do
     let st := match ensuresProof with
       | some thm => s!"linked to Lean theorem {thm}"
-      | none => "missing (no registered ensures_proof)"
+      | none => if oneDir then "partial — one direction proved_by_lean, converse outstanding"
+                else "missing (no registered ensures_proof)"
     vcLines := vcLines ++ [s!"  ensures {Concrete.fmtExpr ens}    {st}"]
   -- loop obligations
   let extraLets := letConstMap f.body
   let retExpr := loopExitReturn f.body
   let mut nextOb : Option (String × String) := none  -- (id, reason)
+  -- The function postcondition IS the contract; completing it takes priority
+  -- over the loop's operational step (which the literal-bound proof can bypass).
+  if !f.ensures.isEmpty && ensuresProof.isNone then
+    if oneDir then
+      nextOb := some ("#[ensures] converse direction",
+        "the proved direction discharges half the postcondition; prove the converse (the other direction of the iff) to fully discharge #[ensures]")
+    else
+      nextOb := some ("#[ensures] postcondition",
+        "state the spec and prove the postcondition; no registered theorem discharges it yet")
   for lc in f.loopContracts do
     let omegaSt := fun (obl : String) =>
       if provedVCs.contains (loopVCKey e.qualName lc.line obl) then "discharged by omega" else "PLANNED"

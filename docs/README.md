@@ -7,6 +7,7 @@ This directory holds the stable reference docs for Concrete's implementation and
 Use these files as the primary reference once a design has moved out of exploration:
 
 - [IDENTITY.md](IDENTITY.md) — what Concrete is optimizing for, where it intends to differentiate, and what it is not trying to be
+- [WHY_CONCRETE.md](WHY_CONCRETE.md) — a direct overview for C and Rust developers: why Concrete exists, what it makes visible, and what it deliberately avoids
 - [PRINCIPLES.md](PRINCIPLES.md) — the stable language principles: minimalist systems programming, no GC, linear/resource-aware ownership, explicit boundaries, predictable execution, and Lean-backed proof direction
 - [INFLUENCES.md](INFLUENCES.md) — which external language ideas Concrete copies, adapts, or rejects
 - [SAFETY.md](SAFETY.md) — capabilities, `trusted`, `Unsafe`, proof boundary, and high-integrity direction
