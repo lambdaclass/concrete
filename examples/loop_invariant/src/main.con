@@ -10,6 +10,21 @@ mod loop_invariant {
         }
         return acc;
     }
+
+    // O3 exit_implies_post fixture. The postcondition `result == 8` follows
+    // ONLY from the loop-exit condition: the invariant alone gives 0 <= i <= 8,
+    // and only `¬(i < 8)` (the exit) pins i = 8. So the bridge from loop
+    // invariant to function #[ensures] is exactly the exit hypothesis.
+    #[ensures(result == 8)]
+    fn count_to_eight() -> i32 {
+        let mut i: i32 = 0;
+        #[invariant(0 <= i && i <= 8)]
+        #[variant(8 - i)]
+        while i < 8 {
+            i = i + 1;
+        }
+        return i;
+    }
 }
 
 pub fn main() with(Std) -> Int { return 0; }

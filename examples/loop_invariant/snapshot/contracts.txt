@@ -1,5 +1,8 @@
 === Source Contracts ===
-(no spec fns or #[ensures] contracts found)
+
+loop_invariant.count_to_eight
+  O1  ensures result == 8
+     status:  missing (no proof-registry entry for this function)
 
 
 === Loop contracts ===
@@ -17,7 +20,29 @@ loop_invariant.count_up  (loop @ line 8)
            (0 ≤ i ∧ i ≤ 8) →      -- invariant (assumed)
            i < 8 →      -- guard (assumed)
            (0 ≤ (i + 1) ∧ (i + 1) ≤ 8)      -- invariant' after body [ acc := acc + i; i := i + 1 ]
-    O3 loop_exit_post_link     status:  planned (no discharge backend linked yet)
+    O3 loop_exit_post_link     status:  n/a (no #[ensures] postcondition)
+    O4 variant_nonnegative     status:  proved_by_kernel_decision
+                                engine:  omega
+       generated VC:  ∀ (i : Int), (0 ≤ i ∧ i ≤ 8) → i < 8 → 0 ≤ (8 - i)
+    O5 variant_decreases       status:  proved_by_kernel_decision
+                                engine:  omega
+       generated VC:  ∀ (i : Int), (0 ≤ i ∧ i ≤ 8) → i < 8 → (8 - (i + 1)) < (8 - i)
+
+loop_invariant.count_to_eight  (loop @ line 23)
+  invariant 0 <= i && i <= 8
+  variant   8 - i
+  obligations:
+    O1 invariant_init          status:  proved_by_kernel_decision
+                                engine:  omega
+       generated VC:  (0 ≤ 0 ∧ 0 ≤ 8)
+    O2 invariant_preservation  status:  planned (no discharge backend linked yet)
+       generated VC:  ∀ (i : Int), 
+           (0 ≤ i ∧ i ≤ 8) →      -- invariant (assumed)
+           i < 8 →      -- guard (assumed)
+           (0 ≤ (i + 1) ∧ (i + 1) ≤ 8)      -- invariant' after body [ i := i + 1 ]
+    O3 loop_exit_post_link     status:  proved_by_kernel_decision
+                                engine:  omega
+       generated VC:  ∀ (i : Int), (0 ≤ i ∧ i ≤ 8) ∧ ¬(i < 8) → i = 8
     O4 variant_nonnegative     status:  proved_by_kernel_decision
                                 engine:  omega
        generated VC:  ∀ (i : Int), (0 ≤ i ∧ i ≤ 8) → i < 8 → 0 ≤ (8 - i)

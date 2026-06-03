@@ -829,6 +829,40 @@ def genVariantDecreases (lc : LoopContract) : Option String := do
   let vs' ← toLeanProp v'
   some s!"∀ ({" ".intercalate vars} : Int), {" ∧ ".intercalate invs} → {gs} → {vs'} < {vs}"
 
+/-- The function's loop-exit return expression, when the loop is immediately
+    followed by a single `return e`. In that shape the loop-exit state IS the
+    returned state (no intervening mutation), so substituting `result := e` into
+    `#[ensures]` is sound. `none` otherwise — keeps O3 conservative rather than
+    claiming a post that post-loop code could invalidate. -/
+def loopExitReturn (body : List Stmt) : Option Expr :=
+  match body.reverse with
+  | (.return_ _ (some e)) :: prev :: _ =>
+    match prev with
+    | .forLoop .. | .while_ .. => some e
+    | _ => none
+  | _ => none
+
+/-- **exit_implies_post VC (O3)**: the loop's exit facts discharge the function
+    postcondition. The exit hypothesis is `invariant ∧ ¬guard`; the goal is the
+    `#[ensures]` with `result` replaced by the loop-exit return expression.
+    States `∀ vars, invariant ∧ ¬guard → ensures'`. `none` when there is no
+    ensures, no clean loop-exit return, or a `result` we cannot ground (so the
+    bridge stays honest). -/
+def genExitVC (lc : LoopContract) (ensures : List Expr) (retExpr : Option Expr) : Option String := do
+  let g ← lc.guard
+  if lc.invariants.isEmpty || ensures.isEmpty then failure
+  let subst := match retExpr with | some e => [("result", e)] | none => []
+  let posts := ensures.map (substContract subst)
+  -- a still-free `result` means we could not ground the postcondition → bail
+  if posts.any (fun e => (collectIdents e).contains "result") then failure
+  let invs ← lc.invariants.mapM toLeanProp
+  let gs ← toLeanProp g
+  let postStrs ← posts.mapM toLeanProp
+  let vars := (lc.invariants.flatMap collectIdents ++ collectIdents g
+                ++ posts.flatMap collectIdents).eraseDups
+  let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
+  some s!"{binder}{" ∧ ".intercalate invs} ∧ ¬({gs}) → {" ∧ ".intercalate postStrs}"
+
 /-- Stable identity for one loop obligation, shared by the goal collector and
     the renderer so discharge results map back to the right line. -/
 def loopVCKey (fnQual : String) (line : Nat) (obl : String) : String :=
@@ -846,9 +880,12 @@ def loopVCGoals (modules : List Module) : List (String × String) := Id.run do
   for (pfx, f) in withLoops do
     let extraLets := letConstMap f.body
     let fq := pfx ++ f.name
+    let retExpr := loopExitReturn f.body
     for lc in f.loopContracts do
       if let some g := genInitVC lc extraLets then
         out := out ++ [(loopVCKey fq lc.line "O1", g)]
+      if let some g := genExitVC lc f.ensures retExpr then
+        out := out ++ [(loopVCKey fq lc.line "O3", g)]
       if lc.variant.isSome then
         if let some g := genVariantNonneg lc then
           out := out ++ [(loopVCKey fq lc.line "O4", g)]
@@ -898,8 +935,15 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
       match preserveProof with
       | some thm => out := out ++ s!"\n    O2 invariant_preservation  status:  proved_by_lean\n                                theorem: {thm}{vc (genPreservationVC lc)}"
       | none     => out := out ++ s!"\n    O2 invariant_preservation  status:  {planned}{vc (genPreservationVC lc)}"
-      -- O3 exit_link needs a postcondition; generated when the fn has #[ensures]
-      out := out ++ s!"\n    O3 loop_exit_post_link     status:  {planned}"
+      -- O3 exit_implies_post: bridges loop exit facts (invariant ∧ ¬guard) to
+      -- the function #[ensures]. Generated only when there is an ensures and a
+      -- clean loop-exit return; kernel-discharged by omega like O1/O4/O5.
+      let exitVC := genExitVC lc f.ensures (loopExitReturn f.body)
+      let o3status :=
+        if exitVC.isSome then kstat "O3"
+        else if f.ensures.isEmpty then "n/a (no #[ensures] postcondition)"
+        else planned
+      out := out ++ s!"\n    O3 loop_exit_post_link     status:  {o3status}{vc exitVC}"
       match lc.variant with
       | some _ =>
         out := out ++ s!"\n    O4 variant_nonnegative     status:  {kstat "O4"}{vc (genVariantNonneg lc)}"
