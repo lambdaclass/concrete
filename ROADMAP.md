@@ -176,6 +176,7 @@ prose.
 
 Design reference: [docs/CONTRACTS_AND_VCS.md](docs/CONTRACTS_AND_VCS.md), and
 [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md) for the build order.
+Usage reference (what works today): [docs/CONTRACTS_GUIDE.md](docs/CONTRACTS_GUIDE.md).
 
 **Ordering (let the proof teach the syntax):** do not freeze contract syntax or
 VC shapes before a real refinement proof exists. The spec layer, the `bv_decide`
