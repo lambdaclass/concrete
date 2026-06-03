@@ -1,0 +1,22 @@
+=== Source-to-ProofCore Extraction ===
+
+  ft.fadd(x, y)
+    status: excluded
+    reasons: floating-point arithmetic has no active proof profile
+    fingerprint: [(ret (binop Concrete.BinOp.add (var x) (var y)))]
+    loc: examples/float_unprofiled/src/main.con:17
+
+  ft.fscale(x)
+    status: excluded
+    reasons: floating-point arithmetic has no active proof profile
+    fingerprint: [(ret (binop Concrete.BinOp.add (var x) (var x)))]
+    loc: examples/float_unprofiled/src/main.con:19
+
+  main.main()
+    status: excluded
+    reasons: has capabilities: Alloc, Clock, Console, Env, File, Network, Process, Random, is entry point (main), allocation, blocking I/O
+    fingerprint: [(ret (int 0))]
+    loc: examples/float_unprofiled/src/main.con:22
+
+Totals: 3 functions — 0 extracted, 0 eligible but not extractable, 3 excluded
+

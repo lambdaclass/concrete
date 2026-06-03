@@ -1676,11 +1676,18 @@ def eligibilityReport (pc : Concrete.ProofCore) : String :=
     else if e.eligible then
       s!"  eligible   `{e.qualName}`  @ {locStr}\n             in provable subset: pure, bounded, no FFI"
     else
+      -- Float arithmetic gets a dedicated, honest framing: it is not a generic
+      -- profile miss but an absent proof profile. Says the useful thing.
+      let floatReason := "floating-point arithmetic has no active proof profile"
+      let floatStr := if e.profileReasons.contains floatReason then
+        s!"\n             float semantics: unprofiled\n             proof eligibility: excluded\n             reason: {floatReason}"
+        else ""
+      let otherProfile := e.profileReasons.filter (· != floatReason)
       let srcStr := if e.sourceReasons.isEmpty then "" else
         s!"\n             source: {", ".intercalate e.sourceReasons}"
-      let profStr := if e.profileReasons.isEmpty then "" else
-        s!"\n             profile: {", ".intercalate e.profileReasons}"
-      s!"  excluded   `{e.qualName}`  @ {locStr}{srcStr}{profStr}"
+      let profStr := if otherProfile.isEmpty then "" else
+        s!"\n             profile: {", ".intercalate otherProfile}"
+      s!"  excluded   `{e.qualName}`  @ {locStr}{srcStr}{profStr}{floatStr}"
   -- Summary
   let eligible := (entries.filter (·.eligible)).length
   let excluded := (entries.filter fun e => !e.eligible && !e.isTrusted).length

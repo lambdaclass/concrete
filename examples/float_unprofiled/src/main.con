@@ -1,0 +1,22 @@
+// Regression fixture: floating-point arithmetic must NOT be proof-eligible.
+//
+// Before the float-soundness fix, `fadd` extracted to `(x + y)` and reported
+// `eligible` — the float `+` was silently modeled as the *integer* `.add`.
+// That violated "no semantically dark constructs": a proof claim over float
+// code with no float proof profile. ProvableV1 is integer/bool only.
+//
+// The fix excludes float-typed params/returns/ops from eligibility at the Core
+// level (where the float type still exists), audit-loud:
+//   float semantics: unprofiled / proof eligibility: excluded /
+//   reason: floating-point arithmetic has no active proof profile
+//
+// See ROADMAP "Provable Float V1" for the future opt-in profile.
+mod ft {
+    // No float *literal* here — the floatness is only in the types, which is
+    // exactly the case the old literal-only check missed.
+    fn fadd(x: f64, y: f64) -> f64 { return x + y; }
+
+    fn fscale(x: f32) -> f32 { return x + x; }
+}
+
+pub fn main() with(Std) -> Int { return 0; }

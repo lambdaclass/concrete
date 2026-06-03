@@ -1,0 +1,16 @@
+=== Proof Eligibility Assessment ===
+
+  excluded   `ft.fadd`  @ examples/float_unprofiled/src/main.con:17
+             float semantics: unprofiled
+             proof eligibility: excluded
+             reason: floating-point arithmetic has no active proof profile
+  excluded   `ft.fscale`  @ examples/float_unprofiled/src/main.con:19
+             float semantics: unprofiled
+             proof eligibility: excluded
+             reason: floating-point arithmetic has no active proof profile
+  excluded   `main.main`  @ examples/float_unprofiled/src/main.con:22
+             source: has capabilities: Alloc, Clock, Console, Env, File, Network, Process, Random, is entry point (main)
+             profile: allocation, blocking I/O
+
+Totals: 3 functions — 0 eligible, 3 excluded (0 source, 2 profile, 1 both), 0 trusted
+

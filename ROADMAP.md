@@ -47,12 +47,14 @@ realized in full: *source extracts to this ProofCore body, this body refines
 the spec, and drift breaks the claim.* `--report check-proofs` = 11 verified,
 0 failed; spec-drift gate = 0 drift, 0 stale.
 
-Next: return to Phase 1 through Phase 4: source contracts, VC generation,
-discharge classification, flagship retrofit, proof authoring UX, and audit
-surfaces. Phase 5 through Phase 7 remain hardening gates; pull their items
-forward when they block the Phase 1-4 work or before release. This keeps
-contract syntax grounded in a real discharged refinement proof instead of an
-imagined obligation shape.
+Next: continue the post-HMAC build-out. The first source-contract slices have
+landed (attributes, `spec fn`, `requires`/`ensures`, call-site obligations,
+`bv_decide` discharge, loop contracts, and one kernel-checked loop VC), and
+ProofKit has been harvested into reusable modules. The remaining Phase 1-4
+work is to make those pieces less hand-linked: generated VCs, ghost state,
+proof stubs, audit UX, flagship retrofit, and release-grade review artifacts.
+Phase 5 through Phase 7 remain hardening gates; pull their items forward when
+they block the Phase 1-4 work or before release.
 
 ---
 
@@ -67,15 +69,20 @@ evidence class so no construct stays semantically dark.
 ProvableV1**. No proof or release claim may be made over float arithmetic until
 a float profile exists.
 
-**Known gap (must fix before any float proof claim).** Today a float-arithmetic
-function with no float *literal* — e.g. `fn fadd(x: f64, y: f64) -> f64 { x + y }`
-— extracts to `(x + y)` and reports `status: extracted`, `eligible`: the float
-`+` is silently modeled as the *integer* `.add`. That is a soundness/honesty
-bug (it violates "no semantically dark constructs") and the first slice of the
-float arc must close it: float-typed params/returns/locals/ops become
-`unsupported_for_proof` and **excluded** from eligibility at the Core level
-(where the float type still exists), audit-loud:
-`float semantics: unprofiled → proof excluded`.
+**Soundness gap — CLOSED (2026-06-03).** Previously a float-arithmetic function
+with no float *literal* — e.g. `fn fadd(x: f64, y: f64) -> f64 { x + y }` —
+extracted to `(x + y)` and reported `status: extracted`, `eligible`: the float
+`+` was silently modeled as the *integer* `.add`. That was a soundness/honesty
+bug (it violated "no semantically dark constructs"). The first slice of the
+float arc now closes it: `assessEligibility` flags any float-typed param,
+return, or body op (detected from the still-present Core type via `isFloatTy`)
+as a profile miss, so the function is **excluded** from eligibility and never
+extracted. `identifyUnsupportedExpr` likewise reports float binops/idents/casts/
+literals as `unsupported_for_proof`. Audit-loud, the dedicated framing reads:
+`float semantics: unprofiled / proof eligibility: excluded /
+reason: floating-point arithmetic has no active proof profile`. Regression
+fixture: `examples/float_unprofiled/` with `eligibility` + `extraction`
+snapshots (`0 extracted`). `ProvableFloatV1` below remains the future opt-in.
 
 **Provable Float V1 (future, narrow profile — see Phase 6).** A function opts
 into a named profile, e.g. `#[float_profile(ieee754_binary64_nearest_even)]`:
@@ -146,6 +153,14 @@ imagined ones. See the build order in `docs/PROOF_LADDER.md`.
 Done when: one flagship uses source contracts as the primary proof surface, and
 each contract is classified as proved, enforced, assumed, missing, blocked, or
 solver-assisted.
+
+**Status (2026-06-03).** The contract surface is no longer aspirational:
+`spec fn`, `#[ensures]`, `#[requires]`, call-site obligations, `bv_decide`
+classification, `#[invariant]`/`#[variant]`, and one kernel-checked
+`invariant_preservation` obligation have shipped. The remaining work in this
+phase is to replace hand-linked examples with generated obligations, add
+`ghost`/`assert`/`assume`, and retrofit a flagship so source contracts become
+the primary proof surface rather than a reported overlay.
 
 1. Add LL(1)-safe function attributes:
    `#[requires(...)]` and `#[ensures(...)]`.
@@ -266,11 +281,17 @@ of one-off `simp` scripts.
 Done when: new flagship proofs can start from useful generated stubs, standard
 lemmas, and actionable failure diagnostics.
 
-1. Package the reusable HMAC proof infrastructure as **Concrete Proof Kit v1**:
+**Status (2026-06-03).** ProofKit v1.1 has shipped as reusable, `fns`-generic
+modules (`Eval`, `BitVec`, `Array`, `Loops`, `Calls`, `Refinement`) with an
+umbrella import and a proof guide. The remaining work is proof authoring UX:
+generated stubs, generated composition scaffolds, failed-obligation debugging,
+and `concrete prove <function>`.
+
+1. [DONE] Package the reusable HMAC proof infrastructure as **Concrete Proof Kit v1**:
    spec/refinement pattern, loop proof kit, array/state proof kit, BitVec
    automation kit, function-table/call kit, generated proof stubs,
    failed-obligation/debug UX, and tutorial proof shapes.
-2. After HMAC is tied to the exact extracted source and graduated, split generic
+2. [DONE] After HMAC is tied to the exact extracted source and graduated, split generic
    proof infrastructure out of `Concrete/Sha256Refine.lean` into dedicated
    modules:
    `Concrete/ProofKit/Eval.lean` for fuel and `while_` lemmas,
@@ -282,23 +303,23 @@ lemmas, and actionable failure diagnostics.
    `Concrete/ProofKit/Refinement.lean` for generic `PExpr`-refines-spec
    theorem patterns. `Concrete/Sha256Refine.lean` should then import the kit
    and contain only SHA/HMAC-specific proofs and buffer/spec shapes.
-3. Make the spec/refinement pattern public: independent Lean spec module,
+3. [DONE] Make the spec/refinement pattern public: independent Lean spec module,
    extracted `PExpr` refinement theorem shape, registry/fingerprint wiring,
    and examples such as `ch_refines`, `block_to_words_refines_spec`,
    `sha256_compress_refines_spec`, and `sha256_hash_refines_spec`.
-4. Expose the loop proof kit:
+4. [DONE] Expose the loop proof kit:
    `eval_fuel_succ`, `eval_fuel_le`, `eval_while_false`,
    `eval_while_true`, `eval_while_count`, and templates for counter-loop
    invariants.
-5. Expose the array/state proof kit:
+5. [DONE] Expose the array/state proof kit:
    `lookupIndex_set_self`, `lookupIndex_set_ne`, `length_set`,
    `set_in_counter_map`, the multi-store frame pattern from `state_to_bytes`,
    and the buffer-update model from the padding proof.
-6. Expose the BitVec automation kit:
+6. [DONE] Expose the BitVec automation kit:
    `bv_decide` examples, `Int`/`Nat`/`BitVec` bridge lemmas, u8/u32 packing
    helpers, wrapping add/shift/rotate helper facts, and symbolic index bridge
    examples.
-7. Expose the function-table/call kit:
+7. [DONE] Expose the function-table/call kit:
    FnTable completeness helpers, call-wrapper refinement pattern, callee
    refinement dependencies, and dependency-ordered table-entry discipline for
    composed functions.
@@ -359,7 +380,7 @@ Goal: let a reviewer answer "what can this program do, what is proved, what is
 assumed, and what changed?" without reading compiler internals.
 
 Done when: `concrete audit`, semantic diff, and an artifact viewer cover the
-four graduated flagships and one package-scale example.
+five graduated flagships and one package-scale example.
 
 1. Stabilize machine-readable fact schemas for proof status, obligations,
    effects, capabilities, assumptions, policies, snapshots, and showcase
@@ -461,6 +482,28 @@ promises.
 10. Add negative examples for every `ProvableV1` and `PredictableV1` exclusion.
 11. Update `CLAIMS_TODAY.md`, README, showcase docs, and release bundles to use
     the frozen subset names consistently.
+12. Close the unprofiled-float proof hole before any float proof claim:
+    float-typed params/returns/locals/literals/ops are excluded from ProofCore
+    extraction unless an explicit float profile is active. Audit output must
+    say `float semantics: unprofiled` and `proof eligibility: excluded` rather
+    than reporting a float operation as extracted through integer `PBinOp.add`.
+13. Define `ProvableFloatV1` as a separate, narrow proof profile:
+    IEEE-754 binary32/binary64, round-to-nearest-even, no fast-math, no
+    reassociation, no implicit FMA contraction, no ambient rounding-mode
+    mutation, and explicit NaN/infinity/subnormal/signed-zero policy.
+14. Add ProofCore support for profiled floats only after item 12 is closed:
+    `PVal.float32/64`, float `PBinOp` cases carrying width and rounding
+    (`fadd`/`fsub`/`fmul`/`fdiv`/`feq`/`flt`/`fle`), interpreter agreement,
+    and backend/audit checks that prove/report `fast_math: forbidden`.
+15. Classify the first float semantics layer honestly. Until Concrete imports
+    or proves a checked IEEE-754 semantics library, primitive float operations
+    are `float_semantics_trusted`; proofs over profiled float code are
+    refinements to an explicit bit-level IEEE spec under that named trusted
+    primitive layer, not `proved_by_lean` from first principles.
+16. Add one small `ProvableFloatV1` flagship only after the profile exists:
+    a fixed-order `f32`/`f64` kernel such as clamp/normalize, tiny FIR/IIR, PID,
+    or dot product. Prove exact IEEE behavior first; real-valued epsilon-bound
+    refinement is a later layer.
 
 ## Phase 7: Runtime Safety Obligations
 
@@ -638,34 +681,34 @@ internally coherent.
 Done when: the showcase set includes a serious security/crypto or protocol
 example with proof/evidence strong enough to anchor the public pitch.
 
-HMAC is tracked explicitly in Phase 0 because it is the active proof thread and
-the forcing example for source-contract obligation shape. This phase keeps the
-broader flagship pipeline after that exception: maintain graduated examples,
-deepen their theorem coverage, and add new examples only when they force a
-named surface or public claim.
+HMAC is complete and tracked in Phase 0 as the forcing example for
+source-contract and ProofKit obligation shape. This phase now maintains the
+graduated showcase, deepens theorem coverage where it strengthens public
+claims, and adds new examples only when they force a named surface or public
+claim.
 
-1. Maintain the four graduated flagships and keep their evidence bundles green:
-   `parse_validate`, `crypto_verify`, `fixed_capacity`, `constant_time_tag`.
+1. Maintain the five graduated flagships and keep their evidence bundles green:
+   `parse_validate`, `crypto_verify`, `fixed_capacity`, `constant_time_tag`,
+   and `hmac_sha256`.
 2. Add stretch theorem for `constant_time_tag`: full iff if tractable, or a
    clearly named stronger negative-direction theorem.
 3. Add stretch theorem for `fixed_capacity`: multi-iteration ring invariant or
    stronger push/search property.
 4. Add stretch theorem for `parse_validate`: success-path / failure-completeness
    theorem once proof ergonomics support it.
-5. Audit the next stronger real-crypto candidate: HMAC-SHA256 verification or
-   Ed25519 verification subset.
+5. Audit the next stronger real-crypto candidate only if it forces a new public
+   claim: Ed25519 verification subset, AEAD, or a post-quantum primitive.
 6. Add only the ProofCore surface that candidate forces: shifts, bitand, u32
    compound loops, rotations, byte-to-word packing, and multi-round invariants.
-7. For `hmac_sha256`, complete the final composition theorem:
-   `hmac_sha256_refines_spec`. The SHA-256 hash side is already proved through
-   `sha256_hash_refines_spec`; HMAC should not add new proof infrastructure.
-8. Graduate `hmac_sha256` only after bar #2 is closed: update manifest,
-   README/status text, release bundle, proof-status table, changelog, and
-   roadmap notes.
-9. After `hmac_sha256` graduates, update the paper and website to use HMAC as
-   the running example for source, spec, proof status, assumptions, oracle,
-   limits, and trusted boundaries. Do not make HMAC the public center before
-   the refinement claim is real.
+7. Keep `hmac_sha256` as the regression anchor for exact-extraction,
+   spec-drift-tied refinement: source perturbations must make the registered
+   proof stale, and ProofKit refactors must keep the 11 proof checks green.
+8. Keep the paper, website, README, and showcase manifest aligned with HMAC's
+   actual claim: exact extracted source refines an independent SHA-256/HMAC
+   spec under named assumptions and trusted backend boundaries.
+9. Use HMAC-derived proof patterns only after they move into ProofKit or an
+   explicit example guide; do not let future flagships copy private
+   `Sha256Refine` scaffolding as hidden infrastructure.
 10. Graduate one runtime-error-obligation flagship: parser/protocol example with
    no OOB/div-zero/overflow obligations discharged.
 11. Graduate one authority/capability flagship: a privilege-separated tool whose

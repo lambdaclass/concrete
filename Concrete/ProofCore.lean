@@ -1124,9 +1124,21 @@ def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
 
 -- Unsupported construct identification
 
+/-- Floating-point types have no active proof profile (ProvableV1 is
+    integer/bool/BitVec only). Any float value or float arithmetic makes a
+    function unprovable until a float profile exists — see ROADMAP
+    "Provable Float V1". Detecting this is what keeps the proof system from
+    silently modeling float `+` as integer `.add`. -/
+private def isFloatTy : Ty → Bool
+  | .float32 | .float64 => true
+  | _ => false
+
+private def floatReason : String := "unprofiled floating-point arithmetic"
+
 mutual
 private partial def identifyUnsupportedExpr : CExpr → List String
-  | .floatLit .. => ["float literal"]
+  | .floatLit .. => [floatReason]
+  | .ident _ ty => if isFloatTy ty then [floatReason] else []
   | .strLit .. => ["string literal"]
   | .charLit .. => ["char literal"]
   -- structLit, enumLit, and fieldAccess are now supported by
@@ -1162,19 +1174,23 @@ private partial def identifyUnsupportedExpr : CExpr → List String
   -- `.cast` extracts to `PExpr.cast` (identity semantics on
   -- mathematical `Int`); recurse so any unsupported construct
   -- inside the cast operand still surfaces.
-  | .cast inner _ => identifyUnsupportedExpr inner
+  | .cast inner targetTy =>
+    (if isFloatTy targetTy then [floatReason] else []) ++ identifyUnsupportedExpr inner
   | .fnRef .. => ["function reference"]
   | .try_ .. => ["try expression"]
   | .allocCall .. => ["alloc call"]
   | .whileExpr .. => ["while expression"]
   | .unaryOp .. => ["unary operator"]
-  | .binOp op lhs rhs _ =>
+  | .binOp op lhs rhs ty =>
+    -- A float-typed result means float arithmetic — unprovable (no float
+    -- profile). Caught here so float `+` is never silently the integer `.add`.
+    let floatUnsup := if isFloatTy ty || isFloatTy (CExpr.ty lhs) then [floatReason] else []
     -- Pass operand type so width-sensitive ops (mod/bitxor) flag
     -- unsupported widths precisely instead of conflating with op support.
     let opUnsup := match binOpToPBinOp op (CExpr.ty lhs) with
       | none => [s!"unsupported operator: {repr op} at {repr (CExpr.ty lhs)}"]
       | some _ => []
-    opUnsup ++ identifyUnsupportedExpr lhs ++ identifyUnsupportedExpr rhs
+    floatUnsup ++ opUnsup ++ identifyUnsupportedExpr lhs ++ identifyUnsupportedExpr rhs
   | .call _ _ args _ =>
     args.foldl (fun acc a => acc ++ identifyUnsupportedExpr a) []
   | .ifExpr cond thenBr elseBr _ =>
@@ -1944,11 +1960,18 @@ private def assessEligibility
     | none => "unclassified"  -- function missing from SCC analysis
   let crossesFfi := callees.any fun c => externNames.contains c
   let loopClass := classifyLoops f.body
+  -- Float arithmetic has no active proof profile (ProvableV1 is integer/bool
+  -- only). A float param, return, or body op must NOT extract — otherwise float
+  -- `+` is silently modeled as the integer `.add`. See ROADMAP "Provable Float
+  -- V1". Detected from the type, which still exists at the Core level.
+  let usesFloat := f.params.any (fun p => isFloatTy p.2) || isFloatTy f.retTy
+    || (identifyUnsupported f.body).contains floatReason
   let profileReasons : List String :=
     (if rec_ != "none" && rec_ != "unclassified" then [s!"recursion ({rec_})"] else []) ++
     (if loopClass == "unbounded" || loopClass == "mixed" then ["unbounded loops"] else []) ++
     (if !allocs.isEmpty || concreteCaps.any (· == "Alloc") then ["allocation"] else []) ++
     (if crossesFfi then ["FFI"] else []) ++
+    (if usesFloat then ["floating-point arithmetic has no active proof profile"] else []) ++
     (if concreteCaps.any fun c => c == "File" || c == "Network" || c == "Process"
      then ["blocking I/O"] else [])
   let passesSource := sourceReasons.isEmpty
