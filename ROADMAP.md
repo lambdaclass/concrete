@@ -224,6 +224,22 @@ the primary proof surface rather than a reported overlay.
 9. Map existing proof-registry entries to generated source-contract obligations
    where possible, so current Lean theorems migrate forward instead of being
    discarded when contracts become the primary proof surface.
+
+   **Retire `proof-registry.json` (end state, gated on `concrete prove`).** The
+   JSON registry is a transitional bridge from a source function to its
+   hand-written Lean proof/spec. Two forces already shrink it: (a) kernel
+   auto-discharge needs **no** entry at all — O1/O3/O4/O5 and O2's arithmetic
+   half are closed by omega/`bv_decide` from the in-source contract alone; (b)
+   the residual hand-Lean links (HMAC chain, point proofs, O2's operational
+   half) want to live **in source** as attributes — e.g.
+   `#[proof_by(thm)]` / `#[spec(name)]` — versioned with the code, surfaced in
+   the same audit output as the contract, with `body_fingerprint` computed at
+   build time (re-extraction already runs) instead of stored and rot-prone.
+   Order: auto-discharge shrinks the registry (in progress) → `concrete prove`
+   (Phase 2 item 15) teaches the link shape → in-source proof attributes
+   replace the JSON → registry files retire. Do **not** hand-migrate the example
+   JSONs to a new format before `concrete prove` defines it (let the tool teach
+   the syntax — same discipline as the contract-VC stability tiers).
 10. Add contract negative examples: unmet precondition at call site, missing
    postcondition proof, weakened postcondition, invalid contract expression.
 11. Add proof-only source forms:
