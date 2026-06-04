@@ -44,6 +44,11 @@ It gives one small, snapshot-backed reference per shipped class:
 `docs/EVIDENCE_CLASSES.md` keeps the classes visible without using a flagship
 as the only example.
 
+The `tested_by_oracle` evidence example also has its standalone corpus shape:
+`evidence_classes/tested_by_oracle` uses a tiny clamp program plus
+`oracle/run_oracle.sh` and `reference.py`, so oracle evidence is no longer only
+a flagship harness.
+
 ### HMAC-SHA256 graduates with exact-extraction refinement (2026-06-02)
 
 `hmac_sha256` graduated as the fifth flagship with the full SHA-256/HMAC

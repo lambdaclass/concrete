@@ -6,3 +6,12 @@ demo.ct_compare
      theorem: Concrete.Proof.ct_compare_same_tag_correct  (coverage: one_direction)
      note:    full postcondition not yet discharged; the converse is the next obligation
 
+
+=== Runtime-safety obligations (array bounds) ===
+
+demo.ct_compare
+  a[i]  (array size 16)
+    status: unproven — bound the index with a #[requires], or insert a runtime check
+  b[i]  (array size 16)
+    status: unproven — bound the index with a #[requires], or insert a runtime check
+

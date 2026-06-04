@@ -1,0 +1,25 @@
+=== Source Contracts ===
+
+demo.nth
+  R1  requires 0 <= i && i < 8
+     status:  assumed_at_entry (callers not yet checked)
+
+
+=== Runtime-safety obligations (array bounds) ===
+
+demo.nth
+  a[i]  (array size 8)
+    status: proved_by_kernel_decision (omega) — statically in bounds, no runtime check needed
+
+demo.third
+  a[3]  (array size 8)
+    status: checked: in bounds (constant index)
+
+demo.oob
+  a[9]  (array size 8)
+    status: VIOLATION: index out of bounds (constant index)
+
+demo.unchecked
+  a[i]  (array size 8)
+    status: unproven — bound the index with a #[requires], or insert a runtime check
+

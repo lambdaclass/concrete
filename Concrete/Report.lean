@@ -934,6 +934,117 @@ def genExitVC (lc : LoopContract) (ensures : List Expr) (retExpr : Option Expr) 
   let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
   some s!"{binder}{" ∧ ".intercalate invs} ∧ ¬({gs}) → {" ∧ ".intercalate postStrs}"
 
+-- ============================================================
+-- Runtime-safety obligations: array bounds
+-- ============================================================
+-- A runtime-error class. Every `arr[idx]` into a fixed-size array generates the
+-- obligation `0 ≤ idx < N`. Constant indices are evaluated (in-bounds / VIOLATION);
+-- variable indices are discharged by `omega` under the function's #[requires]
+-- (a kernel decision procedure — statically in bounds, no runtime check needed),
+-- or left `unproven` (needs a precondition or a runtime check). This is the
+-- runtime_checked evidence class.
+
+mutual
+/-- `(arrayName, indexExpr)` for every `arr[idx]` with an identifier base. -/
+partial def collectIndexUsesE : Expr → List (String × Expr)
+  | .arrayIndex _ (.ident _ arr) idx => (arr, idx) :: collectIndexUsesE idx
+  | .arrayIndex _ a idx => collectIndexUsesE a ++ collectIndexUsesE idx
+  | .binOp _ _ l r => collectIndexUsesE l ++ collectIndexUsesE r
+  | .unaryOp _ _ x | .paren _ x | .borrow _ x | .borrowMut _ x | .deref _ x
+  | .try_ _ x | .cast _ x _ | .fieldAccess _ x _ | .arrowAccess _ x _ => collectIndexUsesE x
+  | .arrayLit _ es => es.flatMap collectIndexUsesE
+  | .call _ _ _ args => args.flatMap collectIndexUsesE
+  | .methodCall _ o _ _ args => collectIndexUsesE o ++ args.flatMap collectIndexUsesE
+  | .staticMethodCall _ _ _ _ args => args.flatMap collectIndexUsesE
+  | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectIndexUsesE fe)
+  | .allocCall _ x a => collectIndexUsesE x ++ collectIndexUsesE a
+  | .ifExpr _ c t el | .whileExpr _ c t el =>
+      collectIndexUsesE c ++ t.flatMap collectIndexUsesS ++ el.flatMap collectIndexUsesS
+  | .match_ _ s _ => collectIndexUsesE s
+  | _ => []
+partial def collectIndexUsesS : Stmt → List (String × Expr)
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v => collectIndexUsesE v
+  | .return_ _ (some v) => collectIndexUsesE v
+  | .ifElse _ c t el => collectIndexUsesE c ++ t.flatMap collectIndexUsesS ++ (el.getD []).flatMap collectIndexUsesS
+  | .while_ _ c b _ => collectIndexUsesE c ++ b.flatMap collectIndexUsesS
+  | .forLoop _ init c step b _ =>
+      (init.map collectIndexUsesS).getD [] ++ collectIndexUsesE c
+        ++ (step.map collectIndexUsesS).getD [] ++ b.flatMap collectIndexUsesS
+  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v => collectIndexUsesE o ++ collectIndexUsesE v
+  | .arrayIndexAssign _ (.ident _ arr) idx v => (arr, idx) :: (collectIndexUsesE idx ++ collectIndexUsesE v)
+  | .arrayIndexAssign _ a i v => collectIndexUsesE a ++ collectIndexUsesE i ++ collectIndexUsesE v
+  | _ => []
+end
+
+/-- One array-bounds obligation. `closedVerdict` is set when the index is a
+    compile-time constant; otherwise `leanGoal` is the omega goal (if lowerable). -/
+structure BoundsObl where
+  fnQual        : String
+  key           : String
+  arrName       : String
+  idxExpr       : Expr
+  size          : Nat
+  closedVerdict : Option Bool
+  leanGoal      : Option String
+
+/-- Identifier → fixed-array size, from array-typed params and annotated lets. -/
+def arraySizeMap (f : FnDef) : List (String × Nat) :=
+  let ps := f.params.filterMap fun p => match p.ty with | .array _ n => some (p.name, n) | _ => none
+  let ls := f.body.filterMap fun s => match s with
+    | .letDecl _ nm _ (some (.array _ n)) _ _ => some (nm, n) | _ => none
+  ps ++ ls
+
+/-- Generate array-bounds obligations for every indexed access into a known
+    fixed-size array. -/
+def boundsObligations (modules : List Module) : List BoundsObl := Id.run do
+  let mut out : List BoundsObl := []
+  for (pfx, f) in modules.flatMap allFunctions do
+    let fq := pfx ++ f.name
+    let sizes := arraySizeMap f
+    let mut i := 0
+    for (arr, idx) in f.body.flatMap collectIndexUsesS do
+      match sizes.find? (·.1 == arr) with
+      | none => pure ()
+      | some (_, n) =>
+        let key := s!"{fq}#bounds{i}"
+        let cv : Option Bool × Option String := match cEvalInt idx with
+          | some k => (some (decide (0 ≤ k) && decide (k < (Int.ofNat n))), none)
+          | none => match toLeanProp idx with
+            | none => (none, none)
+            | some idxStr =>
+              let vars := (collectIdents idx ++ f.requires.flatMap collectIdents).eraseDups
+              let reqs := f.requires.filterMap toLeanProp
+              let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
+              let hyp := if reqs.isEmpty then "" else s!"({" ∧ ".intercalate reqs}) → "
+              (none, some s!"{binder}{hyp}(0 ≤ {idxStr} ∧ {idxStr} < {n})")
+        out := out ++ [{ fnQual := fq, key, arrName := arr, idxExpr := idx, size := n
+                        , closedVerdict := cv.1, leanGoal := cv.2 }]
+        i := i + 1
+  return out
+
+/-- Lean goals for the non-constant bounds obligations, for omega discharge. -/
+def boundsGoals (modules : List Module) : List (String × String) :=
+  (boundsObligations modules).filterMap fun o => o.leanGoal.map (fun g => (o.key, g))
+
+/-- Render the array-bounds section. `provedKeys` are the omega-discharged keys. -/
+def renderBounds (obls : List BoundsObl) (provedKeys : List String) : String := Id.run do
+  if obls.isEmpty then return ""
+  let mut out := "\n\n=== Runtime-safety obligations (array bounds) ==="
+  let mut cur := ""
+  for o in obls do
+    if o.fnQual != cur then out := out ++ s!"\n\n{o.fnQual}"; cur := o.fnQual
+    let status := match o.closedVerdict with
+      | some true  => "checked: in bounds (constant index)"
+      | some false => "VIOLATION: index out of bounds (constant index)"
+      | none => match o.leanGoal with
+        | some _ =>
+          if provedKeys.contains o.key
+          then "proved_by_kernel_decision (omega) — statically in bounds, no runtime check needed"
+          else "unproven — bound the index with a #[requires], or insert a runtime check"
+        | none => "unproven — index not statically analyzable; needs a runtime check"
+    out := out ++ s!"\n  {o.arrName}[{Concrete.fmtExpr o.idxExpr}]  (array size {o.size})\n    status: {status}"
+  return out ++ "\n"
+
 /-- Stable identity for one loop obligation, shared by the goal collector and
     the renderer so discharge results map back to the right line. -/
 def loopVCKey (fnQual : String) (line : Nat) (obl : String) : String :=

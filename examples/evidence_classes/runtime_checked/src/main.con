@@ -1,0 +1,35 @@
+// Evidence class: runtime_checked (array-bounds, a runtime-error obligation).
+//
+// Every `arr[idx]` into a fixed-size array generates the obligation
+// `0 <= idx < N`. `--report contracts` shows each with its disposition:
+//   - bounded by a #[requires]  → proved_by_kernel_decision (omega): statically
+//     safe, no runtime check needed;
+//   - constant in range         → checked: in bounds (constant index);
+//   - constant out of range     → VIOLATION: out of bounds (the audit catches it);
+//   - unbounded variable        → unproven: needs a precondition or runtime check.
+mod demo {
+    // omega-proved: the precondition bounds the index, so the access is safe.
+    #[requires(0 <= i && i < 8)]
+    fn nth(a: [i32; 8], i: i32) -> i32 {
+        return a[i];
+    }
+
+    // constant index, in bounds: checked by arithmetic.
+    fn third(a: [i32; 8]) -> i32 {
+        return a[3];
+    }
+
+    // DELIBERATE out-of-bounds constant: the audit reports VIOLATION rather than
+    // letting an OOB read through (today there is no other static bounds check).
+    fn oob(a: [i32; 8]) -> i32 {
+        return a[9];
+    }
+
+    // unbounded variable index, no precondition: cannot be proved safe — the
+    // audit says so (needs a #[requires] bound or a runtime check).
+    fn unchecked(a: [i32; 8], i: i32) -> i32 {
+        return a[i];
+    }
+}
+
+pub fn main() with(Std) -> Int { return 0; }

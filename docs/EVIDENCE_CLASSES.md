@@ -58,16 +58,21 @@ release gates.
 A `tested` class raises confidence but does **not** kernel-verify — it is below
 `proved` on the ladder and is labeled as such. Disagreement is real signal.
 
-## Planned
+## Runtime safety
 
-| class | status |
-|---|---|
-| `runtime_checked` (runtime-error obligation) | planned — `evidence_classes/runtime_checked/README.md` |
+| class | what it means | command | reference |
+|---|---|---|---|
+| `runtime_checked` | a runtime-error obligation (array bounds); each `arr[idx]` gets `0 ≤ idx < N`, reported with its disposition | `--report contracts` (Runtime-safety section) | `evidence_classes/runtime_checked` |
 
-Tracked, not faked. The `runtime_error` coverage kind exists, but a clean worked
-example needs a discharged runtime-error obligation (bounds / overflow /
-div-zero); there is no auto runtime-check mode and no reusable theorem yet, so
-building it is a real Lean-proof task rather than wiring.
+Dispositions: `proved_by_kernel_decision (omega)` (a `#[requires]` bounds the
+index — statically safe, no runtime check), `checked: in bounds` (constant
+index), `VIOLATION` (constant out of bounds — the audit catches it), or
+`unproven` (needs a precondition or a runtime check). The bounds arithmetic is
+linear, so omega discharges the provable cases. **v1**: array bounds only, from
+`#[requires]` (not yet loop invariants); overflow and div-by-zero are the next
+runtime-error kinds (same generate → omega/eval → status shape).
+
+All nine evidence-class subexamples are now worked references; none are stubbed.
 
 ## See also
 

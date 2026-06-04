@@ -302,13 +302,17 @@ lemmas, and actionable failure diagnostics.
 7. Add generated loop-invariant templates for common proof shapes:
     counter loop over array writes, copy loop, fold loop, multi-store loop,
     offset loop, and block-processing loop.
-8. Add the remaining evidence-class corpus entries. **`tested_by_oracle` DONE
-   (2026-06-04):** `evidence_classes/tested_by_oracle` (clamp) has a standalone
-   per-example `oracle/run_oracle.sh` + `reference.py` that compiles 200 native
-   drivers per seed and matches the reference (PASS=200). **`runtime_checked`
-   remains planned** — it needs a reusable runtime-error obligation shape
-   (bounds / overflow / div-zero) discharged by Lean; there is no auto
-   runtime-check mode or reusable theorem yet, so it is not faked.
+8. **`runtime_checked` DONE (2026-06-04) — the evidence-class corpus is now
+   complete (9/9).** Array-bounds is the first runtime-error obligation kind:
+   every `arr[idx]` into a fixed-size array generates `0 ≤ idx < N`, reported in
+   `--report contracts` (Runtime-safety section) with its disposition —
+   `proved_by_kernel_decision (omega)` when a `#[requires]` bounds the index,
+   `checked` for in-range constants, `VIOLATION` for out-of-range constants (the
+   audit catches the OOB), or `unproven` (needs a precondition or runtime check).
+   Generator + omega discharge in `Report.boundsObligations`/`renderBounds`,
+   wired into `renderContracts`; subexample `evidence_classes/runtime_checked`.
+   v1 uses `#[requires]` (not loop invariants); overflow and div-by-zero are the
+   next runtime-error kinds (same generate → omega/eval → status shape).
 9. Add `concrete prove` corpus entries that teach the proof path from smallest
    to real: straight-line Lean proof, `bv_decide` proof, `omega` proof,
    operational loop proof, state/multi-store proof, call composition, mixed
