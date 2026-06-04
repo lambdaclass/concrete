@@ -73,9 +73,10 @@ makes it statically safe — no runtime check needed), `checked` (a safe
 constant), `VIOLATION` (a constant that faults — an OOB index, a zero divisor,
 or an overflowing constant; the audit catches it), or `unproven` (needs a
 precondition or a runtime check). The obligation arithmetic is linear, so omega
-discharges the provable cases. **Next kinds:** casts and loop bounds — same
-generate → omega/eval → status shape. The bound source is `#[requires]` (not yet
-loop invariants).
+discharges the provable cases. **Next kinds:** casts and loop-derived facts
+feeding the existing bounds/overflow generators — same generate → omega/eval →
+status shape. The current fact source is `#[requires]` and constants, not yet
+loop invariants.
 
 All nine evidence-class subexamples are now worked references; none are stubbed.
 

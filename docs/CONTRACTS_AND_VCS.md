@@ -495,7 +495,8 @@ Runtime safety generates:
 
 - array index bounds
 - division/modulo nonzero
-- overflow under checked/proved arithmetic profiles
+- overflow under `#[overflow_checked]` and future checked/proved arithmetic
+  profiles
 - invalid casts
 - loop bound obligations
 - stack/recursion obligations where a profile claims boundedness

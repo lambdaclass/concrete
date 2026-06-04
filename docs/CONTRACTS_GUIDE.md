@@ -289,6 +289,9 @@ concrete prove FILE FN --replay                 # re-run omega/bv_decide, report
 7. concrete prove FN --replay  → confirm the kernel-decision leaves still close
 ```
 
+[AUTHORING_WALKTHROUGH.md](AUTHORING_WALKTHROUGH.md) runs this whole loop on one
+tiny function with real, reproducible command output.
+
 ## Reading the evidence
 
 ```sh

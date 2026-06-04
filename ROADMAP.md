@@ -10,8 +10,9 @@ document as one queue:
 1. harden source contracts: negative cases, vacuity, spec/ghost totality,
    trapdoor discipline, diagnostics, and soundness obligations;
 2. close the release-blocking predictable/provable/runtime-safety gaps,
-   starting with overflow, casts, loop-derived bounds, and runtime-safety
-   policy after array bounds and div/mod-zero;
+   starting with casts, loop-derived bounds, runtime-safety policy, and the
+   remaining profile story after array bounds, div/mod-zero, and
+   opt-in overflow obligations;
 3. finish proof-link migration away from JSON;
 4. harden audit / proof-status / trust gates around source contracts,
    spec provenance, evidence classes, tool-version drift, and oracle evidence;
@@ -255,7 +256,8 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
 2. Generate VCs for pure no-loop contracts first: preconditions at call sites
    and postconditions at returns.
 3. Generate VCs for runtime safety obligations from Phase 7: array bounds,
-   div/mod nonzero, checked/proved overflow, casts, and loop bounds.
+   div/mod nonzero, `#[overflow_checked]` no-overflow claims, casts, and loop
+   bounds.
 4. Generate VCs for loop invariants: initialization, preservation,
    variant decrease, and exit-implies-postcondition.
 5. **Kernel-checked automation first (`bv_decide`).** Before any external
@@ -619,41 +621,40 @@ zero, overflow profile, casts, and loop bounds with statuses
 1. Define stable obligation schema v1: id, kind, source span, function,
    expression, dependencies, evidence status, discharging theorem/check/
    assumption, and replay command.
-2. [DONE 2026-06-04] Generate overflow obligations under checked/proved
-   arithmetic profiles. Opt-in via `#[overflow_checked]`: each fixed-width
-   `+`/`-`/`*` emits `MIN ≤ result ≤ MAX` for the operand width, reported in the
-   Runtime-safety section as `proved_by_kernel_decision (omega)` (operands
-   bounded by `#[requires]`), `checked`/`VIOLATION` (constants), or `unproven`.
-   Opt-in to avoid flooding the default (profile-dependent) arithmetic.
-   `Report.overflowObligations`/`renderOverflow`; worked in
-   `examples/evidence_classes/runtime_checked` (add_bounded / add_unbounded).
-   Bounds + division + overflow are now the three wired runtime-error kinds.
-3. Define the user-level error model: `Result`, `Option`, assertion failure,
+2. Define the user-level error model: `Result`, `Option`, assertion failure,
    abort/panic, recoverable errors, test failures, and how error flow interacts
    with capabilities, proofs, runtime obligations, and audit output.
-4. Generate narrowing/invalid-cast obligations.
+3. Generate narrowing/invalid-cast obligations.
+4. Generate loop-derived runtime-safety facts so bounds and overflow obligations
+   can use established loop invariants instead of only entry preconditions and
+   constants.
 5. Generate loop bound and variant obligations for bounded loops.
-6. Generate obligations for panic/abort/assert-as-denial-of-service risks:
+6. Define policy gates for `#[overflow_checked]`: release profiles may require
+   overflow obligations for selected functions/packages, while ordinary
+   examples remain quiet unless they opt in. Reports must distinguish
+   `overflow_checked`, `overflow checking not requested`, and explicit wrapping
+   or saturating arithmetic.
+7. Generate obligations for panic/abort/assert-as-denial-of-service risks:
    unchecked indexing, unwrap-like operations, explicit abort paths, failed
    assertions, and profile-dependent panic behavior.
-7. Generate byte/text/path boundary obligations: invalid UTF-8, lossy
+8. Generate byte/text/path boundary obligations: invalid UTF-8, lossy
    conversion, OS-string conversion, path normalization assumptions, and
    rejected implicit conversions.
-8. Generate stack/recursion obligations where the profile claims boundedness.
-9. Report runtime-error obligations in human and JSON forms.
-10. Add policy gates that can require selected runtime-error obligations to be
+9. Generate stack/recursion obligations where the profile claims boundedness.
+10. Report runtime-error obligations in human and JSON forms.
+11. Add policy gates that can require selected runtime-error obligations to be
    proved/enforced before graduation.
-11. Add a runtime-error regression corpus: OOB, div/mod zero, overflow-profile
-    violation, invalid cast, loop-bound violation, lossy byte/text conversion,
-    ignored fallible result, unwrap-like failure, and panic/abort profile
-    mismatch.
-12. Add a runtime-error-obligation flagship requirement: one graduated example
+12. Add a runtime-error regression corpus: invalid cast, loop-bound violation,
+    lossy byte/text conversion, ignored fallible result, unwrap-like failure,
+    panic/abort profile mismatch, and release-policy rejection for missing
+    `#[overflow_checked]` evidence where required.
+13. Add a runtime-error-obligation flagship requirement: one graduated example
     must demonstrate no OOB/div-zero/overflow under a named profile.
-13. Add high-quality diagnostics for obligation failures: violated obligation,
+14. Add high-quality diagnostics for obligation failures: violated obligation,
     source expression, required evidence, current status, and next action.
-14. Add obligation suppression only through explicit assumptions or policy
+15. Add obligation suppression only through explicit assumptions or policy
     waivers, never comments or hidden allowlists.
-15. Prove or validate obligation-generation soundness for the first obligation
+16. Prove or validate obligation-generation soundness for the first obligation
     kinds through the compiler soundness bridge.
 
 ## Phase 8: Language Usability And Daily Workflow

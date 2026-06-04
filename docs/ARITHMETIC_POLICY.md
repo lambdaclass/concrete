@@ -98,6 +98,11 @@ The pattern is clear: some code intends wrapping, some code would prefer trappin
 
 ## 2. Arithmetic Modes
 
+The modes below describe the intended public arithmetic policy. They are staged:
+Concrete currently has opt-in overflow obligations via `#[overflow_checked]`,
+while the runtime/backend switch to checked-by-default arithmetic remains a
+separate implementation step.
+
 Concrete defines three arithmetic modes for integer operations. Every integer operation executes in exactly one mode. The mode is always determinable from the source.
 
 ### 2.1 Checked (trap on overflow)
