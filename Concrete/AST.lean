@@ -255,6 +255,18 @@ structure LoopContract where
   body       : List (String × Expr) := []    -- flattened scalar assigns (body ++ for-step), for VC generation
   entrySubst : List (String × Expr) := []    -- loop-entry initializers (e.g. the for-init `i := 0`), for invariant_init
 
+/-- In-source proof link (`#[proof_by]`/`#[spec]`/`#[ensures_proof]`/
+    `#[proof_coverage]`) — erased metadata that names the Lean proof/spec for a
+    function in the source itself, instead of in `proof-registry.json`. The
+    compiler synthesizes a registry entry from this (with a computed
+    fingerprint), so downstream proof tooling treats it identically. -/
+structure SourceProofLink where
+  spec         : Option String := none  -- #[spec(Q.Name)]            → registry `spec`
+  proofBy      : Option String := none  -- #[proof_by(Q.Name)]        → registry `proof`
+  ensuresProof : Option String := none  -- #[ensures_proof(Q.Name)]   → registry `ensures_proof`
+  coverage     : Option String := none  -- #[proof_coverage(kind)]    → registry `coverage`
+  deriving Repr, Inhabited
+
 structure FnDef where
   name : String
   typeParams : List String := []
@@ -271,6 +283,7 @@ structure FnDef where
   requires : List Expr := []       -- #[requires(...)] preconditions (source contracts; erased metadata, no codegen)
   ensures : List Expr := []        -- #[ensures(...)] postconditions (source contracts; erased metadata, no codegen)
   loopContracts : List LoopContract := []  -- #[invariant]/#[variant] on loops in the body (erased metadata)
+  proofLink : Option SourceProofLink := none  -- in-source proof/spec link (erased metadata)
   span : Span := default
 
 structure ConstDef where

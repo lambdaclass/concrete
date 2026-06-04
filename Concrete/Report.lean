@@ -639,6 +639,43 @@ partial def allFunctions (m : Module) : List (String × FnDef) :=
   let pfx := if m.name.isEmpty then "" else m.name ++ "."
   m.functions.map (fun f => (pfx, f)) ++ m.submodules.flatMap allFunctions
 
+/-- `(qualName, body fingerprint)` for every Core function — same flat qualified
+    naming as `allFunctions`, used to synthesize a fingerprint for in-source
+    proof links (the registry fingerprint is computed, not stored in source). -/
+partial def coreFnFingerprints (m : CModule) : List (String × String) :=
+  let pfx := if m.name.isEmpty then "" else m.name ++ "."
+  m.functions.map (fun f => (pfx ++ f.name, bodyFingerprint f.body))
+    ++ m.submodules.flatMap coreFnFingerprints
+
+/-- Synthesize `ProofRegistry` entries from in-source `#[proof_by]`/`#[spec]`/
+    `#[ensures_proof]`/`#[proof_coverage]` links. The body fingerprint is
+    computed from the current Core body, so a source edit is detected by the
+    same spec-drift / fingerprint machinery as a JSON entry. -/
+def synthesizeSourceLinks (astModules : List Module) (coreModules : List CModule) : ProofRegistry := Id.run do
+  let fps := coreModules.flatMap coreFnFingerprints
+  let mut entries : ProofRegistry := []
+  for (pfx, f) in astModules.flatMap allFunctions do
+    match f.proofLink with
+    | none => pure ()
+    | some link =>
+      let qual := pfx ++ f.name
+      let fp := (fps.find? (·.1 == qual)).map (·.2) |>.getD ""
+      let entry : ProofRegistryEntry :=
+        { function := qual, bodyFingerprint := fp,
+          proof := link.proofBy.getD "", spec := link.spec.getD "",
+          coverage := link.coverage.getD "", ensuresProof := link.ensuresProof }
+      entries := entries ++ [entry]
+  return entries
+
+/-- Merge JSON-registry entries with synthesized in-source link entries. A
+    function defining a proof link in BOTH places is an error — one source of
+    truth. -/
+def mergeSourceLinks (jsonRegistry sourceEntries : ProofRegistry) : Except String ProofRegistry :=
+  let jsonFns := jsonRegistry.map (·.function)
+  let conflicts := sourceEntries.filter (fun e => jsonFns.contains e.function)
+  if conflicts.isEmpty then .ok (jsonRegistry ++ sourceEntries)
+  else .error s!"function(s) have both an in-source proof link and a proof-registry.json entry: {", ".intercalate (conflicts.map (·.function))}. Use one source of truth."
+
 /-- Top-level `let NAME = <const>` bindings in a body, as NAME → literal expr.
     Lets the call-site checker see e.g. `let n = 7; rotr(x, n)`. -/
 def letConstMap (body : List Stmt) : List (String × Expr) :=

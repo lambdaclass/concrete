@@ -1732,6 +1732,22 @@ partial def parseAttribute : ParseM (String × Option String × Option ReprOpts 
     expect .rparen
     expect .rbracket
     return ("repr", none, some opts, none)
+  else if tk == .lparen && (key == "spec" || key == "proof_by"
+      || key == "ensures_proof" || key == "proof_coverage") then
+    -- in-source proof links: #[proof_by(Concrete.Proof.thm)], #[spec(Q.Name)],
+    -- #[ensures_proof(Q.Name)], #[proof_coverage(iff)]. The value is a
+    -- (possibly dotted) qualified Lean name, or a bare coverage kind.
+    advance
+    let mut name ← expectIdent
+    let mut t ← peek
+    while t == .dot do
+      advance
+      let part ← expectIdent
+      name := name ++ "." ++ part
+      t ← peek
+    expect .rparen
+    expect .rbracket
+    return (key, some name, none, none)
   else if tk == .lparen then
     -- #[key(value)]
     advance
@@ -1811,15 +1827,23 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
   let mut pendingIsTest : Bool := false
   let mut pendingEnsures : List Expr := []
   let mut pendingRequires : List Expr := []
+  let mut pendingSpecLink : Option String := none
+  let mut pendingProofBy : Option String := none
+  let mut pendingEnsuresProof : Option String := none
+  let mut pendingCoverage : Option String := none
   let mut tk ← peek
   while tk != stopToken && tk != .eof do
     -- Parse attributes (but don't continue — let the next token be parsed)
     if tk == .hash then
-      let (key, _, reprOpts, ensExpr) ← parseAttribute
+      let (key, attrVal, reprOpts, ensExpr) ← parseAttribute
       if key == "repr" then
         pendingRepr := reprOpts
       if key == "test" then
         pendingIsTest := true
+      if key == "spec" then pendingSpecLink := attrVal
+      if key == "proof_by" then pendingProofBy := attrVal
+      if key == "ensures_proof" then pendingEnsuresProof := attrVal
+      if key == "proof_coverage" then pendingCoverage := attrVal
       match ensExpr with
       | some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
                   else pendingEnsures := pendingEnsures ++ [e]
@@ -1856,11 +1880,15 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           let sp ← peekSpan
           throwParse "'trusted' can only be applied to fn or impl" (span := some sp)
         -- Attribute before a declaration (after pub)
-        let (key, _, reprOpts, ensExpr) ← parseAttribute
+        let (key, attrVal, reprOpts, ensExpr) ← parseAttribute
         if key == "repr" then
           pendingRepr := reprOpts
         if key == "test" then
           pendingIsTest := true
+        if key == "spec" then pendingSpecLink := attrVal
+        if key == "proof_by" then pendingProofBy := attrVal
+        if key == "ensures_proof" then pendingEnsuresProof := attrVal
+        if key == "proof_coverage" then pendingCoverage := attrVal
         match ensExpr with
         | some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
                     else pendingEnsures := pendingEnsures ++ [e]
@@ -1954,12 +1982,22 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
         else if tk == .fn then
           -- Check if function has a body or is body-less (intrinsic/declaration)
           let f ← parseFnDefOrDecl
+          let proofLink : Option SourceProofLink :=
+            if pendingSpecLink.isSome || pendingProofBy.isSome
+                || pendingEnsuresProof.isSome || pendingCoverage.isSome
+            then some { spec := pendingSpecLink, proofBy := pendingProofBy
+                      , ensuresProof := pendingEnsuresProof, coverage := pendingCoverage }
+            else none
           match f with
-          | .inl fnDef => fns := fns ++ [{ fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures }]
+          | .inl fnDef => fns := fns ++ [{ fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures, proofLink }]
           | .inr extDef => externFns := externFns ++ [{ extDef with isPublic := isPub }]
           pendingIsTest := false
           pendingEnsures := []
           pendingRequires := []
+          pendingSpecLink := none
+          pendingProofBy := none
+          pendingEnsuresProof := none
+          pendingCoverage := none
         else if tk == .ident "union" then
           -- Parse union as a struct (all fields share memory)
           advance  -- consume 'union'

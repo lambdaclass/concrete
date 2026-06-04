@@ -819,7 +819,14 @@ def compileAndReport (inputPath : String) (reportType : String)
   | .ok (parsed, fullValidCore, scopedValidCore, srcMap) =>
     let locMap := Report.buildFnLocMap parsed.modules inputPath
     let simpleLocMap := locMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
-    let registry ← loadRegistryWarn inputPath
+    let jsonRegistry ← loadRegistryWarn inputPath
+    -- Merge in-source proof links (#[proof_by]/#[spec]/...) with the JSON
+    -- registry into one combined registry; downstream proof tooling then
+    -- treats a source link exactly like a registry entry.
+    let sourceEntries := Report.synthesizeSourceLinks parsed.modules fullValidCore.coreModules
+    let registry ← match Report.mergeSourceLinks jsonRegistry sourceEntries with
+      | .ok r => pure r
+      | .error msg => IO.eprintln s!"error: {msg}"; return 1
     -- pc and registry validation run on the FULL user package: a
     -- registry entry naming a function defined in a sibling file must
     -- still validate when the user is querying just one file.

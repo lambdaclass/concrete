@@ -3,17 +3,26 @@
 This document is the active execution plan. It answers one question:
 **what should happen next, in what order?**
 
-The roadmap is linear after the explicit active HMAC exception below. Read the
-order as:
+The roadmap is linear. Phases are ordered, and items inside a phase are ordered
+unless explicitly marked as a constraint or a deferred research note. Read the
+document as one queue:
 
-1. finish the active HMAC proof track;
-2. resume Phase 1 through Phase 4 to make source-level evidence usable;
-3. close Phase 5 through Phase 7 hardening gaps when they block those phases or
-   before release;
-4. continue Phase 8 onward.
+1. finish the current source-contract flagship (`constant_time_tag` full value
+   contract);
+2. use that retrofit to move proof links toward source (`#[proof_by]` /
+   `#[spec]`) and shrink the JSON registry;
+3. make `concrete prove` useful enough for non-compiler authors;
+4. harden audit / proof-status / trust gates around the new source-contract
+   path;
+5. close the release-blocking predictable/provable/runtime-safety gaps;
+6. only then broaden the ordinary language surface (patterns, bytes/text/path,
+   collections, iteration, capability polymorphism, tests);
+7. run external validation before the large ecosystem/release/editor build-out;
+8. keep later research items later unless a prior gate forces them.
 
 Completed work moves to [CHANGELOG.md](CHANGELOG.md). Deferred or conditional
-work moves later. There are no `NEXT` tags.
+work moves later in the same linear queue. There are no parallel tracks and no
+`NEXT` tags.
 
 North star: **systems code with explicit authority, bounded behavior, small
 trusted boundaries, and Lean-backed evidence tied to real source code, while
@@ -250,6 +259,10 @@ separate audit/security evidence layer.
 17. Add one contract-bearing flagship retrofit after the machinery is real:
     `constant_time_tag` first, then `hmac_sha256` only after the smaller
     retrofit proves the workflow.
+    - **Immediate order:** prove the different-tag direction
+      (`a != b -> ct_compare(a,b) = 0`), upgrade the inline `#[ensures]` to
+      full `proved_by_lean`, refresh audit/snapshots, and add a stale/missing
+      regression for editing the compare body.
     - **Chosen scope for `constant_time_tag`.** Use layered evidence, not one
       overloaded claim. The source contract proves value semantics; the
       constant-time shape remains a structural audit/profile claim; machine
@@ -328,9 +341,27 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
     the Phase 1 item 17 workflow test: functional correctness via contracts,
     constant-time source shape via audit/profile reporting, machine-level timing
     via explicit assumption.
-15. Update audit/release bundles so VC results appear beside proof registry,
+15. Add a compact VC/discharge example suite before external SMT:
+    - `omega`: linear integer bounds, loop `variant_nonnegative`, and
+      `variant_decreases`.
+    - `bv_decide`: `rotr`, byte packing, xor/or bit facts, and fixed-width
+      wrapping arithmetic.
+    - `proved_by_lean`: operational loop preservation or refinement theorem
+      that cannot be closed by a decision procedure.
+    - `runtime_checked` / `tested_by_oracle`: a deliberately unproved contract
+      checked dynamically or against a reference, with audit showing it is not
+      proof.
+    - `assumed` / `trusted`: machine timing, backend lowering, or FFI boundary.
+    These examples are release-facing documentation fixtures: every evidence
+    class should have one small program and one report snapshot.
+16. Add an external-SMT example only after the backend exists and only behind an
+    explicit policy flag. The example should demonstrate `solver_trusted`,
+    counterexample reporting, timeout/unknown handling, and the difference
+    between `proved_by_kernel_decision` and trusted solver output. Do not use
+    external SMT for facts already closed by `omega` or `bv_decide`.
+17. Update audit/release bundles so VC results appear beside proof registry,
     assumptions, runtime obligations, and proof coverage classification.
-16. Add soundness documentation for the SMT path: trusted solver binary,
+18. Add soundness documentation for the SMT path: trusted solver binary,
     encoding assumptions, unsupported theories, replayed fragments, and how a
     solver bug affects each claim class.
 
@@ -412,19 +443,32 @@ the shape.
    nothing unless `--out`, never edits the registry or `Concrete/` sources,
    never auto-proves. Remaining: replay commands and richer spec-target wiring
    once in-source proof attributes land (item 22).
-16. Add proof minimization/debugging UX: show the smallest extracted expression
+16. Add a `concrete prove` examples corpus, ordered from smallest to real:
+    - straight-line Lean proof: `ch` refines `ch_spec`;
+    - kernel-decision proof: `rotr` / packing fact via `bv_decide`;
+    - linear-integer VC: loop bound / variant via `omega`;
+    - loop proof: `block_to_words` / `ct_compare` preservation via ProofKit;
+    - state/multi-store proof: `state_to_bytes`;
+    - call composition: `sha256_compress`;
+    - mixed evidence flagship: `constant_time_tag` (functional theorem,
+      kernel-decision loop leaves, structural constant-time report, timing
+      assumption);
+    - full refinement flagship: `hmac_sha256`.
+    Each example should have a command, generated scaffold, expected next
+    obligation, and audit class explanation.
+17. Add proof minimization/debugging UX: show the smallest extracted expression
     or lemma surface related to a failed proof, including messages like
     "failed to prove index expression equals spec offset under len <= 375" for
     symbolic arithmetic glue.
-17. Add proof replay/caching once proof artifacts and fingerprints are stable.
-18. Add simple auto-discharge for structural obligations that do not need human
+18. Add proof replay/caching once proof artifacts and fingerprints are stable.
+19. Add simple auto-discharge for structural obligations that do not need human
     proof search.
-19. Add a small verified/spec-checked standard proof library for common
+20. Add a small verified/spec-checked standard proof library for common
     predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
     constant-time source shape.
-20. Add AI-assisted proof repair only after artifacts, statuses, and replay are
+21. Add AI-assisted proof repair only after artifacts, statuses, and replay are
     stable enough to validate suggestions mechanically.
-21. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
+22. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
    establish not just what an iteration *changes* but what it *preserves* — the
    frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
    "a proof mentioning only its footprint preserves everything else"). Today
@@ -443,7 +487,7 @@ the shape.
    majority of proof work. Gate: do not build it until a second update shape
    actually forces it (per the operating rules) — the current functional-list
    model gets framing for free.
-22. **Retire `proof-registry.json` (transitional, not wrong).** The JSON
+23. **Retire `proof-registry.json` (transitional, not wrong).** The JSON
    registry was the right first mechanism; the trajectory is to dissolve it as
    contracts become the primary proof surface, tied to `concrete prove`
    (item 15) which teaches the replacement link shape.
@@ -458,17 +502,23 @@ the shape.
      hints, and next missing obligation. Use the `constant_time_tag` retrofit
      to learn whether this is enough or whether the link syntax needs another
      field.
-   - **Next:** design in-source proof attributes — e.g. `#[proof_by(thm)]` /
-     `#[spec(name)]` — for residual hand-written-Lean proofs (HMAC chain, point
-     proofs, O2 operational half, `constant_time_tag` converse). These replace
-     the JSON theorem/spec links only after one flagship retrofit validates the
-     workflow.
+   - **DONE (first link moved, 2026-06-04):** in-source proof attributes
+     `#[spec]` / `#[proof_by]` / `#[ensures_proof]` / `#[proof_coverage]` ship as
+     erased metadata. The compiler synthesizes a registry entry from them with a
+     **computed** `body_fingerprint`, merges it with `proof-registry.json`
+     (defining a link in both is an error), and all downstream tooling
+     (`validateRegistry`, `proof-status`/`contracts`, `check-proofs`, spec-drift)
+     treats it identically. `constant_time_tag.ct_compare` is the first function
+     moved off JSON (its entry is now `[]`); staleness via spec-drift is
+     regression-tested by `examples/stale_proof_link`. Everything else still
+     uses the JSON registry.
+   - **Next:** move more residual hand-Lean links into source (HMAC chain, point
+     proofs) as confidence grows; add a `concrete prove --emit-link` that prints
+     the attributes to paste.
    - **End state:** `body_fingerprint` is computed from extraction at build
-     time (re-extraction already runs), not hand-stored in JSON and rot-prone.
-   - **Rule:** do **not** migrate the registry to a new format until the
-     `constant_time_tag` retrofit has exercised `concrete prove` on a real
-     flagship — let the tool and the retrofit teach the syntax (same discipline
-     as the contract-VC stability tiers).
+     time (re-extraction already runs), not hand-stored in JSON and rot-prone —
+     **achieved for source links**; JSON entries still carry a stored fingerprint
+     until they migrate.
 
 ## Phase 4: Audit Commands And Review Artifacts
 

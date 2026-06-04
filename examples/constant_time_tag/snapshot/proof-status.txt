@@ -1,19 +1,19 @@
 === Proof Status Report ===
 
--- proved [iff] ------------------------------------------------ examples/constant_time_tag/src/main.con:42
+-- proved [iff] ------------------------------------------------ examples/constant_time_tag/src/main.con:48
 
   ✓ `constant_time_tag.ct_compare` — proof matches current body.
 
- 42 |     fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
+ 48 |     fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: iff
 
--- not eligible ------------------------------------------- examples/constant_time_tag/src/main.con:61
+-- not eligible ------------------------------------------- examples/constant_time_tag/src/main.con:67
 
   `constant_time_tag.main` cannot be proved: fails predictable profile (has capabilities: Console, is entry point (main)).
 
- 61 |     pub fn main() with(Console) -> i32 {
+ 67 |     pub fn main() with(Console) -> i32 {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   reasons: has capabilities: Console, is entry point (main)

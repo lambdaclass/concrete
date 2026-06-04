@@ -192,9 +192,32 @@ kernel-checked Lean proof, surfaced (not hidden) in the report:
   conditions** — see [PROOF_LADDER.md](PROOF_LADDER.md) and the frame-inference
   note in the roadmap.
 
-The proof registry (`proof-registry.json`) is how a function is linked to its
-hand-written Lean proof/spec today; it is transitional and will be replaced by
-in-source proof attributes once `concrete prove` lands (ROADMAP Phase 3).
+## Linking a proof: registry entry or in-source attributes
+
+A function is linked to its hand-written Lean proof/spec one of two ways:
+
+- **`proof-registry.json`** (the original mechanism): an entry naming the
+  `proof`, `spec`, `coverage`, optional `ensures_proof`, and a stored
+  `body_fingerprint`.
+- **In-source attributes** (the replacement, now live): the same fields as
+  erased metadata on the function —
+  ```con
+  #[spec(Concrete.Proof.ctCompareExpr)]
+  #[proof_by(Concrete.Proof.ct_compare_same_tag_correct)]
+  #[ensures_proof(Concrete.Proof.ct_compare_different_tag_correct)]
+  #[proof_coverage(iff)]
+  ```
+  The compiler synthesizes a registry entry from these, computing the
+  `body_fingerprint` at build time (not stored). Everything downstream —
+  `validateRegistry`, `--report proof-status`/`contracts`, `check-proofs`, and
+  spec-drift — treats the source link **identically** to a JSON entry, including
+  staleness: editing the body so the extracted PExpr no longer matches the
+  linked `spec` reports the function `stale` (see
+  `examples/stale_proof_link`). A function may not be linked in both places.
+
+`examples/constant_time_tag` is the first function to use the in-source link;
+the registry is **transitional** and shrinks as auto-discharge and source links
+absorb its entries (ROADMAP Phase 3 item 22).
 
 ## Generating a proof scaffold: `concrete prove`
 

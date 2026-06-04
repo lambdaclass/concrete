@@ -7,7 +7,7 @@
     source:       registry
     fingerprint:  [(let diff (int 0)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 16)) [(set diff (binop Concrete.BinOp.bitor (var diff) (binop Concrete.BinOp.bitxor (index (var a) (var i)) (index (var b) (var i))))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (if (binop Concrete.BinOp.eq (var diff) (int 0)) [(ret (int 1))]) (ret (int 0))]
     dependencies: none
-    loc:          examples/constant_time_tag/src/main.con:42
+    loc:          examples/constant_time_tag/src/main.con:48
 
   constant_time_tag.main
     status:       ineligible
@@ -16,7 +16,7 @@
     source:       none
     fingerprint:  [(let failures (int 0)) (let zeros_a (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (let zeros_b (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (let r1 (call ct_compare (var zeros_a) (var zeros_b))) (if (binop Concrete.BinOp.neq (var r1) (int 1)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (let ones_a (array (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1))) (let ones_b (array (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1))) (let r2 (call ct_compare (var ones_a) (var ones_b))) (if (binop Concrete.BinOp.neq (var r2) (int 1)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (let diff0 (array (int 2) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1))) (let r3 (call ct_compare (var ones_a) (var diff0))) (if (binop Concrete.BinOp.neq (var r3) (int 0)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (let diff15 (array (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 1) (int 2))) (let r4 (call ct_compare (var ones_a) (var diff15))) (if (binop Concrete.BinOp.neq (var r4) (int 0)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (let r5 (call ct_compare (var zeros_a) (var ones_a))) (if (binop Concrete.BinOp.neq (var r5) (int 0)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (let high_a (array (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255))) (let high_b (array (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255) (int 255))) (let r6 (call ct_compare (var high_a) (var high_b))) (if (binop Concrete.BinOp.neq (var r6) (int 1)) [(set failures (binop Concrete.BinOp.add (var failures) (int 1)))]) (if (binop Concrete.BinOp.eq (var failures) (int 0)) [(call print_string (borrow (str "All 6 tests passed."))) (call print_char (int 10)) (ret (int 0))]) (call print_string (borrow (str "Some tests failed."))) (call print_char (int 10)) (ret (var failures))]
     dependencies: constant_time_tag.ct_compare
-    loc:          examples/constant_time_tag/src/main.con:61
+    loc:          examples/constant_time_tag/src/main.con:67
 
 Totals: 2 obligations — 1 proved, 0 stale, 0 missing, 0 blocked, 1 ineligible, 0 trusted
 

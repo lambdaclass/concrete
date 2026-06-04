@@ -31,13 +31,19 @@ mod constant_time_tag {
     // The trailing `if diff == 0` happens once after all 16
     // bytes have been folded.
     // Functional-correctness postcondition (value semantics): the result is 1
-    // exactly when the tags are equal, 0 otherwise. This is the contract the
-    // proof pipeline discharges. (Constant-time is a SEPARATE structural claim —
+    // exactly when the tags are equal, 0 otherwise. The full iff is proved in
+    // Lean (both directions). (Constant-time is a SEPARATE structural claim —
     // see AUDIT.md; it is not expressible as a value-semantics #[ensures].)
     //
-    // Today the same-tag direction (a == b → 1) is proved in Lean; the
-    // different-tag direction (a != b → 0) is the outstanding obligation
-    // (`concrete prove constant_time_tag.ct_compare` prints it as next).
+    // The proof link lives IN SOURCE (not proof-registry.json): the four
+    // #[spec]/#[proof_by]/#[ensures_proof]/#[proof_coverage] attributes below
+    // synthesize the same registry entry the JSON used to hold, with the body
+    // fingerprint computed at build time. This is the first function to use the
+    // in-source proof link; everything else still uses proof-registry.json.
+    #[spec(Concrete.Proof.ctCompareExpr)]
+    #[proof_by(Concrete.Proof.ct_compare_same_tag_correct)]
+    #[ensures_proof(Concrete.Proof.ct_compare_different_tag_correct)]
+    #[proof_coverage(iff)]
     #[ensures((a == b && result == 1) || (a != b && result == 0))]
     fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
         let mut diff: u8 = 0;
