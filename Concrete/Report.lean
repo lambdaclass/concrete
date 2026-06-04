@@ -2562,7 +2562,7 @@ private partial def collectProofStatus
     let regEntry := registry.find? fun re => re.function == qualName
     let coverage := match regEntry with | some re => re.coverage | none => ""
     let origin := match regEntry with
-      | some re => if re.sourceLinked then "source_linked" else "json_backed"
+      | some re => if re.sourceLinked then "source_linked" else "legacy_json_allowed"
       | none => if pSrc == "hardcoded" then "hardcoded" else ""
     { qualName, bareName := f.name, state, currentFp := fp, expectedFp
     , profileGates := gates, unsupported := unsup, specName := sName, proofName := pName

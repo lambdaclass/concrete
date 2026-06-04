@@ -296,8 +296,13 @@ def compileAndEmit (inputPath : String) (mode : String) : IO UInt32 := do
         IO.println (ppSModule sm)
       return 0
 
+/-- Whether `--allow-legacy-proof-registry` was passed (set once in `main`).
+    Gates loading of legacy JSON `proof-registry.json`; default is reject. -/
+initialize allowLegacyRegistryRef : IO.Ref Bool ← IO.mkRef false
+
 /-- Try to load a proof registry from proof-registry.json next to the input file.
-    Returns (entries, warnings). Missing file is not a warning; corrupt file is. -/
+    Returns (entries, warnings). Missing file is not a warning; corrupt file is.
+    Legacy: JSON registries are ignored unless --allow-legacy-proof-registry. -/
 def loadRegistry (inputPath : String) : IO (Concrete.ProofRegistry × List String) := do
   let dir := dirOf inputPath
   let registryPath := dir ++ "/proof-registry.json"
@@ -306,9 +311,17 @@ def loadRegistry (inputPath : String) : IO (Concrete.ProofRegistry × List Strin
     pure true
   catch _ => pure false
   if !fileExists then return ([], [])
+  -- JSON proof registries are LEGACY. The product model is in-source proof links
+  -- (#[proof_by]/#[spec]/#[proof_fingerprint]); a JSON registry is rejected
+  -- (ignored) unless the caller opts in with --allow-legacy-proof-registry
+  -- (the flag is recorded once in `main` into `allowLegacyRegistryRef`).
+  let allowLegacy ← allowLegacyRegistryRef.get
+  if !allowLegacy then
+    return ([], [s!"warning: {registryPath} ignored — JSON proof registries are legacy. Migrate to in-source proof links (#[proof_by]/#[spec]/#[proof_fingerprint]), or pass --allow-legacy-proof-registry to load it."])
   try
     let content ← readFile registryPath
-    return Concrete.parseRegistryJson content
+    let (entries, warns) := Concrete.parseRegistryJson content
+    return (entries, warns ++ [s!"note: loaded legacy JSON registry {registryPath} (legacy_json_allowed)"])
   catch e =>
     return ([], [s!"warning: could not read {registryPath}: {e}"])
 
@@ -1318,7 +1331,11 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
         try IO.FS.removeFile ⟨outPath⟩ catch _ => pure ()
       return testExit
 
-def main (args : List String) : IO UInt32 := do
+def main (argsRaw : List String) : IO UInt32 := do
+  -- Global flag: record --allow-legacy-proof-registry, then strip it before
+  -- positional dispatch (loadRegistry reads the ref).
+  allowLegacyRegistryRef.set (argsRaw.contains "--allow-legacy-proof-registry")
+  let args := argsRaw.filter (· != "--allow-legacy-proof-registry")
   -- Check for "build" command first (before generic single-arg pattern)
   if args.head? == some "build" then
     let cwd ← IO.currentDir

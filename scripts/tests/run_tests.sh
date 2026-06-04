@@ -3521,7 +3521,9 @@ check_report "$OBL_PROG" obligations \
 
 DIAG_DIR="$TESTDIR/adversarial_proof_diagnostics"
 DIAG_PROG="$DIAG_DIR/test_diag.con"
-$COMPILER snapshot "$DIAG_PROG" -o "$TMPDIR/diag_adv.json" 2>/dev/null
+# Legacy JSON registry fixture (registry entries on unextractable/excluded fns):
+# opt in with --allow-legacy-proof-registry.
+$COMPILER --allow-legacy-proof-registry snapshot "$DIAG_PROG" -o "$TMPDIR/diag_adv.json" 2>/dev/null
 
 # Test 1: Eligible but unextractable → blocked (not proved, not missing)
 if python3 -c "
@@ -6440,7 +6442,7 @@ ADV_DIR="$TESTDIR"
 # Registry gives pure_mul the fingerprint of pure_add.
 # pure_mul must NOT be proved — the fingerprint doesn't match its body.
 
-swap_out=$($COMPILER "$ADV_DIR/adversarial_proof_swap/test_proof_registry.con" --report proof-status 2>&1 || true)
+swap_out=$($COMPILER --allow-legacy-proof-registry "$ADV_DIR/adversarial_proof_swap/test_proof_registry.con" --report proof-status 2>&1 || true)
 if echo "$swap_out" | grep -q "1 proved" && echo "$swap_out" | grep -q "1 stale"; then
     echo "  ok  adversarial: cross-function fingerprint swap → 1 proved, 1 stale"
     PASS=$((PASS + 1))
@@ -6515,7 +6517,7 @@ fi
 # --- 4. Malformed registry JSON ---
 # Broken JSON must not crash and must not grant proved status.
 
-mal_out=$($COMPILER "$ADV_DIR/adversarial_proof_malformed_registry/test_proof_registry.con" --report proof-status 2>&1 || true)
+mal_out=$($COMPILER --allow-legacy-proof-registry "$ADV_DIR/adversarial_proof_malformed_registry/test_proof_registry.con" --report proof-status 2>&1 || true)
 # Sentinel: report header must be present, otherwise the absence check
 # below would silently pass on a compiler crash (empty output).
 if echo "$mal_out" | grep -q "Proof Status Report" && ! echo "$mal_out" | grep -q "proved.*proof matches"; then
@@ -6538,7 +6540,7 @@ fi
 # --- 5. Snapshot of swapped-fingerprint code ---
 # Snapshot must show pure_mul as stale, not proved.
 
-$COMPILER snapshot "$ADV_DIR/adversarial_proof_swap/test_proof_registry.con" -o "$ADV_SNAP_DIR/swap.json" 2>/dev/null
+$COMPILER --allow-legacy-proof-registry snapshot "$ADV_DIR/adversarial_proof_swap/test_proof_registry.con" -o "$ADV_SNAP_DIR/swap.json" 2>/dev/null
 if python3 -c "
 import json
 with open('$ADV_SNAP_DIR/swap.json') as f:
@@ -6659,7 +6661,7 @@ fi
 # Existing test dir: proof_registry_miss has entry for nonexistent function.
 
 if [ -d "$ADV_DIR/proof_registry_miss" ]; then
-    miss_out=$($COMPILER "$ADV_DIR/proof_registry_miss/test_proof_registry.con" --report proof-status 2>&1 || true)
+    miss_out=$($COMPILER --allow-legacy-proof-registry "$ADV_DIR/proof_registry_miss/test_proof_registry.con" --report proof-status 2>&1 || true)
     if echo "$miss_out" | grep -q "0 proved"; then
         echo "  ok  adversarial: registry entry for nonexistent function grants 0 proved"
         PASS=$((PASS + 1))
@@ -7446,7 +7448,7 @@ fi
 mkdir -p "$MAL_DIR/reg_corrupt"
 cp "$TESTDIR/adversarial_proof_malformed_registry/test_proof_registry.con" "$MAL_DIR/reg_corrupt/"
 echo '{"TOTALLY BROKEN' > "$MAL_DIR/reg_corrupt/proof-registry.json"
-mal_reg=$($COMPILER "$MAL_DIR/reg_corrupt/test_proof_registry.con" --report proof-status 2>&1 || true)
+mal_reg=$($COMPILER --allow-legacy-proof-registry "$MAL_DIR/reg_corrupt/test_proof_registry.con" --report proof-status 2>&1 || true)
 if echo "$mal_reg" | grep -q "warning.*malformed\|warning.*proof-registry"; then
     echo "  ok  malformed: corrupted registry produces explicit warning"
     mal_pass=$((mal_pass + 1))
@@ -7468,7 +7470,7 @@ fi
 mkdir -p "$MAL_DIR/reg_empty"
 cp "$TESTDIR/adversarial_proof_malformed_registry/test_proof_registry.con" "$MAL_DIR/reg_empty/"
 printf '' > "$MAL_DIR/reg_empty/proof-registry.json"
-mal_empty=$($COMPILER "$MAL_DIR/reg_empty/test_proof_registry.con" --report proof-status 2>&1 || true)
+mal_empty=$($COMPILER --allow-legacy-proof-registry "$MAL_DIR/reg_empty/test_proof_registry.con" --report proof-status 2>&1 || true)
 if echo "$mal_empty" | grep -q "warning.*empty"; then
     echo "  ok  malformed: empty registry produces explicit warning"
     mal_pass=$((mal_pass + 1))
@@ -7486,7 +7488,7 @@ cat > "$MAL_DIR/reg_dupes/proof-registry.json" << 'REGEOF'
   {"function":"main.pure_add","body_fingerprint":"fp2","proof":"P2","spec":"S2"}
 ]
 REGEOF
-mal_dupes=$($COMPILER "$MAL_DIR/reg_dupes/test_proof_registry.con" --report proof-status 2>&1 || true)
+mal_dupes=$($COMPILER --allow-legacy-proof-registry "$MAL_DIR/reg_dupes/test_proof_registry.con" --report proof-status 2>&1 || true)
 if echo "$mal_dupes" | grep -q "warning.*duplicate"; then
     echo "  ok  malformed: duplicate registry entries produce warning"
     mal_pass=$((mal_pass + 1))
@@ -7580,7 +7582,7 @@ cp "$TESTDIR/adversarial_proof_malformed_registry/test_proof_registry.con" "$MAL
 cat > "$MAL_DIR/reg_empty_fp/proof-registry.json" << 'REGEOF'
 [{"function":"main.pure_add","body_fingerprint":"","proof":"P1","spec":"S1"}]
 REGEOF
-mal_fp=$($COMPILER "$MAL_DIR/reg_empty_fp/test_proof_registry.con" --report proof-status 2>&1 || true)
+mal_fp=$($COMPILER --allow-legacy-proof-registry "$MAL_DIR/reg_empty_fp/test_proof_registry.con" --report proof-status 2>&1 || true)
 if echo "$mal_fp" | grep -q "warning.*empty body_fingerprint"; then
     echo "  ok  malformed: registry with empty fingerprint produces warning"
     mal_pass=$((mal_pass + 1))
@@ -7704,7 +7706,7 @@ fi
 mkdir -p "$MAL_DIR/reg_valid_empty"
 cp "$TESTDIR/adversarial_proof_malformed_registry/test_proof_registry.con" "$MAL_DIR/reg_valid_empty/"
 echo '{"version":1,"proofs":[]}' > "$MAL_DIR/reg_valid_empty/proof-registry.json"
-reg_ve=$($COMPILER "$MAL_DIR/reg_valid_empty/test_proof_registry.con" --report proof-status 2>&1 || true)
+reg_ve=$($COMPILER --allow-legacy-proof-registry "$MAL_DIR/reg_valid_empty/test_proof_registry.con" --report proof-status 2>&1 || true)
 # Sentinel: report header must be present (else a crash with empty
 # output trivially satisfies "no malformed warning").
 if echo "$reg_ve" | grep -q "Proof Status Report" && ! echo "$reg_ve" | grep -q "warning.*malformed"; then
@@ -7718,7 +7720,7 @@ fi
 
 # --- 21. Valid empty registry (array form) → no warning ---
 echo '[]' > "$MAL_DIR/reg_valid_empty/proof-registry.json"
-reg_va=$($COMPILER "$MAL_DIR/reg_valid_empty/test_proof_registry.con" --report proof-status 2>&1 || true)
+reg_va=$($COMPILER --allow-legacy-proof-registry "$MAL_DIR/reg_valid_empty/test_proof_registry.con" --report proof-status 2>&1 || true)
 # Sentinel: report header must be present (else a crash with empty
 # output trivially satisfies "no malformed warning").
 if echo "$reg_va" | grep -q "Proof Status Report" && ! echo "$reg_va" | grep -q "warning.*malformed"; then
@@ -7733,7 +7735,7 @@ fi
 mkdir -p "$MAL_DIR/reg_nodup"
 cp "$TESTDIR/adversarial_proof_malformed_registry/test_proof_registry.con" "$MAL_DIR/reg_nodup/"
 echo '{"BROKEN' > "$MAL_DIR/reg_nodup/proof-registry.json"
-reg_nd=$($COMPILER "$MAL_DIR/reg_nodup/test_proof_registry.con" --report proof-status 2>&1 || true)
+reg_nd=$($COMPILER --allow-legacy-proof-registry "$MAL_DIR/reg_nodup/test_proof_registry.con" --report proof-status 2>&1 || true)
 warn_count=$(echo "$reg_nd" | grep -c "warning:" || true)
 if [ "$warn_count" -eq 1 ]; then
     echo "  ok  malformed: registry warning emitted exactly once (not duplicated)"
@@ -7755,7 +7757,7 @@ cat > "$MAL_DIR/reg_missing_fields/proof-registry.json" <<'REGEOF'
   { "function": "main" }
 ] }
 REGEOF
-reg_mf=$($COMPILER "$MAL_DIR/reg_missing_fields/test.con" --report proof-status 2>&1) || true
+reg_mf=$($COMPILER --allow-legacy-proof-registry "$MAL_DIR/reg_missing_fields/test.con" --report proof-status 2>&1) || true
 mf_bp=$(echo "$reg_mf" | grep -c 'missing "body_fingerprint"' || true)
 mf_pr=$(echo "$reg_mf" | grep -c 'missing "proof"' || true)
 mf_sp=$(echo "$reg_mf" | grep -c 'missing "spec"' || true)
@@ -7797,7 +7799,7 @@ cat > "$MAL_DIR/reg_missing_fields/proof-registry.json" <<'REGEOF'
   { "function": "", "body_fingerprint": "abc123", "proof": "test", "spec": "test" }
 ] }
 REGEOF
-reg_nofn=$($COMPILER "$MAL_DIR/reg_missing_fields/test.con" --report proof-status 2>&1) || true
+reg_nofn=$($COMPILER --allow-legacy-proof-registry "$MAL_DIR/reg_missing_fields/test.con" --report proof-status 2>&1) || true
 if echo "$reg_nofn" | grep -q 'empty "function"'; then
     echo "  ok  malformed: registry entry with empty function value produces warning"
     mal_pass=$((mal_pass + 1))
@@ -8745,7 +8747,7 @@ REG_DIR="tests/programs/adversarial_registry"
 # 35. Fabricated function name → error + exit 1
 cp "$REG_DIR/fabricated_function.json" "$REG_DIR/proof-registry.json"
 reg_rc=0
-reg_out=$($COMPILER "$REG_DIR/main.con" --report proof-status 2>&1) || reg_rc=$?
+reg_out=$($COMPILER --allow-legacy-proof-registry "$REG_DIR/main.con" --report proof-status 2>&1) || reg_rc=$?
 if [ "$reg_rc" -ne 0 ] && echo "$reg_out" | grep -q "error:.*unknown function.*nonexistent"; then
     echo "  ok  registry-integrity: fabricated function name rejected"
     evidence_pass=$((evidence_pass + 1))
@@ -8757,7 +8759,7 @@ fi
 # 36. Ineligible function target → error + exit 1
 cp "$REG_DIR/ineligible_target.json" "$REG_DIR/proof-registry.json"
 reg_rc=0
-reg_out=$($COMPILER "$REG_DIR/main.con" --report proof-status 2>&1) || reg_rc=$?
+reg_out=$($COMPILER --allow-legacy-proof-registry "$REG_DIR/main.con" --report proof-status 2>&1) || reg_rc=$?
 if [ "$reg_rc" -ne 0 ] && echo "$reg_out" | grep -q "error:.*ineligible function.*format_result"; then
     echo "  ok  registry-integrity: ineligible function target rejected"
     evidence_pass=$((evidence_pass + 1))
@@ -8769,7 +8771,7 @@ fi
 # 37. Empty proof name → error + exit 1
 cp "$REG_DIR/empty_proof_name.json" "$REG_DIR/proof-registry.json"
 reg_rc=0
-reg_out=$($COMPILER "$REG_DIR/main.con" --report proof-status 2>&1) || reg_rc=$?
+reg_out=$($COMPILER --allow-legacy-proof-registry "$REG_DIR/main.con" --report proof-status 2>&1) || reg_rc=$?
 if [ "$reg_rc" -ne 0 ] && echo "$reg_out" | grep -q "error:.*empty proof name"; then
     echo "  ok  registry-integrity: empty proof name rejected"
     evidence_pass=$((evidence_pass + 1))
@@ -8781,7 +8783,7 @@ fi
 # 38. Empty spec name → error + exit 1
 cp "$REG_DIR/empty_spec_name.json" "$REG_DIR/proof-registry.json"
 reg_rc=0
-reg_out=$($COMPILER "$REG_DIR/main.con" --report proof-status 2>&1) || reg_rc=$?
+reg_out=$($COMPILER --allow-legacy-proof-registry "$REG_DIR/main.con" --report proof-status 2>&1) || reg_rc=$?
 if [ "$reg_rc" -ne 0 ] && echo "$reg_out" | grep -q "error:.*empty spec name"; then
     echo "  ok  registry-integrity: empty spec name rejected"
     evidence_pass=$((evidence_pass + 1))
@@ -8793,7 +8795,7 @@ fi
 # 39. Duplicate entries → warning (deduped at parse time)
 cp "$REG_DIR/duplicate_entries.json" "$REG_DIR/proof-registry.json"
 reg_rc=0
-reg_out=$($COMPILER "$REG_DIR/main.con" --report proof-status 2>&1) || reg_rc=$?
+reg_out=$($COMPILER --allow-legacy-proof-registry "$REG_DIR/main.con" --report proof-status 2>&1) || reg_rc=$?
 if echo "$reg_out" | grep -q "warning:.*duplicate entry"; then
     echo "  ok  registry-integrity: duplicate entries produce warning"
     evidence_pass=$((evidence_pass + 1))
@@ -8804,7 +8806,7 @@ fi
 
 # 40. Clean (empty) registry → exit 0
 echo '{"version":1,"proofs":[]}' > "$REG_DIR/proof-registry.json"
-$COMPILER "$REG_DIR/main.con" --report proof-status > /dev/null 2>&1
+$COMPILER --allow-legacy-proof-registry "$REG_DIR/main.con" --report proof-status > /dev/null 2>&1
 reg_rc=$?
 if [ "$reg_rc" -eq 0 ]; then
     echo "  ok  registry-integrity: clean registry passes (boundary)"
@@ -11551,7 +11553,7 @@ fi
 # main.con. Querying a sibling file's report must NOT raise an
 # "unknown function" error — registry validation runs against the
 # full user package, only the report output is scoped.
-mfr_other=$($COMPILER tests/programs/multi_file_registry/src/other.con --report proof-status 2>&1 || true)
+mfr_other=$($COMPILER --allow-legacy-proof-registry tests/programs/multi_file_registry/src/other.con --report proof-status 2>&1 || true)
 if echo "$mfr_other" | grep -q "Proof Status Report" && \
    ! echo "$mfr_other" | grep -q "registry entry for unknown function"; then
     echo "  ok  scoping: sibling-file --report proof-status doesn't fault sibling registry entries"

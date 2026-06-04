@@ -32,7 +32,11 @@ trusted fn read_byte(buf: *const u8, offset: u64) -> u8 {
 
 // === Provable core (pure, no capabilities) ===
 
-// DRIFTED: first byte check changed from 127 to 0
+// DRIFTED: first byte check changed from 127 to 0 — the #[proof_fingerprint]
+// (from the proved body) no longer matches, so this reports stale.
+#[spec(Concrete.Proof.checkMagicExpr)]
+#[proof_by(Concrete.Proof.check_magic_correct)]
+#[proof_fingerprint("742319e6632d8b8d")]
 fn check_magic(b0: Int, b1: Int, b2: Int, b3: Int) -> Int {
     if b0 == 0 {
         if b1 == 69 {
@@ -53,6 +57,9 @@ fn check_magic(b0: Int, b1: Int, b2: Int, b3: Int) -> Int {
     }
 }
 
+#[spec(Concrete.Proof.checkClassExpr)]
+#[proof_by(Concrete.Proof.check_class_correct)]
+#[proof_fingerprint("4d03c5e0203124eb")]
 fn check_class(cls: Int) -> Int {
     if cls == 1 {
         return 1;
@@ -65,6 +72,9 @@ fn check_class(cls: Int) -> Int {
     }
 }
 
+#[spec(Concrete.Proof.checkDataExpr)]
+#[proof_by(Concrete.Proof.check_data_correct)]
+#[proof_fingerprint("9bd1ef679cf4786")]
 fn check_data(encoding: Int) -> Int {
     if encoding == 1 {
         return 1;
@@ -77,7 +87,10 @@ fn check_data(encoding: Int) -> Int {
     }
 }
 
-// DRIFTED: accepts version 0 in addition to 1
+// DRIFTED: accepts version 0 in addition to 1 — #[proof_fingerprint] no longer matches → stale.
+#[spec(Concrete.Proof.checkVersionExpr)]
+#[proof_by(Concrete.Proof.check_version_correct)]
+#[proof_fingerprint("2e95fb06d4c2a46a")]
 fn check_version(ver: Int) -> Int {
     if ver == 1 {
         return 1;
@@ -90,6 +103,9 @@ fn check_version(ver: Int) -> Int {
     }
 }
 
+#[spec(Concrete.Proof.validateHeaderExpr)]
+#[proof_by(Concrete.Proof.validate_header_correct)]
+#[proof_fingerprint("a3d98e2612d58dd5")]
 fn validate_header(b0: Int, b1: Int, b2: Int, b3: Int,
                    cls: Int, encoding: Int, ver: Int) -> Int {
     let magic_ok: Int = check_magic(b0, b1, b2, b3);
