@@ -388,6 +388,31 @@ lemmas, and actionable failure diagnostics.
    `stale_proof` regression exist. Still on JSON pending the compact
    `#[proof_fingerprint]` (a): `elf_header`, `loop_invariant` (point proofs, NOT
    spec-drift-covered — migrating them now would silently lose drift detection).
+
+   **Deletion gates — multiple checks before JSON support can go away:**
+   - `concrete audit` / `proof-status` must report link origin per proof:
+     `source_linked`, `json_backed`, or `legacy_json_allowed`; no ambiguous
+     "proved" row without origin.
+   - CI must fail on an empty `proof-registry.json` unless the example is still
+     in a documented transition window. Empty registries should not become the
+     new mandatory artifact.
+   - CI must fail on any non-empty `proof-registry.json` once the allowlist is
+     empty. During migration, the allowlist must name each remaining JSON-backed
+     example and why it cannot yet move.
+   - Every migrated proof must have a stale-link regression: edit the source
+     body, keep the proof link, and verify the claim becomes `stale` through
+     either spec-drift or `#[proof_fingerprint]`.
+   - `--emit-link` must be able to emit the complete source-link block,
+     including the compact fingerprint when needed; manual attribute assembly
+     is not enough for bulk migration.
+   - `check-proofs`, `proof-status`, `concrete prove --emit-link`, and
+     `concrete prove --replay` must treat source-linked and JSON-backed proofs
+     identically before JSON is made legacy.
+   - Release bundles must list zero JSON-backed proof links before the JSON
+     reader can be disabled by default.
+   - Final deletion is two-step: first require an explicit
+     `--allow-legacy-proof-registry` flag for JSON, then remove JSON parsing and
+     the flag after one full green cycle with no allowlist entries.
 2. Make the `concrete prove` binary self-describing for agents. Agents may not
    read repository docs, so the binary must expose the workflow itself:
    `concrete prove --help=agent` prints the proof-authoring sequence, stable
