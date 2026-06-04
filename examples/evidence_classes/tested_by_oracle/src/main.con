@@ -1,0 +1,17 @@
+// Evidence class: tested_by_oracle (differential reference).
+//
+// `clamp` is checked against an independent Python reference across seeded
+// random cases by oracle/run_oracle.sh. This is a `tested` evidence class — it
+// raises confidence, it does NOT kernel-verify. Disagreement is real signal:
+// the Concrete source, the reference, or the spec is wrong.
+mod demo {
+    fn clamp(x: i32, lo: i32, hi: i32) -> i32 {
+        if x < lo { return lo; }
+        if x > hi { return hi; }
+        return x;
+    }
+
+    pub fn main() with(Console) -> i32 {
+        return clamp(5, 0, 10);
+    }
+}

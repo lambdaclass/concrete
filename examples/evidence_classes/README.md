@@ -15,8 +15,8 @@ This corpus is the worked reference for each, snapshot-backed.
 | `stale_proof/` | stale (the negative case) | `--report proof-status` |
 | `assumed_boundary/` | assumed (precondition assumed at entry) | `--report contracts` |
 | `trusted_boundary/` | trusted (declared trust boundary) | `--report proof-status` / `effects` |
+| `tested_by_oracle/` | differential-oracle evidence (`tested`, not proved) | `oracle/run_oracle.sh` |
 | `runtime_checked/` | runtime-error obligation | **planned** (see its README) |
-| `tested_by_oracle/` | differential-oracle evidence | **planned** (see its README) |
 
 Each real subexample has `src/main.con`, a `README.md`, and a snapshot of the
 report that shows its class. See `docs/EVIDENCE_CLASSES.md` for the full catalog

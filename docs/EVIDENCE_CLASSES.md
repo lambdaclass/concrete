@@ -49,16 +49,25 @@ These are not failures to hide — they are the audit telling the truth. A
 / `assumptions.toml` taints an obligation to `assumed` and can be forbidden in
 release gates.
 
+## Tested (confidence, not proof)
+
+| class | what it means | command | reference |
+|---|---|---|---|
+| `tested_by_oracle` | compiled program agrees with an independent reference across a vector set | `oracle/run_oracle.sh` | `evidence_classes/tested_by_oracle` (clamp, 200 cases) |
+
+A `tested` class raises confidence but does **not** kernel-verify — it is below
+`proved` on the ladder and is labeled as such. Disagreement is real signal.
+
 ## Planned
 
 | class | status |
 |---|---|
 | `runtime_checked` (runtime-error obligation) | planned — `evidence_classes/runtime_checked/README.md` |
-| `tested_by_oracle` (differential reference) | planned — `evidence_classes/tested_by_oracle/README.md` |
 
-Both are tracked, not faked. The `runtime_error` coverage kind exists; a clean
-worked example needs a discharged runtime-error obligation. The oracle harness
-exists per-flagship; a standalone corpus entry needs a tiny per-example runner.
+Tracked, not faked. The `runtime_error` coverage kind exists, but a clean worked
+example needs a discharged runtime-error obligation (bounds / overflow /
+div-zero); there is no auto runtime-check mode and no reusable theorem yet, so
+building it is a real Lean-proof task rather than wiring.
 
 ## See also
 

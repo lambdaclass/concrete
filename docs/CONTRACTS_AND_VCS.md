@@ -220,29 +220,62 @@ rotr
      engine: bv_decide
 ```
 
-### SMT-assisted bounds
+### SMT-assisted arithmetic glue
 
-External SMT is useful for boring bounds and arithmetic obligations, but it is
-not the same evidence class as Lean or `bv_decide`.
+External SMT is useful for arithmetic glue that is awkward to prove by hand and
+outside the cheap kernel-decision path. It is not the same evidence class as
+Lean, `omega`, or `bv_decide`, and it should not be used for facts Concrete
+already enforces directly, such as ordinary fixed-array bounds.
+
+The HMAC proof exposed the right kind of example: symbolic padding arithmetic.
+The source is simple, but proving the integer division bound manually requires
+bridge lemmas about `Int`, `Nat`, `BitVec`, and division.
 
 ```concrete
-#[requires(0 <= i && i < 16)]
-#[ensures(result == a[i])]
+#[requires(0 <= len && len <= 375)]
+#[ensures(1 <= result && result <= 6)]
 #[prove_by(smt)]
-fn get16(a: [u8; 16], i: i32) -> u8 {
-    return a[i];
+fn sha256_block_count(len: i32) -> i32 {
+    return (len + 9 + 63) / 64;
 }
 ```
 
 Audit shape without certificate replay:
 
 ```text
-get16
-  O1 array_bounds a[i]
+sha256_block_count
+  O1 requires 0 <= len && len <= 375
+     status: assumed_at_entry
+  O2 ensures 1 <= result && result <= 6
      status: proved_by_smt
      solver: z3 4.13.0
      replay: none
      trust: solver_trusted
+```
+
+The counterexample path is just as important. If the postcondition is too
+strong, the solver should report a source-level witness instead of a solver
+term:
+
+```concrete
+#[requires(0 <= len && len <= 375)]
+#[ensures(result <= 5)]
+#[prove_by(smt)]
+fn sha256_block_count_bad(len: i32) -> i32 {
+    return (len + 9 + 63) / 64;
+}
+```
+
+Audit shape:
+
+```text
+sha256_block_count_bad
+  O1 ensures result <= 5
+     status: counterexample
+     solver: z3 4.13.0
+     model:
+       len: 312
+       result: 6
 ```
 
 If a future SMT certificate or replay path is checked by Lean, the audit must

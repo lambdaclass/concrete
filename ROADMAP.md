@@ -150,7 +150,8 @@ Usage reference (what works today): [docs/CONTRACTS_GUIDE.md](docs/CONTRACTS_GUI
 **Ordering (let the proof teach the syntax):** do not freeze contract syntax or
 VC shapes before a real refinement proof exists. The spec layer, the `bv_decide`
 tier, the refinement pattern (`ch_refines` / `maj_refines`), and the first loop
-refinement (`block_to_words_refines_spec`, Phase 0) have all **shipped** — so
+refinement (`block_to_words_refines_spec`) have all shipped and are recorded in
+the changelog, so
 this phase now designs against obligation shapes that have actually been
 discharged, including a real `eval_while_count` loop obligation, rather than
 imagined ones. See the build order in `docs/PROOF_LADDER.md`.
@@ -236,32 +237,44 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
 13. Add SMT negative examples: false postcondition, missing invariant,
     overflow counterexample, OOB counterexample, div-zero counterexample,
     solver timeout, and unsupported theory.
-14. [DONE] Retrofit `constant_time_tag` with source contracts whose easy VCs
-    discharge automatically, while the meaningful theorem remains Lean-checked.
-    This is the Phase 1 item 17 workflow test: functional correctness via
-    contracts, constant-time source shape via audit/profile reporting,
-    machine-level timing via explicit assumption.
-15. Add a compact VC/discharge example suite before external SMT:
-    - `omega`: linear integer bounds, loop `variant_nonnegative`, and
-      `variant_decreases`.
-    - `bv_decide`: `rotr`, byte packing, xor/or bit facts, and fixed-width
-      wrapping arithmetic.
-    - `proved_by_lean`: operational loop preservation or refinement theorem
-      that cannot be closed by a decision procedure.
-    - `runtime_checked` / `tested_by_oracle`: a deliberately unproved contract
-      checked dynamically or against a reference, with audit showing it is not
-      proof.
-    - `assumed` / `trusted`: machine timing, backend lowering, or FFI boundary.
+14. Add a compact VC/discharge example suite before external SMT:
+    - `proved_by_lean`: straight-line refinement (`ch`), operational loop
+      preservation, and one call-composition theorem that cannot be closed by a
+      decision procedure.
+    - `proved_by_kernel_decision (omega)`: linear integer facts, loop
+      `invariant_init`, `variant_nonnegative`, `variant_decreases`, and
+      `exit_implies_post`.
+    - `proved_by_kernel_decision (bv_decide)`: `rotr`, byte packing, xor/or bit
+      facts, fixed-width wrapping arithmetic, and call-site constant bounds.
+    - `partial`: one-direction postcondition proved, converse outstanding.
+    - `stale`: source-linked proof whose body drifted from the extracted spec.
+    - `missing`: proof-eligible function with no proof link yet.
+    - `assumed`: precondition assumed at entry and a named timing assumption.
+    - `trusted`: FFI/backend/unsafe wrapper that is intentionally outside the
+      proof path but audit-visible.
+    - `runtime_checked`: deliberately unproved runtime-error obligation checked
+      dynamically, with audit showing it is not proof.
+    - `tested_by_oracle`: small function checked against a reference
+      implementation, with audit showing it is regression evidence, not proof.
     These examples are release-facing documentation fixtures: every evidence
     class should have one small program and one report snapshot.
-16. Add an external-SMT example only after the backend exists and only behind an
+15. Add an external-SMT example only after the backend exists and only behind an
     explicit policy flag. The example should demonstrate `solver_trusted`,
     counterexample reporting, timeout/unknown handling, and the difference
-    between `proved_by_kernel_decision` and trusted solver output. Do not use
-    external SMT for facts already closed by `omega` or `bv_decide`.
-17. Update audit/release bundles so VC results appear beside proof registry,
+    between `proved_by_kernel_decision` and trusted solver output. Use this
+    sequence of examples:
+    - arithmetic range proof: HMAC-shaped symbolic block-count arithmetic,
+      e.g. `(len + 9 + 63) / 64` under a length bound;
+    - nonlinear or mixed arithmetic proof that `omega` does not own;
+    - path feasibility proof where several branches imply a postcondition;
+    - false postcondition with a source-level counterexample;
+    - timeout/unknown example with a non-proof status;
+    - unsupported-theory example with a clear diagnostic.
+    Do not use external SMT for facts already enforced by Concrete or closed by
+    `omega` / `bv_decide`, such as ordinary fixed-array bounds.
+16. Update audit/release bundles so VC results appear beside proof registry,
     assumptions, runtime obligations, and proof coverage classification.
-18. Add soundness documentation for the SMT path: trusted solver binary,
+17. Add soundness documentation for the SMT path: trusted solver binary,
     encoding assumptions, unsupported theories, replayed fragments, and how a
     solver bug affects each claim class.
 
@@ -273,116 +286,48 @@ of one-off `simp` scripts.
 Done when: new flagship proofs can start from useful generated stubs, standard
 lemmas, and actionable failure diagnostics.
 
-**Status (2026-06-03).** ProofKit v1.1 has shipped as reusable, `fns`-generic
-modules (`Eval`, `BitVec`, `Array`, `Loops`, `Calls`, `Refinement`) with an
-umbrella import and a proof guide. `concrete prove <function>` v1 has shipped
-as a read-only scaffold generator. The remaining work is richer proof authoring
-UX: generated composition scaffolds, replay commands, failed-obligation
-debugging, and in-source theorem/spec links once the contract retrofit teaches
-the shape.
-
-1. [DONE] Package the reusable HMAC proof infrastructure as **Concrete Proof Kit v1**:
-   spec/refinement pattern, loop proof kit, array/state proof kit, BitVec
-   automation kit, function-table/call kit, generated proof stubs,
-   failed-obligation/debug UX, and tutorial proof shapes.
-2. [DONE] After HMAC is tied to the exact extracted source and graduated, split generic
-   proof infrastructure out of `Concrete/Sha256Refine.lean` into dedicated
-   modules:
-   `Concrete/ProofKit/Eval.lean` for fuel and `while_` lemmas,
-   `Concrete/ProofKit/Array.lean` for lookup/set/length/frame lemmas,
-   `Concrete/ProofKit/BitVec.lean` for `Int`/`Nat`/`BitVec` bridges, packing,
-   and `sdiv` patterns,
-   `Concrete/ProofKit/Loops.lean` for copy/xor/multi-store loop templates,
-   `Concrete/ProofKit/Calls.lean` for FnTable and call-wrapper helpers, and
-   `Concrete/ProofKit/Refinement.lean` for generic `PExpr`-refines-spec
-   theorem patterns. `Concrete/Sha256Refine.lean` should then import the kit
-   and contain only SHA/HMAC-specific proofs and buffer/spec shapes.
-3. [DONE] Make the spec/refinement pattern public: independent Lean spec module,
-   extracted `PExpr` refinement theorem shape, registry/fingerprint wiring,
-   and examples such as `ch_refines`, `block_to_words_refines_spec`,
-   `sha256_compress_refines_spec`, and `sha256_hash_refines_spec`.
-4. [DONE] Expose the loop proof kit:
-   `eval_fuel_succ`, `eval_fuel_le`, `eval_while_false`,
-   `eval_while_true`, `eval_while_count`, and templates for counter-loop
-   invariants.
-5. [DONE] Expose the array/state proof kit:
-   `lookupIndex_set_self`, `lookupIndex_set_ne`, `length_set`,
-   `set_in_counter_map`, the multi-store frame pattern from `state_to_bytes`,
-   and the buffer-update model from the padding proof.
-6. [DONE] Expose the BitVec automation kit:
-   `bv_decide` examples, `Int`/`Nat`/`BitVec` bridge lemmas, u8/u32 packing
-   helpers, wrapping add/shift/rotate helper facts, and symbolic index bridge
-   examples.
-7. [DONE] Expose the function-table/call kit:
-   FnTable completeness helpers, call-wrapper refinement pattern, callee
-   refinement dependencies, and dependency-ordered table-entry discipline for
-   composed functions.
-8. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
+1. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
    OOB stuck behavior.
-9. Build reusable lemmas for loop-carried state and `while_step`.
-10. Build reusable lemmas for BitVec operations used by flagships.
-11. Build reusable lemmas for structs, fields, enum construction, match, Result,
+2. Build reusable lemmas for loop-carried state and `while_step`.
+3. Build reusable lemmas for BitVec operations used by flagships.
+4. Build reusable lemmas for structs, fields, enum construction, match, Result,
    Option, and bounded-buffer invariants.
-12. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
+5. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
     fixed buffers, Result/Option, loops, source contracts, and refinement
     composition. Stubs should emit spec target, `PExpr` body, FnTable skeleton,
     expected theorem statement, common imports/tactics, and TODO blocks for
     loop invariants.
-13. Add generated composition scaffolds: FnTable entries, call lemmas, callee
+6. Add generated composition scaffolds: FnTable entries, call lemmas, callee
     refinement dependencies, and composed theorem skeletons.
-14. Add generated loop-invariant templates for common proof shapes:
+7. Add generated loop-invariant templates for common proof shapes:
     counter loop over array writes, copy loop, fold loop, multi-store loop,
     offset loop, and block-processing loop.
-15. [v1 DONE] `concrete prove <file.con> <module.function>`: read-only proof
-   scaffold — suggested imports, body fingerprint, extracted ProofCore body, the
-   contract/VC list with current discharge (omega / `bv_decide` / linked Lean
-   theorem / planned), a theorem skeleton, ProofKit hints from detected features
-   (loops/arrays/bitvecs/calls), and the next obligation with its reason. Prints
-   to stdout; `--out <path>` writes a stub (refuses to overwrite without
-   `--force`); bare name allowed if unique. Deliberately conservative: writes
-   nothing unless `--out`, never edits the registry or `Concrete/` sources,
-   never auto-proves.
-   **v1.1 DONE (2026-06-04):** `--emit-link` (print the in-source
-   `#[spec]`/`#[proof_by]`/`#[ensures_proof]`/`#[proof_coverage]` block from
-   current link data), `--show-obligation <id>` (one loop obligation in full:
-   source span, hypotheses, conclusion, status, ProofKit hint, theorem shape),
-   and `--replay` (re-run omega/`bv_decide` discharge and report whether each
-   obligation still closes). CLI gate: `scripts/tests/test_prove_cli.sh`.
-16. **Evidence-class corpus — first installment DONE (2026-06-04).** A curated
-    suite under `examples/evidence_classes/`, one clean subexample per class
-    (no flagship noise), snapshot-backed, cataloged in
-    `docs/EVIDENCE_CLASSES.md`: `proved_by_lean` (ch via in-source link),
-    `proved_by_kernel_decision_omega`, `proved_by_kernel_decision_bv`,
-    `partial_contract`, `stale_proof`, `assumed_boundary`, `trusted_boundary`.
-    `runtime_checked` and `tested_by_oracle` are README-stubbed **planned**
-    (the runtime-error proof shape and a standalone oracle runner are not yet
-    built — not faked). Feeds CONTRACTS_GUIDE / PROOFKIT_GUIDE / WHY_CONCRETE.
-    Remaining `concrete prove` corpus entries, ordered from smallest to real:
-    - straight-line Lean proof: `ch` refines `ch_spec`;
-    - kernel-decision proof: `rotr` / packing fact via `bv_decide`;
-    - linear-integer VC: loop bound / variant via `omega`;
-    - loop proof: `block_to_words` / `ct_compare` preservation via ProofKit;
-    - state/multi-store proof: `state_to_bytes`;
-    - call composition: `sha256_compress`;
-    - mixed evidence flagship: `constant_time_tag` (functional theorem,
-      kernel-decision loop leaves, structural constant-time report, timing
-      assumption);
-    - full refinement flagship: `hmac_sha256`.
-    Each example should have a command, generated scaffold, expected next
-    obligation, and audit class explanation.
-17. Add proof minimization/debugging UX: show the smallest extracted expression
+8. Add the remaining evidence-class corpus entries. **`tested_by_oracle` DONE
+   (2026-06-04):** `evidence_classes/tested_by_oracle` (clamp) has a standalone
+   per-example `oracle/run_oracle.sh` + `reference.py` that compiles 200 native
+   drivers per seed and matches the reference (PASS=200). **`runtime_checked`
+   remains planned** — it needs a reusable runtime-error obligation shape
+   (bounds / overflow / div-zero) discharged by Lean; there is no auto
+   runtime-check mode or reusable theorem yet, so it is not faked.
+9. Add `concrete prove` corpus entries that teach the proof path from smallest
+   to real: straight-line Lean proof, `bv_decide` proof, `omega` proof,
+   operational loop proof, state/multi-store proof, call composition, mixed
+   evidence flagship, and full refinement flagship. Each entry should include a
+   command, generated scaffold, expected next obligation, and audit class
+   explanation.
+10. Add proof minimization/debugging UX: show the smallest extracted expression
     or lemma surface related to a failed proof, including messages like
     "failed to prove index expression equals spec offset under len <= 375" for
     symbolic arithmetic glue.
-18. Add proof replay/caching once proof artifacts and fingerprints are stable.
-19. Add simple auto-discharge for structural obligations that do not need human
+11. Add proof replay/caching once proof artifacts and fingerprints are stable.
+12. Add simple auto-discharge for structural obligations that do not need human
     proof search.
-20. Add a small verified/spec-checked standard proof library for common
+13. Add a small verified/spec-checked standard proof library for common
     predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
     constant-time source shape.
-21. Add AI-assisted proof repair only after artifacts, statuses, and replay are
+14. Add AI-assisted proof repair only after artifacts, statuses, and replay are
     stable enough to validate suggestions mechanically.
-22. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
+15. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
    establish not just what an iteration *changes* but what it *preserves* — the
    frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
    "a proof mentioning only its footprint preserves everything else"). Today
@@ -401,52 +346,14 @@ the shape.
    majority of proof work. Gate: do not build it until a second update shape
    actually forces it (per the operating rules) — the current functional-list
    model gets framing for free.
-23. **Retire `proof-registry.json` (transitional, not wrong).** The JSON
-   registry was the right first mechanism; the trajectory is to dissolve it as
-   contracts become the primary proof surface, tied to `concrete prove`
-   (item 15) which teaches the replacement link shape.
-   - **Today:** `proof-registry.json` is the bridge from source functions to
-     their Lean specs/proofs (`proof`, `spec`, `coverage`, `ensures_proof`,
-     `body_fingerprint`).
-   - **Near term:** auto-discharge removes many entries because obligations
-     close from the in-source contract alone — O1/O3/O4/O5 and O2's arithmetic
-     half already need no registry entry (omega / `bv_decide`).
-   - **Now:** `concrete prove <function>` v1 teaches the remaining link shape
-     by printing the extracted body, fingerprint, contract/VC list, ProofKit
-     hints, and next missing obligation. Use the `constant_time_tag` retrofit
-     to learn whether this is enough or whether the link syntax needs another
-     field.
-   - **DONE (first link moved, 2026-06-04):** in-source proof attributes
-     `#[spec]` / `#[proof_by]` / `#[ensures_proof]` / `#[proof_coverage]` ship as
-     erased metadata. The compiler synthesizes a registry entry from them with a
-     **computed** `body_fingerprint`, merges it with `proof-registry.json`
-     (defining a link in both is an error), and all downstream tooling
-     (`validateRegistry`, `proof-status`/`contracts`, `check-proofs`, spec-drift)
-     treats it identically. `constant_time_tag.ct_compare` is the first function
-     moved off JSON (its entry is now `[]`); staleness via spec-drift is
-     regression-tested by `examples/evidence_classes/stale_proof`. Everything else still
-     uses the JSON registry.
-   - **Next:** add migration tooling, not another hand format:
-     `concrete prove --emit-link` prints the paste-ready source attributes for a
-     linked proof, and `concrete migrate-proof-registry` (or equivalent) reports
-     which entries can move, which need manual theorem names, and which are
-     blocked.
-   - **Then:** migrate a few small residual links (`ch`, `sha256_init`, and one
-     non-HMAC point proof) before touching the large HMAC chain. Audit should
-     report `source_linked` vs `json_backed` so the migration state is visible.
-   - **Then:** migrate the HMAC chain only after the small migrations and
-     `--emit-link` path are boring. This is larger but should be mechanical:
-     source attributes replace the JSON theorem/spec fields while preserving
-     spec-drift and `check-proofs`.
-   - **Then:** make JSON legacy: existing JSON entries still load with a warning,
-     but new JSON proof entries are rejected unless an explicit
-     `--allow-legacy-registry` / policy flag is set.
-   - **Final removal:** delete JSON registry support only after every flagship is
-     source-linked, stale-link regressions exist, release bundles and docs use
-     source links, and `concrete prove` can emit all required attributes. The
-     end state is no `proof-registry.json`; `body_fingerprint` is computed from
-     extraction at build time (already **achieved for source links**), never
-     stored by hand.
+16. **Retire `proof-registry.json` in order.** The end state is source-linked
+   proof attributes with computed fingerprints, no hand-stored registry
+   fingerprints, and no JSON registry support. The remaining linear path is:
+   add migration reporting, migrate small residual links (`ch`, `sha256_init`,
+   and one non-HMAC point proof), report `source_linked` versus `json_backed`,
+   migrate the HMAC chain, make JSON legacy with an explicit allow flag, and
+   finally delete JSON registry support after every flagship is source-linked
+   and stale-link regressions cover the path.
 
 ## Phase 4: Audit Commands And Review Artifacts
 
@@ -795,48 +702,43 @@ internally coherent.
 Done when: the showcase set includes a serious security/crypto or protocol
 example with proof/evidence strong enough to anchor the public pitch.
 
-HMAC is complete and tracked in Phase 0 as the forcing example for
-source-contract and ProofKit obligation shape. This phase now maintains the
-graduated showcase, deepens theorem coverage where it strengthens public
-claims, and adds new examples only when they force a named surface or public
-claim.
+HMAC and `constant_time_tag` are complete flagship baselines recorded in the
+changelog. This phase maintains the graduated showcase, deepens theorem
+coverage where it strengthens public claims, and adds new examples only when
+they force a named surface or public claim.
 
 1. Maintain the five graduated flagships and keep their evidence bundles green:
    `parse_validate`, `crypto_verify`, `fixed_capacity`, `constant_time_tag`,
    and `hmac_sha256`.
-2. [DONE] Add stretch theorem for `constant_time_tag`: full iff. The
-   different-tag direction landed and the source `#[ensures]` is now fully
-   `proved_by_lean`; keep it as a regression for source-contract-primary
-   flagships and layered evidence.
-3. Add stretch theorem for `fixed_capacity`: multi-iteration ring invariant or
+2. Add stretch theorem for `fixed_capacity`: multi-iteration ring invariant or
    stronger push/search property.
-4. Add stretch theorem for `parse_validate`: success-path / failure-completeness
+3. Add stretch theorem for `parse_validate`: success-path / failure-completeness
    theorem once proof ergonomics support it.
-5. Audit the next stronger real-crypto candidate only if it forces a new public
+4. Audit the next stronger real-crypto candidate only if it forces a new public
    claim: Ed25519 verification subset, AEAD, or a post-quantum primitive.
-6. Add only the ProofCore surface that candidate forces: shifts, bitand, u32
+5. Add only the ProofCore surface that candidate forces: shifts, bitand, u32
    compound loops, rotations, byte-to-word packing, and multi-round invariants.
-7. Keep `hmac_sha256` as the regression anchor for exact-extraction,
+6. Keep `hmac_sha256` as the regression anchor for exact-extraction,
    spec-drift-tied refinement: source perturbations must make the registered
    proof stale, and ProofKit refactors must keep the 11 proof checks green.
-8. Keep the paper, website, README, and showcase manifest aligned with HMAC's
+7. Keep the paper, website, README, and showcase manifest aligned with HMAC's
    actual claim: exact extracted source refines an independent SHA-256/HMAC
    spec under named assumptions and trusted backend boundaries.
-9. Use HMAC-derived proof patterns only after they move into ProofKit or an
+8. Use HMAC-derived proof patterns only after they move into ProofKit or an
    explicit example guide; do not let future flagships copy private
    `Sha256Refine` scaffolding as hidden infrastructure.
-10. Graduate one runtime-error-obligation flagship: parser/protocol example with
+9. Graduate one runtime-error-obligation flagship: parser/protocol example with
    no OOB/div-zero/overflow obligations discharged.
-11. Graduate one authority/capability flagship: a privilege-separated tool whose
+10. Graduate one authority/capability flagship: a privilege-separated tool whose
    trusted core cannot touch files/network/processes except through named
    wrappers.
-12. Graduate one FFI-wrapper flagship: trusted C boundary, safe pure core,
+11. Graduate one FFI-wrapper flagship: trusted C boundary, safe pure core,
     explicit assumptions, layout/ABI evidence.
-13. Graduate one ownership-heavy resource flagship: explicit cleanup,
+12. Graduate one ownership-heavy resource flagship: explicit cleanup,
     borrow-heavy APIs, no leaks/double-use, and evidence explaining why.
-14. Keep the curated showcase balanced: parser/protocol, bounded state,
+13. Keep the curated showcase balanced: parser/protocol, bounded state,
     crypto/security, authority, FFI/trust, ownership-heavy.
-15. Add a Unix-tool/protocol compatibility flagship that demonstrates bugs
+14. Add a Unix-tool/protocol compatibility flagship that demonstrates bugs
     memory safety alone does not catch: byte-preserving I/O, path/OS-string
     handling, handle-relative filesystem authority, exit-code compatibility,
     error behavior compatibility, ignored-result diagnostics, and oracle tests

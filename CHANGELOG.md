@@ -36,6 +36,14 @@ kernel-decision obligations. The first source proof link moved out of
 source, with the compiler synthesizing the registry entry and computed
 fingerprint.
 
+The first evidence-class corpus landed under `examples/evidence_classes/`.
+It gives one small, snapshot-backed reference per shipped class:
+`proved_by_lean`, `proved_by_kernel_decision_omega`,
+`proved_by_kernel_decision_bv`, `partial_contract`, `stale_proof`,
+`assumed_boundary`, and `trusted_boundary`. The catalog in
+`docs/EVIDENCE_CLASSES.md` keeps the classes visible without using a flagship
+as the only example.
+
 ### HMAC-SHA256 graduates with exact-extraction refinement (2026-06-02)
 
 `hmac_sha256` graduated as the fifth flagship with the full SHA-256/HMAC
