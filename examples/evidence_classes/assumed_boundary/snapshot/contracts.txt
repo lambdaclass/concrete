@@ -1,0 +1,14 @@
+=== Source Contracts ===
+
+demo.at
+  R1  requires 0 <= i && i < 16
+     status:  assumed_at_entry (callers not yet checked)
+
+
+=== Call-site obligations ===
+
+demo.good_caller
+  call at(3)
+    requires 0 <= 3 && 3 < 16
+    status:  proved_at_callsite
+

@@ -1,0 +1,22 @@
+// Evidence class: stale proof (the negative case).
+//
+// Same in-source proof link as a real ct_compare, but the body has DRIFTED:
+// `diff` is initialized to 1 instead of 0, so the extracted PExpr no longer
+// matches the linked #[spec] Concrete.Proof.ctCompareExpr. `--report
+// proof-status` reports the function `stale` (spec drift), NOT proved — an
+// in-source link is subject to the same staleness machinery as a JSON entry.
+mod constant_time_tag {
+    #[spec(Concrete.Proof.ctCompareExpr)]
+    #[proof_by(Concrete.Proof.ct_compare_same_tag_correct)]
+    #[proof_coverage(one_direction)]
+    fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
+        let mut diff: u8 = 1;   // DRIFT: the real ct_compare starts `diff` at 0
+        for (let mut i: i32 = 0; i < 16; i = i + 1) {
+            diff = diff | (a[i] ^ b[i]);
+        }
+        if diff == 0 { return 1; }
+        return 0;
+    }
+}
+
+pub fn main() with(Std) -> Int { return 0; }

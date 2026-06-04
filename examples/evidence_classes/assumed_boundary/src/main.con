@@ -1,0 +1,20 @@
+// Evidence class: assumed (a precondition assumed at entry).
+//
+// `#[requires]` is an ASSUMPTION the function makes about its inputs: inside
+// the body it is `assumed_at_entry`, and the obligation is pushed to callers.
+// `--report contracts` shows the requires `assumed_at_entry` on the callee and
+// `proved_at_callsite` / `failed_at_callsite` on each caller. (The other
+// assumed flavor is an `assumptions.toml` entry — a tainted, audit-loud
+// assumption that is never `proved`; see the constant_time_tag flagship.)
+mod demo {
+    #[requires(0 <= i && i < 16)]
+    fn at(i: i32) -> i32 {
+        return i + 1;
+    }
+
+    fn good_caller() -> i32 {
+        return at(3);
+    }
+}
+
+pub fn main() with(Std) -> Int { return 0; }

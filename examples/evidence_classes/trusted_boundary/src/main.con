@@ -1,0 +1,14 @@
+// Evidence class: trusted (a declared trust boundary).
+//
+// A `trusted` function is the explicit escape hatch for code Concrete cannot
+// prove (e.g. a thin wrapper over an FFI/raw operation). Proof is bypassed and
+// the trust is made VISIBLE: `--report effects` shows `evidence: trusted`,
+// `--report proof-status` shows it `trusted` (proof bypassed). It is never a
+// silent gap — it is a named assumption in the audit.
+mod demo {
+    trusted fn read_device_word(addr: i32) -> i32 {
+        return addr;
+    }
+}
+
+pub fn main() with(Std) -> Int { return 0; }

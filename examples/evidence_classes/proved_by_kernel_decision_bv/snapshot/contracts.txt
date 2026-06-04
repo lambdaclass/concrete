@@ -1,0 +1,15 @@
+=== Source Contracts ===
+
+demo.rotr
+  R1  requires 0 <= n && n < 32
+     status:  assumed_at_entry (callers not yet checked)
+
+
+=== Call-site obligations ===
+
+demo.rotr7
+  call rotr(x, n)
+    requires 0 <= n && n < 32
+    status:  proved_by_kernel_decision
+    engine:  bv_decide
+

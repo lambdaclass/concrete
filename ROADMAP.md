@@ -7,12 +7,12 @@ The roadmap is linear. Phases are ordered, and items inside a phase are ordered
 unless explicitly marked as a constraint or a deferred research note. Read the
 document as one queue:
 
-1. finish the current source-contract flagship (`constant_time_tag` full value
-   contract);
-2. use that retrofit to move proof links toward source (`#[proof_by]` /
-   `#[spec]`) and shrink the JSON registry;
-3. make `concrete prove` useful enough for non-compiler authors;
-4. harden audit / proof-status / trust gates around the new source-contract
+1. finish proof-link migration away from JSON (`#[proof_by]` / `#[spec]` and
+   source-linked fingerprints);
+2. make `concrete prove` useful enough for non-compiler authors through examples
+   and replayable workflows;
+3. add small evidence examples for every claim class;
+4. harden audit / proof-status / trust gates around the source-contract
    path;
 5. close the release-blocking predictable/provable/runtime-safety gaps;
 6. only then broaden the ordinary language surface (patterns, bytes/text/path,
@@ -41,33 +41,6 @@ runtime failure, byte/text/path boundaries, and proof class must remain visible
 in source or audit output. Do not hide them behind inference-heavy abstractions,
 implicit conversions, ambient lookup, or broad metaprogramming.
 
-## Phase 0: Finish HMAC Refinement — DONE (2026-06-02)
-
-`hmac_sha256` graduated as the fifth flagship with bar #2 closed the rigorous
-way: the entire composition chain is kernel-verified AND tied to the extracted
-source through the spec-drift gate. `hmac_sha256_refines_spec` proves the
-extracted body computes exactly `Sha256Spec.hmac` for all inputs in the
-documented bounds; the nine chain refinements (`block_to_words(_at)`,
-`sha256_schedule`, `sha256_round`, `sha256_compress(_at)`, `state_to_bytes`,
-`sha256_hash`, `hmac_sha256`) plus the two bar-#1 point proofs are all
-registered with the spec equal to the source-extracted PExpr
-(`Concrete.Proof.specs`), so a source edit turns the proof stale. The thesis
-realized in full: *source extracts to this ProofCore body, this body refines
-the spec, and drift breaks the claim.* `--report check-proofs` = 11 verified,
-0 failed; spec-drift gate = 0 drift, 0 stale.
-
-Next: continue the post-HMAC build-out. The source-contract and proof-authoring
-slab now exists: attributes, `spec fn`, `requires`/`ensures`, call-site
-obligations, `bv_decide` / `omega` discharge, loop contracts, generated loop VC
-shapes, `ghost`, a contracts guide, and `concrete prove` v1. ProofKit has been
-harvested into reusable modules. The remaining Phase 1-4 work is to make the
-first real flagship use source contracts as the primary proof surface, then
-tighten audit UX, registry retirement, and release-grade review artifacts.
-Phase 5 through Phase 7 remain hardening gates; pull their items forward when
-they block the Phase 1-4 work or before release.
-
----
-
 ## Cross-cutting decisions and checkpoints (recorded 2026-06-03)
 
 These are decisions/checkpoints, not yet implementation. Each names the
@@ -76,23 +49,9 @@ evidence class so no construct stays semantically dark.
 ### Floats: usable now, provable only under an explicit profile
 
 **Decision.** `f32`/`f64` are allowed as runtime types but are **outside
-ProvableV1**. No proof or release claim may be made over float arithmetic until
-a float profile exists.
-
-**Soundness gap — CLOSED (2026-06-03).** Previously a float-arithmetic function
-with no float *literal* — e.g. `fn fadd(x: f64, y: f64) -> f64 { x + y }` —
-extracted to `(x + y)` and reported `status: extracted`, `eligible`: the float
-`+` was silently modeled as the *integer* `.add`. That was a soundness/honesty
-bug (it violated "no semantically dark constructs"). The first slice of the
-float arc now closes it: `assessEligibility` flags any float-typed param,
-return, or body op (detected from the still-present Core type via `isFloatTy`)
-as a profile miss, so the function is **excluded** from eligibility and never
-extracted. `identifyUnsupportedExpr` likewise reports float binops/idents/casts/
-literals as `unsupported_for_proof`. Audit-loud, the dedicated framing reads:
-`float semantics: unprofiled / proof eligibility: excluded /
-reason: floating-point arithmetic has no active proof profile`. Regression
-fixture: `examples/float_unprofiled/` with `eligibility` + `extraction`
-snapshots (`0 extracted`). `ProvableFloatV1` below remains the future opt-in.
+ProvableV1** unless a function opts into a future float profile. Unprofiled
+float arithmetic is excluded from proof eligibility and audit-loud; no proof or
+release claim may be made over float arithmetic until a profile exists.
 
 **Provable Float V1 (future, narrow profile — see Phase 6).** A function opts
 into a named profile, e.g. `#[float_profile(ieee754_binary64_nearest_even)]`:
@@ -196,91 +155,32 @@ this phase now designs against obligation shapes that have actually been
 discharged, including a real `eval_while_count` loop obligation, rather than
 imagined ones. See the build order in `docs/PROOF_LADDER.md`.
 
-Done when: one flagship uses source contracts as the primary proof surface, and
-each contract is classified as proved, enforced, assumed, missing, blocked, or
-solver-assisted.
+Done when: the source-contract path is hardened beyond the first flagship:
+negative cases are covered, diagnostics are actionable, source-contract
+soundness obligations are named in the compiler-soundness bridge, and HMAC
+retrofit is explicitly queued behind proof-link migration.
 
-**Status (2026-06-03).** The contract surface is no longer aspirational:
-`spec fn`, `#[ensures]`, `#[requires]`, call-site obligations, `bv_decide`
-classification, `#[invariant]`/`#[variant]`, generated loop VC shapes,
-kernel-checked `omega` discharge for the easy loop VCs, `ghost`, the contracts
-guide, and `concrete prove` v1 have shipped. The remaining work in this phase
-is the first flagship retrofit: make `constant_time_tag` use source contracts
-as its primary proof surface while keeping its constant-time claim as a
-separate audit/security evidence layer.
-
-1. Add LL(1)-safe function attributes:
-   `#[requires(...)]` and `#[ensures(...)]`.
-2. Restrict v1 contract expressions to proof-friendly expressions:
-   parameters, `result`, literals, comparisons, boolean operators, simple
-   arithmetic, fixed array lengths, and named pure predicates where explicitly
-   supported.
-3. Keep the contract surface deliberately boring: attributes, ghost values,
-   `assert`, and `assume` only. No tactics in `.con`, no embedded theorem
-   language, no dependent-programming sublanguage, and no clever contract DSL
-   that makes ordinary code feel abstract before it is auditable.
-4. Add a contract design fixture corpus before implementation:
-   straight-line `ch`, bounds-only `get16`, loop-shaped `ct_compare`, and an
-   HMAC-style `ensures result == spec(...)` example. These fixtures define the
-   expected parse, Core, VC, and audit shapes before the parser/compiler work
-   hardens them.
-5. Store source contracts through Parse/Resolve/Check/Core and report them with
-   source spans.
-6. Generate verification-condition seeds for each source contract: caller-side
-   preconditions, callee-side postconditions, and assumptions needed by the
-   expression language.
-7. Add `--report contracts` with evidence statuses and links to generated
-   obligations and VC ids.
-8. Connect contracts to the proof registry: a theorem can discharge a specific
-   source contract id.
-9. Map existing proof-registry entries to generated source-contract obligations
-   where possible, so current Lean theorems migrate forward instead of being
-   discarded when contracts become the primary proof surface. (The registry's
-   eventual retirement is a Phase 3 proof-authoring item, gated on
-   `concrete prove`.)
-10. Add contract negative examples: unmet precondition at call site, missing
-   postcondition proof, weakened postcondition, invalid contract expression.
-11. Add proof-only source forms:
-   `ghost let`, `assert`, and `assume`. `ghost` erases before codegen;
-   `assert` creates an obligation; `assume` is a tainted, audit-loud
-   assumption, never a proof.
-12. Add loop attributes:
-   `#[invariant(...)]` and `#[variant(...)]`.
-13. Generate loop-invariant obligations: initialization, preservation, variant
-   decrease, and exit-implies-postcondition.
-14. Add source contract soundness work to the compiler soundness bridge: parsing
+1. Add contract negative examples: unmet precondition at call site, missing
+   postcondition proof, weakened postcondition, invalid contract expression,
+   invalid invariant preservation, duplicate source/JSON proof links, and
+   invalid proof-link attributes.
+2. Finish the `assert` / `assume` trapdoor discipline everywhere it appears:
+   `assert` creates an obligation; `assume` is tainted, audit-loud,
+   gate-forbiddable, and never reported as proof.
+3. Improve contract diagnostics: explain whether the failure is caller-side
+   precondition, callee-side postcondition, partial postcondition, loop
+   invariant initialization, invariant preservation, variant decrease, bad
+   proof link, or stale proof.
+4. Add contract stability rules: weakening a precondition, strengthening a
+   postcondition, or changing a public invariant is a semantic API change.
+5. Add source contract soundness work to the compiler soundness bridge: parsing
    preserves meaning, generated obligations correspond to contract semantics,
-   discharged obligations imply the advertised contract claim.
-15. Add contract diagnostics that explain whether the failure is caller-side
-    precondition, callee-side postcondition, loop invariant initialization,
-    invariant preservation, or variant decrease.
-16. Add contract stability rules: weakening a precondition, strengthening a
-    postcondition, or changing a public invariant is a semantic API change.
-17. Add one contract-bearing flagship retrofit after the machinery is real:
-    `constant_time_tag` first, then `hmac_sha256` only after the smaller
-    retrofit proves the workflow.
-    - **Immediate order:** prove the different-tag direction
-      (`a != b -> ct_compare(a,b) = 0`), upgrade the inline `#[ensures]` to
-      full `proved_by_lean`, refresh audit/snapshots, and add a stale/missing
-      regression for editing the compare body.
-    - **Chosen scope for `constant_time_tag`.** Use layered evidence, not one
-      overloaded claim. The source contract proves value semantics; the
-      constant-time shape remains a structural audit/profile claim; machine
-      timing remains an explicit trusted assumption.
-    - Add an inline postcondition first, not a new named `contract SameTag`
-      syntax. Example shape:
-      `#[ensures((a == b && result == 1) || (a != b && result == 0))]`.
-      Named contract declarations can be revisited only if reuse demands them.
-    - Current proof coverage is intentionally partial: the same-tag direction
-      (`a == b -> result == 1`) is already `proved_by_lean`; the different-tag
-      direction (`a != b -> result == 0`) is a planned Lean theorem. The audit
-      must show the full postcondition as not fully discharged until that
-      theorem lands.
-    - Loop arithmetic leaves should discharge through kernel decision
-      procedures where possible; operational preservation stays linked to Lean
-      when it needs evaluator/loop reasoning.
-    - `concrete prove` should expose the remaining obligation rather than
-      hiding it.
+   discharged obligations imply the advertised contract claim, and source proof
+   links imply the same claim class as their generated registry entry.
+6. Add `hmac_sha256` source-contract retrofit only after proof-link migration
+   and `concrete prove` examples make the small proof path routine. Do not
+   start by moving the HMAC chain; use it as the late regression anchor for the
+   mature source-link path.
 
 ## Phase 2: Verification Conditions And SMT Assistance
 
@@ -336,11 +236,11 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
 13. Add SMT negative examples: false postcondition, missing invariant,
     overflow counterexample, OOB counterexample, div-zero counterexample,
     solver timeout, and unsupported theory.
-14. Retrofit `constant_time_tag` with source contracts whose easy VCs discharge
-    automatically, while the meaningful theorem remains Lean-checked. This is
-    the Phase 1 item 17 workflow test: functional correctness via contracts,
-    constant-time source shape via audit/profile reporting, machine-level timing
-    via explicit assumption.
+14. [DONE] Retrofit `constant_time_tag` with source contracts whose easy VCs
+    discharge automatically, while the meaningful theorem remains Lean-checked.
+    This is the Phase 1 item 17 workflow test: functional correctness via
+    contracts, constant-time source shape via audit/profile reporting,
+    machine-level timing via explicit assumption.
 15. Add a compact VC/discharge example suite before external SMT:
     - `omega`: linear integer bounds, loop `variant_nonnegative`, and
       `variant_decreases`.
@@ -448,7 +348,16 @@ the shape.
    source span, hypotheses, conclusion, status, ProofKit hint, theorem shape),
    and `--replay` (re-run omega/`bv_decide` discharge and report whether each
    obligation still closes). CLI gate: `scripts/tests/test_prove_cli.sh`.
-16. Add a `concrete prove` examples corpus, ordered from smallest to real:
+16. **Evidence-class corpus — first installment DONE (2026-06-04).** A curated
+    suite under `examples/evidence_classes/`, one clean subexample per class
+    (no flagship noise), snapshot-backed, cataloged in
+    `docs/EVIDENCE_CLASSES.md`: `proved_by_lean` (ch via in-source link),
+    `proved_by_kernel_decision_omega`, `proved_by_kernel_decision_bv`,
+    `partial_contract`, `stale_proof`, `assumed_boundary`, `trusted_boundary`.
+    `runtime_checked` and `tested_by_oracle` are README-stubbed **planned**
+    (the runtime-error proof shape and a standalone oracle runner are not yet
+    built — not faked). Feeds CONTRACTS_GUIDE / PROOFKIT_GUIDE / WHY_CONCRETE.
+    Remaining `concrete prove` corpus entries, ordered from smallest to real:
     - straight-line Lean proof: `ch` refines `ch_spec`;
     - kernel-decision proof: `rotr` / packing fact via `bv_decide`;
     - linear-integer VC: loop bound / variant via `omega`;
@@ -515,7 +424,7 @@ the shape.
      (`validateRegistry`, `proof-status`/`contracts`, `check-proofs`, spec-drift)
      treats it identically. `constant_time_tag.ct_compare` is the first function
      moved off JSON (its entry is now `[]`); staleness via spec-drift is
-     regression-tested by `examples/stale_proof_link`. Everything else still
+     regression-tested by `examples/evidence_classes/stale_proof`. Everything else still
      uses the JSON registry.
    - **Next:** add migration tooling, not another hand format:
      `concrete prove --emit-link` prints the paste-ready source attributes for a
@@ -895,8 +804,10 @@ claim.
 1. Maintain the five graduated flagships and keep their evidence bundles green:
    `parse_validate`, `crypto_verify`, `fixed_capacity`, `constant_time_tag`,
    and `hmac_sha256`.
-2. Add stretch theorem for `constant_time_tag`: full iff if tractable, or a
-   clearly named stronger negative-direction theorem.
+2. [DONE] Add stretch theorem for `constant_time_tag`: full iff. The
+   different-tag direction landed and the source `#[ensures]` is now fully
+   `proved_by_lean`; keep it as a regression for source-contract-primary
+   flagships and layered evidence.
 3. Add stretch theorem for `fixed_capacity`: multi-iteration ring invariant or
    stronger push/search property.
 4. Add stretch theorem for `parse_validate`: success-path / failure-completeness
@@ -1055,6 +966,43 @@ compiler.
 
 Done when: a fresh user can install Concrete, run a proof-bearing example,
 inspect its audit bundle, and understand the claim matrix in under ten minutes.
+
+**Language graduation is a gate, not a date.** Concrete can graduate individual
+examples before the language graduates. The language reaches **alpha** only
+after the source-contract/proof-link path is usable outside flagship hero work;
+it reaches **beta/release** only after ordinary project workflow and external
+validation are in place.
+
+**Alpha bar (language can be presented as a usable experimental language):**
+- At least one non-author writes, proves, or contract-annotates a useful
+  Concrete program and reports that ProofKit + contracts + `concrete prove`
+  were worth the discipline.
+- Source contracts are primary for at least one flagship, with source-linked
+  proofs and no JSON dependency for that flagship's main proof surface.
+- `concrete prove` guides a user through contract -> obligation -> Lean/omega/
+  `bv_decide` evidence -> source link -> audit.
+- Small evidence examples exist for every public claim class:
+  `proved_by_lean`, `proved_by_kernel_decision`, `tested_by_oracle`,
+  `assumed`, `trusted`, `partial`, and `stale`.
+- Core language surface blockers are settled or explicitly deferred with
+  examples: pattern cleanup, bytes/text/path, iteration, collections,
+  ignored-result diagnostics, and capability polymorphism.
+- Runtime safety obligations have defined evidence classes for bounds,
+  div-zero, overflow, casts, panic/abort, and unchecked conversion behavior.
+- README, website, papers, examples, and roadmap agree and do not outclaim
+  audit evidence.
+
+**Beta/release bar (language can be released to users beyond the thesis
+audience):**
+- `concrete fmt`, `concrete test`, and a minimal project model (`Concrete.toml`)
+  exist.
+- `proof-registry.json` is legacy or gone for flagship proof surfaces; source
+  links are the normal path.
+- Release bundles have stable schemas, replay commands, assumption/trust
+  reports, and proof-link provenance.
+- The stdlib/runtime boundary is stable enough for daily examples.
+- At least one external user completes the first-user tutorial and a useful
+  audit/proof workflow without compiler-author intervention.
 
 1. Define first public release criteria: supported subset, required examples,
    required diagnostics, proof workflow, stdlib/project UX, evidence/policy/

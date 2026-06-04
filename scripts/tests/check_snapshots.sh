@@ -52,10 +52,14 @@ for dir in "${SNAPSHOT_DIRS[@]}"; do
   label="${example_dir#examples/}"
   echo "=== $label ==="
 
+  # Flatten nested example labels (e.g. evidence_classes/proved_by_lean) for the
+  # temp file path, which is a flat directory.
+  flat_label="${label//\//_}"
+
   mapfile -t SNAPSHOTS < <(find "$dir" -maxdepth 1 -name '*.txt' | sort)
   for snap in "${SNAPSHOTS[@]}"; do
     kind=$(report_kind_from "$snap")
-    actual_file="$TMP/$label-$kind.txt"
+    actual_file="$TMP/$flat_label-$kind.txt"
     "$COMPILER" "$source" --report "$kind" > "$actual_file" 2>&1
 
     if cmp -s "$snap" "$actual_file"; then

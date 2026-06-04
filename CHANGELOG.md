@@ -10,6 +10,60 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Source contracts become a real proof-authoring surface (2026-06-04)
+
+Source contracts moved from reported metadata to an end-to-end authoring path.
+The language now supports `spec fn`, `#[requires]`, `#[ensures]`,
+`#[invariant]`, `#[variant]`, `ghost`, call-site obligations, kernel-decision
+discharge (`omega` / `bv_decide`), loop VC generation, and `concrete prove`
+as the proof scaffold CLI.
+
+`constant_time_tag` is the first source-contract-primary flagship:
+`ct_compare` carries its functional postcondition in source, links the Lean
+proofs from source attributes, and the full value-semantics contract is
+`proved_by_lean`. Its constant-time source shape remains a separate
+enforced/reported claim, while machine-level timing remains assumed/trusted.
+This is the intended layered evidence model: value semantics, structural
+security shape, and machine assumptions are not collapsed into one badge.
+
+`concrete prove` v1/v1.1 landed as a conservative authoring tool: it prints the
+extracted body, fingerprint, VC list, ProofKit hints, theorem shape, and next
+obligation; `--emit-link` prints source proof-link attributes;
+`--show-obligation` expands one obligation; and `--replay` rechecks
+kernel-decision obligations. The first source proof link moved out of
+`proof-registry.json`: `constant_time_tag.ct_compare` now uses
+`#[spec]`, `#[proof_by]`, `#[ensures_proof]`, and `#[proof_coverage]` in
+source, with the compiler synthesizing the registry entry and computed
+fingerprint.
+
+### HMAC-SHA256 graduates with exact-extraction refinement (2026-06-02)
+
+`hmac_sha256` graduated as the fifth flagship with the full SHA-256/HMAC
+composition chain kernel-verified and tied to the exact extracted source through
+the spec-drift gate. `hmac_sha256_refines_spec` proves that the extracted body
+computes `Sha256Spec.hmac` for the documented input bounds. The registered
+chain includes `block_to_words(_at)`, `sha256_schedule`, `sha256_round`,
+`sha256_compress(_at)`, `state_to_bytes`, `sha256_hash`, and `hmac_sha256`,
+plus the earlier point proofs; source edits make the registered claims stale.
+
+The proof also produced reusable infrastructure: fuel monotonicity, bounded
+counter-loop induction, array/frame lemmas, BitVec bridge lemmas, call/FnTable
+helpers, copy/xor/multi-store loop templates, and refinement theorem patterns.
+That infrastructure was harvested into `Concrete/ProofKit/*` and documented in
+`docs/PROOFKIT_GUIDE.md`.
+
+### Unprofiled floating point excluded from proof eligibility (2026-06-03)
+
+A soundness/honesty gap around floats was closed. A function such as
+`fn fadd(x: f64, y: f64) -> f64 { x + y }` previously risked entering the
+proof pipeline with float `+` modeled as integer `.add`. Float-typed
+parameters, returns, literals, casts, and operations are now audit-loud and
+excluded from ProofCore until an explicit `ProvableFloatV1` profile exists.
+
+The report surface names the status directly: float semantics are unprofiled,
+proof eligibility is excluded, and the reason is that floating-point arithmetic
+has no active proof profile.
+
 ### Proof-story matrix defines the no-dark-constructs contract
 
 `docs/PROOF_STORY_MATRIX.md` records the language-level proof/evidence story:

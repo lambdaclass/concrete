@@ -1,0 +1,19 @@
+// Evidence class: proved_by_kernel_decision (omega).
+//
+// A counted loop with #[invariant]/#[variant]. The init/variant obligations
+// (O1/O4/O5) are linear-integer facts the compiler discharges itself with
+// `omega` — a kernel decision procedure, no external SMT, no hand proof.
+// `--report contracts` shows them `proved_by_kernel_decision (omega)`.
+mod demo {
+    fn count_up() -> i32 {
+        let mut acc: i32 = 0;
+        #[invariant(0 <= i && i <= 8)]
+        #[variant(8 - i)]
+        for (let mut i: i32 = 0; i < 8; i = i + 1) {
+            acc = acc + i;
+        }
+        return acc;
+    }
+}
+
+pub fn main() with(Std) -> Int { return 0; }

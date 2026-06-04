@@ -1,0 +1,16 @@
+// Evidence class: proved_by_lean.
+//
+// A straight-line function whose extracted body is proved to refine an
+// independent Lean spec, kernel-checked. SHA-256's `ch` (choose) bit-select.
+// The proof link lives in source (#[spec]/#[proof_by]); `--report proof-status`
+// shows it `proved [point]`, `--report check-proofs` kernel-verifies it.
+mod hmac_sha256 {
+    #[spec(Concrete.Proof.chExpr)]
+    #[proof_by(Concrete.Proof.ch_selects_high)]
+    #[proof_coverage(point)]
+    fn ch(x: u32, y: u32, z: u32) -> u32 {
+        return (x & y) ^ ((x ^ 0xFFFFFFFF) & z);
+    }
+}
+
+pub fn main() with(Std) -> Int { return 0; }

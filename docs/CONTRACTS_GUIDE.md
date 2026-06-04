@@ -16,7 +16,10 @@ Everything below is exercised by real fixtures:
 
 A contract is a **claim**, not a guarantee. The compiler turns each claim into
 one or more **obligations** with stable ids, then attaches **evidence**. Audit
-shows the evidence class — never a single green badge. The classes you will see:
+shows the evidence class — never a single green badge.
+[EVIDENCE_CLASSES.md](EVIDENCE_CLASSES.md) is the full catalog, each class backed
+by a worked subexample under `examples/evidence_classes/`. The classes you will
+see:
 
 | status | meaning |
 |---|---|
@@ -213,7 +216,7 @@ A function is linked to its hand-written Lean proof/spec one of two ways:
   spec-drift — treats the source link **identically** to a JSON entry, including
   staleness: editing the body so the extracted PExpr no longer matches the
   linked `spec` reports the function `stale` (see
-  `examples/stale_proof_link`). A function may not be linked in both places.
+  `examples/evidence_classes/stale_proof`). A function may not be linked in both places.
 
 `examples/constant_time_tag` is the first function to use the in-source link;
 the registry is **transitional** and shrinks as auto-discharge and source links

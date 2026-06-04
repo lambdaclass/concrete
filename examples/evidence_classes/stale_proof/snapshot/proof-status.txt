@@ -1,11 +1,11 @@
 error: spec drift for 'constant_time_tag.ct_compare' — registered spec 'Concrete.Proof.ctCompareExpr' (via Concrete.Proof.specs) does not match the source-extracted PExpr; the theorem 'Concrete.Proof.ct_compare_same_tag_correct' is about a different function than the source
 === Proof Status Report ===
 
--- proof stale -------------------------------------------- examples/stale_proof_link/src/main.con:18
+-- proof stale -------------------------------------------- examples/evidence_classes/stale_proof/src/main.con:12
 
   Function `constant_time_tag.ct_compare` has a registered proof, but the body changed.
 
- 18 |     fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
+ 12 |     fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   expected fingerprint:
@@ -16,11 +16,11 @@ error: spec drift for 'constant_time_tag.ct_compare' — registered spec 'Concre
 
   hint: Update the Lean proof in Concrete/Proof.lean, or restore the proved implementation.
 
--- not eligible ------------------------------------------- examples/stale_proof_link/src/main.con:28
+-- not eligible ------------------------------------------- examples/evidence_classes/stale_proof/src/main.con:22
 
   `main.main` cannot be proved: fails predictable profile (has capabilities: Alloc, Clock, Console, Env, File, Network, Process, Random, is entry point (main), allocation, blocking I/O).
 
- 28 | pub fn main() with(Std) -> Int { return 0; }
+ 22 | pub fn main() with(Std) -> Int { return 0; }
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   reasons: has capabilities: Alloc, Clock, Console, Env, File, Network, Process, Random, is entry point (main), allocation, blocking I/O

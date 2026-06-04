@@ -1,0 +1,20 @@
+// Evidence class: proved_by_kernel_decision (bv_decide).
+//
+// A call into a #[requires]-bearing function whose argument is closed after
+// let-substitution. The precondition `0 <= n && n < 32` is a bitvector bound
+// the compiler discharges at the call site with `bv_decide` — a kernel decision
+// procedure (bit-blasted, LRAT-checked), no external SMT. `--report contracts`
+// shows the call `proved_by_kernel_decision`, engine `bv_decide`.
+mod demo {
+    #[requires(0 <= n && n < 32)]
+    fn rotr(x: u32, n: u32) -> u32 {
+        return (x >> n) | (x << (32 - n));
+    }
+
+    fn rotr7(x: u32) -> u32 {
+        let n: u32 = 7;
+        return rotr(x, n);
+    }
+}
+
+pub fn main() with(Std) -> Int { return 0; }

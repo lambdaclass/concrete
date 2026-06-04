@@ -1,0 +1,22 @@
+=== Proof Status Report ===
+
+-- trusted ------------------------------------------------ examples/evidence_classes/trusted_boundary/src/main.con:9
+
+  `demo.read_device_word` is marked trusted — proof is bypassed (trusted assumption).
+
+ 9 |     trusted fn read_device_word(addr: i32) -> i32 {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+-- not eligible ------------------------------------------- examples/evidence_classes/trusted_boundary/src/main.con:14
+
+  `main.main` cannot be proved: fails predictable profile (has capabilities: Alloc, Clock, Console, Env, File, Network, Process, Random, is entry point (main), allocation, blocking I/O).
+
+ 14 | pub fn main() with(Std) -> Int { return 0; }
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  reasons: has capabilities: Alloc, Clock, Console, Env, File, Network, Process, Random, is entry point (main), allocation, blocking I/O
+
+  hint: Address these constraints to make this function eligible for proof.
+
+Totals: 2 functions — 0 proved, 0 stale, 0 unproved, 0 blocked, 1 ineligible, 1 trusted
+
