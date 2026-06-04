@@ -54,6 +54,9 @@ mod hmac_sha256 {
     // SHA-256 initial hash value H(0): the first 32 bits of the
     // fractional parts of the square roots of the first 8 primes.
     // FIPS 180-4 § 5.3.3.
+    #[spec(Concrete.Proof.sha256_initExpr)]
+    #[proof_by(Concrete.Proof.sha256_init_correct)]
+    #[proof_coverage(point)]
     fn sha256_init() -> [u32; 8] {
         return [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
                 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
@@ -95,10 +98,15 @@ mod hmac_sha256 {
     // Ch(x, y, z) = (x AND y) XOR ((NOT x) AND z).  FIPS 180-4 § 4.1.2.
     // Source-contract slice: `ch_spec` names the abstract Ch (modeled in Lean
     // as Sha256Spec.ch); the #[ensures] postcondition is discharged by
-    // Concrete.Proof.ch_refines via the registry (see `--report contracts`).
+    // Concrete.Proof.ch_refines via the in-source #[ensures_proof] link below
+    // (see `--report contracts`).
     spec fn ch_spec(x: u32, y: u32, z: u32) -> u32;
 
     #[ensures(result == ch_spec(x, y, z))]
+    #[spec(Concrete.Proof.chExpr)]
+    #[proof_by(Concrete.Proof.ch_selects_high)]
+    #[ensures_proof(Concrete.Proof.ch_refines)]
+    #[proof_coverage(point)]
     fn ch(x: u32, y: u32, z: u32) -> u32 {
         return (x & y) ^ ((x ^ 0xFFFFFFFF) & z);
     }
@@ -173,6 +181,9 @@ mod hmac_sha256 {
     // ============================================================
 
     // Big-endian pack of a 64-byte block into 16 u32 words.
+    #[spec(Concrete.Proof.blockToWordsExpr)]
+    #[proof_by(Concrete.Proof.block_to_words_refines_spec)]
+    #[proof_coverage(full_contract)]
     fn block_to_words(block: [u8; 64]) -> [u32; 16] {
         let mut w: [u32; 16] = [0; 16];
         for (let mut i: i32 = 0; i < 16; i = i + 1) {
@@ -187,6 +198,9 @@ mod hmac_sha256 {
     // Message-schedule expansion: W[0..15] = block words, then
     // W[i] = sigma1(W[i-2]) + W[i-7] + sigma0(W[i-15]) + W[i-16]
     // for i in 16..63 (all additions mod 2^32).
+    #[spec(Concrete.Proof.scheduleExpr)]
+    #[proof_by(Concrete.Proof.sha256_schedule_refines_spec)]
+    #[proof_coverage(full_contract)]
     fn sha256_schedule(w16: [u32; 16]) -> [u32; 64] {
         let mut w: [u32; 64] = [0; 64];
         for (let mut i: i32 = 0; i < 16; i = i + 1) {
@@ -205,6 +219,9 @@ mod hmac_sha256 {
     //   T1 = h + Sigma1(e) + Ch(e,f,g) + k + w
     //   T2 = Sigma0(a) + Maj(a,b,c)
     //   next = [T1+T2, a, b, c, d+T1, e, f, g]
+    #[spec(Concrete.Proof.roundExpr)]
+    #[proof_by(Concrete.Proof.round_refines_list)]
+    #[proof_coverage(full_contract)]
     fn sha256_round(state: [u32; 8], k: u32, w: u32) -> [u32; 8] {
         let t1: u32 = state[7] + big_sigma1(state[4])
             + ch(state[4], state[5], state[6]) + k + w;
@@ -216,6 +233,9 @@ mod hmac_sha256 {
     // SHA-256 block compression: 64 rounds over the expanded
     // schedule, then add the working state into the input state
     // (Davies-Meyer feed-forward), all mod 2^32.
+    #[spec(Concrete.Proof.sha256_compressExpr)]
+    #[proof_by(Concrete.Proof.sha256_compress_refines_spec)]
+    #[proof_coverage(full_contract)]
     fn sha256_compress(state: [u32; 8], block: [u8; 64]) -> [u32; 8] {
         let w16: [u32; 16] = block_to_words(block);
         let w: [u32; 64] = sha256_schedule(w16);
@@ -234,6 +254,9 @@ mod hmac_sha256 {
     // lets sha256_hash compress straight out of its work buffer
     // without an inner copy loop, keeping every loop body flat (so
     // extraction stays in ProvableV1 — no nested loops).
+    #[spec(Concrete.Proof.blockToWordsAtExpr)]
+    #[proof_by(Concrete.Proof.block_to_words_at_refines_spec)]
+    #[proof_coverage(full_contract)]
     fn block_to_words_at(buf: [u8; 384], off: i32) -> [u32; 16] {
         let mut w: [u32; 16] = [0; 16];
         for (let mut k: i32 = 0; k < 16; k = k + 1) {
@@ -247,6 +270,9 @@ mod hmac_sha256 {
 
     // Compress the 64-byte block at `off` in `buf` into `state`.
     // Offset variant of sha256_compress (same Davies-Meyer body).
+    #[spec(Concrete.Proof.sha256_compressAtExpr)]
+    #[proof_by(Concrete.Proof.sha256_compress_at_refines_spec)]
+    #[proof_coverage(full_contract)]
     fn sha256_compress_at(state: [u32; 8], buf: [u8; 384], off: i32) -> [u32; 8] {
         let w: [u32; 64] = sha256_schedule(block_to_words_at(buf, off));
         let k: [u32; 64] = sha256_k();
@@ -260,6 +286,9 @@ mod hmac_sha256 {
     }
 
     // Big-endian unpack of the 8-word state into 32 bytes.
+    #[spec(Concrete.Proof.stateToBytesExpr)]
+    #[proof_by(Concrete.Proof.state_to_bytes_refines_spec)]
+    #[proof_coverage(full_contract)]
     fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
         let mut out: [u8; 32] = [0; 32];
         for (let mut i: i32 = 0; i < 8; i = i + 1) {
@@ -284,6 +313,9 @@ mod hmac_sha256 {
     // `state = sha256_compress_at(...)` scalar assign — no inner
     // copy loop), and the block count uses `/` (register R-28), so
     // the whole function is proof-extractable (ProvableV1).
+    #[spec(Concrete.Proof.sha256_hashExpr)]
+    #[proof_by(Concrete.Proof.sha256_hash_refines_spec)]
+    #[proof_coverage(full_contract)]
     fn sha256_hash(data: [u8; 384], len: i32) -> [u8; 32] {
         let mut buf: [u8; 384] = data;
         buf[len] = 128;                          // 0x80 marker
@@ -309,6 +341,9 @@ mod hmac_sha256 {
     //   K' = key padded to 64 bytes (hashed first if longer than the
     //        block), then HMAC = H((K' ^ opad) || H((K' ^ ipad) || m)).
     // KEY_MAX = 128, MSG_MAX = 256.
+    #[spec(Concrete.Proof.hmac_sha256Expr)]
+    #[proof_by(Concrete.Proof.hmac_sha256_refines_spec)]
+    #[proof_coverage(full_contract)]
     fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
         // 1. Normalize the key to a 64-byte block K'.
         let mut kp: [u8; 64] = [0; 64];
