@@ -14,6 +14,7 @@ decision discharge, runtime-safety obligations, and the evidence-class corpus.
 | [`loop_invariant/`](loop_invariant/) | `#[invariant]`/`#[variant]` → the five loop VCs; init/variant by `omega`, preservation by Lean. |
 | [`ghost_state/`](ghost_state/) | `ghost let` — proof-only bindings, erased before codegen (E0420 if read at runtime). |
 | [`float_unprofiled/`](float_unprofiled/) | floats excluded from the provable subset, audit-loud (`float semantics: unprofiled`). |
+| [`fixed_point/`](fixed_point/) | runtime safety on a real-ish scalar pipeline: division/linear-overflow machine-checked, nonlinear-overflow and functional spec honestly pending. |
 | [`proof_pressure/`](proof_pressure/) | the proof-status surface across proved / stale / missing / blocked / ineligible. |
 
 **Flagships** — proof-backed, real-ish programs (each with `AUDIT.md`, a proof

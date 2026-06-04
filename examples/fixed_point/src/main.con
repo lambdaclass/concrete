@@ -1,0 +1,47 @@
+// fixed_point — a small real-world program with machine-checked runtime safety.
+//
+// A Q8 fixed-point sensor/audio sample pipeline: scale a sample by a gain and
+// clamp it, then mix two samples. Each function carries a #[requires] bound and
+// opts into #[overflow_checked], so the audit proves the arithmetic cannot
+// overflow i32 and cannot divide by zero — without any runtime checks.
+//
+//   concrete examples/fixed_point/src/main.con --report contracts
+//
+// shows (Runtime-safety sections) — and is HONEST about what it can and cannot
+// prove, which is the whole point:
+//   - scaled / 256, (a+b) / 2   checked: nonzero constant divisor;
+//   - a + b (in mix)            proved_by_kernel_decision (omega): bounded
+//                               operands cannot overflow i32 (LINEAR, so omega);
+//   - sample * gain             UNPROVEN: a product of two variables is
+//                               NONLINEAR, and omega is a linear procedure — it
+//                               cannot bound 255 * 256 even though a human can.
+//                               The audit says so loudly rather than pretending.
+// Closing that needs interval/bv reasoning (a future tactic); the functional
+// postconditions (result ranges) are a further Lean step (PROOFKIT_GUIDE.md).
+// This is the honest mid-authoring state: division and linear overflow
+// machine-checked, nonlinear overflow and functional spec explicitly pending.
+mod fixed_point {
+
+    // Scale a 0..255 sample by a Q8 gain (0..256 = 0.0..1.0) and clamp to 0..255.
+    #[requires(0 <= sample && sample <= 255 && 0 <= gain && gain <= 256)]
+    #[overflow_checked]
+    fn scale_clamp(sample: i32, gain: i32) -> i32 {
+        let scaled: i32 = sample * gain;
+        let shifted: i32 = scaled / 256;
+        if shifted > 255 { return 255; }
+        return shifted;
+    }
+
+    // Average two clamped samples.
+    #[requires(0 <= a && a <= 255 && 0 <= b && b <= 255)]
+    #[overflow_checked]
+    fn mix(a: i32, b: i32) -> i32 {
+        return (a + b) / 2;
+    }
+
+    pub fn main() with(Console) -> i32 {
+        let s: i32 = scale_clamp(200, 128);   // 200 * 0.5 = 100
+        let m: i32 = mix(s, 50);               // (100 + 50) / 2 = 75
+        return m;
+    }
+}

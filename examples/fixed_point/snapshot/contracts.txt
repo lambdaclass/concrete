@@ -1,0 +1,43 @@
+=== Source Contracts ===
+
+fixed_point.scale_clamp
+  R1  requires 0 <= sample && sample <= 255 && 0 <= gain && gain <= 256
+     status:  assumed_at_entry (callers not yet checked)
+
+fixed_point.mix
+  R1  requires 0 <= a && a <= 255 && 0 <= b && b <= 255
+     status:  assumed_at_entry (callers not yet checked)
+
+
+=== Call-site obligations ===
+
+fixed_point.main
+  call scale_clamp(200, 128)
+    requires 0 <= 200 && 200 <= 255 && 0 <= 128 && 128 <= 256
+    status:  proved_at_callsite
+  call mix(s, 50)
+    requires 0 <= s && s <= 255 && 0 <= 50 && 50 <= 255
+    status:  unproven_at_callsite (non-constant; no discharge backend succeeded)
+
+
+=== Runtime-safety obligations (division: non-zero divisor) ===
+
+fixed_point.scale_clamp
+  / divisor 256
+    status: checked: divisor is a nonzero constant
+
+fixed_point.mix
+  / divisor 2
+    status: checked: divisor is a nonzero constant
+
+
+=== Runtime-safety obligations (integer overflow, #[overflow_checked]) ===
+
+fixed_point.scale_clamp
+  sample * gain  (range [-2147483648, 2147483647])
+    status: unproven — bound the operands (#[requires]), or use a wrapping/checked profile
+
+fixed_point.mix
+  a + b  (range [-2147483648, 2147483647])
+    status: proved_by_kernel_decision (omega) — cannot overflow, no runtime check needed
+
