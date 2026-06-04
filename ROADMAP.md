@@ -441,8 +441,13 @@ the shape.
    to stdout; `--out <path>` writes a stub (refuses to overwrite without
    `--force`); bare name allowed if unique. Deliberately conservative: writes
    nothing unless `--out`, never edits the registry or `Concrete/` sources,
-   never auto-proves. Remaining: replay commands and richer spec-target wiring
-   once in-source proof attributes land (item 22).
+   never auto-proves.
+   **v1.1 DONE (2026-06-04):** `--emit-link` (print the in-source
+   `#[spec]`/`#[proof_by]`/`#[ensures_proof]`/`#[proof_coverage]` block from
+   current link data), `--show-obligation <id>` (one loop obligation in full:
+   source span, hypotheses, conclusion, status, ProofKit hint, theorem shape),
+   and `--replay` (re-run omega/`bv_decide` discharge and report whether each
+   obligation still closes). CLI gate: `scripts/tests/test_prove_cli.sh`.
 16. Add a `concrete prove` examples corpus, ordered from smallest to real:
     - straight-line Lean proof: `ch` refines `ch_spec`;
     - kernel-decision proof: `rotr` / packing fact via `bv_decide`;
@@ -512,13 +517,27 @@ the shape.
      moved off JSON (its entry is now `[]`); staleness via spec-drift is
      regression-tested by `examples/stale_proof_link`. Everything else still
      uses the JSON registry.
-   - **Next:** move more residual hand-Lean links into source (HMAC chain, point
-     proofs) as confidence grows; add a `concrete prove --emit-link` that prints
-     the attributes to paste.
-   - **End state:** `body_fingerprint` is computed from extraction at build
-     time (re-extraction already runs), not hand-stored in JSON and rot-prone —
-     **achieved for source links**; JSON entries still carry a stored fingerprint
-     until they migrate.
+   - **Next:** add migration tooling, not another hand format:
+     `concrete prove --emit-link` prints the paste-ready source attributes for a
+     linked proof, and `concrete migrate-proof-registry` (or equivalent) reports
+     which entries can move, which need manual theorem names, and which are
+     blocked.
+   - **Then:** migrate a few small residual links (`ch`, `sha256_init`, and one
+     non-HMAC point proof) before touching the large HMAC chain. Audit should
+     report `source_linked` vs `json_backed` so the migration state is visible.
+   - **Then:** migrate the HMAC chain only after the small migrations and
+     `--emit-link` path are boring. This is larger but should be mechanical:
+     source attributes replace the JSON theorem/spec fields while preserving
+     spec-drift and `check-proofs`.
+   - **Then:** make JSON legacy: existing JSON entries still load with a warning,
+     but new JSON proof entries are rejected unless an explicit
+     `--allow-legacy-registry` / policy flag is set.
+   - **Final removal:** delete JSON registry support only after every flagship is
+     source-linked, stale-link regressions exist, release bundles and docs use
+     source links, and `concrete prove` can emit all required attributes. The
+     end state is no `proof-registry.json`; `body_fingerprint` is computed from
+     extraction at build time (already **achieved for source links**), never
+     stored by hand.
 
 ## Phase 4: Audit Commands And Review Artifacts
 
