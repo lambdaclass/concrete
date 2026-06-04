@@ -55,6 +55,12 @@ accesses generate `0 <= idx < N`, and `--report contracts` reports whether the
 access is proved by `omega`, checked as a constant in-bounds access, flagged as
 a constant violation, or still unproven.
 
+The source-contract path now has dedicated regression gates in CI. The
+`check_evidence_corpus.sh` gate re-derives the load-bearing fact each evidence
+class demonstrates, including kernel-checking the linked Lean proof, detecting
+the stale-proof negative case, and checking oracle vector generation. The
+`test_prove_cli.sh` gate pins the `concrete prove` authoring subcommands.
+
 ### HMAC-SHA256 graduates with exact-extraction refinement (2026-06-02)
 
 `hmac_sha256` graduated as the fifth flagship with the full SHA-256/HMAC

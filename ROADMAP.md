@@ -108,6 +108,25 @@ made into an explicit dependency.
   land. Treat any such construct as "will be reworked," and do not let a
   flagship bake an iterator/collection assumption into the VC shape.
 
+### Spec and contract trust (no dark specs)
+
+Concrete proves source against specs, but that is not enough by itself. The
+spec/contract layer must also have evidence classes, or the system can produce
+a beautiful proof of the wrong theorem. Apply the same rule one layer higher:
+no semantically dark specs, no hidden vacuity, no partial ghost/spec functions,
+and no pretending a monomorphic proof covers every future generic
+instantiation.
+
+- Specs need provenance and review status: external standard, independent
+  reference, test-vector set, reviewer, remaining assumptions, and trust class.
+- Contracts need satisfiability/vacuity checks: an impossible precondition or
+  unreachable path must not show up as an ordinary proof.
+- `spec fn` and ghost computations used in contracts must be pure, erased, and
+  total, with a named obligation when totality is not inherited from Lean.
+- Generic and capability-polymorphic proofs must state their scope:
+  per-instantiation, generic-once, or generic contract with instance-level proof
+  artifacts.
+
 ### External-validation gate (go / no-go before the back half of Phases 8-15)
 
 This is a **gate, not a note** — promoted out of Phase 13 because validation
@@ -165,20 +184,30 @@ retrofit is explicitly queued behind proof-link migration.
    postcondition proof, weakened postcondition, invalid contract expression,
    invalid invariant preservation, duplicate source/JSON proof links, and
    invalid proof-link attributes.
-2. Finish the `assert` / `assume` trapdoor discipline everywhere it appears:
+2. Add vacuity and satisfiability checks for contracts: unsatisfiable
+   preconditions, contradictory assumptions, `#[requires(false)]`, invariant
+   `false`, unreachable returns, and postconditions proved only because the path
+   is impossible. Audit must report `vacuous`, not `proved`, and release policy
+   should reject vacuous proofs by default.
+3. Add `spec fn` / ghost totality rules: spec functions and ghost computations
+   referenced by contracts are pure, erased, and total. Lean-backed specs inherit
+   Lean termination; Concrete-level `spec fn` needs a totality/termination
+   obligation or is rejected from the contract language.
+4. Finish the `assert` / `assume` trapdoor discipline everywhere it appears:
    `assert` creates an obligation; `assume` is tainted, audit-loud,
    gate-forbiddable, and never reported as proof.
-3. Improve contract diagnostics: explain whether the failure is caller-side
+5. Improve contract diagnostics: explain whether the failure is caller-side
    precondition, callee-side postcondition, partial postcondition, loop
    invariant initialization, invariant preservation, variant decrease, bad
-   proof link, or stale proof.
-4. Add contract stability rules: weakening a precondition, strengthening a
+   proof link, stale proof, vacuous proof, or non-total spec/ghost expression.
+6. Add contract stability rules: weakening a precondition, strengthening a
    postcondition, or changing a public invariant is a semantic API change.
-5. Add source contract soundness work to the compiler soundness bridge: parsing
+7. Add source contract soundness work to the compiler soundness bridge: parsing
    preserves meaning, generated obligations correspond to contract semantics,
    discharged obligations imply the advertised contract claim, and source proof
-   links imply the same claim class as their generated registry entry.
-6. Add `hmac_sha256` source-contract retrofit only after proof-link migration
+   links imply the same claim class as their generated registry entry. Include
+   satisfiability/vacuity and spec/ghost totality in this soundness story.
+8. Add `hmac_sha256` source-contract retrofit only after proof-link migration
    and `concrete prove` examples make the small proof path routine. Do not
    start by moving the HMAC chain; use it as the late regression anchor for the
    mature source-link path.
@@ -389,18 +418,24 @@ five graduated flagships and one package-scale example.
     - support metamorphic tests where no complete reference exists;
     - flag oracle evidence weakening in `concrete diff` when cases, seeds,
       reference, comparison mode, or boundary coverage shrink.
-11. Add evidence-level monotonicity checks to audit/diff output.
-12. Add one AI-audit demo where an agent answers authority/proof/trust
+11. Add spec provenance and adequacy facts to audit/release bundles: spec name,
+    source standard or paper, independent reference if any, test-vector set,
+    reviewer, review date, assumptions, and evidence class
+    (`spec_trusted`, `spec_reviewed`, `tested_by_oracle`, or future
+    `spec_refines_standard`). Do not let a source-to-spec proof imply the spec
+    itself is adequate.
+12. Add evidence-level monotonicity checks to audit/diff output.
+13. Add one AI-audit demo where an agent answers authority/proof/trust
     questions using compiler facts rather than source guesses.
-13. Add review checklists generated from facts: what changed, what widened,
+14. Add review checklists generated from facts: what changed, what widened,
     what became trusted, what lost proof, what gained assumptions, and which
     obligations remain open.
-14. Add artifact redaction/stability rules so release bundles can be shared
+15. Add artifact redaction/stability rules so release bundles can be shared
     publicly without leaking local paths, secrets, or machine-specific noise.
-15. Keep audit, contracts, obligations, assumptions, policies, manifests, and
+16. Keep audit, contracts, obligations, assumptions, policies, manifests, and
     proof-status output on one shared vocabulary. Do not let each artifact grow
     its own mini-language for the same evidence classes.
-16. Keep public-facing docs and website copy grounded in the same evidence
+17. Keep public-facing docs and website copy grounded in the same evidence
     vocabulary. Use `docs/WHY_CONCRETE.md` as the source for a C/Rust-oriented
     "why this exists" page: small systems code, explicit authority, visible
     evidence classes, spec-drift-tied proofs, named trust boundaries, and what
@@ -416,15 +451,6 @@ Done when: all existing production proof specs are directly and transitively
 FnTable-complete, proof dependencies and provenance are visible, assumptions
 and trust boundaries have lifecycle reports, and weaker evidence cannot appear
 under a stronger badge.
-
-**Regression nets landed (2026-06-04).** Two source-contract-path gates now run
-in CI (proof-evidence-gate job): `scripts/tests/check_evidence_corpus.sh` pins
-the load-bearing fact each evidence-class subexample demonstrates plus integrity
-cross-checks snapshots can't express (the `proved_by_lean` theorem actually
-kernel-checks; the `stale_proof` drift is genuinely detected — a silent-accept
-regression here is the worst kind; the oracle reference emits its vectors); and
-`scripts/tests/test_prove_cli.sh` pins the `concrete prove` sub-modes. Makefile
-targets `test-evidence-corpus` / `test-prove-cli`.
 
 1. Add transitive FnTable completeness: walk registered spec call graphs, not
    only direct call sites, and fail or flag missing callees before theorem
@@ -451,6 +477,13 @@ targets `test-evidence-corpus` / `test-prove-cli`.
    rationale, review date, affected claims, and a diff gate when it widens.
 9. Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern,
    backend, runtime, and target assumptions in one machine-readable list.
+10. Add spec-adequacy gates: release policy can require reviewed spec
+    provenance for selected claims, forbid unreviewed specs in graduated
+    flagships, and show when a theorem is `proved_by_lean` against a
+    `spec_trusted` or unreviewed spec.
+11. Add vacuity gates to proof status: `proved` summaries must be downgraded or
+    blocked when the proof depends on an unsatisfiable precondition,
+    contradictory assumptions, unreachable code path, or invariant `false`.
 
 ## Phase 6: Provable And Predictable Subsets
 
