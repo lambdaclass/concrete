@@ -742,9 +742,22 @@ zero, overflow profile, casts, and loop bounds with statuses
    abort/panic, recoverable errors, test failures, and how error flow interacts
    with capabilities, proofs, runtime obligations, and audit output.
 3. Generate narrowing/invalid-cast obligations.
-4. Generate loop-derived runtime-safety facts so bounds and overflow obligations
-   can use established loop invariants instead of only entry preconditions and
-   constants.
+4. ~~Generate loop-derived runtime-safety facts so bounds and overflow
+   obligations can use established loop invariants instead of only entry
+   preconditions and constants.~~ **DONE.** Bounds, division, and overflow
+   obligations now fold the enclosing loop's `#[invariant]` + guard into the
+   omega goal (`scopedBounds/Div/Arith` thread an in-scope hypothesis list).
+   Sound by construction: the ordered walk drops a hypothesis the moment the
+   body mutates a variable it mentions, so a mid-body index mutation reverts the
+   obligation to `unproven` rather than proving a false bound. Demonstrated in
+   `evidence_classes/runtime_checked` (`sum_loop` proved, `sum_loop_unsound`
+   unproven) and `constant_time_tag.ct_compare` (`a[i]`/`b[i]` now omega-proved
+   from the invariant). NEXT in this thread: a nonlinear/bitvector overflow tier
+   (small fixed-width `var * var` bounds like `255 * 256`) — interval analysis
+   first, `bv_decide` where needed, classified `proved_by_kernel_decision` only
+   if Lean checks it; use `fixed_point.scale_clamp`'s `sample * gain` as the
+   regression fixture (must move unproven → proved when it lands, and back if
+   the bounds weaken).
 5. Generate loop bound and variant obligations for bounded loops.
 6. Define policy gates for `#[overflow_checked]`: release profiles may require
    overflow obligations for selected functions/packages, while ordinary

@@ -39,9 +39,9 @@ constant_time_tag.ct_compare  (loop @ line 52)
 
 constant_time_tag.ct_compare
   a[i]  (array size 16)
-    status: unproven — bound the index with a #[requires], or insert a runtime check
+    status: proved_by_kernel_decision (omega) — statically in bounds, no runtime check needed
   b[i]  (array size 16)
-    status: unproven — bound the index with a #[requires], or insert a runtime check
+    status: proved_by_kernel_decision (omega) — statically in bounds, no runtime check needed
 
 
 === Runtime-safety obligations (division: non-zero divisor) ===

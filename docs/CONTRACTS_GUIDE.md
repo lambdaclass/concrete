@@ -129,6 +129,16 @@ The discharge is **real**: each goal is shipped to `lake env lean` and
 kernel-checked. A false invariant produces a goal `omega` rejects, and the
 obligation stays `planned` — the compiler will not claim what it cannot prove.
 
+**The invariant also discharges runtime-safety obligations in the loop body.**
+A body access `a[i]` (or a divisor / `#[overflow_checked]` op) under
+`#[invariant(0 <= i && i <= N)]` with guard `i < N` is proved
+`proved_by_kernel_decision (omega)` from the invariant + guard — no `#[requires]`
+needed. This is sound by construction: the invariant is assumed only while it
+provably holds, so once the body mutates a variable the invariant mentions
+(e.g. `i = i + 1` before the access) the hypothesis is dropped and the
+obligation reverts to `unproven`. See `examples/evidence_classes/runtime_checked`
+(`sum_loop` vs `sum_loop_unsound`).
+
 ## Exit-to-postcondition (O3)
 
 `O3` bridges the loop's exit facts to the function's postcondition. The exit

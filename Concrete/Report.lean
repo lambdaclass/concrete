@@ -976,6 +976,80 @@ partial def collectIndexUsesS : Stmt → List (String × Expr)
   | _ => []
 end
 
+-- ============================================================
+-- Loop-invariant scope for runtime-safety obligations
+-- ============================================================
+-- A runtime-safety obligation that occurs inside a loop body may ASSUME the
+-- loop's invariant and guard: at the top of the body the invariant holds and
+-- the guard was just taken. Feeding those facts to omega lets a body access
+-- like `a[i]` discharge from `#[invariant(0 <= i && i <= N)]` + guard `i < N`,
+-- instead of demanding a `#[requires]`. SOUNDNESS: the invariant only provably
+-- holds until the body mutates a variable it mentions, so the ordered walk
+-- below DROPS a hypothesis as soon as a statement assigns to one of its
+-- variables (array-element / field / deref stores touch no integer counter, so
+-- they invalidate nothing; the canonical `a[i] = …; i = i + 1` therefore keeps
+-- the bound at the access and loses it only for statements after the `i = …`).
+
+/-- Loop invariants + guard for the loop whose statement begins on `line`
+    (matched against `FnDef.loopContracts` by source line). The facts assumable
+    for an obligation in that loop's body. -/
+def loopHypsAt (lcs : List LoopContract) (line : Nat) : List Expr :=
+  match lcs.find? (·.line == line) with
+  | some lc => lc.invariants ++ lc.guard.toList
+  | none    => []
+
+/-- Scalar variables a statement assigns to. Mutating one invalidates any
+    in-scope hypothesis that mentions it. Array-element / field / deref stores
+    assign no integer counter (the domain our invariants range over), so they
+    return `[]`; a nested loop invalidates whatever its body assigns. -/
+partial def assignedScalarsS : Stmt → List String
+  | .assign _ n _ => [n]
+  | .letDecl _ n _ _ _ _ => [n]
+  | .ifElse _ _ t el => t.flatMap assignedScalarsS ++ (el.getD []).flatMap assignedScalarsS
+  | .while_ _ _ b _ => b.flatMap assignedScalarsS
+  | .forLoop _ init _ step b _ =>
+      (init.map assignedScalarsS).getD [] ++ (step.map assignedScalarsS).getD []
+        ++ b.flatMap assignedScalarsS
+  | _ => []
+
+/-- Drop every in-scope hypothesis that mentions a just-assigned variable. -/
+def dropStaleHyps (scope : List Expr) (assigned : List String) : List Expr :=
+  scope.filter fun h => (collectIdents h).all (fun v => !assigned.contains v)
+
+-- Index uses paired with the loop invariants/guards in scope at the access,
+-- walking the body in order so a mutated invariant variable drops its
+-- hypotheses for subsequent statements.
+mutual
+partial def scopedBoundsS (lcs : List LoopContract) (scope : List Expr) :
+    Stmt → List (String × Expr × List Expr)
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
+      (collectIndexUsesE v).map fun (a, i) => (a, i, scope)
+  | .return_ _ (some v) => (collectIndexUsesE v).map fun (a, i) => (a, i, scope)
+  | .ifElse _ c t el =>
+      (collectIndexUsesE c).map (fun (a, i) => (a, i, scope))
+        ++ scopedBoundsB lcs scope t ++ scopedBoundsB lcs scope (el.getD [])
+  | .while_ sp c b _ =>
+      (collectIndexUsesE c).map (fun (a, i) => (a, i, scope))
+        ++ scopedBoundsB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .forLoop sp init c step b _ =>
+      ((init.map (scopedBoundsS lcs scope)).getD [])
+        ++ (collectIndexUsesE c).map (fun (a, i) => (a, i, scope))
+        ++ ((step.map (scopedBoundsS lcs scope)).getD [])
+        ++ scopedBoundsB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
+      (collectIndexUsesE o ++ collectIndexUsesE v).map (fun (a, i) => (a, i, scope))
+  | .arrayIndexAssign _ (.ident _ arr) idx v =>
+      (arr, idx, scope) :: (collectIndexUsesE idx ++ collectIndexUsesE v).map (fun (a, i) => (a, i, scope))
+  | .arrayIndexAssign _ a i v =>
+      (collectIndexUsesE a ++ collectIndexUsesE i ++ collectIndexUsesE v).map (fun (x, j) => (x, j, scope))
+  | _ => []
+partial def scopedBoundsB (lcs : List LoopContract) (scope : List Expr) :
+    List Stmt → List (String × Expr × List Expr)
+  | [] => []
+  | s :: rest =>
+      scopedBoundsS lcs scope s ++ scopedBoundsB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
+end
+
 /-- One array-bounds obligation. `closedVerdict` is set when the index is a
     compile-time constant; otherwise `leanGoal` is the omega goal (if lowerable). -/
 structure BoundsObl where
@@ -1002,7 +1076,7 @@ def boundsObligations (modules : List Module) : List BoundsObl := Id.run do
     let fq := pfx ++ f.name
     let sizes := arraySizeMap f
     let mut i := 0
-    for (arr, idx) in f.body.flatMap collectIndexUsesS do
+    for (arr, idx, scope) in scopedBoundsB f.loopContracts [] f.body do
       match sizes.find? (·.1 == arr) with
       | none => pure ()
       | some (_, n) =>
@@ -1012,8 +1086,9 @@ def boundsObligations (modules : List Module) : List BoundsObl := Id.run do
           | none => match toLeanProp idx with
             | none => (none, none)
             | some idxStr =>
-              let vars := (collectIdents idx ++ f.requires.flatMap collectIdents).eraseDups
-              let reqs := f.requires.filterMap toLeanProp
+              let hyps := f.requires ++ scope
+              let vars := (collectIdents idx ++ hyps.flatMap collectIdents).eraseDups
+              let reqs := hyps.filterMap toLeanProp
               let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
               let hyp := if reqs.isEmpty then "" else s!"({" ∧ ".intercalate reqs}) → "
               (none, some s!"{binder}{hyp}(0 ≤ {idxStr} ∧ {idxStr} < {n})")
@@ -1084,6 +1159,37 @@ partial def collectDivisorsS : Stmt → List (Bool × Expr)
   | _ => []
 end
 
+-- Divisor uses paired with the loop invariants/guards in scope (see
+-- `scopedBoundsB`).
+mutual
+partial def scopedDivS (lcs : List LoopContract) (scope : List Expr) :
+    Stmt → List (Bool × Expr × List Expr)
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
+      (collectDivisorsE v).map fun (m, e) => (m, e, scope)
+  | .return_ _ (some v) => (collectDivisorsE v).map fun (m, e) => (m, e, scope)
+  | .ifElse _ c t el =>
+      (collectDivisorsE c).map (fun (m, e) => (m, e, scope))
+        ++ scopedDivB lcs scope t ++ scopedDivB lcs scope (el.getD [])
+  | .while_ sp c b _ =>
+      (collectDivisorsE c).map (fun (m, e) => (m, e, scope))
+        ++ scopedDivB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .forLoop sp init c step b _ =>
+      ((init.map (scopedDivS lcs scope)).getD [])
+        ++ (collectDivisorsE c).map (fun (m, e) => (m, e, scope))
+        ++ ((step.map (scopedDivS lcs scope)).getD [])
+        ++ scopedDivB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
+      (collectDivisorsE o ++ collectDivisorsE v).map (fun (m, e) => (m, e, scope))
+  | .arrayIndexAssign _ a i v =>
+      (collectDivisorsE a ++ collectDivisorsE i ++ collectDivisorsE v).map (fun (m, e) => (m, e, scope))
+  | _ => []
+partial def scopedDivB (lcs : List LoopContract) (scope : List Expr) :
+    List Stmt → List (Bool × Expr × List Expr)
+  | [] => []
+  | s :: rest =>
+      scopedDivS lcs scope s ++ scopedDivB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
+end
+
 /-- One division-by-zero obligation. -/
 structure DivObl where
   fnQual        : String
@@ -1099,15 +1205,16 @@ def divObligations (modules : List Module) : List DivObl := Id.run do
   for (pfx, f) in modules.flatMap allFunctions do
     let fq := pfx ++ f.name
     let mut i := 0
-    for (isMod, dv) in f.body.flatMap collectDivisorsS do
+    for (isMod, dv, scope) in scopedDivB f.loopContracts [] f.body do
       let key := s!"{fq}#div{i}"
       let cv : Option Bool × Option String := match cEvalInt dv with
         | some k => (some (decide (k ≠ 0)), none)
         | none => match toLeanProp dv with
           | none => (none, none)
           | some dStr =>
-            let vars := (collectIdents dv ++ f.requires.flatMap collectIdents).eraseDups
-            let reqs := f.requires.filterMap toLeanProp
+            let hyps := f.requires ++ scope
+            let vars := (collectIdents dv ++ hyps.flatMap collectIdents).eraseDups
+            let reqs := hyps.filterMap toLeanProp
             let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
             let hyp := if reqs.isEmpty then "" else s!"({" ∧ ".intercalate reqs}) → "
             (none, some s!"{binder}{hyp}({dStr} ≠ 0)")
@@ -1196,6 +1303,37 @@ partial def collectArithS : Stmt → List Expr
   | _ => []
 end
 
+-- Arithmetic op nodes paired with the loop invariants/guards in scope (see
+-- `scopedBoundsB`).
+mutual
+partial def scopedArithS (lcs : List LoopContract) (scope : List Expr) :
+    Stmt → List (Expr × List Expr)
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
+      (collectArithE v).map fun e => (e, scope)
+  | .return_ _ (some v) => (collectArithE v).map fun e => (e, scope)
+  | .ifElse _ c t el =>
+      (collectArithE c).map (fun e => (e, scope))
+        ++ scopedArithB lcs scope t ++ scopedArithB lcs scope (el.getD [])
+  | .while_ sp c b _ =>
+      (collectArithE c).map (fun e => (e, scope))
+        ++ scopedArithB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .forLoop sp init c step b _ =>
+      ((init.map (scopedArithS lcs scope)).getD [])
+        ++ (collectArithE c).map (fun e => (e, scope))
+        ++ ((step.map (scopedArithS lcs scope)).getD [])
+        ++ scopedArithB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
+      (collectArithE o ++ collectArithE v).map (fun e => (e, scope))
+  | .arrayIndexAssign _ a i v =>
+      (collectArithE a ++ collectArithE i ++ collectArithE v).map (fun e => (e, scope))
+  | _ => []
+partial def scopedArithB (lcs : List LoopContract) (scope : List Expr) :
+    List Stmt → List (Expr × List Expr)
+  | [] => []
+  | s :: rest =>
+      scopedArithS lcs scope s ++ scopedArithB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
+end
+
 /-- One integer-overflow obligation. -/
 structure OverflowObl where
   fnQual        : String
@@ -1206,10 +1344,21 @@ structure OverflowObl where
   closedVerdict : Option Bool
   leanGoal      : Option String
 
-/-- Var→type map from params and annotated lets. -/
+/-- All annotated `let` bindings in a statement tree, including those declared
+    inside loop inits/steps/bodies (so a loop counter `i` from a `for`-init is
+    typed for the overflow check). -/
+partial def collectLetTys : Stmt → List (String × Ty)
+  | .letDecl _ n _ (some t) _ _ => [(n, t)]
+  | .ifElse _ _ t el => t.flatMap collectLetTys ++ (el.getD []).flatMap collectLetTys
+  | .while_ _ _ b _ => b.flatMap collectLetTys
+  | .forLoop _ init _ step b _ =>
+      (init.map collectLetTys).getD [] ++ (step.map collectLetTys).getD [] ++ b.flatMap collectLetTys
+  | _ => []
+
+/-- Var→type map from params and annotated lets (recursively, see
+    `collectLetTys`). -/
 def varTyMap (f : FnDef) : List (String × Ty) :=
-  f.params.map (fun p => (p.name, p.ty))
-    ++ f.body.filterMap (fun s => match s with | .letDecl _ n _ (some t) _ _ => some (n, t) | _ => none)
+  f.params.map (fun p => (p.name, p.ty)) ++ f.body.flatMap collectLetTys
 
 /-- Generate no-overflow obligations for `#[overflow_checked]` functions. -/
 def overflowObligations (modules : List Module) : List OverflowObl := Id.run do
@@ -1219,15 +1368,16 @@ def overflowObligations (modules : List Module) : List OverflowObl := Id.run do
     let fq := pfx ++ f.name
     let vt := varTyMap f
     let mut i := 0
-    for e in f.body.flatMap collectArithS do
+    for (e, scope) in scopedArithB f.loopContracts [] f.body do
       match (exprIntTy vt e).bind intRange, toLeanProp e with
       | some (lo, hi), some eStr =>
         let key := s!"{fq}#ovf{i}"
         let cv : Option Bool × Option String := match cEvalInt e with
           | some k => (some (decide (lo ≤ k ∧ k ≤ hi)), none)
           | none =>
-            let vars := (collectIdents e ++ f.requires.flatMap collectIdents).eraseDups
-            let reqs := f.requires.filterMap toLeanProp
+            let hyps := f.requires ++ scope
+            let vars := (collectIdents e ++ hyps.flatMap collectIdents).eraseDups
+            let reqs := hyps.filterMap toLeanProp
             let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
             let hyp := if reqs.isEmpty then "" else s!"({" ∧ ".intercalate reqs}) → "
             (none, some s!"{binder}{hyp}({lo} ≤ {eStr} ∧ {eStr} ≤ {hi})")

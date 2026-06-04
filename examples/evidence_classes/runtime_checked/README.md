@@ -12,18 +12,24 @@ disposition rather than letting a faulting access through silently.
 | `third` | `a[3]` | checked: in bounds (constant) |
 | `oob` | `a[9]` | **VIOLATION** — the audit catches the out-of-bounds constant |
 | `unchecked` | `a[i]` (no bound) | `unproven` — needs a `#[requires]` or a runtime check |
+| `sum_loop` | `a[i]` in a loop body (no `#[requires]`) | `proved_by_kernel_decision (omega)` — discharged from the loop `#[invariant]` + guard |
+| `sum_loop_unsound` | `a[i]` after `i = i + 1` in the body | `unproven` — the invariant no longer holds at the access |
 
 The bounds arithmetic is linear, so omega discharges the provable cases as a
 kernel decision procedure (no runtime check needed). The `unproven` case is
 where a dynamic check would be inserted. Overflow and div-by-zero obligations
 are the natural next runtime-error kinds (same generate → omega/eval → status
-shape); only array bounds are wired today.
+shape); array bounds, division, and overflow are wired today.
 
-**v1 limitation:** the index bound is drawn from `#[requires]`, not from loop
-invariants. A loop-counter access like `a[i]` under `#[invariant(0 <= i && i < N)]`
-is reported `unproven` today (the invariant is not yet fed to the bounds
-obligation). Connecting loop invariants → bounds is the next enhancement; the
-status stays honest meanwhile (it never claims unproven-safe as safe).
+**Loop invariants feed the bounds check.** A loop-counter access `a[i]` under
+`#[invariant(0 <= i && i <= N)]` with guard `i < N` discharges as a kernel
+decision (`sum_loop`) — the obligation draws on the invariant + guard, not just
+the function `#[requires]`. This is **sound by construction**: the invariant is
+assumed only while it provably holds. The walk drops the hypothesis the moment
+the body mutates a variable the invariant mentions, so `sum_loop_unsound` — which
+does `i = i + 1` before `a[i]` — correctly stays `unproven`. Weakening what the
+invariant proves sends the obligation back to `unproven`; it never flips to a
+false green.
 
 ## Division by zero (second runtime-error kind)
 

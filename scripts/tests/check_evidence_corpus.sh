@@ -52,6 +52,23 @@ want "runtime → overflow omega-safe"         contracts    runtime_checked "can
 want "runtime → overflow unproven"           contracts    runtime_checked "bound the operands"
 
 echo ""
+echo "=== loop-invariant feeds runtime-safety (bounds from #[invariant]) ==="
+rc="$("$COMPILER" "$EC/runtime_checked/src/main.con" --report contracts 2>&1)"
+# sum_loop: body a[i] proved from the loop invariant + guard, no #[requires].
+if printf '%s' "$rc" | grep -A2 -E '^demo\.sum_loop$' | grep -q "proved_by_kernel_decision (omega)"; then
+  echo "  ok   loop-invariant bounds → proved from #[invariant]"; PASS=$((PASS + 1))
+else
+  echo "  FAIL loop-invariant bounds not proved from #[invariant]"; FAIL=$((FAIL + 1))
+fi
+# sum_loop_unsound: index mutated before the access → invariant hypothesis
+# dropped → access correctly stays unproven (no false green).
+if printf '%s' "$rc" | grep -A2 -E '^demo\.sum_loop_unsound$' | grep -q "unproven"; then
+  echo "  ok   mutated index → stays unproven (soundness guard)"; PASS=$((PASS + 1))
+else
+  echo "  FAIL mutated-index access should stay unproven"; FAIL=$((FAIL + 1))
+fi
+
+echo ""
 echo "=== integrity cross-checks (beyond snapshots) ==="
 # proved_by_lean: the linked theorem must actually kernel-check.
 pl="$("$COMPILER" "$EC/proved_by_lean/src/main.con" --report check-proofs 2>&1)"
