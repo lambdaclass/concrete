@@ -1350,6 +1350,9 @@ structure ProofRegistryEntry where
   spec            : String  -- spec name, e.g. "parse_byte_adds_offset"
   coverage        : String  -- point|one_direction|iff|invariant|runtime_error|full_contract|""
   ensuresProof    : Option String := none  -- theorem discharging the source `#[ensures(...)]` obligation, if any
+  expectedHash    : Option String := none  -- stored short hash of the body fingerprint (from in-source
+                                            -- #[proof_fingerprint]); when set, staleness compares
+                                            -- hash(currentFingerprint) against this instead of the full string
   deriving Repr, Inhabited
 
 /-- All canonical proof coverage classifications. -/
@@ -1468,6 +1471,8 @@ structure SpecAttachment where
   proofName   : String       -- e.g. "Concrete.Proof.parse_byte_correct"
   source      : SpecSource
   expectedFp  : String       -- fingerprint the proof was written against
+  expectedHash : Option String := none  -- stored short hash (in-source #[proof_fingerprint]);
+                                         -- when set, staleness compares hash(currentFp) against it
 
 /-- Resolve spec attachment for a single function. Checks registry first,
     then Proof.provedFunctions. Returns none if no spec is attached. -/
@@ -1479,7 +1484,8 @@ private def resolveSpec (qualName : String)
       specId := { name := re.spec }
       proofName := re.proof
       source := .registry
-      expectedFp := re.bodyFingerprint }
+      expectedFp := re.bodyFingerprint
+      expectedHash := re.expectedHash }
   | none =>
     -- Check hardcoded
     match Proof.provedFunctions.find? fun (name, _, _) => name == qualName with
@@ -1754,6 +1760,12 @@ def RegistryIssue.isError : RegistryIssue → Bool
   | .extractionBlocked _ _ => true
   | .specDrift _ => true            -- drifted spec invalidates the proof
 
+/-- Compact, stable hex hash of a body fingerprint, for the in-source
+    `#[proof_fingerprint("…")]` attribute. The full PExpr string is grotesque in
+    source; this 64-bit digest is short and collision-safe for staleness. -/
+def shortHash (fingerprint : String) : String :=
+  String.ofList (Nat.toDigits 16 (String.hash fingerprint).toNat)
+
 /-- Validate a proof registry against a ProofCore artifact. -/
 def validateRegistry (pc : ProofCore) (registry : ProofRegistry) : List RegistryIssue :=
   let allFns := pc.entries.map (·.qualName) ++ pc.excluded.map (·.qualName)
@@ -1782,12 +1794,18 @@ def validateRegistry (pc : ProofCore) (registry : ProofRegistry) : List Registry
     else
       let specs := (registry.filter fun re => re.function == f).map (·.spec) |>.eraseDups
       if specs.length > 1 then some (.conflictingEntry f specs) else none
-  -- Check for stale fingerprints
+  -- Check for stale fingerprints. An in-source link with a stored
+  -- `#[proof_fingerprint]` compares hash(currentFp) against that stored hash —
+  -- this is how source-linked functions get staleness detection without a full
+  -- fingerprint in source (their synthesized bodyFingerprint always equals the
+  -- recomputed one, so the string compare below can never fire for them). A
+  -- JSON entry (no expectedHash) keeps the full-string compare.
   let stales := registry.filterMap fun re =>
     match allFps.find? fun (f, _) => f == re.function with
     | some (_, currentFp) =>
-      if re.bodyFingerprint != currentFp then some (.staleFingerprint re currentFp)
-      else none
+      match re.expectedHash with
+      | some h => if shortHash currentFp != h then some (.staleFingerprint re currentFp) else none
+      | none   => if re.bodyFingerprint != currentFp then some (.staleFingerprint re currentFp) else none
     | none => none  -- already caught as unknown
   -- Check for entries targeting ineligible functions
   let ineligibles := registry.filterMap fun re =>
@@ -1845,7 +1863,11 @@ def renderRegistryIssue : RegistryIssue → String
   | .conflictingEntry fn specs =>
     s!"error: conflicting specs for '{fn}': {", ".intercalate specs}"
   | .staleFingerprint re currentFp =>
-    s!"warning: stale fingerprint for '{re.function}' (registry: {re.bodyFingerprint.take 40}…, current: {currentFp.take 40}…)"
+    match re.expectedHash with
+    | some h =>
+      s!"warning: stale fingerprint for '{re.function}' (#[proof_fingerprint] \"{h}\" ≠ current \"{shortHash currentFp}\" — body changed since the proof was linked; re-verify and update the fingerprint)"
+    | none =>
+      s!"warning: stale fingerprint for '{re.function}' (registry: {re.bodyFingerprint.take 40}…, current: {currentFp.take 40}…)"
   | .ineligibleFunction re reasons =>
     s!"error: registry entry for ineligible function '{re.function}' ({", ".intercalate reasons})"
   | .emptyProofName re =>
@@ -2033,14 +2055,22 @@ private def deriveObligationStatus
     (eligible : Bool) (isTrusted : Bool) (extracted : Bool)
     (specDrifted : Bool)
     (spec : Option SpecAttachment) (currentFp : String) : ObligationStatus :=
+  -- An in-source link with a stored `#[proof_fingerprint]` compares hash(currentFp)
+  -- against that hash; otherwise the full expected fingerprint is compared. This
+  -- is what gives source-linked functions staleness detection (their expectedFp
+  -- is recomputed from the current body, so the string compare can never fire).
+  let isStale := fun (a : SpecAttachment) =>
+    match a.expectedHash with
+    | some h => shortHash currentFp != h
+    | none   => a.expectedFp != currentFp
   if isTrusted then .trusted
   else if !eligible then
     match spec with
-    | some a => if a.expectedFp != currentFp then .stale else .ineligible
+    | some a => if isStale a then .stale else .ineligible
     | none => .ineligible
   else match spec with
   | some a =>
-    if a.expectedFp != currentFp then .stale
+    if isStale a then .stale
     else if specDrifted then .stale
     else if a.source == .hardcoded then .proved  -- hardcoded proofs done in Lean, extraction not required
     else if !extracted then .blocked
@@ -2293,12 +2323,19 @@ def ProofCore.selfCheck (pc : ProofCore) : List ConsistencyViolation :=
       some { invariant := "PROVED-ENTRY", function := o.functionId.qualName
            , message := "obligation is 'proved' but function is not in entries" }
 
-  -- INV-4: Proved status requires matching fingerprint
+  -- A hash-linked attachment is fresh when hash(currentFp) == expectedHash;
+  -- a plain attachment is fresh when expectedFp == currentFp. (For hash-linked
+  -- entries expectedFp always equals currentFp, so the fp compare is uninformative.)
+  let fpFresh := fun (a : SpecAttachment) (currentFp : String) =>
+    match a.expectedHash with
+    | some h => shortHash currentFp == h
+    | none   => a.expectedFp == currentFp
+  -- INV-4: Proved status requires a fresh fingerprint
   let provedFp := pc.obligations.filterMap fun o =>
     if o.status != .proved then none
     else match o.spec with
     | some a =>
-      if a.expectedFp != o.functionId.fingerprint then
+      if !fpFresh a o.functionId.fingerprint then
         some { invariant := "PROVED-FP", function := o.functionId.qualName
              , message := s!"obligation is 'proved' but fingerprints disagree" }
       else none
@@ -2306,12 +2343,12 @@ def ProofCore.selfCheck (pc : ProofCore) : List ConsistencyViolation :=
       some { invariant := "PROVED-SPEC", function := o.functionId.qualName
            , message := "obligation is 'proved' but has no spec attachment" }
 
-  -- INV-5: Stale status requires spec with different fingerprint
+  -- INV-5: Stale status requires a spec whose fingerprint no longer matches
   let staleFp := pc.obligations.filterMap fun o =>
     if o.status != .stale then none
     else match o.spec with
     | some a =>
-      if a.expectedFp == o.functionId.fingerprint then
+      if fpFresh a o.functionId.fingerprint then
         some { invariant := "STALE-FP", function := o.functionId.qualName
              , message := "obligation is 'stale' but fingerprints match" }
       else none

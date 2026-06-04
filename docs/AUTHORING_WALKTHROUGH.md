@@ -119,10 +119,16 @@ concrete prove …/main.con constant_time_tag.ct_compare --emit-link
 #[proof_by(Concrete.Proof.ct_compare_same_tag_correct)]
 #[ensures_proof(Concrete.Proof.ct_compare_different_tag_correct)]
 #[proof_coverage(iff)]
+#[proof_fingerprint("a3d98e2612d58dd5")]
 ```
 
 Paste it above the function. (The full iff is two theorems — the same-tag and
-different-tag directions. The link records both.)
+different-tag directions. The link records both.) The `#[proof_fingerprint]` is
+a short hash of the body the proof was written against: if the body later
+changes, `hash(current) ≠ stored` and the proof is reported `stale` instead of
+silently accepting the drift. This is what lets a function be source-linked
+*soundly* even when it is not spec-drift-covered — re-run `--emit-link` after a
+deliberate body change to refresh it.
 
 ## 7. Run `check-proofs`
 

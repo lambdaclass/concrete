@@ -374,20 +374,35 @@ lemmas, and actionable failure diagnostics.
    namespaces so attributes carry clean names. The `Concrete.Proof.*` form is a
    transitional wart, not the intended end state.
 
-   **Migration order:** add `#[proof_fingerprint]` (compact hash) + verify it
-   catches drift on a non-spec-drift function → move example proofs out of
-   `Concrete.Proof` → add `source_linked` vs `json_backed` reporting → bulk
-   migrate examples (each `main_drifted` getting the same links → stale via the
-   fingerprint hash) → make JSON legacy behind an allow flag → delete JSON
+   **Migration order:** ~~add `#[proof_fingerprint]` (compact hash) + verify it
+   catches drift on a non-spec-drift function~~ **DONE** → move example proofs
+   out of `Concrete.Proof` → add `source_linked` vs `json_backed` reporting →
+   bulk migrate examples (each `main_drifted` getting the same links → stale via
+   the fingerprint hash) → make JSON legacy behind an allow flag → delete JSON
    support once every flagship is source-linked and stale-link regressions cover
-   the path. **Done so far:** `ct_compare` and the full **`hmac_sha256` chain**
-   (all 11 functions) are source-linked with an empty `[]` registry — both sound
-   because every migrated function is spec-drift-covered (its spec is in
-   `Concrete.Proof.specs`), so staleness still fires without a stored
-   fingerprint. The in-source link mechanism, `--emit-link`, and the
-   `stale_proof` regression exist. Still on JSON pending the compact
-   `#[proof_fingerprint]` (a): `elf_header`, `loop_invariant` (point proofs, NOT
-   spec-drift-covered — migrating them now would silently lose drift detection).
+   the path. **Done so far:**
+   - `ct_compare` and the full **`hmac_sha256` chain** (11 fns): source-linked,
+     empty `[]` registry, sound via spec-drift coverage.
+   - **`#[proof_fingerprint("hash")]` implemented** (prereq (a)): a short
+     `String.hash` of the body fingerprint, stored in source; `--emit-link`
+     emits it. Staleness compares `shortHash(currentFp)` against it in BOTH
+     paths — `validateRegistry` (verify/spec-drift gate) and
+     `deriveObligationStatus` (`--report proof-status`, via
+     `SpecAttachment.expectedHash`). So a source-linked function gets drift
+     detection even without spec-drift coverage.
+   - **`elf_header` (5 point proofs) and `loop_invariant` migrated** to in-source
+     links + `#[proof_fingerprint]`, empty registries. Verified: clean → proved;
+     drifting a body → `stale` (e.g. `check_version` accepting `0` flips
+     proved→stale with a hash-mismatch message). The earlier soundness blocker
+     (computed fingerprint always self-matches) is closed.
+   - The in-source link mechanism, `--emit-link`, and the `stale_proof`
+     regression exist.
+
+   **Remaining (mechanical, all sound now):** the still-JSON flagships
+   (`crypto_verify`, `parse_validate`, `fixed_capacity`, `thesis_demo`, …) — each
+   already spec-drift-covered, so migrating is now a mechanical `--emit-link` +
+   empty-registry pass with no soundness risk. Then prereq (b) namespace move,
+   origin reporting, and JSON-support deletion.
 
    **Deletion gates — multiple checks before JSON support can go away:**
    - `concrete audit` / `proof-status` must report link origin per proof:

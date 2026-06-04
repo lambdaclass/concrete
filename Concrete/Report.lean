@@ -663,7 +663,11 @@ def synthesizeSourceLinks (astModules : List Module) (coreModules : List CModule
       let entry : ProofRegistryEntry :=
         { function := qual, bodyFingerprint := fp,
           proof := link.proofBy.getD "", spec := link.spec.getD "",
-          coverage := link.coverage.getD "", ensuresProof := link.ensuresProof }
+          coverage := link.coverage.getD "", ensuresProof := link.ensuresProof,
+          -- when present, staleness compares hash(currentFp) against this stored
+          -- hash — so source-linked functions get drift detection even without
+          -- spec-drift coverage (the soundness gap that kept point proofs on JSON).
+          expectedHash := link.fingerprint }
       entries := entries ++ [entry]
   return entries
 
@@ -3198,6 +3202,9 @@ def emitProofLink (registry : ProofRegistry) (qual : String) : String :=
     let ens := match e.ensuresProof with
       | some t => s!"#[ensures_proof({t})]"
       | none => "// #[ensures_proof(...)]   ← none (omit if the postcondition is single-direction)"
+    -- The registry entry's bodyFingerprint is the CURRENT body fingerprint;
+    -- hashing it gives the staleness token to store in source.
+    let fp := s!"#[proof_fingerprint(\"{shortHash e.bodyFingerprint}\")]"
     String.join [
       s!"// in-source proof link for `{qual}`.\n",
       "// Paste above the function, then delete its proof-registry.json entry\n",
@@ -3205,7 +3212,8 @@ def emitProofLink (registry : ProofRegistry) (qual : String) : String :=
       req "spec" e.spec, "\n",
       req "proof_by" e.proof, "\n",
       ens, "\n",
-      req "proof_coverage" e.coverage, "\n" ]
+      req "proof_coverage" e.coverage, "\n",
+      fp, "\n" ]
 
 /-- `concrete prove --show-obligation <id>`: print one generated loop obligation
     (O1/O2/O3/O4/O5) in full — source span, hypotheses, conclusion, current

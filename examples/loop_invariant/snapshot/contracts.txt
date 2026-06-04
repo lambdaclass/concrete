@@ -7,7 +7,7 @@ loop_invariant.count_to_eight
 
 === Loop contracts ===
 
-loop_invariant.count_up  (loop @ line 8)
+loop_invariant.count_up  (loop @ line 12)
   invariant 0 <= i && i <= 8
   variant   8 - i
   obligations:
@@ -30,7 +30,7 @@ loop_invariant.count_up  (loop @ line 8)
                                 engine:  omega
        generated VC:  ∀ (i : Int), (0 ≤ i ∧ i ≤ 8) → i < 8 → (8 - (i + 1)) < (8 - i)
 
-loop_invariant.count_to_eight  (loop @ line 23)
+loop_invariant.count_to_eight  (loop @ line 27)
   invariant 0 <= i && i <= 8
   variant   8 - i
   obligations:

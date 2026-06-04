@@ -265,6 +265,7 @@ structure SourceProofLink where
   proofBy      : Option String := none  -- #[proof_by(Q.Name)]        → registry `proof`
   ensuresProof : Option String := none  -- #[ensures_proof(Q.Name)]   → registry `ensures_proof`
   coverage     : Option String := none  -- #[proof_coverage(kind)]    → registry `coverage`
+  fingerprint  : Option String := none  -- #[proof_fingerprint("hash")] → stored body-hash for staleness
   deriving Repr, Inhabited
 
 structure FnDef where

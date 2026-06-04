@@ -1748,6 +1748,16 @@ partial def parseAttribute : ParseM (String × Option String × Option ReprOpts 
     expect .rparen
     expect .rbracket
     return (key, some name, none, none)
+  else if tk == .lparen && key == "proof_fingerprint" then
+    -- #[proof_fingerprint("ab12cd…")]: a short body-hash string literal stored
+    -- in source so staleness is detected for functions spec-drift can't cover.
+    advance
+    let hash ← match (← peek) with
+      | .strLit s => advance; pure s
+      | _ => let sp ← peekSpan; throwParse "expected a string literal in proof_fingerprint(\"…\")" (span := some sp)
+    expect .rparen
+    expect .rbracket
+    return (key, some hash, none, none)
   else if tk == .lparen then
     -- #[key(value)]
     advance
@@ -1832,6 +1842,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
   let mut pendingProofBy : Option String := none
   let mut pendingEnsuresProof : Option String := none
   let mut pendingCoverage : Option String := none
+  let mut pendingFingerprint : Option String := none
   let mut tk ← peek
   while tk != stopToken && tk != .eof do
     -- Parse attributes (but don't continue — let the next token be parsed)
@@ -1846,6 +1857,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
       if key == "proof_by" then pendingProofBy := attrVal
       if key == "ensures_proof" then pendingEnsuresProof := attrVal
       if key == "proof_coverage" then pendingCoverage := attrVal
+      if key == "proof_fingerprint" then pendingFingerprint := attrVal
       match ensExpr with
       | some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
                   else pendingEnsures := pendingEnsures ++ [e]
@@ -1892,6 +1904,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
         if key == "proof_by" then pendingProofBy := attrVal
         if key == "ensures_proof" then pendingEnsuresProof := attrVal
         if key == "proof_coverage" then pendingCoverage := attrVal
+        if key == "proof_fingerprint" then pendingFingerprint := attrVal
         match ensExpr with
         | some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
                     else pendingEnsures := pendingEnsures ++ [e]
@@ -1988,8 +2001,10 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           let proofLink : Option SourceProofLink :=
             if pendingSpecLink.isSome || pendingProofBy.isSome
                 || pendingEnsuresProof.isSome || pendingCoverage.isSome
+                || pendingFingerprint.isSome
             then some { spec := pendingSpecLink, proofBy := pendingProofBy
-                      , ensuresProof := pendingEnsuresProof, coverage := pendingCoverage }
+                      , ensuresProof := pendingEnsuresProof, coverage := pendingCoverage
+                      , fingerprint := pendingFingerprint }
             else none
           match f with
           | .inl fnDef => fns := fns ++ [{ fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures, proofLink, overflowChecked := pendingOverflow }]
@@ -2002,6 +2017,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           pendingProofBy := none
           pendingEnsuresProof := none
           pendingCoverage := none
+          pendingFingerprint := none
         else if tk == .ident "union" then
           -- Parse union as a struct (all fields share memory)
           advance  -- consume 'union'
