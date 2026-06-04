@@ -1,0 +1,34 @@
+// Error flow with a user-defined Result enum + match propagation.
+//
+// Concrete has no built-in Result type; you define a tagged enum and propagate
+// errors upward by matching on it. This is the idiomatic error-flow pattern.
+mod error_flow {
+    enum Copy ParseError { Negative, TooBig }
+
+    enum Copy ParseResult {
+        Ok { value: i32 },
+        Err { error: ParseError },
+    }
+
+    // Validate an input, returning Err for out-of-range values.
+    fn parse_small(n: i32) -> ParseResult {
+        if n < 0 { return ParseResult::Err { error: ParseError::Negative }; }
+        if n > 100 { return ParseResult::Err { error: ParseError::TooBig }; }
+        return ParseResult::Ok { value: n };
+    }
+
+    // Call a fallible function and propagate its error upward via match.
+    fn double_small(n: i32) -> ParseResult {
+        match parse_small(n) {
+            ParseResult::Ok { value } => { return ParseResult::Ok { value: value + value }; },
+            ParseResult::Err { error } => { return ParseResult::Err { error: error }; },
+        }
+    }
+
+    pub fn main() with(Console) -> i32 {
+        match double_small(21) {
+            ParseResult::Ok { value } => { return value; },   // 42
+            ParseResult::Err { error } => { return 1; },
+        }
+    }
+}

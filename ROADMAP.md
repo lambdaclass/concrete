@@ -16,8 +16,9 @@ document as one queue:
 3. finish proof-link migration away from JSON;
 4. harden audit / proof-status / trust gates around source contracts,
    spec provenance, evidence classes, tool-version drift, and oracle evidence;
-5. make `concrete prove` useful enough for non-compiler authors through
-   examples, replayable workflows, and better failed-obligation diagnostics;
+5. make `concrete prove` useful enough for non-compiler authors and
+   binary-only agents through self-describing commands, JSON output, generated
+   Lean stubs, replayable workflows, and better failed-obligation diagnostics;
 6. finish VC/discharge examples and external-SMT policy without hiding solver
    trust;
 7. only then broaden the ordinary language surface (patterns, bytes/text/path,
@@ -382,41 +383,113 @@ lemmas, and actionable failure diagnostics.
    the path. **Done so far:** `ct_compare` (sound — spec-drift covered) is the
    shipped demonstration; the in-source link mechanism, `--emit-link`, and the
    `stale_proof` regression exist.
-2. Add `concrete prove` corpus entries that teach the proof path from smallest
+2. Make the `concrete prove` binary self-describing for agents. Agents may not
+   read repository docs, so the binary must expose the workflow itself:
+   `concrete prove --help=agent` prints the proof-authoring sequence, stable
+   output formats, exit-code meanings, and the next command to run for each
+   common status. This is the agent entrypoint; docs and MCP are secondary.
+3. Add `concrete prove --capabilities --json`: machine-readable feature
+   discovery for proof authoring. It should report support for `prove_json`,
+   `show_obligation_json`, `emit_lean`, `emit_link`, `nearest_lemmas`,
+   `replay_json`, schema version, supported obligation kinds, supported
+   evidence classes, and whether MCP integration is available.
+4. Add `concrete prove --schema`: print the JSON schema and schema version for
+   proof-authoring output. Agents must be able to adapt to the installed
+   binary instead of assuming repo docs match the executable.
+5. Add `concrete prove --json` as the primary machine-readable proof context:
+   function name, eligibility, exclusion reason, body fingerprint,
+   source-linked or JSON-backed proof link, spec target, generated obligations,
+   source spans, hypotheses, conclusions, status, evidence class, replay
+   command, suggested ProofKit imports, suggested theorem names, nearest known
+   lemmas, and `next_actions`.
+6. Add `next_actions` to every proof-authoring JSON response. Each action must
+   include kind, exact command, expected output format, and what status it
+   helps resolve; examples: `show_obligation`, `emit_lean`, `emit_link`,
+   `replay`, `check_proofs`, `run_audit`, and `open_docs` only as a fallback.
+7. Add JSON modes for existing human proof subcommands:
+   `--show-obligation <id> --json`, `--replay --json`,
+   `--emit-link --json`, and `--nearest-lemmas <id> --json`. The JSON forms
+   must carry the same stable ids and statuses as `--report contracts` and
+   `concrete audit`.
+8. Add `concrete prove --emit-lean` as a compilable Lean stub generator. The
+   stub should include imports, namespace, theorem statement, extracted body or
+   spec references, FnTable skeleton, obligation TODO blocks, suggested
+   ProofKit lemmas, and no invented proof. Support `--out PATH`, refuse to
+   clobber without `--force`, and support `--stdout` for agents that only want
+   to inspect the generated file.
+9. Add failed-obligation artifacts under a stable build path such as
+   `.build/prove/<qualified_fn>/<obligation_id>/`: `context.json`,
+   `failed.lean`, `command.txt`, and `README.txt`. These artifacts should be
+   minimal, reproducible, and safe to hand to an agent without loading the whole
+   flagship proof.
+10. Add nearest-lemma and proof-recipe hints. Start with a static mapping from
+    obligation kind and detected features to local lemmas: linear arithmetic ->
+    `omega`; bitvectors -> `bv_decide`; counter loops -> `eval_while_count`;
+    array updates -> `set_in_counter_map`; calls -> `ProofKit.Calls`; loop
+    copies -> `ProofKit.Loops`; source links -> `--emit-link`.
+11. Add proof minimization: `concrete prove --minimize <obligation_id>` emits
+    the smallest source / ProofCore / Lean slice needed to reproduce a failed
+    obligation. This should be built after JSON and failed-artifact formats are
+    stable, not before.
+12. Define and document stable theorem naming conventions in tool output:
+    `<fn>_refines_spec`, `<fn>_<obligation>_proved`,
+    `<fn>_loop_<name>_preserves`, and
+    `<fn>_call_<callee>_discharges_requires`. `concrete prove` should suggest
+    these names instead of leaving agents to invent them.
+13. Add CI gates for the agent-facing proof surfaces: snapshot representative
+    `--json` output, validate schema versioning, ensure generated Lean stubs
+    parse/check up to the intended placeholder boundary, and assert replay JSON
+    reports the same statuses as human replay.
+14. Add binary-first proof authoring fixtures: one small example each for
+    straight-line refinement, call composition, counter loop, array update
+    loop, multi-store loop, ghost-value proof, runtime-safety VC, stale proof
+    repair, and source-link migration. Each fixture must have the exact
+    `concrete prove --json` and `--emit-lean` path pinned.
+15. Add human docs only after the binary path exists:
+    `docs/AGENT_PROOF_AUTHORING.md` and an optional repo-root `AGENTS.md`
+    should summarize the binary workflow and point to the ProofKit guide, but
+    they must not be the source of truth for agents using only an installed
+    binary.
+16. Add MCP only after the CLI/JSON/stub surfaces are stable. The MCP server
+    should wrap the binary rather than duplicate logic, exposing resources such
+    as `concrete://prove/<fn>/obligations`, `concrete://proofkit/lemmas`, and
+    `concrete://examples/evidence-classes`, plus tools for `prove_json`,
+    `show_obligation`, `emit_lean`, `replay`, and `check_proofs`.
+17. Add `concrete prove` corpus entries that teach the proof path from smallest
    to real: straight-line Lean proof, `bv_decide` proof, `omega` proof,
    operational loop proof, state/multi-store proof, call composition, mixed
    evidence flagship, and full refinement flagship. Each entry should include a
    command, generated scaffold, expected next obligation, and audit class
    explanation.
-3. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
+18. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
    OOB stuck behavior.
-4. Build reusable lemmas for loop-carried state and `while_step`.
-5. Build reusable lemmas for BitVec operations used by flagships.
-6. Build reusable lemmas for structs, fields, enum construction, match, Result,
+19. Build reusable lemmas for loop-carried state and `while_step`.
+20. Build reusable lemmas for BitVec operations used by flagships.
+21. Build reusable lemmas for structs, fields, enum construction, match, Result,
    Option, and bounded-buffer invariants.
-7. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
+22. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
     fixed buffers, Result/Option, loops, source contracts, and refinement
     composition. Stubs should emit spec target, `PExpr` body, FnTable skeleton,
     expected theorem statement, common imports/tactics, and TODO blocks for
     loop invariants.
-8. Add generated composition scaffolds: FnTable entries, call lemmas, callee
+23. Add generated composition scaffolds: FnTable entries, call lemmas, callee
     refinement dependencies, and composed theorem skeletons.
-9. Add generated loop-invariant templates for common proof shapes:
+24. Add generated loop-invariant templates for common proof shapes:
     counter loop over array writes, copy loop, fold loop, multi-store loop,
     offset loop, and block-processing loop.
-10. Add proof minimization/debugging UX: show the smallest extracted expression
+25. Add proof minimization/debugging UX: show the smallest extracted expression
     or lemma surface related to a failed proof, including messages like
     "failed to prove index expression equals spec offset under len <= 375" for
     symbolic arithmetic glue.
-11. Add proof replay/caching once proof artifacts and fingerprints are stable.
-12. Add simple auto-discharge for structural obligations that do not need human
+26. Add proof replay/caching once proof artifacts and fingerprints are stable.
+27. Add simple auto-discharge for structural obligations that do not need human
     proof search.
-13. Add a small verified/spec-checked standard proof library for common
+28. Add a small verified/spec-checked standard proof library for common
     predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
     constant-time source shape.
-14. Add AI-assisted proof repair only after artifacts, statuses, and replay are
+29. Add AI-assisted proof repair only after artifacts, statuses, and replay are
     stable enough to validate suggestions mechanically.
-15. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
+30. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
    establish not just what an iteration *changes* but what it *preserves* — the
    frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
    "a proof mentioning only its footprint preserves everything else"). Today
