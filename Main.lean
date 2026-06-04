@@ -726,6 +726,34 @@ def bvDischargeCallSites (candidates : List (Nat × String)) : IO (List Nat) := 
       if (← runLean (mkSrc [c])) == 0 then proved := proved ++ [c.1]
     return proved
 
+/-- Discharge nonlinear integer-overflow goals with `bv_decide`. Each candidate
+    is `(key, propGoal)` where the goal is a quantified BitVec proposition
+    (`∀ (v : BitVec w), … → BitVec.ule e hi`); returns the keys that kernel-check.
+    `intros; bv_decide` introduces the operands and bound hypotheses, then
+    bitblasts — an LRAT-checked kernel decision, no external SMT. Batched,
+    falling back per-goal. -/
+def bvDischargeOverflow (candidates : List (String × String)) : IO (List String) := do
+  if candidates.isEmpty then return []
+  let indexed := (List.range candidates.length).zip candidates
+  let mkSrc (cs : List (Nat × (String × String))) : String :=
+    "import Std.Tactic.BVDecide\n\n"
+      ++ String.join (cs.map (fun (i, (_, g)) => s!"theorem ovf_{i} : {g} := by intros; bv_decide\n"))
+  let runLean (src : String) : IO UInt32 := do
+    let tmpDir ← IO.Process.output { cmd := "mktemp", args := #["-d"] }
+    let dir := tmpDir.stdout.trimAscii.toString
+    IO.FS.writeFile ⟨dir ++ "/ovf.lean"⟩ src
+    let r ← IO.Process.output { cmd := "lake", args := #["env", "lean", dir ++ "/ovf.lean"],
+                                env := #[("LAKE_TERM_ANSI", "0")] }
+    let _ ← IO.Process.output { cmd := "rm", args := #["-rf", dir] }
+    return r.exitCode
+  if (← runLean (mkSrc indexed)) == 0 then
+    return candidates.map (·.1)
+  else
+    let mut proved : List String := []
+    for c in indexed do
+      if (← runLean (mkSrc [c])) == 0 then proved := proved ++ [c.2.1]
+    return proved
+
 /-- Discharge loop init/variant VCs with `omega`. Each candidate is
     `(key, leanGoal)`; returns the keys that kernel-check. These VCs are linear
     integer facts over `Int` (the same domain as the preservation proof), so the
@@ -767,11 +795,14 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
   let provedDiv ← kernelDischargeLoopVCs (Report.divGoals parsedModules)
   let ovfObls := Report.overflowObligations parsedModules
   let provedOvf ← kernelDischargeLoopVCs (Report.overflowGoals parsedModules)
+  -- nonlinear fallback: only the bv goals omega did NOT already discharge.
+  let bvOvfCands := (Report.overflowBVGoals parsedModules).filter (fun (k, _) => !provedOvf.contains k)
+  let provedOvfBV ← bvDischargeOverflow bvOvfCands
   return Report.contractsReport parsedModules registry provedVCs
     ++ Report.renderCallSites obs proved
     ++ Report.renderBounds boundsObls provedBounds
     ++ Report.renderDiv divObls provedDiv
-    ++ Report.renderOverflow ovfObls provedOvf
+    ++ Report.renderOverflow ovfObls provedOvf provedOvfBV
 
 /-- Run pipeline and check a profile constraint.
     If the input file lives inside a `Concrete.toml` project, route

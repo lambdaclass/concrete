@@ -1346,7 +1346,8 @@ structure OverflowObl where
   lo            : Int
   hi            : Int
   closedVerdict : Option Bool
-  leanGoal      : Option String
+  leanGoal      : Option String           -- omega goal (linear)
+  bvGoal        : Option String := none    -- widened bv_decide goal (nonlinear, interval-gated)
 
 /-- All annotated `let` bindings in a statement tree, including those declared
     inside loop inits/steps/bodies (so a loop counter `i` from a `for`-init is
@@ -1364,6 +1365,103 @@ partial def collectLetTys : Stmt → List (String × Ty)
 def varTyMap (f : FnDef) : List (String × Ty) :=
   f.params.map (fun p => (p.name, p.ty)) ++ f.body.flatMap collectLetTys
 
+-- ============================================================
+-- Nonlinear overflow discharge: interval analysis + bv_decide
+-- ============================================================
+-- omega is LINEAR, so a product of two variables (`sample * gain`) is left
+-- `unproven` by the omega path. When every operand has a non-negative, bounded
+-- range (from #[requires] / loop invariants), interval analysis computes the
+-- result range; if it fits the type, we emit a WIDENED unsigned `bv_decide`
+-- goal so the no-overflow fact is KERNEL-checked (not merely computed here).
+-- Restricted to +/* of non-negative bounded operands so the unsigned model is
+-- sound (no underflow); anything else stays honestly `unproven`.
+
+/-- Flatten an `&&`-conjunction into its conjuncts. -/
+partial def conjuncts : Expr → List Expr
+  | .binOp _ .and_ l r => conjuncts l ++ conjuncts r
+  | .paren _ e => conjuncts e
+  | e => [e]
+
+/-- Per-variable integer bounds `[lo,hi]` from hypothesis conjuncts of the form
+    `k <= v`, `v <= k`, `k < v`, `v < k` (and ≥/> mirrors), merged to the
+    tightest known bound. Only variables with BOTH a lower and upper bound. -/
+def varBoundsFromHyps (hyps : List Expr) : List (String × (Int × Int)) := Id.run do
+  let mut los : List (String × Int) := []
+  let mut his : List (String × Int) := []
+  let upd := fun (l : List (String × Int)) (v : String) (k : Int) (f : Int → Int → Int) =>
+    match l.lookup v with
+    | some old => (l.filter (·.1 != v)) ++ [(v, f old k)]
+    | none => l ++ [(v, k)]
+  for c in hyps.flatMap conjuncts do
+    match c with
+    | .binOp _ .leq (.intLit _ k) (.ident _ v) => los := upd los v k max
+    | .binOp _ .leq (.ident _ v) (.intLit _ k) => his := upd his v k min
+    | .binOp _ .lt  (.intLit _ k) (.ident _ v) => los := upd los v (k+1) max
+    | .binOp _ .lt  (.ident _ v) (.intLit _ k) => his := upd his v (k-1) min
+    | .binOp _ .geq (.ident _ v) (.intLit _ k) => los := upd los v k max
+    | .binOp _ .geq (.intLit _ k) (.ident _ v) => his := upd his v k min
+    | .binOp _ .gt  (.ident _ v) (.intLit _ k) => los := upd los v (k+1) max
+    | .binOp _ .gt  (.intLit _ k) (.ident _ v) => his := upd his v (k-1) min
+    | _ => pure ()
+  return los.filterMap fun (v, l) => (his.lookup v).map fun h => (v, (l, h))
+
+/-- Conservative interval `(lo, hi)` of an arithmetic expr plus the maximum
+    magnitude seen across the whole subtree (to choose a wrap-free bit width).
+    `none` if any operand is unbounded or the op is outside `+`/`-`/`*`. -/
+partial def exprIntervalMax (bounds : List (String × (Int × Int))) : Expr → Option (Int × Int × Nat)
+  | .intLit _ k => some (k, k, k.natAbs)
+  | .paren _ e => exprIntervalMax bounds e
+  | .ident _ v => (bounds.lookup v).map fun (l, h) => (l, h, max l.natAbs h.natAbs)
+  | .binOp _ op l r => do
+    let (la, lb, lm) ← exprIntervalMax bounds l
+    let (ra, rb, rm) ← exprIntervalMax bounds r
+    let sub := max lm rm
+    let mk := fun (a b : Int) => some (a, b, max sub (max a.natAbs b.natAbs))
+    match op with
+    | .add => mk (la + ra) (lb + rb)
+    | .sub => mk (la - rb) (lb - ra)
+    | .mul =>
+      let ps := [la*ra, la*rb, lb*ra, lb*rb]
+      mk (ps.foldl min (la*ra)) (ps.foldl max (la*ra))
+    | _ => none
+  | _ => none
+
+/-- Lower an arithmetic expr to a `BitVec w` term (`+`/`*` of vars and
+    non-negative literals only; `-` is excluded so the unsigned model can't
+    underflow). -/
+partial def arithToBVW (w : Nat) : Expr → Option String
+  | .intLit _ k => if k < 0 then none else some s!"({k}#{w})"
+  | .paren _ e => arithToBVW w e
+  | .ident _ v => some v
+  | .binOp _ op l r => do
+    let L ← arithToBVW w l
+    let R ← arithToBVW w r
+    match op with
+    | .add => some s!"({L} + {R})"
+    | .mul => some s!"({L} * {R})"
+    | _ => none
+  | _ => none
+
+/-- A widened unsigned `bv_decide` goal proving `e` cannot overflow `[lo,hi]`,
+    when interval analysis shows the result is non-negative and in range and the
+    operands are `+`/`*` of non-negative bounded vars. `none` otherwise (→ the
+    obligation stays `unproven`). -/
+def overflowBVGoal (e : Expr) (lo hi : Int) (hyps : List Expr) : Option String := do
+  let bounds := varBoundsFromHyps hyps
+  let (elo, ehi, maxMag) ← exprIntervalMax bounds e
+  guard (lo ≤ elo)          -- lower bound holds by interval
+  guard (ehi ≤ hi)          -- upper bound holds by interval
+  guard (0 ≤ elo)           -- non-negative result → unsigned model is sound
+  let w ← if maxMag < 2147483648 then some 32
+          else if maxMag < 9223372036854775808 then some 64 else none
+  let eBV ← arithToBVW w e
+  let vars := (collectIdents e).eraseDups
+  guard (!vars.isEmpty)
+  -- every operand needs a non-negative upper bound to model it as unsigned BitVec
+  let varHyps ← vars.mapM fun v => (bounds.lookup v).bind fun (vl, vh) =>
+    if vl < 0 then none else some s!"BitVec.ule {v} ({vh}#{w})"
+  some s!"∀ ({" ".intercalate vars} : BitVec {w}), {" → ".intercalate varHyps} → BitVec.ule {eBV} ({hi}#{w})"
+
 /-- Generate no-overflow obligations for `#[overflow_checked]` functions. -/
 def overflowObligations (modules : List Module) : List OverflowObl := Id.run do
   let mut out : List OverflowObl := []
@@ -1376,16 +1474,20 @@ def overflowObligations (modules : List Module) : List OverflowObl := Id.run do
       match (exprIntTy vt e).bind intRange, toLeanProp e with
       | some (lo, hi), some eStr =>
         let key := s!"{fq}#ovf{i}"
+        let hyps := f.requires ++ scope
         let cv : Option Bool × Option String := match cEvalInt e with
           | some k => (some (decide (lo ≤ k ∧ k ≤ hi)), none)
           | none =>
-            let hyps := f.requires ++ scope
             let vars := (collectIdents e ++ hyps.flatMap collectIdents).eraseDups
             let reqs := hyps.filterMap toLeanProp
             let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
             let hyp := if reqs.isEmpty then "" else s!"({" ∧ ".intercalate reqs}) → "
             (none, some s!"{binder}{hyp}({lo} ≤ {eStr} ∧ {eStr} ≤ {hi})")
-        out := out ++ [{ fnQual := fq, key, opExpr := e, lo, hi, closedVerdict := cv.1, leanGoal := cv.2 }]
+        -- nonlinear/bv fallback: interval-gated widened unsigned goal (only when
+        -- omega's linear goal won't close it — i.e. the constant case is skipped).
+        let bvGoal := if cv.1.isSome then none else overflowBVGoal e lo hi hyps
+        out := out ++ [{ fnQual := fq, key, opExpr := e, lo, hi
+                       , closedVerdict := cv.1, leanGoal := cv.2, bvGoal }]
         i := i + 1
       | _, _ => pure ()
   return out
@@ -1394,8 +1496,16 @@ def overflowObligations (modules : List Module) : List OverflowObl := Id.run do
 def overflowGoals (modules : List Module) : List (String × String) :=
   (overflowObligations modules).filterMap fun o => o.leanGoal.map (fun g => (o.key, g))
 
-/-- Render the integer-overflow section. -/
-def renderOverflow (obls : List OverflowObl) (provedKeys : List String) : String := Id.run do
+/-- Widened unsigned `bv_decide` goals for nonlinear overflow obligations (the
+    interval-gated `var * var` cases omega cannot close). Run by Main after omega,
+    only for obligations omega left unproven. -/
+def overflowBVGoals (modules : List Module) : List (String × String) :=
+  (overflowObligations modules).filterMap fun o => o.bvGoal.map (fun g => (o.key, g))
+
+/-- Render the integer-overflow section. `provedKeys` are omega-discharged;
+    `bvProvedKeys` are discharged by the widened `bv_decide` (nonlinear) path. -/
+def renderOverflow (obls : List OverflowObl) (provedKeys : List String)
+    (bvProvedKeys : List String := []) : String := Id.run do
   if obls.isEmpty then return ""
   let mut out := "\n\n=== Runtime-safety obligations (integer overflow, #[overflow_checked]) ==="
   let mut cur := ""
@@ -1404,12 +1514,14 @@ def renderOverflow (obls : List OverflowObl) (provedKeys : List String) : String
     let status := match o.closedVerdict with
       | some true  => "checked: result in range (constant)"
       | some false => "VIOLATION: constant overflows the type"
-      | none => match o.leanGoal with
-        | some _ =>
-          if provedKeys.contains o.key
-          then "proved_by_kernel_decision (omega) — cannot overflow, no runtime check needed"
-          else "unproven — bound the operands (#[requires]), or use a wrapping/checked profile"
-        | none => "unproven — operands not statically analyzable"
+      | none =>
+        if provedKeys.contains o.key then
+          "proved_by_kernel_decision (omega) — cannot overflow, no runtime check needed"
+        else if bvProvedKeys.contains o.key then
+          "proved_by_kernel_decision (bv_decide) — bounded operands cannot overflow (interval + bitvector), no runtime check needed"
+        else match o.leanGoal with
+          | some _ => "unproven — bound the operands (#[requires]), or use a wrapping/checked profile"
+          | none => "unproven — operands not statically analyzable"
     out := out ++ s!"\n  {Concrete.fmtExpr o.opExpr}  (range [{o.lo}, {o.hi}])\n    status: {status}"
   return out ++ "\n"
 

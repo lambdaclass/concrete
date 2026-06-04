@@ -12,14 +12,17 @@
 //   - scaled / 256, (a+b) / 2   checked: nonzero constant divisor;
 //   - a + b (in mix)            proved_by_kernel_decision (omega): bounded
 //                               operands cannot overflow i32 (LINEAR, so omega);
-//   - sample * gain             UNPROVEN: a product of two variables is
-//                               NONLINEAR, and omega is a linear procedure — it
-//                               cannot bound 255 * 256 even though a human can.
-//                               The audit says so loudly rather than pretending.
-// Closing that needs interval/bv reasoning (a future tactic); the functional
-// postconditions (result ranges) are a further Lean step (PROOFKIT_GUIDE.md).
-// This is the honest mid-authoring state: division and linear overflow
-// machine-checked, nonlinear overflow and functional spec explicitly pending.
+//   - sample * gain             proved_by_kernel_decision (bv_decide): a product
+//                               of two variables is NONLINEAR, so omega cannot
+//                               bound it — but interval analysis over the
+//                               #[requires] bounds (0..255 * 0..256 = 0..65280)
+//                               shows it fits i32, and a widened unsigned
+//                               bitvector goal makes that KERNEL-checked.
+// If the operand bounds are weakened so the product can exceed i32 (or removed
+// entirely), the obligation reverts to `unproven` — never a false green. The
+// functional postconditions (exact result ranges) are still a further Lean step
+// (PROOFKIT_GUIDE.md): runtime safety (no overflow / no div-by-zero) is
+// machine-checked here; full functional correctness is the remaining work.
 mod fixed_point {
 
     // Scale a 0..255 sample by a Q8 gain (0..256 = 0.0..1.0) and clamp to 0..255.

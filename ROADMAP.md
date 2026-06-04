@@ -767,12 +767,21 @@ zero, overflow profile, casts, and loop bounds with statuses
    obligation to `unproven` rather than proving a false bound. Demonstrated in
    `evidence_classes/runtime_checked` (`sum_loop` proved, `sum_loop_unsound`
    unproven) and `constant_time_tag.ct_compare` (`a[i]`/`b[i]` now omega-proved
-   from the invariant). NEXT in this thread: a nonlinear/bitvector overflow tier
-   (small fixed-width `var * var` bounds like `255 * 256`) — interval analysis
-   first, `bv_decide` where needed, classified `proved_by_kernel_decision` only
-   if Lean checks it; use `fixed_point.scale_clamp`'s `sample * gain` as the
-   regression fixture (must move unproven → proved when it lands, and back if
-   the bounds weaken).
+   from the invariant).
+4b. ~~Nonlinear/bitvector overflow tier (small fixed-width `var * var` bounds
+   like `255 * 256`) — interval analysis first, `bv_decide` where needed,
+   classified `proved_by_kernel_decision` only if Lean checks it.~~ **DONE.**
+   When every operand of a `+`/`*` expression has a non-negative bounded range
+   (from `#[requires]` / loop invariants), `exprIntervalMax` computes the result
+   range; if it fits the type, `overflowBVGoal` emits a WIDENED unsigned
+   `bv_decide` goal (`Main.bvDischargeOverflow`) so the no-overflow fact is
+   kernel-checked, shown `proved_by_kernel_decision (bv_decide)`. Sound by gating:
+   non-negative operands, `+`/`*` only (no unsigned underflow), wrap-free width.
+   `fixed_point.scale_clamp`'s `sample * gain` moves unproven → proved; weakening
+   the operand bounds so the product can exceed i32 (or removing a bound) reverts
+   it to `unproven` — never a false green. NEXT (open): signed/negative-operand
+   intervals; subtraction; nesting deeper than the interval can bound; lifting the
+   functional postcondition (exact result range) to a Lean proof.
 5. Generate loop bound and variant obligations for bounded loops.
 6. Define policy gates for `#[overflow_checked]`: release profiles may require
    overflow obligations for selected functions/packages, while ordinary

@@ -35,7 +35,7 @@ fixed_point.mix
 
 fixed_point.scale_clamp
   sample * gain  (range [-2147483648, 2147483647])
-    status: unproven — bound the operands (#[requires]), or use a wrapping/checked profile
+    status: proved_by_kernel_decision (bv_decide) — bounded operands cannot overflow (interval + bitvector), no runtime check needed
 
 fixed_point.mix
   a + b  (range [-2147483648, 2147483647])
