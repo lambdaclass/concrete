@@ -24,3 +24,17 @@ invariants. A loop-counter access like `a[i]` under `#[invariant(0 <= i && i < N
 is reported `unproven` today (the invariant is not yet fed to the bounds
 obligation). Connecting loop invariants → bounds is the next enhancement; the
 status stays honest meanwhile (it never claims unproven-safe as safe).
+
+## Division by zero (second runtime-error kind)
+
+Every `/` and `%` generates `divisor != 0`, same disposition shape:
+
+| function | divisor | disposition |
+|---|---|---|
+| `ratio` (with `#[requires(0 < d)]`) | `d` | `proved_by_kernel_decision (omega)` |
+| `half` | `2` | checked: nonzero constant |
+| `risky` | `d` (no bound) | `unproven` |
+| `divz` | `0` | **VIOLATION** — divide-by-zero caught |
+
+Overflow is the next kind (needs the integer width + a range analysis); bounds
+and division are wired today.

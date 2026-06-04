@@ -43,3 +43,32 @@ constant_time_tag.ct_compare
   b[i]  (array size 16)
     status: unproven — bound the index with a #[requires], or insert a runtime check
 
+
+=== Runtime-safety obligations (division: non-zero divisor) ===
+
+fmt.format_int
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+
+fmt.format_uint
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+
+hex.decode
+  % divisor 2
+    status: checked: divisor is a nonzero constant
+
+sha256.hash_raw
+  % divisor 64
+    status: checked: divisor is a nonzero constant
+  / divisor 64
+    status: checked: divisor is a nonzero constant
+
+rand.random_range
+  / divisor range
+    status: unproven — require the divisor nonzero (#[requires]), or insert a runtime check
+

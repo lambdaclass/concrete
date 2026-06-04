@@ -1045,6 +1045,100 @@ def renderBounds (obls : List BoundsObl) (provedKeys : List String) : String := 
     out := out ++ s!"\n  {o.arrName}[{Concrete.fmtExpr o.idxExpr}]  (array size {o.size})\n    status: {status}"
   return out ++ "\n"
 
+-- ============================================================
+-- Runtime-safety obligations: division by zero
+-- ============================================================
+-- Every `/` and `%` generates the obligation `divisor ≠ 0`. Same shape as array
+-- bounds: constant divisors are evaluated; variable divisors discharge by omega
+-- under the function's #[requires] (statically nonzero), or stay `unproven`.
+
+mutual
+/-- `(isMod, divisorExpr)` for every `/` and `%` in an expression. -/
+partial def collectDivisorsE : Expr → List (Bool × Expr)
+  | .binOp _ .div l r => (false, r) :: (collectDivisorsE l ++ collectDivisorsE r)
+  | .binOp _ .mod l r => (true, r) :: (collectDivisorsE l ++ collectDivisorsE r)
+  | .binOp _ _ l r => collectDivisorsE l ++ collectDivisorsE r
+  | .unaryOp _ _ x | .paren _ x | .borrow _ x | .borrowMut _ x | .deref _ x
+  | .try_ _ x | .cast _ x _ | .fieldAccess _ x _ | .arrowAccess _ x _ => collectDivisorsE x
+  | .arrayLit _ es => es.flatMap collectDivisorsE
+  | .arrayIndex _ a i => collectDivisorsE a ++ collectDivisorsE i
+  | .call _ _ _ args => args.flatMap collectDivisorsE
+  | .methodCall _ o _ _ args => collectDivisorsE o ++ args.flatMap collectDivisorsE
+  | .staticMethodCall _ _ _ _ args => args.flatMap collectDivisorsE
+  | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectDivisorsE fe)
+  | .allocCall _ x a => collectDivisorsE x ++ collectDivisorsE a
+  | .ifExpr _ c t el | .whileExpr _ c t el =>
+      collectDivisorsE c ++ t.flatMap collectDivisorsS ++ el.flatMap collectDivisorsS
+  | .match_ _ s _ => collectDivisorsE s
+  | _ => []
+partial def collectDivisorsS : Stmt → List (Bool × Expr)
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v => collectDivisorsE v
+  | .return_ _ (some v) => collectDivisorsE v
+  | .ifElse _ c t el => collectDivisorsE c ++ t.flatMap collectDivisorsS ++ (el.getD []).flatMap collectDivisorsS
+  | .while_ _ c b _ => collectDivisorsE c ++ b.flatMap collectDivisorsS
+  | .forLoop _ init c step b _ =>
+      (init.map collectDivisorsS).getD [] ++ collectDivisorsE c
+        ++ (step.map collectDivisorsS).getD [] ++ b.flatMap collectDivisorsS
+  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v => collectDivisorsE o ++ collectDivisorsE v
+  | .arrayIndexAssign _ a i v => collectDivisorsE a ++ collectDivisorsE i ++ collectDivisorsE v
+  | _ => []
+end
+
+/-- One division-by-zero obligation. -/
+structure DivObl where
+  fnQual        : String
+  key           : String
+  divExpr       : Expr
+  isMod         : Bool
+  closedVerdict : Option Bool
+  leanGoal      : Option String
+
+/-- Generate `divisor ≠ 0` obligations for every `/` and `%`. -/
+def divObligations (modules : List Module) : List DivObl := Id.run do
+  let mut out : List DivObl := []
+  for (pfx, f) in modules.flatMap allFunctions do
+    let fq := pfx ++ f.name
+    let mut i := 0
+    for (isMod, dv) in f.body.flatMap collectDivisorsS do
+      let key := s!"{fq}#div{i}"
+      let cv : Option Bool × Option String := match cEvalInt dv with
+        | some k => (some (decide (k ≠ 0)), none)
+        | none => match toLeanProp dv with
+          | none => (none, none)
+          | some dStr =>
+            let vars := (collectIdents dv ++ f.requires.flatMap collectIdents).eraseDups
+            let reqs := f.requires.filterMap toLeanProp
+            let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
+            let hyp := if reqs.isEmpty then "" else s!"({" ∧ ".intercalate reqs}) → "
+            (none, some s!"{binder}{hyp}({dStr} ≠ 0)")
+      out := out ++ [{ fnQual := fq, key, divExpr := dv, isMod, closedVerdict := cv.1, leanGoal := cv.2 }]
+      i := i + 1
+  return out
+
+/-- Lean goals for the non-constant divisor obligations, for omega discharge. -/
+def divGoals (modules : List Module) : List (String × String) :=
+  (divObligations modules).filterMap fun o => o.leanGoal.map (fun g => (o.key, g))
+
+/-- Render the division-by-zero section. -/
+def renderDiv (obls : List DivObl) (provedKeys : List String) : String := Id.run do
+  if obls.isEmpty then return ""
+  let mut out := "\n\n=== Runtime-safety obligations (division: non-zero divisor) ==="
+  let mut cur := ""
+  for o in obls do
+    if o.fnQual != cur then out := out ++ s!"\n\n{o.fnQual}"; cur := o.fnQual
+    let opname := if o.isMod then "%" else "/"
+    let status := match o.closedVerdict with
+      | some true  => "checked: divisor is a nonzero constant"
+      | some false => "VIOLATION: division by zero (constant divisor)"
+      | none => match o.leanGoal with
+        | some _ =>
+          if provedKeys.contains o.key
+          then "proved_by_kernel_decision (omega) — divisor nonzero, no runtime check needed"
+          else "unproven — require the divisor nonzero (#[requires]), or insert a runtime check"
+        | none => "unproven — divisor not statically analyzable; needs a runtime check"
+    out := out ++ s!"\n  {opname} divisor {Concrete.fmtExpr o.divExpr}\n    status: {status}"
+  return out ++ "\n"
+
 /-- Stable identity for one loop obligation, shared by the goal collector and
     the renderer so discharge results map back to the right line. -/
 def loopVCKey (fnQual : String) (line : Nat) (obl : String) : String :=

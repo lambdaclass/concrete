@@ -4,6 +4,10 @@ demo.nth
   R1  requires 0 <= i && i < 8
      status:  assumed_at_entry (callers not yet checked)
 
+demo.ratio
+  R1  requires 0 < d
+     status:  assumed_at_entry (callers not yet checked)
+
 
 === Runtime-safety obligations (array bounds) ===
 
@@ -22,4 +26,23 @@ demo.oob
 demo.unchecked
   a[i]  (array size 8)
     status: unproven — bound the index with a #[requires], or insert a runtime check
+
+
+=== Runtime-safety obligations (division: non-zero divisor) ===
+
+demo.ratio
+  / divisor d
+    status: proved_by_kernel_decision (omega) — divisor nonzero, no runtime check needed
+
+demo.half
+  / divisor 2
+    status: checked: divisor is a nonzero constant
+
+demo.risky
+  / divisor d
+    status: unproven — require the divisor nonzero (#[requires]), or insert a runtime check
+
+demo.divz
+  / divisor 0
+    status: VIOLATION: division by zero (constant divisor)
 

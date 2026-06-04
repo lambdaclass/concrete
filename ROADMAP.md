@@ -7,18 +7,21 @@ The roadmap is linear. Phases are ordered, and items inside a phase are ordered
 unless explicitly marked as a constraint or a deferred research note. Read the
 document as one queue:
 
-1. finish proof-link migration away from JSON (`#[proof_by]` / `#[spec]` and
-   source-linked fingerprints);
-2. harden audit / proof-status / trust gates around the source-contract and
-   evidence-class path;
-3. make `concrete prove` useful enough for non-compiler authors through examples
-   and replayable workflows;
-4. close the release-blocking predictable/provable/runtime-safety gaps,
+1. harden source contracts: negative cases, vacuity, spec/ghost totality,
+   trapdoor discipline, diagnostics, and soundness obligations;
+2. finish VC/discharge examples and external-SMT policy without hiding solver
+   trust;
+3. finish proof-link migration away from JSON, then make `concrete prove`
+   useful enough for non-compiler authors through examples and replayable
+   workflows;
+4. harden audit / proof-status / trust gates around source contracts,
+   spec provenance, evidence classes, and oracle evidence;
+5. close the release-blocking predictable/provable/runtime-safety gaps,
    starting with runtime safety beyond array bounds;
-5. only then broaden the ordinary language surface (patterns, bytes/text/path,
+6. only then broaden the ordinary language surface (patterns, bytes/text/path,
    collections, iteration, capability polymorphism, tests);
-6. run external validation before the large ecosystem/release/editor build-out;
-7. keep later research items later unless a prior gate forces them.
+7. run external validation before the large ecosystem/release/editor build-out;
+8. keep later research items later unless a prior gate forces them.
 
 Completed work moves to [CHANGELOG.md](CHANGELOG.md). Deferred or conditional
 work moves later in the same linear queue. There are no parallel tracks and no
@@ -126,6 +129,12 @@ instantiation.
 - Generic and capability-polymorphic proofs must state their scope:
   per-instantiation, generic-once, or generic contract with instance-level proof
   artifacts.
+- Proof evidence is relative to the toolchain that checked it. Lean,
+  `bv_decide`, `omega`, ProofKit, extraction, and compiler-version changes need
+  drift detection and recheck status, not silent reuse of old green badges.
+- References and borrows need an explicit proof class: value-only/borrow-free,
+  read-only-reference proof, mutable-reference proof with frame obligations, or
+  enforced-only and outside `ProvableV1`.
 
 ### External-validation gate (go / no-go before the back half of Phases 8-15)
 
@@ -470,18 +479,23 @@ under a stronger badge.
 6. Add evidence provenance to proof/evidence facts: source file/span, compiler
    commit, theorem name, spec name, policy file, assumption file, tool version,
    and replay command where available.
-7. Add evidence monotonicity checks: a refactor cannot silently present a weaker
+7. Add tool-version drift checks: proof/evidence facts record the Lean version,
+   Concrete compiler commit, ProofKit hash, extraction version, decision
+   procedure version, and solver version where relevant. A toolchain bump marks
+   affected evidence `needs_recheck` until replayed; old green badges are never
+   silently reused across a proof-tool upgrade.
+8. Add evidence monotonicity checks: a refactor cannot silently present a weaker
    claim as if it were still stronger (`proved` cannot degrade to `reported`
    while retaining the same badge/summary).
-8. Add assumption lifecycle checks: every assumption has an owner, scope,
+9. Add assumption lifecycle checks: every assumption has an owner, scope,
    rationale, review date, affected claims, and a diff gate when it widens.
-9. Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern,
+10. Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern,
    backend, runtime, and target assumptions in one machine-readable list.
-10. Add spec-adequacy gates: release policy can require reviewed spec
+11. Add spec-adequacy gates: release policy can require reviewed spec
     provenance for selected claims, forbid unreviewed specs in graduated
     flagships, and show when a theorem is `proved_by_lean` against a
     `spec_trusted` or unreviewed spec.
-11. Add vacuity gates to proof status: `proved` summaries must be downgraded or
+12. Add vacuity gates to proof status: `proved` summaries must be downgraded or
     blocked when the proof depends on an unsatisfiable precondition,
     contradictory assumptions, unreachable code path, or invariant `false`.
 
@@ -511,30 +525,36 @@ promises.
    `public`, `secret`, `timing-sensitive`.
 8. Define source-level memory-safety claims precisely: what linearity, borrows,
    cleanup, trusted code, raw pointers, and FFI do and do not guarantee.
-9. Define the v1 threat model: adversary, trusted base, proof scope, backend
+9. Decide the proof class for references and borrows. A function using `&` or
+   `&mut` must be classified as one of: value-only/borrow-free,
+   proved over read-only references, proved over mutable references with
+   explicit frame/modifies obligations, or enforced-only and outside
+   `ProvableV1`. Do not let borrow-using code appear proof-eligible through a
+   value-only ProofCore model.
+10. Define the v1 threat model: adversary, trusted base, proof scope, backend
    scope, side-channel scope, dependency scope, and what remains out of model.
-10. Add negative examples for every `ProvableV1` and `PredictableV1` exclusion.
-11. Update `CLAIMS_TODAY.md`, README, showcase docs, and release bundles to use
+11. Add negative examples for every `ProvableV1` and `PredictableV1` exclusion.
+12. Update `CLAIMS_TODAY.md`, README, showcase docs, and release bundles to use
     the frozen subset names consistently.
-12. Close the unprofiled-float proof hole before any float proof claim:
+13. Close the unprofiled-float proof hole before any float proof claim:
     float-typed params/returns/locals/literals/ops are excluded from ProofCore
     extraction unless an explicit float profile is active. Audit output must
     say `float semantics: unprofiled` and `proof eligibility: excluded` rather
     than reporting a float operation as extracted through integer `PBinOp.add`.
-13. Define `ProvableFloatV1` as a separate, narrow proof profile:
+14. Define `ProvableFloatV1` as a separate, narrow proof profile:
     IEEE-754 binary32/binary64, round-to-nearest-even, no fast-math, no
     reassociation, no implicit FMA contraction, no ambient rounding-mode
     mutation, and explicit NaN/infinity/subnormal/signed-zero policy.
-14. Add ProofCore support for profiled floats only after item 12 is closed:
+15. Add ProofCore support for profiled floats only after item 13 is closed:
     `PVal.float32/64`, float `PBinOp` cases carrying width and rounding
     (`fadd`/`fsub`/`fmul`/`fdiv`/`feq`/`flt`/`fle`), interpreter agreement,
     and backend/audit checks that prove/report `fast_math: forbidden`.
-15. Classify the first float semantics layer honestly. Until Concrete imports
+16. Classify the first float semantics layer honestly. Until Concrete imports
     or proves a checked IEEE-754 semantics library, primitive float operations
     are `float_semantics_trusted`; proofs over profiled float code are
     refinements to an explicit bit-level IEEE spec under that named trusted
     primitive layer, not `proved_by_lean` from first principles.
-16. Add one small `ProvableFloatV1` flagship only after the profile exists:
+17. Add one small `ProvableFloatV1` flagship only after the profile exists:
     a fixed-order `f32`/`f64` kernel such as clamp/normalize, tiny FIR/IIR, PID,
     or dot product. Prove exact IEEE behavior first; real-valued epsilon-bound
     refinement is a later layer.
@@ -551,8 +571,16 @@ zero, overflow profile, casts, and loop bounds with statuses
 1. Define stable obligation schema v1: id, kind, source span, function,
    expression, dependencies, evidence status, discharging theorem/check/
    assumption, and replay command.
-2. Generate array index bounds obligations.
-3. Generate division/modulo nonzero obligations.
+2. [DONE 2026-06-04] Generate array index bounds obligations. Every `arr[idx]`
+   into a fixed-size array emits `0 ≤ idx < N`; `--report contracts`
+   (Runtime-safety section) reports `proved_by_kernel_decision (omega)` (bounded
+   by `#[requires]`), `checked` (constant in range), `VIOLATION` (constant OOB),
+   or `unproven`. `Report.boundsObligations`/`renderBounds`. Bound source is
+   `#[requires]` (loop invariants not yet wired).
+3. [DONE 2026-06-04] Generate division/modulo nonzero obligations. Every `/` and
+   `%` emits `divisor ≠ 0` with the same disposition shape (omega / checked /
+   VIOLATION / unproven). `Report.divObligations`/`renderDiv`. Worked reference:
+   `examples/evidence_classes/runtime_checked` covers both kinds.
 4. Generate overflow obligations under checked/proved arithmetic profiles.
 5. Define the user-level error model: `Result`, `Option`, assertion failure,
    abort/panic, recoverable errors, test failures, and how error flow interacts
@@ -694,7 +722,11 @@ debug small Concrete programs with predictable commands and useful errors.
     design must avoid a combinatorial split like `map`, `map_file`,
     `map_alloc`; the expected shape is explicit capability-set polymorphism
     such as `fn map<T, U, C>(xs, f: fn(T) with(C) -> U) with(C) -> ...`,
-    grounded in `research/language/capability-polymorphism.md`.
+    grounded in `research/language/capability-polymorphism.md`. The decision
+    must also specify proof scope: prove each monomorphized instance, prove the
+    generic once, or allow generic contracts with instance-level proof
+    artifacts. Audit output must distinguish `proved_for_instance` from any
+    future `proved_generic` class.
 21. Define stdlib v1 for daily programs: fixed arrays/slices, bytes/string
     basics, `Result`/`Option`, numeric helpers, and capability-scoped Console,
     File, Network, and Alloc APIs. Each stdlib item must declare its evidence
@@ -831,6 +863,16 @@ machine-readable.
     PExpr bodies should be collected/generated in dependency order together
     with FnTable completeness and call dependencies, so proof authors do not
     hand-relocate definitions above tables like `shaFns`.
+11. Prove or mechanically validate spec/ghost totality reporting: every
+    contract-referenced `spec fn` or ghost computation is either backed by
+    Lean termination, accepted by a Concrete totality check, or rejected with a
+    `totality_obligation_missing` status. A contract may not depend on a
+    partial or non-terminating spec expression silently.
+12. Define proof preservation across monomorphization and
+    capability-polymorphic instantiation. The compiler must report whether a
+    theorem proves a specific generated instance (`proved_for_instance`) or a
+    generic body (`proved_generic`), and it must prevent one instance proof from
+    being presented as proof for every future instantiation.
 
 ## Phase 11: Backend, Target, And Stdlib Contracts
 

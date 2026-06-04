@@ -62,15 +62,18 @@ A `tested` class raises confidence but does **not** kernel-verify — it is belo
 
 | class | what it means | command | reference |
 |---|---|---|---|
-| `runtime_checked` | a runtime-error obligation (array bounds); each `arr[idx]` gets `0 ≤ idx < N`, reported with its disposition | `--report contracts` (Runtime-safety section) | `evidence_classes/runtime_checked` |
+| `runtime_checked` | runtime-error obligations: array bounds (`0 ≤ idx < N`) and division (`divisor ≠ 0`), each reported with its disposition | `--report contracts` (Runtime-safety section) | `evidence_classes/runtime_checked` |
 
-Dispositions: `proved_by_kernel_decision (omega)` (a `#[requires]` bounds the
-index — statically safe, no runtime check), `checked: in bounds` (constant
-index), `VIOLATION` (constant out of bounds — the audit catches it), or
-`unproven` (needs a precondition or a runtime check). The bounds arithmetic is
-linear, so omega discharges the provable cases. **v1**: array bounds only, from
-`#[requires]` (not yet loop invariants); overflow and div-by-zero are the next
-runtime-error kinds (same generate → omega/eval → status shape).
+Two kinds are wired today — **array bounds** (`0 ≤ idx < N` per `arr[idx]`) and
+**division** (`divisor ≠ 0` per `/` and `%`). Each access reports a disposition:
+`proved_by_kernel_decision (omega)` (a `#[requires]` makes it statically safe —
+no runtime check needed), `checked` (a safe constant), `VIOLATION` (a constant
+that faults — an OOB index or a zero divisor; the audit catches it), or
+`unproven` (needs a precondition or a runtime check). The obligation arithmetic
+is linear, so omega discharges the provable cases. **Next kinds:** overflow
+(needs the integer width + a range analysis) and casts — same
+generate → omega/eval → status shape. The bound source is `#[requires]` (not yet
+loop invariants).
 
 All nine evidence-class subexamples are now worked references; none are stubbed.
 

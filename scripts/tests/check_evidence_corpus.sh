@@ -46,6 +46,8 @@ want "runtime → omega-safe access"            contracts    runtime_checked "pr
 want "runtime → constant in bounds"           contracts    runtime_checked "checked: in bounds"
 want "runtime → catches OOB"                  contracts    runtime_checked "VIOLATION"
 want "runtime → unproven access"              contracts    runtime_checked "unproven"
+want "runtime → div omega-safe"               contracts    runtime_checked "divisor nonzero, no runtime check needed"
+want "runtime → div catches /0"               contracts    runtime_checked "VIOLATION: division by zero"
 
 echo ""
 echo "=== integrity cross-checks (beyond snapshots) ==="

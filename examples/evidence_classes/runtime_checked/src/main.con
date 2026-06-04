@@ -30,6 +30,30 @@ mod demo {
     fn unchecked(a: [i32; 8], i: i32) -> i32 {
         return a[i];
     }
+
+    // --- division by zero (the second runtime-error kind) ---
+
+    // divisor bounded nonzero by a precondition → omega-proved safe.
+    #[requires(0 < d)]
+    fn ratio(n: i32, d: i32) -> i32 {
+        return n / d;
+    }
+
+    // constant nonzero divisor → checked by arithmetic.
+    fn half(n: i32) -> i32 {
+        return n / 2;
+    }
+
+    // unbounded divisor, no precondition → unproven (could be zero).
+    fn risky(n: i32, d: i32) -> i32 {
+        return n / d;
+    }
+
+    // DELIBERATE division by a zero constant: the audit reports VIOLATION
+    // rather than letting a trap through.
+    fn divz(n: i32) -> i32 {
+        return n / 0;
+    }
 }
 
 pub fn main() with(Std) -> Int { return 0; }
