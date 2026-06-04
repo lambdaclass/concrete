@@ -1353,6 +1353,7 @@ structure ProofRegistryEntry where
   expectedHash    : Option String := none  -- stored short hash of the body fingerprint (from in-source
                                             -- #[proof_fingerprint]); when set, staleness compares
                                             -- hash(currentFingerprint) against this instead of the full string
+  sourceLinked    : Bool := false          -- true if synthesized from an in-source proof link (vs JSON-backed)
   deriving Repr, Inhabited
 
 /-- All canonical proof coverage classifications. -/

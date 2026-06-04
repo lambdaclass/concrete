@@ -9,6 +9,8 @@
 
   coverage: point
 
+  origin: source_linked
+
 -- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:68
 
   `hmac_sha256.sha256_k` passes the predictable profile but has no registered proof.
@@ -29,6 +31,8 @@
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: point
+
+  origin: source_linked
 
 -- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:115
 
@@ -123,6 +127,8 @@
 
   coverage: full_contract
 
+  origin: source_linked
+
 -- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:204
 
   ✓ `hmac_sha256.sha256_schedule` — proof matches current body.
@@ -131,6 +137,8 @@
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
+
+  origin: source_linked
 
 -- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:225
 
@@ -141,6 +149,8 @@
 
   coverage: full_contract
 
+  origin: source_linked
+
 -- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:239
 
   ✓ `hmac_sha256.sha256_compress` — proof matches current body.
@@ -149,6 +159,8 @@
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
+
+  origin: source_linked
 
 -- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:260
 
@@ -159,6 +171,8 @@
 
   coverage: full_contract
 
+  origin: source_linked
+
 -- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:276
 
   ✓ `hmac_sha256.sha256_compress_at` — proof matches current body.
@@ -167,6 +181,8 @@
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
+
+  origin: source_linked
 
 -- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:292
 
@@ -177,6 +193,8 @@
 
   coverage: full_contract
 
+  origin: source_linked
+
 -- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:319
 
   ✓ `hmac_sha256.sha256_hash` — proof matches current body.
@@ -186,6 +204,8 @@
 
   coverage: full_contract
 
+  origin: source_linked
+
 -- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:347
 
   ✓ `hmac_sha256.hmac_sha256` — proof matches current body.
@@ -194,6 +214,8 @@
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
+
+  origin: source_linked
 
 -- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:375
 

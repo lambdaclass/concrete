@@ -18,27 +18,27 @@
              in provable subset: pure, bounded, no FFI
   eligible   `fixed_capacity.read_u16_be`  @ examples/fixed_capacity/src/main.con:107
              in provable subset: pure, bounded, no FFI
-  eligible   `fixed_capacity.ring_new`  @ examples/fixed_capacity/src/main.con:115
+  eligible   `fixed_capacity.ring_new`  @ examples/fixed_capacity/src/main.con:119
              in provable subset: pure, bounded, no FFI
-  eligible   `fixed_capacity.ring_contains`  @ examples/fixed_capacity/src/main.con:122
+  eligible   `fixed_capacity.ring_contains`  @ examples/fixed_capacity/src/main.con:130
              in provable subset: pure, bounded, no FFI
-  eligible   `fixed_capacity.ring_push`  @ examples/fixed_capacity/src/main.con:133
+  eligible   `fixed_capacity.ring_push`  @ examples/fixed_capacity/src/main.con:145
              in provable subset: pure, bounded, no FFI
-  eligible   `fixed_capacity.compute_tag`  @ examples/fixed_capacity/src/main.con:145
+  eligible   `fixed_capacity.compute_tag`  @ examples/fixed_capacity/src/main.con:161
              in provable subset: pure, bounded, no FFI
-  eligible   `fixed_capacity.validate_message`  @ examples/fixed_capacity/src/main.con:155
+  eligible   `fixed_capacity.validate_message`  @ examples/fixed_capacity/src/main.con:171
              in provable subset: pure, bounded, no FFI
-  trusted    `fixed_capacity.build_msg`  @ examples/fixed_capacity/src/main.con:194
+  trusted    `fixed_capacity.build_msg`  @ examples/fixed_capacity/src/main.con:210
              proof bypassed (trusted assumption)
-  trusted    `fixed_capacity.build_bad_version`  @ examples/fixed_capacity/src/main.con:220
+  trusted    `fixed_capacity.build_bad_version`  @ examples/fixed_capacity/src/main.con:236
              proof bypassed (trusted assumption)
-  trusted    `fixed_capacity.build_bad_type`  @ examples/fixed_capacity/src/main.con:226
+  trusted    `fixed_capacity.build_bad_type`  @ examples/fixed_capacity/src/main.con:242
              proof bypassed (trusted assumption)
-  trusted    `fixed_capacity.build_payload_overflow`  @ examples/fixed_capacity/src/main.con:236
+  trusted    `fixed_capacity.build_payload_overflow`  @ examples/fixed_capacity/src/main.con:252
              proof bypassed (trusted assumption)
-  excluded   `fixed_capacity.report`  @ examples/fixed_capacity/src/main.con:250
+  excluded   `fixed_capacity.report`  @ examples/fixed_capacity/src/main.con:266
              source: has capabilities: Console
-  excluded   `fixed_capacity.main`  @ examples/fixed_capacity/src/main.con:270
+  excluded   `fixed_capacity.main`  @ examples/fixed_capacity/src/main.con:286
              source: has capabilities: Console, is entry point (main)
 
 Totals: 20 functions — 14 eligible, 2 excluded (2 source, 0 profile, 0 both), 4 trusted

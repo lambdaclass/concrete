@@ -144,7 +144,7 @@ cryptographic assurance.
 - `CATCHES.md` — negative-pair narrative.
 - `assumptions.toml` — declared trust surface.
 - `Concrete.toml` `[policy]` — enforced budgets.
-- `src/proof-registry.json` + `Concrete/Proof.lean` — attached
-  theorems.
+- in-source `#[proof_by]`/`#[spec]`/`#[proof_fingerprint]` links in
+  `src/main.con` + `Concrete/Proof.lean` — attached theorems.
 - `examples/parse_validate/` — the graduated sibling; this
   README's structural template.

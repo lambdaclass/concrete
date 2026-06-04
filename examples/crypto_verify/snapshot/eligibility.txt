@@ -1,14 +1,14 @@
 === Proof Eligibility Assessment ===
 
-  eligible   `main.compute_tag`  @ examples/crypto_verify/src/main.con:18
+  eligible   `main.compute_tag`  @ examples/crypto_verify/src/main.con:22
              in provable subset: pure, bounded, no FFI
-  eligible   `main.verify_tag`  @ examples/crypto_verify/src/main.con:24
+  eligible   `main.verify_tag`  @ examples/crypto_verify/src/main.con:32
              in provable subset: pure, bounded, no FFI
-  eligible   `main.check_nonce`  @ examples/crypto_verify/src/main.con:35
+  eligible   `main.check_nonce`  @ examples/crypto_verify/src/main.con:47
              in provable subset: pure, bounded, no FFI
-  eligible   `main.verify_message`  @ examples/crypto_verify/src/main.con:52
+  eligible   `main.verify_message`  @ examples/crypto_verify/src/main.con:68
              in provable subset: pure, bounded, no FFI
-  excluded   `main.main`  @ examples/crypto_verify/src/main.con:63
+  excluded   `main.main`  @ examples/crypto_verify/src/main.con:79
              source: is entry point (main)
 
 Totals: 5 functions — 4 eligible, 1 excluded (1 source, 0 profile, 0 both), 0 trusted

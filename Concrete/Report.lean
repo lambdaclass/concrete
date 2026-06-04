@@ -667,7 +667,7 @@ def synthesizeSourceLinks (astModules : List Module) (coreModules : List CModule
           -- when present, staleness compares hash(currentFp) against this stored
           -- hash — so source-linked functions get drift detection even without
           -- spec-drift coverage (the soundness gap that kept point proofs on JSON).
-          expectedHash := link.fingerprint }
+          expectedHash := link.fingerprint, sourceLinked := true }
       entries := entries ++ [entry]
   return entries
 
@@ -2509,6 +2509,7 @@ structure ProofStatusEntry where
   specName      : String       -- spec name (from registry or derived)
   proofName     : String       -- proof/theorem name (from registry or derived)
   proofSource   : String       -- "registry" | "hardcoded" | "none"
+  origin        : String       -- "source_linked" | "json_backed" | "hardcoded" | "" (link provenance)
   coverage      : String       -- proof coverage kind: point|one_direction|iff|invariant|runtime_error|full_contract|""
   loc           : Option SourceLoc
   fnSpan        : Option Span
@@ -2557,13 +2558,15 @@ private partial def collectProofStatus
     let unsup := match pc.entries.find? fun e => e.qualName == qualName with
       | some e => e.unsupported
       | none => []
-    -- Look up coverage classification from the registry entry.
-    let coverage := match registry.find? fun re => re.function == qualName with
-      | some re => re.coverage
-      | none => ""
+    -- Look up coverage classification + link provenance from the registry entry.
+    let regEntry := registry.find? fun re => re.function == qualName
+    let coverage := match regEntry with | some re => re.coverage | none => ""
+    let origin := match regEntry with
+      | some re => if re.sourceLinked then "source_linked" else "json_backed"
+      | none => if pSrc == "hardcoded" then "hardcoded" else ""
     { qualName, bareName := f.name, state, currentFp := fp, expectedFp
     , profileGates := gates, unsupported := unsup, specName := sName, proofName := pName
-    , proofSource := pSrc, coverage, loc := fnLoc, fnSpan := fnSp }
+    , proofSource := pSrc, origin, coverage, loc := fnLoc, fnSpan := fnSp }
   entries ++ m.submodules.foldl (fun acc sub =>
     acc ++ collectProofStatus pc locMap sub qualPrefix registry) []
 
@@ -2588,9 +2591,11 @@ private def renderProofStatusEntry (e : ProofStatusEntry) (sourceMap : SourceMap
   match e.state with
   | .proved =>
     let coverageTag := if e.coverage.isEmpty then "" else s!" [{e.coverage}]"
-    s!"-- proved{coverageTag} {String.ofList (List.replicate 48 '-')} {locStr}\n\n  ✓ `{e.qualName}` — proof matches current body.{snippet}\n\n  coverage: {if e.coverage.isEmpty then "unclassified" else e.coverage}"
+    let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
+    s!"-- proved{coverageTag} {String.ofList (List.replicate 48 '-')} {locStr}\n\n  ✓ `{e.qualName}` — proof matches current body.{snippet}\n\n  coverage: {if e.coverage.isEmpty then "unclassified" else e.coverage}{originLine}"
   | .stale =>
-    s!"-- proof stale {String.ofList (List.replicate 44 '-')} {locStr}\n\n  Function `{e.qualName}` has a registered proof, but the body changed.{snippet}\n\n  expected fingerprint:\n    {e.expectedFp}\n\n  current fingerprint:\n    {e.currentFp}\n\n  hint: Update the Lean proof in Concrete/Proof.lean, or restore the proved implementation."
+    let originLine := if e.origin.isEmpty then "" else s!"\n\n  origin: {e.origin}"
+    s!"-- proof stale {String.ofList (List.replicate 44 '-')} {locStr}\n\n  Function `{e.qualName}` has a registered proof, but the body changed.{snippet}\n\n  expected fingerprint:\n    {e.expectedFp}\n\n  current fingerprint:\n    {e.currentFp}{originLine}\n\n  hint: Update the Lean proof in Concrete/Proof.lean, or restore the proved implementation."
   | .notProved =>
     s!"-- no proof {String.ofList (List.replicate 47 '-')} {locStr}\n\n  `{e.qualName}` passes the predictable profile but has no registered proof.{snippet}\n\n  current fingerprint:\n    {e.currentFp}\n\n  hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above."
   | .blocked =>

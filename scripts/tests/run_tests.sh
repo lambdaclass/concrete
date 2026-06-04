@@ -8243,15 +8243,15 @@ if [ -f "examples/thesis_demo/src/main.con" ]; then
     fi
 fi
 
-# --- Stale-proof check: no proof-status shows 'stale' on registry-bearing examples ---
-for reg in examples/*/src/proof-registry.json; do
-    [ -f "$reg" ] || continue
-    src_dir=$(dirname "$reg")
-    main_file="$src_dir/main.con"
+# --- Stale-proof check: no UNEXPECTED stale on source-linked examples ---
+# (proofs are in-source now; proof_pressure has a DELIBERATE stale, so skip it.)
+for main_file in examples/*/src/main.con; do
     [ -f "$main_file" ] || continue
-    example_name=$(basename "$(dirname "$src_dir")")
+    grep -q '#\[proof_by' "$main_file" || continue
+    example_name=$(basename "$(dirname "$(dirname "$main_file")")")
+    [ "$example_name" = "proof_pressure" ] && continue
     ps_out=$("$COMPILER" "$main_file" --report proof-status 2>&1) || true
-    if echo "$ps_out" | grep -q "^-- stale"; then
+    if echo "$ps_out" | grep -qE "^-- (proof )?stale"; then
         echo "  FAIL stale-proof: $example_name has stale proofs"
         echo "$ps_out" | grep "^-- stale" | head -3 | sed 's/^/    /'
         evidence_fail=$((evidence_fail + 1))
@@ -8295,13 +8295,11 @@ if [ -f "examples/thesis_demo/src/main.con" ]; then
     fi
 fi
 
-# --- Trust-drift: consistency + fingerprints on proof-bearing examples ---
-for reg in examples/*/src/proof-registry.json; do
-    [ -f "$reg" ] || continue
-    src_dir=$(dirname "$reg")
-    main_file="$src_dir/main.con"
+# --- Trust-drift: consistency + fingerprints on source-linked examples ---
+for main_file in examples/*/src/main.con; do
     [ -f "$main_file" ] || continue
-    example_name=$(basename "$(dirname "$src_dir")")
+    grep -q '#\[proof_by' "$main_file" || continue
+    example_name=$(basename "$(dirname "$(dirname "$main_file")")")
     # Consistency
     con_out=$("$COMPILER" "$main_file" --report consistency 2>&1) || true
     if echo "$con_out" | grep -q "All consistency checks passed"; then
@@ -8804,8 +8802,8 @@ else
     evidence_fail=$((evidence_fail + 1))
 fi
 
-# 40. Clean registry (pressure set) → exit 0
-cp examples/proof_pressure/src/proof-registry.json "$REG_DIR/proof-registry.json"
+# 40. Clean (empty) registry → exit 0
+echo '{"version":1,"proofs":[]}' > "$REG_DIR/proof-registry.json"
 $COMPILER "$REG_DIR/main.con" --report proof-status > /dev/null 2>&1
 reg_rc=$?
 if [ "$reg_rc" -eq 0 ]; then

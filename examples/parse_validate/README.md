@@ -90,9 +90,9 @@ The success-direction is the half of the iff that ProofCore's
 current eval semantics can prove without an exponential case
 split; per-failure theorems are small follow-ups.
 
-If a function body changes, the body fingerprint in
-`src/proof-registry.json` will not match and the `proved` evidence
-is revoked — drift detection is part of the contract.
+If a function body changes, the in-source `#[proof_fingerprint]` hash will
+not match the recomputed body fingerprint and the `proved` evidence is
+revoked (reported `stale`) — drift detection is part of the contract.
 
 ## ProvableV1 conformance
 
@@ -220,7 +220,7 @@ time) now opens up the next candidate.
   surface and its CI gate.
 - `Concrete.toml` `[policy]` + `docs/POLICY_FILES.md` — enforced
   budgets.
-- `src/proof-registry.json` + `Concrete/Proof.lean` — attached
-  theorems.
+- in-source `#[proof_by]`/`#[spec]`/`#[proof_fingerprint]` links in
+  `src/main.con` + `Concrete/Proof.lean` — attached theorems.
 - ROADMAP Active Dependency Order rule 2 — the pull-through pilot
   rule.

@@ -77,9 +77,8 @@ All 16 reports run cleanly. Substantive content:
 
 ## 5. Smallest Lean-backed property candidate
 
-**Already done.** Four theorems already attached in
-`Concrete/Proof.lean`, registered in
-`examples/crypto_verify/src/proof-registry.json`:
+**Already done.** Four theorems attached in `Concrete/Proof.lean`, linked
+in-source via `#[proof_by]`/`#[spec]`/`#[proof_fingerprint]` in `src/main.con`:
 
 - `compute_tag_correct (key m nonce)`: `compute_tag(k, m, n) = k*m + n`
 - `verify_tag_correct (key m nonce expected)`: `verify_tag = 1 ↔ k*m+n = expected`

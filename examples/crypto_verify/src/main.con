@@ -15,12 +15,20 @@
 // Toy keyed tag: compute_tag(key, message, nonce) = key * message + nonce
 // This is NOT a real MAC. The proof structure (correctness, rejection,
 // range validation) would be identical for a real HMAC-SHA256 wrapper.
+#[spec(Concrete.Proof.computeTagExpr)]
+#[proof_by(Concrete.Proof.compute_tag_correct)]
+#[proof_coverage(iff)]
+#[proof_fingerprint("bfe56fe9229aaa03")]
 fn compute_tag(key: Int, message: Int, nonce: Int) -> Int {
     return key * message + nonce;
 }
 
 // Verify a message authentication tag.
 // Returns 1 if the tag is valid, 0 if it does not match.
+#[spec(Concrete.Proof.verifyTagExpr)]
+#[proof_by(Concrete.Proof.verify_tag_correct)]
+#[proof_coverage(one_direction)]
+#[proof_fingerprint("e62b81eed16ef033")]
 fn verify_tag(key: Int, message: Int, nonce: Int, expected_tag: Int) -> Int {
     let computed: Int = compute_tag(key, message, nonce);
     if computed == expected_tag {
@@ -32,6 +40,10 @@ fn verify_tag(key: Int, message: Int, nonce: Int, expected_tag: Int) -> Int {
 
 // Validate that a nonce is within the accepted range [1, max_nonce].
 // Returns 1 if valid, 0 if out of range.
+#[spec(Concrete.Proof.checkNonceExpr)]
+#[proof_by(Concrete.Proof.check_nonce_correct)]
+#[proof_coverage(iff)]
+#[proof_fingerprint("f15e2971d90b9095")]
 fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
     if nonce > 0 {
         if nonce <= max_nonce {
@@ -49,6 +61,10 @@ fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
 // This is the central composition the proof story is about —
 // `verify_message_composed_correct` in Concrete/Proof.lean proves
 // that when both validators succeed, this returns 1.
+#[spec(Concrete.Proof.verifyMessageExpr)]
+#[proof_by(Concrete.Proof.verify_message_composed_correct)]
+#[proof_coverage(one_direction)]
+#[proof_fingerprint("944c91cc5fcacede")]
 fn verify_message(
     key: Int, message: Int, nonce: Int,
     expected_tag: Int, max_nonce: Int

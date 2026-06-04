@@ -52,6 +52,10 @@ mod parse_validate {
     // Each returns 0 for success, nonzero for failure.
     // Pure: no capabilities, no allocation, no trusted.
 
+    #[spec(Concrete.Proof.validateVersionExpr)]
+    #[proof_by(Concrete.Proof.validate_version_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("8c799844e258f0da")]
     fn validate_version(v: i32) -> i32 {
         if v == 1 { return 0; }
         return 1;
@@ -104,6 +108,10 @@ mod parse_validate {
     // carries the composition theorem `validate_header_fields_correct`
     // in Concrete/Proof.lean.
 
+    #[spec(Concrete.Proof.validateHeaderFieldsExpr)]
+    #[proof_by(Concrete.Proof.validate_header_fields_success)]
+    #[proof_coverage(one_direction)]
+    #[proof_fingerprint("91be53c0e78153e3")]
     fn validate_header_fields(
         v: i32, t: i32, plen: i32,
         total_len: i32, cs_expected: i32, cs_computed: i32
@@ -122,6 +130,10 @@ mod parse_validate {
     // with the specific error category. No hidden control flow —
     // every early return is an explicit if-then-return.
 
+    #[spec(Concrete.Proof.parseHeaderExpr)]
+    #[proof_by(Concrete.Proof.parse_header_too_short)]
+    #[proof_coverage(one_direction)]
+    #[proof_fingerprint("d9e9e36a63ab2a41")]
     fn parse_header(data: [i32; 8], len: i32) -> Result<Header, ParseError> {
         // Gate: minimum 5 fields needed
         if validate_total_len(len, 5) != 0 {

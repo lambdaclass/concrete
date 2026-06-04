@@ -85,7 +85,10 @@ All 16 reports run cleanly (`caps`, `unsafe`, `layout`, `interface`, `alloc`, `m
 
 - No `assumptions.toml` (Phase 2 E.24 surface).
 - No `policy.toml` for enforceable budgets (Phase 2 E.25 surface). The only policy is `predictable = true` in `Concrete.toml`.
-- No proof registry file. No `proof-registry.json` next to the source, so `--report proof` and `--report proof-status` report blocked extractions but no attached theorems.
+- No `proof-registry.json` (retired): proofs are attached in-source via
+  `#[proof_by]`/`#[spec]`/`#[proof_fingerprint]` links in `src/main.con`, so
+  `--report proof-status` shows `proved [iff]`/`[one_direction]` for the three
+  validated functions (`origin: source_linked`) and `missing` for the rest.
 - No snapshot or report-diff baseline captured (Phase 2 E.21 / E.23 surfaces).
 - No release evidence bundle on file (Phase 8 surface — pulled here as audit material).
 
@@ -129,7 +132,9 @@ The composition theorem on `parse_header` would be the actual thesis demonstrati
 
 **Missing now (pilot-blocking, must close before graduating to Phase 7):**
 
-1. **No attached proof.** No `proof-registry.json`, no theorem checked by Lean, no proof-status `proved` line anywhere. This is the gap the candidate above forces open.
+1. **Partial proof only.** Three functions are now proved (in-source
+   `#[proof_by]` links, kernel-checked); the remaining validators and the full
+   functional postconditions are the gap the candidate above forces open.
 2. **No assumption file.** Nothing declaring what the example assumes about target, alloc, arithmetic policy, runtime. Phase 2 E.24 surface absent for this example.
 3. **No enforceable policy file.** `Concrete.toml` has `predictable = true` only. Phase 2 E.25 surface absent. The actual budget — no alloc, max stack 364 bytes, capabilities = `{}` — is implicit, derivable from reports but not written down as an enforced contract.
 4. **No oracle beyond hand-written tests.** Fuzzing, model comparison against a reference parser, or property-based testing would be the real oracle. Phase 1 D.6 / D.7 / D.9 surfaces apply here.

@@ -108,47 +108,55 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:115
+-- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:119
 
   ✓ `fixed_capacity.ring_new` — proof matches current body.
 
- 115 |     fn ring_new() -> RingBuf {
+ 119 |     fn ring_new() -> RingBuf {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: point
 
--- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:122
+  origin: source_linked
+
+-- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:130
 
   ✓ `fixed_capacity.ring_contains` — proof matches current body.
 
- 122 |     fn ring_contains(rb: RingBuf, val: i32) -> i32 {
+ 130 |     fn ring_contains(rb: RingBuf, val: i32) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: point
 
--- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:133
-
-  ✓ `fixed_capacity.ring_push` — proof matches current body.
-
- 133 |     fn ring_push(rb: RingBuf, val: i32) -> RingBuf {
-     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-  coverage: point
+  origin: source_linked
 
 -- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:145
 
+  ✓ `fixed_capacity.ring_push` — proof matches current body.
+
+ 145 |     fn ring_push(rb: RingBuf, val: i32) -> RingBuf {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  coverage: point
+
+  origin: source_linked
+
+-- proved [point] ------------------------------------------------ examples/fixed_capacity/src/main.con:161
+
   ✓ `fixed_capacity.compute_tag` — proof matches current body.
 
- 145 |     fn compute_tag(buf: MsgBuf) -> i32 {
+ 161 |     fn compute_tag(buf: MsgBuf) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: point
 
--- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:155
+  origin: source_linked
+
+-- no proof ----------------------------------------------- examples/fixed_capacity/src/main.con:171
 
   `fixed_capacity.validate_message` passes the predictable profile but has no registered proof.
 
- 155 |     fn validate_message(buf: MsgBuf, ring: RingBuf) -> ValidateResult {
+ 171 |     fn validate_message(buf: MsgBuf, ring: RingBuf) -> ValidateResult {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -156,50 +164,50 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- trusted ------------------------------------------------ examples/fixed_capacity/src/main.con:194
+-- trusted ------------------------------------------------ examples/fixed_capacity/src/main.con:210
 
   `fixed_capacity.build_msg` is marked trusted — proof is bypassed (trusted assumption).
 
- 194 |     trusted fn build_msg(msg_type: u8, seq: u16, payload_len: u16) -> MsgBuf {
+ 210 |     trusted fn build_msg(msg_type: u8, seq: u16, payload_len: u16) -> MsgBuf {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
--- trusted ------------------------------------------------ examples/fixed_capacity/src/main.con:220
-
-  `fixed_capacity.build_bad_version` is marked trusted — proof is bypassed (trusted assumption).
-
- 220 |     trusted fn build_bad_version() -> MsgBuf {
-     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
--- trusted ------------------------------------------------ examples/fixed_capacity/src/main.con:226
-
-  `fixed_capacity.build_bad_type` is marked trusted — proof is bypassed (trusted assumption).
-
- 226 |     trusted fn build_bad_type() -> MsgBuf {
-     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 -- trusted ------------------------------------------------ examples/fixed_capacity/src/main.con:236
 
+  `fixed_capacity.build_bad_version` is marked trusted — proof is bypassed (trusted assumption).
+
+ 236 |     trusted fn build_bad_version() -> MsgBuf {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+-- trusted ------------------------------------------------ examples/fixed_capacity/src/main.con:242
+
+  `fixed_capacity.build_bad_type` is marked trusted — proof is bypassed (trusted assumption).
+
+ 242 |     trusted fn build_bad_type() -> MsgBuf {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+-- trusted ------------------------------------------------ examples/fixed_capacity/src/main.con:252
+
   `fixed_capacity.build_payload_overflow` is marked trusted — proof is bypassed (trusted assumption).
 
- 236 |     trusted fn build_payload_overflow() -> MsgBuf {
+ 252 |     trusted fn build_payload_overflow() -> MsgBuf {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
--- not eligible ------------------------------------------- examples/fixed_capacity/src/main.con:250
+-- not eligible ------------------------------------------- examples/fixed_capacity/src/main.con:266
 
   `fixed_capacity.report` cannot be proved: fails predictable profile (has capabilities: Console).
 
- 250 |     fn report(label: Int, r: ValidateResult) with(Console) {
+ 266 |     fn report(label: Int, r: ValidateResult) with(Console) {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   reasons: has capabilities: Console
 
   hint: Address these constraints to make this function eligible for proof.
 
--- not eligible ------------------------------------------- examples/fixed_capacity/src/main.con:270
+-- not eligible ------------------------------------------- examples/fixed_capacity/src/main.con:286
 
   `fixed_capacity.main` cannot be proved: fails predictable profile (has capabilities: Console, is entry point (main)).
 
- 270 |     pub fn main() with(Console) -> Int {
+ 286 |     pub fn main() with(Console) -> Int {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   reasons: has capabilities: Console, is entry point (main)

@@ -2,15 +2,15 @@
 
 module main:
   compute_tag
-    frame: 32 bytes  depth: 0  stack: 32 bytes  @ examples/crypto_verify/src/main.con:18
+    frame: 32 bytes  depth: 0  stack: 32 bytes  @ examples/crypto_verify/src/main.con:22
   verify_tag
-    frame: 48 bytes  depth: 1  stack: 80 bytes  @ examples/crypto_verify/src/main.con:24
+    frame: 48 bytes  depth: 1  stack: 80 bytes  @ examples/crypto_verify/src/main.con:32
   check_nonce
-    frame: 24 bytes  depth: 0  stack: 24 bytes  @ examples/crypto_verify/src/main.con:35
+    frame: 24 bytes  depth: 0  stack: 24 bytes  @ examples/crypto_verify/src/main.con:47
   verify_message
-    frame: 48 bytes  depth: 2  stack: 128 bytes  @ examples/crypto_verify/src/main.con:52
+    frame: 48 bytes  depth: 2  stack: 128 bytes  @ examples/crypto_verify/src/main.con:68
   main
-    frame: 72 bytes  depth: 3  stack: 200 bytes  @ examples/crypto_verify/src/main.con:63
+    frame: 72 bytes  depth: 3  stack: 200 bytes  @ examples/crypto_verify/src/main.con:79
 
 Totals: 5 functions, 5 bounded, 0 recursive (unbounded)
 Max stack bound: 200 bytes (main)

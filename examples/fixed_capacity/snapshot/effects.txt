@@ -20,27 +20,27 @@ module fixed_capacity:
       read_u16_be
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/fixed_capacity/src/main.con:107
       ring_new
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/fixed_capacity/src/main.con:115
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/fixed_capacity/src/main.con:119
       ring_contains
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/fixed_capacity/src/main.con:122
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/fixed_capacity/src/main.con:130
       ring_push
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/fixed_capacity/src/main.con:133
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/fixed_capacity/src/main.con:145
       compute_tag
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/fixed_capacity/src/main.con:145
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/fixed_capacity/src/main.con:161
       validate_message
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/fixed_capacity/src/main.con:155
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/fixed_capacity/src/main.con:171
       build_msg
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: yes  evidence: trusted-assumption  @ examples/fixed_capacity/src/main.con:194
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: yes  evidence: trusted-assumption  @ examples/fixed_capacity/src/main.con:210
       build_bad_version
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: yes  evidence: trusted-assumption  @ examples/fixed_capacity/src/main.con:220
-      build_bad_type
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: yes  evidence: trusted-assumption  @ examples/fixed_capacity/src/main.con:226
-      build_payload_overflow
     caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: yes  evidence: trusted-assumption  @ examples/fixed_capacity/src/main.con:236
+      build_bad_type
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: yes  evidence: trusted-assumption  @ examples/fixed_capacity/src/main.con:242
+      build_payload_overflow
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: yes  evidence: trusted-assumption  @ examples/fixed_capacity/src/main.con:252
       report
-    caps: Console  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/fixed_capacity/src/main.con:250
+    caps: Console  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/fixed_capacity/src/main.con:266
   pub main
-    caps: Console  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/fixed_capacity/src/main.con:270
+    caps: Console  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/fixed_capacity/src/main.con:286
 
 Totals: 20 functions, 18 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 4 trusted
 Evidence: 4 proved, 12 enforced, 4 trusted-assumption, 0 reported

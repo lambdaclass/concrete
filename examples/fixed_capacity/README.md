@@ -191,8 +191,8 @@ state.
 - `CATCHES.md` — negative-pair narrative.
 - `assumptions.toml` — declared trust surface.
 - `Concrete.toml` `[policy]` — enforced budgets.
-- `src/proof-registry.json` + `Concrete/Proof.lean` — attached
-  theorems.
+- in-source `#[proof_by]`/`#[spec]`/`#[proof_fingerprint]` links in
+  `src/main.con` + `Concrete/Proof.lean` — attached theorems.
 - `docs/PROOF_STATE_MODEL.md` — the state-model design that
   the composition theorem validates.
 - `examples/parse_validate/` and `examples/crypto_verify/` —

@@ -1,46 +1,54 @@
 === Proof Status Report ===
 
--- proved [iff] ------------------------------------------------ examples/crypto_verify/src/main.con:18
+-- proved [iff] ------------------------------------------------ examples/crypto_verify/src/main.con:22
 
   ✓ `main.compute_tag` — proof matches current body.
 
- 18 | fn compute_tag(key: Int, message: Int, nonce: Int) -> Int {
+ 22 | fn compute_tag(key: Int, message: Int, nonce: Int) -> Int {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: iff
 
--- proved [one_direction] ------------------------------------------------ examples/crypto_verify/src/main.con:24
+  origin: source_linked
+
+-- proved [one_direction] ------------------------------------------------ examples/crypto_verify/src/main.con:32
 
   ✓ `main.verify_tag` — proof matches current body.
 
- 24 | fn verify_tag(key: Int, message: Int, nonce: Int, expected_tag: Int) -> Int {
+ 32 | fn verify_tag(key: Int, message: Int, nonce: Int, expected_tag: Int) -> Int {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: one_direction
 
--- proved [iff] ------------------------------------------------ examples/crypto_verify/src/main.con:35
+  origin: source_linked
+
+-- proved [iff] ------------------------------------------------ examples/crypto_verify/src/main.con:47
 
   ✓ `main.check_nonce` — proof matches current body.
 
- 35 | fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
+ 47 | fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: iff
 
--- proved [one_direction] ------------------------------------------------ examples/crypto_verify/src/main.con:52
+  origin: source_linked
+
+-- proved [one_direction] ------------------------------------------------ examples/crypto_verify/src/main.con:68
 
   ✓ `main.verify_message` — proof matches current body.
 
- 52 | fn verify_message(
+ 68 | fn verify_message(
     | ^^^^^^^^^^^^^^^^^^
 
   coverage: one_direction
 
--- not eligible ------------------------------------------- examples/crypto_verify/src/main.con:63
+  origin: source_linked
+
+-- not eligible ------------------------------------------- examples/crypto_verify/src/main.con:79
 
   `main.main` cannot be proved: fails predictable profile (is entry point (main)).
 
- 63 | fn main() -> i32 {
+ 79 | fn main() -> i32 {
     | ^^^^^^^^^^^^^^^^^^
 
   reasons: is entry point (main)

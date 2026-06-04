@@ -9,6 +9,8 @@
 
   coverage: point
 
+  origin: source_linked
+
 -- not eligible ------------------------------------------- examples/evidence_classes/proved_by_lean/src/main.con:16
 
   `main.main` cannot be proved: fails predictable profile (has capabilities: Alloc, Clock, Console, Env, File, Network, Process, Random, is entry point (main), allocation, blocking I/O).

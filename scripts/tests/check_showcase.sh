@@ -65,8 +65,11 @@ while IFS=$'\t' read -r name path claimed_conf; do
 
   # 2. Required artifacts (the 10 bars' artifacts).
   errs=0
+  # proof-registry.json is NO LONGER required: flagship proofs are in-source
+  # (#[spec]/#[proof_by]/#[proof_fingerprint]); a stray registry is forbidden by
+  # check_no_example_registries.sh.
   for f in src/main.con AUDIT.md README.md CATCHES.md Concrete.toml \
-           assumptions.toml src/proof-registry.json; do
+           assumptions.toml; do
     if [ ! -f "$path/$f" ]; then
       echo "  FAIL missing artifact: $path/$f"
       errs=$((errs + 1))

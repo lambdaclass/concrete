@@ -240,8 +240,8 @@ catch.
 - `Concrete.toml` `[policy]` — enforced budgets.
 - `oracle/reference.py` + `oracle/run_oracle.sh` — the
   differential harness.
-- `src/proof-registry.json` + `Concrete/Proof.lean` —
-  attached theorems.
+- in-source `#[proof_by]`/`#[spec]`/`#[proof_fingerprint]` links in
+  `src/main.con` + `Concrete/Proof.lean` — attached theorems.
 - `docs/PROOF_OBLIGATIONS_REGISTER.md` R-17, R-21 — the
   Phase 12 preservation obligations this candidate's u8
   PBinOp extensions created.

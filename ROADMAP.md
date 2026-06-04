@@ -397,12 +397,23 @@ lemmas, and actionable failure diagnostics.
      (computed fingerprint always self-matches) is closed.
    - The in-source link mechanism, `--emit-link`, and the `stale_proof`
      regression exist.
+   - **ALL example registries retired.** `crypto_verify`, `parse_validate`,
+     `fixed_capacity`, and `proof_pressure` migrated to in-source links +
+     `#[proof_fingerprint]`; every `examples/**/proof-registry.json` deleted
+     (8 files). `proof_pressure.compute_checksum` keeps its DELIBERATE `stale`
+     demo via a pre-drift `#[proof_fingerprint]`. `check_no_example_registries.sh`
+     (CI + `make test-registry-retirement`) fails on any stray example registry.
+   - **Origin reporting**: `--report proof-status` shows `origin: source_linked`
+     / `json_backed` / `hardcoded` per proof (`ProofRegistryEntry.sourceLinked`).
+   - The showcase gate no longer requires `proof-registry.json` as an artifact.
 
-   **Remaining (mechanical, all sound now):** the still-JSON flagships
-   (`crypto_verify`, `parse_validate`, `fixed_capacity`, `thesis_demo`, …) — each
-   already spec-drift-covered, so migrating is now a mechanical `--emit-link` +
-   empty-registry pass with no soundness risk. Then prereq (b) namespace move,
-   origin reporting, and JSON-support deletion.
+   **Remaining:** prereq (b) — move example proofs out of the `Concrete.Proof.*`
+   compiler namespace. Then the compiler-level JSON retirement (steps 4–5 below):
+   gate JSON loading behind `--allow-legacy-proof-registry`, then delete JSON
+   support. These touch the ~14 adversarial JSON fixtures under `tests/programs/`
+   (which test `validateRegistry` / JSON parsing — malformed, dup, spec-drift,
+   stale); gating/removal requires migrating or allowlisting those, so it is the
+   careful tail, not mechanical.
 
    **Deletion gates — multiple checks before JSON support can go away:**
    - `concrete audit` / `proof-status` must report link origin per proof:

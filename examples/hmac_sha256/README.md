@@ -173,6 +173,7 @@ Evidence reports:
 - `AUDIT.md` — graduation bars and review notes.
 - `assumptions.toml` — machine-checked assumptions.
 - `Concrete.toml` — policy budgets.
-- `src/proof-registry.json` — registered proof entries and fingerprints.
+- in-source `#[proof_by]`/`#[spec]`/`#[proof_fingerprint]` links in `src/main.con`
+  — attached proof entries and fingerprints (no JSON registry).
 - `docs/PROOFKIT_GUIDE.md` — how to reuse the proof infrastructure.
 - `docs/PROVABLE_V1.md` — the supported proof subset.

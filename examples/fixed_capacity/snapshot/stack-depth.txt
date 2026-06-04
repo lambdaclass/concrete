@@ -20,27 +20,27 @@ module fixed_capacity:
   read_u16_be
     frame: 280 bytes  depth: 0  stack: 280 bytes  @ examples/fixed_capacity/src/main.con:107
   ring_new
-    frame: 72 bytes  depth: 0  stack: 72 bytes  @ examples/fixed_capacity/src/main.con:115
+    frame: 72 bytes  depth: 0  stack: 72 bytes  @ examples/fixed_capacity/src/main.con:119
   ring_contains
-    frame: 100 bytes  depth: 0  stack: 100 bytes  @ examples/fixed_capacity/src/main.con:122
+    frame: 100 bytes  depth: 0  stack: 100 bytes  @ examples/fixed_capacity/src/main.con:130
   ring_push
-    frame: 160 bytes  depth: 0  stack: 160 bytes  @ examples/fixed_capacity/src/main.con:133
+    frame: 160 bytes  depth: 0  stack: 160 bytes  @ examples/fixed_capacity/src/main.con:145
   compute_tag
-    frame: 276 bytes  depth: 0  stack: 276 bytes  @ examples/fixed_capacity/src/main.con:145
+    frame: 276 bytes  depth: 0  stack: 276 bytes  @ examples/fixed_capacity/src/main.con:161
   validate_message
-    frame: 388 bytes  depth: 1  stack: 668 bytes  @ examples/fixed_capacity/src/main.con:155
+    frame: 388 bytes  depth: 1  stack: 668 bytes  @ examples/fixed_capacity/src/main.con:171
   build_msg
-    frame: 282 bytes  depth: 0  stack: 282 bytes  @ examples/fixed_capacity/src/main.con:194
+    frame: 282 bytes  depth: 0  stack: 282 bytes  @ examples/fixed_capacity/src/main.con:210
   build_bad_version
-    frame: 264 bytes  depth: 0  stack: 264 bytes  @ examples/fixed_capacity/src/main.con:220
+    frame: 264 bytes  depth: 0  stack: 264 bytes  @ examples/fixed_capacity/src/main.con:236
   build_bad_type
-    frame: 265 bytes  depth: 0  stack: 265 bytes  @ examples/fixed_capacity/src/main.con:226
+    frame: 265 bytes  depth: 0  stack: 265 bytes  @ examples/fixed_capacity/src/main.con:242
   build_payload_overflow
-    frame: 265 bytes  depth: 0  stack: 265 bytes  @ examples/fixed_capacity/src/main.con:236
+    frame: 265 bytes  depth: 0  stack: 265 bytes  @ examples/fixed_capacity/src/main.con:252
   report
-    frame: 32 bytes  depth: 0  stack: 32 bytes  @ examples/fixed_capacity/src/main.con:250
+    frame: 32 bytes  depth: 0  stack: 32 bytes  @ examples/fixed_capacity/src/main.con:266
   main
-    frame: 2292 bytes  depth: 2  stack: 2960 bytes  @ examples/fixed_capacity/src/main.con:270
+    frame: 2292 bytes  depth: 2  stack: 2960 bytes  @ examples/fixed_capacity/src/main.con:286
 
 Totals: 20 functions, 20 bounded, 0 recursive (unbounded)
 Max stack bound: 2960 bytes (main)

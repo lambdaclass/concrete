@@ -30,6 +30,9 @@
 // `main.check_nonce` (checkNonceExpr) and theorem
 // `check_nonce_correct` — that is what makes it "proved".
 
+#[spec(check_nonce.spec)]
+#[proof_by(Concrete.Proof.check_nonce_correct)]
+#[proof_fingerprint("f15e2971d90b9095")]
 fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
     if nonce > 0 {
         if nonce <= max_nonce {
@@ -47,6 +50,9 @@ fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
 // Exercises proved-function dependency tracking.
 // Registry entry has correct fingerprint.
 
+#[spec(validate_header.spec)]
+#[proof_by(Concrete.Proof.validate_header_correct)]
+#[proof_fingerprint("f8e64b113309c50")]
 fn validate_header(nonce: Int, max_nonce: Int, version: Int) -> Int {
     let nonce_result: Int = check_nonce(nonce, max_nonce);
     if nonce_result != 1 {
@@ -64,12 +70,16 @@ fn validate_header(nonce: Int, max_nonce: Int, version: Int) -> Int {
     }
 }
 
-// ---- 3. STALE: body was changed after proof was registered ----
-// The registry still has the old fingerprint from when the body was:
+// ---- 3. STALE: body was changed after proof was linked ----
+// The #[proof_fingerprint] below is the hash of the ORIGINAL body:
 //   return key * message + salt
-// But the body has since been changed to add a shift.
-// This must show as "stale".
-
+// but the body has since been changed to add a shift (+ 1). Since
+// hash(current body) != the stored fingerprint, this must show as "stale" —
+// the in-source link is subject to the same staleness machinery a JSON
+// registry entry was (see #[proof_fingerprint] in CONTRACTS_GUIDE).
+#[spec(compute_checksum.spec)]
+#[proof_by(Concrete.Proof.compute_checksum_correct)]
+#[proof_fingerprint("f7c89517c809e99c")]
 fn compute_checksum(key: Int, message: Int, salt: Int) -> Int {
     return key * message + salt + 1;
 }
