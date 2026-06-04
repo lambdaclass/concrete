@@ -18,6 +18,13 @@
 
 mod test_drift {
 
+    // The #[proof_fingerprint] MATCHES the current body, so the staleness check
+    // does NOT fire — but the linked #[spec] driftTestSpec evaluates to a PExpr
+    // that does not match the source-extracted one, so the spec-drift gate
+    // downgrades this from proved to stale. (Checked-in broken state on purpose.)
+    #[spec(Concrete.Proof.driftTestSpec)]
+    #[proof_by(Concrete.Proof.drift_test_theorem)]
+    #[proof_fingerprint("9671eeae7fddc0cd")]
     fn simple_add(a: i32, b: i32) -> i32 {
         return a + b;
     }

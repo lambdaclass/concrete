@@ -4,6 +4,9 @@
 // not whether the proof name resolves to a real Lean declaration.
 // This is a known limitation documented in this test.
 
+#[spec(Nonexistent.Module.fake_spec)]
+#[proof_by(Nonexistent.Module.totally_fake_theorem)]
+#[proof_fingerprint("9671eeae7fddc0cd")]
 fn pure_add(a: Int, b: Int) -> Int {
     return a + b;
 }

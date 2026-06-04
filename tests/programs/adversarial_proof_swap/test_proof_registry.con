@@ -2,10 +2,18 @@
 // The registry has pure_add's fingerprint attached to pure_mul's entry.
 // This should NOT make pure_mul "proved" — the fingerprint won't match.
 
+#[spec(Concrete.Proof.addExpr)]
+#[proof_by(Concrete.Proof.add_correct)]
+#[proof_fingerprint("9671eeae7fddc0cd")]
 fn pure_add(a: Int, b: Int) -> Int {
     return a + b;
 }
 
+// SWAP: pure_mul carries the fingerprint of pure_add's body (the `a+b` hash),
+// so hash(current `a*b`) != stored → pure_mul is stale, pure_add stays proved.
+#[spec(Concrete.Proof.mulExpr)]
+#[proof_by(Concrete.Proof.mul_correct)]
+#[proof_fingerprint("9671eeae7fddc0cd")]
 fn pure_mul(a: Int, b: Int) -> Int {
     return a * b;
 }

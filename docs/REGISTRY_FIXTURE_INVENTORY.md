@@ -17,7 +17,7 @@ JSON-specific parser tests behind `--allow-legacy-proof-registry`).
 | `adversarial_spec_identity` | `pure_add`/`pure_mul` proved | normal | **migrate** → source links |
 | `adversarial_crossmod_deps` | `left.add`/`right.add` proved (cross-module deps) | normal | **migrate** → source links |
 | `adversarial_obligations` | `pure_add` proved + `pure_stale` stale | normal+stale | **migrate** → links (one wrong fp) |
-| `adversarial_proof_diagnostics` | mixed (blocked/trusted/excluded/...) | normal (states) | **migrate** → source links |
+| `adversarial_proof_diagnostics` | registry entries on UNEXTRACTABLE/excluded fns; asserts `source==registry` | **registry-on-non-extractable (JSON-only)** | **keep** — a blocked fn has no extractable body to fingerprint → `--allow-legacy` |
 | `adversarial_spec_drift` | spec mismatch → stale via spec-drift | drift | **migrate** → source link |
 | `adversarial_policy_require_proofs_stale` | policy E0612 rejects stale proof | stale/drift | **migrate** → link + wrong fp |
 | `adversarial_proof_malformed_registry` | broken JSON: no crash, never proved | **malformed-JSON parser** | **keep** (JSON-specific) → `--allow-legacy` |
@@ -27,10 +27,12 @@ JSON-specific parser tests behind `--allow-legacy-proof-registry`).
 ## Steps
 
 1. ~~Inventory + classify.~~ (this file)
-2. Migrate the 10 representable fixtures to in-source links (preserving each
-   test's exact assertion: proved/stale/proof-name/state).
-3. Keep the 3 JSON-specific fixtures (malformed, missing-function, legacy
-   schema) as the only JSON consumers.
+2. ~~Migrate the 9 representable fixtures to in-source links~~ **DONE** (preserving
+   each test's exact assertion: proved/stale/proof-name/state/source/deps/policy).
+3. Keep the **4** JSON-specific fixtures as the only JSON consumers:
+   `adversarial_proof_malformed_registry` (malformed JSON),
+   `proof_registry_miss` (unknown function), `multi_file_registry` (legacy
+   schema), `adversarial_proof_diagnostics` (registry on non-extractable fns).
 4. Add `--allow-legacy-proof-registry`: default REJECTS a JSON registry (ignored
    + warning); the 3 kept fixtures' invocations pass the flag; audit reports
    `legacy_json_allowed`.

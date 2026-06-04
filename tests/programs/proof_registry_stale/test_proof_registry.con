@@ -1,4 +1,8 @@
-// Test: proof registry with stale fingerprint
+// Test: in-source proof link with a STALE fingerprint (hash of an old body),
+// so hash(current) != stored → reported stale.
+#[spec(PureAdd.spec_add)]
+#[proof_by(PureAdd.add_comm)]
+#[proof_fingerprint("133cd23f4e38cf84")]
 fn pure_add(a: Int, b: Int) -> Int {
     return a + b;
 }

@@ -1,6 +1,9 @@
-// Adversarial: require-proofs = true, but registry fingerprint is stale.
-// Policy layer must reject this with E0612 (stale proof).
+// Adversarial: require-proofs = true, but the in-source #[proof_fingerprint] is
+// stale (hash of an old body). Policy layer must reject this with E0612.
 
+#[spec(PureAdd.spec_add)]
+#[proof_by(PureAdd.add_comm)]
+#[proof_fingerprint("133cd23f4e38cf84")]
 fn pure_add(a: Int, b: Int) -> Int {
     return a + b;
 }

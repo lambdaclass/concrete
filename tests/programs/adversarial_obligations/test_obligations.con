@@ -1,10 +1,17 @@
 // Test program for mechanical obligation generation.
 // Exercises all 5 obligation statuses: proved, stale, missing, ineligible, trusted.
 
+#[spec(add_commutativity)]
+#[proof_by(Concrete.Proof.pure_add_correct)]
+#[proof_fingerprint("9671eeae7fddc0cd")]
 fn pure_add(a: i64, b: i64) -> i64 {
     return a + b;
 }
 
+// STALE: #[proof_fingerprint] is the hash of an old body, so it no longer matches.
+#[spec(sub_identity)]
+#[proof_by(Concrete.Proof.pure_sub_correct)]
+#[proof_fingerprint("d4ec801267181540")]
 fn pure_stale(a: i64, b: i64) -> i64 {
     return a - b;
 }

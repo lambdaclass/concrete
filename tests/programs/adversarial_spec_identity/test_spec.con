@@ -1,10 +1,16 @@
 // Test program for spec identity tests.
 // Used with proof-registry.json to verify spec attachment flows through ProofCore.
 
+#[spec(add_commutativity)]
+#[proof_by(Concrete.Proof.pure_add_correct)]
+#[proof_fingerprint("9671eeae7fddc0cd")]
 fn pure_add(a: i64, b: i64) -> i64 {
     return a + b;
 }
 
+#[spec(mul_associativity)]
+#[proof_by(Concrete.Proof.pure_mul_correct)]
+#[proof_fingerprint("69257ee73aec3ed")]
 fn pure_mul(a: i64, b: i64) -> i64 {
     return a * b;
 }

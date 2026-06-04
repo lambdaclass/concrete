@@ -4,6 +4,9 @@
 // The dependency must use the correct qualified name.
 
 mod left {
+    #[spec(left_add_spec)]
+    #[proof_by(Concrete.Proof.left_add_correct)]
+    #[proof_fingerprint("9671eeae7fddc0cd")]
     pub fn add(a: i64, b: i64) -> i64 {
         return a + b;
     }
@@ -14,6 +17,9 @@ mod left {
 }
 
 mod right {
+    #[spec(right_add_spec)]
+    #[proof_by(Concrete.Proof.right_add_correct)]
+    #[proof_fingerprint("9671eeae7fddc0cd")]
     pub fn add(a: i64, b: i64) -> i64 {
         return a + b;
     }
