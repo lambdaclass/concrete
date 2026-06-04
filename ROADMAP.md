@@ -9,19 +9,20 @@ document as one queue:
 
 1. harden source contracts: negative cases, vacuity, spec/ghost totality,
    trapdoor discipline, diagnostics, and soundness obligations;
-2. finish VC/discharge examples and external-SMT policy without hiding solver
-   trust;
-3. finish proof-link migration away from JSON, then make `concrete prove`
-   useful enough for non-compiler authors through examples and replayable
-   workflows;
+2. close the release-blocking predictable/provable/runtime-safety gaps,
+   starting with overflow, casts, loop-derived bounds, and runtime-safety
+   policy after array bounds and div/mod-zero;
+3. finish proof-link migration away from JSON;
 4. harden audit / proof-status / trust gates around source contracts,
-   spec provenance, evidence classes, and oracle evidence;
-5. close the release-blocking predictable/provable/runtime-safety gaps,
-   starting with runtime safety beyond array bounds;
-6. only then broaden the ordinary language surface (patterns, bytes/text/path,
+   spec provenance, evidence classes, tool-version drift, and oracle evidence;
+5. make `concrete prove` useful enough for non-compiler authors through
+   examples, replayable workflows, and better failed-obligation diagnostics;
+6. finish VC/discharge examples and external-SMT policy without hiding solver
+   trust;
+7. only then broaden the ordinary language surface (patterns, bytes/text/path,
    collections, iteration, capability polymorphism, tests);
-7. run external validation before the large ecosystem/release/editor build-out;
-8. keep later research items later unless a prior gate forces them.
+8. run external validation before the large ecosystem/release/editor build-out;
+9. keep later research items later unless a prior gate forces them.
 
 Completed work moves to [CHANGELOG.md](CHANGELOG.md). Deferred or conditional
 work moves later in the same linear queue. There are no parallel tracks and no
@@ -324,14 +325,46 @@ of one-off `simp` scripts.
 Done when: new flagship proofs can start from useful generated stubs, standard
 lemmas, and actionable failure diagnostics.
 
-1. **Retire `proof-registry.json` in order.** The end state is source-linked
-   proof attributes with computed fingerprints, no hand-stored registry
-   fingerprints, and no JSON registry support. The remaining linear path is:
-   add migration reporting, migrate small residual links (`ch`, `sha256_init`,
-   and one non-HMAC point proof), report `source_linked` versus `json_backed`,
-   migrate the HMAC chain, make JSON legacy with an explicit allow flag, and
-   finally delete JSON registry support after every flagship is source-linked
-   and stale-link regressions cover the path.
+1. **Retire `proof-registry.json` — correctly, in order.** The end state is
+   source-linked proof attributes with no JSON registry support. Two
+   prerequisites must land FIRST, because skipping them is unsound or ugly; only
+   then is bulk migration safe.
+
+   **(a) The soundness rule — staleness must survive migration.** A synthesized
+   source-link entry recomputes its `body_fingerprint` from the *current* body,
+   so it never catches "the body changed out from under the proof." Drift is
+   then caught ONLY by spec-drift (`extracted ≠ spec`), which fires only for
+   functions whose spec is in `Concrete.Proof.specs` (parse_validate,
+   crypto_verify, fixed_capacity, ct_compare, hmac_sha256). Functions NOT in
+   that table (point proofs like `elf_header`, `loop_invariant`) get their drift
+   detection *entirely* from the registry's STORED fingerprint — migrating them
+   to a computed fingerprint silently loses it, and a drifted body reports
+   `proved` (demonstrated: `elf_header/main_drifted` showed 5 proved instead of
+   stale). **So: migrate a function only when spec-drift covers it, OR give the
+   in-source link a compact stored fingerprint.** The right long-term fix is a
+   compact **fingerprint hash** in the attribute (e.g.
+   `#[proof_fingerprint("ab12cd…")]`, a short content hash — not the full PExpr,
+   which is grotesque in source) compared against the recomputed hash, so
+   staleness is detected for ALL functions, not just spec-drift-covered ones.
+   Until that exists, `elf_header`/`loop_invariant` stay on JSON.
+
+   **(b) Move example proofs out of the compiler namespace.** In-source links
+   currently read `#[proof_by(Concrete.Proof.foo_correct)]` — leaking the
+   *compiler's own* Lean proof namespace into example source (fine for a real
+   user pointing at their own proofs; incestuous noise for the compiler's
+   flagships). Relocate the example proofs into per-example / user-facing Lean
+   namespaces so attributes carry clean names. The `Concrete.Proof.*` form is a
+   transitional wart, not the intended end state.
+
+   **Migration order:** add `#[proof_fingerprint]` (compact hash) + verify it
+   catches drift on a non-spec-drift function → move example proofs out of
+   `Concrete.Proof` → add `source_linked` vs `json_backed` reporting → bulk
+   migrate examples (each `main_drifted` getting the same links → stale via the
+   fingerprint hash) → make JSON legacy behind an allow flag → delete JSON
+   support once every flagship is source-linked and stale-link regressions cover
+   the path. **Done so far:** `ct_compare` (sound — spec-drift covered) is the
+   shipped demonstration; the in-source link mechanism, `--emit-link`, and the
+   `stale_proof` regression exist.
 2. Add `concrete prove` corpus entries that teach the proof path from smallest
    to real: straight-line Lean proof, `bv_decide` proof, `omega` proof,
    operational loop proof, state/multi-store proof, call composition, mixed
@@ -571,43 +604,33 @@ zero, overflow profile, casts, and loop bounds with statuses
 1. Define stable obligation schema v1: id, kind, source span, function,
    expression, dependencies, evidence status, discharging theorem/check/
    assumption, and replay command.
-2. [DONE 2026-06-04] Generate array index bounds obligations. Every `arr[idx]`
-   into a fixed-size array emits `0 ≤ idx < N`; `--report contracts`
-   (Runtime-safety section) reports `proved_by_kernel_decision (omega)` (bounded
-   by `#[requires]`), `checked` (constant in range), `VIOLATION` (constant OOB),
-   or `unproven`. `Report.boundsObligations`/`renderBounds`. Bound source is
-   `#[requires]` (loop invariants not yet wired).
-3. [DONE 2026-06-04] Generate division/modulo nonzero obligations. Every `/` and
-   `%` emits `divisor ≠ 0` with the same disposition shape (omega / checked /
-   VIOLATION / unproven). `Report.divObligations`/`renderDiv`. Worked reference:
-   `examples/evidence_classes/runtime_checked` covers both kinds.
-4. Generate overflow obligations under checked/proved arithmetic profiles.
-5. Define the user-level error model: `Result`, `Option`, assertion failure,
+2. Generate overflow obligations under checked/proved arithmetic profiles.
+3. Define the user-level error model: `Result`, `Option`, assertion failure,
    abort/panic, recoverable errors, test failures, and how error flow interacts
    with capabilities, proofs, runtime obligations, and audit output.
-6. Generate narrowing/invalid-cast obligations.
-7. Generate loop bound and variant obligations for bounded loops.
-8. Generate obligations for panic/abort/assert-as-denial-of-service risks:
+4. Generate narrowing/invalid-cast obligations.
+5. Generate loop bound and variant obligations for bounded loops.
+6. Generate obligations for panic/abort/assert-as-denial-of-service risks:
    unchecked indexing, unwrap-like operations, explicit abort paths, failed
    assertions, and profile-dependent panic behavior.
-9. Generate byte/text/path boundary obligations: invalid UTF-8, lossy
+7. Generate byte/text/path boundary obligations: invalid UTF-8, lossy
    conversion, OS-string conversion, path normalization assumptions, and
    rejected implicit conversions.
-10. Generate stack/recursion obligations where the profile claims boundedness.
-11. Report runtime-error obligations in human and JSON forms.
-12. Add policy gates that can require selected runtime-error obligations to be
+8. Generate stack/recursion obligations where the profile claims boundedness.
+9. Report runtime-error obligations in human and JSON forms.
+10. Add policy gates that can require selected runtime-error obligations to be
    proved/enforced before graduation.
-13. Add a runtime-error regression corpus: OOB, div/mod zero, overflow-profile
+11. Add a runtime-error regression corpus: OOB, div/mod zero, overflow-profile
     violation, invalid cast, loop-bound violation, lossy byte/text conversion,
     ignored fallible result, unwrap-like failure, and panic/abort profile
     mismatch.
-14. Add a runtime-error-obligation flagship requirement: one graduated example
+12. Add a runtime-error-obligation flagship requirement: one graduated example
     must demonstrate no OOB/div-zero/overflow under a named profile.
-15. Add high-quality diagnostics for obligation failures: violated obligation,
+13. Add high-quality diagnostics for obligation failures: violated obligation,
     source expression, required evidence, current status, and next action.
-16. Add obligation suppression only through explicit assumptions or policy
+14. Add obligation suppression only through explicit assumptions or policy
     waivers, never comments or hidden allowlists.
-17. Prove or validate obligation-generation soundness for the first obligation
+15. Prove or validate obligation-generation soundness for the first obligation
     kinds through the compiler soundness bridge.
 
 ## Phase 8: Language Usability And Daily Workflow
@@ -750,8 +773,10 @@ debug small Concrete programs with predictable commands and useful errors.
     `concrete eval`, `concrete inspect --core`, `concrete inspect --proofcore`,
     `concrete prove --show-obligation`, and `concrete run --trace`.
 26. Add a minimal project model before full packages: `Concrete.toml` fields for
-    name, entry points, tests, policies, assumptions, source roots, and build
-    profiles.
+    name, entry points, tests, policies, assumptions, source roots, build
+    profiles, target profiles, oracle manifests, and evidence gates. The file
+    must make authority, assumptions, runtime-check policy, and proof policy
+    visible; it must not become an ambient hidden configuration channel.
 27. Normalize the CLI around predictable verbs:
     `concrete build`, `concrete run`, `concrete test`, `concrete fmt`,
     `concrete audit`, `concrete prove`, `concrete eval`, `concrete inspect`,
@@ -759,16 +784,20 @@ debug small Concrete programs with predictable commands and useful errors.
 28. Add `concrete doc`: generate basic API/reference docs from source,
     capabilities, modules, and public comments without depending on proof
     infrastructure.
-29. Add a first-user tutorial path that does not start with proofs: install,
-    hello world, ownership, capabilities, arrays, modules, tests, audit, then
-    proof-bearing examples.
+29. Add a first-user tutorial path for C/Rust developers that does not start
+    with proofs: install, hello world, values and fixed arrays, ownership,
+    borrows, capabilities, explicit errors, tests, compiled debugging, audit,
+    then proof-bearing examples. The tone should be "ordinary systems code with
+    visible evidence," not proof-assistant ceremony.
 30. Add useful non-proof examples: a small CLI tool, a protocol decoder, a
     bounded cache, and a capability-scoped file/console program.
 31. Add basic benchmarking UX: run small benchmarks, compare interpreter versus
     compiled performance, and detect obvious generated-code regressions.
 32. Document the memory model for ordinary users: move/copy/drop behavior,
-    cleanup, borrows, linear values, trusted/Unsafe escape hatches, and what is
-    rejected.
+    cleanup, borrows, linear values, trusted/Unsafe escape hatches, definite
+    assignment, and what is rejected. State the invariant explicitly: safe
+    Concrete has no uninitialized reads by construction; trusted/FFI memory may
+    carry explicit assumptions.
 33. Add cross-platform build sanity for the supported host set: macOS and Linux
     first, with CI coverage, reproducible commands, and documented toolchain
     expectations.
@@ -822,6 +851,10 @@ they force a named surface or public claim.
     handling, handle-relative filesystem authority, exit-code compatibility,
     error behavior compatibility, ignored-result diagnostics, and oracle tests
     against a reference implementation.
+15. Do not run broad examples cleanup/polish sweeps. Clean examples
+    opportunistically when a roadmap task touches them. Improve examples only
+    when they serve proof-link migration, `concrete prove` authoring,
+    external validation, or a release-facing tutorial.
 
 ## Phase 10: Compiler Soundness Bridge
 
@@ -887,26 +920,30 @@ and incremental build contracts are explicit enough for release evidence.
    libc expectation, clang/llc boundary, sanitizer/coverage hooks.
 3. Define optimization policy: allowed optimizations, evidence preservation,
    debug/release behavior, report/codegen validation.
-4. Add clean-build versus incremental-build equivalence checks: facts,
+4. Add native compiled-program debugging support: DWARF/source-map emission,
+   source-mapped backtraces for runtime failures, debug-vs-release behavior,
+   optimized-code caveats, and diagnostics that distinguish source-level
+   runtime checks from trusted backend/OS crashes.
+5. Add clean-build versus incremental-build equivalence checks: facts,
    obligations, diagnostics, reports, and codegen must agree.
-5. Add ABI/layout round-trip checks: C headers/stubs, offsets, size, alignment,
+6. Add ABI/layout round-trip checks: C headers/stubs, offsets, size, alignment,
    calling conventions.
-6. Add sanitizer-backed generated-code validation for trusted/FFI/layout/
+7. Add sanitizer-backed generated-code validation for trusted/FFI/layout/
    pointer-heavy examples.
-7. Add backend/codegen differential validation where executable oracles exist.
-8. Add compiler self-leak/resource soak harness for long-running workflows.
-9. Define stdlib stability and evidence policy: which stdlib functions are
+8. Add backend/codegen differential validation where executable oracles exist.
+9. Add compiler self-leak/resource soak harness for long-running workflows.
+10. Define stdlib stability and evidence policy: which stdlib functions are
    trusted, proved, enforced, allocation-free, capability-free, or assumption
    carriers.
-10. Define stdlib contracts for allocators, I/O handles, directory/file/path
+11. Define stdlib contracts for allocators, I/O handles, directory/file/path
     handles, byte/text/path conversion APIs, and fallible return discipline.
     Each public stdlib function must state allocation behavior, OS authority,
     failure mode, trusted platform assumptions, and evidence class.
-11. Add stdlib evidence gates so core helpers cannot silently widen authority,
+12. Add stdlib evidence gates so core helpers cannot silently widen authority,
     allocation, proof assumptions, or runtime-error obligations.
-12. Evaluate a normalized mid-level IR only when traceability/backend-contract
+13. Evaluate a normalized mid-level IR only when traceability/backend-contract
     reports expose a concrete gap.
-13. Keep QBE/WASM/second backend deferred until evidence attachment,
+14. Keep QBE/WASM/second backend deferred until evidence attachment,
     optimization policy, and backend trust boundaries are trustworthy.
 
 ## Phase 12: Freestanding And Embedded Target
@@ -936,18 +973,23 @@ choices, and an audit report naming every remaining target/runtime assumption.
 3. Define freestanding capability policy: no ambient `File`, `Network`,
    `Console`, or `Process`; target-specific capabilities must be declared and
    audited.
-4. Add explicit allocator/runtime hooks for freestanding builds, including
+4. Define hardware-access primitives and evidence classes before device-driver
+   examples: `volatile`/MMIO operations require explicit `with(Mmio)` or
+   `with(Device)` capability, inline assembly is `trusted` and requires
+   `with(Unsafe)`, and interrupt handlers are an effectful/trusted boundary
+   with explicit target assumptions.
+5. Add explicit allocator/runtime hooks for freestanding builds, including
    ownership of allocation failure behavior and cleanup expectations.
-5. Add linker/startup configuration: entry symbol, no-main mode, target triple,
+6. Add linker/startup configuration: entry symbol, no-main mode, target triple,
    data layout, linker script hooks, and section/layout assumptions.
-6. Add freestanding diagnostics: reject hosted APIs, hidden allocation, libc
+7. Add freestanding diagnostics: reject hosted APIs, hidden allocation, libc
    calls, unsupported target features, and unavailable capabilities.
-7. Add one freestanding example: bounded parser, small checksum/hash kernel, or
+8. Add one freestanding example: bounded parser, small checksum/hash kernel, or
    fixed-capacity state machine with no allocation and no hosted I/O.
-8. Add one embedded-style audit bundle naming all remaining target assumptions:
+9. Add one embedded-style audit bundle naming all remaining target assumptions:
    stack, interrupt model if any, allocator/runtime hooks, endian/layout, and
    backend/toolchain boundary.
-9. Keep WASM, QBE, and additional backends deferred until freestanding target
+10. Keep WASM, QBE, and additional backends deferred until freestanding target
    profiles prove the current LLVM path is not enough.
 
 ## Phase 13: Public Release Bar

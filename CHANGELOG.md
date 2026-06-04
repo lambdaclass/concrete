@@ -55,6 +55,12 @@ accesses generate `0 <= idx < N`, and `--report contracts` reports whether the
 access is proved by `omega`, checked as a constant in-bounds access, flagged as
 a constant violation, or still unproven.
 
+Runtime-safety obligations also gained div/mod nonzero coverage. `/` and `%`
+now emit a `divisor != 0` obligation with the same disposition model as array
+bounds: kernel-decision proof when preconditions establish safety, checked for
+constant nonzero divisors, violation for constant zero divisors, or unproven
+when the tool lacks enough facts.
+
 The source-contract path now has dedicated regression gates in CI. The
 `check_evidence_corpus.sh` gate re-derives the load-bearing fact each evidence
 class demonstrates, including kernel-checking the linked Lean proof, detecting
