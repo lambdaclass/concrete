@@ -126,6 +126,20 @@ theorem eval_while_count (fns : FnTable)
 
 ## 4. How to start a proof
 
+For source-contract functions, the fastest on-ramp is `concrete prove` (see
+[CONTRACTS_GUIDE.md](CONTRACTS_GUIDE.md) for the full workflow):
+
+```sh
+concrete prove FILE FN                      # scaffold: extracted body, VCs, next obligation
+concrete prove FILE FN --show-obligation O2 # hypotheses, conclusion, ProofKit hint, theorem shape
+# … write the proof with the suggested kit lemmas …
+concrete prove FILE FN --emit-link          # paste the #[proof_by]/#[spec] link above FN
+concrete FILE --report check-proofs         # kernel-verify
+concrete prove FILE FN --replay             # confirm omega/bv_decide leaves still close
+```
+
+The manual path (still useful for flagship refinement proofs):
+
 1. **Get the exact extracted PExpr.** Generate the kernel-checkable model of
    your function's body:
    ```sh

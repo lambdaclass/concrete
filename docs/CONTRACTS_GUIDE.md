@@ -252,6 +252,40 @@ It prints, for the chosen function:
 For an excluded function it prints why it is not in the provable subset instead
 of a stub.
 
+### Sub-modes (v1.1)
+
+```sh
+concrete prove FILE FN --emit-link              # print the in-source proof-link block
+concrete prove FILE FN --show-obligation <id>   # one obligation in full (e.g. O4)
+concrete prove FILE FN --replay                 # re-run omega/bv_decide, report closure
+```
+
+- **`--emit-link`** prints the `#[spec]`/`#[proof_by]`/`#[ensures_proof]`/
+  `#[proof_coverage]` block from the function's current registry or source-link
+  data, with missing fields shown as commented placeholders. Paste it above the
+  function and delete the JSON entry.
+- **`--show-obligation <id>`** prints one generated loop obligation
+  (`O1`..`O5`): source span, hypotheses, conclusion, current discharge status,
+  suggested ProofKit imports, and the theorem shape to write (or a note that
+  omega already closes it).
+- **`--replay`** re-runs the omega and `bv_decide` discharges for the function
+  and reports, per obligation, whether each **still closes** — a fast
+  regression check after editing a body or upgrading the toolchain.
+
+### The authoring workflow
+
+```
+1. Write the contract:   #[requires] / #[ensures] / #[invariant] / #[variant]
+2. concrete prove FN     → see what omega/bv_decide already close and the
+                           `next` obligation that still needs Lean
+3. concrete prove FN --show-obligation <id>  → hypotheses, conclusion, shape
+4. Write the Lean proof with the suggested ProofKit lemmas
+5. concrete prove FN --emit-link  → paste the source proof link above FN
+6. concrete <file> --report check-proofs  → kernel-verify; audit shows
+                                            proved_by_lean
+7. concrete prove FN --replay  → confirm the kernel-decision leaves still close
+```
+
 ## Reading the evidence
 
 ```sh

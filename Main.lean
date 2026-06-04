@@ -3,7 +3,7 @@ import Concrete
 open Concrete
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--out <path>] [--force]\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--out <path>] [--force] [--emit-link] [--show-obligation <id>] [--replay]\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -768,7 +768,8 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
     through project mode so std and other dependencies resolve. -/
 def compileAndReport (inputPath : String) (reportType : String)
     (proveTarget : Option String := none) (proveOut : Option String := none)
-    (proveForce : Bool := false) : IO UInt32 := do
+    (proveForce : Bool := false) (proveEmitLink : Bool := false)
+    (proveShowObl : Option String := none) (proveReplay : Bool := false) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -844,7 +845,33 @@ def compileAndReport (inputPath : String) (reportType : String)
       match Report.proveResolve pc target with
       | .error msg => IO.eprintln msg; return 1
       | .ok qual =>
+        -- --emit-link: just print the in-source proof-link block (no discharge).
+        if proveEmitLink then
+          IO.println (Report.emitProofLink registry qual)
+          return 0
         let provedVCs ← kernelDischargeLoopVCs (Report.loopVCGoals parsed.modules)
+        -- --show-obligation <id>: print one obligation in full.
+        if let some oblId := proveShowObl then
+          IO.println (Report.showObligation parsed.modules qual oblId provedVCs)
+          return 0
+        -- --replay: re-run omega / bv_decide discharge and report per obligation.
+        if proveReplay then
+          let myLoop := (Report.loopVCGoals parsed.modules).filter (fun (k, _) => k.startsWith (qual ++ "@"))
+          let obs := Report.callSiteObligations parsed.modules
+          let myCands := ((List.range obs.length).zip obs).filterMap fun (i, o) =>
+            if o.caller == qual then o.leanGoal.map (fun g => (i, g)) else none
+          let bvProved ← bvDischargeCallSites myCands
+          let mut out := s!"=== concrete prove --replay: {qual} ===\n"
+          out := out ++ "\nloop obligations (omega):\n"
+          if myLoop.isEmpty then out := out ++ "  (none)\n"
+          for (k, _) in myLoop do
+            out := out ++ (if provedVCs.contains k then s!"  ok   {k} — still closes\n" else s!"  FAIL {k} — no longer closes\n")
+          out := out ++ "\ncall-site obligations (bv_decide):\n"
+          if myCands.isEmpty then out := out ++ "  (none)\n"
+          for (i, _) in myCands do
+            out := out ++ (if bvProved.contains i then s!"  ok   call obligation #{i} — still closes\n" else s!"  FAIL call obligation #{i} — no longer closes\n")
+          IO.println out
+          return 0
         let report := Report.proveReport pc registry parsed.modules qual provedVCs
         match proveOut with
         | none => IO.println report; return 0
@@ -1564,13 +1591,19 @@ def main (args : List String) : IO UInt32 := do
     match args.drop 1 with
     | inputPath :: target :: rest =>
       let force := rest.contains "--force"
+      let emitLink := rest.contains "--emit-link"
+      let replay := rest.contains "--replay"
       let outPath := match rest.dropWhile (· != "--out") with
         | _ :: p :: _ => some p
         | _ => none
+      let showObl := match rest.dropWhile (· != "--show-obligation") with
+        | _ :: id :: _ => some id
+        | _ => none
       return (← compileAndReport inputPath "prove"
-        (proveTarget := some target) (proveOut := outPath) (proveForce := force))
+        (proveTarget := some target) (proveOut := outPath) (proveForce := force)
+        (proveEmitLink := emitLink) (proveShowObl := showObl) (proveReplay := replay))
     | _ =>
-      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--out <path>] [--force]"
+      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--out <path>] [--force] [--emit-link] [--show-obligation <id>] [--replay]"
       return 1
   -- concrete --version
   if args == ["--version"] then

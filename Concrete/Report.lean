@@ -2709,6 +2709,83 @@ def proveReport (pc : Concrete.ProofCore) (registry : ProofRegistry)
       s!"=== concrete prove: {qualName} ===\n\nThis function is NOT in the provable subset, so there is no proof to scaffold.\n  reasons: {", ".intercalate reasons}\n\nMake it eligible (remove the listed constraints) or prove it as a trusted boundary."
     | none => s!"no function '{qualName}' in ProofCore."
 
+/-- `concrete prove --emit-link`: print the in-source proof-link attribute block
+    for `qual`, from its current registry/source-link data. Missing fields are
+    emitted as commented placeholders so the author sees what still needs a name.
+    Read-only: the author pastes the block above the function and deletes the
+    JSON entry. -/
+def emitProofLink (registry : ProofRegistry) (qual : String) : String :=
+  match registry.find? (·.function == qual) with
+  | none => s!"// no proof link or registry entry for `{qual}` — nothing to emit"
+  | some e =>
+    let req := fun (key val : String) =>
+      if val.isEmpty then s!"// #[{key}(...)]   ← missing, fill in" else s!"#[{key}({val})]"
+    let ens := match e.ensuresProof with
+      | some t => s!"#[ensures_proof({t})]"
+      | none => "// #[ensures_proof(...)]   ← none (omit if the postcondition is single-direction)"
+    String.join [
+      s!"// in-source proof link for `{qual}`.\n",
+      "// Paste above the function, then delete its proof-registry.json entry\n",
+      "// (a function may not be linked in both places).\n",
+      req "spec" e.spec, "\n",
+      req "proof_by" e.proof, "\n",
+      ens, "\n",
+      req "proof_coverage" e.coverage, "\n" ]
+
+/-- `concrete prove --show-obligation <id>`: print one generated loop obligation
+    (O1/O2/O3/O4/O5) in full — source span, hypotheses, conclusion, current
+    discharge status, suggested ProofKit imports, and the theorem shape to
+    write (or a note that omega already closes it). `provedVCs` are the omega
+    discharge results from the caller. -/
+def showObligation (modules : List Module) (qualName oblId : String)
+    (provedVCs : List String) : String := Id.run do
+  let astFn? := (modules.flatMap allFunctions).find? (fun (pfx, fn) => pfx ++ fn.name == qualName)
+    |>.map Prod.snd
+  match astFn? with
+  | none => return s!"no function `{qualName}` found."
+  | some f =>
+    let extraLets := letConstMap f.body
+    let retExpr := loopExitReturn f.body
+    for lc in f.loopContracts do
+      let invs := lc.invariants.filterMap toLeanProp
+      let guardStr := (lc.guard.bind toLeanProp).getD "<guard>"
+      let variantStr := (lc.variant.bind toLeanProp).getD "<variant>"
+      let variantBody := (lc.variant.map (substContract lc.body)).bind toLeanProp |>.getD "<variant'>"
+      -- (label, hypotheses, conclusion, theorem-shape-when-not-omega)
+      let info : Option (String × List String × String × String) := match oblId with
+        | "O1" => some ("invariant_init", ["loop-entry state (counter at its initializer)"],
+                        (genInitVC lc extraLets).getD "?", "(none — omega closes it)")
+        | "O2" => some ("invariant_preservation",
+                        invs ++ [guardStr],
+                        " ∧ ".intercalate ((lc.invariants.map (substContract lc.body)).filterMap toLeanProp),
+                        (genPreservationShape lc qualName).getD "(operational step needs a Lean eval lemma)")
+        | "O3" => some ("loop_exit_post_link", invs ++ [s!"¬({guardStr})"],
+                        (genExitVC lc f.ensures retExpr).getD "(no groundable #[ensures] at loop exit)", "(none — omega closes it once grounded)")
+        | "O4" => some ("variant_nonnegative", invs ++ [guardStr], s!"0 ≤ {variantStr}", "(none — omega closes it)")
+        | "O5" => some ("variant_decreases", invs ++ [guardStr], s!"{variantBody} < {variantStr}", "(none — omega closes it)")
+        | _ => none
+      match info with
+      | none => pure ()
+      | some (label, hyps, concl, shape) =>
+        let omegaDone := provedVCs.contains (loopVCKey qualName lc.line oblId)
+        let leanOp := oblId == "O2"
+        let status :=
+          if omegaDone && !leanOp then "proved_by_kernel_decision (omega)"
+          else if omegaDone && leanOp then "arithmetic step: proved_by_kernel_decision (omega); operational step: needs Lean"
+          else "planned"
+        let kitHint :=
+          if leanOp then "Concrete.ProofKit.Loops (eval_while_count) for the operational step; Concrete.ProofKit.Eval"
+          else "Concrete.ProofKit.Loops; the arithmetic leaf closes with omega — no ProofKit lemma needed"
+        return String.join [
+          s!"=== obligation {oblId} ({label}) for {qualName} ===\n\n",
+          s!"source:      {qualName} loop @ line {lc.line}\n",
+          s!"status:      {status}\n\n",
+          "hypotheses:\n", String.join (hyps.map (s!"  {·}\n")),
+          s!"\nconclusion:\n  {concl}\n\n",
+          s!"ProofKit:    {kitHint}\n",
+          s!"theorem shape:\n  {shape}\n" ]
+    return s!"obligation `{oblId}` not found on {qualName} (loops expose O1/O2/O3/O4/O5)."
+
 -- ============================================================
 -- Source/Core/SSA/LLVM traceability (--report traceability)
 -- ============================================================
