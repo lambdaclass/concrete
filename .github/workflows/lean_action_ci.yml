@@ -128,6 +128,12 @@ jobs:
       - name: Run proof evidence gate
         run: bash scripts/ci/proof_gate.sh
 
+      - name: Evidence-class corpus integrity gate
+        run: bash scripts/tests/check_evidence_corpus.sh
+
+      - name: concrete prove CLI gate
+        run: bash scripts/tests/test_prove_cli.sh
+
   thesis-evidence:
     name: Thesis evidence smoke test
     runs-on: ubuntu-latest

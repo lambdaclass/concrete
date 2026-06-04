@@ -1,4 +1,4 @@
-.PHONY: build test test-full test-trust-gate test-proof-gate test-ssa test-fuzz test-oracle test-wrong-code test-reducer-smoke test-bundle-smoke test-verify-gates test-assumptions test-policy test-catches test-snapshots test-pv-oracle test-cv-oracle test-fc-oracle test-ct-oracle test-hmac-oracle test-release-bundle test-showcase clean check-grammar paper paper-ec papers docs-site docs-serve
+.PHONY: build test test-full test-trust-gate test-proof-gate test-ssa test-fuzz test-oracle test-wrong-code test-reducer-smoke test-bundle-smoke test-verify-gates test-assumptions test-policy test-catches test-snapshots test-prove-cli test-evidence-corpus test-pv-oracle test-cv-oracle test-fc-oracle test-ct-oracle test-hmac-oracle test-release-bundle test-showcase clean check-grammar paper paper-ec papers docs-site docs-serve
 
 NIX_DEVELOP = XDG_CACHE_HOME=$(CURDIR)/.cache nix --extra-experimental-features "nix-command flakes" develop --command
 
@@ -49,6 +49,12 @@ test-catches: build
 
 test-snapshots: build
 	$(NIX_DEVELOP) bash ./scripts/tests/check_snapshots.sh
+
+test-prove-cli: build
+	$(NIX_DEVELOP) bash ./scripts/tests/test_prove_cli.sh
+
+test-evidence-corpus: build
+	$(NIX_DEVELOP) bash ./scripts/tests/check_evidence_corpus.sh
 
 test-pv-oracle: build
 	$(NIX_DEVELOP) bash ./examples/parse_validate/oracle/run_oracle.sh 0

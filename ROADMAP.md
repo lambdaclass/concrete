@@ -9,16 +9,16 @@ document as one queue:
 
 1. finish proof-link migration away from JSON (`#[proof_by]` / `#[spec]` and
    source-linked fingerprints);
-2. make `concrete prove` useful enough for non-compiler authors through examples
+2. harden audit / proof-status / trust gates around the source-contract and
+   evidence-class path;
+3. make `concrete prove` useful enough for non-compiler authors through examples
    and replayable workflows;
-3. add small evidence examples for every claim class;
-4. harden audit / proof-status / trust gates around the source-contract
-   path;
-5. close the release-blocking predictable/provable/runtime-safety gaps;
-6. only then broaden the ordinary language surface (patterns, bytes/text/path,
+4. close the release-blocking predictable/provable/runtime-safety gaps,
+   starting with runtime safety beyond array bounds;
+5. only then broaden the ordinary language surface (patterns, bytes/text/path,
    collections, iteration, capability polymorphism, tests);
-7. run external validation before the large ecosystem/release/editor build-out;
-8. keep later research items later unless a prior gate forces them.
+6. run external validation before the large ecosystem/release/editor build-out;
+7. keep later research items later unless a prior gate forces them.
 
 Completed work moves to [CHANGELOG.md](CHANGELOG.md). Deferred or conditional
 work moves later in the same linear queue. There are no parallel tracks and no
@@ -286,39 +286,36 @@ of one-off `simp` scripts.
 Done when: new flagship proofs can start from useful generated stubs, standard
 lemmas, and actionable failure diagnostics.
 
-1. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
-   OOB stuck behavior.
-2. Build reusable lemmas for loop-carried state and `while_step`.
-3. Build reusable lemmas for BitVec operations used by flagships.
-4. Build reusable lemmas for structs, fields, enum construction, match, Result,
-   Option, and bounded-buffer invariants.
-5. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
-    fixed buffers, Result/Option, loops, source contracts, and refinement
-    composition. Stubs should emit spec target, `PExpr` body, FnTable skeleton,
-    expected theorem statement, common imports/tactics, and TODO blocks for
-    loop invariants.
-6. Add generated composition scaffolds: FnTable entries, call lemmas, callee
-    refinement dependencies, and composed theorem skeletons.
-7. Add generated loop-invariant templates for common proof shapes:
-    counter loop over array writes, copy loop, fold loop, multi-store loop,
-    offset loop, and block-processing loop.
-8. **`runtime_checked` DONE (2026-06-04) — the evidence-class corpus is now
-   complete (9/9).** Array-bounds is the first runtime-error obligation kind:
-   every `arr[idx]` into a fixed-size array generates `0 ≤ idx < N`, reported in
-   `--report contracts` (Runtime-safety section) with its disposition —
-   `proved_by_kernel_decision (omega)` when a `#[requires]` bounds the index,
-   `checked` for in-range constants, `VIOLATION` for out-of-range constants (the
-   audit catches the OOB), or `unproven` (needs a precondition or runtime check).
-   Generator + omega discharge in `Report.boundsObligations`/`renderBounds`,
-   wired into `renderContracts`; subexample `evidence_classes/runtime_checked`.
-   v1 uses `#[requires]` (not loop invariants); overflow and div-by-zero are the
-   next runtime-error kinds (same generate → omega/eval → status shape).
-9. Add `concrete prove` corpus entries that teach the proof path from smallest
+1. **Retire `proof-registry.json` in order.** The end state is source-linked
+   proof attributes with computed fingerprints, no hand-stored registry
+   fingerprints, and no JSON registry support. The remaining linear path is:
+   add migration reporting, migrate small residual links (`ch`, `sha256_init`,
+   and one non-HMAC point proof), report `source_linked` versus `json_backed`,
+   migrate the HMAC chain, make JSON legacy with an explicit allow flag, and
+   finally delete JSON registry support after every flagship is source-linked
+   and stale-link regressions cover the path.
+2. Add `concrete prove` corpus entries that teach the proof path from smallest
    to real: straight-line Lean proof, `bv_decide` proof, `omega` proof,
    operational loop proof, state/multi-store proof, call composition, mixed
    evidence flagship, and full refinement flagship. Each entry should include a
    command, generated scaffold, expected next obligation, and audit class
    explanation.
+3. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
+   OOB stuck behavior.
+4. Build reusable lemmas for loop-carried state and `while_step`.
+5. Build reusable lemmas for BitVec operations used by flagships.
+6. Build reusable lemmas for structs, fields, enum construction, match, Result,
+   Option, and bounded-buffer invariants.
+7. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
+    fixed buffers, Result/Option, loops, source contracts, and refinement
+    composition. Stubs should emit spec target, `PExpr` body, FnTable skeleton,
+    expected theorem statement, common imports/tactics, and TODO blocks for
+    loop invariants.
+8. Add generated composition scaffolds: FnTable entries, call lemmas, callee
+    refinement dependencies, and composed theorem skeletons.
+9. Add generated loop-invariant templates for common proof shapes:
+    counter loop over array writes, copy loop, fold loop, multi-store loop,
+    offset loop, and block-processing loop.
 10. Add proof minimization/debugging UX: show the smallest extracted expression
     or lemma surface related to a failed proof, including messages like
     "failed to prove index expression equals spec offset under len <= 375" for
@@ -350,14 +347,6 @@ lemmas, and actionable failure diagnostics.
    majority of proof work. Gate: do not build it until a second update shape
    actually forces it (per the operating rules) — the current functional-list
    model gets framing for free.
-16. **Retire `proof-registry.json` in order.** The end state is source-linked
-   proof attributes with computed fingerprints, no hand-stored registry
-   fingerprints, and no JSON registry support. The remaining linear path is:
-   add migration reporting, migrate small residual links (`ch`, `sha256_init`,
-   and one non-HMAC point proof), report `source_linked` versus `json_backed`,
-   migrate the HMAC chain, make JSON legacy with an explicit allow flag, and
-   finally delete JSON registry support after every flagship is source-linked
-   and stale-link regressions cover the path.
 
 ## Phase 4: Audit Commands And Review Artifacts
 
@@ -388,18 +377,30 @@ five graduated flagships and one package-scale example.
 8. Add an artifact viewer CLI/TUI over facts, obligations, proofs,
    assumptions, release bundles, and diffs.
 9. Ensure every release bundle includes an evidence replay command.
-10. Add evidence-level monotonicity checks to audit/diff output.
-11. Add one AI-audit demo where an agent answers authority/proof/trust
+10. Make `tested_by_oracle` evidence structured and diffable:
+    - add an oracle manifest naming reference, seeds, case count, input model,
+      comparison mode, and coverage kind;
+    - split cases into boundary, known-vector, random, adversarial, and
+      regression buckets;
+    - report case counts, seeds, reference identity, comparison mode, and
+      `not_proof` evidence level in audit output;
+    - save failing cases as reproducible fixtures;
+    - optionally cross-check reference, interpreter, and compiled binary;
+    - support metamorphic tests where no complete reference exists;
+    - flag oracle evidence weakening in `concrete diff` when cases, seeds,
+      reference, comparison mode, or boundary coverage shrink.
+11. Add evidence-level monotonicity checks to audit/diff output.
+12. Add one AI-audit demo where an agent answers authority/proof/trust
     questions using compiler facts rather than source guesses.
-12. Add review checklists generated from facts: what changed, what widened,
+13. Add review checklists generated from facts: what changed, what widened,
     what became trusted, what lost proof, what gained assumptions, and which
     obligations remain open.
-13. Add artifact redaction/stability rules so release bundles can be shared
+14. Add artifact redaction/stability rules so release bundles can be shared
     publicly without leaking local paths, secrets, or machine-specific noise.
-14. Keep audit, contracts, obligations, assumptions, policies, manifests, and
+15. Keep audit, contracts, obligations, assumptions, policies, manifests, and
     proof-status output on one shared vocabulary. Do not let each artifact grow
     its own mini-language for the same evidence classes.
-15. Keep public-facing docs and website copy grounded in the same evidence
+16. Keep public-facing docs and website copy grounded in the same evidence
     vocabulary. Use `docs/WHY_CONCRETE.md` as the source for a C/Rust-oriented
     "why this exists" page: small systems code, explicit authority, visible
     evidence classes, spec-drift-tied proofs, named trust boundaries, and what
@@ -415,6 +416,15 @@ Done when: all existing production proof specs are directly and transitively
 FnTable-complete, proof dependencies and provenance are visible, assumptions
 and trust boundaries have lifecycle reports, and weaker evidence cannot appear
 under a stronger badge.
+
+**Regression nets landed (2026-06-04).** Two source-contract-path gates now run
+in CI (proof-evidence-gate job): `scripts/tests/check_evidence_corpus.sh` pins
+the load-bearing fact each evidence-class subexample demonstrates plus integrity
+cross-checks snapshots can't express (the `proved_by_lean` theorem actually
+kernel-checks; the `stale_proof` drift is genuinely detected — a silent-accept
+regression here is the worst kind; the oracle reference emits its vectors); and
+`scripts/tests/test_prove_cli.sh` pins the `concrete prove` sub-modes. Makefile
+targets `test-evidence-corpus` / `test-prove-cli`.
 
 1. Add transitive FnTable completeness: walk registered spec call graphs, not
    only direct call sites, and fail or flag missing callees before theorem

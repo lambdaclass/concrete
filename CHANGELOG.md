@@ -49,6 +49,12 @@ The `tested_by_oracle` evidence example also has its standalone corpus shape:
 `oracle/run_oracle.sh` and `reference.py`, so oracle evidence is no longer only
 a flagship harness.
 
+The `runtime_checked` evidence example completed the corpus at 9/9. Array
+bounds are the first runtime-error obligation kind: fixed-array `arr[idx]`
+accesses generate `0 <= idx < N`, and `--report contracts` reports whether the
+access is proved by `omega`, checked as a constant in-bounds access, flagged as
+a constant violation, or still unproven.
+
 ### HMAC-SHA256 graduates with exact-extraction refinement (2026-06-02)
 
 `hmac_sha256` graduated as the fifth flagship with the full SHA-256/HMAC
