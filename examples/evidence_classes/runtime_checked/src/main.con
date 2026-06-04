@@ -54,6 +54,22 @@ mod demo {
     fn divz(n: i32) -> i32 {
         return n / 0;
     }
+
+    // --- integer overflow (opt-in, third runtime-error kind) ---
+
+    // #[overflow_checked] opts into no-overflow obligations for fixed-width
+    // +/-/*. Bounded by a precondition → omega proves a + b cannot overflow i32.
+    #[overflow_checked]
+    #[requires(0 <= a && a < 1000 && 0 <= b && b < 1000)]
+    fn add_bounded(a: i32, b: i32) -> i32 {
+        return a + b;
+    }
+
+    // Same op, no precondition → unproven (a + b could overflow i32).
+    #[overflow_checked]
+    fn add_unbounded(a: i32, b: i32) -> i32 {
+        return a + b;
+    }
 }
 
 pub fn main() with(Std) -> Int { return 0; }

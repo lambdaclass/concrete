@@ -279,6 +279,7 @@ structure FnDef where
   isTest : Bool := false
   isTrusted : Bool := false        -- trusted fn: allows raw ptr ops without Unsafe
   isEntryPoint : Bool := false     -- tagged by Check when name == mainFnName
+  overflowChecked : Bool := false  -- #[overflow_checked]: emit no-overflow obligations for fixed-width +/-/* (opt-in)
   capSet : CapSet := .empty        -- with(File, Network, ...)
   requires : List Expr := []       -- #[requires(...)] preconditions (source contracts; erased metadata, no codegen)
   ensures : List Expr := []        -- #[ensures(...)] postconditions (source contracts; erased metadata, no codegen)

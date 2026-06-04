@@ -48,6 +48,8 @@ want "runtime → catches OOB"                  contracts    runtime_checked "VI
 want "runtime → unproven access"              contracts    runtime_checked "unproven"
 want "runtime → div omega-safe"               contracts    runtime_checked "divisor nonzero, no runtime check needed"
 want "runtime → div catches /0"               contracts    runtime_checked "VIOLATION: division by zero"
+want "runtime → overflow omega-safe"         contracts    runtime_checked "cannot overflow, no runtime check needed"
+want "runtime → overflow unproven"           contracts    runtime_checked "bound the operands"
 
 echo ""
 echo "=== integrity cross-checks (beyond snapshots) ==="

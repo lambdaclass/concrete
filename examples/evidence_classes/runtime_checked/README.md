@@ -38,3 +38,17 @@ Every `/` and `%` generates `divisor != 0`, same disposition shape:
 
 Overflow is the next kind (needs the integer width + a range analysis); bounds
 and division are wired today.
+
+## Integer overflow (opt-in, third runtime-error kind)
+
+Under `#[overflow_checked]`, each fixed-width `+`/`-`/`*` generates
+`MIN ≤ result ≤ MAX`:
+
+| function | op | disposition |
+|---|---|---|
+| `add_bounded` (`#[requires(0<=a<1000 && 0<=b<1000)]`) | `a + b` | `proved_by_kernel_decision (omega)` |
+| `add_unbounded` | `a + b` | `unproven` |
+
+It is **opt-in** because Concrete's default overflow semantics are
+profile-dependent; emitting this for every arithmetic op would flood the audit.
+A constant op that overflows its type reports `VIOLATION` (same as bounds/div).

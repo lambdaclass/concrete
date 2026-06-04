@@ -1139,6 +1139,126 @@ def renderDiv (obls : List DivObl) (provedKeys : List String) : String := Id.run
     out := out ++ s!"\n  {opname} divisor {Concrete.fmtExpr o.divExpr}\n    status: {status}"
   return out ++ "\n"
 
+-- ============================================================
+-- Runtime-safety obligations: integer overflow (opt-in)
+-- ============================================================
+-- Under `#[overflow_checked]`, each fixed-width `+`/`-`/`*` generates
+-- `MIN ≤ result ≤ MAX` for that width. Opt-in, because Concrete's default
+-- integer overflow semantics are profile-dependent and emitting this for every
+-- arithmetic op would flood the audit. Same disposition shape as bounds/div.
+
+/-- Inclusive value range of a fixed-width integer type (none = arbitrary/`Int`). -/
+def intRange : Ty → Option (Int × Int)
+  | .i8  => some (-128, 127)        | .i16 => some (-32768, 32767)
+  | .i32 => some (-2147483648, 2147483647)
+  | .u8  => some (0, 255)           | .u16 => some (0, 65535)
+  | .u32 => some (0, 4294967295)
+  | _ => none
+
+/-- Best-effort fixed-width int type of an expression, from a var→type map. -/
+partial def exprIntTy (vt : List (String × Ty)) : Expr → Option Ty
+  | .ident _ n => vt.lookup n
+  | .paren _ e => exprIntTy vt e
+  | .unaryOp _ _ e => exprIntTy vt e
+  | .cast _ _ t => some t
+  | .binOp _ _ l r => match exprIntTy vt l with | some t => some t | none => exprIntTy vt r
+  | _ => none
+
+mutual
+/-- Every `+`/`-`/`*` binop node in an expression (the whole `a op b`). -/
+partial def collectArithE : Expr → List Expr
+  | e@(.binOp _ op l r) =>
+    let here := match op with | .add | .sub | .mul => [e] | _ => []
+    here ++ collectArithE l ++ collectArithE r
+  | .unaryOp _ _ x | .paren _ x | .borrow _ x | .borrowMut _ x | .deref _ x
+  | .try_ _ x | .cast _ x _ | .fieldAccess _ x _ | .arrowAccess _ x _ => collectArithE x
+  | .arrayLit _ es => es.flatMap collectArithE
+  | .arrayIndex _ a i => collectArithE a ++ collectArithE i
+  | .call _ _ _ args => args.flatMap collectArithE
+  | .methodCall _ o _ _ args => collectArithE o ++ args.flatMap collectArithE
+  | .staticMethodCall _ _ _ _ args => args.flatMap collectArithE
+  | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectArithE fe)
+  | .allocCall _ x a => collectArithE x ++ collectArithE a
+  | .ifExpr _ c t el | .whileExpr _ c t el =>
+      collectArithE c ++ t.flatMap collectArithS ++ el.flatMap collectArithS
+  | .match_ _ s _ => collectArithE s
+  | _ => []
+partial def collectArithS : Stmt → List Expr
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v => collectArithE v
+  | .return_ _ (some v) => collectArithE v
+  | .ifElse _ c t el => collectArithE c ++ t.flatMap collectArithS ++ (el.getD []).flatMap collectArithS
+  | .while_ _ c b _ => collectArithE c ++ b.flatMap collectArithS
+  | .forLoop _ init c step b _ =>
+      (init.map collectArithS).getD [] ++ collectArithE c
+        ++ (step.map collectArithS).getD [] ++ b.flatMap collectArithS
+  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v => collectArithE o ++ collectArithE v
+  | .arrayIndexAssign _ a i v => collectArithE a ++ collectArithE i ++ collectArithE v
+  | _ => []
+end
+
+/-- One integer-overflow obligation. -/
+structure OverflowObl where
+  fnQual        : String
+  key           : String
+  opExpr        : Expr
+  lo            : Int
+  hi            : Int
+  closedVerdict : Option Bool
+  leanGoal      : Option String
+
+/-- Var→type map from params and annotated lets. -/
+def varTyMap (f : FnDef) : List (String × Ty) :=
+  f.params.map (fun p => (p.name, p.ty))
+    ++ f.body.filterMap (fun s => match s with | .letDecl _ n _ (some t) _ _ => some (n, t) | _ => none)
+
+/-- Generate no-overflow obligations for `#[overflow_checked]` functions. -/
+def overflowObligations (modules : List Module) : List OverflowObl := Id.run do
+  let mut out : List OverflowObl := []
+  for (pfx, f) in modules.flatMap allFunctions do
+    if !f.overflowChecked then continue
+    let fq := pfx ++ f.name
+    let vt := varTyMap f
+    let mut i := 0
+    for e in f.body.flatMap collectArithS do
+      match (exprIntTy vt e).bind intRange, toLeanProp e with
+      | some (lo, hi), some eStr =>
+        let key := s!"{fq}#ovf{i}"
+        let cv : Option Bool × Option String := match cEvalInt e with
+          | some k => (some (decide (lo ≤ k ∧ k ≤ hi)), none)
+          | none =>
+            let vars := (collectIdents e ++ f.requires.flatMap collectIdents).eraseDups
+            let reqs := f.requires.filterMap toLeanProp
+            let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
+            let hyp := if reqs.isEmpty then "" else s!"({" ∧ ".intercalate reqs}) → "
+            (none, some s!"{binder}{hyp}({lo} ≤ {eStr} ∧ {eStr} ≤ {hi})")
+        out := out ++ [{ fnQual := fq, key, opExpr := e, lo, hi, closedVerdict := cv.1, leanGoal := cv.2 }]
+        i := i + 1
+      | _, _ => pure ()
+  return out
+
+/-- Lean goals for the non-constant overflow obligations, for omega discharge. -/
+def overflowGoals (modules : List Module) : List (String × String) :=
+  (overflowObligations modules).filterMap fun o => o.leanGoal.map (fun g => (o.key, g))
+
+/-- Render the integer-overflow section. -/
+def renderOverflow (obls : List OverflowObl) (provedKeys : List String) : String := Id.run do
+  if obls.isEmpty then return ""
+  let mut out := "\n\n=== Runtime-safety obligations (integer overflow, #[overflow_checked]) ==="
+  let mut cur := ""
+  for o in obls do
+    if o.fnQual != cur then out := out ++ s!"\n\n{o.fnQual}"; cur := o.fnQual
+    let status := match o.closedVerdict with
+      | some true  => "checked: result in range (constant)"
+      | some false => "VIOLATION: constant overflows the type"
+      | none => match o.leanGoal with
+        | some _ =>
+          if provedKeys.contains o.key
+          then "proved_by_kernel_decision (omega) — cannot overflow, no runtime check needed"
+          else "unproven — bound the operands (#[requires]), or use a wrapping/checked profile"
+        | none => "unproven — operands not statically analyzable"
+    out := out ++ s!"\n  {Concrete.fmtExpr o.opExpr}  (range [{o.lo}, {o.hi}])\n    status: {status}"
+  return out ++ "\n"
+
 /-- Stable identity for one loop obligation, shared by the goal collector and
     the renderer so discharge results map back to the right line. -/
 def loopVCKey (fnQual : String) (line : Nat) (obl : String) : String :=

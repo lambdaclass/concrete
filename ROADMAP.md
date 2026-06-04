@@ -90,6 +90,21 @@ Name the evidence class before implementing freestanding/embedded targets:
 Once Concrete emits real binaries, source-mapped DWARF / crash traces matter for
 auditability. Tooling/backend item, not first-release proof-critical.
 
+### Target-conditional code without hidden metaprogramming
+
+Concrete needs target-specific code for hosted/freestanding builds, OS-specific
+FFI, and stdlib splitting, but broad in-source conditional compilation would
+pull the language toward macro-like configuration. Prefer module/file selection
+through `Concrete.toml` target profiles. Add only narrow, audit-visible
+`cfg`-style attributes if file/module selection proves insufficient.
+
+Audit output must explain target selection:
+- selected source roots/modules,
+- excluded source roots/modules,
+- target profile and platform reason,
+- enabled build profile,
+- and any `cfg` attributes if they are ever admitted.
+
 ### Contract-VC stability tiers (dependency edge into Phase 8)
 
 The risk this names: Phase 9 flagships are what exercise contracts, and they
@@ -604,7 +619,15 @@ zero, overflow profile, casts, and loop bounds with statuses
 1. Define stable obligation schema v1: id, kind, source span, function,
    expression, dependencies, evidence status, discharging theorem/check/
    assumption, and replay command.
-2. Generate overflow obligations under checked/proved arithmetic profiles.
+2. [DONE 2026-06-04] Generate overflow obligations under checked/proved
+   arithmetic profiles. Opt-in via `#[overflow_checked]`: each fixed-width
+   `+`/`-`/`*` emits `MIN ≤ result ≤ MAX` for the operand width, reported in the
+   Runtime-safety section as `proved_by_kernel_decision (omega)` (operands
+   bounded by `#[requires]`), `checked`/`VIOLATION` (constants), or `unproven`.
+   Opt-in to avoid flooding the default (profile-dependent) arithmetic.
+   `Report.overflowObligations`/`renderOverflow`; worked in
+   `examples/evidence_classes/runtime_checked` (add_bounded / add_unbounded).
+   Bounds + division + overflow are now the three wired runtime-error kinds.
 3. Define the user-level error model: `Result`, `Option`, assertion failure,
    abort/panic, recoverable errors, test failures, and how error flow interacts
    with capabilities, proofs, runtime obligations, and audit output.
@@ -777,28 +800,32 @@ debug small Concrete programs with predictable commands and useful errors.
     profiles, target profiles, oracle manifests, and evidence gates. The file
     must make authority, assumptions, runtime-check policy, and proof policy
     visible; it must not become an ambient hidden configuration channel.
-27. Normalize the CLI around predictable verbs:
+27. Decide target-conditional code selection before freestanding and
+    cross-platform stdlib work harden. Prefer profile-selected source roots and
+    modules in `Concrete.toml`; if narrow `cfg` attributes are added later, they
+    must be LL(1)-safe, small, target/profile-only, and reported in audit.
+28. Normalize the CLI around predictable verbs:
     `concrete build`, `concrete run`, `concrete test`, `concrete fmt`,
     `concrete audit`, `concrete prove`, `concrete eval`, `concrete inspect`,
     `concrete doc`, and `concrete clean`.
-28. Add `concrete doc`: generate basic API/reference docs from source,
+29. Add `concrete doc`: generate basic API/reference docs from source,
     capabilities, modules, and public comments without depending on proof
     infrastructure.
-29. Add a first-user tutorial path for C/Rust developers that does not start
+30. Add a first-user tutorial path for C/Rust developers that does not start
     with proofs: install, hello world, values and fixed arrays, ownership,
     borrows, capabilities, explicit errors, tests, compiled debugging, audit,
     then proof-bearing examples. The tone should be "ordinary systems code with
     visible evidence," not proof-assistant ceremony.
-30. Add useful non-proof examples: a small CLI tool, a protocol decoder, a
+31. Add useful non-proof examples: a small CLI tool, a protocol decoder, a
     bounded cache, and a capability-scoped file/console program.
-31. Add basic benchmarking UX: run small benchmarks, compare interpreter versus
+32. Add basic benchmarking UX: run small benchmarks, compare interpreter versus
     compiled performance, and detect obvious generated-code regressions.
-32. Document the memory model for ordinary users: move/copy/drop behavior,
+33. Document the memory model for ordinary users: move/copy/drop behavior,
     cleanup, borrows, linear values, trusted/Unsafe escape hatches, definite
     assignment, and what is rejected. State the invariant explicitly: safe
     Concrete has no uninitialized reads by construction; trusted/FFI memory may
     carry explicit assumptions.
-33. Add cross-platform build sanity for the supported host set: macOS and Linux
+34. Add cross-platform build sanity for the supported host set: macOS and Linux
     first, with CI coverage, reproducible commands, and documented toolchain
     expectations.
 

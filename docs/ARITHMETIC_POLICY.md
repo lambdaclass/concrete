@@ -47,6 +47,42 @@ The source-level interpreter (`Interp.lean`) uses Lean's arbitrary-precision `In
 
 The proof model (`Proof.lean`) uses Lean's unbounded `Int`. Theorems proved over `PExpr` hold for mathematical integers but carry an implicit assumption that runtime values stay within representable range. Division and modulo are not modeled in `PBinOp` at all.
 
+### Current overflow-obligation policy
+
+Overflow obligations are **not generated for every integer `+`, `-`, or `*` by
+default**. Arithmetic is everywhere, and Concrete's runtime overflow behavior is
+still profile-dependent while the checked/proved profiles are being built out.
+Emitting a missing obligation for every ordinary arithmetic expression would
+bury useful audit output in noise.
+
+Instead, overflow proof obligations are opt-in through an erased source
+attribute:
+
+```concrete
+#[overflow_checked]
+fn add_capacity(len: i32, extra: i32) -> i32 {
+    return len + extra;
+}
+```
+
+Inside an `#[overflow_checked]` function, each fixed-width integer addition,
+subtraction, and multiplication generates a runtime-safety obligation stating
+that the operation stays within the destination type's range. The obligation may
+then be discharged by `omega`, `bv_decide`, a Lean theorem, runtime checking, or
+reported as missing according to the normal evidence ladder.
+
+Outside an `#[overflow_checked]` scope, audit output must not silently imply
+"overflow proved." It should either omit overflow obligations from that function
+or report that overflow checking is not requested for the active arithmetic
+profile. This keeps the evidence ledger honest without making every example
+unreadable.
+
+`#[overflow_checked]` is **not** an arithmetic mode switch. It does not make
+wrapping arithmetic wrap, trapping arithmetic trap, or saturating arithmetic
+saturate. It only asks the proof/audit pipeline to generate no-overflow claims
+for ordinary arithmetic. Explicit wrapping and saturating operations remain
+source-visible through their named intrinsics.
+
 ### What the pressure tests revealed
 
 The Phase 2 pressure programs expose real arithmetic pain:
@@ -146,9 +182,14 @@ let integral: i32 = saturating_add(acc, error);  // bounded accumulator
 let brightness: u8 = saturating_add(pixel, boost);  // clamped adjustment
 ```
 
-### 4.3 No mode annotations, no attributes, no pragmas
+### 4.3 No ambient arithmetic-mode annotations
 
 There is no `#[wrapping]` attribute, no `@setOverflowMode(.wrapping)`, no module-level mode switch. Every arithmetic operation's mode is visible at the call site. This is consistent with Concrete's principle that a reviewer should be able to read one expression and know what it does without consulting ambient context.
+
+This rule is about **semantics**. It does not forbid attributes that request
+evidence generation. `#[overflow_checked]` is allowed because it does not change
+the meaning of `+`, `-`, or `*`; it makes no-overflow obligations visible in
+audit output.
 
 ### 4.4 Cast between modes
 
@@ -340,6 +381,11 @@ Division and modulo are not currently modeled in `PBinOp`. This remains a gap. A
 
 The long-term path for closing the integer gap is overflow preconditions: the proof obligation for `f(x) = y` includes a machine-checkable condition that all intermediate arithmetic stays within the representable range of the target type. This is not designed here — it depends on the proof model extensions planned for later phases.
 
+The staged path is `#[overflow_checked]` first: functions opt into these
+preconditions explicitly, the audit shows which arithmetic sites are covered,
+and release profiles can later require the attribute or an equivalent checked
+arithmetic profile for selected code.
+
 ---
 
 ## 11. Comparison with Other Languages
@@ -410,6 +456,10 @@ This closes the interpreter-vs-compiled divergence for the first time.
 8. **Update pressure programs**: fix the handful of programs that rely on wrapping.
 9. **Update proof eligibility**: reject wrapping/saturating intrinsics from the proof subset.
 10. **Update PREDICTABLE_BOUNDARIES.md**: remove "Integer overflow: silent wrap" from the UB table. Add "Integer overflow: trap (abort)" to the failure paths table.
+11. **Add `#[overflow_checked]` obligation generation**: before checked
+    arithmetic is the default everywhere, generate no-overflow obligations only
+    for functions or scopes that opt in. Audit output must distinguish
+    "overflow checked/proved" from "overflow checking not requested."
 
 ---
 
@@ -425,3 +475,6 @@ This closes the interpreter-vs-compiled divergence for the first time.
 8. Arithmetic mode is per-expression, not per-function or per-module. No ambient mode switches.
 9. `--report arithmetic` shows the arithmetic mode and operation counts per function.
 10. Wrapping and saturating intrinsics are excluded from the proof-eligible subset.
+11. Overflow proof obligations are opt-in during the staged rollout through
+    `#[overflow_checked]`; absence of the attribute must never be displayed as a
+    proof of no overflow.

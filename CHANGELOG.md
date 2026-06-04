@@ -61,6 +61,15 @@ bounds: kernel-decision proof when preconditions establish safety, checked for
 constant nonzero divisors, violation for constant zero divisors, or unproven
 when the tool lacks enough facts.
 
+Overflow obligations landed as an opt-in runtime-safety surface.
+`#[overflow_checked]` is erased metadata, not an arithmetic-mode switch: inside
+an annotated function, fixed-width integer `+`, `-`, and `*` generate
+no-overflow obligations, while unannotated arithmetic does not flood reports
+with unrequested missing claims. The report uses the same evidence ladder as
+other runtime-safety obligations: kernel-decision proof when preconditions bound
+the operands, checked/violation for constants, and unproven when the tool lacks
+enough facts.
+
 The source-contract path now has dedicated regression gates in CI. The
 `check_evidence_corpus.sh` gate re-derives the load-bearing fact each evidence
 class demonstrates, including kernel-checking the linked Lean proof, detecting

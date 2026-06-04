@@ -1825,6 +1825,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
   let mut specFns : List SpecFnDecl := []
   let mut pendingRepr : Option ReprOpts := none
   let mut pendingIsTest : Bool := false
+  let mut pendingOverflow : Bool := false
   let mut pendingEnsures : List Expr := []
   let mut pendingRequires : List Expr := []
   let mut pendingSpecLink : Option String := none
@@ -1840,6 +1841,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
         pendingRepr := reprOpts
       if key == "test" then
         pendingIsTest := true
+      if key == "overflow_checked" then pendingOverflow := true
       if key == "spec" then pendingSpecLink := attrVal
       if key == "proof_by" then pendingProofBy := attrVal
       if key == "ensures_proof" then pendingEnsuresProof := attrVal
@@ -1885,6 +1887,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           pendingRepr := reprOpts
         if key == "test" then
           pendingIsTest := true
+        if key == "overflow_checked" then pendingOverflow := true
         if key == "spec" then pendingSpecLink := attrVal
         if key == "proof_by" then pendingProofBy := attrVal
         if key == "ensures_proof" then pendingEnsuresProof := attrVal
@@ -1989,9 +1992,10 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
                       , ensuresProof := pendingEnsuresProof, coverage := pendingCoverage }
             else none
           match f with
-          | .inl fnDef => fns := fns ++ [{ fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures, proofLink }]
+          | .inl fnDef => fns := fns ++ [{ fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures, proofLink, overflowChecked := pendingOverflow }]
           | .inr extDef => externFns := externFns ++ [{ extDef with isPublic := isPub }]
           pendingIsTest := false
+          pendingOverflow := false
           pendingEnsures := []
           pendingRequires := []
           pendingSpecLink := none

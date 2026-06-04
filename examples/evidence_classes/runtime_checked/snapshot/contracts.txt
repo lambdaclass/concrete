@@ -8,6 +8,10 @@ demo.ratio
   R1  requires 0 < d
      status:  assumed_at_entry (callers not yet checked)
 
+demo.add_bounded
+  R1  requires 0 <= a && a < 1000 && 0 <= b && b < 1000
+     status:  assumed_at_entry (callers not yet checked)
+
 
 === Runtime-safety obligations (array bounds) ===
 
@@ -45,4 +49,15 @@ demo.risky
 demo.divz
   / divisor 0
     status: VIOLATION: division by zero (constant divisor)
+
+
+=== Runtime-safety obligations (integer overflow, #[overflow_checked]) ===
+
+demo.add_bounded
+  a + b  (range [-2147483648, 2147483647])
+    status: proved_by_kernel_decision (omega) — cannot overflow, no runtime check needed
+
+demo.add_unbounded
+  a + b  (range [-2147483648, 2147483647])
+    status: unproven — bound the operands (#[requires]), or use a wrapping/checked profile
 

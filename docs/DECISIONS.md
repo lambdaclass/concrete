@@ -124,6 +124,31 @@ Auto-deriving `==` for structs with all-Copy fields. Deferred because it require
 
 A real package manager and dependency system. Deferred until the language surface is stable and real programs have been written to validate the model.
 
+### Broad in-source conditional compilation — not yet
+
+**Status:** Deferred
+
+Concrete needs target-specific code for hosted/freestanding builds, OS-specific
+FFI, and stdlib splitting. The default design should be module/file selection
+through `Concrete.toml` target profiles, not a broad `#[cfg]` language embedded
+throughout source files.
+
+**Why not broad cfg now:** in-source conditional compilation can hide control
+flow, authority, target assumptions, and proof/audit differences behind build
+configuration. That is macro-adjacent complexity and works against Concrete's
+locality and auditability goals.
+
+**What Concrete should do first:**
+- select source roots/modules by target profile and platform in `Concrete.toml`;
+- report selected and excluded modules in audit output;
+- make hosted/freestanding stdlib splits visible in the project model;
+- add only narrow, audit-visible `cfg` attributes later if module/file
+  selection proves insufficient.
+
+**Prerequisite:** stable project model, target profiles, hosted/freestanding
+stdlib split, and audit output that can explain which target-specific code was
+selected.
+
 ## How to add a new decision
 
 1. Write a research note in `research/` with the full analysis (what, why, alternatives, precedent).

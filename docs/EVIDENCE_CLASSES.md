@@ -62,16 +62,18 @@ A `tested` class raises confidence but does **not** kernel-verify — it is belo
 
 | class | what it means | command | reference |
 |---|---|---|---|
-| `runtime_checked` | runtime-error obligations: array bounds (`0 ≤ idx < N`) and division (`divisor ≠ 0`), each reported with its disposition | `--report contracts` (Runtime-safety section) | `evidence_classes/runtime_checked` |
+| `runtime_checked` | runtime-error obligations: array bounds (`0 ≤ idx < N`), division (`divisor ≠ 0`), and integer overflow (`MIN ≤ result ≤ MAX`, opt-in), each reported with its disposition | `--report contracts` (Runtime-safety section) | `evidence_classes/runtime_checked` |
 
-Two kinds are wired today — **array bounds** (`0 ≤ idx < N` per `arr[idx]`) and
-**division** (`divisor ≠ 0` per `/` and `%`). Each access reports a disposition:
-`proved_by_kernel_decision (omega)` (a `#[requires]` makes it statically safe —
-no runtime check needed), `checked` (a safe constant), `VIOLATION` (a constant
-that faults — an OOB index or a zero divisor; the audit catches it), or
-`unproven` (needs a precondition or a runtime check). The obligation arithmetic
-is linear, so omega discharges the provable cases. **Next kinds:** overflow
-(needs the integer width + a range analysis) and casts — same
+Three kinds are wired today — **array bounds** (`0 ≤ idx < N` per `arr[idx]`),
+**division** (`divisor ≠ 0` per `/` and `%`), and **integer overflow**
+(`MIN ≤ result ≤ MAX` per fixed-width `+`/`-`/`*`, **opt-in** via
+`#[overflow_checked]` since default overflow semantics are profile-dependent).
+Each reports a disposition: `proved_by_kernel_decision (omega)` (a `#[requires]`
+makes it statically safe — no runtime check needed), `checked` (a safe
+constant), `VIOLATION` (a constant that faults — an OOB index, a zero divisor,
+or an overflowing constant; the audit catches it), or `unproven` (needs a
+precondition or a runtime check). The obligation arithmetic is linear, so omega
+discharges the provable cases. **Next kinds:** casts and loop bounds — same
 generate → omega/eval → status shape. The bound source is `#[requires]` (not yet
 loop invariants).
 

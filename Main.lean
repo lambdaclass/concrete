@@ -765,10 +765,13 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
   let provedBounds ← kernelDischargeLoopVCs (Report.boundsGoals parsedModules)
   let divObls := Report.divObligations parsedModules
   let provedDiv ← kernelDischargeLoopVCs (Report.divGoals parsedModules)
+  let ovfObls := Report.overflowObligations parsedModules
+  let provedOvf ← kernelDischargeLoopVCs (Report.overflowGoals parsedModules)
   return Report.contractsReport parsedModules registry provedVCs
     ++ Report.renderCallSites obs proved
     ++ Report.renderBounds boundsObls provedBounds
     ++ Report.renderDiv divObls provedDiv
+    ++ Report.renderOverflow ovfObls provedOvf
 
 /-- Run pipeline and check a profile constraint.
     If the input file lives inside a `Concrete.toml` project, route
