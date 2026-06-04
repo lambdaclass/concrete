@@ -1,6 +1,9 @@
-// Test: proof registry artifact loading
-// A pure function whose proof status comes from proof-registry.json
+// Test: in-source proof link (source-linked proof status)
+// A pure function whose proof status comes from the #[proof_by] link below.
 
+#[spec(PureAdd.spec_add)]
+#[proof_by(PureAdd.add_comm)]
+#[proof_fingerprint("9671eeae7fddc0cd")]
 fn pure_add(a: Int, b: Int) -> Int {
     return a + b;
 }

@@ -318,6 +318,20 @@ def loadRegistryWarn (inputPath : String) : IO Concrete.ProofRegistry := do
   for w in warnings do IO.eprintln w
   return registry
 
+/-- The FULL proof registry a report/query should see: any JSON entries merged
+    with the in-source proof links synthesized from `#[proof_by]`/`#[spec]`/
+    `#[proof_fingerprint]`. Every registry-consuming path must use this (not bare
+    `loadRegistryWarn`) so source-linked proofs are visible everywhere — proof
+    status, queries, traceability, bundles — not just `--report`. -/
+def loadRegistryWithLinks (inputPath : String)
+    (astModules : List Concrete.Module) (coreModules : List Concrete.CModule) :
+    IO Concrete.ProofRegistry := do
+  let jsonReg ← loadRegistryWarn inputPath
+  let src := Report.synthesizeSourceLinks astModules coreModules
+  match Report.mergeSourceLinks jsonReg src with
+  | .ok merged => return merged
+  | .error e => IO.eprintln s!"warning: {e}"; return jsonReg
+
 /-- Run pipeline to needed depth and produce a report. -/
 def compileAndQuery (inputPath : String) (query : String) : IO UInt32 := do
   let source ← readFile inputPath
@@ -329,7 +343,7 @@ def compileAndQuery (inputPath : String) (query : String) : IO UInt32 := do
   | .ok (parsed, _, validCore, srcMap) =>
     let locMap := Report.buildFnLocMap parsed.modules inputPath
     let simpleLocMap := locMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
-    let registry ← loadRegistryWarn inputPath
+    let registry ← loadRegistryWithLinks inputPath parsed.modules validCore.coreModules
     let pc := extractProofCore validCore simpleLocMap registry
     -- Traceability queries need the backend pipeline
     let parts := query.splitOn ":"
@@ -1190,7 +1204,7 @@ def compileBuild (projectRoot : String) (outputPath : Option String) (emitLLVM :
     -- Always compute ProofCore for summary and policy
     let policyLocMap := Report.buildFnLocMap parsed.modules mainPath
     let simpleLocMap := policyLocMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
-    let registry ← loadRegistryWarn mainPath
+    let registry ← loadRegistryWithLinks mainPath parsed.modules validCore.coreModules
     let pc := extractProofCore validCore simpleLocMap registry
     if !policy.isEmpty then
       let policyDs := enforcePolicy policy validCore.coreModules
@@ -1255,7 +1269,7 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
     if !policy.isEmpty then
       let policyLocMap := Report.buildFnLocMap parsed.modules mainPath
       let simpleLocMap := policyLocMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
-      let registry ← loadRegistryWarn mainPath
+      let registry ← loadRegistryWithLinks mainPath parsed.modules validCore.coreModules
       let pc := extractProofCore validCore simpleLocMap registry
       let policyDs := enforcePolicy policy validCore.coreModules
         (locMap := policyLocMap) (pc := pc) (depNames := depNames)
@@ -1375,7 +1389,7 @@ def main (args : List String) : IO UInt32 := do
         for w in polWarnings do IO.eprintln w
         let policyLocMap := Report.buildFnLocMap parsed.modules mainPath
         let simpleLocMap := policyLocMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
-        let registry ← loadRegistryWarn mainPath
+        let registry ← loadRegistryWithLinks mainPath parsed.modules validCore.coreModules
         let pc := extractProofCore validCore simpleLocMap registry
         -- Validate registry
         let regIssues := Concrete.validateRegistry pc registry
@@ -1498,7 +1512,7 @@ def main (args : List String) : IO UInt32 := do
       | .ok (parsed, _, validCore, _srcMap) =>
         let locMap := Report.buildFnLocMap parsed.modules inp
         let simpleLocMap := locMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
-        let registry ← loadRegistryWarn inp
+        let registry ← loadRegistryWithLinks inp parsed.modules validCore.coreModules
         let pc := extractProofCore validCore simpleLocMap registry
         -- Collect core facts (same as diagnostics-json)
         let coreFacts := Report.collectCoreFacts validCore.coreModules locMap registry pc
