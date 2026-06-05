@@ -806,7 +806,7 @@ def compileAndReport (inputPath : String) (reportType : String)
     (proveEmitLean : Bool := false) (proveStdout : Bool := false)
     (proveEmitArtifacts : Bool := false) (proveOutDir : Option String := none)
     (proveCheck : Bool := false) (proveWorkspace : Option String := none)
-    (proveNearestId : Option String := none) : IO UInt32 := do
+    (proveNearestId : Option String := none) (reportJson : Bool := false) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -1137,7 +1137,10 @@ def compileAndReport (inputPath : String) (reportType : String)
           else none
         | none => none
       if proofNames.isEmpty then
-        IO.println "=== Lean Proof Kernel Check ===\n\nNo proved or stale obligations with proof names to check."
+        if reportJson then
+          IO.println "{\n  \"schema_version\": \"1\",\n  \"all_checked\": true,\n  \"checks\": [],\n  \"lean_error\": \"\",\n  \"summary\": {\"verified\": 0, \"failed\": 0, \"total\": 0}\n}"
+        else
+          IO.println "=== Lean Proof Kernel Check ===\n\nNo proved or stale obligations with proof names to check."
         return 0
       -- Generate temp Lean file with #check for each theorem
       let tmpDir ← IO.Process.output { cmd := "mktemp", args := #["-d"] }
@@ -1185,13 +1188,43 @@ def compileAndReport (inputPath : String) (reportType : String)
             failed := failed ++ [(fn, proofName)]
         verified := []
       let generalFailure := result.exitCode != 0 && failed.isEmpty
-      -- Render report
-      let mut out := "=== Lean Proof Kernel Check ===\n"
-      out := out ++ s!"\nToolchain: "
       let tc ← try
         let tcContent ← IO.FS.readFile ⟨"lean-toolchain"⟩
         pure tcContent.trimAscii.toString
       catch _ => pure "unknown"
+      -- --json: structured whole-file proof-check summary (human output unchanged).
+      if reportJson then
+        let q := Report.jsonStr
+        let lineOf := fun (fn : String) =>
+          ((parsed.modules.flatMap Report.allFunctions).find?
+            (fun (pfx, f) => pfx ++ f.name == fn)).map (fun (_, f) => f.span.line) |>.getD 0
+        let has := fun (sub : String) => (combined.splitOn sub).length != 1
+        let statusOf := fun (thm : String) (oblStatus : String) =>
+          if generalFailure then "env_failure"
+          else if has s!"`{thm}`" then (if has "unknown" then "missing_theorem" else "failed")
+          else if oblStatus == "stale" then "stale"
+          else "checked"
+        let checkObj := fun (fn thm kind origin oblStatus : String) =>
+          String.join ["    {\"function\": ", q fn, ", \"theorem\": ", q thm, ", \"obligation_kind\": ", q kind,
+            ", \"origin\": ", q origin, ", \"status\": ", q (statusOf thm oblStatus),
+            ", \"source_line\": ", toString (lineOf fn), "}"]
+        let refChecks := proofNames.map fun (fn, pn, src, st) =>
+          checkObj fn pn "refinement" (if src == .registry then "source_linked" else "hardcoded") st.canonical
+        let ensChecks := ensuresThms.map fun (fn, thm) => checkObj fn thm "ensures" "source_linked" "proved"
+        let allObjs := refChecks ++ ensChecks
+        let leanErr := if generalFailure || !failed.isEmpty then String.ofList (combined.toList.take 800) else ""
+        IO.println (String.join [
+          "{\n  \"schema_version\": ", q "1", ",\n  \"toolchain\": ", q tc,
+          ",\n  \"all_checked\": ", (if failed.isEmpty && !generalFailure then "true" else "false"),
+          ",\n  \"checks\": [\n", ",\n".intercalate allObjs, "\n  ],\n",
+          "  \"lean_error\": ", q leanErr,
+          ",\n  \"summary\": {\"verified\": ", toString verified.length, ", \"failed\": ", toString failed.length,
+          ", \"total\": ", toString (proofNames.length + ensuresThms.length), "}\n}"])
+        let _ ← IO.Process.output { cmd := "rm", args := #["-rf", tmpDir.stdout.trimAscii.toString] }
+        return (if failed.isEmpty && !generalFailure then 0 else 1)
+      -- Render report
+      let mut out := "=== Lean Proof Kernel Check ===\n"
+      out := out ++ s!"\nToolchain: "
       out := out ++ tc ++ "\n"
       if !verified.isEmpty then
         out := out ++ s!"\n  Kernel-verified ({verified.length}):\n"
@@ -1954,6 +1987,8 @@ def main (args : List String) : IO UInt32 := do
     compileAndCheck inputPath checkType
   | [inputPath, "--report", reportType] =>
     compileAndReport inputPath reportType
+  | [inputPath, "--report", reportType, "--json"] =>
+    compileAndReport inputPath reportType (reportJson := true)
   | [inputPath, "--query", query] =>
     compileAndQuery inputPath query
   | [inputPath, "--fmt"] =>

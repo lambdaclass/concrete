@@ -256,6 +256,16 @@ fi
 assert_json "capabilities workspace=true" 'd["features"]["workspace"] is True' "$COMPILER" prove --capabilities
 rm -rf "$(dirname "$WS")"
 
+echo "=== report check-proofs --json (whole-file kernel summary) ==="
+if command -v lake >/dev/null 2>&1; then
+  assert_json "check-proofs --json (verified, source_linked)" \
+    'd["all_checked"] is True and d["schema_version"]=="1" and any(c["status"]=="checked" and c["origin"]=="source_linked" and "source_line" in c for c in d["checks"])' \
+    "$COMPILER" "$LI" --report check-proofs --json
+  assert_exit "check-proofs --json proved → exit 0" 0 "$COMPILER" "$LI" --report check-proofs --json
+else
+  echo "  skip check-proofs --json assertions (lake not on PATH)"
+fi
+
 echo ""
 echo "PROVE-CLI: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

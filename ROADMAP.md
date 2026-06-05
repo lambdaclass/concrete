@@ -461,8 +461,13 @@ lemmas, and actionable failure diagnostics.
     agents read structured status, not raw stderr. `--capabilities` reports
     `check=true`; `--help=agent` lists it at step 6. Gate: `test_prove_cli.sh`
     (47/0, with a `lake`-guarded kernel assertion).
-    (NEXT: whole-file `concrete <file> --report check-proofs --json`; per-check
-    error spans when a function carries multiple theorems.)
+    Whole-file/project variant: `concrete <file> --report check-proofs --json`
+    runs the same kernel pass over every linked theorem (refinement + `#[ensures]`
+    discharge) and emits `{schema_version, toolchain, all_checked, checks[
+    {function, theorem, obligation_kind, origin, status, source_line}],
+    lean_error, summary}` with the same status vocabulary; the human text report
+    is unchanged. (NEXT: per-check error spans when a function carries multiple
+    theorems.)
 13. ~~Add nearest-lemma and proof-recipe hints.~~ **DONE.** `concrete prove
     <file> <fn> --nearest-lemmas [--json]` (`Report.nearestLemmas` +
     `lemmaRecipeFor`): a static map from obligation kind → tactic/lemmas
