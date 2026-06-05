@@ -3592,6 +3592,79 @@ def emitProofLinkJson (registry : ProofRegistry) (qual inputPath : String) : Str
       s!"  \"next_actions\": [\{\"kind\": \"paste_link\", \"command\": \"<paste link_block above the function in source>\", \"output_format\": \"none\", \"resolves\": \"missing\"}, \{\"kind\": \"check_proofs\", \"command\": {q s!"concrete {inputPath} --report check-proofs"}, \"output_format\": \"text\", \"resolves\": \"proved\"}]\n",
       "}" ]
 
+/-- Static recipe (tactic, lemmas, note) for an obligation kind — the
+    proof-recipe map (linear → omega; preservation → eval_while_count; overflow →
+    bv_decide; arrays → ProofKit.Array; etc.). -/
+def lemmaRecipeFor (kind : String) : String × List String × String :=
+  match kind with
+  | "invariant_init" | "variant_nonnegative" | "variant_decreases" | "loop_exit_post_link" =>
+      ("omega", [], "linear-integer leaf — omega closes it (no lemma needed)")
+  | "invariant_preservation" =>
+      ("intros; (omega | eval)", ["Concrete.ProofKit.Loops.eval_while_count", "Concrete.ProofKit.Eval"],
+       "arithmetic half closes with omega; operational step uses eval_while_count")
+  | "array_bounds" =>
+      ("intros; omega", ["Concrete.ProofKit.Array.lookupIndex_set_self", "Concrete.ProofKit.Array.set_in_counter_map"],
+       "bound from #[requires]/invariant via omega; array lemmas for body updates")
+  | "division_nonzero" => ("intros; omega", [], "divisor ≠ 0 follows from #[requires] via omega")
+  | "integer_overflow" =>
+      ("intros; bv_decide", [], "interval analysis + widened unsigned bv_decide for var*var; omega for linear")
+  | "ensures" =>
+      ("(state spec, then refine)", ["Concrete.ProofKit.Refinement"],
+       "state the spec; prove `<fn> refines spec`; run --emit-link once proved")
+  | _ => ("(unknown)", [], "")
+
+/-- `concrete prove <file> <fn> --nearest-lemmas [--json]`: proof-recipe hints
+    mapping each obligation kind + detected features to local tactics/lemmas. -/
+def nearestLemmas (pc : Concrete.ProofCore) (modules : List Module) (qualName : String)
+    (provedVCs : List String) (json : Bool) : String := Id.run do
+  let astFn? := (modules.flatMap allFunctions).find? (fun (pfx, fn) => pfx ++ fn.name == qualName) |>.map Prod.snd
+  let entry? := pc.entries.find? (·.qualName == qualName)
+  match astFn?, entry? with
+  | some f, some e =>
+    let extraLets := letConstMap f.body
+    let retExpr := loopExitReturn f.body
+    -- collect (id, kind) obligations
+    let mut obls : List (String × String) := []
+    for lc in f.loopContracts do
+      for oid in ["O1", "O2", "O3", "O4", "O5"] do
+        match loopObInfo lc oid qualName f.ensures extraLets retExpr provedVCs with
+        | some (kind, _, _, _) => obls := obls ++ [(loopVCKey qualName lc.line oid, kind)]
+        | none => pure ()
+    for _ in f.ensures do obls := obls ++ [(s!"{qualName}#ensures", "ensures")]
+    -- feature-level lemma families
+    let feats := (e.fn.body.flatMap proveStmtFeatures).eraseDups
+    let mut featLemmas : List String := []
+    if feats.contains "loop" || !f.loopContracts.isEmpty then featLemmas := featLemmas ++ ["Concrete.ProofKit.Loops"]
+    if feats.contains "array" then featLemmas := featLemmas ++ ["Concrete.ProofKit.Array"]
+    if feats.contains "bitvec" then featLemmas := featLemmas ++ ["Concrete.ProofKit.BitVec", "bv_decide"]
+    if feats.contains "call" then featLemmas := featLemmas ++ ["Concrete.ProofKit.Calls"]
+    if json then
+      let q := jsonStr
+      let qarr := fun (xs : List String) => "[" ++ ", ".intercalate (xs.map q) ++ "]"
+      let recipes := obls.map fun (id, kind) =>
+        let (tac, lemmas, note) := lemmaRecipeFor kind
+        String.join ["{\"id\": ", q id, ", \"kind\": ", q kind, ", \"tactic\": ", q tac,
+          ", \"lemmas\": ", qarr lemmas, ", \"note\": ", q note, "}"]
+      return String.join [
+        "{\n",
+        s!"  \"function\": {q qualName},\n",
+        s!"  \"recipes\": [{", ".intercalate recipes}],\n",
+        s!"  \"feature_lemmas\": {qarr featLemmas},\n",
+        s!"  \"next_actions\": [\{\"kind\": \"emit_lean\", \"command\": {q s!"concrete prove <file> {qualName} --emit-lean"}, \"output_format\": \"text\", \"resolves\": \"missing\"}]\n",
+        "}" ]
+    else
+      let mut out := s!"=== nearest lemmas / proof recipes: {qualName} ===\n\n"
+      for (id, kind) in obls do
+        let (tac, lemmas, note) := lemmaRecipeFor kind
+        out := out ++ s!"  {id}  ({kind})\n    tactic: {tac}\n"
+        if !lemmas.isEmpty then out := out ++ s!"    lemmas: {", ".intercalate lemmas}\n"
+        out := out ++ s!"    note:   {note}\n\n"
+      out := out ++ s!"feature lemma families: {if featLemmas.isEmpty then "(none)" else ", ".intercalate featLemmas}\n"
+      return out
+  | _, _ =>
+    if json then s!"\{\"error\": {jsonStr s!"no extractable function '{qualName}'"}}"
+    else s!"no extractable function '{qualName}' (it may be excluded or blocked)."
+
 -- ============================================================
 -- Source/Core/SSA/LLVM traceability (--report traceability)
 -- ============================================================

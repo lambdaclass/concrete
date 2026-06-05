@@ -411,13 +411,14 @@ lemmas, and actionable failure diagnostics.
     checked, failed, stale, missing theorem, and environment/tool failure. This
     is the closed repair loop: agents should not scrape raw `lake env lean`
     stderr to learn whether their proof worked.
-11. Add nearest-lemma and proof-recipe hints. Start with a static mapping from
-    obligation kind and detected features to local lemmas: linear arithmetic ->
-    `omega`; bitvectors -> `bv_decide`; counter loops -> `eval_while_count`;
-    array updates -> `set_in_counter_map`; calls -> `ProofKit.Calls`; loop
-    copies -> `ProofKit.Loops`; source links -> `--emit-link`. Add
-    `--nearest-lemmas <id>` and `--nearest-lemmas <id> --json` here, since this
-    is the item that introduces the subcommand.
+11. ~~Add nearest-lemma and proof-recipe hints.~~ **DONE.** `concrete prove
+    <file> <fn> --nearest-lemmas [--json]` (`Report.nearestLemmas` +
+    `lemmaRecipeFor`): a static map from obligation kind → tactic/lemmas
+    (linear→`omega`; preservation→`eval_while_count`; overflow→`bv_decide`;
+    array_bounds→`ProofKit.Array`; ensures→`ProofKit.Refinement`) plus
+    feature-level lemma families (Loops/Array/BitVec/Calls). `capabilities`
+    reports `nearest_lemmas=true`. (NEXT: scope to a single `<id>`; recipes for
+    bare array/call obligations that have no loop contract.)
 12. Add proof minimization: `concrete prove --minimize <obligation_id>` emits
     the smallest source / ProofCore / Lean slice needed to reproduce a failed
     obligation. This should be built after JSON and failed-artifact formats are

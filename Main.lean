@@ -802,7 +802,7 @@ def compileAndReport (inputPath : String) (reportType : String)
     (proveTarget : Option String := none) (proveOut : Option String := none)
     (proveForce : Bool := false) (proveEmitLink : Bool := false)
     (proveShowObl : Option String := none) (proveReplay : Bool := false)
-    (proveJson : Bool := false) : IO UInt32 := do
+    (proveJson : Bool := false) (proveNearestLemmas : Bool := false) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -879,6 +879,10 @@ def compileAndReport (inputPath : String) (reportType : String)
                       else Report.emitProofLink registry qual)
           return 0
         let provedVCs ← kernelDischargeLoopVCs (Report.loopVCGoals parsed.modules)
+        -- --nearest-lemmas: proof-recipe hints per obligation kind + features.
+        if proveNearestLemmas then
+          IO.println (Report.nearestLemmas pc parsed.modules qual provedVCs proveJson)
+          return 0
         -- --show-obligation <id>: print one obligation in full (text or JSON).
         if let some oblId := proveShowObl then
           IO.println (if proveJson then Report.showObligationJson parsed.modules qual oblId provedVCs inputPath
@@ -1365,7 +1369,7 @@ def proveCapabilitiesJson : String := String.intercalate "\n" [
   "    \"show_obligation_json\": true,",
   "    \"emit_lean\": false,",
   "    \"emit_link\": true,",
-  "    \"nearest_lemmas\": false,",
+  "    \"nearest_lemmas\": true,",
   "    \"replay_json\": true",
   "  },",
   "  \"obligation_kinds\": [\"invariant_init\", \"invariant_preservation\", \"loop_exit_post_link\", \"variant_nonnegative\", \"variant_decreases\", \"array_bounds\", \"division_nonzero\", \"integer_overflow\", \"ensures\"],",
@@ -1735,6 +1739,7 @@ def main (args : List String) : IO UInt32 := do
       let emitLink := rest.contains "--emit-link"
       let replay := rest.contains "--replay"
       let proveJson := rest.contains "--json"
+      let nearestLemmas := rest.contains "--nearest-lemmas"
       let outPath := match rest.dropWhile (· != "--out") with
         | _ :: p :: _ => some p
         | _ => none
@@ -1744,7 +1749,7 @@ def main (args : List String) : IO UInt32 := do
       return (← compileAndReport inputPath "prove"
         (proveTarget := some target) (proveOut := outPath) (proveForce := force)
         (proveEmitLink := emitLink) (proveShowObl := showObl) (proveReplay := replay)
-        (proveJson := proveJson))
+        (proveJson := proveJson) (proveNearestLemmas := nearestLemmas))
     | _ =>
       IO.eprintln "Usage: concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--show-obligation <id>] [--replay]\n       concrete prove --help=agent | --capabilities | --schema   (discovery; no file needed)"
       return 1

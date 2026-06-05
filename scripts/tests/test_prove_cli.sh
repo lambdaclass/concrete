@@ -144,6 +144,12 @@ assert_json "replay --json (all_pass + ids match contracts key)" \
   'd["all_pass"] is True and all("#" in o["id"] for o in d["obligations"])' \
   "$COMPILER" prove "$LI" loop_invariant.count_up --replay --json
 
+echo "=== prove --nearest-lemmas (proof-recipe hints) ==="
+assert_json "nearest-lemmas recipes + feature lemmas" \
+  'len(d["recipes"])>=1 and any(r["kind"]=="invariant_init" and r["tactic"]=="omega" for r in d["recipes"]) and "Concrete.ProofKit.Loops" in d["feature_lemmas"]' \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --nearest-lemmas --json
+assert_json "capabilities nearest_lemmas=true" 'd["features"]["nearest_lemmas"] is True' "$COMPILER" prove --capabilities
+
 echo ""
 echo "PROVE-CLI: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
