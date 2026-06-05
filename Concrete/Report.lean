@@ -1649,7 +1649,7 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry)
         if !e.proof.isEmpty && e.coverage == "one_direction" then
           s!"\n     status:  partial — one direction proved_by_lean, converse outstanding\n     theorem: {e.proof}  (coverage: one_direction)\n     note:    full postcondition not yet discharged; the converse is the next obligation"
         else "\n     status:  missing (registry entry has no ensures_proof)"
-    | none => "\n     status:  missing (no proof-registry entry for this function)"
+    | none => "\n     status:  missing (no in-source proof link for this function)"
   let rec go (m : Module) (acc : String) : String := Id.run do
     let mut out := acc
     let pfx := if m.name.isEmpty then "" else m.name ++ "."
@@ -3466,9 +3466,7 @@ def emitProofLink (registry : ProofRegistry) (qual : String) : String :=
     -- hashing it gives the staleness token to store in source.
     let fp := s!"#[proof_fingerprint(\"{shortHash e.bodyFingerprint}\")]"
     String.join [
-      s!"// in-source proof link for `{qual}`.\n",
-      "// Paste above the function, then delete its proof-registry.json entry\n",
-      "// (a function may not be linked in both places).\n",
+      s!"// in-source proof link for `{qual}` — paste this block above the function.\n",
       req "spec" e.spec, "\n",
       req "proof_by" e.proof, "\n",
       ens, "\n",

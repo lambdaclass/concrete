@@ -343,108 +343,29 @@ of one-off `simp` scripts.
 Done when: new flagship proofs can start from useful generated stubs, standard
 lemmas, and actionable failure diagnostics.
 
-1. **Retire `proof-registry.json` — correctly, in order.** The end state is
-   source-linked proof attributes with no JSON registry support. Two
-   prerequisites must land FIRST, because skipping them is unsound or ugly; only
-   then is bulk migration safe.
-
-   **(a) The soundness rule — staleness must survive migration.** A synthesized
-   source-link entry recomputes its `body_fingerprint` from the *current* body,
-   so it never catches "the body changed out from under the proof." Drift is
-   then caught ONLY by spec-drift (`extracted ≠ spec`), which fires only for
-   functions whose spec is in `Concrete.Proof.specs` (parse_validate,
-   crypto_verify, fixed_capacity, ct_compare, hmac_sha256). Functions NOT in
-   that table (point proofs like `elf_header`, `loop_invariant`) get their drift
-   detection *entirely* from the registry's STORED fingerprint — migrating them
-   to a computed fingerprint silently loses it, and a drifted body reports
-   `proved` (demonstrated: `elf_header/main_drifted` showed 5 proved instead of
-   stale). **So: migrate a function only when spec-drift covers it, OR give the
-   in-source link a compact stored fingerprint.** The right long-term fix is a
-   compact **fingerprint hash** in the attribute (e.g.
-   `#[proof_fingerprint("ab12cd…")]`, a short content hash — not the full PExpr,
-   which is grotesque in source) compared against the recomputed hash, so
-   staleness is detected for ALL functions, not just spec-drift-covered ones.
-   Until that exists, `elf_header`/`loop_invariant` stay on JSON.
-
-   **(b) Move example proofs out of the compiler namespace.** In-source links
-   currently read `#[proof_by(Concrete.Proof.foo_correct)]` — leaking the
-   *compiler's own* Lean proof namespace into example source (fine for a real
-   user pointing at their own proofs; incestuous noise for the compiler's
-   flagships). Relocate the example proofs into per-example / user-facing Lean
-   namespaces so attributes carry clean names. The `Concrete.Proof.*` form is a
-   transitional wart, not the intended end state.
-
-   **Migration order:** ~~add `#[proof_fingerprint]` (compact hash) + verify it
-   catches drift on a non-spec-drift function~~ **DONE** → move example proofs
-   out of `Concrete.Proof` → add `source_linked` vs `json_backed` reporting →
-   bulk migrate examples (each `main_drifted` getting the same links → stale via
-   the fingerprint hash) → make JSON legacy behind an allow flag → delete JSON
-   support once every flagship is source-linked and stale-link regressions cover
-   the path. **Done so far:**
-   - `ct_compare` and the full **`hmac_sha256` chain** (11 fns): source-linked,
-     empty `[]` registry, sound via spec-drift coverage.
-   - **`#[proof_fingerprint("hash")]` implemented** (prereq (a)): a short
-     `String.hash` of the body fingerprint, stored in source; `--emit-link`
-     emits it. Staleness compares `shortHash(currentFp)` against it in BOTH
-     paths — `validateRegistry` (verify/spec-drift gate) and
-     `deriveObligationStatus` (`--report proof-status`, via
-     `SpecAttachment.expectedHash`). So a source-linked function gets drift
-     detection even without spec-drift coverage.
-   - **`elf_header` (5 point proofs) and `loop_invariant` migrated** to in-source
-     links + `#[proof_fingerprint]`, empty registries. Verified: clean → proved;
-     drifting a body → `stale` (e.g. `check_version` accepting `0` flips
-     proved→stale with a hash-mismatch message). The earlier soundness blocker
-     (computed fingerprint always self-matches) is closed.
-   - The in-source link mechanism, `--emit-link`, and the `stale_proof`
-     regression exist.
-   - **ALL example registries retired.** `crypto_verify`, `parse_validate`,
-     `fixed_capacity`, and `proof_pressure` migrated to in-source links +
-     `#[proof_fingerprint]`; every `examples/**/proof-registry.json` deleted
-     (8 files). `proof_pressure.compute_checksum` keeps its DELIBERATE `stale`
-     demo via a pre-drift `#[proof_fingerprint]`. `check_no_example_registries.sh`
-     (CI + `make test-registry-retirement`) fails on any stray example registry.
-   - **Origin reporting**: `--report proof-status` shows `origin: source_linked`
-     / `json_backed` / `hardcoded` per proof (`ProofRegistryEntry.sourceLinked`).
-   - The showcase gate no longer requires `proof-registry.json` as an artifact.
-
-   **Remaining:** prereq (b) — move example proofs out of the `Concrete.Proof.*`
-   compiler namespace. Then the compiler-level JSON retirement (steps 4–5 below):
-   gate JSON loading behind `--allow-legacy-proof-registry`, then delete JSON
-   support. These touch the ~14 adversarial JSON fixtures under `tests/programs/`
-   (which test `validateRegistry` / JSON parsing — malformed, dup, spec-drift,
-   stale); gating/removal requires migrating or allowlisting those, so it is the
-   careful tail, not mechanical.
-
-   **Deletion gates — multiple checks before JSON support can go away:**
-   - `concrete audit` / `proof-status` must report link origin per proof:
-     `source_linked`, `json_backed`, or `legacy_json_allowed`; no ambiguous
-     "proved" row without origin.
-   - CI must fail on an empty `proof-registry.json` unless the example is still
-     in a documented transition window. Empty registries should not become the
-     new mandatory artifact.
-   - CI must fail on any non-empty `proof-registry.json` once the allowlist is
-     empty. During migration, the allowlist must name each remaining JSON-backed
-     example and why it cannot yet move.
-   - Every migrated proof must have a stale-link regression: edit the source
-     body, keep the proof link, and verify the claim becomes `stale` through
-     either spec-drift or `#[proof_fingerprint]`.
-   - `--emit-link` must be able to emit the complete source-link block,
-     including the compact fingerprint when needed; manual attribute assembly
-     is not enough for bulk migration.
-   - `check-proofs`, `proof-status`, `concrete prove --emit-link`, and
-     `concrete prove --replay` must treat source-linked and JSON-backed proofs
-     identically before JSON is made legacy.
-   - Release bundles must list zero JSON-backed proof links before the JSON
-     reader can be disabled by default.
-   - Final deletion is two-step: first require an explicit
-     `--allow-legacy-proof-registry` flag for JSON, then remove JSON parsing and
-     the flag after one full green cycle with no allowlist entries.
+1. ~~Retire `proof-registry.json`.~~ **DONE — JSON support fully removed; source
+   links are the only proof model.**
+   - Each function carries in-source `#[spec]`/`#[proof_by]`/`#[ensures_proof]`/
+     `#[proof_coverage]`/`#[proof_fingerprint]`; the compiler synthesizes the
+     registry from them (`Report.synthesizeSourceLinks`), used by every consumer
+     (report, query, policy, snapshot, traceability).
+   - `#[proof_fingerprint]` (a short body hash) gives staleness detection for ALL
+     functions, not just spec-drift-covered ones — closing the soundness rule
+     that gated migration. `--emit-link` emits the whole block incl. the hash.
+   - Migrated every example + the representable `tests/programs` fixtures; deleted
+     all `proof-registry.json` files, the JSON parser (`parseRegistryJson`), the
+     loader, and the `--allow-legacy-proof-registry` flag. `proof-status` origin
+     is `source_linked` | `hardcoded`. `check_no_example_registries.sh` (CI) keeps
+     `examples/` registry-free. History: `docs/REGISTRY_FIXTURE_INVENTORY.md`.
+   - **Remaining (separate thread):** move example proofs out of the
+     `Concrete.Proof.*` compiler namespace into per-example namespaces — the only
+     transitional wart left.
 2. ~~Make the `concrete prove` binary self-describing for agents.~~ **DONE.**
    `concrete prove --help=agent` prints the proof-authoring sequence, output
    formats, the exit-code taxonomy (0 success, 1 invalid invocation, 2
    obligations missing, 3 stale, 4 proof-check failure, 5 solver/checker
-   failure, 6 internal error), and the next command per status. (The exit codes
-   are documented; wiring `prove`'s process exit to them is a follow-up.)
+   failure, 6 internal error), and the next command per status. Process exit is
+   wired to 0/2/3 for `prove <file> <fn>` (proved/missing/stale).
 3. ~~Add `concrete prove --capabilities`~~ **DONE.** Emits JSON: schema_version,
    features (`prove_json`, `show_obligation_json`, `emit_lean`=false,
    `emit_link`, `nearest_lemmas`=false, `replay_json`), obligation_kinds,
@@ -1221,8 +1142,8 @@ validation are in place.
 audience):**
 - `concrete fmt`, `concrete test`, and a minimal project model (`Concrete.toml`)
   exist.
-- `proof-registry.json` is legacy or gone for flagship proof surfaces; source
-  links are the normal path.
+- ✅ `proof-registry.json` is gone (support removed); in-source links are the
+  only proof path.
 - Release bundles have stable schemas, replay commands, assumption/trust
   reports, and proof-link provenance.
 - The stdlib/runtime boundary is stable enough for daily examples.

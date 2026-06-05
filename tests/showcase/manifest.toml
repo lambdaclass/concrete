@@ -41,7 +41,7 @@ on_showcase_manifest   = true   # bar #10 — this entry
 
 # Evidence pointers — what a reviewer reads to audit the claims.
 [flagship.evidence]
-proof_registry = "examples/parse_validate/src/proof-registry.json"
+proof_links    = "examples/parse_validate/src/main.con"
 proofs         = ["Concrete.Proof.validate_version_correct",
                   "Concrete.Proof.validate_header_fields_success",
                   "Concrete.Proof.parse_header_too_short"]
@@ -133,7 +133,7 @@ snapshot_baseline      = true   # bar #9 — 16 reports
 on_showcase_manifest   = true   # bar #10 — this entry
 
 [flagship.evidence]
-proof_registry = "examples/crypto_verify/src/proof-registry.json"
+proof_links    = "examples/crypto_verify/src/main.con"
 proofs         = ["Concrete.Proof.compute_tag_correct",
                   "Concrete.Proof.verify_tag_correct",
                   "Concrete.Proof.check_nonce_correct",
@@ -222,7 +222,7 @@ snapshot_baseline      = true   # bar #9 — 16 reports
 on_showcase_manifest   = true   # bar #10 — this entry
 
 [flagship.evidence]
-proof_registry = "examples/fixed_capacity/src/proof-registry.json"
+proof_links    = "examples/fixed_capacity/src/main.con"
 proofs         = ["Concrete.Proof.ring_new_correct",
                   "Concrete.Proof.compute_tag_zero_correct",
                   "Concrete.Proof.ring_push_zero_correct",
@@ -315,7 +315,7 @@ snapshot_baseline      = true   # bar #9 — 16 reports
 on_showcase_manifest   = true   # bar #10 — this entry
 
 [flagship.evidence]
-proof_registry = "examples/constant_time_tag/src/proof-registry.json"
+proof_links    = "examples/constant_time_tag/src/main.con"
 proofs         = ["Concrete.Proof.ct_compare_equal_zeros_correct",
                   "Concrete.Proof.ct_compare_same_tag_correct",
                   "Concrete.Proof.bitxor_u8_self_zero"]
@@ -434,7 +434,7 @@ snapshot_baseline      = true   # bar #9 — 16 reports
 on_showcase_manifest   = true   # bar #10 — this entry
 
 [flagship.evidence]
-proof_registry = "examples/hmac_sha256/src/proof-registry.json"
+proof_links    = "examples/hmac_sha256/src/main.con"
 proofs         = ["Concrete.Proof.sha256_init_correct",
                   "Concrete.Proof.ch_selects_high",
                   "Concrete.Proof.block_to_words_refines_spec",

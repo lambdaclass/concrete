@@ -1381,7 +1381,7 @@ structure SpecIdentity where
 /-- How a spec binding was established. -/
 inductive SpecSource where
   | hardcoded   -- from Proof.provedFunctions
-  | registry    -- from proof-registry.json
+  | registry    -- synthesized from in-source proof links
   deriving BEq, Repr
 
 /-- Spec attachment for a function: identity binding only.

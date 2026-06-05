@@ -19,8 +19,8 @@ references them.
    `examples/parse_validate/AUDIT.md` (the template that
    established them).
 2. The example must carry, at minimum:
-   - One Lean-backed theorem in `Concrete/Proof.lean`, registered
-     in `src/proof-registry.json`.
+   - One Lean-backed theorem in `Concrete/Proof.lean`, linked in source
+     via `#[proof_by]`/`#[spec]`/`#[proof_fingerprint]` on the function.
    - An `assumptions.toml` declaring the trust surface (enforced
      by `make test-assumptions`).
    - A `[policy]` section in `Concrete.toml` (enforced by

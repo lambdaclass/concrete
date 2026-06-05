@@ -1,8 +1,8 @@
 // Adversarial: spec-drift gate (regression for commit f371cc1).
 //
-// `simple_add` here has its source body matching the registered
-// `body_fingerprint` in proof-registry.json (so the existing
-// stale-fingerprint check does NOT fire).  The registered spec
+// `simple_add` here has its source body matching the in-source
+// `#[proof_fingerprint]` (so the fingerprint staleness check does NOT
+// fire).  The linked spec
 // `Concrete.Proof.driftTestSpec`, however, evaluates to a PExpr
 // that does NOT match the source-extracted PExpr.
 //

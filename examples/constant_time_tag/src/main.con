@@ -35,11 +35,11 @@ mod constant_time_tag {
     // Lean (both directions). (Constant-time is a SEPARATE structural claim —
     // see AUDIT.md; it is not expressible as a value-semantics #[ensures].)
     //
-    // The proof link lives IN SOURCE (not proof-registry.json): the four
-    // #[spec]/#[proof_by]/#[ensures_proof]/#[proof_coverage] attributes below
-    // synthesize the same registry entry the JSON used to hold, with the body
-    // fingerprint computed at build time. This is the first function to use the
-    // in-source proof link; everything else still uses proof-registry.json.
+    // The proof link lives IN SOURCE: the
+    // #[spec]/#[proof_by]/#[ensures_proof]/#[proof_coverage]/#[proof_fingerprint]
+    // attributes below are synthesized into the registry the compiler builds
+    // in-memory. In-source links are the only proof model (JSON
+    // proof-registry.json support was removed).
     #[spec(Concrete.Proof.ctCompareExpr)]
     #[proof_by(Concrete.Proof.ct_compare_same_tag_correct)]
     #[ensures_proof(Concrete.Proof.ct_compare_different_tag_correct)]

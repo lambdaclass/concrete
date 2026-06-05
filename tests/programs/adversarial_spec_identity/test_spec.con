@@ -1,5 +1,5 @@
 // Test program for spec identity tests.
-// Used with proof-registry.json to verify spec attachment flows through ProofCore.
+// Used with in-source proof links to verify spec attachment flows through ProofCore.
 
 #[spec(add_commutativity)]
 #[proof_by(Concrete.Proof.pure_add_correct)]
