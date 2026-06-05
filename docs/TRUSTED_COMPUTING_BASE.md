@@ -72,7 +72,7 @@ This is the core trust anchor for the "proved" label. When `--report check-proof
 
 **Trusted for:**
 
-- Correctly binding source functions to specs and theorem identities via `proof-registry.json` or hardcoded `provedFunctions`
+- Correctly binding source functions to specs and theorem identities via in-source proof links or hardcoded `provedFunctions`
 - Correctly computing body fingerprints from Core IR
 - Correctly detecting stale or mismatched proof attachments
 - Correctly resolving renamed functions by fingerprint matching

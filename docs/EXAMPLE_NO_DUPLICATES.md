@@ -22,7 +22,7 @@ Reuse an existing example when:
 - The new test gates are additive (e.g., adding drift detection to an example that already has predictable checks)
 - The example's code does not need to change to serve the new phase
 
-**Example**: `crypto_verify` started as a Phase 1 predictable-core example. Phase 2 added proof registration and drift detection. No new example was created — the same program gained a `proof-registry.json` and a `main_drifted.con` variant, and new test gates were added to the existing test section.
+**Example**: `crypto_verify` started as a Phase 1 predictable-core example. Phase 2 added proof registration and drift detection. No new example was created — the same program gained in-source proof links and a `main_drifted.con` variant, and new test gates were added to the existing test section.
 
 ## When to create a new example
 

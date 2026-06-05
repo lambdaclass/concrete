@@ -210,7 +210,7 @@ Every function receives exactly one status:
 - Proof-bundle JSON with summary, assumptions, registry, dependency graph, facts
 - JSON facts: `proof_status`, `obligation`, `extraction`, `proof_diagnostic`, `eligibility`
 - CI proof gate: 20 checks across 8 sections (`scripts/ci/proof_gate.sh`)
-- Proof registry (`proof-registry.json`) with function, fingerprint, proof name, spec
+- In-source proof links (`#[proof_by]`/`#[spec]`/`#[proof_fingerprint]`) with function, fingerprint, proof name, spec
 
 ### What "proved" means and does not mean
 

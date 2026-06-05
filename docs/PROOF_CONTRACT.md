@@ -29,7 +29,7 @@ Each proof is registered with four fields:
 | `proof` | `"Concrete.Proof.parse_byte_correct"` | Lean theorem name |
 | `spec` | `"parse_byte_adds_offset"` | Spec/property name |
 
-The registry can be either hardcoded in `Proof.lean` (via `provedFunctions`) or loaded from a `proof-registry.json` file.
+The registry is synthesized from in-source proof links (`#[proof_by]`/`#[spec]`/`#[proof_fingerprint]`), or hardcoded in `Proof.lean` (via `provedFunctions`).
 
 ---
 

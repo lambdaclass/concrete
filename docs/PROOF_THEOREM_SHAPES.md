@@ -56,7 +56,7 @@ theorem check_nonce_correct (nonce maxNonce : Int) (fuel : Nat) :
 
 **Purpose**: The theorem attached in the proof registry. States the complete behavior.
 
-**Naming**: `<fn>_correct`. This is the name referenced by `proof-registry.json`.
+**Naming**: `<fn>_correct`. This is the name referenced by the `#[proof_by]` in-source link.
 
 ## Naming rules
 

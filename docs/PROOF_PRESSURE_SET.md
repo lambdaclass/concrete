@@ -6,7 +6,8 @@ This document defines the narrow Concrete-to-Lean proof pressure set: 6 function
 
 ## Location
 
-`examples/proof_pressure/src/main.con` with `examples/proof_pressure/src/proof-registry.json`.
+`examples/proof_pressure/src/main.con` — proofs are attached via in-source links
+(`#[proof_by]`/`#[spec]`/`#[proof_fingerprint]`).
 
 ## Functions
 
@@ -49,14 +50,14 @@ Totals: 7 functions — 2 proved, 1 stale, 1 unproved, 1 blocked, 2 ineligible, 
 | blocked | Eligible, but extraction failed | Unsupported construct in function body |
 | ineligible | Fails source or profile gates | Has capabilities, is trusted, is entry point |
 
-## Registry structure
+## Link structure
 
-`proof-registry.json` contains 3 entries:
-- `main.check_nonce` — correct fingerprint (proved)
-- `main.validate_header` — correct fingerprint (proved)
-- `main.compute_checksum` — old fingerprint (stale)
+Three functions carry in-source `#[proof_by]` links:
+- `main.check_nonce` — `#[proof_fingerprint]` matches current body (proved)
+- `main.validate_header` — matches (proved)
+- `main.compute_checksum` — `#[proof_fingerprint]` of the pre-edit body (stale)
 
-No entry for `clamp_value` (missing) or `classify_range` (blocked).
+No link for `clamp_value` (missing) or `classify_range` (blocked).
 
 ## What this enables
 

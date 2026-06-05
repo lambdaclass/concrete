@@ -674,7 +674,7 @@ The audit and release bundle must name which of these affect a given claim.
 5. Add `--report contracts`.
 6. Generate tiny VCs for pure no-loop contracts: call-site preconditions and
    return-site postconditions.
-7. Let proof-registry entries discharge contract/VC ids.
+7. Let in-source proof links discharge contract/VC ids.
 8. Generate runtime-safety VCs: bounds, div/mod nonzero, overflow, casts.
 9. Emit SMT-LIB for the first supported VC fragment.
 10. Add one solver backend with explicit trust classification.

@@ -130,52 +130,47 @@ The file must compile with `warningAsError = true` in `lakefile.toml`. Fix any `
 
 ---
 
-## 4. Attach the Proof
+## 4. Attach the Proof (in-source links)
 
-Add an entry to `proof-registry.json` in the same directory as the source file:
-
-```json
-{
-  "version": 1,
-  "proofs": [
-    {
-      "function": "main.check_nonce",
-      "body_fingerprint": "[(ret (if (< (var nonce) (lit 0)) ...))]",
-      "proof": "Concrete.Proof.check_nonce_correct",
-      "spec": "check_nonce_boundary_check"
-    }
-  ]
-}
-```
-
-### Get the fingerprint
-
-The fingerprint must match the function's current Core IR body exactly. Get it from:
+Proofs are attached **in source**, as attributes above the function — there is
+no `proof-registry.json` (JSON registries were removed; in-source links are the
+only model). Let the compiler write the block for you:
 
 ```bash
-concrete src/main.con --report extraction 2>&1 | grep -A5 check_nonce
+concrete prove src/main.con main.check_nonce --emit-link
 ```
 
-The `fingerprint:` line is the value for `body_fingerprint`.
+```con
+#[spec(Concrete.Proof.checkNonceExpr)]
+#[proof_by(Concrete.Proof.check_nonce_correct)]
+#[proof_coverage(iff)]
+#[proof_fingerprint("f15e2971d90b9095")]
+fn check_nonce(nonce: i32, max_nonce: i32) -> i32 { … }
+```
 
-### Registry fields
+Paste the block above the function. `--emit-link` computes the
+`#[proof_fingerprint]` (a short hash of the current body) for you — no manual
+copying from the extraction report.
 
-| Field | Value | Rule |
-|-------|-------|------|
-| `function` | Qualified name | `module.functionName` — must match exactly |
-| `body_fingerprint` | Core IR structural hash | Must match current body — copy from extraction report |
-| `proof` | Lean theorem name | `Concrete.Proof.<fn>_correct` by convention |
-| `spec` | Property name | Human-readable spec name |
+### Link attributes
 
-### Registry validation
+| Attribute | Value | Rule |
+|-----------|-------|------|
+| `#[spec(...)]` | Lean spec expr | `Concrete.Proof.<fn>Expr` by convention |
+| `#[proof_by(...)]` | Lean theorem | `Concrete.Proof.<fn>_correct` by convention |
+| `#[ensures_proof(...)]` | Lean theorem | discharges a source `#[ensures]`, if any |
+| `#[proof_coverage(...)]` | classification | `point`/`one_direction`/`iff`/`invariant`/`full_contract` |
+| `#[proof_fingerprint("...")]` | short body hash | from `--emit-link`; staleness compares `hash(current body)` against it |
 
-The compiler validates registry entries and rejects:
+### Link validation
 
-- Unknown function names (function not in source)
-- Duplicate entries (last wins, warning issued)
-- Empty proof/spec/fingerprint fields
+The compiler validates the synthesized links and rejects:
+
+- Empty proof/spec fields
 - Proofs attached to ineligible functions (capabilities, entry points, trusted)
 - Proofs attached to blocked functions (extraction failed)
+- **stale** links: `hash(current body) ≠ #[proof_fingerprint]`, or spec-drift
+  (`extracted ≠ #[spec]`) → reported `stale`, not `proved`
 
 ---
 
@@ -212,7 +207,7 @@ This invokes `lake env lean` to verify that each referenced Lean theorem actuall
 
 ```
 Kernel-verified (1):
-  ✓ main.check_nonce — Concrete.Proof.check_nonce_correct (registry)
+  ✓ main.check_nonce — Concrete.Proof.check_nonce_correct (source_linked)
 
 Failed (0):
 ```
@@ -223,7 +218,7 @@ Failed (0):
 concrete src/main.con --report proof-status
 ```
 
-Shows all functions with their complete proof state: status, fingerprint, spec, proof name, source (registry/hardcoded), dependencies, and source location.
+Shows all functions with their complete proof state: status, fingerprint, spec, proof name, origin (`source_linked`/`hardcoded`), dependencies, and source location.
 
 ---
 
@@ -240,11 +235,11 @@ concrete src/main.con --report proof-diagnostics
 | Kind | Code | Meaning | Repair |
 |------|------|---------|--------|
 | `stale_proof` | E0800 | Body changed, fingerprint mismatch | Update theorem or fingerprint |
-| `missing_proof` | E0801 | Eligible, no registry entry | Add registry entry |
+| `missing_proof` | E0801 | Eligible, no in-source link | Add a #[proof_by] link |
 | `ineligible` | E0802 | Fails eligibility gate | Remove capability/trusted/etc. |
 | `unsupported_construct` | E0803 | Extraction blocked | Refactor to supported constructs |
 | `trusted` | E0804 | Function is `trusted` | Remove `trusted` if proof desired |
-| `attachment_integrity` | E0805 | Registry entry invalid | Fix registry (unknown fn, duplicate, etc.) |
+| `attachment_integrity` | E0805 | In-source link invalid | Fix the link (ineligible/blocked fn, empty proof/spec, etc.) |
 | `theorem_lookup` | E0806 | Lean proof name not found | Fix theorem name or write the theorem |
 | `lean_check_failure` | E0807 | Lean kernel rejected proof | Fix the Lean proof |
 
@@ -303,7 +298,8 @@ main.compute_checksum [stale]
 
 1. Regenerate stubs: `concrete src/main.con --report lean-stubs`
 2. Update the theorem statement and proof to match the new PExpr
-3. Update `body_fingerprint` in `proof-registry.json` to the new fingerprint
+3. Refresh the `#[proof_fingerprint("...")]` for the new body:
+   `concrete prove src/main.con <fn> --emit-link`
 4. Verify: `concrete src/main.con --report check-proofs`
 
 **Option B: Revert the code change.**
@@ -375,18 +371,14 @@ The caller's own proof status remains `proved` (its body didn't change), but the
 | Add/remove a branch | Stale | Rewrite theorem |
 | Change operators | Stale | Rewrite theorem |
 | Extract a helper (move code out) | Stale | Rewrite theorem for new body |
-| Rename the function | Registry orphan | Update `function` field in registry |
+| Rename the function | Link moves with it | Keep the link block above the renamed function |
 
-### Rename detection
+### Renaming a function
 
-When a function is renamed, the compiler detects the orphaned registry entry by matching its fingerprint against current functions:
-
-```
-warning: proof-registry.json: unknown function 'main.old_name'
-  (appears renamed to 'main.new_name' — update the registry entry)
-```
-
-Update the `function` field in `proof-registry.json` to the new name.
+In-source links travel with the function — the attribute block sits directly
+above it, so a rename carries the `#[proof_by]`/`#[spec]`/`#[proof_fingerprint]`
+with it. The body is unchanged, so the fingerprint still matches and the proof
+stays `proved`; no separate registry entry to update.
 
 ### Workflow for proof-preserving refactors
 
@@ -395,9 +387,9 @@ Update the `function` field in `proof-registry.json` to the new name.
 3. Run `concrete check` after — compare against baseline
 4. For each newly stale function:
    - Regenerate stubs: `--report lean-stubs`
-   - Update the theorem and fingerprint
+   - Update the theorem, then refresh `#[proof_fingerprint]` via `--emit-link`
    - Verify with `--report check-proofs`
-5. For renamed functions: update registry `function` field
+5. For renamed functions: keep the link block above the function (no extra step)
 6. Confirm `concrete check` exits 0
 
 ---
@@ -472,12 +464,11 @@ concrete examples/proof_pressure/src/main.con --report lean-stubs > /tmp/stubs.l
 #     eval generatedFns (...) (fuel + 3) clamp_valueExpr
 #     = some (.int (if x < lo then lo else if x > hi then hi else x)) := by ...
 
-# 4. Get the fingerprint
-concrete examples/proof_pressure/src/main.con --report extraction 2>&1 | grep -A5 clamp_value | grep fingerprint
+# 4. Emit the in-source link block (computes the fingerprint for you)
+concrete prove examples/proof_pressure/src/main.con main.clamp_value --emit-link
 
-# 5. Add registry entry to proof-registry.json
-# { "function": "main.clamp_value", "body_fingerprint": "<from above>",
-#   "proof": "Concrete.Proof.clamp_value_correct", "spec": "clamp_value_behavior" }
+# 5. Paste the #[spec]/#[proof_by]/#[proof_coverage]/#[proof_fingerprint] block
+#    above `fn clamp_value` in src/main.con
 
 # 6. Verify
 concrete check

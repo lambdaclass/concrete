@@ -99,7 +99,7 @@ These are the most confusing because they enforce project-level policy, not lang
 **E0612 (require-proofs)** should explain:
 - That the function is proof-eligible but has no attached proof
 - What "proof-eligible" means (pure, no trusted, extractable)
-- How to add a proof (proof-registry.json entry + Lean theorem)
+- How to add a proof (in-source `#[proof_by]` link + Lean theorem)
 
 ### 2. Extraction blockers (E0803)
 

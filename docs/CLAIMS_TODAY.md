@@ -88,7 +88,7 @@ The proof workflow is operational today, not aspirational. It includes:
 |------------|--------|--------------------|
 | Extraction and eligibility inspection | Working | `--report extraction` |
 | Lean theorem stub generation | Working | `--report lean-stubs` |
-| Proof registry with fingerprint binding | Working | `proof-registry.json` |
+| In-source proof links with fingerprint binding | Working | `#[proof_by]` / `#[proof_fingerprint]` |
 | Lean kernel verification | Working | `--report check-proofs` |
 | Full proof-status report | Working | `--report proof-status` |
 | Proof diagnostics (8 kinds, E0800–E0807) | Working | `--report proof-diagnostics` |

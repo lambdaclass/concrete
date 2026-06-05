@@ -166,10 +166,10 @@ The manual path (still useful for flagship refinement proofs):
    - bridge the result list to the spec view with `ProofKit.Refinement`.
 
 5. **Register and gate it.** Add a row to `Concrete.Proof.specs`
-   (`(qualName, {name}Expr)`) and an entry to
-   `examples/<flagship>/src/proof-registry.json` with `proof` (your theorem),
-   `spec` (the expr), `coverage`, and `body_fingerprint` (from
-   `--report fingerprints`). Then verify:
+   (`(qualName, {name}Expr)`), then attach the proof in source: paste the block
+   from `concrete prove examples/<flagship>/src/main.con <fn> --emit-link` above
+   the function (`#[proof_by]`/`#[spec]`/`#[proof_coverage]`/`#[proof_fingerprint]`
+   — the fingerprint is computed for you). Then verify:
    ```sh
    concrete examples/<flagship>/src/main.con --report check-proofs   # kernel: theorem exists & type-checks
    concrete audit examples/<flagship>/src/main.con                    # spec-drift gate: spec == extracted, fingerprint fresh

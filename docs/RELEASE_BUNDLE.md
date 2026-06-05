@@ -34,8 +34,8 @@ out/release/<example-name>/
 ├── runtime-stdout.txt       — stdout of running the compiled binary  [always]
 ├── source/
 │   ├── program.con          — canonical filename                     [always]
-│   ├── <basename>.con       — original basename                      [always]
-│   └── proof-registry.json  — attached theorems                      [if any]
+│   └── <basename>.con       — original basename (carries in-source   [always]
+│                              proof links: #[proof_by]/#[spec]/...)
 ├── reports/<kind>.txt       — every --report that runs cleanly       [if any]
 ├── snapshots/<kind>.txt     — snapshot baselines                     [if any]
 ├── catches/<n>.con          — negative-pair companions               [if any]
@@ -78,8 +78,8 @@ The capture script:
    bundle if compilation fails** — a release bundle on a broken
    example would be misleading.
 2. Runs the compiled binary; captures stdout to `runtime-stdout.txt`.
-3. Copies source files, project manifest, assumption file, and
-   proof-registry into stable filenames.
+3. Copies source files (which carry the in-source proof links), the
+   project manifest, and the assumption file into stable filenames.
 4. Runs every `--report <kind>` and keeps the ones that run cleanly.
 5. Copies the snapshot baseline, AUDIT/CATCHES/README narratives,
    and any `catches/*.con` negatives.

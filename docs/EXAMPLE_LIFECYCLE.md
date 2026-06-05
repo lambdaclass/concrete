@@ -48,7 +48,7 @@ This document defines four promotion levels for examples, the bar required to re
 
 **Requirements**:
 - Everything from canonical, plus:
-- Has a `proof-registry.json` with at least one proved function, OR serves 2+ phases with independent test gates in each
+- Has at least one source-linked proved function, OR serves 2+ phases with independent test gates in each
 - Has drift detection (drifted variant + diff-based consistency tests) if proof-backed
 - 10+ trust-gate assertions
 - Listed in the inventory with multi-phase ownership if applicable

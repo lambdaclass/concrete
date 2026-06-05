@@ -181,47 +181,30 @@ theorem clamp_value_in_range : eval_clamp_value 5 0 10 = some (.int 5) := by nat
 
 `native_decide` is a Lean tactic that evaluates the expression and checks the result. It works for fixed inputs and is the fastest way to validate that extraction is correct.
 
-## Step 5: Attach the Proof
+## Step 5: Attach the Proof (in-source link)
 
-Add a registry entry to `proof-registry.json` in the same directory as the source file:
-
-```json
-{
-  "function": "main.clamp_value",
-  "body_fingerprint": "<paste the fingerprint from the extraction report>",
-  "proof": "Concrete.Proof.clamp_value_correct",
-  "spec": "clamp_value_behavior"
-}
-```
-
-Get the fingerprint by running:
+Proofs are attached in source, as attributes above the function. Emit the block
+with the compiler (it computes the fingerprint for you):
 
 ```bash
-concrete examples/proof_pressure/src/main.con --report extraction 2>&1 \
-  | grep -A6 clamp_value | grep fingerprint
+concrete prove examples/proof_pressure/src/main.con main.clamp_value --emit-link
 ```
 
-The `proof` field is the fully qualified Lean theorem name. The `spec` field is a human-readable description of what property is proved.
+Paste the result above `fn clamp_value`:
 
-### Registry format
-
-The full registry file looks like this:
-
-```json
-{
-  "version": 1,
-  "proofs": [
-    {
-      "function": "main.clamp_value",
-      "body_fingerprint": "[(if (binop ...)]",
-      "proof": "Concrete.Proof.clamp_value_correct",
-      "spec": "clamp_value_behavior"
-    }
-  ]
-}
+```con
+#[spec(Concrete.Proof.clamp_valueExpr)]
+#[proof_by(Concrete.Proof.clamp_value_correct)]
+#[proof_coverage(iff)]
+#[proof_fingerprint("<computed by --emit-link>")]
+fn clamp_value(...) { ... }
 ```
 
-All four fields are required. The compiler validates the registry and rejects entries with unknown function names, empty fields, or proofs attached to ineligible functions.
+`#[proof_by]` is the fully qualified Lean theorem name; `#[spec]` names the
+spec expr; `#[proof_fingerprint]` is a short hash of the current body used for
+staleness. The compiler validates the link and rejects empty proof/spec fields
+or proofs attached to ineligible/blocked functions. (JSON `proof-registry.json`
+was the original mechanism and has been removed.)
 
 ## Step 6: Verify
 
