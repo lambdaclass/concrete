@@ -61,10 +61,10 @@ Stated up front so the rest of this document does not oversell.
 Four Lean theorems, checked by the Lean kernel at `make build`:
 
 ```
-Concrete.Proof.compute_tag_correct   : compute_tag(k, m, n) = k*m+n
-Concrete.Proof.verify_tag_correct    : verify_tag = 1 ↔ tag matches
-Concrete.Proof.check_nonce_correct   : check_nonce = 1 ↔ 0 < n ≤ max
-Concrete.Proof.verify_message_composed_correct
+Examples.CryptoVerify.Proofs.compute_tag_correct   : compute_tag(k, m, n) = k*m+n
+Examples.CryptoVerify.Proofs.verify_tag_correct    : verify_tag = 1 ↔ tag matches
+Examples.CryptoVerify.Proofs.check_nonce_correct   : check_nonce = 1 ↔ 0 < n ≤ max
+Examples.CryptoVerify.Proofs.verify_message_composed_correct
                                      : both validators pass → returns 1
 ```
 

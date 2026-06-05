@@ -3,7 +3,7 @@
   main.compute_tag
     status:       proved
     spec:         Concrete.Proof.computeTagExpr
-    proof:        Concrete.Proof.compute_tag_correct
+    proof:        Examples.CryptoVerify.Proofs.compute_tag_correct
     source:       registry
     fingerprint:  [(ret (binop Concrete.BinOp.add (binop Concrete.BinOp.mul (var key) (var message)) (var nonce)))]
     dependencies: none
@@ -12,7 +12,7 @@
   main.verify_tag
     status:       proved
     spec:         Concrete.Proof.verifyTagExpr
-    proof:        Concrete.Proof.verify_tag_correct
+    proof:        Examples.CryptoVerify.Proofs.verify_tag_correct
     source:       registry
     fingerprint:  [(let computed (call compute_tag (var key) (var message) (var nonce))) (if (binop Concrete.BinOp.eq (var computed) (var expected_tag)) [(ret (int 1))] [(ret (int 0))])]
     dependencies: main.compute_tag
@@ -21,7 +21,7 @@
   main.check_nonce
     status:       proved
     spec:         Concrete.Proof.checkNonceExpr
-    proof:        Concrete.Proof.check_nonce_correct
+    proof:        Examples.CryptoVerify.Proofs.check_nonce_correct
     source:       registry
     fingerprint:  [(if (binop Concrete.BinOp.gt (var nonce) (int 0)) [(if (binop Concrete.BinOp.leq (var nonce) (var max_nonce)) [(ret (int 1))] [(ret (int 0))])] [(ret (int 0))])]
     dependencies: none
@@ -30,7 +30,7 @@
   main.verify_message
     status:       proved
     spec:         Concrete.Proof.verifyMessageExpr
-    proof:        Concrete.Proof.verify_message_composed_correct
+    proof:        Examples.CryptoVerify.Proofs.verify_message_composed_correct
     source:       registry
     fingerprint:  [(if (binop Concrete.BinOp.neq (call verify_tag (var key) (var message) (var nonce) (var expected_tag)) (int 1)) [(ret (int 0))]) (if (binop Concrete.BinOp.neq (call check_nonce (var nonce) (var max_nonce)) (int 1)) [(ret (int 0))]) (ret (int 1))]
     dependencies: main.verify_tag, main.check_nonce

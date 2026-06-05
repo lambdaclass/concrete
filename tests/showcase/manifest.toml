@@ -134,14 +134,14 @@ on_showcase_manifest   = true   # bar #10 — this entry
 
 [flagship.evidence]
 proof_links    = "examples/crypto_verify/src/main.con"
-proofs         = ["Concrete.Proof.compute_tag_correct",
-                  "Concrete.Proof.verify_tag_correct",
-                  "Concrete.Proof.check_nonce_correct",
-                  "Concrete.Proof.verify_message_composed_correct"]
-proof_coverage = { "Concrete.Proof.compute_tag_correct" = "iff",
-                   "Concrete.Proof.verify_tag_correct" = "one_direction",
-                   "Concrete.Proof.check_nonce_correct" = "iff",
-                   "Concrete.Proof.verify_message_composed_correct" = "one_direction" }
+proofs         = ["Examples.CryptoVerify.Proofs.compute_tag_correct",
+                  "Examples.CryptoVerify.Proofs.verify_tag_correct",
+                  "Examples.CryptoVerify.Proofs.check_nonce_correct",
+                  "Examples.CryptoVerify.Proofs.verify_message_composed_correct"]
+proof_coverage = { "Examples.CryptoVerify.Proofs.compute_tag_correct" = "iff",
+                   "Examples.CryptoVerify.Proofs.verify_tag_correct" = "one_direction",
+                   "Examples.CryptoVerify.Proofs.check_nonce_correct" = "iff",
+                   "Examples.CryptoVerify.Proofs.verify_message_composed_correct" = "one_direction" }
 provable_v1_conformance = "full"
 assumptions    = "examples/crypto_verify/assumptions.toml"
 policy         = "examples/crypto_verify/Concrete.toml"

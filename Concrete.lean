@@ -31,6 +31,7 @@ import Concrete.Sha256Spec
 import Concrete.Sha256Refine
 import Concrete.Examples.LoopInvariant.Proofs
 import Concrete.Examples.ParseValidate.Proofs
+import Concrete.Examples.CryptoVerify.Proofs
 import Concrete.Format
 import Concrete.Verify
 import Concrete.DebugBundle

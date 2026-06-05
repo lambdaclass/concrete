@@ -13,7 +13,10 @@ document as one queue:
    starting with casts, loop-derived bounds, runtime-safety policy, and the
    remaining profile story after array bounds, div/mod-zero, and
    opt-in overflow obligations;
-3. finish proof-link migration away from JSON;
+3. finish the post-JSON proof architecture cleanup: per-example proof
+   namespaces, then a lower `ProofCore` / spec-registry split, then optional
+   movement of registered spec PExprs out of `Concrete.Proof` without weakening
+   spec-drift;
 4. harden audit / proof-status / trust gates around source contracts,
    spec provenance, evidence classes, tool-version drift, and oracle evidence;
 5. make `concrete prove` useful enough for non-compiler authors and
@@ -378,14 +381,26 @@ lemmas, and actionable failure diagnostics.
        showcase manifest `proofs`/`proof_coverage` + README updated; all gates
        green (showcase 5/0, proof-status 3 proved, check-proofs 3 verified,
        spec-drift regression still fires).
-     - Remaining (one commit each): `crypto_verify` → `fixed_capacity` →
-       `constant_time_tag` → `elf_header` → `hmac_sha256` (last; ~43 refs).
-     - **Follow-up infra item (separate, later):** to also move example SPEC
-       PExprs out of `Concrete.Proof`, split the PExpr/eval model + spec registry
-       into a lower module (`Concrete.ProofModel` / `Concrete.SpecRegistry`)
-       imported by both `Concrete.Proof` and the example modules, so the spec table
-       can reference example-module exprs without a circular import — while
-       preserving the spec-drift tie. Not part of the per-example theorem moves.
+     - Remaining theorem moves (one commit each): `crypto_verify` →
+       `fixed_capacity` → `constant_time_tag` → `elf_header` → `hmac_sha256`
+       (last; ~43 refs). These move proof THEOREMS only; registered spec PExprs
+       stay in `Concrete.Proof` until the infra split below.
+     - **Next architectural item after theorem moves:** split the current
+       `Concrete.Proof` layering so example specs can move without a cycle:
+       `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation, `FnTable`, and the
+       source-independent semantics; `Concrete.SpecRegistry` owns the drift table
+       and imports whichever example spec modules it registers; `Concrete.Proof`
+       becomes the generic proof-theorem / compatibility umbrella. This preserves
+       the audited spec-drift tie while making the ownership clear.
+     - **Only after that split:** move registered example SPEC PExprs from
+       `Concrete.Proof.*Expr` into `Concrete.Examples.<Ex>.Proofs` (or a sibling
+       `Specs` module) and update the central spec registry to import them. Do
+       not drop specs from the drift table to make the move easy; that would
+       weaken the flagship evidence.
+     - **End state:** `Concrete.Proof` contains proof infrastructure, not
+       flagship/example proof bodies; source files carry proof links; generated
+       workspaces may contain JSON artifacts, but no checked-in JSON proof
+       registry or parallel proof source returns.
 2. ~~Make the `concrete prove` binary self-describing for agents.~~ **DONE.**
    `concrete prove --help=agent` prints the proof-authoring sequence, output
    formats, the exit-code taxonomy (0 success, 1 invalid invocation, 2

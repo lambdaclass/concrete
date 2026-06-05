@@ -142,7 +142,7 @@ concrete prove src/main.con main.check_nonce --emit-link
 
 ```con
 #[spec(Concrete.Proof.checkNonceExpr)]
-#[proof_by(Concrete.Proof.check_nonce_correct)]
+#[proof_by(Examples.CryptoVerify.Proofs.check_nonce_correct)]
 #[proof_coverage(iff)]
 #[proof_fingerprint("f15e2971d90b9095")]
 fn check_nonce(nonce: i32, max_nonce: i32) -> i32 { … }
@@ -207,7 +207,7 @@ This invokes `lake env lean` to verify that each referenced Lean theorem actuall
 
 ```
 Kernel-verified (1):
-  ✓ main.check_nonce — Concrete.Proof.check_nonce_correct (source_linked)
+  ✓ main.check_nonce — Examples.CryptoVerify.Proofs.check_nonce_correct (source_linked)
 
 Failed (0):
 ```
