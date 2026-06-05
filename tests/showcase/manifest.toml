@@ -223,17 +223,17 @@ on_showcase_manifest   = true   # bar #10 — this entry
 
 [flagship.evidence]
 proof_links    = "examples/fixed_capacity/src/main.con"
-proofs         = ["Concrete.Proof.ring_new_correct",
-                  "Concrete.Proof.compute_tag_zero_correct",
-                  "Concrete.Proof.ring_push_zero_correct",
-                  "Concrete.Proof.ring_push_then_contains_correct"]
+proofs         = ["Examples.FixedCapacity.Proofs.ring_new_correct",
+                  "Examples.FixedCapacity.Proofs.compute_tag_zero_correct",
+                  "Examples.FixedCapacity.Proofs.ring_push_zero_correct",
+                  "Examples.FixedCapacity.Proofs.ring_push_then_contains_correct"]
 # All four are point proofs (concrete-input cases) — universal /
 # multi-iteration generalizations are open follow-ups named in
 # [flagship.limits].proofs.
-proof_coverage = { "Concrete.Proof.ring_new_correct" = "point",
-                   "Concrete.Proof.compute_tag_zero_correct" = "point",
-                   "Concrete.Proof.ring_push_zero_correct" = "point",
-                   "Concrete.Proof.ring_push_then_contains_correct" = "point" }
+proof_coverage = { "Examples.FixedCapacity.Proofs.ring_new_correct" = "point",
+                   "Examples.FixedCapacity.Proofs.compute_tag_zero_correct" = "point",
+                   "Examples.FixedCapacity.Proofs.ring_push_zero_correct" = "point",
+                   "Examples.FixedCapacity.Proofs.ring_push_then_contains_correct" = "point" }
 provable_v1_conformance = "full"
 assumptions    = "examples/fixed_capacity/assumptions.toml"
 policy         = "examples/fixed_capacity/Concrete.toml"

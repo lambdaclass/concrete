@@ -52,17 +52,17 @@ forge tags.
 Four Lean theorems, checked by the Lean kernel at `make build`:
 
 ```
-Concrete.Proof.ring_new_correct
+Examples.FixedCapacity.Proofs.ring_new_correct
   ring_new() = RingBuf{ data: [0×16], head: 0, count: 0 }
 
-Concrete.Proof.compute_tag_zero_correct
+Examples.FixedCapacity.Proofs.compute_tag_zero_correct
   compute_tag on a 6-zero-prefix buffer returns 0
 
-Concrete.Proof.ring_push_zero_correct
+Examples.FixedCapacity.Proofs.ring_push_zero_correct
   pushing v into the empty ring yields
   RingBuf{ data: [v, 0×15], head: 1, count: 1 }
 
-Concrete.Proof.ring_push_then_contains_correct
+Examples.FixedCapacity.Proofs.ring_push_then_contains_correct
   the 1-element ring containing v at index 0 has
   ring_contains(v) = 1   (the composition theorem)
 ```

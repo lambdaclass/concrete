@@ -13,10 +13,12 @@ document as one queue:
    starting with casts, loop-derived bounds, runtime-safety policy, and the
    remaining profile story after array bounds, div/mod-zero, and
    opt-in overflow obligations;
-3. finish the post-JSON proof architecture cleanup: per-example proof
-   namespaces, then a lower `ProofCore` / spec-registry split, then optional
-   movement of registered spec PExprs out of `Concrete.Proof` without weakening
-   spec-drift;
+3. finish the post-JSON proof architecture cleanup enough to unblock ordinary
+   language work: move example proof theorems to per-example namespaces and add
+   the guard that prevents them from creeping back into `Concrete.Proof`. Record
+   the deeper `ProofCore` / spec-registry split as the next architecture refactor,
+   but do not let it block Phase 8 unless spec ownership or proof authoring
+   starts depending on it;
 4. harden audit / proof-status / trust gates around source contracts,
    spec provenance, evidence classes, tool-version drift, and oracle evidence;
 5. make `concrete prove` useful enough for non-compiler authors and
@@ -385,7 +387,12 @@ lemmas, and actionable failure diagnostics.
        `fixed_capacity` → `constant_time_tag` → `elf_header` → `hmac_sha256`
        (last; ~43 refs). These move proof THEOREMS only; registered spec PExprs
        stay in `Concrete.Proof` until the infra split below.
-     - **Next architectural item after theorem moves:** split the current
+     - **Checkpoint after theorem moves:** once the remaining theorem moves and
+       the "no example theorem in `Concrete.Proof`" guard are green, ordinary
+       Phase 8 language work may proceed. The deeper split below is queued as an
+       architecture refactor, but it should not block non-proof language work
+       unless spec ownership or proof authoring starts depending on it.
+     - **Deferred architecture refactor:** split the current
        `Concrete.Proof` layering so example specs can move without a cycle:
        `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation, `FnTable`, and the
        source-independent semantics; `Concrete.SpecRegistry` owns the drift table
@@ -871,7 +878,17 @@ debug small Concrete programs with predictable commands and useful errors.
    contract syntax, `ghost`/`assert`/`assume`, iteration syntax, and negative
    parser fixtures. This is a syntax reference, not a language-design
    committee.
-6. Close the match/pattern ergonomics gap before broad `Result`/`Option` and
+6. Add plain type aliases before the larger stdlib/examples slab:
+   `type Digest = [u8; 32]`, `type Tag = [u8; 16]`, etc. Aliases must be
+   transparent to layout, extraction, and proof unless explicitly declared as a
+   future opaque/newtype form. This is an ordinary readability feature, not a
+   proof abstraction.
+7. Decide user-facing loop control before broad parser/service examples:
+   `break`, `continue`, and whether labeled loops exist. The decision must
+   state how each interacts with bounded-loop analysis, cleanup/defer,
+   contracts, and runtime-safety obligations. If deferred, examples should use
+   explicit state flags or early returns instead of hidden control flow.
+8. Close the match/pattern ergonomics gap before broad `Result`/`Option` and
    protocol-decoder work. This is one compound usability block: algebraic data
    types are already in the language, so the pattern language must be
    expressive enough to use them without stacks of boilerplate matches.
@@ -898,40 +915,40 @@ debug small Concrete programs with predictable commands and useful errors.
    machinery), then OR patterns or struct update — whichever hurts more in
    practice (parser/service code tends to want OR patterns; SHA-style state
    updates tend to want `..base`).
-7. Define strings, bytes, paths, and OS strings: `Bytes` for raw data, `Text`
+9. Define strings, bytes, paths, and OS strings: `Bytes` for raw data, `Text`
    for validated UTF-8, and `Path`/`OsString` for OS-native boundaries. Specify
    literals, ownership, slicing, indexing, formatting, conversions, parser/JSON
    interaction, diagnostics, and test output. No implicit lossy conversion.
-8. Define numeric literal and cast rules: suffixes, inference/default integer
+10. Define numeric literal and cast rules: suffixes, inference/default integer
    type, signed/unsigned comparisons, narrowing, widening, checked/proved/
    wrapping overflow profiles, and diagnostics for ambiguous or lossy casts.
-9. Define the collections story: fixed arrays, slices, dynamic `Vec`, maps,
+11. Define the collections story: fixed arrays, slices, dynamic `Vec`, maps,
    buffers, parser cursors, and which collections require `Alloc` or other
    capabilities.
-10. Define resource cleanup semantics: `defer`, drop/cleanup ordering,
+12. Define resource cleanup semantics: `defer`, drop/cleanup ordering,
     early-return cleanup, failure during cleanup, move-after-defer behavior, and
     linear-value interaction.
-11. Define the FFI language surface: `extern` syntax, layout restrictions,
+13. Define the FFI language surface: `extern` syntax, layout restrictions,
     ABI/calling convention annotations, ownership crossing the boundary,
     capability/trust requirements, and what cannot be expressed safely.
-12. Define language-visible build profiles: debug/release, overflow checks,
+14. Define language-visible build profiles: debug/release, overflow checks,
     assertions, runtime checks, optimization assumptions, and proof/audit
     compatibility.
-13. State the macro/metaprogramming stance for v1: no unrestricted macro
+15. State the macro/metaprogramming stance for v1: no unrestricted macro
     system. Allow only controlled, audited compile-time generation /
     derive-like helpers for boring repeated artifacts such as equality,
     debug/display, serializers/parsers, proof stubs, contract boilerplate, and
     small table generation. Generated code must preserve source spans and
     evidence/audit traceability.
-14. Define handle-relative filesystem APIs as the preferred capability shape:
+16. Define handle-relative filesystem APIs as the preferred capability shape:
     directory/file handles are capabilities; privileged code should operate
     relative to opened handles rather than repeated ambient path lookup. The
     design must address TOCTOU risks, path normalization, symlinks, temp files,
     and byte-preserving OS boundary behavior.
-15. Add ignored-result diagnostics for fallible APIs: discarding `Result`,
+17. Add ignored-result diagnostics for fallible APIs: discarding `Result`,
     `Option`, or runtime-check results is a warning/error unless explicitly
     acknowledged with `_ = ...`, `ignore(...)`, or a policy-approved pattern.
-16. Track accumulating error sets for `Result`-heavy code, without adopting row
+18. Track accumulating error sets for `Result`-heavy code, without adopting row
     effects. Protocol parsers and service pipelines repeatedly want "this
     function may return exactly these error variants" without hand-writing one
     giant wrapper enum for every stage. First implementation should be a
@@ -939,22 +956,22 @@ debug small Concrete programs with predictable commands and useful errors.
     later consider surface syntax if it stays obvious, e.g. a named error-set
     alias or a restricted union of enum variants. Do **not** introduce general
     row polymorphism or implicit effect rows.
-17. Evaluate units-of-measure / dimensional annotations for common systems
+19. Evaluate units-of-measure / dimensional annotations for common systems
     mistakes: bytes vs bits, milliseconds vs seconds, block counts vs byte
     offsets, protocol lengths, and memory sizes. Start as optional annotations
     and diagnostics over integer-like values, not full dependent types. Any
     proof story must be contract/VC-based and audit-visible; unit erasure must
     not hide conversions or allocation.
-18. Add source style guidance alongside `concrete fmt`: idiomatic layout for
+20. Add source style guidance alongside `concrete fmt`: idiomatic layout for
     functions, modules, contracts, matches, error handling, examples, and
     proof-bearing code.
-19. Decide the v1 iteration protocol before broad stdlib work. Evaluate and
+21. Decide the v1 iteration protocol before broad stdlib work. Evaluate and
     document the replacement for closures/trait-object iterators:
     index-based `for i in 0..len { xs[i] }`, explicit cursor/iterator structs
     with `next() -> Option<T>`, and monomorphized `for_each`-style helpers. The
     decision must cover `Vec`, slices, maps, parser cursors, and interpreter
     workloads, and must explain how authority and allocation remain visible.
-20. Decide capability polymorphism for higher-order stdlib functions before
+22. Decide capability polymorphism for higher-order stdlib functions before
     adding `map`/`fold`/`for_each` families or structured concurrency. The
     design must avoid a combinatorial split like `map`, `map_file`,
     `map_alloc`; the expected shape is explicit capability-set polymorphism
@@ -964,59 +981,59 @@ debug small Concrete programs with predictable commands and useful errors.
     generic once, or allow generic contracts with instance-level proof
     artifacts. Audit output must distinguish `proved_for_instance` from any
     future `proved_generic` class.
-21. Define stdlib v1 for daily programs: fixed arrays/slices, bytes/string
+23. Define stdlib v1 for daily programs: fixed arrays/slices, bytes/string
     basics, `Result`/`Option`, numeric helpers, and capability-scoped Console,
     File, Network, and Alloc APIs. Each stdlib item must declare its evidence
     class (`trusted`, `enforced`, `proved`, `reported`, or `assumed`).
-22. Design user-facing testing framework UX before `std.test` hardens:
+24. Design user-facing testing framework UX before `std.test` hardens:
     test discovery (`#[test]` versus naming convention), expected failures,
     capability-scoped fixtures, temp files without ambient authority, oracle
     tests, interpreter-vs-compiled tests, proof-status interaction, and how test
     failures appear in `concrete audit`.
-23. Add `concrete test`: discover and run user tests, example tests,
+25. Add `concrete test`: discover and run user tests, example tests,
     expected-failure tests, interpreter-vs-compiled differential tests,
     snapshot tests, oracle tests, and policy/assumption gates through one
     command.
-24. Add debug/trace mode: `concrete run --trace`, interpreter step traces, Core /
+26. Add debug/trace mode: `concrete run --trace`, interpreter step traces, Core /
     lowered-IR dumps, source spans in runtime errors, and stable replay commands
     for report/debug failures.
-25. Add interactive evidence commands for low-ceremony feedback without a live
+27. Add interactive evidence commands for low-ceremony feedback without a live
     mutable REPL: evaluate a function with concrete inputs, inspect Core and
     ProofCore for one function, show the current generated obligation, and
     replay a failing proof/debug report. Target commands include
     `concrete eval`, `concrete inspect --core`, `concrete inspect --proofcore`,
     `concrete prove --show-obligation`, and `concrete run --trace`.
-26. Add a minimal project model before full packages: `Concrete.toml` fields for
+28. Add a minimal project model before full packages: `Concrete.toml` fields for
     name, entry points, tests, policies, assumptions, source roots, build
     profiles, target profiles, oracle manifests, and evidence gates. The file
     must make authority, assumptions, runtime-check policy, and proof policy
     visible; it must not become an ambient hidden configuration channel.
-27. Decide target-conditional code selection before freestanding and
+29. Decide target-conditional code selection before freestanding and
     cross-platform stdlib work harden. Prefer profile-selected source roots and
     modules in `Concrete.toml`; if narrow `cfg` attributes are added later, they
     must be LL(1)-safe, small, target/profile-only, and reported in audit.
-28. Normalize the CLI around predictable verbs:
+30. Normalize the CLI around predictable verbs:
     `concrete build`, `concrete run`, `concrete test`, `concrete fmt`,
     `concrete audit`, `concrete prove`, `concrete eval`, `concrete inspect`,
     `concrete doc`, and `concrete clean`.
-29. Add `concrete doc`: generate basic API/reference docs from source,
+31. Add `concrete doc`: generate basic API/reference docs from source,
     capabilities, modules, and public comments without depending on proof
     infrastructure.
-30. Add a first-user tutorial path for C/Rust developers that does not start
+32. Add a first-user tutorial path for C/Rust developers that does not start
     with proofs: install, hello world, values and fixed arrays, ownership,
     borrows, capabilities, explicit errors, tests, compiled debugging, audit,
     then proof-bearing examples. The tone should be "ordinary systems code with
     visible evidence," not proof-assistant ceremony.
-31. Add useful non-proof examples: a small CLI tool, a protocol decoder, a
+33. Add useful non-proof examples: a small CLI tool, a protocol decoder, a
     bounded cache, and a capability-scoped file/console program.
-32. Add basic benchmarking UX: run small benchmarks, compare interpreter versus
+34. Add basic benchmarking UX: run small benchmarks, compare interpreter versus
     compiled performance, and detect obvious generated-code regressions.
-33. Document the memory model for ordinary users: move/copy/drop behavior,
+35. Document the memory model for ordinary users: move/copy/drop behavior,
     cleanup, borrows, linear values, trusted/Unsafe escape hatches, definite
     assignment, and what is rejected. State the invariant explicitly: safe
     Concrete has no uninitialized reads by construction; trusted/FFI memory may
     carry explicit assumptions.
-34. Add cross-platform build sanity for the supported host set: macOS and Linux
+36. Add cross-platform build sanity for the supported host set: macOS and Linux
     first, with CI coverage, reproducible commands, and documented toolchain
     expectations.
 

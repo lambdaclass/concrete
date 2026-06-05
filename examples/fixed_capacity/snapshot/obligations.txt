@@ -84,7 +84,7 @@
   fixed_capacity.ring_new
     status:       proved
     spec:         Concrete.Proof.ringNewExpr
-    proof:        Concrete.Proof.ring_new_correct
+    proof:        Examples.FixedCapacity.Proofs.ring_new_correct
     source:       registry
     fingerprint:  [(let data (array (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0) (int 0))) (ret (struct RingBuf data=(var data) head=(int 0) count=(int 0)))]
     dependencies: none
@@ -93,7 +93,7 @@
   fixed_capacity.ring_contains
     status:       proved
     spec:         Concrete.Proof.ringContainsExpr
-    proof:        Concrete.Proof.ring_push_then_contains_correct
+    proof:        Examples.FixedCapacity.Proofs.ring_push_then_contains_correct
     source:       registry
     fingerprint:  [(let cap (int 16)) (let scan (if (binop Concrete.BinOp.lt (field (var rb) count) (var cap)) [(field (var rb) count)] [(var cap)])) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (var scan)) [(let idx (binop Concrete.BinOp.mod (binop Concrete.BinOp.add (binop Concrete.BinOp.add (binop Concrete.BinOp.sub (field (var rb) head) (field (var rb) count)) (var i)) (binop Concrete.BinOp.mul (var cap) (int 2))) (var cap))) (if (binop Concrete.BinOp.eq (index (field (var rb) data) (var idx)) (var val)) [(ret (int 1))]) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (int 0))]
     dependencies: none
@@ -102,7 +102,7 @@
   fixed_capacity.ring_push
     status:       proved
     spec:         Concrete.Proof.ringPushExpr
-    proof:        Concrete.Proof.ring_push_zero_correct
+    proof:        Examples.FixedCapacity.Proofs.ring_push_zero_correct
     source:       registry
     fingerprint:  [(let cap (int 16)) (let d (field (var rb) data)) (setindex (var d) (binop Concrete.BinOp.mod (field (var rb) head) (var cap)) (var val)) (let new_head (binop Concrete.BinOp.mod (binop Concrete.BinOp.add (field (var rb) head) (int 1)) (var cap))) (let new_count (if (binop Concrete.BinOp.lt (field (var rb) count) (var cap)) [(binop Concrete.BinOp.add (field (var rb) count) (int 1))] [(var cap)])) (ret (struct RingBuf data=(var d) head=(var new_head) count=(var new_count)))]
     dependencies: none
@@ -111,7 +111,7 @@
   fixed_capacity.compute_tag
     status:       proved
     spec:         Concrete.Proof.fcTagExpr
-    proof:        Concrete.Proof.compute_tag_zero_correct
+    proof:        Examples.FixedCapacity.Proofs.compute_tag_zero_correct
     source:       registry
     fingerprint:  [(let acc (int 0)) (let i (int 0)) (while (binop Concrete.BinOp.lt (var i) (int 6)) [(set acc (binop Concrete.BinOp.bitxor (var acc) (cast (index (field (var buf) data) (var i)) Concrete.Ty.i32))) (set i (binop Concrete.BinOp.add (var i) (int 1)))] [(set i (binop Concrete.BinOp.add (var i) (int 1)))]) (ret (var acc))]
     dependencies: none
