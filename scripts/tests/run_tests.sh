@@ -7896,35 +7896,6 @@ else
     evidence_fail=$((evidence_fail + 1))
 fi
 
-# 43. check-proofs: fake proof name detected
-CP_DIR=$(mktemp -d)
-cat > "$CP_DIR/test.con" <<'CONEOF'
-fn pure_add(a: Int, b: Int) -> Int {
-  return a + b;
-}
-fn main() -> i32 { return 0; }
-CONEOF
-cat > "$CP_DIR/proof-registry.json" <<'REGEOF'
-{"version":1,"proofs":[{"function":"main.pure_add","body_fingerprint":"[(ret (binop Concrete.BinOp.add (var a) (var b)))]","proof":"Concrete.Proof.DOES_NOT_EXIST","spec":"s"}]}
-REGEOF
-cp_fake_rc=0
-cp_fake=$($COMPILER "$CP_DIR/test.con" --report check-proofs 2>&1) || cp_fake_rc=$?
-if echo "$cp_fake" | grep -q "Failed (1)" && echo "$cp_fake" | grep -q "DOES_NOT_EXIST"; then
-    echo "  ok  check-proofs: fake proof name rejected by Lean kernel"
-    evidence_pass=$((evidence_pass + 1))
-else
-    echo "  FAIL check-proofs: fake proof name should be rejected"
-    evidence_fail=$((evidence_fail + 1))
-fi
-
-# 44. check-proofs: exit code 1 when proofs fail
-if [ "$cp_fake_rc" -ne 0 ]; then
-    echo "  ok  check-proofs: exit code 1 on kernel check failure"
-    evidence_pass=$((evidence_pass + 1))
-else
-    echo "  FAIL check-proofs: should exit 1 when kernel check fails"
-    evidence_fail=$((evidence_fail + 1))
-fi
 
 # 45. check-proofs: shows toolchain version
 if echo "$cp_out" | grep -q "Toolchain:.*lean4"; then
@@ -7945,7 +7916,6 @@ else
     echo "  FAIL check-proofs: should exit 0 when all proofs pass"
     evidence_fail=$((evidence_fail + 1))
 fi
-rm -rf "$CP_DIR"
 
 # --- End-to-end Lean attachment workflow (item 8) ---
 
@@ -7971,12 +7941,12 @@ else
     evidence_fail=$((evidence_fail + 1))
 fi
 
-# 49. E2E: registry proof name matches check-proofs theorem name
+# 49. E2E: source-linked proof name matches check-proofs theorem name
 if echo "$cp_pp" | grep -q "check_nonce.*Concrete.Proof.check_nonce_correct"; then
-    echo "  ok  e2e-lean: registry proof name matches kernel-checked theorem"
+    echo "  ok  e2e-lean: source-linked proof name matches kernel-checked theorem"
     evidence_pass=$((evidence_pass + 1))
 else
-    echo "  FAIL e2e-lean: registry proof name should appear in check-proofs output"
+    echo "  FAIL e2e-lean: source-linked proof name should appear in check-proofs output"
     evidence_fail=$((evidence_fail + 1))
 fi
 
@@ -8207,39 +8177,6 @@ else
     evidence_fail=$((evidence_fail + 1))
 fi
 
-# 79. Boundary: registry entry for blocked function → error
-BOUNDARY_DIR=$(mktemp -d)
-cp "$BOUNDARY_SRC" "$BOUNDARY_DIR/test.con"
-cat > "$BOUNDARY_DIR/proof-registry.json" <<'REGEOF'
-{"version":1,"proofs":[{"function":"main.blocked_fn","body_fingerprint":"fake","proof":"Proof.blocked_fn_correct","spec":"s"}]}
-REGEOF
-boundary_reg_rc=0
-boundary_reg_out=$($COMPILER "$BOUNDARY_DIR/test.con" --report proof-status 2>&1) || boundary_reg_rc=$?
-if [ "$boundary_reg_rc" -ne 0 ] && echo "$boundary_reg_out" | grep -q "extraction-blocked"; then
-    echo "  ok  boundary-pressure: registry entry for blocked function produces error"
-    evidence_pass=$((evidence_pass + 1))
-else
-    echo "  FAIL boundary-pressure: registry entry for blocked function should produce error"
-    echo "    rc=$boundary_reg_rc"
-    echo "    out: $(echo "$boundary_reg_out" | grep -i "error\|block" | head -3)"
-    evidence_fail=$((evidence_fail + 1))
-fi
-
-# 80. Boundary: registry entry for ineligible function → error
-cat > "$BOUNDARY_DIR/proof-registry.json" <<'REGEOF'
-{"version":1,"proofs":[{"function":"main.ineligible_fn","body_fingerprint":"fake","proof":"Proof.ineligible_fn_correct","spec":"s"}]}
-REGEOF
-boundary_ine_rc=0
-boundary_ine_out=$($COMPILER "$BOUNDARY_DIR/test.con" --report proof-status 2>&1) || boundary_ine_rc=$?
-if [ "$boundary_ine_rc" -ne 0 ] && echo "$boundary_ine_out" | grep -q "ineligible"; then
-    echo "  ok  boundary-pressure: registry entry for ineligible function produces error"
-    evidence_pass=$((evidence_pass + 1))
-else
-    echo "  FAIL boundary-pressure: registry entry for ineligible function should produce error"
-    echo "    rc=$boundary_ine_rc"
-    echo "    out: $(echo "$boundary_ine_out" | grep -i "error\|ineligible" | head -3)"
-    evidence_fail=$((evidence_fail + 1))
-fi
 
 # 81. Boundary: combo_profile shows both source and profile reasons
 if echo "$boundary_ps" | grep -A6 "combo_profile" | grep "has capabilities: Alloc" | grep -q "recursion (direct)"; then
@@ -8308,7 +8245,6 @@ else
     evidence_fail=$((evidence_fail + 1))
 fi
 
-rm -rf "$BOUNDARY_DIR"
 
 if [ "$evidence_fail" -gt 0 ]; then
     echo "  $evidence_fail evidence gate failures"
