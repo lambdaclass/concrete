@@ -40,10 +40,28 @@ JSON-specific parser tests behind `--allow-legacy-proof-registry`).
    (ignored + warning); the 5 kept fixtures' invocations pass the flag;
    proof-status `origin: legacy_json_allowed` for entries loaded under it.
 5. ~~Full green cycle.~~ **DONE** (suite 1575/0, all gates green).
-6. **PENDING (decision):** delete the JSON parser/support and the 5 legacy
-   fixtures — OR keep them as the flag-gated legacy/parser-robustness layer.
-   Note: deleting the parser also removes `--allow-legacy-proof-registry`'s
-   reason to exist (nothing to load) and the migration escape hatch for external
-   users, plus the malformed/missing-field negative coverage. Recommended: keep
-   the flag-gated legacy mode; revisit deletion once no external JSON consumers
-   remain.
+6. ~~Delete the JSON parser/support and the legacy fixtures.~~ **DONE.**
+   - Removed `Concrete.parseRegistryJson`, `Main.loadRegistry`/`loadRegistryWarn`,
+     the `--allow-legacy-proof-registry` flag + `allowLegacyRegistryRef`, and
+     `DebugBundle.loadProofRegistry`. The registry is now built ONLY by
+     `Report.synthesizeSourceLinks` (in-source links), via the single
+     `loadRegistryWithLinks` used by report/query/policy/snapshot/traceability.
+   - Deleted all 5 keeper fixtures + `tests/programs/adversarial_registry`, and
+     excised their run_tests.sh blocks (registry-artifact miss, adversarial
+     swap/malformed/miss, MAL_DIR reg_*, multi_file, ext_miss, the `desync` and
+     stale-repair `--full` sections, registry-integrity).
+   - Origin reporting simplified to `source_linked` | `hardcoded` (no
+     `legacy_json_allowed`).
+   - **Verification:** default suite 1544/0 (CI gate); all gates green
+     (snapshots 95/0, proof gate, showcase 5/0, corpus 21/0, prove-CLI 8/0).
+     `--full` has ZERO new failures vs the pre-change baseline (26 → 22; the
+     removed desync/stale-repair were already red). Remaining `--full` failures
+     are all pre-existing and unrelated to JSON (extraction-consistency,
+     example-property, interp) — see note below.
+
+**Note — pre-existing `--full` failures (not introduced here):** the
+`make test-full` suite (NOT run by CI, which runs the default suite) had 26
+failures before this work and has 22 after. A couple still touch JSON-shaped
+tests interleaved in keep-heavy sections (`check-proofs: fake proof name`,
+`boundary-pressure: registry entry …`); they were already red and are left for a
+separate `--full` cleanup pass.

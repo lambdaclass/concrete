@@ -2561,8 +2561,10 @@ private partial def collectProofStatus
     -- Look up coverage classification + link provenance from the registry entry.
     let regEntry := registry.find? fun re => re.function == qualName
     let coverage := match regEntry with | some re => re.coverage | none => ""
+    -- Registry entries are always synthesized from in-source links now (JSON
+    -- registries were removed); `hardcoded` is a built-in Proof.provedFunctions proof.
     let origin := match regEntry with
-      | some re => if re.sourceLinked then "source_linked" else "legacy_json_allowed"
+      | some _ => "source_linked"
       | none => if pSrc == "hardcoded" then "hardcoded" else ""
     { qualName, bareName := f.name, state, currentFp := fp, expectedFp
     , profileGates := gates, unsupported := unsup, specName := sName, proofName := pName

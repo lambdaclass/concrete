@@ -296,54 +296,15 @@ def compileAndEmit (inputPath : String) (mode : String) : IO UInt32 := do
         IO.println (ppSModule sm)
       return 0
 
-/-- Whether `--allow-legacy-proof-registry` was passed (set once in `main`).
-    Gates loading of legacy JSON `proof-registry.json`; default is reject. -/
-initialize allowLegacyRegistryRef : IO.Ref Bool ← IO.mkRef false
-
-/-- Try to load a proof registry from proof-registry.json next to the input file.
-    Returns (entries, warnings). Missing file is not a warning; corrupt file is.
-    Legacy: JSON registries are ignored unless --allow-legacy-proof-registry. -/
-def loadRegistry (inputPath : String) : IO (Concrete.ProofRegistry × List String) := do
-  let dir := dirOf inputPath
-  let registryPath := dir ++ "/proof-registry.json"
-  let fileExists ← try
-    let _ ← IO.FS.readFile ⟨registryPath⟩
-    pure true
-  catch _ => pure false
-  if !fileExists then return ([], [])
-  -- JSON proof registries are LEGACY. The product model is in-source proof links
-  -- (#[proof_by]/#[spec]/#[proof_fingerprint]); a JSON registry is rejected
-  -- (ignored) unless the caller opts in with --allow-legacy-proof-registry
-  -- (the flag is recorded once in `main` into `allowLegacyRegistryRef`).
-  let allowLegacy ← allowLegacyRegistryRef.get
-  if !allowLegacy then
-    return ([], [s!"warning: {registryPath} ignored — JSON proof registries are legacy. Migrate to in-source proof links (#[proof_by]/#[spec]/#[proof_fingerprint]), or pass --allow-legacy-proof-registry to load it."])
-  try
-    let content ← readFile registryPath
-    let (entries, warns) := Concrete.parseRegistryJson content
-    return (entries, warns ++ [s!"note: loaded legacy JSON registry {registryPath} (legacy_json_allowed)"])
-  catch e =>
-    return ([], [s!"warning: could not read {registryPath}: {e}"])
-
-/-- Load registry and print any warnings to stderr. -/
-def loadRegistryWarn (inputPath : String) : IO Concrete.ProofRegistry := do
-  let (registry, warnings) ← loadRegistry inputPath
-  for w in warnings do IO.eprintln w
-  return registry
-
-/-- The FULL proof registry a report/query should see: any JSON entries merged
-    with the in-source proof links synthesized from `#[proof_by]`/`#[spec]`/
-    `#[proof_fingerprint]`. Every registry-consuming path must use this (not bare
-    `loadRegistryWarn`) so source-linked proofs are visible everywhere — proof
-    status, queries, traceability, bundles — not just `--report`. -/
-def loadRegistryWithLinks (inputPath : String)
+/-- The proof registry a report/query sees: the in-source proof links
+    synthesized from `#[proof_by]`/`#[spec]`/`#[proof_fingerprint]`. Legacy JSON
+    `proof-registry.json` support was removed — source links are the only model,
+    so every registry-consuming path (report, query, policy, snapshot,
+    traceability) goes through this one synthesizer. -/
+def loadRegistryWithLinks (_inputPath : String)
     (astModules : List Concrete.Module) (coreModules : List Concrete.CModule) :
     IO Concrete.ProofRegistry := do
-  let jsonReg ← loadRegistryWarn inputPath
-  let src := Report.synthesizeSourceLinks astModules coreModules
-  match Report.mergeSourceLinks jsonReg src with
-  | .ok merged => return merged
-  | .error e => IO.eprintln s!"warning: {e}"; return jsonReg
+  return Report.synthesizeSourceLinks astModules coreModules
 
 /-- Run pipeline to needed depth and produce a report. -/
 def compileAndQuery (inputPath : String) (query : String) : IO UInt32 := do
@@ -888,14 +849,9 @@ def compileAndReport (inputPath : String) (reportType : String)
   | .ok (parsed, fullValidCore, scopedValidCore, srcMap) =>
     let locMap := Report.buildFnLocMap parsed.modules inputPath
     let simpleLocMap := locMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
-    let jsonRegistry ← loadRegistryWarn inputPath
-    -- Merge in-source proof links (#[proof_by]/#[spec]/...) with the JSON
-    -- registry into one combined registry; downstream proof tooling then
-    -- treats a source link exactly like a registry entry.
-    let sourceEntries := Report.synthesizeSourceLinks parsed.modules fullValidCore.coreModules
-    let registry ← match Report.mergeSourceLinks jsonRegistry sourceEntries with
-      | .ok r => pure r
-      | .error msg => IO.eprintln s!"error: {msg}"; return 1
+    -- The registry is the in-source proof links (#[proof_by]/#[spec]/...)
+    -- synthesized from the FULL user package.
+    let registry := Report.synthesizeSourceLinks parsed.modules fullValidCore.coreModules
     -- pc and registry validation run on the FULL user package: a
     -- registry entry naming a function defined in a sibling file must
     -- still validate when the user is querying just one file.
@@ -1331,11 +1287,7 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
         try IO.FS.removeFile ⟨outPath⟩ catch _ => pure ()
       return testExit
 
-def main (argsRaw : List String) : IO UInt32 := do
-  -- Global flag: record --allow-legacy-proof-registry, then strip it before
-  -- positional dispatch (loadRegistry reads the ref).
-  allowLegacyRegistryRef.set (argsRaw.contains "--allow-legacy-proof-registry")
-  let args := argsRaw.filter (· != "--allow-legacy-proof-registry")
+def main (args : List String) : IO UInt32 := do
   -- Check for "build" command first (before generic single-arg pattern)
   if args.head? == some "build" then
     let cwd ← IO.currentDir

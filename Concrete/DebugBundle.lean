@@ -224,18 +224,6 @@ where
     | name :: _ => name
     | [] => path
 
-/-- Load proof registry, returning empty list on failure. -/
-private def loadProofRegistry (inputPath : String) : IO ProofRegistry := do
-  let dir := match inputPath.splitOn "/" |>.reverse with
-    | _ :: rest => "/".intercalate rest.reverse
-    | [] => "."
-  let regPath := dir ++ "/proof-registry.json"
-  try
-    let content ← IO.FS.readFile ⟨regPath⟩
-    let (registry, _warnings) := parseRegistryJson content
-    return registry
-  catch _ => return []
-
 /-- Run the full pipeline, capturing state at each stage.
     Returns the bundle state (which may represent a failure at any point). -/
 partial def capturePipeline (inputPath source : String)
@@ -284,7 +272,7 @@ partial def capturePipeline (inputPath source : String)
   -- ProofCore (non-blocking)
   let locMap := Report.buildFnLocMap resolved.modules inputPath
   let simpleLocMap := locMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
-  let registry ← loadProofRegistry inputPath
+  let registry := Report.synthesizeSourceLinks resolved.modules validCore.coreModules
   let pc := extractProofCore validCore simpleLocMap registry
 
   -- Verifier (non-blocking)
