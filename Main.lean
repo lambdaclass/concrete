@@ -3,7 +3,7 @@ import Concrete
 open Concrete
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -804,7 +804,8 @@ def compileAndReport (inputPath : String) (reportType : String)
     (proveShowObl : Option String := none) (proveReplay : Bool := false)
     (proveJson : Bool := false) (proveNearestLemmas : Bool := false)
     (proveEmitLean : Bool := false) (proveStdout : Bool := false)
-    (proveEmitArtifacts : Bool := false) (proveOutDir : Option String := none) : IO UInt32 := do
+    (proveEmitArtifacts : Bool := false) (proveOutDir : Option String := none)
+    (proveCheck : Bool := false) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -923,6 +924,89 @@ def compileAndReport (inputPath : String) (reportType : String)
             IO.println s!"wrote {dir}/  (context.json, failed.lean, command.txt, README.txt)"
           IO.println s!"{arts.length} failed-obligation artifact(s) under {baseDir}/"
           return 0
+        -- --check: run the Lean kernel on this function's linked theorem(s) and
+        -- map the result back to obligation id / theorem / status / span / error.
+        -- The closed repair loop: agents read structured status, not raw stderr.
+        if proveCheck then
+          let q := Report.jsonStr
+          -- (obligationId, theorem, originalObligationStatus) for this function
+          let mut checks : List (String × String × String) := []
+          for o in pc.obligations do
+            if o.functionId.qualName == qual then
+              match o.spec with
+              | some s =>
+                if !checks.any (fun (_, t, _) => t == s.proofName) then
+                  checks := checks ++ [(s!"{qual}#refines_spec", s.proofName, o.status.canonical)]
+              | none => pure ()
+          for e in registry do
+            if e.function == qual then
+              match e.ensuresProof with
+              | some t => if !checks.any (fun (_, tt, _) => tt == t) then
+                            checks := checks ++ [(s!"{qual}#ensures", t, "ensures")]
+              | none => pure ()
+          let srcLine := ((parsed.modules.flatMap Report.allFunctions).find?
+            (fun (pfx, fn) => pfx ++ fn.name == qual)).map (fun (_, fn) => fn.span.line) |>.getD 0
+          let stubCmd := s!"concrete prove {inputPath} {qual} --emit-lean --out failed.lean --force"
+          -- No linked theorem: report missing_theorem without invoking Lean.
+          if checks.isEmpty then
+            if proveJson then
+              IO.println (String.join ["{\n  \"function\": ", q qual, ",\n  \"schema_version\": ", q proveSchemaVersion,
+                ",\n  \"all_checked\": false,\n  \"checks\": [\n",
+                "    {\"obligation_id\": ", q s!"{qual}#refines_spec", ", \"theorem\": null, \"status\": \"missing_theorem\"",
+                ", \"source_line\": ", toString srcLine, ", \"stub_command\": ", q stubCmd, "}\n  ],\n",
+                "  \"lean_error\": ", q "no #[proof_by]/#[ensures_proof] theorem linked on this function",
+                ",\n  \"summary\": ", q "0 checked, 1 missing theorem", "\n}"])
+            else
+              IO.println s!"=== concrete prove --check: {qual} ===\n\n  ✗ {qual}#refines_spec — no linked theorem (missing_theorem)\n\nSummary: 0 checked, 1 missing theorem."
+            return 2
+          -- Invoke the Lean kernel once on all linked theorems.
+          let tmp ← IO.Process.output { cmd := "mktemp", args := #["-d"] }
+          let tmpPath := tmp.stdout.trimAscii.toString ++ "/prove_check.lean"
+          let mut src := "import Concrete\n\n-- Auto-generated by `concrete prove --check`.\n"
+          for (_, thm, _) in checks do src := src ++ s!"#check @{thm}\n"
+          IO.FS.writeFile ⟨tmpPath⟩ src
+          let r ← IO.Process.output { cmd := "lake", args := #["env", "lean", tmpPath], env := #[("LAKE_TERM_ANSI", "0")] }
+          let combined := r.stdout.trimAscii.toString ++ "\n" ++ r.stderr.trimAscii.toString
+          let _ ← IO.Process.output { cmd := "rm", args := #["-rf", tmp.stdout.trimAscii.toString] }
+          let has := fun (s sub : String) => (s.splitOn sub).length != 1
+          let anyNeedle := checks.any (fun (_, thm, _) => has combined s!"`{thm}`")
+          let envFailure := r.exitCode != 0 && !anyNeedle
+          let results := checks.map fun (id, thm, st) =>
+            let failed := has combined s!"`{thm}`"
+            let status :=
+              if envFailure then "env_failure"
+              else if failed then (if has combined "unknown" then "missing_theorem" else "failed")
+              else if st == "stale" then "stale"
+              else "checked"
+            (id, thm, status)
+          let allChecked := results.all (fun (_, _, st) => st == "checked")
+          let exitCode : UInt32 :=
+            if envFailure then 5
+            else if results.any (fun (_, _, st) => st == "failed") then 4
+            else if results.any (fun (_, _, st) => st == "missing_theorem") then 2
+            else if results.any (fun (_, _, st) => st == "stale") then 3
+            else 0
+          let leanErr := if allChecked then "" else String.ofList (combined.toList.take 800)
+          if proveJson then
+            let body := results.map fun (id, thm, st) =>
+              String.join ["    {\"obligation_id\": ", q id, ", \"theorem\": ", q thm, ", \"status\": ", q st,
+                ", \"source_line\": ", toString srcLine, ", \"stub_command\": ", q stubCmd, "}"]
+            IO.println (String.join ["{\n  \"function\": ", q qual, ",\n  \"schema_version\": ", q proveSchemaVersion,
+              ",\n  \"toolchain\": ", q ((← (try IO.FS.readFile ⟨"lean-toolchain"⟩ catch _ => pure "unknown")).trimAscii.toString),
+              ",\n  \"all_checked\": ", (if allChecked then "true" else "false"),
+              ",\n  \"checks\": [\n", ",\n".intercalate body, "\n  ],\n",
+              "  \"lean_error\": ", q leanErr,
+              ",\n  \"summary\": ", q s!"{results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not checked",
+              "\n}"])
+          else
+            let mut out := s!"=== concrete prove --check: {qual} ===\n\n"
+            for (id, thm, st) in results do
+              let mark := if st == "checked" then "✓" else "✗"
+              out := out ++ s!"  {mark} {id} — {thm} ({st})\n"
+            if !leanErr.isEmpty then out := out ++ s!"\nLean output:\n{leanErr}\n"
+            out := out ++ s!"\nSummary: {results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not checked"
+            IO.println out
+          return exitCode
         -- --show-obligation <id>: print one obligation in full (text or JSON).
         if let some oblId := proveShowObl then
           IO.println (if proveJson then Report.showObligationJson parsed.modules qual oblId provedVCs inputPath
@@ -1378,7 +1462,8 @@ def proveAgentHelp : String := String.intercalate "\n" [
   "  4. write the Lean proof in Concrete/Proof.lean (see PROOFKIT_GUIDE)",
   "  5. concrete prove <file> <module.fn> --emit-link             # in-source link block",
   "     (paste #[spec]/#[proof_by]/#[proof_coverage]/#[proof_fingerprint] above the fn)",
-  "  6. concrete <file> --report check-proofs                     # kernel-verify",
+  "  6. concrete prove <file> <module.fn> --check [--json]        # kernel-verify THIS fn's theorem",
+  "     concrete <file> --report check-proofs                     # kernel-verify all linked proofs",
   "  7. concrete prove <file> <module.fn> --replay                # re-run omega/bv_decide",
   "",
   "DISCOVERY (no file needed):",
@@ -1413,7 +1498,8 @@ def proveCapabilitiesJson : String := String.intercalate "\n" [
   "    \"emit_link\": true,",
   "    \"nearest_lemmas\": true,",
   "    \"replay_json\": true,",
-  "    \"failed_artifacts\": true",
+  "    \"failed_artifacts\": true,",
+  "    \"check\": true",
   "  },",
   "  \"obligation_kinds\": [\"invariant_init\", \"invariant_preservation\", \"loop_exit_post_link\", \"variant_nonnegative\", \"variant_decreases\", \"array_bounds\", \"division_nonzero\", \"integer_overflow\", \"ensures\"],",
   "  \"evidence_classes\": [\"proved_by_lean\", \"proved_by_kernel_decision\", \"partial\", \"stale\", \"missing\", \"blocked\", \"ineligible\", \"trusted\", \"tested_by_oracle\", \"runtime_checked\"],",
@@ -1785,6 +1871,7 @@ def main (args : List String) : IO UInt32 := do
       let nearestLemmas := rest.contains "--nearest-lemmas"
       let emitLean := rest.contains "--emit-lean"
       let emitArtifacts := rest.contains "--emit-artifacts"
+      let check := rest.contains "--check"
       let stdout := rest.contains "--stdout"
       let outDir := match rest.dropWhile (· != "--out-dir") with
         | _ :: d :: _ => some d
@@ -1800,9 +1887,10 @@ def main (args : List String) : IO UInt32 := do
         (proveEmitLink := emitLink) (proveShowObl := showObl) (proveReplay := replay)
         (proveJson := proveJson) (proveNearestLemmas := nearestLemmas)
         (proveEmitLean := emitLean) (proveStdout := stdout)
-        (proveEmitArtifacts := emitArtifacts) (proveOutDir := outDir))
+        (proveEmitArtifacts := emitArtifacts) (proveOutDir := outDir)
+        (proveCheck := check))
     | _ =>
-      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas]\n       concrete prove --help=agent | --capabilities | --schema   (discovery; no file needed)"
+      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check]\n       concrete prove --help=agent | --capabilities | --schema   (discovery; no file needed)"
       return 1
   -- concrete --version
   if args == ["--version"] then

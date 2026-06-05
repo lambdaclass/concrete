@@ -191,6 +191,23 @@ assert_json "artifacts context.json (stable id + recipe)" \
 rm -rf "$ART_DIR"
 assert_json "capabilities failed_artifacts=true" 'd["features"]["failed_artifacts"] is True' "$COMPILER" prove --capabilities
 
+echo "=== prove --check (structured proof-check JSON) ==="
+# Missing-theorem path needs no Lean (returns before invoking the kernel).
+assert_json "check missing_theorem (no link)" \
+  'd["all_checked"] is False and d["checks"][0]["status"]=="missing_theorem" and d["checks"][0]["theorem"] is None and "lean_error" in d' \
+  "$COMPILER" prove "$PP" main.clamp_value --check --json
+assert_exit "check missing → exit 2" 2 "$COMPILER" prove "$PP" main.clamp_value --check --json
+assert_json "capabilities check=true" 'd["features"]["check"] is True' "$COMPILER" prove --capabilities
+# Kernel-backed "checked" path: only when the Lean toolchain is on PATH (always in CI).
+if command -v lake >/dev/null 2>&1; then
+  assert_json "check proved → checked (kernel)" \
+    'd["all_checked"] is True and d["checks"][0]["status"]=="checked" and d["checks"][0]["theorem"].startswith("Concrete.Proof.")' \
+    "$COMPILER" prove "$LI" loop_invariant.count_up --check --json
+  assert_exit "check proved → exit 0" 0 "$COMPILER" prove "$LI" loop_invariant.count_up --check --json
+else
+  echo "  skip kernel --check assertions (lake not on PATH)"
+fi
+
 echo ""
 echo "PROVE-CLI: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
