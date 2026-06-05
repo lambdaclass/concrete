@@ -3837,6 +3837,109 @@ def proveArtifacts (pc : Concrete.ProofCore) (registry : ProofRegistry)
     arts := arts ++ [mk s!"{qualName}#refines_spec" "refines_spec" kind proveStatus "0" [] concl tac lemmas note]
   return arts
 
+/-- `concrete prove <file> <fn> --workspace DIR`: compose the read-only prove
+    surfaces into one self-contained directory (disposable build output, NOT a
+    proof registry). Returns `(relativePath, contents)` pairs the caller writes
+    under DIR:
+      manifest.json          — `--json` proof report (status/fingerprint/link/next_actions)
+      context.json           — proof-authoring inputs (spec/proof refs, ProofKit imports, theorems, feature hints)
+      <Fn>Proofs.lean        — the `--emit-lean` stub
+      link.con.txt           — the `--emit-link` source attributes
+      obligations/<id>.json  — per-obligation facts + lemma recipe + replay/check command
+      check.sh / replay.sh   — exact local commands
+      README.md              — function-specific workflow -/
+def workspaceFiles (pc : Concrete.ProofCore) (registry : ProofRegistry)
+    (modules : List Module) (qualName inputPath schemaVersion : String)
+    (provedVCs : List String) : List (String × String) := Id.run do
+  let q := jsonStr
+  let qarr := fun (xs : List String) => "[" ++ ", ".intercalate (xs.map q) ++ "]"
+  let leanName := leanIdent (qualName.splitOn "." |>.getLast!)
+  let capName := match leanName.toList with
+    | c :: rest => String.ofList (c.toUpper :: rest)
+    | [] => leanName
+  let leanFile := s!"{capName}Proofs.lean"
+  let astFn? := (modules.flatMap allFunctions).find? (fun (pfx, fn) => pfx ++ fn.name == qualName) |>.map Prod.snd
+  let regEntry := registry.find? (·.function == qualName)
+  -- context.json: the proof-authoring inputs (distinct from manifest's status report)
+  let mut hints : List String := []
+  let mut suggested : List String := [leanName ++ "_refines_spec"]
+  match pc.entries.find? (·.qualName == qualName), astFn? with
+  | some e, some f =>
+    let feats := (e.fn.body.flatMap proveStmtFeatures).eraseDups
+    if feats.contains "loop" || !f.loopContracts.isEmpty then hints := hints ++ ["Concrete.ProofKit.Loops"]
+    if feats.contains "array" then hints := hints ++ ["Concrete.ProofKit.Array"]
+    if feats.contains "bitvec" then hints := hints ++ ["Concrete.ProofKit.BitVec"]
+    if feats.contains "call" then hints := hints ++ ["Concrete.ProofKit.Calls"]
+  | _, _ => pure ()
+  let linkRefs := match regEntry with
+    | some re => String.join [
+        "  \"spec\": ", q re.spec, ",\n  \"proof_by\": ", q re.proof,
+        ",\n  \"ensures_proof\": ", (match re.ensuresProof with | some t => q t | none => "null"),
+        ",\n  \"proof_fingerprint\": ", q (shortHash re.bodyFingerprint), ",\n" ]
+    | none => "  \"spec\": null,\n  \"proof_by\": null,\n  \"ensures_proof\": null,\n  \"proof_fingerprint\": null,\n"
+  let contextJson := String.join [
+    "{\n  \"function\": ", q qualName, ",\n  \"schema_version\": ", q schemaVersion, ",\n",
+    linkRefs,
+    "  \"proofkit_imports\": ", qarr hints, ",\n",
+    "  \"suggested_theorems\": ", qarr suggested, ",\n",
+    "  \"lean_stub_file\": ", q leanFile, ",\n",
+    "  \"link_file\": \"link.con.txt\"\n}\n" ]
+  let mut files : List (String × String) := []
+  files := files ++ [("manifest.json", proveReportJson pc registry modules qualName provedVCs inputPath schemaVersion ++ "\n")]
+  files := files ++ [("context.json", contextJson)]
+  files := files ++ [(leanFile, emitLeanStub pc registry modules qualName provedVCs)]
+  files := files ++ [("link.con.txt", emitProofLink registry qualName ++ "\n")]
+  -- obligations/<id>.json — per-obligation facts + recipe + commands
+  let oblFile := fun (id kind status srcLine : String) (hyps : List String) (concl : String) =>
+    let (tac, lemmas, note) := lemmaRecipeFor kind
+    String.join [
+      "{\n  \"id\": ", q id, ",\n  \"function\": ", q qualName,
+      ",\n  \"kind\": ", q kind, ",\n  \"status\": ", q status,
+      ",\n  \"source_line\": ", srcLine,
+      ",\n  \"hypotheses\": ", qarr hyps, ",\n  \"conclusion\": ", q concl,
+      ",\n  \"recipe\": {\"tactic\": ", q tac, ", \"lemmas\": ", qarr lemmas, ", \"note\": ", q note, "}",
+      ",\n  \"replay_command\": ", q s!"concrete prove {inputPath} {qualName} --replay --json",
+      ",\n  \"check_command\": ", q s!"concrete prove {inputPath} {qualName} --check --json", "\n}\n" ]
+  match astFn? with
+  | some f =>
+    let extraLets := letConstMap f.body
+    let retExpr := loopExitReturn f.body
+    for lc in f.loopContracts do
+      for oid in ["O1", "O2", "O3", "O4", "O5"] do
+        match loopObInfo lc oid qualName f.ensures extraLets retExpr provedVCs with
+        | some (kind, hyps, concl, st) =>
+          let id := loopVCKey qualName lc.line oid
+          files := files ++ [(s!"obligations/{artifactDirName id}.json", oblFile id kind st (toString lc.line) hyps concl)]
+        | none => pure ()
+    for ens in f.ensures do
+      let reqHyps := f.requires.map Concrete.fmtExpr
+      let st := (pc.obligations.find? (·.functionId.qualName == qualName)).map (·.status.canonical) |>.getD "missing"
+      files := files ++ [(s!"obligations/{artifactDirName s!"{qualName}#ensures"}.json", oblFile s!"{qualName}#ensures" "ensures" st (toString f.span.line) reqHyps (Concrete.fmtExpr ens))]
+  | none => pure ()
+  files := files ++ [("check.sh", s!"#!/usr/bin/env bash\n# Kernel-verify this function's linked Lean proof (structured JSON).\nconcrete prove {inputPath} {qualName} --check --json\n")]
+  files := files ++ [("replay.sh", s!"#!/usr/bin/env bash\n# Re-run omega / bv_decide discharge for this function (structured JSON).\nconcrete prove {inputPath} {qualName} --replay --json\n")]
+  let readme := String.join [
+    s!"# Proof workspace — `{qualName}`\n\n",
+    s!"Generated by `concrete prove {inputPath} {qualName} --workspace`.\n\n",
+    "This is a **disposable build output**, not a proof registry. The source of\n",
+    "truth stays the `.con` file plus its in-source proof attributes. Do not\n",
+    "commit this directory.\n\n",
+    "## Files\n\n",
+    "- `manifest.json` — machine-readable status: eligibility, fingerprint, proof link, next actions.\n",
+    "- `context.json` — proof-authoring inputs: spec/proof references, ProofKit imports, suggested theorem names.\n",
+    s!"- `{leanFile}` — compilable Lean stub (ends in `sorry`; write the proof here or in Concrete/Proof.lean).\n",
+    "- `obligations/<id>.json` — one file per obligation: hypotheses, conclusion, status, lemma recipe, replay/check command.\n",
+    "- `link.con.txt` — the in-source `#[spec]/#[proof_by]/...` attributes to paste above the function once proved.\n",
+    "- `check.sh` / `replay.sh` — exact local verification commands.\n\n",
+    "## Workflow\n\n",
+    "1. Read `manifest.json` for status + next actions, and the `obligations/` files for what to prove.\n",
+    s!"2. Write the proof in `{leanFile}` (see PROOFKIT_GUIDE for the lemmas in `context.json`).\n",
+    "3. `bash check.sh` — kernel-verify. Iterate until `\"all_checked\": true`.\n",
+    "4. Paste `link.con.txt` above the function in the `.con` source.\n",
+    s!"5. `concrete {inputPath} --report check-proofs` and `concrete audit {inputPath}` to confirm.\n" ]
+  files := files ++ [("README.md", readme)]
+  return files
+
 -- ============================================================
 -- Source/Core/SSA/LLVM traceability (--report traceability)
 -- ============================================================

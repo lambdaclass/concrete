@@ -208,6 +208,43 @@ else
   echo "  skip kernel --check assertions (lake not on PATH)"
 fi
 
+echo "=== prove --workspace (composed proof workspace) ==="
+WS="$(mktemp -d)/ws"
+WS_OUT="$("$COMPILER" prove "$LI" loop_invariant.count_up --workspace "$WS" 2>&1)"
+if printf '%s' "$WS_OUT" | grep -qF "wrote proof workspace"; then
+  echo "  ok   workspace generated"; PASS=$((PASS+1))
+else
+  echo "  FAIL workspace generation — $WS_OUT"; FAIL=$((FAIL+1))
+fi
+# Expected files present.
+for f in manifest.json context.json link.con.txt check.sh replay.sh README.md Count_upProofs.lean; do
+  if [ -f "$WS/$f" ]; then echo "  ok   workspace file $f"; PASS=$((PASS+1));
+  else echo "  FAIL workspace file $f missing"; FAIL=$((FAIL+1)); fi
+done
+# At least one obligation JSON file.
+if ls "$WS"/obligations/*.json >/dev/null 2>&1; then echo "  ok   workspace obligations/ populated"; PASS=$((PASS+1));
+else echo "  FAIL workspace obligations/ empty"; FAIL=$((FAIL+1)); fi
+# JSON validity + load-bearing fields.
+assert_json "workspace manifest.json (function + status)" \
+  'd["function"]=="loop_invariant.count_up" and "status" in d' cat "$WS/manifest.json"
+assert_json "workspace context.json (imports + suggested theorem)" \
+  '"Concrete.ProofKit.Loops" in d["proofkit_imports"] and any("refines_spec" in t for t in d["suggested_theorems"])' \
+  cat "$WS/context.json"
+OBL_FILE="$(ls "$WS"/obligations/*.json | head -1)"
+assert_json "workspace obligation file (recipe + commands)" \
+  '"recipe" in d and "tactic" in d["recipe"] and "replay_command" in d and "check_command" in d and "#" in d["id"]' \
+  cat "$OBL_FILE"
+assert_contains "workspace link.con.txt block" "#[proof_by(" cat "$WS/link.con.txt"
+assert_contains "workspace stub theorem"       "theorem count_up_refines_spec" cat "$WS/Count_upProofs.lean"
+# Workspace is a build output, NOT a proof registry: no proof-registry.json anywhere.
+if find "$WS" -name 'proof-registry.json' | grep -q .; then
+  echo "  FAIL workspace contains a proof-registry.json (must not)"; FAIL=$((FAIL+1))
+else
+  echo "  ok   workspace has no proof-registry.json"; PASS=$((PASS+1))
+fi
+assert_json "capabilities workspace=true" 'd["features"]["workspace"] is True' "$COMPILER" prove --capabilities
+rm -rf "$(dirname "$WS")"
+
 echo ""
 echo "PROVE-CLI: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

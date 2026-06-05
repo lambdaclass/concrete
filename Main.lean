@@ -3,7 +3,7 @@ import Concrete
 open Concrete
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -805,7 +805,7 @@ def compileAndReport (inputPath : String) (reportType : String)
     (proveJson : Bool := false) (proveNearestLemmas : Bool := false)
     (proveEmitLean : Bool := false) (proveStdout : Bool := false)
     (proveEmitArtifacts : Bool := false) (proveOutDir : Option String := none)
-    (proveCheck : Bool := false) : IO UInt32 := do
+    (proveCheck : Bool := false) (proveWorkspace : Option String := none) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -1007,6 +1007,20 @@ def compileAndReport (inputPath : String) (reportType : String)
             out := out ++ s!"\nSummary: {results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not checked"
             IO.println out
           return exitCode
+        -- --workspace DIR: compose the read-only surfaces into one directory.
+        if let some wsArg := proveWorkspace then
+          let dir := if wsArg.isEmpty then s!".build/prove/{Report.artifactDirName qual}/workspace" else wsArg
+          let files := Report.workspaceFiles pc registry parsed.modules qual inputPath proveSchemaVersion provedVCs
+          IO.FS.createDirAll dir
+          for (rel, contents) in files do
+            let path := dir ++ "/" ++ rel
+            if let some parent := (System.FilePath.mk path).parent then
+              IO.FS.createDirAll parent
+            IO.FS.writeFile path contents
+            if rel.endsWith ".sh" then
+              let _ ← IO.Process.output { cmd := "chmod", args := #["+x", path] }
+          IO.println s!"wrote proof workspace for {qual} to {dir}/ ({files.length} files)"
+          return 0
         -- --show-obligation <id>: print one obligation in full (text or JSON).
         if let some oblId := proveShowObl then
           IO.println (if proveJson then Report.showObligationJson parsed.modules qual oblId provedVCs inputPath
@@ -1466,6 +1480,11 @@ def proveAgentHelp : String := String.intercalate "\n" [
   "     concrete <file> --report check-proofs                     # kernel-verify all linked proofs",
   "  7. concrete prove <file> <module.fn> --replay                # re-run omega/bv_decide",
   "",
+  "ALL-IN-ONE:",
+  "  concrete prove <file> <module.fn> --workspace [dir]          # generate a self-contained",
+  "    proof workspace (manifest.json, context.json, obligations/, <Fn>Proofs.lean, link.con.txt,",
+  "    check.sh, replay.sh, README.md). Disposable build output; default dir .build/prove/<fn>/workspace.",
+  "",
   "DISCOVERY (no file needed):",
   "  concrete prove --capabilities      # JSON: supported features + schema version",
   "  concrete prove --schema            # JSON schema for --json output",
@@ -1499,7 +1518,8 @@ def proveCapabilitiesJson : String := String.intercalate "\n" [
   "    \"nearest_lemmas\": true,",
   "    \"replay_json\": true,",
   "    \"failed_artifacts\": true,",
-  "    \"check\": true",
+  "    \"check\": true,",
+  "    \"workspace\": true",
   "  },",
   "  \"obligation_kinds\": [\"invariant_init\", \"invariant_preservation\", \"loop_exit_post_link\", \"variant_nonnegative\", \"variant_decreases\", \"array_bounds\", \"division_nonzero\", \"integer_overflow\", \"ensures\"],",
   "  \"evidence_classes\": [\"proved_by_lean\", \"proved_by_kernel_decision\", \"partial\", \"stale\", \"missing\", \"blocked\", \"ineligible\", \"trusted\", \"tested_by_oracle\", \"runtime_checked\"],",
@@ -1872,6 +1892,11 @@ def main (args : List String) : IO UInt32 := do
       let emitLean := rest.contains "--emit-lean"
       let emitArtifacts := rest.contains "--emit-artifacts"
       let check := rest.contains "--check"
+      let workspace := if rest.contains "--workspace" then
+          some (match rest.dropWhile (· != "--workspace") with
+                | _ :: d :: _ => if d.startsWith "--" then "" else d
+                | _ => "")
+        else none
       let stdout := rest.contains "--stdout"
       let outDir := match rest.dropWhile (· != "--out-dir") with
         | _ :: d :: _ => some d
@@ -1888,9 +1913,9 @@ def main (args : List String) : IO UInt32 := do
         (proveJson := proveJson) (proveNearestLemmas := nearestLemmas)
         (proveEmitLean := emitLean) (proveStdout := stdout)
         (proveEmitArtifacts := emitArtifacts) (proveOutDir := outDir)
-        (proveCheck := check))
+        (proveCheck := check) (proveWorkspace := workspace))
     | _ =>
-      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check]\n       concrete prove --help=agent | --capabilities | --schema   (discovery; no file needed)"
+      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema   (discovery; no file needed)"
       return 1
   -- concrete --version
   if args == ["--version"] then

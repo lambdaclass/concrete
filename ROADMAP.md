@@ -419,31 +419,32 @@ lemmas, and actionable failure diagnostics.
    (inspect → regenerate → re-check commands), and `README.txt`. A cleanly-proved
    function emits nothing and exits 0. `--capabilities` reports
    `failed_artifacts=true`. Gate: `test_prove_cli.sh` (42/0).
-10. Add `concrete prove --workspace DIR`: a single generated proof workspace for
-    humans and agents. This is the high-level wrapper over the existing
-    binary-first surfaces, not a second proof model. It should create a
-    self-contained directory such as:
-    - `manifest.json` — generated machine-readable report: schema version,
-      function, status, body fingerprint, proof link, current next actions.
-    - `context.json` — generated proof context: extracted body/spec references,
-      ProofKit imports, theorem names, and feature hints.
-    - `obligations/<id>.json` — generated obligation facts: source span,
-      hypotheses, conclusion, status, replay/check command, and lemma recipe.
-    - `<Fn>Proofs.lean` — the `--emit-lean` stub.
-    - `check.sh` / `replay.sh` — exact local commands.
+10. ~~Add `concrete prove --workspace DIR`.~~ **DONE.** `Report.workspaceFiles`
+    composes the read-only prove surfaces into one self-contained directory
+    (high-level wrapper, NOT a second proof model):
+    - `manifest.json` — the `--json` proof report (status, fingerprint, link, next_actions).
+    - `context.json` — proof-authoring inputs: spec/proof_by/ensures_proof refs,
+      `proof_fingerprint`, ProofKit imports, suggested theorem names, stub/link file names.
+    - `obligations/<id>.json` — one per obligation (loop VCs + `#[ensures]`):
+      source line, hypotheses, conclusion, status, `lemmaRecipeFor` recipe, and
+      replay/check commands. Filename = sanitized stable id.
+    - `<Fn>Proofs.lean` — the `--emit-lean` stub (verified to typecheck).
     - `link.con.txt` — the `--emit-link` source attributes.
+    - `check.sh` / `replay.sh` — exact local commands (chmod +x).
     - `README.md` — function-specific workflow.
 
-    **Important terminology:** these JSON files are generated proof workspace
-    artifacts, not a proof registry. They are disposable build outputs under
-    `.build/prove` or a user-selected directory, are not the source of truth,
-    and should normally not be committed. The old `proof-registry.json`
-    side-channel stays deleted. Source truth remains the `.con` file plus
-    in-source proof attributes.
-11. Add a CI fixture for `concrete prove --workspace`: one small function with a
-    missing obligation must produce the expected manifest/context/obligation
-    JSON files, Lean stub, scripts, and link block; the fixture must assert that
-    no `proof-registry.json` appears in the workspace.
+    `--workspace` takes an optional dir (default `.build/prove/<fn>/workspace`,
+    gitignored). `--capabilities` reports `workspace=true`; `--help=agent` has an
+    ALL-IN-ONE section. **Terminology:** these are disposable build outputs, not a
+    proof registry; source truth stays the `.con` file + in-source attributes.
+    The old `proof-registry.json` side-channel stays deleted.
+11. ~~Add a CI fixture for `concrete prove --workspace`.~~ **DONE.**
+    `test_prove_cli.sh` generates a workspace for `loop_invariant.count_up`,
+    asserts all seven base files + a populated `obligations/`, validates
+    `manifest.json`/`context.json`/an obligation file as JSON with their
+    load-bearing fields, checks the link block and stub theorem, asserts
+    `workspace=true` in capabilities, and asserts **no `proof-registry.json`
+    appears anywhere in the workspace tree**. Gate now 63/0.
 12. ~~Add a structured proof-check step for agent-written Lean.~~ **DONE.**
     `concrete prove <file> <fn> --check [--json]` runs the Lean kernel
     (`lake env lean` on `import Concrete` + `#check @<theorem>`) on the
