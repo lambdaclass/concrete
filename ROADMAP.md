@@ -357,9 +357,17 @@ lemmas, and actionable failure diagnostics.
      loader, and the `--allow-legacy-proof-registry` flag. `proof-status` origin
      is `source_linked` | `hardcoded`. `check_no_example_registries.sh` (CI) keeps
      `examples/` registry-free. History: `docs/REGISTRY_FIXTURE_INVENTORY.md`.
-   - **Remaining (separate thread):** move example proofs out of the
-     `Concrete.Proof.*` compiler namespace into per-example namespaces — the only
-     transitional wart left.
+   - **In progress (separate thread):** move example proofs out of the
+     `Concrete.Proof.*` compiler namespace into per-example namespaces. **Pilot
+     DONE:** `loop_invariant` (`count_upBody`/`count_up_loop_preserves`) moved to
+     `Concrete/Examples/LoopInvariant/Proofs.lean`, namespace
+     `Examples.LoopInvariant.Proofs`, imported by the umbrella `Concrete`. The
+     `.con` `#[spec]`/`#[proof_by]` now name the new namespace; snapshot
+     regenerated; check-proofs/proof-status/emit-link/replay all green; the proof
+     name resolution is namespace-agnostic (no compiler change needed). Remaining:
+     bulk-move parse_validate, crypto_verify, fixed_capacity, constant_time_tag,
+     elf_header, hmac_sha256 (the big one, ~43 refs) + the `specs`/`provedFunctions`
+     table entries they own.
 2. ~~Make the `concrete prove` binary self-describing for agents.~~ **DONE.**
    `concrete prove --help=agent` prints the proof-authoring sequence, output
    formats, the exit-code taxonomy (0 success, 1 invalid invocation, 2

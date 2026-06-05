@@ -212,7 +212,7 @@ assert_json "capabilities check=true" 'd["features"]["check"] is True' "$COMPILE
 # Kernel-backed "checked" path: only when the Lean toolchain is on PATH (always in CI).
 if command -v lake >/dev/null 2>&1; then
   assert_json "check proved → checked (kernel)" \
-    'd["all_checked"] is True and d["checks"][0]["status"]=="checked" and d["checks"][0]["theorem"].startswith("Concrete.Proof.")' \
+    'd["all_checked"] is True and d["checks"][0]["status"]=="checked" and "." in d["checks"][0]["theorem"]' \
     "$COMPILER" prove "$LI" loop_invariant.count_up --check --json
   assert_exit "check proved → exit 0" 0 "$COMPILER" prove "$LI" loop_invariant.count_up --check --json
 else

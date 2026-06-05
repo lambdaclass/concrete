@@ -1,8 +1,8 @@
 mod loop_invariant {
     // A tiny counted loop for the first real loop-invariant VC.
     // Invariant: the counter stays in range. Variant: 8 - i decreases.
-    #[spec(Concrete.Proof.count_upBody)]
-    #[proof_by(Concrete.Proof.count_up_loop_preserves)]
+    #[spec(Examples.LoopInvariant.Proofs.count_upBody)]
+    #[proof_by(Examples.LoopInvariant.Proofs.count_up_loop_preserves)]
     #[proof_coverage(invariant)]
     #[proof_fingerprint("82ceeff21cfb6254")]
     fn count_up() -> i32 {

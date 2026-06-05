@@ -29,6 +29,7 @@ import Concrete.ProofKit
 import Concrete.ProofSoundness
 import Concrete.Sha256Spec
 import Concrete.Sha256Refine
+import Concrete.Examples.LoopInvariant.Proofs
 import Concrete.Format
 import Concrete.Verify
 import Concrete.DebugBundle
