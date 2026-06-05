@@ -116,8 +116,8 @@ concrete prove …/main.con constant_time_tag.ct_compare --emit-link
 ```
 ```con
 #[spec(Concrete.Proof.ctCompareExpr)]
-#[proof_by(Concrete.Proof.ct_compare_same_tag_correct)]
-#[ensures_proof(Concrete.Proof.ct_compare_different_tag_correct)]
+#[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
+#[ensures_proof(Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct)]
 #[proof_coverage(iff)]
 #[proof_fingerprint("a3d98e2612d58dd5")]
 ```
@@ -171,8 +171,8 @@ concrete examples/constant_time_tag/src/main.con --report contracts
 constant_time_tag.ct_compare
   O1  ensures (a == b && result == 1) || (a != b && result == 0)
      status:  proved_by_lean (full iff)
-     forward direction:  Concrete.Proof.ct_compare_same_tag_correct
-     converse direction: Concrete.Proof.ct_compare_different_tag_correct
+     forward direction:  Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct
+     converse direction: Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct
   … loop obligations: O1/O4/O5 omega; O2 arithmetic omega + operational Lean …
 ```
 

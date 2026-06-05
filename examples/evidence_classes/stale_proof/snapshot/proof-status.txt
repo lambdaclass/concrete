@@ -1,4 +1,4 @@
-error: spec drift for 'constant_time_tag.ct_compare' — registered spec 'Concrete.Proof.ctCompareExpr' (via Concrete.Proof.specs) does not match the source-extracted PExpr; the theorem 'Concrete.Proof.ct_compare_same_tag_correct' is about a different function than the source
+error: spec drift for 'constant_time_tag.ct_compare' — registered spec 'Concrete.Proof.ctCompareExpr' (via Concrete.Proof.specs) does not match the source-extracted PExpr; the theorem 'Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct' is about a different function than the source
 === Proof Status Report ===
 
 -- proof stale -------------------------------------------- examples/evidence_classes/stale_proof/src/main.con:12

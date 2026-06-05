@@ -213,8 +213,8 @@ the original mechanism and has been removed; source links are the only model):
 
 ```con
 #[spec(Concrete.Proof.ctCompareExpr)]
-#[proof_by(Concrete.Proof.ct_compare_same_tag_correct)]
-#[ensures_proof(Concrete.Proof.ct_compare_different_tag_correct)]
+#[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
+#[ensures_proof(Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct)]
 #[proof_coverage(iff)]
 #[proof_fingerprint("a3d98e2612d58dd5")]
 ```

@@ -565,7 +565,7 @@ The proof registry should evolve from function-level attachment:
 ```json
 {
   "function": "hmac.ct_compare",
-  "proof": "Concrete.Proof.ct_compare_same_tag_correct",
+  "proof": "Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct",
   "coverage": "one_direction"
 }
 ```
@@ -575,7 +575,7 @@ to obligation-level attachment:
 ```json
 {
   "obligation": "hmac.ct_compare.ensures.same_tag.forward",
-  "proof": "Concrete.Proof.ct_compare_same_tag_correct",
+  "proof": "Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct",
   "coverage": "universal_one_direction"
 }
 ```

@@ -3,7 +3,7 @@
 demo.ct_compare
   O1  ensures (a == b && result == 1) || (a != b && result == 0)
      status:  partial — one direction proved_by_lean, converse outstanding
-     theorem: Concrete.Proof.ct_compare_same_tag_correct  (coverage: one_direction)
+     theorem: Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct  (coverage: one_direction)
      note:    full postcondition not yet discharged; the converse is the next obligation
 
 

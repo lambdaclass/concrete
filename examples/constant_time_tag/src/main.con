@@ -41,8 +41,8 @@ mod constant_time_tag {
     // in-memory. In-source links are the only proof model (JSON
     // proof-registry.json support was removed).
     #[spec(Concrete.Proof.ctCompareExpr)]
-    #[proof_by(Concrete.Proof.ct_compare_same_tag_correct)]
-    #[ensures_proof(Concrete.Proof.ct_compare_different_tag_correct)]
+    #[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
+    #[ensures_proof(Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct)]
     #[proof_coverage(iff)]
     #[ensures((a == b && result == 1) || (a != b && result == 0))]
     fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {

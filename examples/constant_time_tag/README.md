@@ -63,14 +63,14 @@ explicitly as `assumed_not_proved`.
 Three Lean theorems, checked by the Lean kernel at `make build`:
 
 ```
-Concrete.Proof.ct_compare_equal_zeros_correct
+Examples.ConstantTimeTag.Proofs.ct_compare_equal_zeros_correct
   ct_compare on two all-zero tags returns 1
 
-Concrete.Proof.ct_compare_same_tag_correct
+Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct
   for any 16-byte tag t (parametric in all 16 byte values),
   ct_compare(t, t) = 1
 
-Concrete.Proof.bitxor_u8_self_zero
+Examples.ConstantTimeTag.Proofs.bitxor_u8_self_zero
   helper: any u8 value xor'd with itself is 0
 ```
 

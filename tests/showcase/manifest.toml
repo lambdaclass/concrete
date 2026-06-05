@@ -316,18 +316,18 @@ on_showcase_manifest   = true   # bar #10 — this entry
 
 [flagship.evidence]
 proof_links    = "examples/constant_time_tag/src/main.con"
-proofs         = ["Concrete.Proof.ct_compare_equal_zeros_correct",
-                  "Concrete.Proof.ct_compare_same_tag_correct",
-                  "Concrete.Proof.bitxor_u8_self_zero"]
+proofs         = ["Examples.ConstantTimeTag.Proofs.ct_compare_equal_zeros_correct",
+                  "Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct",
+                  "Examples.ConstantTimeTag.Proofs.bitxor_u8_self_zero"]
 # Note ct_compare's REGISTERED proof is ct_compare_same_tag_correct
 # (one_direction: universal over byte values, positive direction
 # only).  The zeros theorem is a sanity corollary kept
 # kernel-checked.  bitxor_u8_self_zero is a helper lemma supporting
 # future iff work.  The full iff direction is open — named in
 # [flagship.limits].proofs.
-proof_coverage = { "Concrete.Proof.ct_compare_equal_zeros_correct" = "point",
-                   "Concrete.Proof.ct_compare_same_tag_correct" = "one_direction",
-                   "Concrete.Proof.bitxor_u8_self_zero" = "invariant" }
+proof_coverage = { "Examples.ConstantTimeTag.Proofs.ct_compare_equal_zeros_correct" = "point",
+                   "Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct" = "one_direction",
+                   "Examples.ConstantTimeTag.Proofs.bitxor_u8_self_zero" = "invariant" }
 provable_v1_conformance = "full"
 assumptions    = "examples/constant_time_tag/assumptions.toml"
 policy         = "examples/constant_time_tag/Concrete.toml"

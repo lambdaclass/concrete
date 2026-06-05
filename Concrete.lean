@@ -33,6 +33,7 @@ import Concrete.Examples.LoopInvariant.Proofs
 import Concrete.Examples.ParseValidate.Proofs
 import Concrete.Examples.CryptoVerify.Proofs
 import Concrete.Examples.FixedCapacity.Proofs
+import Concrete.Examples.ConstantTimeTag.Proofs
 import Concrete.Format
 import Concrete.Verify
 import Concrete.DebugBundle

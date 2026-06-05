@@ -3,8 +3,8 @@
 constant_time_tag.ct_compare
   O1  ensures (a == b && result == 1) || (a != b && result == 0)
      status:  proved_by_lean (full iff)
-     forward direction:  Concrete.Proof.ct_compare_same_tag_correct
-     converse direction: Concrete.Proof.ct_compare_different_tag_correct
+     forward direction:  Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct
+     converse direction: Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct
 
 
 === Loop contracts ===

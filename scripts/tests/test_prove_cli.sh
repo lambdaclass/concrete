@@ -56,7 +56,7 @@ CC="tests/programs/contract_callsite/main.con"
 echo "=== prove --emit-link ==="
 assert_contains "emit-link spec"     "#[spec(Concrete.Proof.ctCompareExpr)]" \
   "$COMPILER" prove "$CT" constant_time_tag.ct_compare --emit-link
-assert_contains "emit-link proof_by" "#[proof_by(Concrete.Proof.ct_compare_same_tag_correct)]" \
+assert_contains "emit-link proof_by" "#[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]" \
   "$COMPILER" prove "$CT" constant_time_tag.ct_compare --emit-link
 
 echo "=== prove --show-obligation ==="

@@ -9,7 +9,7 @@
 // only one to demonstrate the partial state.)
 mod demo {
     #[spec(Concrete.Proof.ctCompareExpr)]
-    #[proof_by(Concrete.Proof.ct_compare_same_tag_correct)]
+    #[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
     #[proof_coverage(one_direction)]
     #[ensures((a == b && result == 1) || (a != b && result == 0))]
     fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {

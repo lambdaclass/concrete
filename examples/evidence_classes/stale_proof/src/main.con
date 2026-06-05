@@ -7,7 +7,7 @@
 // in-source link is subject to the same staleness machinery as a JSON entry.
 mod constant_time_tag {
     #[spec(Concrete.Proof.ctCompareExpr)]
-    #[proof_by(Concrete.Proof.ct_compare_same_tag_correct)]
+    #[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
     #[proof_coverage(one_direction)]
     fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
         let mut diff: u8 = 1;   // DRIFT: the real ct_compare starts `diff` at 0
