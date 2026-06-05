@@ -3665,6 +3665,67 @@ def nearestLemmas (pc : Concrete.ProofCore) (modules : List Module) (qualName : 
     if json then s!"\{\"error\": {jsonStr s!"no extractable function '{qualName}'"}}"
     else s!"no extractable function '{qualName}' (it may be excluded or blocked)."
 
+/-- `concrete prove <file> <fn> --emit-lean`: a compilable Lean stub for ONE
+    function — imports, namespace, the extracted PExpr + PFnDef, a single-entry
+    FnTable, an eval helper, obligation TODO blocks (from the loop VCs +
+    `#[ensures]`), suggested ProofKit lemmas, and a theorem stub ending in
+    `sorry` (no invented proof). -/
+def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
+    (modules : List Module) (qualName : String) (provedVCs : List String) : String := Id.run do
+  let entries := extractionEntriesFromPC pc registry
+  match entries.find? (·.qualName == qualName) with
+  | none => return s!"-- no function '{qualName}' in ProofCore.\n"
+  | some e =>
+    if !(e.eligible && e.extracted.isSome) then
+      return s!"-- `{qualName}` is not extractable (excluded or blocked); no Lean stub to emit.\n"
+    let name := leanIdent (qualName.splitOn "." |>.getLast!)
+    let pexpr := match e.extracted with | some p => renderPExprAsLean p | none => "sorry"
+    let paramsList := "[" ++ ", ".intercalate (e.params.map (s!"\"{·}\"")) ++ "]"
+    let paramSig := " ".intercalate (e.params.map fun p => s!"({p} : Int)")
+    let paramBinds := e.params.foldl (fun acc p =>
+      s!"({acc}.bind \"{p}\" (.int {p}))") "Env.empty"
+    -- obligation TODO blocks (loop VCs + ensures), with recipes
+    let astFn? := (modules.flatMap allFunctions).find? (fun (pfx, fn) => pfx ++ fn.name == qualName) |>.map Prod.snd
+    let mut oblTodos : List String := []
+    let mut featLemmas : List String := []
+    match astFn? with
+    | some f =>
+      let extraLets := letConstMap f.body
+      let retExpr := loopExitReturn f.body
+      for lc in f.loopContracts do
+        for oid in ["O1", "O2", "O3", "O4", "O5"] do
+          match loopObInfo lc oid qualName f.ensures extraLets retExpr provedVCs with
+          | some (kind, hyps, concl, status) =>
+            let (tac, lemmas, _) := lemmaRecipeFor kind
+            oblTodos := oblTodos ++ [s!"--   [{loopVCKey qualName lc.line oid}] {kind} ({status})\n--     hyps: {" ∧ ".intercalate hyps}\n--     goal: {concl}\n--     recipe: {tac}{if lemmas.isEmpty then "" else s!" — {", ".intercalate lemmas}"}"]
+          | none => pure ()
+      for ens in f.ensures do
+        oblTodos := oblTodos ++ [s!"--   [{qualName}#ensures] ensures: {Concrete.fmtExpr ens}\n--     recipe: state the spec; prove `{name}_refines_spec`"]
+      let feats := match pc.entries.find? (·.qualName == qualName) with
+        | some pe => (pe.fn.body.flatMap proveStmtFeatures).eraseDups
+        | none => []
+      if feats.contains "loop" || !f.loopContracts.isEmpty then featLemmas := featLemmas ++ ["Concrete.ProofKit.Loops"]
+      if feats.contains "array" then featLemmas := featLemmas ++ ["Concrete.ProofKit.Array"]
+      if feats.contains "bitvec" then featLemmas := featLemmas ++ ["Concrete.ProofKit.BitVec", "bv_decide"]
+      if feats.contains "call" then featLemmas := featLemmas ++ ["Concrete.ProofKit.Calls"]
+    | none => pure ()
+    let oblSection := if oblTodos.isEmpty then "--   (no generated loop/ensures obligations)"
+                      else "\n".intercalate oblTodos
+    let kitSection := if featLemmas.isEmpty then "Concrete.ProofKit (general)" else ", ".intercalate featLemmas
+    return String.join [
+      s!"-- Lean proof stub for `{qualName}` — fill in the spec and replace `sorry`.\n",
+      s!"-- Suggested ProofKit lemmas: {kitSection}\n",
+      "import Concrete.Proof\nimport Concrete.ProofKit\n\n",
+      s!"namespace Concrete.Proof.Generated.{name}\nopen Concrete.Proof\n\n",
+      s!"/-- Extracted from `{qualName}`. -/\ndef {name}Expr : PExpr :=\n    {pexpr}\n\n",
+      s!"def {name}Fn : PFnDef :=\n  \{ name := \"{name}\", params := {paramsList}, body := {name}Expr }\n\n",
+      s!"def fns : FnTable\n  | \"{name}\" => some {name}Fn\n  | _ => none\n\n",
+      s!"def eval_{name} {paramSig} (fuel : Nat := 20) : Option PVal :=\n  eval fns {paramBinds} fuel {name}Expr\n\n",
+      "-- Obligations to discharge:\n", oblSection, "\n\n",
+      s!"/-- TODO: replace `sorry` (RHS) with the spec, then prove it. -/\n",
+      s!"theorem {name}_refines_spec {paramSig} (fuel : Nat) :\n    eval fns {paramBinds} (fuel + 1) {name}Expr = sorry := by\n  sorry\n\n",
+      s!"end Concrete.Proof.Generated.{name}\n" ]
+
 -- ============================================================
 -- Source/Core/SSA/LLVM traceability (--report traceability)
 -- ============================================================

@@ -150,6 +150,27 @@ assert_json "nearest-lemmas recipes + feature lemmas" \
   "$COMPILER" prove "$LI" loop_invariant.count_up --nearest-lemmas --json
 assert_json "capabilities nearest_lemmas=true" 'd["features"]["nearest_lemmas"] is True' "$COMPILER" prove --capabilities
 
+echo "=== prove --emit-lean (compilable single-function Lean stub) ==="
+assert_contains "emit-lean namespace"  "namespace Concrete.Proof.Generated.count_up" \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --emit-lean
+assert_contains "emit-lean theorem"    "theorem count_up_refines_spec" \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --emit-lean
+assert_contains "emit-lean ends sorry" "= sorry := by" \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --emit-lean
+assert_contains "emit-lean obl block"  "@12#O1] invariant_init" \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --emit-lean
+# --out writes; refuses to clobber without --force.
+EMIT_OUT="$(mktemp -u)/stub.lean"
+assert_contains "emit-lean --out writes" "wrote Lean proof stub" \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --emit-lean --out "$EMIT_OUT"
+mkdir -p "$(dirname "$EMIT_OUT")"; : > "$EMIT_OUT"   # now it exists
+assert_exit "emit-lean clobber refused=1" 1 \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --emit-lean --out "$EMIT_OUT"
+assert_exit "emit-lean --force=0" 0 \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --emit-lean --out "$EMIT_OUT" --force
+rm -rf "$(dirname "$EMIT_OUT")"
+assert_json "capabilities emit_lean=true" 'd["features"]["emit_lean"] is True' "$COMPILER" prove --capabilities
+
 echo ""
 echo "PROVE-CLI: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

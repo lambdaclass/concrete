@@ -367,8 +367,8 @@ lemmas, and actionable failure diagnostics.
    failure, 6 internal error), and the next command per status. Process exit is
    wired to 0/2/3 for `prove <file> <fn>` (proved/missing/stale).
 3. ~~Add `concrete prove --capabilities`~~ **DONE.** Emits JSON: schema_version,
-   features (`prove_json`, `show_obligation_json`, `emit_lean`=false,
-   `emit_link`, `nearest_lemmas`=false, `replay_json`), obligation_kinds,
+   features (`prove_json`, `show_obligation_json`, `emit_lean`=true,
+   `emit_link`, `nearest_lemmas`=true, `replay_json`), obligation_kinds,
    evidence_classes, proof_model, link_attributes, mcp_available=false.
 4. ~~Add `concrete prove --schema`~~ **DONE.** Prints the JSON schema + version
    for `--json` output.
@@ -392,12 +392,20 @@ lemmas, and actionable failure diagnostics.
    and `--emit-link --json` (fields + pasteable link_block + next_actions). All
    carry the same stable ids (`<qual>@<line>#<Ox>`) as `--json`/`--report
    contracts`/`--replay`.
-8. Add `concrete prove --emit-lean` as a compilable Lean stub generator. The
-   stub should include imports, namespace, theorem statement, extracted body or
-   spec references, FnTable skeleton, obligation TODO blocks, suggested
-   ProofKit lemmas, and no invented proof. Support `--out PATH`, refuse to
-   clobber without `--force`, and support `--stdout` for agents that only want
-   to inspect the generated file.
+8. ~~Add `concrete prove --emit-lean` as a compilable Lean stub generator.~~
+   **DONE.** `Report.emitLeanStub` emits a self-contained, kernel-compilable
+   single-function stub: header comment with suggested ProofKit lemmas, imports
+   (`Concrete.Proof`/`Concrete.ProofKit`), per-function namespace
+   (`Concrete.Proof.Generated.<fn>`), the extracted `<fn>Expr : PExpr` +
+   `<fn>Fn : PFnDef`, a single-entry `fns : FnTable`, an `eval_<fn>` helper, the
+   obligation TODO blocks (loop VCs + `#[ensures]`, each with id/kind/status/
+   hyps/goal and a `lemmaRecipeFor` recipe), and a `<fn>_refines_spec` theorem
+   ending in `= sorry := by sorry` (no invented proof). Default prints to stdout;
+   `--out PATH` writes (creating parent dirs), refusing to clobber without
+   `--force`; `--stdout` overrides `--out` to print without writing. Verified
+   the emitted stub typechecks (`lake env lean`, exit 0, zero errors).
+   `--capabilities` now reports `emit_lean=true`. Gate: `test_prove_cli.sh`
+   (34/0).
 9. Add failed-obligation artifacts under a stable build path such as
    `.build/prove/<qualified_fn>/<obligation_id>/`: `context.json`,
    `failed.lean`, `command.txt`, and `README.txt`. These artifacts should be

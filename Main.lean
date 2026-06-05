@@ -3,7 +3,7 @@ import Concrete
 open Concrete
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--show-obligation <id>] [--replay]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--show-obligation <id>] [--replay] [--nearest-lemmas]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -802,7 +802,8 @@ def compileAndReport (inputPath : String) (reportType : String)
     (proveTarget : Option String := none) (proveOut : Option String := none)
     (proveForce : Bool := false) (proveEmitLink : Bool := false)
     (proveShowObl : Option String := none) (proveReplay : Bool := false)
-    (proveJson : Bool := false) (proveNearestLemmas : Bool := false) : IO UInt32 := do
+    (proveJson : Bool := false) (proveNearestLemmas : Bool := false)
+    (proveEmitLean : Bool := false) (proveStdout : Bool := false) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -883,6 +884,21 @@ def compileAndReport (inputPath : String) (reportType : String)
         if proveNearestLemmas then
           IO.println (Report.nearestLemmas pc parsed.modules qual provedVCs proveJson)
           return 0
+        -- --emit-lean: compilable single-function Lean proof stub (ends in `sorry`).
+        if proveEmitLean then
+          let stub := Report.emitLeanStub pc registry parsed.modules qual provedVCs
+          match proveOut with
+          | some path =>
+            if proveStdout then IO.println stub; return 0
+            if (← System.FilePath.pathExists path) && !proveForce then
+              IO.eprintln s!"refusing to overwrite existing '{path}' (pass --force to clobber)."
+              return 1
+            if let some parent := (System.FilePath.mk path).parent then
+              IO.FS.createDirAll parent
+            IO.FS.writeFile path stub
+            IO.println s!"wrote Lean proof stub for {qual} to {path}"
+            return 0
+          | none => IO.println stub; return 0
         -- --show-obligation <id>: print one obligation in full (text or JSON).
         if let some oblId := proveShowObl then
           IO.println (if proveJson then Report.showObligationJson parsed.modules qual oblId provedVCs inputPath
@@ -1367,7 +1383,7 @@ def proveCapabilitiesJson : String := String.intercalate "\n" [
   "  \"features\": {",
   "    \"prove_json\": true,",
   "    \"show_obligation_json\": true,",
-  "    \"emit_lean\": false,",
+  "    \"emit_lean\": true,",
   "    \"emit_link\": true,",
   "    \"nearest_lemmas\": true,",
   "    \"replay_json\": true",
@@ -1740,6 +1756,8 @@ def main (args : List String) : IO UInt32 := do
       let replay := rest.contains "--replay"
       let proveJson := rest.contains "--json"
       let nearestLemmas := rest.contains "--nearest-lemmas"
+      let emitLean := rest.contains "--emit-lean"
+      let stdout := rest.contains "--stdout"
       let outPath := match rest.dropWhile (· != "--out") with
         | _ :: p :: _ => some p
         | _ => none
@@ -1749,9 +1767,10 @@ def main (args : List String) : IO UInt32 := do
       return (← compileAndReport inputPath "prove"
         (proveTarget := some target) (proveOut := outPath) (proveForce := force)
         (proveEmitLink := emitLink) (proveShowObl := showObl) (proveReplay := replay)
-        (proveJson := proveJson) (proveNearestLemmas := nearestLemmas))
+        (proveJson := proveJson) (proveNearestLemmas := nearestLemmas)
+        (proveEmitLean := emitLean) (proveStdout := stdout))
     | _ =>
-      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--show-obligation <id>] [--replay]\n       concrete prove --help=agent | --capabilities | --schema   (discovery; no file needed)"
+      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--show-obligation <id>] [--replay] [--nearest-lemmas]\n       concrete prove --help=agent | --capabilities | --schema   (discovery; no file needed)"
       return 1
   -- concrete --version
   if args == ["--version"] then
