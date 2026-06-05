@@ -358,16 +358,34 @@ lemmas, and actionable failure diagnostics.
      is `source_linked` | `hardcoded`. `check_no_example_registries.sh` (CI) keeps
      `examples/` registry-free. History: `docs/REGISTRY_FIXTURE_INVENTORY.md`.
    - **In progress (separate thread):** move example proofs out of the
-     `Concrete.Proof.*` compiler namespace into per-example namespaces. **Pilot
-     DONE:** `loop_invariant` (`count_upBody`/`count_up_loop_preserves`) moved to
-     `Concrete/Examples/LoopInvariant/Proofs.lean`, namespace
-     `Examples.LoopInvariant.Proofs`, imported by the umbrella `Concrete`. The
-     `.con` `#[spec]`/`#[proof_by]` now name the new namespace; snapshot
-     regenerated; check-proofs/proof-status/emit-link/replay all green; the proof
-     name resolution is namespace-agnostic (no compiler change needed). Remaining:
-     bulk-move parse_validate, crypto_verify, fixed_capacity, constant_time_tag,
-     elf_header, hmac_sha256 (the big one, ~43 refs) + the `specs`/`provedFunctions`
-     table entries they own.
+     `Concrete.Proof.*` compiler namespace into per-example namespaces.
+     **POLICY (decided):** example proof THEOREMS move to `Examples.<Ex>.Proofs.*`
+     (so `#[proof_by]`/`#[ensures_proof]` — the user-facing theorem links — move);
+     the registered spec PExprs (`Concrete.Proof.*Expr` in `Concrete.Proof.specs`)
+     and their eval scaffolding STAY — they are the compiler's spec-drift oracle,
+     not example cruft, so `#[spec]` keeps the `Concrete.Proof.` prefix. Dropping
+     specs from the table is rejected (it would falsify the showcase manifest's
+     audited "spec-drift-tied" claim). Moving the specs too would need a real infra
+     refactor (split the PExpr/eval model + spec registry into a lower module so it
+     can reference example modules without a cycle) — tracked as the follow-up infra
+     item at the end of this thread.
+     - **Pilot DONE:** `loop_invariant` (`count_upBody`/`count_up_loop_preserves`,
+       which were NOT registered specs) → `Examples.LoopInvariant.Proofs`.
+     - **Pattern (table-backed) DONE:** `parse_validate` — 7 theorems →
+       `Examples.ParseValidate.Proofs`; `#[proof_by]` retargeted; `#[spec]` +
+       `parseValidateFns`/`*Fn`/`*Expr` scaffolding + the 3 `specs` entries stay in
+       `Concrete.Proof` (made `errResultExpr` public for cross-module reference);
+       showcase manifest `proofs`/`proof_coverage` + README updated; all gates
+       green (showcase 5/0, proof-status 3 proved, check-proofs 3 verified,
+       spec-drift regression still fires).
+     - Remaining (one commit each): `crypto_verify` → `fixed_capacity` →
+       `constant_time_tag` → `elf_header` → `hmac_sha256` (last; ~43 refs).
+     - **Follow-up infra item (separate, later):** to also move example SPEC
+       PExprs out of `Concrete.Proof`, split the PExpr/eval model + spec registry
+       into a lower module (`Concrete.ProofModel` / `Concrete.SpecRegistry`)
+       imported by both `Concrete.Proof` and the example modules, so the spec table
+       can reference example-module exprs without a circular import — while
+       preserving the spec-drift tie. Not part of the per-example theorem moves.
 2. ~~Make the `concrete prove` binary self-describing for agents.~~ **DONE.**
    `concrete prove --help=agent` prints the proof-authoring sequence, output
    formats, the exit-code taxonomy (0 success, 1 invalid invocation, 2

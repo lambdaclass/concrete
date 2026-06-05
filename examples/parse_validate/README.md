@@ -71,10 +71,10 @@ stated up front so the rest of this document does not oversell.
 Two Lean theorems, checked by the Lean kernel at `make build`:
 
 ```
-Concrete.Proof.validate_version_correct (v : Int) :
+Examples.ParseValidate.Proofs.validate_version_correct (v : Int) :
     eval ... validateVersionExpr = some (.int (if v = 1 then 0 else 1))
 
-Concrete.Proof.validate_header_fields_success
+Examples.ParseValidate.Proofs.validate_header_fields_success
     (v t plen total_len cs_expected cs_computed : Int)
     (h_tl5 : total_len ≥ 5) (h_v : v = 1)
     (h_t1 : t ≥ 1) (h_t4 : t ≤ 4)

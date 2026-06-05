@@ -42,16 +42,16 @@ on_showcase_manifest   = true   # bar #10 — this entry
 # Evidence pointers — what a reviewer reads to audit the claims.
 [flagship.evidence]
 proof_links    = "examples/parse_validate/src/main.con"
-proofs         = ["Concrete.Proof.validate_version_correct",
-                  "Concrete.Proof.validate_header_fields_success",
-                  "Concrete.Proof.parse_header_too_short"]
+proofs         = ["Examples.ParseValidate.Proofs.validate_version_correct",
+                  "Examples.ParseValidate.Proofs.validate_header_fields_success",
+                  "Examples.ParseValidate.Proofs.parse_header_too_short"]
 # Proof coverage classification per registered theorem.  See
 # `Concrete.ProofRegistryEntry.allCoverageKinds`.  "No hidden green":
 # any reviewer reading `proved` for this flagship should be able to
 # tell which theorems are point proofs vs. one-direction vs. iff.
-proof_coverage = { "Concrete.Proof.validate_version_correct" = "iff",
-                   "Concrete.Proof.validate_header_fields_success" = "one_direction",
-                   "Concrete.Proof.parse_header_too_short" = "one_direction" }
+proof_coverage = { "Examples.ParseValidate.Proofs.validate_version_correct" = "iff",
+                   "Examples.ParseValidate.Proofs.validate_header_fields_success" = "one_direction",
+                   "Examples.ParseValidate.Proofs.parse_header_too_short" = "one_direction" }
 # ProvableV1 conformance — see docs/PROVABLE_V1.md.  "full" = every
 # proof-eligible function in this flagship fits the ProvableV1
 # eligibility gates and supported-construct surface.  Entry points
