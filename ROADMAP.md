@@ -385,10 +385,13 @@ lemmas, and actionable failure diagnostics.
    `--json` (kind/command/output_format/resolves; `show_obligation`/`emit_link`/
    `check_proofs`/`replay`/`run_audit`/`open_docs` by status). Extend to the
    other JSON modes as they land (item 7).
-7. Add JSON modes for existing human proof subcommands:
-   `--show-obligation <id> --json`, `--replay --json`, and
-   `--emit-link --json`. The JSON forms must carry the same stable ids and
-   statuses as `--report contracts` and `concrete audit`.
+7. ~~Add JSON modes for existing human proof subcommands.~~ **DONE.**
+   `--show-obligation <id> --json` (accepts the stable id or short "O4"; emits
+   id/kind/status/source_line/hypotheses/conclusion/theorem_shape/next_actions),
+   `--replay --json` (all_pass + per-obligation closes, exit 4 on regression),
+   and `--emit-link --json` (fields + pasteable link_block + next_actions). All
+   carry the same stable ids (`<qual>@<line>#<Ox>`) as `--json`/`--report
+   contracts`/`--replay`.
 8. Add `concrete prove --emit-lean` as a compilable Lean stub generator. The
    stub should include imports, namespace, theorem statement, extracted body or
    spec references, FnTable skeleton, obligation TODO blocks, suggested

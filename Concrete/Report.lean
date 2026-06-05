@@ -3478,8 +3478,10 @@ def emitProofLink (registry : ProofRegistry) (qual : String) : String :=
     discharge status, suggested ProofKit imports, and the theorem shape to
     write (or a note that omega already closes it). `provedVCs` are the omega
     discharge results from the caller. -/
-def showObligation (modules : List Module) (qualName oblId : String)
+def showObligation (modules : List Module) (qualName oblId0 : String)
     (provedVCs : List String) : String := Id.run do
+  -- Accept either the short id ("O4") or the stable id ("<qual>@<line>#O4").
+  let oblId := (oblId0.splitOn "#").getLast!
   let astFn? := (modules.flatMap allFunctions).find? (fun (pfx, fn) => pfx ++ fn.name == qualName)
     |>.map Prod.snd
   match astFn? with
@@ -3526,6 +3528,69 @@ def showObligation (modules : List Module) (qualName oblId : String)
           s!"ProofKit:    {kitHint}\n",
           s!"theorem shape:\n  {shape}\n" ]
     return s!"obligation `{oblId}` not found on {qualName} (loops expose O1/O2/O3/O4/O5)."
+
+/-- JSON-escape and quote a string. Shared by the prove JSON emitters. -/
+def jsonStr (s : String) : String :=
+  "\"" ++ s.foldl (fun a c => a ++ (match c with
+    | '"' => "\\\"" | '\\' => "\\\\" | '\n' => "\\n" | '\t' => "\\t" | c => c.toString)) "" ++ "\""
+
+/-- `concrete prove --show-obligation <id> --json`: one obligation, structured.
+    Carries the same stable id as `--json` / `--report contracts`. Accepts the
+    short id ("O4") or the stable id ("<qual>@<line>#O4"). -/
+def showObligationJson (modules : List Module) (qualName oblId0 : String)
+    (provedVCs : List String) (inputPath : String) : String := Id.run do
+  let oblId := (oblId0.splitOn "#").getLast!
+  let q := jsonStr
+  let qarr := fun (xs : List String) => "[" ++ ", ".intercalate (xs.map q) ++ "]"
+  let astFn? := (modules.flatMap allFunctions).find? (fun (pfx, fn) => pfx ++ fn.name == qualName) |>.map Prod.snd
+  match astFn? with
+  | none => return s!"\{\"error\": {q s!"no function '{qualName}'"}}"
+  | some f =>
+    let extraLets := letConstMap f.body
+    let retExpr := loopExitReturn f.body
+    for lc in f.loopContracts do
+      match loopObInfo lc oblId qualName f.ensures extraLets retExpr provedVCs with
+      | none => pure ()
+      | some (kind, hyps, concl, status) =>
+        let shape := if oblId == "O2" then (genPreservationShape lc qualName).getD "" else ""
+        let kit := if oblId == "O2" then ["Concrete.ProofKit.Loops", "Concrete.ProofKit.Eval"] else ["Concrete.ProofKit.Loops"]
+        let na := if status == "planned" || status == "arithmetic_proved" then
+            [String.join ["{\"kind\": \"emit_lean\", \"command\": ", q s!"concrete prove {inputPath} {qualName} --emit-lean", ", \"output_format\": \"text\", \"resolves\": ", q status, "}"]]
+          else
+            [String.join ["{\"kind\": \"replay\", \"command\": ", q s!"concrete prove {inputPath} {qualName} --replay", ", \"output_format\": \"text\", \"resolves\": \"proved\"}"]]
+        return String.join [
+          "{\n",
+          s!"  \"id\": {q (loopVCKey qualName lc.line oblId)},\n",
+          s!"  \"function\": {q qualName},\n",
+          s!"  \"kind\": {q kind},\n",
+          s!"  \"status\": {q status},\n",
+          s!"  \"source_line\": {toString lc.line},\n",
+          s!"  \"hypotheses\": {qarr hyps},\n",
+          s!"  \"conclusion\": {q concl},\n",
+          s!"  \"theorem_shape\": {q shape},\n",
+          s!"  \"proofkit_imports\": {qarr kit},\n",
+          s!"  \"next_actions\": [{", ".intercalate na}]\n",
+          "}" ]
+    return s!"\{\"error\": {q s!"obligation '{oblId}' not found on {qualName}"}}"
+
+/-- `concrete prove --emit-link --json`: the link fields + the pasteable block. -/
+def emitProofLinkJson (registry : ProofRegistry) (qual inputPath : String) : String :=
+  let q := jsonStr
+  match registry.find? (·.function == qual) with
+  | none => s!"\{\"error\": {q s!"no proof link for '{qual}'"}}"
+  | some e =>
+    let block := emitProofLink registry qual
+    String.join [
+      "{\n",
+      s!"  \"function\": {q qual},\n",
+      s!"  \"spec\": {q e.spec},\n",
+      s!"  \"proof_by\": {q e.proof},\n",
+      s!"  \"ensures_proof\": {match e.ensuresProof with | some t => q t | none => "null"},\n",
+      s!"  \"coverage\": {q e.coverage},\n",
+      s!"  \"proof_fingerprint\": {q (shortHash e.bodyFingerprint)},\n",
+      s!"  \"link_block\": {q block},\n",
+      s!"  \"next_actions\": [\{\"kind\": \"paste_link\", \"command\": \"<paste link_block above the function in source>\", \"output_format\": \"none\", \"resolves\": \"missing\"}, \{\"kind\": \"check_proofs\", \"command\": {q s!"concrete {inputPath} --report check-proofs"}, \"output_format\": \"text\", \"resolves\": \"proved\"}]\n",
+      "}" ]
 
 -- ============================================================
 -- Source/Core/SSA/LLVM traceability (--report traceability)

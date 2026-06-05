@@ -873,14 +873,16 @@ def compileAndReport (inputPath : String) (reportType : String)
       match Report.proveResolve pc target with
       | .error msg => IO.eprintln msg; return 1
       | .ok qual =>
-        -- --emit-link: just print the in-source proof-link block (no discharge).
+        -- --emit-link: print the in-source proof-link block (text or JSON).
         if proveEmitLink then
-          IO.println (Report.emitProofLink registry qual)
+          IO.println (if proveJson then Report.emitProofLinkJson registry qual inputPath
+                      else Report.emitProofLink registry qual)
           return 0
         let provedVCs ← kernelDischargeLoopVCs (Report.loopVCGoals parsed.modules)
-        -- --show-obligation <id>: print one obligation in full.
+        -- --show-obligation <id>: print one obligation in full (text or JSON).
         if let some oblId := proveShowObl then
-          IO.println (Report.showObligation parsed.modules qual oblId provedVCs)
+          IO.println (if proveJson then Report.showObligationJson parsed.modules qual oblId provedVCs inputPath
+                      else Report.showObligation parsed.modules qual oblId provedVCs)
           return 0
         -- --replay: re-run omega / bv_decide discharge and report per obligation.
         if proveReplay then
@@ -889,6 +891,21 @@ def compileAndReport (inputPath : String) (reportType : String)
           let myCands := ((List.range obs.length).zip obs).filterMap fun (i, o) =>
             if o.caller == qual then o.leanGoal.map (fun g => (i, g)) else none
           let bvProved ← bvDischargeCallSites myCands
+          if proveJson then
+            let q := Report.jsonStr
+            let loopObs := myLoop.map fun (k, _) =>
+              s!"\{\"id\": {q k}, \"engine\": \"omega\", \"closes\": {if provedVCs.contains k then "true" else "false"}}"
+            let callObs := myCands.map fun (i, _) =>
+              s!"\{\"id\": {q s!"{qual}#call{i}"}, \"engine\": \"bv_decide\", \"closes\": {if bvProved.contains i then "true" else "false"}}"
+            let allPass := myLoop.all (fun (k, _) => provedVCs.contains k) && myCands.all (fun (i, _) => bvProved.contains i)
+            IO.println (String.join [
+              "{\n",
+              s!"  \"function\": {q qual},\n",
+              s!"  \"all_pass\": {if allPass then "true" else "false"},\n",
+              s!"  \"obligations\": [{", ".intercalate (loopObs ++ callObs)}],\n",
+              s!"  \"next_actions\": [\{\"kind\": \"run_audit\", \"command\": {q s!"concrete audit {inputPath}"}, \"output_format\": \"text\", \"resolves\": {if allPass then "\"proved\"" else "\"stale\""}}]\n",
+              "}" ])
+            return (if myLoop.all (fun (k, _) => provedVCs.contains k) && myCands.all (fun (i, _) => bvProved.contains i) then 0 else 4)
           let mut out := s!"=== concrete prove --replay: {qual} ===\n"
           out := out ++ "\nloop obligations (omega):\n"
           if myLoop.isEmpty then out := out ++ "  (none)\n"

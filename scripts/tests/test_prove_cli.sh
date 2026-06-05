@@ -130,6 +130,20 @@ assert_json "json obligation has span + hyps + stable id" \
   'all(("source_line" in o and "hypotheses" in o and "conclusion" in o and "#" in o["id"]) for o in d["obligations"])' \
   "$COMPILER" prove "$LI" loop_invariant.count_up --json
 
+echo "=== prove JSON modes for subcommands (--show-obligation/--emit-link/--replay --json) ==="
+assert_json "show-obligation --json (stable id, hyps, concl)" \
+  'd["kind"]=="variant_nonnegative" and "#" in d["id"] and len(d["hypotheses"])>=1 and "conclusion" in d' \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --show-obligation 'loop_invariant.count_up@12#O4' --json
+assert_json "show-obligation --json accepts short id too" \
+  '"O4" in d["id"]' \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --show-obligation O4 --json
+assert_json "emit-link --json (fingerprint + link_block + next_actions)" \
+  'len(d["proof_fingerprint"])>0 and "#[proof_by" in d["link_block"] and any(a["kind"]=="check_proofs" for a in d["next_actions"])' \
+  "$COMPILER" prove "$CT" constant_time_tag.ct_compare --emit-link --json
+assert_json "replay --json (all_pass + ids match contracts key)" \
+  'd["all_pass"] is True and all("#" in o["id"] for o in d["obligations"])' \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --replay --json
+
 echo ""
 echo "PROVE-CLI: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
