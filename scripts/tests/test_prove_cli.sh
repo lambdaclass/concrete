@@ -149,6 +149,17 @@ assert_json "nearest-lemmas recipes + feature lemmas" \
   'len(d["recipes"])>=1 and any(r["kind"]=="invariant_init" and r["tactic"]=="omega" for r in d["recipes"]) and "Concrete.ProofKit.Loops" in d["feature_lemmas"]' \
   "$COMPILER" prove "$LI" loop_invariant.count_up --nearest-lemmas --json
 assert_json "capabilities nearest_lemmas=true" 'd["features"]["nearest_lemmas"] is True' "$COMPILER" prove --capabilities
+# Scoped to one obligation id (short form) → exactly that recipe.
+assert_json "nearest-lemmas scoped to O4" \
+  'len(d["recipes"])==1 and d["recipes"][0]["kind"]=="variant_nonnegative" and d["recipes"][0]["tactic"]=="omega"' \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --nearest-lemmas O4 --json
+# Scoped by the stable id (same key as --json / workspace).
+assert_json "nearest-lemmas scoped to stable id" \
+  'len(d["recipes"])==1 and "#O2" in d["recipes"][0]["id"]' \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --nearest-lemmas 'loop_invariant.count_up@12#O2' --json
+assert_json "nearest-lemmas unknown id → error" \
+  '"error" in d' \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --nearest-lemmas O9 --json
 
 echo "=== prove --emit-lean (compilable single-function Lean stub) ==="
 assert_contains "emit-lean namespace"  "namespace Concrete.Proof.Generated.count_up" \

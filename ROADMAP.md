@@ -469,8 +469,11 @@ lemmas, and actionable failure diagnostics.
     (linear→`omega`; preservation→`eval_while_count`; overflow→`bv_decide`;
     array_bounds→`ProofKit.Array`; ensures→`ProofKit.Refinement`) plus
     feature-level lemma families (Loops/Array/BitVec/Calls). `capabilities`
-    reports `nearest_lemmas=true`. (NEXT: scope to a single `<id>`; recipes for
-    bare array/call obligations that have no loop contract.)
+    reports `nearest_lemmas=true`. Scoping: `--nearest-lemmas <id>` narrows the
+    recipes to one obligation (accepts the stable `<qual>@<line>#<Ox>` id or the
+    short `O4`/`ensures` form, the same keys as `--json`/workspace); unknown id
+    returns an `error`; no id keeps the all-obligations behavior. (NEXT: recipes
+    for bare array/call obligations that have no loop contract.)
 14. Add proof minimization: `concrete prove --minimize <obligation_id>` emits
     the smallest source / ProofCore / Lean slice needed to reproduce a failed
     obligation. This should be built after JSON and failed-artifact formats are

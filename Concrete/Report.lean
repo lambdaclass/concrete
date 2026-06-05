@@ -3613,10 +3613,12 @@ def lemmaRecipeFor (kind : String) : String × List String × String :=
        "state the spec; prove `<fn> refines spec`; run --emit-link once proved")
   | _ => ("(unknown)", [], "")
 
-/-- `concrete prove <file> <fn> --nearest-lemmas [--json]`: proof-recipe hints
-    mapping each obligation kind + detected features to local tactics/lemmas. -/
+/-- `concrete prove <file> <fn> --nearest-lemmas [<id>] [--json]`: proof-recipe
+    hints mapping each obligation kind + detected features to local tactics/
+    lemmas. With `oblFilter` set (a stable `<qual>@<line>#<Ox>` id or a short
+    `O4`/`ensures`), the recipes are scoped to that one obligation. -/
 def nearestLemmas (pc : Concrete.ProofCore) (modules : List Module) (qualName : String)
-    (provedVCs : List String) (json : Bool) : String := Id.run do
+    (provedVCs : List String) (json : Bool) (oblFilter : Option String := none) : String := Id.run do
   let astFn? := (modules.flatMap allFunctions).find? (fun (pfx, fn) => pfx ++ fn.name == qualName) |>.map Prod.snd
   let entry? := pc.entries.find? (·.qualName == qualName)
   match astFn?, entry? with
@@ -3631,6 +3633,15 @@ def nearestLemmas (pc : Concrete.ProofCore) (modules : List Module) (qualName : 
         | some (kind, _, _, _) => obls := obls ++ [(loopVCKey qualName lc.line oid, kind)]
         | none => pure ()
     for _ in f.ensures do obls := obls ++ [(s!"{qualName}#ensures", "ensures")]
+    -- scope to a single obligation when an id is given (stable or short form)
+    match oblFilter with
+    | some want =>
+      obls := obls.filter fun (id, _) =>
+        id == want || (id.splitOn "#").getLast! == want || id == s!"{qualName}#{want}"
+      if obls.isEmpty then
+        return if json then s!"\{\"error\": {jsonStr s!"no obligation '{want}' for '{qualName}'"}}"
+               else s!"no obligation '{want}' for '{qualName}'."
+    | none => pure ()
     -- feature-level lemma families
     let feats := (e.fn.body.flatMap proveStmtFeatures).eraseDups
     let mut featLemmas : List String := []

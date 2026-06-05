@@ -805,7 +805,8 @@ def compileAndReport (inputPath : String) (reportType : String)
     (proveJson : Bool := false) (proveNearestLemmas : Bool := false)
     (proveEmitLean : Bool := false) (proveStdout : Bool := false)
     (proveEmitArtifacts : Bool := false) (proveOutDir : Option String := none)
-    (proveCheck : Bool := false) (proveWorkspace : Option String := none) : IO UInt32 := do
+    (proveCheck : Bool := false) (proveWorkspace : Option String := none)
+    (proveNearestId : Option String := none) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -884,7 +885,7 @@ def compileAndReport (inputPath : String) (reportType : String)
         let provedVCs ← kernelDischargeLoopVCs (Report.loopVCGoals parsed.modules)
         -- --nearest-lemmas: proof-recipe hints per obligation kind + features.
         if proveNearestLemmas then
-          IO.println (Report.nearestLemmas pc parsed.modules qual provedVCs proveJson)
+          IO.println (Report.nearestLemmas pc parsed.modules qual provedVCs proveJson proveNearestId)
           return 0
         -- --emit-lean: compilable single-function Lean proof stub (ends in `sorry`).
         if proveEmitLean then
@@ -1470,7 +1471,7 @@ def proveAgentHelp : String := String.intercalate "\n" [
   "WORKFLOW (each step prints what to do next):",
   "  1. concrete prove <file> <module.fn> --json     # proof context + next_actions",
   "  2. concrete prove <file> <module.fn> --show-obligation <id>   # one obligation",
-  "     concrete prove <file> <module.fn> --nearest-lemmas         # tactic/lemma hints",
+  "     concrete prove <file> <module.fn> --nearest-lemmas [<id>]  # tactic/lemma hints (all, or one obligation)",
   "  3. concrete prove <file> <module.fn> --emit-lean             # compilable Lean stub",
   "     concrete prove <file> <module.fn> --emit-artifacts        # one bundle per UNPROVED obligation",
   "  4. write the Lean proof in Concrete/Proof.lean (see PROOFKIT_GUIDE)",
@@ -1889,6 +1890,9 @@ def main (args : List String) : IO UInt32 := do
       let replay := rest.contains "--replay"
       let proveJson := rest.contains "--json"
       let nearestLemmas := rest.contains "--nearest-lemmas"
+      let nearestId := match rest.dropWhile (· != "--nearest-lemmas") with
+        | _ :: id :: _ => if id.startsWith "--" then none else some id
+        | _ => none
       let emitLean := rest.contains "--emit-lean"
       let emitArtifacts := rest.contains "--emit-artifacts"
       let check := rest.contains "--check"
@@ -1913,7 +1917,8 @@ def main (args : List String) : IO UInt32 := do
         (proveJson := proveJson) (proveNearestLemmas := nearestLemmas)
         (proveEmitLean := emitLean) (proveStdout := stdout)
         (proveEmitArtifacts := emitArtifacts) (proveOutDir := outDir)
-        (proveCheck := check) (proveWorkspace := workspace))
+        (proveCheck := check) (proveWorkspace := workspace)
+        (proveNearestId := nearestId))
     | _ =>
       IO.eprintln "Usage: concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema   (discovery; no file needed)"
       return 1
