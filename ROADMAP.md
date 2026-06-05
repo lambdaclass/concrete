@@ -439,28 +439,25 @@ lemmas, and actionable failure diagnostics.
    - Final deletion is two-step: first require an explicit
      `--allow-legacy-proof-registry` flag for JSON, then remove JSON parsing and
      the flag after one full green cycle with no allowlist entries.
-2. Make the `concrete prove` binary self-describing for agents. Agents may not
-   read repository docs, so the binary must expose the workflow itself:
-   `concrete prove --help=agent` prints the proof-authoring sequence, stable
-   output formats, a stable exit-code taxonomy, and the next command to run for
-   each common status. This is the agent entrypoint; docs and MCP are
-   secondary. The exit-code taxonomy must at least distinguish invalid
-   invocation, obligations missing, stale evidence, proof-check failure,
-   solver/checker failure, and internal compiler error.
-3. Add `concrete prove --capabilities --json`: machine-readable feature
-   discovery for proof authoring. It should report support for `prove_json`,
-   `show_obligation_json`, `emit_lean`, `emit_link`, `nearest_lemmas`,
-   `replay_json`, schema version, supported obligation kinds, supported
-   evidence classes, and whether MCP integration is available.
-4. Add `concrete prove --schema`: print the JSON schema and schema version for
-   proof-authoring output. Agents must be able to adapt to the installed
-   binary instead of assuming repo docs match the executable.
-5. Add `concrete prove --json` as the primary machine-readable proof context:
-   function name, eligibility, exclusion reason, body fingerprint,
-   source-linked or JSON-backed proof link, spec target, generated obligations,
-   source spans, hypotheses, conclusions, status, evidence class, replay
-   command, suggested ProofKit imports, suggested theorem names, nearest known
-   lemmas, and `next_actions`.
+2. ~~Make the `concrete prove` binary self-describing for agents.~~ **DONE.**
+   `concrete prove --help=agent` prints the proof-authoring sequence, output
+   formats, the exit-code taxonomy (0 success, 1 invalid invocation, 2
+   obligations missing, 3 stale, 4 proof-check failure, 5 solver/checker
+   failure, 6 internal error), and the next command per status. (The exit codes
+   are documented; wiring `prove`'s process exit to them is a follow-up.)
+3. ~~Add `concrete prove --capabilities`~~ **DONE.** Emits JSON: schema_version,
+   features (`prove_json`, `show_obligation_json`, `emit_lean`=false,
+   `emit_link`, `nearest_lemmas`=false, `replay_json`), obligation_kinds,
+   evidence_classes, proof_model, link_attributes, mcp_available=false.
+4. ~~Add `concrete prove --schema`~~ **DONE.** Prints the JSON schema + version
+   for `--json` output.
+5. ~~Add `concrete prove --json`~~ **DONE.** Structured proof context: function,
+   eligibility, exclusion_reason, body_fingerprint, proof_link (spec/proof/
+   ensures_proof/coverage/fingerprint/origin), status, evidence_class,
+   obligations (id/kind/status), replay_command, proofkit_imports,
+   suggested_theorems, and `next_actions`. (NEXT: source spans + hypotheses/
+   conclusions per obligation; nearest_lemmas; `--show-obligation/--replay/
+   --emit-link --json` (item 7); process exit-code wiring.)
 6. Add `next_actions` to every proof-authoring JSON response. Each action must
    include kind, exact command, expected output format, and what status it
    helps resolve; examples: `show_obligation`, `emit_lean`, `emit_link`,

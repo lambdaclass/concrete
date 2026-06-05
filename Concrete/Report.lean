@@ -3307,6 +3307,113 @@ def proveReport (pc : Concrete.ProofCore) (registry : ProofRegistry)
       s!"=== concrete prove: {qualName} ===\n\nThis function is NOT in the provable subset, so there is no proof to scaffold.\n  reasons: {", ".intercalate reasons}\n\nMake it eligible (remove the listed constraints) or prove it as a trusted boundary."
     | none => s!"no function '{qualName}' in ProofCore."
 
+/-- `concrete prove <file> <fn> --json`: the primary machine-readable proof
+    context. Same data as `proveReport`, structured, with `next_actions`. -/
+def proveReportJson (pc : Concrete.ProofCore) (registry : ProofRegistry)
+    (modules : List Module) (qualName : String) (provedVCs : List String)
+    (inputPath schemaVersion : String) : String := Id.run do
+  let esc := fun (s : String) => s.foldl (fun a c => a ++ (match c with
+    | '"' => "\\\"" | '\\' => "\\\\" | '\n' => "\\n" | '\t' => "\\t" | c => c.toString)) ""
+  let q := fun (s : String) => "\"" ++ esc s ++ "\""
+  let jarr := fun (xs : List String) => "[" ++ ", ".intercalate xs ++ "]"
+  let qarr := fun (xs : List String) => jarr (xs.map q)
+  let replay := s!"concrete prove {inputPath} {qualName} --replay"
+  -- next_actions object builder
+  let action := fun (kind cmd fmt resolves : String) =>
+    String.join ["{\"kind\": ", q kind, ", \"command\": ", q cmd,
+                 ", \"output_format\": ", q fmt, ", \"resolves\": ", q resolves, "}"]
+  let astFn? := (modules.flatMap allFunctions).find? (fun (pfx, fn) => pfx ++ fn.name == qualName) |>.map Prod.snd
+  let head := s!"  \"schema_version\": {q schemaVersion},\n  \"function\": {q qualName},"
+  match pc.entries.find? (·.qualName == qualName) with
+  | none =>
+    match pc.excluded.find? (·.qualName == qualName) with
+    | some x =>
+      let reasons := x.eligibility.sourceReasons ++ x.eligibility.profileReasons
+      return String.join [
+        "{\n", head, "\n",
+        "  \"eligible\": false,\n",
+        s!"  \"exclusion_reason\": {q (", ".intercalate reasons)},\n",
+        s!"  \"body_fingerprint\": {q x.fingerprint},\n",
+        "  \"proof_link\": null,\n",
+        "  \"status\": \"ineligible\",\n",
+        "  \"evidence_class\": \"ineligible\",\n",
+        "  \"obligations\": [],\n",
+        s!"  \"next_actions\": [{action "open_docs" "see docs/PROFILES.md" "text" "ineligible"}]\n",
+        "}" ]
+    | none =>
+      return String.join ["{\n", head, s!"\n  \"error\": {q s!"no function '{qualName}' in ProofCore"},\n  \"next_actions\": []\n", "}"]
+  | some e =>
+    let regEntry := registry.find? (fun re => re.function == e.qualName)
+    -- status + evidence from the obligation
+    let obl := pc.obligations.find? (·.functionId.qualName == qualName)
+    let status := match obl with | some o => o.status.canonical | none => "missing"
+    let origin := match regEntry with
+      | some re => if re.sourceLinked then "source_linked" else "hardcoded"
+      | none => "hardcoded"
+    -- proof_link
+    let linkJson := match regEntry with
+      | some re => String.join [
+          "{\"spec\": ", q re.spec, ", \"proof_by\": ", q re.proof,
+          ", \"ensures_proof\": ", (match re.ensuresProof with | some t => q t | none => "null"),
+          ", \"coverage\": ", q re.coverage,
+          ", \"proof_fingerprint\": ", q (shortHash re.bodyFingerprint),
+          ", \"origin\": ", q origin, "}" ]
+      | none => "null"
+    -- obligations (loop VCs)
+    let f := astFn?.getD { name := e.bareName, params := [], retTy := .unit, body := [] }
+    let extraLets := letConstMap f.body
+    let retExpr := loopExitReturn f.body
+    let mut obls : List String := []
+    let oblObj := fun (id kind st : String) =>
+      String.join ["{\"id\": ", q id, ", \"kind\": ", q kind, ", \"status\": ", q st, "}"]
+    let omegaSt := fun (line : Nat) (o : String) =>
+      if provedVCs.contains (loopVCKey e.qualName line o) then "proved_by_kernel_decision" else "planned"
+    for lc in f.loopContracts do
+      if (genInitVC lc extraLets).isSome then obls := obls ++ [oblObj (s!"O1@{lc.line}") "invariant_init" (omegaSt lc.line "O1")]
+      obls := obls ++ [oblObj (s!"O2@{lc.line}") "invariant_preservation" (omegaSt lc.line "O2")]
+      if (genExitVC lc f.ensures retExpr).isSome then obls := obls ++ [oblObj (s!"O3@{lc.line}") "loop_exit_post_link" (omegaSt lc.line "O3")]
+      if lc.variant.isSome then
+        obls := obls ++ [oblObj (s!"O4@{lc.line}") "variant_nonnegative" (omegaSt lc.line "O4")]
+        obls := obls ++ [oblObj (s!"O5@{lc.line}") "variant_decreases" (omegaSt lc.line "O5")]
+    for _ens in f.ensures do
+      obls := obls ++ [oblObj "ensures" "ensures" status]
+    -- proofkit hints
+    let feats := (e.fn.body.flatMap proveStmtFeatures).eraseDups
+    let mut hints : List String := []
+    if feats.contains "loop" || !f.loopContracts.isEmpty then hints := hints ++ ["Concrete.ProofKit.Loops"]
+    if feats.contains "array" then hints := hints ++ ["Concrete.ProofKit.Array"]
+    if feats.contains "bitvec" then hints := hints ++ ["Concrete.ProofKit.BitVec"]
+    if feats.contains "call" then hints := hints ++ ["Concrete.ProofKit.Calls"]
+    let leanName := leanIdent (e.qualName.splitOn "." |>.getLast!)
+    -- next_actions by status
+    let na := match status with
+      | "missing" => [
+          action "show_obligation" s!"concrete prove {inputPath} {qualName} --show-obligation <id>" "text" "missing",
+          action "emit_link" s!"concrete prove {inputPath} {qualName} --emit-link" "text" "missing" ]
+      | "stale" => [
+          action "emit_link" s!"concrete prove {inputPath} {qualName} --emit-link" "text" "stale",
+          action "check_proofs" s!"concrete {inputPath} --report check-proofs" "text" "stale" ]
+      | "blocked" => [ action "open_docs" "see docs/PROOF_WORKFLOW.md (extraction gates)" "text" "blocked" ]
+      | "proved" => [
+          action "check_proofs" s!"concrete {inputPath} --report check-proofs" "text" "proved",
+          action "replay" replay "text" "proved",
+          action "run_audit" s!"concrete audit {inputPath}" "text" "proved" ]
+      | _ => [ action "run_audit" s!"concrete audit {inputPath}" "text" status ]
+    return String.join [
+      "{\n", head, "\n",
+      "  \"eligible\": true,\n",
+      "  \"exclusion_reason\": null,\n",
+      s!"  \"body_fingerprint\": {q e.fingerprint},\n",
+      s!"  \"proof_link\": {linkJson},\n",
+      s!"  \"status\": {q status},\n",
+      s!"  \"evidence_class\": {q (if status == "proved" then "proved_by_lean" else status)},\n",
+      s!"  \"obligations\": {jarr obls},\n",
+      s!"  \"replay_command\": {q replay},\n",
+      s!"  \"proofkit_imports\": {qarr hints},\n",
+      s!"  \"suggested_theorems\": {qarr [leanName ++ "_correct"]},\n",
+      s!"  \"next_actions\": {jarr na}\n",
+      "}" ]
+
 /-- `concrete prove --emit-link`: print the in-source proof-link attribute block
     for `qual`, from its current registry/source-link data. Missing fields are
     emitted as commented placeholders so the author sees what still needs a name.

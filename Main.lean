@@ -3,7 +3,7 @@ import Concrete
 open Concrete
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--out <path>] [--force] [--emit-link] [--show-obligation <id>] [--replay]\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--show-obligation <id>] [--replay]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -305,6 +305,9 @@ def loadRegistryWithLinks (_inputPath : String)
     (astModules : List Concrete.Module) (coreModules : List Concrete.CModule) :
     IO Concrete.ProofRegistry := do
   return Report.synthesizeSourceLinks astModules coreModules
+
+/-- Stable schema version for `concrete prove` machine-readable output. -/
+def proveSchemaVersion : String := "1"
 
 /-- Run pipeline to needed depth and produce a report. -/
 def compileAndQuery (inputPath : String) (query : String) : IO UInt32 := do
@@ -798,7 +801,8 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
 def compileAndReport (inputPath : String) (reportType : String)
     (proveTarget : Option String := none) (proveOut : Option String := none)
     (proveForce : Bool := false) (proveEmitLink : Bool := false)
-    (proveShowObl : Option String := none) (proveReplay : Bool := false) : IO UInt32 := do
+    (proveShowObl : Option String := none) (proveReplay : Bool := false)
+    (proveJson : Bool := false) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -895,6 +899,10 @@ def compileAndReport (inputPath : String) (reportType : String)
           for (i, _) in myCands do
             out := out ++ (if bvProved.contains i then s!"  ok   call obligation #{i} — still closes\n" else s!"  FAIL call obligation #{i} — no longer closes\n")
           IO.println out
+          return 0
+        -- --json: structured proof context + next_actions.
+        if proveJson then
+          IO.println (Report.proveReportJson pc registry parsed.modules qual provedVCs inputPath proveSchemaVersion)
           return 0
         let report := Report.proveReport pc registry parsed.modules qual provedVCs
         match proveOut with
@@ -1287,6 +1295,88 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
         try IO.FS.removeFile ⟨outPath⟩ catch _ => pure ()
       return testExit
 
+/-- `concrete prove --help=agent`: the agent entrypoint. Prints the
+    proof-authoring sequence, stable output formats, the exit-code taxonomy, and
+    the next command to run for each common status. -/
+def proveAgentHelp : String := String.intercalate "\n" [
+  "concrete prove — agent guide (schema v" ++ proveSchemaVersion ++ ")",
+  "",
+  "PURPOSE: author and verify a Lean proof for one Concrete function.",
+  "",
+  "WORKFLOW (each step prints what to do next):",
+  "  1. concrete prove <file> <module.fn> --json     # proof context + next_actions",
+  "  2. concrete prove <file> <module.fn> --show-obligation <id>   # one obligation",
+  "  3. concrete prove <file> <module.fn> --emit-lean             # compilable Lean stub",
+  "  4. write the Lean proof in Concrete/Proof.lean (see PROOFKIT_GUIDE)",
+  "  5. concrete prove <file> <module.fn> --emit-link             # in-source link block",
+  "     (paste #[spec]/#[proof_by]/#[proof_coverage]/#[proof_fingerprint] above the fn)",
+  "  6. concrete <file> --report check-proofs                     # kernel-verify",
+  "  7. concrete prove <file> <module.fn> --replay                # re-run omega/bv_decide",
+  "",
+  "DISCOVERY (no file needed):",
+  "  concrete prove --capabilities      # JSON: supported features + schema version",
+  "  concrete prove --schema            # JSON schema for --json output",
+  "  concrete prove --help=agent        # this guide",
+  "",
+  "OUTPUT FORMATS: text (default) or JSON (--json on prove/--show-obligation/--replay).",
+  "  JSON is stable and carries the same obligation ids/statuses as",
+  "  `--report contracts` and `concrete audit`. Every JSON response has next_actions.",
+  "",
+  "EXIT CODES:",
+  "  0  success (proved / clean / info printed)",
+  "  1  invalid invocation (bad args, unknown function)",
+  "  2  obligations missing (eligible but unproved)",
+  "  3  stale evidence (body changed since the proof was linked)",
+  "  4  proof-check failure (Lean kernel rejected a referenced theorem)",
+  "  5  solver/checker failure (omega/bv_decide/lake could not run)",
+  "  6  internal compiler error",
+  "",
+  "PROOF MODEL: in-source links only (no proof-registry.json). A function carries",
+  "  #[spec]/#[proof_by]/#[ensures_proof]/#[proof_coverage]/#[proof_fingerprint]." ]
+
+/-- `concrete prove --capabilities`: machine-readable feature discovery. -/
+def proveCapabilitiesJson : String := String.intercalate "\n" [
+  "{",
+  "  \"schema_version\": \"" ++ proveSchemaVersion ++ "\",",
+  "  \"features\": {",
+  "    \"prove_json\": true,",
+  "    \"show_obligation_json\": true,",
+  "    \"emit_lean\": false,",
+  "    \"emit_link\": true,",
+  "    \"nearest_lemmas\": false,",
+  "    \"replay_json\": true",
+  "  },",
+  "  \"obligation_kinds\": [\"invariant_init\", \"invariant_preservation\", \"loop_exit_post_link\", \"variant_nonnegative\", \"variant_decreases\", \"array_bounds\", \"division_nonzero\", \"integer_overflow\", \"ensures\"],",
+  "  \"evidence_classes\": [\"proved_by_lean\", \"proved_by_kernel_decision\", \"partial\", \"stale\", \"missing\", \"blocked\", \"ineligible\", \"trusted\", \"tested_by_oracle\", \"runtime_checked\"],",
+  "  \"proof_model\": \"in_source_links\",",
+  "  \"link_attributes\": [\"spec\", \"proof_by\", \"ensures_proof\", \"proof_coverage\", \"proof_fingerprint\"],",
+  "  \"mcp_available\": false",
+  "}" ]
+
+/-- `concrete prove --schema`: JSON schema (+ version) for `--json` output. -/
+def proveSchemaJson : String := String.intercalate "\n" [
+  "{",
+  "  \"schema_version\": \"" ++ proveSchemaVersion ++ "\",",
+  "  \"title\": \"concrete prove --json\",",
+  "  \"type\": \"object\",",
+  "  \"properties\": {",
+  "    \"schema_version\": {\"type\": \"string\"},",
+  "    \"function\": {\"type\": \"string\", \"description\": \"qualified name\"},",
+  "    \"eligible\": {\"type\": \"boolean\"},",
+  "    \"exclusion_reason\": {\"type\": [\"string\", \"null\"]},",
+  "    \"body_fingerprint\": {\"type\": \"string\"},",
+  "    \"proof_link\": {\"type\": [\"object\", \"null\"], \"description\": \"spec, proof, ensures_proof, coverage, fingerprint, origin (source_linked|hardcoded)\"},",
+  "    \"status\": {\"type\": \"string\", \"enum\": [\"proved\", \"stale\", \"missing\", \"blocked\", \"ineligible\", \"trusted\"]},",
+  "    \"evidence_class\": {\"type\": \"string\"},",
+  "    \"obligations\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"description\": \"id, kind, status, hypotheses, conclusion, engine, theorem_shape\"}},",
+  "    \"replay_command\": {\"type\": \"string\"},",
+  "    \"proofkit_imports\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}},",
+  "    \"suggested_theorems\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}},",
+  "    \"next_actions\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"description\": \"kind, command, output_format, resolves\"}}",
+  "  },",
+  "  \"required\": [\"schema_version\", \"function\", \"status\", \"next_actions\"]",
+  "}" ]
+
 def main (args : List String) : IO UInt32 := do
   -- Check for "build" command first (before generic single-arg pattern)
   if args.head? == some "build" then
@@ -1612,11 +1702,17 @@ def main (args : List String) : IO UInt32 := do
   --   Read-only proof-scaffold generator. Prints to stdout; --out writes a
   --   stub file (refusing to overwrite without --force). Never auto-proves.
   if args.head? == some "prove" then
-    match args.drop 1 with
+    let pargs := args.drop 1
+    -- Discovery commands (no file/function needed) — the agent entrypoint.
+    if pargs.contains "--help=agent" then IO.println proveAgentHelp; return 0
+    if pargs.contains "--capabilities" then IO.println proveCapabilitiesJson; return 0
+    if pargs.contains "--schema" then IO.println proveSchemaJson; return 0
+    match pargs with
     | inputPath :: target :: rest =>
       let force := rest.contains "--force"
       let emitLink := rest.contains "--emit-link"
       let replay := rest.contains "--replay"
+      let proveJson := rest.contains "--json"
       let outPath := match rest.dropWhile (· != "--out") with
         | _ :: p :: _ => some p
         | _ => none
@@ -1625,9 +1721,10 @@ def main (args : List String) : IO UInt32 := do
         | _ => none
       return (← compileAndReport inputPath "prove"
         (proveTarget := some target) (proveOut := outPath) (proveForce := force)
-        (proveEmitLink := emitLink) (proveShowObl := showObl) (proveReplay := replay))
+        (proveEmitLink := emitLink) (proveShowObl := showObl) (proveReplay := replay)
+        (proveJson := proveJson))
     | _ =>
-      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--out <path>] [--force] [--emit-link] [--show-obligation <id>] [--replay]"
+      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--show-obligation <id>] [--replay]\n       concrete prove --help=agent | --capabilities | --schema   (discovery; no file needed)"
       return 1
   -- concrete --version
   if args == ["--version"] then
