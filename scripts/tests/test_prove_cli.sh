@@ -107,6 +107,29 @@ assert_json "json next_actions"    'len(d["next_actions"])>=1 and all("kind" in 
 assert_json "json loop obligations" 'any(o["kind"]=="invariant_init" for o in d["obligations"])' \
   "$COMPILER" prove "$LI" loop_invariant.count_up --json
 
+# assert_exit <label> <expected-code> <command...>
+assert_exit() {
+  local label="$1"; local want="$2"; shift 2
+  "$@" >/dev/null 2>&1; local got=$?
+  if [ "$got" -eq "$want" ]; then
+    echo "  ok   $label — exit $got"
+    PASS=$((PASS + 1))
+  else
+    echo "  FAIL $label — exit $got, want $want"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+echo "=== prove exit-code taxonomy (0 proved / 2 missing / 3 stale) ==="
+assert_exit "exit proved=0"  0 "$COMPILER" prove "$CT" constant_time_tag.ct_compare --json
+assert_exit "exit missing=2" 2 "$COMPILER" prove examples/proof_pressure/src/main.con main.clamp_value --json
+assert_exit "exit stale=3"   3 "$COMPILER" prove examples/proof_pressure/src/main.con main.compute_checksum --json
+
+echo "=== prove --json obligation detail (id matches contracts/replay key, spans, hyps) ==="
+assert_json "json obligation has span + hyps + stable id" \
+  'all(("source_line" in o and "hypotheses" in o and "conclusion" in o and "#" in o["id"]) for o in d["obligations"])' \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --json
+
 echo ""
 echo "PROVE-CLI: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

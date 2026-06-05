@@ -455,13 +455,15 @@ lemmas, and actionable failure diagnostics.
    eligibility, exclusion_reason, body_fingerprint, proof_link (spec/proof/
    ensures_proof/coverage/fingerprint/origin), status, evidence_class,
    obligations (id/kind/status), replay_command, proofkit_imports,
-   suggested_theorems, and `next_actions`. (NEXT: source spans + hypotheses/
-   conclusions per obligation; nearest_lemmas; `--show-obligation/--replay/
-   --emit-link --json` (item 7); process exit-code wiring.)
-6. Add `next_actions` to every proof-authoring JSON response. Each action must
-   include kind, exact command, expected output format, and what status it
-   helps resolve; examples: `show_obligation`, `emit_lean`, `emit_link`,
-   `replay`, `check_proofs`, `run_audit`, and `open_docs` only as a fallback.
+   suggested_theorems, and `next_actions`. Obligations now carry stable ids
+   (`<qual>@<line>#<Ox>`, the same key as `--report contracts`/`--replay`),
+   `source_line`, `hypotheses`, and `conclusion` (single source `loopObInfo`).
+   Process exit codes wired to the taxonomy (0 proved · 2 missing · 3 stale).
+   (NEXT: per-obligation source spans as ranges; nearest_lemmas.)
+6. ~~Add `next_actions` to every proof-authoring JSON response.~~ **DONE** for
+   `--json` (kind/command/output_format/resolves; `show_obligation`/`emit_link`/
+   `check_proofs`/`replay`/`run_audit`/`open_docs` by status). Extend to the
+   other JSON modes as they land (item 7).
 7. Add JSON modes for existing human proof subcommands:
    `--show-obligation <id> --json`, `--replay --json`, and
    `--emit-link --json`. The JSON forms must carry the same stable ids and

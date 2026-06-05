@@ -900,13 +900,18 @@ def compileAndReport (inputPath : String) (reportType : String)
             out := out ++ (if bvProved.contains i then s!"  ok   call obligation #{i} — still closes\n" else s!"  FAIL call obligation #{i} — no longer closes\n")
           IO.println out
           return 0
+        -- Process exit code follows the documented taxonomy (see --help=agent):
+        --   0 proved/clean · 2 obligations missing · 3 stale evidence.
+        let proveStatus := (pc.obligations.find? (·.functionId.qualName == qual)).map (·.status.canonical) |>.getD "missing"
+        let proveExit : UInt32 := match proveStatus with
+          | "stale" => 3 | "missing" => 2 | "blocked" => 2 | _ => 0
         -- --json: structured proof context + next_actions.
         if proveJson then
           IO.println (Report.proveReportJson pc registry parsed.modules qual provedVCs inputPath proveSchemaVersion)
-          return 0
+          return proveExit
         let report := Report.proveReport pc registry parsed.modules qual provedVCs
         match proveOut with
-        | none => IO.println report; return 0
+        | none => IO.println report; return proveExit
         | some path =>
           if (← System.FilePath.pathExists path) && !proveForce then
             IO.eprintln s!"refusing to overwrite '{path}' (pass --force to replace it)"

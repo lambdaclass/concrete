@@ -3307,6 +3307,38 @@ def proveReport (pc : Concrete.ProofCore) (registry : ProofRegistry)
       s!"=== concrete prove: {qualName} ===\n\nThis function is NOT in the provable subset, so there is no proof to scaffold.\n  reasons: {", ".intercalate reasons}\n\nMake it eligible (remove the listed constraints) or prove it as a trusted boundary."
     | none => s!"no function '{qualName}' in ProofCore."
 
+/-- Single source of truth for one loop obligation's identity and content.
+    Returns `(kind, hypotheses, conclusion, status)` for `oblId` ∈ O1..O5, or
+    `none` when that obligation does not exist on this loop (gating: O1 needs a
+    groundable init, O3 a groundable exit postcondition, O4/O5 a variant).
+    `status` is `proved_by_kernel_decision` (omega closed), `arithmetic_proved`
+    (O2 arithmetic half closed, operational pending), or `planned`. Used by both
+    `--show-obligation` and `--json` so ids/kinds/hypotheses never drift. -/
+def loopObInfo (lc : LoopContract) (oblId qualName : String) (ensures : List Expr)
+    (extraLets : List (String × Expr)) (retExpr : Option Expr) (provedVCs : List String) :
+    Option (String × List String × String × String) :=
+  let invs := lc.invariants.filterMap toLeanProp
+  let guardStr := (lc.guard.bind toLeanProp).getD "<guard>"
+  let variantStr := (lc.variant.bind toLeanProp).getD "<variant>"
+  let variantBody := (lc.variant.map (substContract lc.body)).bind toLeanProp |>.getD "<variant'>"
+  let omegaDone := provedVCs.contains (loopVCKey qualName lc.line oblId)
+  let status := fun (leanOp : Bool) =>
+    if omegaDone && !leanOp then "proved_by_kernel_decision"
+    else if omegaDone && leanOp then "arithmetic_proved"
+    else "planned"
+  match oblId with
+  | "O1" => (genInitVC lc extraLets).map fun g =>
+      ("invariant_init", ["loop-entry state (counter at its initializer)"], g, status false)
+  | "O2" => some ("invariant_preservation", invs ++ [guardStr],
+      " ∧ ".intercalate ((lc.invariants.map (substContract lc.body)).filterMap toLeanProp), status true)
+  | "O3" => (genExitVC lc ensures retExpr).map fun g =>
+      ("loop_exit_post_link", invs ++ [s!"¬({guardStr})"], g, status false)
+  | "O4" => if lc.variant.isSome then
+      some ("variant_nonnegative", invs ++ [guardStr], s!"0 ≤ {variantStr}", status false) else none
+  | "O5" => if lc.variant.isSome then
+      some ("variant_decreases", invs ++ [guardStr], s!"{variantBody} < {variantStr}", status false) else none
+  | _ => none
+
 /-- `concrete prove <file> <fn> --json`: the primary machine-readable proof
     context. Same data as `proveReport`, structured, with `next_actions`. -/
 def proveReportJson (pc : Concrete.ProofCore) (registry : ProofRegistry)
@@ -3364,19 +3396,21 @@ def proveReportJson (pc : Concrete.ProofCore) (registry : ProofRegistry)
     let extraLets := letConstMap f.body
     let retExpr := loopExitReturn f.body
     let mut obls : List String := []
-    let oblObj := fun (id kind st : String) =>
-      String.join ["{\"id\": ", q id, ", \"kind\": ", q kind, ", \"status\": ", q st, "}"]
-    let omegaSt := fun (line : Nat) (o : String) =>
-      if provedVCs.contains (loopVCKey e.qualName line o) then "proved_by_kernel_decision" else "planned"
+    -- stable id: "<qual>@<line>#<Ox>" (same key as --report contracts / --replay).
+    let oblObj := fun (id : String) (line : Int) (kind : String) (hyps : List String) (concl st : String) =>
+      String.join ["{\"id\": ", q id, ", \"kind\": ", q kind, ", \"status\": ", q st,
+        ", \"source_line\": ", toString line,
+        ", \"hypotheses\": ", qarr hyps, ", \"conclusion\": ", q concl, "}"]
     for lc in f.loopContracts do
-      if (genInitVC lc extraLets).isSome then obls := obls ++ [oblObj (s!"O1@{lc.line}") "invariant_init" (omegaSt lc.line "O1")]
-      obls := obls ++ [oblObj (s!"O2@{lc.line}") "invariant_preservation" (omegaSt lc.line "O2")]
-      if (genExitVC lc f.ensures retExpr).isSome then obls := obls ++ [oblObj (s!"O3@{lc.line}") "loop_exit_post_link" (omegaSt lc.line "O3")]
-      if lc.variant.isSome then
-        obls := obls ++ [oblObj (s!"O4@{lc.line}") "variant_nonnegative" (omegaSt lc.line "O4")]
-        obls := obls ++ [oblObj (s!"O5@{lc.line}") "variant_decreases" (omegaSt lc.line "O5")]
-    for _ens in f.ensures do
-      obls := obls ++ [oblObj "ensures" "ensures" status]
+      for oid in ["O1", "O2", "O3", "O4", "O5"] do
+        match loopObInfo lc oid e.qualName f.ensures extraLets retExpr provedVCs with
+        | some (kind, hyps, concl, st) =>
+          obls := obls ++ [oblObj (loopVCKey e.qualName lc.line oid) (Int.ofNat lc.line) kind hyps concl st]
+        | none => pure ()
+    -- the function postcondition (#[ensures]) as an obligation
+    for ens in f.ensures do
+      let reqHyps := f.requires.map Concrete.fmtExpr
+      obls := obls ++ [oblObj s!"{e.qualName}#ensures" (Int.ofNat (f.span.line)) "ensures" reqHyps (Concrete.fmtExpr ens) status]
     -- proofkit hints
     let feats := (e.fn.body.flatMap proveStmtFeatures).eraseDups
     let mut hints : List String := []
