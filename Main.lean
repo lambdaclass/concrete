@@ -3,7 +3,7 @@ import Concrete
 open Concrete
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--show-obligation <id>] [--replay] [--nearest-lemmas]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -803,7 +803,8 @@ def compileAndReport (inputPath : String) (reportType : String)
     (proveForce : Bool := false) (proveEmitLink : Bool := false)
     (proveShowObl : Option String := none) (proveReplay : Bool := false)
     (proveJson : Bool := false) (proveNearestLemmas : Bool := false)
-    (proveEmitLean : Bool := false) (proveStdout : Bool := false) : IO UInt32 := do
+    (proveEmitLean : Bool := false) (proveStdout : Bool := false)
+    (proveEmitArtifacts : Bool := false) (proveOutDir : Option String := none) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -899,6 +900,29 @@ def compileAndReport (inputPath : String) (reportType : String)
             IO.println s!"wrote Lean proof stub for {qual} to {path}"
             return 0
           | none => IO.println stub; return 0
+        -- --emit-artifacts: write a reproducible bundle per failed obligation.
+        if proveEmitArtifacts then
+          let proveStatus := (pc.obligations.find? (·.functionId.qualName == qual)).map (·.status.canonical) |>.getD "missing"
+          let obs := Report.callSiteObligations parsed.modules
+          let myCands := ((List.range obs.length).zip obs).filterMap fun (i, o) =>
+            if o.caller == qual then o.leanGoal.map (fun g => (i, g)) else none
+          let bvProved ← bvDischargeCallSites myCands
+          let failingCalls := myCands.filter (fun (i, _) => !bvProved.contains i)
+          let arts := Report.proveArtifacts pc registry parsed.modules qual inputPath provedVCs failingCalls proveStatus
+          if arts.isEmpty then
+            IO.println s!"no failed obligations for {qual} (nothing to emit)."
+            return 0
+          let baseDir := (proveOutDir.getD ".build/prove") ++ "/" ++ Report.artifactDirName qual
+          for a in arts do
+            let dir := baseDir ++ "/" ++ a.dirName
+            IO.FS.createDirAll dir
+            IO.FS.writeFile (dir ++ "/context.json") a.context
+            IO.FS.writeFile (dir ++ "/failed.lean") a.failedLean
+            IO.FS.writeFile (dir ++ "/command.txt") a.command
+            IO.FS.writeFile (dir ++ "/README.txt") a.readme
+            IO.println s!"wrote {dir}/  (context.json, failed.lean, command.txt, README.txt)"
+          IO.println s!"{arts.length} failed-obligation artifact(s) under {baseDir}/"
+          return 0
         -- --show-obligation <id>: print one obligation in full (text or JSON).
         if let some oblId := proveShowObl then
           IO.println (if proveJson then Report.showObligationJson parsed.modules qual oblId provedVCs inputPath
@@ -1348,7 +1372,9 @@ def proveAgentHelp : String := String.intercalate "\n" [
   "WORKFLOW (each step prints what to do next):",
   "  1. concrete prove <file> <module.fn> --json     # proof context + next_actions",
   "  2. concrete prove <file> <module.fn> --show-obligation <id>   # one obligation",
+  "     concrete prove <file> <module.fn> --nearest-lemmas         # tactic/lemma hints",
   "  3. concrete prove <file> <module.fn> --emit-lean             # compilable Lean stub",
+  "     concrete prove <file> <module.fn> --emit-artifacts        # one bundle per UNPROVED obligation",
   "  4. write the Lean proof in Concrete/Proof.lean (see PROOFKIT_GUIDE)",
   "  5. concrete prove <file> <module.fn> --emit-link             # in-source link block",
   "     (paste #[spec]/#[proof_by]/#[proof_coverage]/#[proof_fingerprint] above the fn)",
@@ -1386,7 +1412,8 @@ def proveCapabilitiesJson : String := String.intercalate "\n" [
   "    \"emit_lean\": true,",
   "    \"emit_link\": true,",
   "    \"nearest_lemmas\": true,",
-  "    \"replay_json\": true",
+  "    \"replay_json\": true,",
+  "    \"failed_artifacts\": true",
   "  },",
   "  \"obligation_kinds\": [\"invariant_init\", \"invariant_preservation\", \"loop_exit_post_link\", \"variant_nonnegative\", \"variant_decreases\", \"array_bounds\", \"division_nonzero\", \"integer_overflow\", \"ensures\"],",
   "  \"evidence_classes\": [\"proved_by_lean\", \"proved_by_kernel_decision\", \"partial\", \"stale\", \"missing\", \"blocked\", \"ineligible\", \"trusted\", \"tested_by_oracle\", \"runtime_checked\"],",
@@ -1757,7 +1784,11 @@ def main (args : List String) : IO UInt32 := do
       let proveJson := rest.contains "--json"
       let nearestLemmas := rest.contains "--nearest-lemmas"
       let emitLean := rest.contains "--emit-lean"
+      let emitArtifacts := rest.contains "--emit-artifacts"
       let stdout := rest.contains "--stdout"
+      let outDir := match rest.dropWhile (· != "--out-dir") with
+        | _ :: d :: _ => some d
+        | _ => none
       let outPath := match rest.dropWhile (· != "--out") with
         | _ :: p :: _ => some p
         | _ => none
@@ -1768,9 +1799,10 @@ def main (args : List String) : IO UInt32 := do
         (proveTarget := some target) (proveOut := outPath) (proveForce := force)
         (proveEmitLink := emitLink) (proveShowObl := showObl) (proveReplay := replay)
         (proveJson := proveJson) (proveNearestLemmas := nearestLemmas)
-        (proveEmitLean := emitLean) (proveStdout := stdout))
+        (proveEmitLean := emitLean) (proveStdout := stdout)
+        (proveEmitArtifacts := emitArtifacts) (proveOutDir := outDir))
     | _ =>
-      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--show-obligation <id>] [--replay] [--nearest-lemmas]\n       concrete prove --help=agent | --capabilities | --schema   (discovery; no file needed)"
+      IO.eprintln "Usage: concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas]\n       concrete prove --help=agent | --capabilities | --schema   (discovery; no file needed)"
       return 1
   -- concrete --version
   if args == ["--version"] then

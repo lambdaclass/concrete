@@ -3726,6 +3726,117 @@ def emitLeanStub (pc : Concrete.ProofCore) (registry : ProofRegistry)
       s!"theorem {name}_refines_spec {paramSig} (fuel : Nat) :\n    eval fns {paramBinds} (fuel + 1) {name}Expr = sorry := by\n  sorry\n\n",
       s!"end Concrete.Proof.Generated.{name}\n" ]
 
+/-- One failed-obligation artifact bundle: a sanitized directory name plus the
+    four files written under `.build/prove/<fn>/<dirName>/`. -/
+structure ProveArtifact where
+  oblId : String
+  dirName : String
+  context : String      -- context.json
+  failedLean : String   -- failed.lean
+  command : String      -- command.txt
+  readme : String       -- README.txt
+  deriving Inhabited
+
+/-- Sanitize an obligation id (`<qual>@<line>#<Ox>`) into a path-safe segment. -/
+def artifactDirName (oblId : String) : String :=
+  String.ofList (oblId.toList.map fun c =>
+    if c.isAlphanum || c == '_' || c == '-' then c else '_')
+
+/-- `concrete prove <file> <fn> --emit-artifacts`: collect every obligation that
+    does NOT currently close — loop VCs absent from `provedVCs`, call-site VCs in
+    `failingCalls`, and (when the function itself is `missing`/`stale`/`blocked`)
+    a function-level refinement artifact. Each becomes a reproducible bundle an
+    agent can pick up without loading the whole flagship proof. Returns `[]` for a
+    cleanly-proved function. -/
+def proveArtifacts (pc : Concrete.ProofCore) (registry : ProofRegistry)
+    (modules : List Module) (qualName inputPath : String)
+    (provedVCs : List String) (failingCalls : List (Nat × String))
+    (proveStatus : String) : List ProveArtifact := Id.run do
+  let q := jsonStr
+  let qarr := fun (xs : List String) => "[" ++ ", ".intercalate (xs.map q) ++ "]"
+  let stub := emitLeanStub pc registry modules qualName provedVCs
+  let astFn? := (modules.flatMap allFunctions).find? (fun (pfx, fn) => pfx ++ fn.name == qualName) |>.map Prod.snd
+  -- shared builder for the four files given the obligation facts
+  let mk := fun (oblId shortId kind status srcLine : String)
+                (hyps : List String) (concl tactic : String) (lemmas : List String) (note : String) =>
+    let ctx := String.join [
+      "{\n",
+      s!"  \"id\": {q oblId},\n",
+      s!"  \"function\": {q qualName},\n",
+      s!"  \"input_file\": {q inputPath},\n",
+      s!"  \"kind\": {q kind},\n",
+      s!"  \"status\": {q status},\n",
+      s!"  \"source_line\": {srcLine},\n",
+      s!"  \"hypotheses\": {qarr hyps},\n",
+      s!"  \"conclusion\": {q concl},\n",
+      s!"  \"recipe\": \{\"tactic\": {q tactic}, \"lemmas\": {qarr lemmas}, \"note\": {q note}}\n",
+      "}\n" ]
+    let cmd := String.join [
+      "# Failed obligation: ", oblId, " (", kind, ") — ", status, "\n\n",
+      "# 1. inspect this obligation in full:\n",
+      s!"concrete prove {inputPath} {qualName} --show-obligation {shortId} --json\n\n",
+      "# 2. (re)generate the Lean stub for this function:\n",
+      s!"concrete prove {inputPath} {qualName} --emit-lean --out failed.lean --force\n\n",
+      "# recipe: ", tactic, (if lemmas.isEmpty then "" else "  [" ++ ", ".intercalate lemmas ++ "]"), "\n\n",
+      "# 3. write the proof in failed.lean (or Concrete/Proof.lean), then re-check:\n",
+      s!"concrete prove {inputPath} {qualName} --replay --json\n",
+      s!"concrete {inputPath} --report check-proofs\n" ]
+    let readme := String.join [
+      "FAILED OBLIGATION ", oblId, "\n",
+      "================", String.ofList (List.replicate oblId.length '='), "\n\n",
+      "function:   ", qualName, "\n",
+      "file:       ", inputPath, "\n",
+      "kind:       ", kind, "\n",
+      "status:     ", status, "\n",
+      (if srcLine == "0" then "" else s!"source line: {srcLine}\n"),
+      "\nhypotheses:\n",
+      (if hyps.isEmpty then "  (none)\n" else String.join (hyps.map (s!"  - {·}\n"))),
+      "\ngoal:\n  ", concl, "\n\n",
+      "suggested recipe:\n  tactic: ", tactic, "\n",
+      (if lemmas.isEmpty then "" else "  lemmas: " ++ ", ".intercalate lemmas ++ "\n"),
+      "  note:   ", note, "\n\n",
+      "Files in this directory:\n",
+      "  context.json  — machine-readable obligation facts (id matches --json / --replay / --report contracts)\n",
+      "  failed.lean   — compilable single-function Lean stub (ends in `sorry`; fill in and prove)\n",
+      "  command.txt   — exact commands to inspect, regenerate, and re-check\n",
+      "  README.txt    — this file\n\n",
+      "This bundle is self-contained: it does not require loading the flagship proof.\n" ]
+    let banner := s!"-- FAILED OBLIGATION: {oblId} ({kind}) — {status}\n-- See command.txt / README.txt in this directory.\n\n"
+    ({ oblId, dirName := artifactDirName oblId,
+       context := ctx, failedLean := banner ++ stub, command := cmd, readme } : ProveArtifact)
+  let mut arts : List ProveArtifact := []
+  -- failing loop obligations
+  match astFn? with
+  | some f =>
+    let extraLets := letConstMap f.body
+    let retExpr := loopExitReturn f.body
+    for lc in f.loopContracts do
+      for oid in ["O1", "O2", "O3", "O4", "O5"] do
+        match loopObInfo lc oid qualName f.ensures extraLets retExpr provedVCs with
+        | some (kind, hyps, concl, _) =>
+          let key := loopVCKey qualName lc.line oid
+          if !provedVCs.contains key then
+            let (tac, lemmas, note) := lemmaRecipeFor kind
+            arts := arts ++ [mk key oid kind "fails_to_close" (toString lc.line) hyps concl tac lemmas note]
+        | none => pure ()
+  | none => pure ()
+  -- failing call-site obligations
+  for (i, goal) in failingCalls do
+    let (tac, lemmas, note) := lemmaRecipeFor "integer_overflow"
+    arts := arts ++ [mk s!"{qualName}#call{i}" s!"call{i}" "call_site_safety" "fails_to_close" "0" [] goal tac lemmas note]
+  -- function-level: no/stale/blocked proof link
+  if proveStatus == "missing" || proveStatus == "stale" || proveStatus == "blocked" then
+    let (tac, lemmas, note) := lemmaRecipeFor "ensures"
+    let concl := match astFn? with
+      | some f => match f.ensures with
+                  | e :: _ => Concrete.fmtExpr e
+                  | [] => s!"{qualName} refines its specification"
+      | none => s!"{qualName} refines its specification"
+    let kind := match proveStatus with
+      | "stale" => "stale_proof_link" | "blocked" => "blocked" | _ => "missing_proof_link"
+    arts := arts ++ [mk s!"{qualName}#refines_spec" "refines_spec" kind proveStatus "0" [] concl tac lemmas note]
+  return arts
+
 -- ============================================================
 -- Source/Core/SSA/LLVM traceability (--report traceability)
 -- ============================================================

@@ -171,6 +171,26 @@ assert_exit "emit-lean --force=0" 0 \
 rm -rf "$(dirname "$EMIT_OUT")"
 assert_json "capabilities emit_lean=true" 'd["features"]["emit_lean"] is True' "$COMPILER" prove --capabilities
 
+echo "=== prove --emit-artifacts (failed-obligation bundles) ==="
+PP="examples/proof_pressure/src/main.con"
+# A cleanly-proved function emits nothing.
+assert_contains "artifacts clean → none" "no failed obligations" \
+  "$COMPILER" prove "$LI" loop_invariant.count_up --emit-artifacts --out-dir "$(mktemp -d)"
+# A missing-proof function emits one function-level bundle with all four files.
+ART_DIR="$(mktemp -d)"
+assert_contains "artifacts missing → bundle" "failed-obligation artifact" \
+  "$COMPILER" prove "$PP" main.clamp_value --emit-artifacts --out-dir "$ART_DIR"
+BUNDLE="$ART_DIR/main_clamp_value/main_clamp_value_refines_spec"
+for f in context.json failed.lean command.txt README.txt; do
+  if [ -f "$BUNDLE/$f" ]; then echo "  ok   artifacts file $f present"; PASS=$((PASS+1));
+  else echo "  FAIL artifacts file $f missing"; FAIL=$((FAIL+1)); fi
+done
+assert_json "artifacts context.json (stable id + recipe)" \
+  'd["id"]=="main.clamp_value#refines_spec" and "tactic" in d["recipe"]' \
+  cat "$BUNDLE/context.json"
+rm -rf "$ART_DIR"
+assert_json "capabilities failed_artifacts=true" 'd["features"]["failed_artifacts"] is True' "$COMPILER" prove --capabilities
+
 echo ""
 echo "PROVE-CLI: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -4,6 +4,8 @@
 
 # Build artifacts
 build/
+# Failed-obligation artifacts (concrete prove --emit-artifacts default dir)
+.build/
 *.so
 *.a
 *.mlir

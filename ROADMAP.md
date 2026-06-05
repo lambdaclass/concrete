@@ -406,11 +406,19 @@ lemmas, and actionable failure diagnostics.
    the emitted stub typechecks (`lake env lean`, exit 0, zero errors).
    `--capabilities` now reports `emit_lean=true`. Gate: `test_prove_cli.sh`
    (34/0).
-9. Add failed-obligation artifacts under a stable build path such as
-   `.build/prove/<qualified_fn>/<obligation_id>/`: `context.json`,
-   `failed.lean`, `command.txt`, and `README.txt`. These artifacts should be
-   minimal, reproducible, and safe to hand to an agent without loading the whole
-   flagship proof.
+9. ~~Add failed-obligation artifacts under a stable build path.~~ **DONE.**
+   `concrete prove <file> <fn> --emit-artifacts [--out-dir DIR]`
+   (`Report.proveArtifacts`) writes one reproducible bundle per obligation that
+   does NOT currently close — loop VCs absent from the kernel-discharged set,
+   call-site VCs that `bv_decide` doesn't close, and (when the function itself is
+   `missing`/`stale`/`blocked`) a function-level `#refines_spec` bundle. Each
+   lands in `<dir>/<fn>/<sanitized_obligation_id>/` (default `dir=.build/prove`,
+   gitignored) with `context.json` (stable id + kind/status/hyps/goal +
+   `lemmaRecipeFor` recipe), `failed.lean` (the compilable single-function stub,
+   banner-tagged with the obligation — verified to typecheck), `command.txt`
+   (inspect → regenerate → re-check commands), and `README.txt`. A cleanly-proved
+   function emits nothing and exits 0. `--capabilities` reports
+   `failed_artifacts=true`. Gate: `test_prove_cli.sh` (42/0).
 10. Add a structured proof-check step for agent-written Lean:
     `concrete prove --check <path-or-function> --json` or
     `concrete check-proofs --json`. It must run the Lean kernel, map failures
