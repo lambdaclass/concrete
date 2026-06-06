@@ -418,9 +418,19 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
    `check_vc_schema.sh` pins that no solver class appears by default and
    `check_smt_path.sh` pins the flagged classification. (`proved_by_smt_replayed`
    awaits the Lean-replay path, item 12.)
-10. Surface counterexamples in source terms where possible: function inputs,
-   loop variables, failing index, failing arithmetic side condition, and the
-   contract/obligation that failed.
+10. **[done — for the SMT overflow fragment]** Surface counterexamples in source
+   terms. The emitted SMT-LIB now requests `(get-model)`; on a `sat` result
+   `Main.smtDischarge` parses Z3's model and, because the query declares each
+   variable by its source name, maps the witness straight back to function inputs.
+   The VC carries a `counterexample` field (var → concrete value), rendered in
+   `--report vcs --smt` (`counterexample: sample = 99161, gain = 98166`) and JSON,
+   alongside the failing obligation (`origin`, `conclusion`). Status is
+   `counterexample`, never a proof, and only ever on a VC the kernel tiers left
+   `unproven`. Negative sibling `scale_unbounded` in
+   `examples/smt/nonlinear_overflow/` (bounds that genuinely allow overflow); gate
+   `check_smt_path.sh` (12/0 with Z3, 10/0 without) pins source-named, overflowing
+   witnesses and that the default path shows no SMT result. (Loop-variable /
+   array-index counterexamples extend this as those VC classes gain SMT eligibility.)
 11. Add CI gates for solver determinism and replay: same VC, same solver
    configuration, same result class, with timeouts treated as non-proofs.
 12. Add Lean replay for the simplest SMT-discharged fragments where practical:

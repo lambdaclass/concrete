@@ -22,4 +22,16 @@ mod smt {
     fn scale(sample: i32, gain: i32) -> i32 {
         return sample * gain;
     }
+
+    // Negative sibling: the bounds are too loose — the product CAN exceed i32
+    // (100000 * 100000 = 10^10 > 2^31). The kernel tiers can't own the nonlinear
+    // goal, so under --smt Z3 returns `sat` with a concrete source-level
+    // counterexample (e.g. sample = 100000, gain = 100000). Status is
+    // `counterexample`, never a proof — the bug surfaces with real inputs.
+    #[overflow_checked]
+    #[requires(0 <= sample && sample <= 100000)]
+    #[requires(0 <= gain && gain <= 100000)]
+    fn scale_unbounded(sample: i32, gain: i32) -> i32 {
+        return sample * gain;
+    }
 }

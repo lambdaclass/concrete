@@ -815,37 +815,65 @@ def computeVCsDischarged (modules : List Concrete.Module) (locMap : Report.FnLoc
   let bvOvfKeys ← bvDischargeOverflow ovfBV
   return Report.dischargeVCs vcs omegaProved (bvCallKeys ++ bvOvfKeys)
 
-/-- External-SMT adapter (Phase 2 #8). One solver (Z3), pinned timeout. For each
+/-- Read the value Z3 assigned to variable `v` from `(get-model)` output. Handles
+    both `... Int 100000)` and the negative `... Int (- 5))` shapes, across lines.
+    The declared name IS the source variable name, so no remapping is needed. -/
+def smtModelValue (out v : String) : Option String :=
+  match ((out.splitOn s!"define-fun {v} () Int").drop 1).head? with
+  | none => none
+  | some after =>
+    let cs := after.toList.dropWhile (fun c => !c.isDigit && c != '-')
+    match cs with
+    | [] => none
+    | c :: rest =>
+      if c == '-' then
+        let num := (rest.dropWhile (· == ' ')).takeWhile Char.isDigit
+        if num.isEmpty then none else some (String.ofList ('-' :: num))
+      else
+        let num := cs.takeWhile Char.isDigit
+        if num.isEmpty then none else some (String.ofList num)
+
+/-- External-SMT adapter (Phase 2 #8/#10). One solver (Z3), pinned timeout. For each
     `(vcKey, smtlibScript)` it writes the script, runs `z3 -T:<timeout>`, and reads
     the first line: `unsat` → `solver_trusted` (solver-proved, solver in the TCB —
-    NOT a kernel-checked class), `sat` → `counterexample`, `unknown`/`timeout`
-    accordingly. If Z3 is not on PATH the honest verdict is `solver_error` for every
-    query — an absent solver never yields a proof. Only ever called behind an
-    explicit flag. -/
-def smtDischarge (queries : List (String × String)) (timeoutSec : Nat) : IO (List (String × String)) := do
+    NOT a kernel-checked class), `sat` → `counterexample` (with the model parsed
+    back to source variables via `(get-model)`), `unknown`/`timeout` accordingly. If
+    Z3 is not on PATH the honest verdict is `solver_error` for every query — an
+    absent solver never yields a proof. Only ever called behind an explicit flag.
+    Returns `(vcKey, resultClass, counterexampleModel)`. -/
+def smtDischarge (queries : List (String × String)) (timeoutSec : Nat)
+    : IO (List (String × String × List (String × String))) := do
   if queries.isEmpty then return []
   let haveZ3 ← (try
       let o ← IO.Process.output { cmd := "bash", args := #["-c", "command -v z3"] }
       pure (o.exitCode == 0)
     catch _ => pure false)
   if !haveZ3 then
-    return queries.map (fun (k, _) => (k, "solver_error"))
-  let mut res : List (String × String) := []
+    return queries.map (fun (k, _) => (k, "solver_error", []))
+  let mut res : List (String × String × List (String × String)) := []
   for (k, script) in queries do
-    let cls ← (try
+    let r ← (try
         let mk ← IO.Process.output { cmd := "mktemp", args := #["-t", "concrete-vc-XXXXXX"] }
         let path := mk.stdout.trimAscii.toString
         IO.FS.writeFile ⟨path⟩ script
         let out ← IO.Process.output { cmd := "z3", args := #["-T:" ++ toString timeoutSec, path] }
         let _ ← IO.Process.output { cmd := "rm", args := #["-f", path] }
-        let line := ((out.stdout.trimAscii.toString.splitOn "\n").head?.getD "").trimAscii.toString
-        pure (if line == "unsat" then "solver_trusted"
-              else if line == "sat" then "counterexample"
-              else if line == "unknown" then "unknown"
-              else if line == "timeout" then "timeout"
-              else "solver_error")
-      catch _ => pure "solver_error")
-    res := res ++ [(k, cls)]
+        let stdout := out.stdout
+        let line := ((stdout.trimAscii.toString.splitOn "\n").head?.getD "").trimAscii.toString
+        if line == "unsat" then pure ("solver_trusted", ([] : List (String × String)))
+        else if line == "sat" then
+          -- the declared vars are the source names; read each from the model.
+          let vars := (script.splitOn "\n").filterMap fun l =>
+            let t := l.trimAscii.toString
+            if t.startsWith "(declare-const " then ((t.drop "(declare-const ".length).toString.splitOn " ").head?
+            else none
+          let model := vars.filterMap fun vn => (smtModelValue stdout vn).map (fun x => (vn, x))
+          pure ("counterexample", model)
+        else if line == "unknown" then pure ("unknown", [])
+        else if line == "timeout" then pure ("timeout", [])
+        else pure ("solver_error", [])
+      catch _ => pure ("solver_error", ([] : List (String × String))))
+    res := res ++ [(k, r.1, r.2)]
   return res
 
 /-- Render the contracts report plus the call-site obligation section, running

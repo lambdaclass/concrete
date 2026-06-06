@@ -1886,7 +1886,7 @@ def overflowSmtGoals (modules : List Module) : List (String × String) := Id.run
       let neg := s!"(assert (not (and (<= {o.lo} {eSmt}) (<= {eSmt} {o.hi}))))"
       let script := "\n".intercalate
         (["; VC " ++ o.key, "; no-overflow of an operand in [" ++ toString o.lo ++ ", " ++ toString o.hi ++ "]",
-          "(set-logic QF_NIA)"] ++ decls ++ hypAsserts ++ [neg, "(check-sat)"])
+          "(set-logic QF_NIA)"] ++ decls ++ hypAsserts ++ [neg, "(check-sat)", "(get-model)"])
       out := out ++ [(o.key, script)]
     | _, _ => pure ()
   return out
@@ -3802,6 +3802,8 @@ structure VC where
   status        : String       -- planned | proved_by_kernel_decision | proved_by_lean |
                                 -- arithmetic_proved | counterexample | unproven | missing
   engine        : String       -- constant_fold | omega | bv_decide | lean | "" (none yet)
+  -- concrete source-level counterexample (var → value), when a solver returned `sat`:
+  counterexample : List (String × String) := []
 
 /-- Split a compiler-generated goal string `∀ (vars : T), (h1) → h2 → (concl)`
     into (hypotheses, conclusion): drop the binder, split the body on top-level
@@ -3971,12 +3973,15 @@ def markSmtEligible (vcs : List VC) (smtKeys : List String) : List VC :=
     (`solver_trusted` / `counterexample` / `unknown` / `timeout` / `solver_error`)
     is applied ONLY to a VC the kernel-checked tiers left `unproven` — so an
     external solver can NEVER override or be confused with a `proved_by_kernel_decision`
-    or `proved_by_lean` result. The engine records the solver. -/
-def foldSmtResults (vcs : List VC) (results : List (String × String)) : List VC :=
+    or `proved_by_lean` result. The engine records the solver; a `counterexample`
+    carries the solver's model mapped back to source variable names. -/
+def foldSmtResults (vcs : List VC) (results : List (String × String × List (String × String))) : List VC :=
   vcs.map fun v =>
     match results.find? (·.1 == v.id) with
-    | some (_, cls) =>
-      if v.status == "unproven" then { v with status := cls, engine := "smt:z3" } else v
+    | some (_, cls, model) =>
+      if v.status != "unproven" then v else
+        let cex := if cls == "counterexample" then model else []
+        { v with status := cls, engine := "smt:z3", counterexample := cex }
     | none => v
 
 /-- Human-readable VC schedule (post-discharge), grouped by originating function.
@@ -3991,11 +3996,13 @@ def vcsReport (vcs : List VC) : String := Id.run do
       let hyps := if v.hypotheses.isEmpty then "(none)" else " ∧ ".intercalate v.hypotheses
       let deps := if v.dependencies.isEmpty then "" else s!"\n      dependencies:  {", ".intercalate v.dependencies}"
       let eng := if v.engine.isEmpty then "" else s!" ({v.engine})"
+      let cex := if v.counterexample.isEmpty then ""
+        else s!"\n      counterexample:  {", ".intercalate (v.counterexample.map (fun (n, x) => s!"{n} = {x}"))}"
       out := out ++ s!"\n  [{v.id}]  {v.kind}"
         ++ s!"\n      status:  {v.status}{eng}"
         ++ s!"\n      profile/expected:  {v.arithProfile} / {v.dischargeMode}"
         ++ s!"\n      hypotheses:  {hyps}"
-        ++ s!"\n      conclusion:  {v.conclusion}{deps}"
+        ++ s!"\n      conclusion:  {v.conclusion}{deps}{cex}"
   -- summary by status
   let proved := (vcs.filter (·.status == "proved_by_kernel_decision")).length
   let lean := (vcs.filter (·.status == "proved_by_lean")).length
@@ -5394,7 +5401,8 @@ def vcToJson (v : VC) : Val :=
     ("arith_profile", .str v.arithProfile),
     ("expected_discharge", .str v.dischargeMode),
     ("status", .str v.status),
-    ("engine", .str v.engine)
+    ("engine", .str v.engine),
+    ("counterexample", .obj (v.counterexample.map (fun (n, x) => (n, Json.Val.str x))))
   ]
 
 open Json in
@@ -6520,7 +6528,7 @@ def schemaReport : String :=
           ("schema_kind", .str "\"vcs\""),
           ("vc_schema_version", .str "number — VC schema version (currently 1)"),
           ("count", .str "number"),
-          ("vcs", .str "object[] — each: id, kind, function, loc{file,line}, hypotheses[], conclusion, origin, dependencies[], arith_profile, expected_discharge, status, engine. status ∈ {planned, proved_by_kernel_decision, proved_by_lean, arithmetic_proved, counterexample, unproven, missing} plus the OPT-IN external-solver classes {solver_trusted, unknown, timeout, solver_error}; engine ∈ {constant_fold, omega, bv_decide, lean, smt:<solver>, \"\"}. A decision procedure can only yield proved_by_kernel_decision; an external solver (behind --smt) yields solver_trusted/counterexample/unknown/timeout/solver_error and only ever on a VC the kernel tiers left unproven — the classes never merge.")])])
+          ("vcs", .str "object[] — each: id, kind, function, loc{file,line}, hypotheses[], conclusion, origin, dependencies[], arith_profile, expected_discharge, status, engine, counterexample{var:value}. status ∈ {planned, proved_by_kernel_decision, proved_by_lean, arithmetic_proved, counterexample, unproven, missing} plus the OPT-IN external-solver classes {solver_trusted, unknown, timeout, solver_error}; engine ∈ {constant_fold, omega, bv_decide, lean, smt:<solver>, \"\"}. counterexample maps SOURCE variable names to concrete values, populated only on a `sat` solver result. A decision procedure can only yield proved_by_kernel_decision; an external solver (behind --smt) yields solver_trusted/counterexample/unknown/timeout/solver_error and only ever on a VC the kernel tiers left unproven — the classes never merge.")])])
     ]),
     ("policies", .obj [
       ("empty_result", .str "A query that matches zero facts returns a facts envelope with an empty facts array and fact_count 0. Semantic queries for unknown functions return a query_answer with answer \"not_found\". Neither case is an error."),

@@ -42,12 +42,23 @@ solver never yields a proof.
 
 ## `nonlinear_overflow/`
 
-`scale(sample, gain) = sample * gain` with both operands in signed ranges. The
-product provably fits `i32` (`|s·g| ≤ 30000·60000 < 2³¹`), but:
+Two `sample * gain` products that the kernel tiers cannot own (nonlinear; omega
+can't, and interval `bv_decide` bails) — the genuine SMT niche.
 
-- `omega` can't own it — the goal is nonlinear (a product of two variables);
-- the interval `bv_decide` path models unsigned, non-negative operands, so signed
-  ranges make it bail.
+- **`scale`** — operands in signed ranges, product provably fits `i32`
+  (`|s·g| ≤ 30000·60000 < 2³¹`). Z3 returns `unsat` → `solver_trusted`.
+- **`scale_unbounded`** — bounds too loose (`100000·100000 = 10¹⁰ > 2³¹`), so the
+  product *can* overflow. Z3 returns `sat` and the emitted `(get-model)` is parsed
+  back to **source variables**, e.g.:
 
-So it is the genuine SMT niche: useful for an external solver, **not**
-kernel-equivalent. Z3 returns `unsat` on the emitted query → `solver_trusted`.
+  ```
+  [smt.scale_unbounded#ovf0]  no_overflow
+      status:  counterexample (smt:z3)
+      counterexample:  sample = 99161, gain = 98166
+  ```
+
+  Status is `counterexample`, never a proof — the contract bug surfaces with
+  concrete inputs. This is the user-facing payoff of the SMT path: a
+  counterexample in source terms is more valuable for debugging a contract than a
+  trusted "proved". The model variable names are the function's own parameters; no
+  remapping is needed because the SMT query declares them by source name.

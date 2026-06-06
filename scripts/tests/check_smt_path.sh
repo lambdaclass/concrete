@@ -25,6 +25,7 @@ echo "=== --emit-smt produces a sound, well-formed QF_NIA query ==="
 emit="$("$COMPILER" "$EX" --report vcs --emit-smt 2>/dev/null)"
 printf '%s' "$emit" | grep -qF "(set-logic QF_NIA)" && ok "declares QF_NIA logic" || no "missing set-logic QF_NIA"
 printf '%s' "$emit" | grep -qF "(check-sat)" && ok "has (check-sat)" || no "missing check-sat"
+printf '%s' "$emit" | grep -qF "(get-model)" && ok "requests (get-model) for counterexamples" || no "missing get-model"
 printf '%s' "$emit" | grep -qF "(* sample gain)" && ok "encodes the nonlinear product" || no "missing the product term"
 # SOUNDNESS: both #[requires] bounds must be asserted, else the query is a lie.
 printf '%s' "$emit" | grep -qF "(<= sample 30000)" \
@@ -60,12 +61,30 @@ sys.exit(0 if not bad else 1)" \
   && ok "no proved_by_kernel_decision VC is attributed to smt" || no "smt overrode a kernel decision"
 
 if command -v z3 >/dev/null 2>&1; then
-  echo "=== Z3 present: unsat → solver_trusted (provable nonlinear bound) ==="
+  echo "=== Z3 present: provable bound → solver_trusted; loose bound → counterexample ==="
+  # scale (tight bounds): unsat → solver_trusted.
   printf '%s' "$smtjson" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
-sys.exit(0 if any(v['kind']=='no_overflow' and v['status']=='solver_trusted' and v['engine']=='smt:z3' for v in d['vcs']) else 1)" \
-    && ok "nonlinear no_overflow → solver_trusted (smt:z3)" || no "expected solver_trusted from Z3"
+sys.exit(0 if any(v['function'].endswith('.scale') and v['kind']=='no_overflow' and v['status']=='solver_trusted' and v['engine']=='smt:z3' for v in d['vcs']) else 1)" \
+    && ok "scale (tight) → solver_trusted (smt:z3)" || no "expected solver_trusted for scale"
+  # scale_unbounded (loose bounds): sat → counterexample.
+  printf '%s' "$smtjson" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+sys.exit(0 if any(v['function'].endswith('.scale_unbounded') and v['status']=='counterexample' and v['engine']=='smt:z3' for v in d['vcs']) else 1)" \
+    && ok "scale_unbounded (loose) → counterexample (smt:z3)" || no "expected counterexample for scale_unbounded"
+  # the counterexample names SOURCE variables (sample, gain) with concrete values.
+  printf '%s' "$smtjson" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+v=next((v for v in d['vcs'] if v['function'].endswith('.scale_unbounded') and v['kind']=='no_overflow'), None)
+m=v['counterexample'] if v else {}
+ok = ('sample' in m and 'gain' in m and m['sample'].lstrip('-').isdigit() and m['gain'].lstrip('-').isdigit())
+# and the witness actually overflows i32: sample*gain > 2^31-1
+ok = ok and (int(m['sample'])*int(m['gain']) > 2147483647 or int(m['sample'])*int(m['gain']) < -2147483648)
+sys.exit(0 if ok else 1)" \
+    && ok "counterexample uses source names with overflowing concrete values" || no "counterexample should map to source vars that overflow"
 else
   echo "=== Z3 absent: --smt yields solver_error, never a proof ==="
   printf '%s' "$smtjson" | python3 -c "
