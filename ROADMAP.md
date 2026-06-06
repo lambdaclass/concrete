@@ -217,47 +217,50 @@ retrofit is explicitly queued behind proof-link migration.
    tasks in this phase are the contract cases that can make a green proof
    misleading: negative examples, vacuity, spec/ghost totality, trapdoor
    discipline, diagnostics, API-stability rules, and soundness obligations.
-2. ~~Add contract negative examples.~~ **MOSTLY DONE** — `examples/contract_negatives/`
-   + gate `scripts/tests/check_contract_negatives.sh` (10/0, CI + `make
-   test-contract-negatives`): `precondition_callsite` (caller-side `#[requires]`
-   checking, the call-site hardening), `missing_postcondition` (reported
-   `missing`), `weakened_postcondition` (one_direction coverage → `partial`, not
-   full), `invalid_invariant` (false preservation VC → omega refuses, stays
-   `planned`), `duplicate_links` (duplicate proof-link attribute → parse error,
-   newly hardened), `fabricated_proof` (nonexistent theorem → proof-status's
-   known limitation but caught by `prove --check`). **invalid contract expression — DONE** (report-side
-   scope check: `validateContractExpr` against `callableContractNames` /
-   `contractConstNames` / `localNamesB`; `--report contracts` shows
-   `invalid_contract_expression` + `unknown identifier '…'`, conservative with
-   zero false positives across the flagships). All seven contract negatives are
-   now covered; next contract-hardening work is vacuity/satisfiability.
-3. Add vacuity and satisfiability checks for contracts: unsatisfiable
+2. Add vacuity and satisfiability checks for contracts: unsatisfiable
    preconditions, contradictory assumptions, `#[requires(false)]`, invariant
    `false`, unreachable returns, and postconditions proved only because the path
    is impossible. Audit must report `vacuous`, not `proved`, and release policy
-   should reject vacuous proofs by default.
-4. Add `spec fn` / ghost totality rules: spec functions and ghost computations
+   should reject vacuous proofs by default. Include
+   `examples/contract_negatives/vacuous_contract/` for `#[requires(false)]`,
+   contradictory requires, and `#[invariant(false)]`, plus a
+   `vacuity_policy_gate` fixture proving release policy rejects false-green
+   claims.
+3. Add `spec fn` / ghost totality rules: spec functions and ghost computations
    referenced by contracts are pure, erased, and total. Lean-backed specs inherit
    Lean termination; Concrete-level `spec fn` needs a totality/termination
-   obligation or is rejected from the contract language.
-5. Finish the `assert` / `assume` trapdoor discipline everywhere it appears:
+   obligation or is rejected from the contract language. Add
+   `examples/contract_negatives/spec_ghost_totality/` and one accepted positive
+   control that proves valid ghost/spec references are not over-rejected.
+4. Finish the `assert` / `assume` trapdoor discipline everywhere it appears:
    `assert` creates an obligation; `assume` is tainted, audit-loud,
-   gate-forbiddable, and never reported as proof.
-6. Improve contract diagnostics: explain whether the failure is caller-side
+   gate-forbiddable, and never reported as proof. Add
+   `examples/contract_negatives/assert_obligation/` and
+   `examples/contract_negatives/assume_taint/` so the report shows both paths.
+5. Improve contract diagnostics: explain whether the failure is caller-side
    precondition, callee-side postcondition, partial postcondition, loop
    invariant initialization, invariant preservation, variant decrease, bad
    proof link, stale proof, vacuous proof, or non-total spec/ghost expression.
-7. Add contract stability rules: weakening a precondition, strengthening a
+   Include a positive resolver fixture such as
+   `examples/contract_positive/valid_complex_contract_scope/` covering params,
+   result, locals, ghost bindings, loop counters, constants, functions, and
+   spec calls without false positives.
+6. Add contract stability rules: weakening a precondition, strengthening a
    postcondition, or changing a public invariant is a semantic API change.
-8. Add source contract soundness work to the compiler soundness bridge: parsing
+7. Add source contract soundness work to the compiler soundness bridge: parsing
    preserves meaning, generated obligations correspond to contract semantics,
    discharged obligations imply the advertised contract claim, and source proof
    links imply the same claim class as their generated registry entry. Include
    satisfiability/vacuity and spec/ghost totality in this soundness story.
-9. Add `hmac_sha256` source-contract retrofit only after proof-link migration
+8. Add `hmac_sha256` source-contract retrofit only after proof-link migration
    and `concrete prove` examples make the small proof path routine. Do not
    start by moving the HMAC chain; use it as the late regression anchor for the
    mature source-link path.
+9. Add the Phase 1 validation artifact: the combined contract-positive,
+   contract-negative, vacuity, totality, assert/assume, and stability fixtures
+   must run under one gate, produce one report snapshot per contract failure
+   class, and have a README explaining what each fixture proves, reports, or
+   deliberately refuses to prove.
 
 ## Phase 2: Verification Conditions And SMT Assistance
 
@@ -386,6 +389,11 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
 18. Add soundness documentation for the SMT path: trusted solver binary,
     encoding assumptions, unsupported theories, replayed fragments, and how a
     solver bug affects each claim class.
+19. Add the Phase 2 validation artifact: a VC/discharge project that runs the
+    compact VC suite plus the external-SMT suite when enabled, checks every
+    solver/kernel evidence class, pins counterexample output, records solver
+    name/version/encoding hash, and proves ordinary linear/bv obligations stay
+    on `omega`/`bv_decide` rather than drifting into external SMT.
 
 ## Phase 3: Proof Authoring And Automation
 
@@ -492,6 +500,13 @@ lemmas, and actionable failure diagnostics.
    Only after this split should registered example SPEC PExprs move from
    `Concrete.Proof.*Expr` into `Concrete.Examples.<Ex>.Proofs` or sibling
    `Specs` modules. Preserve the spec-drift tie throughout.
+21. Add the Phase 3 validation artifact: a proof-authoring project that
+   exercises `--json`, `--show-obligation`, `--emit-lean`, `--emit-artifacts`,
+   `--workspace`, `--check`, `--nearest-lemmas`, `--minimize`, and source-linked
+   proof attachment across straight-line, array update, loop copy, fold,
+   composition, ghost, stale, missing, partial, and repair cases. The gate must
+   typecheck generated stubs, reject any `proof-registry.json`, and verify that
+   failing Lean proofs map back to stable obligation ids.
 
 ## Phase 4: Audit Commands And Review Artifacts
 
@@ -557,6 +572,12 @@ five graduated flagships and one package-scale example.
     evidence classes, spec-drift-tied proofs, named trust boundaries, and what
     Concrete deliberately avoids. The website should show the end goal and the
     current honest status, not catchy slogans or one-badge proof claims.
+18. Add the Phase 4 validation artifact: one package-scale audit bundle fixture
+    with human and JSON output, semantic diff before/after a change, artifact
+    viewer smoke test, oracle manifest, spec-provenance facts, redaction check,
+    replay command, and a README showing how a reviewer answers authority,
+    proof, trust, assumption, and runtime-obligation questions without reading
+    compiler internals.
 
 ## Phase 5: Proof Status And Trust Gates
 
@@ -605,6 +626,11 @@ under a stronger badge.
 12. Add vacuity gates to proof status: `proved` summaries must be downgraded or
     blocked when the proof depends on an unsatisfiable precondition,
     contradictory assumptions, unreachable code path, or invariant `false`.
+13. Add the Phase 5 validation artifact: a trust-gate pressure project that
+    includes transitive proof dependencies, stale dependency propagation,
+    tool-version drift, assumption widening, spec-adequacy policy, vacuity
+    downgrade, weaker-evidence monotonicity, and a release gate proving each
+    status cannot be silently presented as stronger evidence.
 
 ## Phase 6: Provable And Predictable Subsets
 
@@ -665,6 +691,12 @@ promises.
     a fixed-order `f32`/`f64` kernel such as clamp/normalize, tiny FIR/IIR, PID,
     or dot product. Prove exact IEEE behavior first; real-valued epsilon-bound
     refinement is a later layer.
+18. Add the Phase 6 validation artifact: a profile matrix project covering
+    `PredictableV1`, `ProvableV1`, unprofiled-float exclusion, profiled-float
+    admission, borrow/reference proof-class decisions, constant-time source
+    shape, stack/runtime-failure assumptions, and negative examples for every
+    exclusion. The gate must prove reports never call excluded code proof
+    eligible.
 
 ## Phase 7: Runtime Safety Obligations
 
@@ -710,6 +742,11 @@ zero, overflow profile, casts, and loop bounds with statuses
     waivers, never comments or hidden allowlists.
 15. Prove or validate obligation-generation soundness for the first obligation
     kinds through the compiler soundness bridge.
+16. Add the Phase 7 validation artifact: a runtime-safety corpus covering
+    bounds, div/mod-zero, overflow, casts, panic/abort/assert, byte/text/path
+    boundaries, stack/recursion, and obligation suppression. Each case must show
+    one of `proved`, `enforced`, `assumed`, `missing`, or `blocked`, include a
+    negative variant, and run through policy gates plus human/JSON reports.
 
 ## Phase 8: Language Usability And Daily Workflow
 
@@ -768,7 +805,7 @@ rest of Phase 8 stays after that slab in the same linear queue.
    types are already in the language, so the pattern language must be
    expressive enough to use them without stacks of boilerplate matches.
 
-   **Done (first chunk):** `_` wildcard *match arms*
+   **Current baseline:** `_` wildcard *match arms*
    (`tests/programs/wildcard_pattern.con`); integer/value patterns (`litArm`)
    and variable patterns (`varArm`); `let`-destructuring including `let … else`
    (`letDestructure` with `elseBody`); struct destructuring
@@ -898,6 +935,11 @@ rest of Phase 8 stays after that slab in the same linear queue.
 36. Add cross-platform build sanity for the supported host set: macOS and Linux
     first, with CI coverage, reproducible commands, and documented toolchain
     expectations.
+37. Add the Phase 8 validation project: a small C/Rust-style CLI using the core
+    slab plus daily workflow (`Concrete.toml`, modules/imports,
+    `concrete test`, bytes/text/path, collections, diagnostics, formatting,
+    docs, and trace/debug commands). CI must build, run, test, format-check,
+    audit, and compare interpreter-vs-compiled behavior on macOS and Linux.
 
 ## Phase 9: Flagship Depth And Examples
 
@@ -1000,6 +1042,12 @@ they force a named surface or public claim.
     opportunistically when a roadmap task touches them. Improve examples only
     when they serve proof-link migration, `concrete prove` authoring,
     external validation, or a release-facing tutorial.
+17. Add the Phase 9 validation artifact: a showcase/workload dashboard that
+    proves every flagship and graduated workload has a check story, evidence
+    bundle, oracle or reference when appropriate, interpreter-vs-compiled
+    coverage, runtime-obligation audit, trust/assumption classification, and
+    release-CI replay. The first external-user workload in this dashboard is
+    the external-validation-gate trial.
 
 ## Phase 10: Compiler Soundness Bridge
 
@@ -1051,6 +1099,11 @@ machine-readable.
     theorem proves a specific generated instance (`proved_for_instance`) or a
     generic body (`proved_generic`), and it must prevent one instance proof from
     being presented as proof for every future instantiation.
+13. Add the Phase 10 validation artifact: a compiler-soundness dashboard with
+    one witness program per shipped ProofCore construct, one status per
+    R-rule, replay commands for proved/mechanically-validated facts, and
+    regressions proving report facts (`proved`, `stale`, `blocked`, `missing`,
+    `ineligible`, `trusted`) agree with compiler state.
 
 ## Phase 11: Backend, Target, And Stdlib Contracts
 
@@ -1090,6 +1143,10 @@ and incremental build contracts are explicit enough for release evidence.
     reports expose a concrete gap.
 14. Keep QBE/WASM/second backend deferred until evidence attachment,
     optimization policy, and backend trust boundaries are trustworthy.
+15. Add the Phase 11 validation artifact: a backend/std-lib contract project
+    with ABI/layout C round trips, sanitizer runs, compiled-oracle
+    differential tests, native debug/source-map smoke tests, clean-vs-incremental
+    fact equivalence, and stdlib authority/allocation/evidence gates.
 
 ## Phase 12: Freestanding And Embedded Target
 
@@ -1135,7 +1192,12 @@ choices, and an audit report naming every remaining target/runtime assumption.
    stack, interrupt model if any, allocator/runtime hooks, endian/layout, and
    backend/toolchain boundary.
 10. Keep WASM, QBE, and additional backends deferred until freestanding target
-   profiles prove the current LLVM path is not enough.
+    profiles prove the current LLVM path is not enough.
+11. Add the Phase 12 validation artifact: one freestanding demo project plus an
+    MMIO/device-profile mock audit bundle. The demo must build with no hosted
+    APIs, name allocator/startup/linker assumptions, reject hidden libc or
+    allocation, and report `with(Device)`/`with(Mmio)`/`with(Unsafe)` evidence
+    classes without pretending hardware behavior is proved.
 
 ## Phase 13: Public Release Bar
 
@@ -1174,8 +1236,8 @@ validation are in place.
 audience):**
 - `concrete fmt`, `concrete test`, and a minimal project model (`Concrete.toml`)
   exist.
-- ✅ `proof-registry.json` is gone (support removed); in-source links are the
-  only proof path.
+- In-source proof links are the only proof path; `proof-registry.json` support
+  must remain absent.
 - Release bundles have stable schemas, replay commands, assumption/trust
   reports, and proof-link provenance.
 - The stdlib/runtime boundary is stable enough for daily examples.
@@ -1218,6 +1280,11 @@ audience):**
 14. Add release/install distribution matrix: host triples, checksums/signing,
     install paths, supported/deferred channels.
 15. Ship the first narrow public release only after the above are green.
+16. Add the Phase 13 validation artifact: a release-candidate bundle installed
+    from scratch on supported hosts, containing the claim matrix, threat model,
+    first-user workflow, public examples policy, replay commands, schemas,
+    assumptions/trust reports, checksums/signing metadata, and a tutorial run by
+    someone who did not build the compiler.
 
 ## Phase 14: Packages And Dependency Evidence
 
@@ -1243,6 +1310,10 @@ policies, provenance, and registry protocol.
     visible to dependents and release bundles.
 11. Add package provenance and publishing model.
 12. Add package registry server protocol and trust model.
+13. Add the Phase 14 validation artifact: a multi-package workspace project
+    with dependency resolution, lockfile, package-aware tests, interface/body
+    artifact split, dependency trust policy, assumption inheritance, authority
+    budgets, provenance, and release-bundle evidence for every dependency.
 
 ## Phase 15: Editor And Human Tooling
 
@@ -1264,6 +1335,11 @@ reports without inventing a second truth source.
 7. Add backwards-compatibility regression corpus once public users exist.
 8. Add language/versioning/deprecation policy across syntax, stdlib, proof/fact
    artifacts.
+9. Add the Phase 15 validation artifact: a scripted editor/LSP session or
+   golden transcript over one real project, proving hover, diagnostics,
+   obligation navigation, proof/evidence facts, dependency audit UI, and
+   refactor behavior match CLI facts rather than inventing a second truth
+   source.
 
 ## Phase 16: Concurrency And Research-Gated Extensions
 
@@ -1305,3 +1381,10 @@ forcing example, explicitly deferred, or rejected.
     abstract effect inference. Revisit only as a research note if explicit
     capabilities create a proven, repeated blocker in real programs after the
     stdlib and concurrency pressure tests exist.
+14. Add the Phase 16 validation artifact: one pressure-test sketch, expected
+    report, and decision record for every research-gated extension
+    (concurrency, typestate, arena allocation, WCET, binary-format DSLs,
+    hardware capability mapping, Miri-style interpreter, sized evaluator,
+    persistent rewrite state, and row effects). No research item graduates
+    unless its forcing example, report shape, evidence class, and rejection or
+    pull-forward criteria are recorded.
