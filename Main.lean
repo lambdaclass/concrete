@@ -889,19 +889,46 @@ def smtDischarge (queries : List (String × String)) (timeoutSec : Nat)
     res := res ++ [(k, r.1, r.2)]
   return res
 
+/-- Lean replay (Phase 2 #12). Given `(vcKey, leanTheoremSource)` pairs, write each
+    theorem to a file and run `lake env lean` on it. Returns the keys Lean
+    INDEPENDENTLY closed (exit 0) — those graduate from `solver_trusted` to
+    `proved_by_lean_replay`. Only the in-toolchain tactic in the source (`omega`)
+    is used; no Mathlib. A theorem omega cannot close simply fails to compile and
+    its key is not returned, so the VC honestly stays `solver_trusted`. -/
+def leanReplayCheck (goals : List (String × String)) : IO (List String) := do
+  if goals.isEmpty then return []
+  let mut closed : List String := []
+  for (k, src) in goals do
+    let ok ← (try
+        let tmpDir ← IO.Process.output { cmd := "mktemp", args := #["-d"] }
+        let dir := tmpDir.stdout.trimAscii.toString
+        IO.FS.writeFile ⟨dir ++ "/vc_replay.lean"⟩ src
+        let r ← IO.Process.output { cmd := "lake", args := #["env", "lean", dir ++ "/vc_replay.lean"],
+                                    env := #[("LAKE_TERM_ANSI", "0")] }
+        let _ ← IO.Process.output { cmd := "rm", args := #["-rf", dir] }
+        pure (r.exitCode == 0)
+      catch _ => pure false)
+    if ok then closed := closed ++ [k]
+  return closed
+
 /-- Release-policy input: the VC ids an external solver discharged as
-    `solver_trusted` during this build. Run ONLY when the project's policy takes a
-    stance on solver evidence (`forbid`/`assumptions`/`allow`) and there are
-    SMT-eligible VCs — so an ordinary build never invokes a solver. If no solver is
-    present, `smtDischarge` returns `solver_error` and the trusted set is empty
-    (an absent solver yields no evidence, so nothing to gate). -/
+    `solver_trusted` AND that Lean could NOT independently replay during this build.
+    Run ONLY when the project's policy takes a stance on solver evidence
+    (`forbid`/`assumptions`/`allow`) and there are SMT-eligible VCs — so an ordinary
+    build never invokes a solver. A replayed VC is kernel evidence, not solver
+    evidence, so it is excluded here (not subject to the solver-evidence gate). If no
+    solver is present, `smtDischarge` returns `solver_error` and the set is empty. -/
 def computeSolverTrustedQuals (policy : Concrete.ProjectPolicy)
     (modules : List Concrete.Module) : IO (List String) := do
   if policy.solverEvidence.isEmpty then return []   -- no stance → no SMT during build
   let smtGoals := Report.overflowSmtGoals modules
   if smtGoals.isEmpty then return []
   let results ← smtDischarge smtGoals 5
-  return (results.filterMap fun (k, cls, _) => if cls == "solver_trusted" then some k else none)
+  let trusted := results.filterMap fun (k, cls, _) => if cls == "solver_trusted" then some k else none
+  -- a VC Lean can independently replay is kernel evidence, not solver evidence.
+  let replayGoals := (Report.leanReplayGoals modules).filter (fun (k, _) => trusted.contains k)
+  let replayed ← leanReplayCheck replayGoals
+  return trusted.filter (fun k => !replayed.contains k)
 
 /-- Render the contracts report plus the call-site obligation section, running
     the `bv_decide` backend on the closed-but-non-literal call-site obligations
@@ -945,7 +972,8 @@ def compileAndReport (inputPath : String) (reportType : String)
     (proveEmitArtifacts : Bool := false) (proveOutDir : Option String := none)
     (proveCheck : Bool := false) (proveWorkspace : Option String := none)
     (proveNearestId : Option String := none) (reportJson : Bool := false)
-    (smtRun : Bool := false) (smtEmit : Bool := false) : IO UInt32 := do
+    (smtRun : Bool := false) (smtEmit : Bool := false)
+    (smtReplay : Bool := false) (emitLeanReplay : Bool := false) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -1226,17 +1254,32 @@ def compileAndReport (inputPath : String) (reportType : String)
       -- External-SMT path is OPT-IN. Without --smt/--emit-smt nothing here touches
       -- a solver and no VC ever advertises `smt` — the kernel boundary is the default.
       let smtGoals := Report.overflowSmtGoals parsed.modules
+      let replayGoals := Report.leanReplayGoals parsed.modules
       if smtEmit then
         -- stable SMT-LIB output path: emit the scripts (no solver needed).
         if smtGoals.isEmpty then IO.println "; no SMT-eligible VCs (nonlinear arithmetic) in this file"
         for (k, script) in smtGoals do
           IO.println s!";; ==== {k} ====\n{script}\n"
         return 0
-      let dvcs := if smtRun || smtEmit then Report.markSmtEligible dvcs smtGoals else dvcs
+      if emitLeanReplay then
+        -- Lean replay artifact: the same obligation as a kernel-checkable theorem.
+        if replayGoals.isEmpty then IO.println "-- no SMT-eligible VCs to replay in this file"
+        for (k, src) in replayGoals do
+          IO.println s!"-- ==== {k} ====\n-- check: lake env lean vc_replay.lean\n{src}\n"
+        return 0
+      let dvcs := if smtRun || smtEmit then Report.markSmtEligible dvcs smtGoals replayGoals else dvcs
       let dvcs ← if smtRun then do
           let solverId ← z3VersionId
           let results ← smtDischarge smtGoals 5
-          pure (Report.foldSmtResults dvcs results solverId)
+          let dvcs := Report.foldSmtResults dvcs results solverId
+          -- --replay: try to kernel-check each solver_trusted VC in Lean; a success
+          -- graduates it to proved_by_lean_replay (solver dropped from the claim).
+          if smtReplay then
+            let trusted := dvcs.filterMap fun v => if v.status == "solver_trusted" then some v.id else none
+            let rg := replayGoals.filter (fun (k, _) => trusted.contains k)
+            let replayed ← leanReplayCheck rg
+            pure (Report.foldReplayResults dvcs replayed)
+          else pure dvcs
         else pure dvcs
       if reportJson then
         IO.println (Report.vcsJson dvcs 1)
@@ -2167,10 +2210,16 @@ def main (args : List String) : IO UInt32 := do
     compileAndReport inputPath reportType (reportJson := true)
   | [inputPath, "--report", reportType, "--emit-smt"] =>
     compileAndReport inputPath reportType (smtEmit := true)
+  | [inputPath, "--report", reportType, "--emit-lean-replay"] =>
+    compileAndReport inputPath reportType (emitLeanReplay := true)
   | [inputPath, "--report", reportType, "--smt"] =>
     compileAndReport inputPath reportType (smtRun := true)
   | [inputPath, "--report", reportType, "--smt", "--json"] =>
     compileAndReport inputPath reportType (reportJson := true) (smtRun := true)
+  | [inputPath, "--report", reportType, "--smt", "--replay"] =>
+    compileAndReport inputPath reportType (smtRun := true) (smtReplay := true)
+  | [inputPath, "--report", reportType, "--smt", "--replay", "--json"] =>
+    compileAndReport inputPath reportType (reportJson := true) (smtRun := true) (smtReplay := true)
   | [inputPath, "--query", query] =>
     compileAndQuery inputPath query
   | [inputPath, "--fmt"] =>

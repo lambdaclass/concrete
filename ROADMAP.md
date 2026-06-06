@@ -443,9 +443,24 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
    / solver_error / counterexample treated as non-proofs; and `--report vcs` free
    of all SMT data (including provenance) unless `--smt`/`--emit-smt` is passed.
    Validated against real Z3 4.16 (stable hashes + identical verdicts across runs).
-12. Add Lean replay for the simplest SMT-discharged fragments where practical:
-   propositional/linear integer facts, bounds arithmetic, and trivial BitVec
-   identities. Results without replay remain explicitly solver-trusted.
+12. **[done — replay artifact + dormant upgrade path]** Lean replay. For each SMT
+   VC, `Report.leanReplayGoals` emits a standalone Lean theorem restating the
+   obligation (hypotheses as binders, range goal as conclusion) with an
+   in-toolchain proof attempt (`by omega`); surfaced via `--report vcs
+   --emit-lean-replay` and in the JSON `smt.lean_replay` object. `--report vcs
+   --smt --replay` runs `lake env lean` on each `solver_trusted` VC's theorem
+   (`Main.leanReplayCheck`) and, on a kernel-checked success, graduates it
+   `solver_trusted` → `proved_by_lean_replay` (engine `lean:omega`) via
+   `Report.foldReplayResults` — the solver is dropped from the claim, so a
+   replayed VC is excluded from `computeSolverTrustedQuals` and is NOT subject to
+   the `solver-evidence` policy. The boundary stays crisp: the upgrade fires ONLY
+   when Lean independently closes the theorem. The current bounded-nonlinear
+   fragment is outside `omega`/`bv_decide` (and `nlinarith` is Mathlib, deliberately
+   not a dependency), so today it stays `solver_trusted` — the upgrade path is real
+   but dormant until a kernel-replayable fragment or a Mathlib build exists.
+   Gate `check_smt_replay.sh` (7/0 with Z3, 6/0 without) pins the artifact, that
+   `omega` genuinely cannot close it (so no silent upgrade), and the default-clean
+   boundary. No Mathlib added.
 13. **[done]** SMT release-policy gate. A project declares its stance with
     `[policy] solver-evidence` (`forbid` / `allow` / `assumptions`, default unset);
     `concrete build` inspects the VCs an external solver discharged as

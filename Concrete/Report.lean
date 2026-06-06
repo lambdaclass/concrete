@@ -1891,6 +1891,63 @@ def overflowSmtGoals (modules : List Module) : List (String × String) := Id.run
     | _, _ => pure ()
   return out
 
+/-! ## Lean replay artifact (Phase 2 #12)
+
+For each SMT VC we also emit a standalone Lean theorem that states the SAME
+obligation — hypotheses as binders, the range goal as the conclusion — with an
+in-toolchain proof attempt (`by omega`). If a kernel-checked tactic closes it, the
+claim no longer depends on the external solver and graduates `solver_trusted` →
+`proved_by_lean_replay` (a Lean/kernel class, no solver in the TCB). The bounded
+*nonlinear* fragment we route to SMT is, by construction, outside `omega`'s reach
+(and `nlinarith` is Mathlib, which is deliberately NOT a dependency), so today the
+attempt does not close and the VC honestly stays `solver_trusted`. The artifact is
+still emitted so a reviewer — or a Mathlib-enabled build that swaps `omega` for
+`nlinarith` — can check it and graduate the evidence. -/
+
+/-- Lower a contract `Expr` to Lean `Prop`/`Int` syntax for the replay theorem.
+    Same fragment as `toLeanProp` but ALSO handles unary negation (`-30000`) — the
+    signed bounds that make a VC SMT-eligible in the first place. Kept local to the
+    replay path so `toLeanProp`'s callers are unaffected. -/
+partial def exprToLeanProp : Expr → Option String
+  | .intLit _ v => some s!"{v}"
+  | .ident _ n => some n
+  | .paren _ e => exprToLeanProp e
+  | .unaryOp _ op e => do
+    let E ← exprToLeanProp e
+    match op with | .neg => some s!"(-{E})" | .not_ => some s!"(¬ {E})" | _ => none
+  | .binOp _ op l r => do
+    let L ← exprToLeanProp l; let R ← exprToLeanProp r
+    match op with
+    | .leq => some s!"{L} ≤ {R}" | .lt => some s!"{L} < {R}"
+    | .geq => some s!"{L} ≥ {R}" | .gt => some s!"{L} > {R}"
+    | .eq => some s!"{L} = {R}" | .neq => some s!"{L} ≠ {R}"
+    | .and_ => some s!"({L} ∧ {R})" | .or_ => some s!"({L} ∨ {R})"
+    | .add => some s!"({L} + {R})" | .sub => some s!"({L} - {R})" | .mul => some s!"({L} * {R})"
+    | _ => none
+  | _ => none
+
+/-- `(vcKey, leanTheoremSource)` for each SMT-eligible VC: a self-contained Lean
+    theorem restating the obligation, with a `by omega` proof attempt. Same
+    selection as `overflowSmtGoals`. -/
+def leanReplayGoals (modules : List Module) : List (String × String) := Id.run do
+  let mut out : List (String × String) := []
+  for o in overflowObligations modules do
+    if o.closedVerdict.isSome then continue
+    if o.bvGoal.isSome then continue
+    if !exprHasNonlinMul o.opExpr then continue
+    match exprToLeanProp o.opExpr, o.hyps.mapM exprToLeanProp with
+    | some eProp, some hypProps =>
+      let vars := (collectIdents o.opExpr ++ o.hyps.flatMap collectIdents).eraseDups
+      let binders := if vars.isEmpty then "" else s!"({" ".intercalate vars} : Int) "
+      let hypBinders := " ".intercalate
+        ((List.range hypProps.length).zip hypProps |>.map (fun (i, h) => s!"(h{i} : {h})"))
+      let concl := s!"({o.lo} ≤ {eProp}) ∧ ({eProp} ≤ {o.hi})"
+      -- `by omega` is the in-toolchain attempt; a Mathlib build swaps in `nlinarith`.
+      let src := s!"theorem vc_replay {binders}{hypBinders} : {concl} := by omega"
+      out := out ++ [(o.key, src)]
+    | _, _ => pure ()
+  return out
+
 /-- Render the integer-overflow section. `provedKeys` are omega-discharged;
     `bvProvedKeys` are discharged by the widened `bv_decide` (nonlinear) path. -/
 def renderOverflow (obls : List OverflowObl) (provedKeys : List String)
@@ -3808,6 +3865,7 @@ structure VC where
   smtHash       : String := ""  -- stable digest of the exact SMT-LIB query
   smtQuery      : String := ""  -- the SMT-LIB script itself (the replay artifact)
   solver        : String := ""  -- solver identity + version, e.g. "z3 4.16.0" (when run)
+  leanReplay    : String := ""  -- the standalone Lean replay theorem (the artifact to kernel-check)
 
 /-- Split a compiler-generated goal string `∀ (vars : T), (h1) → h2 → (concl)`
     into (hypotheses, conclusion): drop the binder, split the body on top-level
@@ -3971,13 +4029,27 @@ def dischargeVCs (vcs : List VC) (omegaProved bvProved : List String) : List VC 
     (`smtHash`) and the query text itself (`smtQuery`, the replay artifact).
     Applied ONLY when the external-SMT path is engaged (an explicit flag) — so by
     default no VC ever advertises `smt`. Does not change `status`. -/
-def markSmtEligible (vcs : List VC) (smtGoals : List (String × String)) : List VC :=
+def markSmtEligible (vcs : List VC) (smtGoals : List (String × String))
+    (replayGoals : List (String × String) := []) : List VC :=
   vcs.map fun v =>
     match smtGoals.find? (·.1 == v.id) with
     | some (_, script) =>
       { v with arithProfile := "nonlinear", dischargeMode := "smt",
-               smtHash := shortHash script, smtQuery := script }
+               smtHash := shortHash script, smtQuery := script,
+               leanReplay := (replayGoals.find? (·.1 == v.id)).map (·.2) |>.getD "" }
     | none => v
+
+/-- Fold Lean-replay results into the VC schedule. `replayed` lists the VC ids a
+    kernel-checked Lean tactic INDEPENDENTLY closed. Such a VC graduates from
+    `solver_trusted` to `proved_by_lean_replay` (engine `lean:omega`) — the external
+    solver is no longer part of the claim, so it is NOT subject to the solver-evidence
+    policy. Applied only to VCs currently `solver_trusted`; everything else is left
+    exactly as is, so the class boundary stays crisp. -/
+def foldReplayResults (vcs : List VC) (replayed : List String) : List VC :=
+  vcs.map fun v =>
+    if v.status == "solver_trusted" && replayed.contains v.id
+    then { v with status := "proved_by_lean_replay", engine := "lean:omega" }
+    else v
 
 /-- Fold external-solver results into the VC schedule. A result class
     (`solver_trusted` / `counterexample` / `unknown` / `timeout` / `solver_error`)
@@ -4012,6 +4084,7 @@ def vcsReport (vcs : List VC) : String := Id.run do
         else s!"\n      counterexample:  {", ".intercalate (v.counterexample.map (fun (n, x) => s!"{n} = {x}"))}"
       let prov := if v.smtHash.isEmpty then ""
         else s!"\n      solver:  {if v.solver.isEmpty then "(not run)" else v.solver} | logic QF_NIA | timeout 5s | smtlib-sha {v.smtHash}"
+          ++ (if v.leanReplay.isEmpty then "" else "\n      lean-replay:  artifact emitted (check with `--emit-lean-replay`); kernel-checks → proved_by_lean_replay")
       out := out ++ s!"\n  [{v.id}]  {v.kind}"
         ++ s!"\n      status:  {v.status}{eng}"
         ++ s!"\n      profile/expected:  {v.arithProfile} / {v.dischargeMode}"
@@ -5425,7 +5498,13 @@ def vcToJson (v : VC) : Val :=
       ("smtlib_sha", .str v.smtHash),
       ("solver", .str (if v.solver.isEmpty then "(not run)" else v.solver)),
       ("query", .str v.smtQuery),
-      ("replay", .str s!"save `query` to vc.smt2 and run: z3 -T:5 vc.smt2")
+      ("replay", .str s!"save `query` to vc.smt2 and run: z3 -T:5 vc.smt2"),
+      -- Lean replay artifact: the SAME obligation as a kernel-checkable theorem.
+      ("lean_replay", if v.leanReplay.isEmpty then Json.Val.null else .obj [
+        ("theorem", .str v.leanReplay),
+        ("proof_attempt", .str "by omega (in-toolchain; a Mathlib build can swap in nlinarith)"),
+        ("check_command", .str "save to vc_replay.lean and run: lake env lean vc_replay.lean"),
+        ("note", .str "if Lean closes it, the VC graduates solver_trusted → proved_by_lean_replay and no longer depends on the solver")])
     ])
   ]
 
@@ -6552,7 +6631,7 @@ def schemaReport : String :=
           ("schema_kind", .str "\"vcs\""),
           ("vc_schema_version", .str "number — VC schema version (currently 1)"),
           ("count", .str "number"),
-          ("vcs", .str "object[] — each: id, kind, function, loc{file,line}, hypotheses[], conclusion, origin, dependencies[], arith_profile, expected_discharge, status, engine, counterexample{var:value}. status ∈ {planned, proved_by_kernel_decision, proved_by_lean, arithmetic_proved, counterexample, unproven, missing} plus the OPT-IN external-solver classes {solver_trusted, unknown, timeout, solver_error}; engine ∈ {constant_fold, omega, bv_decide, lean, smt:<solver>, \"\"}. counterexample maps SOURCE variable names to concrete values, populated only on a `sat` solver result. smt (null unless the VC was SMT-routed) carries determinism/replay provenance: {logic, timeout_sec, smtlib_sha (stable digest of the exact query), solver (name+version), query (the SMT-LIB script), replay}. A decision procedure can only yield proved_by_kernel_decision; an external solver (behind --smt) yields solver_trusted/counterexample/unknown/timeout/solver_error and only ever on a VC the kernel tiers left unproven — the classes never merge.")])])
+          ("vcs", .str "object[] — each: id, kind, function, loc{file,line}, hypotheses[], conclusion, origin, dependencies[], arith_profile, expected_discharge, status, engine, counterexample{var:value}. status ∈ {planned, proved_by_kernel_decision, proved_by_lean, arithmetic_proved, counterexample, unproven, missing} plus the OPT-IN external-solver classes {solver_trusted, unknown, timeout, solver_error} and the replay class proved_by_lean_replay (a Lean/kernel class — set only when a kernel tactic independently closes the replay theorem, dropping the solver from the claim); engine ∈ {constant_fold, omega, bv_decide, lean, lean:omega, smt:<solver>, \"\"}. counterexample maps SOURCE variable names to concrete values, populated only on a `sat` solver result. smt (null unless the VC was SMT-routed) carries determinism/replay provenance: {logic, timeout_sec, smtlib_sha (stable digest of the exact query), solver (name+version), query (the SMT-LIB script), replay, lean_replay{theorem, proof_attempt, check_command, note}}. A decision procedure can only yield proved_by_kernel_decision; an external solver (behind --smt) yields solver_trusted/counterexample/unknown/timeout/solver_error and only ever on a VC the kernel tiers left unproven — the classes never merge.")])])
     ]),
     ("policies", .obj [
       ("empty_result", .str "A query that matches zero facts returns a facts envelope with an empty facts array and fact_count 0. Semantic queries for unknown functions return a query_answer with answer \"not_found\". Neither case is an error."),

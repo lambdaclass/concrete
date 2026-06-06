@@ -41,6 +41,30 @@ artifact), and a **replay** command. The `smtlib_sha` and result class are
 deterministic across runs; `check_smt_path.sh` pins this. `timeout`, `unknown`,
 and `solver_error` are always treated as non-proofs.
 
+## Lean replay (`--emit-lean-replay` / `--smt --replay`)
+
+`solver_trusted` is not the end of the story: for each SMT VC we also emit a
+**standalone Lean theorem** restating the same obligation, with an in-toolchain
+proof attempt (`by omega`):
+
+```sh
+concrete examples/smt/nonlinear_overflow/src/main.con --report vcs --emit-lean-replay
+# theorem vc_replay (sample gain : Int) (h0 : ((-30000) ≤ sample ∧ ...)) ... := by omega
+```
+
+If a kernel-checked tactic **independently** closes that theorem, the VC graduates
+`solver_trusted` → **`proved_by_lean_replay`** (engine `lean:omega`) — the solver
+is no longer part of the claim, so it is **not** subject to `solver-evidence`
+policy. `--smt --replay` runs the attempt and folds the result in.
+
+**Today this fragment stays `solver_trusted`.** The obligations we route to SMT
+are bounded *nonlinear* integer facts, which `omega` cannot close and `bv_decide`
+cannot bound — and `nlinarith` lives in Mathlib, which is deliberately **not** a
+dependency. So the in-toolchain replay does not close, and the class boundary
+holds: nothing is silently upgraded. The artifact is still emitted so a reviewer,
+or a Mathlib-enabled build that swaps `omega` → `nlinarith`, can check it and
+graduate the evidence. Pinned by `check_smt_replay.sh`.
+
 ## Release-policy gate (`[policy] solver-evidence`)
 
 **SMT is useful, but `solver_trusted` is not Lean/kernel evidence unless replayed.**

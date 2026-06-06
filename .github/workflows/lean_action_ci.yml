@@ -161,6 +161,9 @@ jobs:
       - name: SMT release-policy gate (Phase 2 evidence governance)
         run: bash scripts/tests/check_smt_policy.sh
 
+      - name: Lean-replay gate (Phase 2 SMT→kernel upgrade artifact)
+        run: bash scripts/tests/check_smt_replay.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 
