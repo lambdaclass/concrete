@@ -435,17 +435,17 @@ on_showcase_manifest   = true   # bar #10 — this entry
 
 [flagship.evidence]
 proof_links    = "examples/hmac_sha256/src/main.con"
-proofs         = ["Concrete.Proof.sha256_init_correct",
-                  "Concrete.Proof.ch_selects_high",
-                  "Concrete.Proof.block_to_words_refines_spec",
-                  "Concrete.Proof.block_to_words_at_refines_spec",
-                  "Concrete.Proof.sha256_schedule_refines_spec",
-                  "Concrete.Proof.round_refines_list",
-                  "Concrete.Proof.sha256_compress_refines_spec",
-                  "Concrete.Proof.sha256_compress_at_refines_spec",
-                  "Concrete.Proof.state_to_bytes_refines_spec",
-                  "Concrete.Proof.sha256_hash_refines_spec",
-                  "Concrete.Proof.hmac_sha256_refines_spec"]
+proofs         = ["Examples.HmacSha256.Proofs.sha256_init_correct",
+                  "Examples.HmacSha256.Proofs.ch_selects_high",
+                  "Examples.HmacSha256.Proofs.block_to_words_refines_spec",
+                  "Examples.HmacSha256.Proofs.block_to_words_at_refines_spec",
+                  "Examples.HmacSha256.Proofs.sha256_schedule_refines_spec",
+                  "Examples.HmacSha256.Proofs.round_refines_list",
+                  "Examples.HmacSha256.Proofs.sha256_compress_refines_spec",
+                  "Examples.HmacSha256.Proofs.sha256_compress_at_refines_spec",
+                  "Examples.HmacSha256.Proofs.state_to_bytes_refines_spec",
+                  "Examples.HmacSha256.Proofs.sha256_hash_refines_spec",
+                  "Examples.HmacSha256.Proofs.hmac_sha256_refines_spec"]
 # The two bar-#1 theorems are point proofs (sha256_init, ch).  The
 # other nine are full-contract refinements: each proves the extracted
 # source body equals an independent BitVec spec for all inputs in the
@@ -453,17 +453,17 @@ proofs         = ["Concrete.Proof.sha256_init_correct",
 # (Concrete.Proof.specs): the registered spec equals the
 # source-extracted PExpr, enforced by validateRegistry.
 # `--report check-proofs` = 11 verified, 0 failed; 0 spec-drift, 0 stale.
-proof_coverage = { "Concrete.Proof.sha256_init_correct" = "point",
-                   "Concrete.Proof.ch_selects_high" = "point",
-                   "Concrete.Proof.block_to_words_refines_spec" = "full_contract",
-                   "Concrete.Proof.block_to_words_at_refines_spec" = "full_contract",
-                   "Concrete.Proof.sha256_schedule_refines_spec" = "full_contract",
-                   "Concrete.Proof.round_refines_list" = "full_contract",
-                   "Concrete.Proof.sha256_compress_refines_spec" = "full_contract",
-                   "Concrete.Proof.sha256_compress_at_refines_spec" = "full_contract",
-                   "Concrete.Proof.state_to_bytes_refines_spec" = "full_contract",
-                   "Concrete.Proof.sha256_hash_refines_spec" = "full_contract",
-                   "Concrete.Proof.hmac_sha256_refines_spec" = "full_contract" }
+proof_coverage = { "Examples.HmacSha256.Proofs.sha256_init_correct" = "point",
+                   "Examples.HmacSha256.Proofs.ch_selects_high" = "point",
+                   "Examples.HmacSha256.Proofs.block_to_words_refines_spec" = "full_contract",
+                   "Examples.HmacSha256.Proofs.block_to_words_at_refines_spec" = "full_contract",
+                   "Examples.HmacSha256.Proofs.sha256_schedule_refines_spec" = "full_contract",
+                   "Examples.HmacSha256.Proofs.round_refines_list" = "full_contract",
+                   "Examples.HmacSha256.Proofs.sha256_compress_refines_spec" = "full_contract",
+                   "Examples.HmacSha256.Proofs.sha256_compress_at_refines_spec" = "full_contract",
+                   "Examples.HmacSha256.Proofs.state_to_bytes_refines_spec" = "full_contract",
+                   "Examples.HmacSha256.Proofs.sha256_hash_refines_spec" = "full_contract",
+                   "Examples.HmacSha256.Proofs.hmac_sha256_refines_spec" = "full_contract" }
 provable_v1_conformance = "full"
 assumptions    = "examples/hmac_sha256/assumptions.toml"
 policy         = "examples/hmac_sha256/Concrete.toml"

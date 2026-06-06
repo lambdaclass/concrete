@@ -28,7 +28,7 @@ import Concrete.Proof
 import Concrete.ProofKit
 import Concrete.ProofSoundness
 import Concrete.Sha256Spec
-import Concrete.Sha256Refine
+import Concrete.Examples.HmacSha256.Proofs
 import Concrete.Examples.LoopInvariant.Proofs
 import Concrete.Examples.ParseValidate.Proofs
 import Concrete.Examples.CryptoVerify.Proofs

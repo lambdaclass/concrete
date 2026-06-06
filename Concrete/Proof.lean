@@ -1914,18 +1914,9 @@ def sha256_initExpr : PExpr :=
     , .lit (.int 1359893119), .lit (.int 2600822924)
     , .lit (.int 528734635),  .lit (.int 1541459225) ]
 
-/-- **First attached theorem on hmac_sha256** (AUDIT.md § 6 bar #1).
-    `sha256_init()` evaluates to exactly the eight FIPS 180-4 H(0)
-    constants.  A point proof with no PBinOp dependency — its job is
-    to establish the array-of-u32 shape in the proof model and the
-    body-fingerprint mechanism on the candidate's simplest function,
-    the foundation the compression-pipeline theorems build on. -/
-theorem sha256_init_correct (fuel : Nat) :
-    eval (fun _ => none) Env.empty (fuel + 2) sha256_initExpr
-      = some (.array_
-          [ .int 1779033703, .int 3144134277, .int 1013904242, .int 2773480762
-          , .int 1359893119, .int 2600822924, .int 528734635, .int 1541459225 ]) := by
-  simp [sha256_initExpr, eval, eval.evalElems]
+-- NOTE: the hmac_sha256 theorems sha256_init_correct and ch_selects_high were
+-- moved OUT into `Concrete.Examples.HmacSha256.Proofs`. chExpr (a registered
+-- spec, below) and the other hmac spec PExprs stay here.
 
 /-- Extracted spec for `hmac_sha256.ch`: the SHA-256 `Ch` choice
     function `(x AND y) XOR ((NOT x) AND z)`, with `~x` written as
@@ -1939,19 +1930,6 @@ def chExpr : PExpr :=
       (.binOp (.bitxor 32 false) (.var "x") (.lit (.int 4294967295)))
       (.var "z"))
 
-/-- `Ch(0xFFFFFFFF, 0x12345678, 0x9abcdef0) = 0x12345678`: when the
-    selector word is all-ones, `Ch` chooses the second word and the
-    third vanishes.  A point proof over the EXTRACTED `chExpr` — the
-    first kernel theorem over the candidate's forced u32 bitwise ops
-    (`bitand`/`bitxor` at width 32); sha256_init had no PBinOp
-    dependency, this one bottoms out in the BitVec eval rules. -/
-theorem ch_selects_high (fuel : Nat) :
-    eval (fun _ => none)
-      (((Env.empty.bind "x" (.int 4294967295)).bind "y" (.int 305419896)).bind
-        "z" (.int 2596069104))
-      (fuel + 1) chExpr
-      = some (.int 305419896) := by
-  simp [chExpr, eval, Env.bind, evalBinOp]
 
 -- ============================================================
 -- Relocated SHA-256/HMAC chain spec exprs (task #22).

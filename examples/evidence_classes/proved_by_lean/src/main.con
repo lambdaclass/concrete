@@ -6,7 +6,7 @@
 // shows it `proved [point]`, `--report check-proofs` kernel-verifies it.
 mod hmac_sha256 {
     #[spec(Concrete.Proof.chExpr)]
-    #[proof_by(Concrete.Proof.ch_selects_high)]
+    #[proof_by(Examples.HmacSha256.Proofs.ch_selects_high)]
     #[proof_coverage(point)]
     fn ch(x: u32, y: u32, z: u32) -> u32 {
         return (x & y) ^ ((x ^ 0xFFFFFFFF) & z);

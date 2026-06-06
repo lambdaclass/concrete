@@ -383,8 +383,18 @@ lemmas, and actionable failure diagnostics.
    - Done after the table-backed pattern: `crypto_verify`, `fixed_capacity`,
      and `constant_time_tag` moved their proof theorems to per-example modules
      with specs still drift-tied through `Concrete.Proof`.
-   - Current remaining theorem moves, one commit each: finish `elf_header`,
-     then `hmac_sha256` last. These move proof THEOREMS only.
+   - **MIGRATION COMPLETE.** `elf_header` (5 theorems; `provedFunctions` strings
+     + `main_drifted.con` + `proof_pressure`'s reused `validate_header_correct`
+     retargeted) and `hmac_sha256` (the whole `Sha256Refine.lean` relocated to
+     `Concrete/Examples/HmacSha256/Proofs.lean` as `Examples.HmacSha256.Proofs`
+     with `open Concrete.Proof`/`open Concrete`; `sha256_init_correct` +
+     `ch_selects_high` pulled out of `Proof.lean` around the staying `chExpr`
+     spec; 12 source links + `evidence_classes/proved_by_lean`'s reused
+     `ch_selects_high` retargeted) are done. No example proof THEOREM remains in
+     `Concrete.Proof`; the registered spec PExprs + eval scaffolding stay there
+     as the drift oracle. All gates green after each example. Follow-up (separate,
+     later): the lower-layer `Concrete.ProofModel`/`Concrete.SpecRegistry` split
+     that would let the specs move too.
 3. Add a CI/source guard that prevents new example-owned theorem bodies from
    being added to `Concrete.Proof`. The guard should allow core proof
    infrastructure, registered spec PExprs, and spec-drift scaffolding while
