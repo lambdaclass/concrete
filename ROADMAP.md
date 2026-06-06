@@ -9,27 +9,21 @@ document as one queue:
 
 1. harden source contracts: negative cases, vacuity, spec/ghost totality,
    trapdoor discipline, diagnostics, and soundness obligations;
-2. close the release-blocking predictable/provable/runtime-safety gaps,
+2. finish VC generation, discharge examples, and external-SMT policy without
+   hiding solver trust;
+3. finish the bounded proof-pattern examples/tests slab so proof authoring is
+   teachable from small examples, not only from flagships, while keeping all
+   proof evidence source-linked and replayable;
+4. harden audit / proof-status / trust gates around source contracts,
+   spec provenance, evidence classes, tool-version drift, and oracle evidence;
+5. close the release-blocking predictable/provable/runtime-safety gaps,
    starting with casts, loop-derived bounds, runtime-safety policy, and the
    remaining profile story after array bounds, div/mod-zero, and
    opt-in overflow obligations;
-3. finish the post-JSON proof architecture cleanup enough to unblock ordinary
-   language work: move example proof theorems to per-example namespaces and add
-   the guard that prevents them from creeping back into `Concrete.Proof`. Record
-   the deeper `ProofCore` / spec-registry split as the next architecture refactor,
-   but do not let it block Phase 8 unless spec ownership or proof authoring
-   starts depending on it;
-4. harden audit / proof-status / trust gates around source contracts,
-   spec provenance, evidence classes, tool-version drift, and oracle evidence;
-5. finish the bounded proof-pattern examples/tests slab so proof authoring is
-   teachable from small examples, not only from flagships, while keeping all
-   proof evidence source-linked and replayable;
-6. finish VC/discharge examples and external-SMT policy without hiding solver
-   trust;
-7. only then broaden the ordinary language surface (patterns, bytes/text/path,
+6. only then broaden the ordinary language surface (patterns, bytes/text/path,
    collections, iteration, capability polymorphism, tests);
-8. run external validation before the large ecosystem/release/editor build-out;
-9. keep later research items later unless a prior gate forces them.
+7. run external validation before the large ecosystem/release/editor build-out;
+8. keep later research items later unless a prior gate forces them.
 
 Completed work moves to [CHANGELOG.md](CHANGELOG.md). Deferred or conditional
 work moves later in the same linear queue. There are no parallel tracks. Inline
@@ -216,34 +210,38 @@ negative cases are covered, diagnostics are actionable, source-contract
 soundness obligations are named in the compiler-soundness bridge, and HMAC
 retrofit is explicitly queued behind proof-link migration.
 
-1. Add contract negative examples: unmet precondition at call site, missing
+1. Finish the source-contract hardening gate before Phase 2. The remaining
+   tasks in this phase are the contract cases that can make a green proof
+   misleading: negative examples, vacuity, spec/ghost totality, trapdoor
+   discipline, diagnostics, API-stability rules, and soundness obligations.
+2. Add contract negative examples: unmet precondition at call site, missing
    postcondition proof, weakened postcondition, invalid contract expression,
    invalid invariant preservation, duplicate source/JSON proof links, and
    invalid proof-link attributes.
-2. Add vacuity and satisfiability checks for contracts: unsatisfiable
+3. Add vacuity and satisfiability checks for contracts: unsatisfiable
    preconditions, contradictory assumptions, `#[requires(false)]`, invariant
    `false`, unreachable returns, and postconditions proved only because the path
    is impossible. Audit must report `vacuous`, not `proved`, and release policy
    should reject vacuous proofs by default.
-3. Add `spec fn` / ghost totality rules: spec functions and ghost computations
+4. Add `spec fn` / ghost totality rules: spec functions and ghost computations
    referenced by contracts are pure, erased, and total. Lean-backed specs inherit
    Lean termination; Concrete-level `spec fn` needs a totality/termination
    obligation or is rejected from the contract language.
-4. Finish the `assert` / `assume` trapdoor discipline everywhere it appears:
+5. Finish the `assert` / `assume` trapdoor discipline everywhere it appears:
    `assert` creates an obligation; `assume` is tainted, audit-loud,
    gate-forbiddable, and never reported as proof.
-5. Improve contract diagnostics: explain whether the failure is caller-side
+6. Improve contract diagnostics: explain whether the failure is caller-side
    precondition, callee-side postcondition, partial postcondition, loop
    invariant initialization, invariant preservation, variant decrease, bad
    proof link, stale proof, vacuous proof, or non-total spec/ghost expression.
-6. Add contract stability rules: weakening a precondition, strengthening a
+7. Add contract stability rules: weakening a precondition, strengthening a
    postcondition, or changing a public invariant is a semantic API change.
-7. Add source contract soundness work to the compiler soundness bridge: parsing
+8. Add source contract soundness work to the compiler soundness bridge: parsing
    preserves meaning, generated obligations correspond to contract semantics,
    discharged obligations imply the advertised contract claim, and source proof
    links imply the same claim class as their generated registry entry. Include
    satisfiability/vacuity and spec/ghost totality in this soundness story.
-8. Add `hmac_sha256` source-contract retrofit only after proof-link migration
+9. Add `hmac_sha256` source-contract retrofit only after proof-link migration
    and `concrete prove` examples make the small proof path routine. Do not
    start by moving the HMAC chain; use it as the late regression anchor for the
    mature source-link path.
@@ -260,50 +258,54 @@ invariants generate machine-readable VCs; a solver can discharge the easy ones;
 counterexamples are reported clearly; and audit output distinguishes Lean,
 SMT, tests, enforcement, assumptions, and trusted solver claims.
 
-1. Define VC schema v1: id, source span, kind, hypotheses, conclusion,
+1. Finish the VC/discharge gate before Phase 3. The remaining tasks in this
+   phase are the VC schema, generation coverage, kernel-checked decision path,
+   arithmetic bridge library, explicit external-SMT trust model, examples,
+   counterexamples, replay/determinism gates, and audit integration.
+2. Define VC schema v1: id, source span, kind, hypotheses, conclusion,
    originating contract/obligation, dependencies, arithmetic profile, and
    expected discharge mode.
-2. Generate VCs for pure no-loop contracts first: preconditions at call sites
+3. Generate VCs for pure no-loop contracts first: preconditions at call sites
    and postconditions at returns.
-3. Generate VCs for runtime safety obligations from Phase 7: array bounds,
+4. Generate VCs for runtime safety obligations from Phase 7: array bounds,
    div/mod nonzero, `#[overflow_checked]` no-overflow claims, casts, and loop
    bounds.
-4. Generate VCs for loop invariants: initialization, preservation,
+5. Generate VCs for loop invariants: initialization, preservation,
    variant decrease, and exit-implies-postcondition.
-5. **Kernel-checked automation first (`bv_decide`).** Before any external
+6. **Kernel-checked automation first (`bv_decide`).** Before any external
    solver, route BitVec / bounded-arithmetic VCs to Lean's `bv_decide`
    (in-toolchain; bit-blasts to SAT and replays a kernel-checked certificate —
    **no TCB growth**). Already validated against the HMAC helper facts. Its
    results are classified `proved_by_kernel_decision`, a kernel-checked class
    distinct from `proved_by_smt`. See [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).
-6. Centralize arithmetic bridge lemmas before adding more crypto/protocol VCs:
+7. Centralize arithmetic bridge lemmas before adding more crypto/protocol VCs:
    `Int` / `Nat` / `BitVec` round trips, division/modulo, shift index
    arithmetic, byte/word packing, and symbolic bridge cases like the
    `sdiv`/`Nat.div` proof from HMAC padding. These are proof-library
    primitives, not one-off flagship lemmas.
-7. Add an *external* SMT backend behind an explicit flag or policy gate, reached
+8. Add an *external* SMT backend behind an explicit flag or policy gate, reached
    for only when `bv_decide` cannot (e.g. nonlinear). Start with one solver
    adapter and a stable SMT-LIB output path before adding more solvers. Its
    results are `solver_trusted` (solver enters the TCB) unless a certificate is
    replayed — never collapsed into a kernel-checked class.
-8. Classify solver results in reports and artifacts:
+9. Classify solver results in reports and artifacts:
    `proved_by_kernel_decision` (kernel-checked), `proved_by_smt` /
    `solver_trusted` (external), `unknown`, `counterexample`, `timeout`,
    `solver_error`.
-9. Surface counterexamples in source terms where possible: function inputs,
+10. Surface counterexamples in source terms where possible: function inputs,
    loop variables, failing index, failing arithmetic side condition, and the
    contract/obligation that failed.
-10. Add CI gates for solver determinism and replay: same VC, same solver
+11. Add CI gates for solver determinism and replay: same VC, same solver
    configuration, same result class, with timeouts treated as non-proofs.
-11. Add Lean replay for the simplest SMT-discharged fragments where practical:
+12. Add Lean replay for the simplest SMT-discharged fragments where practical:
    propositional/linear integer facts, bounds arithmetic, and trivial BitVec
    identities. Results without replay remain explicitly solver-trusted.
-12. Add policy controls: projects can require `proved_by_lean`, allow
+13. Add policy controls: projects can require `proved_by_lean`, allow
     `proved_by_smt`, or permit `solver_trusted` only under named assumptions.
-13. Add SMT negative examples: false postcondition, missing invariant,
+14. Add SMT negative examples: false postcondition, missing invariant,
     overflow counterexample, OOB counterexample, div-zero counterexample,
     solver timeout, and unsupported theory.
-14. Add a compact VC/discharge example suite before external SMT:
+15. Add a compact VC/discharge example suite before external SMT:
     - `proved_by_lean`: straight-line refinement (`ch`), operational loop
       preservation, and one call-composition theorem that cannot be closed by a
       decision procedure.
@@ -324,7 +326,7 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
       implementation, with audit showing it is regression evidence, not proof.
     These examples are release-facing documentation fixtures: every evidence
     class should have one small program and one report snapshot.
-15. Add an external-SMT example only after the backend exists and only behind an
+16. Add an external-SMT example only after the backend exists and only behind an
     explicit policy flag. The example should demonstrate `solver_trusted`,
     counterexample reporting, timeout/unknown handling, and the difference
     between `proved_by_kernel_decision` and trusted solver output. Use this
@@ -338,9 +340,9 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
     - unsupported-theory example with a clear diagnostic.
     Do not use external SMT for facts already enforced by Concrete or closed by
     `omega` / `bv_decide`, such as ordinary fixed-array bounds.
-16. Update audit/release bundles so VC results appear beside proof registry,
+17. Update audit/release bundles so VC results appear beside proof registry,
     assumptions, runtime obligations, and proof coverage classification.
-17. Add soundness documentation for the SMT path: trusted solver binary,
+18. Add soundness documentation for the SMT path: trusted solver binary,
     encoding assumptions, unsupported theories, replayed fragments, and how a
     solver bug affects each claim class.
 
@@ -368,21 +370,22 @@ lemmas, and actionable failure diagnostics.
    small example, then migrate all current example proof modules. Keep registered
    spec PExprs in `Concrete.Proof` until the later `ProofCore` /
    `SpecRegistry` split.
-2. Final proof-authoring blocker before Phase 8: add one bounded proof-pattern
-   corpus that is both regression suite and teaching set. Put it under
-   `examples/proof_patterns/`, with one small subexample per shape:
-   straight-line refinement, array read/write frame proof, loop copy proof,
-   fold/reduction proof, call composition proof, runtime-safety proof
-   (bounds/div/overflow plus one negative variant), ghost-assisted proof,
-   partial/missing/stale proof states, `concrete prove --workspace`, and an
-   agent repair fixture where `--check --json` maps a failing Lean proof back
-   to an obligation id. Each subexample must carry source-linked proofs only,
-   the exact `concrete prove --workspace`, `--json`, `--emit-lean`, `--check
-   --json`, expected next obligation, audit class, and pinned output. Tests
-   assert `check-proofs` for proved examples, expected `proof-status` classes,
-   stable obligation ids, typechecking emitted stubs up to placeholders, no
-   `proof-registry.json` in generated workspaces, and honest failures for
-   negative variants.
+2. ~~Final proof-authoring blocker before Phase 8: add one bounded proof-pattern
+   corpus that is both regression suite and teaching set.~~ **DONE.**
+   `examples/proof_patterns/` carries one small source-linked subexample per
+   shape: `straight_line`, `array_update` (read/write frame), `loop_copy`,
+   `fold`, `composition` (proved refinements; specs + theorems in
+   `Concrete.Examples.ProofPatterns.Proofs`, fingerprint model), `runtime_safety`
+   (bounds/div/overflow discharged by omega/bv_decide + a negative `unchecked`
+   variant), `stale_missing_partial` (the three non-green states), `workspace`
+   (the `--workspace` fixture), and `repair` (agent loop: `--check --json` maps a
+   not-yet-written proof to `missing_theorem` on its obligation id). Gate:
+   `scripts/tests/check_proof_patterns.sh` (33/0, lake-guarded for kernel checks)
+   — asserts `check-proofs` for proved examples, expected `proof-status` classes,
+   stable `--json` obligation ids, emit-lean stub typechecking, no
+   `proof-registry.json` in generated workspaces, and honest negatives. Wired into
+   CI and `make test-proof-patterns`. (The "ghost-assisted" shape from the
+   original sketch was outside the executed slice plan; add later if wanted.)
 3. Add proof minimization: `concrete prove --minimize <obligation_id>` emits
     the smallest source / ProofCore / Lean slice needed to reproduce a failed
     obligation. This should be built after JSON and failed-artifact formats are
