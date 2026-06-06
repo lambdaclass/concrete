@@ -1,0 +1,28 @@
+// contract negatives: unmet precondition at a call site.
+//
+// A callee's #[requires] is now checked at every call. `--report contracts`
+// classifies each call site:
+//   - the caller's own #[requires] establishes it      → proved (omega)
+//   - an enclosing guard establishes it                → proved (omega)
+//   - a constant argument violates it                  → failed_at_callsite
+//   - nothing in scope establishes it                  → unproven (honest gap)
+mod cn {
+    #[requires(0 < d)]
+    fn ratio(n: i32, d: i32) -> i32 { return n / d; }
+
+    // PROVED: caller's precondition implies the callee's.
+    #[requires(0 < x)]
+    fn ok_via_requires(x: i32) -> i32 { return ratio(10, x); }
+
+    // PROVED: enclosing guard implies the callee's.
+    fn ok_via_guard(x: i32) -> i32 {
+        if 0 < x { return ratio(10, x); }
+        return 0;
+    }
+
+    // FAILED: constant argument violates the precondition (caught, not a false green).
+    fn violation() -> i32 { return ratio(10, 0); }
+
+    // UNPROVEN: nothing in scope establishes `0 < x` — the honest gap.
+    fn unmet(x: i32) -> i32 { return ratio(10, x); }
+}

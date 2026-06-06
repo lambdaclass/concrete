@@ -2,15 +2,15 @@
 
 demo.nth
   R1  requires 0 <= i && i < 8
-     status:  assumed_at_entry (callers not yet checked)
+     status:  assumed_at_entry (each call site checked separately)
 
 demo.ratio
   R1  requires 0 < d
-     status:  assumed_at_entry (callers not yet checked)
+     status:  assumed_at_entry (each call site checked separately)
 
 demo.add_bounded
   R1  requires 0 <= a && a < 1000 && 0 <= b && b < 1000
-     status:  assumed_at_entry (callers not yet checked)
+     status:  assumed_at_entry (each call site checked separately)
 
 
 === Loop contracts ===

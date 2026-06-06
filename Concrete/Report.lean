@@ -731,43 +731,19 @@ structure CallObligation where
   specExpr   : Expr            -- precondition with the call's args substituted
   baseStatus : String          -- "proved_at_callsite" | "failed_at_callsite" | "unproven"
   leanGoal   : Option String   -- bv_decide goal (closed after let-const subst), when baseStatus is unproven
+  key        : String := ""    -- stable id "<caller>#pre<i>" for omega discharge keying
+  hyps       : List Expr := [] -- caller's #[requires] + enclosing guards/loop invariants in scope at the call
 
-/-- Build the ordered list of call-site obligations across all callers. The fast
-    constant folder classifies the literal/arithmetic cases; obligations it
-    cannot fold but that become closed after substituting caller let-constants
-    carry a `leanGoal` for the `bv_decide` discharge backend (run by Main). -/
-def callSiteObligations (modules : List Module) : List CallObligation := Id.run do
-  let fns := modules.flatMap allFunctions
-  let reqMap : List (String × (List Param × List Expr)) :=
-    fns.filterMap (fun (_, f) => if f.requires.isEmpty then none else some (f.name, (f.params, f.requires)))
-  if reqMap.isEmpty then return []
-  let mut obs : List CallObligation := []
-  for (pfx, f) in fns do
-    let lets := letConstMap f.body
-    for (_, fn, args) in f.body.flatMap collectCallsS do
-      match reqMap.find? (·.1 == fn) with
-      | none => pure ()
-      | some (_, (params, reqs)) =>
-        let argSubst := (params.zip args).map (fun (p, a) => (p.name, a))
-        let callStr := s!"{fn}({", ".intercalate (args.map Concrete.fmtExpr)})"
-        for r in reqs do
-          let spec := substContract argSubst r
-          let (baseStatus, leanGoal) := match cEvalBool spec with
-            | some true  => ("proved_at_callsite", none)
-            | some false => ("failed_at_callsite", none)
-            | none =>
-              -- tier 2: also substitute caller let-constants
-              let spec2 := substContract lets spec
-              match cEvalBool spec2 with
-              | some false => ("failed_at_callsite", none)        -- closed and violated
-              | _ => if isClosed spec2 then ("unproven", toLeanBV spec2)  -- closed → bv_decide candidate
-                     else ("unproven", none)                              -- still has free vars
-          obs := obs ++ [{ caller := pfx ++ f.name, callStr, specExpr := spec, baseStatus, leanGoal }]
-  return obs
+-- `callSiteObligations` is defined below, after the scoped-hypothesis helpers
+-- (`loopHypsAt` / `dropStaleHyps` / `assignedScalarsS`) and `toLeanProp`, which
+-- it needs to discharge a precondition from the caller's in-scope facts.
 
-/-- Render the call-site obligation section. `provedByBV` is the list of indices
-    (into `obs`) that the `bv_decide` backend kernel-checked. -/
-def renderCallSites (obs : List CallObligation) (provedByBV : List Nat) : String := Id.run do
+/-- Render the call-site obligation section. `provedByBV` are the indices (into
+    `obs`) the `bv_decide` backend kernel-checked; `provedByOmega` are the
+    obligation `key`s the `omega` backend discharged from the caller's
+    `#[requires]` / enclosing guards / loop invariants. -/
+def renderCallSites (obs : List CallObligation) (provedByBV : List Nat)
+    (provedByOmega : List String := []) : String := Id.run do
   if obs.isEmpty then return ""
   let mut out := "\n\n=== Call-site obligations ==="
   let mut curCaller := ""
@@ -776,8 +752,9 @@ def renderCallSites (obs : List CallObligation) (provedByBV : List Nat) : String
     out := out ++ s!"\n  call {o.callStr}\n    requires {Concrete.fmtExpr o.specExpr}"
     let status := match o.baseStatus with
       | "unproven" =>
-        if provedByBV.contains i then "proved_by_kernel_decision\n    engine:  bv_decide"
-        else "unproven_at_callsite (non-constant; no discharge backend succeeded)"
+        if provedByOmega.contains o.key then "proved_by_kernel_decision\n    engine:  omega (from caller's #[requires] / guards)"
+        else if provedByBV.contains i then "proved_by_kernel_decision\n    engine:  bv_decide"
+        else "unproven_at_callsite (caller does not establish the precondition)"
       | s => s
     out := out ++ s!"\n    status:  {status}"
   return out ++ "\n"
@@ -1053,6 +1030,93 @@ partial def scopedBoundsB (lcs : List LoopContract) (scope : List Expr) :
   | s :: rest =>
       scopedBoundsS lcs scope s ++ scopedBoundsB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
 end
+
+-- Calls paired with the hypotheses in scope at the call: enclosing `if`-guards
+-- (the then-branch gets the condition) and loop invariants/guards. Walks the body
+-- in order so a reassigned variable drops its stale hypotheses (`dropStaleHyps`),
+-- exactly as the bounds walker does.
+mutual
+partial def scopedCallsS (lcs : List LoopContract) (scope : List Expr) :
+    Stmt → List (String × List Expr × List Expr)
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
+      (collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
+  | .return_ _ (some v) => (collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
+  | .ifElse _ c t el =>
+      (collectCallsE c).map (fun (_, fn, args) => (fn, args, scope))
+        ++ scopedCallsB lcs (scope ++ [c]) t
+        ++ scopedCallsB lcs scope (el.getD [])
+  | .while_ sp c b _ =>
+      (collectCallsE c).map (fun (_, fn, args) => (fn, args, scope))
+        ++ scopedCallsB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .forLoop sp init c step b _ =>
+      ((init.map (scopedCallsS lcs scope)).getD [])
+        ++ (collectCallsE c).map (fun (_, fn, args) => (fn, args, scope))
+        ++ ((step.map (scopedCallsS lcs scope)).getD [])
+        ++ scopedCallsB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
+      (collectCallsE o ++ collectCallsE v).map (fun (_, fn, args) => (fn, args, scope))
+  | .arrayIndexAssign _ a i v =>
+      (collectCallsE a ++ collectCallsE i ++ collectCallsE v).map (fun (_, fn, args) => (fn, args, scope))
+  | _ => []
+partial def scopedCallsB (lcs : List LoopContract) (scope : List Expr) :
+    List Stmt → List (String × List Expr × List Expr)
+  | [] => []
+  | s :: rest =>
+      scopedCallsS lcs scope s ++ scopedCallsB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
+end
+
+/-- Build the ordered list of call-site obligations across all callers. The fast
+    constant folder classifies the literal/arithmetic cases; an obligation that
+    stays non-constant carries a `bv_decide` `leanGoal` (when closed after
+    let-const subst) and the `hyps` in scope at the call so `callPrecondGoals`
+    can try to discharge it with `omega` from the caller's `#[requires]` /
+    enclosing guards / loop invariants. -/
+def callSiteObligations (modules : List Module) : List CallObligation := Id.run do
+  let fns := modules.flatMap allFunctions
+  let reqMap : List (String × (List Param × List Expr)) :=
+    fns.filterMap (fun (_, f) => if f.requires.isEmpty then none else some (f.name, (f.params, f.requires)))
+  if reqMap.isEmpty then return []
+  let mut obs : List CallObligation := []
+  let mut gi := 0
+  for (pfx, f) in fns do
+    let lets := letConstMap f.body
+    for (fn, args, scope) in scopedCallsB f.loopContracts [] f.body do
+      match reqMap.find? (·.1 == fn) with
+      | none => pure ()
+      | some (_, (params, reqs)) =>
+        let argSubst := (params.zip args).map (fun (p, a) => (p.name, a))
+        let callStr := s!"{fn}({", ".intercalate (args.map Concrete.fmtExpr)})"
+        for r in reqs do
+          let spec := substContract argSubst r
+          let (baseStatus, leanGoal) := match cEvalBool spec with
+            | some true  => ("proved_at_callsite", none)
+            | some false => ("failed_at_callsite", none)
+            | none =>
+              let spec2 := substContract lets spec
+              match cEvalBool spec2 with
+              | some false => ("failed_at_callsite", none)
+              | _ => if isClosed spec2 then ("unproven", toLeanBV spec2)
+                     else ("unproven", none)
+          obs := obs ++ [{ caller := pfx ++ f.name, callStr, specExpr := spec, baseStatus, leanGoal
+                         , key := s!"{pfx ++ f.name}#pre{gi}", hyps := f.requires ++ scope }]
+          gi := gi + 1
+  return obs
+
+/-- Omega goals for call-site preconditions that are not constant-decidable:
+    `∀ (vars : Int), (caller hyps) → precondition`. Discharged by the same
+    `omega` backend as the bounds/div goals; a success means the caller's
+    `#[requires]` / guards / loop invariants establish the callee's precondition. -/
+def callPrecondGoals (modules : List Module) : List (String × String) :=
+  (callSiteObligations modules).filterMap fun o =>
+    if o.baseStatus != "unproven" then none
+    else match toLeanProp o.specExpr with
+      | none => none
+      | some specStr =>
+        let vars := (collectIdents o.specExpr ++ o.hyps.flatMap collectIdents).eraseDups
+        let reqs := o.hyps.filterMap toLeanProp
+        let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
+        let hyp := if reqs.isEmpty then "" else s!"({" ∧ ".intercalate reqs}) → "
+        some (o.key, s!"{binder}{hyp}({specStr})")
 
 /-- One array-bounds obligation. `closedVerdict` is set when the index is a
     compile-time constant; otherwise `leanGoal` is the omega goal (if lowerable). -/
@@ -1659,10 +1723,11 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry)
     for f in m.functions do
       if !f.ensures.isEmpty || !f.requires.isEmpty then
         out := out ++ s!"\n\n{pfx}{f.name}"
-        -- preconditions: assumed on entry (no call-site checking in this slice)
+        -- preconditions: assumed on entry here; each call site is checked
+        -- separately (see the "Call-site obligations" section).
         let mut ri := 1
         for r in f.requires do
-          out := out ++ s!"\n  R{ri}  requires {Concrete.fmtExpr r}\n     status:  assumed_at_entry (callers not yet checked)"
+          out := out ++ s!"\n  R{ri}  requires {Concrete.fmtExpr r}\n     status:  assumed_at_entry (each call site checked separately)"
           ri := ri + 1
         -- postconditions: discharged by a registered ensures_proof, or missing
         let mut i := 1

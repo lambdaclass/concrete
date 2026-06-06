@@ -10,6 +10,31 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Call-site precondition checking (source-contract hardening) (2026-06-06)
+
+A callee's `#[requires]` is now verified at every call site, closing a gap where
+a caller could violate a precondition with no diagnostic (a "green proof that's
+misleading"). `callSiteObligations` substitutes the call's arguments into the
+callee's precondition and a scoped walker (`scopedCallsB`) threads the caller's
+in-scope facts to the call: its own `#[requires]`, enclosing `if`-guards
+(then-branch), and loop invariants, with `dropStaleHyps` invalidating a
+hypothesis once its variable is reassigned. `--report contracts` classifies each
+call site:
+
+- constant argument violates it          → `failed_at_callsite`
+- caller's `#[requires]` / guard implies it → `proved_by_kernel_decision (omega)`
+  (`callPrecondGoals` builds `∀ vars, (hyps) → precondition`, discharged by the
+  same omega backend as the bounds/div goals)
+- closed after let-const subst           → `bv_decide`
+- nothing in scope establishes it        → `unproven_at_callsite` (honest gap)
+
+First case of the Phase 1 contract-negatives suite: `examples/contract_negatives/
+precondition_callsite/` (proved-via-requires, proved-via-guard, constant
+violation, honest gap) + gate `scripts/tests/check_contract_negatives.sh` (CI +
+`make test-contract-negatives`). The per-function `#[requires]` line in the
+report now reads "each call site checked separately." No regressions: snapshots
+95/0 (4 reworded), default suite 1544/0.
+
 ### Example proofs moved out of the `Concrete.Proof` compiler namespace (2026-06-06)
 
 All seven flagship/example proof developments moved out of the `Concrete.Proof`

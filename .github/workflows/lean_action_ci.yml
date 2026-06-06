@@ -140,6 +140,9 @@ jobs:
       - name: Proof-patterns corpus gate
         run: bash scripts/tests/check_proof_patterns.sh
 
+      - name: Contract-negatives gate (source-contract hardening)
+        run: bash scripts/tests/check_contract_negatives.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

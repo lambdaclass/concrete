@@ -2,11 +2,11 @@
 
 fixed_point.scale_clamp
   R1  requires 0 <= sample && sample <= 255 && 0 <= gain && gain <= 256
-     status:  assumed_at_entry (callers not yet checked)
+     status:  assumed_at_entry (each call site checked separately)
 
 fixed_point.mix
   R1  requires 0 <= a && a <= 255 && 0 <= b && b <= 255
-     status:  assumed_at_entry (callers not yet checked)
+     status:  assumed_at_entry (each call site checked separately)
 
 
 === Call-site obligations ===
@@ -17,7 +17,7 @@ fixed_point.main
     status:  proved_at_callsite
   call mix(s, 50)
     requires 0 <= s && s <= 255 && 0 <= 50 && 50 <= 255
-    status:  unproven_at_callsite (non-constant; no discharge backend succeeded)
+    status:  unproven_at_callsite (caller does not establish the precondition)
 
 
 === Runtime-safety obligations (division: non-zero divisor) ===

@@ -779,6 +779,8 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
   let obs := Report.callSiteObligations parsedModules
   let cands := ((List.range obs.length).zip obs).filterMap fun (i, o) => o.leanGoal.map (fun g => (i, g))
   let proved ← bvDischargeCallSites cands
+  -- discharge call-site preconditions from the caller's #[requires]/guards via omega
+  let provedCallPre ← kernelDischargeLoopVCs (Report.callPrecondGoals parsedModules)
   let provedVCs ← kernelDischargeLoopVCs (Report.loopVCGoals parsedModules)
   let boundsObls := Report.boundsObligations parsedModules
   let provedBounds ← kernelDischargeLoopVCs (Report.boundsGoals parsedModules)
@@ -790,7 +792,7 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
   let bvOvfCands := (Report.overflowBVGoals parsedModules).filter (fun (k, _) => !provedOvf.contains k)
   let provedOvfBV ← bvDischargeOverflow bvOvfCands
   return Report.contractsReport parsedModules registry provedVCs
-    ++ Report.renderCallSites obs proved
+    ++ Report.renderCallSites obs proved provedCallPre
     ++ Report.renderBounds boundsObls provedBounds
     ++ Report.renderDiv divObls provedDiv
     ++ Report.renderOverflow ovfObls provedOvf provedOvfBV

@@ -2,7 +2,7 @@
 
 demo.at
   R1  requires 0 <= i && i < 16
-     status:  assumed_at_entry (callers not yet checked)
+     status:  assumed_at_entry (each call site checked separately)
 
 
 === Call-site obligations ===

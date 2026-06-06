@@ -124,11 +124,13 @@ made into an explicit dependency.
   (HMAC, `ct_compare`, the loop VC). Contract/VC syntax here may be stabilized.
 - **Provisional** — any obligation quantifying over collections, iterators,
   strings/text, bytes, paths, or capability-polymorphic callees. These depend
-  on **Phase 8 items 4 (module/import stability), 7 (bytes/text/path), 9
-  (collections), 17 (iteration protocol), and 18 (capability polymorphism)**
-  and MUST NOT have their contract syntax or VC shape frozen until those items
-  land. Treat any such construct as "will be reworked," and do not let a
-  flagship bake an iterator/collection assumption into the VC shape.
+  on the **Phase 8 core slab** (modules/imports, minimal project model,
+  `concrete test`, core diagnostics, bytes/text/path, and collections). They
+  also remain provisional over later iteration and capability-polymorphism
+  work. Do not freeze contract syntax or VC shape for those constructs until
+  the relevant Phase 8 item has landed. Treat any such construct as "will be
+  reworked," and do not let a flagship bake an iterator/collection assumption
+  into the VC shape.
 
 ### Spec and contract trust (no dark specs)
 
@@ -169,9 +171,9 @@ from the execution plan; this gate wires it in.
 It cannot be "before any Phase 8" — there is a chicken-and-egg floor: an outside
 user needs *some* slab to write anything real. So the gate is:
 
-1. **Define the minimum slab** an external user needs to write and prove one
-   useful program — likely Phase 8 items 4 (module stability), 7 (bytes/text),
-   9 (collections), plus a package/build path.
+1. **The minimum slab is the Phase 8 core slab**: modules/imports, minimal
+   project model, `concrete test`, core diagnostics, bytes/text/path, and
+   collections.
 2. **Build exactly that** — not the full back half.
 3. **Run the trial and treat the result as an explicit go / no-go on the rest
    of Phases 8-15.**
@@ -215,7 +217,10 @@ retrofit is explicitly queued behind proof-link migration.
    tasks in this phase are the contract cases that can make a green proof
    misleading: negative examples, vacuity, spec/ghost totality, trapdoor
    discipline, diagnostics, API-stability rules, and soundness obligations.
-2. Add contract negative examples: unmet precondition at call site, missing
+2. Add contract negative examples: **unmet precondition at call site — DONE** (caller-side
+   `#[requires]` checking via `callSiteObligations`/`callPrecondGoals`; omega-discharged from
+   the caller's requires/guards/invariants; `examples/contract_negatives/precondition_callsite/`
+   + `check_contract_negatives.sh`). Remaining: missing
    postcondition proof, weakened postcondition, invalid contract expression,
    invalid invariant preservation, duplicate source/JSON proof links, and
    invalid proof-link attributes.
@@ -681,33 +686,51 @@ whether a user is writing proofs.
 Done when: a new user can format, build, run, test, diagnose, inspect, and
 debug small Concrete programs with predictable commands and useful errors.
 
-1. Add `concrete fmt`: stable formatting for source files, examples, docs
-   snippets, and generated fixtures. Formatting must not churn semantic
-   fingerprints.
-2. Improve diagnostics for parser, resolver, type checker, ownership, linearity,
-   capability, unsupported-construct, and codegen/interpreter mismatch errors:
-   every diagnostic has a source span, reason, and next action.
-3. Add basic LSP/editor diagnostics early: parse/type errors, capability
-   summaries, hover for inferred types, and jump-to-definition. Deeper
-   proof/evidence LSP features remain in the later editor phase.
-4. Stabilize modules and imports before packages grow: module names, file
+The first six items are the **Phase 8 core slab**. Build them before the
+external-validation trial, medium real-workload examples, or any contract/VC
+syntax that depends on collections, bytes/text/path, or project layout. The
+rest of Phase 8 stays after that slab in the same linear queue.
+
+1. Stabilize modules and imports before packages grow: module names, file
    layout, visibility, import resolution, cycle diagnostics, and generated
    interface summaries.
-5. Add `docs/GRAMMAR.md`: LL(1) grammar, reserved keywords, attribute syntax,
+2. Add a minimal project model before full packages: `Concrete.toml` fields for
+   name, entry points, tests, policies, assumptions, source roots, build
+   profiles, target profiles, oracle manifests, and evidence gates. The file
+   must make authority, assumptions, runtime-check policy, and proof policy
+   visible; it must not become an ambient hidden configuration channel.
+3. Add `concrete test`: discover and run user tests, example tests,
+   expected-failure tests, interpreter-vs-compiled differential tests,
+   snapshot tests, oracle tests, and policy/assumption gates through one
+   command.
+4. Improve diagnostics for parser, resolver, type checker, ownership, linearity,
+   capability, unsupported-construct, and codegen/interpreter mismatch errors:
+   every diagnostic has a source span, reason, and next action.
+5. Define strings, bytes, paths, and OS strings: `Bytes` for raw data, `Text`
+   for validated UTF-8, and `Path`/`OsString` for OS-native boundaries. Specify
+   literals, ownership, slicing, indexing, formatting, conversions, parser/JSON
+   interaction, diagnostics, and test output. No implicit lossy conversion.
+6. Define the collections story: fixed arrays, slices, dynamic `Vec`, maps,
+   buffers, parser cursors, and which collections require `Alloc` or other
+   capabilities.
+7. Add `concrete fmt`: stable formatting for source files, examples, docs
+   snippets, and generated fixtures. Formatting must not churn semantic
+   fingerprints.
+8. Add `docs/GRAMMAR.md`: LL(1) grammar, reserved keywords, attribute syntax,
    contract syntax, `ghost`/`assert`/`assume`, iteration syntax, and negative
    parser fixtures. This is a syntax reference, not a language-design
    committee.
-6. Add plain type aliases before the larger stdlib/examples slab:
+9. Add plain type aliases before the larger stdlib/examples slab:
    `type Digest = [u8; 32]`, `type Tag = [u8; 16]`, etc. Aliases must be
    transparent to layout, extraction, and proof unless explicitly declared as a
    future opaque/newtype form. This is an ordinary readability feature, not a
    proof abstraction.
-7. Decide user-facing loop control before broad parser/service examples:
+10. Decide user-facing loop control before broad parser/service examples:
    `break`, `continue`, and whether labeled loops exist. The decision must
    state how each interacts with bounded-loop analysis, cleanup/defer,
    contracts, and runtime-safety obligations. If deferred, examples should use
    explicit state flags or early returns instead of hidden control flow.
-8. Close the match/pattern ergonomics gap before broad `Result`/`Option` and
+11. Close the match/pattern ergonomics gap before broad `Result`/`Option` and
    protocol-decoder work. This is one compound usability block: algebraic data
    types are already in the language, so the pattern language must be
    expressive enough to use them without stacks of boilerplate matches.
@@ -734,40 +757,33 @@ debug small Concrete programs with predictable commands and useful errors.
    machinery), then OR patterns or struct update — whichever hurts more in
    practice (parser/service code tends to want OR patterns; SHA-style state
    updates tend to want `..base`).
-9. Define strings, bytes, paths, and OS strings: `Bytes` for raw data, `Text`
-   for validated UTF-8, and `Path`/`OsString` for OS-native boundaries. Specify
-   literals, ownership, slicing, indexing, formatting, conversions, parser/JSON
-   interaction, diagnostics, and test output. No implicit lossy conversion.
-10. Define numeric literal and cast rules: suffixes, inference/default integer
+12. Define numeric literal and cast rules: suffixes, inference/default integer
    type, signed/unsigned comparisons, narrowing, widening, checked/proved/
    wrapping overflow profiles, and diagnostics for ambiguous or lossy casts.
-11. Define the collections story: fixed arrays, slices, dynamic `Vec`, maps,
-   buffers, parser cursors, and which collections require `Alloc` or other
-   capabilities.
-12. Define resource cleanup semantics: `defer`, drop/cleanup ordering,
+13. Define resource cleanup semantics: `defer`, drop/cleanup ordering,
     early-return cleanup, failure during cleanup, move-after-defer behavior, and
     linear-value interaction.
-13. Define the FFI language surface: `extern` syntax, layout restrictions,
+14. Define the FFI language surface: `extern` syntax, layout restrictions,
     ABI/calling convention annotations, ownership crossing the boundary,
     capability/trust requirements, and what cannot be expressed safely.
-14. Define language-visible build profiles: debug/release, overflow checks,
+15. Define language-visible build profiles: debug/release, overflow checks,
     assertions, runtime checks, optimization assumptions, and proof/audit
     compatibility.
-15. State the macro/metaprogramming stance for v1: no unrestricted macro
+16. State the macro/metaprogramming stance for v1: no unrestricted macro
     system. Allow only controlled, audited compile-time generation /
     derive-like helpers for boring repeated artifacts such as equality,
     debug/display, serializers/parsers, proof stubs, contract boilerplate, and
     small table generation. Generated code must preserve source spans and
     evidence/audit traceability.
-16. Define handle-relative filesystem APIs as the preferred capability shape:
+17. Define handle-relative filesystem APIs as the preferred capability shape:
     directory/file handles are capabilities; privileged code should operate
     relative to opened handles rather than repeated ambient path lookup. The
     design must address TOCTOU risks, path normalization, symlinks, temp files,
     and byte-preserving OS boundary behavior.
-17. Add ignored-result diagnostics for fallible APIs: discarding `Result`,
+18. Add ignored-result diagnostics for fallible APIs: discarding `Result`,
     `Option`, or runtime-check results is a warning/error unless explicitly
     acknowledged with `_ = ...`, `ignore(...)`, or a policy-approved pattern.
-18. Track accumulating error sets for `Result`-heavy code, without adopting row
+19. Track accumulating error sets for `Result`-heavy code, without adopting row
     effects. Protocol parsers and service pipelines repeatedly want "this
     function may return exactly these error variants" without hand-writing one
     giant wrapper enum for every stage. First implementation should be a
@@ -775,22 +791,22 @@ debug small Concrete programs with predictable commands and useful errors.
     later consider surface syntax if it stays obvious, e.g. a named error-set
     alias or a restricted union of enum variants. Do **not** introduce general
     row polymorphism or implicit effect rows.
-19. Evaluate units-of-measure / dimensional annotations for common systems
+20. Evaluate units-of-measure / dimensional annotations for common systems
     mistakes: bytes vs bits, milliseconds vs seconds, block counts vs byte
     offsets, protocol lengths, and memory sizes. Start as optional annotations
     and diagnostics over integer-like values, not full dependent types. Any
     proof story must be contract/VC-based and audit-visible; unit erasure must
     not hide conversions or allocation.
-20. Add source style guidance alongside `concrete fmt`: idiomatic layout for
+21. Add source style guidance alongside `concrete fmt`: idiomatic layout for
     functions, modules, contracts, matches, error handling, examples, and
     proof-bearing code.
-21. Decide the v1 iteration protocol before broad stdlib work. Evaluate and
+22. Decide the v1 iteration protocol before broad stdlib work. Evaluate and
     document the replacement for closures/trait-object iterators:
     index-based `for i in 0..len { xs[i] }`, explicit cursor/iterator structs
     with `next() -> Option<T>`, and monomorphized `for_each`-style helpers. The
     decision must cover `Vec`, slices, maps, parser cursors, and interpreter
     workloads, and must explain how authority and allocation remain visible.
-22. Decide capability polymorphism for higher-order stdlib functions before
+23. Decide capability polymorphism for higher-order stdlib functions before
     adding `map`/`fold`/`for_each` families or structured concurrency. The
     design must avoid a combinatorial split like `map`, `map_file`,
     `map_alloc`; the expected shape is explicit capability-set polymorphism
@@ -800,19 +816,15 @@ debug small Concrete programs with predictable commands and useful errors.
     generic once, or allow generic contracts with instance-level proof
     artifacts. Audit output must distinguish `proved_for_instance` from any
     future `proved_generic` class.
-23. Define stdlib v1 for daily programs: fixed arrays/slices, bytes/string
+24. Define stdlib v1 for daily programs: fixed arrays/slices, bytes/string
     basics, `Result`/`Option`, numeric helpers, and capability-scoped Console,
     File, Network, and Alloc APIs. Each stdlib item must declare its evidence
     class (`trusted`, `enforced`, `proved`, `reported`, or `assumed`).
-24. Design user-facing testing framework UX before `std.test` hardens:
+25. Design user-facing testing framework UX before `std.test` hardens:
     test discovery (`#[test]` versus naming convention), expected failures,
     capability-scoped fixtures, temp files without ambient authority, oracle
     tests, interpreter-vs-compiled tests, proof-status interaction, and how test
     failures appear in `concrete audit`.
-25. Add `concrete test`: discover and run user tests, example tests,
-    expected-failure tests, interpreter-vs-compiled differential tests,
-    snapshot tests, oracle tests, and policy/assumption gates through one
-    command.
 26. Add debug/trace mode: `concrete run --trace`, interpreter step traces, Core /
     lowered-IR dumps, source spans in runtime errors, and stable replay commands
     for report/debug failures.
@@ -822,11 +834,9 @@ debug small Concrete programs with predictable commands and useful errors.
     replay a failing proof/debug report. Target commands include
     `concrete eval`, `concrete inspect --core`, `concrete inspect --proofcore`,
     `concrete prove --show-obligation`, and `concrete run --trace`.
-28. Add a minimal project model before full packages: `Concrete.toml` fields for
-    name, entry points, tests, policies, assumptions, source roots, build
-    profiles, target profiles, oracle manifests, and evidence gates. The file
-    must make authority, assumptions, runtime-check policy, and proof policy
-    visible; it must not become an ambient hidden configuration channel.
+28. Add basic LSP/editor diagnostics early: parse/type errors, capability
+    summaries, hover for inferred types, and jump-to-definition. Deeper
+    proof/evidence LSP features remain in the later editor phase.
 29. Decide target-conditional code selection before freestanding and
     cross-platform stdlib work harden. Prefer profile-selected source roots and
     modules in `Concrete.toml`; if narrow `cfg` attributes are added later, they
@@ -909,13 +919,13 @@ they force a named surface or public claim.
     builds real things that can be checked against references, not only tiny
     proof demos. Each workload must name the surface or public claim it forces;
     otherwise it does not belong in this phase. Do not jump straight to multiple
-    10k-line ports before the language/workflow slab can support them; that
-    would mostly test missing ergonomics. Sequence:
+    10k-line ports before the Phase 8 core slab and daily workflow can support
+    them; that would mostly test missing ergonomics. Sequence:
     - **Main compiler repo:** keep tiny proof patterns
       (`examples/proof_patterns/`), evidence-class examples, small real programs
       that gate the compiler, and showcase flagships here. These protect
       compiler/proof correctness and should stay close to the tests.
-    - **Medium in-repo real programs after Phase 8 basics:** 500-2,000 line
+    - **Medium in-repo real programs after the Phase 8 core slab:** 500-2,000 line
       examples, each chosen for a named pressure point: INI/TOML or tiny JSON
       parser (bytes/text/path, diagnostics, runtime obligations), bounded HTTP
       header parser (ignored-result diagnostics, byte-preserving parsing),
@@ -936,7 +946,7 @@ they force a named surface or public claim.
       external-validation-gate trial from the cross-cutting checkpoint. The repo
       must pin a Concrete compiler/toolchain version and be validated by release
       CI so it does not silently rot as the language changes.
-    - **Ported compatibility examples after the workflow slab is stable:**
+    - **Ported compatibility examples after the daily workflow is stable:**
       `wc`/`cat`/`sha256sum`-style tools, QOI image decoder, base64 library,
       INI parser, tiny glob/regex matcher, arena allocator demo, MMIO-mock
       driver, or protocol codec. Annotate forcing surfaces: glob/regex must

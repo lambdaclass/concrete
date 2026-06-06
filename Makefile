@@ -1,4 +1,4 @@
-.PHONY: build test test-full test-trust-gate test-proof-gate test-ssa test-fuzz test-oracle test-wrong-code test-reducer-smoke test-bundle-smoke test-verify-gates test-assumptions test-policy test-catches test-snapshots test-prove-cli test-evidence-corpus test-pv-oracle test-cv-oracle test-fc-oracle test-ct-oracle test-hmac-oracle test-release-bundle test-showcase test-registry-retirement test-proof-namespace test-proof-patterns clean check-grammar paper paper-ec papers docs-site docs-serve
+.PHONY: build test test-full test-trust-gate test-proof-gate test-ssa test-fuzz test-oracle test-wrong-code test-reducer-smoke test-bundle-smoke test-verify-gates test-assumptions test-policy test-catches test-snapshots test-prove-cli test-evidence-corpus test-pv-oracle test-cv-oracle test-fc-oracle test-ct-oracle test-hmac-oracle test-release-bundle test-showcase test-registry-retirement test-proof-namespace test-proof-patterns test-contract-negatives clean check-grammar paper paper-ec papers docs-site docs-serve
 
 NIX_DEVELOP = XDG_CACHE_HOME=$(CURDIR)/.cache nix --extra-experimental-features "nix-command flakes" develop --command
 
@@ -95,6 +95,9 @@ test-proof-namespace:
 
 test-proof-patterns: build
 	$(NIX_DEVELOP) bash ./scripts/tests/check_proof_patterns.sh
+
+test-contract-negatives: build
+	$(NIX_DEVELOP) bash ./scripts/tests/check_contract_negatives.sh
 
 check-grammar:
 	$(NIX_DEVELOP) python3 scripts/check_ll1.py grammar/concrete.ebnf
