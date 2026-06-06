@@ -53,7 +53,7 @@ is the composition: systems control, explicit authority, contracts in source,
 Lean checked proof links, drift detection, and audit reports that refuse to
 hide trust.
 
-## Three Claim Shapes
+## Four Claim Shapes
 
 Functional correctness, proved in Lean:
 
@@ -137,8 +137,32 @@ hmac_sha256
 The third class is deliberately not the same as a Lean proof or a kernel
 decision. Oracle tests are valuable because they compare the compiled program
 against an independent implementation, but Concrete must still label them as
-tests, not proof. External SMT belongs to the same accounting discipline when
-it lands: useful, named, and never confused with a kernel checked theorem.
+tests, not proof.
+
+External SMT, when policy allows it:
+
+```con
+#[requires(0 <= msg_len && msg_len <= 256)]
+#[ensures(result <= 5)]
+fn sha256_padded_blocks(msg_len: i32) -> i32 {
+    return (msg_len + 9 + 63) / 64;
+}
+```
+
+Audit:
+
+```text
+sha256_padded_blocks
+  postcondition result <= 5
+    status: proved_by_smt
+    solver: z3
+    trust: solver_trusted
+    replay: none
+```
+
+SMT belongs to the same accounting discipline: useful, named, policy gated, and
+never confused with a Lean theorem or kernel checked decision procedure unless
+the result is replayed.
 
 If you are coming from C or Rust and want the short "why this exists" version,
 read [docs/WHY_CONCRETE.md](docs/WHY_CONCRETE.md).

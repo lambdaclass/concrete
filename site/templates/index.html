@@ -77,7 +77,8 @@
       <h3>3. Claim Shapes</h3>
       <p>
         The audit class matters as much as the code. A Lean theorem, a kernel
-        decision procedure, and an oracle test do not mean the same thing.
+        decision procedure, an oracle test, and an external solver do not mean
+        the same thing.
       </p>
       <figure class="listing">
         <pre><code>#[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
@@ -120,6 +121,22 @@ hmac_sha256
   proof level: regression evidence, not proof</code></pre>
         <figcaption>
           Oracle evidence is useful, but it stays below proof in the ledger.
+        </figcaption>
+      </figure>
+      <figure class="listing">
+        <pre><code>#[requires(0 &lt;= msg_len &amp;&amp; msg_len &lt;= 256)]
+#[ensures(result &lt;= 5)]
+fn sha256_padded_blocks(msg_len: i32) -&gt; i32 {
+    return (msg_len + 9 + 63) / 64;
+}
+
+status: proved_by_smt
+solver: z3
+trust: solver_trusted
+replay: none</code></pre>
+        <figcaption>
+          External SMT is useful when policy allows it, but the solver and trust
+          class are named.
         </figcaption>
       </figure>
     </section>
