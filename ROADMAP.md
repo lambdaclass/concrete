@@ -217,15 +217,19 @@ retrofit is explicitly queued behind proof-link migration.
    tasks in this phase are the contract cases that can make a green proof
    misleading: negative examples, vacuity, spec/ghost totality, trapdoor
    discipline, diagnostics, API-stability rules, and soundness obligations.
-2. Add vacuity and satisfiability checks for contracts: unsatisfiable
-   preconditions, contradictory assumptions, `#[requires(false)]`, invariant
-   `false`, unreachable returns, and postconditions proved only because the path
-   is impossible. Audit must report `vacuous`, not `proved`, and release policy
-   should reject vacuous proofs by default. Include
-   `examples/contract_negatives/vacuous_contract/` for `#[requires(false)]`,
-   contradictory requires, and `#[invariant(false)]`, plus a
-   `vacuity_policy_gate` fixture proving release policy rejects false-green
-   claims.
+2. ~~Add vacuity and satisfiability checks for contracts.~~ **MOSTLY DONE.**
+   Report-side detection (keeps the file compilable): `#[requires(false)]` and
+   other constant-false preconditions (folder), contradictory assumptions like
+   `x>0 && x<0` (omega refutes `∀vars, ¬(conjunction)`, `Report.vacuityGoals`),
+   and `#[invariant(false)]` are reported `vacuous` / `invalid/vacuous`, never
+   `proved` (`--report contracts` flags `⚠ VACUOUS` + marks each `#[ensures]`
+   `vacuous`). The release/policy gate rejects vacuous contracts by default
+   (E0613, `Policy.enforceNoVacuous` + `Main.computeVacuousQuals`). Fixtures:
+   `examples/contract_negatives/vacuous_contract/` (the three report cases) +
+   `tests/programs/adversarial_policy_vacuous/` (policy rejection). Gate
+   `check_contract_negatives.sh` 15/0; zero false positives across the flagships.
+   REMAINING (deeper, path-sensitive): unreachable returns and postconditions
+   proved only because a path is impossible.
 3. Add `spec fn` / ghost totality rules: spec functions and ghost computations
    referenced by contracts are pure, erased, and total. Lean-backed specs inherit
    Lean termination; Concrete-level `spec fn` needs a totality/termination
