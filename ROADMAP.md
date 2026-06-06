@@ -367,12 +367,20 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
    (O1), `loop_invariant_preservation` (O2), `loop_exit_implies_post` (O3),
    `variant_nonnegative` (O4), `variant_decreases` (O5) — O1/O4/O5 omega,
    O2/O3 operational/lean. (Reuses `loopObInfo`; existing discharge unchanged.)
-6. **Kernel-checked automation first (`bv_decide`).** Before any external
-   solver, route BitVec / bounded-arithmetic VCs to Lean's `bv_decide`
-   (in-toolchain; bit-blasts to SAT and replays a kernel-checked certificate —
-   **no TCB growth**). Already validated against the HMAC helper facts. Its
-   results are classified `proved_by_kernel_decision`, a kernel-checked class
-   distinct from `proved_by_smt`. See [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).
+6. **[done]** Kernel-checked automation first (`bv_decide`). BitVec /
+   bounded-arithmetic VCs route to Lean's `bv_decide` (in-toolchain; bit-blasts
+   to SAT and replays a kernel-checked certificate — **no TCB growth**) and
+   linear VCs to `omega`. `Main.computeVCsDischarged` runs both backends over the
+   VC schedule and `Report.dischargeVCs` folds the results into each VC's
+   `status` + `engine`: a proved `planned` VC becomes `proved_by_kernel_decision`
+   (engine `omega`/`bv_decide`), constant verdicts are `proved_by_kernel_decision`
+   (`constant_fold`) or `counterexample`, registered Lean links are
+   `proved_by_lean`. Loop-invariant preservation can only reach `arithmetic_proved`
+   (omega closes the arithmetic half; the operational realization needs Lean) —
+   never a full kernel-decision proof. The class stays distinct from
+   `proved_by_smt`; `check_vc_schema.sh` (23/0) pins that no VC ever carries an
+   `smt` engine or `proved_by_smt`/`solver_trusted` status before the external
+   trust model lands. See [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).
 7. Centralize arithmetic bridge lemmas before adding more crypto/protocol VCs:
    `Int` / `Nat` / `BitVec` round trips, division/modulo, shift index
    arithmetic, byte/word packing, and symbolic bridge cases like the

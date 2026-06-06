@@ -794,6 +794,27 @@ def computeAssumeQuals (astModules : List Concrete.Module) (depNames : List Stri
     then some (pfx ++ f.name) else none).eraseDups.filter fun q =>
       !depNames.any (fun d => q.startsWith (d ++ "."))
 
+/-- Build the VC schedule and fold in the kernel-checked discharge results
+    (omega over the linear goals; `bv_decide` over the BitVec call-site and
+    overflow goals). The proved/`counterexample`/constant verdicts already
+    decided structurally by `collectVCs` are preserved; only `planned` VCs are
+    upgraded — and only to `proved_by_kernel_decision` (or `arithmetic_proved`
+    for loop preservation), never to an external-solver class. -/
+def computeVCsDischarged (modules : List Concrete.Module) (locMap : Report.FnLocMap)
+    (registry : Concrete.ProofRegistry) : IO (List Report.VC) := do
+  let vcs := Report.collectVCs modules locMap registry
+  let omegaGoals := Report.callPrecondGoals modules ++ Report.assertGoals modules
+    ++ Report.vacuityGoals modules ++ Report.loopVCGoals modules
+    ++ Report.boundsGoals modules ++ Report.divGoals modules ++ Report.overflowGoals modules
+  let omegaProved ← kernelDischargeLoopVCs omegaGoals
+  let obs := Report.callSiteObligations modules
+  let cands := ((List.range obs.length).zip obs).filterMap fun (i, o) => o.leanGoal.map (fun g => (i, g))
+  let bvIdx ← bvDischargeCallSites cands
+  let bvCallKeys := bvIdx.filterMap fun i => obs[i]?.map (·.key)
+  let ovfBV := (Report.overflowBVGoals modules).filter (fun (k, _) => !omegaProved.contains k)
+  let bvOvfKeys ← bvDischargeOverflow ovfBV
+  return Report.dischargeVCs vcs omegaProved (bvCallKeys ++ bvOvfKeys)
+
 /-- Render the contracts report plus the call-site obligation section, running
     the `bv_decide` backend on the closed-but-non-literal call-site obligations
     and `omega` on the loop init/variant VCs. -/
@@ -1112,10 +1133,11 @@ def compileAndReport (inputPath : String) (reportType : String)
       IO.println (← renderContracts parsed.modules registry)
       return 0
     if reportType == "vcs" then
+      let dvcs ← computeVCsDischarged parsed.modules locMap registry
       if reportJson then
-        IO.println (Report.vcsJson parsed.modules locMap registry 1)
+        IO.println (Report.vcsJson dvcs 1)
       else
-        IO.println (Report.vcsReport parsed.modules locMap registry)
+        IO.println (Report.vcsReport dvcs)
       return 0
     if reportType == "caps" then
       IO.println (Report.capabilityReport validCore.coreModules)

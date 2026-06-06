@@ -525,16 +525,27 @@ Loop contracts generate:
   postcondition, a `coverage: invariant` proof for O2);
 - `arith_profile` — `constant | linear | bitvector | nonlinear | refinement |
   operational | unsupported`;
-- `expected_discharge` — `constant_fold | omega | bv_decide | lean | smt | none`.
+- `expected_discharge` — which backend *should* own it: `constant_fold | omega |
+  bv_decide | lean | smt | none`;
+- `status` — the actual discharge OUTCOME, folded in after the kernel-checked
+  backends run: `planned | proved_by_kernel_decision | proved_by_lean |
+  arithmetic_proved | counterexample | unproven | missing`;
+- `engine` — which engine produced a proof: `constant_fold | omega | bv_decide |
+  lean | ""`.
 
-A VC **describes** an obligation and which backend *should* own it; it does not
-itself run a solver. The schema is deliberately separate from the discharge
-machinery so that adding a solver later cannot silently turn a VC into a
-"proved" path — `expected_discharge: smt` does not exist yet, and
-`check_vc_schema.sh` asserts no VC claims it until the external-SMT trust model
-(items 8–9) lands.
+The kernel-checked decision path (omega + Lean's `bv_decide`, both in-toolchain
+with no TCB growth) is the only route by which a VC reaches `status:
+proved_by_kernel_decision` — a class kept deliberately distinct from any future
+`proved_by_smt` / `solver_trusted`. Loop-invariant *preservation* is special:
+omega closes only its arithmetic half, so it can reach `arithmetic_proved` but
+never a full `proved_by_kernel_decision` — the operational realization still
+needs Lean. The schema is separate from discharge so a solver can never silently
+turn a VC into "proved": `smt` is not a valid `engine` or `expected_discharge`
+yet, and `check_vc_schema.sh` asserts it stays that way until the external-SMT
+trust model (items 8–9) lands.
 
-Example VC (JSON, schema v1):
+Example VC (JSON, schema v1) — a symbolic precondition discharged by omega from
+the caller's `#[requires]`:
 
 ```json
 {
@@ -547,7 +558,9 @@ Example VC (JSON, schema v1):
   "origin": "precondition of block_to_words_at(buf, off) in hmac_sha256.sha256_compress_at",
   "dependencies": [],
   "arith_profile": "linear",
-  "expected_discharge": "omega"
+  "expected_discharge": "omega",
+  "status": "proved_by_kernel_decision",
+  "engine": "omega"
 }
 ```
 

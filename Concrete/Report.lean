@@ -3724,6 +3724,10 @@ structure VC where
   dependencies  : List String
   arithProfile  : String       -- constant | linear | bitvector | nonlinear | refinement | operational | unsupported
   dischargeMode : String       -- constant_fold | omega | bv_decide | lean | smt | none
+  -- discharge OUTCOME (filled in by `dischargeVCs` after the backends run):
+  status        : String       -- planned | proved_by_kernel_decision | proved_by_lean |
+                                -- arithmetic_proved | counterexample | unproven | missing
+  engine        : String       -- constant_fold | omega | bv_decide | lean | "" (none yet)
 
 /-- Split a compiler-generated goal string `∀ (vars : T), (h1) → h2 → (concl)`
     into (hypotheses, conclusion): drop the binder, split the body on top-level
@@ -3757,64 +3761,76 @@ def collectVCs (modules : List Module) (locMap : FnLocMap)
     | some e => (e.file, e.fnSpan.line)
     | none => ("", 0)
   let mkVC := fun (id kind fq file : String) (line : Nat) (hyps : List String)
-      (concl origin : String) (deps : List String) (profile mode : String) =>
+      (concl origin : String) (deps : List String) (profile mode status engine : String) =>
     ({ id := id, kind := kind, fn := fq, file := file, line := line, hypotheses := hyps,
        conclusion := concl, origin := origin, dependencies := deps,
-       arithProfile := profile, dischargeMode := mode } : VC)
+       arithProfile := profile, dischargeMode := mode, status := status, engine := engine } : VC)
+  -- a VC whose discharge cannot be decided without running a backend is "planned";
+  -- the constant-fold and lean-link verdicts ARE decidable here and set directly.
   let mkSplit := fun (key kind profile mode : String) (goal : String) (deps : List String) =>
     let (hyps, concl) := splitVCGoal goal
     let fq := vcFnOfKey key
     let (file, line) := loc fq
-    mkVC key kind fq file line hyps concl s!"{kind} in {fq}" deps profile mode
+    mkVC key kind fq file line hyps concl s!"{kind} in {fq}" deps profile mode "planned" ""
   let mut out : List VC := []
   -- preconditions at call sites (structural: includes the constant-decided ones).
   for o in callSiteObligations modules do
     let (file, line) := loc o.caller
     let concl := (toLeanProp o.specExpr).getD (Concrete.fmtExpr o.specExpr)
     let hyps := o.hyps.filterMap toLeanProp
-    let (profile, mode) := match o.baseStatus with
-      | "proved_at_callsite" => ("constant", "constant_fold")
-      | "failed_at_callsite" => ("constant", "constant_fold")
+    let (profile, mode, status, engine) := match o.baseStatus with
+      | "proved_at_callsite" => ("constant", "constant_fold", "proved_by_kernel_decision", "constant_fold")
+      | "failed_at_callsite" => ("constant", "constant_fold", "counterexample", "constant_fold")
       | _ => match o.leanGoal with
-             | some _ => ("bitvector", "bv_decide")
-             | none   => if (toLeanProp o.specExpr).isSome then ("linear", "omega") else ("unsupported", "none")
+             | some _ => ("bitvector", "bv_decide", "planned", "")
+             | none   => if (toLeanProp o.specExpr).isSome then ("linear", "omega", "planned", "") else ("unsupported", "none", "unproven", "")
     out := out ++ [mkVC o.key "precondition" o.caller file line hyps concl
-      s!"precondition of {o.callStr} in {o.caller}" [] profile mode]
-  -- asserts and vacuity (goal-string generators).
+      s!"precondition of {o.callStr} in {o.caller}" [] profile mode status engine]
+  -- asserts and vacuity (goal-string generators; omega decides at discharge time).
   for (k, g) in assertGoals modules do out := out ++ [mkSplit k "assert" "linear" "omega" g []]
   for (k, g) in vacuityGoals modules do out := out ++ [mkSplit k "vacuity" "linear" "omega" g []]
+  -- a constant runtime-safety verdict → kernel-decided here; else planned/omega/bv.
+  let constStatus := fun (cv : Option Bool) =>
+    match cv with
+    | some true  => ("proved_by_kernel_decision", "constant_fold")
+    | some false => ("counterexample", "constant_fold")
+    | none       => ("unproven", "")
   -- array bounds.
   for o in boundsObligations modules do
     let (file, line) := loc o.fnQual
-    let (hyps, concl, profile, mode) := match o.leanGoal with
-      | some g => let (h, c) := splitVCGoal g; (h, c, "linear", "omega")
+    let (hyps, concl, profile, mode, status, engine) := match o.leanGoal with
+      | some g => let (h, c) := splitVCGoal g; (h, c, "linear", "omega", "planned", "")
       | none =>
         let c := s!"0 ≤ {Concrete.fmtExpr o.idxExpr} ∧ {Concrete.fmtExpr o.idxExpr} < {o.size}"
-        if o.closedVerdict.isSome then ([], c, "constant", "constant_fold") else ([], c, "unsupported", "none")
+        let (st, en) := constStatus o.closedVerdict
+        if o.closedVerdict.isSome then ([], c, "constant", "constant_fold", st, en) else ([], c, "unsupported", "none", st, en)
     out := out ++ [mkVC o.key "array_bounds" o.fnQual file line hyps concl
-      s!"index {o.arrName}[{Concrete.fmtExpr o.idxExpr}] (size {o.size}) in {o.fnQual}" [] profile mode]
+      s!"index {o.arrName}[{Concrete.fmtExpr o.idxExpr}] (size {o.size}) in {o.fnQual}" [] profile mode status engine]
   -- div/mod nonzero.
   for o in divObligations modules do
     let (file, line) := loc o.fnQual
-    let (hyps, concl, profile, mode) := match o.leanGoal with
-      | some g => let (h, c) := splitVCGoal g; (h, c, "linear", "omega")
+    let (hyps, concl, profile, mode, status, engine) := match o.leanGoal with
+      | some g => let (h, c) := splitVCGoal g; (h, c, "linear", "omega", "planned", "")
       | none =>
         let c := s!"{Concrete.fmtExpr o.divExpr} ≠ 0"
-        if o.closedVerdict.isSome then ([], c, "constant", "constant_fold") else ([], c, "unsupported", "none")
+        let (st, en) := constStatus o.closedVerdict
+        if o.closedVerdict.isSome then ([], c, "constant", "constant_fold", st, en) else ([], c, "unsupported", "none", st, en)
     out := out ++ [mkVC o.key "div_nonzero" o.fnQual file line hyps concl
-      s!"{if o.isMod then "%" else "/"} divisor {Concrete.fmtExpr o.divExpr} in {o.fnQual}" [] profile mode]
+      s!"{if o.isMod then "%" else "/"} divisor {Concrete.fmtExpr o.divExpr} in {o.fnQual}" [] profile mode status engine]
   -- overflow (omega tier, then the interval-gated bv_decide fallback, then const).
   for o in overflowObligations modules do
     let (file, line) := loc o.fnQual
-    let (hyps, concl, profile, mode) := match o.leanGoal, o.bvGoal with
-      | some g, _ => let (h, c) := splitVCGoal g; (h, c, "linear", "omega")
-      | none, some g => let (h, c) := splitVCGoal g; (h, c, "bitvector", "bv_decide")
+    let (hyps, concl, profile, mode, status, engine) := match o.leanGoal, o.bvGoal with
+      | some g, _ => let (h, c) := splitVCGoal g; (h, c, "linear", "omega", "planned", "")
+      | none, some g => let (h, c) := splitVCGoal g; (h, c, "bitvector", "bv_decide", "planned", "")
       | none, none =>
         let c := s!"{o.lo} ≤ {Concrete.fmtExpr o.opExpr} ∧ {Concrete.fmtExpr o.opExpr} ≤ {o.hi}"
-        if o.closedVerdict.isSome then ([], c, "constant", "constant_fold") else ([], c, "unsupported", "none")
+        let (st, en) := constStatus o.closedVerdict
+        if o.closedVerdict.isSome then ([], c, "constant", "constant_fold", st, en) else ([], c, "unsupported", "none", st, en)
     out := out ++ [mkVC o.key "no_overflow" o.fnQual file line hyps concl
-      s!"no-overflow of {Concrete.fmtExpr o.opExpr} in [{o.lo}, {o.hi}] in {o.fnQual}" [] profile mode]
-  -- loop obligations (reuse loopObInfo for kind/hyps/conclusion).
+      s!"no-overflow of {Concrete.fmtExpr o.opExpr} in [{o.lo}, {o.hi}] in {o.fnQual}" [] profile mode status engine]
+  -- loop obligations (reuse loopObInfo for kind/hyps/conclusion). Discharge is
+  -- decided by omega (O1/O3/O4/O5) or stays operational/lean (O2) → planned here.
   for (pfx, f) in (modules.flatMap allFunctions).filter (fun (_, f) => !f.loopContracts.isEmpty) do
     let fq := pfx ++ f.name
     let (file, _) := loc fq
@@ -3826,13 +3842,10 @@ def collectVCs (modules : List Module) (locMap : FnLocMap)
       for oid in ["O1", "O2", "O3", "O4", "O5"] do
         match loopObInfo lc oid fq f.ensures extraLets retExpr [] with
         | some (kind, hyps, concl, _) =>
-          let (profile, mode) := match oid with
-            | "O2" => ("operational", "lean")
-            | "O3" => ("operational", "lean")
-            | _    => ("linear", "omega")
+          let (profile, mode) := if oid == "O2" then ("operational", "lean") else ("linear", "omega")
           let deps := if oid == "O2" then invDep else []
           out := out ++ [mkVC (loopVCKey fq lc.line oid) kind fq file lc.line hyps concl
-            s!"{kind} (loop @ line {lc.line}) in {fq}" deps profile mode]
+            s!"{kind} (loop @ line {lc.line}) in {fq}" deps profile mode "planned" ""]
         | none => pure ()
   -- postconditions (#[ensures]) discharged by registered Lean proofs.
   for (pfx, f) in modules.flatMap allFunctions do
@@ -3845,15 +3858,36 @@ def collectVCs (modules : List Module) (locMap : FnLocMap)
       | none => []
     let mut ei := 0
     for ens in f.ensures do
+      let (mode, status, engine) := if dep.isEmpty then ("none", "missing", "") else ("lean", "proved_by_lean", "lean")
       out := out ++ [mkVC s!"{fq}#ensures{ei}" "postcondition" fq file line
         (f.requires.map Concrete.fmtExpr) (Concrete.fmtExpr ens) s!"postcondition in {fq}"
-        dep "refinement" (if dep.isEmpty then "none" else "lean")]
+        dep "refinement" mode status engine]
       ei := ei + 1
   return out
 
-/-- Human-readable VC schedule, grouped by originating function. -/
-def vcsReport (modules : List Module) (locMap : FnLocMap) (registry : ProofRegistry) : String := Id.run do
-  let vcs := collectVCs modules locMap registry
+/-- Fold the kernel-checked discharge results (omega + `bv_decide`) into the VC
+    schedule. A `planned` VC whose id was proved becomes `proved_by_kernel_decision`
+    (engine `omega`/`bv_decide`) — except loop-invariant preservation (O2), where
+    omega only closes the arithmetic half and the operational realization still
+    needs Lean: that becomes `arithmetic_proved`, never a full proof. Constant-fold
+    and lean-linked verdicts (already set by `collectVCs`) are left untouched. This
+    is the ONLY way a VC reaches a `proved` status from a decision procedure, and
+    the class is `proved_by_kernel_decision` — kept distinct from any future
+    `proved_by_smt`/`solver_trusted`. -/
+def dischargeVCs (vcs : List VC) (omegaProved bvProved : List String) : List VC :=
+  vcs.map fun v =>
+    if v.status != "planned" then v
+    else if omegaProved.contains v.id then
+      if v.kind == "loop_invariant_preservation"
+      then { v with status := "arithmetic_proved", engine := "omega" }
+      else { v with status := "proved_by_kernel_decision", engine := "omega" }
+    else if bvProved.contains v.id then
+      { v with status := "proved_by_kernel_decision", engine := "bv_decide" }
+    else { v with status := "unproven" }
+
+/-- Human-readable VC schedule (post-discharge), grouped by originating function.
+    `vcs` is the output of `collectVCs` after `dischargeVCs` has folded in results. -/
+def vcsReport (vcs : List VC) : String := Id.run do
   if vcs.isEmpty then return "=== Verification Conditions (schema v1) ===\n\n(no VCs generated)"
   let mut out := "=== Verification Conditions (schema v1) ==="
   let fns := (vcs.map (·.fn)).eraseDups
@@ -3862,11 +3896,19 @@ def vcsReport (modules : List Module) (locMap : FnLocMap) (registry : ProofRegis
     for v in vcs.filter (·.fn == fq) do
       let hyps := if v.hypotheses.isEmpty then "(none)" else " ∧ ".intercalate v.hypotheses
       let deps := if v.dependencies.isEmpty then "" else s!"\n      dependencies:  {", ".intercalate v.dependencies}"
+      let eng := if v.engine.isEmpty then "" else s!" ({v.engine})"
       out := out ++ s!"\n  [{v.id}]  {v.kind}"
-        ++ s!"\n      profile/discharge:  {v.arithProfile} / {v.dischargeMode}"
+        ++ s!"\n      status:  {v.status}{eng}"
+        ++ s!"\n      profile/expected:  {v.arithProfile} / {v.dischargeMode}"
         ++ s!"\n      hypotheses:  {hyps}"
         ++ s!"\n      conclusion:  {v.conclusion}{deps}"
-  out := out ++ s!"\n\nTotal: {vcs.length} VCs"
+  -- summary by status
+  let proved := (vcs.filter (·.status == "proved_by_kernel_decision")).length
+  let lean := (vcs.filter (·.status == "proved_by_lean")).length
+  let arith := (vcs.filter (·.status == "arithmetic_proved")).length
+  let cex := (vcs.filter (·.status == "counterexample")).length
+  let unproven := (vcs.filter (fun v => v.status == "unproven" || v.status == "missing" || v.status == "planned")).length
+  out := out ++ s!"\n\nTotal: {vcs.length} VCs — {proved} proved_by_kernel_decision, {lean} proved_by_lean, {arith} arithmetic_proved, {cex} counterexample, {unproven} outstanding"
   return out
 
 /-- `concrete prove <file> <fn> --json`: the primary machine-readable proof
@@ -5256,14 +5298,14 @@ def vcToJson (v : VC) : Val :=
     ("origin", .str v.origin),
     ("dependencies", .arr (v.dependencies.map (.str ·))),
     ("arith_profile", .str v.arithProfile),
-    ("expected_discharge", .str v.dischargeMode)
+    ("expected_discharge", .str v.dischargeMode),
+    ("status", .str v.status),
+    ("engine", .str v.engine)
   ]
 
 open Json in
-/-- Versioned JSON envelope of every generated VC (schema v1). -/
-def vcsJson (modules : List Module) (locMap : FnLocMap) (registry : ProofRegistry)
-    (schemaVer : Nat) : String :=
-  let vcs := collectVCs modules locMap registry
+/-- Versioned JSON envelope of a (post-discharge) VC schedule (schema v1). -/
+def vcsJson (vcs : List VC) (schemaVer : Nat) : String :=
   (Val.obj [
     ("schema_version", .num (Int.ofNat schemaVer)),
     ("schema_kind", .str "vcs"),
@@ -6384,7 +6426,7 @@ def schemaReport : String :=
           ("schema_kind", .str "\"vcs\""),
           ("vc_schema_version", .str "number — VC schema version (currently 1)"),
           ("count", .str "number"),
-          ("vcs", .str "object[] — each: id, kind, function, loc{file,line}, hypotheses[], conclusion, origin, dependencies[], arith_profile, expected_discharge")])])
+          ("vcs", .str "object[] — each: id, kind, function, loc{file,line}, hypotheses[], conclusion, origin, dependencies[], arith_profile, expected_discharge, status, engine. status ∈ {planned, proved_by_kernel_decision, proved_by_lean, arithmetic_proved, counterexample, unproven, missing}; engine ∈ {constant_fold, omega, bv_decide, lean, \"\"}. A decision procedure can only yield proved_by_kernel_decision — never an external-solver class.")])])
     ]),
     ("policies", .obj [
       ("empty_result", .str "A query that matches zero facts returns a facts envelope with an empty facts array and fact_count 0. Semantic queries for unknown functions return a query_answer with answer \"not_found\". Neither case is an error."),

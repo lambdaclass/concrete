@@ -48,26 +48,46 @@ check_json "arith_profile from the v1 set" "$HMAC" \
 check_json "expected_discharge from the v1 set" "$HMAC" \
   "set(v['expected_discharge'] for v in d['vcs']) <= {'constant_fold','omega','bv_decide','lean','smt','none'}"
 
+echo "=== discharge outcome (kernel-checked) is folded in ==="
+check_json "status from the v1 set" "$HMAC" \
+  "set(v['status'] for v in d['vcs']) <= {'planned','proved_by_kernel_decision','proved_by_lean','arithmetic_proved','counterexample','unproven','missing'}"
+check_json "engine from the v1 set" "$HMAC" \
+  "set(v['engine'] for v in d['vcs']) <= {'constant_fold','omega','bv_decide','lean',''}"
+check_json "every kernel-decision VC names an engine" "$HMAC" \
+  "all(v['engine'] in ('constant_fold','omega','bv_decide') for v in d['vcs'] if v['status']=='proved_by_kernel_decision')"
+check_json "something actually discharged (proved_by_kernel_decision present)" "$HMAC" \
+  "any(v['status']=='proved_by_kernel_decision' for v in d['vcs'])"
+
 echo "=== TRUST BOUNDARY: SMT is not yet a discharge path ==="
-# Phase 2 has not added an external solver. No VC may claim `smt` discharge —
-# this pins that SMT cannot silently become a 'proved' route before its trust
-# model lands (items #8/#9). When SMT arrives, this assertion is updated DELIBERATELY.
-check_json "no VC routed to smt"   "$HMAC" "all(v['expected_discharge']!='smt' for v in d['vcs'])"
-check_json "no VC routed to smt"   "$POS"  "all(v['expected_discharge']!='smt' for v in d['vcs'])"
+# Phase 2 has not added an external solver. No VC may claim `smt` as its expected
+# OR actual discharge, and no status may be an external-solver class. This pins
+# that SMT cannot silently become a 'proved' route before its trust model lands
+# (items #8/#9). When SMT arrives, these assertions are updated DELIBERATELY.
+check_json "no VC expects smt"            "$HMAC" "all(v['expected_discharge']!='smt' for v in d['vcs'])"
+check_json "no VC expects smt"            "$POS"  "all(v['expected_discharge']!='smt' for v in d['vcs'])"
+check_json "no engine is smt"             "$HMAC" "all(v['engine']!='smt' for v in d['vcs'])"
+check_json "no proved_by_smt/solver_trusted status" "$HMAC" \
+  "all(v['status'] not in ('proved_by_smt','solver_trusted') for v in d['vcs'])"
 
-echo "=== symbolic precondition carries hypotheses + omega (the mature path) ==="
-check_json "block_to_words_at precond: omega + non-empty hyps" "$HMAC" \
-  "any(v['kind']=='precondition' and 'block_to_words_at' in v['origin'] and v['expected_discharge']=='omega' and len(v['hypotheses'])>0 for v in d['vcs'])"
+echo "=== honesty: loop preservation is never claimed by a decision procedure ==="
+# omega can close O2's arithmetic half only; the operational realization needs
+# Lean. So loop_invariant_preservation must NEVER be 'proved_by_kernel_decision'.
+check_json "O2 never proved_by_kernel_decision" "$HMAC" \
+  "all(v['status']!='proved_by_kernel_decision' for v in d['vcs'] if v['kind']=='loop_invariant_preservation')"
+check_json "O2 never proved_by_kernel_decision" "$POS" \
+  "all(v['status']!='proved_by_kernel_decision' for v in d['vcs'] if v['kind']=='loop_invariant_preservation')"
 
-echo "=== loop obligations enumerated (O1/O4/O5 omega, O2/O3 lean) ==="
-check_json "variant_decreases VC present, omega" "$POS" \
-  "any(v['kind']=='variant_decreases' and v['expected_discharge']=='omega' for v in d['vcs'])"
-check_json "loop_invariant_preservation is operational/lean (not a decision proc)" "$POS" \
-  "all(v['expected_discharge']=='lean' for v in d['vcs'] if v['kind']=='loop_invariant_preservation')"
+echo "=== symbolic precondition actually discharged by omega (the mature path) ==="
+check_json "block_to_words_at precond: proved_by_kernel_decision via omega + hyps" "$HMAC" \
+  "any(v['kind']=='precondition' and 'block_to_words_at' in v['origin'] and v['status']=='proved_by_kernel_decision' and v['engine']=='omega' and len(v['hypotheses'])>0 for v in d['vcs'])"
 
-echo "=== postcondition with a registered proof links its dependency ==="
-check_json "ch ensures depends on its ensures_proof" "$HMAC" \
-  "any(v['kind']=='postcondition' and v['function']=='hmac_sha256.ch' and len(v['dependencies'])>0 and v['expected_discharge']=='lean' for v in d['vcs'])"
+echo "=== loop obligations: variant_decreases discharged by omega ==="
+check_json "variant_decreases proved_by_kernel_decision via omega" "$POS" \
+  "any(v['kind']=='variant_decreases' and v['status']=='proved_by_kernel_decision' and v['engine']=='omega' for v in d['vcs'])"
+
+echo "=== postcondition with a registered proof → proved_by_lean + dependency ==="
+check_json "ch ensures proved_by_lean, depends on its ensures_proof" "$HMAC" \
+  "any(v['kind']=='postcondition' and v['function']=='hmac_sha256.ch' and len(v['dependencies'])>0 and v['status']=='proved_by_lean' and v['engine']=='lean' for v in d['vcs'])"
 
 echo ""
 echo "VC-SCHEMA: PASS=$PASS  FAIL=$FAIL"
