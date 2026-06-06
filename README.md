@@ -164,6 +164,20 @@ SMT belongs to the same accounting discipline: useful, named, policy gated, and
 never confused with a Lean theorem or kernel checked decision procedure unless
 the result is replayed.
 
+Other honest statuses appear in reports too:
+
+```text
+assumed       explicit assumption, not proof
+trusted       outside the proof model, named in audit
+partial       one direction or point proved, not the full claim
+stale         source changed after the proof was linked
+vacuous       contract holds only because the premise is impossible
+missing       proof eligible, but no proof is linked yet
+unproven      obligation generated, not discharged
+violation     runtime safety failure detected
+invalid       malformed or ill scoped contract expression
+```
+
 If you are coming from C or Rust and want the short "why this exists" version,
 read [docs/WHY_CONCRETE.md](docs/WHY_CONCRETE.md).
 

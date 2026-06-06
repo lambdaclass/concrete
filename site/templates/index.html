@@ -139,6 +139,21 @@ replay: none</code></pre>
           class are named.
         </figcaption>
       </figure>
+      <figure class="listing">
+        <pre><code>assumed    explicit assumption, not proof
+trusted    outside the proof model, named in audit
+partial    one direction or point proved, not the full claim
+stale      source changed after the proof was linked
+vacuous    contract holds only because the premise is impossible
+missing    proof eligible, but no proof is linked yet
+unproven   obligation generated, not discharged
+violation  runtime safety failure detected
+invalid    malformed or ill scoped contract expression</code></pre>
+        <figcaption>
+          Other statuses are not failures of vocabulary. They are how Concrete
+          refuses to hide weaker evidence.
+        </figcaption>
+      </figure>
     </section>
 
     <section id="model" class="paper-section">

@@ -15,7 +15,8 @@ reports that refuse to hide trust.
 
 The homepage shows the important distinction with small examples: a Lean linked
 proof, a kernel decision procedure, oracle evidence that is useful but not
-proof, and external SMT with named solver trust.
+proof, external SMT with named solver trust, and the lower evidence statuses
+that keep reports honest.
 
 Use the reference section for stable contracts and project rules. Use the guide
 section for a smaller narrative path through the language, tooling, and current
