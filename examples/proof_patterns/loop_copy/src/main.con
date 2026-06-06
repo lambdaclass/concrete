@@ -1,0 +1,18 @@
+// proof_patterns: loop copy proof.
+// Copies a fixed [i32; 2] element-by-element into a fresh buffer; the proof
+// shows the copy is faithful on a concrete input (point coverage).
+mod loopcopy {
+    #[spec(Examples.ProofPatterns.Proofs.copy2Expr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.copy2_copies_faithfully)]
+    #[proof_coverage(point)]
+    #[proof_fingerprint("e693ce90fababfc7")]
+    fn copy2(src: [i32; 2]) -> [i32; 2] {
+        let mut dst: [i32; 2] = [0; 2];
+        #[invariant(0 <= i && i <= 2)]
+        #[variant(2 - i)]
+        for (let mut i: i32 = 0; i < 2; i = i + 1) {
+            dst[i] = src[i];
+        }
+        return dst;
+    }
+}

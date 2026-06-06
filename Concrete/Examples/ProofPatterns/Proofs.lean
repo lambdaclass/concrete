@@ -63,4 +63,29 @@ theorem put_writes_index_1_frames_rest (fuel : Nat) :
       = some (.array_ [.int 10, .int 99, .int 12, .int 13]) := by
   simp [putExpr, eval, Env.bind]
 
+/-! ## 3. Loop copy
+
+`loopcopy.copy2` copies a fixed `[i32; 2]` element-by-element into a fresh
+buffer. The proof runs the whole copy loop on a concrete input and shows the
+copy is faithful (point coverage): `copy2([5, 7]) = [5, 7]`. -/
+
+/-- Spec = the extracted body of `copy2` (zero-init `dst`, counted copy loop). -/
+def copy2Expr : PExpr :=
+  .letIn "dst"
+    (.arrayLit [(.lit (.int 0)), (.lit (.int 0))])
+    (.letIn "i"
+      (.lit (.int 0))
+      (.while_
+        (.binOp .lt (.var "i") (.lit (.int 2)))
+        [ ("dst", .arraySet (.var "dst") (.var "i") (.arrayIndex (.var "src") (.var "i")))
+        , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+        (.var "dst")))
+
+/-- The copy loop faithfully copies a concrete two-element array. -/
+theorem copy2_copies_faithfully (fuel : Nat) :
+    eval (fun _ => none) (Env.empty.bind "src" (.array_ [.int 5, .int 7])) (fuel + 10) copy2Expr
+      = some (.array_ [.int 5, .int 7]) := by
+  simp [copy2Expr, eval, evalBinOp, Env.bind,
+        eval.evalAssigns, eval.evalElems, eval.lookupIndex]
+
 end Examples.ProofPatterns.Proofs
