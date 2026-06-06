@@ -134,6 +134,9 @@ jobs:
       - name: Registry-retirement gate (examples are source-linked, no JSON)
         run: bash scripts/tests/check_no_example_registries.sh
 
+      - name: Proof-namespace guard (example proofs stay under Concrete.Examples.*)
+        run: bash scripts/tests/check_proof_namespace.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

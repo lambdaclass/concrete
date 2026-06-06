@@ -1,0 +1,69 @@
+# Allowlist of theorem/lemma names permitted in Concrete/Proof.lean.
+#
+# After the theorem-namespace migration (ROADMAP item: move example proofs out of
+# Concrete.Proof.*), example-CORRECTNESS theorems live in their per-example module
+# `Concrete.Examples.<Ex>.Proofs` (namespace `Examples.<Ex>.Proofs`). Concrete.Proof
+# keeps proof INFRASTRUCTURE only. The registered spec PExprs, eval scaffolding,
+# `specs`/`provedFunctions` tables, etc. are `def`s, not theorems, and stay freely.
+#
+# `check_proof_namespace.sh` fails if Concrete/Proof.lean declares a theorem/lemma
+# whose name is NOT on this list. When that happens:
+#   * if it is example-correctness  -> define it under Concrete.Examples.<Ex>.Proofs
+#   * if it is genuine infrastructure -> add the name here (a deliberate, reviewed act)
+# Comments (#) and blank lines are ignored.
+
+# --- Proof infrastructure: PExpr/eval semantics + the loop/array "ladder" ---
+eval_lit
+eval_bool_lit
+eval_var_bound
+eval_if_true
+eval_if_false
+eval_add_lits
+eval_sub_lits
+eval_mul_lits
+eval_fuel_le
+eval_fuel_succ
+eval_while_count
+eval_while_false
+eval_while_true
+eval_while_step_unfold
+evalAssigns_fuel_le
+evalWhileStep_succ_cont
+while_step_break
+while_step_cont
+while_step_exit
+length_set
+lookupIndex_set_ne
+lookupIndex_set_self
+
+# --- Grandfathered: pre-flagship demo / legacy theorems that predate the
+#     per-example split. These are NOT a license to add new example proofs here;
+#     they are tracked debt to migrate or delete later (abs/max/clamp demos, the
+#     legacy parse_byte/check_length/decode_header set, the spec-drift fixture).
+#     New example-correctness theorems must go under Concrete.Examples.<Ex>.Proofs. ---
+abs_negative
+abs_positive
+abs_zero
+clamp_above
+clamp_below
+clamp_in_range
+max_left
+max_right
+max_self
+parse_byte_10_3
+parse_byte_boundary
+parse_byte_correct
+parse_byte_zero
+check_length_accepts_valid
+check_length_exact
+check_length_large
+check_length_rejects_short
+check_length_short
+check_length_zero
+decode_header_rejects_high_version
+decode_header_rejects_low_version
+decode_header_rejects_overflow
+decode_header_rejects_short
+decode_header_valid
+validate_rejects_short
+drift_test_theorem

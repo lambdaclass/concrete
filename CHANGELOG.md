@@ -10,6 +10,30 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Example proofs moved out of the `Concrete.Proof` compiler namespace (2026-06-06)
+
+All seven flagship/example proof developments moved out of the `Concrete.Proof`
+compiler namespace into per-example modules `Concrete.Examples.<Ex>.Proofs`
+(namespace `Examples.<Ex>.Proofs`): `loop_invariant`, `parse_validate`,
+`crypto_verify`, `fixed_capacity`, `constant_time_tag`, `elf_header`, and
+`hmac_sha256` (the whole `Sha256Refine.lean`, relocated). Source links retargeted
+accordingly: `#[proof_by]` / `#[ensures_proof]` now name the example namespace,
+while `#[spec]` keeps `Concrete.Proof.` because the registered spec PExprs are the
+compiler's spec-drift oracle (consumed by `Concrete.Proof.specs`) and stay put —
+together with the eval scaffolding and the `specs` / `provedFunctions` tables.
+The audited "spec-drift-tied" claim is preserved.
+
+The migration is held in place by a namespace guard
+(`scripts/tests/check_proof_namespace.sh`, in CI and `make test-proof-namespace`):
+no `Concrete/Examples/` file may declare `namespace Concrete.Proof`; every
+theorem/lemma in `Concrete/Proof.lean` must be on an allowlist (a new one must be
+moved to an example module or explicitly justified as infrastructure); and the
+migrated theorem names may not reappear in a `Concrete.Proof` file.
+
+Deferred (not blocking): a lower-layer `Concrete.ProofModel` / `Concrete.SpecRegistry`
+split that would also let the registered spec PExprs move without a circular
+import. The current spec-drift setup is sound; this is later architecture work.
+
 ### Source contracts become a real proof-authoring surface (2026-06-04)
 
 Source contracts moved from reported metadata to an end-to-end authoring path.

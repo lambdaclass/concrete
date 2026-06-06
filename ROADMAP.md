@@ -395,12 +395,23 @@ lemmas, and actionable failure diagnostics.
      as the drift oracle. All gates green after each example. Follow-up (separate,
      later): the lower-layer `Concrete.ProofModel`/`Concrete.SpecRegistry` split
      that would let the specs move too.
-3. Add a CI/source guard that prevents new example-owned theorem bodies from
-   being added to `Concrete.Proof`. The guard should allow core proof
-   infrastructure, registered spec PExprs, and spec-drift scaffolding while
-   rejecting theorem names/modules that belong under `Concrete.Examples.<Ex>`.
-   Once this guard and item 2 are green, ordinary Phase 8 language work may
-   proceed.
+3. ~~Add a CI/source guard that prevents new example-owned theorem bodies from
+   being added to `Concrete.Proof`.~~ **DONE.**
+   `scripts/tests/check_proof_namespace.sh` (+ `scripts/tests/proof_namespace_allowlist.txt`)
+   enforces three things: (1) no file under `Concrete/Examples/` may declare
+   `namespace Concrete.Proof`; (2) every `theorem`/`lemma` in `Concrete/Proof.lean`
+   must be on the allowlist — a new one fails until it is either moved to
+   `Concrete.Examples.<Ex>.Proofs` (if example-correctness) or added to the
+   allowlist (if genuine infrastructure, a reviewed act, same discipline as
+   snapshots); (3) the migrated flagship theorem names must not reappear in any
+   Concrete.Proof file. Registered spec PExprs / eval scaffolding / `specs` /
+   `provedFunctions` are `def`s, not theorems, so they stay freely. The allowlist
+   is sectioned: 22 infrastructure lemmas + 26 grandfathered pre-flagship
+   demo/legacy theorems (abs/max/clamp, legacy parse_byte/check_length/
+   decode_header, the spec-drift fixture) tracked as debt to migrate/delete later.
+   Wired into CI (`lean_action_ci.yml`) and `make test-proof-namespace`. With this
+   guard green, the theorem-namespace migration "stays done" and Phase 8 language
+   work may proceed.
 4. Deferred architecture refactor: split the current `Concrete.Proof` layering
    so registered example specs can move without a cycle, but do not let this
    block Phase 8 unless spec ownership or proof authoring starts depending on
