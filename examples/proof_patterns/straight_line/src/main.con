@@ -1,0 +1,12 @@
+// proof_patterns: straight-line refinement.
+// A tiny pure arithmetic function whose extracted body is proved to compute
+// exactly `x + 3` for all inputs. The simplest source-linked Lean refinement.
+mod straight_line {
+    #[spec(Examples.ProofPatterns.Proofs.addThreeExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.add_three_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("24f8f09dfab3dee7")]
+    fn add_three(x: i32) -> i32 {
+        return x + 3;
+    }
+}

@@ -137,6 +137,9 @@ jobs:
       - name: Proof-namespace guard (example proofs stay under Concrete.Examples.*)
         run: bash scripts/tests/check_proof_namespace.sh
 
+      - name: Proof-patterns corpus gate
+        run: bash scripts/tests/check_proof_patterns.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

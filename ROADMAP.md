@@ -354,7 +354,21 @@ lemmas, and actionable failure diagnostics.
 
 **Completed (recorded in [CHANGELOG.md](CHANGELOG.md)):** the JSON proof-registry retirement (source links are the only proof model); the per-example proof-theorem namespace migration (`Concrete.Examples.<Ex>.Proofs`) and its namespace guard; and the binary-first `concrete prove` agent surface — `--help=agent`/`--capabilities`/`--schema`, `--json` + `next_actions` with stable obligation ids, JSON modes for `--show-obligation`/`--replay`/`--emit-link`/`--nearest-lemmas`, `--emit-lean`, `--emit-artifacts`, `--check` (+ `--report check-proofs --json`), and `--workspace` with its CI fixture. Remaining Phase 3 work below.
 
-1. Final proof-authoring blocker before Phase 8: add one bounded proof-pattern
+1. Move example Lean proofs physically next to their Concrete examples before
+   adding new proof-pattern examples. Target layout:
+   `examples/<name>/src/main.con`, `examples/<name>/proofs/Proofs.lean`,
+   `examples/<name>/snapshot/...`. Configure Lake/module discovery so these
+   files are importable by the proof checker (for example as
+   `Examples.<Name>.Proofs` or an equivalent stable namespace), update
+   `Concrete.lean`/proof umbrellas so `check-proofs` can see them, retarget
+   source `#[proof_by]` / `#[ensures_proof]` links, and update
+   `concrete prove --emit-lean` / `--workspace` to prefer the
+   `examples/<name>/proofs/` destination. Update the proof-namespace guard to
+   reject new example proof modules under `Concrete/Examples/`. Pilot on one
+   small example, then migrate all current example proof modules. Keep registered
+   spec PExprs in `Concrete.Proof` until the later `ProofCore` /
+   `SpecRegistry` split.
+2. Final proof-authoring blocker before Phase 8: add one bounded proof-pattern
    corpus that is both regression suite and teaching set. Put it under
    `examples/proof_patterns/`, with one small subexample per shape:
    straight-line refinement, array read/write frame proof, loop copy proof,
@@ -369,62 +383,62 @@ lemmas, and actionable failure diagnostics.
    stable obligation ids, typechecking emitted stubs up to placeholders, no
    `proof-registry.json` in generated workspaces, and honest failures for
    negative variants.
-2. Add proof minimization: `concrete prove --minimize <obligation_id>` emits
+3. Add proof minimization: `concrete prove --minimize <obligation_id>` emits
     the smallest source / ProofCore / Lean slice needed to reproduce a failed
     obligation. This should be built after JSON and failed-artifact formats are
     stable, not before.
-3. Define and document stable theorem naming conventions in tool output:
+4. Define and document stable theorem naming conventions in tool output:
     `<fn>_refines_spec`, `<fn>_<obligation>_proved`,
     `<fn>_loop_<name>_preserves`, and
     `<fn>_call_<callee>_discharges_requires`. `concrete prove` should suggest
     these names instead of leaving agents to invent them.
-4. Add CI gates for the agent-facing proof surfaces: snapshot representative
+5. Add CI gates for the agent-facing proof surfaces: snapshot representative
     `--json` output, validate schema versioning, ensure generated Lean stubs
     parse/check up to the intended placeholder boundary, assert replay JSON
     reports the same statuses as human replay, and assert proof-check JSON maps
     a failing Lean proof back to the intended obligation id.
-5. Add human docs only after the binary path exists:
+6. Add human docs only after the binary path exists:
     `docs/AGENT_PROOF_AUTHORING.md` and an optional repo-root `AGENTS.md`
     should summarize the binary workflow and point to the ProofKit guide, but
     they must not be the source of truth for agents using only an installed
     binary.
-6. Add MCP only after the CLI/JSON/stub/workspace surfaces are stable. The MCP
+7. Add MCP only after the CLI/JSON/stub/workspace surfaces are stable. The MCP
     server should wrap the binary rather than duplicate logic, exposing resources such
     as `concrete://prove/<fn>/obligations`, `concrete://proofkit/lemmas`, and
     `concrete://examples/evidence-classes`, plus tools for `prove_json`,
     `show_obligation`, `emit_lean`, `check`, `replay`, and `check_proofs`.
-7. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
+8. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
     OOB stuck behavior.
-8. Build reusable lemmas for loop-carried state and `while_step`.
-9. Build reusable lemmas for BitVec operations used by flagships.
-10. Build reusable lemmas for structs, fields, enum construction, match, Result,
+9. Build reusable lemmas for loop-carried state and `while_step`.
+10. Build reusable lemmas for BitVec operations used by flagships.
+11. Build reusable lemmas for structs, fields, enum construction, match, Result,
     Option, and bounded-buffer invariants.
-11. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
+12. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
     fixed buffers, Result/Option, loops, source contracts, and refinement
     composition. Stubs should emit spec target, `PExpr` body, FnTable skeleton,
     expected theorem statement, common imports/tactics, and TODO blocks for
     loop invariants. These items enrich what `--emit-lean` produces; they do
     not introduce a second stub generator.
-12. Add generated composition scaffolds: FnTable entries, call lemmas, callee
+13. Add generated composition scaffolds: FnTable entries, call lemmas, callee
     refinement dependencies, and composed theorem skeletons.
-13. Add generated loop-invariant templates for common proof shapes:
+14. Add generated loop-invariant templates for common proof shapes:
     counter loop over array writes, copy loop, fold loop, multi-store loop,
     offset loop, and block-processing loop.
-14. Improve failed-proof diagnostics after `--json`, failed artifacts, and
+15. Improve failed-proof diagnostics after `--json`, failed artifacts, and
     `--minimize` exist: classify common failures into actionable categories
     such as missing callee theorem, stale source link, missing table entry,
     failed arithmetic bridge, insufficient frame fact, and spec/extraction
     mismatch. Diagnostics should point to the already-generated artifact or
     next action instead of introducing another parallel proof surface.
-15. Add proof-result caching once proof artifacts and fingerprints are stable.
-16. Add simple auto-discharge for structural obligations that do not need human
+16. Add proof-result caching once proof artifacts and fingerprints are stable.
+17. Add simple auto-discharge for structural obligations that do not need human
     proof search.
-17. Add a small verified/spec-checked standard proof library for common
+18. Add a small verified/spec-checked standard proof library for common
     predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
     constant-time source shape.
-18. Add AI-assisted proof repair only after artifacts, statuses, and replay are
+19. Add AI-assisted proof repair only after artifacts, statuses, and replay are
     stable enough to validate suggestions mechanically.
-19. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
+20. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
    establish not just what an iteration *changes* but what it *preserves* — the
    frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
    "a proof mentioning only its footprint preserves everything else"). Today
@@ -443,7 +457,7 @@ lemmas, and actionable failure diagnostics.
    majority of proof work. Gate: do not build it until a second update shape
    actually forces it (per the operating rules) — the current functional-list
    model gets framing for free.
-20. Deferred architecture refactor: split the current `Concrete.Proof` layering
+21. Deferred architecture refactor: split the current `Concrete.Proof` layering
    so registered example specs can move without a cycle, but do not let this
    block Phase 8 unless spec ownership or proof authoring starts depending on
    it. Target shape: `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation,

@@ -1,0 +1,16 @@
+// proof_patterns: workspace fixture.
+//
+// `concrete prove examples/proof_patterns/workspace/src/main.con
+//  workspace.scale_by_two --workspace <dir>` generates a self-contained,
+// disposable proof workspace: manifest.json, context.json, obligations/<id>.json,
+// <Fn>Proofs.lean (emit-lean stub), link.con.txt, check.sh, replay.sh, README.md.
+// It must contain NO proof-registry.json (the side-channel stays deleted).
+mod workspace {
+    #[spec(Examples.ProofPatterns.Proofs.scaleByTwoExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.scale_by_two_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("95879500a4d022c")]
+    fn scale_by_two(x: i32) -> i32 {
+        return x * 2;
+    }
+}

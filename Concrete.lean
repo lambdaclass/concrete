@@ -35,6 +35,7 @@ import Concrete.Examples.CryptoVerify.Proofs
 import Concrete.Examples.FixedCapacity.Proofs
 import Concrete.Examples.ConstantTimeTag.Proofs
 import Concrete.Examples.ElfHeader.Proofs
+import Concrete.Examples.ProofPatterns.Proofs
 import Concrete.Format
 import Concrete.Verify
 import Concrete.DebugBundle

@@ -1,0 +1,16 @@
+// proof_patterns: agent repair fixture.
+//
+// The function links a #[proof_by] to a theorem that does NOT exist yet (the
+// author hasn't written it). `concrete prove ... --check --json` runs the Lean
+// kernel and maps the failure back to the obligation id with status
+// `missing_theorem` — the closed repair loop. (proof-status alone would call it
+// proved on fingerprint; --check is what actually verifies the proof exists.)
+mod repair {
+    #[spec(Examples.ProofPatterns.Proofs.addThreeExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.add_three_not_yet_proved)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("24f8f09dfab3dee7")]
+    fn needs_proof(x: i32) -> i32 {
+        return x + 3;
+    }
+}

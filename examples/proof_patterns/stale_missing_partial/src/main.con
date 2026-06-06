@@ -1,0 +1,32 @@
+// proof_patterns: the non-green proof states, each shown intentionally.
+//
+// proof-status / `concrete prove --json` classify each function honestly:
+//   - missing : eligible, but no proof link in source
+//   - stale   : linked, but #[proof_fingerprint] no longer matches the body
+//   - partial : proved, but coverage is one-directional (no #[ensures_proof])
+// All three reuse the straight-line proof (body is `x + 3`) so the states are
+// about the LINK metadata, not a different computation.
+mod states {
+    // MISSING: no proof attributes at all.
+    fn missing(x: i32) -> i32 {
+        return x + 3;
+    }
+
+    // STALE: correct theorem, but a deliberately wrong stored fingerprint.
+    #[spec(Examples.ProofPatterns.Proofs.addThreeExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.add_three_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("deadbeefdeadbeef")]
+    fn stale(x: i32) -> i32 {
+        return x + 3;
+    }
+
+    // PARTIAL: proved, but only the forward direction (one_direction coverage).
+    #[spec(Examples.ProofPatterns.Proofs.addThreeExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.add_three_correct)]
+    #[proof_coverage(one_direction)]
+    #[proof_fingerprint("24f8f09dfab3dee7")]
+    fn partial(x: i32) -> i32 {
+        return x + 3;
+    }
+}

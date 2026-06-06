@@ -1,0 +1,44 @@
+// proof_patterns: runtime-safety obligations (compiler-discharged, no Lean proof).
+//
+// `--report contracts` shows bounds / division / overflow obligations and how
+// each is discharged. The positives are proved by the kernel decision procedure
+// (omega / bv_decide) from the in-scope precondition or loop invariant; the
+// negative variant has no bound, so it stays `unproven` — failing honestly,
+// never a false green.
+mod rt {
+    // bounds: precondition bounds the index → omega-proved safe.
+    #[requires(0 <= i && i < 4)]
+    fn get(a: [i32; 4], i: i32) -> i32 {
+        return a[i];
+    }
+
+    // division: precondition makes the divisor nonzero → omega-proved safe.
+    #[requires(0 < d)]
+    fn ratio(n: i32, d: i32) -> i32 {
+        return n / d;
+    }
+
+    // overflow: bounded operands → bv_decide proves a * b cannot overflow i32.
+    #[overflow_checked]
+    #[requires(0 <= a && a < 1000 && 0 <= b && b < 1000)]
+    fn scale(a: i32, b: i32) -> i32 {
+        return a * b;
+    }
+
+    // bounds from a loop invariant (no #[requires]): the invariant + guard feed
+    // the access obligation → omega-proved safe.
+    fn sum(a: [i32; 4]) -> i32 {
+        let mut s: i32 = 0;
+        #[invariant(0 <= i && i <= 4)]
+        #[variant(4 - i)]
+        for (let mut i: i32 = 0; i < 4; i = i + 1) {
+            s = s + a[i];
+        }
+        return s;
+    }
+
+    // NEGATIVE variant: unbounded index, no precondition → cannot be proved.
+    fn unchecked(a: [i32; 4], i: i32) -> i32 {
+        return a[i];
+    }
+}
