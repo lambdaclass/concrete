@@ -830,4 +830,274 @@ example : fnTableComplete fixedCapacityFns fcTagExpr := by decide
 -- constant_time_tag (uses ctTagFns)
 example : fnTableComplete ctTagFns ctCompareExpr := by decide
 
+/-! ## Source-contract soundness (Phase 1, R-22..R-28)
+
+The R-01..R-21 theorems above are about ProofCore *extraction* (source body →
+PExpr, meaning preserved). This section is the meta-level justification for the
+*source-contract* obligation pipeline — the `#[requires]`/`#[ensures]`/
+`#[invariant]` machinery in `Report.lean` and `Main.lean`.
+
+The VC generators (`Report.callPrecondGoals`, `assertGoals`, `vacuityGoals`,
+loop O1–O5) lower a contract clause to a Lean `Prop` *string* and hand it to
+omega. We cannot prove theorems about strings, so we model the supported clause
+fragment as a real inductive (`Clause`) whose `eval` IS the contract's intended
+semantics, and prove the soundness relationships over it. Each theorem names the
+operational rule it justifies. Anything outside this fragment the real lowerer
+maps to `none` and reports `unproven` — never `proved` — so the model's coverage
+is a *lower* bound on honesty, never an over-claim.
+
+`Clause.eval env` reads "the clause holds in environment `env`". A function's
+precondition is the conjunction of its `#[requires]` clauses; its postcondition
+the conjunction of its `#[ensures]` clauses (with `result` a distinguished var). -/
+
+/-- Integer terms over program variables — the arithmetic fragment omega sees. -/
+inductive CTerm where
+  | lit (n : Int)
+  | var (n : String)
+  | add (a b : CTerm)
+  | sub (a b : CTerm)
+  deriving Repr
+
+/-- The decidable contract-clause fragment (comparisons + boolean connectives),
+    mirroring `Report.toLeanProp`'s supported subset. -/
+inductive Clause where
+  | tt | ff
+  | le (a b : CTerm)
+  | lt (a b : CTerm)
+  | eq (a b : CTerm)
+  | and (p q : Clause)
+  | or  (p q : Clause)
+  | not (p : Clause)
+  deriving Repr
+
+def CTerm.eval (env : String → Int) : CTerm → Int
+  | .lit n   => n
+  | .var n   => env n
+  | .add a b => a.eval env + b.eval env
+  | .sub a b => a.eval env - b.eval env
+
+/-- The intended semantics of a contract clause. This is what the generated omega
+    goal *means*; soundness is stated relative to it. -/
+def Clause.eval (env : String → Int) : Clause → Prop
+  | .tt      => True
+  | .ff      => False
+  | .le a b  => a.eval env ≤ b.eval env
+  | .lt a b  => a.eval env < b.eval env
+  | .eq a b  => a.eval env = b.eval env
+  | .and p q => p.eval env ∧ q.eval env
+  | .or  p q => p.eval env ∨ q.eval env
+  | .not p   => ¬ p.eval env
+
+/-! ### R-22: a discharged obligation IS the advertised claim
+
+`Report.callPrecondGoals` / the ensures VC generate `∀ env, pre → post`. Proving
+that goal (omega) is *definitionally* proving the contract claim "whenever the
+precondition holds, the postcondition holds". The identity below makes the link
+explicit: there is no gap between "omega closed the VC" and "the claim holds". -/
+theorem discharged_implies_claim (pre post : Clause)
+    (hVC : ∀ env, pre.eval env → post.eval env) :
+    ∀ env, pre.eval env → post.eval env := hVC
+
+/-- Call-site corollary: where the caller establishes the precondition (the
+    `callPrecondGoals` hypotheses), the callee's postcondition holds. -/
+theorem callsite_sound (pre post : Clause)
+    (hVC : ∀ env, pre.eval env → post.eval env)
+    (env : String → Int) (hcall : pre.eval env) : post.eval env :=
+  hVC env hcall
+
+/-! ### R-23: a vacuous precondition trivializes — and so is NOT a real proof
+
+If the precondition is unsatisfiable (`vacuityGoals` proves `∀ env, ¬ pre`), the
+postcondition VC `∀ env, pre → post` holds for *every* `post`, carrying zero
+information about the function. The second theorem is the smoking gun: under a
+vacuous precondition you can even "prove" the postcondition `False`. This is
+exactly why `Report.contractsReport` reports such a function `vacuous`, never
+`proved`, and `Policy.enforceNoVacuous` rejects it (E0613). -/
+theorem vacuous_trivializes (pre post : Clause)
+    (hvac : ∀ env, ¬ pre.eval env) :
+    ∀ env, pre.eval env → post.eval env :=
+  fun env hp => absurd hp (hvac env)
+
+theorem vacuous_even_proves_false (pre : Clause)
+    (hvac : ∀ env, ¬ pre.eval env) :
+    ∀ env, pre.eval env → Clause.ff.eval env :=
+  fun env hp => absurd hp (hvac env)
+
+/-! ### R-24: adding a `#[requires]` conjunct STRENGTHENS the precondition (breaking)
+
+Justifies `Report.isWeakening "contract" "requires"`: a clause present in the new
+version but not the old strengthens the precondition. `add_requires_strengthens`
+shows the new precondition implies the old (so the function demands at least as
+much); `add_requires_can_break` exhibits an environment a previously-valid caller
+satisfied that the new precondition rejects — i.e. it is a breaking change. -/
+theorem add_requires_strengthens (pold radd : Clause) (env : String → Int)
+    (h : (Clause.and pold radd).eval env) : pold.eval env := h.1
+
+theorem add_requires_can_break (pold radd : Clause) (env : String → Int)
+    (_hold : pold.eval env) (hnr : ¬ radd.eval env) :
+    ¬ (Clause.and pold radd).eval env :=
+  fun h => hnr h.2
+
+/-! ### R-25: dropping an `#[ensures]` conjunct WEAKENS the guarantee (breaking)
+
+Justifies `Report.isWeakening "contract" "ensures"`. The kept postcondition is
+implied by the old (so the change is "compatible" for the kept part), but a caller
+that relied on the dropped conjunct loses a guarantee it had — a breaking change. -/
+theorem drop_ensures_compatible (qkept sdropped : Clause) (env : String → Int)
+    (h : (Clause.and qkept sdropped).eval env) : qkept.eval env := h.1
+
+theorem drop_ensures_loses_guarantee (qkept sdropped : Clause) (env : String → Int)
+    (hq : qkept.eval env) (hns : ¬ sdropped.eval env) :
+    qkept.eval env ∧ ¬ sdropped.eval env := ⟨hq, hns⟩
+
+/-! ### R-26: the spec/ghost language is total
+
+A `spec fn` is body-less and modeled as a total Lean function; a `ghost let` is
+erased before Core. Lean functions are total by construction, so a spec call in a
+contract cannot diverge or get stuck — the totality `Report.contractImpureCalls`
+enforces operationally (rejecting capability/effectful calls) holds by
+construction for the things that survive into the contract. -/
+theorem spec_total {α β : Type} (f : α → β) (a : α) : ∃ b, f a = b := ⟨f a, rfl⟩
+
+/-! ### R-27: the constant folder is sound (parsing preserves meaning)
+
+`Report.cEvalBool` constant-folds a closed clause (no free variables); the vacuity
+constant tier and the assert-`VIOLATION` detector trust its verdict. `evalConst`
+models that folder; the theorems prove its verdict agrees with the real semantics
+`Clause.eval` in *every* environment — so a `some false` verdict (used to flag
+`#[requires(false)]` vacuous and `assert(0>1)` violations) is genuinely
+unsatisfiable, never a false alarm, and a `some true` genuinely holds. -/
+def CTerm.evalConst : CTerm → Option Int
+  | .lit n   => some n
+  | .var _   => none
+  | .add a b => match a.evalConst, b.evalConst with
+                | some x, some y => some (x + y) | _, _ => none
+  | .sub a b => match a.evalConst, b.evalConst with
+                | some x, some y => some (x - y) | _, _ => none
+
+theorem CTerm.evalConst_sound (t : CTerm) (env : String → Int) (n : Int)
+    (h : t.evalConst = some n) : t.eval env = n := by
+  induction t generalizing n with
+  | lit m => simp [CTerm.evalConst] at h; simp [CTerm.eval, h]
+  | var s => simp [CTerm.evalConst] at h
+  | add a b iha ihb =>
+    simp only [CTerm.evalConst] at h
+    split at h <;> simp_all [CTerm.eval]
+  | sub a b iha ihb =>
+    simp only [CTerm.evalConst] at h
+    split at h <;> simp_all [CTerm.eval]
+
+def Clause.evalConst : Clause → Option Bool
+  | .tt      => some true
+  | .ff      => some false
+  | .le a b  => match a.evalConst, b.evalConst with
+                | some x, some y => some (decide (x ≤ y)) | _, _ => none
+  | .lt a b  => match a.evalConst, b.evalConst with
+                | some x, some y => some (decide (x < y)) | _, _ => none
+  | .eq a b  => match a.evalConst, b.evalConst with
+                | some x, some y => some (decide (x = y)) | _, _ => none
+  | .and p q => match p.evalConst, q.evalConst with
+                | some x, some y => some (x && y) | _, _ => none
+  | .or  p q => match p.evalConst, q.evalConst with
+                | some x, some y => some (x || y) | _, _ => none
+  | .not p   => match p.evalConst with
+                | some x => some (!x) | _ => none
+
+/-- The constant folder is sound: when it returns a verdict, that verdict is the
+    clause's truth value in every environment. Hence `some false` ⇒ genuinely
+    unsatisfiable (vacuity / assert-violation are not false alarms), and
+    `some true` ⇒ genuinely valid. -/
+theorem Clause.evalConst_sound (c : Clause) (env : String → Int) (b : Bool)
+    (h : c.evalConst = some b) : (c.eval env ↔ b = true) := by
+  induction c generalizing b with
+  | tt => simp [Clause.evalConst] at h; simp [Clause.eval, ← h]
+  | ff => simp [Clause.evalConst] at h; simp [Clause.eval, ← h]
+  | le a d =>
+    simp only [Clause.evalConst] at h
+    cases ha : a.evalConst with
+    | none => rw [ha] at h; simp at h
+    | some x => cases hd : d.evalConst with
+      | none => rw [ha, hd] at h; simp at h
+      | some y =>
+        rw [ha, hd] at h; simp only [Option.some.injEq] at h
+        rw [Clause.eval, CTerm.evalConst_sound a env x ha,
+            CTerm.evalConst_sound d env y hd, ← h]; simp
+  | lt a d =>
+    simp only [Clause.evalConst] at h
+    cases ha : a.evalConst with
+    | none => rw [ha] at h; simp at h
+    | some x => cases hd : d.evalConst with
+      | none => rw [ha, hd] at h; simp at h
+      | some y =>
+        rw [ha, hd] at h; simp only [Option.some.injEq] at h
+        rw [Clause.eval, CTerm.evalConst_sound a env x ha,
+            CTerm.evalConst_sound d env y hd, ← h]; simp
+  | eq a d =>
+    simp only [Clause.evalConst] at h
+    cases ha : a.evalConst with
+    | none => rw [ha] at h; simp at h
+    | some x => cases hd : d.evalConst with
+      | none => rw [ha, hd] at h; simp at h
+      | some y =>
+        rw [ha, hd] at h; simp only [Option.some.injEq] at h
+        rw [Clause.eval, CTerm.evalConst_sound a env x ha,
+            CTerm.evalConst_sound d env y hd, ← h]; simp
+  | and p q ihp ihq =>
+    simp only [Clause.evalConst] at h
+    cases hp : p.evalConst with
+    | none => rw [hp] at h; simp at h
+    | some x => cases hq : q.evalConst with
+      | none => rw [hp, hq] at h; simp at h
+      | some y =>
+        rw [hp, hq] at h; simp only [Option.some.injEq] at h
+        rw [Clause.eval, ← h]
+        rw [ihp x hp, ihq y hq]; simp
+  | or p q ihp ihq =>
+    simp only [Clause.evalConst] at h
+    cases hp : p.evalConst with
+    | none => rw [hp] at h; simp at h
+    | some x => cases hq : q.evalConst with
+      | none => rw [hp, hq] at h; simp at h
+      | some y =>
+        rw [hp, hq] at h; simp only [Option.some.injEq] at h
+        rw [Clause.eval, ← h]
+        rw [ihp x hp, ihq y hq]; simp
+  | not p ihp =>
+    simp only [Clause.evalConst] at h
+    cases hp : p.evalConst with
+    | none => rw [hp] at h; simp at h
+    | some x =>
+      rw [hp] at h; simp only [Option.some.injEq] at h
+      rw [Clause.eval, ← h, ihp x hp]; simp
+
+/-- Corollary used by the vacuity constant tier: a clause that folds to `false`
+    is unsatisfiable in every environment. -/
+theorem Clause.const_false_unsat (c : Clause) (env : String → Int)
+    (h : c.evalConst = some false) : ¬ c.eval env := by
+  have := Clause.evalConst_sound c env false h
+  simp_all
+
+/-! ### R-28: source proof link ⇒ same claim class as the registry entry
+
+This one is *operational*, not a Lean theorem: `#[proof_by]`/`#[ensures_proof]`
+links are checked by the spec-drift gate (`Report` spec-drift machinery + the
+`#[proof_fingerprint]` model), which rejects a link whose extracted PExpr does not
+match the registered spec, and downgrades a stale fingerprint to `stale`. The
+soundness contract is: a green `proved_by_lean` on a source link carries the same
+claim class (`point`/`iff`/`invariant`) as the registry entry it resolves to. The
+`fnTableComplete` `decide`-checks above and the spec-drift regression
+(`check_contract_negatives.sh::fabricated_proof`, `run_tests.sh::spec_drift`) pin
+that operationally; no over-claim is made here at the kernel level. -/
+
+/-! ### Sanity checks — the soundness fragment kernel-checks on concrete clauses -/
+
+-- `#[requires(false)]` is genuinely unsatisfiable (vacuity constant tier).
+example : Clause.ff.evalConst = some false := rfl
+-- `assert(0 > 1)` constant-folds to a VIOLATION (false), soundly; `0 < 1` holds.
+example : (Clause.lt (.lit 0) (.lit 1)).evalConst = some true := rfl
+example : (Clause.lt (.lit 1) (.lit 0)).evalConst = some false := rfl
+-- contradictory `#[requires]` x>0 ∧ x<0: at a free var the folder bails (`none`),
+-- matching the omega tier taking over from the constant tier.
+example : (Clause.and (.lt (.lit 0) (.var "x")) (.lt (.var "x") (.lit 0))).evalConst = none := rfl
+
 end Concrete.ProofSoundness

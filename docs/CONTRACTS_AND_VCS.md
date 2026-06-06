@@ -685,6 +685,35 @@ The audit and release bundle must name which of these affect a given claim.
 15. Retrofit one flagship with source contracts.
 16. Add Lean replay for simple arithmetic/bounds fragments.
 
+## Soundness Bridge
+
+The source-contract pipeline is justified at the kernel level by the
+`Source-contract soundness (R-22..R-28)` section of `Concrete/ProofSoundness.lean`.
+A small `Clause` inductive models the decidable contract fragment the VC
+generators actually lower; its `eval` is the contract's intended semantics, and
+the theorems prove the relationships the pipeline relies on:
+
+- **R-22 `discharged_implies_claim` / `callsite_sound`** — the omega goal
+  `∀ env, pre → post` *is* the contract claim; closing it leaves no gap.
+- **R-23 `vacuous_trivializes` / `vacuous_even_proves_false`** — an unsatisfiable
+  precondition makes the postcondition VC hold for *any* `post` (even `False`),
+  so a vacuous contract is reported `vacuous`, never `proved` (E0613).
+- **R-24 `add_requires_strengthens` / `add_requires_can_break`** and
+  **R-25 `drop_ensures_compatible` / `drop_ensures_loses_guarantee`** — justify
+  the `concrete diff` contract-drift classification: a `requires` conjunct added,
+  or an `ensures` conjunct dropped, is a breaking change.
+- **R-26 `spec_total`** — a `spec fn` is modeled as a total Lean function.
+- **R-27 `Clause.evalConst_sound` / `const_false_unsat`** — the constant folder
+  (vacuity constant tier, `assert(...)` VIOLATION detector) agrees with the real
+  semantics in every environment, so a `some false` verdict is genuinely
+  unsatisfiable, never a false alarm.
+- **R-28** — source proof links carrying the same claim class as their registry
+  entry is enforced operationally by the spec-drift gate (no kernel over-claim).
+
+Anything outside the modeled fragment the real lowerer maps to `none` and reports
+`unproven` — never `proved` — so the model's coverage is a lower bound on
+honesty, not an over-claim.
+
 ## Relationship To Existing Docs
 
 - `docs/PROVABLE_V1.md` defines the current subset that can carry

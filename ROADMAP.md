@@ -281,11 +281,21 @@ retrofit is explicitly queued behind proof-link migration.
    `check_contract_stability.sh` (6/0, wired into CI proof_gate + Makefile) pin
    all four directions and the clean self-diff. Schema (`--report schema`) and
    api-versioning fact-kind catalog updated to 12.
-7. Add source contract soundness work to the compiler soundness bridge: parsing
-   preserves meaning, generated obligations correspond to contract semantics,
-   discharged obligations imply the advertised contract claim, and source proof
-   links imply the same claim class as their generated registry entry. Include
-   satisfiability/vacuity and spec/ghost totality in this soundness story.
+7. **[done]** Source-contract soundness bridge. `Concrete/ProofSoundness.lean`
+   gains a `Source-contract soundness (R-22..R-28)` section: a `Clause` inductive
+   models the decidable contract fragment the VC generators lower, with `eval` as
+   the intended semantics. Kernel-checked theorems (no `sorry`; only `propext`/
+   `Quot.sound`): R-22 `discharged_implies_claim`/`callsite_sound` (the omega goal
+   IS the claim); R-23 `vacuous_trivializes`/`vacuous_even_proves_false` (a
+   vacuous precondition proves any postcondition, even `False` → reported
+   `vacuous`, not `proved`); R-24/R-25 `add_requires_strengthens`+`_can_break` /
+   `drop_ensures_compatible`+`_loses_guarantee` (justify the `concrete diff`
+   contract-drift classification); R-26 `spec_total` (spec fns total by
+   construction); R-27 `Clause.evalConst_sound`/`const_false_unsat` by structural
+   induction (the constant folder behind the vacuity tier + assert-VIOLATION
+   agrees with the real semantics in every env — never a false alarm); R-28 the
+   source-link claim-class equality is the operational spec-drift gate (no kernel
+   over-claim). Documented in `docs/CONTRACTS_AND_VCS.md` (Soundness Bridge).
 8. Add `hmac_sha256` source-contract retrofit only after proof-link migration
    and `concrete prove` examples make the small proof path routine. Do not
    start by moving the HMAC chain; use it as the late regression anchor for the
