@@ -395,15 +395,29 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
    the library exists, is actually used by the corpus, and is not re-duplicated as
    example one-offs. Classifications unchanged (HMAC proofs stay `proved_by_lean`;
    fingerprints / ProvableV1 conformance / oracle 200/0 all unchanged); no SMT.
-8. Add an *external* SMT backend behind an explicit flag or policy gate, reached
-   for only when `bv_decide` cannot (e.g. nonlinear). Start with one solver
-   adapter and a stable SMT-LIB output path before adding more solvers. Its
-   results are `solver_trusted` (solver enters the TCB) unless a certificate is
-   replayed — never collapsed into a kernel-checked class.
-9. Classify solver results in reports and artifacts:
-   `proved_by_kernel_decision` (kernel-checked), `proved_by_smt` /
-   `solver_trusted` (external), `unknown`, `counterexample`, `timeout`,
-   `solver_error`.
+8. **[done — narrow first slice]** External SMT backend, opt-in. Reached only
+   when the kernel tiers cannot (one VC class for now: `#[overflow_checked]`
+   no-overflow obligations whose operand is genuinely nonlinear — a product of
+   two variables — not constant and not closed by interval `bv_decide`;
+   `Report.overflowSmtGoals` selects them). `--report vcs --emit-smt` emits a
+   stable QF_NIA SMT-LIB query per eligible VC, translated from structured
+   `Expr`s (`Report.exprToSmt`) so it is well-formed by construction — declares
+   the vars, asserts every in-scope `#[requires]`, asserts the negated range
+   goal, `(check-sat)`; if any hypothesis falls outside the fragment the query is
+   dropped (never emitted unsound). `--report vcs --smt` runs one solver (Z3,
+   `-T:5`, `Main.smtDischarge`); an absent solver yields `solver_error`, never a
+   proof. Results are `solver_trusted` (solver in the TCB; no replay yet) — never
+   collapsed into a kernel-checked class. Gate `check_smt_path.sh` (9/0); example
+   `examples/smt/nonlinear_overflow/` + `examples/smt/README.md`. Later: more
+   solvers, policy gating (item 13), Lean replay (item 12).
+9. **[done — classes wired]** Solver results are classified separately in the VC
+   view: `proved_by_kernel_decision` (kernel), `proved_by_lean` (Lean),
+   `solver_trusted` (external `unsat`), `counterexample` (`sat`), `unknown`,
+   `timeout`, `solver_error`. `Report.foldSmtResults` applies the external classes
+   ONLY to a VC the kernel tiers left `unproven`, so the classes never merge;
+   `check_vc_schema.sh` pins that no solver class appears by default and
+   `check_smt_path.sh` pins the flagged classification. (`proved_by_smt_replayed`
+   awaits the Lean-replay path, item 12.)
 10. Surface counterexamples in source terms where possible: function inputs,
    loop variables, failing index, failing arithmetic side condition, and the
    contract/obligation that failed.

@@ -596,6 +596,32 @@ Solver result classes:
 SMT must not silently mark an obligation as `proved_by_lean`. If replay into
 Lean is not available, the solver is part of the trusted base for that claim.
 
+### Shipped (v1 narrow slice)
+
+The first external-SMT slice is live, deliberately narrow, and opt-in:
+
+- **One VC class.** Only `#[overflow_checked]` no-overflow obligations whose
+  operand is genuinely nonlinear (a product of two variables), not constant, and
+  not closed by the interval `bv_decide` path — i.e. exactly what the
+  kernel-checked tiers cannot own. `Report.overflowSmtGoals` selects them.
+- **Stable SMT-LIB output.** `--report vcs --emit-smt` emits a QF_NIA query per
+  eligible VC, translated from structured `Expr`s (so it is well-formed by
+  construction): declare the integer vars, assert every in-scope `#[requires]`,
+  assert the *negation* of the range goal, `(check-sat)`. If any hypothesis falls
+  outside the SMT fragment the whole query is dropped — never emitted missing a
+  constraint.
+- **One solver, pinned.** `--report vcs --smt` runs Z3 (`-T:5`), reads the first
+  line, and classifies: `unsat → solver_trusted`, `sat → counterexample`,
+  `unknown → unknown`, timeout → `timeout`. If Z3 is absent the verdict is
+  `solver_error` — an absent solver never yields a proof.
+- **The boundary holds.** SMT results are folded in by `Report.foldSmtResults`
+  ONLY onto a VC the kernel tiers left `unproven`, so a solver can never override
+  or be confused with `proved_by_kernel_decision`/`proved_by_lean`. Without the
+  flag, no VC advertises `smt` (`expected_discharge`, `engine`) or any solver
+  status. `solver_trusted` means the solver is in the trusted base for that claim
+  (no Lean replay yet — that is item #12). Pinned by `check_smt_path.sh` and
+  `check_vc_schema.sh`; example in `examples/smt/nonlinear_overflow/`.
+
 ## Lean Integration
 
 Lean remains the highest-confidence evidence path.

@@ -155,6 +155,9 @@ jobs:
       - name: ProofKit arithmetic-bridge gate (Phase 2 library)
         run: bash scripts/tests/check_proofkit_arith.sh
 
+      - name: External-SMT path gate (Phase 2 trust boundary)
+        run: bash scripts/tests/check_smt_path.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

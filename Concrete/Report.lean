@@ -1663,6 +1663,7 @@ structure OverflowObl where
   closedVerdict : Option Bool
   leanGoal      : Option String           -- omega goal (linear)
   bvGoal        : Option String := none    -- widened bv_decide goal (nonlinear, interval-gated)
+  hyps          : List Expr := []          -- the in-scope #[requires]/guards (for the SMT query)
 
 /-- All annotated `let` bindings in a statement tree, including those declared
     inside loop inits/steps/bodies (so a loop counter `i` from a `for`-init is
@@ -1802,7 +1803,7 @@ def overflowObligations (modules : List Module) : List OverflowObl := Id.run do
         -- omega's linear goal won't close it — i.e. the constant case is skipped).
         let bvGoal := if cv.1.isSome then none else overflowBVGoal e lo hi hyps
         out := out ++ [{ fnQual := fq, key, opExpr := e, lo, hi
-                       , closedVerdict := cv.1, leanGoal := cv.2, bvGoal }]
+                       , closedVerdict := cv.1, leanGoal := cv.2, bvGoal, hyps }]
         i := i + 1
       | _, _ => pure ()
   return out
@@ -1816,6 +1817,79 @@ def overflowGoals (modules : List Module) : List (String × String) :=
     only for obligations omega left unproven. -/
 def overflowBVGoals (modules : List Module) : List (String × String) :=
   (overflowObligations modules).filterMap fun o => o.bvGoal.map (fun g => (o.key, g))
+
+/-! ## External-SMT path (Phase 2 #8) — narrow first slice
+
+The kernel-checked tiers (constant fold → omega → `bv_decide`) are exhausted
+first. What genuinely remains outside them is *nonlinear* integer arithmetic —
+a product of two program variables that interval analysis cannot bound. For that
+one narrow VC class we can emit a standard SMT-LIB query and hand it to an
+external solver. The result is NEVER a kernel-checked class: it is
+`solver_trusted` / `proved_by_smt` (the solver enters the TCB), kept distinct
+from `proved_by_kernel_decision`, and only ever produced behind an explicit flag.
+The translation targets structured `Expr`s (not the Lean-syntax strings), so the
+emitted SMT-LIB is well-formed by construction. -/
+
+/-- Lower a contract `Expr` to an SMT-LIB (QF_NIA) s-expression. Same fragment as
+    `toLeanProp`: integer literals/vars, add/sub/mul, comparisons, and/or/not. -/
+partial def exprToSmt : Expr → Option String
+  | .intLit _ v => some (if v < 0 then s!"(- {-v})" else s!"{v}")
+  | .ident _ n => some n
+  | .paren _ e => exprToSmt e
+  | .unaryOp _ op e => do
+    let E ← exprToSmt e
+    match op with
+    | .neg  => some s!"(- {E})"
+    | .not_ => some s!"(not {E})"
+    | _     => none
+  | .binOp _ op l r => do
+    let L ← exprToSmt l
+    let R ← exprToSmt r
+    match op with
+    | .leq => some s!"(<= {L} {R})" | .lt => some s!"(< {L} {R})"
+    | .geq => some s!"(>= {L} {R})" | .gt => some s!"(> {L} {R})"
+    | .eq  => some s!"(= {L} {R})"  | .neq => some s!"(not (= {L} {R}))"
+    | .and_ => some s!"(and {L} {R})" | .or_ => some s!"(or {L} {R})"
+    | .add => some s!"(+ {L} {R})" | .sub => some s!"(- {L} {R})" | .mul => some s!"(* {L} {R})"
+    | _ => none
+  | _ => none
+
+/-- True when `e` contains a multiplication of two non-constant operands — the
+    genuinely nonlinear shape `omega` cannot own and interval `bv_decide` may miss. -/
+partial def exprHasNonlinMul : Expr → Bool
+  | .binOp _ .mul l r => (cEvalInt l).isNone && (cEvalInt r).isNone
+      || exprHasNonlinMul l || exprHasNonlinMul r
+  | .binOp _ _ l r => exprHasNonlinMul l || exprHasNonlinMul r
+  | .paren _ e => exprHasNonlinMul e
+  | _ => false
+
+/-- The SMT-eligible VC class (v1): `#[overflow_checked]` obligations whose operand
+    is genuinely nonlinear (a product of variables), not constant, and not already
+    closed by the interval `bv_decide` path. Returns `(vcKey, smtlibScript)`. The
+    script asserts the in-scope hypotheses and the NEGATION of the range goal:
+    `unsat` ⇒ no overflow (solver-proved); `sat` ⇒ a counterexample exists. -/
+def overflowSmtGoals (modules : List Module) : List (String × String) := Id.run do
+  let mut out : List (String × String) := []
+  for o in overflowObligations modules do
+    if o.closedVerdict.isSome then continue          -- constant tier owns it
+    if o.bvGoal.isSome then continue                 -- interval bv_decide owns it
+    if !exprHasNonlinMul o.opExpr then continue      -- omega owns the linear case
+    -- soundness: require the operand AND every hypothesis to lower. If any
+    -- #[requires]/guard falls outside the SMT fragment, DROP the whole query
+    -- rather than emit one missing a constraint (which could read as a spurious
+    -- counterexample). Never emit an unsound query.
+    match exprToSmt o.opExpr, o.hyps.mapM exprToSmt with
+    | some eSmt, some hypSmts =>
+      let vars := (collectIdents o.opExpr ++ o.hyps.flatMap collectIdents).eraseDups
+      let decls := vars.map (fun v => s!"(declare-const {v} Int)")
+      let hypAsserts := hypSmts.map (fun s => s!"(assert {s})")
+      let neg := s!"(assert (not (and (<= {o.lo} {eSmt}) (<= {eSmt} {o.hi}))))"
+      let script := "\n".intercalate
+        (["; VC " ++ o.key, "; no-overflow of an operand in [" ++ toString o.lo ++ ", " ++ toString o.hi ++ "]",
+          "(set-logic QF_NIA)"] ++ decls ++ hypAsserts ++ [neg, "(check-sat)"])
+      out := out ++ [(o.key, script)]
+    | _, _ => pure ()
+  return out
 
 /-- Render the integer-overflow section. `provedKeys` are omega-discharged;
     `bvProvedKeys` are discharged by the widened `bv_decide` (nonlinear) path. -/
@@ -3884,6 +3958,26 @@ def dischargeVCs (vcs : List VC) (omegaProved bvProved : List String) : List VC 
     else if bvProved.contains v.id then
       { v with status := "proved_by_kernel_decision", engine := "bv_decide" }
     else { v with status := "unproven" }
+
+/-- Mark the SMT-eligible VCs (by id) as routed to the external solver: their
+    `arith_profile` becomes `nonlinear` and `expected_discharge` becomes `smt`.
+    Applied ONLY when the external-SMT path is engaged (an explicit flag) — so by
+    default no VC ever advertises `smt`. Does not change `status`. -/
+def markSmtEligible (vcs : List VC) (smtKeys : List String) : List VC :=
+  vcs.map fun v =>
+    if smtKeys.contains v.id then { v with arithProfile := "nonlinear", dischargeMode := "smt" } else v
+
+/-- Fold external-solver results into the VC schedule. A result class
+    (`solver_trusted` / `counterexample` / `unknown` / `timeout` / `solver_error`)
+    is applied ONLY to a VC the kernel-checked tiers left `unproven` — so an
+    external solver can NEVER override or be confused with a `proved_by_kernel_decision`
+    or `proved_by_lean` result. The engine records the solver. -/
+def foldSmtResults (vcs : List VC) (results : List (String × String)) : List VC :=
+  vcs.map fun v =>
+    match results.find? (·.1 == v.id) with
+    | some (_, cls) =>
+      if v.status == "unproven" then { v with status := cls, engine := "smt:z3" } else v
+    | none => v
 
 /-- Human-readable VC schedule (post-discharge), grouped by originating function.
     `vcs` is the output of `collectVCs` after `dischargeVCs` has folded in results. -/
@@ -6426,7 +6520,7 @@ def schemaReport : String :=
           ("schema_kind", .str "\"vcs\""),
           ("vc_schema_version", .str "number — VC schema version (currently 1)"),
           ("count", .str "number"),
-          ("vcs", .str "object[] — each: id, kind, function, loc{file,line}, hypotheses[], conclusion, origin, dependencies[], arith_profile, expected_discharge, status, engine. status ∈ {planned, proved_by_kernel_decision, proved_by_lean, arithmetic_proved, counterexample, unproven, missing}; engine ∈ {constant_fold, omega, bv_decide, lean, \"\"}. A decision procedure can only yield proved_by_kernel_decision — never an external-solver class.")])])
+          ("vcs", .str "object[] — each: id, kind, function, loc{file,line}, hypotheses[], conclusion, origin, dependencies[], arith_profile, expected_discharge, status, engine. status ∈ {planned, proved_by_kernel_decision, proved_by_lean, arithmetic_proved, counterexample, unproven, missing} plus the OPT-IN external-solver classes {solver_trusted, unknown, timeout, solver_error}; engine ∈ {constant_fold, omega, bv_decide, lean, smt:<solver>, \"\"}. A decision procedure can only yield proved_by_kernel_decision; an external solver (behind --smt) yields solver_trusted/counterexample/unknown/timeout/solver_error and only ever on a VC the kernel tiers left unproven — the classes never merge.")])])
     ]),
     ("policies", .obj [
       ("empty_result", .str "A query that matches zero facts returns a facts envelope with an empty facts array and fact_count 0. Semantic queries for unknown functions return a query_answer with answer \"not_found\". Neither case is an error."),

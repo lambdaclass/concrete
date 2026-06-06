@@ -1,0 +1,25 @@
+// SMT example (Phase 2 #8): nonlinear overflow — useful for an external solver,
+// NOT kernel-equivalent.
+//
+// `sample * gain` is a product of two program variables. With both bounded by
+// #[requires], the result provably fits i32, but:
+//   - `omega` cannot own it (the goal is nonlinear);
+//   - the interval-gated `bv_decide` path here does not bound a var*var product.
+// So the no-overflow VC is left `unproven` by the kernel-checked tiers. Only with
+// the explicit `--smt` flag is it handed to Z3, and only as `solver_trusted` —
+// never confused with Lean/kernel evidence. Without the flag it stays unproven.
+//
+//   concrete examples/smt/nonlinear_overflow/src/main.con --report vcs --emit-smt
+//   concrete examples/smt/nonlinear_overflow/src/main.con --report vcs --smt
+mod smt {
+    // Signed ranges: the product is bounded (|s*g| ≤ 30000*60000 < 2^31) so it
+    // provably fits i32 — but the operands can be negative, so the interval
+    // `bv_decide` path (which models unsigned, non-negative operands) bails, and
+    // omega can't do the nonlinear product. That is exactly the SMT niche.
+    #[overflow_checked]
+    #[requires(-30000 <= sample && sample <= 30000)]
+    #[requires(-60000 <= gain && gain <= 60000)]
+    fn scale(sample: i32, gain: i32) -> i32 {
+        return sample * gain;
+    }
+}

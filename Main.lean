@@ -815,6 +815,39 @@ def computeVCsDischarged (modules : List Concrete.Module) (locMap : Report.FnLoc
   let bvOvfKeys ← bvDischargeOverflow ovfBV
   return Report.dischargeVCs vcs omegaProved (bvCallKeys ++ bvOvfKeys)
 
+/-- External-SMT adapter (Phase 2 #8). One solver (Z3), pinned timeout. For each
+    `(vcKey, smtlibScript)` it writes the script, runs `z3 -T:<timeout>`, and reads
+    the first line: `unsat` → `solver_trusted` (solver-proved, solver in the TCB —
+    NOT a kernel-checked class), `sat` → `counterexample`, `unknown`/`timeout`
+    accordingly. If Z3 is not on PATH the honest verdict is `solver_error` for every
+    query — an absent solver never yields a proof. Only ever called behind an
+    explicit flag. -/
+def smtDischarge (queries : List (String × String)) (timeoutSec : Nat) : IO (List (String × String)) := do
+  if queries.isEmpty then return []
+  let haveZ3 ← (try
+      let o ← IO.Process.output { cmd := "bash", args := #["-c", "command -v z3"] }
+      pure (o.exitCode == 0)
+    catch _ => pure false)
+  if !haveZ3 then
+    return queries.map (fun (k, _) => (k, "solver_error"))
+  let mut res : List (String × String) := []
+  for (k, script) in queries do
+    let cls ← (try
+        let mk ← IO.Process.output { cmd := "mktemp", args := #["-t", "concrete-vc-XXXXXX"] }
+        let path := mk.stdout.trimAscii.toString
+        IO.FS.writeFile ⟨path⟩ script
+        let out ← IO.Process.output { cmd := "z3", args := #["-T:" ++ toString timeoutSec, path] }
+        let _ ← IO.Process.output { cmd := "rm", args := #["-f", path] }
+        let line := ((out.stdout.trimAscii.toString.splitOn "\n").head?.getD "").trimAscii.toString
+        pure (if line == "unsat" then "solver_trusted"
+              else if line == "sat" then "counterexample"
+              else if line == "unknown" then "unknown"
+              else if line == "timeout" then "timeout"
+              else "solver_error")
+      catch _ => pure "solver_error")
+    res := res ++ [(k, cls)]
+  return res
+
 /-- Render the contracts report plus the call-site obligation section, running
     the `bv_decide` backend on the closed-but-non-literal call-site obligations
     and `omega` on the loop init/variant VCs. -/
@@ -856,7 +889,8 @@ def compileAndReport (inputPath : String) (reportType : String)
     (proveEmitLean : Bool := false) (proveStdout : Bool := false)
     (proveEmitArtifacts : Bool := false) (proveOutDir : Option String := none)
     (proveCheck : Bool := false) (proveWorkspace : Option String := none)
-    (proveNearestId : Option String := none) (reportJson : Bool := false) : IO UInt32 := do
+    (proveNearestId : Option String := none) (reportJson : Bool := false)
+    (smtRun : Bool := false) (smtEmit : Bool := false) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -1134,6 +1168,20 @@ def compileAndReport (inputPath : String) (reportType : String)
       return 0
     if reportType == "vcs" then
       let dvcs ← computeVCsDischarged parsed.modules locMap registry
+      -- External-SMT path is OPT-IN. Without --smt/--emit-smt nothing here touches
+      -- a solver and no VC ever advertises `smt` — the kernel boundary is the default.
+      let smtGoals := Report.overflowSmtGoals parsed.modules
+      if smtEmit then
+        -- stable SMT-LIB output path: emit the scripts (no solver needed).
+        if smtGoals.isEmpty then IO.println "; no SMT-eligible VCs (nonlinear arithmetic) in this file"
+        for (k, script) in smtGoals do
+          IO.println s!";; ==== {k} ====\n{script}\n"
+        return 0
+      let dvcs := if smtRun || smtEmit then Report.markSmtEligible dvcs (smtGoals.map (·.1)) else dvcs
+      let dvcs ← if smtRun then do
+          let results ← smtDischarge smtGoals 5
+          pure (Report.foldSmtResults dvcs results)
+        else pure dvcs
       if reportJson then
         IO.println (Report.vcsJson dvcs 1)
       else
@@ -2058,6 +2106,12 @@ def main (args : List String) : IO UInt32 := do
     compileAndReport inputPath reportType
   | [inputPath, "--report", reportType, "--json"] =>
     compileAndReport inputPath reportType (reportJson := true)
+  | [inputPath, "--report", reportType, "--emit-smt"] =>
+    compileAndReport inputPath reportType (smtEmit := true)
+  | [inputPath, "--report", reportType, "--smt"] =>
+    compileAndReport inputPath reportType (smtRun := true)
+  | [inputPath, "--report", reportType, "--smt", "--json"] =>
+    compileAndReport inputPath reportType (reportJson := true) (smtRun := true)
   | [inputPath, "--query", query] =>
     compileAndQuery inputPath query
   | [inputPath, "--fmt"] =>
