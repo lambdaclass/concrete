@@ -44,6 +44,13 @@ assert_json "straight_line --json proved + stable id" \
   'd["status"]=="proved" and all("#" in o["id"] for o in d["obligations"])' \
   "$COMPILER" prove "$SL" straight_line.add_three --json
 
+echo "=== array_update (read/write frame) ==="
+AU="$PP/array_update/src/main.con"
+assert_contains "array_update proved" "proof matches current body" "$COMPILER" "$AU" --report proof-status
+assert_json "array_update --json proved + stable id" \
+  'd["status"]=="proved" and all("#" in o["id"] for o in d["obligations"])' \
+  "$COMPILER" prove "$AU" arr.put --json
+
 echo "=== runtime_safety (compiler-discharged + negative) ==="
 RT="$PP/runtime_safety/src/main.con"
 assert_contains "rt bounds omega-proved" "proved_by_kernel_decision (omega)" "$COMPILER" "$RT" --report contracts
@@ -70,6 +77,7 @@ rm -rf "$(dirname "$WS")"
 if command -v lake >/dev/null 2>&1; then
   echo "=== kernel: check-proofs for proved patterns ==="
   assert_contains "straight_line kernel-verified" "1 verified, 0 failed" "$COMPILER" "$SL" --report check-proofs
+  assert_contains "array_update kernel-verified"  "1 verified, 0 failed" "$COMPILER" "$AU" --report check-proofs
   assert_contains "workspace fn kernel-verified"  "1 verified, 0 failed" "$COMPILER" "$PP/workspace/src/main.con" --report check-proofs
   echo "=== kernel: emit-lean stub typechecks (up to sorry) ==="
   STUB="$(mktemp -d)/Patterns/SL.lean"; mkdir -p "$(dirname "$STUB")"

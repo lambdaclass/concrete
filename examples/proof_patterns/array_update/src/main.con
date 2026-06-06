@@ -1,0 +1,13 @@
+// proof_patterns: array read/write frame proof.
+// Writes one index of a fixed array; the proof shows the written cell changed
+// and every other cell is framed (unchanged).
+mod arr {
+    #[spec(Examples.ProofPatterns.Proofs.putExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.put_writes_index_1_frames_rest)]
+    #[proof_coverage(point)]
+    #[proof_fingerprint("5dd61817ad08c4eb")]
+    fn put(a: [i32; 4], v: i32) -> [i32; 4] {
+        a[1] = v;
+        return a;
+    }
+}
