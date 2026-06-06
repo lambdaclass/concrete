@@ -53,72 +53,92 @@ is the composition: systems control, explicit authority, contracts in source,
 Lean checked proof links, drift detection, and audit reports that refuse to
 hide trust.
 
-## Three Tiny Claims
+## Three Claim Shapes
 
-Lean proof attached to source:
+Functional correctness, proved in Lean:
 
 ```con
-#[ensures(result == x + 3)]
-#[proof_by(Examples.ProofPatterns.Proofs.add_three_correct)]
-fn add_three(x: i32) -> i32 {
-    return x + 3;
+#[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
+#[ensures_proof(Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct)]
+#[proof_coverage(iff)]
+#[ensures((a == b && result == 1) || (a != b && result == 0))]
+fn ct_compare(a: [u8; 16], b: [u8; 16]) -> i32 {
+    let mut diff: u8 = 0;
+    for (let mut i: i32 = 0; i < 16; i = i + 1) {
+        diff = diff | (a[i] ^ b[i]);
+    }
+    if diff == 0 { return 1; }
+    return 0;
 }
 ```
 
 Audit:
 
 ```text
-add_three
-  ensures result == x + 3
+ct_compare
+  ensures equal tags return 1 and different tags return 0
     status: proved_by_lean
-    theorem: Examples.ProofPatterns.Proofs.add_three_correct
+    coverage: iff
+    theorems:
+      Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct
+      Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct
 ```
 
-Kernel decision procedure:
+This is value correctness. The constant-time source shape and machine timing
+assumptions are separate evidence, not hidden inside the postcondition.
+
+Runtime safety, discharged by a kernel decision procedure:
 
 ```con
-#[requires(0 <= i && i < 16)]
-#[ensures(result == a[i])]
-fn get16(a: [u8; 16], i: i32) -> u8 {
-    return a[i];
+#[overflow_checked]
+#[requires(0 <= off && off + 1 < len && len <= 512)]
+fn read_u16_be(packet: [u8; 512], off: i32, len: i32) -> i32 {
+    let hi: i32 = packet[off] as i32;
+    let lo: i32 = packet[off + 1] as i32;
+    return hi * 256 + lo;
 }
 ```
 
 Audit:
 
 ```text
-get16
-  requires 0 <= i && i < 16
+read_u16_be
+  requires 0 <= off && off + 1 < len && len <= 512
     status: assumed_at_entry
-  runtime array_bounds a[i]
+  runtime array_bounds packet[off]
     status: proved_by_kernel_decision
     engine: omega
+  runtime array_bounds packet[off + 1]
+    status: proved_by_kernel_decision
+    engine: omega
+  runtime overflow hi * 256 + lo
+    status: proved_by_kernel_decision
+    engine: bv_decide
 ```
 
-External SMT, when policy allows it:
+Regression evidence, tested against an independent oracle:
 
-```con
-#[requires(0 <= len && len <= max_len)]
-#[ensures(result <= max_blocks)]
-fn padded_blocks(len: i32, max_len: i32, max_blocks: i32) -> i32 {
-    return (len + 9 + 63) / 64;
-}
+```sh
+make test-hmac-oracle
 ```
 
 Audit:
 
 ```text
-padded_blocks
-  arithmetic summary
-    status: proved_by_smt
-    solver: z3
-    trust: solver_trusted
-    replay: none
+hmac_sha256
+  reference: Python hmac/hashlib
+  vectors:
+    RFC 4231 TC1, RFC 4231 TC2, FIPS 180-4 SHA-256("abc")
+    600 generated cases across key/message length regimes
+  status: tested_by_oracle
+  proof level: regression evidence, not proof
 ```
 
-The third example is deliberately not the same class as a Lean proof or a
-kernel decision. SMT can be useful, but Concrete must name the solver and the
-trust it adds.
+The third class is deliberately not the same as a Lean proof or a kernel
+decision. Oracle tests are valuable because they compare the compiled program
+against an independent implementation, but Concrete must still label them as
+tests, not proof. External SMT belongs to the same accounting discipline when
+it lands: useful, named, and never confused with a kernel checked theorem.
 
 If you are coming from C or Rust and want the short "why this exists" version,
 read [docs/WHY_CONCRETE.md](docs/WHY_CONCRETE.md).

@@ -14,8 +14,8 @@ detection, multiple evidence classes instead of one green badge, and audit
 reports that refuse to hide trust.
 
 The homepage shows the important distinction with small examples: a Lean linked
-proof, a kernel decision procedure, and an external SMT result with named solver
-trust.
+proof, a kernel decision procedure, and oracle evidence that is useful but not
+proof.
 
 Use the reference section for stable contracts and project rules. Use the guide
 section for a smaller narrative path through the language, tooling, and current

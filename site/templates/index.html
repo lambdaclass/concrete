@@ -74,41 +74,52 @@
     </section>
 
     <section id="tiny-claims" class="paper-section">
-      <h3>3. Tiny Claims</h3>
+      <h3>3. Claim Shapes</h3>
       <p>
         The audit class matters as much as the code. A Lean theorem, a kernel
-        decision procedure, and an external solver do not mean the same thing.
+        decision procedure, and an oracle test do not mean the same thing.
       </p>
       <figure class="listing">
-        <pre><code>#[ensures(result == x + 3)]
-#[proof_by(Examples.ProofPatterns.Proofs.add_three_correct)]
-fn add_three(x: i32) -&gt; i32 {
-    return x + 3;
+        <pre><code>#[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
+#[ensures_proof(Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct)]
+#[proof_coverage(iff)]
+#[ensures((a == b &amp;&amp; result == 1) || (a != b &amp;&amp; result == 0))]
+fn ct_compare(a: [u8; 16], b: [u8; 16]) -&gt; i32 {
+    let mut diff: u8 = 0;
+    for (let mut i: i32 = 0; i &lt; 16; i = i + 1) {
+        diff = diff | (a[i] ^ b[i]);
+    }
+    if diff == 0 { return 1; }
+    return 0;
 }</code></pre>
         <figcaption>
-          Lean proof attached to source: <code>proved_by_lean</code>, with a theorem name.
+          Functional correctness, proved in Lean: <code>proved_by_lean</code>,
+          coverage <code>iff</code>.
         </figcaption>
       </figure>
       <figure class="listing">
-        <pre><code>#[requires(0 &lt;= i &amp;&amp; i &lt; 16)]
-#[ensures(result == a[i])]
-fn get16(a: [u8; 16], i: i32) -&gt; u8 {
-    return a[i];
+        <pre><code>#[overflow_checked]
+#[requires(0 &lt;= off &amp;&amp; off + 1 &lt; len &amp;&amp; len &lt;= 512)]
+fn read_u16_be(packet: [u8; 512], off: i32, len: i32) -&gt; i32 {
+    let hi: i32 = packet[off] as i32;
+    let lo: i32 = packet[off + 1] as i32;
+    return hi * 256 + lo;
 }</code></pre>
         <figcaption>
-          Runtime bound discharged by a kernel decision procedure:
-          <code>proved_by_kernel_decision</code>, engine <code>omega</code>.
+          Runtime safety discharged by kernel decision procedures:
+          <code>omega</code> for bounds, <code>bv_decide</code> for overflow.
         </figcaption>
       </figure>
       <figure class="listing">
-        <pre><code>#[requires(0 &lt;= len &amp;&amp; len &lt;= max_len)]
-#[ensures(result &lt;= max_blocks)]
-fn padded_blocks(len: i32, max_len: i32, max_blocks: i32) -&gt; i32 {
-    return (len + 9 + 63) / 64;
-}</code></pre>
+        <pre><code>$ make test-hmac-oracle
+
+hmac_sha256
+  reference: Python hmac/hashlib
+  vectors: RFC 4231, FIPS 180-4, 600 generated cases
+  status: tested_by_oracle
+  proof level: regression evidence, not proof</code></pre>
         <figcaption>
-          External SMT, when policy allows it: <code>proved_by_smt</code>,
-          solver named, trust class <code>solver_trusted</code>.
+          Oracle evidence is useful, but it stays below proof in the ledger.
         </figcaption>
       </figure>
     </section>
