@@ -254,6 +254,11 @@ mod hmac_sha256 {
     // lets sha256_hash compress straight out of its work buffer
     // without an inner copy loop, keeping every loop body flat (so
     // extraction stays in ProvableV1 — no nested loops).
+    // Source-contract slice (Phase 1 regression anchor): `off` must leave a full
+    // 64-byte block inside the 384-byte buffer — it reads buf[off .. off+63]. The
+    // precondition is discharged symbolically at the call site in
+    // `sha256_compress_at` from THAT function's matching #[requires] (omega).
+    #[requires(0 <= off && off + 64 <= 384)]
     #[spec(Concrete.Proof.blockToWordsAtExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.block_to_words_at_refines_spec)]
     #[proof_coverage(full_contract)]
@@ -270,6 +275,9 @@ mod hmac_sha256 {
 
     // Compress the 64-byte block at `off` in `buf` into `state`.
     // Offset variant of sha256_compress (same Davies-Meyer body).
+    // Same offset precondition as block_to_words_at — propagated to the inner
+    // call below so its precondition discharges by omega from this #[requires].
+    #[requires(0 <= off && off + 64 <= 384)]
     #[spec(Concrete.Proof.sha256_compressAtExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.sha256_compress_at_refines_spec)]
     #[proof_coverage(full_contract)]
@@ -313,6 +321,10 @@ mod hmac_sha256 {
     // `state = sha256_compress_at(...)` scalar assign — no inner
     // copy loop), and the block count uses `/` (register R-28), so
     // the whole function is proof-extractable (ProvableV1).
+    // `len` must be small enough that the padded message (len + 9 bytes, rounded
+    // up to a 64-byte multiple) fits the 384-byte buffer: nblocks = (len+72)/64
+    // ≤ 6 ⟺ len ≤ 312, which also keeps the 0x80 marker write buf[len] in range.
+    #[requires(0 <= len && len <= 312)]
     #[spec(Concrete.Proof.sha256_hashExpr)]
     #[proof_by(Examples.HmacSha256.Proofs.sha256_hash_refines_spec)]
     #[proof_coverage(full_contract)]

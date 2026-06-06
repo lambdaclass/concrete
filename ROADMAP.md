@@ -296,10 +296,20 @@ retrofit is explicitly queued behind proof-link migration.
    agrees with the real semantics in every env — never a false alarm); R-28 the
    source-link claim-class equality is the operational spec-drift gate (no kernel
    over-claim). Documented in `docs/CONTRACTS_AND_VCS.md` (Soundness Bridge).
-8. Add `hmac_sha256` source-contract retrofit only after proof-link migration
-   and `concrete prove` examples make the small proof path routine. Do not
-   start by moving the HMAC chain; use it as the late regression anchor for the
-   mature source-link path.
+8. **[done]** `hmac_sha256` source-contract retrofit — the late regression
+   anchor. The HMAC proof chain was NOT moved; instead the crypto flagship gained
+   call-site-meaningful preconditions alongside its existing in-source proof
+   links: `block_to_words_at` / `sha256_compress_at` carry
+   `#[requires(0 <= off && off + 64 <= 384)]` (the real buffer-block bound) and
+   `sha256_hash` carries `#[requires(0 <= len && len <= 312)]`. This pins both the
+   capability and the honesty of the mature path: the `block_to_words_at` call
+   inside `sha256_compress_at` is discharged SYMBOLICALLY by omega from the
+   caller's `#[requires]` (not a constant arg) — `proved_by_kernel_decision` — while
+   the `sha256_hash → sha256_compress_at` call (block offset bounded by a
+   division-based block count omega can't model) stays honestly
+   `unproven_at_callsite` — no false green. Pinned by `check_contract_negatives.sh`
+   (33/0, +2); ProvableV1 conformance / fingerprints unchanged (contracts erased
+   before Core), hmac oracle 200/0.
 9. Add the Phase 1 validation artifact: the combined contract-positive,
    contract-negative, vacuity, totality, assert/assume, and stability fixtures
    must run under one gate, produce one report snapshot per contract failure

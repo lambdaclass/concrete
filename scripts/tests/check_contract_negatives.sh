@@ -185,6 +185,31 @@ if printf '%s' "$posrep" | grep -qF "requires in_range(x, lo, hi)" \
 else
   echo "  FAIL positive fixture: a legal contract name did not render"; FAIL=$((FAIL+1)); fi
 
+echo "=== hmac_sha256 (mature source-link path — Phase 1 #8 regression anchor) ==="
+# The crypto flagship carries source contracts alongside its in-source proof
+# links. This pins BOTH the capability and the honesty of the call-site checker:
+#  (a) block_to_words_at's #[requires(off+64<=384)] is discharged SYMBOLICALLY by
+#      omega from sha256_compress_at's matching #[requires] (not a constant arg);
+#  (b) the sha256_hash → sha256_compress_at call (block offset = blk*64, bounded
+#      by a division-based block count omega can't model) stays honestly unproven
+#      — no false green.
+HMAC="examples/hmac_sha256/src/main.con"
+if command -v lake >/dev/null 2>&1; then
+  hmrep="$("$COMPILER" "$HMAC" --report contracts 2>/dev/null \
+    | sed -n '/=== Call-site obligations/,/^=== /p')"
+  cab="$(printf '%s' "$hmrep" | awk '/hmac_sha256.sha256_compress_at/{f=1} f{print} f&&/^$/{exit}')"
+  if printf '%s' "$cab" | grep -qF "call block_to_words_at(buf, off)" \
+     && printf '%s' "$cab" | grep -qF "omega (from caller's #[requires]"; then
+    echo "  ok   block_to_words_at precond discharged symbolically by omega from caller #[requires]"; PASS=$((PASS+1));
+  else echo "  FAIL hmac: expected symbolic omega discharge of block_to_words_at precond"; printf '%s\n' "$cab"|sed 's/^/      /'; FAIL=$((FAIL+1)); fi
+  hab="$(printf '%s' "$hmrep" | awk '/hmac_sha256.sha256_hash/{f=1} f{print} f&&/^$/{exit}')"
+  if printf '%s' "$hab" | grep -qF "unproven_at_callsite"; then
+    echo "  ok   sha256_hash block-offset call stays honestly unproven (no false green)"; PASS=$((PASS+1));
+  else echo "  FAIL hmac: sha256_hash call site should be honestly unproven"; printf '%s\n' "$hab"|sed 's/^/      /'; FAIL=$((FAIL+1)); fi
+else
+  echo "  skip hmac mature-path checks (lake not on PATH)"
+fi
+
 echo ""
 echo "CONTRACT-NEGATIVES: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
