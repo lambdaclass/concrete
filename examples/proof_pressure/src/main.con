@@ -51,7 +51,7 @@ fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
 // Registry entry has correct fingerprint.
 
 #[spec(validate_header.spec)]
-#[proof_by(Concrete.Proof.validate_header_correct)]
+#[proof_by(Examples.ElfHeader.Proofs.validate_header_correct)]
 #[proof_fingerprint("f8e64b113309c50")]
 fn validate_header(nonce: Int, max_nonce: Int, version: Int) -> Int {
     let nonce_result: Int = check_nonce(nonce, max_nonce);

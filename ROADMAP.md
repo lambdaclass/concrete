@@ -380,9 +380,11 @@ lemmas, and actionable failure diagnostics.
      `Examples.ParseValidate.Proofs`; `#[proof_by]` retargeted; `#[spec]` +
      `parseValidateFns` / `*Fn` / `*Expr` scaffolding + the 3 `specs` entries
      stay in `Concrete.Proof`; spec-drift regression still fires.
-   - Remaining theorem moves, one commit each: `crypto_verify` →
-     `fixed_capacity` → `constant_time_tag` → `elf_header` → `hmac_sha256`
-     last. These move proof THEOREMS only.
+   - Done after the table-backed pattern: `crypto_verify`, `fixed_capacity`,
+     and `constant_time_tag` moved their proof theorems to per-example modules
+     with specs still drift-tied through `Concrete.Proof`.
+   - Current remaining theorem moves, one commit each: finish `elf_header`,
+     then `hmac_sha256` last. These move proof THEOREMS only.
 3. Add a CI/source guard that prevents new example-owned theorem bodies from
    being added to `Concrete.Proof`. The guard should allow core proof
    infrastructure, registered spec PExprs, and spec-drift scaffolding while

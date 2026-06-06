@@ -5817,8 +5817,8 @@ with open('$ELF_SNAP_DIR/good.json') as f:
     s = json.load(f)
 facts = s['facts']
 proof_statuses = {f['function']: f for f in facts if f['kind'] == 'proof_status' and f.get('proof')}
-assert proof_statuses['main.check_magic']['proof'] == 'Concrete.Proof.check_magic_correct'
-assert proof_statuses['main.validate_header']['proof'] == 'Concrete.Proof.validate_header_correct'
+assert proof_statuses['main.check_magic']['proof'] == 'Examples.ElfHeader.Proofs.check_magic_correct'
+assert proof_statuses['main.validate_header']['proof'] == 'Examples.ElfHeader.Proofs.validate_header_correct'
 assert proof_statuses['main.check_version']['spec'] == 'Concrete.Proof.checkVersionExpr'
 " 2>/dev/null; then
     echo "  ok  elf_header: proof names match actual Lean symbols"
