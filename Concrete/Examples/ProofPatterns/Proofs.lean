@@ -88,4 +88,29 @@ theorem copy2_copies_faithfully (fuel : Nat) :
   simp [copy2Expr, eval, evalBinOp, Env.bind,
         eval.evalAssigns, eval.evalElems, eval.lookupIndex]
 
+/-! ## 4. Fold / reduction
+
+`fold.sum4` sums a fixed `[i32; 4]` with a counted loop. The proof runs the fold
+on a concrete input and shows the total is correct (point coverage):
+`sum4([1, 2, 3, 4]) = 10`. -/
+
+/-- Spec = the extracted body of `sum4` (acc += a[i] over a counted loop). -/
+def sum4Expr : PExpr :=
+  .letIn "acc"
+    (.lit (.int 0))
+    (.letIn "i"
+      (.lit (.int 0))
+      (.while_
+        (.binOp .lt (.var "i") (.lit (.int 4)))
+        [ ("acc", .binOp .add (.var "acc") (.arrayIndex (.var "a") (.var "i")))
+        , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+        (.var "acc")))
+
+/-- The fold computes the correct total on a concrete four-element array. -/
+theorem sum4_totals_concrete (fuel : Nat) :
+    eval (fun _ => none) (Env.empty.bind "a" (.array_ [.int 1, .int 2, .int 3, .int 4])) (fuel + 14) sum4Expr
+      = some (.int 10) := by
+  simp [sum4Expr, eval, evalBinOp, Env.bind,
+        eval.evalAssigns, eval.lookupIndex]
+
 end Examples.ProofPatterns.Proofs

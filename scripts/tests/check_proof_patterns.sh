@@ -58,6 +58,13 @@ assert_json "loop_copy --json proved + stable id" \
   'd["status"]=="proved" and all("#" in o["id"] for o in d["obligations"])' \
   "$COMPILER" prove "$LC" loopcopy.copy2 --json
 
+echo "=== fold (reduction over fixed array) ==="
+FD="$PP/fold/src/main.con"
+assert_contains "fold proved" "proof matches current body" "$COMPILER" "$FD" --report proof-status
+assert_json "fold --json proved + stable id" \
+  'd["status"]=="proved" and all("#" in o["id"] for o in d["obligations"])' \
+  "$COMPILER" prove "$FD" fold.sum4 --json
+
 echo "=== runtime_safety (compiler-discharged + negative) ==="
 RT="$PP/runtime_safety/src/main.con"
 assert_contains "rt bounds omega-proved" "proved_by_kernel_decision (omega)" "$COMPILER" "$RT" --report contracts
@@ -86,6 +93,7 @@ if command -v lake >/dev/null 2>&1; then
   assert_contains "straight_line kernel-verified" "1 verified, 0 failed" "$COMPILER" "$SL" --report check-proofs
   assert_contains "array_update kernel-verified"  "1 verified, 0 failed" "$COMPILER" "$AU" --report check-proofs
   assert_contains "loop_copy kernel-verified"    "1 verified, 0 failed" "$COMPILER" "$LC" --report check-proofs
+  assert_contains "fold kernel-verified"         "1 verified, 0 failed" "$COMPILER" "$FD" --report check-proofs
   assert_contains "workspace fn kernel-verified"  "1 verified, 0 failed" "$COMPILER" "$PP/workspace/src/main.con" --report check-proofs
   echo "=== kernel: emit-lean stub typechecks (up to sorry) ==="
   STUB="$(mktemp -d)/Patterns/SL.lean"; mkdir -p "$(dirname "$STUB")"
