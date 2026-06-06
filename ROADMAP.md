@@ -225,14 +225,12 @@ retrofit is explicitly queued behind proof-link migration.
    full), `invalid_invariant` (false preservation VC → omega refuses, stays
    `planned`), `duplicate_links` (duplicate proof-link attribute → parse error,
    newly hardened), `fabricated_proof` (nonexistent theorem → proof-status's
-   known limitation but caught by `prove --check`). **REMAINING GAP — invalid
-   contract expression:** `#[requires]`/`#[ensures]`/`#[invariant]` expressions
-   are NOT scope/type-checked, so an unknown identifier (e.g.
-   `#[requires(0 < nonexistent)]`) is silently accepted. Hardening it needs a
-   contract-expression resolver aware of params, `result` (ensures), ghost
-   bindings, spec-fn / function names, and loop counters (invariants) — with care
-   to not false-positive on existing flagship contracts. Tracked as the next
-   contract-hardening step.
+   known limitation but caught by `prove --check`). **invalid contract expression — DONE** (report-side
+   scope check: `validateContractExpr` against `callableContractNames` /
+   `contractConstNames` / `localNamesB`; `--report contracts` shows
+   `invalid_contract_expression` + `unknown identifier '…'`, conservative with
+   zero false positives across the flagships). All seven contract negatives are
+   now covered; next contract-hardening work is vacuity/satisfiability.
 3. Add vacuity and satisfiability checks for contracts: unsatisfiable
    preconditions, contradictory assumptions, `#[requires(false)]`, invariant
    `false`, unreachable returns, and postconditions proved only because the path
