@@ -40,7 +40,7 @@ Every statement the compiler makes about a program falls into exactly one of the
 **Definition:** A property with a Lean 4 theorem attached via the proof registry, over the function's extracted PExpr representation, with a matching body fingerprint.
 
 **What qualifies:**
-- Functional correctness theorems (e.g., `abs_positive`, `max_right`, `clamp_in_range`)
+- Functional correctness theorems (e.g., `parse_byte_correct`, `ct_compare_same_tag_correct`)
 - Structural lemmas (e.g., `eval_lit`, `eval_if_true`, `eval_add_lits`)
 - Any user-attached theorem that satisfies the proof pipeline (spec → extraction → proof → registry)
 

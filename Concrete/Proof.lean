@@ -764,41 +764,6 @@ where
 -- Embedded Concrete programs
 -- ============================================================
 
-/-- `fn abs(x: i64) -> i64 { if x < 0 { return -x; } return x; }`
-    Encoded as a proof-fragment expression. -/
-def absExpr : PExpr :=
-  .ifThenElse
-    (.binOp .lt (.var "x") (.lit (.int 0)))
-    (.binOp .sub (.lit (.int 0)) (.var "x"))
-    (.var "x")
-
-def absFn : PFnDef := { name := "abs", params := ["x"], body := absExpr }
-
-/-- `fn max(a: i64, b: i64) -> i64 { if a >= b { return a; } return b; }` -/
-def maxExpr : PExpr :=
-  .ifThenElse
-    (.binOp .ge (.var "a") (.var "b"))
-    (.var "a")
-    (.var "b")
-
-def maxFn : PFnDef := { name := "max", params := ["a", "b"], body := maxExpr }
-
-/-- `fn clamp(x: i64, lo: i64, hi: i64) -> i64 {
-       if x < lo { return lo; }
-       if x > hi { return hi; }
-       return x;
-    }` -/
-def clampExpr : PExpr :=
-  .ifThenElse
-    (.binOp .lt (.var "x") (.var "lo"))
-    (.var "lo")
-    (.ifThenElse
-      (.binOp .gt (.var "x") (.var "hi"))
-      (.var "hi")
-      (.var "x"))
-
-def clampFn : PFnDef := { name := "clamp", params := ["x", "lo", "hi"], body := clampExpr }
-
 /-- `fn parse_byte(data: Int, offset: Int) -> Int { return data + offset; }`
     First proof-connected function from the packet decoder core. -/
 def parseByteExpr : PExpr :=
@@ -819,9 +784,6 @@ def checkLengthFn : PFnDef :=
 
 /-- Function table for proofs. -/
 def proofFns : FnTable
-  | "abs" => some absFn
-  | "max" => some maxFn
-  | "clamp" => some clampFn
   | "parse_byte" => some parseByteFn
   | "check_length" => some checkLengthFn
   | _ => none
@@ -829,70 +791,6 @@ def proofFns : FnTable
 -- ============================================================
 -- Proofs
 -- ============================================================
-
-/-- Helper: evaluate abs with a given integer input. -/
-def evalAbs (x : Int) : Option PVal :=
-  eval proofFns (Env.empty.bind "x" (.int x)) 10 absExpr
-
-/-- Helper: evaluate max with two integer inputs. -/
-def evalMax (a b : Int) : Option PVal :=
-  eval proofFns ((Env.empty.bind "a" (.int a)).bind "b" (.int b)) 10 maxExpr
-
-/-- Helper: evaluate clamp. -/
-def evalClamp (x lo hi : Int) : Option PVal :=
-  eval proofFns (((Env.empty.bind "x" (.int x)).bind "lo" (.int lo)).bind "hi" (.int hi)) 10 clampExpr
-
--- Concrete test cases (verified by kernel reduction)
-#eval evalAbs 5     -- some (int 5)
-#eval evalAbs (-3)  -- some (int 3)
-#eval evalAbs 0     -- some (int 0)
-#eval evalMax 10 20 -- some (int 20)
-#eval evalMax 7 3   -- some (int 7)
-
-set_option linter.unusedSimpArgs false in
-/-- abs(5) = 5 -/
-theorem abs_positive : evalAbs 5 = some (.int 5) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
-            eval, evalBinOp, Env.bind, Env.empty]
-
-set_option linter.unusedSimpArgs false in
-/-- abs(-3) = 3 -/
-theorem abs_negative : evalAbs (-3) = some (.int 3) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
-            eval, evalBinOp, Env.bind, Env.empty]
-
-set_option linter.unusedSimpArgs false in
-/-- abs(0) = 0 -/
-theorem abs_zero : evalAbs 0 = some (.int 0) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
-            eval, evalBinOp, Env.bind, Env.empty]
-
-set_option linter.unusedSimpArgs false in
-/-- max(10, 20) = 20 -/
-theorem max_right : evalMax 10 20 = some (.int 20) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
-            eval, evalBinOp, Env.bind, Env.empty]
-
-set_option linter.unusedSimpArgs false in
-/-- max(7, 3) = 7 -/
-theorem max_left : evalMax 7 3 = some (.int 7) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
-            eval, evalBinOp, Env.bind, Env.empty]
-
-set_option linter.unusedSimpArgs false in
-/-- max(x, x) = x for a specific value (kernel-reducible). -/
-theorem max_self : evalMax 42 42 = some (.int 42) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
-            eval, evalBinOp, Env.bind, Env.empty]
-
-set_option linter.unusedSimpArgs false in
-/-- clamp(5, 0, 10) = 5 (in range) -/
-theorem clamp_in_range : evalClamp 5 0 10 = some (.int 5) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
-            eval, evalBinOp, Env.bind, Env.empty]
-
-set_option linter.unusedSimpArgs false in
-/-- clamp(-3, 0, 10) = 0 (below range) -/
-theorem clamp_below : evalClamp (-3) 0 10 = some (.int 0) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
-            eval, evalBinOp, Env.bind, Env.empty]
-
-set_option linter.unusedSimpArgs false in
-/-- clamp(15, 0, 10) = 10 (above range) -/
-theorem clamp_above : evalClamp 15 0 10 = some (.int 10) := by simp [evalAbs, evalMax, evalClamp, absExpr, maxExpr, clampExpr,
-            eval, evalBinOp, Env.bind, Env.empty]
 
 /-- Integer literal evaluates to itself (with sufficient fuel). -/
 theorem eval_lit (n : Int) (fuel : Nat) (fns : FnTable) (env : Env) :

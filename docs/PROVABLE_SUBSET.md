@@ -136,12 +136,14 @@ ProofCore extraction happens at the `ValidatedCore` stage, not after monomorphiz
 
 ## Proved Properties (Current)
 
-`Concrete/Proof.lean` contains 17 theorems:
+`Concrete/Proof.lean` holds proof INFRASTRUCTURE plus the hardcoded
+`provedFunctions` proof path; the flagship example-correctness theorems now live
+in per-example modules `Concrete.Examples.<Ex>.Proofs` (see CHANGELOG, 2026-06-06).
 
-**Concrete function correctness:**
-- `abs_positive`, `abs_negative`, `abs_zero` — abs function returns correct values
-- `max_right`, `max_left`, `max_self` — max function returns correct values
-- `clamp_in_range`, `clamp_below`, `clamp_above` — clamp function returns correct values
+**Concrete function correctness (hardcoded `provedFunctions` path):**
+- `parse_byte_correct` — `parse_byte` returns `data + offset` for all inputs
+- `check_length_rejects_short` / `check_length_accepts_valid` — length guard
+- `decode_header_rejects_short` / `decode_header_valid` — header decode failure/success paths
 
 **Structural lemmas:**
 - `eval_lit` — integer literals evaluate to themselves

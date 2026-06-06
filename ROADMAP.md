@@ -181,6 +181,9 @@ user needs *some* slab to write anything real. So the gate is:
 3. **Run the trial and treat the result as an explicit go / no-go on the rest
    of Phases 8-15.**
 
+The trial should be implemented as the first external-user workload in the
+Phase 9 real-workload ladder, not as a separate validation artifact.
+
 **Pass criterion:** at least one person who is **not** the compiler author
 writes, proves, or contract-annotates a useful Concrete program and reports that
 the proof discipline (ProofKit + contracts + `concrete prove`) was worth the
@@ -351,93 +354,77 @@ lemmas, and actionable failure diagnostics.
 
 **Completed (recorded in [CHANGELOG.md](CHANGELOG.md)):** the JSON proof-registry retirement (source links are the only proof model); the per-example proof-theorem namespace migration (`Concrete.Examples.<Ex>.Proofs`) and its namespace guard; and the binary-first `concrete prove` agent surface — `--help=agent`/`--capabilities`/`--schema`, `--json` + `next_actions` with stable obligation ids, JSON modes for `--show-obligation`/`--replay`/`--emit-link`/`--nearest-lemmas`, `--emit-lean`, `--emit-artifacts`, `--check` (+ `--report check-proofs --json`), and `--workspace` with its CI fixture. Remaining Phase 3 work below.
 
-1. Deferred architecture refactor: split the current `Concrete.Proof` layering
-   so registered example specs can move without a cycle, but do not let this
-   block Phase 8 unless spec ownership or proof authoring starts depending on
-   it. Target shape:
-   - `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation, `FnTable`, and
-     source-independent semantics.
-   - `Concrete.SpecRegistry` owns the spec-drift table and imports whichever
-     example spec modules it registers.
-   - `Concrete.Proof` becomes the generic proof-theorem / compatibility
-     umbrella.
-   Only after this split should registered example SPEC PExprs move from
-   `Concrete.Proof.*Expr` into `Concrete.Examples.<Ex>.Proofs` or sibling
-   `Specs` modules. Preserve the spec-drift tie throughout.
-2. Add one bounded proof-pattern corpus that is both regression suite and
-    teaching set before Phase 8 language work starts. This is the final
-    proof-authoring bridge from "flagships prove it works" to "a new author can
-    copy a small pattern"; it must not grow into a second proof-research phase.
-    Put it under `examples/proof_patterns/`, with one small subexample per shape:
-    straight-line refinement, array read/write frame proof, loop copy proof,
-    fold/reduction proof, call composition proof, runtime-safety proof
-    (bounds/div/overflow plus one negative variant), ghost-assisted proof,
-    partial/missing/stale proof states, `concrete prove --workspace`, and an
-    agent repair fixture where `--check --json` maps a failing Lean proof back
-    to an obligation id. Each subexample must carry source-linked proofs only,
-    the exact `concrete prove --workspace`, `--json`, `--emit-lean`, `--check
-    --json`, expected next obligation, audit class, and pinned output. Tests
-    assert `check-proofs` for proved examples, expected `proof-status` classes,
-    stable obligation ids, typechecking emitted stubs up to placeholders, no
-    `proof-registry.json` in generated workspaces, and honest failures for
-    negative variants. After this corpus and its gates are green, Phase 8 may
-    proceed unless a concrete regression exposes a missing proof primitive.
-3. Add proof minimization: `concrete prove --minimize <obligation_id>` emits
+1. Final proof-authoring blocker before Phase 8: add one bounded proof-pattern
+   corpus that is both regression suite and teaching set. Put it under
+   `examples/proof_patterns/`, with one small subexample per shape:
+   straight-line refinement, array read/write frame proof, loop copy proof,
+   fold/reduction proof, call composition proof, runtime-safety proof
+   (bounds/div/overflow plus one negative variant), ghost-assisted proof,
+   partial/missing/stale proof states, `concrete prove --workspace`, and an
+   agent repair fixture where `--check --json` maps a failing Lean proof back
+   to an obligation id. Each subexample must carry source-linked proofs only,
+   the exact `concrete prove --workspace`, `--json`, `--emit-lean`, `--check
+   --json`, expected next obligation, audit class, and pinned output. Tests
+   assert `check-proofs` for proved examples, expected `proof-status` classes,
+   stable obligation ids, typechecking emitted stubs up to placeholders, no
+   `proof-registry.json` in generated workspaces, and honest failures for
+   negative variants.
+2. Add proof minimization: `concrete prove --minimize <obligation_id>` emits
     the smallest source / ProofCore / Lean slice needed to reproduce a failed
     obligation. This should be built after JSON and failed-artifact formats are
     stable, not before.
-4. Define and document stable theorem naming conventions in tool output:
+3. Define and document stable theorem naming conventions in tool output:
     `<fn>_refines_spec`, `<fn>_<obligation>_proved`,
     `<fn>_loop_<name>_preserves`, and
     `<fn>_call_<callee>_discharges_requires`. `concrete prove` should suggest
     these names instead of leaving agents to invent them.
-5. Add CI gates for the agent-facing proof surfaces: snapshot representative
+4. Add CI gates for the agent-facing proof surfaces: snapshot representative
     `--json` output, validate schema versioning, ensure generated Lean stubs
     parse/check up to the intended placeholder boundary, assert replay JSON
     reports the same statuses as human replay, and assert proof-check JSON maps
     a failing Lean proof back to the intended obligation id.
-6. Add human docs only after the binary path exists:
+5. Add human docs only after the binary path exists:
     `docs/AGENT_PROOF_AUTHORING.md` and an optional repo-root `AGENTS.md`
     should summarize the binary workflow and point to the ProofKit guide, but
     they must not be the source of truth for agents using only an installed
     binary.
-7. Add MCP only after the CLI/JSON/stub/workspace surfaces are stable. The MCP
+6. Add MCP only after the CLI/JSON/stub/workspace surfaces are stable. The MCP
     server should wrap the binary rather than duplicate logic, exposing resources such
     as `concrete://prove/<fn>/obligations`, `concrete://proofkit/lemmas`, and
     `concrete://examples/evidence-classes`, plus tools for `prove_json`,
     `show_obligation`, `emit_lean`, `check`, `replay`, and `check_proofs`.
-8. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
+7. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
     OOB stuck behavior.
-9. Build reusable lemmas for loop-carried state and `while_step`.
-10. Build reusable lemmas for BitVec operations used by flagships.
-11. Build reusable lemmas for structs, fields, enum construction, match, Result,
+8. Build reusable lemmas for loop-carried state and `while_step`.
+9. Build reusable lemmas for BitVec operations used by flagships.
+10. Build reusable lemmas for structs, fields, enum construction, match, Result,
     Option, and bounded-buffer invariants.
-12. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
+11. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
     fixed buffers, Result/Option, loops, source contracts, and refinement
     composition. Stubs should emit spec target, `PExpr` body, FnTable skeleton,
     expected theorem statement, common imports/tactics, and TODO blocks for
     loop invariants. These items enrich what `--emit-lean` produces; they do
     not introduce a second stub generator.
-13. Add generated composition scaffolds: FnTable entries, call lemmas, callee
+12. Add generated composition scaffolds: FnTable entries, call lemmas, callee
     refinement dependencies, and composed theorem skeletons.
-14. Add generated loop-invariant templates for common proof shapes:
+13. Add generated loop-invariant templates for common proof shapes:
     counter loop over array writes, copy loop, fold loop, multi-store loop,
     offset loop, and block-processing loop.
-15. Improve failed-proof diagnostics after `--json`, failed artifacts, and
+14. Improve failed-proof diagnostics after `--json`, failed artifacts, and
     `--minimize` exist: classify common failures into actionable categories
     such as missing callee theorem, stale source link, missing table entry,
     failed arithmetic bridge, insufficient frame fact, and spec/extraction
     mismatch. Diagnostics should point to the already-generated artifact or
     next action instead of introducing another parallel proof surface.
-16. Add proof-result caching once proof artifacts and fingerprints are stable.
-17. Add simple auto-discharge for structural obligations that do not need human
+15. Add proof-result caching once proof artifacts and fingerprints are stable.
+16. Add simple auto-discharge for structural obligations that do not need human
     proof search.
-18. Add a small verified/spec-checked standard proof library for common
+17. Add a small verified/spec-checked standard proof library for common
     predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
     constant-time source shape.
-19. Add AI-assisted proof repair only after artifacts, statuses, and replay are
+18. Add AI-assisted proof repair only after artifacts, statuses, and replay are
     stable enough to validate suggestions mechanically.
-20. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
+19. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
    establish not just what an iteration *changes* but what it *preserves* — the
    frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
    "a proof mentioning only its footprint preserves everything else"). Today
@@ -456,6 +443,16 @@ lemmas, and actionable failure diagnostics.
    majority of proof work. Gate: do not build it until a second update shape
    actually forces it (per the operating rules) — the current functional-list
    model gets framing for free.
+20. Deferred architecture refactor: split the current `Concrete.Proof` layering
+   so registered example specs can move without a cycle, but do not let this
+   block Phase 8 unless spec ownership or proof authoring starts depending on
+   it. Target shape: `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation,
+   `FnTable`, and source-independent semantics; `Concrete.SpecRegistry` owns
+   the spec-drift table and imports whichever example spec modules it registers;
+   `Concrete.Proof` becomes the generic proof-theorem / compatibility umbrella.
+   Only after this split should registered example SPEC PExprs move from
+   `Concrete.Proof.*Expr` into `Concrete.Examples.<Ex>.Proofs` or sibling
+   `Specs` modules. Preserve the spec-drift tie throughout.
 
 ## Phase 4: Audit Commands And Review Artifacts
 
@@ -909,7 +906,55 @@ they force a named surface or public claim.
     handling, handle-relative filesystem authority, exit-code compatibility,
     error behavior compatibility, ignored-result diagnostics, and oracle tests
     against a reference implementation.
-15. Do not run broad examples cleanup/polish sweeps. Clean examples
+15. Add a graduated real-workload ladder. The goal is to make sure Concrete
+    builds real things that can be checked against references, not only tiny
+    proof demos. Each workload must name the surface or public claim it forces;
+    otherwise it does not belong in this phase. Do not jump straight to multiple
+    10k-line ports before the language/workflow slab can support them; that
+    would mostly test missing ergonomics. Sequence:
+    - **Main compiler repo:** keep tiny proof patterns
+      (`examples/proof_patterns/`), evidence-class examples, small real programs
+      that gate the compiler, and showcase flagships here. These protect
+      compiler/proof correctness and should stay close to the tests.
+    - **Medium in-repo real programs after Phase 8 basics:** 500-2,000 line
+      examples, each chosen for a named pressure point: INI/TOML or tiny JSON
+      parser (bytes/text/path, diagnostics, runtime obligations), bounded HTTP
+      header parser (ignored-result diagnostics, byte-preserving parsing),
+      small tar/zip reader (path/OS-string boundaries, archive offsets,
+      overflow/cast obligations), bytecode interpreter (modules, dispatch,
+      bounded loops), fixed-capacity LRU cache (collections, ownership, frame
+      facts), or CLI checksum tool (project model, `concrete test`, oracle
+      comparison). Tier exits only when at least two medium programs build, run,
+      pass interpreter-vs-compiled checks, carry full evidence/trust
+      classification, and are covered by runtime-obligation audit.
+    - **Separate workload repo later** (`concrete-workloads`,
+      `concrete-corpus`, or similar): use it for larger ports, 2k-10k line
+      programs, compatibility suites, external-user programs, benchmark
+      workloads, and reference/oracle data that would bloat the compiler repo.
+      Do not create this repo until modules/imports, `Concrete.toml`,
+      `concrete test`, bytes/text/path, collections, and basic diagnostics are
+      usable. The first external-user workload in this repo is the
+      external-validation-gate trial from the cross-cutting checkpoint. The repo
+      must pin a Concrete compiler/toolchain version and be validated by release
+      CI so it does not silently rot as the language changes.
+    - **Ported compatibility examples after the workflow slab is stable:**
+      `wc`/`cat`/`sha256sum`-style tools, QOI image decoder, base64 library,
+      INI parser, tiny glob/regex matcher, arena allocator demo, MMIO-mock
+      driver, or protocol codec. Annotate forcing surfaces: glob/regex must
+      stay bounded or explicitly outside `PredictableV1`; arena allocator demo
+      waits for allocation-profile work that needs it; MMIO-mock driver waits
+      for the Phase 12 `with(Device)`/MMIO evidence decision or explicitly
+      pulls that decision forward.
+    - **10k-line stress ports** only after daily workflow is stable enough that
+      the port tests Concrete rather than fighting missing basics. Tier exits
+      only when at least one large port has a pinned reference/oracle suite,
+      interpreter-vs-compiled differential coverage, runtime-obligation audit,
+      and release-CI replay.
+    Each workload must have a check story: oracle/reference comparison,
+    interpreter-vs-compiled differential tests, runtime-obligation audit, and
+    explicit evidence/trust classification for what is proved, tested, assumed,
+    or trusted.
+16. Do not run broad examples cleanup/polish sweeps. Clean examples
     opportunistically when a roadmap task touches them. Improve examples only
     when they serve proof-link migration, `concrete prove` authoring,
     external validation, or a release-facing tutorial.

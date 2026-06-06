@@ -1,10 +1,12 @@
 # Allowlist of theorem/lemma names permitted in Concrete/Proof.lean.
 #
 # After the theorem-namespace migration (ROADMAP item: move example proofs out of
-# Concrete.Proof.*), example-CORRECTNESS theorems live in their per-example module
-# `Concrete.Examples.<Ex>.Proofs` (namespace `Examples.<Ex>.Proofs`). Concrete.Proof
-# keeps proof INFRASTRUCTURE only. The registered spec PExprs, eval scaffolding,
-# `specs`/`provedFunctions` tables, etc. are `def`s, not theorems, and stay freely.
+# Concrete.Proof.*), example-CORRECTNESS theorems for the seven flagships live in
+# their per-example module `Concrete.Examples.<Ex>.Proofs` (namespace
+# `Examples.<Ex>.Proofs`). Concrete.Proof keeps proof INFRASTRUCTURE plus the
+# theorems of the hardcoded `provedFunctions` proof path (see below). The
+# registered spec PExprs, eval scaffolding, `specs`/`provedFunctions` tables, etc.
+# are `def`s, not theorems, so they stay freely.
 #
 # `check_proof_namespace.sh` fails if Concrete/Proof.lean declares a theorem/lemma
 # whose name is NOT on this list. When that happens:
@@ -36,20 +38,14 @@ length_set
 lookupIndex_set_ne
 lookupIndex_set_self
 
-# --- Grandfathered: pre-flagship demo / legacy theorems that predate the
-#     per-example split. These are NOT a license to add new example proofs here;
-#     they are tracked debt to migrate or delete later (abs/max/clamp demos, the
-#     legacy parse_byte/check_length/decode_header set, the spec-drift fixture).
-#     New example-correctness theorems must go under Concrete.Examples.<Ex>.Proofs. ---
-abs_negative
-abs_positive
-abs_zero
-clamp_above
-clamp_below
-clamp_in_range
-max_left
-max_right
-max_self
+# --- Live: the hardcoded `provedFunctions` proof path. These prove the
+#     parse_byte / check_length / decode_header (+ validate) functions correct
+#     and are consumed via `Concrete.Proof.provedFunctions` by `thesis_demo`,
+#     `packet`, and the proof-evidence test suite under tests/programs/ (e.g.
+#     proof_decode_header, report_evidence_*, the adversarial_proof_* fixtures).
+#     They are NOT example cruft and NOT dead; they are the non-source-linked
+#     evidence path the compiler still supports. (If that path is ever retired,
+#     delete these together with the provedFunctions table.) ---
 parse_byte_10_3
 parse_byte_boundary
 parse_byte_correct
@@ -66,4 +62,9 @@ decode_header_rejects_overflow
 decode_header_rejects_short
 decode_header_valid
 validate_rejects_short
+
+# --- Live: spec-drift gate regression fixture. `driftTestSpec` (a registered
+#     spec) deliberately mismatches the extracted body; `drift_test_theorem`
+#     proves the spec, and tests/programs/adversarial_spec_drift/test_drift.con
+#     links both so the spec-drift gate must fire (see run_tests.sh "spec_drift"). ---
 drift_test_theorem
