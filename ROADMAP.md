@@ -230,12 +230,18 @@ retrofit is explicitly queued behind proof-link migration.
    `check_contract_negatives.sh` 15/0; zero false positives across the flagships.
    REMAINING (deeper, path-sensitive): unreachable returns and postconditions
    proved only because a path is impossible.
-3. Add `spec fn` / ghost totality rules: spec functions and ghost computations
-   referenced by contracts are pure, erased, and total. Lean-backed specs inherit
-   Lean termination; Concrete-level `spec fn` needs a totality/termination
-   obligation or is rejected from the contract language. Add
-   `examples/contract_negatives/spec_ghost_totality/` and one accepted positive
-   control that proves valid ghost/spec references are not over-rejected.
+3. ~~Add `spec fn` / ghost totality rules.~~ **DONE (purity) / N/A (spec-fn totality).**
+   `spec fn` is body-less and Lean-backed, so its totality is inherited from Lean
+   — there is no Concrete-level spec-fn body to reject. The checkable Concrete-side
+   rule is that the spec/ghost language is PURE and TOTAL: a contract calling a
+   capability-requiring (effectful) function is rejected report-side
+   (`Report.impureFnNames` + `contractImpureCalls`, wired into requires/ensures/
+   invariants/variants) as `invalid_contract_expression: impure call '<fn>' …`.
+   `examples/contract_negatives/spec_ghost_totality/` covers the negative (an
+   effectful call) and a positive control (pure helper + `spec fn`, not
+   over-rejected); zero false positives across the flagships. (Deeper ghost-value
+   totality — e.g. a partial op inside a `ghost let` value — remains a possible
+   follow-up.)
 4. Finish the `assert` / `assume` trapdoor discipline everywhere it appears:
    `assert` creates an obligation; `assume` is tainted, audit-loud,
    gate-forbiddable, and never reported as proof. Add
