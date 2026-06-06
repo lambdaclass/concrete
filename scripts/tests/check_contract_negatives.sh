@@ -49,6 +49,10 @@ assert_contains(){ local l="$1" n="$2"; shift 2; local o; o="$("$@" 2>&1)"
 assert_absent(){ local l="$1" n="$2"; shift 2; local o; o="$("$@" 2>&1)"
   if printf '%s' "$o" | grep -qF -- "$n"; then echo "  FAIL $l — unexpected '$n'"; FAIL=$((FAIL+1));
   else echo "  ok   $l"; fi; }
+# assert_json <label> <pyexpr> <cmd...>
+assert_json(){ local l="$1" e="$2"; shift 2; local o; o="$("$@" 2>/dev/null)"
+  if printf '%s' "$o" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if ($e) else 1)" 2>/dev/null; then echo "  ok   $l"; PASS=$((PASS+1));
+  else echo "  FAIL $l — JSON/assert failed: $e"; FAIL=$((FAIL+1)); fi; }
 
 echo "=== missing_postcondition (#[ensures] with no proof) ==="
 assert_contains "ensures reported missing, not proved" "missing (no in-source proof link" \
@@ -65,6 +69,24 @@ if command -v lake >/dev/null 2>&1; then
     "$COMPILER" "$CN/invalid_invariant/src/main.con" --report contracts
 else
   echo "  skip invalid_invariant omega check (lake not on PATH)"
+fi
+
+echo "=== duplicate_links (two of the same proof-link attribute) ==="
+assert_contains "duplicate #[spec] rejected at parse time" "duplicate #[spec(...)]" \
+  "$COMPILER" "$CN/duplicate_links/src/main.con"
+
+echo "=== fabricated_proof (nonexistent theorem name) ==="
+FAB="$CN/fabricated_proof/src/main.con"
+# documents the known limitation: proof-status trusts the fingerprint...
+assert_contains "proof-status reports proved (known limitation)" "proof matches current body" \
+  "$COMPILER" "$FAB" --report proof-status
+# ...but --check is the safety net that catches it.
+if command -v lake >/dev/null 2>&1; then
+  assert_json "prove --check catches fabricated name → missing_theorem" \
+    'd["all_checked"] is False and d["checks"][0]["status"]=="missing_theorem"' \
+    "$COMPILER" prove "$FAB" cn.f --check --json
+else
+  echo "  skip fabricated --check (lake not on PATH)"
 fi
 
 echo ""

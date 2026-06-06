@@ -1853,11 +1853,21 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
       if key == "test" then
         pendingIsTest := true
       if key == "overflow_checked" then pendingOverflow := true
-      if key == "spec" then pendingSpecLink := attrVal
-      if key == "proof_by" then pendingProofBy := attrVal
-      if key == "ensures_proof" then pendingEnsuresProof := attrVal
-      if key == "proof_coverage" then pendingCoverage := attrVal
-      if key == "proof_fingerprint" then pendingFingerprint := attrVal
+      if key == "spec" then
+        if pendingSpecLink.isSome then throwParse s!"duplicate #[spec(...)] on one function" (span := none)
+        pendingSpecLink := attrVal
+      if key == "proof_by" then
+        if pendingProofBy.isSome then throwParse s!"duplicate #[proof_by(...)] on one function" (span := none)
+        pendingProofBy := attrVal
+      if key == "ensures_proof" then
+        if pendingEnsuresProof.isSome then throwParse s!"duplicate #[ensures_proof(...)] on one function" (span := none)
+        pendingEnsuresProof := attrVal
+      if key == "proof_coverage" then
+        if pendingCoverage.isSome then throwParse s!"duplicate #[proof_coverage(...)] on one function" (span := none)
+        pendingCoverage := attrVal
+      if key == "proof_fingerprint" then
+        if pendingFingerprint.isSome then throwParse s!"duplicate #[proof_fingerprint(...)] on one function" (span := none)
+        pendingFingerprint := attrVal
       match ensExpr with
       | some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
                   else pendingEnsures := pendingEnsures ++ [e]
@@ -1900,11 +1910,21 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
         if key == "test" then
           pendingIsTest := true
         if key == "overflow_checked" then pendingOverflow := true
-        if key == "spec" then pendingSpecLink := attrVal
-        if key == "proof_by" then pendingProofBy := attrVal
-        if key == "ensures_proof" then pendingEnsuresProof := attrVal
-        if key == "proof_coverage" then pendingCoverage := attrVal
-        if key == "proof_fingerprint" then pendingFingerprint := attrVal
+        if key == "spec" then
+          if pendingSpecLink.isSome then throwParse s!"duplicate #[spec(...)] on one function" (span := none)
+          pendingSpecLink := attrVal
+        if key == "proof_by" then
+          if pendingProofBy.isSome then throwParse s!"duplicate #[proof_by(...)] on one function" (span := none)
+          pendingProofBy := attrVal
+        if key == "ensures_proof" then
+          if pendingEnsuresProof.isSome then throwParse s!"duplicate #[ensures_proof(...)] on one function" (span := none)
+          pendingEnsuresProof := attrVal
+        if key == "proof_coverage" then
+          if pendingCoverage.isSome then throwParse s!"duplicate #[proof_coverage(...)] on one function" (span := none)
+          pendingCoverage := attrVal
+        if key == "proof_fingerprint" then
+          if pendingFingerprint.isSome then throwParse s!"duplicate #[proof_fingerprint(...)] on one function" (span := none)
+          pendingFingerprint := attrVal
         match ensExpr with
         | some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
                     else pendingEnsures := pendingEnsures ++ [e]

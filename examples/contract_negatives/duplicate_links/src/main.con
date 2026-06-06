@@ -1,0 +1,9 @@
+// contract negatives: duplicate / conflicting proof links.
+// A function may carry at most one of each proof-link attribute. Two #[spec]
+// (or two #[proof_by], etc.) are rejected at parse time, rather than silently
+// last-wins masking a conflict.
+mod cn {
+    #[spec(A.x)]
+    #[spec(B.y)]
+    fn f(x: i32) -> i32 { return x; }
+}

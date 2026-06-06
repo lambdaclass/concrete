@@ -1,0 +1,12 @@
+// contract negatives: a fabricated proof name.
+// #[proof_by] names a theorem that does not exist. proof-status trusts the
+// fingerprint and reports `proved` (a known limitation — names aren't validated
+// there), but `concrete prove --check` runs the Lean kernel and catches it as
+// `missing_theorem`. The --check loop is the safety net against this false green.
+mod cn {
+    #[spec(Examples.DoesNotExist.fakeSpec)]
+    #[proof_by(Examples.DoesNotExist.fake_theorem)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("8f6d57b27104e2c9")]
+    fn f(x: i32) -> i32 { return x; }
+}
