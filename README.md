@@ -236,31 +236,6 @@ The predictable profile (`--check predictable`) rejects functions that recurse, 
 
 Reports that run cleanly today: `caps`, `unsafe`, `layout`, `interface`, `alloc`, `mono`, `authority`, `proof`, `eligibility`, `proof-status`, `obligations`, `stack-depth`, `fingerprints`, `effects`, `recursion`, `consistency`, `verify`.
 
-## Where Concrete is honest
-
-The README discipline this project tries to live up to: state what is true today, name what is not, do not sell harder than the AUDITs allow.
-
-**The compiler is written in Lean 4. It is not yet proved in Lean 4.** That distinction matters. Phase 10 of the roadmap (the Compiler Soundness Bridge) is where compiler correctness work happens; today the compiler is well tested (1575 positive tests, drift detection gates including the spec drift gate that prevents typo'd specs from silently "proving," 5 graduated flagships' worth of oracle differentials totaling ~3000 cases) but not Lean verified.  Every extraction rule (R-01…R-28) names the Phase 10 preservation obligation it creates; see `docs/PROOF_OBLIGATIONS_REGISTER.md`.  The 4 layer trust map: (1) Lean kernel checks the user's theorem; (2) Concrete compiler extracts the property, trusted; (3) LLVM/clang/linker, trusted; (4) host kernel + libc, trusted. See [docs/TRUSTED_COMPUTING_BASE.md](docs/TRUSTED_COMPUTING_BASE.md).
-
-**"Every function provable" is the long term aim, not the current state.** Today ProofCore covers integer/bool, if then else (including early return desugaring), function calls, let bindings, struct + enum literals, pattern matching, array reads and functional array updates, bounded `while` loops (flat assign body, including array element writes) and richer `while_step` loops (Cont/Break enum), casts, and width tagged arithmetic/bitwise ops: `mod`/`div`, `bitand`/`bitor`/`bitxor`, logical `shl`/`shr`, and `u32` wrapping `add` at i32/u32/u8 widths with signed and unsigned result modes (the HMAC-SHA256 forcing surface, R-22…R-28).  It does NOT yet cover references/borrows or arbitrary (non counter) loop invariants.  **Refinement against an independent spec** is now demonstrated end to end. An independent `BitVec` valued SHA-256/HMAC spec ships ([`Concrete/Sha256Spec.lean`](Concrete/Sha256Spec.lean)), and the **entire** extracted SHA-256/HMAC chain is proved to *refine* it for all inputs in the documented bounds: 11 registered theorems, kernel checked (`--report check-proofs` = 11 verified, 0 failed), each tied to the exact extracted source through the spec drift gate (the [hmac_sha256](examples/hmac_sha256/) flagship; see the dedicated paragraph below).  All of it lives in [`Concrete/Sha256Refine.lean`](Concrete/Sha256Refine.lean), and the reusable machinery it produced (fuel monotonicity + bounded counter loop induction + array/BitVec/loop/call lemmas) was harvested into the `fns` generic [`Concrete/ProofKit/*`](Concrete/ProofKit/). See [docs/PROOFKIT_GUIDE.md](docs/PROOFKIT_GUIDE.md) and [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).  Per construct register: `docs/PROOF_OBLIGATIONS_REGISTER.md`; mutation model: `docs/PROOF_STATE_MODEL.md`.
-
-**Five graduated Phase 7 flagships as of 2026-06-02:**
-- [parse_validate](examples/parse_validate/): capability pure validation core, Lean composition theorem, drift enforced negative pair.
-- [crypto_verify](examples/crypto_verify/): toy proof scaffolding for authenticated tag verification (explicitly NOT real crypto).
-- [fixed_capacity](examples/fixed_capacity/): bounded ring buffer + message validator with iteration counted composition theorem over mutable state.
-- [constant_time_tag](examples/constant_time_tag/): fixed size byte array comparison with universal same tag theorem and honest machine level timing gap.
-- [hmac_sha256](examples/hmac_sha256/): first real cryptographic primitive (FIPS 180-4 + RFC 4231); the **entire** SHA-256/HMAC composition chain is kernel verified (11 registered proofs) and every link is tied to the exact extracted source through the spec drift gate.
-
-Each is in `tests/showcase/manifest.toml` with 10 of 10 graduation bars met; `make test-showcase` walks all five and asserts CI gates + release bundle capture cleanly.
-
-`hmac_sha256` (graduated 2026-06-02) is the deepest proof artifact: `hmac_sha256_refines_spec` proves the extracted body computes exactly an independent BitVec model (`Sha256Spec.hmac`) for all inputs in the documented bounds (`k_len ≤ 128`, `m_len ≤ 256`, `len ≤ 375`), composing nine full contract chain refinements (block to words, schedule, round, single/offset compress, state serialization, multi block padded hash, outer HMAC) by `eval_while_count` loop induction + `bv_decide`, not 64× unfolding. It realizes the thesis end to end: *source extracts to this ProofCore body, this body refines the spec, and drift breaks the claim.* The proof infrastructure was then harvested into a reusable, `fns` generic **Proof Kit** (`Concrete/ProofKit/*`); the [docs/PROOFKIT_GUIDE.md](docs/PROOFKIT_GUIDE.md) teaches the path on `ch` → `block_to_words` → `state_to_bytes` → `sha256_compress` → `hmac_sha256`. See also [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).
-
-**Async / concurrency / threads / channels are not implemented.** The research direction is documented (evidence-bearing structured concurrency, `with(Async)` vs `with(Concurrent)`, linear task handles, deterministic simulation as a future backend) but no code exists. See [research/stdlib-runtime/async-concurrency-evidence.md](research/stdlib-runtime/async-concurrency-evidence.md).
-
-**Other things not implemented:** broad proof coverage, bounded-capacity types, incremental compilation, package manager / workspaces, second backend (QBE/WASM/etc.), LSP / editor support, REPL / playground. See [ROADMAP.md](ROADMAP.md) for priorities.
-
-**The audience is narrow.** Systems engineers who want Lean backed proofs on selected functions, willing to accept linearity discipline, working in a domain where no GC matters. If you want broad memory safety with low ceremony, Rust is more mature. If you want fast iteration on low level code without proof story, Zig is simpler. Concrete is for the case where all four of those constraints bind.
-
 ## Research Direction: Evidence-Bearing Concurrency
 
 Sketched as future work; not in scope for the first release. The interesting target is not Rust-style async/await but **evidence-bearing structured concurrency**:
@@ -306,18 +281,6 @@ make build
 make test
 make clean
 ```
-
-## Doc Map
-
-**Start here:** [examples/parse_validate/README.md](examples/parse_validate/README.md): the first graduated flagship, with the honest framing template all five flagships share.
-
-**Discipline:** [docs/WRONG_CODE_CORPUS.md](docs/WRONG_CODE_CORPUS.md), [docs/REDUCER_WORKFLOW.md](docs/REDUCER_WORKFLOW.md), [docs/BUG_BUNDLE.md](docs/BUG_BUNDLE.md), [docs/VERIFY_GATES.md](docs/VERIFY_GATES.md), [docs/ASSUMPTION_FILES.md](docs/ASSUMPTION_FILES.md), [docs/POLICY_FILES.md](docs/POLICY_FILES.md), [docs/INTERPRETER_TRUST.md](docs/INTERPRETER_TRUST.md).
-
-**Identity / claims:** [docs/IDENTITY.md](docs/IDENTITY.md), [docs/PRINCIPLES.md](docs/PRINCIPLES.md), [docs/CLAIMS_TODAY.md](docs/CLAIMS_TODAY.md), [docs/PROOF_STORY_MATRIX.md](docs/PROOF_STORY_MATRIX.md), [docs/PROVABLE_V1.md](docs/PROVABLE_V1.md), [docs/TRUSTED_COMPUTING_BASE.md](docs/TRUSTED_COMPUTING_BASE.md), [docs/PROFILES.md](docs/PROFILES.md), [docs/INFLUENCES.md](docs/INFLUENCES.md).
-
-**Proof system:** [docs/PROOFKIT_GUIDE.md](docs/PROOFKIT_GUIDE.md) ("prove your first Concrete function", the reusable `fns` generic proof kit harvested from HMAC), [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md) (discharge tiers + the shipped reusable proof layer), [docs/CONTRACTS_AND_VCS.md](docs/CONTRACTS_AND_VCS.md) (the planned claim→obligation→evidence→audit pipeline and source contracts), [docs/PROOF_OBLIGATIONS_REGISTER.md](docs/PROOF_OBLIGATIONS_REGISTER.md), [docs/PROOF_WORKFLOW.md](docs/PROOF_WORKFLOW.md).
-
-**Direction:** [ROADMAP.md](ROADMAP.md), [CHANGELOG.md](CHANGELOG.md), [research/](research/).
 
 ## License
 

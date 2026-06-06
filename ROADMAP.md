@@ -255,14 +255,20 @@ retrofit is explicitly queued behind proof-link migration.
    (closed-by-omega / unproven / false) and `assume_taint/` (taint + clean
    sibling + policy rejection) are pinned by `check_contract_negatives.sh`
    (24/0, +8).
-5. Improve contract diagnostics: explain whether the failure is caller-side
-   precondition, callee-side postcondition, partial postcondition, loop
-   invariant initialization, invariant preservation, variant decrease, bad
-   proof link, stale proof, vacuous proof, or non-total spec/ghost expression.
-   Include a positive resolver fixture such as
-   `examples/contract_positive/valid_complex_contract_scope/` covering params,
-   result, locals, ghost bindings, loop counters, constants, functions, and
-   spec calls without false positives.
+5. **[done]** Contract diagnostics taxonomy + positive resolver fixture. Every
+   failure class is now self-labelled and placed: caller-side precondition lives
+   in `=== Call-site obligations ===` (`unproven_at_callsite (caller does not
+   establish …)` / `failed_at_callsite`); callee-side postcondition is the O*
+   `ensures` status (`missing` / `proved_by_lean` / `partial — one direction
+   proved_by_lean, converse outstanding`); loop obligations are O1 init / O2
+   preservation / O4–O5 variant; vacuity is `⚠ VACUOUS`; bad/stale proof links
+   surface in `--report proof-status`; non-total spec/ghost is
+   `invalid_contract_expression: impure call …`. The companion positive fixture
+   `examples/contract_positive/valid_complex_contract_scope/` mentions every
+   legal name a contract can (params, `result`, module constant, pure helper
+   call, `spec fn` call, loop counter, `ghost let`, ordinary local) and is pinned
+   to produce ZERO false positives by `check_contract_negatives.sh` (31/0, +7) —
+   over-eager scope-checking is as dishonest as a missed obligation.
 6. Add contract stability rules: weakening a precondition, strengthening a
    postcondition, or changing a public invariant is a semantic API change.
 7. Add source contract soundness work to the compiler soundness bridge: parsing

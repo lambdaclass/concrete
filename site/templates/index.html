@@ -7,12 +7,13 @@
     <nav>
       <a href="#abstract">1. Abstract</a>
       <a href="#distinctive">2. What Makes It Different</a>
-      <a href="#model">3. Evidence Model</a>
-      <a href="#example">4. Running Example</a>
-      <a href="#status">5. Current Status</a>
-      <a href="#hmac">6. HMAC Work</a>
-      <a href="#limits">7. Limits</a>
-      <a href="#read">8. Read Next</a>
+      <a href="#tiny-claims">3. Tiny Claims</a>
+      <a href="#model">4. Evidence Model</a>
+      <a href="#example">5. Running Example</a>
+      <a href="#status">6. Current Status</a>
+      <a href="#hmac">7. HMAC Work</a>
+      <a href="#limits">8. Limits</a>
+      <a href="#read">9. Read Next</a>
     </nav>
     <div class="sidebar-links">
       <a href="{{ get_url(path='@/paper.md') }}">Paper</a>
@@ -72,8 +73,48 @@
       </ol>
     </section>
 
+    <section id="tiny-claims" class="paper-section">
+      <h3>3. Tiny Claims</h3>
+      <p>
+        The audit class matters as much as the code. A Lean theorem, a kernel
+        decision procedure, and an external solver do not mean the same thing.
+      </p>
+      <figure class="listing">
+        <pre><code>#[ensures(result == x + 3)]
+#[proof_by(Examples.ProofPatterns.Proofs.add_three_correct)]
+fn add_three(x: i32) -&gt; i32 {
+    return x + 3;
+}</code></pre>
+        <figcaption>
+          Lean proof attached to source: <code>proved_by_lean</code>, with a theorem name.
+        </figcaption>
+      </figure>
+      <figure class="listing">
+        <pre><code>#[requires(0 &lt;= i &amp;&amp; i &lt; 16)]
+#[ensures(result == a[i])]
+fn get16(a: [u8; 16], i: i32) -&gt; u8 {
+    return a[i];
+}</code></pre>
+        <figcaption>
+          Runtime bound discharged by a kernel decision procedure:
+          <code>proved_by_kernel_decision</code>, engine <code>omega</code>.
+        </figcaption>
+      </figure>
+      <figure class="listing">
+        <pre><code>#[requires(0 &lt;= len &amp;&amp; len &lt;= max_len)]
+#[ensures(result &lt;= max_blocks)]
+fn padded_blocks(len: i32, max_len: i32, max_blocks: i32) -&gt; i32 {
+    return (len + 9 + 63) / 64;
+}</code></pre>
+        <figcaption>
+          External SMT, when policy allows it: <code>proved_by_smt</code>,
+          solver named, trust class <code>solver_trusted</code>.
+        </figcaption>
+      </figure>
+    </section>
+
     <section id="model" class="paper-section">
-      <h3>3. Evidence Model</h3>
+      <h3>4. Evidence Model</h3>
       <p>
         Concrete separates claim classes instead of reducing everything to one
         green badge. The current audit vocabulary is deliberately explicit:
@@ -96,7 +137,7 @@
     </section>
 
     <section id="example" class="paper-section">
-      <h3>4. Running Example</h3>
+      <h3>5. Running Example</h3>
       <p>
         The narrow real-crypto example is a constant-time tag comparison. Its
         proof does not claim machine-level constant time. It proves a source
@@ -143,7 +184,7 @@ assumptions:
     </section>
 
     <section id="status" class="paper-section">
-      <h3>5. Current Status</h3>
+      <h3>6. Current Status</h3>
       <div class="paper-table-wrap">
         <table class="paper-table">
           <thead>
@@ -161,7 +202,7 @@ assumptions:
     </section>
 
     <section id="hmac" class="paper-section">
-      <h3>6. HMAC Work</h3>
+      <h3>7. HMAC Work</h3>
       <p>
         HMAC-SHA256 is the deepest proof artifact. The extracted Concrete
         source is linked to Lean checked refinements against an independent
@@ -177,7 +218,7 @@ assumptions:
     </section>
 
     <section id="limits" class="paper-section">
-      <h3>7. What Concrete Does Not Claim Yet</h3>
+      <h3>8. What Concrete Does Not Claim Yet</h3>
       <p>
         Concrete is not a verified compiler today. It does not yet prove
         generated binary correctness, whole-program constant-time behavior, or
@@ -188,7 +229,7 @@ assumptions:
     </section>
 
     <section id="read" class="paper-section read-next">
-      <h3>8. Read Next</h3>
+      <h3>9. Read Next</h3>
       <ul class="paper-links">
         <li><a href="{{ get_url(path='@/guide/getting_started.md') }}">Getting started</a><span>Build the compiler and run a program.</span></li>
         <li><a href="{{ get_url(path='@/reference/PROVABLE_SUBSET.md') }}">Provable subset</a><span>What can carry Lean backed evidence today.</span></li>

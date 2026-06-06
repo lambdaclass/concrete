@@ -1,0 +1,50 @@
+// contract POSITIVE: the resolver must accept every legal name a contract can
+// mention, with ZERO false positives. This is the companion to the
+// contract_negatives suite — it pins that the scope checker
+// (Report.validateContractExpr) is not over-eager: no `invalid_contract_expression`,
+// no spurious `impure call`, no spurious `vacuous`.
+//
+// Scope vocabulary exercised, in one function's contracts:
+//   - parameters           (lo, hi, x)
+//   - the result keyword    (result, in #[ensures])
+//   - module constants      (LIMIT)
+//   - pure helper functions (in_range — called from a contract)
+//   - spec functions        (clamp_spec — body-less, Lean-backed, total)
+//   - loop counters         (i, bound to the loop)
+//   - ghost bindings        (span, a proof-only `ghost let`)
+//   - ordinary locals       (acc)
+mod scope {
+    const LIMIT: i32 = 16;
+
+    // a PURE helper (no capabilities) — legal to call from a contract.
+    fn in_range(v: i32, lo: i32, hi: i32) -> bool {
+        return lo <= v && v <= hi;
+    }
+
+    // a spec function — body-less, total by construction, legal in contracts.
+    spec fn clamp_spec(x: i32, lo: i32, hi: i32) -> i32;
+
+    // requires mentions: params (lo, hi, x), a constant (LIMIT), a pure helper
+    //   call (in_range), and a spec call (clamp_spec).
+    // ensures mentions: result, params, the constant, and the spec function.
+    #[requires(lo <= hi && hi < LIMIT)]
+    #[requires(in_range(x, lo, hi))]
+    #[ensures(result == clamp_spec(x, lo, hi))]
+    #[ensures(lo <= result && result <= hi)]
+    fn clamp(x: i32, lo: i32, hi: i32) -> i32 {
+        return x;
+    }
+
+    // a loop whose invariant/variant mention a ghost binding (span), the loop
+    //   counter (i), the constant (LIMIT), and a local (acc) — all legal.
+    fn accumulate() -> i32 {
+        ghost let span: i32 = LIMIT;
+        let mut acc: i32 = 0;
+        #[invariant(0 <= i && i <= span && acc <= LIMIT)]
+        #[variant(span - i)]
+        for (let mut i: i32 = 0; i < LIMIT; i = i + 1) {
+            acc = acc;
+        }
+        return acc;
+    }
+}

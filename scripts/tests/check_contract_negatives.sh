@@ -165,6 +165,26 @@ else
   echo "  skip fabricated --check (lake not on PATH)"
 fi
 
+echo "=== valid_complex_contract_scope (positive: resolver has zero false positives) ==="
+# The companion to the negatives: a contract that legally mentions every name a
+# contract CAN mention must produce NO false red. Over-eager scope-checking is as
+# dishonest as a missed obligation.
+POS="examples/contract_positive/valid_complex_contract_scope/src/main.con"
+posrep="$("$COMPILER" "$POS" --report contracts 2>/dev/null)"
+# no false positives of any class:
+for bad in "invalid_contract_expression" "impure call" "unknown identifier" "unknown function/spec" "VACUOUS" "vacuous"; do
+  if printf '%s' "$posrep" | grep -qF -- "$bad"; then
+    echo "  FAIL positive fixture flagged '$bad' (false positive)"; printf '%s\n' "$posrep" | grep -F -- "$bad" | sed 's/^/      /'; FAIL=$((FAIL+1));
+  else echo "  ok   no false '$bad'"; PASS=$((PASS+1)); fi
+done
+# and the legal names actually resolve to normal statuses (not silently dropped):
+if printf '%s' "$posrep" | grep -qF "requires in_range(x, lo, hi)" \
+   && printf '%s' "$posrep" | grep -qF "ensures result == clamp_spec(x, lo, hi)" \
+   && printf '%s' "$posrep" | grep -qF "invariant 0 <= i && i <= span && acc <= LIMIT"; then
+  echo "  ok   params/result/const/helper/spec/counter/ghost/local all resolve"; PASS=$((PASS+1));
+else
+  echo "  FAIL positive fixture: a legal contract name did not render"; FAIL=$((FAIL+1)); fi
+
 echo ""
 echo "CONTRACT-NEGATIVES: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -13,6 +13,10 @@ explicit capabilities, contracts in source, Lean checked proof links, drift
 detection, multiple evidence classes instead of one green badge, and audit
 reports that refuse to hide trust.
 
+The homepage shows the important distinction with small examples: a Lean linked
+proof, a kernel decision procedure, and an external SMT result with named solver
+trust.
+
 Use the reference section for stable contracts and project rules. Use the guide
 section for a smaller narrative path through the language, tooling, and current
 implementation.
