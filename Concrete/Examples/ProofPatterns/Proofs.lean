@@ -144,4 +144,31 @@ theorem combine_correct (x : Int) (fuel : Nat) :
   simp [combineExpr, eval, eval.evalArgs, combineFns, incFn, incExpr,
         dblFn, dblExpr, Env.bind, evalBinOp, bindArgs]
 
+/-! ## 6. Ghost-assisted proof
+
+`ghost.with_ghost` uses a `ghost let` to name the loop bound for its invariant.
+A `ghost let` is erased before Core, so it never reaches the extracted body or
+its `#[proof_fingerprint]`: the extracted body below contains no `n`, and the
+sibling `ghost.plain` (same runtime body, literal invariant, no ghost) shares the
+SAME spec, proof, and fingerprint — demonstrating ghost/contract metadata does
+not affect the fingerprint. -/
+
+/-- Spec = the extracted body of `with_ghost` / `plain` (the ghost `n` is erased;
+    only the runtime loop summing `0..4` remains). -/
+def ghostSumExpr : PExpr :=
+  .letIn "acc"
+    (.lit (.int 0))
+    (.letIn "i"
+      (.lit (.int 0))
+      (.while_
+        (.binOp .lt (.var "i") (.lit (.int 4)))
+        [ ("acc", .binOp .add (.var "acc") (.var "i"))
+        , ("i", .binOp .add (.var "i") (.lit (.int 1))) ]
+        (.var "acc")))
+
+/-- The ghost-assisted loop sums `0 + 1 + 2 + 3 = 6` (point coverage). -/
+theorem ghost_sum_correct (fuel : Nat) :
+    eval (fun _ => none) Env.empty (fuel + 14) ghostSumExpr = some (.int 6) := by
+  simp [ghostSumExpr, eval, evalBinOp, Env.bind, eval.evalAssigns]
+
 end Examples.ProofPatterns.Proofs

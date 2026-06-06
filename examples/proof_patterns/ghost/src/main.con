@@ -1,0 +1,37 @@
+// proof_patterns: ghost-assisted proof.
+//
+// A `ghost let` is a proof-only binding: erased before Core/codegen, so it never
+// reaches the extracted body or its #[proof_fingerprint]. Here the ghost `n`
+// names the loop bound for the invariant. `with_ghost` is proved; `plain` is the
+// same runtime body with a literal invariant and NO ghost — they must share the
+// same fingerprint, demonstrating that ghost/contract metadata does not affect it.
+mod ghost {
+    #[spec(Examples.ProofPatterns.Proofs.ghostSumExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.ghost_sum_correct)]
+    #[proof_coverage(point)]
+    #[proof_fingerprint("580482017753f812")]
+    fn with_ghost() -> i32 {
+        ghost let n: i32 = 4;
+        let mut acc: i32 = 0;
+        #[invariant(0 <= i && i <= n)]
+        #[variant(n - i)]
+        for (let mut i: i32 = 0; i < 4; i = i + 1) {
+            acc = acc + i;
+        }
+        return acc;
+    }
+
+    #[spec(Examples.ProofPatterns.Proofs.ghostSumExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.ghost_sum_correct)]
+    #[proof_coverage(point)]
+    #[proof_fingerprint("580482017753f812")]
+    fn plain() -> i32 {
+        let mut acc: i32 = 0;
+        #[invariant(0 <= i && i <= 4)]
+        #[variant(4 - i)]
+        for (let mut i: i32 = 0; i < 4; i = i + 1) {
+            acc = acc + i;
+        }
+        return acc;
+    }
+}

@@ -66,8 +66,35 @@ the only proof model); this milestone is the agent-facing tooling on top of it.
   env_failure); whole-file `--report check-proofs --json` is the project-wide
   twin. Agents read structured status, not raw `lake env lean` stderr.
 - Gate: `scripts/tests/test_prove_cli.sh` (68 assertions, lake-guarded for the
-  kernel checks). Remaining agent-tooling items (docs, MCP, minimize, the
-  proof-pattern corpus) stay in ROADMAP Phase 3.
+  kernel checks). Remaining agent-tooling items (docs, MCP, minimize) stay in
+  ROADMAP Phase 3.
+
+### Proof-pattern corpus (2026-06-06)
+
+`examples/proof_patterns/` landed as a bounded proof-authoring corpus: small
+source-linked examples that teach and regression-test the common proof shapes
+without forcing users to learn from the large flagships first.
+
+The corpus covers:
+- `straight_line` — `add_three = x + 3` (`iff` coverage).
+- `array_update` — write index 1 and frame the rest (`point` coverage).
+- `loop_copy` — fixed two-byte copy proof.
+- `fold` — fixed four-element sum proof.
+- `composition` — function composition through a FnTable/callee proof chain
+  (`iff` coverage).
+- `runtime_safety` — bounds/div/overflow obligations discharged by
+  `omega`/`bv_decide`, plus a negative unchecked variant.
+- `stale_missing_partial` — the three intentional non-green states.
+- `workspace` — `concrete prove --workspace` fixture with no
+  `proof-registry.json`.
+- `repair` — `concrete prove --check --json` maps a missing proof back to an
+  obligation id.
+
+All examples use source-linked proofs only. The gate
+`scripts/tests/check_proof_patterns.sh` is wired into CI and `make
+test-proof-patterns`; it checks proof status, kernel proof checks where
+applicable, stable obligation ids, emitted-stub typechecking, absence of
+`proof-registry.json` in generated workspaces, and intended negative behavior.
 
 ### Loop-derived and nonlinear runtime-safety obligations (2026-06-04)
 

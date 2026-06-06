@@ -72,6 +72,15 @@ assert_json "composition --json proved + stable id" \
   'd["status"]=="proved" and all("#" in o["id"] for o in d["obligations"])' \
   "$COMPILER" prove "$CO" calls.combine --json
 
+echo "=== ghost (ghost-assisted; fingerprint ghost-invariant) ==="
+GH="$PP/ghost/src/main.con"
+assert_contains "ghost with_ghost proved" "proof matches current body" "$COMPILER" "$GH" --report proof-status
+# both with_ghost and plain proved with NO stale — they share one fingerprint, so
+# if the ghost affected the body hash one would be stale. 2 proved / 0 stale proves erasure.
+assert_contains "ghost+plain both proved, none stale" "2 proved, 0 stale" "$COMPILER" "$GH" --report proof-status
+# the ghost `n` is erased: it must NOT appear in the extracted body / emitted stub.
+assert_absent "ghost var erased from extracted body" '(.var "n")' "$COMPILER" prove "$GH" ghost.with_ghost --emit-lean
+
 echo "=== runtime_safety (compiler-discharged + negative) ==="
 RT="$PP/runtime_safety/src/main.con"
 assert_contains "rt bounds omega-proved" "proved_by_kernel_decision (omega)" "$COMPILER" "$RT" --report contracts
@@ -102,6 +111,7 @@ if command -v lake >/dev/null 2>&1; then
   assert_contains "loop_copy kernel-verified"    "1 verified, 0 failed" "$COMPILER" "$LC" --report check-proofs
   assert_contains "fold kernel-verified"         "1 verified, 0 failed" "$COMPILER" "$FD" --report check-proofs
   assert_contains "composition kernel-verified"  "1 verified, 0 failed" "$COMPILER" "$CO" --report check-proofs
+  assert_contains "ghost kernel-verified"        "verified" "$COMPILER" "$GH" --report check-proofs
   assert_contains "workspace fn kernel-verified"  "1 verified, 0 failed" "$COMPILER" "$PP/workspace/src/main.con" --report check-proofs
   echo "=== kernel: emit-lean stub typechecks (up to sorry) ==="
   STUB="$(mktemp -d)/Patterns/SL.lean"; mkdir -p "$(dirname "$STUB")"
