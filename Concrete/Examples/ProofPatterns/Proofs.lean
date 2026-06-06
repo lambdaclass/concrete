@@ -113,4 +113,35 @@ theorem sum4_totals_concrete (fuel : Nat) :
   simp [sum4Expr, eval, evalBinOp, Env.bind,
         eval.evalAssigns, eval.lookupIndex]
 
+/-! ## 5. Call composition
+
+`calls.combine` calls two proved helpers (`inc`, `dbl`). The proof evaluates
+through the `FnTable` / call scaffolding and establishes the composed result for
+every input: `combine(x) = (x + 1) + (x * 2)`. -/
+
+/-- `inc(x) = x + 1`. -/
+def incExpr : PExpr := .binOp .add (.var "x") (.lit (.int 1))
+/-- `dbl(x) = x * 2`. -/
+def dblExpr : PExpr := .binOp .mul (.var "x") (.lit (.int 2))
+
+def incFn : PFnDef := { name := "inc", params := ["x"], body := incExpr }
+def dblFn : PFnDef := { name := "dbl", params := ["x"], body := dblExpr }
+
+/-- Function table the composition resolves its calls against. -/
+def combineFns : FnTable
+  | "inc" => some incFn
+  | "dbl" => some dblFn
+  | _     => none
+
+/-- Spec = the extracted body of `combine`: `inc(x) + dbl(x)`. -/
+def combineExpr : PExpr :=
+  .binOp .add (.call "inc" [(.var "x")]) (.call "dbl" [(.var "x")])
+
+/-- `combine(x)` composes its two proved helpers: `(x + 1) + (x * 2)`. -/
+theorem combine_correct (x : Int) (fuel : Nat) :
+    eval combineFns (Env.empty.bind "x" (.int x)) (fuel + 5) combineExpr
+      = some (.int ((x + 1) + (x * 2))) := by
+  simp [combineExpr, eval, eval.evalArgs, combineFns, incFn, incExpr,
+        dblFn, dblExpr, Env.bind, evalBinOp, bindArgs]
+
 end Examples.ProofPatterns.Proofs

@@ -1,0 +1,18 @@
+// proof_patterns: call composition proof.
+// `combine` calls two proved helpers; the proof evaluates through the FnTable /
+// call scaffolding and shows the composed result for all inputs.
+mod calls {
+    fn inc(x: i32) -> i32 {
+        return x + 1;
+    }
+    fn dbl(x: i32) -> i32 {
+        return x * 2;
+    }
+    #[spec(Examples.ProofPatterns.Proofs.combineExpr)]
+    #[proof_by(Examples.ProofPatterns.Proofs.combine_correct)]
+    #[proof_coverage(iff)]
+    #[proof_fingerprint("99253f531fb8b7d9")]
+    fn combine(x: i32) -> i32 {
+        return inc(x) + dbl(x);
+    }
+}
