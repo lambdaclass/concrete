@@ -58,6 +58,11 @@ echo "=== missing_postcondition (#[ensures] with no proof) ==="
 assert_contains "ensures reported missing, not proved" "missing (no in-source proof link" \
   "$COMPILER" "$CN/missing_postcondition/src/main.con" --report contracts
 
+echo "=== weakened_postcondition (only one direction proved) ==="
+assert_contains "one_direction postcondition reported partial, not proved" \
+  "partial — one direction proved_by_lean, converse outstanding" \
+  "$COMPILER" "$CN/weakened_postcondition/src/main.con" --report contracts
+
 echo "=== invalid_attribute (malformed #[proof_fingerprint]) ==="
 assert_contains "malformed attribute rejected at parse time" "expected a string literal" \
   "$COMPILER" "$CN/invalid_attribute/src/main.con"
