@@ -1,0 +1,26 @@
+// contract stability — version 2. Diff against v1.con:
+//   concrete snapshot v1.con -o v1.json
+//   concrete snapshot v2.con -o v2.json
+//   concrete diff v1.json v2.json
+mod api {
+    // ADDED `x <= 100` → precondition strengthened → BREAKING (weakened drift).
+    #[requires(0 <= x)]
+    #[requires(x <= 100)]
+    #[ensures(result == x)]
+    fn strengthen_pre(x: i32) -> i32 { return x; }
+
+    // REMOVED `0 <= result` → postcondition weakened → BREAKING (weakened drift).
+    #[requires(0 <= x)]
+    #[ensures(result == x)]
+    fn weaken_post(x: i32) -> i32 { return x; }
+
+    // REMOVED `x <= 10` → precondition weakened → COMPATIBLE (strengthened drift).
+    #[requires(0 <= x)]
+    #[ensures(result == x)]
+    fn relax_pre(x: i32) -> i32 { return x; }
+
+    // unchanged → absent from the diff.
+    #[requires(0 <= x)]
+    #[ensures(result == x)]
+    fn stable(x: i32) -> i32 { return x; }
+}

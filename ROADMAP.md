@@ -269,8 +269,18 @@ retrofit is explicitly queued behind proof-link migration.
    call, `spec fn` call, loop counter, `ghost let`, ordinary local) and is pinned
    to produce ZERO false positives by `check_contract_negatives.sh` (31/0, +7) —
    over-eager scope-checking is as dishonest as a missed obligation.
-6. Add contract stability rules: weakening a precondition, strengthening a
-   postcondition, or changing a public invariant is a semantic API change.
+6. **[done]** Contract stability / API rules. A function's `#[requires]` /
+   `#[ensures]` / `#[invariant]` are part of its published API. `concrete
+   snapshot` now emits a `contract` fact (12th fact kind) per contracted
+   function; `concrete diff` classifies a change between versions, sound at the
+   conjunctive clause-set level (`Report.isWeakening "contract"`): a `requires`
+   clause ADDED strengthens the precondition → breaking (`weakened` drift, exit
+   1); an `ensures` clause REMOVED weakens the guarantee → breaking; a `requires`
+   clause REMOVED weakens the precondition → compatible (`strengthened`); any
+   invariant change is flagged. `examples/contract_stability/{v1,v2}.con` +
+   `check_contract_stability.sh` (6/0, wired into CI proof_gate + Makefile) pin
+   all four directions and the clean self-diff. Schema (`--report schema`) and
+   api-versioning fact-kind catalog updated to 12.
 7. Add source contract soundness work to the compiler soundness bridge: parsing
    preserves meaning, generated obligations correspond to contract semantics,
    discharged obligations imply the advertised contract claim, and source proof

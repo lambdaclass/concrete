@@ -4637,7 +4637,8 @@ def schemaVersion : Nat := 1
 /-- Known fact kinds that the compiler produces. -/
 def knownFactKinds : List String :=
   ["proof_diagnostic", "predictable_violation", "proof_status", "eligibility",
-   "obligation", "extraction", "traceability", "effects", "capability", "unsafe", "alloc"]
+   "obligation", "extraction", "traceability", "effects", "capability", "unsafe", "alloc",
+   "contract"]
 
 /-- Known semantic query prefixes. -/
 def knownQueryKinds : List String :=
@@ -5024,6 +5025,27 @@ private partial def collectAllocFactsModule (m : CModule) (modulePath : String :
 open Json in
 def collectAllocFacts (modules : List CModule) : List Val :=
   modules.foldl (fun acc m => acc ++ collectAllocFactsModule m) []
+
+open Json in
+/-- Collect per-function source-contract facts from the AST (not Core — contracts
+    are AST metadata, erased before Core). One fact per function that declares any
+    `#[requires]` / `#[ensures]` / loop `#[invariant]`. The clause sets are joined
+    with `∧` and diffed at the clause level (see `isWeakening "contract"`), so the
+    semantic-diff surface can classify a contract change as a breaking precondition
+    strengthening, a breaking postcondition weakening, or a flagged invariant
+    change. Emitted by `concrete snapshot`; consumed by `concrete diff`. -/
+def collectContractFacts (modules : List Module) : List Val :=
+  (modules.flatMap allFunctions).filterMap fun (pfx, f) =>
+    let invs := f.loopContracts.flatMap (·.invariants)
+    if f.requires.isEmpty && f.ensures.isEmpty && invs.isEmpty then none
+    else
+      let canon (es : List Expr) := " ∧ ".intercalate ((es.map Concrete.fmtExpr).eraseDups)
+      some (.obj [
+        ("kind", .str "contract"),
+        ("function", .str (pfx ++ f.name)),
+        ("requires", .str (canon f.requires)),
+        ("ensures", .str (canon f.ensures)),
+        ("invariants", .str (canon invs)) ])
 
 open Json in
 /-- Collect all core facts (everything except traceability) into a flat list. -/
@@ -5626,7 +5648,12 @@ private def trustFields (kind : String) : List String :=
   | "alloc" => ["allocates", "frees", "defers", "potential_leak"]
   | "predictable_violation" => ["state", "reason"]
   | "traceability" => ["evidence", "extraction", "boundary", "spec", "proof", "fingerprint"]
+  | "contract" => ["requires", "ensures", "invariants"]
   | _ => []
+
+/-- Split a `∧`-joined clause field into a trimmed, non-empty clause set. -/
+private def splitClauses (s : String) : List String :=
+  (s.splitOn " ∧ ").map (·.trimAscii.toString) |>.filter (!·.isEmpty)
 
 /-- Evidence level ordering for drift detection (higher = stronger). -/
 private def evidenceRank (s : String) : Nat :=
@@ -5665,6 +5692,21 @@ private def isWeakening (kind : String) (field : String) (oldV newV : String) : 
     let oldRank := match oldV with | "extracted" => 3 | "eligible_not_extractable" => 2 | "excluded" => 1 | _ => 0
     let newRank := match newV with | "extracted" => 3 | "eligible_not_extractable" => 2 | "excluded" => 1 | _ => 0
     newRank < oldRank
+  -- Source-contract API stability, sound at the conjunctive clause-set level.
+  | "contract", "requires" =>
+    -- precondition = conjunction of clauses. A clause in NEW but not OLD
+    -- STRENGTHENS the precondition → existing callers may now violate it →
+    -- a breaking change (blocker).
+    let oldS := splitClauses oldV
+    !(splitClauses newV).all oldS.contains
+  | "contract", "ensures" =>
+    -- postcondition = conjunction. A clause in OLD but not NEW WEAKENS the
+    -- guarantee → callers that relied on it break → a breaking change.
+    let newS := splitClauses newV
+    !(splitClauses oldV).all newS.contains
+  | "contract", "invariants" =>
+    -- a public invariant change alters the loop's guarantee surface; flag any.
+    oldV != newV
   | _, _ => false
 
 /-- Determine if a field change represents trust strengthening. -/
@@ -5746,6 +5788,12 @@ private def classifyNewFact (kind : String) (v : Val) : String :=
     let ev := (jsonGetVal v "evidence").map valDisplay
     if ev.isNone then "weakened"
     else if evidenceRank (ev.getD "") < 3 then "weakened" else "neutral"  -- below "enforced"
+  | "contract" =>
+    -- a function that gained a contract. A new precondition (`requires`) can
+    -- break existing callers, so flag it; a function that only added/declared a
+    -- postcondition is a compatible strengthening.
+    let reqs := (jsonGetVal v "requires").map valDisplay
+    if reqs.isSome && reqs != some "" then "weakened" else "neutral"
   | "eligibility" | "proof_diagnostic" => "neutral"  -- informational fact kinds
   | _ => "weakened"  -- unknown fact kind in new facts is suspicious
 
@@ -6062,6 +6110,12 @@ def schemaReport : String :=
       [("kind", "string"), ("function", "string"), ("allocates", "string[]"),
        ("frees", "string[]"), ("defers", "string[]"), ("returns_allocation", "boolean"),
        ("potential_leak", "boolean")]
+      []),
+    ("contract", fieldSpec
+      [("kind", "string"), ("function", "string"),
+       ("requires", "string — ∧-joined precondition clauses"),
+       ("ensures", "string — ∧-joined postcondition clauses"),
+       ("invariants", "string — ∧-joined loop-invariant clauses")]
       [])
   ]
   let querySchemas := Val.obj [

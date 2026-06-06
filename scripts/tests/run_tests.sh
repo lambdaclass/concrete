@@ -8281,18 +8281,18 @@ else
     api_fail=$((api_fail + 1))
 fi
 
-# 3. diagnostics-json has fact_kinds with all 11 kinds
+# 3. diagnostics-json has fact_kinds with all 12 kinds
 if python3 -c "
 import json, sys
 env = json.loads(sys.stdin.read())
 fk = set(env['fact_kinds'])
-expected = {'proof_diagnostic','predictable_violation','proof_status','eligibility','obligation','extraction','traceability','effects','capability','unsafe','alloc'}
+expected = {'proof_diagnostic','predictable_violation','proof_status','eligibility','obligation','extraction','traceability','effects','capability','unsafe','alloc','contract'}
 assert fk == expected, f'got {fk}'
 " <<< "$api_env" 2>/dev/null; then
-    echo "  ok  api-versioning: diagnostics-json fact_kinds has all 11 kinds"
+    echo "  ok  api-versioning: diagnostics-json fact_kinds has all 12 kinds"
     api_pass=$((api_pass + 1))
 else
-    echo "FAIL  api-versioning: diagnostics-json fact_kinds should have all 11 kinds"
+    echo "FAIL  api-versioning: diagnostics-json fact_kinds should have all 12 kinds"
     api_fail=$((api_fail + 1))
 fi
 
@@ -8339,7 +8339,7 @@ s = json.loads(sys.stdin.read())
 for k in ['schema_version','fact_kinds','query_kinds','fact_schemas','query_schemas','envelopes','policies','location_encoding']:
     assert k in s, f'missing key: {k}'
 assert s['schema_version'] == 1
-assert len(s['fact_kinds']) == 11
+assert len(s['fact_kinds']) == 12
 assert len(s['query_kinds']) == 7
 " <<< "$schema_out" 2>/dev/null; then
     echo "  ok  api-versioning: --report schema has all expected fields"

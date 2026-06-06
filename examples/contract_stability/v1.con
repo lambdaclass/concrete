@@ -1,0 +1,27 @@
+// contract stability — version 1 (baseline).
+// A function's #[requires]/#[ensures] are part of its published API. Changing
+// them between versions is a semantic API change. `concrete snapshot` records the
+// contract; `concrete diff` classifies the change. See v2.con for the deltas.
+mod api {
+    // v2 ADDS a requires clause → precondition strengthened → BREAKING.
+    #[requires(0 <= x)]
+    #[ensures(result == x)]
+    fn strengthen_pre(x: i32) -> i32 { return x; }
+
+    // v2 REMOVES an ensures clause → postcondition weakened → BREAKING.
+    #[requires(0 <= x)]
+    #[ensures(result == x)]
+    #[ensures(0 <= result)]
+    fn weaken_post(x: i32) -> i32 { return x; }
+
+    // v2 REMOVES a requires clause → precondition weakened → COMPATIBLE.
+    #[requires(0 <= x)]
+    #[requires(x <= 10)]
+    #[ensures(result == x)]
+    fn relax_pre(x: i32) -> i32 { return x; }
+
+    // unchanged between versions → no drift.
+    #[requires(0 <= x)]
+    #[ensures(result == x)]
+    fn stable(x: i32) -> i32 { return x; }
+}

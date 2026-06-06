@@ -1820,8 +1820,11 @@ def main (args : List String) : IO UInt32 := do
         let simpleLocMap := locMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
         let registry ← loadRegistryWithLinks inp parsed.modules validCore.coreModules
         let pc := extractProofCore validCore simpleLocMap registry
-        -- Collect core facts (same as diagnostics-json)
+        -- Collect core facts (same as diagnostics-json) plus source-contract facts
+        -- (AST metadata, absent from Core) so `concrete diff` can detect contract
+        -- API drift (precondition strengthening, postcondition weakening).
         let coreFacts := Report.collectCoreFacts validCore.coreModules locMap registry pc
+          ++ Report.collectContractFacts parsed.modules
         -- Run backend pipeline for traceability facts
         let (traceFacts, traceWarns) ← match Pipeline.monomorphize validCore with
           | .error ds =>
