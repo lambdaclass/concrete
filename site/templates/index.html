@@ -6,12 +6,13 @@
     <p class="sidebar-title">Concrete</p>
     <nav>
       <a href="#abstract">1. Abstract</a>
-      <a href="#model">2. Evidence Model</a>
-      <a href="#example">3. Running Example</a>
-      <a href="#status">4. Current Status</a>
-      <a href="#hmac">5. HMAC Work</a>
-      <a href="#limits">6. Limits</a>
-      <a href="#read">7. Read Next</a>
+      <a href="#distinctive">2. What Makes It Different</a>
+      <a href="#model">3. Evidence Model</a>
+      <a href="#example">4. Running Example</a>
+      <a href="#status">5. Current Status</a>
+      <a href="#hmac">6. HMAC Work</a>
+      <a href="#limits">7. Limits</a>
+      <a href="#read">8. Read Next</a>
     </nav>
     <div class="sidebar-links">
       <a href="{{ get_url(path='@/paper.md') }}">Paper</a>
@@ -25,8 +26,8 @@
       <p class="eyebrow">Concrete documentation</p>
       <h2>Concrete</h2>
       <p class="paper-subtitle">
-        A small systems language where source code carries evidence about
-        authority, assumptions, tests, and Lean-checked proofs.
+        A small systems language for C and Rust programmers where authority, runtime risk,
+        assumptions, and proof evidence are visible in the toolchain.
       </p>
       <p class="paper-meta">
         Project status: experimental. Compiler correctness and backend
@@ -37,10 +38,11 @@
     <section id="abstract" class="paper-section">
       <h3>1. Abstract</h3>
       <p>
-        Concrete is a no-GC systems language with linear ownership and explicit
-        capabilities. Its compiler is written in Lean and maintains a registry
-        connecting source functions to proof artifacts, assumptions, test
-        oracles, policy files, and drift checks.
+        Concrete's claim is the composition: systems control and evidence
+        accounting in the same toolchain. It combines no GC systems code, linear
+        ownership, explicit capabilities, contracts in source, Lean checked
+        proof links, drift detection, and audit reports that refuse to hide
+        trust.
       </p>
       <p>
         The immediate claim is narrow: the toolchain should not let evidence
@@ -50,8 +52,28 @@
       </p>
     </section>
 
+    <section id="distinctive" class="paper-section">
+      <h3>2. What Makes It Different</h3>
+      <p>
+        Most nearby systems pick only part of this shape: Rust has strong
+        ownership but external proofs; Zig and C give excellent control but
+        little built in evidence tracking; SPARK, Dafny, F*, and Why3 have
+        strong verification but are usually SMT heavy and not shaped like a
+        small no GC systems language; Lean and Coq have excellent
+        proof kernels but are not ordinary systems languages.
+      </p>
+      <ol class="paper-list">
+        <li>No GC systems code: fixed arrays, explicit control, no hidden runtime story by default.</li>
+        <li>Linear ownership plus explicit capabilities: functions show what they can touch.</li>
+        <li>Proofs attached to source: contracts and source linked Lean evidence can go stale when bodies drift.</li>
+        <li>Multiple evidence classes, not one green badge: Lean proof, kernel decision, SMT with named solver trust, oracle test, enforced, assumed, trusted, partial, stale, and vacuous are distinct.</li>
+        <li>Audit first philosophy: reports say what is proved, enforced, tested, assumed, and trusted.</li>
+        <li>Lean as compiler and proof substrate: selected user proofs are checked by Lean's kernel, and compiler soundness work can live in the same ecosystem.</li>
+      </ol>
+    </section>
+
     <section id="model" class="paper-section">
-      <h3>2. Evidence Model</h3>
+      <h3>3. Evidence Model</h3>
       <p>
         Concrete separates claim classes instead of reducing everything to one
         green badge. The current audit vocabulary is deliberately explicit:
@@ -74,7 +96,7 @@
     </section>
 
     <section id="example" class="paper-section">
-      <h3>3. Running Example</h3>
+      <h3>4. Running Example</h3>
       <p>
         The narrow real-crypto example is a constant-time tag comparison. Its
         proof does not claim machine-level constant time. It proves a source
@@ -121,7 +143,7 @@ assumptions:
     </section>
 
     <section id="status" class="paper-section">
-      <h3>4. Current Status</h3>
+      <h3>5. Current Status</h3>
       <div class="paper-table-wrap">
         <table class="paper-table">
           <thead>
@@ -132,29 +154,30 @@ assumptions:
             <tr><th>crypto_verify</th><td>graduated</td><td>Authentication scaffolding with a toy MAC.</td></tr>
             <tr><th>fixed_capacity</th><td>graduated</td><td>Bounded mutable state and array-update proofs.</td></tr>
             <tr><th>constant_time_tag</th><td>graduated</td><td>Narrow real-crypto source proof with timing assumptions.</td></tr>
-            <tr><th>hmac_sha256</th><td>candidate</td><td>Larger SHA-256/HMAC refinement target.</td></tr>
+            <tr><th>hmac_sha256</th><td>graduated</td><td>SHA-256/HMAC refinement chain against an independent spec.</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <section id="hmac" class="paper-section">
-      <h3>5. HMAC Work</h3>
+      <h3>6. HMAC Work</h3>
       <p>
-        HMAC-SHA256 is the active proof target. The implementation and oracle
-        tests exist; the remaining graduation work is the refinement chain from
-        extracted Concrete code to an independent SHA-256/HMAC specification.
+        HMAC-SHA256 is the deepest proof artifact. The extracted Concrete
+        source is linked to Lean checked refinements against an independent
+        SHA-256/HMAC specification, with drift gates tying the proof claim to
+        the exact source body.
       </p>
       <ol class="paper-list">
-        <li>Round-function refinements: started.</li>
-        <li>Block-to-words loop refinement: done.</li>
-        <li>Schedule refinement: in progress.</li>
-        <li>Compression, hash, and HMAC composition: open.</li>
+        <li>Source contracts and proof links stay in source.</li>
+        <li>Loop and bitvector obligations use reusable ProofKit machinery.</li>
+        <li>Oracle tests remain regression evidence, not proof.</li>
+        <li>Backend and machine-level behavior remain named trust boundaries.</li>
       </ol>
     </section>
 
     <section id="limits" class="paper-section">
-      <h3>6. What Concrete Does Not Claim Yet</h3>
+      <h3>7. What Concrete Does Not Claim Yet</h3>
       <p>
         Concrete is not a verified compiler today. It does not yet prove
         generated binary correctness, whole-program constant-time behavior, or
@@ -165,10 +188,10 @@ assumptions:
     </section>
 
     <section id="read" class="paper-section read-next">
-      <h3>7. Read Next</h3>
+      <h3>8. Read Next</h3>
       <ul class="paper-links">
         <li><a href="{{ get_url(path='@/guide/getting_started.md') }}">Getting started</a><span>Build the compiler and run a program.</span></li>
-        <li><a href="{{ get_url(path='@/reference/PROVABLE_SUBSET.md') }}">Provable subset</a><span>What can carry Lean-backed evidence today.</span></li>
+        <li><a href="{{ get_url(path='@/reference/PROVABLE_SUBSET.md') }}">Provable subset</a><span>What can carry Lean backed evidence today.</span></li>
         <li><a href="{{ get_url(path='@/reference/SAFETY.md') }}">Safety</a><span>Capabilities, trusted code, Unsafe, and proof boundaries.</span></li>
         <li><a href="{{ get_url(path='@/paper.md') }}">Paper</a><span>Research-style statement and build notes.</span></li>
         <li><a href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">Roadmap</a><span>Active sequencing and open proof work.</span></li>
