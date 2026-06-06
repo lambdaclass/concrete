@@ -1,0 +1,9 @@
+mod smt {
+    #[overflow_checked]
+    #[requires(-30000 <= sample && sample <= 30000)]
+    #[requires(-60000 <= gain && gain <= 60000)]
+    fn scale(sample: i32, gain: i32) -> i32 {
+        return sample * gain;
+    }
+    pub fn main() -> i32 { return scale(2, 3); }
+}

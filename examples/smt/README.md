@@ -41,6 +41,29 @@ artifact), and a **replay** command. The `smtlib_sha` and result class are
 deterministic across runs; `check_smt_path.sh` pins this. `timeout`, `unknown`,
 and `solver_error` are always treated as non-proofs.
 
+## Release-policy gate (`[policy] solver-evidence`)
+
+**SMT is useful, but `solver_trusted` is not Lean/kernel evidence unless replayed.**
+A project declares its release stance and `concrete build` enforces it — if an
+external solver discharged a VC as `solver_trusted`, the build is rejected (E0615)
+unless the policy allows it:
+
+```toml
+[policy]
+solver-evidence  = "forbid"        # solver_trusted is a release blocker (default stance)
+# solver-evidence = "allow"        # accepted
+# solver-evidence = "assumptions"  # accepted ONLY with a named justification:
+# solver-assumption = "z3-4.16-QF_NIA-trusted"
+```
+
+The gate inspects the solver results, not just the flag: a `forbid` project that
+relies on a solver-only VC fails to build; an `assumptions` project must name what
+it trusts (the solver + version + logic), recording the provenance for audit.
+`counterexample` / `unknown` / `timeout` / `solver_error` are non-proofs and never
+count as evidence, so they never trip — or satisfy — this gate. Fixtures:
+`examples/smt/policy_forbid/`, `policy_allow/`, `policy_assumptions_missing/`;
+pinned by `check_smt_policy.sh`.
+
 ## The boundary is enforced
 
 - SMT only ever touches a VC the kernel tiers left `unproven`

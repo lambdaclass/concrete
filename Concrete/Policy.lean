@@ -27,12 +27,22 @@ structure ProjectPolicy where
   requireProofs : Bool := false
   /-- Forbid `assume(...)` — the escape hatch is off-limits in this profile. -/
   forbidAssume : Bool := false
+  /-- Release stance on external-solver (SMT) evidence. `""` = unset (no SMT
+      enforcement); `"forbid"` = `solver_trusted` is not acceptable for release;
+      `"allow"` = accepted; `"assumptions"` = accepted only with a named
+      `solver-assumption`. An external solver is NOT Lean/kernel evidence unless
+      replayed, so a release must opt into trusting it. -/
+  solverEvidence : String := ""
+  /-- Named provenance/assumption justifying `solver_trusted` under the
+      `"assumptions"` stance (e.g. "z3-4.16-QF_NIA-trusted"). -/
+  solverAssumption : String := ""
 
 instance : Inhabited ProjectPolicy := ⟨{}⟩
 
 /-- True when no policy constraints are set. -/
 def ProjectPolicy.isEmpty (p : ProjectPolicy) : Bool :=
   !p.predictable && p.deny.isEmpty && !p.requireProofs && !p.forbidAssume
+    && p.solverEvidence.isEmpty
 
 -- ============================================================
 -- TOML parsing
@@ -77,6 +87,10 @@ def parsePolicy (content : String) : ProjectPolicy × List String :=
           go rest true { p with requireProofs := parseValue trimmed == "true" } warns
         else if trimmed.startsWith "forbid-assume" then
           go rest true { p with forbidAssume := parseValue trimmed == "true" } warns
+        else if trimmed.startsWith "solver-evidence" then
+          go rest true { p with solverEvidence := (parseValue trimmed).replace "\"" "" } warns
+        else if trimmed.startsWith "solver-assumption" then
+          go rest true { p with solverAssumption := (parseValue trimmed).replace "\"" "" } warns
         else if trimmed.startsWith "deny" then
           go rest true { p with deny := parseDenyList trimmed } warns
         else
@@ -190,12 +204,44 @@ def enforceNoAssume (assumeQuals : List String) : Diagnostics :=
       file := ""
       context := [] }
 
+/-- Release-policy gate on external-solver evidence. `solverTrustedQuals` are the
+    VCs (by id) that an external solver discharged as `solver_trusted` during this
+    build — solver evidence, NOT Lean/kernel evidence. The project's stance decides
+    whether that is acceptable for release:
+      - `forbid`      → every `solver_trusted` VC is a blocker (E0615);
+      - `assumptions` → accepted only if a named `solver-assumption` is declared,
+                        else a blocker;
+      - `allow` / unset → accepted.
+    `counterexample` / `unknown` / `timeout` / `solver_error` are non-proofs and are
+    never in `solverTrustedQuals`, so they never pass this gate as evidence. -/
+def enforceSolverEvidence (solverTrustedQuals : List String) (policy : ProjectPolicy) : Diagnostics :=
+  let blocked (reason hint : String) : Diagnostics :=
+    solverTrustedQuals.eraseDups.map fun q =>
+      { severity := .error
+        message := s!"policy violation: VC '{q}' is discharged only by an external solver (solver_trusted) — {reason}"
+        pass := "policy"
+        span := none
+        hint := some hint
+        code := "E0615"
+        file := ""
+        context := [] }
+  if solverTrustedQuals.isEmpty then []
+  else match policy.solverEvidence with
+    | "forbid" => blocked "[policy] solver-evidence = \"forbid\" does not accept it for release"
+        "prove it in Lean, or set [policy] solver-evidence = \"allow\"/\"assumptions\""
+    | "assumptions" =>
+      if policy.solverAssumption.isEmpty then
+        blocked "[policy] solver-evidence = \"assumptions\" requires a named justification"
+          "set [policy] solver-assumption = \"<provenance>\", or prove it in Lean"
+      else []
+    | _ => []  -- "allow" or unset
+
 /-- Enforce policy constraints on compiled modules. Returns diagnostics for violations.
     Runs after CoreCheck (on ValidatedCore) so all type information is available. -/
 def enforcePolicy (policy : ProjectPolicy) (modules : List CModule)
     (locMap : Report.FnLocMap := []) (pc : ProofCore)
     (depNames : List String := []) (vacuousQuals : List String := [])
-    (assumeQuals : List String := []) : Diagnostics :=
+    (assumeQuals : List String := []) (solverTrustedQuals : List String := []) : Diagnostics :=
   if policy.isEmpty then [] else
   let projectModules := modules.filter fun m => !depNames.contains m.name
   let ds1 := if policy.predictable then enforcePredictable projectModules pc locMap else []
@@ -204,6 +250,7 @@ def enforcePolicy (policy : ProjectPolicy) (modules : List CModule)
   -- vacuous contracts are rejected whenever any policy is set (release default).
   let ds4 := enforceNoVacuous vacuousQuals
   let ds5 := if policy.forbidAssume then enforceNoAssume assumeQuals else []
-  ds1 ++ ds2 ++ ds3 ++ ds4 ++ ds5
+  let ds6 := enforceSolverEvidence solverTrustedQuals policy
+  ds1 ++ ds2 ++ ds3 ++ ds4 ++ ds5 ++ ds6
 
 end Concrete

@@ -889,6 +889,20 @@ def smtDischarge (queries : List (String × String)) (timeoutSec : Nat)
     res := res ++ [(k, r.1, r.2)]
   return res
 
+/-- Release-policy input: the VC ids an external solver discharged as
+    `solver_trusted` during this build. Run ONLY when the project's policy takes a
+    stance on solver evidence (`forbid`/`assumptions`/`allow`) and there are
+    SMT-eligible VCs — so an ordinary build never invokes a solver. If no solver is
+    present, `smtDischarge` returns `solver_error` and the trusted set is empty
+    (an absent solver yields no evidence, so nothing to gate). -/
+def computeSolverTrustedQuals (policy : Concrete.ProjectPolicy)
+    (modules : List Concrete.Module) : IO (List String) := do
+  if policy.solverEvidence.isEmpty then return []   -- no stance → no SMT during build
+  let smtGoals := Report.overflowSmtGoals modules
+  if smtGoals.isEmpty then return []
+  let results ← smtDischarge smtGoals 5
+  return (results.filterMap fun (k, cls, _) => if cls == "solver_trusted" then some k else none)
+
 /-- Render the contracts report plus the call-site obligation section, running
     the `bv_decide` backend on the closed-but-non-literal call-site obligations
     and `omega` on the loop init/variant VCs. -/
@@ -1531,9 +1545,10 @@ def compileBuild (projectRoot : String) (outputPath : Option String) (emitLLVM :
     if !policy.isEmpty then
       let vac ← computeVacuousQuals parsed.modules depNames
       let asm := computeAssumeQuals parsed.modules depNames
+      let st ← computeSolverTrustedQuals policy parsed.modules
       let policyDs := enforcePolicy policy validCore.coreModules
         (locMap := policyLocMap) (pc := pc) (depNames := depNames) (vacuousQuals := vac)
-        (assumeQuals := asm)
+        (assumeQuals := asm) (solverTrustedQuals := st)
       if hasErrors policyDs then
         IO.eprintln (renderDiagnostics policyDs (sourceMap := allSrcMap))
         return 1
@@ -1598,9 +1613,10 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
       let pc := extractProofCore validCore simpleLocMap registry
       let vac ← computeVacuousQuals parsed.modules depNames
       let asm := computeAssumeQuals parsed.modules depNames
+      let st ← computeSolverTrustedQuals policy parsed.modules
       let policyDs := enforcePolicy policy validCore.coreModules
         (locMap := policyLocMap) (pc := pc) (depNames := depNames) (vacuousQuals := vac)
-        (assumeQuals := asm)
+        (assumeQuals := asm) (solverTrustedQuals := st)
       if hasErrors policyDs then
         IO.eprintln (renderDiagnostics policyDs (sourceMap := allSrcMap))
         return 1
@@ -1819,9 +1835,10 @@ def main (args : List String) : IO UInt32 := do
         if !policy.isEmpty then
           let vac ← computeVacuousQuals parsed.modules depNames
           let asm := computeAssumeQuals parsed.modules depNames
+          let st ← computeSolverTrustedQuals policy parsed.modules
           let policyDs := enforcePolicy policy validCore.coreModules
             (locMap := policyLocMap) (pc := pc) (depNames := depNames) (vacuousQuals := vac)
-            (assumeQuals := asm)
+            (assumeQuals := asm) (solverTrustedQuals := st)
           if hasErrors policyDs then
             IO.eprintln (renderDiagnostics policyDs (sourceMap := allSrcMap))
             return 1

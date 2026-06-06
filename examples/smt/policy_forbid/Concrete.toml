@@ -1,0 +1,8 @@
+[package]
+name = "smt_policy_forbid"
+version = "0.1.0"
+
+# Release stance: external-solver evidence is NOT acceptable. A VC that only an
+# external SMT solver can discharge (solver_trusted) is a release blocker (E0615).
+[policy]
+solver-evidence = "forbid"

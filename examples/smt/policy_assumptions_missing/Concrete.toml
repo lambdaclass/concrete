@@ -1,0 +1,8 @@
+[package]
+name = "smt_policy_assumptions_missing"
+version = "0.1.0"
+
+# Stance is "assumptions" but NO named solver-assumption is declared → a
+# solver_trusted VC is still a release blocker (E0615): you must name what you trust.
+[policy]
+solver-evidence = "assumptions"

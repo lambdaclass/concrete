@@ -714,6 +714,29 @@ Possible policies:
 - require all generated VCs to be discharged before graduation,
 - allow oracle evidence only for explicitly empirical claims.
 
+### Shipped: the SMT release-policy gate
+
+The external-solver stance is enforced at build time. **SMT is useful, but
+`solver_trusted` is not Lean/kernel evidence unless replayed** — so a release must
+opt into trusting it:
+
+```toml
+[policy]
+solver-evidence  = "forbid"        # solver_trusted is a release blocker (E0615)
+# solver-evidence = "allow"        # accepted
+# solver-evidence = "assumptions"  # accepted only with a named justification:
+# solver-assumption = "z3-4.16-QF_NIA-trusted"
+```
+
+`Policy.enforceSolverEvidence` inspects the VC ids an external solver discharged
+as `solver_trusted` during the build (`Main.computeSolverTrustedQuals`, run only
+when the policy takes a stance) and rejects the build (E0615) when they are not
+permitted. The stance is opt-in: with no `solver-evidence` key the build never
+invokes a solver. `counterexample` / `unknown` / `timeout` / `solver_error` are
+non-proofs regardless of policy and are never counted as evidence. When Lean
+replay (item 12) lands, a replayed fragment graduates from `solver_trusted` to a
+kernel-checked class and is no longer subject to this gate.
+
 ## Threat Model
 
 The SMT/contract path adds new trust surfaces.

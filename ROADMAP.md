@@ -446,8 +446,20 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
 12. Add Lean replay for the simplest SMT-discharged fragments where practical:
    propositional/linear integer facts, bounds arithmetic, and trivial BitVec
    identities. Results without replay remain explicitly solver-trusted.
-13. Add policy controls: projects can require `proved_by_lean`, allow
-    `proved_by_smt`, or permit `solver_trusted` only under named assumptions.
+13. **[done]** SMT release-policy gate. A project declares its stance with
+    `[policy] solver-evidence` (`forbid` / `allow` / `assumptions`, default unset);
+    `concrete build` inspects the VCs an external solver discharged as
+    `solver_trusted` (`Main.computeSolverTrustedQuals`, run only when the policy
+    takes a stance) and `Policy.enforceSolverEvidence` REJECTS the build (E0615)
+    when they are not permitted — `forbid` blocks any, `assumptions` blocks unless
+    a named `solver-assumption` is declared, `allow` accepts. `counterexample` /
+    `unknown` / `timeout` / `solver_error` are non-proofs regardless of policy and
+    are never counted as evidence. The stance is opt-in: with no key the build
+    never invokes a solver. Fixtures `examples/smt/{policy_forbid,policy_allow,
+    policy_assumptions_missing}/`; gate `check_smt_policy.sh` (5/0 with Z3 — forbid
+    & assumptions-missing rejected, allow+named passes; 4/0 without Z3 — honest, no
+    solver evidence produced). Docs: `examples/smt/README.md` + CONTRACTS_AND_VCS.md
+    plainly state SMT is not Lean/kernel evidence unless replayed (item 12).
 14. Add SMT negative examples: false postcondition, missing invariant,
     overflow counterexample, OOB counterexample, div-zero counterexample,
     solver timeout, and unsupported theory.

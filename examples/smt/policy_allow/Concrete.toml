@@ -1,0 +1,9 @@
+[package]
+name = "smt_policy_allow"
+version = "0.1.0"
+
+# Release stance: external-solver evidence is accepted under a NAMED assumption
+# (the solver enters the TCB; the provenance is recorded for audit).
+[policy]
+solver-evidence = "assumptions"
+solver-assumption = "z3-4.16-QF_NIA-trusted"
