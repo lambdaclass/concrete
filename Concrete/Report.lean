@@ -680,6 +680,132 @@ def mergeSourceLinks (jsonRegistry sourceEntries : ProofRegistry) : Except Strin
   if conflicts.isEmpty then .ok (jsonRegistry ++ sourceEntries)
   else .error s!"function(s) have both an in-source proof link and a proof-registry.json entry: {", ".intercalate (conflicts.map (·.function))}. Use one source of truth."
 
+-- ---- source-contract expression validation ----
+
+/-- Function/spec/extern names that contract expressions may call. Includes
+    bare and qualified names so examples can use either local specs (`ch_spec`)
+    or fully-qualified links as the module system evolves. -/
+partial def callableContractNames (modules : List Module) : List String := Id.run do
+  let rec go (pfx : String) (m : Module) : List String :=
+    let q (n : String) := if pfx.isEmpty then n else pfx ++ "." ++ n
+    let localFns := m.functions.map (fun f => [f.name, q f.name])
+    let localSpecs := m.specFns.map (fun s => [s.name, q s.name])
+    let localExterns := m.externFns.map (fun e => [e.name, q e.name])
+    let subPfx := if pfx.isEmpty then m.name else pfx ++ "." ++ m.name
+    (localFns ++ localSpecs ++ localExterns).flatten ++ m.submodules.flatMap (go subPfx)
+  return (modules.flatMap (go "")).eraseDups
+
+/-- Constant names that contract expressions may reference directly. -/
+partial def contractConstNames (modules : List Module) : List String := Id.run do
+  let rec go (pfx : String) (m : Module) : List String :=
+    let q (n : String) := if pfx.isEmpty then n else pfx ++ "." ++ n
+    let localConsts := m.constants.map (fun c => [c.name, q c.name])
+    let subPfx := if pfx.isEmpty then m.name else pfx ++ "." ++ m.name
+    localConsts.flatten ++ m.submodules.flatMap (go subPfx)
+  return (modules.flatMap (go "")).eraseDups
+
+mutual
+  /-- Names introduced by a statement body. This is intentionally conservative:
+      loop invariants may mention counters/ghost lets and other locals, and the
+      later VC generator decides whether the fact is actually usable. -/
+  partial def localNamesS : Stmt → List String
+    | .letDecl _ n _ _ v _ => n :: localNamesE v
+    | .assign _ n v => n :: localNamesE v
+    | .return_ _ (some v) | .expr _ v | .defer _ v => localNamesE v
+    | .return_ _ none | .break_ _ none _ | .continue_ _ _ => []
+    | .ifElse _ c t el => localNamesE c ++ localNamesB t ++ localNamesB (el.getD [])
+    | .while_ _ c b _ => localNamesE c ++ localNamesB b
+    | .forLoop _ init c step b _ =>
+      ((init.map localNamesS).getD []) ++ localNamesE c ++ ((step.map localNamesS).getD []) ++ localNamesB b
+    | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v => localNamesE o ++ localNamesE v
+    | .arrayIndexAssign _ a i v => localNamesE a ++ localNamesE i ++ localNamesE v
+    | .break_ _ (some v) _ => localNamesE v
+    | .borrowIn _ v r _ _ b => [v, r] ++ localNamesB b
+    | .letDestructure _ _ _ bs v el => bs ++ localNamesE v ++ localNamesB (el.getD [])
+    | .letStructDestructure _ _ bs v => bs ++ localNamesE v
+
+  partial def localNamesB (body : List Stmt) : List String :=
+    (body.flatMap localNamesS).eraseDups
+
+  partial def localNamesE : Expr → List String
+    | .binOp _ _ l r => localNamesE l ++ localNamesE r
+    | .unaryOp _ _ e | .paren _ e | .borrow _ e | .borrowMut _ e | .deref _ e
+    | .try_ _ e | .cast _ e _ | .fieldAccess _ e _ | .arrowAccess _ e _ => localNamesE e
+    | .call _ _ _ args | .staticMethodCall _ _ _ _ args => args.flatMap localNamesE
+    | .methodCall _ o _ _ args => localNamesE o ++ args.flatMap localNamesE
+    | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => localNamesE e)
+    | .match_ _ s arms => localNamesE s ++ arms.flatMap localNamesArm
+    | .arrayLit _ es => es.flatMap localNamesE
+    | .arrayIndex _ a i => localNamesE a ++ localNamesE i
+    | .allocCall _ e a => localNamesE e ++ localNamesE a
+    | .whileExpr _ c b el | .ifExpr _ c b el => localNamesE c ++ localNamesB b ++ localNamesB el
+    | _ => []
+
+  partial def localNamesArm : MatchArm → List String
+    | .mk _ _ _ bs b => bs ++ localNamesB b
+    | .litArm _ v b => localNamesE v ++ localNamesB b
+    | .varArm _ bnd b => bnd :: localNamesB b
+end
+
+mutual
+  /-- Return human-readable validation problems for a source-contract
+      expression. This is deliberately scoped, not a full theorem checker: it
+      catches silent typos/unknown names without rejecting existing flagship
+      contracts that use params, result, locals, ghost lets, and spec calls. -/
+  partial def validateContractExpr (allowedVars callables : List String) : Expr → List String
+    | .ident _ n =>
+      if allowedVars.contains n then [] else [s!"unknown identifier '{n}'"]
+    | .fnRef _ n =>
+      if callables.contains n then [] else [s!"unknown function/spec '{n}'"]
+    | .call _ fn _ args =>
+      let here := if callables.contains fn then [] else [s!"unknown function/spec '{fn}'"]
+      here ++ args.flatMap (validateContractExpr allowedVars callables)
+    | .staticMethodCall _ ty meth _ args =>
+      let fn := ty ++ "." ++ meth
+      let here := if callables.contains fn || callables.contains meth then [] else [s!"unknown function/spec '{fn}'"]
+      here ++ args.flatMap (validateContractExpr allowedVars callables)
+    | .methodCall _ obj _ _ args =>
+      validateContractExpr allowedVars callables obj ++ args.flatMap (validateContractExpr allowedVars callables)
+    | .binOp _ _ l r => validateContractExpr allowedVars callables l ++ validateContractExpr allowedVars callables r
+    | .unaryOp _ _ e | .paren _ e | .borrow _ e | .borrowMut _ e | .deref _ e
+    | .try_ _ e | .cast _ e _ | .fieldAccess _ e _ | .arrowAccess _ e _ => validateContractExpr allowedVars callables e
+    | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => validateContractExpr allowedVars callables e)
+    | .match_ _ s arms => validateContractExpr allowedVars callables s ++ arms.flatMap (validateContractArm allowedVars callables)
+    | .arrayLit _ es => es.flatMap (validateContractExpr allowedVars callables)
+    | .arrayIndex _ a i => validateContractExpr allowedVars callables a ++ validateContractExpr allowedVars callables i
+    | .allocCall _ e a => validateContractExpr allowedVars callables e ++ validateContractExpr allowedVars callables a
+    | .whileExpr _ c b el | .ifExpr _ c b el =>
+      validateContractExpr allowedVars callables c ++ b.flatMap (validateContractStmt allowedVars callables) ++ el.flatMap (validateContractStmt allowedVars callables)
+    | _ => []
+
+  partial def validateContractStmt (allowedVars callables : List String) : Stmt → List String
+    | .letDecl _ _ _ _ v _ => validateContractExpr allowedVars callables v
+    | .assign _ n v =>
+      (if allowedVars.contains n then [] else [s!"unknown identifier '{n}'"]) ++ validateContractExpr allowedVars callables v
+    | .return_ _ (some v) | .expr _ v | .defer _ v => validateContractExpr allowedVars callables v
+    | .return_ _ none | .break_ _ none _ | .continue_ _ _ => []
+    | .ifElse _ c t el => validateContractExpr allowedVars callables c ++ t.flatMap (validateContractStmt allowedVars callables) ++ (el.getD []).flatMap (validateContractStmt allowedVars callables)
+    | .while_ _ c b _ => validateContractExpr allowedVars callables c ++ b.flatMap (validateContractStmt allowedVars callables)
+    | .forLoop _ init c step b _ =>
+      ((init.map (validateContractStmt allowedVars callables)).getD []) ++ validateContractExpr allowedVars callables c ++ ((step.map (validateContractStmt allowedVars callables)).getD []) ++ b.flatMap (validateContractStmt allowedVars callables)
+    | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v => validateContractExpr allowedVars callables o ++ validateContractExpr allowedVars callables v
+    | .arrayIndexAssign _ a i v => validateContractExpr allowedVars callables a ++ validateContractExpr allowedVars callables i ++ validateContractExpr allowedVars callables v
+    | .break_ _ (some v) _ => validateContractExpr allowedVars callables v
+    | .borrowIn _ v r _ _ b => b.flatMap (validateContractStmt (v :: r :: allowedVars) callables)
+    | .letDestructure _ _ _ bs v el => validateContractExpr allowedVars callables v ++ (el.getD []).flatMap (validateContractStmt (bs ++ allowedVars) callables)
+    | .letStructDestructure _ _ _ v => validateContractExpr allowedVars callables v
+
+  partial def validateContractArm (allowedVars callables : List String) : MatchArm → List String
+    | .mk _ _ _ bs b => b.flatMap (validateContractStmt (bs ++ allowedVars) callables)
+    | .litArm _ v b => validateContractExpr allowedVars callables v ++ b.flatMap (validateContractStmt allowedVars callables)
+    | .varArm _ bnd b => b.flatMap (validateContractStmt (bnd :: allowedVars) callables)
+end
+
+def contractIssueStatus (issues : List String) : String :=
+  let uniq := issues.eraseDups
+  if uniq.isEmpty then ""
+  else s!"\n     status:  invalid_contract_expression\n     reason:  {", ".intercalate uniq}"
+
 /-- Top-level `let NAME = <const>` bindings in a body, as NAME → literal expr.
     Lets the call-site checker see e.g. `let n = 7; rotr(x, n)`. -/
 def letConstMap (body : List Stmt) : List (String × Expr) :=
@@ -1633,6 +1759,8 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
     (provedVCs : List String := []) : String := Id.run do
   let withLoops := (modules.flatMap allFunctions).filter (fun (_, f) => !f.loopContracts.isEmpty)
   if withLoops.isEmpty then return ""
+  let callables := callableContractNames modules
+  let consts := contractConstNames modules
   let mut out := "\n\n=== Loop contracts ==="
   for (pfx, f) in withLoops do
     -- a registered `coverage: invariant` proof discharges invariant_preservation
@@ -1642,12 +1770,13 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
       | none => none
     let extraLets := letConstMap f.body
     let fq := pfx ++ f.name
+    let contractVars := (f.params.map (·.name) ++ localNamesB f.body ++ consts).eraseDups
     for lc in f.loopContracts do
       out := out ++ s!"\n\n{pfx}{f.name}  (loop @ line {lc.line})"
       for inv in lc.invariants do
-        out := out ++ s!"\n  invariant {Concrete.fmtExpr inv}"
+        out := out ++ s!"\n  invariant {Concrete.fmtExpr inv}{contractIssueStatus (validateContractExpr contractVars callables inv)}"
       match lc.variant with
-      | some v => out := out ++ s!"\n  variant   {Concrete.fmtExpr v}"
+      | some v => out := out ++ s!"\n  variant   {Concrete.fmtExpr v}{contractIssueStatus (validateContractExpr contractVars callables v)}"
       | none => pure ()
       out := out ++ "\n  obligations:"
       let planned := "planned (no discharge backend linked yet)"
@@ -1695,6 +1824,8 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
 
 partial def contractsReport (modules : List Module) (registry : ProofRegistry)
     (provedVCs : List String := []) : String := Id.run do
+  let callables := callableContractNames modules
+  let consts := contractConstNames modules
   -- Discharge status for an `#[ensures]` on `qual`. Tiers, honest about partial
   -- coverage: a registered `ensures_proof` → fully proved_by_lean. Otherwise, a
   -- registered `proof` with directional coverage (`one_direction`) discharges
@@ -1723,16 +1854,25 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry)
     for f in m.functions do
       if !f.ensures.isEmpty || !f.requires.isEmpty then
         out := out ++ s!"\n\n{pfx}{f.name}"
+        let paramVars := f.params.map (·.name)
+        let postVars := (paramVars ++ ["result"] ++ localNamesB f.body ++ consts).eraseDups
+        let preVars := (paramVars ++ consts).eraseDups
         -- preconditions: assumed on entry here; each call site is checked
         -- separately (see the "Call-site obligations" section).
         let mut ri := 1
         for r in f.requires do
-          out := out ++ s!"\n  R{ri}  requires {Concrete.fmtExpr r}\n     status:  assumed_at_entry (each call site checked separately)"
+          let issues := validateContractExpr preVars callables r
+          let st :=
+            if issues.isEmpty then "\n     status:  assumed_at_entry (each call site checked separately)"
+            else contractIssueStatus issues
+          out := out ++ s!"\n  R{ri}  requires {Concrete.fmtExpr r}{st}"
           ri := ri + 1
         -- postconditions: discharged by a registered ensures_proof, or missing
         let mut i := 1
         for e in f.ensures do
-          out := out ++ s!"\n  O{i}  ensures {Concrete.fmtExpr e}{discharge (pfx ++ f.name)}"
+          let issues := validateContractExpr postVars callables e
+          let st := if issues.isEmpty then discharge (pfx ++ f.name) else contractIssueStatus issues
+          out := out ++ s!"\n  O{i}  ensures {Concrete.fmtExpr e}{st}"
           i := i + 1
     for sub in m.submodules do
       out := go sub out

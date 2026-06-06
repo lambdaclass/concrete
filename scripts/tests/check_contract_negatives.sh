@@ -76,6 +76,12 @@ else
   echo "  skip invalid_invariant omega check (lake not on PATH)"
 fi
 
+echo "=== invalid_contract_expression (unknown identifier in contract) ==="
+assert_contains "unknown identifier rejected in #[requires]" "invalid_contract_expression" \
+  "$COMPILER" "$CN/invalid_contract_expression/src/main.con" --report contracts
+assert_contains "unknown identifier named in diagnostic" "unknown identifier 'nonexistent'" \
+  "$COMPILER" "$CN/invalid_contract_expression/src/main.con" --report contracts
+
 echo "=== duplicate_links (two of the same proof-link attribute) ==="
 assert_contains "duplicate #[spec] rejected at parse time" "duplicate #[spec(...)]" \
   "$COMPILER" "$CN/duplicate_links/src/main.con"

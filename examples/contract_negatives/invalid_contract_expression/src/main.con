@@ -1,0 +1,11 @@
+// contract negatives: contract expression references an unknown identifier.
+//
+// The function body is ordinary and would otherwise be proof-eligible, but the
+// precondition mentions `nonexistent`, which is not a parameter, constant,
+// ghost/local contract name, `result`, or known spec/function call.
+// `--report contracts` must report invalid_contract_expression rather than
+// silently accepting the contract as assumed/proved.
+mod cn {
+    #[requires(0 < nonexistent)]
+    fn bad(x: i32) -> i32 { return x; }
+}
