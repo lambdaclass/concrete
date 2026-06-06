@@ -26,8 +26,7 @@ Concrete combines Rust style ownership, Zig style explicit control, Austral
 style capability discipline, and Lean 4 kernel checked proofs. It is not a
 proof assistant. It is a no GC systems language that Lean can reason about.
 The compiler is written in Lean 4. The long term aim is to prove selected
-compiler properties in the same kernel, but that work is gated. See "Where
-Concrete is honest" below.
+compiler properties in the same kernel, but that work is gated in the roadmap.
 
 Concretely, that means:
 
@@ -53,7 +52,14 @@ is the composition: systems control, explicit authority, contracts in source,
 Lean checked proof links, drift detection, and audit reports that refuse to
 hide trust.
 
+The practical goal is simple: a reviewer should be able to ask the toolchain
+what a function can do, what can go wrong at runtime, which claims are proved,
+which claims are tested, and where trust enters.
+
 ## Four Claim Shapes
+
+This is the core idea. Concrete does not collapse all evidence into one green
+badge.
 
 Functional correctness, proved in Lean:
 
@@ -181,53 +187,7 @@ invalid       malformed or ill scoped contract expression
 If you are coming from C or Rust and want the short "why this exists" version,
 read [docs/WHY_CONCRETE.md](docs/WHY_CONCRETE.md).
 
-## Where Concrete sits
-
-| | Rust | Zig | SPARK / Ada | Lean 4 | Austral | **Concrete** |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| No GC | ✓ | ✓ | ✓ | ✗ | ✓ | **✓** |
-| Linear types | ⚠ borrow checker | ✗ | ✗ | ✗ | ✓ | **✓** |
-| Capability visible effects | ✗ | ✗ | ⚠ contracts | ✗ | ✓ | **✓** |
-| Kernel checked user proofs | ✗ | ✗ | ✓ (SMT) | ✓ | ✗ | **✓ (Lean)** |
-| Compiler written in same kernel | ✗ | ✗ | ✗ | n/a | ✗ | **✓** |
-| Systems target | ✓ | ✓ | ✓ | ✗ | ✓ | **✓** |
-
-The bet is the combination: no GC + linear + capability visible effects + kernel
-checked user proofs + compiler written in the same kernel + systems target.
-
-## Nearby Systems
-
-Concrete is adjacent to several mature systems, but none has exactly this
-ledger.
-
-- **Rust** has great ownership and systems ergonomics, but proofs are mostly
-  external.
-- **Zig / C / C++** give excellent low level control, but little built in
-  evidence tracking.
-- **SPARK / Ada, Dafny, F*, Why3** have strong verification stories, usually
-  SMT heavy, but they are not trying to feel like a small no GC C/Rust style
-  systems language with Lean as the compiler/proof substrate.
-- **Lean / Coq / Isabelle** are excellent proof systems, but writing normal
-  low level systems code there is not the primary path.
-- **Austral** is closer on linear types and safety, but it does not have the
-  same Lean backed proof and evidence pipeline.
-
-That is the gap Concrete is trying to occupy: systems language shape,
-compiler enforced discipline, Lean backed theorem attachment, drift gates, and
-evidence bundles in one toolchain.
-
-## The Thesis
-
-Most systems languages give you safety **or** control. Concrete is trying to make four things visible at the function boundary:
-
-1. **what authority** a function has (capabilities)
-2. **whether it allocates, blocks, recurses, or runs unboundedly** (predictable execution profile)
-3. **where it crosses trust boundaries** (`trusted`, `unsafe`)
-4. **whether those claims are reported, enforced, or proved**
-
-A reviewer should be able to audit a function from its signature plus the compiler's reports, without reading the implementation and without trusting convention. That same discipline makes the code unusually legible to LLM tools. The model can ask the compiler what code is allowed to do instead of guessing from source.
-
-## The Language
+## Language Shape
 
 - **No garbage collector.** Memory is managed through ownership and borrowing, checked at compile time. No runtime GC, no hidden reference counting.
 - **Linear type system.** Every non-`Copy` value must be consumed exactly once. Programs that leak, double-free, or use-after-move are rejected.
@@ -237,11 +197,12 @@ A reviewer should be able to audit a function from its signature plus the compil
 - **Explicit trust boundaries.** `trusted` marks code the compiler cannot fully verify (pointer arithmetic, FFI). Everything else is checked. The boundary is visible.
 - **Lean backed proofs.** Selected pure functions can carry Lean 4 theorems. `make build` runs the kernel; drift in source revokes the `proved` evidence automatically.
 
-## What This Looks Like
+## Reports
 
-The first graduated flagship, [examples/parse_validate](examples/parse_validate/), is the example to read first.  Its [`README.md`](examples/parse_validate/README.md) follows the honest framing the rest of the project tries to live up to: what is proved, what is enforced (statically and by CI), what is reported, what is assumed, and **what is not yet done**.  Four later flagships ([crypto_verify](examples/crypto_verify/), [fixed_capacity](examples/fixed_capacity/), [constant_time_tag](examples/constant_time_tag/), [hmac_sha256](examples/hmac_sha256/)) reuse the same template across different systems domains.
+Concrete reports facts instead of asking reviewers to infer them from style.
 
-For the minimal effects-report shape, here is [examples/thesis_demo](examples/thesis_demo/src/main.con):
+For the minimal effects shape, here is
+[examples/thesis_demo](examples/thesis_demo/src/main.con):
 
 ```con
 fn parse_byte(data: Int, offset: Int) -> Int { return data + offset; }
@@ -281,34 +242,38 @@ pub main       caps: File,Network,Clock,Env,Random,Process,Console,Alloc
 
 Read the signatures. `parse_byte`, `check_length`, `validate` are pure. `report` can write to the console and nothing else. `main` has `Std` because it is the entry point. The split between bounded core and effectful shell is the point. Concrete does not pretend the whole program is predictable; it makes the boundary explicit.
 
-## What the compiler reports
-
-Evidence levels:
-
-- **proved**: a linked Lean 4 theorem backs the claim.
-- **enforced**: the compiler can reject violations (passes all 5 predictable gates).
-- **reported**: the compiler classifies it but cannot enforce.
-- **trusted assumption**: claim depends on an explicit trust boundary.
-
-The predictable profile (`--check predictable`) rejects functions that recurse, contain unbounded loops, allocate (or declare `Alloc`), cross FFI, or block through file/network/process capabilities. Per function.
-
 Reports that run cleanly today: `caps`, `unsafe`, `layout`, `interface`, `alloc`, `mono`, `authority`, `proof`, `eligibility`, `proof-status`, `obligations`, `stack-depth`, `fingerprints`, `effects`, `recursion`, `consistency`, `verify`.
 
-## Research Direction: Evidence-Bearing Concurrency
+## Examples To Read
 
-Sketched as future work; not in scope for the first release. The interesting target is not Rust-style async/await but **evidence-bearing structured concurrency**:
+- [examples/constant_time_tag](examples/constant_time_tag/) shows layered
+  evidence: Lean proves value correctness, source shape reports constant-time
+  discipline, and machine timing remains an assumption.
+- [examples/hmac_sha256](examples/hmac_sha256/) is the deepest proof artifact:
+  SHA-256/HMAC refinement against an independent spec, plus oracle tests against
+  RFC/FIPS/Python references.
+- [examples/fixed_point](examples/fixed_point/) shows runtime-safety accounting
+  on fixed-point arithmetic: division, overflow, and nonlinear multiplication
+  obligations are reported separately.
+- [examples/evidence_classes](examples/evidence_classes/) is the compact
+  catalog of evidence classes.
 
-- `with(Async)` for order-independent work that may safely run sequentially
-- `with(Concurrent)` for work requiring real concurrent progress for correctness
-- structured scopes; child tasks cannot outlive their parent
-- linear task handles; tasks cannot leak
-- owned-value transfer instead of `Send` contagion
-- bounded channels, race/select, cooperative cancellation only if they fit the linear/evidence model
-- deterministic simulation as a future backend, with scheduler bugs reproducible from a seed
+## Nearby Systems
 
-`Async` vs `Concurrent` is the key distinction. If two operations are merely independent, sequential fallback is correct. If both must make progress or the program deadlocks, the type system should say so. "Missing concurrency" becomes a type-system issue, not a scheduler accident.
+Concrete is adjacent to several mature systems, but none has exactly this
+ledger.
 
-See [research/stdlib-runtime/async-concurrency-evidence.md](research/stdlib-runtime/async-concurrency-evidence.md).
+- **Rust** has great ownership and systems ergonomics, but proofs are mostly
+  external.
+- **Zig / C / C++** give excellent low level control, but little built in
+  evidence tracking.
+- **SPARK / Ada, Dafny, F*, Why3** have strong verification stories, usually
+  SMT heavy, but they are not shaped like a small no GC C/Rust style systems
+  language with Lean as the compiler/proof substrate.
+- **Lean / Coq / Isabelle** have excellent proof kernels, but ordinary low
+  level systems code is not their primary path.
+- **Austral** is closer on linear types and safety, but it does not have the
+  same Lean backed proof and evidence pipeline.
 
 ## Try it
 

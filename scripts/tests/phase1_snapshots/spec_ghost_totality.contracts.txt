@@ -1,0 +1,12 @@
+=== Source Contracts ===
+spec fn cn.ideal(n: i32) -> i32
+
+cn.bad
+  O1  ensures result == tick()
+     status:  invalid_contract_expression
+     reason:  impure call 'tick' — spec/ghost must be pure and total (no capabilities)
+
+cn.good
+  O1  ensures result == dbl(x)
+     status:  missing (no in-source proof link for this function)
+

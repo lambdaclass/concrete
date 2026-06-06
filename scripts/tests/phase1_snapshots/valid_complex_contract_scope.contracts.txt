@@ -1,0 +1,40 @@
+=== Source Contracts ===
+spec fn scope.clamp_spec(x: i32, lo: i32, hi: i32) -> i32
+
+scope.clamp
+  R1  requires lo <= hi && hi < LIMIT
+     status:  assumed_at_entry (each call site checked separately)
+  R2  requires in_range(x, lo, hi)
+     status:  assumed_at_entry (each call site checked separately)
+  O1  ensures result == clamp_spec(x, lo, hi)
+     status:  missing (no in-source proof link for this function)
+  O2  ensures lo <= result && result <= hi
+     status:  missing (no in-source proof link for this function)
+
+
+=== Loop contracts ===
+
+scope.accumulate  (loop @ line 45)
+  invariant 0 <= i && i <= span && acc <= LIMIT
+  variant   span - i
+  obligations:
+    O1 invariant_init          status:  planned (no discharge backend linked yet)
+       generated VC:  ∀ (span LIMIT : Int), ((0 ≤ 0 ∧ 0 ≤ span) ∧ 0 ≤ LIMIT)
+    O2 invariant_preservation
+       arithmetic step:   planned (no discharge backend linked yet)
+       operational step:  planned — needs Lean (operational realization), shape:
+           theorem scope_accumulate_loop_preserves (fns : FnTable) (env : Env) (fuel : Nat) … :
+             eval.evalAssigns fns env fuel <body> = some <env after [ acc := acc; i := i + 1 ]>
+             ∧ (0 <= i && i <= span && acc <= LIMIT)      -- arithmetic half above is omega-discharged
+       generated VC:  ∀ (i span acc LIMIT : Int), 
+           ((0 ≤ i ∧ i ≤ span) ∧ acc ≤ LIMIT) →      -- invariant (assumed)
+           i < LIMIT →      -- guard (assumed)
+           ((0 ≤ (i + 1) ∧ (i + 1) ≤ span) ∧ acc ≤ LIMIT)      -- invariant' after body [ acc := acc; i := i + 1 ]
+    O3 loop_exit_post_link     status:  n/a (no #[ensures] postcondition)
+    O4 variant_nonnegative     status:  proved_by_kernel_decision
+                                engine:  omega
+       generated VC:  ∀ (i span acc LIMIT : Int), ((0 ≤ i ∧ i ≤ span) ∧ acc ≤ LIMIT) → i < LIMIT → 0 ≤ (span - i)
+    O5 variant_decreases       status:  proved_by_kernel_decision
+                                engine:  omega
+       generated VC:  ∀ (i span acc LIMIT : Int), ((0 ≤ i ∧ i ≤ span) ∧ acc ≤ LIMIT) → i < LIMIT → (span - (i + 1)) < (span - i)
+

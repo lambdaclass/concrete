@@ -1,0 +1,17 @@
+=== Semantic Diff / Trust Drift ===
+
+  TRUST WEAKENED (2):
+    [~] contract / api.strengthen_pre
+
+      requires: 0 <= x → 0 <= x ∧ x <= 100
+    [~] contract / api.weaken_post
+
+      ensures: result == x ∧ 0 <= result → result == x
+
+  TRUST STRENGTHENED (1):
+    [~] contract / api.relax_pre
+
+      requires: 0 <= x ∧ x <= 10 → 0 <= x
+
+Summary: 3 changes — 2 weakened, 1 strengthened, 0 neutral
+

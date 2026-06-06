@@ -1,0 +1,55 @@
+=== Source Contracts ===
+
+cn.clean
+  R1  requires 0 < x && x < 10
+     status:  assumed_at_entry (each call site checked separately)
+
+
+=== Call-site obligations ===
+
+cn.main
+  call clean(3)
+    requires 0 < 3 && 3 < 10
+    status:  proved_at_callsite
+
+
+=== assert / assume ===
+
+cn.trusts
+  ⚠ TAINTED — depends on assume(...): evidence is `assumed` (trust), NOT a clean proof
+  assume (x > 0)
+     status:  assumed (trust, not proof — audit-visible; release policy may forbid)
+
+cn.clean
+  assert (x < 16)
+     status:  proved_by_kernel_decision (omega)
+
+
+=== Runtime-safety obligations (division: non-zero divisor) ===
+
+fmt.format_int
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+
+fmt.format_uint
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+  / divisor 10
+    status: checked: divisor is a nonzero constant
+
+hex.decode
+  % divisor 2
+    status: checked: divisor is a nonzero constant
+
+sha256.hash_raw
+  % divisor 64
+    status: checked: divisor is a nonzero constant
+  / divisor 64
+    status: checked: divisor is a nonzero constant
+
+rand.random_range
+  / divisor range
+    status: unproven — require the divisor nonzero (#[requires]), or insert a runtime check
+

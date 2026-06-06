@@ -1,0 +1,8 @@
+=== Source Contracts ===
+
+cn.weak
+  O1  ensures result > x
+     status:  partial — one direction proved_by_lean, converse outstanding
+     theorem: Examples.ProofPatterns.Proofs.add_three_correct  (coverage: one_direction)
+     note:    full postcondition not yet discharged; the converse is the next obligation
+

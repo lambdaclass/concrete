@@ -1,0 +1,7 @@
+=== Source Contracts ===
+
+cn.bad
+  R1  requires 0 < nonexistent
+     status:  invalid_contract_expression
+     reason:  unknown identifier 'nonexistent'
+

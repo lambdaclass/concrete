@@ -1,0 +1,42 @@
+=== Source Contracts ===
+
+cn.ratio
+  R1  requires 0 < d
+     status:  assumed_at_entry (each call site checked separately)
+
+cn.ok_via_requires
+  R1  requires 0 < x
+     status:  assumed_at_entry (each call site checked separately)
+
+
+=== Call-site obligations ===
+
+cn.ok_via_requires
+  call ratio(10, x)
+    requires 0 < x
+    status:  proved_by_kernel_decision
+    engine:  omega (from caller's #[requires] / guards)
+
+cn.ok_via_guard
+  call ratio(10, x)
+    requires 0 < x
+    status:  proved_by_kernel_decision
+    engine:  omega (from caller's #[requires] / guards)
+
+cn.violation
+  call ratio(10, 0)
+    requires 0 < 0
+    status:  failed_at_callsite
+
+cn.unmet
+  call ratio(10, x)
+    requires 0 < x
+    status:  unproven_at_callsite (caller does not establish the precondition)
+
+
+=== Runtime-safety obligations (division: non-zero divisor) ===
+
+cn.ratio
+  / divisor d
+    status: proved_by_kernel_decision (omega) — divisor nonzero, no runtime check needed
+

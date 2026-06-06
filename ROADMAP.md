@@ -310,11 +310,19 @@ retrofit is explicitly queued behind proof-link migration.
    `unproven_at_callsite` — no false green. Pinned by `check_contract_negatives.sh`
    (33/0, +2); ProvableV1 conformance / fingerprints unchanged (contracts erased
    before Core), hmac oracle 200/0.
-9. Add the Phase 1 validation artifact: the combined contract-positive,
-   contract-negative, vacuity, totality, assert/assume, and stability fixtures
-   must run under one gate, produce one report snapshot per contract failure
-   class, and have a README explaining what each fixture proves, reports, or
-   deliberately refuses to prove.
+9. **[done]** Phase 1 validation artifact. `check_phase1_contracts.sh` is the
+   single umbrella gate (30/0): it runs the two contract sub-gates
+   (`check_contract_negatives.sh` 33/0, `check_contract_stability.sh` 6/0),
+   asserts one byte-identical golden REPORT SNAPSHOT per failure class (14 under
+   `scripts/tests/phase1_snapshots/` — precondition_callsite, missing/weakened
+   postcondition, invalid attribute/invariant/contract-expression, spec_ghost
+   totality, vacuity, assert_obligation, assume_taint, duplicate_links,
+   fabricated_proof, valid_complex_contract_scope, contract_stability diff), and
+   checks the README covers every fixture. `examples/contract_negatives/README.md`
+   is the explainer: a per-class table of what each fixture proves, reports, or
+   deliberately refuses to prove. Wired into CI proof_gate + Makefile
+   (`test-phase1-contracts`). Regenerate snapshots with
+   `UPDATE_PHASE1_SNAPSHOTS=1`.
 
 ## Phase 2: Verification Conditions And SMT Assistance
 

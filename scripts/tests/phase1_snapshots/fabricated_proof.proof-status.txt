@@ -1,0 +1,15 @@
+=== Proof Status Report ===
+
+-- proved [iff] ------------------------------------------------ examples/contract_negatives/fabricated_proof/src/main.con:11
+
+  ✓ `cn.f` — proof matches current body.
+
+ 11 |     fn f(x: i32) -> i32 { return x; }
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  coverage: iff
+
+  origin: source_linked
+
+Totals: 1 functions — 1 proved, 0 stale, 0 unproved, 0 blocked, 0 ineligible, 0 trusted
+

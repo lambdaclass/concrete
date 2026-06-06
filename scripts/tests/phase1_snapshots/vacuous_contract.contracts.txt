@@ -1,0 +1,37 @@
+=== Source Contracts ===
+
+cn.always
+  ⚠ VACUOUS — preconditions are unsatisfiable; any #[ensures] holds trivially (NOT a real proof)
+  R1  requires false
+     status:  vacuous (unsatisfiable precondition)
+  O1  ensures result > 0
+     status:  vacuous (precondition unsatisfiable — postcondition holds trivially, NOT proved)
+
+cn.contradictory
+  ⚠ VACUOUS — preconditions are unsatisfiable; any #[ensures] holds trivially (NOT a real proof)
+  R1  requires x > 0
+     status:  vacuous (unsatisfiable precondition)
+  R2  requires x < 0
+     status:  vacuous (unsatisfiable precondition)
+  O1  ensures result == x
+     status:  vacuous (precondition unsatisfiable — postcondition holds trivially, NOT proved)
+
+
+=== Loop contracts ===
+
+cn.bad_loop  (loop @ line 21)
+  invariant false
+     status:  invalid/vacuous (unsatisfiable invariant — the loop obligations below are meaningless)
+  variant   8 - i
+  obligations:
+    O1 invariant_init          status:  planned (no discharge backend linked yet)
+    O2 invariant_preservation
+       arithmetic step:   planned (no discharge backend linked yet)
+       operational step:  planned — needs Lean (operational realization), shape:
+           theorem cn_bad_loop_loop_preserves (fns : FnTable) (env : Env) (fuel : Nat) … :
+             eval.evalAssigns fns env fuel <body> = some <env after [ acc := acc + i; i := i + 1 ]>
+             ∧ (false)      -- arithmetic half above is omega-discharged
+    O3 loop_exit_post_link     status:  n/a (no #[ensures] postcondition)
+    O4 variant_nonnegative     status:  planned (no discharge backend linked yet)
+    O5 variant_decreases       status:  planned (no discharge backend linked yet)
+

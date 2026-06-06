@@ -1,0 +1,3 @@
+examples/contract_negatives/invalid_attribute/src/main.con:5:25: error[parse]: (E0001) expected a string literal in proof_fingerprint("…")
+ 5 |     #[proof_fingerprint(12345)]
+   |                         ^

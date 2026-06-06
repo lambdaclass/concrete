@@ -1,0 +1,6 @@
+=== Source Contracts ===
+
+cn.f
+  O1  ensures result >= 0
+     status:  missing (no in-source proof link for this function)
+

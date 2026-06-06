@@ -1,0 +1,1 @@
+examples/contract_negatives/duplicate_links/src/main.con: error[parse]: (E0001) duplicate #[spec(...)] on one function

@@ -1,0 +1,21 @@
+=== Source Contracts ===
+
+cn.proved
+  R1  requires 0 < x && x < 10
+     status:  assumed_at_entry (each call site checked separately)
+
+
+=== assert / assume ===
+
+cn.proved
+  assert (x < 16)
+     status:  proved_by_kernel_decision (omega)
+
+cn.unproven
+  assert (x < 16)
+     status:  unproven (assert not discharged — never silently accepted)
+
+cn.always_false
+  assert (0 > 1)
+     status:  VIOLATION: assert is always false
+
