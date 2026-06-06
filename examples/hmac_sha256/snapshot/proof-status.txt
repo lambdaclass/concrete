@@ -162,66 +162,66 @@
 
   origin: source_linked
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:260
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:265
 
   ✓ `hmac_sha256.block_to_words_at` — proof matches current body.
 
- 260 |     fn block_to_words_at(buf: [u8; 384], off: i32) -> [u32; 16] {
+ 265 |     fn block_to_words_at(buf: [u8; 384], off: i32) -> [u32; 16] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
   origin: source_linked
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:276
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:284
 
   ✓ `hmac_sha256.sha256_compress_at` — proof matches current body.
 
- 276 |     fn sha256_compress_at(state: [u32; 8], buf: [u8; 384], off: i32) -> [u32; 8] {
+ 284 |     fn sha256_compress_at(state: [u32; 8], buf: [u8; 384], off: i32) -> [u32; 8] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
   origin: source_linked
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:292
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:300
 
   ✓ `hmac_sha256.state_to_bytes` — proof matches current body.
 
- 292 |     fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
+ 300 |     fn state_to_bytes(state: [u32; 8]) -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
   origin: source_linked
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:319
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:331
 
   ✓ `hmac_sha256.sha256_hash` — proof matches current body.
 
- 319 |     fn sha256_hash(data: [u8; 384], len: i32) -> [u8; 32] {
+ 331 |     fn sha256_hash(data: [u8; 384], len: i32) -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
   origin: source_linked
 
--- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:347
+-- proved [full_contract] ------------------------------------------------ examples/hmac_sha256/src/main.con:359
 
   ✓ `hmac_sha256.hmac_sha256` — proof matches current body.
 
- 347 |     fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
+ 359 |     fn hmac_sha256(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32) -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   coverage: full_contract
 
   origin: source_linked
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:375
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:387
 
   `hmac_sha256.verify_hmac` passes the predictable profile but has no registered proof.
 
- 375 |     fn verify_hmac(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32,
+ 387 |     fn verify_hmac(k: [u8; 128], k_len: i32, m: [u8; 256], m_len: i32,
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -229,11 +229,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:385
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:397
 
   `hmac_sha256.abc_block` passes the predictable profile but has no registered proof.
 
- 385 |     fn abc_block() -> [u8; 64] {
+ 397 |     fn abc_block() -> [u8; 64] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -241,11 +241,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:397
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:409
 
   `hmac_sha256.rfc4231_tc1_tag` passes the predictable profile but has no registered proof.
 
- 397 |     fn rfc4231_tc1_tag() -> [u8; 32] {
+ 409 |     fn rfc4231_tc1_tag() -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -253,11 +253,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:403
+-- no proof ----------------------------------------------- examples/hmac_sha256/src/main.con:415
 
   `hmac_sha256.rfc4231_tc2_tag` passes the predictable profile but has no registered proof.
 
- 403 |     fn rfc4231_tc2_tag() -> [u8; 32] {
+ 415 |     fn rfc4231_tc2_tag() -> [u8; 32] {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   current fingerprint:
@@ -265,11 +265,11 @@
 
   hint: Add a Lean proof for this function in Concrete/Proof.lean with the fingerprint above.
 
--- not eligible ------------------------------------------- examples/hmac_sha256/src/main.con:420
+-- not eligible ------------------------------------------- examples/hmac_sha256/src/main.con:432
 
   `hmac_sha256.main` cannot be proved: fails predictable profile (has capabilities: Console, is entry point (main)).
 
- 420 |     pub fn main() with(Console) -> i32 {
+ 432 |     pub fn main() with(Console) -> i32 {
      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
   reasons: has capabilities: Console, is entry point (main)

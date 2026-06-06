@@ -30,25 +30,25 @@ module hmac_sha256:
   sha256_compress
     frame: 716 bytes  depth: 3  stack: 1080 bytes  @ examples/hmac_sha256/src/main.con:239
   block_to_words_at
-    frame: 464 bytes  depth: 0  stack: 464 bytes  @ examples/hmac_sha256/src/main.con:260
+    frame: 464 bytes  depth: 0  stack: 464 bytes  @ examples/hmac_sha256/src/main.con:265
   sha256_compress_at
-    frame: 976 bytes  depth: 1  stack: 1440 bytes  @ examples/hmac_sha256/src/main.con:276
+    frame: 976 bytes  depth: 1  stack: 1440 bytes  @ examples/hmac_sha256/src/main.con:284
   state_to_bytes
-    frame: 76 bytes  depth: 0  stack: 76 bytes  @ examples/hmac_sha256/src/main.con:292
+    frame: 76 bytes  depth: 0  stack: 76 bytes  @ examples/hmac_sha256/src/main.con:300
   sha256_hash
-    frame: 828 bytes  depth: 2  stack: 2268 bytes  @ examples/hmac_sha256/src/main.con:319
+    frame: 828 bytes  depth: 2  stack: 2268 bytes  @ examples/hmac_sha256/src/main.con:331
   hmac_sha256
-    frame: 1704 bytes  depth: 3  stack: 3972 bytes  @ examples/hmac_sha256/src/main.con:347
+    frame: 1704 bytes  depth: 3  stack: 3972 bytes  @ examples/hmac_sha256/src/main.con:359
   verify_hmac
-    frame: 464 bytes  depth: 4  stack: 4436 bytes  @ examples/hmac_sha256/src/main.con:375
+    frame: 464 bytes  depth: 4  stack: 4436 bytes  @ examples/hmac_sha256/src/main.con:387
   abc_block
-    frame: 72 bytes  depth: 0  stack: 72 bytes  @ examples/hmac_sha256/src/main.con:385
+    frame: 72 bytes  depth: 0  stack: 72 bytes  @ examples/hmac_sha256/src/main.con:397
   rfc4231_tc1_tag
-    frame: 8 bytes  depth: 0  stack: 8 bytes  @ examples/hmac_sha256/src/main.con:397
+    frame: 8 bytes  depth: 0  stack: 8 bytes  @ examples/hmac_sha256/src/main.con:409
   rfc4231_tc2_tag
-    frame: 8 bytes  depth: 0  stack: 8 bytes  @ examples/hmac_sha256/src/main.con:403
+    frame: 8 bytes  depth: 0  stack: 8 bytes  @ examples/hmac_sha256/src/main.con:415
   main
-    frame: 1168 bytes  depth: 5  stack: 5604 bytes  @ examples/hmac_sha256/src/main.con:420
+    frame: 1168 bytes  depth: 5  stack: 5604 bytes  @ examples/hmac_sha256/src/main.con:432
 
 Totals: 24 functions, 24 bounded, 0 recursive (unbounded)
 Max stack bound: 5604 bytes (main)
