@@ -1,0 +1,22 @@
+// SMT negatives — locking the honesty boundaries.
+//
+// Every external-solver result class is a NON-PROOF unless it is a genuine
+// kernel/Lean discharge. This module + the shared nonlinear_overflow example are
+// driven by check_smt_negatives.sh to pin that:
+//   - solver absent              → solver_error      (not a proof)
+//   - configured tiny timeout    → unknown/timeout   (not a proof)
+//   - out-of-fragment obligation → NO SMT query      (SMT never reaches for it)
+//   - satisfiable negated goal   → counterexample    (not a proof)
+//   - [policy] forbids           → release build FAILS (E0615)
+//   - Lean replay cannot close   → stays solver_trusted (not upgraded)
+mod neg {
+    // LINEAR overflow obligation: `a + b`. omega owns this; it is NOT a nonlinear
+    // product, so SMT must produce NO query for it (SMT does not grab what the
+    // kernel tiers own). A linear fact never becomes solver_trusted.
+    #[overflow_checked]
+    #[requires(0 <= a && a <= 1000)]
+    #[requires(0 <= b && b <= 1000)]
+    fn linear_add(a: i32, b: i32) -> i32 {
+        return a + b;
+    }
+}

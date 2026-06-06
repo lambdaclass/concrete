@@ -164,6 +164,9 @@ jobs:
       - name: Lean-replay gate (Phase 2 SMT→kernel upgrade artifact)
         run: bash scripts/tests/check_smt_replay.sh
 
+      - name: SMT negatives gate (Phase 2 honesty boundaries)
+        run: bash scripts/tests/check_smt_negatives.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

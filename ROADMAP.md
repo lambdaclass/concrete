@@ -475,9 +475,20 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
     & assumptions-missing rejected, allow+named passes; 4/0 without Z3 — honest, no
     solver evidence produced). Docs: `examples/smt/README.md` + CONTRACTS_AND_VCS.md
     plainly state SMT is not Lean/kernel evidence unless replayed (item 12).
-14. Add SMT negative examples: false postcondition, missing invariant,
-    overflow counterexample, OOB counterexample, div-zero counterexample,
-    solver timeout, and unsupported theory.
+14. **[done]** SMT negative examples — the honesty boundaries. A consolidated
+    suite pins that every external-solver result class is a NON-PROOF unless it is
+    a genuine kernel/Lean discharge: solver absent → `solver_error`; configured
+    tiny timeout (`--report vcs --smt --smt-timeout-ms 1`, Z3 `-t:<ms>` →
+    `Main.smtDischarge`) → `unknown`/`timeout`; out-of-fragment obligation (linear
+    `a + b`) → NO SMT query (SMT never reaches for what the kernel tiers own);
+    satisfiable negated goal → `counterexample`; `[policy] solver-evidence =
+    forbid` → release build FAILS (E0615); Lean replay cannot close → stays
+    `solver_trusted`, not upgraded. `examples/smt/negatives/` (the out-of-fragment
+    `linear_add`) + reuse of `nonlinear_overflow/` & `policy_forbid/`; gate
+    `check_smt_negatives.sh` (9/0 with Z3, 5/0 without) asserts each class is
+    reproduced AND that no non-proof class is ever a `proved_*` status. (Casts /
+    OOB / div-zero counterexamples extend this as those VC classes gain SMT
+    eligibility — Phase 7.)
 15. Add a compact VC/discharge example suite before external SMT:
     - `proved_by_lean`: straight-line refinement (`ch`), operational loop
       preservation, and one call-composition theorem that cannot be closed by a

@@ -97,6 +97,25 @@ pinned by `check_smt_policy.sh`.
   `engine`) or carries a solver status. `check_vc_schema.sh` pins the default;
   `check_smt_path.sh` pins the flagged behaviour.
 
+## Negatives — the honesty boundaries (`negatives/`)
+
+A solver result is a **non-proof** unless it is a genuine kernel/Lean discharge.
+`check_smt_negatives.sh` pins every negative path so a solver result is never
+mistaken for proof:
+
+| case | result | is it a proof? |
+| --- | --- | --- |
+| solver absent | `solver_error` | no |
+| configured tiny timeout (`--smt-timeout-ms 1`) | `unknown` / `timeout` | no |
+| out-of-fragment obligation (e.g. linear `a + b`) | **no SMT query** | no — kernel owns it |
+| satisfiable negated goal (`scale_unbounded`) | `counterexample` | no |
+| `[policy] solver-evidence = forbid` | release build **fails** (E0615) | n/a |
+| Lean replay cannot close | stays `solver_trusted` | no |
+
+`examples/smt/negatives/` holds `linear_add` (the out-of-fragment case — SMT must
+not reach for what the kernel tiers own); the other cases reuse
+`nonlinear_overflow/` and `policy_forbid/`.
+
 ## `nonlinear_overflow/`
 
 Two `sample * gain` products that the kernel tiers cannot own (nonlinear; omega

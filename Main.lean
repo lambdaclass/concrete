@@ -855,8 +855,14 @@ def z3VersionId : IO String := do
     absent solver never yields a proof. Only ever called behind an explicit flag.
     Returns `(vcKey, resultClass, counterexampleModel)`. -/
 def smtDischarge (queries : List (String × String)) (timeoutSec : Nat)
+    (timeoutMs : Option Nat := none)
     : IO (List (String × String × List (String × String))) := do
   if queries.isEmpty then return []
+  -- a configured tiny millisecond soft-timeout (`-t:<ms>`) forces `unknown`; the
+  -- default is the per-run wall timeout (`-T:<sec>`).
+  let timeoutArg := match timeoutMs with
+    | some ms => "-t:" ++ toString ms
+    | none => "-T:" ++ toString timeoutSec
   let haveZ3 ← (try
       let o ← IO.Process.output { cmd := "bash", args := #["-c", "command -v z3"] }
       pure (o.exitCode == 0)
@@ -869,7 +875,7 @@ def smtDischarge (queries : List (String × String)) (timeoutSec : Nat)
         let mk ← IO.Process.output { cmd := "mktemp", args := #["-t", "concrete-vc-XXXXXX"] }
         let path := mk.stdout.trimAscii.toString
         IO.FS.writeFile ⟨path⟩ script
-        let out ← IO.Process.output { cmd := "z3", args := #["-T:" ++ toString timeoutSec, path] }
+        let out ← IO.Process.output { cmd := "z3", args := #[timeoutArg, path] }
         let _ ← IO.Process.output { cmd := "rm", args := #["-f", path] }
         let stdout := out.stdout
         let line := ((stdout.trimAscii.toString.splitOn "\n").head?.getD "").trimAscii.toString
@@ -973,7 +979,8 @@ def compileAndReport (inputPath : String) (reportType : String)
     (proveCheck : Bool := false) (proveWorkspace : Option String := none)
     (proveNearestId : Option String := none) (reportJson : Bool := false)
     (smtRun : Bool := false) (smtEmit : Bool := false)
-    (smtReplay : Bool := false) (emitLeanReplay : Bool := false) : IO UInt32 := do
+    (smtReplay : Bool := false) (emitLeanReplay : Bool := false)
+    (smtTimeoutMs : Option Nat := none) : IO UInt32 := do
   let source ← readFile inputPath
   let mainSrcMap : SourceMap := [(inputPath, source)]
   -- Interface report only needs parse + resolveFiles + summary
@@ -1270,7 +1277,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       let dvcs := if smtRun || smtEmit then Report.markSmtEligible dvcs smtGoals replayGoals else dvcs
       let dvcs ← if smtRun then do
           let solverId ← z3VersionId
-          let results ← smtDischarge smtGoals 5
+          let results ← smtDischarge smtGoals 5 smtTimeoutMs
           let dvcs := Report.foldSmtResults dvcs results solverId
           -- --replay: try to kernel-check each solver_trusted VC in Lean; a success
           -- graduates it to proved_by_lean_replay (solver dropped from the claim).
@@ -2220,6 +2227,11 @@ def main (args : List String) : IO UInt32 := do
     compileAndReport inputPath reportType (smtRun := true) (smtReplay := true)
   | [inputPath, "--report", reportType, "--smt", "--replay", "--json"] =>
     compileAndReport inputPath reportType (reportJson := true) (smtRun := true) (smtReplay := true)
+  | [inputPath, "--report", reportType, "--smt", "--smt-timeout-ms", ms, "--json"] =>
+    compileAndReport inputPath reportType (reportJson := true) (smtRun := true)
+      (smtTimeoutMs := ms.toNat?)
+  | [inputPath, "--report", reportType, "--smt", "--smt-timeout-ms", ms] =>
+    compileAndReport inputPath reportType (smtRun := true) (smtTimeoutMs := ms.toNat?)
   | [inputPath, "--query", query] =>
     compileAndQuery inputPath query
   | [inputPath, "--fmt"] =>
