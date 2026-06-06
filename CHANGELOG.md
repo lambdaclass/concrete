@@ -10,6 +10,29 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Contract-negatives suite completed (2026-06-06)
+
+The Phase 1 source-contract negative suite is now a real regression gate:
+`examples/contract_negatives/` plus
+`scripts/tests/check_contract_negatives.sh` / `make test-contract-negatives`.
+It covers the contract states that could otherwise create a misleading green
+claim:
+
+- unmet callee precondition at a call site;
+- missing postcondition proof;
+- weakened / one-direction postcondition proof (`partial`, not full proof);
+- invalid invariant preservation;
+- invalid contract expression (`invalid_contract_expression`, e.g. unknown
+  identifier);
+- duplicate/conflicting proof-link attributes;
+- fabricated theorem name caught by `concrete prove --check`.
+
+The invalid-expression check is report-side and conservative: contract
+expressions are checked against parameters, `result`, locals/ghosts/loop
+counters, constants, functions, specs, and externs (bare and qualified), so the
+flagship contracts remain valid while typos such as
+`#[requires(0 < nonexistent)]` report an explicit invalid contract expression.
+
 ### Call-site precondition checking (source-contract hardening) (2026-06-06)
 
 A callee's `#[requires]` is now verified at every call site, closing a gap where
