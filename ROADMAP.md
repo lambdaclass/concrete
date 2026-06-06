@@ -217,13 +217,22 @@ retrofit is explicitly queued behind proof-link migration.
    tasks in this phase are the contract cases that can make a green proof
    misleading: negative examples, vacuity, spec/ghost totality, trapdoor
    discipline, diagnostics, API-stability rules, and soundness obligations.
-2. Add contract negative examples: **unmet precondition at call site — DONE** (caller-side
-   `#[requires]` checking via `callSiteObligations`/`callPrecondGoals`; omega-discharged from
-   the caller's requires/guards/invariants; `examples/contract_negatives/precondition_callsite/`
-   + `check_contract_negatives.sh`). Remaining: missing
-   postcondition proof, weakened postcondition, invalid contract expression,
-   invalid invariant preservation, duplicate source/JSON proof links, and
-   invalid proof-link attributes.
+2. ~~Add contract negative examples.~~ **MOSTLY DONE** — `examples/contract_negatives/`
+   + gate `scripts/tests/check_contract_negatives.sh` (10/0, CI + `make
+   test-contract-negatives`): `precondition_callsite` (caller-side `#[requires]`
+   checking, the call-site hardening), `missing_postcondition` (reported
+   `missing`), `weakened_postcondition` (one_direction coverage → `partial`, not
+   full), `invalid_invariant` (false preservation VC → omega refuses, stays
+   `planned`), `duplicate_links` (duplicate proof-link attribute → parse error,
+   newly hardened), `fabricated_proof` (nonexistent theorem → proof-status's
+   known limitation but caught by `prove --check`). **REMAINING GAP — invalid
+   contract expression:** `#[requires]`/`#[ensures]`/`#[invariant]` expressions
+   are NOT scope/type-checked, so an unknown identifier (e.g.
+   `#[requires(0 < nonexistent)]`) is silently accepted. Hardening it needs a
+   contract-expression resolver aware of params, `result` (ensures), ghost
+   bindings, spec-fn / function names, and loop counters (invariants) — with care
+   to not false-positive on existing flagship contracts. Tracked as the next
+   contract-hardening step.
 3. Add vacuity and satisfiability checks for contracts: unsatisfiable
    preconditions, contradictory assumptions, `#[requires(false)]`, invariant
    `false`, unreachable returns, and postconditions proved only because the path
@@ -334,20 +343,46 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
       implementation, with audit showing it is regression evidence, not proof.
     These examples are release-facing documentation fixtures: every evidence
     class should have one small program and one report snapshot.
-16. Add an external-SMT example only after the backend exists and only behind an
-    explicit policy flag. The example should demonstrate `solver_trusted`,
-    counterexample reporting, timeout/unknown handling, and the difference
-    between `proved_by_kernel_decision` and trusted solver output. Use this
-    sequence of examples:
-    - arithmetic range proof: HMAC-shaped symbolic block-count arithmetic,
-      e.g. `(len + 9 + 63) / 64` under a length bound;
-    - nonlinear or mixed arithmetic proof that `omega` does not own;
-    - path feasibility proof where several branches imply a postcondition;
-    - false postcondition with a source-level counterexample;
-    - timeout/unknown example with a non-proof status;
-    - unsupported-theory example with a clear diagnostic.
-    Do not use external SMT for facts already enforced by Concrete or closed by
-    `omega` / `bv_decide`, such as ordinary fixed-array bounds.
+16. Add a clear external-SMT example suite only after the backend exists and
+    only behind an explicit policy flag. These examples must teach when SMT is
+    useful, when it is trusted, and when Concrete should prefer Lean/kernel
+    decision procedures. Put them under a dedicated example group such as
+    `examples/smt/`, with one small program per case, a README, report
+    snapshots, and a gate that asserts the expected evidence class. Use this
+    sequence:
+    - `range_block_count`: HMAC-shaped symbolic block-count arithmetic, e.g.
+      prove `(len + 9 + 63) / 64 <= max_blocks` under a length bound. This is
+      the "SMT is useful for arithmetic summaries" example. Report
+      `proved_by_smt` / `solver_trusted` unless Lean replay closes it.
+    - `nonlinear_overflow`: a product/range obligation such as
+      `sample * gain` under interval bounds where `omega` is not enough. This
+      must clearly say why `omega` does not own it and whether the result is
+      solver-trusted or replayed.
+    - `path_feasibility`: several guarded branches imply a postcondition, e.g.
+      a clamp/classifier where each branch has different arithmetic facts.
+      This shows SMT over path conditions, not ordinary array bounds.
+    - `false_postcondition_counterexample`: deliberately false `#[ensures]`
+      with a source-level model: concrete inputs, failing branch, and failing
+      postcondition. Status is `counterexample`, never proof.
+    - `overflow_counterexample`: an opt-in `#[overflow_checked]` function with
+      insufficient bounds. Report concrete inputs that overflow or a symbolic
+      counterexample if concrete reconstruction is unavailable.
+    - `div_zero_counterexample`: a missing nonzero divisor proof. Report the
+      path/inputs where divisor can be zero.
+    - `unknown_or_timeout`: a deliberately hard quantified/nonlinear case with
+      a small timeout. Status is `unknown` or `timeout`, treated as non-proof
+      and blocked from release unless policy allows it.
+    - `unsupported_theory`: a construct outside the SMT encoding. It must fail
+      with an explicit diagnostic naming the unsupported theory rather than
+      silently dropping the obligation.
+    - `kernel_preferred`: a near-duplicate fact already closed by `omega` or
+      `bv_decide`, proving the tool does **not** route ordinary fixed-array
+      bounds, linear integer facts, or BitVec identities through external SMT.
+      This is the anti-example that protects the trust boundary.
+    Every SMT example must print solver name/version, timeout, encoding hash or
+    SMT-LIB path, replay status, and trust class. Do not use external SMT for
+    facts already enforced by Concrete or closed by `omega` / `bv_decide`, such
+    as ordinary fixed-array bounds.
 17. Update audit/release bundles so VC results appear beside proof registry,
     assumptions, runtime obligations, and proof coverage classification.
 18. Add soundness documentation for the SMT path: trusted solver binary,
