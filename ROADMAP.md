@@ -21,9 +21,9 @@ document as one queue:
    starts depending on it;
 4. harden audit / proof-status / trust gates around source contracts,
    spec provenance, evidence classes, tool-version drift, and oracle evidence;
-5. make `concrete prove` useful enough for non-compiler authors and
-   binary-only agents through self-describing commands, JSON output, generated
-   Lean stubs, replayable workflows, and better failed-obligation diagnostics;
+5. finish the bounded proof-pattern examples/tests slab so proof authoring is
+   teachable from small examples, not only from flagships, while keeping all
+   proof evidence source-linked and replayable;
 6. finish VC/discharge examples and external-SMT policy without hiding solver
    trust;
 7. only then broaden the ordinary language surface (patterns, bytes/text/path,
@@ -349,70 +349,9 @@ of one-off `simp` scripts.
 Done when: new flagship proofs can start from useful generated stubs, standard
 lemmas, and actionable failure diagnostics.
 
-1. ~~Retire `proof-registry.json`.~~ **DONE — JSON support fully removed; source
-   links are the only proof model.**
-   - Each function carries in-source `#[spec]`/`#[proof_by]`/`#[ensures_proof]`/
-     `#[proof_coverage]`/`#[proof_fingerprint]`; the compiler synthesizes the
-     registry from them (`Report.synthesizeSourceLinks`), used by every consumer
-     (report, query, policy, snapshot, traceability).
-   - `#[proof_fingerprint]` (a short body hash) gives staleness detection for ALL
-     functions, not just spec-drift-covered ones — closing the soundness rule
-     that gated migration. `--emit-link` emits the whole block incl. the hash.
-   - Migrated every example + the representable `tests/programs` fixtures; deleted
-     all `proof-registry.json` files, the JSON parser (`parseRegistryJson`), the
-     loader, and the `--allow-legacy-proof-registry` flag. `proof-status` origin
-     is `source_linked` | `hardcoded`. `check_no_example_registries.sh` (CI) keeps
-     `examples/` registry-free. History: `docs/REGISTRY_FIXTURE_INVENTORY.md`.
-   - Post-JSON namespace cleanup continues in items 2-4. Source files carry proof
-     links; generated workspaces may contain JSON artifacts, but no checked-in
-     JSON proof registry or parallel proof source returns.
-2. Move example proof THEOREMS out of the `Concrete.Proof.*` compiler namespace
-   into per-example namespaces. Policy: `#[proof_by]` / `#[ensures_proof]` links
-   move to `Concrete.Examples.<Ex>.Proofs.*`; registered spec PExprs and eval
-   scaffolding stay in `Concrete.Proof` for now because they are the
-   spec-drift oracle consumed by `Concrete.Proof.specs`.
-   - Dropping specs from the drift table is rejected: it would falsify the
-     showcase manifest's audited "spec-drift-tied" claim.
-   - Pilot done: `loop_invariant` (`count_upBody` /
-     `count_up_loop_preserves`, not registered specs) →
-     `Examples.LoopInvariant.Proofs`.
-   - Table-backed pattern done: `parse_validate` — 7 theorems →
-     `Examples.ParseValidate.Proofs`; `#[proof_by]` retargeted; `#[spec]` +
-     `parseValidateFns` / `*Fn` / `*Expr` scaffolding + the 3 `specs` entries
-     stay in `Concrete.Proof`; spec-drift regression still fires.
-   - Done after the table-backed pattern: `crypto_verify`, `fixed_capacity`,
-     and `constant_time_tag` moved their proof theorems to per-example modules
-     with specs still drift-tied through `Concrete.Proof`.
-   - **MIGRATION COMPLETE.** `elf_header` (5 theorems; `provedFunctions` strings
-     + `main_drifted.con` + `proof_pressure`'s reused `validate_header_correct`
-     retargeted) and `hmac_sha256` (the whole `Sha256Refine.lean` relocated to
-     `Concrete/Examples/HmacSha256/Proofs.lean` as `Examples.HmacSha256.Proofs`
-     with `open Concrete.Proof`/`open Concrete`; `sha256_init_correct` +
-     `ch_selects_high` pulled out of `Proof.lean` around the staying `chExpr`
-     spec; 12 source links + `evidence_classes/proved_by_lean`'s reused
-     `ch_selects_high` retargeted) are done. No example proof THEOREM remains in
-     `Concrete.Proof`; the registered spec PExprs + eval scaffolding stay there
-     as the drift oracle. All gates green after each example. Follow-up (separate,
-     later): the lower-layer `Concrete.ProofModel`/`Concrete.SpecRegistry` split
-     that would let the specs move too.
-3. ~~Add a CI/source guard that prevents new example-owned theorem bodies from
-   being added to `Concrete.Proof`.~~ **DONE.**
-   `scripts/tests/check_proof_namespace.sh` (+ `scripts/tests/proof_namespace_allowlist.txt`)
-   enforces three things: (1) no file under `Concrete/Examples/` may declare
-   `namespace Concrete.Proof`; (2) every `theorem`/`lemma` in `Concrete/Proof.lean`
-   must be on the allowlist — a new one fails until it is either moved to
-   `Concrete.Examples.<Ex>.Proofs` (if example-correctness) or added to the
-   allowlist (if genuine infrastructure, a reviewed act, same discipline as
-   snapshots); (3) the migrated flagship theorem names must not reappear in any
-   Concrete.Proof file. Registered spec PExprs / eval scaffolding / `specs` /
-   `provedFunctions` are `def`s, not theorems, so they stay freely. The allowlist
-   is sectioned: 22 infrastructure lemmas + 26 grandfathered pre-flagship
-   demo/legacy theorems (abs/max/clamp, legacy parse_byte/check_length/
-   decode_header, the spec-drift fixture) tracked as debt to migrate/delete later.
-   Wired into CI (`lean_action_ci.yml`) and `make test-proof-namespace`. With this
-   guard green, the theorem-namespace migration "stays done" and Phase 8 language
-   work may proceed.
-4. Deferred architecture refactor: split the current `Concrete.Proof` layering
+**Completed (recorded in [CHANGELOG.md](CHANGELOG.md)):** the JSON proof-registry retirement (source links are the only proof model); the per-example proof-theorem namespace migration (`Concrete.Examples.<Ex>.Proofs`) and its namespace guard; and the binary-first `concrete prove` agent surface — `--help=agent`/`--capabilities`/`--schema`, `--json` + `next_actions` with stable obligation ids, JSON modes for `--show-obligation`/`--replay`/`--emit-link`/`--nearest-lemmas`, `--emit-lean`, `--emit-artifacts`, `--check` (+ `--report check-proofs --json`), and `--workspace` with its CI fixture. Remaining Phase 3 work below.
+
+1. Deferred architecture refactor: split the current `Concrete.Proof` layering
    so registered example specs can move without a cycle, but do not let this
    block Phase 8 unless spec ownership or proof authoring starts depending on
    it. Target shape:
@@ -425,190 +364,80 @@ lemmas, and actionable failure diagnostics.
    Only after this split should registered example SPEC PExprs move from
    `Concrete.Proof.*Expr` into `Concrete.Examples.<Ex>.Proofs` or sibling
    `Specs` modules. Preserve the spec-drift tie throughout.
-5. ~~Make the `concrete prove` binary self-describing for agents.~~ **DONE.**
-   `concrete prove --help=agent` prints the proof-authoring sequence, output
-   formats, the exit-code taxonomy (0 success, 1 invalid invocation, 2
-   obligations missing, 3 stale, 4 proof-check failure, 5 solver/checker
-   failure, 6 internal error), and the next command per status. Process exit is
-   wired to 0/2/3 for `prove <file> <fn>` (proved/missing/stale).
-6. ~~Add `concrete prove --capabilities`~~ **DONE.** Emits JSON: schema_version,
-   features (`prove_json`, `show_obligation_json`, `emit_lean`=true,
-   `emit_link`, `nearest_lemmas`=true, `replay_json`), obligation_kinds,
-   evidence_classes, proof_model, link_attributes, mcp_available=false.
-7. ~~Add `concrete prove --schema`~~ **DONE.** Prints the JSON schema + version
-   for `--json` output.
-8. ~~Add `concrete prove --json`~~ **DONE.** Structured proof context: function,
-   eligibility, exclusion_reason, body_fingerprint, proof_link (spec/proof/
-   ensures_proof/coverage/fingerprint/origin), status, evidence_class,
-   obligations (id/kind/status), replay_command, proofkit_imports,
-   suggested_theorems, and `next_actions`. Obligations now carry stable ids
-   (`<qual>@<line>#<Ox>`, the same key as `--report contracts`/`--replay`),
-   `source_line`, `hypotheses`, and `conclusion` (single source `loopObInfo`).
-   Process exit codes wired to the taxonomy (0 proved · 2 missing · 3 stale).
-   (NEXT: per-obligation source spans as ranges; nearest_lemmas.)
-9. ~~Add `next_actions` to every proof-authoring JSON response.~~ **DONE** for
-   `--json` (kind/command/output_format/resolves; `show_obligation`/`emit_link`/
-   `check_proofs`/`replay`/`run_audit`/`open_docs` by status). Extend to the
-   other JSON modes as they land (item 10).
-10. ~~Add JSON modes for existing human proof subcommands.~~ **DONE.**
-   `--show-obligation <id> --json` (accepts the stable id or short "O4"; emits
-   id/kind/status/source_line/hypotheses/conclusion/theorem_shape/next_actions),
-   `--replay --json` (all_pass + per-obligation closes, exit 4 on regression),
-   and `--emit-link --json` (fields + pasteable link_block + next_actions). All
-   carry the same stable ids (`<qual>@<line>#<Ox>`) as `--json`/`--report
-   contracts`/`--replay`.
-11. ~~Add `concrete prove --emit-lean` as a compilable Lean stub generator.~~
-   **DONE.** `Report.emitLeanStub` emits a self-contained, kernel-compilable
-   single-function stub: header comment with suggested ProofKit lemmas, imports
-   (`Concrete.Proof`/`Concrete.ProofKit`), per-function namespace
-   (`Concrete.Proof.Generated.<fn>`), the extracted `<fn>Expr : PExpr` +
-   `<fn>Fn : PFnDef`, a single-entry `fns : FnTable`, an `eval_<fn>` helper, the
-   obligation TODO blocks (loop VCs + `#[ensures]`, each with id/kind/status/
-   hyps/goal and a `lemmaRecipeFor` recipe), and a `<fn>_refines_spec` theorem
-   ending in `= sorry := by sorry` (no invented proof). Default prints to stdout;
-   `--out PATH` writes (creating parent dirs), refusing to clobber without
-   `--force`; `--stdout` overrides `--out` to print without writing. Verified
-   the emitted stub typechecks (`lake env lean`, exit 0, zero errors).
-   `--capabilities` now reports `emit_lean=true`. Gate: `test_prove_cli.sh`
-   (34/0).
-12. ~~Add failed-obligation artifacts under a stable build path.~~ **DONE.**
-   `concrete prove <file> <fn> --emit-artifacts [--out-dir DIR]`
-   (`Report.proveArtifacts`) writes one reproducible bundle per obligation that
-   does NOT currently close — loop VCs absent from the kernel-discharged set,
-   call-site VCs that `bv_decide` doesn't close, and (when the function itself is
-   `missing`/`stale`/`blocked`) a function-level `#refines_spec` bundle. Each
-   lands in `<dir>/<fn>/<sanitized_obligation_id>/` (default `dir=.build/prove`,
-   gitignored) with `context.json` (stable id + kind/status/hyps/goal +
-   `lemmaRecipeFor` recipe), `failed.lean` (the compilable single-function stub,
-   banner-tagged with the obligation — verified to typecheck), `command.txt`
-   (inspect → regenerate → re-check commands), and `README.txt`. A cleanly-proved
-   function emits nothing and exits 0. `--capabilities` reports
-   `failed_artifacts=true`. Gate: `test_prove_cli.sh` (42/0).
-13. ~~Add `concrete prove --workspace DIR`.~~ **DONE.** `Report.workspaceFiles`
-    composes the read-only prove surfaces into one self-contained directory
-    (high-level wrapper, NOT a second proof model):
-    - `manifest.json` — the `--json` proof report (status, fingerprint, link, next_actions).
-    - `context.json` — proof-authoring inputs: spec/proof_by/ensures_proof refs,
-      `proof_fingerprint`, ProofKit imports, suggested theorem names, stub/link file names.
-    - `obligations/<id>.json` — one per obligation (loop VCs + `#[ensures]`):
-      source line, hypotheses, conclusion, status, `lemmaRecipeFor` recipe, and
-      replay/check commands. Filename = sanitized stable id.
-    - `<Fn>Proofs.lean` — the `--emit-lean` stub (verified to typecheck).
-    - `link.con.txt` — the `--emit-link` source attributes.
-    - `check.sh` / `replay.sh` — exact local commands (chmod +x).
-    - `README.md` — function-specific workflow.
-
-    `--workspace` takes an optional dir (default `.build/prove/<fn>/workspace`,
-    gitignored). `--capabilities` reports `workspace=true`; `--help=agent` has an
-    ALL-IN-ONE section. **Terminology:** these are disposable build outputs, not a
-    proof registry; source truth stays the `.con` file + in-source attributes.
-    The old `proof-registry.json` side-channel stays deleted.
-14. ~~Add a CI fixture for `concrete prove --workspace`.~~ **DONE.**
-    `test_prove_cli.sh` generates a workspace for `loop_invariant.count_up`,
-    asserts all seven base files + a populated `obligations/`, validates
-    `manifest.json`/`context.json`/an obligation file as JSON with their
-    load-bearing fields, checks the link block and stub theorem, asserts
-    `workspace=true` in capabilities, and asserts **no `proof-registry.json`
-    appears anywhere in the workspace tree**. Gate now 63/0.
-15. ~~Add a structured proof-check step for agent-written Lean.~~ **DONE.**
-    `concrete prove <file> <fn> --check [--json]` runs the Lean kernel
-    (`lake env lean` on `import Concrete` + `#check @<theorem>`) on the
-    function's linked theorem(s) and maps the result back to obligation id
-    (`<qual>#refines_spec` / `<qual>#ensures`), theorem name, source line, the
-    regeneration `stub_command`, and `lean_error` text. Stable statuses:
-    `checked` (kernel-verified), `failed` (kernel rejected the proof),
-    `missing_theorem` (no link, or the named theorem doesn't resolve — detected
-    via the `unknown` identifier error), `stale` (theorem checks but the
-    obligation's fingerprint drifted), `env_failure` (toolchain/lake error).
-    Exit codes follow the taxonomy: 0 checked · 2 missing · 3 stale · 4
-    proof-check failure · 5 solver/checker failure. The missing-link case
-    short-circuits without invoking Lean. This is the closed repair loop —
-    agents read structured status, not raw stderr. `--capabilities` reports
-    `check=true`; `--help=agent` lists it at step 6. Gate: `test_prove_cli.sh`
-    (47/0, with a `lake`-guarded kernel assertion).
-    Whole-file/project variant: `concrete <file> --report check-proofs --json`
-    runs the same kernel pass over every linked theorem (refinement + `#[ensures]`
-    discharge) and emits `{schema_version, toolchain, all_checked, checks[
-    {function, theorem, obligation_kind, origin, status, source_line}],
-    lean_error, summary}` with the same status vocabulary; the human text report
-    is unchanged. (NEXT: per-check error spans when a function carries multiple
-    theorems.)
-16. ~~Add nearest-lemma and proof-recipe hints.~~ **DONE.** `concrete prove
-    <file> <fn> --nearest-lemmas [--json]` (`Report.nearestLemmas` +
-    `lemmaRecipeFor`): a static map from obligation kind → tactic/lemmas
-    (linear→`omega`; preservation→`eval_while_count`; overflow→`bv_decide`;
-    array_bounds→`ProofKit.Array`; ensures→`ProofKit.Refinement`) plus
-    feature-level lemma families (Loops/Array/BitVec/Calls). `capabilities`
-    reports `nearest_lemmas=true`. Scoping: `--nearest-lemmas <id>` narrows the
-    recipes to one obligation (accepts the stable `<qual>@<line>#<Ox>` id or the
-    short `O4`/`ensures` form, the same keys as `--json`/workspace); unknown id
-    returns an `error`; no id keeps the all-obligations behavior. (NEXT: recipes
-    for bare array/call obligations that have no loop contract.)
-17. Add proof minimization: `concrete prove --minimize <obligation_id>` emits
+2. Add one bounded proof-pattern corpus that is both regression suite and
+    teaching set before Phase 8 language work starts. This is the final
+    proof-authoring bridge from "flagships prove it works" to "a new author can
+    copy a small pattern"; it must not grow into a second proof-research phase.
+    Put it under `examples/proof_patterns/`, with one small subexample per shape:
+    straight-line refinement, array read/write frame proof, loop copy proof,
+    fold/reduction proof, call composition proof, runtime-safety proof
+    (bounds/div/overflow plus one negative variant), ghost-assisted proof,
+    partial/missing/stale proof states, `concrete prove --workspace`, and an
+    agent repair fixture where `--check --json` maps a failing Lean proof back
+    to an obligation id. Each subexample must carry source-linked proofs only,
+    the exact `concrete prove --workspace`, `--json`, `--emit-lean`, `--check
+    --json`, expected next obligation, audit class, and pinned output. Tests
+    assert `check-proofs` for proved examples, expected `proof-status` classes,
+    stable obligation ids, typechecking emitted stubs up to placeholders, no
+    `proof-registry.json` in generated workspaces, and honest failures for
+    negative variants. After this corpus and its gates are green, Phase 8 may
+    proceed unless a concrete regression exposes a missing proof primitive.
+3. Add proof minimization: `concrete prove --minimize <obligation_id>` emits
     the smallest source / ProofCore / Lean slice needed to reproduce a failed
     obligation. This should be built after JSON and failed-artifact formats are
     stable, not before.
-18. Define and document stable theorem naming conventions in tool output:
+4. Define and document stable theorem naming conventions in tool output:
     `<fn>_refines_spec`, `<fn>_<obligation>_proved`,
     `<fn>_loop_<name>_preserves`, and
     `<fn>_call_<callee>_discharges_requires`. `concrete prove` should suggest
     these names instead of leaving agents to invent them.
-19. Add CI gates for the agent-facing proof surfaces: snapshot representative
+5. Add CI gates for the agent-facing proof surfaces: snapshot representative
     `--json` output, validate schema versioning, ensure generated Lean stubs
     parse/check up to the intended placeholder boundary, assert replay JSON
     reports the same statuses as human replay, and assert proof-check JSON maps
     a failing Lean proof back to the intended obligation id.
-20. Add one binary-first proof authoring corpus that is both regression suite
-    and teaching set. Each example must carry the exact `concrete prove
-    --workspace`, `--json`, `--emit-lean`, `--check --json`, expected next
-    obligation, audit class, and pinned output. Cover straight-line refinement,
-    `bv_decide`, `omega`, call composition, counter loop, array update loop,
-    multi-store loop, ghost-value proof, runtime-safety VC, stale proof repair,
-    source-link migration, mixed evidence flagship, and full refinement
-    flagship. This replaces separate "agent fixtures" and "pedagogical corpus"
-    lists; it is one corpus seen by both humans and agents.
-21. Add human docs only after the binary path exists:
+6. Add human docs only after the binary path exists:
     `docs/AGENT_PROOF_AUTHORING.md` and an optional repo-root `AGENTS.md`
     should summarize the binary workflow and point to the ProofKit guide, but
     they must not be the source of truth for agents using only an installed
     binary.
-22. Add MCP only after the CLI/JSON/stub/workspace surfaces are stable. The MCP
+7. Add MCP only after the CLI/JSON/stub/workspace surfaces are stable. The MCP
     server should wrap the binary rather than duplicate logic, exposing resources such
     as `concrete://prove/<fn>/obligations`, `concrete://proofkit/lemmas`, and
     `concrete://examples/evidence-classes`, plus tools for `prove_json`,
     `show_obligation`, `emit_lean`, `check`, `replay`, and `check_proofs`.
-23. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
+8. Build reusable proof lemmas for arrays: lookup, update, length, in-bounds,
     OOB stuck behavior.
-24. Build reusable lemmas for loop-carried state and `while_step`.
-25. Build reusable lemmas for BitVec operations used by flagships.
-26. Build reusable lemmas for structs, fields, enum construction, match, Result,
+9. Build reusable lemmas for loop-carried state and `while_step`.
+10. Build reusable lemmas for BitVec operations used by flagships.
+11. Build reusable lemmas for structs, fields, enum construction, match, Result,
     Option, and bounded-buffer invariants.
-27. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
+12. Upgrade generated proof stubs for real shapes: arrays, structs, enums,
     fixed buffers, Result/Option, loops, source contracts, and refinement
     composition. Stubs should emit spec target, `PExpr` body, FnTable skeleton,
     expected theorem statement, common imports/tactics, and TODO blocks for
     loop invariants. These items enrich what `--emit-lean` produces; they do
     not introduce a second stub generator.
-28. Add generated composition scaffolds: FnTable entries, call lemmas, callee
+13. Add generated composition scaffolds: FnTable entries, call lemmas, callee
     refinement dependencies, and composed theorem skeletons.
-29. Add generated loop-invariant templates for common proof shapes:
+14. Add generated loop-invariant templates for common proof shapes:
     counter loop over array writes, copy loop, fold loop, multi-store loop,
     offset loop, and block-processing loop.
-30. Improve failed-proof diagnostics after `--json`, failed artifacts, and
+15. Improve failed-proof diagnostics after `--json`, failed artifacts, and
     `--minimize` exist: classify common failures into actionable categories
     such as missing callee theorem, stale source link, missing table entry,
     failed arithmetic bridge, insufficient frame fact, and spec/extraction
     mismatch. Diagnostics should point to the already-generated artifact or
     next action instead of introducing another parallel proof surface.
-31. Add proof-result caching once proof artifacts and fingerprints are stable.
-32. Add simple auto-discharge for structural obligations that do not need human
+16. Add proof-result caching once proof artifacts and fingerprints are stable.
+17. Add simple auto-discharge for structural obligations that do not need human
     proof search.
-33. Add a small verified/spec-checked standard proof library for common
+18. Add a small verified/spec-checked standard proof library for common
     predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
     constant-time source shape.
-34. Add AI-assisted proof repair only after artifacts, statuses, and replay are
+19. Add AI-assisted proof repair only after artifacts, statuses, and replay are
     stable enough to validate suggestions mechanically.
-35. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
+20. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
    establish not just what an iteration *changes* but what it *preserves* — the
    frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
    "a proof mentioning only its footprint preserves everything else"). Today
@@ -810,6 +639,8 @@ Done when: parser/security examples can show obligations for bounds, div/mod
 zero, overflow profile, casts, and loop bounds with statuses
 `proved`, `enforced`, `assumed`, `missing`, or `blocked`.
 
+**Completed (recorded in [CHANGELOG.md](CHANGELOG.md)):** loop-derived runtime-safety obligations (bounds/div/overflow fold in the enclosing loop `#[invariant]` + guard) and the nonlinear/bitvector overflow tier (interval bound → widened unsigned `bv_decide`). Remaining Phase 7 work below.
+
 1. Define stable obligation schema v1: id, kind, source span, function,
    expression, dependencies, evidence status, discharging theorem/check/
    assumption, and replay command.
@@ -817,58 +648,33 @@ zero, overflow profile, casts, and loop bounds with statuses
    abort/panic, recoverable errors, test failures, and how error flow interacts
    with capabilities, proofs, runtime obligations, and audit output.
 3. Generate narrowing/invalid-cast obligations.
-4. ~~Generate loop-derived runtime-safety facts so bounds and overflow
-   obligations can use established loop invariants instead of only entry
-   preconditions and constants.~~ **DONE.** Bounds, division, and overflow
-   obligations now fold the enclosing loop's `#[invariant]` + guard into the
-   omega goal (`scopedBounds/Div/Arith` thread an in-scope hypothesis list).
-   Sound by construction: the ordered walk drops a hypothesis the moment the
-   body mutates a variable it mentions, so a mid-body index mutation reverts the
-   obligation to `unproven` rather than proving a false bound. Demonstrated in
-   `evidence_classes/runtime_checked` (`sum_loop` proved, `sum_loop_unsound`
-   unproven) and `constant_time_tag.ct_compare` (`a[i]`/`b[i]` now omega-proved
-   from the invariant).
-4b. ~~Nonlinear/bitvector overflow tier (small fixed-width `var * var` bounds
-   like `255 * 256`) — interval analysis first, `bv_decide` where needed,
-   classified `proved_by_kernel_decision` only if Lean checks it.~~ **DONE.**
-   When every operand of a `+`/`*` expression has a non-negative bounded range
-   (from `#[requires]` / loop invariants), `exprIntervalMax` computes the result
-   range; if it fits the type, `overflowBVGoal` emits a WIDENED unsigned
-   `bv_decide` goal (`Main.bvDischargeOverflow`) so the no-overflow fact is
-   kernel-checked, shown `proved_by_kernel_decision (bv_decide)`. Sound by gating:
-   non-negative operands, `+`/`*` only (no unsigned underflow), wrap-free width.
-   `fixed_point.scale_clamp`'s `sample * gain` moves unproven → proved; weakening
-   the operand bounds so the product can exceed i32 (or removing a bound) reverts
-   it to `unproven` — never a false green. NEXT (open): signed/negative-operand
-   intervals; subtraction; nesting deeper than the interval can bound; lifting the
-   functional postcondition (exact result range) to a Lean proof.
-5. Generate loop bound and variant obligations for bounded loops.
-6. Define policy gates for `#[overflow_checked]`: release profiles may require
+4. Generate loop bound and variant obligations for bounded loops.
+5. Define policy gates for `#[overflow_checked]`: release profiles may require
    overflow obligations for selected functions/packages, while ordinary
    examples remain quiet unless they opt in. Reports must distinguish
    `overflow_checked`, `overflow checking not requested`, and explicit wrapping
    or saturating arithmetic.
-7. Generate obligations for panic/abort/assert-as-denial-of-service risks:
+6. Generate obligations for panic/abort/assert-as-denial-of-service risks:
    unchecked indexing, unwrap-like operations, explicit abort paths, failed
    assertions, and profile-dependent panic behavior.
-8. Generate byte/text/path boundary obligations: invalid UTF-8, lossy
+7. Generate byte/text/path boundary obligations: invalid UTF-8, lossy
    conversion, OS-string conversion, path normalization assumptions, and
    rejected implicit conversions.
-9. Generate stack/recursion obligations where the profile claims boundedness.
-10. Report runtime-error obligations in human and JSON forms.
-11. Add policy gates that can require selected runtime-error obligations to be
+8. Generate stack/recursion obligations where the profile claims boundedness.
+9. Report runtime-error obligations in human and JSON forms.
+10. Add policy gates that can require selected runtime-error obligations to be
    proved/enforced before graduation.
-12. Add a runtime-error regression corpus: invalid cast, loop-bound violation,
+11. Add a runtime-error regression corpus: invalid cast, loop-bound violation,
     lossy byte/text conversion, ignored fallible result, unwrap-like failure,
     panic/abort profile mismatch, and release-policy rejection for missing
     `#[overflow_checked]` evidence where required.
-13. Add a runtime-error-obligation flagship requirement: one graduated example
+12. Add a runtime-error-obligation flagship requirement: one graduated example
     must demonstrate no OOB/div-zero/overflow under a named profile.
-14. Add high-quality diagnostics for obligation failures: violated obligation,
+13. Add high-quality diagnostics for obligation failures: violated obligation,
     source expression, required evidence, current status, and next action.
-15. Add obligation suppression only through explicit assumptions or policy
+14. Add obligation suppression only through explicit assumptions or policy
     waivers, never comments or hidden allowlists.
-16. Prove or validate obligation-generation soundness for the first obligation
+15. Prove or validate obligation-generation soundness for the first obligation
     kinds through the compiler soundness bridge.
 
 ## Phase 8: Language Usability And Daily Workflow

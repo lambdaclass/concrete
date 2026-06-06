@@ -34,6 +34,62 @@ Deferred (not blocking): a lower-layer `Concrete.ProofModel` / `Concrete.SpecReg
 split that would also let the registered spec PExprs move without a circular
 import. The current spec-drift setup is sound; this is later architecture work.
 
+### Binary-first `concrete prove` agent surface (2026-06-05)
+
+`concrete prove` became a self-describing, machine-drivable surface so an agent
+can author and verify a proof against an installed binary it can't read the repo
+for. The JSON proof-registry side-channel was already retired (source links are
+the only proof model); this milestone is the agent-facing tooling on top of it.
+
+- Discovery: `--help=agent` (workflow + exit-code taxonomy 0/1/2/3/4/5/6),
+  `--capabilities` (JSON feature/obligation/evidence catalogue + schema version),
+  `--schema` (schema for `--json`).
+- Structured context: `--json` — function, eligibility, body fingerprint, proof
+  link, status, evidence class, obligations with stable ids
+  (`<qual>@<line>#<Ox>`, the same key across `--report contracts`/`--replay`) +
+  source line / hypotheses / conclusion, replay command, ProofKit imports,
+  suggested theorems, and `next_actions` on every response. Process exit follows
+  the taxonomy (0 proved · 2 missing · 3 stale).
+- JSON modes for the human subcommands: `--show-obligation <id> --json`,
+  `--replay --json` (per-obligation closes; exit 4 on regression),
+  `--emit-link --json`, and `--nearest-lemmas [<id>] --json` (recipe per
+  obligation kind + feature lemma families; scopable to one obligation).
+- Generators: `--emit-lean` (compilable single-function stub ending in `sorry`,
+  verified to typecheck; `--out`/`--force`/`--stdout`); `--emit-artifacts`
+  (one reproducible bundle per UNPROVED obligation under `.build/prove/…` —
+  context.json/failed.lean/command.txt/README.txt); `--workspace [dir]` (the
+  all-in-one: manifest/context/obligations JSON + stub + link block + check/
+  replay scripts + README, a disposable build output, never a proof registry).
+- The closed loop: `--check [--json]` runs the Lean kernel on a function's linked
+  theorem(s) and maps the result back to obligation id / theorem / source line /
+  Lean error with stable statuses (checked / failed / missing_theorem / stale /
+  env_failure); whole-file `--report check-proofs --json` is the project-wide
+  twin. Agents read structured status, not raw `lake env lean` stderr.
+- Gate: `scripts/tests/test_prove_cli.sh` (68 assertions, lake-guarded for the
+  kernel checks). Remaining agent-tooling items (docs, MCP, minimize, the
+  proof-pattern corpus) stay in ROADMAP Phase 3.
+
+### Loop-derived and nonlinear runtime-safety obligations (2026-06-04)
+
+Runtime-safety obligations stopped relying only on entry preconditions/constants.
+
+- Bounds / division / overflow obligations now fold the enclosing loop's
+  `#[invariant]` + guard into the omega goal (`scopedBounds`/`scopedDiv`/
+  `scopedArith` thread an in-scope hypothesis list). Sound by construction: the
+  ordered walk drops a hypothesis the moment the body mutates a variable it
+  mentions, so a mid-body index mutation reverts the obligation to `unproven`
+  rather than proving a false bound. Shown in `evidence_classes/runtime_checked`
+  (`sum_loop` proved, `sum_loop_unsound` unproven) and `constant_time_tag`
+  (`a[i]`/`b[i]` omega-proved from the invariant).
+- Nonlinear / bitvector overflow tier: when every operand of a `+`/`*` has a
+  non-negative bounded range, `exprIntervalMax` computes the result range and, if
+  it fits the type, `overflowBVGoal` emits a widened unsigned `bv_decide` goal
+  (`Main.bvDischargeOverflow`) so the no-overflow fact is kernel-checked
+  (`proved_by_kernel_decision (bv_decide)`). Sound by gating (non-negative
+  operands, `+`/`*` only, wrap-free width). `fixed_point.scale_clamp`'s
+  `sample * gain` moves unproven → proved; weakening the operand bounds reverts
+  it to `unproven` — never a false green.
+
 ### Source contracts become a real proof-authoring surface (2026-06-04)
 
 Source contracts moved from reported metadata to an end-to-end authoring path.
