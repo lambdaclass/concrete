@@ -3696,6 +3696,179 @@ def loopObInfo (lc : LoopContract) (oblId qualName : String) (ensures : List Exp
       some ("variant_decreases", invs ++ [guardStr], s!"{variantBody} < {variantStr}", status false) else none
   | _ => none
 
+/-! ## Verification-condition schema v1 (Phase 2 foundation)
+
+A single, project-wide, machine-readable view over every obligation the compiler
+generates. Each VC carries the schema-v1 fields: a stable `id`, source `loc`
+(span), `kind`, separated `hypotheses` + `conclusion`, the `origin` function,
+`dependencies` (proof links it leans on), an `arith_profile`, and the
+`expected_discharge` mode. This is deliberately a DESCRIPTION of the obligation
+and which backend *should* own it — it does not itself run any solver. Discharge
+status stays in the existing per-kind reports; keeping the schema separate is
+what stops a solver from silently becoming a "proved" path. -/
+
+def vcSchemaVersion : Nat := 1
+
+structure VC where
+  id            : String
+  kind          : String       -- precondition | postcondition | assert | vacuity |
+                                -- array_bounds | div_nonzero | no_overflow |
+                                -- loop_invariant_init | loop_invariant_preservation |
+                                -- loop_exit_implies_post | variant_nonnegative | variant_decreases
+  fn            : String
+  file          : String
+  line          : Nat
+  hypotheses    : List String
+  conclusion    : String
+  origin        : String
+  dependencies  : List String
+  arithProfile  : String       -- constant | linear | bitvector | nonlinear | refinement | operational | unsupported
+  dischargeMode : String       -- constant_fold | omega | bv_decide | lean | smt | none
+
+/-- Split a compiler-generated goal string `∀ (vars : T), (h1) → h2 → (concl)`
+    into (hypotheses, conclusion): drop the binder, split the body on top-level
+    ` → `, the conclusion is the final component. The goal strings are
+    compiler-generated with a regular shape, so this is exact, not heuristic. -/
+def splitVCGoal (g : String) : List String × String :=
+  let body :=
+    if g.startsWith "∀" then
+      match g.splitOn "), " with
+      | _ :: rest => "), ".intercalate rest
+      | [] => g
+    else g
+  let parts := body.splitOn " → "
+  match parts.reverse with
+  | concl :: hypsRev => (hypsRev.reverse, concl)
+  | [] => ([], body)
+
+/-- Function qualname embedded in a VC key: strip the `#suffix` and any `@line`. -/
+private def vcFnOfKey (key : String) : String :=
+  let beforeHash := (key.splitOn "#").head?.getD key
+  (beforeHash.splitOn "@").head?.getD beforeHash
+
+/-- Collect the project-wide VC schedule. Covers preconditions (call sites),
+    postconditions (`#[ensures]`), asserts, vacuity, the runtime-safety
+    obligations (array bounds, div/mod nonzero, `#[overflow_checked]`), and the
+    loop obligations (O1 init, O2 preservation, O3 exit→post, O4/O5 variant). -/
+def collectVCs (modules : List Module) (locMap : FnLocMap)
+    (registry : ProofRegistry) : List VC := Id.run do
+  let loc := fun (fq : String) =>
+    match locMap.find? (·.qualName == fq) with
+    | some e => (e.file, e.fnSpan.line)
+    | none => ("", 0)
+  let mkVC := fun (id kind fq file : String) (line : Nat) (hyps : List String)
+      (concl origin : String) (deps : List String) (profile mode : String) =>
+    ({ id := id, kind := kind, fn := fq, file := file, line := line, hypotheses := hyps,
+       conclusion := concl, origin := origin, dependencies := deps,
+       arithProfile := profile, dischargeMode := mode } : VC)
+  let mkSplit := fun (key kind profile mode : String) (goal : String) (deps : List String) =>
+    let (hyps, concl) := splitVCGoal goal
+    let fq := vcFnOfKey key
+    let (file, line) := loc fq
+    mkVC key kind fq file line hyps concl s!"{kind} in {fq}" deps profile mode
+  let mut out : List VC := []
+  -- preconditions at call sites (structural: includes the constant-decided ones).
+  for o in callSiteObligations modules do
+    let (file, line) := loc o.caller
+    let concl := (toLeanProp o.specExpr).getD (Concrete.fmtExpr o.specExpr)
+    let hyps := o.hyps.filterMap toLeanProp
+    let (profile, mode) := match o.baseStatus with
+      | "proved_at_callsite" => ("constant", "constant_fold")
+      | "failed_at_callsite" => ("constant", "constant_fold")
+      | _ => match o.leanGoal with
+             | some _ => ("bitvector", "bv_decide")
+             | none   => if (toLeanProp o.specExpr).isSome then ("linear", "omega") else ("unsupported", "none")
+    out := out ++ [mkVC o.key "precondition" o.caller file line hyps concl
+      s!"precondition of {o.callStr} in {o.caller}" [] profile mode]
+  -- asserts and vacuity (goal-string generators).
+  for (k, g) in assertGoals modules do out := out ++ [mkSplit k "assert" "linear" "omega" g []]
+  for (k, g) in vacuityGoals modules do out := out ++ [mkSplit k "vacuity" "linear" "omega" g []]
+  -- array bounds.
+  for o in boundsObligations modules do
+    let (file, line) := loc o.fnQual
+    let (hyps, concl, profile, mode) := match o.leanGoal with
+      | some g => let (h, c) := splitVCGoal g; (h, c, "linear", "omega")
+      | none =>
+        let c := s!"0 ≤ {Concrete.fmtExpr o.idxExpr} ∧ {Concrete.fmtExpr o.idxExpr} < {o.size}"
+        if o.closedVerdict.isSome then ([], c, "constant", "constant_fold") else ([], c, "unsupported", "none")
+    out := out ++ [mkVC o.key "array_bounds" o.fnQual file line hyps concl
+      s!"index {o.arrName}[{Concrete.fmtExpr o.idxExpr}] (size {o.size}) in {o.fnQual}" [] profile mode]
+  -- div/mod nonzero.
+  for o in divObligations modules do
+    let (file, line) := loc o.fnQual
+    let (hyps, concl, profile, mode) := match o.leanGoal with
+      | some g => let (h, c) := splitVCGoal g; (h, c, "linear", "omega")
+      | none =>
+        let c := s!"{Concrete.fmtExpr o.divExpr} ≠ 0"
+        if o.closedVerdict.isSome then ([], c, "constant", "constant_fold") else ([], c, "unsupported", "none")
+    out := out ++ [mkVC o.key "div_nonzero" o.fnQual file line hyps concl
+      s!"{if o.isMod then "%" else "/"} divisor {Concrete.fmtExpr o.divExpr} in {o.fnQual}" [] profile mode]
+  -- overflow (omega tier, then the interval-gated bv_decide fallback, then const).
+  for o in overflowObligations modules do
+    let (file, line) := loc o.fnQual
+    let (hyps, concl, profile, mode) := match o.leanGoal, o.bvGoal with
+      | some g, _ => let (h, c) := splitVCGoal g; (h, c, "linear", "omega")
+      | none, some g => let (h, c) := splitVCGoal g; (h, c, "bitvector", "bv_decide")
+      | none, none =>
+        let c := s!"{o.lo} ≤ {Concrete.fmtExpr o.opExpr} ∧ {Concrete.fmtExpr o.opExpr} ≤ {o.hi}"
+        if o.closedVerdict.isSome then ([], c, "constant", "constant_fold") else ([], c, "unsupported", "none")
+    out := out ++ [mkVC o.key "no_overflow" o.fnQual file line hyps concl
+      s!"no-overflow of {Concrete.fmtExpr o.opExpr} in [{o.lo}, {o.hi}] in {o.fnQual}" [] profile mode]
+  -- loop obligations (reuse loopObInfo for kind/hyps/conclusion).
+  for (pfx, f) in (modules.flatMap allFunctions).filter (fun (_, f) => !f.loopContracts.isEmpty) do
+    let fq := pfx ++ f.name
+    let (file, _) := loc fq
+    let extraLets := letConstMap f.body
+    let retExpr := loopExitReturn f.body
+    let reg := registry.find? (·.function == fq)
+    let invDep := match reg with | some e => if e.coverage == "invariant" && !e.proof.isEmpty then [e.proof] else [] | none => []
+    for lc in f.loopContracts do
+      for oid in ["O1", "O2", "O3", "O4", "O5"] do
+        match loopObInfo lc oid fq f.ensures extraLets retExpr [] with
+        | some (kind, hyps, concl, _) =>
+          let (profile, mode) := match oid with
+            | "O2" => ("operational", "lean")
+            | "O3" => ("operational", "lean")
+            | _    => ("linear", "omega")
+          let deps := if oid == "O2" then invDep else []
+          out := out ++ [mkVC (loopVCKey fq lc.line oid) kind fq file lc.line hyps concl
+            s!"{kind} (loop @ line {lc.line}) in {fq}" deps profile mode]
+        | none => pure ()
+  -- postconditions (#[ensures]) discharged by registered Lean proofs.
+  for (pfx, f) in modules.flatMap allFunctions do
+    let fq := pfx ++ f.name
+    if f.ensures.isEmpty then continue
+    let (file, line) := loc fq
+    let reg := registry.find? (·.function == fq)
+    let dep := match reg with
+      | some e => (match e.ensuresProof with | some t => [t] | none => []) ++ (if !e.proof.isEmpty then [e.proof] else [])
+      | none => []
+    let mut ei := 0
+    for ens in f.ensures do
+      out := out ++ [mkVC s!"{fq}#ensures{ei}" "postcondition" fq file line
+        (f.requires.map Concrete.fmtExpr) (Concrete.fmtExpr ens) s!"postcondition in {fq}"
+        dep "refinement" (if dep.isEmpty then "none" else "lean")]
+      ei := ei + 1
+  return out
+
+/-- Human-readable VC schedule, grouped by originating function. -/
+def vcsReport (modules : List Module) (locMap : FnLocMap) (registry : ProofRegistry) : String := Id.run do
+  let vcs := collectVCs modules locMap registry
+  if vcs.isEmpty then return "=== Verification Conditions (schema v1) ===\n\n(no VCs generated)"
+  let mut out := "=== Verification Conditions (schema v1) ==="
+  let fns := (vcs.map (·.fn)).eraseDups
+  for fq in fns do
+    out := out ++ s!"\n\n{fq}"
+    for v in vcs.filter (·.fn == fq) do
+      let hyps := if v.hypotheses.isEmpty then "(none)" else " ∧ ".intercalate v.hypotheses
+      let deps := if v.dependencies.isEmpty then "" else s!"\n      dependencies:  {", ".intercalate v.dependencies}"
+      out := out ++ s!"\n  [{v.id}]  {v.kind}"
+        ++ s!"\n      profile/discharge:  {v.arithProfile} / {v.dischargeMode}"
+        ++ s!"\n      hypotheses:  {hyps}"
+        ++ s!"\n      conclusion:  {v.conclusion}{deps}"
+  out := out ++ s!"\n\nTotal: {vcs.length} VCs"
+  return out
+
 /-- `concrete prove <file> <fn> --json`: the primary machine-readable proof
     context. Same data as `proveReport`, structured, with `next_actions`. -/
 def proveReportJson (pc : Concrete.ProofCore) (registry : ProofRegistry)
@@ -5071,6 +5244,35 @@ def diagnosticsJson (modules : List CModule) (locMap : FnLocMap := [])
   (factsEnvelope (collectCoreFacts modules locMap registry pc)).render
 
 open Json in
+/-- One VC as a JSON object (schema v1). -/
+def vcToJson (v : VC) : Val :=
+  .obj [
+    ("id", .str v.id),
+    ("kind", .str v.kind),
+    ("function", .str v.fn),
+    ("loc", .obj [("file", .str v.file), ("line", .num (Int.ofNat v.line))]),
+    ("hypotheses", .arr (v.hypotheses.map (.str ·))),
+    ("conclusion", .str v.conclusion),
+    ("origin", .str v.origin),
+    ("dependencies", .arr (v.dependencies.map (.str ·))),
+    ("arith_profile", .str v.arithProfile),
+    ("expected_discharge", .str v.dischargeMode)
+  ]
+
+open Json in
+/-- Versioned JSON envelope of every generated VC (schema v1). -/
+def vcsJson (modules : List Module) (locMap : FnLocMap) (registry : ProofRegistry)
+    (schemaVer : Nat) : String :=
+  let vcs := collectVCs modules locMap registry
+  (Val.obj [
+    ("schema_version", .num (Int.ofNat schemaVer)),
+    ("schema_kind", .str "vcs"),
+    ("vc_schema_version", .num (Int.ofNat vcSchemaVersion)),
+    ("count", .num (Int.ofNat vcs.length)),
+    ("vcs", .arr (vcs.map vcToJson))
+  ]).render
+
+open Json in
 /-- Build proof-specific summary from proof-related facts. -/
 private def buildProofSummary (pc : Concrete.ProofCore) : Val :=
   let obCount (s : Concrete.ObligationStatus) := (pc.obligations.filter fun o => o.status == s).length
@@ -6174,7 +6376,15 @@ def schemaReport : String :=
           ("timestamp", .str "string"),
           ("fact_count", .str "number"),
           ("summary", .str "object"),
-          ("facts", .str "object[]")])])
+          ("facts", .str "object[]")])]),
+      ("vcs", .obj [
+        ("description", .str "Verification-condition schedule from --report vcs --json (schema v1). A VC describes an obligation and the backend that SHOULD discharge it; it does not itself run a solver."),
+        ("fields", .obj [
+          ("schema_version", .str "number"),
+          ("schema_kind", .str "\"vcs\""),
+          ("vc_schema_version", .str "number — VC schema version (currently 1)"),
+          ("count", .str "number"),
+          ("vcs", .str "object[] — each: id, kind, function, loc{file,line}, hypotheses[], conclusion, origin, dependencies[], arith_profile, expected_discharge")])])
     ]),
     ("policies", .obj [
       ("empty_result", .str "A query that matches zero facts returns a facts envelope with an empty facts array and fact_count 0. Semantic queries for unknown functions return a query_answer with answer \"not_found\". Neither case is an error."),

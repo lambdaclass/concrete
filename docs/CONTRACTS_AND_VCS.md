@@ -509,19 +509,46 @@ Loop contracts generate:
 - variant decreases
 - invariant plus exit condition implies postcondition
 
-Example VC:
+### Schema v1 (shipped)
 
-```text
-VC:
-  id: hmac.ct_compare.loop.i_le_16.preserve
-  kind: loop_invariant_preservation
-  hypotheses:
-    i >= 0
-    i <= 16
-    i < 16
-  conclusion:
-    i + 1 <= 16
-  evidence: proved_by_trusted_solver
+`Report.collectVCs` projects every obligation above into a stable, machine-readable
+`VC` record (schema v1). Surface it with `concrete <file> --report vcs` (human) or
+`--report vcs --json` (versioned envelope, `vc_schema_version: 1`; documented under
+`envelopes.vcs` in `--report schema`). Each VC carries:
+
+- `id` — stable key (e.g. `hmac.f#pre3`, `f@21#O2`), shared with the other reports;
+- `loc` — `{file, line}` source span; `kind`; `function`;
+- `hypotheses` (list) and `conclusion` — the implication the backend receives,
+  split apart, not pre-joined;
+- `origin` — the contract/obligation it came from;
+- `dependencies` — proof links it leans on (e.g. an `ensures_proof` for a
+  postcondition, a `coverage: invariant` proof for O2);
+- `arith_profile` — `constant | linear | bitvector | nonlinear | refinement |
+  operational | unsupported`;
+- `expected_discharge` — `constant_fold | omega | bv_decide | lean | smt | none`.
+
+A VC **describes** an obligation and which backend *should* own it; it does not
+itself run a solver. The schema is deliberately separate from the discharge
+machinery so that adding a solver later cannot silently turn a VC into a
+"proved" path — `expected_discharge: smt` does not exist yet, and
+`check_vc_schema.sh` asserts no VC claims it until the external-SMT trust model
+(items 8–9) lands.
+
+Example VC (JSON, schema v1):
+
+```json
+{
+  "id": "hmac_sha256.sha256_compress_at#pre20",
+  "kind": "precondition",
+  "function": "hmac_sha256.sha256_compress_at",
+  "loc": { "file": "examples/hmac_sha256/src/main.con", "line": 284 },
+  "hypotheses": ["(0 ≤ off ∧ (off + 64) ≤ 384)"],
+  "conclusion": "(0 ≤ off ∧ (off + 64) ≤ 384)",
+  "origin": "precondition of block_to_words_at(buf, off) in hmac_sha256.sha256_compress_at",
+  "dependencies": [],
+  "arith_profile": "linear",
+  "expected_discharge": "omega"
+}
 ```
 
 ## SMT Assistance

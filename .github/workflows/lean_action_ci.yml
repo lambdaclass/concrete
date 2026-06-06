@@ -149,6 +149,9 @@ jobs:
       - name: Phase 1 contracts validation artifact (umbrella + snapshots)
         run: bash scripts/tests/check_phase1_contracts.sh
 
+      - name: VC schema v1 gate (Phase 2 foundation)
+        run: bash scripts/tests/check_vc_schema.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

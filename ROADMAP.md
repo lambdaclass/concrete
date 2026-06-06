@@ -7,24 +7,22 @@ The roadmap is linear. Phases are ordered, and items inside a phase are ordered
 unless explicitly marked as a constraint or a deferred research note. Read the
 document as one queue:
 
-1. harden source contracts: negative cases, vacuity, spec/ghost totality,
-   trapdoor discipline, diagnostics, and soundness obligations;
-2. finish VC generation, discharge examples, and external-SMT policy without
+1. finish VC generation, discharge examples, and external-SMT policy without
    hiding solver trust;
-3. finish remaining proof-authoring cleanup: colocate example Lean proofs with
+2. finish remaining proof-authoring cleanup: colocate example Lean proofs with
    their Concrete examples, keep generated proof workspaces source-linked and
    replayable, and leave the deeper `ProofCore` / spec-registry split deferred
    unless it becomes necessary;
-4. harden audit / proof-status / trust gates around source contracts,
+3. harden audit / proof-status / trust gates around source contracts,
    spec provenance, evidence classes, tool-version drift, and oracle evidence;
-5. close the release-blocking predictable/provable/runtime-safety gaps,
+4. close the release-blocking predictable/provable/runtime-safety gaps,
    starting with casts, loop-derived bounds, runtime-safety policy, and the
    remaining profile story after array bounds, div/mod-zero, and
    opt-in overflow obligations;
-6. only then broaden the ordinary language surface (patterns, bytes/text/path,
+5. only then broaden the ordinary language surface (patterns, bytes/text/path,
    collections, iteration, capability polymorphism, tests);
-7. run external validation before the large ecosystem/release/editor build-out;
-8. keep later research items later unless a prior gate forces them.
+6. run external validation before the large ecosystem/release/editor build-out;
+7. keep later research items later unless a prior gate forces them.
 
 Completed work moves to [CHANGELOG.md](CHANGELOG.md). Deferred or conditional
 work moves later in the same linear queue. There are no parallel tracks. Inline
@@ -210,14 +208,15 @@ imagined ones. See the build order in `docs/PROOF_LADDER.md`.
 
 Done when: the source-contract path is hardened beyond the first flagship:
 negative cases are covered, diagnostics are actionable, source-contract
-soundness obligations are named in the compiler-soundness bridge, and HMAC
-retrofit is explicitly queued behind proof-link migration.
+soundness obligations are named in the compiler-soundness bridge, HMAC carries
+source contracts, and a single validation artifact gates the whole phase.
 
-1. Finish the source-contract hardening gate before Phase 2. The remaining
-   tasks in this phase are the contract cases that can make a green proof
-   misleading: negative examples, vacuity, spec/ghost totality, trapdoor
-   discipline, diagnostics, API-stability rules, and soundness obligations.
-2. ~~Add vacuity and satisfiability checks for contracts.~~ **MOSTLY DONE.**
+1. **[done]** Finish the source-contract hardening gate before Phase 2. The
+   misleading-green cases are covered by fixtures and gates: negative examples,
+   vacuity, spec/ghost totality, trapdoor discipline, diagnostics,
+   API-stability rules, soundness obligations, the HMAC regression anchor, and
+   the Phase 1 validation artifact.
+2. **[done]** Add vacuity and satisfiability checks for contracts.
    Report-side detection (keeps the file compilable): `#[requires(false)]` and
    other constant-false preconditions (folder), contradictory assumptions like
    `x>0 && x<0` (omega refutes `∀vars, ¬(conjunction)`, `Report.vacuityGoals`),
@@ -228,9 +227,10 @@ retrofit is explicitly queued behind proof-link migration.
    `examples/contract_negatives/vacuous_contract/` (the three report cases) +
    `tests/programs/adversarial_policy_vacuous/` (policy rejection). Gate
    `check_contract_negatives.sh` 15/0; zero false positives across the flagships.
-   REMAINING (deeper, path-sensitive): unreachable returns and postconditions
-   proved only because a path is impossible.
-3. ~~Add `spec fn` / ghost totality rules.~~ **DONE (purity) / N/A (spec-fn totality).**
+   Deeper path-sensitive vacuity, such as unreachable returns and postconditions
+   proved only because a path is impossible, is tracked later as a Phase 5
+   proof-status/trust-gate problem rather than as a remaining Phase 1 blocker.
+3. **[done]** Add `spec fn` / ghost totality rules.
    `spec fn` is body-less and Lean-backed, so its totality is inherited from Lean
    — there is no Concrete-level spec-fn body to reject. The checkable Concrete-side
    rule is that the spec/ghost language is PURE and TOTAL: a contract calling a
@@ -340,18 +340,33 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
    phase are the VC schema, generation coverage, kernel-checked decision path,
    arithmetic bridge library, explicit external-SMT trust model, examples,
    counterexamples, replay/determinism gates, and audit integration.
-2. Define VC schema v1: id, source span, kind, hypotheses, conclusion,
-   originating contract/obligation, dependencies, arithmetic profile, and
-   expected discharge mode.
-3. Generate VCs for pure no-loop contracts first: preconditions at call sites
-   and postconditions at returns.
-4. Generate VCs for the runtime-safety obligations that already exist today:
-   array bounds, div/mod nonzero, and `#[overflow_checked]` no-overflow claims.
-   Later Phase 7 work extends this same VC path to casts, panic/abort,
-   byte/text/path boundaries, stack/recursion, and any new runtime-error
-   obligation kinds.
-5. Generate VCs for loop invariants: initialization, preservation,
-   variant decrease, and exit-implies-postcondition.
+2. **[done]** VC schema v1. `Report.VC` + `collectVCs` give a single,
+   project-wide, machine-readable view over every obligation, each carrying the
+   full schema: `id`, `loc` (file+line span), `kind`, separated `hypotheses` +
+   `conclusion`, `origin` (function + contract), `dependencies` (proof links it
+   leans on), `arith_profile` (constant/linear/bitvector/nonlinear/refinement/
+   operational/unsupported), and `expected_discharge` (constant_fold/omega/
+   bv_decide/lean/smt/none). Surfaced via `concrete <file> --report vcs` (human)
+   and `--report vcs --json` (versioned envelope, `vc_schema_version: 1`),
+   documented in `--report schema` (`envelopes.vcs`). A VC *describes* an
+   obligation and which backend should own it — it runs no solver, which is what
+   keeps the schema/evidence boundary clean before discharge expands. Gate
+   `check_vc_schema.sh` (16/0) pins the schema, the controlled vocabularies, and
+   the **trust boundary** (no VC is routed to `smt` — SMT cannot silently become
+   a proved path before its trust model lands). Wired into CI + Makefile
+   (`test-vc-schema`).
+3. **[done, via #2]** Generate VCs for pure no-loop contracts: `collectVCs`
+   emits `precondition` VCs at every call site (constant/omega/bv_decide) and
+   `postcondition` VCs at returns (refinement, dependency = registered proof).
+4. **[done, via #2]** Generate VCs for the runtime-safety obligations that exist
+   today: `array_bounds`, `div_nonzero`, and `#[overflow_checked]` `no_overflow`
+   (omega tier + interval-gated bv_decide fallback + constant tier). Later Phase
+   7 work extends this same VC path to casts, panic/abort, byte/text/path
+   boundaries, stack/recursion, and any new runtime-error obligation kinds.
+5. **[done, via #2]** Generate VCs for loop invariants: `loop_invariant_init`
+   (O1), `loop_invariant_preservation` (O2), `loop_exit_implies_post` (O3),
+   `variant_nonnegative` (O4), `variant_decreases` (O5) — O1/O4/O5 omega,
+   O2/O3 operational/lean. (Reuses `loopObInfo`; existing discharge unchanged.)
 6. **Kernel-checked automation first (`bv_decide`).** Before any external
    solver, route BitVec / bounded-arithmetic VCs to Lean's `bv_decide`
    (in-toolchain; bit-blasts to SAT and replays a kernel-checked certificate —
