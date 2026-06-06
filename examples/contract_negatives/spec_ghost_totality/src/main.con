@@ -1,0 +1,22 @@
+// contract negatives: spec/ghost totality + purity.
+// The spec language must be PURE and TOTAL. `spec fn` is body-less and
+// Lean-backed (total by construction); pure helpers are fine; but a contract
+// that calls a CAPABILITY-requiring (effectful) function is rejected.
+mod cn {
+    // effectful: requires the Console capability — NOT pure.
+    fn tick() with(Console) -> i32 { return 0; }
+
+    // pure total helper — fine to call in a contract.
+    fn dbl(n: i32) -> i32 { return n * 2; }
+
+    // Lean-backed spec function (body-less, total by construction).
+    spec fn ideal(n: i32) -> i32;
+
+    // NEGATIVE: the postcondition calls an effectful function.
+    #[ensures(result == tick())]
+    fn bad(x: i32) -> i32 { return x; }
+
+    // POSITIVE control: contract uses a pure helper and a spec fn — accepted.
+    #[ensures(result == dbl(x))]
+    fn good(x: i32) -> i32 { return x + x; }
+}

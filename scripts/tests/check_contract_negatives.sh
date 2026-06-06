@@ -82,6 +82,19 @@ assert_contains "unknown identifier rejected in #[requires]" "invalid_contract_e
 assert_contains "unknown identifier named in diagnostic" "unknown identifier 'nonexistent'" \
   "$COMPILER" "$CN/invalid_contract_expression/src/main.con" --report contracts
 
+echo "=== spec_ghost_totality (spec/ghost language must be pure & total) ==="
+SGT="$CN/spec_ghost_totality/src/main.con"
+assert_contains "impure (effectful) call in contract rejected" \
+  "impure call 'tick' — spec/ghost must be pure and total" \
+  "$COMPILER" "$SGT" --report contracts
+# positive control: a contract calling a PURE helper is NOT over-rejected.
+assert_block_absent() { local l="$1" anchor="$2" needle="$3" file="$4"
+  local out; out="$("$COMPILER" "$file" --report contracts 2>/dev/null \
+    | awk -v a="$anchor" 'index($0,a){f=1} f{print} f&&/^$/{exit}')"
+  if printf '%s' "$out" | grep -qF -- "$needle"; then echo "  FAIL $l — unexpected '$needle'"; FAIL=$((FAIL+1));
+  else echo "  ok   $l"; fi; }
+assert_block_absent "pure-helper contract not over-rejected" "cn.good" "impure call" "$SGT"
+
 echo "=== vacuous_contract (unsatisfiable preconditions / invariant) ==="
 VAC="$CN/vacuous_contract/src/main.con"
 # constant-false precondition (no omega needed):

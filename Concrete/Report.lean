@@ -704,6 +704,35 @@ partial def contractConstNames (modules : List Module) : List String := Id.run d
     localConsts.flatten ++ m.submodules.flatMap (go subPfx)
   return (modules.flatMap (go "")).eraseDups
 
+/-- Bare + qualified names of functions that require capabilities (effectful).
+    The spec/ghost language must be pure and total, so a contract may not call
+    these. (`spec fn`s are body-less and Lean-backed — total by construction —
+    and pure helpers have no capabilities, so neither is flagged.) -/
+partial def impureFnNames (modules : List Module) : List String := Id.run do
+  let rec go (pfx : String) (m : Module) : List String :=
+    let q (n : String) := if pfx.isEmpty then n else pfx ++ "." ++ n
+    let here := m.functions.filterMap (fun f => if f.capSet.isEmpty then none else some [f.name, q f.name])
+    let subPfx := if pfx.isEmpty then m.name else pfx ++ "." ++ m.name
+    here.flatten ++ m.submodules.flatMap (go subPfx)
+  return (modules.flatMap (go "")).eraseDups
+
+/-- Names of impure (capability-requiring) functions CALLED inside a contract
+    expression. A non-empty result means the contract is not pure/total. -/
+partial def contractImpureCalls (impureFns : List String) : Expr → List String
+  | .call _ fn _ args =>
+      (if impureFns.contains fn then [fn] else []) ++ args.flatMap (contractImpureCalls impureFns)
+  | .staticMethodCall _ ty meth _ args =>
+      (if impureFns.contains (ty ++ "." ++ meth) || impureFns.contains meth then [ty ++ "." ++ meth] else [])
+        ++ args.flatMap (contractImpureCalls impureFns)
+  | .methodCall _ o _ _ args => contractImpureCalls impureFns o ++ args.flatMap (contractImpureCalls impureFns)
+  | .binOp _ _ l r => contractImpureCalls impureFns l ++ contractImpureCalls impureFns r
+  | .unaryOp _ _ e | .paren _ e | .borrow _ e | .borrowMut _ e | .deref _ e
+  | .try_ _ e | .cast _ e _ | .fieldAccess _ e _ | .arrowAccess _ e _ => contractImpureCalls impureFns e
+  | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => contractImpureCalls impureFns e)
+  | .arrayLit _ es => es.flatMap (contractImpureCalls impureFns)
+  | .arrayIndex _ a i => contractImpureCalls impureFns a ++ contractImpureCalls impureFns i
+  | _ => []
+
 mutual
   /-- Names introduced by a statement body. This is intentionally conservative:
       loop invariants may mention counters/ghost lets and other locals, and the
@@ -1789,6 +1818,7 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
   if withLoops.isEmpty then return ""
   let callables := callableContractNames modules
   let consts := contractConstNames modules
+  let impures := impureFnNames modules
   let mut out := "\n\n=== Loop contracts ==="
   for (pfx, f) in withLoops do
     -- a registered `coverage: invariant` proof discharges invariant_preservation
@@ -1804,6 +1834,7 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
       let mut invIdx := 0
       for inv in lc.invariants do
         let issues := validateContractExpr contractVars callables inv
+          ++ (contractImpureCalls impures inv).map (fun fn => s!"impure call '{fn}' — spec/ghost must be pure and total (no capabilities)")
         let vac := cEvalBool inv == some false || provedVacuous.contains s!"{fq}@{lc.line}#inv_vac{invIdx}"
         let st :=
           if !issues.isEmpty then contractIssueStatus issues
@@ -1862,6 +1893,7 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry)
     (provedVCs : List String := []) (provedVacuous : List String := []) : String := Id.run do
   let callables := callableContractNames modules
   let consts := contractConstNames modules
+  let impures := impureFnNames modules
   -- Discharge status for an `#[ensures]` on `qual`. Tiers, honest about partial
   -- coverage: a registered `ensures_proof` → fully proved_by_lean. Otherwise, a
   -- registered `proof` with directional coverage (`one_direction`) discharges
@@ -1906,6 +1938,7 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry)
         let mut ri := 1
         for r in f.requires do
           let issues := validateContractExpr preVars callables r
+            ++ (contractImpureCalls impures r).map (fun fn => s!"impure call '{fn}' — spec/ghost must be pure and total (no capabilities)")
           let st :=
             if !issues.isEmpty then contractIssueStatus issues
             else if vacuous then "\n     status:  vacuous (unsatisfiable precondition)"
@@ -1917,6 +1950,7 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry)
         let mut i := 1
         for e in f.ensures do
           let issues := validateContractExpr postVars callables e
+            ++ (contractImpureCalls impures e).map (fun fn => s!"impure call '{fn}' — spec/ghost must be pure and total (no capabilities)")
           let st :=
             if !issues.isEmpty then contractIssueStatus issues
             else if vacuous then "\n     status:  vacuous (precondition unsatisfiable — postcondition holds trivially, NOT proved)"
