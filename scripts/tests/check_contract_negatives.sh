@@ -82,6 +82,20 @@ assert_contains "unknown identifier rejected in #[requires]" "invalid_contract_e
 assert_contains "unknown identifier named in diagnostic" "unknown identifier 'nonexistent'" \
   "$COMPILER" "$CN/invalid_contract_expression/src/main.con" --report contracts
 
+echo "=== vacuous_contract (unsatisfiable preconditions / invariant) ==="
+VAC="$CN/vacuous_contract/src/main.con"
+# constant-false precondition (no omega needed):
+assert_contains "requires(false) → vacuous, not proved" \
+  "vacuous (precondition unsatisfiable" "$COMPILER" "$VAC" --report contracts
+if command -v lake >/dev/null 2>&1; then
+  # contradictory preconditions: omega refutes x>0 ∧ x<0 → the function is VACUOUS.
+  assert_contains "contradictory requires → VACUOUS (omega)" "VACUOUS" "$COMPILER" "$VAC" --report contracts
+  # #[invariant(false)] → invalid/vacuous, loop obligations meaningless.
+  assert_contains "invariant(false) → invalid/vacuous" "invalid/vacuous" "$COMPILER" "$VAC" --report contracts
+else
+  echo "  skip omega vacuity checks (lake not on PATH)"
+fi
+
 echo "=== duplicate_links (two of the same proof-link attribute) ==="
 assert_contains "duplicate #[spec] rejected at parse time" "duplicate #[spec(...)]" \
   "$COMPILER" "$CN/duplicate_links/src/main.con"

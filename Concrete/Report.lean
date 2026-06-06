@@ -915,6 +915,34 @@ partial def toLeanProp : Expr → Option String
     | _ => none
   | _ => none
 
+/-- Omega goals that witness an UNSATISFIABLE contract (the vacuity risk): for a
+    function's `#[requires]` conjunction and each loop `#[invariant]`,
+    `∀ vars, ¬(P)`. If omega proves it, no input satisfies P, so the contract is
+    vacuous — any postcondition holds trivially and must be reported `vacuous`,
+    never `proved`. (The constant-false case, e.g. `#[requires(false)]`, is caught
+    separately by the `cEvalBool` folder; this tier catches symbolic
+    contradictions like `x > 0 && x < 0`.) -/
+def vacuityGoals (modules : List Module) : List (String × String) := Id.run do
+  let mut goals : List (String × String) := []
+  for (pfx, f) in modules.flatMap allFunctions do
+    let fq := pfx ++ f.name
+    if !f.requires.isEmpty then
+      let props := f.requires.filterMap toLeanProp
+      if props.length == f.requires.length then
+        let vars := (f.requires.flatMap collectIdents).eraseDups
+        let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
+        let conj := " ∧ ".intercalate (props.map (fun p => s!"({p})"))
+        goals := goals ++ [(s!"{fq}#requires_vac", s!"{binder}¬({conj})")]
+    for lc in f.loopContracts do
+      for (i, inv) in (List.range lc.invariants.length).zip lc.invariants do
+        match toLeanProp inv with
+        | some p =>
+          let vars := (collectIdents inv).eraseDups
+          let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
+          goals := goals ++ [(s!"{fq}@{lc.line}#inv_vac{i}", s!"{binder}¬({p})")]
+        | none => pure ()
+  return goals
+
 /-- **Generate the invariant-preservation VC** from a loop contract: substitute
     the body's assignments into the invariant (`invariant'`), and state
     `∀ vars, invariant → guard → invariant'`. The compiler produces the
@@ -1756,7 +1784,7 @@ def loopVCGoals (modules : List Module) : List (String × String) := Id.run do
     (O1/O4/O5) are kernel-discharged by `omega` when their key appears in
     `provedVCs`; the rest are `planned`. -/
 def loopContractSection (modules : List Module) (registry : ProofRegistry)
-    (provedVCs : List String := []) : String := Id.run do
+    (provedVCs : List String := []) (provedVacuous : List String := []) : String := Id.run do
   let withLoops := (modules.flatMap allFunctions).filter (fun (_, f) => !f.loopContracts.isEmpty)
   if withLoops.isEmpty then return ""
   let callables := callableContractNames modules
@@ -1773,8 +1801,16 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
     let contractVars := (f.params.map (·.name) ++ localNamesB f.body ++ consts).eraseDups
     for lc in f.loopContracts do
       out := out ++ s!"\n\n{pfx}{f.name}  (loop @ line {lc.line})"
+      let mut invIdx := 0
       for inv in lc.invariants do
-        out := out ++ s!"\n  invariant {Concrete.fmtExpr inv}{contractIssueStatus (validateContractExpr contractVars callables inv)}"
+        let issues := validateContractExpr contractVars callables inv
+        let vac := cEvalBool inv == some false || provedVacuous.contains s!"{fq}@{lc.line}#inv_vac{invIdx}"
+        let st :=
+          if !issues.isEmpty then contractIssueStatus issues
+          else if vac then "\n     status:  invalid/vacuous (unsatisfiable invariant — the loop obligations below are meaningless)"
+          else ""
+        out := out ++ s!"\n  invariant {Concrete.fmtExpr inv}{st}"
+        invIdx := invIdx + 1
       match lc.variant with
       | some v => out := out ++ s!"\n  variant   {Concrete.fmtExpr v}{contractIssueStatus (validateContractExpr contractVars callables v)}"
       | none => pure ()
@@ -1823,7 +1859,7 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
   return out ++ "\n"
 
 partial def contractsReport (modules : List Module) (registry : ProofRegistry)
-    (provedVCs : List String := []) : String := Id.run do
+    (provedVCs : List String := []) (provedVacuous : List String := []) : String := Id.run do
   let callables := callableContractNames modules
   let consts := contractConstNames modules
   -- Discharge status for an `#[ensures]` on `qual`. Tiers, honest about partial
@@ -1857,21 +1893,34 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry)
         let paramVars := f.params.map (·.name)
         let postVars := (paramVars ++ ["result"] ++ localNamesB f.body ++ consts).eraseDups
         let preVars := (paramVars ++ consts).eraseDups
+        -- vacuity: an unsatisfiable precondition makes every #[ensures] hold
+        -- trivially — a misleading green. Caught by the constant folder
+        -- (#[requires(false)]) or by omega refuting the conjunction (x>0 && x<0).
+        let vacuous := !f.requires.isEmpty
+          && (f.requires.any (fun r => cEvalBool r == some false)
+              || provedVacuous.contains s!"{pfx ++ f.name}#requires_vac")
+        if vacuous then
+          out := out ++ "\n  ⚠ VACUOUS — preconditions are unsatisfiable; any #[ensures] holds trivially (NOT a real proof)"
         -- preconditions: assumed on entry here; each call site is checked
         -- separately (see the "Call-site obligations" section).
         let mut ri := 1
         for r in f.requires do
           let issues := validateContractExpr preVars callables r
           let st :=
-            if issues.isEmpty then "\n     status:  assumed_at_entry (each call site checked separately)"
-            else contractIssueStatus issues
+            if !issues.isEmpty then contractIssueStatus issues
+            else if vacuous then "\n     status:  vacuous (unsatisfiable precondition)"
+            else "\n     status:  assumed_at_entry (each call site checked separately)"
           out := out ++ s!"\n  R{ri}  requires {Concrete.fmtExpr r}{st}"
           ri := ri + 1
-        -- postconditions: discharged by a registered ensures_proof, or missing
+        -- postconditions: vacuous if the precondition is unsatisfiable, else
+        -- discharged by a registered ensures_proof, or missing.
         let mut i := 1
         for e in f.ensures do
           let issues := validateContractExpr postVars callables e
-          let st := if issues.isEmpty then discharge (pfx ++ f.name) else contractIssueStatus issues
+          let st :=
+            if !issues.isEmpty then contractIssueStatus issues
+            else if vacuous then "\n     status:  vacuous (precondition unsatisfiable — postcondition holds trivially, NOT proved)"
+            else discharge (pfx ++ f.name)
           out := out ++ s!"\n  O{i}  ensures {Concrete.fmtExpr e}{st}"
           i := i + 1
     for sub in m.submodules do
@@ -1879,7 +1928,7 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry)
     return out
   let body := modules.foldl (fun acc m => go m acc) ""
   let body := if body.isEmpty then "\n(no spec fns or #[ensures] contracts found)" else body
-  return s!"=== Source Contracts ==={body}\n{loopContractSection modules registry provedVCs}"
+  return s!"=== Source Contracts ==={body}\n{loopContractSection modules registry provedVCs provedVacuous}"
 
 /-- Whether any module (or submodule) carries a source contract — a `spec fn`
     or an `#[ensures(...)]`. Used to decide whether `audit` appends the

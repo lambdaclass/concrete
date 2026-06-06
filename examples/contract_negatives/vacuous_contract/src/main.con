@@ -1,0 +1,24 @@
+// contract negatives: vacuous (unsatisfiable) contracts.
+// An unsatisfiable precondition makes every #[ensures] hold trivially — a
+// misleading green. These must be reported `vacuous`, never `proved`.
+mod cn {
+    // (1) #[requires(false)] — trivially unsatisfiable (constant folder).
+    #[requires(false)]
+    #[ensures(result > 0)]
+    fn always(x: i32) -> i32 { return x; }
+
+    // (2) contradictory preconditions — unsatisfiable (omega refutes x>0 ∧ x<0).
+    #[requires(x > 0)]
+    #[requires(x < 0)]
+    #[ensures(result == x)]
+    fn contradictory(x: i32) -> i32 { return x; }
+
+    // (3) #[invariant(false)] — unsatisfiable invariant; loop obligations are meaningless.
+    fn bad_loop() -> i32 {
+        let mut acc: i32 = 0;
+        #[invariant(false)]
+        #[variant(8 - i)]
+        for (let mut i: i32 = 0; i < 8; i = i + 1) { acc = acc + i; }
+        return acc;
+    }
+}

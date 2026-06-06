@@ -781,6 +781,8 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
   let proved ← bvDischargeCallSites cands
   -- discharge call-site preconditions from the caller's #[requires]/guards via omega
   let provedCallPre ← kernelDischargeLoopVCs (Report.callPrecondGoals parsedModules)
+  -- vacuity: omega proves a contract is unsatisfiable (∀ vars, ¬P) → report vacuous, not proved
+  let provedVacuous ← kernelDischargeLoopVCs (Report.vacuityGoals parsedModules)
   let provedVCs ← kernelDischargeLoopVCs (Report.loopVCGoals parsedModules)
   let boundsObls := Report.boundsObligations parsedModules
   let provedBounds ← kernelDischargeLoopVCs (Report.boundsGoals parsedModules)
@@ -791,7 +793,7 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
   -- nonlinear fallback: only the bv goals omega did NOT already discharge.
   let bvOvfCands := (Report.overflowBVGoals parsedModules).filter (fun (k, _) => !provedOvf.contains k)
   let provedOvfBV ← bvDischargeOverflow bvOvfCands
-  return Report.contractsReport parsedModules registry provedVCs
+  return Report.contractsReport parsedModules registry provedVCs provedVacuous
     ++ Report.renderCallSites obs proved provedCallPre
     ++ Report.renderBounds boundsObls provedBounds
     ++ Report.renderDiv divObls provedDiv
