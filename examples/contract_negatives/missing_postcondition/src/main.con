@@ -1,0 +1,7 @@
+// contract negatives: a postcondition with no proof.
+// `#[ensures(result >= 0)]` carries no #[proof_by]/#[ensures_proof], so the
+// obligation is reported `missing` — not silently treated as proved.
+mod cn {
+    #[ensures(result >= 0)]
+    fn f(x: i32) -> i32 { return x; }
+}

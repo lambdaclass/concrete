@@ -1,0 +1,7 @@
+// contract negatives: a malformed proof-link attribute.
+// #[proof_fingerprint] requires a string literal; a bare integer is rejected at
+// parse time (E0001), not silently accepted.
+mod cn {
+    #[proof_fingerprint(12345)]
+    fn f(x: i32) -> i32 { return x; }
+}

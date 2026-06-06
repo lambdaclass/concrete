@@ -1,0 +1,13 @@
+// contract negatives: an invariant the loop does not preserve.
+// The loop runs i in [0,8) but claims #[invariant(i <= 3)]; the preservation VC
+// `i <= 3 -> i+1 <= 3` is FALSE, so omega refuses it — O2's arithmetic step
+// stays `planned`, never `proved_by_kernel_decision`. No false green.
+mod cn {
+    fn bad() -> i32 {
+        let mut acc: i32 = 0;
+        #[invariant(i <= 3)]
+        #[variant(8 - i)]
+        for (let mut i: i32 = 0; i < 8; i = i + 1) { acc = acc + i; }
+        return acc;
+    }
+}

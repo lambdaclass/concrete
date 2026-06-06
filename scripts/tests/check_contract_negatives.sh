@@ -41,6 +41,32 @@ else
   echo "  skip omega-discharged precondition checks (lake not on PATH)"
 fi
 
+# assert_contains <label> <needle> <cmd...>
+assert_contains(){ local l="$1" n="$2"; shift 2; local o; o="$("$@" 2>&1)"
+  if printf '%s' "$o" | grep -qF -- "$n"; then echo "  ok   $l"; PASS=$((PASS+1));
+  else echo "  FAIL $l — missing '$n'"; printf '%s\n' "$o"|sed 's/^/      /'|head -6; FAIL=$((FAIL+1)); fi; }
+# assert_absent <label> <needle> <cmd...>
+assert_absent(){ local l="$1" n="$2"; shift 2; local o; o="$("$@" 2>&1)"
+  if printf '%s' "$o" | grep -qF -- "$n"; then echo "  FAIL $l — unexpected '$n'"; FAIL=$((FAIL+1));
+  else echo "  ok   $l"; fi; }
+
+echo "=== missing_postcondition (#[ensures] with no proof) ==="
+assert_contains "ensures reported missing, not proved" "missing (no in-source proof link" \
+  "$COMPILER" "$CN/missing_postcondition/src/main.con" --report contracts
+
+echo "=== invalid_attribute (malformed #[proof_fingerprint]) ==="
+assert_contains "malformed attribute rejected at parse time" "expected a string literal" \
+  "$COMPILER" "$CN/invalid_attribute/src/main.con"
+
+echo "=== invalid_invariant (loop does not preserve the invariant) ==="
+if command -v lake >/dev/null 2>&1; then
+  # omega refuses the false preservation VC: O2's arithmetic step must NOT be proved.
+  assert_absent "false invariant VC not omega-proved (no false green)" "arithmetic step:   proved_by_kernel_decision" \
+    "$COMPILER" "$CN/invalid_invariant/src/main.con" --report contracts
+else
+  echo "  skip invalid_invariant omega check (lake not on PATH)"
+fi
+
 echo ""
 echo "CONTRACT-NEGATIVES: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
