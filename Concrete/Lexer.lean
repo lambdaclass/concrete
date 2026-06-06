@@ -42,6 +42,8 @@ def lookupKeyword : String → Option TokenKind
   | "while" => some .while_
   | "for" => some .for_
   | "return" => some .return_
+  | "assert" => some .assert_
+  | "assume" => some .assume_
   | "true" => some .true_
   | "false" => some .false_
   | "mod" => some .«mod»

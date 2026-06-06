@@ -821,7 +821,7 @@ partial def parseExprBlock : ParseM (List Stmt) := do
     -- If the token starts a keyword statement (let, return, if, while, etc.), parse normally
     match stmtTk with
     | .«let» | .return_ | .while_ | .for_ | .match_ | .break_ | .continue_
-    | .defer_ | .borrow_ | .label _ =>
+    | .defer_ | .borrow_ | .label _ | .assert_ | .assume_ =>
       let stmt ← parseStmt
       stmts := stmts ++ [stmt]
     | .if_ =>
@@ -876,6 +876,8 @@ partial def parseStmt : ParseM Stmt := do
   match tk with
   | .«let» => parseLet
   | .return_ => parseReturn
+  | .assert_ => parseAssertOrAssume true
+  | .assume_ => parseAssertOrAssume false
   | .if_ => parseIf
   | .while_ => parseWhile none
   | .for_ => parseFor none
@@ -1052,6 +1054,16 @@ partial def parseReturn : ParseM Stmt := do
     pure (some e)
   expect .semicolon
   return .return_ sp value
+
+/-- `assert(e);` / `assume(e);` — proof-only statements. `assert` claims `e`
+    (generates an obligation); `assume` proceeds as if `e` (an audit-visible
+    trust escape hatch). The condition is an ordinary (parenthesized) expression. -/
+partial def parseAssertOrAssume (isAssert : Bool) : ParseM Stmt := do
+  let sp ← peekSpan
+  expect (if isAssert then .assert_ else .assume_)
+  let e ← parseExpr
+  expect .semicolon
+  return (if isAssert then .assert_ sp e else .assume_ sp e)
 
 partial def parseIf : ParseM Stmt := do
   let sp ← peekSpan

@@ -752,6 +752,7 @@ mutual
     | .borrowIn _ v r _ _ b => [v, r] ++ localNamesB b
     | .letDestructure _ _ _ bs v el => bs ++ localNamesE v ++ localNamesB (el.getD [])
     | .letStructDestructure _ _ bs v => bs ++ localNamesE v
+    | .assert_ _ c | .assume_ _ c => localNamesE c
 
   partial def localNamesB (body : List Stmt) : List String :=
     (body.flatMap localNamesS).eraseDups
@@ -823,6 +824,7 @@ mutual
     | .borrowIn _ v r _ _ b => b.flatMap (validateContractStmt (v :: r :: allowedVars) callables)
     | .letDestructure _ _ _ bs v el => validateContractExpr allowedVars callables v ++ (el.getD []).flatMap (validateContractStmt (bs ++ allowedVars) callables)
     | .letStructDestructure _ _ _ v => validateContractExpr allowedVars callables v
+    | .assert_ _ c | .assume_ _ c => validateContractExpr allowedVars callables c
 
   partial def validateContractArm (allowedVars callables : List String) : MatchArm → List String
     | .mk _ _ _ bs b => b.flatMap (validateContractStmt (bs ++ allowedVars) callables)
@@ -971,6 +973,72 @@ def vacuityGoals (modules : List Module) : List (String × String) := Id.run do
           goals := goals ++ [(s!"{fq}@{lc.line}#inv_vac{i}", s!"{binder}¬({p})")]
         | none => pure ()
   return goals
+
+/-- `(isAssume, condition)` for every `assert`/`assume` in a statement body
+    (recursing into nested blocks). `assert` claims the condition; `assume`
+    trusts it. -/
+partial def collectAssertAssumeS : Stmt → List (Bool × Expr)
+  | .assert_ _ c => [(false, c)]
+  | .assume_ _ c => [(true, c)]
+  | .ifElse _ _ t el => t.flatMap collectAssertAssumeS ++ (el.getD []).flatMap collectAssertAssumeS
+  | .while_ _ _ b _ => b.flatMap collectAssertAssumeS
+  | .forLoop _ init _ step b _ =>
+      (init.map collectAssertAssumeS).getD [] ++ (step.map collectAssertAssumeS).getD [] ++ b.flatMap collectAssertAssumeS
+  | .borrowIn _ _ _ _ _ b => b.flatMap collectAssertAssumeS
+  | _ => []
+
+/-- Omega goals for `assert(e)` obligations: `∀ vars, (e)`. Discharged by the
+    same omega backend as the VC/vacuity goals; a success means the assert holds.
+    `assume` produces no goal (it is trusted, not proved). Keyed `<fq>#aa<i>` by
+    position in the combined assert/assume stream, matching `renderAssertAssume`. -/
+def assertGoals (modules : List Module) : List (String × String) := Id.run do
+  let mut goals : List (String × String) := []
+  for (pfx, f) in modules.flatMap allFunctions do
+    let fq := pfx ++ f.name
+    -- fold the function's #[requires] in as hypotheses (the lowerable subset —
+    -- omitting any is sound: fewer hypotheses can only make omega prove LESS).
+    let reqProps := f.requires.filterMap toLeanProp
+    let reqVars := f.requires.flatMap collectIdents
+    let mut i := 0
+    for (isAssume, cond) in f.body.flatMap collectAssertAssumeS do
+      if !isAssume then
+        match toLeanProp cond with
+        | some p =>
+          let vars := (collectIdents cond ++ reqVars).eraseDups
+          let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
+          let hyp := if reqProps.isEmpty then "" else s!"({" ∧ ".intercalate (reqProps.map (fun q => s!"({q})"))}) → "
+          goals := goals ++ [(s!"{fq}#aa{i}", s!"{binder}{hyp}({p})")]
+        | none => pure ()
+      i := i + 1
+  return goals
+
+/-- Render the `assert`/`assume` section: each `assert` is an obligation
+    (proved_by_kernel_decision when omega closed its key, a VIOLATION when it
+    folds to false, else unproven); each `assume` is `assumed` (trust, not
+    proof). A function that contains any `assume` is flagged TAINTED — its
+    evidence is not a clean proof. -/
+def renderAssertAssume (modules : List Module) (provedAsserts : List String) : String := Id.run do
+  let withAA := (modules.flatMap allFunctions).filterMap fun (pfx, f) =>
+    let aa := f.body.flatMap collectAssertAssumeS
+    if aa.isEmpty then none else some (pfx ++ f.name, aa)
+  if withAA.isEmpty then return ""
+  let mut out := "\n\n=== assert / assume ==="
+  for (fq, aa) in withAA do
+    out := out ++ s!"\n\n{fq}"
+    if aa.any (·.1) then
+      out := out ++ "\n  ⚠ TAINTED — depends on assume(...): evidence is `assumed` (trust), NOT a clean proof"
+    let mut i := 0
+    for (isAssume, cond) in aa do
+      if isAssume then
+        out := out ++ s!"\n  assume {Concrete.fmtExpr cond}\n     status:  assumed (trust, not proof — audit-visible; release policy may forbid)"
+      else
+        let st :=
+          if cEvalBool cond == some false then "VIOLATION: assert is always false"
+          else if provedAsserts.contains s!"{fq}#aa{i}" then "proved_by_kernel_decision (omega)"
+          else "unproven (assert not discharged — never silently accepted)"
+        out := out ++ s!"\n  assert {Concrete.fmtExpr cond}\n     status:  {st}"
+      i := i + 1
+  return out ++ "\n"
 
 /-- **Generate the invariant-preservation VC** from a loop contract: substitute
     the body's assignments into the invariant (`invariant'`), and state
@@ -1970,7 +2038,8 @@ partial def contractsReport (modules : List Module) (registry : ProofRegistry)
 partial def hasContracts (modules : List Module) : Bool :=
   modules.any fun m =>
     !m.specFns.isEmpty
-    || m.functions.any (fun f => !f.ensures.isEmpty || !f.requires.isEmpty || !f.loopContracts.isEmpty)
+    || m.functions.any (fun f => !f.ensures.isEmpty || !f.requires.isEmpty || !f.loopContracts.isEmpty
+        || !(f.body.flatMap collectAssertAssumeS).isEmpty)
     || hasContracts m.submodules
 
 def interfaceReport (summaryTable : List (String × FileSummary)) : String :=

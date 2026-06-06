@@ -1,0 +1,14 @@
+// contract negatives: assume(...) taints function evidence.
+// `assume(e)` proceeds AS IF e held — trust, not proof. It is audit-loud: the
+// function is marked ⚠ TAINTED and the assume's evidence class is `assumed`,
+// never upgraded to a clean proof. A `forbid-assume` release profile rejects it.
+mod cn {
+    // opens the escape hatch: evidence becomes `assumed`, function is TAINTED.
+    fn trusts(x: i32) -> i32 { assume(x > 0); return x; }
+
+    // a clean function in the same module is NOT tainted (taint is per-function).
+    #[requires(0 < x && x < 10)]
+    fn clean(x: i32) -> i32 { assert(x < 16); return x; }
+
+    pub fn main() -> i32 { return trusts(7) + clean(3); }
+}

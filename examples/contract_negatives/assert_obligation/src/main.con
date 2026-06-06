@@ -1,0 +1,16 @@
+// contract negatives: assert(...) obligations.
+// `assert(e)` is the program CLAIMING e holds — it generates a proof obligation.
+// A proved assert is `proved_by_kernel_decision`; an unproved one is reported
+// `unproven` (never silently accepted); an always-false assert is a VIOLATION.
+// No assert may pass as proved without omega actually discharging it.
+mod cn {
+    // (1) closed by omega from the function's #[requires]: 0<x<10 ⊢ x<16.
+    #[requires(0 < x && x < 10)]
+    fn proved(x: i32) -> i32 { assert(x < 16); return x; }
+
+    // (2) not provable: nothing establishes x<16 for an arbitrary x → unproven.
+    fn unproven(x: i32) -> i32 { assert(x < 16); return x; }
+
+    // (3) always false: assert(0 > 1) can never hold → VIOLATION.
+    fn always_false() -> i32 { assert(0 > 1); return 0; }
+}

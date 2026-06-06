@@ -1,0 +1,8 @@
+[package]
+name = "assume_taint"
+version = "0.1.0"
+
+# A release profile that forbids the assume(...) escape hatch entirely.
+# `concrete build` here must FAIL: cn.trusts opens an assume → E0614.
+[policy]
+forbid-assume = true

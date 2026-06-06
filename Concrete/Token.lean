@@ -13,7 +13,7 @@ inductive TokenKind where
   | fn | «let» | mut | if_ | else_ | while_ | for_ | return_
   | true_ | false_ | «mod» | struct_ | enum_ | match_ | pub_ | import_
   | as_ | impl_ | trait_ | const_ | type_ | extern_ | with_ | cap_ | break_ | continue_
-  | defer_ | borrow_ | in_ | newtype_ | trusted_
+  | defer_ | borrow_ | in_ | newtype_ | trusted_ | assert_ | assume_
   | label (name : String)  -- 'outer (labeled loop)
   -- Types
   | arrow  -- ->
@@ -85,6 +85,8 @@ def TokenKind.toString : TokenKind → String
   | .break_ => "break"
   | .continue_ => "continue"
   | .defer_ => "defer"
+  | .assert_ => "assert"
+  | .assume_ => "assume"
   | .borrow_ => "borrow"
   | .in_ => "in"
   | .newtype_ => "newtype"

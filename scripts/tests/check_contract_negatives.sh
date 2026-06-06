@@ -109,6 +109,44 @@ else
   echo "  skip omega vacuity checks (lake not on PATH)"
 fi
 
+echo "=== assert_obligation (assert(...) generates a proof obligation) ==="
+AO="$CN/assert_obligation/src/main.con"
+# block helper scoped to the assert/assume section.
+assert_aa_block(){ local l="$1" anchor="$2" needle="$3" file="$4"
+  local out; out="$("$COMPILER" "$file" --report contracts 2>/dev/null \
+    | sed -n '/=== assert \/ assume/,/^=== /p' \
+    | awk -v a="$anchor" 'index($0,a){f=1} f{print} f&&/^$/{exit}')"
+  if printf '%s' "$out" | grep -qF -- "$needle"; then echo "  ok   $l"; PASS=$((PASS+1));
+  else echo "  FAIL $l — '$anchor' block missing '$needle'"; printf '%s\n' "$out"|sed 's/^/      /'; FAIL=$((FAIL+1)); fi; }
+# always-false assert is a VIOLATION (constant fold — no Lean needed):
+assert_aa_block "assert(0>1) → VIOLATION (always false)" "cn.always_false" "VIOLATION: assert is always false" "$AO"
+# unestablished assert is unproven, never silently accepted:
+assert_aa_block "assert with no support → unproven" "cn.unproven" "unproven (assert not discharged" "$AO"
+if command -v lake >/dev/null 2>&1; then
+  # assert closed by omega from the function's #[requires]:
+  assert_aa_block "assert closed by omega via #[requires] → proved" "cn.proved" "proved_by_kernel_decision" "$AO"
+  # safety net: a false assert must NEVER be reported proved.
+  assert_aa_block "assert(0>1) is NOT reported proved (no false green)" "cn.always_false" "VIOLATION" "$AO"
+else
+  echo "  skip omega assert checks (lake not on PATH)"
+fi
+
+echo "=== assume_taint (assume(...) is trust, not proof) ==="
+AT="$CN/assume_taint/src/main.con"
+# assume appears in the report with evidence class `assumed`, not proved.
+assert_aa_block "assume → evidence class 'assumed' (not proved)" "cn.trusts" "assumed (trust, not proof" "$AT"
+# the function opening the assume is marked TAINTED.
+assert_aa_block "function with assume → TAINTED" "cn.trusts" "TAINTED" "$AT"
+# a clean function in the same module is NOT tainted (taint is per-function).
+assert_aa_block "clean sibling function not tainted" "cn.clean" "proved_by_kernel_decision" "$AT"
+# release profile forbids the escape hatch: `concrete build` must fail with E0614.
+ATDIR="$CN/assume_taint"
+asm_out="$( cd "$ATDIR" && "$ROOT_DIR/$COMPILER" build 2>&1 )" && asm_exit=0 || asm_exit=$?
+if [ "$asm_exit" -ne 0 ] && printf '%s' "$asm_out" | grep -qF "E0614"; then
+  echo "  ok   forbid-assume policy rejects build (E0614)"; PASS=$((PASS+1));
+else
+  echo "  FAIL forbid-assume policy should reject build with E0614 (exit=$asm_exit)"; printf '%s\n' "$asm_out"|sed 's/^/      /'|head -4; FAIL=$((FAIL+1)); fi
+
 echo "=== duplicate_links (two of the same proof-link attribute) ==="
 assert_contains "duplicate #[spec] rejected at parse time" "duplicate #[spec(...)]" \
   "$COMPILER" "$CN/duplicate_links/src/main.con"

@@ -249,6 +249,8 @@ partial def fmtStmt (ind : Nat) (s : Stmt) : String :=
     let lblStr := match label with | some l => s!" '{l}" | none => ""
     s!"{pfx}continue{lblStr};"
   | .defer _ body => s!"{pfx}defer {fmtExprAt ind body};"
+  | .assert_ _ cond => s!"{pfx}assert({fmtExprAt ind cond});"
+  | .assume_ _ cond => s!"{pfx}assume({fmtExprAt ind cond});"
   | .borrowIn _ var ref region isMut body =>
     let mutStr := if isMut then "mut " else ""
     s!"{pfx}borrow {mutStr}{var} as {ref} in {region} \{\n{"\n".intercalate (body.map (fmtStmt (ind + 1)))}\n{pfx}}"

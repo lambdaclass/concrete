@@ -1226,6 +1226,11 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
     throwElab (.unknownEnumType "internal: letDestructure not desugared") (some sp)
   | .letStructDestructure sp _ _ _ =>
     throwElab (.unknownStructType "internal: letStructDestructure not desugared") (some sp)
+  -- assert(e)/assume(e): proof-only, ERASED before Core (like contracts/ghost).
+  -- Not elaborated — the condition may legally read ghost bindings (it is a proof
+  -- context), which elabExpr would otherwise reject as a runtime ghost leak. The
+  -- condition is type-checked in Check and scope/purity-checked in the report.
+  | .assert_ _ _ | .assume_ _ _ => return []
 
 partial def elabStmts (stmts : List Stmt) : ElabM (List CStmt) := do
   let mut result : List CStmt := []

@@ -334,6 +334,7 @@ partial def resolveStmt (ctx : ResolveCtx) (stmt : Stmt) : ResolveCtx :=
   | .letStructDestructure _ _ bindings value =>
     let ctx := resolveExpr ctx value
     bindings.foldl (fun c b => addLocal c b (.var none false)) ctx
+  | .assert_ _ cond | .assume_ _ cond => resolveExpr ctx cond
 end
 
 -- ============================================================

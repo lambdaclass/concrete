@@ -784,6 +784,16 @@ def computeVacuousQuals (astModules : List Concrete.Module) (depNames : List Str
     if k.endsWith "#requires_vac" then some (k.dropEnd ("#requires_vac".length)).toString else none
   return (constVac ++ omegaVac).eraseDups.filter fun q => !depNames.any (fun d => q.startsWith (d ++ "."))
 
+/-- Fully-qualified names of project functions that open an `assume(...)` escape
+    hatch. Computed from the source AST (assume statements are erased before Core,
+    so they are invisible to the policy pass otherwise). Used by the
+    `forbid-assume` release profile. -/
+def computeAssumeQuals (astModules : List Concrete.Module) (depNames : List String) : List String :=
+  ((astModules.flatMap Report.allFunctions).filterMap fun (pfx, f) =>
+    if (f.body.flatMap Report.collectAssertAssumeS).any (fun (isAssume, _) => isAssume)
+    then some (pfx ++ f.name) else none).eraseDups.filter fun q =>
+      !depNames.any (fun d => q.startsWith (d ++ "."))
+
 /-- Render the contracts report plus the call-site obligation section, running
     the `bv_decide` backend on the closed-but-non-literal call-site obligations
     and `omega` on the loop init/variant VCs. -/
@@ -795,6 +805,8 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
   let provedCallPre ← kernelDischargeLoopVCs (Report.callPrecondGoals parsedModules)
   -- vacuity: omega proves a contract is unsatisfiable (∀ vars, ¬P) → report vacuous, not proved
   let provedVacuous ← kernelDischargeLoopVCs (Report.vacuityGoals parsedModules)
+  -- assert obligations: omega proves `∀ vars, e` → the assert holds
+  let provedAsserts ← kernelDischargeLoopVCs (Report.assertGoals parsedModules)
   let provedVCs ← kernelDischargeLoopVCs (Report.loopVCGoals parsedModules)
   let boundsObls := Report.boundsObligations parsedModules
   let provedBounds ← kernelDischargeLoopVCs (Report.boundsGoals parsedModules)
@@ -807,6 +819,7 @@ def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.
   let provedOvfBV ← bvDischargeOverflow bvOvfCands
   return Report.contractsReport parsedModules registry provedVCs provedVacuous
     ++ Report.renderCallSites obs proved provedCallPre
+    ++ Report.renderAssertAssume parsedModules provedAsserts
     ++ Report.renderBounds boundsObls provedBounds
     ++ Report.renderDiv divObls provedDiv
     ++ Report.renderOverflow ovfObls provedOvf provedOvfBV
@@ -1399,8 +1412,10 @@ def compileBuild (projectRoot : String) (outputPath : Option String) (emitLLVM :
     let pc := extractProofCore validCore simpleLocMap registry
     if !policy.isEmpty then
       let vac ← computeVacuousQuals parsed.modules depNames
+      let asm := computeAssumeQuals parsed.modules depNames
       let policyDs := enforcePolicy policy validCore.coreModules
         (locMap := policyLocMap) (pc := pc) (depNames := depNames) (vacuousQuals := vac)
+        (assumeQuals := asm)
       if hasErrors policyDs then
         IO.eprintln (renderDiagnostics policyDs (sourceMap := allSrcMap))
         return 1
@@ -1464,8 +1479,10 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
       let registry ← loadRegistryWithLinks mainPath parsed.modules validCore.coreModules
       let pc := extractProofCore validCore simpleLocMap registry
       let vac ← computeVacuousQuals parsed.modules depNames
+      let asm := computeAssumeQuals parsed.modules depNames
       let policyDs := enforcePolicy policy validCore.coreModules
         (locMap := policyLocMap) (pc := pc) (depNames := depNames) (vacuousQuals := vac)
+        (assumeQuals := asm)
       if hasErrors policyDs then
         IO.eprintln (renderDiagnostics policyDs (sourceMap := allSrcMap))
         return 1
@@ -1683,8 +1700,10 @@ def main (args : List String) : IO UInt32 := do
           IO.eprintln (Concrete.renderRegistryIssue issue)
         if !policy.isEmpty then
           let vac ← computeVacuousQuals parsed.modules depNames
+          let asm := computeAssumeQuals parsed.modules depNames
           let policyDs := enforcePolicy policy validCore.coreModules
             (locMap := policyLocMap) (pc := pc) (depNames := depNames) (vacuousQuals := vac)
+            (assumeQuals := asm)
           if hasErrors policyDs then
             IO.eprintln (renderDiagnostics policyDs (sourceMap := allSrcMap))
             return 1

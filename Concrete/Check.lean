@@ -2162,6 +2162,12 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     for (name, info) in env.vars do
       if !info.isCopy && info.state != .consumed && info.state != .reserved && info.loopDepth >= env.loopDepth then
         throwCheck (.continueSkipsUnconsumedLinear name) (some stmt.getSpan)
+  -- assert(e)/assume(e): the condition must be a boolean. Both are proof-only
+  -- (erased in Elab); the obligation (assert) / assumption taint (assume) is
+  -- surfaced by the contracts report.
+  | .assert_ _ cond | .assume_ _ cond =>
+    let t ← checkExpr cond none
+    expectTy .bool t "assert/assume condition" (some stmt.getSpan)
   -- These are desugared before reaching Check; should never appear
   | .letDestructure _ _ _ _ _ _ => pure ()
   | .letStructDestructure _ _ _ _ => pure ()

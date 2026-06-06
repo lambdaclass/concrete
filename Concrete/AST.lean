@@ -153,6 +153,12 @@ inductive Stmt where
   | break_ (span : Span) (value : Option Expr) (label : Option String)  -- break; or break 'label; or break expr;
   | continue_ (span : Span) (label : Option String)                    -- continue; or continue 'label;
   | defer (span : Span) (body : Expr)           -- defer expr;
+  -- `assert(e);` — the program CLAIMS e; the compiler/prover must justify it
+  -- (generates an obligation). `assume(e);` — the program proceeds AS IF e; this
+  -- is trust, not proof (an audit-visible assumption that taints evidence).
+  -- Both are erased before Core/codegen (proof-only metadata), like contracts.
+  | assert_ (span : Span) (cond : Expr)
+  | assume_ (span : Span) (cond : Expr)
   | borrowIn (span : Span) (var : String) (ref : String) (region : String) (isMut : Bool) (body : List Stmt)
   | arrowAssign (span : Span) (obj : Expr) (field : String) (value : Expr)  -- p->x = val
   -- let...else and irrefutable destructuring let (desugared to match before Elab)
@@ -179,6 +185,7 @@ def Stmt.getSpan : Stmt → Span
   | .break_ sp _ _ | .continue_ sp _ | .defer sp _ => sp
   | .borrowIn sp _ _ _ _ _ | .arrowAssign sp _ _ _ => sp
   | .letDestructure sp _ _ _ _ _ | .letStructDestructure sp _ _ _ => sp
+  | .assert_ sp _ | .assume_ sp _ => sp
 
 structure ImportSymbol where
   name : String
@@ -553,6 +560,8 @@ partial def collectFreeVarsStmts (stmts : List Stmt) (bound : List String) : Lis
         (valueFree ++ elseFree, bindings ++ bound)
       | .letStructDestructure _ _ bindings value =>
         (collectFreeVarsExpr value bound, bindings ++ bound)
+      | .assert_ _ cond | .assume_ _ cond =>
+        (collectFreeVarsExpr cond bound, bound)
     freeVars ++ collectFreeVarsStmts rest newBound
 end
 

@@ -53,6 +53,73 @@ is the composition: systems control, explicit authority, contracts in source,
 Lean checked proof links, drift detection, and audit reports that refuse to
 hide trust.
 
+## Three Tiny Claims
+
+Lean proof attached to source:
+
+```con
+#[ensures(result == x + 3)]
+#[proof_by(Examples.ProofPatterns.Proofs.add_three_correct)]
+fn add_three(x: i32) -> i32 {
+    return x + 3;
+}
+```
+
+Audit:
+
+```text
+add_three
+  ensures result == x + 3
+    status: proved_by_lean
+    theorem: Examples.ProofPatterns.Proofs.add_three_correct
+```
+
+Kernel decision procedure:
+
+```con
+#[requires(0 <= i && i < 16)]
+#[ensures(result == a[i])]
+fn get16(a: [u8; 16], i: i32) -> u8 {
+    return a[i];
+}
+```
+
+Audit:
+
+```text
+get16
+  requires 0 <= i && i < 16
+    status: assumed_at_entry
+  runtime array_bounds a[i]
+    status: proved_by_kernel_decision
+    engine: omega
+```
+
+External SMT, when policy allows it:
+
+```con
+#[requires(0 <= len && len <= max_len)]
+#[ensures(result <= max_blocks)]
+fn padded_blocks(len: i32, max_len: i32, max_blocks: i32) -> i32 {
+    return (len + 9 + 63) / 64;
+}
+```
+
+Audit:
+
+```text
+padded_blocks
+  arithmetic summary
+    status: proved_by_smt
+    solver: z3
+    trust: solver_trusted
+    replay: none
+```
+
+The third example is deliberately not the same class as a Lean proof or a
+kernel decision. SMT can be useful, but Concrete must name the solver and the
+trust it adds.
+
 If you are coming from C or Rust and want the short "why this exists" version,
 read [docs/WHY_CONCRETE.md](docs/WHY_CONCRETE.md).
 

@@ -242,11 +242,19 @@ retrofit is explicitly queued behind proof-link migration.
    over-rejected); zero false positives across the flagships. (Deeper ghost-value
    totality — e.g. a partial op inside a `ghost let` value — remains a possible
    follow-up.)
-4. Finish the `assert` / `assume` trapdoor discipline everywhere it appears:
-   `assert` creates an obligation; `assume` is tainted, audit-loud,
-   gate-forbiddable, and never reported as proof. Add
-   `examples/contract_negatives/assert_obligation/` and
-   `examples/contract_negatives/assume_taint/` so the report shows both paths.
+4. **[done]** `assert` / `assume` trapdoor discipline. First-class `Stmt`
+   constructs (`assert(e);` / `assume(e);`), type-checked to `bool` (E0220),
+   erased before Core (they may read ghost state in proof context). `assert(e)`
+   generates an omega obligation folding the function's `#[requires]`:
+   `proved_by_kernel_decision` when discharged, `unproven` when not (never
+   silently accepted), `VIOLATION` when always-false. `assume(e)` is audit-loud:
+   evidence class `assumed` (never upgraded to proof) and the function is marked
+   `⚠ TAINTED`; the `forbid-assume` release profile rejects it (E0614). Reported
+   in a `=== assert / assume ===` section (`Report.assertGoals` /
+   `renderAssertAssume`). `examples/contract_negatives/assert_obligation/`
+   (closed-by-omega / unproven / false) and `assume_taint/` (taint + clean
+   sibling + policy rejection) are pinned by `check_contract_negatives.sh`
+   (24/0, +8).
 5. Improve contract diagnostics: explain whether the failure is caller-side
    precondition, callee-side postcondition, partial postcondition, loop
    invariant initialization, invariant preservation, variant decrease, bad

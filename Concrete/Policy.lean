@@ -25,12 +25,14 @@ structure ProjectPolicy where
   deny : List String := []
   /-- Require proofs for all eligible functions. -/
   requireProofs : Bool := false
+  /-- Forbid `assume(...)` — the escape hatch is off-limits in this profile. -/
+  forbidAssume : Bool := false
 
 instance : Inhabited ProjectPolicy := ⟨{}⟩
 
 /-- True when no policy constraints are set. -/
 def ProjectPolicy.isEmpty (p : ProjectPolicy) : Bool :=
-  !p.predictable && p.deny.isEmpty && !p.requireProofs
+  !p.predictable && p.deny.isEmpty && !p.requireProofs && !p.forbidAssume
 
 -- ============================================================
 -- TOML parsing
@@ -73,6 +75,8 @@ def parsePolicy (content : String) : ProjectPolicy × List String :=
           go rest true { p with predictable := parseValue trimmed == "true" } warns
         else if trimmed.startsWith "require-proofs" then
           go rest true { p with requireProofs := parseValue trimmed == "true" } warns
+        else if trimmed.startsWith "forbid-assume" then
+          go rest true { p with forbidAssume := parseValue trimmed == "true" } warns
         else if trimmed.startsWith "deny" then
           go rest true { p with deny := parseDenyList trimmed } warns
         else
@@ -170,11 +174,28 @@ def enforceNoVacuous (vacuousQuals : List String) : Diagnostics :=
       file := ""
       context := [] }
 
+/-- Reject `assume(...)` under a `forbid-assume` profile. An assume is a trust
+    escape hatch — it lets a function proceed *as if* a fact held without proving
+    it. A release profile can forbid the hatch entirely; every function that opens
+    one is a blocker. The tainted function quals are computed by the caller (it
+    walks the source AST for `assume` statements, absent from Core). -/
+def enforceNoAssume (assumeQuals : List String) : Diagnostics :=
+  assumeQuals.eraseDups.map fun q =>
+    { severity := .error
+      message := s!"policy violation: '{q}' uses assume(...) — the trust escape hatch is forbidden by [policy] forbid-assume = true"
+      pass := "policy"
+      span := none
+      hint := some "discharge the assumption with a proof (turn it into an assert), or remove the assume"
+      code := "E0614"
+      file := ""
+      context := [] }
+
 /-- Enforce policy constraints on compiled modules. Returns diagnostics for violations.
     Runs after CoreCheck (on ValidatedCore) so all type information is available. -/
 def enforcePolicy (policy : ProjectPolicy) (modules : List CModule)
     (locMap : Report.FnLocMap := []) (pc : ProofCore)
-    (depNames : List String := []) (vacuousQuals : List String := []) : Diagnostics :=
+    (depNames : List String := []) (vacuousQuals : List String := [])
+    (assumeQuals : List String := []) : Diagnostics :=
   if policy.isEmpty then [] else
   let projectModules := modules.filter fun m => !depNames.contains m.name
   let ds1 := if policy.predictable then enforcePredictable projectModules pc locMap else []
@@ -182,6 +203,7 @@ def enforcePolicy (policy : ProjectPolicy) (modules : List CModule)
   let ds3 := if policy.requireProofs then enforceRequireProofs (pc.scopeToUser depNames) else []
   -- vacuous contracts are rejected whenever any policy is set (release default).
   let ds4 := enforceNoVacuous vacuousQuals
-  ds1 ++ ds2 ++ ds3 ++ ds4
+  let ds5 := if policy.forbidAssume then enforceNoAssume assumeQuals else []
+  ds1 ++ ds2 ++ ds3 ++ ds4 ++ ds5
 
 end Concrete
