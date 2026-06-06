@@ -8587,6 +8587,11 @@ policy_err "$TESTDIR/adversarial_policy_require_proofs_missing" \
     "is proof-eligible but unproved" \
     "require-proofs rejects missing proof (E0612)"
 
+# 8b. any [policy] rejects a vacuous (unsatisfiable) contract by default
+policy_err "$TESTDIR/adversarial_policy_vacuous" \
+    "has a vacuous (unsatisfiable) contract" \
+    "policy rejects vacuous contract (E0613)"
+
 # 9. require-proofs = true rejects stale proof
 policy_err "$TESTDIR/adversarial_policy_require_proofs_stale" \
     "has a stale proof" \

@@ -1,0 +1,10 @@
+// Adversarial: a vacuous contract under a [policy].
+// `always` has #[requires(false)] — unsatisfiable — so its #[ensures] holds
+// trivially. The policy gate must REJECT it (E0613), not accept a fake proof.
+mod m {
+    #[requires(false)]
+    #[ensures(result > 0)]
+    fn always(x: i32) -> i32 { return x; }
+}
+
+pub fn main() -> i32 { return 0; }

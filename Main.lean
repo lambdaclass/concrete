@@ -772,6 +772,18 @@ def kernelDischargeLoopVCs (candidates : List (String × String)) : IO (List Str
       if (← runLean (mkSrc [c])) == 0 then proved := proved ++ [c.2.1]
     return proved
 
+/-- Qualified names of functions with a vacuous (unsatisfiable) `#[requires]` —
+    constant-false (folder) or symbolically contradictory (omega refutes the
+    conjunction). Project scope only (dep modules excluded). The policy gate
+    rejects these. -/
+def computeVacuousQuals (astModules : List Concrete.Module) (depNames : List String) : IO (List String) := do
+  let constVac := (astModules.flatMap Report.allFunctions).filterMap fun (pfx, f) =>
+    if f.requires.any (fun r => Report.cEvalBool r == some false) then some (pfx ++ f.name) else none
+  let provedVac ← kernelDischargeLoopVCs (Report.vacuityGoals astModules)
+  let omegaVac := provedVac.filterMap fun k =>
+    if k.endsWith "#requires_vac" then some (k.dropEnd ("#requires_vac".length)).toString else none
+  return (constVac ++ omegaVac).eraseDups.filter fun q => !depNames.any (fun d => q.startsWith (d ++ "."))
+
 /-- Render the contracts report plus the call-site obligation section, running
     the `bv_decide` backend on the closed-but-non-literal call-site obligations
     and `omega` on the loop init/variant VCs. -/
@@ -1386,8 +1398,9 @@ def compileBuild (projectRoot : String) (outputPath : Option String) (emitLLVM :
     let registry ← loadRegistryWithLinks mainPath parsed.modules validCore.coreModules
     let pc := extractProofCore validCore simpleLocMap registry
     if !policy.isEmpty then
+      let vac ← computeVacuousQuals parsed.modules depNames
       let policyDs := enforcePolicy policy validCore.coreModules
-        (locMap := policyLocMap) (pc := pc) (depNames := depNames)
+        (locMap := policyLocMap) (pc := pc) (depNames := depNames) (vacuousQuals := vac)
       if hasErrors policyDs then
         IO.eprintln (renderDiagnostics policyDs (sourceMap := allSrcMap))
         return 1
@@ -1450,8 +1463,9 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
       let simpleLocMap := policyLocMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
       let registry ← loadRegistryWithLinks mainPath parsed.modules validCore.coreModules
       let pc := extractProofCore validCore simpleLocMap registry
+      let vac ← computeVacuousQuals parsed.modules depNames
       let policyDs := enforcePolicy policy validCore.coreModules
-        (locMap := policyLocMap) (pc := pc) (depNames := depNames)
+        (locMap := policyLocMap) (pc := pc) (depNames := depNames) (vacuousQuals := vac)
       if hasErrors policyDs then
         IO.eprintln (renderDiagnostics policyDs (sourceMap := allSrcMap))
         return 1
@@ -1668,8 +1682,9 @@ def main (args : List String) : IO UInt32 := do
         for issue in regIssues do
           IO.eprintln (Concrete.renderRegistryIssue issue)
         if !policy.isEmpty then
+          let vac ← computeVacuousQuals parsed.modules depNames
           let policyDs := enforcePolicy policy validCore.coreModules
-            (locMap := policyLocMap) (pc := pc) (depNames := depNames)
+            (locMap := policyLocMap) (pc := pc) (depNames := depNames) (vacuousQuals := vac)
           if hasErrors policyDs then
             IO.eprintln (renderDiagnostics policyDs (sourceMap := allSrcMap))
             return 1

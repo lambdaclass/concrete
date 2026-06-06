@@ -153,16 +153,35 @@ private def enforceRequireProofs (pc : ProofCore) : Diagnostics :=
         "simplify the function body or change [policy] require-proofs")
     | _ => none
 
+/-- Reject vacuous contracts. A function whose precondition is unsatisfiable has
+    a postcondition that holds only because no input ever reaches it — a
+    misleading green, never a real proof. The vacuous function quals are computed
+    by the caller (constant fold + omega over the source `#[requires]`), since
+    contracts are AST metadata not present in Core. Rejected whenever a `[policy]`
+    is configured (a vacuous contract is a release blocker by default). -/
+def enforceNoVacuous (vacuousQuals : List String) : Diagnostics :=
+  vacuousQuals.eraseDups.map fun q =>
+    { severity := .error
+      message := s!"policy violation: '{q}' has a vacuous (unsatisfiable) contract — its postcondition holds trivially and is not genuinely proved"
+      pass := "policy"
+      span := none
+      hint := some "make the precondition satisfiable, or remove the contract"
+      code := "E0613"
+      file := ""
+      context := [] }
+
 /-- Enforce policy constraints on compiled modules. Returns diagnostics for violations.
     Runs after CoreCheck (on ValidatedCore) so all type information is available. -/
 def enforcePolicy (policy : ProjectPolicy) (modules : List CModule)
     (locMap : Report.FnLocMap := []) (pc : ProofCore)
-    (depNames : List String := []) : Diagnostics :=
+    (depNames : List String := []) (vacuousQuals : List String := []) : Diagnostics :=
   if policy.isEmpty then [] else
   let projectModules := modules.filter fun m => !depNames.contains m.name
   let ds1 := if policy.predictable then enforcePredictable projectModules pc locMap else []
   let ds2 := if !policy.deny.isEmpty then enforceDeny projectModules policy.deny else []
   let ds3 := if policy.requireProofs then enforceRequireProofs (pc.scopeToUser depNames) else []
-  ds1 ++ ds2 ++ ds3
+  -- vacuous contracts are rejected whenever any policy is set (release default).
+  let ds4 := enforceNoVacuous vacuousQuals
+  ds1 ++ ds2 ++ ds3 ++ ds4
 
 end Concrete
