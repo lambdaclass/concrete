@@ -152,6 +152,9 @@ jobs:
       - name: VC schema v1 gate (Phase 2 foundation)
         run: bash scripts/tests/check_vc_schema.sh
 
+      - name: ProofKit arithmetic-bridge gate (Phase 2 library)
+        run: bash scripts/tests/check_proofkit_arith.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

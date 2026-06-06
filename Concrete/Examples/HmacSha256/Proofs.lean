@@ -29,6 +29,7 @@ import Std.Tactic.BVDecide
 import Concrete.Proof
 import Concrete.ProofKit.Eval
 import Concrete.ProofKit.BitVec
+import Concrete.ProofKit.Arith
 import Concrete.ProofKit.Array
 import Concrete.ProofKit.Loops
 import Concrete.ProofKit.Calls
@@ -1447,11 +1448,7 @@ def plenOf (len : Nat) : Nat := ((len + 9 + 63) / 64) * 64
 
 theorem plen_ge (len : Nat) : plenOf len ≥ len + 9 := by unfold plenOf; omega
 
-theorem ofNat64_eq_setWidth32 (n : Nat) (h : n < 2^32) :
-    BitVec.ofNat 64 n = (BitVec.ofNat 32 n).setWidth 64 := by
-  apply BitVec.toNat_inj.mp
-  simp only [BitVec.toNat_ofNat, BitVec.toNat_setWidth]
-  omega
+-- `ofNat64_eq_setWidth32` is now a ProofKit arithmetic bridge (Concrete.Proof).
 
 theorem be64_getD (n i : Nat) (hi : i < 8) :
     (Sha256Spec.be64 n).getD i 0 = (BitVec.ofNat 64 n >>> (8 * (7 - i))).setWidth 8 := by
@@ -1745,10 +1742,7 @@ theorem obAt_32 (state : List Sha256Spec.W) (h8 : 8 ≤ state.length) :
 
 -- store-value: the shifted+masked byte (r=0,1,2) and the masked-only byte (r=3)
 
-theorem and255_lo (y : BitVec 32) : (y &&& BitVec.ofInt 32 255).toNat = (BitVec.setWidth 8 y).toNat := by
-  have h : y &&& BitVec.ofInt 32 255 = (BitVec.setWidth 8 y).setWidth 32 := by bv_decide
-  rw [h, BitVec.toNat_setWidth,
-    Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le (BitVec.setWidth 8 y).isLt (by decide))]
+-- `and255_lo` is now a ProofKit arithmetic bridge (Concrete.Proof).
 
 theorem sb_shr_eval (state : List Sha256Spec.W) (i : Nat) (env : Env) (fuel s : Nat) (hi : i < 8)
     (h8 : 8 ≤ state.length)
@@ -1912,23 +1906,16 @@ theorem state_to_bytes_refines_spec (e : Env) (state : List Sha256Spec.W) (h8 : 
 -- ==================================================================
 
 -- sdiv bridge (verified earlier)
-theorem ofNat32_msb_false (a : Nat) (ha : a < 2^31) : (BitVec.ofNat 32 a).msb = false := by
-  rw [BitVec.msb_eq_false_iff_two_mul_lt, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]; omega
+-- `ofNat32_msb_false` is now a ProofKit arithmetic bridge (Concrete.Proof).
 
+/-- HMAC padding block count: a thin corollary of the general ProofKit
+    signed-division bridge `sdiv_ofNat_eq_natDiv`, instantiated at `(L+72)/64`. -/
 theorem sdiv64_bridge (L : Nat) (hL : L ≤ 375) :
     ((BitVec.ofInt 32 ((L:Int) + 9 + 63)).sdiv (BitVec.ofInt 32 64)).toInt
       = (((L + 72) / 64 : Nat) : Int) := by
   rw [show (L:Int) + 9 + 63 = ((L + 72 : Nat) : Int) by omega,
-      show (64 : Int) = ((64 : Nat) : Int) by rfl,
-      BitVec.ofInt_natCast, BitVec.ofInt_natCast,
-      BitVec.sdiv_eq, ofNat32_msb_false (L + 72) (by omega), ofNat32_msb_false 64 (by omega),
-      BitVec.udiv_eq]
-  rw [BitVec.toInt_eq_toNat_of_lt (by
-        rw [BitVec.toNat_udiv, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
-            Nat.mod_eq_of_lt (show L + 72 < 2^32 by omega), Nat.mod_eq_of_lt (show 64 < 2^32 by omega)]
-        omega)]
-  rw [BitVec.toNat_udiv, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
-      Nat.mod_eq_of_lt (show L + 72 < 2^32 by omega), Nat.mod_eq_of_lt (show 64 < 2^32 by omega)]
+      show (64 : Int) = ((64 : Nat) : Int) by rfl]
+  exact sdiv_ofNat_eq_natDiv (L + 72) 64 (by omega) (by omega)
 
 theorem sha256_init_call (env : Env) (fuel : Nat) :
     eval shaFns env (fuel + 3) (.call "sha256_init" [])

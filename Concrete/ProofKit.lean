@@ -1,5 +1,6 @@
 import Concrete.ProofKit.Eval
 import Concrete.ProofKit.BitVec
+import Concrete.ProofKit.Arith
 import Concrete.ProofKit.Array
 import Concrete.ProofKit.Loops
 import Concrete.ProofKit.Calls
@@ -16,6 +17,9 @@ functions don't re-derive the same machinery. All lemmas live in the
 Modules:
 - `ProofKit.Eval`       — `eval` semantics: letIn / ifThenElse / arrayLit stepping.
 - `ProofKit.BitVec`     — Int/Nat/BitVec round-trips + indexing for `bv_decide`.
+- `ProofKit.Arith`      — arithmetic bridges: width conversions, byte masking,
+                          sign-bit facts, and the signed-division bridge
+                          (`sdiv` over unsigned-range operands = `Nat` division).
 - `ProofKit.Array`      — size-generic buffer model `arrN`, frame lemma, arraySet eval.
 - `ProofKit.Loops`      — generic copy-into-buffer loop template `copy_loop`/`cpy_step`
                           + `copyFn` spec, over an arbitrary `fns : FnTable`.

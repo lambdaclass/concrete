@@ -381,11 +381,20 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
    `proved_by_smt`; `check_vc_schema.sh` (23/0) pins that no VC ever carries an
    `smt` engine or `proved_by_smt`/`solver_trusted` status before the external
    trust model lands. See [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).
-7. Centralize arithmetic bridge lemmas before adding more crypto/protocol VCs:
-   `Int` / `Nat` / `BitVec` round trips, division/modulo, shift index
-   arithmetic, byte/word packing, and symbolic bridge cases like the
-   `sdiv`/`Nat.div` proof from HMAC padding. These are proof-library
-   primitives, not one-off flagship lemmas.
+7. **[done]** Centralized arithmetic bridge library. `Concrete/ProofKit/Arith.lean`
+   (namespace `Concrete.Proof`, in the kit umbrella) holds the reusable
+   `Int`/`Nat`/`BitVec` primitives: `ofNat64_eq_setWidth32` (width conversion),
+   `ofNat32_msb_false` (sign bit), `and255_lo` (byte masking), and the
+   generalized signed-division bridge `sdiv_ofNat_eq_natDiv` (`sdiv` over two
+   unsigned-range operands = `Nat` division — the `sdiv`/`Nat.div` case from HMAC
+   padding, now stated once over arbitrary `a`/`b`). The HMAC flagship's one-off
+   lemmas were lifted here and its `sdiv64_bridge` is now a one-line corollary of
+   the general lemma; an inventory confirmed no other example held duplicate
+   arithmetic lemmas. Kernel-checked (no `sorry`; `bv_decide` certificate +
+   `omega`/`simp` — no TCB growth). Gate `check_proofkit_arith.sh` (9/0) pins that
+   the library exists, is actually used by the corpus, and is not re-duplicated as
+   example one-offs. Classifications unchanged (HMAC proofs stay `proved_by_lean`;
+   fingerprints / ProvableV1 conformance / oracle 200/0 all unchanged); no SMT.
 8. Add an *external* SMT backend behind an explicit flag or policy gate, reached
    for only when `bv_decide` cannot (e.g. nonlinear). Start with one solver
    adapter and a stable SMT-LIB output path before adding more solvers. Its
