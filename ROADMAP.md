@@ -489,27 +489,24 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
     reproduced AND that no non-proof class is ever a `proved_*` status. (Casts /
     OOB / div-zero counterexamples extend this as those VC classes gain SMT
     eligibility — Phase 7.)
-15. Add a compact VC/discharge example suite before external SMT:
-    - `proved_by_lean`: straight-line refinement (`ch`), operational loop
-      preservation, and one call-composition theorem that cannot be closed by a
-      decision procedure.
-    - `proved_by_kernel_decision (omega)`: linear integer facts, loop
-      `invariant_init`, `variant_nonnegative`, `variant_decreases`, and
-      `exit_implies_post`.
-    - `proved_by_kernel_decision (bv_decide)`: `rotr`, byte packing, xor/or bit
-      facts, fixed-width wrapping arithmetic, and call-site constant bounds.
-    - `partial`: one-direction postcondition proved, converse outstanding.
-    - `stale`: source-linked proof whose body drifted from the extracted spec.
-    - `missing`: proof-eligible function with no proof link yet.
-    - `assumed`: precondition assumed at entry and a named timing assumption.
-    - `trusted`: FFI/backend/unsafe wrapper that is intentionally outside the
-      proof path but audit-visible.
-    - `runtime_checked`: deliberately unproved runtime-error obligation checked
-      dynamically, with audit showing it is not proof.
-    - `tested_by_oracle`: small function checked against a reference
-      implementation, with audit showing it is regression evidence, not proof.
-    These examples are release-facing documentation fixtures: every evidence
-    class should have one small program and one report snapshot.
+15. **[done]** Compact VC/discharge example matrix. `examples/vc_discharge/` —
+    one tiny, self-contained subexample per VC status a user sees, **no proof
+    registry JSON and no Lean proof file**: `omega.con` →
+    `proved_by_kernel_decision (omega)`, `bv_decide.con` →
+    `proved_by_kernel_decision (bv_decide)`, `solver_trusted.con` →
+    `solver_trusted`, `counterexample.con` → `counterexample`, `missing.con` →
+    `missing`, `assumed.con` → `assumed` (trust boundary). The three proof-backed
+    statuses each need a *real* Lean proof to be honest — recreating one per
+    status is neither compact nor adds value, and a link to a nonexistent theorem
+    would be a misleading green — so the matrix CITES the existing verified
+    references: `proved_by_lean` (`hmac_sha256` `ch`), `partial`
+    (`contract_negatives/weakened_postcondition`), `stale`
+    (`proof_patterns/stale_missing_partial`). README is the matrix table. Gate
+    `check_vc_discharge_examples.sh` (9/0 with Z3, 7/0 without) pins one assertion
+    per status via `--report vcs`/`contracts`/`proof-status`. (Broader evidence
+    classes — `trusted`, `runtime_checked`, `tested_by_oracle` — already live in
+    `examples/evidence_classes/`; this suite is specifically the VC-discharge
+    matrix, not another general gallery.)
 16. Add a clear external-SMT example suite only after the backend exists and
     only behind an explicit policy flag. These examples must teach when SMT is
     useful, when it is trusted, and when Concrete should prefer Lean/kernel

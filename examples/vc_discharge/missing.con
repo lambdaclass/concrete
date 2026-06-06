@@ -1,0 +1,6 @@
+// VC outcome: missing (a postcondition with no in-source proof link).
+//   concrete examples/vc_discharge/missing.con --report vcs
+mod vc {
+    #[ensures(result == x)]
+    fn unproved(x: i32) -> i32 { return x; }
+}

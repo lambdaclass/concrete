@@ -1,0 +1,10 @@
+// VC outcome: proved_by_kernel_decision / bv_decide.
+// A bounded non-negative product fits i32 (30000*60000 < 2^31); the interval
+// bitvector path closes it with a kernel-checked certificate (no SMT).
+//   concrete examples/vc_discharge/bv_decide.con --report vcs
+mod vc {
+    #[overflow_checked]
+    #[requires(0 <= a && a <= 30000)]
+    #[requires(0 <= b && b <= 60000)]
+    fn bv_product(a: i32, b: i32) -> i32 { return a * b; }
+}

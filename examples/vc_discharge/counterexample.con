@@ -1,0 +1,10 @@
+// VC outcome: counterexample (external SMT; a non-proof, with source inputs).
+// The bounds are too loose (100000*100000 > 2^31): Z3 returns sat and a concrete
+// counterexample over the source variables.
+//   concrete examples/vc_discharge/counterexample.con --report vcs --smt
+mod vc {
+    #[overflow_checked]
+    #[requires(0 <= a && a <= 100000)]
+    #[requires(0 <= b && b <= 100000)]
+    fn overflows(a: i32, b: i32) -> i32 { return a * b; }
+}

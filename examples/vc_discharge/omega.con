@@ -1,0 +1,7 @@
+// VC outcome: proved_by_kernel_decision / omega.
+// The assert follows from the function's #[requires] by linear arithmetic.
+//   concrete examples/vc_discharge/omega.con --report vcs
+mod vc {
+    #[requires(0 < x && x < 10)]
+    fn omega_assert(x: i32) -> i32 { assert(x < 16); return x; }
+}

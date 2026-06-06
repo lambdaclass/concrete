@@ -1,0 +1,10 @@
+// VC outcome: solver_trusted (external SMT; NOT kernel evidence).
+// Signed bounds make the product provably fit i32, but omega can't (nonlinear)
+// and the interval bv path bails (signed) — only Z3 closes it.
+//   concrete examples/vc_discharge/solver_trusted.con --report vcs --smt
+mod vc {
+    #[overflow_checked]
+    #[requires(-30000 <= a && a <= 30000)]
+    #[requires(-60000 <= b && b <= 60000)]
+    fn smt_product(a: i32, b: i32) -> i32 { return a * b; }
+}

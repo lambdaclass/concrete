@@ -167,6 +167,9 @@ jobs:
       - name: SMT negatives gate (Phase 2 honesty boundaries)
         run: bash scripts/tests/check_smt_negatives.sh
 
+      - name: VC/discharge example matrix gate (Phase 2 status references)
+        run: bash scripts/tests/check_vc_discharge_examples.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

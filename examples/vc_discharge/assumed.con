@@ -1,0 +1,5 @@
+// VC/audit outcome: assumed (a trust boundary opened by assume(...); never proof).
+//   concrete examples/vc_discharge/assumed.con --report contracts
+mod vc {
+    fn trusts(x: i32) -> i32 { assume(x > 0); return x; }
+}
