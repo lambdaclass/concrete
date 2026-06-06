@@ -34,14 +34,31 @@ printf '%s' "$emit" | grep -qF "(<= sample 30000)" \
 printf '%s' "$emit" | grep -qF "(not (and (<= -2147483648 (* sample gain))" \
   && ok "asserts the NEGATED range goal (refutation query)" || no "missing negated goal"
 
+echo "=== provenance + determinism (no solver needed: the query is deterministic) ==="
+emitjson="$("$COMPILER" "$EX" --report vcs --smt --json 2>/dev/null)"
+printf '%s' "$emitjson" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+v=next((v for v in d['vcs'] if v.get('smt')), None)
+s=v['smt'] if v else {}
+ok = (s.get('logic')=='QF_NIA' and s.get('timeout_sec')==5 and bool(s.get('smtlib_sha'))
+      and '(set-logic QF_NIA)' in s.get('query','') and '(get-model)' in s.get('query','')
+      and 'replay' in s)
+sys.exit(0 if ok else 1)" \
+  && ok "SMT provenance recorded (logic, timeout, smtlib_sha, query, replay)" || no "missing SMT provenance fields"
+# determinism: the SMT-LIB hash is stable across two independent runs.
+sha_a="$(printf '%s' "$emitjson" | python3 -c "import json,sys;d=json.load(sys.stdin);print(' '.join(sorted(v['smt']['smtlib_sha'] for v in d['vcs'] if v.get('smt'))))")"
+sha_b="$("$COMPILER" "$EX" --report vcs --smt --json 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print(' '.join(sorted(v['smt']['smtlib_sha'] for v in d['vcs'] if v.get('smt'))))")"
+[ -n "$sha_a" ] && [ "$sha_a" = "$sha_b" ] && ok "smtlib_sha is deterministic across runs" || no "smtlib_sha drifted: '$sha_a' vs '$sha_b'"
+
 echo "=== default (no flag): the kernel boundary holds ==="
 defjson="$("$COMPILER" "$EX" --report vcs --json 2>/dev/null)"
 printf '%s' "$defjson" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
-bad=[v for v in d['vcs'] if v['expected_discharge']=='smt' or v['engine'].startswith('smt') or v['status'] in ('solver_trusted','proved_by_smt','solver_error','unknown','timeout')]
+bad=[v for v in d['vcs'] if v['expected_discharge']=='smt' or v['engine'].startswith('smt') or v['status'] in ('solver_trusted','proved_by_smt','solver_error','unknown','timeout') or v.get('smt') is not None]
 sys.exit(0 if not bad else 1)" \
-  && ok "no VC advertises smt or a solver status by default" || no "a solver class leaked without the flag"
+  && ok "no VC advertises smt, a solver status, or SMT provenance by default" || no "a solver class/provenance leaked without the flag"
 # the nonlinear VC is honestly unproven by the kernel tiers, not silently 'proved'.
 printf '%s' "$defjson" | python3 -c "
 import json,sys
@@ -59,6 +76,14 @@ d=json.load(sys.stdin)
 bad=[v for v in d['vcs'] if v['status']=='proved_by_kernel_decision' and v['engine'].startswith('smt')]
 sys.exit(0 if not bad else 1)" \
   && ok "no proved_by_kernel_decision VC is attributed to smt" || no "smt overrode a kernel decision"
+# timeout / unknown / solver_error / counterexample are NEVER proof statuses.
+printf '%s' "$smtjson" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+nonproof={'unknown','timeout','solver_error','counterexample'}
+bad=[v for v in d['vcs'] if v['status'] in nonproof and v['status'] in ('proved_by_kernel_decision','proved_by_lean','solver_trusted')]
+sys.exit(0 if not bad else 1)" \
+  && ok "timeout/unknown/solver_error/counterexample are treated as non-proofs" || no "a non-proof status was treated as a proof"
 
 if command -v z3 >/dev/null 2>&1; then
   echo "=== Z3 present: provable bound → solver_trusted; loose bound → counterexample ==="
@@ -85,6 +110,17 @@ ok = ('sample' in m and 'gain' in m and m['sample'].lstrip('-').isdigit() and m[
 ok = ok and (int(m['sample'])*int(m['gain']) > 2147483647 or int(m['sample'])*int(m['gain']) < -2147483648)
 sys.exit(0 if ok else 1)" \
     && ok "counterexample uses source names with overflowing concrete values" || no "counterexample should map to source vars that overflow"
+  # the solver identity+version is recorded for provenance.
+  printf '%s' "$smtjson" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+sys.exit(0 if any(v.get('smt') and v['smt']['solver'].startswith('z3 ') and v['smt']['solver']!='z3 (not run)' for v in d['vcs']) else 1)" \
+    && ok "solver identity+version recorded (e.g. z3 4.16.0)" || no "expected a concrete z3 version in provenance"
+  # determinism of the RESULT CLASS across two solver runs (compare extracted
+  # id:status strings — never embed the JSON query text into python source).
+  cls_a="$(printf '%s' "$smtjson" | python3 -c "import json,sys;d=json.load(sys.stdin);print('|'.join(sorted(v['id']+':'+v['status'] for v in d['vcs'] if v.get('smt'))))")"
+  cls_b="$("$COMPILER" "$EX" --report vcs --smt --json 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print('|'.join(sorted(v['id']+':'+v['status'] for v in d['vcs'] if v.get('smt'))))")"
+  [ -n "$cls_a" ] && [ "$cls_a" = "$cls_b" ] && ok "result class is deterministic across two solver runs" || no "solver result class drifted: '$cls_a' vs '$cls_b'"
 else
   echo "=== Z3 absent: --smt yields solver_error, never a proof ==="
   printf '%s' "$smtjson" | python3 -c "

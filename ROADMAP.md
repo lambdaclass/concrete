@@ -431,8 +431,18 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
    `check_smt_path.sh` (12/0 with Z3, 10/0 without) pins source-named, overflowing
    witnesses and that the default path shows no SMT result. (Loop-variable /
    array-index counterexamples extend this as those VC classes gain SMT eligibility.)
-11. Add CI gates for solver determinism and replay: same VC, same solver
-   configuration, same result class, with timeouts treated as non-proofs.
+11. **[done]** Solver determinism + replay provenance. Every SMT-routed VC now
+   records, in `--report vcs --smt` and JSON (`smt` object), the full provenance
+   needed to reproduce its verdict: `logic` (QF_NIA), `timeout_sec` (5), a stable
+   `smtlib_sha` digest of the exact query (`Report.markSmtEligible` via
+   `shortHash`), the `solver` identity+version (`Main.z3VersionId`, e.g.
+   `z3 4.16.0`), the `query` itself (the replay artifact), and a `replay` command.
+   `Main.smtDischarge` runs Z3 with the pinned `-T:5`. Gate `check_smt_path.sh`
+   (17/0 with Z3, 13/0 without) pins: provenance present; `smtlib_sha` AND result
+   class deterministic across two runs; solver version recorded; timeout / unknown
+   / solver_error / counterexample treated as non-proofs; and `--report vcs` free
+   of all SMT data (including provenance) unless `--smt`/`--emit-smt` is passed.
+   Validated against real Z3 4.16 (stable hashes + identical verdicts across runs).
 12. Add Lean replay for the simplest SMT-discharged fragments where practical:
    propositional/linear integer facts, bounds arithmetic, and trivial BitVec
    identities. Results without replay remain explicitly solver-trusted.

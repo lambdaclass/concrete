@@ -3804,6 +3804,10 @@ structure VC where
   engine        : String       -- constant_fold | omega | bv_decide | lean | "" (none yet)
   -- concrete source-level counterexample (var → value), when a solver returned `sat`:
   counterexample : List (String × String) := []
+  -- external-solver provenance (set only for SMT-routed VCs), for determinism/replay:
+  smtHash       : String := ""  -- stable digest of the exact SMT-LIB query
+  smtQuery      : String := ""  -- the SMT-LIB script itself (the replay artifact)
+  solver        : String := ""  -- solver identity + version, e.g. "z3 4.16.0" (when run)
 
 /-- Split a compiler-generated goal string `∀ (vars : T), (h1) → h2 → (concl)`
     into (hypotheses, conclusion): drop the binder, split the body on top-level
@@ -3961,27 +3965,35 @@ def dischargeVCs (vcs : List VC) (omegaProved bvProved : List String) : List VC 
       { v with status := "proved_by_kernel_decision", engine := "bv_decide" }
     else { v with status := "unproven" }
 
-/-- Mark the SMT-eligible VCs (by id) as routed to the external solver: their
-    `arith_profile` becomes `nonlinear` and `expected_discharge` becomes `smt`.
+/-- Mark the SMT-eligible VCs as routed to the external solver: `arith_profile`
+    becomes `nonlinear`, `expected_discharge` becomes `smt`, and the determinism /
+    replay provenance is attached — a stable digest of the exact SMT-LIB query
+    (`smtHash`) and the query text itself (`smtQuery`, the replay artifact).
     Applied ONLY when the external-SMT path is engaged (an explicit flag) — so by
     default no VC ever advertises `smt`. Does not change `status`. -/
-def markSmtEligible (vcs : List VC) (smtKeys : List String) : List VC :=
+def markSmtEligible (vcs : List VC) (smtGoals : List (String × String)) : List VC :=
   vcs.map fun v =>
-    if smtKeys.contains v.id then { v with arithProfile := "nonlinear", dischargeMode := "smt" } else v
+    match smtGoals.find? (·.1 == v.id) with
+    | some (_, script) =>
+      { v with arithProfile := "nonlinear", dischargeMode := "smt",
+               smtHash := shortHash script, smtQuery := script }
+    | none => v
 
 /-- Fold external-solver results into the VC schedule. A result class
     (`solver_trusted` / `counterexample` / `unknown` / `timeout` / `solver_error`)
     is applied ONLY to a VC the kernel-checked tiers left `unproven` — so an
     external solver can NEVER override or be confused with a `proved_by_kernel_decision`
     or `proved_by_lean` result. The engine records the solver; a `counterexample`
-    carries the solver's model mapped back to source variable names. -/
-def foldSmtResults (vcs : List VC) (results : List (String × String × List (String × String))) : List VC :=
+    carries the solver's model mapped back to source variable names; `solver`
+    records the exact solver identity+version that produced the verdict. -/
+def foldSmtResults (vcs : List VC) (results : List (String × String × List (String × String)))
+    (solverId : String) : List VC :=
   vcs.map fun v =>
     match results.find? (·.1 == v.id) with
     | some (_, cls, model) =>
       if v.status != "unproven" then v else
         let cex := if cls == "counterexample" then model else []
-        { v with status := cls, engine := "smt:z3", counterexample := cex }
+        { v with status := cls, engine := "smt:z3", counterexample := cex, solver := solverId }
     | none => v
 
 /-- Human-readable VC schedule (post-discharge), grouped by originating function.
@@ -3998,11 +4010,13 @@ def vcsReport (vcs : List VC) : String := Id.run do
       let eng := if v.engine.isEmpty then "" else s!" ({v.engine})"
       let cex := if v.counterexample.isEmpty then ""
         else s!"\n      counterexample:  {", ".intercalate (v.counterexample.map (fun (n, x) => s!"{n} = {x}"))}"
+      let prov := if v.smtHash.isEmpty then ""
+        else s!"\n      solver:  {if v.solver.isEmpty then "(not run)" else v.solver} | logic QF_NIA | timeout 5s | smtlib-sha {v.smtHash}"
       out := out ++ s!"\n  [{v.id}]  {v.kind}"
         ++ s!"\n      status:  {v.status}{eng}"
         ++ s!"\n      profile/expected:  {v.arithProfile} / {v.dischargeMode}"
         ++ s!"\n      hypotheses:  {hyps}"
-        ++ s!"\n      conclusion:  {v.conclusion}{deps}{cex}"
+        ++ s!"\n      conclusion:  {v.conclusion}{deps}{cex}{prov}"
   -- summary by status
   let proved := (vcs.filter (·.status == "proved_by_kernel_decision")).length
   let lean := (vcs.filter (·.status == "proved_by_lean")).length
@@ -5402,7 +5416,17 @@ def vcToJson (v : VC) : Val :=
     ("expected_discharge", .str v.dischargeMode),
     ("status", .str v.status),
     ("engine", .str v.engine),
-    ("counterexample", .obj (v.counterexample.map (fun (n, x) => (n, Json.Val.str x))))
+    ("counterexample", .obj (v.counterexample.map (fun (n, x) => (n, Json.Val.str x)))),
+    -- SMT provenance (determinism / replay). Present only for SMT-routed VCs;
+    -- `null` otherwise, so the default report carries no solver data.
+    ("smt", if v.smtHash.isEmpty then Json.Val.null else .obj [
+      ("logic", .str "QF_NIA"),
+      ("timeout_sec", .num 5),
+      ("smtlib_sha", .str v.smtHash),
+      ("solver", .str (if v.solver.isEmpty then "(not run)" else v.solver)),
+      ("query", .str v.smtQuery),
+      ("replay", .str s!"save `query` to vc.smt2 and run: z3 -T:5 vc.smt2")
+    ])
   ]
 
 open Json in
@@ -6528,7 +6552,7 @@ def schemaReport : String :=
           ("schema_kind", .str "\"vcs\""),
           ("vc_schema_version", .str "number — VC schema version (currently 1)"),
           ("count", .str "number"),
-          ("vcs", .str "object[] — each: id, kind, function, loc{file,line}, hypotheses[], conclusion, origin, dependencies[], arith_profile, expected_discharge, status, engine, counterexample{var:value}. status ∈ {planned, proved_by_kernel_decision, proved_by_lean, arithmetic_proved, counterexample, unproven, missing} plus the OPT-IN external-solver classes {solver_trusted, unknown, timeout, solver_error}; engine ∈ {constant_fold, omega, bv_decide, lean, smt:<solver>, \"\"}. counterexample maps SOURCE variable names to concrete values, populated only on a `sat` solver result. A decision procedure can only yield proved_by_kernel_decision; an external solver (behind --smt) yields solver_trusted/counterexample/unknown/timeout/solver_error and only ever on a VC the kernel tiers left unproven — the classes never merge.")])])
+          ("vcs", .str "object[] — each: id, kind, function, loc{file,line}, hypotheses[], conclusion, origin, dependencies[], arith_profile, expected_discharge, status, engine, counterexample{var:value}. status ∈ {planned, proved_by_kernel_decision, proved_by_lean, arithmetic_proved, counterexample, unproven, missing} plus the OPT-IN external-solver classes {solver_trusted, unknown, timeout, solver_error}; engine ∈ {constant_fold, omega, bv_decide, lean, smt:<solver>, \"\"}. counterexample maps SOURCE variable names to concrete values, populated only on a `sat` solver result. smt (null unless the VC was SMT-routed) carries determinism/replay provenance: {logic, timeout_sec, smtlib_sha (stable digest of the exact query), solver (name+version), query (the SMT-LIB script), replay}. A decision procedure can only yield proved_by_kernel_decision; an external solver (behind --smt) yields solver_trusted/counterexample/unknown/timeout/solver_error and only ever on a VC the kernel tiers left unproven — the classes never merge.")])])
     ]),
     ("policies", .obj [
       ("empty_result", .str "A query that matches zero facts returns a facts envelope with an empty facts array and fact_count 0. Semantic queries for unknown functions return a query_answer with answer \"not_found\". Neither case is an error."),

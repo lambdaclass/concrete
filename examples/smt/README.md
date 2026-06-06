@@ -31,6 +31,16 @@ concrete examples/smt/nonlinear_overflow/src/main.con --report vcs --smt
 If Z3 is not on `PATH`, `--smt` reports `solver_error` for every query — an absent
 solver never yields a proof.
 
+### Provenance & determinism
+
+Every SMT-routed VC records, in `--report vcs --smt` and JSON (`smt` object), the
+information needed to reproduce its verdict: the **logic** (`QF_NIA`), the
+**timeout** (5 s), a stable **`smtlib_sha`** digest of the exact query, the
+**solver** identity + version (e.g. `z3 4.16.0`), the **query** itself (the replay
+artifact), and a **replay** command. The `smtlib_sha` and result class are
+deterministic across runs; `check_smt_path.sh` pins this. `timeout`, `unknown`,
+and `solver_error` are always treated as non-proofs.
+
 ## The boundary is enforced
 
 - SMT only ever touches a VC the kernel tiers left `unproven`

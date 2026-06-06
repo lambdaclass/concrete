@@ -833,6 +833,19 @@ def smtModelValue (out v : String) : Option String :=
         let num := cs.takeWhile Char.isDigit
         if num.isEmpty then none else some (String.ofList num)
 
+/-- Solver identity + version for provenance, e.g. "z3 4.16.0", or "z3 (unavailable)"
+    when Z3 is not on PATH. `z3 --version` prints "Z3 version X.Y.Z - 64 bit". -/
+def z3VersionId : IO String := do
+  try
+    let o ← IO.Process.output { cmd := "z3", args := #["--version"] }
+    if o.exitCode != 0 then return "z3 (unavailable)"
+    -- extract the version token after "version"
+    let toks := o.stdout.trimAscii.toString.splitOn " "
+    match toks.dropWhile (· != "version") with
+    | _ :: v :: _ => return s!"z3 {v}"
+    | _ => return "z3"
+  catch _ => return "z3 (unavailable)"
+
 /-- External-SMT adapter (Phase 2 #8/#10). One solver (Z3), pinned timeout. For each
     `(vcKey, smtlibScript)` it writes the script, runs `z3 -T:<timeout>`, and reads
     the first line: `unsat` → `solver_trusted` (solver-proved, solver in the TCB —
@@ -1205,10 +1218,11 @@ def compileAndReport (inputPath : String) (reportType : String)
         for (k, script) in smtGoals do
           IO.println s!";; ==== {k} ====\n{script}\n"
         return 0
-      let dvcs := if smtRun || smtEmit then Report.markSmtEligible dvcs (smtGoals.map (·.1)) else dvcs
+      let dvcs := if smtRun || smtEmit then Report.markSmtEligible dvcs smtGoals else dvcs
       let dvcs ← if smtRun then do
+          let solverId ← z3VersionId
           let results ← smtDischarge smtGoals 5
-          pure (Report.foldSmtResults dvcs results)
+          pure (Report.foldSmtResults dvcs results solverId)
         else pure dvcs
       if reportJson then
         IO.println (Report.vcsJson dvcs 1)
