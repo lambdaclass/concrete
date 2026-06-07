@@ -200,208 +200,29 @@ invariants generate machine-readable VCs; a solver can discharge the easy ones;
 counterexamples are reported clearly; and audit output distinguishes Lean,
 SMT, tests, enforcement, assumptions, and trusted solver claims.
 
-1. Finish the VC/discharge gate before Phase 3. The remaining tasks in this
-   phase are the VC schema, generation coverage, kernel-checked decision path,
-   arithmetic bridge library, explicit external-SMT trust model, examples,
-   counterexamples, replay/determinism gates, and audit integration.
-2. **[done]** VC schema v1. `Report.VC` + `collectVCs` give a single,
-   project-wide, machine-readable view over every obligation, each carrying the
-   full schema: `id`, `loc` (file+line span), `kind`, separated `hypotheses` +
-   `conclusion`, `origin` (function + contract), `dependencies` (proof links it
-   leans on), `arith_profile` (constant/linear/bitvector/nonlinear/refinement/
-   operational/unsupported), and `expected_discharge` (constant_fold/omega/
-   bv_decide/lean/smt/none). Surfaced via `concrete <file> --report vcs` (human)
-   and `--report vcs --json` (versioned envelope, `vc_schema_version: 1`),
-   documented in `--report schema` (`envelopes.vcs`). A VC *describes* an
-   obligation and which backend should own it — it runs no solver, which is what
-   keeps the schema/evidence boundary clean before discharge expands. Gate
-   `check_vc_schema.sh` (16/0) pins the schema, the controlled vocabularies, and
-   the **trust boundary** (no VC is routed to `smt` — SMT cannot silently become
-   a proved path before its trust model lands). Wired into CI + Makefile
-   (`test-vc-schema`).
-3. **[done, via #2]** Generate VCs for pure no-loop contracts: `collectVCs`
-   emits `precondition` VCs at every call site (constant/omega/bv_decide) and
-   `postcondition` VCs at returns (refinement, dependency = registered proof).
-4. **[done, via #2]** Generate VCs for the runtime-safety obligations that exist
-   today: `array_bounds`, `div_nonzero`, and `#[overflow_checked]` `no_overflow`
-   (omega tier + interval-gated bv_decide fallback + constant tier). Later Phase
-   7 work extends this same VC path to casts, panic/abort, byte/text/path
-   boundaries, stack/recursion, and any new runtime-error obligation kinds.
-5. **[done, via #2]** Generate VCs for loop invariants: `loop_invariant_init`
-   (O1), `loop_invariant_preservation` (O2), `loop_exit_implies_post` (O3),
-   `variant_nonnegative` (O4), `variant_decreases` (O5) — O1/O4/O5 omega,
-   O2/O3 operational/lean. (Reuses `loopObInfo`; existing discharge unchanged.)
-6. **[done]** Kernel-checked automation first (`bv_decide`). BitVec /
-   bounded-arithmetic VCs route to Lean's `bv_decide` (in-toolchain; bit-blasts
-   to SAT and replays a kernel-checked certificate — **no TCB growth**) and
-   linear VCs to `omega`. `Main.computeVCsDischarged` runs both backends over the
-   VC schedule and `Report.dischargeVCs` folds the results into each VC's
-   `status` + `engine`: a proved `planned` VC becomes `proved_by_kernel_decision`
-   (engine `omega`/`bv_decide`), constant verdicts are `proved_by_kernel_decision`
-   (`constant_fold`) or `counterexample`, registered Lean links are
-   `proved_by_lean`. Loop-invariant preservation can only reach `arithmetic_proved`
-   (omega closes the arithmetic half; the operational realization needs Lean) —
-   never a full kernel-decision proof. The class stays distinct from
-   `proved_by_smt`; `check_vc_schema.sh` (23/0) pins that no VC ever carries an
-   `smt` engine or `proved_by_smt`/`solver_trusted` status before the external
-   trust model lands. See [docs/PROOF_LADDER.md](docs/PROOF_LADDER.md).
-7. **[done]** Centralized arithmetic bridge library. `Concrete/ProofKit/Arith.lean`
-   (namespace `Concrete.Proof`, in the kit umbrella) holds the reusable
-   `Int`/`Nat`/`BitVec` primitives: `ofNat64_eq_setWidth32` (width conversion),
-   `ofNat32_msb_false` (sign bit), `and255_lo` (byte masking), and the
-   generalized signed-division bridge `sdiv_ofNat_eq_natDiv` (`sdiv` over two
-   unsigned-range operands = `Nat` division — the `sdiv`/`Nat.div` case from HMAC
-   padding, now stated once over arbitrary `a`/`b`). The HMAC flagship's one-off
-   lemmas were lifted here and its `sdiv64_bridge` is now a one-line corollary of
-   the general lemma; an inventory confirmed no other example held duplicate
-   arithmetic lemmas. Kernel-checked (no `sorry`; `bv_decide` certificate +
-   `omega`/`simp` — no TCB growth). Gate `check_proofkit_arith.sh` (9/0) pins that
-   the library exists, is actually used by the corpus, and is not re-duplicated as
-   example one-offs. Classifications unchanged (HMAC proofs stay `proved_by_lean`;
-   fingerprints / ProvableV1 conformance / oracle 200/0 all unchanged); no SMT.
-8. **[done — narrow first slice]** External SMT backend, opt-in. Reached only
-   when the kernel tiers cannot (one VC class for now: `#[overflow_checked]`
-   no-overflow obligations whose operand is genuinely nonlinear — a product of
-   two variables — not constant and not closed by interval `bv_decide`;
-   `Report.overflowSmtGoals` selects them). `--report vcs --emit-smt` emits a
-   stable QF_NIA SMT-LIB query per eligible VC, translated from structured
-   `Expr`s (`Report.exprToSmt`) so it is well-formed by construction — declares
-   the vars, asserts every in-scope `#[requires]`, asserts the negated range
-   goal, `(check-sat)`; if any hypothesis falls outside the fragment the query is
-   dropped (never emitted unsound). `--report vcs --smt` runs one solver (Z3,
-   `-T:5`, `Main.smtDischarge`); an absent solver yields `solver_error`, never a
-   proof. Results are `solver_trusted` (solver in the TCB; no replay yet) — never
-   collapsed into a kernel-checked class. Gate `check_smt_path.sh` (9/0); example
-   `examples/smt/nonlinear_overflow/` + `examples/smt/README.md`. Later: more
-   solvers, policy gating (item 13), Lean replay (item 12).
-9. **[done — classes wired]** Solver results are classified separately in the VC
-   view: `proved_by_kernel_decision` (kernel), `proved_by_lean` (Lean),
-   `solver_trusted` (external `unsat`), `counterexample` (`sat`), `unknown`,
-   `timeout`, `solver_error`. `Report.foldSmtResults` applies the external classes
-   ONLY to a VC the kernel tiers left `unproven`, so the classes never merge;
-   `check_vc_schema.sh` pins that no solver class appears by default and
-   `check_smt_path.sh` pins the flagged classification. (`proved_by_smt_replayed`
-   awaits the Lean-replay path, item 12.)
-10. **[done — for the SMT overflow fragment]** Surface counterexamples in source
-   terms. The emitted SMT-LIB now requests `(get-model)`; on a `sat` result
-   `Main.smtDischarge` parses Z3's model and, because the query declares each
-   variable by its source name, maps the witness straight back to function inputs.
-   The VC carries a `counterexample` field (var → concrete value), rendered in
-   `--report vcs --smt` (`counterexample: sample = 99161, gain = 98166`) and JSON,
-   alongside the failing obligation (`origin`, `conclusion`). Status is
-   `counterexample`, never a proof, and only ever on a VC the kernel tiers left
-   `unproven`. Negative sibling `scale_unbounded` in
-   `examples/smt/nonlinear_overflow/` (bounds that genuinely allow overflow); gate
-   `check_smt_path.sh` (12/0 with Z3, 10/0 without) pins source-named, overflowing
-   witnesses and that the default path shows no SMT result. (Loop-variable /
-   array-index counterexamples extend this as those VC classes gain SMT eligibility.)
-11. **[done]** Solver determinism + replay provenance. Every SMT-routed VC now
-   records, in `--report vcs --smt` and JSON (`smt` object), the full provenance
-   needed to reproduce its verdict: `logic` (QF_NIA), `timeout_sec` (5), a stable
-   `smtlib_sha` digest of the exact query (`Report.markSmtEligible` via
-   `shortHash`), the `solver` identity+version (`Main.z3VersionId`, e.g.
-   `z3 4.16.0`), the `query` itself (the replay artifact), and a `replay` command.
-   `Main.smtDischarge` runs Z3 with the pinned `-T:5`. Gate `check_smt_path.sh`
-   (17/0 with Z3, 13/0 without) pins: provenance present; `smtlib_sha` AND result
-   class deterministic across two runs; solver version recorded; timeout / unknown
-   / solver_error / counterexample treated as non-proofs; and `--report vcs` free
-   of all SMT data (including provenance) unless `--smt`/`--emit-smt` is passed.
-   Validated against real Z3 4.16 (stable hashes + identical verdicts across runs).
-12. **[done — replay artifact + dormant upgrade path]** Lean replay. For each SMT
-   VC, `Report.leanReplayGoals` emits a standalone Lean theorem restating the
-   obligation (hypotheses as binders, range goal as conclusion) with an
-   in-toolchain proof attempt (`by omega`); surfaced via `--report vcs
-   --emit-lean-replay` and in the JSON `smt.lean_replay` object. `--report vcs
-   --smt --replay` runs `lake env lean` on each `solver_trusted` VC's theorem
-   (`Main.leanReplayCheck`) and, on a kernel-checked success, graduates it
-   `solver_trusted` → `proved_by_lean_replay` (engine `lean:omega`) via
-   `Report.foldReplayResults` — the solver is dropped from the claim, so a
-   replayed VC is excluded from `computeSolverTrustedQuals` and is NOT subject to
-   the `solver-evidence` policy. The boundary stays crisp: the upgrade fires ONLY
-   when Lean independently closes the theorem. The current bounded-nonlinear
-   fragment is outside `omega`/`bv_decide` (and `nlinarith` is Mathlib, deliberately
-   not a dependency), so today it stays `solver_trusted` — the upgrade path is real
-   but dormant until a kernel-replayable fragment or a Mathlib build exists.
-   Gate `check_smt_replay.sh` (7/0 with Z3, 6/0 without) pins the artifact, that
-   `omega` genuinely cannot close it (so no silent upgrade), and the default-clean
-   boundary. No Mathlib added.
-13. **[done]** SMT release-policy gate. A project declares its stance with
-    `[policy] solver-evidence` (`forbid` / `allow` / `assumptions`, default unset);
-    `concrete build` inspects the VCs an external solver discharged as
-    `solver_trusted` (`Main.computeSolverTrustedQuals`, run only when the policy
-    takes a stance) and `Policy.enforceSolverEvidence` REJECTS the build (E0615)
-    when they are not permitted — `forbid` blocks any, `assumptions` blocks unless
-    a named `solver-assumption` is declared, `allow` accepts. `counterexample` /
-    `unknown` / `timeout` / `solver_error` are non-proofs regardless of policy and
-    are never counted as evidence. The stance is opt-in: with no key the build
-    never invokes a solver. Fixtures `examples/smt/{policy_forbid,policy_allow,
-    policy_assumptions_missing}/`; gate `check_smt_policy.sh` (5/0 with Z3 — forbid
-    & assumptions-missing rejected, allow+named passes; 4/0 without Z3 — honest, no
-    solver evidence produced). Docs: `examples/smt/README.md` + CONTRACTS_AND_VCS.md
-    plainly state SMT is not Lean/kernel evidence unless replayed (item 12).
-14. **[done]** SMT negative examples — the honesty boundaries. A consolidated
-    suite pins that every external-solver result class is a NON-PROOF unless it is
-    a genuine kernel/Lean discharge: solver absent → `solver_error`; configured
-    tiny timeout (`--report vcs --smt --smt-timeout-ms 1`, Z3 `-t:<ms>` →
-    `Main.smtDischarge`) → `unknown`/`timeout`; out-of-fragment obligation (linear
-    `a + b`) → NO SMT query (SMT never reaches for what the kernel tiers own);
-    satisfiable negated goal → `counterexample`; `[policy] solver-evidence =
-    forbid` → release build FAILS (E0615); Lean replay cannot close → stays
-    `solver_trusted`, not upgraded. `examples/smt/negatives/` (the out-of-fragment
-    `linear_add`) + reuse of `nonlinear_overflow/` & `policy_forbid/`; gate
-    `check_smt_negatives.sh` (9/0 with Z3, 5/0 without) asserts each class is
-    reproduced AND that no non-proof class is ever a `proved_*` status. (Casts /
-    OOB / div-zero counterexamples extend this as those VC classes gain SMT
-    eligibility — Phase 7.)
-15. **[done]** Compact VC/discharge example matrix. `examples/vc_discharge/` —
-    one tiny, self-contained subexample per VC status a user sees, **no proof
-    registry JSON and no Lean proof file**: `omega.con` →
-    `proved_by_kernel_decision (omega)`, `bv_decide.con` →
-    `proved_by_kernel_decision (bv_decide)`, `solver_trusted.con` →
-    `solver_trusted`, `counterexample.con` → `counterexample`, `missing.con` →
-    `missing`, `assumed.con` → `assumed` (trust boundary). The three proof-backed
-    statuses each need a *real* Lean proof to be honest — recreating one per
-    status is neither compact nor adds value, and a link to a nonexistent theorem
-    would be a misleading green — so the matrix CITES the existing verified
-    references: `proved_by_lean` (`hmac_sha256` `ch`), `partial`
-    (`contract_negatives/weakened_postcondition`), `stale`
-    (`proof_patterns/stale_missing_partial`). README is the matrix table. Gate
-    `check_vc_discharge_examples.sh` (9/0 with Z3, 7/0 without) pins one assertion
-    per status via `--report vcs`/`contracts`/`proof-status`. (Broader evidence
-    classes — `trusted`, `runtime_checked`, `tested_by_oracle` — already live in
-    `examples/evidence_classes/`; this suite is specifically the VC-discharge
-    matrix, not another general gallery.)
-16. **[done — teaching group, honest about backend limits]** External-SMT
-    teaching group under `examples/smt/teaching/` (+ `examples/smt/README.md`):
-    explains when SMT is useful and when Concrete refuses it. The ONE genuine
-    solver case is the nonlinear product (`nonlinear_overflow/`, reused for both
-    `solver_trusted` and the false-claim `counterexample`); `kernel_preferred.con`
-    shows linear (omega) and bounded-bitvector (bv_decide) facts emit NO SMT
-    query; `unsupported_theory.con` shows an out-of-fragment VC (nonlinear
-    array-bounds index) is VISIBLE as `unproven`, never dropped, no query. Gate
-    `check_smt_examples.sh` (9/0 with Z3, 7/0 without): the useful case reports
-    solver name/version/smtlib-sha/replay/lean_replay; kernel-owned facts emit no
-    query and are `proved_by_kernel_decision`; out-of-fragment is unproven-but-
-    visible; counterexample stays a non-proof; default reports carry no SMT data.
-    Honestly NOT shipped as working SMT examples (would misrepresent the solver):
-    `range_block_count` (constant-divisor block count is an omega fact, but needs
-    sound division lowering into the goal language — `Int./` vs Concrete `/`
-    differ on negatives) and `path_feasibility` (needs enclosing branch conditions
-    threaded into assert VCs — call-site/bounds/div already thread scope, asserts
-    do not yet). Both documented as queued backend work. (`div_zero` / `overflow`
-    counterexamples for other VC kinds follow as those classes gain SMT
-    eligibility — Phase 7.)
-17. Update audit/release bundles so VC results appear beside proof registry,
+1. Thread enclosing branch conditions into `assert` VCs. Call-site,
+    array-bounds, and div/mod VCs already thread their lexical scope (enclosing
+    `if`-guards + loop invariants) into the omega goal; `assert` VCs do not —
+    they fold only the function's `#[requires]`. So an `assert` in a fall-through
+    branch whose truth follows from the negated guards (a clamp/path-feasibility
+    shape) is reported `unproven` even though omega could close it with the path
+    conditions in scope. Add a scoped `assert` walker (mirroring
+    `scopedCallsB`/`scopedBoundsB`) so assert VCs carry their path conditions.
+    This makes `path_feasibility` a real `kernel_preferred` example (omega owns
+    it) and is a soundness-neutral completeness improvement. Guard with the
+    existing assert-obligation negatives so `assert(false)` / unprovable asserts
+    stay caught.
+2. Update audit/release bundles so VC results appear beside proof registry,
     assumptions, runtime obligations, and proof coverage classification.
-18. Add soundness documentation for the SMT path: trusted solver binary,
+3. Add soundness documentation for the SMT path: trusted solver binary,
     encoding assumptions, unsupported theories, replayed fragments, and how a
     solver bug affects each claim class.
-19. Add the Phase 2 validation artifact: a VC/discharge project that runs the
+4. Add the Phase 2 validation artifact: a VC/discharge project that runs the
     compact VC suite plus the external-SMT suite when enabled, checks every
     solver/kernel evidence class, pins counterexample output, records solver
     name/version/encoding hash, and proves ordinary linear/bv obligations stay
     on `omega`/`bv_decide` rather than drifting into external SMT.
-20. Add a small set of interesting end-of-Phase-2 VC/SMT examples. These are
+5. Add a small set of interesting end-of-Phase-2 VC/SMT examples. These are
     not a second flagship phase and not a broad workload ladder; each example
     must force one named VC/SMT surface and carry an oracle or report gate. Good
     candidates:
@@ -425,34 +246,6 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
     non-proof. If an example needs language features from Phase 8 or runtime
     obligations from Phase 7, keep it as a README stub that names the blocker
     instead of faking the result.
-21. **[done]** Sound division/modulo lowering into the VC goal language (surfaced
-    by #16). `toLeanProp` dropped any `/`/`%` clause, so HMAC-shaped block-count
-    summaries produced no VC. Confirmed empirically that Lean's `Int` `/` is
-    E-division (floor: `(-7)/2 = -4`) while Concrete's is truncate-toward-zero
-    (`-3`) — they agree ONLY for non-negative dividends. `Report.toLeanPropD` now
-    lowers `/`/`%`, but `toLeanPropSound` uses it ONLY under `divSound`: every
-    `/`/`%` must have a provably non-negative dividend (`exprNonNeg` over the
-    `#[requires]`-derived `nonNegFromHyps`) and a positive-literal divisor —
-    otherwise the clause stays non-lowerable (no VC, never mis-proved). Wired into
-    `assertGoals`. `examples/smt/teaching/range_block_count.con` is now a real
-    `kernel_preferred` example: `nblocks`' `(len+72)/64 <= 6` is
-    `proved_by_kernel_decision (omega)` with NO SMT query, and `signed_div` (a
-    possibly-negative dividend) is the negative control — not mis-proved. Gate
-    `check_smt_examples.sh` (10/0 with Z3) pins both. No regression
-    (contract-negatives 33/0, fast suite 1544/0).
-22. **Thread enclosing branch conditions into `assert` VCs** (surfaced by #16).
-    Call-site, array-bounds, and div/mod VCs already thread their lexical scope
-    (enclosing `if`-guards + loop invariants) into the omega goal; `assert` VCs do
-    not — they fold only the function's `#[requires]`. So an `assert` in a
-    fall-through branch whose truth follows from the negated guards (a clamp /
-    path-feasibility shape) is reported `unproven` even though omega could close
-    it with the path conditions in scope. Add a scoped `assert` walker (mirroring
-    `scopedCallsB`/`scopedBoundsB`) so assert VCs carry their path conditions.
-    This makes `path_feasibility` a real `kernel_preferred` example (omega owns it)
-    and is a soundness-neutral completeness improvement (more hypotheses can only
-    let omega prove more, never less). Guard with the existing assert-obligation
-    negatives so `assert(false)` / unprovable asserts stay caught.
-
 ## Phase 3: Proof Authoring And Automation
 
 Goal: make flagship proofs a repeatable engineering workflow, not a collection

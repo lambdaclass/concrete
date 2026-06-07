@@ -10,6 +10,63 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 2 VC and SMT core completed through teaching examples (2026-06-07)
+
+Phase 2's completed VC/SMT foundation moved out of the active roadmap. The
+shipped core now includes:
+
+- VC schema v1 for source contracts, runtime-safety obligations, loop
+  invariants, preconditions, postconditions, dependencies, arithmetic profile,
+  expected discharge, status, and engine.
+- Kernel-first discharge through `omega` and `bv_decide`, with
+  `proved_by_kernel_decision` kept separate from Lean theorem evidence and
+  external solver evidence.
+- `Concrete.ProofKit.Arith`, centralizing the reusable Int/Nat/BitVec bridge
+  lemmas that had been private HMAC proof scaffolding.
+- External SMT as an explicit opt-in path for the narrow nonlinear overflow
+  fragment, with Z3 results classified as `solver_trusted`,
+  `counterexample`, `unknown`, `timeout`, or `solver_error` rather than
+  kernel evidence.
+- Source-level SMT counterexamples, solver provenance, deterministic replay
+  metadata, release-policy gates for solver evidence, Lean replay artifacts,
+  and negative examples proving non-proof solver outcomes stay non-proofs.
+- Compact examples under `examples/vc_discharge/` and SMT teaching examples
+  under `examples/smt/teaching/`, including the `kernel_preferred` anti-example
+  and the out-of-fragment unsupported-theory case.
+- Sound division/modulo lowering for VC goals: `/` and `%` lower only when
+  Concrete and Lean integer semantics agree, namely a provably non-negative
+  dividend and positive-literal divisor. `range_block_count` is now a real
+  `proved_by_kernel_decision (omega)` example, while negative-division cases
+  remain unlowered rather than mis-proved.
+
+Remaining active Phase 2 work is now only the closure work: branch-conditioned
+assert VCs, audit/release integration, SMT soundness docs, validation artifact,
+and optional end-of-phase examples.
+
+### Phase 1 source contracts completed (2026-06-06)
+
+Phase 1 is complete and no longer appears as active roadmap work. It delivered
+the source-contract hardening gate:
+
+- negative contract examples for unmet preconditions, missing/weakened
+  postconditions, invalid invariants, invalid contract expressions, duplicate
+  links, malformed attributes, and fabricated theorem names;
+- vacuity/satisfiability reporting and policy rejection for vacuous contracts;
+- spec/ghost purity checks for contract expressions;
+- first-class `assert(e);` and `assume(e);` with assert obligations,
+  audit-loud assume taint, and the `forbid-assume` policy gate;
+- contract diagnostics taxonomy and a positive resolver fixture proving legal
+  names in complex contracts are not over-rejected;
+- contract API stability facts and `concrete diff` classification for
+  strengthened preconditions, weakened guarantees, and invariant drift;
+- source-contract soundness bridge facts R-22..R-28 in
+  `Concrete/ProofSoundness.lean`;
+- an HMAC source-contract retrofit that proves symbolic call-site bounds where
+  the current arithmetic can support them and reports the remaining
+  division-shaped call-site gap honestly;
+- `check_phase1_contracts.sh`, the Phase 1 umbrella gate over per-class report
+  snapshots, negative fixtures, stability fixtures, and documentation.
+
 ### Contract-negatives suite completed (2026-06-06)
 
 The Phase 1 source-contract negative suite is now a real regression gate:
