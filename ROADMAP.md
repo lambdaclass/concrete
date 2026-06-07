@@ -561,6 +561,31 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
     non-proof. If an example needs language features from Phase 8 or runtime
     obligations from Phase 7, keep it as a README stub that names the blocker
     instead of faking the result.
+21. **Sound division/modulo lowering into the VC goal language** (surfaced by #16).
+    `Report.toLeanProp` (and the omega goal generators) currently lower
+    `+`/`-`/`*` but drop any clause containing `/` or `%` — so a contract or
+    assert like the HMAC block-count summary `(len + 9 + 63) / 64 <= max` produces
+    no VC at all. Add division/modulo lowering, but **soundly**: Concrete's integer
+    `/`/`%` semantics (truncation toward zero, like C/Rust) differ from Lean's
+    `Int./`/`Int.emod` (T-division vs E-division) on negative operands, so a naive
+    `| .div => "{L} / {R}"` would let omega "prove" facts under the wrong
+    convention. Model the matching semantics (or gate lowering to provably
+    non-negative operands) so omega owns constant-divisor summaries. Then
+    `range_block_count` becomes a real `kernel_preferred` example
+    (`examples/smt/teaching/`), discharged by omega — not SMT. Add a negative
+    fixture pinning that a negative-operand division is NOT mis-proved.
+22. **Thread enclosing branch conditions into `assert` VCs** (surfaced by #16).
+    Call-site, array-bounds, and div/mod VCs already thread their lexical scope
+    (enclosing `if`-guards + loop invariants) into the omega goal; `assert` VCs do
+    not — they fold only the function's `#[requires]`. So an `assert` in a
+    fall-through branch whose truth follows from the negated guards (a clamp /
+    path-feasibility shape) is reported `unproven` even though omega could close
+    it with the path conditions in scope. Add a scoped `assert` walker (mirroring
+    `scopedCallsB`/`scopedBoundsB`) so assert VCs carry their path conditions.
+    This makes `path_feasibility` a real `kernel_preferred` example (omega owns it)
+    and is a soundness-neutral completeness improvement (more hypotheses can only
+    let omega prove more, never less). Guard with the existing assert-obligation
+    negatives so `assert(false)` / unprovable asserts stay caught.
 
 ## Phase 3: Proof Authoring And Automation
 
