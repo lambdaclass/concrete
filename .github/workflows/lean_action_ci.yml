@@ -215,6 +215,9 @@ jobs:
       - name: Obligation-expression lowering gate (Phase 3 #12 shared lowering layer)
         run: bash scripts/tests/check_obligation_lowering.sh
 
+      - name: Backend discharge-adapter gate (Phase 3 #13 evidence-class firewall)
+        run: bash scripts/tests/check_discharge_adapters.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 
