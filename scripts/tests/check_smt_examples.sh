@@ -32,6 +32,16 @@ have_bv=any(v['status']=='proved_by_kernel_decision' and v['engine']=='bv_decide
 sys.exit(0 if have_omega and have_bv else 1)" \
   && ok "facts are proved_by_kernel_decision (omega AND bv_decide), not solver_trusted" || no "expected omega+bv kernel proofs"
 
+echo "=== range_block_count: HMAC summary is a KERNEL fact (omega), not SMT ==="
+RBC="examples/smt/teaching/range_block_count.con"
+printf '%s' "$("$COMPILER" "$RBC" --report vcs --emit-smt 2>/dev/null)" | grep -qiF "no SMT-eligible" \
+  && ok "block-count summary → no SMT query" || no "block-count produced an SMT query"
+printf '%s' "$("$COMPILER" "$RBC" --report vcs 2>/dev/null)" | grep -A2 "nblocks#aa0\]" | grep -qF "proved_by_kernel_decision (omega)" \
+  && ok "nblocks (len+72)/64 <= 6 → proved_by_kernel_decision (omega)" || no "block-count not omega-proved"
+# soundness: a possibly-negative dividend is NEVER mis-proved (no kernel proof).
+printf '%s' "$("$COMPILER" "$RBC" --report vcs 2>/dev/null)" | awk '/signed_div#aa0\]/{f=1} f{print} f&&/^$/{exit}' | grep -qF "proved_by_kernel_decision" \
+  && no "signed division (negative dividend) was mis-proved — UNSOUND" || ok "signed division (possibly negative) is NOT mis-proved (sound gate)"
+
 echo "=== unsupported_theory: out-of-fragment VC is VISIBLE (unproven), no query ==="
 printf '%s' "$("$COMPILER" "$UN" --report vcs --emit-smt 2>/dev/null)" | grep -qiF "no SMT-eligible" \
   && ok "nonlinear array-bounds index → no SMT query" || no "out-of-fragment VC produced an SMT query"

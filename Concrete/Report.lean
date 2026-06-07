@@ -946,6 +946,78 @@ partial def toLeanProp : Expr → Option String
     | _ => none
   | _ => none
 
+/-! ### Sound division/modulo lowering (Phase 2 #21)
+
+`toLeanProp` drops any clause containing `/` or `%`, so a block-count summary like
+`(len + 9 + 63) / 64 <= max` never becomes a VC. Concrete's `/`/`%` truncate toward
+zero (LLVM `sdiv`/`srem`); Lean's `Int` `/`/`%` are E-division (floor), which agree
+with Concrete ONLY when the dividend is non-negative. So `toLeanPropD` lowers
+division too, but it is SOUND to use only when `divSound` holds — every `/`/`%` has
+a provably non-negative dividend and a positive-literal divisor. Otherwise the
+clause stays non-lowerable (no VC), never mis-proved. -/
+
+/-- Program variables a hypothesis set proves `≥ 0` (`0 ≤ v` / `0 < v`, recursing
+    through conjunctions). Conservative — only used to gate division lowering. -/
+partial def nonNegVarsOf : Expr → List String
+  | .binOp _ .and_ l r => nonNegVarsOf l ++ nonNegVarsOf r
+  | .paren _ e => nonNegVarsOf e
+  | .binOp _ .leq lo (.ident _ v) => match cEvalInt lo with | some k => if k ≥ 0 then [v] else [] | _ => []
+  | .binOp _ .lt  lo (.ident _ v) => match cEvalInt lo with | some k => if k ≥ 0 then [v] else [] | _ => []
+  | _ => []
+
+def nonNegFromHyps (hyps : List Expr) : List String := (hyps.flatMap nonNegVarsOf).eraseDups
+
+/-- `e` is provably `≥ 0` from the non-negative variable set `nn`. -/
+partial def exprNonNeg (nn : List String) : Expr → Bool
+  | .intLit _ v => v ≥ 0
+  | .ident _ n => nn.contains n
+  | .paren _ e => exprNonNeg nn e
+  | .binOp _ .add l r => exprNonNeg nn l && exprNonNeg nn r
+  | .binOp _ .mul l r => exprNonNeg nn l && exprNonNeg nn r
+  | .binOp _ .div l r => exprNonNeg nn l && exprNonNeg nn r
+  | .binOp _ .mod _ r => exprNonNeg nn r
+  | _ => false
+
+/-- Every `/`/`%` in `e` is sound to lower to Lean's E-division: non-negative
+    dividend (so toward-zero = floor) and a positive-literal divisor. -/
+partial def divSound (nn : List String) : Expr → Bool
+  | .binOp _ .div a b => exprNonNeg nn a && (match cEvalInt b with | some k => k > 0 | _ => false) && divSound nn a && divSound nn b
+  | .binOp _ .mod a b => exprNonNeg nn a && (match cEvalInt b with | some k => k > 0 | _ => false) && divSound nn a && divSound nn b
+  | .binOp _ _ l r => divSound nn l && divSound nn r
+  | .unaryOp _ _ e | .paren _ e => divSound nn e
+  | _ => true
+
+/-- A clause contains `/` or `%`. -/
+partial def exprHasDiv : Expr → Bool
+  | .binOp _ op l r => (op == .div || op == .mod) || exprHasDiv l || exprHasDiv r
+  | .unaryOp _ _ e | .paren _ e => exprHasDiv e
+  | _ => false
+
+/-- `toLeanProp` extended with `/`/`%` (→ Lean E-division). Use ONLY under `divSound`. -/
+partial def toLeanPropD : Expr → Option String
+  | .intLit _ v => some s!"{v}"
+  | .ident _ n => some n
+  | .paren _ e => toLeanPropD e
+  | .call _ fn _ args => do let as ← args.mapM toLeanPropD; some s!"{fn} {" ".intercalate as}"
+  | .binOp _ op l r => do
+    let L ← toLeanPropD l
+    let R ← toLeanPropD r
+    match op with
+    | .leq => some s!"{L} ≤ {R}" | .lt => some s!"{L} < {R}"
+    | .geq => some s!"{L} ≥ {R}" | .gt => some s!"{L} > {R}"
+    | .eq => some s!"{L} = {R}" | .neq => some s!"{L} ≠ {R}"
+    | .and_ => some s!"({L} ∧ {R})" | .or_ => some s!"({L} ∨ {R})"
+    | .add => some s!"({L} + {R})" | .sub => some s!"({L} - {R})" | .mul => some s!"({L} * {R})"
+    | .div => some s!"({L} / {R})" | .mod => some s!"({L} % {R})"
+    | _ => none
+  | _ => none
+
+/-- Lower an assert/contract clause, soundly handling division: a clause with
+    `/`/`%` is lowered (E-division) only when `divSound nn` holds; otherwise it is
+    left non-lowerable. Division-free clauses go through `toLeanProp` unchanged. -/
+def toLeanPropSound (nn : List String) (e : Expr) : Option String :=
+  if exprHasDiv e then (if divSound nn e then toLeanPropD e else none) else toLeanProp e
+
 /-- Omega goals that witness an UNSATISFIABLE contract (the vacuity risk): for a
     function's `#[requires]` conjunction and each loop `#[invariant]`,
     `∀ vars, ¬(P)`. If omega proves it, no input satisfies P, so the contract is
@@ -999,10 +1071,12 @@ def assertGoals (modules : List Module) : List (String × String) := Id.run do
     -- omitting any is sound: fewer hypotheses can only make omega prove LESS).
     let reqProps := f.requires.filterMap toLeanProp
     let reqVars := f.requires.flatMap collectIdents
+    -- variables the #[requires] prove non-negative — gates sound division lowering.
+    let nn := nonNegFromHyps f.requires
     let mut i := 0
     for (isAssume, cond) in f.body.flatMap collectAssertAssumeS do
       if !isAssume then
-        match toLeanProp cond with
+        match toLeanPropSound nn cond with
         | some p =>
           let vars := (collectIdents cond ++ reqVars).eraseDups
           let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "

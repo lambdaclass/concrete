@@ -1,0 +1,28 @@
+// TEACHING — an HMAC-shaped arithmetic summary is a KERNEL fact, not SMT.
+//
+// You might expect `(len + 9 + 63) / 64 <= max_blocks` to need a solver. It does
+// not: the divisor is the constant 64, and with a non-negative dividend the
+// kernel decision procedure (omega) owns it — `--report vcs` shows
+// proved_by_kernel_decision (omega), and `--emit-smt` produces NO query.
+//
+// Soundness: Concrete's `/` truncates toward zero (LLVM sdiv); Lean's `/` floors.
+// They agree only for non-negative dividends, so the VC is generated ONLY when the
+// dividend is provably >= 0 (here from `0 <= len`). `signed_div` shows the guard:
+// a possibly-negative dividend is NOT lowered, so it is never mis-proved.
+mod blocks {
+    // padded length (len + 0x80 marker + 8-byte count, rounded to 64) is <= 6
+    // blocks for len <= 312. omega proves it; no SMT.
+    #[requires(0 <= len && len <= 312)]
+    fn nblocks(len: i32) -> i32 {
+        assert((len + 72) / 64 <= 6);
+        return (len + 72) / 64;
+    }
+
+    // NEGATIVE control: the dividend may be negative (Concrete trunc-to-zero ≠
+    // Lean floor), so this division is NOT lowered to a VC — never mis-proved.
+    #[requires(-100 <= x && x <= 100)]
+    fn signed_div(x: i32) -> i32 {
+        assert(x / 2 <= 50);
+        return x / 2;
+    }
+}
