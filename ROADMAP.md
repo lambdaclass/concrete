@@ -375,6 +375,8 @@ depends on them.
    policies, assumptions, target profile, build profile, oracle manifests,
    source maps, toolchain identity, and command mode. All commands must load
    this once instead of growing command-specific project discovery.
+   This is the Gleam-style product lesson: one coherent toolchain surface, not
+   separate mini-compilers behind `build`, `test`, `fmt`, `audit`, and `prove`.
 2. Split the frontend into named pass outputs: parsed AST, resolved AST,
    canonical IR, typed surface IR, ownership-checked IR,
    capability-checked IR, contract/ghost/assert metadata, lowered Core, and
@@ -428,6 +430,9 @@ depends on them.
     `typecheck(function)`, `capabilities(function)`, `typed_ir(function)`,
     `core(function)`, `obligations(function)`, `audit_facts(function)`,
     `codegen(function)`, and `release_bundle(project)`.
+    The shape should be query-first, Salsa/rust-analyzer style, but Concrete
+    should not take a cache dependency until invalidation and diagnostics are
+    stable.
 16. Define incremental artifact dependencies: which source files/functions
     affect which diagnostics, facts, obligations, proof checks, generated code,
     inspect output, and release-bundle entries. Do not implement caching broadly

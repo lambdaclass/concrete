@@ -39,6 +39,12 @@ Those commands may stop at different stages, but they should not each invent
 their own project loading, source discovery, diagnostics, policy loading, or
 target-profile logic.
 
+This is a product decision as much as an architecture decision. Concrete should
+feel like one coherent toolchain, not a compiler plus a pile of wrapper scripts.
+The lesson from languages with strong developer tooling is that `build`, `run`,
+`test`, `fmt`, docs, diagnostics, and language-server facts should share the
+same project model.
+
 ## Non-Goals
 
 This phase does not introduce a new proof system, external compiler framework,
@@ -223,6 +229,11 @@ release_bundle(project)
 
 The first implementation can recompute everything. The important part is
 recording dependencies now so a later cache does not guess.
+
+The intended shape is query-first: each compiler fact has a named key, stable
+inputs, and declared dependencies. This borrows the useful discipline from
+query-based compilers without committing Concrete to a caching framework before
+the pass boundaries and diagnostics are stable.
 
 ## Backend Contract
 
