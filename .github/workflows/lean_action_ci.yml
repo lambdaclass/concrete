@@ -176,6 +176,9 @@ jobs:
       - name: Red-team VC/SMT gate (Phase 2 adversarial)
         run: bash scripts/tests/check_smt_redteam.sh
 
+      - name: End-of-Phase-2 VC/SMT examples gate
+        run: bash scripts/tests/check_vc_examples.sh
+
       - name: Phase 2 VC/discharge validation artifact (umbrella)
         run: bash scripts/tests/check_phase2_vc.sh
 

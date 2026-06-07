@@ -1,0 +1,10 @@
+// VC suite #7 — chunked_hash_padding: HMAC-shaped block-count arithmetic. The
+// padded message fits a bounded number of blocks; the constant-divisor division
+// is kernel-owned (omega via sound division lowering), not SMT.
+mod pad {
+    #[requires(0 <= len && len <= 312)]
+    fn nblocks(len: i32) -> i32 {
+        assert((len + 72) / 64 <= 6);
+        return (len + 72) / 64;
+    }
+}

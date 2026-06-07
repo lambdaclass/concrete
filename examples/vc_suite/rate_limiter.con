@@ -1,0 +1,19 @@
+// VC suite #8 — rate_limiter: a counter clamped into [0, cap]. The clamp's safety
+// follows from the branch guards (omega via threaded path conditions); weakening
+// a guard leaves the postcondition unproven (the false-postcondition surface).
+mod rl {
+    #[requires(0 <= cap && cap <= 1000)]
+    fn clamp_count(n: i32, cap: i32) -> i32 {
+        if n < 0 { return 0; }
+        if n > cap { return cap; }
+        assert(0 <= n && n <= cap);   // path conditions ⟹ proved (omega)
+        return n;
+    }
+    // weakened: missing the upper guard, so n <= cap does NOT follow → unproven.
+    #[requires(0 <= cap && cap <= 1000)]
+    fn weak_clamp(n: i32, cap: i32) -> i32 {
+        if n < 0 { return 0; }
+        assert(n <= cap);
+        return n;
+    }
+}

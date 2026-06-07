@@ -1,0 +1,16 @@
+// VC suite #5 — packet_window: a fixed 64-byte window where header length and
+// payload length must line up inside the window. Forces bounds arithmetic; the
+// bad-length variant stays unproven (the counterexample surface).
+mod pkt {
+    // header + payload fits the 64-byte window — follows from #[requires] (omega).
+    #[requires(0 <= hlen && hlen <= 8 && 0 <= plen && hlen + plen <= 64)]
+    fn payload_end(hlen: i32, plen: i32) -> i32 {
+        assert(hlen + plen <= 64);
+        return hlen + plen;
+    }
+    // bad length: no bound relating hlen+plen to 64 → the slice can overrun → unproven.
+    fn unchecked_end(hlen: i32, plen: i32) -> i32 {
+        assert(hlen + plen <= 64);
+        return hlen + plen;
+    }
+}

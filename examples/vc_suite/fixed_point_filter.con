@@ -1,0 +1,12 @@
+// VC suite #6 — fixed_point_filter: Q-format arithmetic. A linear accumulate is
+// kernel-owned (omega); a signed nonlinear product is the genuine SMT surface.
+mod dsp {
+    // linear accumulate → omega (NOT SMT).
+    #[overflow_checked]
+    #[requires(0 <= a && a <= 1000 && 0 <= b && b <= 1000)]
+    fn accumulate(a: i32, b: i32) -> i32 { return a + b; }
+    // signed Q-format scale: sample * coeff — nonlinear, signed → solver_trusted under --smt.
+    #[overflow_checked]
+    #[requires(-30000 <= sample && sample <= 30000 && -32768 <= coeff && coeff <= 32767)]
+    fn scale(sample: i32, coeff: i32) -> i32 { return sample * coeff; }
+}

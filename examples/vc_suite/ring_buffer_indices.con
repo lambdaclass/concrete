@@ -1,0 +1,10 @@
+// VC suite #9 — ring_buffer_indices: a wraparound index into a fixed capacity.
+// `i % 16` stays in [0, 16) for a non-negative index — kernel-owned (omega via
+// sound modulo lowering), not SMT.
+mod ring {
+    #[requires(0 <= i)]
+    fn wrap(i: i32) -> i32 {
+        assert(0 <= i % 16 && i % 16 < 16);
+        return i % 16;
+    }
+}

@@ -27,6 +27,7 @@ SUBGATES=(
   check_smt_replay.sh             # Lean-replay artifact + crisp boundary
   check_smt_examples.sh           # teaching group (when useful / when refused)
   check_smt_redteam.sh            # adversarial: nothing mis-proved, no crash
+  check_vc_examples.sh            # end-of-Phase-2 examples (one VC/SMT surface each)
 )
 
 PASS=0; FAIL=0
