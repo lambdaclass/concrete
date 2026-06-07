@@ -1148,17 +1148,19 @@ def genPreservationVC (lc : LoopContract) : Option String := do
     invariant is inductive as arithmetic, independent of how the loop body is
     realized. The remaining *operational* half (the extracted body actually
     performs the substitution) is `genPreservationShape` and still needs Lean. -/
-def genPreservationGoal (lc : LoopContract) : Option String := do
+def genPreservationGoal (lc : LoopContract) (outer : List Expr := []) : Option String := do
   let guard ← lc.guard
   if lc.invariants.isEmpty then failure
   let invs' := lc.invariants.map (substContract lc.body)
+  let outerStrs := outer.filterMap toLeanProp
   let vars := (lc.invariants.flatMap collectIdents ++ collectIdents guard
+                ++ outer.flatMap collectIdents
                 ++ lc.body.flatMap (fun (_, e) => collectIdents e)).eraseDups
   let invStrs ← lc.invariants.mapM toLeanProp
   let guardStr ← toLeanProp guard
   let inv'Strs ← invs'.mapM toLeanProp
   let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
-  some s!"{binder}({" ∧ ".intercalate invStrs}) → {guardStr} → ({" ∧ ".intercalate inv'Strs})"
+  some s!"{binder}({" ∧ ".intercalate (outerStrs ++ invStrs)}) → {guardStr} → ({" ∧ ".intercalate inv'Strs})"
 
 /-- The **operational** half of invariant_preservation as a Lean theorem
     *shape* (not a claim): the extracted loop body, evaluated, yields the
@@ -1178,37 +1180,44 @@ def genPreservationShape (lc : LoopContract) (fnQual : String) : Option String :
 
 /-- invariant_init VC: the invariant holds in the loop-entry state (the for-init
     and preceding let-constants substituted). -/
-def genInitVC (lc : LoopContract) (extraLets : List (String × Expr)) : Option String := do
+def genInitVC (lc : LoopContract) (extraLets : List (String × Expr))
+    (outer : List Expr := []) : Option String := do
   if lc.invariants.isEmpty then failure
   let inits := lc.invariants.map (substContract (lc.entrySubst ++ extraLets))
-  let vars := (inits.flatMap collectIdents).eraseDups
+  let outerStrs := outer.filterMap toLeanProp
+  let vars := (inits.flatMap collectIdents ++ outer.flatMap collectIdents).eraseDups
   let strs ← inits.mapM toLeanProp
   let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
-  some s!"{binder}{" ∧ ".intercalate strs}"
+  let hyp := if outerStrs.isEmpty then "" else s!"({" ∧ ".intercalate outerStrs}) → "
+  some s!"{binder}{hyp}{" ∧ ".intercalate strs}"
 
 /-- variant_nonnegative VC: invariant ∧ guard → 0 ≤ variant. -/
-def genVariantNonneg (lc : LoopContract) : Option String := do
+def genVariantNonneg (lc : LoopContract) (outer : List Expr := []) : Option String := do
   let v ← lc.variant
   let g ← lc.guard
   if lc.invariants.isEmpty then failure
-  let vars := (lc.invariants.flatMap collectIdents ++ collectIdents g ++ collectIdents v).eraseDups
+  let outerStrs := outer.filterMap toLeanProp
+  let vars := (lc.invariants.flatMap collectIdents ++ collectIdents g ++ collectIdents v
+                ++ outer.flatMap collectIdents).eraseDups
   let invs ← lc.invariants.mapM toLeanProp
   let gs ← toLeanProp g
   let vs ← toLeanProp v
-  some s!"∀ ({" ".intercalate vars} : Int), {" ∧ ".intercalate invs} → {gs} → 0 ≤ {vs}"
+  some s!"∀ ({" ".intercalate vars} : Int), {" ∧ ".intercalate (outerStrs ++ invs)} → {gs} → 0 ≤ {vs}"
 
 /-- variant_decreases VC: invariant ∧ guard → variant[body] < variant. -/
-def genVariantDecreases (lc : LoopContract) : Option String := do
+def genVariantDecreases (lc : LoopContract) (outer : List Expr := []) : Option String := do
   let v ← lc.variant
   let g ← lc.guard
   if lc.invariants.isEmpty then failure
   let v' := substContract lc.body v
-  let vars := (lc.invariants.flatMap collectIdents ++ collectIdents g ++ collectIdents v).eraseDups
+  let outerStrs := outer.filterMap toLeanProp
+  let vars := (lc.invariants.flatMap collectIdents ++ collectIdents g ++ collectIdents v
+                ++ outer.flatMap collectIdents).eraseDups
   let invs ← lc.invariants.mapM toLeanProp
   let gs ← toLeanProp g
   let vs ← toLeanProp v
   let vs' ← toLeanProp v'
-  some s!"∀ ({" ".intercalate vars} : Int), {" ∧ ".intercalate invs} → {gs} → {vs'} < {vs}"
+  some s!"∀ ({" ".intercalate vars} : Int), {" ∧ ".intercalate (outerStrs ++ invs)} → {gs} → {vs'} < {vs}"
 
 /-- The function's loop-exit return expression, when the loop is immediately
     followed by a single `return e`. In that shape the loop-exit state IS the
@@ -1229,20 +1238,22 @@ def loopExitReturn (body : List Stmt) : Option Expr :=
     States `∀ vars, invariant ∧ ¬guard → ensures'`. `none` when there is no
     ensures, no clean loop-exit return, or a `result` we cannot ground (so the
     bridge stays honest). -/
-def genExitVC (lc : LoopContract) (ensures : List Expr) (retExpr : Option Expr) : Option String := do
+def genExitVC (lc : LoopContract) (ensures : List Expr) (retExpr : Option Expr)
+    (outer : List Expr := []) : Option String := do
   let g ← lc.guard
   if lc.invariants.isEmpty || ensures.isEmpty then failure
   let subst := match retExpr with | some e => [("result", e)] | none => []
   let posts := ensures.map (substContract subst)
   -- a still-free `result` means we could not ground the postcondition → bail
   if posts.any (fun e => (collectIdents e).contains "result") then failure
+  let outerStrs := outer.filterMap toLeanProp
   let invs ← lc.invariants.mapM toLeanProp
   let gs ← toLeanProp g
   let postStrs ← posts.mapM toLeanProp
   let vars := (lc.invariants.flatMap collectIdents ++ collectIdents g
-                ++ posts.flatMap collectIdents).eraseDups
+                ++ outer.flatMap collectIdents ++ posts.flatMap collectIdents).eraseDups
   let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
-  some s!"{binder}{" ∧ ".intercalate invs} ∧ ¬({gs}) → {" ∧ ".intercalate postStrs}"
+  some s!"{binder}{" ∧ ".intercalate (outerStrs ++ invs)} ∧ ¬({gs}) → {" ∧ ".intercalate postStrs}"
 
 -- ============================================================
 -- Runtime-safety obligations: array bounds
@@ -2166,19 +2177,24 @@ def loopVCGoals (modules : List Module) : List (String × String) := Id.run do
     let extraLets := letConstMap f.body
     let fq := pfx ++ f.name
     let retExpr := loopExitReturn f.body
+    -- Phase 3 #9: thread the function's `#[requires]` into every loop obligation
+    -- (the unified scoped context). Adding hypotheses is monotonic — it can only
+    -- turn an `unproven` loop VC `proved` (e.g. an init `0 ≤ n` from a precondition),
+    -- never the reverse.
+    let outer := f.requires
     for lc in f.loopContracts do
-      if let some g := genInitVC lc extraLets then
+      if let some g := genInitVC lc extraLets outer then
         out := out ++ [(loopVCKey fq lc.line "O1", g)]
       -- O2 arithmetic half: invariant is inductive (omega); operational half
       -- still needs Lean (genPreservationShape).
-      if let some g := genPreservationGoal lc then
+      if let some g := genPreservationGoal lc outer then
         out := out ++ [(loopVCKey fq lc.line "O2", g)]
-      if let some g := genExitVC lc f.ensures retExpr then
+      if let some g := genExitVC lc f.ensures retExpr outer then
         out := out ++ [(loopVCKey fq lc.line "O3", g)]
       if lc.variant.isSome then
-        if let some g := genVariantNonneg lc then
+        if let some g := genVariantNonneg lc outer then
           out := out ++ [(loopVCKey fq lc.line "O4", g)]
-        if let some g := genVariantDecreases lc then
+        if let some g := genVariantDecreases lc outer then
           out := out ++ [(loopVCKey fq lc.line "O5", g)]
   return out
 
@@ -2204,6 +2220,7 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
       | none => none
     let extraLets := letConstMap f.body
     let fq := pfx ++ f.name
+    let outer := f.requires  -- Phase 3 #9: function preconditions are in scope for loop VCs
     let contractVars := (f.params.map (·.name) ++ localNamesB f.body ++ consts).eraseDups
     for lc in f.loopContracts do
       out := out ++ s!"\n\n{pfx}{f.name}  (loop @ line {lc.line})"
@@ -2232,7 +2249,7 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
         then "proved_by_kernel_decision\n                                engine:  omega"
         else planned
       -- O1 invariant_init — generated shape, kernel-discharged
-      out := out ++ s!"\n    O1 invariant_init          status:  {kstat "O1"}{vc (genInitVC lc extraLets)}"
+      out := out ++ s!"\n    O1 invariant_init          status:  {kstat "O1"}{vc (genInitVC lc extraLets outer)}"
       -- O2 invariant_preservation — split into the two things it actually
       -- requires: (1) the arithmetic step (invariant is inductive), now
       -- auto-discharged by omega; (2) the operational step (the extracted body
@@ -2252,7 +2269,7 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
       -- O3 exit_implies_post: bridges loop exit facts (invariant ∧ ¬guard) to
       -- the function #[ensures]. Generated only when there is an ensures and a
       -- clean loop-exit return; kernel-discharged by omega like O1/O4/O5.
-      let exitVC := genExitVC lc f.ensures (loopExitReturn f.body)
+      let exitVC := genExitVC lc f.ensures (loopExitReturn f.body) outer
       let o3status :=
         if exitVC.isSome then kstat "O3"
         else if f.ensures.isEmpty then "n/a (no #[ensures] postcondition)"
@@ -2260,8 +2277,8 @@ def loopContractSection (modules : List Module) (registry : ProofRegistry)
       out := out ++ s!"\n    O3 loop_exit_post_link     status:  {o3status}{vc exitVC}"
       match lc.variant with
       | some _ =>
-        out := out ++ s!"\n    O4 variant_nonnegative     status:  {kstat "O4"}{vc (genVariantNonneg lc)}"
-        out := out ++ s!"\n    O5 variant_decreases       status:  {kstat "O5"}{vc (genVariantDecreases lc)}"
+        out := out ++ s!"\n    O4 variant_nonnegative     status:  {kstat "O4"}{vc (genVariantNonneg lc outer)}"
+        out := out ++ s!"\n    O5 variant_decreases       status:  {kstat "O5"}{vc (genVariantDecreases lc outer)}"
       | none => pure ()
   return out ++ "\n"
 
@@ -3980,9 +3997,13 @@ def proveReport (pc : Concrete.ProofCore) (registry : ProofRegistry)
     (O2 arithmetic half closed, operational pending), or `planned`. Used by both
     `--show-obligation` and `--json` so ids/kinds/hypotheses never drift. -/
 def loopObInfo (lc : LoopContract) (oblId qualName : String) (ensures : List Expr)
-    (extraLets : List (String × Expr)) (retExpr : Option Expr) (provedVCs : List String) :
+    (extraLets : List (String × Expr)) (retExpr : Option Expr) (provedVCs : List String)
+    (outer : List Expr := []) :
     Option (String × List String × String × String) :=
   let invs := lc.invariants.filterMap toLeanProp
+  -- Phase 3 #9: the function's `#[requires]` are in scope for every loop
+  -- obligation; surface them in the hypotheses (monotonic — see `loopVCGoals`).
+  let outerStrs := outer.filterMap toLeanProp
   let guardStr := (lc.guard.bind toLeanProp).getD "<guard>"
   let variantStr := (lc.variant.bind toLeanProp).getD "<variant>"
   let variantBody := (lc.variant.map (substContract lc.body)).bind toLeanProp |>.getD "<variant'>"
@@ -3992,16 +4013,16 @@ def loopObInfo (lc : LoopContract) (oblId qualName : String) (ensures : List Exp
     else if omegaDone && leanOp then "arithmetic_proved"
     else "planned"
   match oblId with
-  | "O1" => (genInitVC lc extraLets).map fun g =>
-      ("invariant_init", ["loop-entry state (counter at its initializer)"], g, status false)
-  | "O2" => some ("invariant_preservation", invs ++ [guardStr],
+  | "O1" => (genInitVC lc extraLets outer).map fun g =>
+      ("invariant_init", outerStrs ++ ["loop-entry state (counter at its initializer)"], g, status false)
+  | "O2" => some ("invariant_preservation", outerStrs ++ invs ++ [guardStr],
       " ∧ ".intercalate ((lc.invariants.map (substContract lc.body)).filterMap toLeanProp), status true)
-  | "O3" => (genExitVC lc ensures retExpr).map fun g =>
-      ("loop_exit_post_link", invs ++ [s!"¬({guardStr})"], g, status false)
+  | "O3" => (genExitVC lc ensures retExpr outer).map fun g =>
+      ("loop_exit_post_link", outerStrs ++ invs ++ [s!"¬({guardStr})"], g, status false)
   | "O4" => if lc.variant.isSome then
-      some ("variant_nonnegative", invs ++ [guardStr], s!"0 ≤ {variantStr}", status false) else none
+      some ("variant_nonnegative", outerStrs ++ invs ++ [guardStr], s!"0 ≤ {variantStr}", status false) else none
   | "O5" => if lc.variant.isSome then
-      some ("variant_decreases", invs ++ [guardStr], s!"{variantBody} < {variantStr}", status false) else none
+      some ("variant_decreases", outerStrs ++ invs ++ [guardStr], s!"{variantBody} < {variantStr}", status false) else none
   | _ => none
 
 /-! ## Verification-condition schema v1 (Phase 2 foundation)
@@ -4161,7 +4182,7 @@ def collectVCs (modules : List Module) (locMap : FnLocMap)
     let invDep := match reg with | some e => if e.coverage == "invariant" && !e.proof.isEmpty then [e.proof] else [] | none => []
     for lc in f.loopContracts do
       for oid in ["O1", "O2", "O3", "O4", "O5"] do
-        match loopObInfo lc oid fq f.ensures extraLets retExpr [] with
+        match loopObInfo lc oid fq f.ensures extraLets retExpr [] f.requires with
         | some (kind, hyps, concl, _) =>
           let (profile, mode) := if oid == "O2" then ("operational", "lean") else ("linear", "omega")
           let deps := if oid == "O2" then invDep else []

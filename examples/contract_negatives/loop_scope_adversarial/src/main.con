@@ -1,0 +1,31 @@
+// ADVERSARIAL fixture for the loop-obligation migration (ROADMAP Phase 3 #9).
+//
+// Loop obligations O1-O5 are now part of the unified scoped context: the
+// function's #[requires] is threaded into every loop VC. Adding hypotheses is
+// monotonic — it can only turn an `unproven` loop obligation `proved`, never the
+// reverse — and the negative control proves a genuinely-missing fact still fails.
+mod adv {
+    // IMPROVEMENT: O1 invariant_init needs 0 <= n at entry (i = 0 ⇒ invariant is
+    // 0 <= 0 && 0 <= n). The precondition supplies it ⇒ O1 proved.
+    #[requires(0 <= n)]
+    fn with_requires(n: i32) -> i32 {
+        let mut s: i32 = 0;
+        let mut i: i32 = 0;
+        #[invariant(0 <= i && i <= n)]
+        #[variant(n - i)]
+        while i < n { s = s + i; i = i + 1; }
+        return s;
+    }
+
+    // NEGATIVE control: the SAME loop with NO precondition. Nothing establishes
+    // 0 <= n, so O1 invariant_init stays unproven — the migration must not
+    // manufacture the missing fact.
+    fn without_requires(n: i32) -> i32 {
+        let mut s: i32 = 0;
+        let mut i: i32 = 0;
+        #[invariant(0 <= i && i <= n)]
+        #[variant(n - i)]
+        while i < n { s = s + i; i = i + 1; }
+        return s;
+    }
+}
