@@ -170,6 +170,9 @@ jobs:
       - name: VC/discharge example matrix gate (Phase 2 status references)
         run: bash scripts/tests/check_vc_discharge_examples.sh
 
+      - name: External-SMT teaching group gate (Phase 2 when-useful/when-refused)
+        run: bash scripts/tests/check_smt_examples.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

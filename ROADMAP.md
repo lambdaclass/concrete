@@ -507,46 +507,26 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
     classes — `trusted`, `runtime_checked`, `tested_by_oracle` — already live in
     `examples/evidence_classes/`; this suite is specifically the VC-discharge
     matrix, not another general gallery.)
-16. Add a clear external-SMT example suite only after the backend exists and
-    only behind an explicit policy flag. These examples must teach when SMT is
-    useful, when it is trusted, and when Concrete should prefer Lean/kernel
-    decision procedures. Put them under a dedicated example group such as
-    `examples/smt/`, with one small program per case, a README, report
-    snapshots, and a gate that asserts the expected evidence class. Use this
-    sequence:
-    - `range_block_count`: HMAC-shaped symbolic block-count arithmetic, e.g.
-      prove `(len + 9 + 63) / 64 <= max_blocks` under a length bound. This is
-      the "SMT is useful for arithmetic summaries" example. Report
-      `proved_by_smt` / `solver_trusted` unless Lean replay closes it.
-    - `nonlinear_overflow`: a product/range obligation such as
-      `sample * gain` under interval bounds where `omega` is not enough. This
-      must clearly say why `omega` does not own it and whether the result is
-      solver-trusted or replayed.
-    - `path_feasibility`: several guarded branches imply a postcondition, e.g.
-      a clamp/classifier where each branch has different arithmetic facts.
-      This shows SMT over path conditions, not ordinary array bounds.
-    - `false_postcondition_counterexample`: deliberately false `#[ensures]`
-      with a source-level model: concrete inputs, failing branch, and failing
-      postcondition. Status is `counterexample`, never proof.
-    - `overflow_counterexample`: an opt-in `#[overflow_checked]` function with
-      insufficient bounds. Report concrete inputs that overflow or a symbolic
-      counterexample if concrete reconstruction is unavailable.
-    - `div_zero_counterexample`: a missing nonzero divisor proof. Report the
-      path/inputs where divisor can be zero.
-    - `unknown_or_timeout`: a deliberately hard quantified/nonlinear case with
-      a small timeout. Status is `unknown` or `timeout`, treated as non-proof
-      and blocked from release unless policy allows it.
-    - `unsupported_theory`: a construct outside the SMT encoding. It must fail
-      with an explicit diagnostic naming the unsupported theory rather than
-      silently dropping the obligation.
-    - `kernel_preferred`: a near-duplicate fact already closed by `omega` or
-      `bv_decide`, proving the tool does **not** route ordinary fixed-array
-      bounds, linear integer facts, or BitVec identities through external SMT.
-      This is the anti-example that protects the trust boundary.
-    Every SMT example must print solver name/version, timeout, encoding hash or
-    SMT-LIB path, replay status, and trust class. Do not use external SMT for
-    facts already enforced by Concrete or closed by `omega` / `bv_decide`, such
-    as ordinary fixed-array bounds.
+16. **[done — teaching group, honest about backend limits]** External-SMT
+    teaching group under `examples/smt/teaching/` (+ `examples/smt/README.md`):
+    explains when SMT is useful and when Concrete refuses it. The ONE genuine
+    solver case is the nonlinear product (`nonlinear_overflow/`, reused for both
+    `solver_trusted` and the false-claim `counterexample`); `kernel_preferred.con`
+    shows linear (omega) and bounded-bitvector (bv_decide) facts emit NO SMT
+    query; `unsupported_theory.con` shows an out-of-fragment VC (nonlinear
+    array-bounds index) is VISIBLE as `unproven`, never dropped, no query. Gate
+    `check_smt_examples.sh` (9/0 with Z3, 7/0 without): the useful case reports
+    solver name/version/smtlib-sha/replay/lean_replay; kernel-owned facts emit no
+    query and are `proved_by_kernel_decision`; out-of-fragment is unproven-but-
+    visible; counterexample stays a non-proof; default reports carry no SMT data.
+    Honestly NOT shipped as working SMT examples (would misrepresent the solver):
+    `range_block_count` (constant-divisor block count is an omega fact, but needs
+    sound division lowering into the goal language — `Int./` vs Concrete `/`
+    differ on negatives) and `path_feasibility` (needs enclosing branch conditions
+    threaded into assert VCs — call-site/bounds/div already thread scope, asserts
+    do not yet). Both documented as queued backend work. (`div_zero` / `overflow`
+    counterexamples for other VC kinds follow as those classes gain SMT
+    eligibility — Phase 7.)
 17. Update audit/release bundles so VC results appear beside proof registry,
     assumptions, runtime obligations, and proof coverage classification.
 18. Add soundness documentation for the SMT path: trusted solver binary,
@@ -557,6 +537,30 @@ SMT, tests, enforcement, assumptions, and trusted solver claims.
     solver/kernel evidence class, pins counterexample output, records solver
     name/version/encoding hash, and proves ordinary linear/bv obligations stay
     on `omega`/`bv_decide` rather than drifting into external SMT.
+20. Add a small set of interesting end-of-Phase-2 VC/SMT examples. These are
+    not a second flagship phase and not a broad workload ladder; each example
+    must force one named VC/SMT surface and carry an oracle or report gate. Good
+    candidates:
+    - `packet_window`: parse a fixed packet window where header length,
+      payload offset, and checksum slice bounds must line up. Demonstrates
+      mixed bounds, div/mod, and source-level counterexamples for bad lengths.
+    - `fixed_point_filter`: Q-format arithmetic with `#[overflow_checked]`,
+      showing kernel-proved linear bounds, SMT-owned nonlinear products, and an
+      oracle over sample vectors.
+    - `chunked_hash_padding`: HMAC-shaped block-count arithmetic over a small
+      toy hash, demonstrating why SMT helps with symbolic padding summaries
+      while byte/word facts stay in ProofKit/`bv_decide`.
+    - `rate_limiter`: guarded branch/path feasibility over counters and caps,
+      showing SMT over path facts and a false-postcondition counterexample when
+      a guard is weakened.
+    - `ring_buffer_indices`: wraparound index arithmetic with fixed capacity,
+      demonstrating which facts stay kernel-owned and which require explicit
+      solver trust or a future replay lemma.
+    Each one must show default no-SMT behavior, `--smt` behavior, provenance,
+    replay status, policy effect, and at least one negative variant that stays a
+    non-proof. If an example needs language features from Phase 8 or runtime
+    obligations from Phase 7, keep it as a README stub that names the blocker
+    instead of faking the result.
 
 ## Phase 3: Proof Authoring And Automation
 

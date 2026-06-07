@@ -1,0 +1,14 @@
+// TEACHING — a VC outside the SMT fragment is VISIBLE, not dropped.
+//
+// The current external-SMT fragment is exactly the #[overflow_checked] nonlinear
+// PRODUCT obligation. A nonlinear array-bounds index (arr[a*b]) is outside it:
+// omega can't (nonlinear), and SMT is not wired for bounds. Concrete does NOT
+// silently drop the obligation and does NOT pretend a solver covered it — it
+// shows the VC as `unproven` in `--report vcs`, and `--emit-smt` produces no
+// query. Honest absence of evidence, not a hidden gap.
+mod unsupported {
+    fn nonlinear_index(a: i32, b: i32) -> i32 {
+        let arr: [i32; 16] = [0; 16];
+        return arr[a * b];
+    }
+}

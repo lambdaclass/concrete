@@ -116,6 +116,17 @@ mistaken for proof:
 not reach for what the kernel tiers own); the other cases reuse
 `nonlinear_overflow/` and `policy_forbid/`.
 
+## Teaching group (`teaching/`)
+
+`teaching/README.md` is the narrative for **when SMT is useful and when Concrete
+refuses it**: the only genuine solver case is a nonlinear product
+(`nonlinear_overflow/`); linear and bounded-bitvector facts stay kernel-checked
+(`teaching/kernel_preferred.con` → no SMT query), and an out-of-fragment
+obligation is shown `unproven`, never dropped (`teaching/unsupported_theory.con`).
+It also records honestly why `range_block_count` (needs sound division lowering)
+and `path_feasibility` (needs branch conditions threaded into assert VCs) are
+*not* SMT cases in this backend. Pinned by `check_smt_examples.sh`.
+
 ## `nonlinear_overflow/`
 
 Two `sample * gain` products that the kernel tiers cannot own (nonlinear; omega

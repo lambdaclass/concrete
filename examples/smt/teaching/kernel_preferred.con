@@ -1,0 +1,20 @@
+// TEACHING — when Concrete REFUSES external SMT.
+//
+// The kernel-checked tiers (constant fold → omega → Lean bv_decide) own these
+// facts, so Concrete never sends them to a solver. `--report vcs --emit-smt`
+// produces NO query here; `--report vcs` shows each VC proved_by_kernel_decision.
+// This is the anti-example that protects the trust boundary: ordinary linear,
+// fixed-width, and bounded facts stay kernel-checked, not solver_trusted.
+mod kernel_preferred {
+    // linear overflow → omega (NOT SMT).
+    #[overflow_checked]
+    #[requires(0 <= a && a <= 1000 && 0 <= b && b <= 1000)]
+    fn linear_sum(a: i32, b: i32) -> i32 { return a + b; }
+
+    // bounded NON-NEGATIVE product (30000*60000 < 2^31) → interval bv_decide
+    // (a kernel-checked certificate, NOT a solver). Only SIGNED bounds would push
+    // a product to SMT — see ../nonlinear_overflow/.
+    #[overflow_checked]
+    #[requires(0 <= a && a <= 30000 && 0 <= b && b <= 60000)]
+    fn bounded_product(a: i32, b: i32) -> i32 { return a * b; }
+}
