@@ -208,7 +208,10 @@ Done when:
 - VC results appear in audit/release bundles beside assumptions, runtime
   obligations, proof status, and proof coverage;
 - the Phase 2 umbrella gate covers kernel evidence, solver-trusted evidence,
-  counterexamples, unsupported/unproven cases, and no-SMT default behavior.
+  counterexamples, unsupported/unproven cases, and no-SMT default behavior;
+- a red-team gate proves adversarial inputs (malformed contracts, fake solver,
+  bad models, unsupported lowering, stale facts, negative division, reassigned
+  guards) stay non-proofs or honest diagnostics.
 
 1. Update audit/release bundles so VC results appear beside proof registry,
     assumptions, runtime obligations, and proof coverage classification.
@@ -220,30 +223,43 @@ Done when:
     solver/kernel evidence class, pins counterexample output, records solver
     name/version/encoding hash, and proves ordinary linear/bv obligations stay
     on `omega`/`bv_decide` rather than drifting into external SMT.
-4. Add a small set of interesting end-of-Phase-2 VC/SMT examples. These are
-    not a second flagship phase and not a broad workload ladder; each example
-    must force one named VC/SMT surface and carry an oracle or report gate. Good
-    candidates:
-    - `packet_window`: parse a fixed packet window where header length,
-      payload offset, and checksum slice bounds must line up. Demonstrates
-      mixed bounds, div/mod, and source-level counterexamples for bad lengths.
-    - `fixed_point_filter`: Q-format arithmetic with `#[overflow_checked]`,
-      showing kernel-proved linear bounds, SMT-owned nonlinear products, and an
-      oracle over sample vectors.
-    - `chunked_hash_padding`: HMAC-shaped block-count arithmetic over a small
-      toy hash, demonstrating why SMT helps with symbolic padding summaries
-      while byte/word facts stay in ProofKit/`bv_decide`.
-    - `rate_limiter`: guarded branch/path feasibility over counters and caps,
-      showing SMT over path facts and a false-postcondition counterexample when
-      a guard is weakened.
-    - `ring_buffer_indices`: wraparound index arithmetic with fixed capacity,
-      demonstrating which facts stay kernel-owned and which require explicit
-      solver trust or a future replay lemma.
-    Each one must show default no-SMT behavior, `--smt` behavior, provenance,
-    replay status, policy effect, and at least one negative variant that stays a
-    non-proof. If an example needs language features from Phase 9 or runtime
-    obligations from Phase 8, keep it as a README stub that names the blocker
-    instead of faking the result.
+4. Add a red-team VC/SMT gate — the explicit "try to break everything" item.
+    It is implied by the validation artifact but important enough to stand alone:
+    pin that every adversarial input stays a non-proof or an honest diagnostic,
+    never a misleading green. Ship as fixtures plus a `check_*` gate so each stays
+    a regression, not a one-time audit. Cases:
+    - malformed / edge contracts (empty, deeply nested, huge literals, `i32::MIN`,
+      non-literal divisor, un-negatable guards) → no crash, honest `unproven`;
+    - a fake / garbage `z3` on `PATH` (non-`sat/unsat` output, crash, a model
+      naming an undeclared variable) → `solver_error`, never proof;
+    - a `sat` query that *looks* provable → `counterexample`, never proof;
+    - an obligation outside the SMT / omega fragment → no query / `unproven`, not
+      silently dropped;
+    - stale facts (mismatched `#[proof_fingerprint]`, drifted spec) → `stale`;
+    - negative-operand division (Lean floor vs Concrete truncate-to-zero) → not
+      lowered, not mis-proved;
+    - a guard variable reassigned before its assert → stale hypothesis dropped.
+5. `packet_window`: parse a fixed packet window where header length, payload
+    offset, and checksum slice bounds must line up. Mixed bounds, div/mod, and
+    source-level counterexamples for bad lengths.
+6. `fixed_point_filter`: Q-format arithmetic with `#[overflow_checked]` — kernel-
+    proved linear bounds, SMT-owned nonlinear products, and an oracle over sample
+    vectors.
+7. `chunked_hash_padding`: HMAC-shaped block-count arithmetic over a small toy
+    hash — why SMT helps with symbolic padding summaries while byte/word facts
+    stay in ProofKit / `bv_decide`.
+8. `rate_limiter`: guarded branch / path feasibility over counters and caps —
+    SMT over path facts, and a false-postcondition counterexample when a guard is
+    weakened.
+9. `ring_buffer_indices`: wraparound index arithmetic with fixed capacity — which
+    facts stay kernel-owned and which require explicit solver trust or a future
+    replay lemma.
+    Items 5-9 are end-of-Phase-2 examples: not a second flagship phase and not a
+    broad workload ladder. Each forces one named VC/SMT surface and must show
+    default no-SMT behavior, `--smt` behavior, provenance, replay status, policy
+    effect, and at least one negative variant that stays a non-proof. If an
+    example needs Phase 9 language features or Phase 8 runtime obligations, ship
+    it as a README stub naming the blocker rather than faking the result.
 
 ## Phase 3: ObligationCore Pipeline Consolidation
 
