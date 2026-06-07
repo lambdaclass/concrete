@@ -1476,6 +1476,27 @@ def assertGoals (modules : List Module) : List (String × String) := Id.run do
       i := i + 1
   return goals
 
+/-- `assume(e)` facts with the path conditions in scope (Phase 3 #8). An `assume`
+    is NOT an obligation to discharge — it is a trusted assumption fact that the
+    audit ledger must surface loudly: it carries status `assumed` (never a proof),
+    is a policy input (`forbid-assume`, E0614), and crucially produces no goal, so
+    it can never launder trust into kernel evidence for a later assert. Keyed
+    `<fq>#aa<i>` by the SAME position scheme as `assertGoals` (assume and assert
+    occupy disjoint positions in the shared stream). -/
+def assumeFacts (modules : List Module) : List (String × String × List String) := Id.run do
+  let mut facts : List (String × String × List String) := []
+  for (pfx, f) in modules.flatMap allFunctions do
+    let fq := pfx ++ f.name
+    let mut i := 0
+    for (isAssume, cond, scope) in scopedAssertsB f.loopContracts [] f.body do
+      if isAssume then
+        let hyps := f.requires ++ scope
+        let nn := nonNegFromHyps hyps
+        let concl := (toLeanPropSound nn cond).getD (Concrete.fmtExpr cond)
+        facts := facts ++ [(s!"{fq}#aa{i}", concl, hyps.filterMap (toLeanPropSound nn))]
+      i := i + 1
+  return facts
+
 /-- Build the ordered list of call-site obligations across all callers. The fast
     constant folder classifies the literal/arithmetic cases; an obligation that
     stays non-constant carries a `bv_decide` `leanGoal` (when closed after
@@ -4082,6 +4103,12 @@ def collectVCs (modules : List Module) (locMap : FnLocMap)
       s!"precondition of {o.callStr} in {o.caller}" [] profile mode status engine]
   -- asserts and vacuity (goal-string generators; omega decides at discharge time).
   for (k, g) in assertGoals modules do out := out ++ [mkSplit k "assert" "linear" "omega" g []]
+  -- assume facts: trusted assumptions surfaced in the one ledger as `assumed`
+  -- (never a proof; no goal, so they cannot launder trust into kernel evidence).
+  for (k, concl, hyps) in assumeFacts modules do
+    let fq := vcFnOfKey k
+    let (file, line) := loc fq
+    out := out ++ [mkVC k "assume" fq file line hyps concl s!"assume in {fq}" [] "operational" "none" "assumed" "assumed"]
   for (k, g) in vacuityGoals modules do out := out ++ [mkSplit k "vacuity" "linear" "omega" g []]
   -- a constant runtime-safety verdict → kernel-decided here; else planned/omega/bv.
   let constStatus := fun (cv : Option Bool) =>

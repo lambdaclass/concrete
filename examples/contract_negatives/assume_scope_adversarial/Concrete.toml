@@ -1,0 +1,9 @@
+[package]
+name = "assume_scope_adversarial"
+version = "0.1.0"
+
+# A release profile that forbids the assume(...) escape hatch entirely.
+# `concrete build` here must FAIL with E0614 — assume is a policy input, and a
+# trusted assumption may never ride into a release that forbids it.
+[policy]
+forbid-assume = true

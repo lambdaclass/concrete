@@ -200,6 +200,9 @@ jobs:
       - name: Overflow migration gate (Phase 3 #7 three-route parity+trust-boundary)
         run: bash scripts/tests/check_overflow_migration.sh
 
+      - name: Assert/assume migration gate (Phase 3 #8 ledger fact + no-laundering)
+        run: bash scripts/tests/check_assume_migration.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

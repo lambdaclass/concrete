@@ -1,0 +1,31 @@
+// ADVERSARIAL fixture for the assert/assume migration (ROADMAP Phase 3 #8).
+//
+// assert(e) is a real obligation (it rides the unified scopedWalk collector and
+// is proved/unproven by the kernel tiers). assume(e) is the OPPOSITE: a trusted
+// assumption fact, surfaced in the one ledger as `assumed` — NEVER a proof, a
+// policy input (forbid-assume / E0614), and crucially it must never launder
+// trust into kernel evidence for a later assert.
+mod adv {
+    // NO LAUNDERING: assume(0 < x) must NOT make the identical assert provable.
+    // The assert stays `unproven` — trust does not become kernel evidence.
+    fn no_launder(x: i32) -> i32 {
+        assume(0 < x);
+        assert(0 < x);
+        return x;
+    }
+
+    // assume is `assumed` (a fact), the guarded assert next to it is a real
+    // obligation proved by the collector from the guard — the two never blur.
+    fn assume_vs_assert(x: i32) -> i32 {
+        assume(0 < x);
+        if x < 16 { assert(x < 16); return x; }
+        return 0;
+    }
+
+    // A plain trusted assumption with no nearby assert: still ledger-visible as
+    // `assumed`, still a forbid-assume policy input.
+    fn trusts(x: i32) -> i32 {
+        assume(100 < x);
+        return x + 1;
+    }
+}
