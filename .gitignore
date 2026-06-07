@@ -95,3 +95,13 @@ paper/*.pdf
 site/public/
 tmp/
 .claude/scheduled_tasks.lock
+
+# `concrete build` outputs left in example project dirs by policy/build gates
+examples/constant_time_tag/constant_time_tag
+examples/hmac_sha256/hmac_sha256
+examples/smt/policy_allow/smt_policy_allow
+examples/crypto_verify/crypto_verify
+examples/parse_validate/parse_validate
+examples/fixed_capacity/fixed_capacity
+examples/service_errors/service_errors
+examples/obligation_core_probe/obligation_core_probe
