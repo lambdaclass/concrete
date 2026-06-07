@@ -3292,6 +3292,14 @@ private def renderProofStatusEntry (e : ProofStatusEntry) (sourceMap : SourceMap
   | .trusted =>
     s!"-- trusted {String.ofList (List.replicate 48 '-')} {locStr}\n\n  `{e.qualName}` is marked trusted — proof is bypassed (trusted assumption).{snippet}"
 
+/-- The raw per-function proof-link freshness entries (Phase 3 #11): the same
+    records `proofStatusReport` renders, exposed so the ObligationCore ledger can
+    project proof links / fingerprint drift / missing / blocked / ineligible /
+    trusted facts into the one ledger instead of a separate proof-status model. -/
+def proofStatusEntries (modules : List CModule) (locMap : FnLocMap := [])
+    (registry : ProofRegistry := []) (pc : Concrete.ProofCore) : List ProofStatusEntry :=
+  modules.foldl (fun acc m => acc ++ collectProofStatus pc locMap m "" registry) []
+
 /-- Proof status report with Elm-clear diagnostics. -/
 def proofStatusReport (modules : List CModule) (locMap : FnLocMap := [])
     (sourceMap : SourceMap := []) (registry : ProofRegistry := [])

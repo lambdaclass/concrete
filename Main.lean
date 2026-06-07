@@ -1258,10 +1258,14 @@ def compileAndReport (inputPath : String) (reportType : String)
       IO.println (← renderContracts parsed.modules registry)
       return 0
     if reportType == "obligation-ledger" then
-      -- Phase 3: the unified ObligationCore ledger (currently the discharged VC
-      -- families projected into the schema; contract/proof-link families migrate next).
+      -- Phase 3: the unified ObligationCore ledger — the discharged VC families
+      -- (runtime-safety, contracts incl. clause diagnostics) PLUS the proof-link
+      -- freshness family (#11), projected into the one schema.
       let dvcs ← computeVCsDischarged parsed.modules locMap registry
-      let ledger := Concrete.ObligationCore.ledgerOfVCs dvcs
+      let vcLedger := Concrete.ObligationCore.ledgerOfVCs dvcs
+      let proofLinks := Concrete.ObligationCore.proofLinkLedger
+        (Report.proofStatusEntries validCore.coreModules locMap registry pc)
+      let ledger := vcLedger ++ proofLinks
       if reportJson then IO.println (Concrete.ObligationCore.ledgerJson ledger 1)
       else IO.println (Concrete.ObligationCore.ledgerReport ledger)
       return 0

@@ -41,19 +41,19 @@ ck "allowed_engines come from the tier set" "$HMAC" \
 ck "kernel-decided obligations are owned by a kernel engine" "$HMAC" \
   "all(set(o['allowed_engines']) <= {'constant_fold','omega','bv_decide'} for o in d['obligations'] if o['status']=='proved_by_kernel_decision')"
 
-echo "=== the ledger is a VIEW over the VC discharge (agrees with --report vcs) ==="
+echo "=== the ledger's VC subset is a VIEW over the VC discharge (agrees with --report vcs) ==="
 vcs_json="$("$COMPILER" "$HMAC" --report vcs --json 2>/dev/null)"
 led_json="$("$COMPILER" "$HMAC" --report obligation-ledger --json 2>/dev/null)"
-python3 -c "
-import json,sys
-vcs=json.loads('''$vcs_json'''.strip() or '{}')
-led=json.loads('''$led_json'''.strip() or '{}')
-" 2>/dev/null || true
-# compare extracted id:status maps (never embed the JSON in python source).
+# The ledger = VC-projected obligations + the proof-link family (#11). Compare the
+# VC ids+statuses against the ledger MINUS the #prooflink entries: that subset must
+# match exactly (a view, not a recompute); proof-links are an additional family.
 vmap="$(printf '%s' "$vcs_json" | python3 -c "import json,sys;d=json.load(sys.stdin);print('|'.join(sorted(v['id']+':'+v['status'] for v in d['vcs'])))")"
-lmap="$(printf '%s' "$led_json" | python3 -c "import json,sys;d=json.load(sys.stdin);print('|'.join(sorted(o['id']+':'+o['status'] for o in d['obligations'])))")"
-[ -n "$vmap" ] && [ "$vmap" = "$lmap" ] && ok "ledger ids+statuses == VC ids+statuses (a view, not a recompute)" \
-  || no "ledger drifted from the VC view"
+lmap="$(printf '%s' "$led_json" | python3 -c "import json,sys;d=json.load(sys.stdin);print('|'.join(sorted(o['id']+':'+o['status'] for o in d['obligations'] if not o['id'].endswith('#prooflink'))))")"
+[ -n "$vmap" ] && [ "$vmap" = "$lmap" ] && ok "ledger VC subset == VC ids+statuses (a view, not a recompute)" \
+  || no "ledger VC subset drifted from the VC view"
+# the proof-link family IS present (Phase 3 #11): proof-status now lives in the one ledger.
+plinks="$(printf '%s' "$led_json" | python3 -c "import json,sys;d=json.load(sys.stdin);print(len([o for o in d['obligations'] if o['id'].endswith('#prooflink')]))")"
+[ "${plinks:-0}" -ge 1 ] && ok "proof-link family present in the ledger (#11)" || no "no proof-link obligations in the ledger"
 
 echo "=== default: ledger carries no external-solver data unless --smt path engaged ==="
 ck "no solver_trusted/counterexample by default (no --smt)" "$HMAC" \

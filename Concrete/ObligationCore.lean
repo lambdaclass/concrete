@@ -100,9 +100,43 @@ def ofVC (v : Report.VC) : Obligation :=
     policyImpact := policyImpactOf v.status }
 
 /-- The current ObligationCore ledger: the discharged VC families projected into
-    the unified model. (Contract-diagnostic and proof-link families are added by
-    Phase 3 #10-11.) -/
+    the unified model. Contract-clause diagnostics ride in as VCs (Phase 3 #10);
+    proof-link freshness is projected separately by `ofProofStatus` (#11). -/
 def ledgerOfVCs (vcs : List Report.VC) : List Obligation := vcs.map ofVC
+
+/-- Project a proof-link freshness entry into ObligationCore (Phase 3 #11). The
+    proof-status model (proved / stale / missing / blocked / ineligible / trusted)
+    becomes first-class ledger obligations instead of a separate report: a fresh
+    link is `source_proof_link` (proved_by_lean), a fingerprint mismatch is
+    `spec_drift` (stale), and so on — so a release gate can read proof staleness
+    from the same ledger as the runtime/contract obligations. -/
+def ofProofStatus (e : Report.ProofStatusEntry) : Obligation :=
+  let (kind, status) := match e.state with
+    | .proved      => ("source_proof_link", "proved_by_lean")
+    | .stale       => ("spec_drift",        "stale")
+    | .notProved   => ("missing_theorem",   "missing")
+    | .blocked     => ("blocked_proof",     "unproven")
+    | .notEligible => ("ineligible_construct", "ineligible")
+    | .trusted     => ("trusted_boundary",  "trusted")
+  let engine := match e.state with | .proved => "lean" | _ => ""
+  let concl := match e.state with
+    | .stale       => s!"proof fingerprint {e.expectedFp} ≠ current {e.currentFp}"
+    | .proved      => if e.proofName.isEmpty then "in-source proof link is fresh" else s!"proved by {e.proofName}"
+    | .notProved   => "no registered proof for an eligible function"
+    | .blocked     => s!"extraction blocked: {", ".intercalate e.unsupported}"
+    | .notEligible => s!"ineligible: {", ".intercalate e.profileGates}"
+    | .trusted     => "trusted boundary (proof bypassed)"
+  { id := s!"{e.qualName}#prooflink", kind := kind, function := e.qualName,
+    file := (e.loc.map (·.1)).getD "", line := (e.loc.map (·.2)).getD 0,
+    origin := if e.origin.isEmpty then "proof link" else e.origin,
+    variables := [], hypotheses := [], conclusion := concl,
+    semanticProfile := "operational", dependencies := if e.proofName.isEmpty then [] else [e.proofName],
+    allowedEngines := if e.state matches .proved then ["lean"] else [],
+    status := status, engine := engine, policyImpact := policyImpactOf status }
+
+/-- Project the proof-link freshness entries into the ledger (Phase 3 #11). -/
+def proofLinkLedger (entries : List Report.ProofStatusEntry) : List Obligation :=
+  entries.map ofProofStatus
 
 /-- Minimal JSON string escaper (self-contained; matches `proveReportJson`). -/
 private def esc (s : String) : String :=
