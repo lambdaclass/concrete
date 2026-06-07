@@ -233,6 +233,9 @@ jobs:
       - name: prove-as-ledger-view gate (Phase 3 #16)
         run: bash scripts/tests/check_obligation_prove_views.sh
 
+      - name: Phase 3 capstone — ObligationCore single truth source (umbrella)
+        run: bash scripts/tests/check_phase3_obligation_core.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

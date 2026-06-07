@@ -1,0 +1,49 @@
+// Phase 3 capstone probe (ROADMAP #19). One project that exercises every
+// migrated obligation kind, so check_phase3_obligation_core.sh can prove the
+// ObligationCore ledger is the SINGLE truth source: the same stable ids and
+// statuses appear across --report vcs, --report obligation-ledger, --report
+// audit, --report proof-status, policy, and `concrete prove`.
+mod probe {
+    // div_nonzero (callee precondition feeds call-site precondition too).
+    #[requires(0 < d)]
+    fn ratio(n: i32, d: i32) -> i32 { return n / d; }
+
+    // precondition (at the call to ratio) + div_nonzero + postcondition.
+    #[requires(0 < x)]
+    #[ensures(result == 10 / x)]
+    fn use_ratio(x: i32) -> i32 { return ratio(10, x); }
+
+    // assert (proved via guard) + assume (trusted fact) + array_bounds.
+    fn checks(a: [i32; 16], i: i32) -> i32 {
+        assume(0 <= i);
+        if i < 16 {
+            assert(0 <= i && i < 16);
+            return a[i];
+        }
+        return 0;
+    }
+
+    // no_overflow (#[overflow_checked]) proved by the guard.
+    #[overflow_checked]
+    fn bounded_sum(a: i32, b: i32) -> i32 {
+        if 0 <= a && a <= 1000 && 0 <= b && b <= 1000 { return a + b; }
+        return 0;
+    }
+
+    // loop obligations O1-O5 (#[invariant]/#[variant]) with the precondition
+    // threaded so invariant_init is proved.
+    #[requires(0 <= n)]
+    fn count(n: i32) -> i32 {
+        let mut s: i32 = 0;
+        let mut i: i32 = 0;
+        #[invariant(0 <= i && i <= n)]
+        #[variant(n - i)]
+        while i < n { s = s + i; i = i + 1; }
+        return s;
+    }
+
+    // vacuity: an unsatisfiable precondition (omega refutes x>0 ∧ x<0).
+    #[requires(x > 0)]
+    #[requires(x < 0)]
+    fn vacuous(x: i32) -> i32 { return x; }
+}
