@@ -61,6 +61,16 @@ structure Obligation where
   counterexample  : List (String × String) := []
   replay          : String := ""
   policyImpact    : String := ""
+  -- The full VC discharge surface (Phase 3 #18a) so the record is a SUPERSET of
+  -- `Report.VC` and `ofVC` is lossless — these let `--report vcs` and the audit
+  -- VC summary render from the ledger (18b/18c) without dropping solver
+  -- provenance / discharge mode / the replay artifact. Default "" so the JSON
+  -- and human ledger views are unchanged until a consumer reads them.
+  dischargeMode   : String := ""            -- constant_fold | omega | bv_decide | lean | smt | none
+  smtHash         : String := ""            -- stable digest of the SMT-LIB query
+  smtQuery        : String := ""            -- the SMT-LIB script (replay artifact)
+  solver          : String := ""            -- solver identity + version, when run
+  leanReplay      : String := ""            -- the standalone Lean replay theorem
 
 /-- Which backends are allowed to discharge an obligation of a given semantic
     profile. A profile maps to exactly the engines that may legitimately close it
@@ -97,7 +107,9 @@ def ofVC (v : Report.VC) : Obligation :=
     dependencies := v.dependencies, allowedEngines := enginesFor v.arithProfile,
     status := v.status, engine := v.engine, counterexample := v.counterexample,
     replay := if v.smtQuery.isEmpty then "" else s!"z3 -T:5 vc.smt2 (smtlib-sha {v.smtHash})",
-    policyImpact := policyImpactOf v.status }
+    policyImpact := policyImpactOf v.status,
+    dischargeMode := v.dischargeMode, smtHash := v.smtHash, smtQuery := v.smtQuery,
+    solver := v.solver, leanReplay := v.leanReplay }
 
 /-- The current ObligationCore ledger: the discharged VC families projected into
     the unified model. Contract-clause diagnostics ride in as VCs (Phase 3 #10);
