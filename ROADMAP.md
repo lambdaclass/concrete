@@ -725,7 +725,13 @@ lemmas, and actionable failure diagnostics.
    `Concrete.Proof` becomes the generic proof-theorem / compatibility umbrella.
    Only after this split should registered example SPEC PExprs move from
    `Concrete.Proof.*Expr` into `Concrete.Examples.<Ex>.Proofs` or sibling
-   `Specs` modules. Preserve the spec-drift tie throughout.
+   `Specs` modules. Preserve the spec-drift tie throughout. Add
+   `scripts/tests/check_proof_layering_split.sh`; the gate must prove example
+   proof theorems and example spec PExprs live under the example namespace,
+   `Concrete.SpecRegistry` still drives spec-drift, `Concrete.ProofCore` has no
+   example-owned theorem/spec definitions, `check-proofs` can reach moved
+   modules through the umbrella import, and changing a moved example body still
+   reports stale/spec-drift rather than silently accepting the old proof.
 21. Add the Phase 5 validation artifact: a proof-authoring project that
    exercises `--json`, `--show-obligation`, `--emit-lean`, `--emit-artifacts`,
    `--workspace`, `--check`, `--nearest-lemmas`, `--minimize`, and source-linked
@@ -1876,14 +1882,35 @@ Done when: packages have manifests, lockfiles, package-aware facts, trust
 policies, provenance, and registry protocol.
 
 1. Expand package artifacts only after reports, policies, assumptions,
-   interface artifacts, and CI gates prove what packages must carry.
+   interface artifacts, and CI gates prove what packages must carry. The first
+   package artifact refactor must define exact files:
+   `Concrete.package.json` (manifest summary), `Concrete.lock`,
+   `.concrete/interfaces/<module>.json`, `.concrete/facts/<module>.json`,
+   `.concrete/evidence/<module>.json`, and `.concrete/docs/<module>.json`.
+   Each artifact must name compiler version, schema version, package id,
+   source hash, interface hash, dependency hashes, authority budget,
+   assumptions, proof/evidence summaries, and replay commands. Add
+   `scripts/tests/check_package_artifacts.sh`; the gate must prove package
+   consumers read these artifacts rather than source-private side channels.
 2. Design and parse package manifest.
 3. Add version constraints, dependency resolution, and lockfile.
 4. Add workspace and multi-package support.
 5. Add package-aware test selection.
 6. Split interface artifacts from body artifacts at package/workspace scale.
+   Interface artifacts expose public names, types, capabilities, contracts,
+   allocation/effect summaries, deprecation/version facts, and evidence classes.
+   Body artifacts contain implementation fingerprints, private obligations,
+   proof links, emitted IR hashes, and private diagnostics. A dependent package
+   may compile against interface artifacts without seeing private bodies, but
+   audit/release bundles must still show when a public claim depends on a
+   private body proof, trusted boundary, or assumption.
 7. Add proof-aware package artifacts: facts, obligations, proof status, trusted
    assumptions, policy declarations, package-boundary evidence summaries.
+   Required statuses: `proved_by_lean`, `proved_by_kernel_decision`,
+   `solver_trusted`, `tested_by_oracle`, `enforced`, `assumed`, `trusted`,
+   `partial`, `stale`, `vacuous`, `missing`, and `ineligible`. The artifact
+   must record whether evidence is package-local, inherited from a dependency,
+   or trusted through a boundary.
 8. Add module/package authority budgets after package graphs are real.
 9. Add dependency trust policy: trust widening across boundaries, review and
    inheritance.
