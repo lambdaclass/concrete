@@ -55,15 +55,16 @@ for f in manifest.json compiler-version.txt runtime-stdout.txt \
   check_file "$f" "$OUT/$f"
 done
 
-# Stage-conditional files (parse_validate has all of these)
-for f in assumptions.toml AUDIT.md CATCHES.md README.md \
-         source/proof-registry.json; do
+# Stage-conditional files (parse_validate has all of these).
+# Note: proof-registry.json is gone — proofs are linked in-source now
+# (registry-retirement migration), so the bundle no longer carries it.
+for f in assumptions.toml AUDIT.md CATCHES.md README.md; do
   check_file "$f" "$OUT/$f"
 done
 
-# Reports present
+# Reports present (now includes the Phase 2 VC views).
 for kind in caps alloc unsafe stack-depth effects proof-status \
-            eligibility verify; do
+            eligibility verify vcs audit contracts; do
   check_file "reports/$kind.txt" "$OUT/reports/$kind.txt"
 done
 
@@ -76,7 +77,7 @@ check_file "catches/01_authority_widening.con" "$OUT/catches/01_authority_wideni
 
 # Manifest correctness
 check_contains "manifest.json names example" "$OUT/manifest.json" '"example": "parse_validate"'
-check_contains "manifest.json reports proved_functions" "$OUT/manifest.json" '"proved_functions": 2'
+check_contains "manifest.json reports proved_functions" "$OUT/manifest.json" '"proved_functions": 3'
 check_contains "manifest.json reports has_policy" "$OUT/manifest.json" '"has_policy": true'
 check_contains "manifest.json reports has_assumptions" "$OUT/manifest.json" '"has_assumptions": true'
 check_contains "manifest.json reports has_negative_pair" "$OUT/manifest.json" '"has_negative_pair": true'
