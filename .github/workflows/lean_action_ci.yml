@@ -206,6 +206,9 @@ jobs:
       - name: Loop-obligation migration gate (Phase 3 #9 O1-O5 scoped + split status)
         run: bash scripts/tests/check_loop_migration.sh
 
+      - name: Contract-clause migration gate (Phase 3 #10 ledger diagnostics + partial)
+        run: bash scripts/tests/check_contract_clause_migration.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

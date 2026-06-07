@@ -4086,10 +4086,58 @@ private def vcFnOfKey (key : String) : String :=
   let beforeHash := (key.splitOn "#").head?.getD key
   (beforeHash.splitOn "@").head?.getD beforeHash
 
+/-- Contract-clause diagnostics for the ledger (Phase 3 #10): every `#[requires]`/
+    `#[ensures]`/`#[invariant]`/`#[variant]` clause that fails validation surfaces
+    as a ledger obligation — `impure_contract_call` when it calls a
+    capability-requiring function, else `invalid_contract_expression` (unknown
+    name, non-total construct, …). Status is `ineligible`: such a clause is not a
+    provable obligation, it is a malformed contract the audit must show loudly.
+    Mirrors the checks `contractsReport`/`loopContractSection` already render. -/
+def contractClauseDiagnostics (modules : List Module) :
+    List (String × String × String × String × List String) := Id.run do
+  let callables := callableContractNames modules
+  let consts := contractConstNames modules
+  let impures := impureFnNames modules
+  let mut out : List (String × String × String × String × List String) := []
+  let diag := fun (allowed : List String) (e : Expr) =>
+    let invalid := validateContractExpr allowed callables e
+    let impure := (contractImpureCalls impures e).map (fun fn =>
+      s!"impure call '{fn}' — spec/ghost must be pure and total (no capabilities)")
+    (invalid, impure)
+  for (pfx, f) in modules.flatMap allFunctions do
+    let fq := pfx ++ f.name
+    let paramVars := f.params.map (·.name)
+    let preVars := (paramVars ++ consts).eraseDups
+    let postVars := (paramVars ++ ["result"] ++ localNamesB f.body ++ consts).eraseDups
+    let loopVars := (paramVars ++ localNamesB f.body ++ consts).eraseDups
+    let emit := fun (acc : List (String × String × String × String × List String))
+        (key clauseTxt : String) (allowed : List String) (e : Expr) =>
+      let (invalid, impure) := diag allowed e
+      if !impure.isEmpty then
+        acc ++ [(key, "impure_contract_call", fq, clauseTxt, impure)]
+      else if !invalid.isEmpty then
+        acc ++ [(key, "invalid_contract_expression", fq, clauseTxt, invalid.eraseDups)]
+      else acc
+    let mut ri := 1
+    for r in f.requires do
+      out := emit out s!"{fq}#req_diag{ri}" s!"requires {Concrete.fmtExpr r}" preVars r; ri := ri + 1
+    let mut oi := 1
+    for e in f.ensures do
+      out := emit out s!"{fq}#ens_diag{oi}" s!"ensures {Concrete.fmtExpr e}" postVars e; oi := oi + 1
+    for lc in f.loopContracts do
+      let mut ii := 1
+      for inv in lc.invariants do
+        out := emit out s!"{fq}@{lc.line}#inv_diag{ii}" s!"invariant {Concrete.fmtExpr inv}" loopVars inv; ii := ii + 1
+      match lc.variant with
+      | some v => out := emit out s!"{fq}@{lc.line}#var_diag" s!"variant {Concrete.fmtExpr v}" loopVars v
+      | none => pure ()
+  return out
+
 /-- Collect the project-wide VC schedule. Covers preconditions (call sites),
     postconditions (`#[ensures]`), asserts, vacuity, the runtime-safety
-    obligations (array bounds, div/mod nonzero, `#[overflow_checked]`), and the
-    loop obligations (O1 init, O2 preservation, O3 exit→post, O4/O5 variant). -/
+    obligations (array bounds, div/mod nonzero, `#[overflow_checked]`), the
+    loop obligations (O1 init, O2 preservation, O3 exit→post, O4/O5 variant),
+    and the contract-clause diagnostics (Phase 3 #10). -/
 def collectVCs (modules : List Module) (locMap : FnLocMap)
     (registry : ProofRegistry) : List VC := Id.run do
   let loc := fun (fq : String) =>
@@ -4198,13 +4246,27 @@ def collectVCs (modules : List Module) (locMap : FnLocMap)
     let dep := match reg with
       | some e => (match e.ensuresProof with | some t => [t] | none => []) ++ (if !e.proof.isEmpty then [e.proof] else [])
       | none => []
+    -- a one-direction registry proof discharges ONE direction of the
+    -- postcondition → `partial`, not a full `proved_by_lean` (Phase 3 #10).
+    let onePartial := match reg with
+      | some e => e.ensuresProof.isNone && e.coverage == "one_direction" && !e.proof.isEmpty
+      | none => false
     let mut ei := 0
     for ens in f.ensures do
-      let (mode, status, engine) := if dep.isEmpty then ("none", "missing", "") else ("lean", "proved_by_lean", "lean")
+      let (mode, status, engine) :=
+        if dep.isEmpty then ("none", "missing", "")
+        else if onePartial then ("lean", "partial", "lean")
+        else ("lean", "proved_by_lean", "lean")
       out := out ++ [mkVC s!"{fq}#ensures{ei}" "postcondition" fq file line
         (f.requires.map Concrete.fmtExpr) (Concrete.fmtExpr ens) s!"postcondition in {fq}"
         dep "refinement" mode status engine]
       ei := ei + 1
+  -- contract-clause diagnostics: malformed #[requires]/#[ensures]/#[invariant]/
+  -- #[variant] clauses surface as `ineligible` ledger obligations (Phase 3 #10).
+  for (key, kind, fq, clauseTxt, issues) in contractClauseDiagnostics modules do
+    let (file, line) := loc fq
+    out := out ++ [mkVC key kind fq file line [] (", ".intercalate issues)
+      s!"{clauseTxt} in {fq}" [] "unsupported" "none" "ineligible" ""]
   return out
 
 /-- Fold the kernel-checked discharge results (omega + `bv_decide`) into the VC
