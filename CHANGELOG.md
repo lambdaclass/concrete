@@ -51,9 +51,24 @@ shipped core now includes:
   and outstanding obligations. The default audit path does not invoke external
   SMT; solver evidence remains opt-in through `--report vcs --smt`.
 
-Remaining active Phase 2 work is now only the closure work: release-bundle
-integration, SMT soundness docs, validation artifact, red-team gate, and
-end-of-phase examples.
+The Phase 2 closure work also landed and is no longer active roadmap work:
+
+- release-bundle capture now includes `reports/vcs.txt`, `reports/audit.txt`,
+  and `reports/contracts.txt`, so VC evidence ships beside assumptions,
+  runtime-safety facts, proof status, and audit output;
+- [docs/SMT_SOUNDNESS.md](docs/SMT_SOUNDNESS.md) records the trusted solver
+  binary, encoding assumptions, unsupported theories, replay boundary, policy
+  behavior, and blast radius of solver bugs;
+- `check_phase2_vc.sh` is the umbrella validation gate over the VC schema,
+  discharge matrix, SMT path, SMT negatives, SMT policy, SMT replay, SMT
+  teaching examples, SMT red-team checks, and end-of-phase VC examples;
+- `check_smt_redteam.sh` pins fake, garbage, and lying solver behavior,
+  negative-division lowering, stale facts, unsupported lowering, and reassigned
+  guards as non-proofs or honest diagnostics;
+- `examples/vc_suite/` supplies the end-of-phase examples:
+  `packet_window`, `fixed_point_filter`, `chunked_hash_padding`,
+  `rate_limiter`, and `ring_buffer_indices`, including the fixed-point filter
+  oracle over sample vectors.
 
 ### Phase 1 source contracts completed (2026-06-06)
 

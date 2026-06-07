@@ -7,30 +7,28 @@ The roadmap is linear. Phases are ordered, and items inside a phase are ordered
 unless explicitly marked as a constraint or a deferred research note. Read the
 document as one queue:
 
-1. finish VC generation, discharge examples, and external-SMT policy without
-   hiding solver trust;
-2. consolidate the compiler's obligation pipeline so contracts, VCs, runtime
+1. consolidate the compiler's obligation pipeline so contracts, VCs, runtime
    safety, asserts, SMT, policy, reports, and proof workspaces all read from
    one typed evidence ledger;
-3. consolidate the ordinary compiler pipeline: project loading, pass
+2. consolidate the ordinary compiler pipeline: project loading, pass
    boundaries, typed IR, diagnostics, source maps, backend contracts, and
    command plumbing;
-4. finish remaining proof-authoring cleanup: colocate example Lean proofs with
+3. finish remaining proof-authoring cleanup: colocate example Lean proofs with
    their Concrete examples, keep generated proof workspaces source-linked and
    replayable, and leave the deeper `ProofCore` / spec-registry split deferred
    unless it becomes necessary;
-5. harden audit / proof-status / trust gates around source contracts,
+4. harden audit / proof-status / trust gates around source contracts,
    spec provenance, evidence classes, tool-version drift, and oracle evidence;
-6. close the release-blocking predictable/provable/runtime-safety gaps,
+5. close the release-blocking predictable/provable/runtime-safety gaps,
    starting with casts, loop-derived bounds, runtime-safety policy, and the
    remaining profile story after array bounds, div/mod-zero, and
    opt-in overflow obligations;
-7. only then broaden the ordinary language surface (patterns, bytes/text/path,
+6. only then broaden the ordinary language surface (patterns, bytes/text/path,
    collections, iteration, capability polymorphism, tests);
-8. build the standard library and core APIs before relying on real workloads,
+7. build the standard library and core APIs before relying on real workloads,
    packages, editor tooling, freestanding targets, or release examples;
-9. run external validation before the large ecosystem/release/editor build-out;
-10. keep later research items later unless a prior gate forces them.
+8. run external validation before the large ecosystem/release/editor build-out;
+9. keep later research items later unless a prior gate forces them.
 
 Completed work moves to [CHANGELOG.md](CHANGELOG.md). Deferred or conditional
 work moves later in the same linear queue. There are no parallel tracks. Inline
@@ -194,79 +192,6 @@ the proof discipline (ProofKit + contracts + `concrete prove`) was worth the
 cost. Until this passes, the back half of Phases 10-18 is flagged **at-risk**,
 not green.
 
-## Phase 2: Verification Conditions And SMT Assistance
-
-Goal: get closer to SPARK-style automation without hiding solver trust or
-replacing Lean-checked theorem claims.
-
-Design reference: [docs/CONTRACTS_AND_VCS.md](docs/CONTRACTS_AND_VCS.md).
-
-Done when:
-- contracts, bounds checks, arithmetic side conditions, and simple loop
-  invariants generate machine-readable VCs;
-- kernel-owned facts stay on `omega` / `bv_decide`;
-- external SMT is opt-in, reproducible, policy-gated, and never confused with
-  kernel evidence;
-- counterexamples are reported in source terms;
-- VC results appear in release bundles beside assumptions, runtime obligations,
-  proof status, proof coverage, and the audit VC summary;
-- the Phase 2 umbrella gate covers kernel evidence, solver-trusted evidence,
-  counterexamples, unsupported/unproven cases, and no-SMT default behavior;
-- a red-team gate proves adversarial inputs (malformed contracts, fake solver,
-  bad models, unsupported lowering, stale facts, negative division, reassigned
-  guards) stay non-proofs or honest diagnostics.
-
-1. Update release bundles so VC results appear beside proof registry,
-    assumptions, runtime obligations, proof coverage classification, and the
-    audit VC summary. `--report audit` already includes the default
-    kernel-discharged VC summary; this item closes the release-bundle artifact
-    side and keeps external-SMT evidence opt-in.
-2. Add soundness documentation for the SMT path: trusted solver binary,
-    encoding assumptions, unsupported theories, replayed fragments, and how a
-    solver bug affects each claim class.
-3. Add the Phase 2 validation artifact: a VC/discharge project that runs the
-    compact VC suite plus the external-SMT suite when enabled, checks every
-    solver/kernel evidence class, pins counterexample output, records solver
-    name/version/encoding hash, and proves ordinary linear/bv obligations stay
-    on `omega`/`bv_decide` rather than drifting into external SMT.
-4. Add a red-team VC/SMT gate — the explicit "try to break everything" item.
-    It is implied by the validation artifact but important enough to stand alone:
-    pin that every adversarial input stays a non-proof or an honest diagnostic,
-    never a misleading green. Ship as fixtures plus a `check_*` gate so each stays
-    a regression, not a one-time audit. Cases:
-    - malformed / edge contracts (empty, deeply nested, huge literals, `i32::MIN`,
-      non-literal divisor, un-negatable guards) → no crash, honest `unproven`;
-    - a fake / garbage `z3` on `PATH` (non-`sat/unsat` output, crash, a model
-      naming an undeclared variable) → `solver_error`, never proof;
-    - a `sat` query that *looks* provable → `counterexample`, never proof;
-    - an obligation outside the SMT / omega fragment → no query / `unproven`, not
-      silently dropped;
-    - stale facts (mismatched `#[proof_fingerprint]`, drifted spec) → `stale`;
-    - negative-operand division (Lean floor vs Concrete truncate-to-zero) → not
-      lowered, not mis-proved;
-    - a guard variable reassigned before its assert → stale hypothesis dropped.
-5. `packet_window`: parse a fixed packet window where header length, payload
-    offset, and checksum slice bounds must line up. Mixed bounds, div/mod, and
-    source-level counterexamples for bad lengths.
-6. `fixed_point_filter`: Q-format arithmetic with `#[overflow_checked]` — kernel-
-    proved linear bounds, SMT-owned nonlinear products, and an oracle over sample
-    vectors.
-7. `chunked_hash_padding`: HMAC-shaped block-count arithmetic over a small toy
-    hash — why SMT helps with symbolic padding summaries while byte/word facts
-    stay in ProofKit / `bv_decide`.
-8. `rate_limiter`: guarded branch / path feasibility over counters and caps —
-    SMT over path facts, and a false-postcondition counterexample when a guard is
-    weakened.
-9. `ring_buffer_indices`: wraparound index arithmetic with fixed capacity — which
-    facts stay kernel-owned and which require explicit solver trust or a future
-    replay lemma.
-    Items 5-9 are end-of-Phase-2 examples: not a second flagship phase and not a
-    broad workload ladder. Each forces one named VC/SMT surface and must show
-    default no-SMT behavior, `--smt` behavior, provenance, replay status, policy
-    effect, and at least one negative variant that stays a non-proof. If an
-    example needs Phase 10 language features or Phase 9 runtime obligations, ship
-    it as a README stub naming the blocker rather than faking the result.
-
 ## Phase 3: ObligationCore Pipeline Consolidation
 
 Goal: make every proof, contract, runtime-safety, assertion, SMT, policy, audit,
@@ -279,6 +204,11 @@ Done when: call-site preconditions, bounds, div/mod, overflow, assertions,
 loop VCs, contract clauses, proof links, SMT queries, counterexamples, policies,
 audit reports, JSON, and `concrete prove --workspace` all agree because they
 consume the same typed `ObligationCore` records and evidence classifications.
+
+Execution order: migrate obligation families first, then expression lowering
+and backend adapters, then policies/reports/prove workspaces as views, then
+delete duplicate walkers. Do not move a consumer before the family records it
+needs exist in the ledger.
 
 1. Define `ObligationCore` schema v1: stable id, source span, function,
    obligation kind, expression shape, typed variables, scoped hypotheses,
@@ -324,34 +254,49 @@ consume the same typed `ObligationCore` records and evidence classifications.
 12. Unify expression lowering through one typed obligation expression layer:
     human rendering, Lean proposition rendering, SMT-LIB rendering,
     counterexample source-variable mapping, and JSON serialization must lower
-    from the same structure.
+    from the same structure. Add `scripts/tests/check_obligation_lowering.sh`
+    with round-trip cases for linear arithmetic, bitvectors, sound division,
+    nonlinear SMT terms, branch/path facts, and invalid expressions.
 13. Add backend-owned discharge adapters over `ObligationCore`: constant fold,
     `omega`, `bv_decide`, linked Lean theorem, Lean replay, external SMT,
     oracle/test evidence, runtime enforcement, assumption, and trust boundary.
-    Each adapter may only produce its declared evidence class.
+    Each adapter may only produce its declared evidence class. Add
+    `scripts/tests/check_obligation_discharge_adapters.sh` to prove a solver
+    adapter cannot emit kernel evidence, a runtime check cannot emit proof
+    evidence, and a Lean/kernel adapter cannot depend on external solver state.
 14. Make policies consume the final ledger instead of recomputing facts:
     forbid-assume, forbid-vacuous, solver-evidence policy, stale-proof policy,
-    runtime-safety requirements, trusted-boundary policy, and future release
-    gates.
+    runtime-safety requirements, trusted-boundary policy, and release gates.
+    Add `scripts/tests/check_obligation_policy_views.sh` with one fixture per
+    policy decision and one negative case proving stale/vacuous/solver-trusted
+    evidence is rejected when policy says so.
 15. Make reports consume the ledger: `--report contracts`, `--report vcs`,
     `--report proof-status`, `--report check-proofs`, audit bundles, release
     bundles, JSON, snapshots, and evidence corpus gates become views over the
-    same records.
+    same records. Add `scripts/tests/check_obligation_report_views.sh` to assert
+    the same stable ids and statuses appear in every report surface.
 16. Make `concrete prove` consume the ledger: `--json`, `--show-obligation`,
     `--emit-lean`, `--emit-artifacts`, `--workspace`, `--check`, `--replay`,
     `--nearest-lemmas`, and future `--minimize` should not reconstruct
-    obligation context independently.
+    obligation context independently. Add
+    `scripts/tests/check_obligation_prove_views.sh` to compare prove JSON,
+    workspace files, emitted Lean, replay commands, and check output against the
+    ledger for the same obligation ids.
 17. Add a migration parity gate after each migrated obligation family:
     compare old and new human reports, JSON, policy behavior, stable ids,
     counterexamples, solver provenance, and proof-workspace output on the
     existing corpus before deleting the old path.
 18. Delete the old report-specific walkers and duplicate VC/obligation models
     only after parity gates pass. No obligation family may keep two live truth
-    sources.
+    sources. Add `scripts/tests/check_no_duplicate_obligation_walkers.sh` to
+    fail on reintroduced family-specific collectors or direct report-side
+    obligation recomputation.
 19. Add the Phase 3 validation artifact: one fixture project that exercises
     every migrated obligation kind and proves the ledger is the only truth
     source by checking contracts, VCs, proof status, audit, policy, JSON,
-    workspace, replay, and release-bundle output for the same stable ids.
+    workspace, replay, and release-bundle output for the same stable ids. Use
+    `examples/obligation_core_probe/` and
+    `scripts/tests/check_phase3_obligation_core.sh` as the final umbrella gate.
 
 ## Phase 4: Compiler Pipeline And Typed IR
 
@@ -509,16 +454,63 @@ depends on them.
     preservation, interpreter/codegen mismatch, backend assumption reporting,
     canonicalization edge cases, dependency invalidation, and deterministic
     `inspect` output.
-28. Add the Phase 4 validation artifact:
+28. Add source-location privacy modes, borrowing the useful part of Odin's
+    source-location controls but making them audit-visible:
+    `[build] source-location-mode = "normal" | "filename" | "obfuscated" |
+    "none"` in `Concrete.toml`, plus `--source-location-mode <mode>` for
+    one-off commands. The mode must affect human diagnostics,
+    `--json-errors`, crash bundles, audit bundles, release bundles, generated
+    C/LLVM/native debug info, proof workspaces, and emitted pass artifacts
+    consistently. Add `scripts/tests/check_source_location_modes.sh` with
+    `tests/programs/source_locations/{normal,filename,obfuscated,none}.con`.
+    Done when local CI still sees full spans under `normal`, release bundles
+    record `source_location_mode`, and redacted artifacts never pretend that
+    redaction is proof or evidence.
+29. Add JSON diagnostic parity as a named gate, not just a renderer option:
+    `concrete build --json-errors` or the equivalent command mode must emit the
+    same diagnostic codes, spans, reasons, related spans, next actions, and
+    payloads as the human renderer. Wire `scripts/tests/check_json_diagnostics.sh`
+    with parser, resolver, type, ownership, capability, policy, backend, and
+    internal-error fixtures.
+30. Add artifact-retention and emitted-pass files for debugging, inspired by
+    Odin's keep-temp-files workflow and QBE's printable IL discipline:
+    `--keep-artifacts`, `--emit-ast`, `--emit-resolved`, `--emit-typed-ir`,
+    `--emit-core`, `--emit-backend-ir`, `--emit-asm`, and
+    `--emit-link-command`. Artifacts must live under `.build/concrete-artifacts/`
+    by default, obey source-location privacy mode, and include
+    `artifact-manifest.json` with `command`, `toolchain`, `target`,
+    `build_profile`, `source_location_mode`, `pass_ids`, `input_hashes`,
+    `output_files`, and `replay_command`. Add
+    `scripts/tests/check_emit_artifacts.sh` with
+    `examples/compiler_pipeline_probe/` and one negative case proving
+    `--emit-backend-ir` is unavailable before backend IR exists rather than
+    silently emitting stale output.
+31. Keep the backend IR printable, verifier-checked, and regression-testable
+    directly. This is the QBE lesson adapted to Concrete: even if LLVM remains
+    the backend, Concrete's own backend contract should be a stable emitted
+    artifact with a verifier, not an opaque stream of generated code. V1 must
+    cover exactly these backend constructs: integer arithmetic, fixed arrays,
+    structs, enums, direct calls, bounded loops, branches, runtime checks,
+    capability calls, and source-map annotations. Add
+    backend-IR golden tests under `tests/backend_ir/`:
+    `arith.con`, `calls.con`, `if_loop.con`, `structs.con`, `arrays.con`,
+    `runtime_checks.con`, `capabilities.con`, `source_maps.con`, and
+    `target_constants.con`. Wire `scripts/tests/check_backend_ir.sh` to run
+    `concrete inspect --backend-ir`, `concrete verify-ir --pass backend-ir`,
+    and a compiled execution check for each fixture.
+32. Add the Phase 4 validation artifact:
     `examples/compiler_pipeline_probe/` plus
     `scripts/tests/check_phase4_pipeline.sh`. The fixture must run
     `concrete build`, `run`, `test`, `fmt --check`, `inspect --ast`,
     `inspect --resolved`, `inspect --typed`, `inspect --core`,
-    `verify-ir --pass typed`, `build --events --json`,
-    `report performance --json`, and `audit`; compare interpreter-vs-compiled
-    output; assert source-map spans survive; assert dependency facts are
-    stable; assert crash/repro bundles are emitted only for deliberate internal
-    compiler failures; and run the fuzz-regression fixtures without relying on
+    `inspect --backend-ir`, `verify-ir --pass typed`,
+    `verify-ir --pass backend-ir`, `build --events --json`,
+    `build --json-errors`, `build --keep-artifacts`,
+    `report performance --json`, and `audit`; compare
+    interpreter-vs-compiled output; assert source-map spans and source-location
+    privacy modes survive; assert dependency facts are stable; assert
+    crash/repro bundles are emitted only for deliberate internal compiler
+    failures; and run the fuzz-regression fixtures without relying on
     proof-specific machinery.
 
 ## Phase 5: Proof Authoring And Automation
@@ -544,8 +536,13 @@ lemmas, and actionable failure diagnostics.
    `SpecRegistry` split.
 2. Add proof minimization: `concrete prove --minimize <obligation_id>` emits
     the smallest source / ProofCore / Lean slice needed to reproduce a failed
-    obligation. This should be built after JSON and failed-artifact formats are
-    stable, not before.
+    obligation. Output directory:
+    `.build/prove/<function>/<obligation_id>/minimized/` with `source.con`,
+    `proofcore.lean`, `replay.lean`, `context.json`, and `README.md`. Wire
+    `scripts/tests/check_prove_minimize.sh` with one loop VC, one failed
+    postcondition, one stale proof, and one SMT counterexample. The minimized
+    artifact must reproduce the same status and stable id without unrelated
+    functions.
 3. Define and document stable theorem naming conventions in tool output:
     `<fn>_refines_spec`, `<fn>_<obligation>_proved`,
     `<fn>_loop_<name>_preserves`, and
@@ -590,13 +587,36 @@ lemmas, and actionable failure diagnostics.
     mismatch. Diagnostics should point to the already-generated artifact or
     next action instead of introducing another parallel proof surface.
 15. Add proof-result caching once proof artifacts and fingerprints are stable.
+    Cache key: toolchain version, source fingerprint, spec/proof link,
+    obligation id, ProofKit version, backend engine version, and policy mode.
+    Store under `.build/concrete-proof-cache/` and expose
+    `concrete prove --cache-status --json`. Wire
+    `scripts/tests/check_proof_cache.sh`; the gate must prove cache hits do not
+    mask stale source, stale theorem names, changed policies, or changed solver
+    trust settings.
 16. Add simple auto-discharge for structural obligations that do not need human
-    proof search.
+    proof search. V1 shapes: reflexive field projection, tuple/struct
+    constructor-destructor round trips, enum tag preservation, fixed-array
+    literal length, direct call wrapper, and source-contract metadata erasure.
+    Command surface: `concrete prove --auto <function> --json`, reporting
+    `auto_closed`, `needs_lean`, or `not_supported` per obligation. Wire
+    `scripts/tests/check_structural_auto_discharge.sh`; auto-discharge may only
+    emit `proved_by_kernel_decision` or a linked Lean theorem when the kernel
+    actually checks the generated proof.
 17. Add a small verified/spec-checked standard proof library for common
     predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
     constant-time source shape.
 18. Add AI-assisted proof repair only after artifacts, statuses, and replay are
-    stable enough to validate suggestions mechanically.
+    stable enough to validate suggestions mechanically. The binary surface is
+    `concrete prove --repair-plan <obligation_id> --json`; it emits no edited
+    source, only candidate next actions with required checks. Required JSON
+    fields: `obligation_id`, `failure_class`, `minimal_artifact`,
+    `suggested_lemma`, `suggested_imports`, `candidate_tactic`,
+    `validation_command`, and `risk`. Wire
+    `scripts/tests/check_proof_repair_plan.sh` with missing theorem, stale
+    proof, missing frame fact, arithmetic bridge failure, and spec mismatch.
+    No repair suggestion may change a proof status until `--check` or
+    `check-proofs` verifies it.
 19. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
    establish not just what an iteration *changes* but what it *preserves* — the
    frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
@@ -922,10 +942,15 @@ rest of Phase 10 stays after that slab in the same linear queue.
    future opaque/newtype form. This is an ordinary readability feature, not a
    proof abstraction.
 10. Decide user-facing loop control before broad parser/service examples:
-   `break`, `continue`, and whether labeled loops exist. The decision must
-   state how each interacts with bounded-loop analysis, cleanup/defer,
-   contracts, and runtime-safety obligations. If deferred, examples should use
-   explicit state flags or early returns instead of hidden control flow.
+    `break`, `continue`, and whether labeled loops exist. The decision must
+    state how each interacts with bounded-loop analysis, cleanup/defer,
+    contracts, and runtime-safety obligations. Write
+    `docs/LOOP_CONTROL.md`, add fixtures under `tests/programs/loop_control/`,
+    and wire `scripts/tests/check_loop_control.sh`. If `break`/`continue` are
+    admitted, the gate must cover single loop, nested loop, early cleanup,
+    invariant preservation, variant/decrease, and runtime-safety facts. If they
+    are deferred, the gate must pin the rejection diagnostics and show the
+    explicit-state alternative in `examples/daily/packet_decoder`.
 11. Close the match/pattern ergonomics gap before broad `Result`/`Option` and
    protocol-decoder work. This is one compound usability block: algebraic data
    types are already in the language, so the pattern language must be
@@ -985,28 +1010,37 @@ rest of Phase 10 stays after that slab in the same linear queue.
     `Option`, or runtime-check results is a warning/error unless explicitly
     acknowledged with `_ = ...`, `ignore(...)`, or a policy-approved pattern.
 20. Track accumulating error sets for `Result`-heavy code, without adopting row
-    effects. Protocol parsers and service pipelines repeatedly want "this
-    function may return exactly these error variants" without hand-writing one
-    giant wrapper enum for every stage. First implementation should be a
-    compiler report / audit fact over existing enum-returning functions; only
-    later consider surface syntax if it stays obvious, e.g. a named error-set
-    alias or a restricted union of enum variants. Do **not** introduce general
-    row polymorphism or implicit effect rows.
+    effects. V1 is report-only: `concrete audit --report error-sets` and
+    `concrete inspect --error-sets --json` over existing enum-returning
+    functions. Add `examples/error_sets/protocol_pipeline/` with
+    `ParseErr`, `IoErr`, and `AuthErr`, plus
+    `scripts/tests/check_error_sets.sh`. The gate must prove call composition
+    accumulates variants, dead variants are not reported, ignored-result
+    diagnostics still fire, and no syntax resembling row polymorphism is
+    accepted.
 21. Evaluate units-of-measure / dimensional annotations for common systems
-    mistakes: bytes vs bits, milliseconds vs seconds, block counts vs byte
-    offsets, protocol lengths, and memory sizes. Start as optional annotations
-    and diagnostics over integer-like values, not full dependent types. Any
-    proof story must be contract/VC-based and audit-visible; unit erasure must
-    not hide conversions or allocation.
+    mistakes by shipping a report-only prototype first. Add
+    `examples/units_probe/` with bytes-vs-bits, milliseconds-vs-seconds,
+    block-count-vs-byte-offset, protocol-length, and memory-size cases. Add
+    `scripts/tests/check_units_probe.sh` and `docs/UNITS_OF_MEASURE.md`. V1
+    annotations are optional and erased only after audit records the
+    conversion; no implicit unit conversion, no dependent numeric refinements,
+    and no proof status may depend on unit erasure unless a contract/VC names
+    the conversion explicitly.
 22. Add source style guidance alongside `concrete fmt`: idiomatic layout for
     functions, modules, contracts, matches, error handling, examples, and
     proof-bearing code.
 23. Decide the v1 iteration protocol before broad stdlib work. Evaluate and
-    document the replacement for closures/trait-object iterators:
+    document the replacement for closures/trait-object iterators in
+    `docs/ITERATION_PROTOCOL.md`:
     index-based `for i in 0..len { xs[i] }`, explicit cursor/iterator structs
     with `next() -> Option<T>`, and monomorphized `for_each`-style helpers. The
     decision must cover `Vec`, slices, maps, parser cursors, and interpreter
     workloads, and must explain how authority and allocation remain visible.
+    Add `examples/iteration_protocol/{slice_cursor,vec_iter,map_iter,parser_cursor}/`
+    and `scripts/tests/check_iteration_protocol.sh`; the gate must report
+    allocation/capability behavior for each iteration form and prove bounded
+    loops stay visible to runtime-safety obligations.
 24. Decide capability polymorphism for higher-order stdlib functions before
     adding `map`/`fold`/`for_each` families or structured concurrency. The
     design must avoid a combinatorial split like `map`, `map_file`,
@@ -1021,8 +1055,12 @@ rest of Phase 10 stays after that slab in the same linear queue.
     language surfaces the stdlib depends on — modules/imports, project model,
     tests, diagnostics, bytes/text/path types, collections, iteration,
     capability polymorphism, build profiles, and CLI verbs — but the actual
-    library APIs are built in the dedicated stdlib phase. The handoff must list
-    which surfaces are stable enough to build on and which remain provisional.
+    library APIs are built in the dedicated stdlib phase. Write
+    `docs/STDLIB_HANDOFF.md` and gate it with
+    `scripts/tests/check_stdlib_handoff.sh`; the gate must assert each required
+    Phase 10 surface has a status of `stable_for_stdlib`, `provisional_with_gate`,
+    or `blocked`, and Phase 11 may not start while any required surface is
+    `blocked`.
 26. Design user-facing testing framework UX before `std.test` hardens:
     test discovery (`#[test]` versus naming convention), expected failures,
     capability-scoped fixtures, temp files without ambient authority, oracle
@@ -1058,42 +1096,61 @@ rest of Phase 10 stays after that slab in the same linear queue.
     cross-platform stdlib work harden. Prefer profile-selected source roots and
     modules in `Concrete.toml`; if narrow `cfg` attributes are added later, they
     must be LL(1)-safe, small, target/profile-only, and reported in audit.
-33. Normalize the CLI around predictable verbs:
+33. Define compiler-known target constants as ordinary, audit-visible compile
+    facts, not hidden preprocessor state. Inspired by Odin's builtin target
+    constants, Concrete should expose names such as `CONCRETE_OS`,
+    `CONCRETE_ARCH`, `CONCRETE_ENDIAN`, `CONCRETE_TARGET_PROFILE`,
+    `CONCRETE_BUILD_PROFILE`, and `CONCRETE_TOOLCHAIN_VERSION` only through the
+    resolved/typed fact layer. Reports and release bundles must record which
+    constants affected compiled source, proofs, obligations, or stdlib module
+    selection. Add `examples/target_constants/` and
+    `scripts/tests/check_target_constants.sh`; the gate must prove constants
+    appear in `concrete inspect --resolved --json`, `--report audit`, and the
+    release bundle, and that a target-dependent branch is labelled
+    `target_selected` rather than erased silently.
+34. Normalize the CLI around predictable verbs:
     `concrete build`, `concrete run`, `concrete test`, `concrete fmt`,
     `concrete lint`, `concrete vet`, `concrete audit`, `concrete prove`,
     `concrete eval`, `concrete inspect`, `concrete doc`, `concrete bench`,
     `concrete trace`, and `concrete clean`.
-34. Add `concrete doc`: generate basic API/reference docs from source,
+35. Add `concrete doc`: generate basic API/reference docs from source,
     capabilities, modules, and public comments without depending on proof
     infrastructure. Outputs must include `concrete doc --format json` and
     `concrete doc --format html`, so editor tooling and published docs reuse
     the same source.
-35. Add a first-user tutorial path for C/Rust developers that does not start
+36. Add a first-user tutorial path for C/Rust developers that does not start
     with proofs: install, hello world, values and fixed arrays, ownership,
     borrows, capabilities, explicit errors, tests, compiled debugging, audit,
     then proof-bearing examples. The tone should be "ordinary systems code with
     visible evidence," not proof-assistant ceremony.
-36. Add useful non-proof examples: a small CLI tool, a protocol decoder, a
-    bounded cache, and a capability-scoped file/console program.
-37. Add basic benchmarking UX: `concrete bench` runs small benchmarks, compares
+37. Add useful non-proof examples: a small CLI tool, a protocol decoder, a
+    bounded cache, and a capability-scoped file/console program. Use exact
+    examples `examples/daily/word_count`, `examples/daily/packet_decoder`,
+    `examples/daily/lru_cache`, and `examples/daily/file_summary`. Wire
+    `scripts/tests/check_daily_examples.sh` to build, run, compare
+    interpreter-vs-compiled output, assert `--report effects`, assert
+    `--report audit`, and pin one negative fixture per example under
+    `examples/daily/*/catches/`.
+38. Add basic benchmarking UX: `concrete bench` runs small benchmarks, compares
     interpreter versus compiled performance, emits `--json`, and detects
     obvious generated-code regressions. This is separate from compiler
     performance budgets in Phase 4.
-38. Document the memory model for ordinary users: move/copy/drop behavior,
+39. Document the memory model for ordinary users: move/copy/drop behavior,
     cleanup, borrows, linear values, trusted/Unsafe escape hatches, definite
     assignment, and what is rejected. State the invariant explicitly: safe
     Concrete has no uninitialized reads by construction; trusted/FFI memory may
     carry explicit assumptions.
-39. Add cross-platform build sanity for the supported host set: macOS and Linux
+40. Add cross-platform build sanity for the supported host set: macOS and Linux
     first, with CI coverage, reproducible commands, and documented toolchain
     expectations.
-40. Add the Phase 10 validation project: a small C/Rust-style CLI using the core
+41. Add the Phase 10 validation project: a small C/Rust-style CLI using the core
     slab plus daily workflow (`Concrete.toml`, modules/imports,
     `concrete test`, bytes/text/path and collection decisions, diagnostics,
     formatting, docs, lint/vet, benchmark/profile/coverage smoke tests, and
     trace/debug commands). CI must build, run, test, format-check, lint, audit,
-    and compare interpreter-vs-compiled behavior on macOS and Linux. It
-    validates the language/tooling slab, not the full stdlib.
+    record compiler-known target constants, and compare interpreter-vs-compiled
+    behavior on macOS and Linux. It validates the language/tooling slab, not the
+    full stdlib.
 
 ## Phase 11: Standard Library And Core APIs
 
@@ -1207,8 +1264,10 @@ class and authority/allocation story.
     `consume`, span/position tracking, error reporting, and no hidden
     allocation unless the API carries `with(Alloc)`.
 17. Add `std.base64` as the first byte-format module: encode/decode, streaming
-    shape if needed, strict error reporting, RFC test vectors, oracle
-    comparison, and evidence classification.
+    encode/decode over fixed buffers and allocation-backed `Vec<u8>`, strict
+    error reporting, RFC 4648 vectors, invalid-padding negatives, oracle
+    comparison, and evidence classification. Streaming encode/decode is
+    explicitly deferred to package/workload pressure, not hidden in v1.
 18. Add `std.uri` parsing/formatting after the byte/text/path split is stable:
     component accessors, percent encoding/decoding, normalization policy, and
     clear distinction between syntax validation and network authority.
@@ -1235,8 +1294,12 @@ class and authority/allocation story.
     integration, capability requirements, and policy for release builds. Keep
     this small; it is not a tracing framework.
 25. Add progress/status output helpers for CLI tools in proposed
-    `std.progress` if examples need them: progress lines, quiet/verbose policy,
-    terminal detection, and no ambient terminal authority.
+    `std.progress` only after `examples/daily/word_count` and
+    `examples/stdlib_workloads/base64_cli` need visible progress output. V1
+    surface: `ProgressWriter`, `quiet`, `verbose`, `set_total`, `advance`,
+    `finish`, terminal detection through an explicit console handle, and no
+    ambient terminal authority. Wire
+    `scripts/tests/check_stdlib_progress.sh` when the module is admitted.
 26. Build capability-scoped console, file, network, process, and time APIs in
     `std.io`, `std.writer`, `std.fs`, `std.env`, `std.args`, `std.process`,
     `std.net`, and `std.time`. Authority must be visible in function types and
@@ -1244,8 +1307,11 @@ class and authority/allocation story.
     wrapper.
 27. Build handle-relative filesystem APIs in `std.fs` as the preferred
     file/path shape: directory/file handles carry authority; operations are
-    relative to handles where possible; temp-file and symlink behavior is
-    explicit.
+    relative to handles for `open`, `create`, `read`, `write`, `metadata`,
+    `remove`, `rename`, and `list`. Ambient absolute-path helpers must be
+    hosted-only convenience wrappers with explicit authority. Temp-file,
+    symlink, path-normalization, and TOCTOU behavior must appear in
+    `docs/STDLIB_GUIDE.md` and `scripts/tests/check_stdlib_fs.sh`.
 28. Build handle-based network surface in `std.net` only as far as the
     validation workloads require: address parsing, socket handle wrappers, HTTP
     header parsing as a pure parser first, and no full HTTP client/server until
@@ -1262,45 +1328,58 @@ class and authority/allocation story.
 32. Add stdlib authority/allocation/runtime-obligation gates so core helpers
     cannot silently widen capabilities, allocation behavior, trusted
     assumptions, or runtime-risk obligations.
-33. Split hosted versus freestanding-ready stdlib modules at the API level:
+33. Add sanitizer/runtime-instrumentation hooks as debug and validation
+    surfaces, not proof evidence. Inspired by Odin's sanitizer-facing base
+    surface, Concrete should expose named hooks for bounds, overflow,
+    use-after-free-like trusted/FFI probes where applicable, allocator checks,
+    and generated-code validation. Audit output must classify this as
+    `runtime_checked`, `tested`, or `instrumented`, never `proved`.
+34. Split hosted versus freestanding-ready stdlib modules at the API level:
     no-alloc/no-OS core modules, allocator-backed modules, hosted OS modules,
     and modules that are explicitly unavailable under freestanding profiles.
     The freestanding target implementation still lands in Phase 15.
-34. Record deliberately deferred stdlib families so they do not disappear from
+35. Record deliberately deferred stdlib families so they do not disappear from
     planning: compression/archive formats, broad crypto beyond the narrow
     hash/HMAC/constant-time story, full HTTP client/server, dynamic libraries,
     OS debug formats, atomics, threads, SIMD, target/ABI databases, and
     platform-specific C/POSIX wrappers. Each stays package-later,
     backend-later, freestanding-later, or research-later until a workload
     forces it.
-35. Add stdlib docs and examples for C/Rust users:
+36. Add stdlib docs and examples for C/Rust users:
     `docs/STDLIB_GUIDE.md` plus `examples/stdlib_recipes/bytes_text`,
     `path_fs`, `result_errors`, `vec_map`, `parser_cursor`, `json_scan`,
     `base64_cli`, `uri_parse`, `checksum`, `deterministic_rand`, `time_log`,
     and `capability_io`. Each recipe must show the exact `std.*` imports,
     capability set, allocation behavior, and expected audit line.
-36. Add a stdlib compatibility/oracle corpus under
+37. Add a stdlib compatibility/oracle corpus under
     `examples/stdlib_compat/`: `fmt_parse_vectors`, `bytes_text_vectors`,
     `path_vectors`, `collection_vectors`, `base64_vectors`, `uri_vectors`,
     `json_vectors`, `semver_vectors`, `sort_search_vectors`,
     `checksum_vectors`, `rand_vectors`, and `cli_io_vectors`. Wire it with
-    `scripts/tests/check_stdlib_compat.sh`; every vector either oracle-compares
-    against a reference or records why it is an audit/evidence check instead.
-37. Add real stdlib workload checks before Phase 12 relies on the library:
+    `scripts/tests/check_stdlib_compat.sh`; every vector must declare exactly
+    one mode in `manifest.toml`: `oracle_python`, `oracle_system_tool`,
+    `interp_vs_compiled`, `audit_only`, or `negative_expected_failure`.
+38. Add real stdlib workload checks before Phase 12 relies on the library:
     `examples/stdlib_workloads/base64_cli`,
     `json_validator`, `ini_parser`, `checksum_cli`, `http_headers`,
     `path_normalizer`, and `lru_cache` or `ring_buffer`. Wire them with
     `scripts/tests/check_stdlib_workloads.sh`. Each workload must build, run,
-    oracle-check where possible, compare interpreter-vs-compiled output, and
-    report authority/allocation/evidence classes.
-38. Add the Phase 11 validation project:
+    compare interpreter-vs-compiled output, and report authority/allocation/
+    evidence classes. The oracle requirement is explicit per workload:
+    `base64_cli` against Python `base64`, `json_validator` against Python
+    `json`, `ini_parser` against a checked-in Python reference,
+    `checksum_cli` against Python/hashlib or a checked-in reference,
+    `http_headers` against checked-in vectors, `path_normalizer` against
+    checked-in platform-specific vectors, and `lru_cache`/`ring_buffer` against
+    a checked-in reference model.
+39. Add the Phase 11 validation project:
     `examples/stdlib_client/` plus `scripts/tests/check_phase11_stdlib.sh`.
     The client must use `std.option`, `std.result`, `std.bytes`, `std.text`,
     `std.path`, `std.vec`, `std.map`, `std.fs`, `std.io`, `std.fmt`,
     `std.parse`, either `std.json` or `std.base64`, deterministic RNG or
-    checksums, and `std.test`. CI must build, run, test, audit
-    authority/allocation/evidence classes, and compare interpreter-vs-compiled
-    behavior.
+    checksums, sanitizer/runtime-instrumentation hooks where available, and
+    `std.test`. CI must build, run, test, audit authority/allocation/evidence
+    classes, and compare interpreter-vs-compiled behavior.
 
 ## Phase 12: Flagship Depth And Examples
 
@@ -1363,27 +1442,33 @@ they force a named surface or public claim.
       that gate the compiler, and showcase flagships here. These protect
       compiler/proof correctness and should stay close to the tests.
     - **Medium in-repo real programs after the Phase 10 core slab and Phase 11
-      stdlib:** 500-2,000 line examples, each chosen for a named pressure point:
-      INI/TOML or tiny JSON parser (bytes/text/path, diagnostics, runtime
-      obligations), bounded HTTP header parser (ignored-result diagnostics,
-      byte-preserving parsing),
-      small tar/zip reader (path/OS-string boundaries, archive offsets,
-      overflow/cast obligations), bytecode interpreter (modules, dispatch,
-      bounded loops), fixed-capacity LRU cache (collections, ownership, frame
-      facts), or CLI checksum tool (project model, `concrete test`, oracle
-      comparison). Tier exits only when at least two medium programs build, run,
-      pass interpreter-vs-compiled checks, carry full evidence/trust
-      classification, and are covered by runtime-obligation audit.
-    - **Separate workload repo later** (`concrete-workloads`,
-      `concrete-corpus`, or similar): use it for larger ports, 2k-10k line
+      stdlib:** build exactly these first six examples under
+      `examples/workloads_medium/`: `mini_toml`, `http_headers`, `tar_index`,
+      `bytecode_vm`, `lru_cache`, and `checksum_cli`. Wire
+      `scripts/tests/check_medium_workloads.sh`. `mini_toml` forces
+      bytes/text/path diagnostics and parse errors; `http_headers` forces
+      ignored-result diagnostics and byte-preserving parsing; `tar_index`
+      forces path/OS-string boundaries, archive offsets, overflow/cast
+      obligations; `bytecode_vm` forces modules, dispatch, bounded loops;
+      `lru_cache` forces collections, ownership, frame facts; `checksum_cli`
+      forces project model, `concrete test`, and oracle comparison. Tier exits
+      only when at least two medium programs build, run, pass
+      interpreter-vs-compiled checks, carry full evidence/trust classification,
+      and are covered by runtime-obligation audit.
+    - **Separate workload repo later** (`concrete-workloads`): use it for
+      larger ports, 2k-10k line
       programs, compatibility suites, external-user programs, benchmark
       workloads, and reference/oracle data that would bloat the compiler repo.
       Do not create this repo until modules/imports, `Concrete.toml`,
       `concrete test`, bytes/text/path, collections, stdlib core APIs, and basic
       diagnostics are usable. The first external-user workload in this repo is the
       external-validation-gate trial from the cross-cutting checkpoint. The repo
-      must pin a Concrete compiler/toolchain version and be validated by release
-      CI so it does not silently rot as the language changes.
+      must pin a Concrete compiler/toolchain version in
+      `concrete-workloads/Concrete.lock`, include `workloads.toml` with
+      `name`, `size_lines`, `source_language`, `oracle`, `evidence_class`, and
+      `required_concrete_version`, and be validated by release CI through
+      `scripts/tests/check_external_workloads_repo.sh` so it does not silently
+      rot as the language changes.
     - **Ported compatibility examples after the daily workflow is stable:**
       `wc`/`cat`/`sha256sum`-style tools, QOI image decoder, base64 library,
       INI parser, tiny glob/regex matcher, arena allocator demo, MMIO-mock
@@ -1393,10 +1478,15 @@ they force a named surface or public claim.
       for the Phase 15 `with(Device)`/MMIO evidence decision or explicitly
       pulls that decision forward.
     - **10k-line stress ports** only after daily workflow is stable enough that
-      the port tests Concrete rather than fighting missing basics. Tier exits
-      only when at least one large port has a pinned reference/oracle suite,
-      interpreter-vs-compiled differential coverage, runtime-obligation audit,
-      and release-CI replay.
+      the port tests Concrete rather than fighting missing basics. First
+      accepted port set: `inih`, `cJSON`, `qoi`, `tiny_regex`, and `tiny_tar`.
+      Each port must live under `concrete-workloads/ports/<name>/` and include
+      `PORT.toml` with `upstream_url`, `upstream_commit`, `license`,
+      `ported_subset`, `line_count`, `unsupported_features`, `oracle_command`,
+      `known_trust_boundaries`, and `lessons_for_concrete`. Wire
+      `scripts/tests/check_10k_ports.sh`. Tier exits only when at least one
+      large port has a pinned reference/oracle suite, interpreter-vs-compiled
+      differential coverage, runtime-obligation audit, and release-CI replay.
     Each workload must have a check story: oracle/reference comparison,
     interpreter-vs-compiled differential tests, runtime-obligation audit, and
     explicit evidence/trust classification for what is proved, tested, assumed,
@@ -1480,7 +1570,10 @@ and incremental build contracts are explicit enough for release evidence.
 2. Document target/toolchain model: triple, data layout, linker, runtime/startup,
    libc expectation, clang/llc boundary, sanitizer/coverage hooks.
 3. Define optimization policy: allowed optimizations, evidence preservation,
-   debug/release behavior, report/codegen validation.
+   debug/release behavior, report/codegen validation. Follow the QBE-style
+   "small auditable backend contract first" principle: prefer a stable,
+   inspectable subset with explicit assumptions over early attempts to match
+   LLVM-level optimization coverage.
 4. Add native compiled-program debugging support: DWARF/source-map emission,
    source-mapped backtraces for runtime failures, debug-vs-release behavior,
    optimized-code caveats, and diagnostics that distinguish source-level
@@ -1493,25 +1586,43 @@ and incremental build contracts are explicit enough for release evidence.
    stubs, symbol names, calling conventions, ownership transfer, capability
    labels, and trust assumptions must round-trip through at least one C
    harness and one Concrete caller.
-8. Add sanitizer-backed generated-code validation for trusted/FFI/layout/
-   pointer-heavy examples.
-9. Add backend/codegen differential validation where executable oracles exist.
-10. Add compiler self-leak/resource soak harness for long-running workflows.
-11. Harden stdlib stability and evidence policy from Phase 11: which stdlib functions are
+8. Add a C ABI classification suite, inspired by QBE's explicit ABI contract:
+   scalar parameters and returns, small and large structs, arrays, nested
+   aggregates, alignment/padding, by-value versus by-reference lowering,
+   varargs policy, calling convention labels, symbol names, and ownership/
+   capability/trust annotations. Wire `scripts/tests/check_c_abi_matrix.sh`
+   with both generated C callers and Concrete callers.
+9. Add backend IR emission and verification as a release-facing backend
+   contract: `concrete inspect --backend-ir`, `--emit-backend-ir`,
+   `concrete verify-ir --pass backend-ir`, golden backend-IR fixtures, and
+   round-trip checks that source maps, target constants, runtime checks, and
+   capability/trust labels survive lowering.
+10. Add sanitizer-backed generated-code validation for trusted/FFI/layout/
+    pointer-heavy examples, plus the stdlib sanitizer/runtime hooks from Phase
+    11. Sanitizer findings are `runtime_checked` / `tested` evidence, not proof.
+11. Add backend/codegen differential validation where executable oracles exist.
+12. Add compiler self-leak/resource soak harness for long-running workflows.
+13. Harden stdlib stability and evidence policy from Phase 11: which stdlib functions are
    trusted, proved, enforced, allocation-free, capability-free, or assumption
    carriers.
-12. Define stdlib contracts for allocators, I/O handles, directory/file/path
+14. Define stdlib contracts for allocators, I/O handles, directory/file/path
     handles, byte/text/path conversion APIs, and fallible return discipline.
     Each public stdlib function must state allocation behavior, OS authority,
     failure mode, trusted platform assumptions, and evidence class.
-13. Add stdlib evidence gates so core helpers cannot silently widen authority,
+15. Add stdlib evidence gates so core helpers cannot silently widen authority,
     allocation, proof assumptions, or runtime-error obligations.
-14. Evaluate a normalized mid-level IR only when traceability/backend-contract
+16. Evaluate a normalized mid-level IR only when traceability/backend-contract
     reports expose a concrete gap.
-15. Keep QBE/WASM/second backend deferred until evidence attachment,
-    optimization policy, and backend trust boundaries are trustworthy.
-16. Add the Phase 14 validation artifact: a backend/std-lib contract project
+17. Keep QBE/WASM/second backend deferred until evidence attachment,
+    optimization policy, backend IR verification, and backend trust boundaries
+    are trustworthy. A QBE-style backend experiment is allowed only as a
+    measured research branch: it must consume the same backend IR contract,
+    emit the same source maps and target assumptions, pass the C ABI matrix for
+    its supported subset, and report exactly which claims become backend/
+    target-trusted.
+18. Add the Phase 14 validation artifact: a backend/std-lib contract project
     with ABI/layout C round trips, C/ABI glue generation/import checks,
+    the C ABI classification matrix, backend-IR emission/verifier checks,
     sanitizer runs, compiled-oracle differential tests, native debug/source-map
     smoke tests, clean-vs-incremental fact equivalence, and stdlib
     authority/allocation/evidence gates.
