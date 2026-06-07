@@ -362,6 +362,8 @@ interpreter, backend, and command plumbing should have clear boundaries and one
 source of truth for each fact.
 
 Design reference: [docs/COMPILER_PIPELINE.md](docs/COMPILER_PIPELINE.md).
+Research reference:
+[docs/COMPILER_PIPELINE_RESEARCH.md](docs/COMPILER_PIPELINE_RESEARCH.md).
 
 Done when: every user-facing command loads the same typed project context,
 the frontend produces resolved/canonical/typed IR with source spans and
@@ -407,25 +409,63 @@ depends on them.
 9. Treat diagnostics as compiler data, not formatted strings. Passes should
    emit structured diagnostics first; human text, JSON, LSP output, tests, and
    release bundles should render the same diagnostic records.
-10. Preserve source maps through every lowering boundary: AST -> TypedIR,
+10. Add error-tolerant partial facts for tooling and reports: parser,
+    resolver, typechecker, ownership, and capability passes should be able to
+    produce partial artifacts containing explicit `invalid` / `unknown`
+    placeholders where safe. This is the LSP/product lesson from Gleam, Dafny,
+    Lean, Rust, and Swift: one bad expression should not erase unrelated
+    diagnostics, formatting, docs, hover, import facts, or audit context. Any
+    partial fact must be labelled as partial and must never feed codegen,
+    proof, policy, or release claims as if it were complete.
+11. Preserve source maps through every lowering boundary: AST -> TypedIR,
    TypedIR -> Core, Core -> backend IR, generated C/LLVM/native debug info,
    runtime failures, audit facts, and proof/obligation artifacts.
-11. Normalize command plumbing for `build`, `run`, `test`, `audit`, `prove`,
+12. Normalize command plumbing for `build`, `run`, `test`, `audit`, `prove`,
    `inspect`, `fmt`, `doc`, and `clean`: shared project loading, shared target/
    policy/assumption loading, shared diagnostics, shared output conventions,
    and shared exit-code taxonomy.
-12. Define the backend contract boundary: integer overflow profile, division
+13. Define the backend contract boundary: integer overflow profile, division
    semantics, layout/ABI, panic/assert behavior, optimization assumptions,
    target triple/data layout, libc/runtime assumptions, and what is trusted.
-13. Add an interpreter-vs-compiled differential harness for ordinary language
+14. Add an interpreter-vs-compiled differential harness for ordinary language
     development. Every new executable language feature should be able to run
     through `interpret result == compiled result` where deterministic and
     target-independent.
-14. Add pass inspection commands for compiler developers and users:
+15. Add pass inspection commands for compiler developers and users:
     `concrete inspect --ast`, `--resolved`, `--typed`, `--core`,
     `--backend-ir`, with stable redaction of local paths and deterministic
     ordering.
-15. Define a query/dependency model for compiler facts before implementing
+16. Add pass verifier gates, inspired by Swift's SIL verifier, Lean's IR
+    checker, Zig's AIR/codegen bookkeeping checks, and Go's SSA validation:
+    `concrete verify-ir --pass parsed|resolved|typed|core|backend-ir` must
+    check structural invariants for each representation. Examples: resolved
+    names must point at existing declarations; typed expressions must carry
+    types; ownership facts must not mention dead locals; capabilities must be
+    attached before lowering; Core must contain no source-only contract/ghost
+    syntax; backend IR must preserve source maps and target assumptions. Wire
+    this into `scripts/tests/check_ir_verifiers.sh`.
+17. Add structured compiler pipeline events, borrowing the useful part of
+    Dafny's pipeline events and Gleam's build telemetry:
+    `concrete build --events --json` emits start/finish/fail events for
+    project-load, parse, resolve, canonicalize, typecheck, ownership,
+    capability, obligation collection, proof/evidence reports, codegen, link,
+    and release-bundle capture. Events must include pass name, input artifact
+    ids, output artifact ids, source counts, timing, diagnostic count, and
+    command context.
+18. Add crash/repro bundles for compiler bugs, inspired by Zig's crash context
+    reports and Rust's ICE discipline: on an internal compiler failure,
+    Concrete writes `.build/concrete-crash/<id>/` with `command.txt`,
+    `toolchain.json`, `project.json`, redacted source inputs, last successful
+    pass, current function/module/obligation id if known, structured
+    diagnostics so far, and a replay command. User errors must never produce
+    crash bundles; crash bundles are for compiler bugs only.
+19. Define canonical interned identities for names, types, literals, layouts,
+    and target facts before broad caching or package artifacts. This is the
+    Zig `InternPool` / Rust stable-id lesson adapted to Concrete: reports,
+    fingerprints, obligation ids, package interfaces, incremental facts, and
+    proof artifacts should use stable canonical ids instead of re-rendered
+    strings where possible.
+20. Define a query/dependency model for compiler facts before implementing
     broad caching. Name facts such as `parse(file)`, `resolve(module)`,
     `typecheck(function)`, `capabilities(function)`, `typed_ir(function)`,
     `core(function)`, `obligations(function)`, `audit_facts(function)`,
@@ -433,22 +473,52 @@ depends on them.
     The shape should be query-first, Salsa/rust-analyzer style, but Concrete
     should not take a cache dependency until invalidation and diagnostics are
     stable.
-16. Define incremental artifact dependencies: which source files/functions
+21. Define incremental artifact dependencies: which source files/functions
     affect which diagnostics, facts, obligations, proof checks, generated code,
     inspect output, and release-bundle entries. Do not implement caching broadly
     until the dependency model is named and validated.
-17. Document pass invariants and failure boundaries: what each pass guarantees,
+22. Add compiler performance instrumentation before broad feature growth:
+    `concrete build --timings --json` and `concrete report performance --json`
+    must report parse/resolve/typecheck/ownership/capability/lowering/codegen/
+    report/prove timings, peak memory if available, source-file/function counts,
+    stdlib compile time, and toolchain identity. Performance data is a compiler
+    fact, not a printed side channel.
+23. Add compiler performance regression budgets:
+    `scripts/tests/check_compiler_performance.sh` compares
+    `tests/perf/small_project`, `tests/perf/stdlib_imports`,
+    `tests/perf/proof_report`, and `tests/perf/codegen_loop` against committed
+    JSON baselines. Done when CI fails on unexplained budget regressions and
+    the report says which pass regressed.
+24. Add compiler fuzzing as a standing gate:
+    `scripts/fuzz/parser`, `scripts/fuzz/resolver`,
+    `scripts/fuzz/typecheck`, `scripts/fuzz/ownership`,
+    `scripts/fuzz/formatter`, `scripts/fuzz/lowering`, and
+    `scripts/fuzz/obligations`. Done when `make test-fuzz` runs a bounded CI
+    budget and proves crashes, parser panics, malformed JSON, and false
+    `proved_*` statuses are rejected.
+25. Add fuzz minimization and fixture promotion:
+    `scripts/fuzz/minimize` writes reduced repros into
+    `tests/fuzz_regressions/<area>/<name>.con` with an expected diagnostic or
+    honest non-proof snapshot. Done when every promoted repro is run by CI and
+    no fuzzer-only failure stays outside the checked-in corpus for a release.
+26. Document pass invariants and failure boundaries: what each pass guarantees,
     which errors are recoverable for reporting, which errors stop compilation,
     and which assumptions are trusted.
-18. Add a compiler-pipeline regression corpus: malformed modules, ambiguous
+27. Add a compiler-pipeline regression corpus: malformed modules, ambiguous
     names, type errors, ownership errors, capability errors, source-map
     preservation, interpreter/codegen mismatch, backend assumption reporting,
     canonicalization edge cases, dependency invalidation, and deterministic
     `inspect` output.
-19. Add the Phase 4 validation artifact: one project that exercises all shared
-    command plumbing, pass inspection, diagnostics-as-data, canonicalization,
-    source maps, backend assumptions, interpreter-vs-compiled comparison,
-    dependency facts, and release/audit fact agreement without relying on
+28. Add the Phase 4 validation artifact:
+    `examples/compiler_pipeline_probe/` plus
+    `scripts/tests/check_phase4_pipeline.sh`. The fixture must run
+    `concrete build`, `run`, `test`, `fmt --check`, `inspect --ast`,
+    `inspect --resolved`, `inspect --typed`, `inspect --core`,
+    `verify-ir --pass typed`, `build --events --json`,
+    `report performance --json`, and `audit`; compare interpreter-vs-compiled
+    output; assert source-map spans survive; assert dependency facts are
+    stable; assert crash/repro bundles are emitted only for deliberate internal
+    compiler failures; and run the fuzz-regression fixtures without relying on
     proof-specific machinery.
 
 ## Phase 5: Proof Authoring And Automation
@@ -892,24 +962,29 @@ rest of Phase 10 stays after that slab in the same linear queue.
 14. Define the FFI language surface: `extern` syntax, layout restrictions,
     ABI/calling convention annotations, ownership crossing the boundary,
     capability/trust requirements, and what cannot be expressed safely.
-15. Define language-visible build profiles: debug/release, overflow checks,
+15. Define C/ABI glue-generation UX before FFI examples grow: whether Concrete
+    emits C headers, imports declarations from C headers, generates host stubs,
+    or exposes a narrow `concrete ffi`/`concrete bindgen` command. Generated
+    glue must carry layout/ABI assumptions, ownership boundary rules,
+    capability/trust labels, source spans, and reproducible output.
+16. Define language-visible build profiles: debug/release, overflow checks,
     assertions, runtime checks, optimization assumptions, and proof/audit
     compatibility.
-16. State the macro/metaprogramming stance for v1: no unrestricted macro
+17. State the macro/metaprogramming stance for v1: no unrestricted macro
     system. Allow only controlled, audited compile-time generation /
     derive-like helpers for boring repeated artifacts such as equality,
     debug/display, serializers/parsers, proof stubs, contract boilerplate, and
     small table generation. Generated code must preserve source spans and
     evidence/audit traceability.
-17. Define handle-relative filesystem APIs as the preferred capability shape:
+18. Define handle-relative filesystem APIs as the preferred capability shape:
     directory/file handles are capabilities; privileged code should operate
     relative to opened handles rather than repeated ambient path lookup. The
     design must address TOCTOU risks, path normalization, symlinks, temp files,
     and byte-preserving OS boundary behavior.
-18. Add ignored-result diagnostics for fallible APIs: discarding `Result`,
+19. Add ignored-result diagnostics for fallible APIs: discarding `Result`,
     `Option`, or runtime-check results is a warning/error unless explicitly
     acknowledged with `_ = ...`, `ignore(...)`, or a policy-approved pattern.
-19. Track accumulating error sets for `Result`-heavy code, without adopting row
+20. Track accumulating error sets for `Result`-heavy code, without adopting row
     effects. Protocol parsers and service pipelines repeatedly want "this
     function may return exactly these error variants" without hand-writing one
     giant wrapper enum for every stage. First implementation should be a
@@ -917,22 +992,22 @@ rest of Phase 10 stays after that slab in the same linear queue.
     later consider surface syntax if it stays obvious, e.g. a named error-set
     alias or a restricted union of enum variants. Do **not** introduce general
     row polymorphism or implicit effect rows.
-20. Evaluate units-of-measure / dimensional annotations for common systems
+21. Evaluate units-of-measure / dimensional annotations for common systems
     mistakes: bytes vs bits, milliseconds vs seconds, block counts vs byte
     offsets, protocol lengths, and memory sizes. Start as optional annotations
     and diagnostics over integer-like values, not full dependent types. Any
     proof story must be contract/VC-based and audit-visible; unit erasure must
     not hide conversions or allocation.
-21. Add source style guidance alongside `concrete fmt`: idiomatic layout for
+22. Add source style guidance alongside `concrete fmt`: idiomatic layout for
     functions, modules, contracts, matches, error handling, examples, and
     proof-bearing code.
-22. Decide the v1 iteration protocol before broad stdlib work. Evaluate and
+23. Decide the v1 iteration protocol before broad stdlib work. Evaluate and
     document the replacement for closures/trait-object iterators:
     index-based `for i in 0..len { xs[i] }`, explicit cursor/iterator structs
     with `next() -> Option<T>`, and monomorphized `for_each`-style helpers. The
     decision must cover `Vec`, slices, maps, parser cursors, and interpreter
     workloads, and must explain how authority and allocation remain visible.
-23. Decide capability polymorphism for higher-order stdlib functions before
+24. Decide capability polymorphism for higher-order stdlib functions before
     adding `map`/`fold`/`for_each` families or structured concurrency. The
     design must avoid a combinatorial split like `map`, `map_file`,
     `map_alloc`; the expected shape is explicit capability-set polymorphism
@@ -942,63 +1017,83 @@ rest of Phase 10 stays after that slab in the same linear queue.
     generic once, or allow generic contracts with instance-level proof
     artifacts. Audit output must distinguish `proved_for_instance` from any
     future `proved_generic` class.
-24. Define the stdlib handoff contract for Phase 11. Phase 10 decides the
+25. Define the stdlib handoff contract for Phase 11. Phase 10 decides the
     language surfaces the stdlib depends on — modules/imports, project model,
     tests, diagnostics, bytes/text/path types, collections, iteration,
     capability polymorphism, build profiles, and CLI verbs — but the actual
     library APIs are built in the dedicated stdlib phase. The handoff must list
     which surfaces are stable enough to build on and which remain provisional.
-25. Design user-facing testing framework UX before `std.test` hardens:
+26. Design user-facing testing framework UX before `std.test` hardens:
     test discovery (`#[test]` versus naming convention), expected failures,
     capability-scoped fixtures, temp files without ambient authority, oracle
     tests, interpreter-vs-compiled tests, proof-status interaction, and how test
-    failures appear in `concrete audit`.
-26. Add debug/trace mode: `concrete run --trace`, interpreter step traces, Core /
+    failures appear in `concrete audit`. The user-facing output must include
+    `concrete test --json` with a stable event stream comparable to Go's
+    `test2json`: discovered, started, passed, failed, skipped, expected-failed,
+    oracle-compared, policy-blocked, and proof-status events.
+27. Add `concrete lint` / `concrete vet` before public examples grow:
+    semantic warnings that are not type errors, including ignored fallible
+    results, suspicious capabilities, unreachable contracts, redundant
+    runtime checks, likely path/bytes/text confusion, unstable public API use,
+    and release-policy warnings. Every lint must have a diagnostic code,
+    source span, machine-readable JSON payload, and an explicit allow/deny
+    policy.
+28. Add debug/trace mode: `concrete run --trace`, interpreter step traces, Core /
     lowered-IR dumps, source spans in runtime errors, and stable replay commands
     for report/debug failures.
-27. Add interactive evidence commands for low-ceremony feedback without a live
+29. Add developer profiling/coverage commands for Concrete programs:
+    `concrete run --profile`, `concrete test --coverage`, and
+    `concrete trace --json`. These are ordinary debugging surfaces, not proof
+    evidence; audit output must label them `tested/profiled`, never `proved`.
+30. Add interactive evidence commands for low-ceremony feedback without a live
     mutable REPL: evaluate a function with concrete inputs, inspect Core and
     ProofCore for one function, show the current generated obligation, and
     replay a failing proof/debug report. Target commands include
     `concrete eval`, `concrete inspect --core`, `concrete inspect --proofcore`,
     `concrete prove --show-obligation`, and `concrete run --trace`.
-28. Add basic LSP/editor diagnostics early: parse/type errors, capability
+31. Add basic LSP/editor diagnostics early: parse/type errors, capability
     summaries, hover for inferred types, and jump-to-definition. Deeper
     proof/evidence LSP features remain in the later editor phase.
-29. Decide target-conditional code selection before freestanding and
+32. Decide target-conditional code selection before freestanding and
     cross-platform stdlib work harden. Prefer profile-selected source roots and
     modules in `Concrete.toml`; if narrow `cfg` attributes are added later, they
     must be LL(1)-safe, small, target/profile-only, and reported in audit.
-30. Normalize the CLI around predictable verbs:
+33. Normalize the CLI around predictable verbs:
     `concrete build`, `concrete run`, `concrete test`, `concrete fmt`,
-    `concrete audit`, `concrete prove`, `concrete eval`, `concrete inspect`,
-    `concrete doc`, and `concrete clean`.
-31. Add `concrete doc`: generate basic API/reference docs from source,
+    `concrete lint`, `concrete vet`, `concrete audit`, `concrete prove`,
+    `concrete eval`, `concrete inspect`, `concrete doc`, `concrete bench`,
+    `concrete trace`, and `concrete clean`.
+34. Add `concrete doc`: generate basic API/reference docs from source,
     capabilities, modules, and public comments without depending on proof
-    infrastructure.
-32. Add a first-user tutorial path for C/Rust developers that does not start
+    infrastructure. Outputs must include `concrete doc --format json` and
+    `concrete doc --format html`, so editor tooling and published docs reuse
+    the same source.
+35. Add a first-user tutorial path for C/Rust developers that does not start
     with proofs: install, hello world, values and fixed arrays, ownership,
     borrows, capabilities, explicit errors, tests, compiled debugging, audit,
     then proof-bearing examples. The tone should be "ordinary systems code with
     visible evidence," not proof-assistant ceremony.
-33. Add useful non-proof examples: a small CLI tool, a protocol decoder, a
+36. Add useful non-proof examples: a small CLI tool, a protocol decoder, a
     bounded cache, and a capability-scoped file/console program.
-34. Add basic benchmarking UX: run small benchmarks, compare interpreter versus
-    compiled performance, and detect obvious generated-code regressions.
-35. Document the memory model for ordinary users: move/copy/drop behavior,
+37. Add basic benchmarking UX: `concrete bench` runs small benchmarks, compares
+    interpreter versus compiled performance, emits `--json`, and detects
+    obvious generated-code regressions. This is separate from compiler
+    performance budgets in Phase 4.
+38. Document the memory model for ordinary users: move/copy/drop behavior,
     cleanup, borrows, linear values, trusted/Unsafe escape hatches, definite
     assignment, and what is rejected. State the invariant explicitly: safe
     Concrete has no uninitialized reads by construction; trusted/FFI memory may
     carry explicit assumptions.
-36. Add cross-platform build sanity for the supported host set: macOS and Linux
+39. Add cross-platform build sanity for the supported host set: macOS and Linux
     first, with CI coverage, reproducible commands, and documented toolchain
     expectations.
-37. Add the Phase 10 validation project: a small C/Rust-style CLI using the core
+40. Add the Phase 10 validation project: a small C/Rust-style CLI using the core
     slab plus daily workflow (`Concrete.toml`, modules/imports,
     `concrete test`, bytes/text/path and collection decisions, diagnostics,
-    formatting, docs, and trace/debug commands). CI must build, run, test,
-    format-check, audit, and compare interpreter-vs-compiled behavior on macOS
-    and Linux. It validates the language/tooling slab, not the full stdlib.
+    formatting, docs, lint/vet, benchmark/profile/coverage smoke tests, and
+    trace/debug commands). CI must build, run, test, format-check, lint, audit,
+    and compare interpreter-vs-compiled behavior on macOS and Linux. It
+    validates the language/tooling slab, not the full stdlib.
 
 ## Phase 11: Standard Library And Core APIs
 
@@ -1042,9 +1137,10 @@ class and authority/allocation story.
    - Proposed iterator/builder modules: `std.iter`, `std.builder`.
    - Proposed collection helper modules: `std.sort`, `std.search`.
    - Proposed data/encoding modules: `std.checksum`, `std.base64`,
-     `std.uri`, `std.json`, `std.decode`.
+     `std.uri`, `std.json`, `std.decode`, `std.bin`.
    - Proposed package/config modules: `std.semver`, `std.config`.
-   - Proposed CLI/user-output modules: `std.log`, `std.progress`.
+   - Proposed CLI/user-output modules: `std.cli`, `std.log`, `std.progress`.
+   - Proposed security/text-policy modules: `std.ct`, `std.unicode`.
 3. Stabilize `std.option` and `std.result`: `Option<T>`, `Result<T, E>`,
    construction, matching helpers,
    fallible chaining, ignored-result behavior, test helpers, and audit facts
@@ -1058,11 +1154,15 @@ class and authority/allocation story.
    Decide the `std.bytes.Bytes` / `std.text.Text` / `std.string.String` split
    before `std.json`, `std.uri`, `std.path`, or `std.net` examples depend on
    it.
-6. Build path and OS-string APIs in `std.path`: `Path`, `OsString`,
+6. Define the Unicode policy in proposed `std.unicode` before text-heavy APIs
+   grow: validation, scalar/value iteration, normalization stance, case
+   folding stance, width/display policy, and which pieces are core-now versus
+   package-later. Do not silently normalize or case-fold text.
+7. Build path and OS-string APIs in `std.path`: `Path`, `OsString`,
    byte-preserving platform
    boundaries, normalization assumptions, symlink/TOCTOU notes, and explicit
    failure modes.
-7. Build collection APIs across `std.vec`, `std.map`, `std.set`,
+8. Build collection APIs across `std.vec`, `std.map`, `std.set`,
    `std.ordered_map`, `std.ordered_set`, `std.deque`, `std.heap`,
    `std.bitset`, and `std.slice`: fixed arrays/slices, `Vec<T>`, maps, sets,
    buffers, parser cursors, and capacity-aware helpers. Add the ordinary APIs
@@ -1071,114 +1171,134 @@ class and authority/allocation story.
    stable ordering helpers for ordered collections. Each API must state whether
    it requires `with(Alloc)`, whether it can fail, and which runtime
    obligations it creates.
-8. Build iterator and builder APIs in proposed `std.iter` and `std.builder`
+9. Build iterator and builder APIs in proposed `std.iter` and `std.builder`
    after the collection shape is known: `Iter<T>`-style adapters,
    `fold`/`map`/`filter`/`take`/`drop`, known-length reporting, byte/text
    builders, and tree/buffer builders inspired by Gleam's `BytesTree` and
    `StringTree`. Do not hide allocation; builder APIs either carry
    `with(Alloc)` or operate over fixed buffers.
-9. Build numeric helper APIs in `std.numeric`, `std.math`, and `std.mem`:
+10. Build numeric helper APIs in `std.numeric`, `std.math`, and `std.mem`:
    checked/wrapping/saturating arithmetic helpers,
    narrowing/conversion helpers, endian conversions, byte/word packing, and
    evidence classes for each helper.
-10. Build sorting and searching primitives in proposed `std.sort` and
+11. Build sorting and searching primitives in proposed `std.sort` and
     `std.search`: comparison conventions, stable/unstable sort decision,
     binary search, min/max helpers, and evidence/oracle tests over edge cases.
-11. Build hashing, checksums, and deterministic random helpers in `std.hash`,
+12. Build hashing, checksums, and deterministic random helpers in `std.hash`,
     proposed `std.checksum`, and `std.rand`: stable hash APIs for maps/sets,
     non-cryptographic checksums, seeded deterministic RNG for tests/oracles,
     and a clear split from cryptographic randomness. Any OS entropy source is
     hosted-only and capability-visible.
-12. Build time and duration helpers in `std.time`: monotonic versus wall-clock
+13. Build constant-time helper APIs in proposed `std.ct` only for narrow,
+    auditable cases: equality/compare over fixed-size bytes, no secret-dependent
+    branches or early exits, source-shape audit evidence, and clear
+    machine-level timing assumptions. This belongs to the narrow security
+    surface, not broad crypto.
+14. Build time and duration helpers in `std.time`: monotonic versus wall-clock
     distinction,
     timestamp formatting/parsing if admitted, timeout helpers, and explicit
     hosted authority for reading the clock.
-13. Build formatting and parsing helpers in `std.fmt` and `std.parse`:
+15. Build formatting and parsing helpers in `std.fmt` and `std.parse`:
     integer/text formatting, simple
     scanners, structured parse results, error-set reports, and oracle-friendly
     output conventions.
-14. Build a reusable scanner/parser core in `std.parse` over
+16. Build a reusable scanner/parser core in `std.parse` over
     `std.bytes.Bytes` and `std.text.Text`: `peek`, `advance`, `take_while`,
     `consume`, span/position tracking, error reporting, and no hidden
     allocation unless the API carries `with(Alloc)`.
-15. Add `std.base64` as the first byte-format module: encode/decode, streaming
+17. Add `std.base64` as the first byte-format module: encode/decode, streaming
     shape if needed, strict error reporting, RFC test vectors, oracle
     comparison, and evidence classification.
-16. Add `std.uri` parsing/formatting after the byte/text/path split is stable:
+18. Add `std.uri` parsing/formatting after the byte/text/path split is stable:
     component accessors, percent encoding/decoding, normalization policy, and
     clear distinction between syntax validation and network authority.
-17. Add `std.json` as the first structured data module: tokenization,
+19. Add `std.json` as the first structured data module: tokenization,
     string/number handling, error spans, bounded recursion policy, optional
     DOM-like representation only if the allocation story is explicit, and
     oracle tests against a reference implementation.
-18. Add a small typed decoding layer in proposed `std.decode` after
+20. Add a small typed decoding layer in proposed `std.decode` after
     `std.json`: dynamic value decoding, field access, error paths, and examples
     comparable to Gleam's `dynamic/decode`, without broad reflection or hidden
     runtime typing.
-19. Add semantic-version and config-format helpers in proposed `std.semver`
+21. Add binary serialization helpers in proposed `std.bin`: endian-aware
+    reading/writing, fixed-width integers, length-prefixed fields only with
+    explicit bounds, byte-span diagnostics, and no hidden allocation.
+22. Add semantic-version and config-format helpers in proposed `std.semver`
     and `std.config` if package/build work starts depending on them:
     `SemVer`, INI/TOML-style scanner, and manifest parsing support. These are
     stdlib/package-boundary helpers, not general metaprogramming.
-20. Add simple logging/diagnostic output APIs in proposed `std.log`: levels,
+23. Add command-line parser helpers in proposed `std.cli`: flags, positional
+    arguments, usage text, typed parse errors, no ambient environment access
+    except through `std.args`, and examples that keep authority visible.
+24. Add simple logging/diagnostic output APIs in proposed `std.log`: levels,
     writers, formatting
     integration, capability requirements, and policy for release builds. Keep
     this small; it is not a tracing framework.
-21. Add progress/status output helpers for CLI tools in proposed
+25. Add progress/status output helpers for CLI tools in proposed
     `std.progress` if examples need them: progress lines, quiet/verbose policy,
     terminal detection, and no ambient terminal authority.
-22. Build capability-scoped console, file, network, process, and time APIs in
+26. Build capability-scoped console, file, network, process, and time APIs in
     `std.io`, `std.writer`, `std.fs`, `std.env`, `std.args`, `std.process`,
     `std.net`, and `std.time`. Authority must be visible in function types and
     audit reports; no API may smuggle ambient authority through a convenience
     wrapper.
-23. Build handle-relative filesystem APIs in `std.fs` as the preferred
+27. Build handle-relative filesystem APIs in `std.fs` as the preferred
     file/path shape: directory/file handles carry authority; operations are
     relative to handles where possible; temp-file and symlink behavior is
     explicit.
-24. Build handle-based network surface in `std.net` only as far as the
+28. Build handle-based network surface in `std.net` only as far as the
     validation workloads require: address parsing, socket handle wrappers, HTTP
     header parsing as a pure parser first, and no full HTTP client/server until
     package/workload evidence demands it.
-25. Build stdlib test/oracle helpers in `std.test`: expected failures,
+29. Build stdlib test/oracle helpers in `std.test`: expected failures,
     capability-scoped fixtures, temp directories, oracle vector runners,
     interpreter-vs-compiled helpers, and report snapshots.
-26. Define stdlib error-handling conventions: when APIs return `Result`,
+30. Define stdlib error-handling conventions: when APIs return `Result`,
     `Option`, panic/abort, or require a policy gate; how ignored-result
     diagnostics apply; and how accumulating error sets are reported.
-27. Define stdlib evidence classes per public API: `proved`, `enforced`,
+31. Define stdlib evidence classes per public API: `proved`, `enforced`,
     `reported`, `tested_by_oracle`, `assumed`, or `trusted`. The evidence class
     must appear in docs and audit artifacts, not just implementation comments.
-28. Add stdlib authority/allocation/runtime-obligation gates so core helpers
+32. Add stdlib authority/allocation/runtime-obligation gates so core helpers
     cannot silently widen capabilities, allocation behavior, trusted
     assumptions, or runtime-risk obligations.
-29. Split hosted versus freestanding-ready stdlib modules at the API level:
+33. Split hosted versus freestanding-ready stdlib modules at the API level:
     no-alloc/no-OS core modules, allocator-backed modules, hosted OS modules,
     and modules that are explicitly unavailable under freestanding profiles.
     The freestanding target implementation still lands in Phase 15.
-30. Record deliberately deferred stdlib families so they do not disappear from
+34. Record deliberately deferred stdlib families so they do not disappear from
     planning: compression/archive formats, broad crypto beyond the narrow
     hash/HMAC/constant-time story, full HTTP client/server, dynamic libraries,
     OS debug formats, atomics, threads, SIMD, target/ABI databases, and
     platform-specific C/POSIX wrappers. Each stays package-later,
     backend-later, freestanding-later, or research-later until a workload
     forces it.
-31. Add stdlib docs and examples for C/Rust users: small recipes for bytes,
-    text, paths, errors, files, vectors, maps, tests, parser cursors, JSON,
-    base64, URI, hashing, deterministic random, time, logging, and
-    capability-scoped I/O.
-32. Add a stdlib compatibility/oracle corpus: reference-vector tests for
-    parsing/formatting, byte/text/path conversions, collection behavior,
-    base64, URI, JSON, semantic versions, path normalization,
-    sorting/searching, checksums, deterministic RNG, and simple CLI I/O.
-33. Add real stdlib workload checks before Phase 12 relies on the library:
-    base64 CLI, JSON validator/scanner, INI/TOML-style parser, checksum CLI,
-    HTTP header parser, path normalizer, and collection-heavy ring-buffer or
-    LRU cache. Each workload must build, run, oracle-check where possible, and
+35. Add stdlib docs and examples for C/Rust users:
+    `docs/STDLIB_GUIDE.md` plus `examples/stdlib_recipes/bytes_text`,
+    `path_fs`, `result_errors`, `vec_map`, `parser_cursor`, `json_scan`,
+    `base64_cli`, `uri_parse`, `checksum`, `deterministic_rand`, `time_log`,
+    and `capability_io`. Each recipe must show the exact `std.*` imports,
+    capability set, allocation behavior, and expected audit line.
+36. Add a stdlib compatibility/oracle corpus under
+    `examples/stdlib_compat/`: `fmt_parse_vectors`, `bytes_text_vectors`,
+    `path_vectors`, `collection_vectors`, `base64_vectors`, `uri_vectors`,
+    `json_vectors`, `semver_vectors`, `sort_search_vectors`,
+    `checksum_vectors`, `rand_vectors`, and `cli_io_vectors`. Wire it with
+    `scripts/tests/check_stdlib_compat.sh`; every vector either oracle-compares
+    against a reference or records why it is an audit/evidence check instead.
+37. Add real stdlib workload checks before Phase 12 relies on the library:
+    `examples/stdlib_workloads/base64_cli`,
+    `json_validator`, `ini_parser`, `checksum_cli`, `http_headers`,
+    `path_normalizer`, and `lru_cache` or `ring_buffer`. Wire them with
+    `scripts/tests/check_stdlib_workloads.sh`. Each workload must build, run,
+    oracle-check where possible, compare interpreter-vs-compiled output, and
     report authority/allocation/evidence classes.
-34. Add the Phase 11 validation project: a small real stdlib client that uses
-    `Result`/`Option`, `Bytes`/`Text`/`Path`, collections, files/console,
-    formatting/parsing, JSON or base64, deterministic RNG or checksums, tests,
-    and oracle helpers. CI must build, run, test, audit
+38. Add the Phase 11 validation project:
+    `examples/stdlib_client/` plus `scripts/tests/check_phase11_stdlib.sh`.
+    The client must use `std.option`, `std.result`, `std.bytes`, `std.text`,
+    `std.path`, `std.vec`, `std.map`, `std.fs`, `std.io`, `std.fmt`,
+    `std.parse`, either `std.json` or `std.base64`, deterministic RNG or
+    checksums, and `std.test`. CI must build, run, test, audit
     authority/allocation/evidence classes, and compare interpreter-vs-compiled
     behavior.
 
@@ -1369,27 +1489,32 @@ and incremental build contracts are explicit enough for release evidence.
    obligations, diagnostics, reports, and codegen must agree.
 6. Add ABI/layout round-trip checks: C headers/stubs, offsets, size, alignment,
    calling conventions.
-7. Add sanitizer-backed generated-code validation for trusted/FFI/layout/
+7. Add C/ABI glue validation: generated headers, imported declarations, host
+   stubs, symbol names, calling conventions, ownership transfer, capability
+   labels, and trust assumptions must round-trip through at least one C
+   harness and one Concrete caller.
+8. Add sanitizer-backed generated-code validation for trusted/FFI/layout/
    pointer-heavy examples.
-8. Add backend/codegen differential validation where executable oracles exist.
-9. Add compiler self-leak/resource soak harness for long-running workflows.
-10. Harden stdlib stability and evidence policy from Phase 11: which stdlib functions are
+9. Add backend/codegen differential validation where executable oracles exist.
+10. Add compiler self-leak/resource soak harness for long-running workflows.
+11. Harden stdlib stability and evidence policy from Phase 11: which stdlib functions are
    trusted, proved, enforced, allocation-free, capability-free, or assumption
    carriers.
-11. Define stdlib contracts for allocators, I/O handles, directory/file/path
+12. Define stdlib contracts for allocators, I/O handles, directory/file/path
     handles, byte/text/path conversion APIs, and fallible return discipline.
     Each public stdlib function must state allocation behavior, OS authority,
     failure mode, trusted platform assumptions, and evidence class.
-12. Add stdlib evidence gates so core helpers cannot silently widen authority,
+13. Add stdlib evidence gates so core helpers cannot silently widen authority,
     allocation, proof assumptions, or runtime-error obligations.
-13. Evaluate a normalized mid-level IR only when traceability/backend-contract
+14. Evaluate a normalized mid-level IR only when traceability/backend-contract
     reports expose a concrete gap.
-14. Keep QBE/WASM/second backend deferred until evidence attachment,
+15. Keep QBE/WASM/second backend deferred until evidence attachment,
     optimization policy, and backend trust boundaries are trustworthy.
-15. Add the Phase 14 validation artifact: a backend/std-lib contract project
-    with ABI/layout C round trips, sanitizer runs, compiled-oracle
-    differential tests, native debug/source-map smoke tests, clean-vs-incremental
-    fact equivalence, and stdlib authority/allocation/evidence gates.
+16. Add the Phase 14 validation artifact: a backend/std-lib contract project
+    with ABI/layout C round trips, C/ABI glue generation/import checks,
+    sanitizer runs, compiled-oracle differential tests, native debug/source-map
+    smoke tests, clean-vs-incremental fact equivalence, and stdlib
+    authority/allocation/evidence gates.
 
 ## Phase 15: Freestanding And Embedded Target
 
@@ -1499,35 +1624,57 @@ audience):**
    obligation IDs should stay stable across harmless formatting and local
    refactors, and any unavoidable churn should be reported as artifact churn,
    not hidden under ordinary proof drift.
-6. Define release/showcase evidence policy by class:
+6. Add public API compatibility checking before release:
+   `concrete api-diff old/ new/ --json` compares exported modules, function
+   signatures, capabilities, allocation behavior, evidence classes, stdlib API,
+   package interface artifacts, and generated docs. This is the Swift
+   API-digester lesson adapted to Concrete: API drift is a reportable fact,
+   not a release-note afterthought.
+7. Define release/showcase evidence policy by class:
    `proved_by_lean` and `proved_by_kernel_decision` are strong evidence;
    `tested_by_oracle` is supporting evidence; `proved_by_smt` /
    `solver_trusted` require explicit policy approval; `open` and unreviewed
    `assumed` are forbidden for release claims.
-7. Add public examples policy: public-facing examples, website copy, README
+8. Add public examples policy: public-facing examples, website copy, README
    snippets, paper examples, and showcase manifests must not outclaim their
    proof status. Active candidates can be shown as active work, but cannot be
    presented as proved or graduated until their bars land.
-8. Add public security/soundness disclosure policy: compiler/proof pipeline
+9. Add public security/soundness disclosure policy: compiler/proof pipeline
    bugs are security-relevant.
-9. Publish `THREAT_MODEL.md` and keep it linked from README, release bundles,
+10. Publish `THREAT_MODEL.md` and keep it linked from README, release bundles,
    showcase manifests, and assumptions docs.
-10. Add first-user workflow CI: install compiler, create/run one example,
+11. Add first-user workflow CI: install compiler, create/run one example,
    inspect one audit bundle without repo-local assumptions.
-11. Improve onboarding, tutorial, and docs around `proved` / `enforced` /
+12. Improve onboarding, tutorial, and docs around `proved` / `enforced` /
    `reported` / `assumed` / `trusted`.
-12. Add positioning page against Rust, Zig, Lean, SPARK/Ada, Austral, Dafny,
+13. Add positioning page against Rust, Zig, Lean, SPARK/Ada, Austral, Dafny,
    F*, Why3.
-13. Add migration/adoption playbook: what C/Rust/Zig code moves first, how to
+14. Add migration/adoption playbook: what C/Rust/Zig code moves first, how to
    wrap libraries honestly, what stays outside Concrete.
-14. Add release/install distribution matrix: host triples, checksums/signing,
+15. Add release/install distribution matrix: host triples, checksums/signing,
     install paths, supported/deferred channels.
-15. Ship the first narrow public release only after the above are green.
-16. Add the Phase 16 validation artifact: a release-candidate bundle installed
-    from scratch on supported hosts, containing the claim matrix, threat model,
-    first-user workflow, public examples policy, replay commands, schemas,
-    assumptions/trust reports, checksums/signing metadata, and a tutorial run by
-    someone who did not build the compiler.
+16. Add concrete distribution UX:
+    `concrete --version --json`, `scripts/release/build_dist.sh`,
+    `dist/concrete-<version>-<target>.tar.gz`, `dist/SHA256SUMS`,
+    `dist/SIGNATURES` if signing is enabled, `INSTALL.md`,
+    `RELEASE_NOTES.md`, and uninstall/upgrade notes. Nix/Homebrew or similar
+    channels may be added only if they can be kept reproducible and
+    version-pinned.
+17. Add release performance budgets:
+    `scripts/tests/check_release_performance.sh` must measure compiler startup,
+    small-project build, stdlib build, `concrete test`, audit/report generation,
+    and proof-check latency against `release/perf-baseline.json`. Done when
+    release CI blocks unexplained regressions and prints the regressed command.
+18. Ship the first narrow public release only after the above are green.
+19. Add the Phase 16 validation artifact:
+    `scripts/tests/check_release_candidate.sh` installs the dist archive into a
+    clean temp prefix on every supported host, runs `concrete --version --json`,
+    builds one example, runs one proof/audit workflow, verifies checksums and
+    signatures if enabled, checks `release/perf-baseline.json`, runs
+    `concrete api-diff` against the previous public interface snapshot, and
+    confirms the bundle contains the claim matrix, threat model, public
+    examples policy, replay commands, schemas, assumptions/trust reports, and
+    tutorial transcript from someone who did not build the compiler.
 
 ## Phase 17: Packages And Dependency Evidence
 
@@ -1553,10 +1700,24 @@ policies, provenance, and registry protocol.
     visible to dependents and release bundles.
 11. Add package provenance and publishing model.
 12. Add package registry server protocol and trust model.
-13. Add the Phase 17 validation artifact: a multi-package workspace project
+13. Add API docs publishing for packages and stdlib:
+    `concrete doc --format json`, `concrete doc --format html`,
+    `docs/api/std/<version>/`, and package docs under
+    `docs/api/packages/<name>/<version>/`. Generated docs must carry version,
+    module path, capabilities, allocation behavior, evidence class,
+    deprecation status, and source links where available. Published docs must
+    be reproducible from the package artifact.
+14. Add package documentation hosting/export format only after `concrete doc`
+    and package artifacts are stable: static HTML, JSON docs, versioned stdlib
+    docs, package docs, release-note links, and
+    `scripts/tests/check_docs_publish.sh` to prove generated docs are
+    reproducible.
+15. Add the Phase 17 validation artifact: a multi-package workspace project
     with dependency resolution, lockfile, package-aware tests, interface/body
     artifact split, dependency trust policy, assumption inheritance, authority
-    budgets, provenance, and release-bundle evidence for every dependency.
+    budgets, provenance, published docs, and release-bundle evidence for every
+    dependency. Wire it as `examples/package_workspace/` plus
+    `scripts/tests/check_phase17_packages.sh`.
 
 ## Phase 18: Editor And Human Tooling
 
@@ -1578,11 +1739,28 @@ reports without inventing a second truth source.
 7. Add backwards-compatibility regression corpus once public users exist.
 8. Add language/versioning/deprecation policy across syntax, stdlib, proof/fact
    artifacts.
-9. Add the Phase 18 validation artifact: a scripted editor/LSP session or
-   golden transcript over one real project, proving hover, diagnostics,
-   obligation navigation, proof/evidence facts, dependency audit UI, and
-   refactor behavior match CLI facts rather than inventing a second truth
-   source.
+9. Add migration/deprecation tooling after the policy exists:
+   `concrete migrate --check`, `concrete migrate --apply`, diagnostics for
+   deprecated syntax/APIs, suggested replacements, edition/version notes where
+   needed, and mechanical rewrites only for transformations that preserve
+   evidence facts or explicitly mark them `needs_recheck`. The tool must read
+   `concrete api-diff --json`, `concrete doc --format json`, and the final
+   obligation ledger rather than scraping text.
+10. Add API-docs/editor integration: LSP go-to-docs for stdlib/package APIs,
+    evidence/capability/deprecation badges in hover, and diagnostic links to
+    `concrete doc` output. The LSP payload must reuse the same doc/evidence
+    JSON as the CLI.
+11. Add a playground or local web runner only after the release subset is
+    stable: `concrete playground --local` or a static hosted runner with
+    preloaded examples, no hidden claims, visible evidence class, audit output,
+    and clear sandbox/timeout/resource assumptions. This is a teaching surface,
+    not a second compiler pipeline.
+12. Add the Phase 18 validation artifact:
+   `scripts/tests/check_phase18_editor.sh` runs a scripted LSP/editor session
+   or golden transcript over one real project, proving hover, diagnostics,
+   obligation navigation, proof/evidence facts, dependency audit UI, refactor
+   behavior, docs integration, deprecation diagnostics, and playground output
+   match CLI facts rather than inventing a second truth source.
 
 ## Phase 19: Concurrency And Research-Gated Extensions
 
