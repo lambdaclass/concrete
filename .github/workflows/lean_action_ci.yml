@@ -230,6 +230,9 @@ jobs:
       - name: Policy-as-ledger-view gate (Phase 3 #14)
         run: bash scripts/tests/check_obligation_policy_views.sh
 
+      - name: prove-as-ledger-view gate (Phase 3 #16)
+        run: bash scripts/tests/check_obligation_prove_views.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 
