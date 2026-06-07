@@ -1301,10 +1301,14 @@ def compileAndReport (inputPath : String) (reportType : String)
             pure (Report.foldReplayResults dvcs replayed)
           else pure dvcs
         else pure dvcs
+      -- Phase 3 #18b: --report vcs renders THROUGH the ObligationCore hub
+      -- (VC → ledger → toVCView → render). Byte-identical, proving the hub
+      -- carries the full VC surface losslessly.
+      let vcView := (Concrete.ObligationCore.ledgerOfVCs dvcs).map Concrete.ObligationCore.toVCView
       if reportJson then
-        IO.println (Report.vcsJson dvcs 1)
+        IO.println (Report.vcsJson vcView 1)
       else
-        IO.println (Report.vcsReport dvcs)
+        IO.println (Report.vcsReport vcView)
       return 0
     if reportType == "caps" then
       IO.println (Report.capabilityReport validCore.coreModules)

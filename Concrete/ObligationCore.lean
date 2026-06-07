@@ -116,6 +116,25 @@ def ofVC (v : Report.VC) : Obligation :=
     proof-link freshness is projected separately by `ofProofStatus` (#11). -/
 def ledgerOfVCs (vcs : List Report.VC) : List Obligation := vcs.map ofVC
 
+/-- Reconstruct a `Report.VC` from a hub obligation (Phase 3 #18b). Because `ofVC`
+    is lossless over the VC surface (18a), `toVCView (ofVC v)` agrees with `v` on
+    every field the VC reports render — so `--report vcs` can flow THROUGH the
+    hub (`VC → Obligation → toVCView → render`) and stay byte-identical, which is
+    exactly the proof that the hub carries the full VC surface losslessly. The
+    VC-shaped reports keep their renderers until 18d collapses `VC` into the hub. -/
+def toVCView (o : Obligation) : Report.VC :=
+  { id := o.id, kind := o.kind, fn := o.function, file := o.file, line := o.line,
+    hypotheses := o.hypotheses, conclusion := o.conclusion, origin := o.origin,
+    dependencies := o.dependencies, arithProfile := o.semanticProfile,
+    dischargeMode := o.dischargeMode, status := o.status, engine := o.engine,
+    counterexample := o.counterexample, smtHash := o.smtHash, smtQuery := o.smtQuery,
+    solver := o.solver, leanReplay := o.leanReplay }
+
+/-- Round-trip identity on the rendered surface: projecting a VC into the hub and
+    back changes nothing a report can observe (Phase 3 #18b). -/
+example (v : Report.VC) : toVCView (ofVC v) = { v with } := by
+  cases v; rfl
+
 /-- Project a proof-link freshness entry into ObligationCore (Phase 3 #11). The
     proof-status model (proved / stale / missing / blocked / ineligible / trusted)
     becomes first-class ledger obligations instead of a separate report: a fresh
