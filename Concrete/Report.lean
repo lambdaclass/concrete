@@ -4294,15 +4294,6 @@ def collectVCs (modules : List Module) (locMap : FnLocMap)
       s!"{clauseTxt} in {fq}" [] "unsupported" "none" "ineligible" ""]
   return out
 
-/-- Fold the kernel-checked discharge results (omega + `bv_decide`) into the VC
-    schedule. A `planned` VC whose id was proved becomes `proved_by_kernel_decision`
-    (engine `omega`/`bv_decide`) — except loop-invariant preservation (O2), where
-    omega only closes the arithmetic half and the operational realization still
-    needs Lean: that becomes `arithmetic_proved`, never a full proof. Constant-fold
-    and lean-linked verdicts (already set by `collectVCs`) are left untouched. This
-    is the ONLY way a VC reaches a `proved` status from a decision procedure, and
-    the class is `proved_by_kernel_decision` — kept distinct from any future
-    `proved_by_smt`/`solver_trusted`. -/
 /-! ### Backend discharge adapters (Phase 3 #13)
 
 Every backend that can change a VC's status is expressed as ONE adapter type with
@@ -4368,10 +4359,57 @@ def replayAdapter : DischargeAdapter :=
   { engine := "lean:omega", allowed := ["proved_by_lean_replay"],
     actsOn := (· == "solver_trusted"), finalize := fun _ _ => "proved_by_lean_replay" }
 
+/-- Constant fold: decides literal/arithmetic obligations at collect time. Owns
+    `proved_by_kernel_decision` (in range) and `counterexample` (a constant
+    violation). Assigned directly in `collectVCs`; declared here so its owned
+    classes are part of the one firewall spec. -/
+def constantFoldAdapter : DischargeAdapter :=
+  { engine := "constant_fold", allowed := ["proved_by_kernel_decision", "counterexample"],
+    actsOn := (· == "planned"), finalize := fun _ raw => raw }
+
+/-- Linked Lean theorem: a registered in-source proof. Owns only `proved_by_lean`. -/
+def linkedLeanAdapter : DischargeAdapter :=
+  { engine := "lean", allowed := ["proved_by_lean", "partial"],
+    actsOn := (· == "planned"), finalize := fun _ raw => raw }
+
+/-- Oracle / differential test evidence. Owns only `tested_by_oracle` — never a
+    proof class. -/
+def oracleAdapter : DischargeAdapter :=
+  { engine := "oracle", allowed := ["tested_by_oracle"],
+    actsOn := (· == "planned"), finalize := fun _ _ => "tested_by_oracle" }
+
+/-- Runtime enforcement: a runtime check or capability gate. Owns
+    `runtime_checked` / `enforced` — NEVER a static proof class. -/
+def runtimeAdapter : DischargeAdapter :=
+  { engine := "runtime", allowed := ["runtime_checked", "enforced"],
+    actsOn := (· == "planned"), finalize := fun _ raw => raw }
+
+/-- Assumption / trust boundary: `assume(...)` and `#[trusted]`. Owns `assumed` /
+    `trusted` — a trust escape hatch, NEVER a proof class. -/
+def assumptionAdapter : DischargeAdapter :=
+  { engine := "assumed", allowed := ["assumed", "trusted"],
+    actsOn := fun _ => true, finalize := fun _ raw => raw }
+
+/-- Every backend adapter, for the firewall properties below and documentation. -/
+def dischargeAdapters : List DischargeAdapter :=
+  [constantFoldAdapter, omegaAdapter, bvAdapter, linkedLeanAdapter, replayAdapter,
+   smtAdapter, oracleAdapter, runtimeAdapter, assumptionAdapter]
+
+/-- The static-proof evidence classes — the ones an untrusted backend (SMT,
+    runtime, oracle, assumption) must NEVER be able to emit. -/
+def proofClasses : List String :=
+  ["proved_by_kernel_decision", "proved_by_lean", "proved_by_lean_replay", "arithmetic_proved"]
+
 /-! ### The evidence-class firewall, proved at compile time (Phase 3 #13)
 
 These `example`s are kernel-checked proofs that no adapter can emit a class it
 does not own — the firewall holds by construction, independent of any caller. -/
+
+-- Untrusted backends declare NO static-proof class in their `allowed` set.
+example : smtAdapter.allowed.all (fun c => !proofClasses.contains c) = true := rfl
+example : runtimeAdapter.allowed.all (fun c => !proofClasses.contains c) = true := rfl
+example : assumptionAdapter.allowed.all (fun c => !proofClasses.contains c) = true := rfl
+example : oracleAdapter.allowed.all (fun c => !proofClasses.contains c) = true := rfl
 
 private def fwVC (st : String) : VC :=
   { id := "f#x", kind := "no_overflow", fn := "f", file := "", line := 0,
