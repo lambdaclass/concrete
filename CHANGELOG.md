@@ -45,9 +45,14 @@ shipped core now includes:
   `path_feasibility` teaching example now shows a clamp safety assertion proved
   by `omega` with no SMT query, while the `over_claim` negative remains
   unproven instead of being mis-proved.
+- Audit reports now include a compact VC evidence summary. `--report audit`
+  shows counts for kernel-discovered VC evidence, Lean evidence, replayed Lean
+  evidence, arithmetic-only closures, solver-trusted evidence, counterexamples,
+  and outstanding obligations. The default audit path does not invoke external
+  SMT; solver evidence remains opt-in through `--report vcs --smt`.
 
-Remaining active Phase 2 work is now only the closure work: audit/release
-integration, SMT soundness docs, validation artifact, and optional
+Remaining active Phase 2 work is now only the closure work: release-bundle
+integration, SMT soundness docs, validation artifact, red-team gate, and
 end-of-phase examples.
 
 ### Phase 1 source contracts completed (2026-06-06)

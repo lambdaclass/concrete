@@ -205,16 +205,19 @@ Done when:
 - external SMT is opt-in, reproducible, policy-gated, and never confused with
   kernel evidence;
 - counterexamples are reported in source terms;
-- VC results appear in audit/release bundles beside assumptions, runtime
-  obligations, proof status, and proof coverage;
+- VC results appear in release bundles beside assumptions, runtime obligations,
+  proof status, proof coverage, and the audit VC summary;
 - the Phase 2 umbrella gate covers kernel evidence, solver-trusted evidence,
   counterexamples, unsupported/unproven cases, and no-SMT default behavior;
 - a red-team gate proves adversarial inputs (malformed contracts, fake solver,
   bad models, unsupported lowering, stale facts, negative division, reassigned
   guards) stay non-proofs or honest diagnostics.
 
-1. Update audit/release bundles so VC results appear beside proof registry,
-    assumptions, runtime obligations, and proof coverage classification.
+1. Update release bundles so VC results appear beside proof registry,
+    assumptions, runtime obligations, proof coverage classification, and the
+    audit VC summary. `--report audit` already includes the default
+    kernel-discharged VC summary; this item closes the release-bundle artifact
+    side and keeps external-SMT evidence opt-in.
 2. Add soundness documentation for the SMT path: trusted solver binary,
     encoding assumptions, unsupported theories, replayed fragments, and how a
     solver bug affects each claim class.
