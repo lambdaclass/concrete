@@ -116,6 +116,18 @@ The important invariant is that `build`, `test`, `audit`, `prove`, `inspect`,
 No command should construct a private fact store that can drift from the rest
 of the toolchain.
 
+No hidden global compiler state is allowed to become a second fact store.
+Mutable facts must live in one of the named places:
+
+- `ProjectContext`
+- `CompilerLedger`
+- `ObligationCore`
+- an explicit pass artifact
+- a named cache object with declared invalidation
+
+Ad hoc module-level caches, command-local side tables, and report-only
+recomputations are design bugs unless they are recorded back into the ledger.
+
 ## Pass Outputs
 
 Each pass should have a named output and a short invariant.
@@ -291,6 +303,25 @@ The intended shape is query-first: each compiler fact has a named key, stable
 inputs, and declared dependencies. This borrows the useful discipline from
 query-based compilers without committing Concrete to a caching framework before
 the pass boundaries and diagnostics are stable.
+
+## Deterministic Replay
+
+The compiler pipeline should be replayable and deterministic before Concrete
+depends on broad parallelism or incremental builds.
+
+The same project should produce the same:
+
+- diagnostics
+- artifact ids
+- source maps
+- ledger facts
+- obligation ids
+- emitted backend IR
+- release-bundle facts
+
+across repeated runs, clean builds, retained-artifact replay, and serial versus
+parallel pass scheduling where parallelism exists. If two modes differ, the
+compiler should report a pipeline bug, not silently pick one answer.
 
 ## Backend Contract
 

@@ -476,39 +476,56 @@ work depends on them.
     affect which diagnostics, facts, obligations, proof checks, generated code,
     inspect output, and release-bundle entries. Do not implement caching broadly
     until the dependency model is named and validated.
-23. Add compiler performance instrumentation before broad feature growth:
+23. Eliminate hidden global compiler state before adding broad parallelism,
+    caching, LSP, or package builds. All mutable compiler facts must be owned by
+    `ProjectContext`, `CompilerLedger`, `ObligationCore`, an explicit pass
+    artifact, or a clearly named cache object with declared invalidation. Add
+    `scripts/tests/check_no_hidden_compiler_state.sh`; the gate must fail on
+    new module-level mutable state, command-local fact stores, ad hoc global
+    caches, or pass-local side tables that are consumed by later commands
+    without being recorded in the ledger.
+24. Add deterministic pipeline replay and serial/parallel equivalence before
+    broad incremental compilation. The same project must produce the same
+    diagnostics, artifact ids, source maps, ledger facts, obligation ids,
+    emitted backend IR, and release-bundle facts under serial execution,
+    parallel pass scheduling where enabled, clean builds, and replay from
+    retained artifacts. Add `scripts/tests/check_pipeline_determinism.sh` over
+    `examples/compiler_pipeline_probe/`; the gate must compare
+    `--events --json`, `inspect --ledger`, `inspect --backend-ir`,
+    `--json-errors`, and release-bundle summaries across repeated runs.
+25. Add compiler performance instrumentation before broad feature growth:
     `concrete build --timings --json` and `concrete report performance --json`
     must report parse/resolve/typecheck/ownership/capability/lowering/codegen/
     report/prove timings, peak memory if available, source-file/function counts,
     stdlib compile time, and toolchain identity. Performance data is a compiler
     fact, not a printed side channel.
-24. Add compiler performance regression budgets:
+26. Add compiler performance regression budgets:
     `scripts/tests/check_compiler_performance.sh` compares
     `tests/perf/small_project`, `tests/perf/stdlib_imports`,
     `tests/perf/proof_report`, and `tests/perf/codegen_loop` against committed
     JSON baselines. Done when CI fails on unexplained budget regressions and
     the report says which pass regressed.
-25. Add compiler fuzzing as a standing gate:
+27. Add compiler fuzzing as a standing gate:
     `scripts/fuzz/parser`, `scripts/fuzz/resolver`,
     `scripts/fuzz/typecheck`, `scripts/fuzz/ownership`,
     `scripts/fuzz/formatter`, `scripts/fuzz/lowering`, and
     `scripts/fuzz/obligations`. Done when `make test-fuzz` runs a bounded CI
     budget and proves crashes, parser panics, malformed JSON, and false
     `proved_*` statuses are rejected.
-26. Add fuzz minimization and fixture promotion:
+28. Add fuzz minimization and fixture promotion:
     `scripts/fuzz/minimize` writes reduced repros into
     `tests/fuzz_regressions/<area>/<name>.con` with an expected diagnostic or
     honest non-proof snapshot. Done when every promoted repro is run by CI and
     no fuzzer-only failure stays outside the checked-in corpus for a release.
-27. Document pass invariants and failure boundaries: what each pass guarantees,
+29. Document pass invariants and failure boundaries: what each pass guarantees,
     which errors are recoverable for reporting, which errors stop compilation,
     and which assumptions are trusted.
-28. Add a compiler-pipeline regression corpus: malformed modules, ambiguous
+30. Add a compiler-pipeline regression corpus: malformed modules, ambiguous
     names, type errors, ownership errors, capability errors, source-map
     preservation, interpreter/codegen mismatch, backend assumption reporting,
     canonicalization edge cases, dependency invalidation, and deterministic
     `inspect` output.
-29. Add source-location privacy modes, borrowing the useful part of Odin's
+31. Add source-location privacy modes, borrowing the useful part of Odin's
     source-location controls but making them audit-visible:
     `[build] source-location-mode = "normal" | "filename" | "obfuscated" |
     "none"` in `Concrete.toml`, plus `--source-location-mode <mode>` for
@@ -520,13 +537,13 @@ work depends on them.
     Done when local CI still sees full spans under `normal`, release bundles
     record `source_location_mode`, and redacted artifacts never pretend that
     redaction is proof or evidence.
-30. Add JSON diagnostic parity as a named gate, not just a renderer option:
+32. Add JSON diagnostic parity as a named gate, not just a renderer option:
     `concrete build --json-errors` or the equivalent command mode must emit the
     same diagnostic codes, spans, reasons, related spans, next actions, and
     payloads as the human renderer. Wire `scripts/tests/check_json_diagnostics.sh`
     with parser, resolver, type, ownership, capability, policy, backend, and
     internal-error fixtures.
-31. Add artifact-retention and emitted-pass files for debugging, inspired by
+33. Add artifact-retention and emitted-pass files for debugging, inspired by
     Odin's keep-temp-files workflow and QBE's printable IL discipline:
     `--keep-artifacts`, `--emit-ast`, `--emit-resolved`, `--emit-typed-ir`,
     `--emit-core`, `--emit-backend-ir`, `--emit-asm`, and
@@ -539,14 +556,14 @@ work depends on them.
     `examples/compiler_pipeline_probe/` and one negative case proving
     `--emit-backend-ir` is unavailable before backend IR exists rather than
     silently emitting stale output.
-32. Add compiler self-audit: `concrete audit --compiler` renders the
+34. Add compiler self-audit: `concrete audit --compiler` renders the
     `CompilerLedger` itself. Required output: passes run, artifact ids,
     diagnostics count, source-location privacy mode, target/toolchain identity,
     solver/tool versions, cache/dependency facts, replay commands, backend
     assumptions, emitted files, and links to the `ObligationCore` ledger. Wire
     `scripts/tests/check_compiler_self_audit.sh`; the gate must prove the
     self-audit is generated from `CompilerLedger`, not from text scraping.
-33. Keep the backend IR printable, verifier-checked, and regression-testable
+35. Keep the backend IR printable, verifier-checked, and regression-testable
     directly. This is the QBE lesson adapted to Concrete: even if LLVM remains
     the backend, Concrete's own backend contract should be a stable emitted
     artifact with a verifier, not an opaque stream of generated code. V1 must
@@ -559,7 +576,7 @@ work depends on them.
     `target_constants.con`. Wire `scripts/tests/check_backend_ir.sh` to run
     `concrete inspect --backend-ir`, `concrete verify-ir --pass backend-ir`,
     and a compiled execution check for each fixture.
-34. Add the Phase 4 validation artifact:
+36. Add the Phase 4 validation artifact:
     `examples/compiler_pipeline_probe/` plus
     `scripts/tests/check_phase4_pipeline.sh`. The fixture must run
     `concrete build`, `run`, `test`, `fmt --check`, `inspect --ast`,
