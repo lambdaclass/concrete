@@ -4236,6 +4236,39 @@ def vcsReport (vcs : List VC) : String := Id.run do
   out := out ++ s!"\n\nTotal: {vcs.length} VCs — {proved} proved_by_kernel_decision, {lean} proved_by_lean, {arith} arithmetic_proved, {cex} counterexample, {unproven} outstanding"
   return out
 
+/-- Compact VC-evidence summary for the audit report (the reviewer artifact):
+    counts per evidence class, plus the audit-critical lines — every
+    `solver_trusted` VC (solver identity + SMT-LIB hash; NOT kernel evidence) and
+    every `counterexample` (source-level model). Empty when there are no VCs. -/
+def vcAuditSummary (vcs : List VC) : String := Id.run do
+  if vcs.isEmpty then return "(no verification conditions)"
+  let count := fun (s : String) => (vcs.filter (·.status == s)).length
+  let outstanding := (vcs.filter (fun v => v.status == "unproven" || v.status == "missing" || v.status == "planned")).length
+  let mut out := s!"{vcs.length} verification conditions:"
+  out := out ++ s!"\n  proved_by_kernel_decision:  {count "proved_by_kernel_decision"}  (omega / bv_decide / constant — kernel-checked)"
+  out := out ++ s!"\n  proved_by_lean:             {count "proved_by_lean"}  (registered Lean proof)"
+  out := out ++ s!"\n  proved_by_lean_replay:      {count "proved_by_lean_replay"}  (solver result replayed in Lean)"
+  out := out ++ s!"\n  arithmetic_proved:          {count "arithmetic_proved"}  (omega closed the arithmetic half; operational step needs Lean)"
+  out := out ++ s!"\n  solver_trusted:             {count "solver_trusted"}  (external SMT — solver in the TCB, NOT kernel evidence)"
+  out := out ++ s!"\n  counterexample:             {count "counterexample"}  (non-proof)"
+  out := out ++ s!"\n  outstanding:                {outstanding}  (unproven / missing)"
+  -- audit-critical detail: solver-trusted evidence and counterexamples by name.
+  let trusted := vcs.filter (·.status == "solver_trusted")
+  if !trusted.isEmpty then
+    out := out ++ "\n  external-solver evidence (review: solver in the trusted base):"
+    for v in trusted do
+      out := out ++ s!"\n    {v.id}  [{if v.solver.isEmpty then "solver" else v.solver}, smtlib-sha {v.smtHash}]"
+  let cexs := vcs.filter (·.status == "counterexample")
+  if !cexs.isEmpty then
+    out := out ++ "\n  counterexamples (non-proofs):"
+    for v in cexs do
+      let m := if v.counterexample.isEmpty then "" else " — " ++ ", ".intercalate (v.counterexample.map (fun (n, x) => s!"{n} = {x}"))
+      out := out ++ s!"\n    {v.id}{m}"
+  -- by default the audit does not invoke an external solver; note where SMT lives.
+  if (count "solver_trusted") == 0 && (count "counterexample") == 0 then
+    out := out ++ "\n  (external-solver evidence is opt-in: see `--report vcs --smt`)"
+  return out
+
 /-- `concrete prove <file> <fn> --json`: the primary machine-readable proof
     context. Same data as `proveReport`, structured, with `next_actions`. -/
 def proveReportJson (pc : Concrete.ProofCore) (registry : ProofRegistry)
@@ -6591,7 +6624,7 @@ def snapshotJson
     add machine-readable JSON output and a ProvableV1 conformance check. -/
 def auditReport (modules : List CModule) (locMap : FnLocMap := [])
     (sourceMap : SourceMap := []) (registry : ProofRegistry := [])
-    (pc : Concrete.ProofCore) : String :=
+    (pc : Concrete.ProofCore) (vcSummary : String := "") : String :=
   let banner := String.intercalate "\n"
     [ "=== Concrete Audit Report ==="
     , ""
@@ -6618,7 +6651,9 @@ def auditReport (modules : List CModule) (locMap : FnLocMap := [])
     sectionHeader "ProvableV1 Conformance",
     provableV1ConformanceReport modules locMap (registry := registry) (pc := pc),
     sectionHeader "Obligations",
-    obligationsReport modules locMap registry pc
+    obligationsReport modules locMap registry pc,
+    sectionHeader "Verification Conditions",
+    (if vcSummary.isEmpty then "(no verification conditions)" else vcSummary)
   ]
 
 open Json in

@@ -1496,7 +1496,11 @@ def compileAndReport (inputPath : String) (reportType : String)
       IO.println (ConsistencyViolation.render violations)
       if violations.isEmpty then return 0 else return 1
     if reportType == "audit" then
-      IO.println (Report.auditReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc))
+      -- fold the kernel-checked VC discharge into the reviewer artifact (no
+      -- external solver by default — SMT evidence stays opt-in via --report vcs --smt).
+      let auditVCs ← computeVCsDischarged parsed.modules locMap registry
+      let vcSum := Report.vcAuditSummary auditVCs
+      IO.println (Report.auditReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc) (vcSummary := vcSum))
       if Report.hasContracts parsed.modules then
         IO.println (← renderContracts parsed.modules registry)
       return (if hasRegistryErrors then 1 else 0)
