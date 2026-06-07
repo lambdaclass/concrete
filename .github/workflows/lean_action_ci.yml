@@ -221,6 +221,9 @@ jobs:
       - name: Reports-as-views gate (Phase 3 #15 ledger consistency)
         run: bash scripts/tests/check_obligation_report_views.sh
 
+      - name: No-duplicate-obligation-walkers guard (Phase 3 #18d)
+        run: bash scripts/tests/check_no_duplicate_obligation_walkers.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 
