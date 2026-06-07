@@ -218,6 +218,9 @@ jobs:
       - name: Backend discharge-adapter gate (Phase 3 #13 evidence-class firewall)
         run: bash scripts/tests/check_discharge_adapters.sh
 
+      - name: Reports-as-views gate (Phase 3 #15 ledger consistency)
+        run: bash scripts/tests/check_obligation_report_views.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 
