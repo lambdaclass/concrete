@@ -206,9 +206,12 @@ audit reports, JSON, and `concrete prove --workspace` all agree because they
 consume the same typed `ObligationCore` records and evidence classifications.
 
 Execution order: migrate obligation families first, then expression lowering
-and backend adapters, then policies/reports/prove workspaces as views, then
-delete duplicate walkers. Do not move a consumer before the family records it
-needs exist in the ledger.
+and backend adapters, then policies/reports/prove workspaces as temporary
+views/parity gates, then perform the full model merge and delete the duplicate
+models/walkers. Do not call #14, #15, or #16 architecturally complete merely
+because a consistency gate passes; they are only complete when #18 has made
+`ObligationCore` the hub and the old side-channel model is gone. Do not move a
+consumer before the family records it needs exist in the ledger.
 
 1. Define `ObligationCore` schema v1: stable id, source span, function,
    obligation kind, expression shape, typed variables, scoped hypotheses,
@@ -269,30 +272,40 @@ needs exist in the ledger.
     runtime-safety requirements, trusted-boundary policy, and release gates.
     Add `scripts/tests/check_obligation_policy_views.sh` with one fixture per
     policy decision and one negative case proving stale/vacuous/solver-trusted
-    evidence is rejected when policy says so.
+    evidence is rejected when policy says so. A temporary consistency gate is
+    allowed during migration, but the item is not complete until policy
+    enforcement reads `ObligationCore` records directly and the old
+    side-channel qualifier collection is deleted.
 15. Make reports consume the ledger: `--report contracts`, `--report vcs`,
     `--report proof-status`, `--report check-proofs`, audit bundles, release
     bundles, JSON, snapshots, and evidence corpus gates become views over the
     same records. Add `scripts/tests/check_obligation_report_views.sh` to assert
-    the same stable ids and statuses appear in every report surface.
+    the same stable ids and statuses appear in every report surface. A
+    consistency gate proves parity during migration; it does not replace the
+    full renderer refactor. This item is complete only when report renderers
+    read the hub model, not `Report.VC` / proof-status side structures.
 16. Make `concrete prove` consume the ledger: `--json`, `--show-obligation`,
     `--emit-lean`, `--emit-artifacts`, `--workspace`, `--check`, `--replay`,
     `--nearest-lemmas`, and future `--minimize` should not reconstruct
     obligation context independently. Add
     `scripts/tests/check_obligation_prove_views.sh` to compare prove JSON,
     workspace files, emitted Lean, replay commands, and check output against the
-    ledger for the same obligation ids.
+    ledger for the same obligation ids. This item is complete only when the
+    prove surface obtains obligation context, statuses, replay commands,
+    nearest-lemma hints, and check targets from `ObligationCore`, not from a
+    private prove/report reconstruction path.
 17. Add a migration parity gate after each migrated obligation family:
     compare old and new human reports, JSON, policy behavior, stable ids,
     counterexamples, solver provenance, and proof-workspace output on the
     existing corpus before deleting the old path.
 18. Collapse the duplicate obligation models so there is ONE truth source, then
-    delete the old report-specific walkers. `ObligationCore` is today a lossy
+    delete the old report/prove/policy-specific models and walkers.
+    `ObligationCore` is today a lossy
     projection of `Report.VC` (it drops `smtHash`/`smtQuery`/`solver`/
     `dischargeMode`/`leanReplay`, and never carried the contract/proof-link
     presentation fields), so consumers still read `VC`/`ProofCore.Obligation`
     directly and `ObligationCore` is a leaf, not the hub. Making it the hub is a
-    prerequisite for #14/#16 being real consumers rather than consistency gates,
+    prerequisite for #14/#15/#16 being real consumers rather than consistency gates,
     so this is staged, each sub-step verified byte-identical before the next:
     - 18a. Widen `ObligationCore.Obligation` to a SUPERSET of the VC surface
       (solver provenance, discharge mode, replay) and make `ofVC` lossless. Pure
@@ -306,6 +319,15 @@ needs exist in the ledger.
       keep two live truth sources. Add
       `scripts/tests/check_no_duplicate_obligation_walkers.sh` to fail on
       reintroduced family-specific collectors or report-side recomputation.
+    - 18e. Delete compatibility shims that allow reports, policies, or prove to
+      bypass the hub: no `collectVCs`-only report path, no policy-side
+      `compute*Quals` side channel, no prove-side obligation reconstruction, and
+      no proof-status-only table that is not projected from the hub.
+    - 18f. Add a negative source guard:
+      `scripts/tests/check_obligation_single_truth_source.sh` must fail if new
+      code introduces `Report.VC` as a storage model, a second proof-status
+      obligation record, or a family-specific scoped walker outside the
+      approved collector/backend adapters.
     The presentation-rich reports (`--report contracts`, `--report proof-status`)
     convert to literal hub consumers only once their fields live in the model;
     until then the #15 consistency gate holds them to the ledger.
