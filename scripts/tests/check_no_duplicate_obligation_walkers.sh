@@ -28,22 +28,17 @@ for d in scopedWalkS scopedWalkB callLeaf boundsLeaf divLeaf arithLeaf assertLea
   grep -qE "def $d\b" "$R" && ok "present: $d" || no "missing unified-collector piece: $d"
 done
 
-echo "=== VC reports render THROUGH the ObligationCore hub (no raw recompute) ==="
-# the hub-routed render calls must be the ones in use ...
-grep -q "Report.vcsJson vcView" "$M" && grep -q "Report.vcsReport vcView" "$M" \
-  && grep -q "vcAuditSummary auditVCView" "$M" \
-  && ok "--report vcs and audit render from ledger→toVCView views" \
-  || no "a VC report is no longer hub-routed"
-# ... and the raw forms (rendering collectVCs output directly) must be gone.
-if grep -qE "vcsReport dvcs|vcsJson dvcs|vcAuditSummary auditVCs\b" "$M"; then
-  no "a VC report renders raw collectVCs output (bypasses the hub)"
-else
-  ok "no raw collectVCs rendering in Main (hub is in the data path)"
-fi
-# the round-trip lossless-ness proof must remain in the hub.
-grep -q "toVCView (ofVC v)" Concrete/ObligationCore.lean \
-  && ok "round-trip identity proof (toVCView ∘ ofVC = id) retained" \
-  || no "lossless round-trip proof removed from ObligationCore"
+echo "=== VC reports render the ONE obligation schedule directly (post-merge) ==="
+# after the #18d model merge there is one record type, so the VC reports render
+# the obligation schedule (`dvcs`/`auditVCs`) directly — no conversion glue.
+grep -q "Report.vcsJson dvcs" "$M" && grep -q "Report.vcsReport dvcs" "$M" \
+  && grep -q "vcAuditSummary auditVCs" "$M" \
+  && ok "--report vcs and audit render the obligation schedule directly" \
+  || no "a VC report no longer renders the obligation schedule"
+# the conversion glue is gone.
+grep -q "toVCView" "$M" Concrete/ObligationCore.lean \
+  && no "toVCView conversion glue reintroduced (records are unified — no view needed)" \
+  || ok "no toVCView conversion glue (records unified)"
 
 echo ""
 echo "NO-DUPLICATE-WALKERS: PASS=$PASS  FAIL=$FAIL"

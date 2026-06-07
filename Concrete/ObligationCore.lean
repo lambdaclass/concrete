@@ -90,19 +90,14 @@ def ofVC (v : Report.VC) : Obligation :=
     proof-link freshness is projected separately by `ofProofStatus` (#11). -/
 def ledgerOfVCs (vcs : List Report.VC) : List Obligation := vcs.map ofVC
 
-/-- The VC view of a hub obligation (Phase 3 #18d). Now that there is one record
-    type, this is the identity — kept as a named no-op so the render call sites in
-    Main read clearly until step 4 inlines them; `toVCView (ofVC v)` ignores the
-    view-only enrichment, so the VC reports stay byte-identical. -/
-def toVCView (o : Obligation) : Report.VC := o
-
-/-- The VC reports never observe the ledger-view enrichment: the VC view of an
-    enriched obligation agrees with the original on every field a VC renders. -/
-example (v : Report.VC) : (toVCView (ofVC v)).fn = v.fn
-    ∧ (toVCView (ofVC v)).arithProfile = v.arithProfile
-    ∧ (toVCView (ofVC v)).status = v.status
-    ∧ (toVCView (ofVC v)).counterexample = v.counterexample
-    ∧ (toVCView (ofVC v)).smtQuery = v.smtQuery := ⟨rfl, rfl, rfl, rfl, rfl⟩
+/-- `ofVC` only enriches the view fields; the VC surface is untouched, so a VC
+    report rendering an enriched obligation is byte-identical to rendering the
+    original (Phase 3 #18d). -/
+example (v : Report.VC) : (ofVC v).fn = v.fn
+    ∧ (ofVC v).arithProfile = v.arithProfile
+    ∧ (ofVC v).status = v.status
+    ∧ (ofVC v).counterexample = v.counterexample
+    ∧ (ofVC v).smtQuery = v.smtQuery := ⟨rfl, rfl, rfl, rfl, rfl⟩
 
 /-- Project a proof-link freshness entry into ObligationCore (Phase 3 #11). The
     proof-status model (proved / stale / missing / blocked / ineligible / trusted)

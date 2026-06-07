@@ -224,6 +224,9 @@ jobs:
       - name: No-duplicate-obligation-walkers guard (Phase 3 #18d)
         run: bash scripts/tests/check_no_duplicate_obligation_walkers.sh
 
+      - name: Single-truth-source guard (Phase 3 #18d step 5)
+        run: bash scripts/tests/check_obligation_single_truth_source.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

@@ -1301,14 +1301,12 @@ def compileAndReport (inputPath : String) (reportType : String)
             pure (Report.foldReplayResults dvcs replayed)
           else pure dvcs
         else pure dvcs
-      -- Phase 3 #18b: --report vcs renders THROUGH the ObligationCore hub
-      -- (VC → ledger → toVCView → render). Byte-identical, proving the hub
-      -- carries the full VC surface losslessly.
-      let vcView := (Concrete.ObligationCore.ledgerOfVCs dvcs).map Concrete.ObligationCore.toVCView
+      -- Phase 3 #18d: the VC schedule IS a list of obligations (one record type),
+      -- so the VC reports render it directly — no conversion glue.
       if reportJson then
-        IO.println (Report.vcsJson vcView 1)
+        IO.println (Report.vcsJson dvcs 1)
       else
-        IO.println (Report.vcsReport vcView)
+        IO.println (Report.vcsReport dvcs)
       return 0
     if reportType == "caps" then
       IO.println (Report.capabilityReport validCore.coreModules)
@@ -1515,11 +1513,10 @@ def compileAndReport (inputPath : String) (reportType : String)
     if reportType == "audit" then
       -- fold the kernel-checked VC discharge into the reviewer artifact (no
       -- external solver by default — SMT evidence stays opt-in via --report vcs --smt).
-      -- Phase 3 #18c: the audit VC summary consumes the ObligationCore hub too
-      -- (VC → ledger → toVCView → summary), byte-identical.
+      -- Phase 3 #18d: one record type — the audit VC summary reads the obligation
+      -- schedule directly.
       let auditVCs ← computeVCsDischarged parsed.modules locMap registry
-      let auditVCView := (Concrete.ObligationCore.ledgerOfVCs auditVCs).map Concrete.ObligationCore.toVCView
-      let vcSum := Report.vcAuditSummary auditVCView
+      let vcSum := Report.vcAuditSummary auditVCs
       IO.println (Report.auditReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc) (vcSummary := vcSum))
       if Report.hasContracts parsed.modules then
         IO.println (← renderContracts parsed.modules registry)
