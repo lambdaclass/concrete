@@ -40,37 +40,14 @@ def kindVocabulary : List String :=
     "missing_theorem", "blocked_proof", "ineligible_construct", "smt_query",
     "oracle_evidence", "runtime_enforced", "trusted_boundary" ]
 
-/-- ObligationCore schema v1 — the one typed record every downstream consumer
-    reads. `id` is stable across harmless formatting (it is for tools); the span
-    is for humans. -/
-structure Obligation where
-  id              : String
-  kind            : String                 -- ∈ kindVocabulary
-  function        : String
-  file            : String
-  line            : Nat
-  origin          : String                 -- originating source construct (human)
-  variables       : List String            -- typed variables in scope (names)
-  hypotheses      : List String
-  conclusion      : String
-  semanticProfile : String                 -- constant | linear | bitvector | nonlinear | refinement | operational | unsupported
-  dependencies    : List String            -- proof links / other obligations leaned on
-  allowedEngines  : List String            -- which backends may discharge it
-  status          : String                 -- ∈ statusVocabulary
-  engine          : String                 -- the backend that produced `status` ("" if none)
-  counterexample  : List (String × String) := []
-  replay          : String := ""
-  policyImpact    : String := ""
-  -- The full VC discharge surface (Phase 3 #18a) so the record is a SUPERSET of
-  -- `Report.VC` and `ofVC` is lossless — these let `--report vcs` and the audit
-  -- VC summary render from the ledger (18b/18c) without dropping solver
-  -- provenance / discharge mode / the replay artifact. Default "" so the JSON
-  -- and human ledger views are unchanged until a consumer reads them.
-  dischargeMode   : String := ""            -- constant_fold | omega | bv_decide | lean | smt | none
-  smtHash         : String := ""            -- stable digest of the SMT-LIB query
-  smtQuery        : String := ""            -- the SMT-LIB script (replay artifact)
-  solver          : String := ""            -- solver identity + version, when run
-  leanReplay      : String := ""            -- the standalone Lean replay theorem
+/-- ObligationCore schema — the one typed obligation record (Phase 3 #18d). It is
+    now an `abbrev` of `Report.Obligation`: there is a SINGLE record type, hosted
+    in `Report` (where `collectVCs` lives, since `ObligationCore` imports
+    `Report`), and both `Report.VC` and this name refer to it. The ledger-view
+    fields (`variables`, `allowedEngines`, `replay`, `policyImpact`) live on that
+    one record; reports read whichever fields they need. Field names follow the
+    record: `fn` (not `function`), `arithProfile` (not `semanticProfile`). -/
+abbrev Obligation := Report.Obligation
 
 /-- Which backends are allowed to discharge an obligation of a given semantic
     profile. A profile maps to exactly the engines that may legitimately close it
@@ -96,44 +73,36 @@ def policyImpactOf (status : String) : String :=
   | "counterexample" => "non-proof — a concrete counterexample exists"
   | _                => ""
 
-/-- Project a VC-discharge record into ObligationCore. This is the first migrated
-    family (Phase 3 #4-9): the VC ledger flows into the unified model unchanged in
-    meaning. `variables` is left empty here — it is populated when the obligation
-    generators feed ObligationCore directly, not through the VC string view. -/
+/-- Enrich an obligation with the ledger-view fields (Phase 3 #18d). Since the
+    record is now unified, this is no longer a type conversion — it only fills the
+    derived view fields (`allowedEngines`/`replay`/`policyImpact`) from the VC
+    surface already present, leaving every VC field untouched. So a VC report
+    rendering the result is byte-identical (it never reads the view fields), and
+    the obligation-ledger sees the same derived values it did before. -/
 def ofVC (v : Report.VC) : Obligation :=
-  { id := v.id, kind := v.kind, function := v.fn, file := v.file, line := v.line,
-    origin := v.origin, variables := [], hypotheses := v.hypotheses,
-    conclusion := v.conclusion, semanticProfile := v.arithProfile,
-    dependencies := v.dependencies, allowedEngines := enginesFor v.arithProfile,
-    status := v.status, engine := v.engine, counterexample := v.counterexample,
+  { v with
+    allowedEngines := enginesFor v.arithProfile,
     replay := if v.smtQuery.isEmpty then "" else s!"z3 -T:5 vc.smt2 (smtlib-sha {v.smtHash})",
-    policyImpact := policyImpactOf v.status,
-    dischargeMode := v.dischargeMode, smtHash := v.smtHash, smtQuery := v.smtQuery,
-    solver := v.solver, leanReplay := v.leanReplay }
+    policyImpact := policyImpactOf v.status }
 
-/-- The current ObligationCore ledger: the discharged VC families projected into
-    the unified model. Contract-clause diagnostics ride in as VCs (Phase 3 #10);
+/-- The current ObligationCore ledger: the discharged VC families enriched with
+    the view fields. Contract-clause diagnostics ride in as VCs (Phase 3 #10);
     proof-link freshness is projected separately by `ofProofStatus` (#11). -/
 def ledgerOfVCs (vcs : List Report.VC) : List Obligation := vcs.map ofVC
 
-/-- Reconstruct a `Report.VC` from a hub obligation (Phase 3 #18b). Because `ofVC`
-    is lossless over the VC surface (18a), `toVCView (ofVC v)` agrees with `v` on
-    every field the VC reports render — so `--report vcs` can flow THROUGH the
-    hub (`VC → Obligation → toVCView → render`) and stay byte-identical, which is
-    exactly the proof that the hub carries the full VC surface losslessly. The
-    VC-shaped reports keep their renderers until 18d collapses `VC` into the hub. -/
-def toVCView (o : Obligation) : Report.VC :=
-  { id := o.id, kind := o.kind, fn := o.function, file := o.file, line := o.line,
-    hypotheses := o.hypotheses, conclusion := o.conclusion, origin := o.origin,
-    dependencies := o.dependencies, arithProfile := o.semanticProfile,
-    dischargeMode := o.dischargeMode, status := o.status, engine := o.engine,
-    counterexample := o.counterexample, smtHash := o.smtHash, smtQuery := o.smtQuery,
-    solver := o.solver, leanReplay := o.leanReplay }
+/-- The VC view of a hub obligation (Phase 3 #18d). Now that there is one record
+    type, this is the identity — kept as a named no-op so the render call sites in
+    Main read clearly until step 4 inlines them; `toVCView (ofVC v)` ignores the
+    view-only enrichment, so the VC reports stay byte-identical. -/
+def toVCView (o : Obligation) : Report.VC := o
 
-/-- Round-trip identity on the rendered surface: projecting a VC into the hub and
-    back changes nothing a report can observe (Phase 3 #18b). -/
-example (v : Report.VC) : toVCView (ofVC v) = { v with } := by
-  cases v; rfl
+/-- The VC reports never observe the ledger-view enrichment: the VC view of an
+    enriched obligation agrees with the original on every field a VC renders. -/
+example (v : Report.VC) : (toVCView (ofVC v)).fn = v.fn
+    ∧ (toVCView (ofVC v)).arithProfile = v.arithProfile
+    ∧ (toVCView (ofVC v)).status = v.status
+    ∧ (toVCView (ofVC v)).counterexample = v.counterexample
+    ∧ (toVCView (ofVC v)).smtQuery = v.smtQuery := ⟨rfl, rfl, rfl, rfl, rfl⟩
 
 /-- Project a proof-link freshness entry into ObligationCore (Phase 3 #11). The
     proof-status model (proved / stale / missing / blocked / ineligible / trusted)
@@ -157,11 +126,12 @@ def ofProofStatus (e : Report.ProofStatusEntry) : Obligation :=
     | .blocked     => s!"extraction blocked: {", ".intercalate e.unsupported}"
     | .notEligible => s!"ineligible: {", ".intercalate e.profileGates}"
     | .trusted     => "trusted boundary (proof bypassed)"
-  { id := s!"{e.qualName}#prooflink", kind := kind, function := e.qualName,
+  { id := s!"{e.qualName}#prooflink", kind := kind, fn := e.qualName,
     file := (e.loc.map (·.1)).getD "", line := (e.loc.map (·.2)).getD 0,
     origin := if e.origin.isEmpty then "proof link" else e.origin,
     variables := [], hypotheses := [], conclusion := concl,
-    semanticProfile := "operational", dependencies := if e.proofName.isEmpty then [] else [e.proofName],
+    arithProfile := "operational", dischargeMode := "none",
+    dependencies := if e.proofName.isEmpty then [] else [e.proofName],
     allowedEngines := if e.state matches .proved then ["lean"] else [],
     status := status, engine := engine, policyImpact := policyImpactOf status }
 
@@ -181,13 +151,13 @@ private def jobjStr (kvs : List (String × String)) : String :=
 /-- One obligation as a JSON object (ledger schema v1). -/
 def toJson (o : Obligation) : String :=
   String.intercalate ", " [
-    s!"{q "id"}: {q o.id}", s!"{q "kind"}: {q o.kind}", s!"{q "function"}: {q o.function}",
+    s!"{q "id"}: {q o.id}", s!"{q "kind"}: {q o.kind}", s!"{q "function"}: {q o.fn}",
     s!"{q "loc"}: \{{q "file"}: {q o.file}, {q "line"}: {o.line}}",
     s!"{q "origin"}: {q o.origin}",
     s!"{q "variables"}: {jarrStr o.variables}",
     s!"{q "hypotheses"}: {jarrStr o.hypotheses}",
     s!"{q "conclusion"}: {q o.conclusion}",
-    s!"{q "semantic_profile"}: {q o.semanticProfile}",
+    s!"{q "semantic_profile"}: {q o.arithProfile}",
     s!"{q "dependencies"}: {jarrStr o.dependencies}",
     s!"{q "allowed_engines"}: {jarrStr o.allowedEngines}",
     s!"{q "status"}: {q o.status}", s!"{q "engine"}: {q o.engine}",
@@ -208,9 +178,9 @@ def ledgerJson (obs : List Obligation) (schemaVer : Nat) : String :=
 def ledgerReport (obs : List Obligation) : String := Id.run do
   if obs.isEmpty then return "=== Obligation Ledger (schema v1) ===\n\n(no obligations)"
   let mut out := "=== Obligation Ledger (schema v1) ==="
-  for fq in (obs.map (·.function)).eraseDups do
+  for fq in (obs.map (·.fn)).eraseDups do
     out := out ++ s!"\n\n{fq}"
-    for o in obs.filter (·.function == fq) do
+    for o in obs.filter (·.fn == fq) do
       let eng := if o.engine.isEmpty then "" else s!" ({o.engine})"
       let pol := if o.policyImpact.isEmpty then "" else s!"\n      policy:  {o.policyImpact}"
       out := out ++ s!"\n  [{o.id}]  {o.kind}  →  {o.status}{eng}"

@@ -4063,12 +4063,17 @@ what stops a solver from silently becoming a "proved" path. -/
 
 def vcSchemaVersion : Nat := 1
 
-structure VC where
+/-- The ONE obligation record (Phase 3 #18d). Formerly two types — `Report.VC`
+    and `ObligationCore.Obligation` — now a single struct hosted here (the module
+    `collectVCs` lives in; `ObligationCore` imports `Report`, so the canonical
+    record must live at or below `Report`). `ObligationCore.Obligation` is an
+    `abbrev` of this, and `VC` is kept as a compatibility alias for the existing
+    discharge/schema/render call sites. The fields after `leanReplay` are the
+    ledger-view fields (formerly ObligationCore-only); they default empty so a
+    plain VC literal is unchanged and the VC reports never observe them. -/
+structure Obligation where
   id            : String
-  kind          : String       -- precondition | postcondition | assert | vacuity |
-                                -- array_bounds | div_nonzero | no_overflow |
-                                -- loop_invariant_init | loop_invariant_preservation |
-                                -- loop_exit_implies_post | variant_nonnegative | variant_decreases
+  kind          : String       -- ∈ kindVocabulary
   fn            : String
   file          : String
   line          : Nat
@@ -4079,8 +4084,7 @@ structure VC where
   arithProfile  : String       -- constant | linear | bitvector | nonlinear | refinement | operational | unsupported
   dischargeMode : String       -- constant_fold | omega | bv_decide | lean | smt | none
   -- discharge OUTCOME (filled in by `dischargeVCs` after the backends run):
-  status        : String       -- planned | proved_by_kernel_decision | proved_by_lean |
-                                -- arithmetic_proved | counterexample | unproven | missing
+  status        : String       -- ∈ statusVocabulary
   engine        : String       -- constant_fold | omega | bv_decide | lean | "" (none yet)
   -- concrete source-level counterexample (var → value), when a solver returned `sat`:
   counterexample : List (String × String) := []
@@ -4089,6 +4093,15 @@ structure VC where
   smtQuery      : String := ""  -- the SMT-LIB script itself (the replay artifact)
   solver        : String := ""  -- solver identity + version, e.g. "z3 4.16.0" (when run)
   leanReplay    : String := ""  -- the standalone Lean replay theorem (the artifact to kernel-check)
+  -- ledger-view fields (Phase 3 #18d; formerly ObligationCore.Obligation-only):
+  variables      : List String := []   -- typed variables in scope (names)
+  allowedEngines : List String := []   -- which backends may discharge it
+  replay         : String := ""        -- human replay hint
+  policyImpact   : String := ""        -- release-policy consequence of `status`
+
+/-- Compatibility alias: `VC` is the obligation record, kept for the existing
+    discharge/schema/render call sites. -/
+abbrev VC := Obligation
 
 /-- Split a compiler-generated goal string `∀ (vars : T), (h1) → h2 → (concl)`
     into (hypotheses, conclusion): drop the binder, split the body on top-level
