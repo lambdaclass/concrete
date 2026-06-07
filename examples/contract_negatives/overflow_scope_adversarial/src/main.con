@@ -1,0 +1,58 @@
+// ADVERSARIAL fixture for the overflow migration (ROADMAP Phase 3 #7).
+//
+// Overflow obligations (only from `#[overflow_checked]`) own THREE discharge
+// routes: omega (linear), interval+bv_decide (kernel-checked, non-negative
+// bounded), and opt-in external SMT (signed nonlinear, `--smt` only). The
+// migration routes the obligation COLLECTION through the unified `scopedWalk`,
+// so enclosing guards now feed the bounds — proofs can only get stronger. The
+// invariant to protect: unified scoped facts may strengthen overflow proofs, but
+// must not let SMT blur into kernel evidence or let stale bounds prove arithmetic.
+mod adv {
+    // IMPROVEMENT (unproven → proved by omega): the guard supplies the linear
+    // bounds; a+b fits i32. Must be kernel-owned — NO SMT query.
+    #[overflow_checked]
+    fn linear_guarded(a: i32, b: i32) -> i32 {
+        if 0 <= a && a <= 1000 && 0 <= b && b <= 1000 { return a + b; }
+        return 0;
+    }
+
+    // IMPROVEMENT (unproven → proved by bv_decide): non-negative bounded product
+    // via the guard (30000*60000 < 2^31). Interval+bv_decide owns it — NO SMT.
+    #[overflow_checked]
+    fn product_guarded(a: i32, b: i32) -> i32 {
+        if 0 <= a && a <= 30000 && 0 <= b && b <= 60000 { return a * b; }
+        return 0;
+    }
+
+    // NEGATIVE control (stale bound): the guard bounds a, but a is reassigned
+    // before the product, so the bound is invalidated ⇒ stays unproven.
+    #[overflow_checked]
+    fn stale_bound(a: i32, b: i32) -> i32 {
+        if 0 <= a && a <= 30000 && 0 <= b && b <= 60000 {
+            a = a + 1;
+            return a * b;
+        }
+        return 0;
+    }
+
+    // NEGATIVE control (missing lower bound): only upper bounds are known, so
+    // interval analysis (which needs both) bails ⇒ unproven, never a false green.
+    #[overflow_checked]
+    #[requires(a <= 30000 && b <= 60000)]
+    fn no_lower_bound(a: i32, b: i32) -> i32 { return a * b; }
+
+    // SMT NICHE: signed bounds, product provably fits i32 (|s*g| < 2^31) but
+    // operands may be negative, so the unsigned interval/bv route bails and omega
+    // can't do the nonlinear product. Left unproven by the kernel tiers; only
+    // `--smt` hands it to Z3 as solver_trusted. Default report stays solver-clean.
+    #[overflow_checked]
+    #[requires(-30000 <= s && s <= 30000 && -60000 <= g && g <= 60000)]
+    fn signed_product(s: i32, g: i32) -> i32 { return s * g; }
+
+    // WEAKENED bound: the bounds are too loose — the product CAN exceed i32
+    // (100000*100000 = 10^10 > 2^31). Kernel tiers can't own it ⇒ unproven by
+    // default (a concrete counterexample under --smt) — never proved.
+    #[overflow_checked]
+    #[requires(0 <= a && a <= 100000 && 0 <= b && b <= 100000)]
+    fn weakened(a: i32, b: i32) -> i32 { return a * b; }
+}

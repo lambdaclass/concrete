@@ -1780,36 +1780,34 @@ partial def collectArithS : Stmt → List Expr
   | _ => []
 end
 
--- Arithmetic op nodes paired with the loop invariants/guards in scope (see
--- `scopedBoundsB`).
-mutual
-partial def scopedArithS (lcs : List LoopContract) (scope : List Expr) :
-    Stmt → List (Expr × List Expr)
+/-- Arithmetic-op leaf: the `+`/`-`/`*` op nodes in a statement's OWN expression
+    positions (the walker owns recursion into branches/loops/init/step, so
+    `.ifElse`/`.while_`/`.forLoop` contribute only their condition's op nodes). -/
+def arithLeaf (scope : List Expr) : Stmt → List (Expr × List Expr)
   | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
       (collectArithE v).map fun e => (e, scope)
   | .return_ _ (some v) => (collectArithE v).map fun e => (e, scope)
-  | .ifElse _ c t el =>
-      (collectArithE c).map (fun e => (e, scope))
-        ++ scopedArithB lcs scope t ++ scopedArithB lcs scope (el.getD [])
-  | .while_ sp c b _ =>
-      (collectArithE c).map (fun e => (e, scope))
-        ++ scopedArithB lcs (scope ++ loopHypsAt lcs sp.line) b
-  | .forLoop sp init c step b _ =>
-      ((init.map (scopedArithS lcs scope)).getD [])
-        ++ (collectArithE c).map (fun e => (e, scope))
-        ++ ((step.map (scopedArithS lcs scope)).getD [])
-        ++ scopedArithB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .ifElse _ c _ _ => (collectArithE c).map fun e => (e, scope)
+  | .while_ _ c _ _ => (collectArithE c).map fun e => (e, scope)
+  | .forLoop _ _ c _ _ _ => (collectArithE c).map fun e => (e, scope)
   | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
-      (collectArithE o ++ collectArithE v).map (fun e => (e, scope))
+      (collectArithE o ++ collectArithE v).map fun e => (e, scope)
   | .arrayIndexAssign _ a i v =>
-      (collectArithE a ++ collectArithE i ++ collectArithE v).map (fun e => (e, scope))
+      (collectArithE a ++ collectArithE i ++ collectArithE v).map fun e => (e, scope)
   | _ => []
-partial def scopedArithB (lcs : List LoopContract) (scope : List Expr) :
-    List Stmt → List (Expr × List Expr)
-  | [] => []
-  | s :: rest =>
-      scopedArithS lcs scope s ++ scopedArithB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
-end
+
+/-- Arithmetic-op nodes paired with the hypotheses in scope (Phase 3 #7 —
+    migrated onto the unified `scopedWalk`). The collector now threads enclosing
+    guards / negated guards / fall-through / loop invariants into the in-scope
+    facts, so an overflow obligation's interval/`bv_decide`/SMT discharge sees
+    strictly MORE sound bounds — proofs can only get stronger
+    (`unproven → proved`), never weaker. The three-route discharge downstream is
+    unchanged: omega/interval/`bv_decide` are kernel-owned, external SMT remains
+    opt-in (`--smt`) and may only touch obligations the kernel tiers left
+    unproved; stale bounds are still dropped by the shared invalidation rule. -/
+def scopedArithB (lcs : List LoopContract) (scope : List Expr) (body : List Stmt) :
+    List (Expr × List Expr) :=
+  scopedWalkB arithLeaf lcs scope body
 
 /-- One integer-overflow obligation. -/
 structure OverflowObl where

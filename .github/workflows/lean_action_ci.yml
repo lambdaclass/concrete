@@ -197,6 +197,9 @@ jobs:
       - name: Div/mod + sound-lowering migration gate (Phase 3 #6 parity+improvement)
         run: bash scripts/tests/check_div_migration.sh
 
+      - name: Overflow migration gate (Phase 3 #7 three-route parity+trust-boundary)
+        run: bash scripts/tests/check_overflow_migration.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 
