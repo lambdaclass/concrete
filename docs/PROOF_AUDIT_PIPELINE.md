@@ -157,6 +157,15 @@ assumptions, snapshots, and release bundles all render from the same
 facts, contradictions become test failures instead of documentation
 rot.
 
+> **This shared fact layer is generalized by the typed `ObligationCore`
+> ledger** — the single source of truth for proof, contract, runtime-safety,
+> SMT, policy, audit, and proof-authoring surfaces. The report-fact unification
+> described here is the report-layer view of that one ledger; the full model and
+> its migration are in [OBLIGATION_CORE.md](OBLIGATION_CORE.md) (ROADMAP Phase 3,
+> ObligationCore Pipeline Consolidation). Treat `OBLIGATION_CORE.md` as canonical
+> for the fact/evidence model; this document covers the proof/audit *pass* shape
+> that feeds it.
+
 ## Pass Contracts
 
 Every named compiler boundary should eventually have a contract:

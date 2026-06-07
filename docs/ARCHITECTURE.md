@@ -49,6 +49,17 @@ This target shape is documented in
 - reports, policies, assumptions, snapshots, release bundles, and
   showcase manifests should render from one shared fact layer.
 
+That "one shared fact layer" is the **typed `ObligationCore` ledger**: the
+`Obligations / proof reports / proof registry` node above consolidates into one
+record model (id, span, kind, scoped hypotheses, conclusion, semantic profile,
+allowed engines, status, evidence class, counterexample, replay, policy impact),
+and reports / policies / proof workspaces / audit bundles / codegen gates all
+become views over it. That consolidation is its own work item — see
+[OBLIGATION_CORE.md](OBLIGATION_CORE.md) and ROADMAP Phase 3 (ObligationCore
+Pipeline Consolidation). `OBLIGATION_CORE.md` is canonical for the obligation /
+evidence model; this document and [PASSES.md](PASSES.md) own the front-end pass
+contracts that feed it.
+
 The current active architecture track is to make this path explicit
 without turning ProofCore into a second semantic authority.
 
