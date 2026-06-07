@@ -1010,62 +1010,177 @@ for errors, bytes/text/path, collections, formatting/parsing, I/O capabilities,
 tests, and oracle helpers, with every public stdlib item carrying an evidence
 class and authority/allocation story.
 
-1. Define stdlib module layout and naming: core/prelude, bytes/text/path,
+1. Define the stdlib gap matrix against Gleam, Roc, and Zig before expanding
+   APIs. Concrete should not copy Zig's full surface; it should make a
+   Gleam/Roc-sized core pleasant, Zig-style authority explicit, and Concrete's
+   evidence ledger visible. Record which modules are core-now, hosted-now,
+   freestanding-later, package-later, or research-later. The matrix must name
+   the obvious external references so they are not forgotten: Gleam's
+   `List`/`Dict`/`Set`/`String`/`BitArray`/`BytesTree`/`StringTree`/`Uri`/
+   `Dynamic.Decode`; Roc's `Str`/`List`/`Dict`/`Set`/`Iter`/numeric builtins;
+   and Zig's `ArrayList`/maps/sets/sort/fmt/json/base64/Uri/fs/process/time/
+   random/hash/crypto/log/testing/allocators/atomics/threads/compress/archive/
+   target/OS/debug-format surface.
+2. Define stdlib module layout and naming: core/prelude, bytes/text/path,
    collections, numeric helpers, formatting/parsing, console/file/network/
    process/time, test/oracle helpers, and target-profile-specific modules.
-2. Stabilize `Option` and `Result` APIs: construction, matching helpers,
+   Start from this explicit module checklist so none of the Concrete names or
+   comparison-driven additions disappear:
+   - Existing core/result modules: `std.option`, `std.result`.
+   - Existing numeric/memory modules: `std.numeric`, `std.math`, `std.mem`,
+     `std.ptr`, `std.alloc`.
+   - Existing byte/text/path modules: `std.bytes`, `std.slice`, `std.string`,
+     `std.text`, `std.ascii`, `std.path`.
+   - Existing format/parse/data modules: `std.fmt`, `std.parse`, `std.hex`,
+     `std.sha256`, `std.hash`, `std.rand`, `std.time`.
+   - Existing collection modules: `std.vec`, `std.map`, `std.set`,
+     `std.ordered_map`, `std.ordered_set`, `std.deque`, `std.heap`,
+     `std.bitset`.
+   - Existing hosted/capability modules: `std.io`, `std.writer`, `std.fs`,
+     `std.env`, `std.args`, `std.process`, `std.net`, `std.libc`.
+   - Existing test module: `std.test`.
+   - Proposed iterator/builder modules: `std.iter`, `std.builder`.
+   - Proposed collection helper modules: `std.sort`, `std.search`.
+   - Proposed data/encoding modules: `std.checksum`, `std.base64`,
+     `std.uri`, `std.json`, `std.decode`.
+   - Proposed package/config modules: `std.semver`, `std.config`.
+   - Proposed CLI/user-output modules: `std.log`, `std.progress`.
+3. Stabilize `std.option` and `std.result`: `Option<T>`, `Result<T, E>`,
+   construction, matching helpers,
    fallible chaining, ignored-result behavior, test helpers, and audit facts
    for fallible returns.
-3. Build raw-data APIs: `Bytes`, byte slices, fixed buffers, parser cursors,
+4. Build raw-data APIs in `std.bytes` and `std.slice`: `Bytes`, byte slices,
+   fixed buffers, parser cursors,
    byte-preserving formatting, and no implicit UTF-8 or lossy conversions.
-4. Build validated text APIs: `Text`, UTF-8 validation, slicing/indexing rules,
-   formatting, parse helpers, diagnostics, and explicit conversion from/to raw
-   bytes.
-5. Build path and OS-string APIs: `Path`, `OsString`, byte-preserving platform
+5. Build validated text APIs in `std.text`, `std.string`, and `std.ascii`:
+   `Text`, `String`, UTF-8 validation, slicing/indexing rules, formatting,
+   parse helpers, diagnostics, and explicit conversion from/to raw bytes.
+   Decide the `std.bytes.Bytes` / `std.text.Text` / `std.string.String` split
+   before `std.json`, `std.uri`, `std.path`, or `std.net` examples depend on
+   it.
+6. Build path and OS-string APIs in `std.path`: `Path`, `OsString`,
+   byte-preserving platform
    boundaries, normalization assumptions, symlink/TOCTOU notes, and explicit
    failure modes.
-6. Build collection APIs: fixed arrays/slices, `Vec`, maps, sets, buffers,
-   parser cursors, and capacity-aware helpers. Each API must state whether it
-   requires `Alloc`, whether it can fail, and which runtime obligations it
-   creates.
-7. Build numeric helper APIs: checked/wrapping/saturating arithmetic helpers,
+7. Build collection APIs across `std.vec`, `std.map`, `std.set`,
+   `std.ordered_map`, `std.ordered_set`, `std.deque`, `std.heap`,
+   `std.bitset`, and `std.slice`: fixed arrays/slices, `Vec<T>`, maps, sets,
+   buffers, parser cursors, and capacity-aware helpers. Add the ordinary APIs
+   C/Rust users expect: `contains`, `remove`, `iter` for maps and sets;
+   `insert`, `remove`, `retain`, `sort`, `search` for vectors and slices;
+   stable ordering helpers for ordered collections. Each API must state whether
+   it requires `with(Alloc)`, whether it can fail, and which runtime
+   obligations it creates.
+8. Build iterator and builder APIs in proposed `std.iter` and `std.builder`
+   after the collection shape is known: `Iter<T>`-style adapters,
+   `fold`/`map`/`filter`/`take`/`drop`, known-length reporting, byte/text
+   builders, and tree/buffer builders inspired by Gleam's `BytesTree` and
+   `StringTree`. Do not hide allocation; builder APIs either carry
+   `with(Alloc)` or operate over fixed buffers.
+9. Build numeric helper APIs in `std.numeric`, `std.math`, and `std.mem`:
+   checked/wrapping/saturating arithmetic helpers,
    narrowing/conversion helpers, endian conversions, byte/word packing, and
    evidence classes for each helper.
-8. Build formatting and parsing helpers: integer/text formatting, simple
-   scanners, structured parse results, error-set reports, and oracle-friendly
-   output conventions.
-9. Build capability-scoped console, file, network, process, and time APIs.
-   Authority must be visible in function types and audit reports; no API may
-   smuggle ambient authority through a convenience wrapper.
-10. Build handle-relative filesystem APIs as the preferred file/path shape:
-    directory/file handles carry authority; operations are relative to handles
-    where possible; temp-file and symlink behavior is explicit.
-11. Build stdlib test/oracle helpers: `std.test`, expected failures,
+10. Build sorting and searching primitives in proposed `std.sort` and
+    `std.search`: comparison conventions, stable/unstable sort decision,
+    binary search, min/max helpers, and evidence/oracle tests over edge cases.
+11. Build hashing, checksums, and deterministic random helpers in `std.hash`,
+    proposed `std.checksum`, and `std.rand`: stable hash APIs for maps/sets,
+    non-cryptographic checksums, seeded deterministic RNG for tests/oracles,
+    and a clear split from cryptographic randomness. Any OS entropy source is
+    hosted-only and capability-visible.
+12. Build time and duration helpers in `std.time`: monotonic versus wall-clock
+    distinction,
+    timestamp formatting/parsing if admitted, timeout helpers, and explicit
+    hosted authority for reading the clock.
+13. Build formatting and parsing helpers in `std.fmt` and `std.parse`:
+    integer/text formatting, simple
+    scanners, structured parse results, error-set reports, and oracle-friendly
+    output conventions.
+14. Build a reusable scanner/parser core in `std.parse` over
+    `std.bytes.Bytes` and `std.text.Text`: `peek`, `advance`, `take_while`,
+    `consume`, span/position tracking, error reporting, and no hidden
+    allocation unless the API carries `with(Alloc)`.
+15. Add `std.base64` as the first byte-format module: encode/decode, streaming
+    shape if needed, strict error reporting, RFC test vectors, oracle
+    comparison, and evidence classification.
+16. Add `std.uri` parsing/formatting after the byte/text/path split is stable:
+    component accessors, percent encoding/decoding, normalization policy, and
+    clear distinction between syntax validation and network authority.
+17. Add `std.json` as the first structured data module: tokenization,
+    string/number handling, error spans, bounded recursion policy, optional
+    DOM-like representation only if the allocation story is explicit, and
+    oracle tests against a reference implementation.
+18. Add a small typed decoding layer in proposed `std.decode` after
+    `std.json`: dynamic value decoding, field access, error paths, and examples
+    comparable to Gleam's `dynamic/decode`, without broad reflection or hidden
+    runtime typing.
+19. Add semantic-version and config-format helpers in proposed `std.semver`
+    and `std.config` if package/build work starts depending on them:
+    `SemVer`, INI/TOML-style scanner, and manifest parsing support. These are
+    stdlib/package-boundary helpers, not general metaprogramming.
+20. Add simple logging/diagnostic output APIs in proposed `std.log`: levels,
+    writers, formatting
+    integration, capability requirements, and policy for release builds. Keep
+    this small; it is not a tracing framework.
+21. Add progress/status output helpers for CLI tools in proposed
+    `std.progress` if examples need them: progress lines, quiet/verbose policy,
+    terminal detection, and no ambient terminal authority.
+22. Build capability-scoped console, file, network, process, and time APIs in
+    `std.io`, `std.writer`, `std.fs`, `std.env`, `std.args`, `std.process`,
+    `std.net`, and `std.time`. Authority must be visible in function types and
+    audit reports; no API may smuggle ambient authority through a convenience
+    wrapper.
+23. Build handle-relative filesystem APIs in `std.fs` as the preferred
+    file/path shape: directory/file handles carry authority; operations are
+    relative to handles where possible; temp-file and symlink behavior is
+    explicit.
+24. Build handle-based network surface in `std.net` only as far as the
+    validation workloads require: address parsing, socket handle wrappers, HTTP
+    header parsing as a pure parser first, and no full HTTP client/server until
+    package/workload evidence demands it.
+25. Build stdlib test/oracle helpers in `std.test`: expected failures,
     capability-scoped fixtures, temp directories, oracle vector runners,
     interpreter-vs-compiled helpers, and report snapshots.
-12. Define stdlib error-handling conventions: when APIs return `Result`,
+26. Define stdlib error-handling conventions: when APIs return `Result`,
     `Option`, panic/abort, or require a policy gate; how ignored-result
     diagnostics apply; and how accumulating error sets are reported.
-13. Define stdlib evidence classes per public API: `proved`, `enforced`,
+27. Define stdlib evidence classes per public API: `proved`, `enforced`,
     `reported`, `tested_by_oracle`, `assumed`, or `trusted`. The evidence class
     must appear in docs and audit artifacts, not just implementation comments.
-14. Add stdlib authority/allocation/runtime-obligation gates so core helpers
+28. Add stdlib authority/allocation/runtime-obligation gates so core helpers
     cannot silently widen capabilities, allocation behavior, trusted
     assumptions, or runtime-risk obligations.
-15. Split hosted versus freestanding-ready stdlib modules at the API level:
+29. Split hosted versus freestanding-ready stdlib modules at the API level:
     no-alloc/no-OS core modules, allocator-backed modules, hosted OS modules,
     and modules that are explicitly unavailable under freestanding profiles.
     The freestanding target implementation still lands in Phase 15.
-16. Add stdlib docs and examples for C/Rust users: small recipes for bytes,
-    text, paths, errors, files, vectors, maps, tests, and capability-scoped I/O.
-17. Add a stdlib compatibility/oracle corpus: reference-vector tests for
-    parsing/formatting, byte/text/path conversions, collection behavior, and
-    simple CLI I/O.
-18. Add the Phase 11 validation project: a small real stdlib client that uses
+30. Record deliberately deferred stdlib families so they do not disappear from
+    planning: compression/archive formats, broad crypto beyond the narrow
+    hash/HMAC/constant-time story, full HTTP client/server, dynamic libraries,
+    OS debug formats, atomics, threads, SIMD, target/ABI databases, and
+    platform-specific C/POSIX wrappers. Each stays package-later,
+    backend-later, freestanding-later, or research-later until a workload
+    forces it.
+31. Add stdlib docs and examples for C/Rust users: small recipes for bytes,
+    text, paths, errors, files, vectors, maps, tests, parser cursors, JSON,
+    base64, URI, hashing, deterministic random, time, logging, and
+    capability-scoped I/O.
+32. Add a stdlib compatibility/oracle corpus: reference-vector tests for
+    parsing/formatting, byte/text/path conversions, collection behavior,
+    base64, URI, JSON, semantic versions, path normalization,
+    sorting/searching, checksums, deterministic RNG, and simple CLI I/O.
+33. Add real stdlib workload checks before Phase 12 relies on the library:
+    base64 CLI, JSON validator/scanner, INI/TOML-style parser, checksum CLI,
+    HTTP header parser, path normalizer, and collection-heavy ring-buffer or
+    LRU cache. Each workload must build, run, oracle-check where possible, and
+    report authority/allocation/evidence classes.
+34. Add the Phase 11 validation project: a small real stdlib client that uses
     `Result`/`Option`, `Bytes`/`Text`/`Path`, collections, files/console,
-    formatting/parsing, tests, and oracle helpers. CI must build, run, test,
-    audit authority/allocation/evidence classes, and compare
-    interpreter-vs-compiled behavior.
+    formatting/parsing, JSON or base64, deterministic RNG or checksums, tests,
+    and oracle helpers. CI must build, run, test, audit
+    authority/allocation/evidence classes, and compare interpreter-vs-compiled
+    behavior.
 
 ## Phase 12: Flagship Depth And Examples
 
