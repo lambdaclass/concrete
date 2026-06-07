@@ -134,6 +134,32 @@ def ofProofStatus (e : Report.ProofStatusEntry) : Obligation :=
 def proofLinkLedger (entries : List Report.ProofStatusEntry) : List Obligation :=
   entries.map ofProofStatus
 
+/-! ### Policy projections (Phase 3 #14)
+
+Release policy reads its inputs from the one ledger instead of a parallel
+`compute*Quals` side channel. Each projection filters the ledger for the
+obligations a policy acts on; the policy logic (`enforceNoVacuous` /
+`enforceNoAssume` / `enforceSolverEvidence`) is unchanged. -/
+
+/-- Functions with a vacuous (unsatisfiable) precondition — a proved
+    `#requires_vac` vacuity obligation, whether the constant folder or omega
+    decided it. Feeds `forbid-vacuous` (E0613). -/
+def vacuousFunctions (obs : List Obligation) : List String :=
+  (obs.filter fun o =>
+    o.kind == "vacuity" && o.status == "proved_by_kernel_decision"
+      && o.id.endsWith "#requires_vac").map (·.fn) |>.eraseDups
+
+/-- Functions that open an `assume(...)` escape hatch — an `assume` obligation in
+    the ledger. Feeds `forbid-assume` (E0614). -/
+def assumeFunctions (obs : List Obligation) : List String :=
+  (obs.filter (·.kind == "assume")).map (·.fn) |>.eraseDups
+
+/-- VC ids discharged ONLY by an external solver (`solver_trusted`) — solver
+    evidence, never kernel/Lean (Lean-replayed VCs are `proved_by_lean_replay`,
+    not `solver_trusted`, so they are excluded). Feeds `solver-evidence` (E0615). -/
+def solverTrustedIds (obs : List Obligation) : List String :=
+  (obs.filter (·.status == "solver_trusted")).map (·.id) |>.eraseDups
+
 /-- Minimal JSON string escaper (self-contained; matches `proveReportJson`). -/
 private def esc (s : String) : String :=
   s.foldl (fun a c => a ++ (match c with

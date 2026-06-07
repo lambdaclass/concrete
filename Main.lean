@@ -773,27 +773,10 @@ def kernelDischargeLoopVCs (candidates : List (String × String)) : IO (List Str
       if (← runLean (mkSrc [c])) == 0 then proved := proved ++ [c.2.1]
     return proved
 
-/-- Qualified names of functions with a vacuous (unsatisfiable) `#[requires]` —
-    constant-false (folder) or symbolically contradictory (omega refutes the
-    conjunction). Project scope only (dep modules excluded). The policy gate
-    rejects these. -/
-def computeVacuousQuals (astModules : List Concrete.Module) (depNames : List String) : IO (List String) := do
-  let constVac := (astModules.flatMap Report.allFunctions).filterMap fun (pfx, f) =>
-    if f.requires.any (fun r => Report.cEvalBool r == some false) then some (pfx ++ f.name) else none
-  let provedVac ← kernelDischargeLoopVCs (Report.vacuityGoals astModules)
-  let omegaVac := provedVac.filterMap fun k =>
-    if k.endsWith "#requires_vac" then some (k.dropEnd ("#requires_vac".length)).toString else none
-  return (constVac ++ omegaVac).eraseDups.filter fun q => !depNames.any (fun d => q.startsWith (d ++ "."))
-
-/-- Fully-qualified names of project functions that open an `assume(...)` escape
-    hatch. Computed from the source AST (assume statements are erased before Core,
-    so they are invisible to the policy pass otherwise). Used by the
-    `forbid-assume` release profile. -/
-def computeAssumeQuals (astModules : List Concrete.Module) (depNames : List String) : List String :=
-  ((astModules.flatMap Report.allFunctions).filterMap fun (pfx, f) =>
-    if (f.body.flatMap Report.collectAssertAssumeS).any (fun (isAssume, _) => isAssume)
-    then some (pfx ++ f.name) else none).eraseDups.filter fun q =>
-      !depNames.any (fun d => q.startsWith (d ++ "."))
+-- (Phase 3 #14) The former `computeVacuousQuals` / `computeAssumeQuals` /
+-- `computeSolverTrustedQuals` side channels are gone: policy now reads these
+-- facts from the one obligation ledger via `computePolicyQuals` (below), which
+-- projects `ObligationCore.{vacuousFunctions,assumeFunctions,solverTrustedIds}`.
 
 /-- Build the VC schedule and fold in the kernel-checked discharge results
     (omega over the linear goals; `bv_decide` over the BitVec call-site and
@@ -918,24 +901,36 @@ def leanReplayCheck (goals : List (String × String)) : IO (List String) := do
     if ok then closed := closed ++ [k]
   return closed
 
-/-- Release-policy input: the VC ids an external solver discharged as
-    `solver_trusted` AND that Lean could NOT independently replay during this build.
-    Run ONLY when the project's policy takes a stance on solver evidence
-    (`forbid`/`assumptions`/`allow`) and there are SMT-eligible VCs — so an ordinary
-    build never invokes a solver. A replayed VC is kernel evidence, not solver
-    evidence, so it is excluded here (not subject to the solver-evidence gate). If no
-    solver is present, `smtDischarge` returns `solver_error` and the set is empty. -/
-def computeSolverTrustedQuals (policy : Concrete.ProjectPolicy)
-    (modules : List Concrete.Module) : IO (List String) := do
-  if policy.solverEvidence.isEmpty then return []   -- no stance → no SMT during build
-  let smtGoals := Report.overflowSmtGoals modules
-  if smtGoals.isEmpty then return []
-  let results ← smtDischarge smtGoals 5
-  let trusted := results.filterMap fun (k, cls, _) => if cls == "solver_trusted" then some k else none
-  -- a VC Lean can independently replay is kernel evidence, not solver evidence.
-  let replayGoals := (Report.leanReplayGoals modules).filter (fun (k, _) => trusted.contains k)
-  let replayed ← leanReplayCheck replayGoals
-  return trusted.filter (fun k => !replayed.contains k)
+/-- Phase 3 #14: policy inputs derived from the ONE obligation ledger. Builds the
+    discharged ledger (folding the external-SMT path when a solver-evidence stance
+    is set, so `solver_trusted` is present), then projects the vacuous / assume /
+    solver-trusted facts the release policy acts on — replacing the three
+    `compute*Quals` side channels. Returns `(vacuousQuals, assumeQuals,
+    solverTrustedQuals)`, dep-filtered exactly as before. -/
+def computePolicyQuals (policy : Concrete.ProjectPolicy) (modules : List Concrete.Module)
+    (depNames : List String) (locMap : Report.FnLocMap) (registry : Concrete.ProofRegistry) :
+    IO (List String × List String × List String) := do
+  let dvcs ← computeVCsDischarged modules locMap registry
+  -- fold the external-SMT path into the ledger only when a stance is set (matches
+  -- the old computeSolverTrustedQuals gating; otherwise no solver runs).
+  let dvcs ← if policy.solverEvidence.isEmpty then pure dvcs else do
+    let smtGoals := Report.overflowSmtGoals modules
+    if smtGoals.isEmpty then pure dvcs else do
+      let replayGoals := Report.leanReplayGoals modules
+      let dvcs := Report.markSmtEligible dvcs smtGoals replayGoals
+      let solverId ← z3VersionId
+      let results ← smtDischarge smtGoals 5
+      let dvcs := Report.foldSmtResults dvcs results solverId
+      let trusted := dvcs.filterMap fun v => if v.status == "solver_trusted" then some v.id else none
+      let rg := replayGoals.filter (fun (k, _) => trusted.contains k)
+      let replayed ← leanReplayCheck rg
+      pure (Report.foldReplayResults dvcs replayed)
+  let ledger := Concrete.ObligationCore.ledgerOfVCs dvcs
+  let keep := fun (q : String) => !depNames.any (fun d => q.startsWith (d ++ "."))
+  let vac := (Concrete.ObligationCore.vacuousFunctions ledger).filter keep
+  let asm := (Concrete.ObligationCore.assumeFunctions ledger).filter keep
+  let st := Concrete.ObligationCore.solverTrustedIds ledger
+  return (vac, asm, st)
 
 /-- Render the contracts report plus the call-site obligation section, running
     the `bv_decide` backend on the closed-but-non-literal call-site obligations
@@ -1614,9 +1609,7 @@ def compileBuild (projectRoot : String) (outputPath : Option String) (emitLLVM :
     let registry ← loadRegistryWithLinks mainPath parsed.modules validCore.coreModules
     let pc := extractProofCore validCore simpleLocMap registry
     if !policy.isEmpty then
-      let vac ← computeVacuousQuals parsed.modules depNames
-      let asm := computeAssumeQuals parsed.modules depNames
-      let st ← computeSolverTrustedQuals policy parsed.modules
+      let (vac, asm, st) ← computePolicyQuals policy parsed.modules depNames policyLocMap registry
       let policyDs := enforcePolicy policy validCore.coreModules
         (locMap := policyLocMap) (pc := pc) (depNames := depNames) (vacuousQuals := vac)
         (assumeQuals := asm) (solverTrustedQuals := st)
@@ -1682,9 +1675,7 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
       let simpleLocMap := policyLocMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
       let registry ← loadRegistryWithLinks mainPath parsed.modules validCore.coreModules
       let pc := extractProofCore validCore simpleLocMap registry
-      let vac ← computeVacuousQuals parsed.modules depNames
-      let asm := computeAssumeQuals parsed.modules depNames
-      let st ← computeSolverTrustedQuals policy parsed.modules
+      let (vac, asm, st) ← computePolicyQuals policy parsed.modules depNames policyLocMap registry
       let policyDs := enforcePolicy policy validCore.coreModules
         (locMap := policyLocMap) (pc := pc) (depNames := depNames) (vacuousQuals := vac)
         (assumeQuals := asm) (solverTrustedQuals := st)
@@ -1904,9 +1895,7 @@ def main (args : List String) : IO UInt32 := do
         for issue in regIssues do
           IO.eprintln (Concrete.renderRegistryIssue issue)
         if !policy.isEmpty then
-          let vac ← computeVacuousQuals parsed.modules depNames
-          let asm := computeAssumeQuals parsed.modules depNames
-          let st ← computeSolverTrustedQuals policy parsed.modules
+          let (vac, asm, st) ← computePolicyQuals policy parsed.modules depNames policyLocMap registry
           let policyDs := enforcePolicy policy validCore.coreModules
             (locMap := policyLocMap) (pc := pc) (depNames := depNames) (vacuousQuals := vac)
             (assumeQuals := asm) (solverTrustedQuals := st)

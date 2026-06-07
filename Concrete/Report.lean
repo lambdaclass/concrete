@@ -4217,6 +4217,17 @@ def collectVCs (modules : List Module) (locMap : FnLocMap)
     let (file, line) := loc fq
     out := out ++ [mkVC k "assume" fq file line hyps concl s!"assume in {fq}" [] "operational" "none" "assumed" "assumed"]
   for (k, g) in vacuityGoals modules do out := out ++ [mkSplit k "vacuity" "linear" "omega" g []]
+  -- constant-false preconditions are vacuous too, but the constant folder (not
+  -- omega) decides them — `vacuityGoals` skips them because `false` does not
+  -- lower to a Lean prop. Surface them in the ledger as constant-fold vacuity so
+  -- the obligation ledger is the complete source of vacuous functions (Phase 3
+  -- #14: policy reads vacuity from the ledger, not a side channel).
+  for (pfx, f) in modules.flatMap allFunctions do
+    let fq := pfx ++ f.name
+    if f.requires.any (fun r => cEvalBool r == some false) then
+      let (file, line) := loc fq
+      out := out ++ [mkVC s!"{fq}#requires_vac" "vacuity" fq file line []
+        "False" s!"vacuity in {fq}" [] "constant" "constant_fold" "proved_by_kernel_decision" "constant_fold"]
   -- a constant runtime-safety verdict → kernel-decided here; else planned/omega/bv.
   let constStatus := fun (cv : Option Bool) =>
     match cv with

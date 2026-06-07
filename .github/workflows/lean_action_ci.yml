@@ -227,6 +227,9 @@ jobs:
       - name: Single-truth-source guard (Phase 3 #18d step 5)
         run: bash scripts/tests/check_obligation_single_truth_source.sh
 
+      - name: Policy-as-ledger-view gate (Phase 3 #14)
+        run: bash scripts/tests/check_obligation_policy_views.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 
