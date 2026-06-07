@@ -191,6 +191,9 @@ jobs:
       - name: Call-site precondition migration gate (Phase 3 #4 parity+improvement)
         run: bash scripts/tests/check_call_site_migration.sh
 
+      - name: Array-bounds migration gate (Phase 3 #5 parity+improvement)
+        run: bash scripts/tests/check_bounds_migration.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

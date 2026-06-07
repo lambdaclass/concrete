@@ -1353,8 +1353,11 @@ partial def scopedWalkS {α} (leaf : List Expr → Stmt → List α)
   | s@(.while_ sp _ b _) =>
       leaf scope s ++ scopedWalkB leaf lcs (scope ++ loopHypsAt lcs sp.line) b
   | s@(.forLoop sp init _ step b _) =>
-      leaf scope s
-        ++ ((init.map (scopedWalkS leaf lcs scope)).getD [])
+      -- init, then this statement's own leaves (the loop condition), then step,
+      -- then body — the traversal ORDER every family's old walker used, so the
+      -- positional `#idx`/`#pre`/… keys are preserved across the migration.
+      ((init.map (scopedWalkS leaf lcs scope)).getD [])
+        ++ leaf scope s
         ++ ((step.map (scopedWalkS leaf lcs scope)).getD [])
         ++ scopedWalkB leaf lcs (scope ++ loopHypsAt lcs sp.line) b
   | s@(.borrowIn _ _ _ _ _ b) => leaf scope s ++ scopedWalkB leaf lcs scope b
@@ -1370,39 +1373,36 @@ partial def scopedWalkB {α} (leaf : List Expr → Stmt → List α)
       scopedWalkS leaf lcs scope s ++ scopedWalkB leaf lcs restScope rest
 end
 
--- Index uses paired with the loop invariants/guards in scope at the access,
--- walking the body in order so a mutated invariant variable drops its
--- hypotheses for subsequent statements.
-mutual
-partial def scopedBoundsS (lcs : List LoopContract) (scope : List Expr) :
-    Stmt → List (String × Expr × List Expr)
+/-- Array-index leaf: the index uses in a statement's OWN expression positions
+    (the walker owns recursion into branches/loops/init/step, so
+    `.ifElse`/`.while_`/`.forLoop` contribute only their condition's index uses).
+    A store `a[idx] = v` carries its target bound `(a, idx)` FIRST, matching the
+    old walker's ordering exactly. -/
+def boundsLeaf (scope : List Expr) : Stmt → List (String × Expr × List Expr)
   | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
       (collectIndexUsesE v).map fun (a, i) => (a, i, scope)
   | .return_ _ (some v) => (collectIndexUsesE v).map fun (a, i) => (a, i, scope)
-  | .ifElse _ c t el =>
-      (collectIndexUsesE c).map (fun (a, i) => (a, i, scope))
-        ++ scopedBoundsB lcs scope t ++ scopedBoundsB lcs scope (el.getD [])
-  | .while_ sp c b _ =>
-      (collectIndexUsesE c).map (fun (a, i) => (a, i, scope))
-        ++ scopedBoundsB lcs (scope ++ loopHypsAt lcs sp.line) b
-  | .forLoop sp init c step b _ =>
-      ((init.map (scopedBoundsS lcs scope)).getD [])
-        ++ (collectIndexUsesE c).map (fun (a, i) => (a, i, scope))
-        ++ ((step.map (scopedBoundsS lcs scope)).getD [])
-        ++ scopedBoundsB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .ifElse _ c _ _ => (collectIndexUsesE c).map fun (a, i) => (a, i, scope)
+  | .while_ _ c _ _ => (collectIndexUsesE c).map fun (a, i) => (a, i, scope)
+  | .forLoop _ _ c _ _ _ => (collectIndexUsesE c).map fun (a, i) => (a, i, scope)
   | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
-      (collectIndexUsesE o ++ collectIndexUsesE v).map (fun (a, i) => (a, i, scope))
+      (collectIndexUsesE o ++ collectIndexUsesE v).map fun (a, i) => (a, i, scope)
   | .arrayIndexAssign _ (.ident _ arr) idx v =>
-      (arr, idx, scope) :: (collectIndexUsesE idx ++ collectIndexUsesE v).map (fun (a, i) => (a, i, scope))
+      (arr, idx, scope) :: (collectIndexUsesE idx ++ collectIndexUsesE v).map fun (a, i) => (a, i, scope)
   | .arrayIndexAssign _ a i v =>
-      (collectIndexUsesE a ++ collectIndexUsesE i ++ collectIndexUsesE v).map (fun (x, j) => (x, j, scope))
+      (collectIndexUsesE a ++ collectIndexUsesE i ++ collectIndexUsesE v).map fun (x, j) => (x, j, scope)
   | _ => []
-partial def scopedBoundsB (lcs : List LoopContract) (scope : List Expr) :
-    List Stmt → List (String × Expr × List Expr)
-  | [] => []
-  | s :: rest =>
-      scopedBoundsS lcs scope s ++ scopedBoundsB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
-end
+
+/-- Index uses paired with the hypotheses in scope at the access (Phase 3 #5 —
+    migrated onto the unified `scopedWalk`). Like the call-site migration, the
+    collector now threads enclosing `if`-guards (then assumes `c`, else assumes
+    `¬c`), early-return fall-through, and loop invariants/guards — strictly more
+    sound context than the old bounds walker, so a bounds obligation can only move
+    `unproven → proved_by_kernel_decision` (e.g. `if 0 ≤ i && i < n { a[i] }`),
+    never the reverse, and a reassigned index still drops its stale guard. -/
+def scopedBoundsB (lcs : List LoopContract) (scope : List Expr) (body : List Stmt) :
+    List (String × Expr × List Expr) :=
+  scopedWalkB boundsLeaf lcs scope body
 
 /-- Call-site leaf: the calls in a statement's OWN expression positions (the
     walker owns recursion into branches, loop bodies, and for-loop init/step, so
