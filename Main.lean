@@ -1515,8 +1515,11 @@ def compileAndReport (inputPath : String) (reportType : String)
     if reportType == "audit" then
       -- fold the kernel-checked VC discharge into the reviewer artifact (no
       -- external solver by default — SMT evidence stays opt-in via --report vcs --smt).
+      -- Phase 3 #18c: the audit VC summary consumes the ObligationCore hub too
+      -- (VC → ledger → toVCView → summary), byte-identical.
       let auditVCs ← computeVCsDischarged parsed.modules locMap registry
-      let vcSum := Report.vcAuditSummary auditVCs
+      let auditVCView := (Concrete.ObligationCore.ledgerOfVCs auditVCs).map Concrete.ObligationCore.toVCView
+      let vcSum := Report.vcAuditSummary auditVCView
       IO.println (Report.auditReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc) (vcSummary := vcSum))
       if Report.hasContracts parsed.modules then
         IO.println (← renderContracts parsed.modules registry)
