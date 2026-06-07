@@ -1326,81 +1326,14 @@ partial def assignedScalarsS : Stmt → List String
 def dropStaleHyps (scope : List Expr) (assigned : List String) : List Expr :=
   scope.filter fun h => (collectIdents h).all (fun v => !assigned.contains v)
 
--- Index uses paired with the loop invariants/guards in scope at the access,
--- walking the body in order so a mutated invariant variable drops its
--- hypotheses for subsequent statements.
-mutual
-partial def scopedBoundsS (lcs : List LoopContract) (scope : List Expr) :
-    Stmt → List (String × Expr × List Expr)
-  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
-      (collectIndexUsesE v).map fun (a, i) => (a, i, scope)
-  | .return_ _ (some v) => (collectIndexUsesE v).map fun (a, i) => (a, i, scope)
-  | .ifElse _ c t el =>
-      (collectIndexUsesE c).map (fun (a, i) => (a, i, scope))
-        ++ scopedBoundsB lcs scope t ++ scopedBoundsB lcs scope (el.getD [])
-  | .while_ sp c b _ =>
-      (collectIndexUsesE c).map (fun (a, i) => (a, i, scope))
-        ++ scopedBoundsB lcs (scope ++ loopHypsAt lcs sp.line) b
-  | .forLoop sp init c step b _ =>
-      ((init.map (scopedBoundsS lcs scope)).getD [])
-        ++ (collectIndexUsesE c).map (fun (a, i) => (a, i, scope))
-        ++ ((step.map (scopedBoundsS lcs scope)).getD [])
-        ++ scopedBoundsB lcs (scope ++ loopHypsAt lcs sp.line) b
-  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
-      (collectIndexUsesE o ++ collectIndexUsesE v).map (fun (a, i) => (a, i, scope))
-  | .arrayIndexAssign _ (.ident _ arr) idx v =>
-      (arr, idx, scope) :: (collectIndexUsesE idx ++ collectIndexUsesE v).map (fun (a, i) => (a, i, scope))
-  | .arrayIndexAssign _ a i v =>
-      (collectIndexUsesE a ++ collectIndexUsesE i ++ collectIndexUsesE v).map (fun (x, j) => (x, j, scope))
-  | _ => []
-partial def scopedBoundsB (lcs : List LoopContract) (scope : List Expr) :
-    List Stmt → List (String × Expr × List Expr)
-  | [] => []
-  | s :: rest =>
-      scopedBoundsS lcs scope s ++ scopedBoundsB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
-end
-
--- Calls paired with the hypotheses in scope at the call: enclosing `if`-guards
--- (the then-branch gets the condition) and loop invariants/guards. Walks the body
--- in order so a reassigned variable drops its stale hypotheses (`dropStaleHyps`),
--- exactly as the bounds walker does.
-mutual
-partial def scopedCallsS (lcs : List LoopContract) (scope : List Expr) :
-    Stmt → List (String × List Expr × List Expr)
-  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
-      (collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
-  | .return_ _ (some v) => (collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
-  | .ifElse _ c t el =>
-      (collectCallsE c).map (fun (_, fn, args) => (fn, args, scope))
-        ++ scopedCallsB lcs (scope ++ [c]) t
-        ++ scopedCallsB lcs scope (el.getD [])
-  | .while_ sp c b _ =>
-      (collectCallsE c).map (fun (_, fn, args) => (fn, args, scope))
-        ++ scopedCallsB lcs (scope ++ loopHypsAt lcs sp.line) b
-  | .forLoop sp init c step b _ =>
-      ((init.map (scopedCallsS lcs scope)).getD [])
-        ++ (collectCallsE c).map (fun (_, fn, args) => (fn, args, scope))
-        ++ ((step.map (scopedCallsS lcs scope)).getD [])
-        ++ scopedCallsB lcs (scope ++ loopHypsAt lcs sp.line) b
-  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
-      (collectCallsE o ++ collectCallsE v).map (fun (_, fn, args) => (fn, args, scope))
-  | .arrayIndexAssign _ a i v =>
-      (collectCallsE a ++ collectCallsE i ++ collectCallsE v).map (fun (_, fn, args) => (fn, args, scope))
-  | _ => []
-partial def scopedCallsB (lcs : List LoopContract) (scope : List Expr) :
-    List Stmt → List (String × List Expr × List Expr)
-  | [] => []
-  | s :: rest =>
-      scopedCallsS lcs scope s ++ scopedCallsB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
-end
-
 -- ────────────────────────────────────────────────────────────────────────────
 -- The ONE scoped context collector (ROADMAP Phase 3 #3).
 --
--- Every obligation family (call-site preconditions, array bounds, div/mod,
--- overflow, asserts, …) is collected by walking the body once with the SAME
--- scope-threading discipline, parameterised only by a per-statement `leaf`
--- extractor. The walker threads the full fact set the roadmap requires:
+-- Shared engine for every scoped obligation family (call-site preconditions,
+-- array bounds, div/mod, overflow, asserts, …). Migrated families walk the body
+-- once with the SAME scope-threading discipline, parameterised only by a
+-- per-statement `leaf` extractor. The walker threads the full fact set the
+-- roadmap requires:
 --   • enclosing `if`-guards          → the then-branch assumes `c`,
 --   • negated guards                 → the else-branch assumes `¬c`,
 --   • early-return fall-through       → after `if c { …return… }`, assume `¬c`,
@@ -1436,6 +1369,68 @@ partial def scopedWalkB {α} (leaf : List Expr → Stmt → List α)
         | _ => dropStaleHyps scope (assignedScalarsS s)
       scopedWalkS leaf lcs scope s ++ scopedWalkB leaf lcs restScope rest
 end
+
+-- Index uses paired with the loop invariants/guards in scope at the access,
+-- walking the body in order so a mutated invariant variable drops its
+-- hypotheses for subsequent statements.
+mutual
+partial def scopedBoundsS (lcs : List LoopContract) (scope : List Expr) :
+    Stmt → List (String × Expr × List Expr)
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
+      (collectIndexUsesE v).map fun (a, i) => (a, i, scope)
+  | .return_ _ (some v) => (collectIndexUsesE v).map fun (a, i) => (a, i, scope)
+  | .ifElse _ c t el =>
+      (collectIndexUsesE c).map (fun (a, i) => (a, i, scope))
+        ++ scopedBoundsB lcs scope t ++ scopedBoundsB lcs scope (el.getD [])
+  | .while_ sp c b _ =>
+      (collectIndexUsesE c).map (fun (a, i) => (a, i, scope))
+        ++ scopedBoundsB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .forLoop sp init c step b _ =>
+      ((init.map (scopedBoundsS lcs scope)).getD [])
+        ++ (collectIndexUsesE c).map (fun (a, i) => (a, i, scope))
+        ++ ((step.map (scopedBoundsS lcs scope)).getD [])
+        ++ scopedBoundsB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
+      (collectIndexUsesE o ++ collectIndexUsesE v).map (fun (a, i) => (a, i, scope))
+  | .arrayIndexAssign _ (.ident _ arr) idx v =>
+      (arr, idx, scope) :: (collectIndexUsesE idx ++ collectIndexUsesE v).map (fun (a, i) => (a, i, scope))
+  | .arrayIndexAssign _ a i v =>
+      (collectIndexUsesE a ++ collectIndexUsesE i ++ collectIndexUsesE v).map (fun (x, j) => (x, j, scope))
+  | _ => []
+partial def scopedBoundsB (lcs : List LoopContract) (scope : List Expr) :
+    List Stmt → List (String × Expr × List Expr)
+  | [] => []
+  | s :: rest =>
+      scopedBoundsS lcs scope s ++ scopedBoundsB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
+end
+
+/-- Call-site leaf: the calls in a statement's OWN expression positions (the
+    walker owns recursion into branches, loop bodies, and for-loop init/step, so
+    `.ifElse`/`.while_`/`.forLoop` contribute only their condition's calls). -/
+def callLeaf (scope : List Expr) : Stmt → List (String × List Expr × List Expr)
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
+      (collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
+  | .return_ _ (some v) => (collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
+  | .ifElse _ c _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope)
+  | .while_ _ c _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope)
+  | .forLoop _ _ c _ _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope)
+  | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
+      (collectCallsE o ++ collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
+  | .arrayIndexAssign _ a i v =>
+      (collectCallsE a ++ collectCallsE i ++ collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
+  | _ => []
+
+/-- Calls paired with the hypotheses in scope at the call (Phase 3 #4 — migrated
+    onto the unified `scopedWalk`). The collector threads the FULL fact set:
+    enclosing `if`-guards (then assumes `c`, else assumes `¬c`), early-return
+    fall-through (`¬c` after `if c { …return… }`), loop invariants/guards, and one
+    shared stale-hypothesis rule. This is strictly more (sound) context than the
+    old call walker threaded, so a call precondition can only move `unproven →
+    proved`, never the reverse; it also closes the old gap of skipping calls
+    inside `borrow … in { }` bodies. -/
+def scopedCallsB (lcs : List LoopContract) (scope : List Expr) (body : List Stmt) :
+    List (String × List Expr × List Expr) :=
+  scopedWalkB callLeaf lcs scope body
 
 /-- `assert`/`assume` leaf: the only own-obligation statements are `assert`/
     `assume` themselves; everything else is pure recursion the walker owns. -/

@@ -188,6 +188,9 @@ jobs:
       - name: Unified scoped-collector gate (Phase 3 #3 adversarial)
         run: bash scripts/tests/check_scoped_collector.sh
 
+      - name: Call-site precondition migration gate (Phase 3 #4 parity+improvement)
+        run: bash scripts/tests/check_call_site_migration.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

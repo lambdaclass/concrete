@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Unified scoped collector gate (ROADMAP Phase 3 #3 — adversarial regression).
 #
-# Phase 3 routes every obligation family through ONE scoped context collector
-# (`scopedWalk` in Concrete/Report.lean). This gate is the adversarial guard the
-# project requires for every Phase-3 pipeline change: it pins the path-fact
-# threading on a fixture that exercises EACH mechanism the collector must get
-# right, AND the negative controls that must NOT be mis-proved.
+# Phase 3 introduces ONE scoped context collector (`scopedWalk` in
+# Concrete/Report.lean). Obligation families migrate onto it one by one; asserts
+# are the first migrated family. This gate is the adversarial guard the project
+# requires for every Phase-3 pipeline change: it pins the path-fact threading on
+# a fixture that exercises EACH mechanism the collector must get right, AND the
+# negative controls that must NOT be mis-proved.
 #
 # The migration to the unified engine was verified byte-for-byte against the
 # pre-refactor binary (old-vs-new assert VC diff, zero drift). This gate freezes
