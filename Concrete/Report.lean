@@ -4303,16 +4303,104 @@ def collectVCs (modules : List Module) (locMap : FnLocMap)
     is the ONLY way a VC reaches a `proved` status from a decision procedure, and
     the class is `proved_by_kernel_decision` — kept distinct from any future
     `proved_by_smt`/`solver_trusted`. -/
-def dischargeVCs (vcs : List VC) (omegaProved bvProved : List String) : List VC :=
+/-! ### Backend discharge adapters (Phase 3 #13)
+
+Every backend that can change a VC's status is expressed as ONE adapter type with
+a DECLARED set of evidence classes it may produce. `DischargeAdapter.fold` applies
+a backend's results only to VCs in the adapter's precondition status AND only when
+the resulting class is in the adapter's `allowed` set — so a backend can NEVER emit
+a class it does not own (the evidence-class firewall is structural, not a
+convention). omega/bv_decide own the kernel classes, external SMT owns only the
+solver classes, Lean-replay owns only `proved_by_lean_replay`. -/
+
+structure DischargeAdapter where
+  engine     : String              -- the engine string stamped on a touched VC
+  allowed    : List String         -- the ONLY statuses this backend may assign
+  actsOn     : String → Bool       -- precondition: which CURRENT status it may act on
+  finalize   : String → String → String  -- (vcKind, rawResultClass) → final status
+  setsSolver : Bool := false       -- whether to stamp the solver-identity field
+
+/-- Apply a backend's `(id, rawClass, model)` results through the adapter
+    firewall. A result is applied to VC `v` only when `v.id` matches, `actsOn
+    v.status` holds, and the finalized class is in `allowed`; otherwise `v` is
+    left exactly as is. This is the single choke point through which any
+    status-changing backend must pass. -/
+def DischargeAdapter.fold (a : DischargeAdapter) (solverId : String)
+    (vcs : List VC) (results : List (String × String × List (String × String))) : List VC :=
   vcs.map fun v =>
-    if v.status != "planned" then v
-    else if omegaProved.contains v.id then
-      if v.kind == "loop_invariant_preservation"
-      then { v with status := "arithmetic_proved", engine := "omega" }
-      else { v with status := "proved_by_kernel_decision", engine := "omega" }
-    else if bvProved.contains v.id then
-      { v with status := "proved_by_kernel_decision", engine := "bv_decide" }
-    else { v with status := "unproven" }
+    match results.find? (·.1 == v.id) with
+    | none => v
+    | some (_, raw, model) =>
+      let cls := a.finalize v.kind raw
+      if a.actsOn v.status && a.allowed.contains cls then
+        { v with status := cls, engine := a.engine,
+                 counterexample := if cls == "counterexample" then model else v.counterexample,
+                 solver := if a.setsSolver then solverId else v.solver }
+      else v
+
+/-- omega: a kernel decision procedure. Owns `proved_by_kernel_decision`, plus
+    `arithmetic_proved` for loop-invariant preservation (where omega closes only
+    the arithmetic half). Acts only on `planned` VCs. -/
+def omegaAdapter : DischargeAdapter :=
+  { engine := "omega", allowed := ["proved_by_kernel_decision", "arithmetic_proved"],
+    actsOn := (· == "planned"),
+    finalize := fun kind _ =>
+      if kind == "loop_invariant_preservation" then "arithmetic_proved"
+      else "proved_by_kernel_decision" }
+
+/-- bv_decide: a kernel bit-vector decision procedure. Owns only
+    `proved_by_kernel_decision`. Acts only on `planned` VCs. -/
+def bvAdapter : DischargeAdapter :=
+  { engine := "bv_decide", allowed := ["proved_by_kernel_decision"],
+    actsOn := (· == "planned"), finalize := fun _ _ => "proved_by_kernel_decision" }
+
+/-- External SMT: opt-in, untrusted relative to the kernel. Owns ONLY the solver
+    classes — it can never produce a kernel/Lean class. Acts only on VCs the
+    kernel tiers left `unproven`, and stamps the solver identity. -/
+def smtAdapter : DischargeAdapter :=
+  { engine := "smt:z3",
+    allowed := ["solver_trusted", "counterexample", "unknown", "timeout", "solver_error"],
+    actsOn := (· == "unproven"), finalize := fun _ raw => raw, setsSolver := true }
+
+/-- Lean replay: an independent kernel re-check of a solver_trusted VC. Owns only
+    `proved_by_lean_replay`, and acts only on `solver_trusted` VCs. -/
+def replayAdapter : DischargeAdapter :=
+  { engine := "lean:omega", allowed := ["proved_by_lean_replay"],
+    actsOn := (· == "solver_trusted"), finalize := fun _ _ => "proved_by_lean_replay" }
+
+/-! ### The evidence-class firewall, proved at compile time (Phase 3 #13)
+
+These `example`s are kernel-checked proofs that no adapter can emit a class it
+does not own — the firewall holds by construction, independent of any caller. -/
+
+private def fwVC (st : String) : VC :=
+  { id := "f#x", kind := "no_overflow", fn := "f", file := "", line := 0,
+    hypotheses := [], conclusion := "c", origin := "", dependencies := [],
+    arithProfile := "nonlinear", dischargeMode := "smt", status := st, engine := "" }
+
+-- external SMT may NOT emit a kernel class onto an unproven VC: rejected.
+example : (smtAdapter.fold "z3" [fwVC "unproven"]
+    [("f#x", "proved_by_kernel_decision", [])]).map (·.status) = ["unproven"] := rfl
+-- external SMT may emit its OWN class.
+example : (smtAdapter.fold "z3" [fwVC "unproven"]
+    [("f#x", "solver_trusted", [])]).map (·.status) = ["solver_trusted"] := rfl
+-- external SMT may NOT overwrite a kernel-proved VC (wrong precondition status).
+example : (smtAdapter.fold "z3" [fwVC "proved_by_kernel_decision"]
+    [("f#x", "counterexample", [])]).map (·.status) = ["proved_by_kernel_decision"] := rfl
+-- omega cannot be coerced into a solver class: it always finalizes to its own.
+example : (omegaAdapter.fold "" [fwVC "planned"]
+    [("f#x", "solver_trusted", [])]).map (·.status) = ["proved_by_kernel_decision"] := rfl
+-- replay acts ONLY on solver_trusted: a planned VC is untouched.
+example : (replayAdapter.fold "" [fwVC "planned"]
+    [("f#x", "x", [])]).map (·.status) = ["planned"] := rfl
+
+def dischargeVCs (vcs : List VC) (omegaProved bvProved : List String) : List VC :=
+  -- omega then bv_decide through the adapter firewall; whatever stays `planned`
+  -- afterwards was discharged by no kernel tier → `unproven`.
+  let idResults := fun (ids : List String) => ids.map (fun k => (k, "proved", ([] : List (String × String))))
+  let afterOmega := omegaAdapter.fold "" vcs (idResults omegaProved)
+  let afterBv := bvAdapter.fold "" afterOmega (idResults bvProved)
+  afterBv.map fun v => if v.status == "planned" then { v with status := "unproven" } else v
 
 /-- Mark the SMT-eligible VCs as routed to the external solver: `arith_profile`
     becomes `nonlinear`, `expected_discharge` becomes `smt`, and the determinism /
@@ -4337,10 +4425,7 @@ def markSmtEligible (vcs : List VC) (smtGoals : List (String × String))
     policy. Applied only to VCs currently `solver_trusted`; everything else is left
     exactly as is, so the class boundary stays crisp. -/
 def foldReplayResults (vcs : List VC) (replayed : List String) : List VC :=
-  vcs.map fun v =>
-    if v.status == "solver_trusted" && replayed.contains v.id
-    then { v with status := "proved_by_lean_replay", engine := "lean:omega" }
-    else v
+  replayAdapter.fold "" vcs (replayed.map (fun k => (k, "replayed", [])))
 
 /-- Fold external-solver results into the VC schedule. A result class
     (`solver_trusted` / `counterexample` / `unknown` / `timeout` / `solver_error`)
@@ -4351,13 +4436,7 @@ def foldReplayResults (vcs : List VC) (replayed : List String) : List VC :=
     records the exact solver identity+version that produced the verdict. -/
 def foldSmtResults (vcs : List VC) (results : List (String × String × List (String × String)))
     (solverId : String) : List VC :=
-  vcs.map fun v =>
-    match results.find? (·.1 == v.id) with
-    | some (_, cls, model) =>
-      if v.status != "unproven" then v else
-        let cex := if cls == "counterexample" then model else []
-        { v with status := cls, engine := "smt:z3", counterexample := cex, solver := solverId }
-    | none => v
+  smtAdapter.fold solverId vcs results
 
 /-- Human-readable VC schedule (post-discharge), grouped by originating function.
     `vcs` is the output of `collectVCs` after `dischargeVCs` has folded in results. -/
