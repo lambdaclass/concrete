@@ -38,10 +38,17 @@ shipped core now includes:
   dividend and positive-literal divisor. `range_block_count` is now a real
   `proved_by_kernel_decision (omega)` example, while negative-division cases
   remain unlowered rather than mis-proved.
+- Branch/path facts now feed `assert` VCs. `scopedAssertsS` /
+  `scopedAssertsB` thread branch guards, negated fall-through facts, and loop
+  invariants into assertion obligations, using the same stale-hypothesis
+  discipline as the call-site and runtime-safety walkers. The
+  `path_feasibility` teaching example now shows a clamp safety assertion proved
+  by `omega` with no SMT query, while the `over_claim` negative remains
+  unproven instead of being mis-proved.
 
-Remaining active Phase 2 work is now only the closure work: branch-conditioned
-assert VCs, audit/release integration, SMT soundness docs, validation artifact,
-and optional end-of-phase examples.
+Remaining active Phase 2 work is now only the closure work: audit/release
+integration, SMT soundness docs, validation artifact, and optional
+end-of-phase examples.
 
 ### Phase 1 source contracts completed (2026-06-06)
 

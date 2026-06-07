@@ -198,41 +198,29 @@ replacing Lean-checked theorem claims.
 
 Design reference: [docs/CONTRACTS_AND_VCS.md](docs/CONTRACTS_AND_VCS.md).
 
-Done when: contracts, bounds checks, arithmetic side conditions, and simple loop
-invariants generate machine-readable VCs; a solver can discharge the easy ones;
-counterexamples are reported clearly; and audit output distinguishes Lean,
-SMT, tests, enforcement, assumptions, and trusted solver claims.
+Done when:
+- contracts, bounds checks, arithmetic side conditions, and simple loop
+  invariants generate machine-readable VCs;
+- kernel-owned facts stay on `omega` / `bv_decide`;
+- external SMT is opt-in, reproducible, policy-gated, and never confused with
+  kernel evidence;
+- counterexamples are reported in source terms;
+- VC results appear in audit/release bundles beside assumptions, runtime
+  obligations, proof status, and proof coverage;
+- the Phase 2 umbrella gate covers kernel evidence, solver-trusted evidence,
+  counterexamples, unsupported/unproven cases, and no-SMT default behavior.
 
-1. **[done]** Thread enclosing branch conditions into `assert` VCs. Call-site,
-    array-bounds, and div/mod VCs already thread their lexical scope; `assert` VCs
-    folded only `#[requires]`, so an assert whose truth follows from the negated
-    guards (a clamp / path-feasibility shape) was reported `unproven`. Added
-    `Report.scopedAssertsS`/`scopedAssertsB` (mirroring `scopedCallsB`/
-    `scopedBoundsB`, reusing `dropStaleHyps`/`loopHypsAt`) threading the guard into
-    the then-branch, its negation (`Report.negateGuard`, flipping comparisons /
-    De Morgan — stays in the lowerable fragment) into the else-branch, and `¬c`
-    into the fall-through of an early-return `if c { …return… }` (via
-    `blockTerminates`); loop invariants thread into loop bodies. `assertGoals` now
-    folds `#[requires]` + the scope and keeps the same `#aa<i>` keys (same
-    traversal order as `collectAssertAssumeS`). `examples/smt/teaching/path_feasibility.con`
-    is now a real `kernel_preferred` example: `clamp`'s safety assert is
-    `proved_by_kernel_decision (omega)` with NO SMT query; `over_claim` (a claim the
-    path facts don't imply) is the negative control — stays `unproven`. Sound (more
-    hypotheses only let omega prove more) and soundness-gated: stale hyps dropped on
-    reassignment, un-negatable guards dropped. Gate `check_smt_examples.sh`;
-    assert-obligation negatives unchanged (`assert(0>1)` VIOLATION, unsupported
-    asserts unproven); contract-negatives 33/0, fast suite 1544/0.
-2. Update audit/release bundles so VC results appear beside proof registry,
+1. Update audit/release bundles so VC results appear beside proof registry,
     assumptions, runtime obligations, and proof coverage classification.
-3. Add soundness documentation for the SMT path: trusted solver binary,
+2. Add soundness documentation for the SMT path: trusted solver binary,
     encoding assumptions, unsupported theories, replayed fragments, and how a
     solver bug affects each claim class.
-4. Add the Phase 2 validation artifact: a VC/discharge project that runs the
+3. Add the Phase 2 validation artifact: a VC/discharge project that runs the
     compact VC suite plus the external-SMT suite when enabled, checks every
     solver/kernel evidence class, pins counterexample output, records solver
     name/version/encoding hash, and proves ordinary linear/bv obligations stay
     on `omega`/`bv_decide` rather than drifting into external SMT.
-5. Add a small set of interesting end-of-Phase-2 VC/SMT examples. These are
+4. Add a small set of interesting end-of-Phase-2 VC/SMT examples. These are
     not a second flagship phase and not a broad workload ladder; each example
     must force one named VC/SMT surface and carry an oracle or report gate. Good
     candidates:
