@@ -42,6 +42,16 @@ printf '%s' "$("$COMPILER" "$RBC" --report vcs 2>/dev/null)" | grep -A2 "nblocks
 printf '%s' "$("$COMPILER" "$RBC" --report vcs 2>/dev/null)" | awk '/signed_div#aa0\]/{f=1} f{print} f&&/^$/{exit}' | grep -qF "proved_by_kernel_decision" \
   && no "signed division (negative dividend) was mis-proved — UNSOUND" || ok "signed division (possibly negative) is NOT mis-proved (sound gate)"
 
+echo "=== path_feasibility: branch facts are a KERNEL fact (omega), not SMT ==="
+PF="examples/smt/teaching/path_feasibility.con"
+printf '%s' "$("$COMPILER" "$PF" --report vcs --emit-smt 2>/dev/null)" | grep -qiF "no SMT-eligible" \
+  && ok "clamp guards → no SMT query" || no "path_feasibility produced an SMT query"
+printf '%s' "$("$COMPILER" "$PF" --report vcs 2>/dev/null)" | awk '/clamp.clamp#aa0/{f=1} f{print} f&&/^$/{exit}' | grep -qF "proved_by_kernel_decision (omega)" \
+  && ok "clamp safety assert → proved_by_kernel_decision (omega) via threaded path conditions" || no "clamp assert not omega-proved"
+# negative: a claim the path conditions don't establish stays unproven (not mis-proved).
+printf '%s' "$("$COMPILER" "$PF" --report vcs 2>/dev/null)" | awk '/over_claim#aa0/{f=1} f{print} f&&/^$/{exit}' | grep -qF "proved_by_kernel_decision" \
+  && no "over_claim (x==50) was mis-proved from weaker path facts — UNSOUND" || ok "over_claim (x==50) stays unproven (path facts don't imply it)"
+
 echo "=== unsupported_theory: out-of-fragment VC is VISIBLE (unproven), no query ==="
 printf '%s' "$("$COMPILER" "$UN" --report vcs --emit-smt 2>/dev/null)" | grep -qiF "no SMT-eligible" \
   && ok "nonlinear array-bounds index → no SMT query" || no "out-of-fragment VC produced an SMT query"

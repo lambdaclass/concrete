@@ -1059,32 +1059,36 @@ partial def collectAssertAssumeS : Stmt → List (Bool × Expr)
   | .borrowIn _ _ _ _ _ b => b.flatMap collectAssertAssumeS
   | _ => []
 
-/-- Omega goals for `assert(e)` obligations: `∀ vars, (e)`. Discharged by the
-    same omega backend as the VC/vacuity goals; a success means the assert holds.
-    `assume` produces no goal (it is trusted, not proved). Keyed `<fq>#aa<i>` by
-    position in the combined assert/assume stream, matching `renderAssertAssume`. -/
-def assertGoals (modules : List Module) : List (String × String) := Id.run do
-  let mut goals : List (String × String) := []
-  for (pfx, f) in modules.flatMap allFunctions do
-    let fq := pfx ++ f.name
-    -- fold the function's #[requires] in as hypotheses (the lowerable subset —
-    -- omitting any is sound: fewer hypotheses can only make omega prove LESS).
-    let reqProps := f.requires.filterMap toLeanProp
-    let reqVars := f.requires.flatMap collectIdents
-    -- variables the #[requires] prove non-negative — gates sound division lowering.
-    let nn := nonNegFromHyps f.requires
-    let mut i := 0
-    for (isAssume, cond) in f.body.flatMap collectAssertAssumeS do
-      if !isAssume then
-        match toLeanPropSound nn cond with
-        | some p =>
-          let vars := (collectIdents cond ++ reqVars).eraseDups
-          let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
-          let hyp := if reqProps.isEmpty then "" else s!"({" ∧ ".intercalate (reqProps.map (fun q => s!"({q})"))}) → "
-          goals := goals ++ [(s!"{fq}#aa{i}", s!"{binder}{hyp}({p})")]
-        | none => pure ()
-      i := i + 1
-  return goals
+/-- Negate a guard, staying inside the lowerable fragment by flipping the
+    comparison (and De Morgan over ∧/∨) rather than introducing `¬`. `none` when
+    the guard isn't a (combination of) comparisons — then it's simply dropped from
+    scope, which is sound (fewer hypotheses). Lets the fall-through of `if c { … }`
+    carry `¬c`. -/
+partial def negateGuard : Expr → Option Expr
+  | .paren _ e => negateGuard e
+  | .unaryOp _ .not_ e => some e
+  | .binOp sp op l r =>
+    match op with
+    | .lt  => some (.binOp sp .geq l r) | .leq => some (.binOp sp .gt  l r)
+    | .gt  => some (.binOp sp .leq l r) | .geq => some (.binOp sp .lt  l r)
+    | .eq  => some (.binOp sp .neq l r) | .neq => some (.binOp sp .eq  l r)
+    | .and_ => do let nl ← negateGuard l; let nr ← negateGuard r; some (.binOp sp .or_  nl nr)
+    | .or_  => do let nl ← negateGuard l; let nr ← negateGuard r; some (.binOp sp .and_ nl nr)
+    | _ => none
+  | _ => none
+
+mutual
+/-- A statement transfers control out of the enclosing block on every path
+    (so the statements after it run only when an earlier guard was false). -/
+partial def stmtTerminates : Stmt → Bool
+  | .return_ _ _ | .break_ _ _ _ | .continue_ _ _ => true
+  | .ifElse _ _ t (some el) => blockTerminates t && blockTerminates el
+  | _ => false
+partial def blockTerminates : List Stmt → Bool
+  | [] => false
+  | [s] => stmtTerminates s
+  | _ :: rest => blockTerminates rest
+end
 
 /-- Render the `assert`/`assume` section: each `assert` is an obligation
     (proved_by_kernel_decision when omega closed its key, a VIOLATION when it
@@ -1389,6 +1393,65 @@ partial def scopedCallsB (lcs : List LoopContract) (scope : List Expr) :
   | s :: rest =>
       scopedCallsS lcs scope s ++ scopedCallsB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
 end
+
+mutual
+/-- `assert`/`assume` with the path conditions in scope at each one: enclosing
+    `if`-guards (the guard on the then-branch, its negation on the else-branch),
+    loop invariants in the body, and `¬c` for the fall-through of an early-return
+    `if c { …return… }`. Mirrors `collectAssertAssumeS`'s traversal ORDER exactly,
+    so the `i`-th item keeps the same `#aa<i>` key the renderer uses; it only adds
+    the scope. Stale hypotheses are dropped when a variable is reassigned. -/
+partial def scopedAssertsS (lcs : List LoopContract) (scope : List Expr) :
+    Stmt → List (Bool × Expr × List Expr)
+  | .assert_ _ c => [(false, c, scope)]
+  | .assume_ _ c => [(true, c, scope)]
+  | .ifElse _ c t el =>
+      scopedAssertsB lcs (scope ++ [c]) t
+        ++ scopedAssertsB lcs (scope ++ (negateGuard c).toList) (el.getD [])
+  | .while_ sp _ b _ => scopedAssertsB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .forLoop sp init _ step b _ =>
+      ((init.map (scopedAssertsS lcs scope)).getD [])
+        ++ ((step.map (scopedAssertsS lcs scope)).getD [])
+        ++ scopedAssertsB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .borrowIn _ _ _ _ _ b => scopedAssertsB lcs scope b
+  | _ => []
+partial def scopedAssertsB (lcs : List LoopContract) (scope : List Expr) :
+    List Stmt → List (Bool × Expr × List Expr)
+  | [] => []
+  | s :: rest =>
+      let restScope := match s with
+        | .ifElse _ c t none => if blockTerminates t then scope ++ (negateGuard c).toList
+                                else dropStaleHyps scope (assignedScalarsS s)
+        | _ => dropStaleHyps scope (assignedScalarsS s)
+      scopedAssertsS lcs scope s ++ scopedAssertsB lcs restScope rest
+end
+
+/-- Omega goals for `assert(e)` obligations: `∀ vars, (path conditions) → (e)`.
+    The hypotheses are the function's `#[requires]` PLUS the path conditions in
+    scope at the assert (if-guards, negated guards, loop invariants) — threaded
+    like the call-site/bounds/div VCs. Discharged by the same omega backend; a
+    success means the assert holds. `assume` produces no goal (trusted, not
+    proved). Keyed `<fq>#aa<i>` by position in the assert/assume stream, matching
+    `renderAssertAssume`. -/
+def assertGoals (modules : List Module) : List (String × String) := Id.run do
+  let mut goals : List (String × String) := []
+  for (pfx, f) in modules.flatMap allFunctions do
+    let fq := pfx ++ f.name
+    let mut i := 0
+    for (isAssume, cond, scope) in scopedAssertsB f.loopContracts [] f.body do
+      if !isAssume then
+        let hyps := f.requires ++ scope
+        let nn := nonNegFromHyps hyps
+        match toLeanPropSound nn cond with
+        | some p =>
+          let hypProps := hyps.filterMap (toLeanPropSound nn)
+          let vars := (collectIdents cond ++ hyps.flatMap collectIdents).eraseDups
+          let binder := if vars.isEmpty then "" else s!"∀ ({" ".intercalate vars} : Int), "
+          let hyp := if hypProps.isEmpty then "" else s!"({" ∧ ".intercalate (hypProps.map (fun q => s!"({q})"))}) → "
+          goals := goals ++ [(s!"{fq}#aa{i}", s!"{binder}{hyp}({p})")]
+        | none => pure ()
+      i := i + 1
+  return goals
 
 /-- Build the ordered list of call-site obligations across all callers. The fast
     constant folder classifies the literal/arithmetic cases; an obligation that

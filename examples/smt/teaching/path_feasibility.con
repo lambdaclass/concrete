@@ -1,0 +1,26 @@
+// TEACHING — branch/path facts are KERNEL facts, not SMT.
+//
+// A clamp's safety follows from its guards. Concrete threads the enclosing branch
+// conditions into the assert VC (the then-branch carries the guard, the
+// fall-through carries its negation), so omega owns it: `--report vcs` shows
+// proved_by_kernel_decision (omega), and `--emit-smt` produces NO query. SMT over
+// path conditions is not needed for linear guards.
+mod clamp {
+    // After the two early-return guards, the fall-through knows ¬(x<0) ∧ ¬(x>100),
+    // i.e. 0 ≤ x ≤ 100 — so the safety assert is omega-proved.
+    fn clamp(x: i32) -> i32 {
+        if x < 0 { return 0; }
+        if x > 100 { return 100; }
+        assert(0 <= x && x <= 100);
+        return x;
+    }
+
+    // NEGATIVE control: the path conditions give 0 ≤ x ≤ 100, which does NOT imply
+    // x == 50 — so this assert stays `unproven`, never mis-proved.
+    fn over_claim(x: i32) -> i32 {
+        if x < 0 { return 0; }
+        if x > 100 { return 100; }
+        assert(x == 50);
+        return x;
+    }
+}
