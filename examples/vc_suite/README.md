@@ -14,6 +14,12 @@ external-solver surface is the signed nonlinear product.
 | 8 | `rate_limiter` | clamp counter via branch guards | omega (threaded path conditions, #22); weakened guard → `unproven` |
 | 9 | `ring_buffer_indices` | wraparound `i % 16 ∈ [0,16)` | omega (sound modulo lowering, #21) — **not** SMT |
 
+`fixed_point_filter` additionally carries a **differential oracle**
+(`fixed_point_filter_oracle/`): it runs `dsp.scale` over 50 seeded sample/coeff
+vectors and compares the compiled output to a Python reference (`tested_by_oracle`
+evidence — runtime correctness, distinct from the VC proof surface).
+`run_oracle.sh [seed]`; also run by `check_vc_examples.sh`.
+
 Each "bad" variant (`unchecked_end`, `weak_clamp`) stays a non-proof — never a
 misleading green. The only SMT-eligible obligation across all five is
 `fixed_point_filter::scale` (a signed `var * var` product); run it with `--smt`

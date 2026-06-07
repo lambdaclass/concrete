@@ -44,6 +44,13 @@ echo "=== #9 ring_buffer_indices: wraparound modulo = omega (#21) ==="
 proved  "$D/ring_buffer_indices.con" "wrap#aa0" "i % 16 ∈ [0,16) → omega"
 no_query "$D/ring_buffer_indices.con" "wraparound is kernel-owned → no SMT query"
 
+echo "=== #6 fixed_point_filter differential oracle (sample vectors) ==="
+if bash examples/vc_suite/fixed_point_filter_oracle/run_oracle.sh 0 >/dev/null 2>&1; then
+  ok "fixed_point_filter oracle agrees with the reference over 50 cases"
+else
+  no "fixed_point_filter oracle disagreed with the reference"
+fi
+
 echo ""
 echo "VC-EXAMPLES: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

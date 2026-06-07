@@ -101,7 +101,7 @@ fi
 # --- Full report set (every report kind that runs cleanly) ---
 for kind in caps unsafe layout interface alloc mono authority proof \
             eligibility proof-status obligations stack-depth fingerprints \
-            effects recursion consistency verify; do
+            effects recursion consistency verify contracts vcs audit; do
   out_file="$OUT/reports/$kind.txt"
   if "$COMPILER" "$SOURCE" --report "$kind" > "$out_file" 2>&1; then
     :
