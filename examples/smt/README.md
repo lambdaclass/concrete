@@ -1,5 +1,9 @@
 # External-SMT examples (Phase 2 #8/#9)
 
+> Soundness reference: [docs/SMT_SOUNDNESS.md](../../docs/SMT_SOUNDNESS.md) — the
+> trusted solver binary, encoding assumptions, unsupported theories, replayed
+> fragments, and the per-class blast radius of a solver bug.
+
 Concrete exhausts its **kernel-checked** discharge tiers first — constant fold →
 `omega` → Lean `bv_decide` — all in-toolchain with no growth of the trusted base.
 What genuinely remains outside them (nonlinear integer arithmetic) can be handed

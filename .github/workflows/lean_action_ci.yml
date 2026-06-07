@@ -173,6 +173,12 @@ jobs:
       - name: External-SMT teaching group gate (Phase 2 when-useful/when-refused)
         run: bash scripts/tests/check_smt_examples.sh
 
+      - name: Red-team VC/SMT gate (Phase 2 adversarial)
+        run: bash scripts/tests/check_smt_redteam.sh
+
+      - name: Phase 2 VC/discharge validation artifact (umbrella)
+        run: bash scripts/tests/check_phase2_vc.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

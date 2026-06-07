@@ -1,0 +1,38 @@
+// RED TEAM — try to break the VC/SMT pipeline. Every adversarial input must stay
+// a non-proof or an honest diagnostic, never a misleading green.
+// Driven by check_smt_redteam.sh.
+mod rt {
+    // (1) reassigned guard: the guard `x < 16` is STALE after `x = 100`, so the
+    // assert must NOT be proved (the stale hypothesis is dropped on assignment).
+    fn reassigned_guard(x: i32) -> i32 {
+        let mut y: i32 = x;
+        if y < 16 {
+            y = 100;
+            assert(y < 16);   // y is 100 here — must stay unproven
+            return y;
+        }
+        return 0;
+    }
+
+    // (2) edge/large literal: a huge i32 bound. Must not crash; the assert
+    // follows from #[requires] → omega-proved.
+    #[requires(0 <= x && x <= 2147483647)]
+    fn edge_bounds(x: i32) -> i32 {
+        assert(x <= 2147483647);   // follows from #[requires] → omega-proved
+        return x;
+    }
+
+    // (3) non-literal divisor: x / d with d a variable — outside the sound-division
+    // gate (divisor not a positive literal), so NOT lowered, NOT mis-proved.
+    #[requires(0 <= x && x <= 100 && 1 <= d && d <= 10)]
+    fn var_divisor(x: i32, d: i32) -> i32 {
+        assert(x / d <= 100);     // must stay unproven (no sound lowering)
+        return x / d;
+    }
+
+    // (4) genuinely nonlinear product — the only SMT-eligible obligation here,
+    // used to probe a fake/garbage solver via --smt.
+    #[overflow_checked]
+    #[requires(-30000 <= a && a <= 30000 && -60000 <= b && b <= 60000)]
+    fn product(a: i32, b: i32) -> i32 { return a * b; }
+}
