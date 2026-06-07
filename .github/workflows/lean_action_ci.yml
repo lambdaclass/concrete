@@ -182,6 +182,9 @@ jobs:
       - name: Phase 2 VC/discharge validation artifact (umbrella)
         run: bash scripts/tests/check_phase2_vc.sh
 
+      - name: ObligationCore ledger gate (Phase 3 schema + vocabulary)
+        run: bash scripts/tests/check_obligation_core.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

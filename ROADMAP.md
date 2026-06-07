@@ -12,22 +12,25 @@ document as one queue:
 2. consolidate the compiler's obligation pipeline so contracts, VCs, runtime
    safety, asserts, SMT, policy, reports, and proof workspaces all read from
    one typed evidence ledger;
-3. finish remaining proof-authoring cleanup: colocate example Lean proofs with
+3. consolidate the ordinary compiler pipeline: project loading, pass
+   boundaries, typed IR, diagnostics, source maps, backend contracts, and
+   command plumbing;
+4. finish remaining proof-authoring cleanup: colocate example Lean proofs with
    their Concrete examples, keep generated proof workspaces source-linked and
    replayable, and leave the deeper `ProofCore` / spec-registry split deferred
    unless it becomes necessary;
-4. harden audit / proof-status / trust gates around source contracts,
+5. harden audit / proof-status / trust gates around source contracts,
    spec provenance, evidence classes, tool-version drift, and oracle evidence;
-5. close the release-blocking predictable/provable/runtime-safety gaps,
+6. close the release-blocking predictable/provable/runtime-safety gaps,
    starting with casts, loop-derived bounds, runtime-safety policy, and the
    remaining profile story after array bounds, div/mod-zero, and
    opt-in overflow obligations;
-6. only then broaden the ordinary language surface (patterns, bytes/text/path,
+7. only then broaden the ordinary language surface (patterns, bytes/text/path,
    collections, iteration, capability polymorphism, tests);
-7. build the standard library and core APIs before relying on real workloads,
+8. build the standard library and core APIs before relying on real workloads,
    packages, editor tooling, freestanding targets, or release examples;
-8. run external validation before the large ecosystem/release/editor build-out;
-9. keep later research items later unless a prior gate forces them.
+9. run external validation before the large ecosystem/release/editor build-out;
+10. keep later research items later unless a prior gate forces them.
 
 Completed work moves to [CHANGELOG.md](CHANGELOG.md). Deferred or conditional
 work moves later in the same linear queue. There are no parallel tracks. Inline
@@ -63,7 +66,7 @@ ProvableV1** unless a function opts into a future float profile. Unprofiled
 float arithmetic is excluded from proof eligibility and audit-loud; no proof or
 release claim may be made over float arithmetic until a profile exists.
 
-**Provable Float V1 (future, narrow profile — see Phase 7).** A function opts
+**Provable Float V1 (future, narrow profile — see Phase 8).** A function opts
 into a named profile, e.g. `#[float_profile(ieee754_binary64_nearest_even)]`:
 - IEEE-754 binary32/binary64; round-to-nearest-even only at first.
 - No fast-math; no reassociation; no FMA contraction unless the source names
@@ -83,7 +86,7 @@ into a named profile, e.g. `#[float_profile(ieee754_binary64_nearest_even)]`:
   fixed-order dot product, a tiny IIR/FIR or PID), proved exact-IEEE — not
   scientific computing. Real-number ε-bound refinement is a later layer.
 
-### Embedded hardware access: evidence classes (see Phase 14)
+### Embedded hardware access: evidence classes (see Phase 15)
 
 Name the evidence class before implementing freestanding/embedded targets:
 - **inline asm** — `trusted`, requires `with(Unsafe)`.
@@ -91,7 +94,7 @@ Name the evidence class before implementing freestanding/embedded targets:
   reads/writes are audit-visible effects, never silently elided.
 - **interrupt handlers** — a separate trusted/effectful boundary.
 
-### Native debug info (see Phase 13)
+### Native debug info (see Phase 14)
 
 Once Concrete emits real binaries, source-mapped DWARF / crash traces matter for
 auditability. Tooling/backend item, not first-release proof-critical.
@@ -111,13 +114,13 @@ Audit output must explain target selection:
 - enabled build profile,
 - and any `cfg` attributes if they are ever admitted.
 
-### Contract-VC stability tiers (dependency edge into Phase 9)
+### Contract-VC stability tiers (dependency edge into Phase 10)
 
-The risk this names: Phase 11 flagships are what exercise contracts, and they
-will keep hitting an un-frozen Phase 9 surface — so any VC/contract IR designed
+The risk this names: Phase 12 flagships are what exercise contracts, and they
+will keep hitting an un-frozen Phase 10 surface — so any VC/contract IR designed
 in Phases 1-2 against that surface gets reworked when collections and the
 iteration protocol land. The fix is **not** to reorder (that is circular: the
-flagships are what stress-test Phase 9) but to tag each contract/VC construct by
+flagships are what stress-test Phase 10) but to tag each contract/VC construct by
 stability tier and refuse to freeze syntax over the provisional tier. This is
 the same discipline as "let the proof teach the syntax" (Phase 1 preamble),
 made into an explicit dependency.
@@ -127,11 +130,11 @@ made into an explicit dependency.
   (HMAC, `ct_compare`, the loop VC). Contract/VC syntax here may be stabilized.
 - **Provisional** — any obligation quantifying over collections, iterators,
   strings/text, bytes, paths, or capability-polymorphic callees. These depend
-  on the **Phase 9 core slab** (modules/imports, minimal project model,
+  on the **Phase 10 core slab** (modules/imports, minimal project model,
   `concrete test`, core diagnostics, bytes/text/path, and collections). They
   also remain provisional over later iteration and capability-polymorphism
   work. Do not freeze contract syntax or VC shape for those constructs until
-  the relevant Phase 9 item has landed. Treat any such construct as "will be
+  the relevant Phase 10 item has landed. Treat any such construct as "will be
   reworked," and do not let a flagship bake an iterator/collection assumption
   into the VC shape.
 
@@ -160,35 +163,35 @@ instantiation.
   read-only-reference proof, mutable-reference proof with frame obligations, or
   enforced-only and outside `ProvableV1`.
 
-### External-validation gate (go / no-go before the back half of Phases 9-17)
+### External-validation gate (go / no-go before the back half of Phases 10-18)
 
-This is a **gate, not a note** — promoted out of Phase 15 because validation
+This is a **gate, not a note** — promoted out of Phase 16 because validation
 that sits downstream of the build-out it is meant to justify is no validation
 at all. The central bet of the whole project is "evidence-carrying source is
 worth the discipline." Today the only person who has found it worth the cost is
-the person who built it, yet Phases 9-17 (packages, editor, freestanding,
+the person who built it, yet Phases 10-18 (packages, editor, freestanding,
 release) are a large investment fully predicated on that bet. The research under
 `research/` and `thesis-validation/` tests the thesis but is currently orphaned
 from the execution plan; this gate wires it in.
 
-It cannot be "before any Phase 9" — there is a chicken-and-egg floor: an outside
+It cannot be "before any Phase 10" — there is a chicken-and-egg floor: an outside
 user needs *some* slab to write anything real. So the gate is:
 
-1. **The minimum slab is the Phase 9 core slab**: modules/imports, minimal
+1. **The minimum slab is the Phase 10 core slab**: modules/imports, minimal
    project model, `concrete test`, core diagnostics, bytes/text/path, and
    collections.
 2. **Build exactly that** — not the full back half.
 3. **Run the trial and treat the result as an explicit go / no-go on the rest
-   of Phases 9-17.**
+   of Phases 10-18.**
 
 The trial should be implemented as the first external-user workload in the
-Phase 11 real-workload ladder, after the Phase 9 core slab and Phase 10
+Phase 12 real-workload ladder, after the Phase 10 core slab and Phase 11
 stdlib/core-API slab exist, not as a separate validation artifact.
 
 **Pass criterion:** at least one person who is **not** the compiler author
 writes, proves, or contract-annotates a useful Concrete program and reports that
 the proof discipline (ProofKit + contracts + `concrete prove`) was worth the
-cost. Until this passes, the back half of Phases 9-17 is flagged **at-risk**,
+cost. Until this passes, the back half of Phases 10-18 is flagged **at-risk**,
 not green.
 
 ## Phase 2: Verification Conditions And SMT Assistance
@@ -261,7 +264,7 @@ Done when:
     broad workload ladder. Each forces one named VC/SMT surface and must show
     default no-SMT behavior, `--smt` behavior, provenance, replay status, policy
     effect, and at least one negative variant that stays a non-proof. If an
-    example needs Phase 9 language features or Phase 8 runtime obligations, ship
+    example needs Phase 10 language features or Phase 9 runtime obligations, ship
     it as a README stub naming the blocker rather than faking the result.
 
 ## Phase 3: ObligationCore Pipeline Consolidation
@@ -350,7 +353,100 @@ consume the same typed `ObligationCore` records and evidence classifications.
     source by checking contracts, VCs, proof status, audit, policy, JSON,
     workspace, replay, and release-bundle output for the same stable ids.
 
-## Phase 4: Proof Authoring And Automation
+## Phase 4: Compiler Pipeline And Typed IR
+
+Goal: make the ordinary compiler pipeline as explicit and maintainable as the
+proof/evidence pipeline: project loading, parsing, resolution, canonicalization,
+type checking, ownership, capabilities, lowering, diagnostics, source maps,
+interpreter, backend, and command plumbing should have clear boundaries and one
+source of truth for each fact.
+
+Design reference: [docs/COMPILER_PIPELINE.md](docs/COMPILER_PIPELINE.md).
+
+Done when: every user-facing command loads the same typed project context,
+the frontend produces resolved/canonical/typed IR with source spans and
+ownership / capability facts attached once, diagnostics share one schema,
+compiler facts have named dependencies for later incremental/LSP work,
+interpreter and compiled execution can be compared through one harness, and
+backend/target assumptions are explicit before Phase 10 language usability work
+depends on them.
+
+1. Define `ProjectContext`: source roots, modules, entry points, tests,
+   policies, assumptions, target profile, build profile, oracle manifests,
+   source maps, toolchain identity, and command mode. All commands must load
+   this once instead of growing command-specific project discovery.
+2. Split the frontend into named pass outputs: parsed AST, resolved AST,
+   canonical IR, typed surface IR, ownership-checked IR,
+   capability-checked IR, contract/ghost/assert metadata, lowered Core, and
+   backend IR. Each pass must state what facts it consumes and produces.
+3. Define a `ResolvedAST` representation with stable resolved names,
+   module-qualified references, proof/spec names, source spans, and import
+   provenance. Later passes should not redo textual name lookup.
+4. Add an explicit canonicalization pass between resolution and type checking.
+   It should remove surface-only syntax before the rest of the compiler sees
+   it: normalize patterns, desugar `if let`/`while let` once they exist,
+   normalize attributes, resolve field puns, make early-return and fall-through
+   edges explicit, and keep source-span provenance for diagnostics and reports.
+5. Define a multi-level IR policy: no pass may erase a fact until every
+   downstream consumer has either consumed it or copied it into a typed fact
+   table. Capabilities, source spans, ownership facts, failure points, and
+   target assumptions must not disappear during lowering.
+6. Define a `TypedIR` representation after type checking but before proof/
+   obligation lowering. It should carry expression types, lvalue/rvalue
+   classification, array/struct/enum shapes, control-flow form, and source
+   spans.
+7. Attach ownership and capability facts once, in the checked IR, rather than
+   rediscovering them in reports. Reports may render these facts; they should
+   not re-infer them from raw syntax.
+8. Define one diagnostic schema and renderer: diagnostic code, severity, source
+   span, message, reason, help/next action, related spans, command context, and
+   optional machine-readable payload. Parser, resolver, type, ownership,
+   capability, policy, runtime-obligation, and backend diagnostics must use it.
+9. Treat diagnostics as compiler data, not formatted strings. Passes should
+   emit structured diagnostics first; human text, JSON, LSP output, tests, and
+   release bundles should render the same diagnostic records.
+10. Preserve source maps through every lowering boundary: AST -> TypedIR,
+   TypedIR -> Core, Core -> backend IR, generated C/LLVM/native debug info,
+   runtime failures, audit facts, and proof/obligation artifacts.
+11. Normalize command plumbing for `build`, `run`, `test`, `audit`, `prove`,
+   `inspect`, `fmt`, `doc`, and `clean`: shared project loading, shared target/
+   policy/assumption loading, shared diagnostics, shared output conventions,
+   and shared exit-code taxonomy.
+12. Define the backend contract boundary: integer overflow profile, division
+   semantics, layout/ABI, panic/assert behavior, optimization assumptions,
+   target triple/data layout, libc/runtime assumptions, and what is trusted.
+13. Add an interpreter-vs-compiled differential harness for ordinary language
+    development. Every new executable language feature should be able to run
+    through `interpret result == compiled result` where deterministic and
+    target-independent.
+14. Add pass inspection commands for compiler developers and users:
+    `concrete inspect --ast`, `--resolved`, `--typed`, `--core`,
+    `--backend-ir`, with stable redaction of local paths and deterministic
+    ordering.
+15. Define a query/dependency model for compiler facts before implementing
+    broad caching. Name facts such as `parse(file)`, `resolve(module)`,
+    `typecheck(function)`, `capabilities(function)`, `typed_ir(function)`,
+    `core(function)`, `obligations(function)`, `audit_facts(function)`,
+    `codegen(function)`, and `release_bundle(project)`.
+16. Define incremental artifact dependencies: which source files/functions
+    affect which diagnostics, facts, obligations, proof checks, generated code,
+    inspect output, and release-bundle entries. Do not implement caching broadly
+    until the dependency model is named and validated.
+17. Document pass invariants and failure boundaries: what each pass guarantees,
+    which errors are recoverable for reporting, which errors stop compilation,
+    and which assumptions are trusted.
+18. Add a compiler-pipeline regression corpus: malformed modules, ambiguous
+    names, type errors, ownership errors, capability errors, source-map
+    preservation, interpreter/codegen mismatch, backend assumption reporting,
+    canonicalization edge cases, dependency invalidation, and deterministic
+    `inspect` output.
+19. Add the Phase 4 validation artifact: one project that exercises all shared
+    command plumbing, pass inspection, diagnostics-as-data, canonicalization,
+    source maps, backend assumptions, interpreter-vs-compiled comparison,
+    dependency facts, and release/audit fact agreement without relying on
+    proof-specific machinery.
+
+## Phase 5: Proof Authoring And Automation
 
 Goal: make flagship proofs a repeatable engineering workflow, not a collection
 of one-off `simp` scripts.
@@ -447,7 +543,7 @@ lemmas, and actionable failure diagnostics.
    model gets framing for free.
 20. Deferred architecture refactor: split the current `Concrete.Proof` layering
    so registered example specs can move without a cycle, but do not let this
-   block Phase 9 unless spec ownership or proof authoring starts depending on
+   block Phase 10 unless spec ownership or proof authoring starts depending on
    it. Target shape: `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation,
    `FnTable`, and source-independent semantics; `Concrete.SpecRegistry` owns
    the spec-drift table and imports whichever example spec modules it registers;
@@ -455,7 +551,7 @@ lemmas, and actionable failure diagnostics.
    Only after this split should registered example SPEC PExprs move from
    `Concrete.Proof.*Expr` into `Concrete.Examples.<Ex>.Proofs` or sibling
    `Specs` modules. Preserve the spec-drift tie throughout.
-21. Add the Phase 4 validation artifact: a proof-authoring project that
+21. Add the Phase 5 validation artifact: a proof-authoring project that
    exercises `--json`, `--show-obligation`, `--emit-lean`, `--emit-artifacts`,
    `--workspace`, `--check`, `--nearest-lemmas`, `--minimize`, and source-linked
    proof attachment across straight-line, array update, loop copy, fold,
@@ -463,7 +559,7 @@ lemmas, and actionable failure diagnostics.
    typecheck generated stubs, reject any `proof-registry.json`, and verify that
    failing Lean proofs map back to stable obligation ids.
 
-## Phase 5: Audit Commands And Review Artifacts
+## Phase 6: Audit Commands And Review Artifacts
 
 Goal: let a reviewer answer "what can this program do, what is proved, what is
 assumed, and what changed?" without reading compiler internals.
@@ -527,14 +623,14 @@ five graduated flagships and one package-scale example.
     evidence classes, spec-drift-tied proofs, named trust boundaries, and what
     Concrete deliberately avoids. The website should show the end goal and the
     current honest status, not catchy slogans or one-badge proof claims.
-18. Add the Phase 5 validation artifact: one package-scale audit bundle fixture
+18. Add the Phase 6 validation artifact: one package-scale audit bundle fixture
     with human and JSON output, semantic diff before/after a change, artifact
     viewer smoke test, oracle manifest, spec-provenance facts, redaction check,
     replay command, and a README showing how a reviewer answers authority,
     proof, trust, assumption, and runtime-obligation questions without reading
     compiler internals.
 
-## Phase 6: Proof Status And Trust Gates
+## Phase 7: Proof Status And Trust Gates
 
 Goal: make every green proof/evidence status precise, traceable, and hard to
 misread.
@@ -581,13 +677,13 @@ under a stronger badge.
 12. Add vacuity gates to proof status: `proved` summaries must be downgraded or
     blocked when the proof depends on an unsatisfiable precondition,
     contradictory assumptions, unreachable code path, or invariant `false`.
-13. Add the Phase 6 validation artifact: a trust-gate pressure project that
+13. Add the Phase 7 validation artifact: a trust-gate pressure project that
     includes transitive proof dependencies, stale dependency propagation,
     tool-version drift, assumption widening, spec-adequacy policy, vacuity
     downgrade, weaker-evidence monotonicity, and a release gate proving each
     status cannot be silently presented as stronger evidence.
 
-## Phase 7: Provable And Predictable Subsets
+## Phase 8: Provable And Predictable Subsets
 
 Goal: give users a named small subset they can rely on for serious
 proof/evidence work.
@@ -646,14 +742,14 @@ promises.
     a fixed-order `f32`/`f64` kernel such as clamp/normalize, tiny FIR/IIR, PID,
     or dot product. Prove exact IEEE behavior first; real-valued epsilon-bound
     refinement is a later layer.
-18. Add the Phase 7 validation artifact: a profile matrix project covering
+18. Add the Phase 8 validation artifact: a profile matrix project covering
     `PredictableV1`, `ProvableV1`, unprofiled-float exclusion, profiled-float
     admission, borrow/reference proof-class decisions, constant-time source
     shape, stack/runtime-failure assumptions, and negative examples for every
     exclusion. The gate must prove reports never call excluded code proof
     eligible.
 
-## Phase 8: Runtime Safety Obligations
+## Phase 9: Runtime Safety Obligations
 
 Goal: generate SPARK-like obligations for boring runtime failures instead of
 relying only on examples and prose.
@@ -697,13 +793,13 @@ zero, overflow profile, casts, and loop bounds with statuses
     waivers, never comments or hidden allowlists.
 15. Prove or validate obligation-generation soundness for the first obligation
     kinds through the compiler soundness bridge.
-16. Add the Phase 8 validation artifact: a runtime-safety corpus covering
+16. Add the Phase 9 validation artifact: a runtime-safety corpus covering
     bounds, div/mod-zero, overflow, casts, panic/abort/assert, byte/text/path
     boundaries, stack/recursion, and obligation suppression. Each case must show
     one of `proved`, `enforced`, `assumed`, `missing`, or `blocked`, include a
     negative variant, and run through policy gates plus human/JSON reports.
 
-## Phase 9: Language Usability And Daily Workflow
+## Phase 10: Language Usability And Daily Workflow
 
 Goal: make Concrete usable as a normal experimental language, independent of
 whether a user is writing proofs.
@@ -711,10 +807,10 @@ whether a user is writing proofs.
 Done when: a new user can format, build, run, test, diagnose, inspect, and
 debug small Concrete programs with predictable commands and useful errors.
 
-The first six items are the **Phase 9 core slab**. Build them before the
+The first six items are the **Phase 10 core slab**. Build them before the
 external-validation trial, medium real-workload examples, or any contract/VC
 syntax that depends on collections, bytes/text/path, or project layout. The
-rest of Phase 9 stays after that slab in the same linear queue.
+rest of Phase 10 stays after that slab in the same linear queue.
 
 1. Stabilize modules and imports before packages grow: module names, file
    layout, visibility, import resolution, cycle diagnostics, and generated
@@ -841,7 +937,7 @@ rest of Phase 9 stays after that slab in the same linear queue.
     generic once, or allow generic contracts with instance-level proof
     artifacts. Audit output must distinguish `proved_for_instance` from any
     future `proved_generic` class.
-24. Define the stdlib handoff contract for Phase 10. Phase 9 decides the
+24. Define the stdlib handoff contract for Phase 11. Phase 10 decides the
     language surfaces the stdlib depends on — modules/imports, project model,
     tests, diagnostics, bytes/text/path types, collections, iteration,
     capability polymorphism, build profiles, and CLI verbs — but the actual
@@ -892,14 +988,14 @@ rest of Phase 9 stays after that slab in the same linear queue.
 36. Add cross-platform build sanity for the supported host set: macOS and Linux
     first, with CI coverage, reproducible commands, and documented toolchain
     expectations.
-37. Add the Phase 9 validation project: a small C/Rust-style CLI using the core
+37. Add the Phase 10 validation project: a small C/Rust-style CLI using the core
     slab plus daily workflow (`Concrete.toml`, modules/imports,
     `concrete test`, bytes/text/path and collection decisions, diagnostics,
     formatting, docs, and trace/debug commands). CI must build, run, test,
     format-check, audit, and compare interpreter-vs-compiled behavior on macOS
     and Linux. It validates the language/tooling slab, not the full stdlib.
 
-## Phase 10: Standard Library And Core APIs
+## Phase 11: Standard Library And Core APIs
 
 Goal: build the small standard library people need before real workloads,
 packages, editor tooling, freestanding targets, and release work can be honest.
@@ -954,19 +1050,19 @@ class and authority/allocation story.
 15. Split hosted versus freestanding-ready stdlib modules at the API level:
     no-alloc/no-OS core modules, allocator-backed modules, hosted OS modules,
     and modules that are explicitly unavailable under freestanding profiles.
-    The freestanding target implementation still lands in Phase 14.
+    The freestanding target implementation still lands in Phase 15.
 16. Add stdlib docs and examples for C/Rust users: small recipes for bytes,
     text, paths, errors, files, vectors, maps, tests, and capability-scoped I/O.
 17. Add a stdlib compatibility/oracle corpus: reference-vector tests for
     parsing/formatting, byte/text/path conversions, collection behavior, and
     simple CLI I/O.
-18. Add the Phase 10 validation project: a small real stdlib client that uses
+18. Add the Phase 11 validation project: a small real stdlib client that uses
     `Result`/`Option`, `Bytes`/`Text`/`Path`, collections, files/console,
     formatting/parsing, tests, and oracle helpers. CI must build, run, test,
     audit authority/allocation/evidence classes, and compare
     interpreter-vs-compiled behavior.
 
-## Phase 11: Flagship Depth And Examples
+## Phase 12: Flagship Depth And Examples
 
 Goal: produce examples that outside systems engineers find impressive, not only
 internally coherent.
@@ -1019,14 +1115,14 @@ they force a named surface or public claim.
     builds real things that can be checked against references, not only tiny
     proof demos. Each workload must name the surface or public claim it forces;
     otherwise it does not belong in this phase. Do not jump straight to multiple
-    10k-line ports before the Phase 9 core slab, Phase 10 stdlib, and daily
+    10k-line ports before the Phase 10 core slab, Phase 11 stdlib, and daily
     workflow can support them; that would mostly test missing ergonomics.
     Sequence:
     - **Main compiler repo:** keep tiny proof patterns
       (`examples/proof_patterns/`), evidence-class examples, small real programs
       that gate the compiler, and showcase flagships here. These protect
       compiler/proof correctness and should stay close to the tests.
-    - **Medium in-repo real programs after the Phase 9 core slab and Phase 10
+    - **Medium in-repo real programs after the Phase 10 core slab and Phase 11
       stdlib:** 500-2,000 line examples, each chosen for a named pressure point:
       INI/TOML or tiny JSON parser (bytes/text/path, diagnostics, runtime
       obligations), bounded HTTP header parser (ignored-result diagnostics,
@@ -1054,7 +1150,7 @@ they force a named surface or public claim.
       driver, or protocol codec. Annotate forcing surfaces: glob/regex must
       stay bounded or explicitly outside `PredictableV1`; arena allocator demo
       waits for allocation-profile work that needs it; MMIO-mock driver waits
-      for the Phase 14 `with(Device)`/MMIO evidence decision or explicitly
+      for the Phase 15 `with(Device)`/MMIO evidence decision or explicitly
       pulls that decision forward.
     - **10k-line stress ports** only after daily workflow is stable enough that
       the port tests Concrete rather than fighting missing basics. Tier exits
@@ -1069,14 +1165,14 @@ they force a named surface or public claim.
     opportunistically when a roadmap task touches them. Improve examples only
     when they serve proof-link migration, `concrete prove` authoring,
     external validation, or a release-facing tutorial.
-17. Add the Phase 11 validation artifact: a showcase/workload dashboard that
+17. Add the Phase 12 validation artifact: a showcase/workload dashboard that
     proves every flagship and graduated workload has a check story, evidence
     bundle, oracle or reference when appropriate, interpreter-vs-compiled
     coverage, runtime-obligation audit, trust/assumption classification, and
     release-CI replay. The first external-user workload in this dashboard is
     the external-validation-gate trial.
 
-## Phase 12: Compiler Soundness Bridge
+## Phase 13: Compiler Soundness Bridge
 
 Goal: move the flagship-used `Core -> ProofCore` rules from "extracts to the
 expected ProofCore shape" toward source-semantics agreement and checked
@@ -1126,13 +1222,13 @@ machine-readable.
     theorem proves a specific generated instance (`proved_for_instance`) or a
     generic body (`proved_generic`), and it must prevent one instance proof from
     being presented as proof for every future instantiation.
-13. Add the Phase 12 validation artifact: a compiler-soundness dashboard with
+13. Add the Phase 13 validation artifact: a compiler-soundness dashboard with
     one witness program per shipped ProofCore construct, one status per
     R-rule, replay commands for proved/mechanically-validated facts, and
     regressions proving report facts (`proved`, `stale`, `blocked`, `missing`,
     `ineligible`, `trusted`) agree with compiler state.
 
-## Phase 13: Backend, Target, And Stdlib Contracts
+## Phase 14: Backend, Target, And Stdlib Contracts
 
 Goal: make backend/toolchain/stdlib assumptions explicit, and state exactly
 where source-level proof stops.
@@ -1157,7 +1253,7 @@ and incremental build contracts are explicit enough for release evidence.
    pointer-heavy examples.
 8. Add backend/codegen differential validation where executable oracles exist.
 9. Add compiler self-leak/resource soak harness for long-running workflows.
-10. Harden stdlib stability and evidence policy from Phase 10: which stdlib functions are
+10. Harden stdlib stability and evidence policy from Phase 11: which stdlib functions are
    trusted, proved, enforced, allocation-free, capability-free, or assumption
    carriers.
 11. Define stdlib contracts for allocators, I/O handles, directory/file/path
@@ -1170,12 +1266,12 @@ and incremental build contracts are explicit enough for release evidence.
     reports expose a concrete gap.
 14. Keep QBE/WASM/second backend deferred until evidence attachment,
     optimization policy, and backend trust boundaries are trustworthy.
-15. Add the Phase 13 validation artifact: a backend/std-lib contract project
+15. Add the Phase 14 validation artifact: a backend/std-lib contract project
     with ABI/layout C round trips, sanitizer runs, compiled-oracle
     differential tests, native debug/source-map smoke tests, clean-vs-incremental
     fact equivalence, and stdlib authority/allocation/evidence gates.
 
-## Phase 14: Freestanding And Embedded Target
+## Phase 15: Freestanding And Embedded Target
 
 Goal: make Concrete's hosted-vs-freestanding boundary explicit enough for
 embedded, kernel, and audit-critical targets without destabilizing the hosted
@@ -1220,13 +1316,13 @@ choices, and an audit report naming every remaining target/runtime assumption.
    backend/toolchain boundary.
 10. Keep WASM, QBE, and additional backends deferred until freestanding target
     profiles prove the current LLVM path is not enough.
-11. Add the Phase 14 validation artifact: one freestanding demo project plus an
+11. Add the Phase 15 validation artifact: one freestanding demo project plus an
     MMIO/device-profile mock audit bundle. The demo must build with no hosted
     APIs, name allocator/startup/linker assumptions, reject hidden libc or
     allocation, and report `with(Device)`/`with(Mmio)`/`with(Unsafe)` evidence
     classes without pretending hardware behavior is proved.
 
-## Phase 15: Public Release Bar
+## Phase 16: Public Release Bar
 
 Goal: make Concrete understandable and usable by someone who did not build the
 compiler.
@@ -1307,13 +1403,13 @@ audience):**
 14. Add release/install distribution matrix: host triples, checksums/signing,
     install paths, supported/deferred channels.
 15. Ship the first narrow public release only after the above are green.
-16. Add the Phase 15 validation artifact: a release-candidate bundle installed
+16. Add the Phase 16 validation artifact: a release-candidate bundle installed
     from scratch on supported hosts, containing the claim matrix, threat model,
     first-user workflow, public examples policy, replay commands, schemas,
     assumptions/trust reports, checksums/signing metadata, and a tutorial run by
     someone who did not build the compiler.
 
-## Phase 16: Packages And Dependency Evidence
+## Phase 17: Packages And Dependency Evidence
 
 Goal: let package users inspect proof, trust, capability, and assumption facts
 before adopting a dependency.
@@ -1337,12 +1433,12 @@ policies, provenance, and registry protocol.
     visible to dependents and release bundles.
 11. Add package provenance and publishing model.
 12. Add package registry server protocol and trust model.
-13. Add the Phase 16 validation artifact: a multi-package workspace project
+13. Add the Phase 17 validation artifact: a multi-package workspace project
     with dependency resolution, lockfile, package-aware tests, interface/body
     artifact split, dependency trust policy, assumption inheritance, authority
     budgets, provenance, and release-bundle evidence for every dependency.
 
-## Phase 17: Editor And Human Tooling
+## Phase 18: Editor And Human Tooling
 
 Goal: make evidence visible where developers work.
 
@@ -1362,13 +1458,13 @@ reports without inventing a second truth source.
 7. Add backwards-compatibility regression corpus once public users exist.
 8. Add language/versioning/deprecation policy across syntax, stdlib, proof/fact
    artifacts.
-9. Add the Phase 17 validation artifact: a scripted editor/LSP session or
+9. Add the Phase 18 validation artifact: a scripted editor/LSP session or
    golden transcript over one real project, proving hover, diagnostics,
    obligation navigation, proof/evidence facts, dependency audit UI, and
    refactor behavior match CLI facts rather than inventing a second truth
    source.
 
-## Phase 18: Concurrency And Research-Gated Extensions
+## Phase 19: Concurrency And Research-Gated Extensions
 
 Goal: keep speculative ideas gated until Concrete's proof/evidence foundation
 can contain them honestly.
@@ -1408,7 +1504,7 @@ forcing example, explicitly deferred, or rejected.
     abstract effect inference. Revisit only as a research note if explicit
     capabilities create a proven, repeated blocker in real programs after the
     stdlib and concurrency pressure tests exist.
-14. Add the Phase 18 validation artifact: one pressure-test sketch, expected
+14. Add the Phase 19 validation artifact: one pressure-test sketch, expected
     report, and decision record for every research-gated extension
     (concurrency, typestate, arena allocation, WCET, binary-format DSLs,
     hardware capability mapping, Miri-style interpreter, sized evaluator,
