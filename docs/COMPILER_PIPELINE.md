@@ -1,9 +1,18 @@
-# Compiler Pipeline And Typed IR
+# CompilerLedger Pipeline And Typed IR
 
 Concrete needs the ordinary compiler pipeline to be as explicit as the
 proof/evidence pipeline. The goal is not to add clever machinery. The goal is
 to stop later commands from rediscovering facts that an earlier pass already
 knows.
+
+The central object is `CompilerLedger` / `ProjectFacts`: the typed, non-proof
+fact store for the compiler. `ProjectContext` loads the project once.
+Compiler passes write facts and artifacts into the ledger. Reports, editor
+tooling, crash bundles, release bundles, cache keys, pass inspectors, and
+backend validation render the ledger instead of recomputing facts.
+
+`ObligationCore` remains the proof/evidence ledger. `CompilerLedger` links to
+it; it does not replace it.
 
 The target flow is:
 
@@ -19,6 +28,7 @@ ProjectContext
   -> Core
   -> obligations and audit facts
   -> interpreter / backend IR / codegen
+  -> CompilerLedger artifacts and facts
 ```
 
 Every command should travel through the same front door:
@@ -73,6 +83,39 @@ it.
 All commands should receive this context. A command may request additional
 derived facts, but it should not reload the project differently.
 
+## CompilerLedger
+
+`CompilerLedger` is the single typed fact store for ordinary compiler facts.
+It should contain:
+
+- names, modules, imports, and resolved identities
+- types, layouts, target constants, and backend assumptions
+- ownership, move/copy/drop, borrow, and capability facts
+- diagnostics and related spans
+- source maps and source-location privacy mode
+- pass artifacts and artifact dependencies
+- pass timings and performance counters
+- emitted files and replay commands
+- cache/dependency facts
+- links to `ObligationCore` ids and summaries
+
+The first API should be small and boring:
+
+```text
+recordArtifact
+recordDiagnostic
+recordFact
+recordDependency
+recordTiming
+recordSourceMap
+recordReplayCommand
+```
+
+The important invariant is that `build`, `test`, `audit`, `prove`, `inspect`,
+`fmt`, `doc`, and release-bundle capture all read from the same project facts.
+No command should construct a private fact store that can drift from the rest
+of the toolchain.
+
 ## Pass Outputs
 
 Each pass should have a named output and a short invariant.
@@ -90,6 +133,20 @@ BackendIR
 The important rule is that later passes consume typed facts, not raw syntax.
 For example, audit reports should not rediscover capabilities from source text
 if the capability checker already produced capability facts.
+
+Every pass artifact should record:
+
+- artifact id
+- pass name
+- input artifact ids
+- output artifact ids
+- facts consumed
+- facts produced
+- diagnostics emitted
+- source maps emitted or preserved
+- timing
+- replay command
+- verifier status
 
 ## ResolvedAST
 
@@ -273,9 +330,48 @@ concrete inspect --canonical
 concrete inspect --typed
 concrete inspect --core
 concrete inspect --backend-ir
+concrete inspect --ledger
 ```
 
 These outputs should be deterministic and redact local paths where needed.
+`--ledger` should render the same `CompilerLedger` records consumed by reports
+and release bundles.
+
+## Compiler Self-Audit
+
+`concrete audit --compiler` should render the compiler pipeline itself:
+
+- passes run
+- artifact ids
+- diagnostics count
+- source-location privacy mode
+- target and toolchain identity
+- solver/tool versions
+- cache/dependency facts
+- replay commands
+- backend assumptions
+- emitted files
+- links to `ObligationCore`
+
+This is the ordinary-compiler counterpart to the proof/evidence audit. It
+answers: what did the compiler know, where did each fact come from, which pass
+produced it, and how can the run be replayed?
+
+## Events, Crashes, And Retained Artifacts
+
+The pipeline should have three debugging surfaces:
+
+- `concrete build --events --json`: structured start/finish/fail events for
+  project-load, parse, resolve, canonicalize, typecheck, ownership,
+  capability, obligation collection, codegen, link, and bundle capture.
+- `.build/concrete-crash/<id>/`: crash bundles for internal compiler bugs,
+  with command, toolchain, redacted inputs, last successful pass, diagnostics
+  so far, and a replay command.
+- `.build/concrete-artifacts/`: retained pass artifacts from `--keep-artifacts`
+  and explicit `--emit-*` commands, with an artifact manifest.
+
+User errors should produce diagnostics, not crash bundles. Crash bundles are
+only for compiler bugs.
 
 ## Why This Phase Comes Before Usability
 
