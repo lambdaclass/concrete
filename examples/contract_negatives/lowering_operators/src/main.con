@@ -1,0 +1,25 @@
+// Operator-coverage fixture for the obligation-expression lowering layer
+// (ROADMAP Phase 3 #12). Exercises every operator the shared `obBinOpLean` /
+// `obBinOpSmt` table spells, so the lowering gate can pin the Lean (assert VC
+// conclusion) and SMT-LIB (nonlinear overflow query) renderings and catch any
+// drift between targets. Parity-only: this is verification scaffolding, not a
+// behavior change.
+mod low {
+    // Lean rendering: an assert exercising comparisons, logical ops, and
+    // arithmetic. Lowered by toLeanProp into the VC conclusion.
+    fn lean_ops(a: i32, b: i32) -> i32 {
+        if 0 <= a && a <= 100 && 0 < b && b < 50 {
+            assert(a + b - a * 1 <= 200 && (a >= 0 || b != 7) && a == a);
+            return a;
+        }
+        return 0;
+    }
+
+    // SMT rendering: a signed nonlinear product routes to SMT under --smt /
+    // --emit-smt; the query lowers `*`, `<=`, and the bound via exprToSmt.
+    #[overflow_checked]
+    #[requires(-30000 <= s && s <= 30000 && -60000 <= g && g <= 60000)]
+    fn smt_ops(s: i32, g: i32) -> i32 {
+        return s * g;
+    }
+}

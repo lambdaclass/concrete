@@ -925,8 +925,44 @@ partial def collectIdents : Expr → List String
   | .call _ _ _ args => args.flatMap collectIdents
   | _ => []
 
+/-! ### Obligation-expression lowering layer (Phase 3 #12)
+
+The single source of truth for how an obligation's binary operator is spelled in
+each lowering target, so the human / Lean-prop / SMT-LIB renderings cannot drift.
+Lean is infix (`sym`), parenthesized for the arithmetic/logical ops and bare for
+comparisons (matching surface precedence); SMT-LIB is prefix `(sym L R)`. Every
+Lean lowering (`toLeanProp` / `toLeanPropD` / `exprToLeanProp`) and the SMT
+lowering (`exprToSmt`) consult this table, so adding an operator is a one-line
+change checked by `check_obligation_lowering.sh`. -/
+
+/-- Lean infix spelling of a binary operator: `(symbol, wrap-in-parens)`. -/
+def obBinOpLean : BinOp → Option (String × Bool)
+  | .leq => some ("≤", false) | .lt => some ("<", false)
+  | .geq => some ("≥", false) | .gt => some (">", false)
+  | .eq  => some ("=", false) | .neq => some ("≠", false)
+  | .and_ => some ("∧", true) | .or_ => some ("∨", true)
+  | .add => some ("+", true)  | .sub => some ("-", true) | .mul => some ("*", true)
+  | .div => some ("/", true)  | .mod => some ("%", true)
+  | _ => none
+
+/-- SMT-LIB prefix symbol of a binary operator (`(sym L R)`). `none` for operators
+    with no direct prefix form: `neq` is rendered specially as `(not (= L R))`,
+    and `/`/`%` are not lowered to SMT here. -/
+def obBinOpSmt : BinOp → Option String
+  | .leq => some "<=" | .lt => some "<" | .geq => some ">=" | .gt => some ">"
+  | .eq  => some "="  | .and_ => some "and" | .or_ => some "or"
+  | .add => some "+"  | .sub => some "-" | .mul => some "*"
+  | _ => none
+
+/-- Render a binary operator's Lean infix form from the shared table. -/
+def leanBinOp (op : BinOp) (L R : String) : Option String :=
+  (obBinOpLean op).map fun (sym, paren) =>
+    if paren then s!"({L} {sym} {R})" else s!"{L} {sym} {R}"
+
 /-- Lower a contract expression to a Lean `Prop`/`Int` term (`&&`→`∧`, `<=`→`≤`,
-    spec-fn calls as applications). `none` if outside the supported subset. -/
+    spec-fn calls as applications). `none` if outside the supported subset.
+    Division/modulo are excluded here (see `toLeanPropD`, which is sound only
+    under `divSound`). -/
 partial def toLeanProp : Expr → Option String
   | .intLit _ v => some s!"{v}"
   | .ident _ n => some n
@@ -938,12 +974,8 @@ partial def toLeanProp : Expr → Option String
     let L ← toLeanProp l
     let R ← toLeanProp r
     match op with
-    | .leq => some s!"{L} ≤ {R}" | .lt => some s!"{L} < {R}"
-    | .geq => some s!"{L} ≥ {R}" | .gt => some s!"{L} > {R}"
-    | .eq => some s!"{L} = {R}" | .neq => some s!"{L} ≠ {R}"
-    | .and_ => some s!"({L} ∧ {R})" | .or_ => some s!"({L} ∨ {R})"
-    | .add => some s!"({L} + {R})" | .sub => some s!"({L} - {R})" | .mul => some s!"({L} * {R})"
-    | _ => none
+    | .div | .mod => none
+    | _ => leanBinOp op L R
   | _ => none
 
 /-! ### Sound division/modulo lowering (Phase 2 #21)
@@ -1002,14 +1034,7 @@ partial def toLeanPropD : Expr → Option String
   | .binOp _ op l r => do
     let L ← toLeanPropD l
     let R ← toLeanPropD r
-    match op with
-    | .leq => some s!"{L} ≤ {R}" | .lt => some s!"{L} < {R}"
-    | .geq => some s!"{L} ≥ {R}" | .gt => some s!"{L} > {R}"
-    | .eq => some s!"{L} = {R}" | .neq => some s!"{L} ≠ {R}"
-    | .and_ => some s!"({L} ∧ {R})" | .or_ => some s!"({L} ∨ {R})"
-    | .add => some s!"({L} + {R})" | .sub => some s!"({L} - {R})" | .mul => some s!"({L} * {R})"
-    | .div => some s!"({L} / {R})" | .mod => some s!"({L} % {R})"
-    | _ => none
+    leanBinOp op L R
   | _ => none
 
 /-- Lower an assert/contract clause, soundly handling division: a clause with
@@ -2034,12 +2059,8 @@ partial def exprToSmt : Expr → Option String
     let L ← exprToSmt l
     let R ← exprToSmt r
     match op with
-    | .leq => some s!"(<= {L} {R})" | .lt => some s!"(< {L} {R})"
-    | .geq => some s!"(>= {L} {R})" | .gt => some s!"(> {L} {R})"
-    | .eq  => some s!"(= {L} {R})"  | .neq => some s!"(not (= {L} {R}))"
-    | .and_ => some s!"(and {L} {R})" | .or_ => some s!"(or {L} {R})"
-    | .add => some s!"(+ {L} {R})" | .sub => some s!"(- {L} {R})" | .mul => some s!"(* {L} {R})"
-    | _ => none
+    | .neq => some s!"(not (= {L} {R}))"
+    | _ => (obBinOpSmt op).map fun s => s!"({s} {L} {R})"
   | _ => none
 
 /-- True when `e` contains a multiplication of two non-constant operands — the
@@ -2106,12 +2127,8 @@ partial def exprToLeanProp : Expr → Option String
   | .binOp _ op l r => do
     let L ← exprToLeanProp l; let R ← exprToLeanProp r
     match op with
-    | .leq => some s!"{L} ≤ {R}" | .lt => some s!"{L} < {R}"
-    | .geq => some s!"{L} ≥ {R}" | .gt => some s!"{L} > {R}"
-    | .eq => some s!"{L} = {R}" | .neq => some s!"{L} ≠ {R}"
-    | .and_ => some s!"({L} ∧ {R})" | .or_ => some s!"({L} ∨ {R})"
-    | .add => some s!"({L} + {R})" | .sub => some s!"({L} - {R})" | .mul => some s!"({L} * {R})"
-    | _ => none
+    | .div | .mod => none
+    | _ => leanBinOp op L R
   | _ => none
 
 /-- `(vcKey, leanTheoremSource)` for each SMT-eligible VC: a self-contained Lean

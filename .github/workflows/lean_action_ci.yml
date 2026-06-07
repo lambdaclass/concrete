@@ -212,6 +212,9 @@ jobs:
       - name: Proof-link freshness migration gate (Phase 3 #11 proof-status in the ledger)
         run: bash scripts/tests/check_proof_link_migration.sh
 
+      - name: Obligation-expression lowering gate (Phase 3 #12 shared lowering layer)
+        run: bash scripts/tests/check_obligation_lowering.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 
