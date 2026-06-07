@@ -194,6 +194,9 @@ jobs:
       - name: Array-bounds migration gate (Phase 3 #5 parity+improvement)
         run: bash scripts/tests/check_bounds_migration.sh
 
+      - name: Div/mod + sound-lowering migration gate (Phase 3 #6 parity+improvement)
+        run: bash scripts/tests/check_div_migration.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

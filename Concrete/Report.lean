@@ -1638,36 +1638,34 @@ partial def collectDivisorsS : Stmt → List (Bool × Expr)
   | _ => []
 end
 
--- Divisor uses paired with the loop invariants/guards in scope (see
--- `scopedBoundsB`).
-mutual
-partial def scopedDivS (lcs : List LoopContract) (scope : List Expr) :
-    Stmt → List (Bool × Expr × List Expr)
+/-- Divisor leaf: the `/`/`%` divisors in a statement's OWN expression positions
+    (the walker owns recursion into branches/loops/init/step, so
+    `.ifElse`/`.while_`/`.forLoop` contribute only their condition's divisors).
+    Each item is `(isMod, divisorExpr, scope)`. -/
+def divLeaf (scope : List Expr) : Stmt → List (Bool × Expr × List Expr)
   | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
       (collectDivisorsE v).map fun (m, e) => (m, e, scope)
   | .return_ _ (some v) => (collectDivisorsE v).map fun (m, e) => (m, e, scope)
-  | .ifElse _ c t el =>
-      (collectDivisorsE c).map (fun (m, e) => (m, e, scope))
-        ++ scopedDivB lcs scope t ++ scopedDivB lcs scope (el.getD [])
-  | .while_ sp c b _ =>
-      (collectDivisorsE c).map (fun (m, e) => (m, e, scope))
-        ++ scopedDivB lcs (scope ++ loopHypsAt lcs sp.line) b
-  | .forLoop sp init c step b _ =>
-      ((init.map (scopedDivS lcs scope)).getD [])
-        ++ (collectDivisorsE c).map (fun (m, e) => (m, e, scope))
-        ++ ((step.map (scopedDivS lcs scope)).getD [])
-        ++ scopedDivB lcs (scope ++ loopHypsAt lcs sp.line) b
+  | .ifElse _ c _ _ => (collectDivisorsE c).map fun (m, e) => (m, e, scope)
+  | .while_ _ c _ _ => (collectDivisorsE c).map fun (m, e) => (m, e, scope)
+  | .forLoop _ _ c _ _ _ => (collectDivisorsE c).map fun (m, e) => (m, e, scope)
   | .fieldAssign _ o _ v | .arrowAssign _ o _ v | .derefAssign _ o v =>
-      (collectDivisorsE o ++ collectDivisorsE v).map (fun (m, e) => (m, e, scope))
+      (collectDivisorsE o ++ collectDivisorsE v).map fun (m, e) => (m, e, scope)
   | .arrayIndexAssign _ a i v =>
-      (collectDivisorsE a ++ collectDivisorsE i ++ collectDivisorsE v).map (fun (m, e) => (m, e, scope))
+      (collectDivisorsE a ++ collectDivisorsE i ++ collectDivisorsE v).map fun (m, e) => (m, e, scope)
   | _ => []
-partial def scopedDivB (lcs : List LoopContract) (scope : List Expr) :
-    List Stmt → List (Bool × Expr × List Expr)
-  | [] => []
-  | s :: rest =>
-      scopedDivS lcs scope s ++ scopedDivB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
-end
+
+/-- Divisor uses paired with the hypotheses in scope at the `/`/`%` (Phase 3 #6 —
+    migrated onto the unified `scopedWalk`). The collector threads enclosing
+    guards / negated guards / fall-through / loop invariants, so a `divisor ≠ 0`
+    obligation can only move `unproven → proved` (e.g. `if d != 0 { n / d }`),
+    never the reverse. The SOUND division/modulo lowering is unchanged: it still
+    flows through `divSound`/`toLeanPropSound`, which lower `/`/`%` to Lean
+    E-division ONLY when the dividend is provably non-negative — keeping Concrete's
+    truncating semantics from being confused with Lean's floor division. -/
+def scopedDivB (lcs : List LoopContract) (scope : List Expr) (body : List Stmt) :
+    List (Bool × Expr × List Expr) :=
+  scopedWalkB divLeaf lcs scope body
 
 /-- One division-by-zero obligation. -/
 structure DivObl where

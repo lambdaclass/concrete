@@ -1,0 +1,52 @@
+// ADVERSARIAL fixture for the div/mod migration + sound division lowering
+// (ROADMAP Phase 3 #6).
+//
+// Two things are exercised:
+//  (A) the `divisor ≠ 0` obligation, migrated onto the unified `scopedWalk`
+//      (guard / negated guard / fall-through / stale-drop), and
+//  (B) the SOUND division lowering — a `/` is lowered to Lean E-division (which
+//      omega can reason about) ONLY when the dividend is provably non-negative,
+//      because Concrete truncates toward zero while Lean `Int` floors; they
+//      disagree for negative dividends, so the guard must block the lowering.
+mod adv {
+    // ── (A) divisor ≠ 0 ────────────────────────────────────────────────────
+    // IMPROVEMENT (unproven → proved): the then-branch assumes d ≠ 0.
+    fn guarded(n: i32, d: i32) -> i32 {
+        if d != 0 { return n / d; }
+        return 0;
+    }
+
+    // NEGATIVE control: nothing establishes d ≠ 0 ⇒ stays unproven.
+    fn unguarded(n: i32, d: i32) -> i32 { return n / d; }
+
+    // IMPROVEMENT via fall-through: after `if d == 0 { return }`, ¬(d==0) ⇒ d ≠ 0.
+    fn fall_through(n: i32, d: i32) -> i32 {
+        if d == 0 { return 0; }
+        return n / d;
+    }
+
+    // STALE control: the guard d ≠ 0 is dropped after d is reassigned, so the
+    // divisor obligation on the new d stays unproven (d-1 could be 0).
+    fn stale(n: i32, d: i32) -> i32 {
+        if d != 0 { d = d - 1; return n / d; }
+        return 0;
+    }
+
+    // ── (B) sound division lowering ────────────────────────────────────────
+    // SOUND-LOWERING positive: the guard puts 0 ≤ n in scope, so n / 2 is a
+    // non-negative dividend ⇒ lowered to Lean E-division ⇒ omega proves the
+    // assert. (Divisor 2 is a positive literal, so #div is constant-proved too.)
+    fn sound_pos(n: i32) -> i32 {
+        if 0 <= n { assert(n / 2 <= n); return n / 2; }
+        return 0;
+    }
+
+    // SOUND-LOWERING control: n is unconstrained (may be negative). Concrete's
+    // truncating n / 2 disagrees with Lean's floor for negative n, so the assert
+    // about n / 2 must NOT be soundly lowered — it stays unproven, never proved
+    // by a floor-division argument that Concrete does not implement.
+    fn sound_neg(n: i32) -> i32 {
+        assert(n / 2 <= n);
+        return n / 2;
+    }
+}
