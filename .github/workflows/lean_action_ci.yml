@@ -236,6 +236,9 @@ jobs:
       - name: Phase 3 capstone — ObligationCore single truth source (umbrella)
         run: bash scripts/tests/check_phase3_obligation_core.sh
 
+      - name: ObligationCore red-team gate (Phase 3 hardening)
+        run: bash scripts/tests/check_obligation_redteam.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

@@ -1,0 +1,34 @@
+// RED-TEAM fixture for the ObligationCore ledger (Phase 3 hardening). Every
+// function here is an ATTACK: a construct that LOOKS like it might pass but must
+// never read as proved on ANY surface (vcs / ledger / audit / prove), and must
+// never let trust launder into kernel evidence. check_obligation_redteam.sh
+// asserts the system refuses each one.
+mod rt {
+    // ATTACK 1 — unbounded nonlinear product. The kernel tiers cannot own it; it
+    // must stay `unproven` (and only an opt-in solver may ever touch it).
+    #[overflow_checked]
+    fn unsafe_mul(a: i32, b: i32) -> i32 { return a * b; }
+
+    // ATTACK 2 — assume-laundering. assume(0 < x) is trust, not proof; the
+    // identical assert must NOT become kernel-proved.
+    fn launder(x: i32) -> i32 {
+        assume(0 < x);
+        assert(0 < x);
+        return x;
+    }
+
+    // ATTACK 3 — vacuous false green. The preconditions are unsatisfiable
+    // (x>0 ∧ x<0); the postcondition holds trivially and must read `vacuous`,
+    // never `proved_by_lean`.
+    #[requires(x > 0)]
+    #[requires(x < 0)]
+    #[ensures(result == 42)]
+    fn vacuous_green(x: i32) -> i32 { return x; }
+
+    // ATTACK 4 — out-of-bounds: an unguarded index. The bounds obligation must
+    // stay `unproven` (nothing establishes 0 ≤ i < 8).
+    fn oob(a: [i32; 8], i: i32) -> i32 { return a[i]; }
+
+    // ATTACK 5 — division by a possibly-zero divisor. Must stay `unproven`.
+    fn divzero(n: i32, d: i32) -> i32 { return n / d; }
+}

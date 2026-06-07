@@ -105,3 +105,4 @@ examples/parse_validate/parse_validate
 examples/fixed_capacity/fixed_capacity
 examples/service_errors/service_errors
 examples/obligation_core_probe/obligation_core_probe
+examples/contract_negatives/obligation_redteam/obligation_redteam

@@ -1,0 +1,8 @@
+[package]
+name = "obligation_redteam"
+version = "0.1.0"
+
+# A strict release profile: the red-team attacks must all be rejected.
+[policy]
+forbid-assume = true
+solver-evidence = "forbid"
