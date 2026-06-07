@@ -1,0 +1,58 @@
+// ADVERSARIAL fixture for the unified scoped collector (ROADMAP Phase 3 #3).
+//
+// Every branch of the scope-threading discipline is exercised here so the
+// migration parity gate can prove the unified `scopedWalk` engine threads the
+// SAME facts the old assert-specific walker did. Each assert is annotated with
+// the path facts that must be in scope for it; the gate checks the resulting
+// proved/unproven verdict, and the parity gate diffs old-vs-new VC output.
+mod adv {
+    // then-guard threaded into the then-branch: c ⊢ x<16.
+    fn then_guard(x: i32) -> i32 {
+        if x < 10 { assert(x < 16); return x; }
+        return 0;
+    }
+
+    // negated else-guard threaded into the else-branch: ¬(x<10) ⊢ x>=10.
+    fn else_guard(x: i32) -> i32 {
+        if x < 10 { return 0; } else { assert(x >= 10); return x; }
+    }
+
+    // early-return fall-through: after `if x<0 {return}` and `if x>100 {return}`,
+    // the fall-through assumes ¬(x<0) ∧ ¬(x>100) ⊢ 0<=x<=100.
+    fn fall_through(x: i32) -> i32 {
+        if x < 0 { return 0; }
+        if x > 100 { return 100; }
+        assert(0 <= x && x <= 100);
+        return x;
+    }
+
+    // stale-hyp drop: the guard establishes x<10, but x is reassigned before the
+    // assert, so the x<10 fact is invalidated → unproven (never mis-proved).
+    fn stale_after_assign(x: i32) -> i32 {
+        if x < 10 {
+            x = x + 100;
+            assert(x < 16);
+            return x;
+        }
+        return 0;
+    }
+
+    // nested branches: both guards in scope ⊢ 0<x ∧ x<10 → x<16.
+    fn nested(x: i32) -> i32 {
+        if x > 0 {
+            if x < 10 {
+                assert(x < 16);
+                return x;
+            }
+        }
+        return 0;
+    }
+
+    // over-claim control under fall-through: 0<=x<=100 does NOT imply x==50.
+    fn over_claim(x: i32) -> i32 {
+        if x < 0 { return 0; }
+        if x > 100 { return 100; }
+        assert(x == 50);
+        return x;
+    }
+}

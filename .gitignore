@@ -94,3 +94,4 @@ out/release/
 paper/*.pdf
 site/public/
 tmp/
+.claude/scheduled_tasks.lock

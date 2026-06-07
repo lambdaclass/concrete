@@ -1394,37 +1394,65 @@ partial def scopedCallsB (lcs : List LoopContract) (scope : List Expr) :
       scopedCallsS lcs scope s ++ scopedCallsB lcs (dropStaleHyps scope (assignedScalarsS s)) rest
 end
 
+-- ────────────────────────────────────────────────────────────────────────────
+-- The ONE scoped context collector (ROADMAP Phase 3 #3).
+--
+-- Every obligation family (call-site preconditions, array bounds, div/mod,
+-- overflow, asserts, …) is collected by walking the body once with the SAME
+-- scope-threading discipline, parameterised only by a per-statement `leaf`
+-- extractor. The walker threads the full fact set the roadmap requires:
+--   • enclosing `if`-guards          → the then-branch assumes `c`,
+--   • negated guards                 → the else-branch assumes `¬c`,
+--   • early-return fall-through       → after `if c { …return… }`, assume `¬c`,
+--   • loop invariants + guards        → the body assumes `loopHypsAt`,
+--   • one shared invalidation rule    → `dropStaleHyps` after each assignment.
+-- `leaf scope s` sees the hypotheses in scope at `s` and returns this statement's
+-- own (non-recursive) obligations; the walker owns ALL recursion into branches,
+-- loop bodies, and for-loop init/step, so no family can drift in how it threads
+-- scope. Migrated families instantiate this with their own leaf (Phase 3 #4-9).
 mutual
-/-- `assert`/`assume` with the path conditions in scope at each one: enclosing
-    `if`-guards (the guard on the then-branch, its negation on the else-branch),
-    loop invariants in the body, and `¬c` for the fall-through of an early-return
-    `if c { …return… }`. Mirrors `collectAssertAssumeS`'s traversal ORDER exactly,
-    so the `i`-th item keeps the same `#aa<i>` key the renderer uses; it only adds
-    the scope. Stale hypotheses are dropped when a variable is reassigned. -/
-partial def scopedAssertsS (lcs : List LoopContract) (scope : List Expr) :
-    Stmt → List (Bool × Expr × List Expr)
-  | .assert_ _ c => [(false, c, scope)]
-  | .assume_ _ c => [(true, c, scope)]
-  | .ifElse _ c t el =>
-      scopedAssertsB lcs (scope ++ [c]) t
-        ++ scopedAssertsB lcs (scope ++ (negateGuard c).toList) (el.getD [])
-  | .while_ sp _ b _ => scopedAssertsB lcs (scope ++ loopHypsAt lcs sp.line) b
-  | .forLoop sp init _ step b _ =>
-      ((init.map (scopedAssertsS lcs scope)).getD [])
-        ++ ((step.map (scopedAssertsS lcs scope)).getD [])
-        ++ scopedAssertsB lcs (scope ++ loopHypsAt lcs sp.line) b
-  | .borrowIn _ _ _ _ _ b => scopedAssertsB lcs scope b
-  | _ => []
-partial def scopedAssertsB (lcs : List LoopContract) (scope : List Expr) :
-    List Stmt → List (Bool × Expr × List Expr)
+partial def scopedWalkS {α} (leaf : List Expr → Stmt → List α)
+    (lcs : List LoopContract) (scope : List Expr) : Stmt → List α
+  | s@(.ifElse _ c t el) =>
+      leaf scope s
+        ++ scopedWalkB leaf lcs (scope ++ [c]) t
+        ++ scopedWalkB leaf lcs (scope ++ (negateGuard c).toList) (el.getD [])
+  | s@(.while_ sp _ b _) =>
+      leaf scope s ++ scopedWalkB leaf lcs (scope ++ loopHypsAt lcs sp.line) b
+  | s@(.forLoop sp init _ step b _) =>
+      leaf scope s
+        ++ ((init.map (scopedWalkS leaf lcs scope)).getD [])
+        ++ ((step.map (scopedWalkS leaf lcs scope)).getD [])
+        ++ scopedWalkB leaf lcs (scope ++ loopHypsAt lcs sp.line) b
+  | s@(.borrowIn _ _ _ _ _ b) => leaf scope s ++ scopedWalkB leaf lcs scope b
+  | s => leaf scope s
+partial def scopedWalkB {α} (leaf : List Expr → Stmt → List α)
+    (lcs : List LoopContract) (scope : List Expr) : List Stmt → List α
   | [] => []
   | s :: rest =>
       let restScope := match s with
         | .ifElse _ c t none => if blockTerminates t then scope ++ (negateGuard c).toList
                                 else dropStaleHyps scope (assignedScalarsS s)
         | _ => dropStaleHyps scope (assignedScalarsS s)
-      scopedAssertsS lcs scope s ++ scopedAssertsB lcs restScope rest
+      scopedWalkS leaf lcs scope s ++ scopedWalkB leaf lcs restScope rest
 end
+
+/-- `assert`/`assume` leaf: the only own-obligation statements are `assert`/
+    `assume` themselves; everything else is pure recursion the walker owns. -/
+def assertLeaf (scope : List Expr) : Stmt → List (Bool × Expr × List Expr)
+  | .assert_ _ c => [(false, c, scope)]
+  | .assume_ _ c => [(true, c, scope)]
+  | _ => []
+
+/-- `assert`/`assume` with the path conditions in scope at each one (the first
+    family on the unified collector — Phase 3 #3). Enclosing `if`-guards (the
+    guard on the then-branch, its negation on the else-branch), loop invariants in
+    the body, and `¬c` for the fall-through of an early-return `if c { …return… }`.
+    Mirrors `collectAssertAssumeS`'s traversal ORDER exactly, so the `i`-th item
+    keeps the same `#aa<i>` key the renderer uses. -/
+def scopedAssertsB (lcs : List LoopContract) (scope : List Expr) (body : List Stmt) :
+    List (Bool × Expr × List Expr) :=
+  scopedWalkB assertLeaf lcs scope body
 
 /-- Omega goals for `assert(e)` obligations: `∀ vars, (path conditions) → (e)`.
     The hypotheses are the function's `#[requires]` PLUS the path conditions in

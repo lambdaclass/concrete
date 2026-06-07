@@ -185,6 +185,9 @@ jobs:
       - name: ObligationCore ledger gate (Phase 3 schema + vocabulary)
         run: bash scripts/tests/check_obligation_core.sh
 
+      - name: Unified scoped-collector gate (Phase 3 #3 adversarial)
+        run: bash scripts/tests/check_scoped_collector.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 
