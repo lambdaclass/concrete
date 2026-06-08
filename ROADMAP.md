@@ -486,6 +486,17 @@ work depends on them.
      generated C/LLVM, and debug info can name the source function.
    - 13c. Attach the originating function/decl span to proof obligations and
      audit facts (ObligationCore), so witnesses/counterexamples cite source.
+     Split by source of the function:
+     - 13c1. Project-code obligations cite source (file, line). Verified and
+       gated (`check_source_maps.sh`: `main.divide → file:4`). [DONE]
+     - 13c2. Dependency/stdlib obligation source locations. [DEFERRED] Two
+       blockers: `buildFnLocMap` stamps the entry-point path as the file for
+       every module (so a dependency function's span line is paired with the
+       wrong file), and the obligation-naming origin of stdlib-qualified names
+       (e.g. `sha256.bsig0`) is not yet pinned — main.con neither declares nor
+       imports those modules. Needs per-module source-file tracking (a loader
+       change) plus obligation-origin investigation. NOT bodged with suffix
+       matching: a wrong file in an audit tool is worse than an honest unknown.
    - 13d. Expression/statement-granularity spans in Core (the invasive step):
      thread spans onto Core nodes or a node→span side table for precise
      within-function obligation and runtime-failure locations.
