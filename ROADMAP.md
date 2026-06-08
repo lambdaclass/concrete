@@ -1003,12 +1003,29 @@ under a stronger badge.
     The gate must fail if a mutated proof/spec still reports the original green
     evidence class without an allowed explanation. This is evidence about the
     evidence: proofs must constrain the implementation, not merely decorate it.
-15. Add the Phase 7 validation artifact: a trust-gate pressure project that
+15. Add proof-corpus migration across toolchain upgrades, the active half of the
+    §7 drift story. Detection marks evidence `needs_recheck`; migration must turn
+    a bumped corpus green again without hand-walking every obligation. Command
+    surface: `concrete prove --recheck-corpus [--json]` re-runs every linked
+    proof/evidence check under the current toolchain and triages each into
+    `still_proved`, `replayed_clean`, `broke_needs_repair`, or
+    `unavailable_dependency`; `concrete prove --recheck <obligation_id>` does one.
+    Pin the external Lean proof-library surface the corpus depends on (Lean
+    stdlib / Batteries / Mathlib lemmas and tactics actually cited) in a checked
+    `proofs/lean-deps.lock` with versions, so a renamed or relocated upstream
+    lemma is reported as `unavailable_dependency`, never a silent break. Wire
+    `scripts/tests/check_proof_corpus_migration.sh`: it must prove the flagship
+    corpus (`hmac_sha256`, `constant_time_tag`) re-greens under a simulated
+    toolchain bump, that a removed/renamed pinned lemma surfaces as
+    `unavailable_dependency`, and that no `needs_recheck` obligation can reach a
+    green badge without an actual kernel re-check.
+16. Add the Phase 7 validation artifact: a trust-gate pressure project that
     includes transitive proof dependencies, stale dependency propagation,
-    tool-version drift, assumption widening, spec-adequacy policy, vacuity
-    downgrade, solver portfolio / disagreement handling, evidence mutation
-    testing, weaker-evidence monotonicity, and a release gate proving each
-    status cannot be silently presented as stronger evidence.
+    tool-version drift, proof-corpus migration across a simulated toolchain bump,
+    assumption widening, spec-adequacy policy, vacuity downgrade, solver
+    portfolio / disagreement handling, evidence mutation testing, weaker-evidence
+    monotonicity, and a release gate proving each status cannot be silently
+    presented as stronger evidence.
 
 ## Phase 8: Provable And Predictable Subsets
 
@@ -1761,7 +1778,22 @@ they force a named surface or public claim.
     opportunistically when a roadmap task touches them. Improve examples only
     when they serve proof-link migration, `concrete prove` authoring,
     external validation, or a release-facing tutorial.
-18. Add the Phase 12 validation artifact: a showcase/workload dashboard that
+18. Upgrade the constant-time flagship from `reported` to `enforced` with a
+    secret-dependent-flow checker. Today `constant_time_tag` reports a
+    constant-time source shape and leaves machine timing `assumed`; add a
+    source/IR information-flow pass that rejects secret-tagged values reaching
+    branch conditions, loop bounds, or array indices, so the discipline becomes a
+    compiler-enforced structural property, not a reported shape. This needs no
+    hardware/timing model and must not claim machine-level timing: it produces
+    `enforced` for the source-flow property only, with machine timing still named
+    `assumed`. Mark secrets with an explicit annotation (e.g. `#[secret]`); the
+    checker reports `enforced` or a counterexample flow path back to source. Add
+    `examples/secret_flow/` with a clean constant-time case and negatives for a
+    secret-dependent branch, a secret-dependent index, and a secret-dependent
+    loop bound. Wire `scripts/tests/check_secret_flow.sh`; the gate must reject
+    every negative and must never present source-flow enforcement as timing
+    proof.
+19. Add the Phase 12 validation artifact: a showcase/workload dashboard that
     proves every flagship and graduated workload has a check story, evidence
     bundle, oracle or reference when appropriate, interpreter-vs-compiled
     coverage, property-test/counterexample-regression coverage where relevant,
@@ -1798,7 +1830,11 @@ machine-readable.
    completeness, eligibility classification.
 7. Record a machine-readable trusted computing base for proof/evidence claims:
    Lean kernel, compiler modules, backend/toolchain, runtime/OS/hardware,
-   trusted/extern code.
+   trusted/extern code, and the external Lean proof-library surface the corpus
+   cites (Lean stdlib / Batteries / Mathlib lemmas and tactics). Kernel-checked
+   library lemmas do not widen the trusted base, but they are a pinned
+   version/availability dependency (see Phase 7 proof-corpus migration); the TCB
+   record must name them so a proof's replay surface stays reproducible.
 8. Prove selected checker/report agreement for authority and purity facts used
    by proof eligibility, so a function cannot be called proof-eligible while
    secretly requiring capabilities.
