@@ -239,6 +239,9 @@ jobs:
       - name: ObligationCore red-team gate (Phase 3 hardening)
         run: bash scripts/tests/check_obligation_redteam.sh
 
+      - name: CompilerLedger gate (Phase 4 #2 — non-proof fact store)
+        run: bash scripts/tests/check_compiler_ledger.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

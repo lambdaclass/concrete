@@ -1,10 +1,11 @@
 import Concrete
 import Concrete.ObligationCore
+import Concrete.CompilerLedger
 
 open Concrete
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|vcs|obligation-ledger|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|vcs|obligation-ledger|compiler-ledger|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -606,6 +607,9 @@ structure ProjectContext where
   policyLocMap  : Report.FnLocMap
   registry      : Concrete.ProofRegistry
   pc            : Concrete.ProofCore
+  -- the non-proof compiler fact store (Phase 4 #2), built once from this load and
+  -- linked to the ObligationCore (proof) ledger.
+  ledger        : Concrete.CompilerLedger.CompilerLedger
 
 /-- Load a project to ValidatedCore. Shared by build, test, and check. -/
 partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : IO (Except UInt32 ProjectContext) := do
@@ -710,8 +714,16 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
     let simpleLocMap := policyLocMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
     let registry ← loadRegistryWithLinks mainPath merged.modules validCore.coreModules
     let pc := extractProofCore validCore simpleLocMap registry
+    -- Build the non-proof compiler fact store once (Phase 4 #2) from the facts this
+    -- load already holds. Cheap facts only here (modules / deps / source files /
+    -- obligation link); the git-backed toolchain id is filled lazily at render time.
+    let mut ledger := (({} : Concrete.CompilerLedger.CompilerLedger).linkObligations
+      "ObligationCore ledger — `concrete --report obligation-ledger`")
+    for (n, p) in deps do ledger := ledger.recordDependency n p
+    for m in merged.modules do ledger := ledger.recordFact "module" m.name (if depNames.contains m.name then "dependency" else "project")
+    for (file, _) in allSrcMap do ledger := ledger.recordSourceMap file []
     return Except.ok { projectRoot, validCore, parsed := merged, allSrcMap, tomlContent,
-                       mainPath, depNames, policy, policyWarnings, policyLocMap, registry, pc }
+                       mainPath, depNames, policy, policyWarnings, policyLocMap, registry, pc, ledger }
 
 /-- Discharge call-site contract obligations with `bv_decide`. Each candidate is
     `(index, leanBoolGoal)`; returns the indices that kernel-check. Runs one
@@ -1829,6 +1841,24 @@ def proveSchemaJson : String := String.intercalate "\n" [
   "}" ]
 
 def main (args : List String) : IO UInt32 := do
+  -- `concrete --report compiler-ledger [--json]` — the project-scoped non-proof
+  -- fact store (Phase 4 #2). Project mode: loads the one ProjectContext and renders
+  -- its CompilerLedger (toolchain id filled here, lazily).
+  if args.head? == some "--report" && args[1]? == some "compiler-ledger" then
+    let json := args.contains "--json"
+    let cwd ← IO.currentDir
+    match ← findProjectRoot cwd.toString with
+    | none =>
+      IO.eprintln "error: no Concrete.toml found in current directory or parent\nhint: `--report compiler-ledger` reads a project; run from a project directory"
+      return 1
+    | some root =>
+      match ← loadProject root with
+      | .error exitCode => return exitCode
+      | .ok ctx =>
+        let toolId ← compilerIdentity
+        let l := { ctx.ledger with toolchainId := toolId }
+        IO.println (if json then l.toJson 1 else l.render)
+        return 0
   -- Check for "build" command first (before generic single-arg pattern)
   if args.head? == some "build" then
     let cwd ← IO.currentDir
