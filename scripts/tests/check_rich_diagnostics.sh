@@ -46,6 +46,19 @@ check_family "type"     "examples/diagnostics_rich/type_mismatch.con" "E0220" "c
 check_family "ownership" "examples/diagnostics_rich/use_after_move.con" "E0205" "check"
 check_family "capability" "examples/diagnostics_rich/missing_capability.con" "E0520" "core-check"
 
+echo "=== rich fields: expected-vs-actual agree in human and JSON (type family) ==="
+TM="examples/diagnostics_rich/type_mismatch.con"
+TMJ="$("$COMPILER" "$TM" --diagnostics-json 2>/dev/null)"
+TMH="$("$COMPILER" "$TM" --report caps 2>&1)"
+read -r jexp jact < <(printf '%s' "$TMJ" | python3 -c "import json,sys;x=json.load(sys.stdin)['diagnostics'][0];print(x['expected'],x['actual'])" 2>/dev/null)
+if [ "$jexp" = "i32" ] && [ "$jact" = "bool" ] \
+   && printf '%s' "$TMH" | grep -qE "expected: i32" \
+   && printf '%s' "$TMH" | grep -qE "found: +bool"; then
+  ok "type mismatch: expected/actual structured + shown in human and JSON (i32 vs bool)"
+else
+  no "type mismatch expected/actual mismatch (json exp=$jexp act=$jact)"
+fi
+
 echo "=== JSON envelope is well-formed and versioned ==="
 ENV_J="$("$COMPILER" examples/diagnostics_rich/parser_error.con --diagnostics-json 2>/dev/null)"
 printf '%s' "$ENV_J" | python3 -c "import json,sys;d=json.load(sys.stdin);sys.exit(0 if d['schema_kind']=='diagnostics' and d['schema_version']>=1 and d['count']==1 else 1)" \

@@ -252,6 +252,15 @@ def CheckError.hint : CheckError → Option String
   | .cannotInferCapVariable cap _ => some s!"provide an explicit capability for '{cap}' at the call site"
   | _ => none
 
+/-- Expected/actual facts for the rich diagnostic surface (Phase 4 #11). Only the
+    type-mismatch family carries an expected-vs-actual pair; the rest are `none`. -/
+def CheckError.expected : CheckError → Option String
+  | .typeMismatch _ e _ => some e
+  | _ => none
+def CheckError.actual : CheckError → Option String
+  | .typeMismatch _ _ a => some a
+  | _ => none
+
 def CheckError.code : CheckError → String
   -- Slice 1: Name/variable/linearity (E0200–E0219)
   | .selfOutsideImpl => "E0200"
@@ -331,7 +340,8 @@ def CheckError.code : CheckError → String
   | .notPublicInModule _ _ => "E0285"
 
 def throwCheck (e : CheckError) (span : Option Span := none) : CheckM α :=
-  throw [{ severity := .error, message := e.message, pass := "check", span := span, hint := e.hint, code := e.code }]
+  throw [{ severity := .error, message := e.message, pass := "check", span := span,
+           hint := e.hint, code := e.code, expected := e.expected, actual := e.actual }]
 
 private def throwCheckMsg (msg : String) (span : Option Span := none) : CheckM α :=
   throw [{ severity := .error, message := msg, pass := "check", span := span, hint := none }]
