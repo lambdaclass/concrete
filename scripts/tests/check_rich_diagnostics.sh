@@ -23,17 +23,20 @@ check_family(){ local label="$1" F="$2" wantCode="$3" wantPass="$4"
   local JSON HUMAN jcode jsev jpass jline
   JSON="$("$COMPILER" "$F" --diagnostics-json 2>/dev/null)"
   HUMAN="$("$COMPILER" "$F" --report caps 2>&1)"
+  # span may be null (function-level diagnostics, e.g. capability errors).
   read -r jcode jsev jpass jline < <(printf '%s' "$JSON" | python3 -c "
 import json,sys
 d=json.load(sys.stdin); x=d['diagnostics'][0]
-print(x['code'], x['severity'], x['pass'], x['span']['line'])" 2>/dev/null)
+print(x['code'], x['severity'], x['pass'], (x['span'] or {}).get('line',''))" 2>/dev/null)
+  local spanOk=1
+  if [ -n "$jline" ]; then printf '%s' "$HUMAN" | grep -qE ":${jline}:" || spanOk=0; fi
   if [ "$jcode" = "$wantCode" ] && [ "$jpass" = "$wantPass" ] && [ "$jsev" = "error" ] \
+     && [ "$spanOk" = "1" ] \
      && printf '%s' "$HUMAN" | grep -qF "($jcode)" \
-     && printf '%s' "$HUMAN" | grep -qE "${jsev}\[${jpass}\]" \
-     && printf '%s' "$HUMAN" | grep -qE ":${jline}:"; then
-    ok "$label: human and JSON agree ($jcode/$jsev/$jpass @ line $jline)"
+     && printf '%s' "$HUMAN" | grep -qE "${jsev}\[${jpass}\]"; then
+    ok "$label: human and JSON agree ($jcode/$jsev/$jpass${jline:+ @ line $jline})"
   else
-    no "$label: human/JSON disagree (json=$jcode/$jsev/$jpass@$jline want $wantCode/$wantPass)"
+    no "$label: human/JSON disagree (json=$jcode/$jsev/$jpass@${jline:-none} want $wantCode/$wantPass)"
   fi; }
 
 echo "=== diagnostics render human + JSON from the SAME record, per family ==="
@@ -41,6 +44,7 @@ check_family "parser"   "examples/diagnostics_rich/parser_error.con" "E0001" "pa
 check_family "resolver" "examples/diagnostics_rich/unknown_name.con" "E0101" "resolve"
 check_family "type"     "examples/diagnostics_rich/type_mismatch.con" "E0220" "check"
 check_family "ownership" "examples/diagnostics_rich/use_after_move.con" "E0205" "check"
+check_family "capability" "examples/diagnostics_rich/missing_capability.con" "E0520" "core-check"
 
 echo "=== JSON envelope is well-formed and versioned ==="
 ENV_J="$("$COMPILER" examples/diagnostics_rich/parser_error.con --diagnostics-json 2>/dev/null)"
