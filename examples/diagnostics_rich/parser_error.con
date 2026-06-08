@@ -1,0 +1,6 @@
+// Phase 4 #4/#11 fixture — a parser error. check_rich_diagnostics.sh asserts the
+// human and JSON renderings agree on code, severity, pass, and span, because both
+// render from the SAME structured Diagnostic record.
+mod m {
+    fn f(x: i32) -> i32 { return x + }
+}

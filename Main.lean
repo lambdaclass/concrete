@@ -2263,6 +2263,14 @@ def main (args : List String) : IO UInt32 := do
     let id ← compilerIdentity
     IO.println id
     return 0
+  -- `concrete <file> --diagnostics-json` — frontend diagnostics as JSON, rendered
+  -- from the SAME structured Diagnostic records the human output uses (Phase 4 #4).
+  if args.length == 2 && args[1]? == some "--diagnostics-json" then
+    let inputPath := args.headD ""
+    let source ← readFile inputPath
+    match ← Pipeline.runFrontend inputPath source resolveAllModules with
+    | .error ds => IO.println (Concrete.diagnosticsToJson ds); return 1
+    | .ok _ => IO.println (Concrete.diagnosticsToJson []); return 0
   match args with
   | [] =>
     IO.eprintln usage

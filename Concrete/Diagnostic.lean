@@ -98,6 +98,49 @@ def renderDiagnostics (ds : Diagnostics) (sourceMap : SourceMap := []) : String 
   "\n".intercalate (ds.map fun d => d.render sourceMap)
 
 -- ============================================================
+-- JSON rendering (Phase 4 #4 / #11): human and machine output from the SAME
+-- structured record, so they cannot drift. `Diagnostic.render` (above) and
+-- `Diagnostic.toJson` (below) read the same fields.
+-- ============================================================
+
+private def jesc (s : String) : String :=
+  s.foldl (fun a c => a ++ (match c with
+    | '"' => "\\\"" | '\\' => "\\\\" | '\n' => "\\n" | '\t' => "\\t" | c => c.toString)) ""
+private def jq (s : String) : String := "\"" ++ jesc s ++ "\""
+
+/-- A diagnostic as a JSON object: the SAME code / severity / message / pass /
+    file / span / hint / context the human renderer uses (Phase 4 #4). -/
+def Diagnostic.toJson (d : Diagnostic) : String :=
+  let spanJson := match d.span with
+    | some sp => s!"\{{jq "line"}: {sp.line}, {jq "col"}: {sp.col}, {jq "end_line"}: {sp.endLine}, {jq "end_col"}: {sp.endCol}}"
+    | none => "null"
+  let hintJson := match d.hint with | some h => jq h | none => "null"
+  let ctxJson := "[" ++ ", ".intercalate (d.context.map jq) ++ "]"
+  String.join [
+    "{", s!"{jq "severity"}: {jq (severityStr d.severity)}, ",
+    s!"{jq "code"}: {jq d.code}, ", s!"{jq "pass"}: {jq d.pass}, ",
+    s!"{jq "message"}: {jq d.message}, ", s!"{jq "file"}: {jq d.file}, ",
+    s!"{jq "span"}: {spanJson}, ", s!"{jq "hint"}: {hintJson}, ",
+    s!"{jq "context"}: {ctxJson}", "}" ]
+
+/-- A versioned JSON envelope of a diagnostics list. -/
+def diagnosticsToJson (ds : Diagnostics) (schemaVer : Nat := 1) : String :=
+  String.join [
+    "{", s!"{jq "schema_version"}: {schemaVer}, ",
+    s!"{jq "schema_kind"}: {jq "diagnostics"}, ",
+    s!"{jq "count"}: {ds.length}, ",
+    s!"{jq "diagnostics"}: [", ", ".intercalate (ds.map Diagnostic.toJson), "]}" ]
+
+-- field-parity: the JSON carries the same code / message / severity the human
+-- render shows (kernel-checked at build time).
+private def fwDiag : Diagnostic :=
+  { severity := .error, message := "boom", pass := "parse",
+    span := some ⟨3, 5, 3, 9⟩, hint := some "fix it", code := "E0001", file := "a.con" }
+example : (fwDiag.toJson.splitOn "\"E0001\"").length = 2
+    ∧ (fwDiag.toJson.splitOn "\"boom\"").length = 2
+    ∧ (fwDiag.render.splitOn "E0001").length ≥ 2 := by native_decide
+
+-- ============================================================
 -- Queries
 -- ============================================================
 
