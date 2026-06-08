@@ -1,0 +1,12 @@
+// Phase 4 #4 fixture — ownership/linearity family: a linear resource used after
+// it is moved. Human and JSON renderings must agree (one Diagnostic record).
+struct Resource { value: Int, }
+
+fn consume(r: Resource) -> Int { return r.value; }
+
+fn main() -> Int {
+    let r: Resource = Resource { value: 42 };
+    let x: Int = consume(r);
+    let y: Int = consume(r);
+    return x + y;
+}

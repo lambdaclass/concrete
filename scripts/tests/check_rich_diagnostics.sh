@@ -40,6 +40,7 @@ echo "=== diagnostics render human + JSON from the SAME record, per family ==="
 check_family "parser"   "examples/diagnostics_rich/parser_error.con" "E0001" "parse"
 check_family "resolver" "examples/diagnostics_rich/unknown_name.con" "E0101" "resolve"
 check_family "type"     "examples/diagnostics_rich/type_mismatch.con" "E0220" "check"
+check_family "ownership" "examples/diagnostics_rich/use_after_move.con" "E0205" "check"
 
 echo "=== JSON envelope is well-formed and versioned ==="
 ENV_J="$("$COMPILER" examples/diagnostics_rich/parser_error.con --diagnostics-json 2>/dev/null)"
