@@ -35,6 +35,8 @@ echo "=== the pipeline is a named, replayable pass chain (Phase 4 #3) ==="
 ck "records the frontend pass artifacts"   "[a['pass'] for a in d['artifacts']]==['parse','resolve','typecheck','elaborate','core-check']"
 ck "artifacts form an input→output chain"  "all(a['output_ids']==[a['id']] for a in d['artifacts']) and d['artifacts'][1]['input_ids']==[d['artifacts'][0]['id']]"
 ck "every artifact carries a replay command" "all(a['replay'] for a in d['artifacts'])"
+ck "key artifacts carry a deterministic summary" "any(a['pass']=='core-check' and 'core modules' in a['summary'] for a in d['artifacts']) and any(a['pass']=='resolve' and 'modules' in a['summary'] for a in d['artifacts'])"
+ck "records per-phase timings"             "[t['pass'] for t in d['timings']]==['load-deps','frontend']"
 
 echo "=== the two ledgers compose: link to ObligationCore is real ==="
 ck "obligation_link names the ObligationCore ledger" "'obligation-ledger' in d['obligation_link']"
@@ -53,9 +55,12 @@ for c in "compileBuild" "compileTestBuild"; do
   grep -q "loadProject" Main.lean && ok "$c-class commands load the project context" || no "$c not via loadProject"
 done
 
-echo "=== deterministic: the same project yields the same facts ==="
+echo "=== deterministic (modulo runtime-variable timings) ==="
 J2="$(cd "$PROJ" && "$COMPILER" --report compiler-ledger --json 2>/dev/null)"
-[ "$J" = "$J2" ] && ok "compiler-ledger output is deterministic" || no "compiler-ledger output not deterministic"
+# timings are runtime-variable by nature; normalize their values before comparing.
+norm(){ printf '%s' "$1" | sed 's/"millis": [0-9]*/"millis": 0/g'; }
+[ "$(norm "$J")" = "$(norm "$J2")" ] && ok "compiler-ledger is deterministic (timings normalized)" \
+  || no "compiler-ledger output not deterministic after timing normalization"
 
 echo ""
 echo "COMPILER-LEDGER: PASS=$PASS  FAIL=$FAIL"

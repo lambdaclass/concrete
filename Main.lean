@@ -613,6 +613,7 @@ structure ProjectContext where
 
 /-- Load a project to ValidatedCore. Shared by build, test, and check. -/
 partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : IO (Except UInt32 ProjectContext) := do
+  let tLoadStart ← IO.monoMsNow
   let tomlPath := projectRoot ++ "/Concrete.toml"
   let tomlContent ← readFile tomlPath
   let tomlWarnings := validateToml tomlContent
@@ -644,6 +645,7 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
     | .ok (modules, srcMap) =>
       depModules := depModules ++ modules
       depSrcMap := depSrcMap ++ srcMap
+  let tDepsLoaded ← IO.monoMsNow
 
   -- Load project's main source
   let mainPath := projectRoot ++ "/src/main.con"
@@ -729,11 +731,21 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       [ ("ast", "parse", "source"), ("resolved", "resolve", "ast"),
         ("checked", "typecheck", "resolved"), ("elaborated", "elaborate", "checked"),
         ("core", "core-check", "elaborated") ]
+    let projModules := merged.modules.filter (fun m => !depNames.contains m.name)
+    let summaryFor : String → String := fun oid =>
+      if oid == "core" then s!"{validCore.coreModules.length} core modules"
+      else if oid == "resolved" then s!"{merged.modules.length} modules ({projModules.length} project, {depNames.length} dep)"
+      else ""
     for (oid, passName, inp) in chain do
       let art : Concrete.CompilerLedger.Artifact :=
         { id := oid, pass := passName, inputIds := [inp], outputIds := [oid],
-          replay := s!"concrete check  (pass: {passName})" }
+          summary := summaryFor oid, replay := s!"concrete check  (pass: {passName})" }
       ledger := ledger.recordArtifact art
+    -- per-phase timings (runtime-variable facts; consumers normalize them out for
+    -- determinism checks).
+    let tFrontend ← IO.monoMsNow
+    ledger := ledger.recordTiming "load-deps" (tDepsLoaded - tLoadStart)
+    ledger := ledger.recordTiming "frontend" (tFrontend - tDepsLoaded)
     -- Record proof-registry validation diagnostics into the one store (Phase 4 #4):
     -- commands render these from the ledger instead of recomputing them.
     for issue in Concrete.validateRegistry pc registry do

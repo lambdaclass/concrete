@@ -33,6 +33,7 @@ structure Artifact where
   pass      : String
   inputIds  : List String := []
   outputIds : List String := []
+  summary   : String := ""        -- a deterministic one-line summary of the output
   replay    : String := ""
   deriving Inhabited
 
@@ -112,13 +113,19 @@ def toJson (l : CompilerLedger) (schemaVer : Nat) : String :=
     ++ q "modules" ++ ": " ++ arr s.modules ++ "}"
   let artObjs := l.artifacts.map fun a => "{" ++ q "id" ++ ": " ++ q a.id ++ ", "
     ++ q "pass" ++ ": " ++ q a.pass ++ ", " ++ q "input_ids" ++ ": " ++ arr a.inputIds ++ ", "
-    ++ q "output_ids" ++ ": " ++ arr a.outputIds ++ ", " ++ q "replay" ++ ": " ++ q a.replay ++ "}"
+    ++ q "output_ids" ++ ": " ++ arr a.outputIds ++ ", " ++ q "summary" ++ ": " ++ q a.summary
+    ++ ", " ++ q "replay" ++ ": " ++ q a.replay ++ "}"
+  -- timings carry runtime-variable values; consumers that compare ledgers for
+  -- determinism normalize `millis` out (see check_compiler_ledger.sh).
+  let timeObjs := l.timings.map fun t => "{" ++ q "pass" ++ ": " ++ q t.pass ++ ", "
+    ++ q "millis" ++ ": " ++ toString t.millis ++ "}"
   String.join [
     "{", s!"{q "schema_version"}: {schemaVer}, ",
     s!"{q "schema_kind"}: {q "compiler_ledger"}, ",
     s!"{q "toolchain"}: {q l.toolchainId}, ",
     s!"{q "obligation_link"}: {q l.obligationLink}, ",
     s!"{q "artifacts"}: [", ", ".intercalate artObjs, "], ",
+    s!"{q "timings"}: [", ", ".intercalate timeObjs, "], ",
     s!"{q "facts"}: [", ", ".intercalate factObjs, "], ",
     s!"{q "diagnostics"}: [", ", ".intercalate diagObjs, "], ",
     s!"{q "dependencies"}: {pairArr l.dependencies}, ",
@@ -136,7 +143,11 @@ def render (l : CompilerLedger) : String := Id.run do
   if !l.artifacts.isEmpty then
     out := out ++ "\n\npass artifacts (input → output):"
     for a in l.artifacts do
-      out := out ++ s!"\n  {a.pass}:  {", ".intercalate a.inputIds} → {", ".intercalate a.outputIds}"
+      let sm := if a.summary.isEmpty then "" else s!"  [{a.summary}]"
+      out := out ++ s!"\n  {a.pass}:  {", ".intercalate a.inputIds} → {", ".intercalate a.outputIds}{sm}"
+  if !l.timings.isEmpty then
+    out := out ++ "\n\ntimings:"
+    for t in l.timings do out := out ++ s!"\n  {t.pass}:  {t.millis} ms"
   if !l.dependencies.isEmpty then
     out := out ++ "\n\ndependencies:"
     for (n, p) in l.dependencies do out := out ++ s!"\n  {n}  ({p})"
