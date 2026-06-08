@@ -1,0 +1,5 @@
+// Phase 4 #4 fixture — resolver family: a call to an unknown function. The human
+// and JSON renderings must agree on code/severity/pass/span (one Diagnostic record).
+mod m {
+    fn f(x: i32) -> i32 { return nonexistent_fn(x); }
+}
