@@ -722,6 +722,18 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
     for (n, p) in deps do ledger := ledger.recordDependency n p
     for m in merged.modules do ledger := ledger.recordFact "module" m.name (if depNames.contains m.name then "dependency" else "project")
     for (file, _) in allSrcMap do ledger := ledger.recordSourceMap file []
+    -- The frontend pass chain as named artifacts (Phase 4 #3): every pass that ran
+    -- to produce this context, with input → output provenance, so the pipeline is a
+    -- replayable fact chain. They all succeeded (we are on the ok path).
+    let chain : List (String × String × String) :=
+      [ ("ast", "parse", "source"), ("resolved", "resolve", "ast"),
+        ("checked", "typecheck", "resolved"), ("elaborated", "elaborate", "checked"),
+        ("core", "core-check", "elaborated") ]
+    for (oid, passName, inp) in chain do
+      let art : Concrete.CompilerLedger.Artifact :=
+        { id := oid, pass := passName, inputIds := [inp], outputIds := [oid],
+          replay := s!"concrete check  (pass: {passName})" }
+      ledger := ledger.recordArtifact art
     return Except.ok { projectRoot, validCore, parsed := merged, allSrcMap, tomlContent,
                        mainPath, depNames, policy, policyWarnings, policyLocMap, registry, pc, ledger }
 

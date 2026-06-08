@@ -31,6 +31,11 @@ ck "records module facts"                  "any(f['category']=='module' for f in
 ck "records a project module fact"         "any(f['category']=='module' and f['value']=='project' for f in d['facts'])"
 ck "carries a toolchain identity"          "len(d['toolchain'])>0"
 
+echo "=== the pipeline is a named, replayable pass chain (Phase 4 #3) ==="
+ck "records the frontend pass artifacts"   "[a['pass'] for a in d['artifacts']]==['parse','resolve','typecheck','elaborate','core-check']"
+ck "artifacts form an input→output chain"  "all(a['output_ids']==[a['id']] for a in d['artifacts']) and d['artifacts'][1]['input_ids']==[d['artifacts'][0]['id']]"
+ck "every artifact carries a replay command" "all(a['replay'] for a in d['artifacts'])"
+
 echo "=== the two ledgers compose: link to ObligationCore is real ==="
 ck "obligation_link names the ObligationCore ledger" "'obligation-ledger' in d['obligation_link']"
 # and that linked ledger is actually obtainable for this project.

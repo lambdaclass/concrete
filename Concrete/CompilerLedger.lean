@@ -110,17 +110,21 @@ def toJson (l : CompilerLedger) (schemaVer : Nat) : String :=
     ++ q "severity" ++ ": " ++ q d.severity ++ ", " ++ q "message" ++ ": " ++ q d.message ++ "}"
   let srcObjs := l.sourceFiles.map fun s => "{" ++ q "file" ++ ": " ++ q s.file ++ ", "
     ++ q "modules" ++ ": " ++ arr s.modules ++ "}"
+  let artObjs := l.artifacts.map fun a => "{" ++ q "id" ++ ": " ++ q a.id ++ ", "
+    ++ q "pass" ++ ": " ++ q a.pass ++ ", " ++ q "input_ids" ++ ": " ++ arr a.inputIds ++ ", "
+    ++ q "output_ids" ++ ": " ++ arr a.outputIds ++ ", " ++ q "replay" ++ ": " ++ q a.replay ++ "}"
   String.join [
     "{", s!"{q "schema_version"}: {schemaVer}, ",
     s!"{q "schema_kind"}: {q "compiler_ledger"}, ",
     s!"{q "toolchain"}: {q l.toolchainId}, ",
     s!"{q "obligation_link"}: {q l.obligationLink}, ",
+    s!"{q "artifacts"}: [", ", ".intercalate artObjs, "], ",
     s!"{q "facts"}: [", ", ".intercalate factObjs, "], ",
     s!"{q "diagnostics"}: [", ", ".intercalate diagObjs, "], ",
     s!"{q "dependencies"}: {pairArr l.dependencies}, ",
     s!"{q "source_files"}: [", ", ".intercalate srcObjs, "], ",
     s!"{q "emitted_files"}: {arr l.emittedFiles}, ",
-    s!"{q "counts"}: \{{q "facts"}: {l.facts.length}, {q "diagnostics"}: {l.diagnostics.length}, "
+    s!"{q "counts"}: \{{q "artifacts"}: {l.artifacts.length}, {q "facts"}: {l.facts.length}, {q "diagnostics"}: {l.diagnostics.length}, "
       ++ s!"{q "dependencies"}: {l.dependencies.length}, {q "source_files"}: {l.sourceFiles.length}}",
     "}" ]
 
@@ -129,6 +133,10 @@ def render (l : CompilerLedger) : String := Id.run do
   let mut out := "=== Compiler Ledger (project facts) ==="
   out := out ++ s!"\n\ntoolchain:  {l.toolchainId}"
   out := out ++ s!"\nobligations: {l.obligationLink}"
+  if !l.artifacts.isEmpty then
+    out := out ++ "\n\npass artifacts (input → output):"
+    for a in l.artifacts do
+      out := out ++ s!"\n  {a.pass}:  {", ".intercalate a.inputIds} → {", ".intercalate a.outputIds}"
   if !l.dependencies.isEmpty then
     out := out ++ "\n\ndependencies:"
     for (n, p) in l.dependencies do out := out ++ s!"\n  {n}  ({p})"
