@@ -43,6 +43,17 @@ something real to run. Phase 4 may use `examples/compiler_pipeline_probe/` as
 that transcript for the compiler pipeline; Phase 12 carries the later
 `examples/credibility_slice/packet_window/` replayable flagship.
 
+Every phase must leave behind checked evidence that it works. A phase item is
+not complete because code exists; it is complete when the behavior has positive
+fixtures, negative fixtures, regression fixtures, and at least one adversarial
+or red-team fixture for the failure mode that would be most damaging. Gates
+must be named in the item text, wired into CI or the phase validation artifact,
+and must prove both success and non-success: no false green, no stale cache, no
+silent trust upgrade, no side-channel recomputation, no hidden artifact, and no
+user-facing claim without a replay command or checked report. If a task cannot
+yet have a red-team gate, the roadmap item must say why and name the first gate
+that will make it testable.
+
 North star: **systems code with explicit authority, bounded behavior, small
 trusted boundaries, and Lean-backed evidence tied to real source code, while
 keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
