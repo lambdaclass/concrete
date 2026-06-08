@@ -1,0 +1,12 @@
+// Phase 4 #13a: before #13, core-check diagnostics were location-less. The
+// function declaration span now survives the AST→Core boundary, so the
+// capability violation inside `allocates` points at its declaration.
+fn allocates() -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    vec_push(&mut v, 1);
+    let x: Int = vec_get(&v, 0);
+    vec_free(v);
+    return x;
+}
+
+fn main() with(Std) -> Int { return allocates(); }

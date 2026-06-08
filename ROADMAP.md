@@ -474,6 +474,19 @@ work depends on them.
 13. Preserve source maps through every lowering boundary: AST -> TypedIR,
    TypedIR -> Core, Core -> backend IR, generated C/LLVM/native debug info,
    runtime failures, audit facts, and proof/obligation artifacts.
+   Staged:
+   - 13a. AST→Core function-granularity: `CFnDef.declSpan` carries the function
+     declaration span across elaboration (which previously dropped all spans —
+     Core/SSA had zero span fields). Core-check diagnostics (capability, etc.)
+     now point at the offending function instead of being location-less.
+     `check_source_maps.sh`. [DONE]
+   - 13b. Carry `declSpan` Core→SSA→emitted-symbol so backend diagnostics,
+     generated C/LLVM, and debug info can name the source function.
+   - 13c. Attach the originating function/decl span to proof obligations and
+     audit facts (ObligationCore), so witnesses/counterexamples cite source.
+   - 13d. Expression/statement-granularity spans in Core (the invasive step):
+     thread spans onto Core nodes or a node→span side table for precise
+     within-function obligation and runtime-failure locations.
 14. Normalize command plumbing for `build`, `run`, `test`, `audit`, `prove`,
    `inspect`, `fmt`, `doc`, and `clean`: shared project loading, shared target/
    policy/assumption loading, shared diagnostics, shared output conventions,

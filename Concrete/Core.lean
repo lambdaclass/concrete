@@ -85,6 +85,11 @@ structure CFnDef where
   isEntryPoint : Bool := false  -- tagged by Elab when name == mainFnName
   trustedImplOrigin : Option String := none  -- "TypeName" if from a trusted impl/trait-impl
   capSet : CapSet := .empty
+  -- Source location of the function declaration, carried across the AST→Core
+  -- boundary so Core-level diagnostics, the compiler ledger, and audit/obligation
+  -- artifacts can point back at source (ROADMAP Phase 4 #13). `none` for synthesized
+  -- functions with no source form.
+  declSpan : Option Span := none
 
 structure CStructDef where
   name : String

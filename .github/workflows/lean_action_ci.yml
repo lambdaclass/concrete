@@ -248,6 +248,9 @@ jobs:
       - name: Partial-facts gate (Phase 4 #12a — error-tolerant diagnostics)
         run: bash scripts/tests/check_partial_facts.sh
 
+      - name: Source-maps gate (Phase 4 #13a — spans survive AST→Core)
+        run: bash scripts/tests/check_source_maps.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

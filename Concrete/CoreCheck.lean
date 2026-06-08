@@ -38,6 +38,9 @@ structure CoreCheckEnv where
   currentRetTy : Ty
   inLoop : Bool
   inTrusted : Bool
+  -- Source span of the function currently being checked, so core-check diagnostics
+  -- point at source instead of being location-less (ROADMAP Phase 4 #13).
+  currentFnSpan : Option Span := none
   errors : Diagnostics
 
 abbrev CoreCheckM := StateM CoreCheckEnv Unit
@@ -233,7 +236,7 @@ def CoreCheckError.evidence : CoreCheckError → List (String × String)
 private def addError (msg : String) (hint : Option String := none) (code : String := "")
     (reason : Option String := none) (evidence : List (String × String) := []) : StateM CoreCheckEnv Unit := do
   let env ← getEnv
-  setEnv { env with errors := env.errors ++ [{ severity := .error, message := msg, pass := "core-check", span := none, hint := hint, code := code, reason := reason, evidence := evidence }] }
+  setEnv { env with errors := env.errors ++ [{ severity := .error, message := msg, pass := "core-check", span := env.currentFnSpan, hint := hint, code := code, reason := reason, evidence := evidence }] }
 
 private def addCCError (e : CoreCheckError) : StateM CoreCheckEnv Unit :=
   addError e.message e.hint e.code e.reason e.evidence
@@ -815,6 +818,7 @@ def ccCheckFn (f : CFnDef) : StateM CoreCheckEnv Unit := do
     currentRetTy := f.retTy
     inLoop := false
     inTrusted := f.isTrusted
+    currentFnSpan := f.declSpan
   }
   for s in f.body do
     ccCheckStmt s
