@@ -2268,9 +2268,12 @@ def main (args : List String) : IO UInt32 := do
   if args.length == 2 && args[1]? == some "--diagnostics-json" then
     let inputPath := args.headD ""
     let source ← readFile inputPath
-    match ← Pipeline.runFrontend inputPath source resolveAllModules with
-    | .error ds => IO.println (Concrete.diagnosticsToJson ds); return 1
-    | .ok _ => IO.println (Concrete.diagnosticsToJson []); return 0
+    -- Error-tolerant path (Phase 4 #12a): a failing pass does not erase diagnostics
+    -- from passes that can still run. Returns only diagnostics + a `partial` flag —
+    -- structurally never a codegen/proof artifact.
+    let (ds, isPartial) ← Pipeline.runFrontendDiagnostics inputPath source resolveAllModules
+    IO.println (Concrete.diagnosticsToJson ds 1 isPartial)
+    return (if Concrete.hasErrors ds then 1 else 0)
   match args with
   | [] =>
     IO.eprintln usage

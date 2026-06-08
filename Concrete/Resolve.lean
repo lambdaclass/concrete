@@ -538,13 +538,21 @@ def resolveShallow (moduleSummaries : List FileSummary)
 -- Body-level resolution
 -- ============================================================
 
-/-- Resolve all module bodies using the result of the shallow phase. -/
-def resolveBodies (modules : List Module) (shallow : ShallowResult) : Except Diagnostics (List ResolvedModule) :=
+/-- Resolve bodies, returning the (always structurally complete, side-table-resolved)
+    modules ALONGSIDE any diagnostics, rather than discarding the modules on error.
+    Resolution never modifies the AST (it validates via side tables), so the returned
+    modules are safe to feed to a later *diagnostic* pass even when diagnostics are
+    non-empty. Callers that feed proof/codegen must reject non-empty diagnostics.
+    (ROADMAP Phase 4 #12a.) -/
+def resolveBodiesPartial (modules : List Module) (shallow : ShallowResult) : (List ResolvedModule × Diagnostics) :=
   let (resolved, bodyErrors) := modules.foldl (fun (acc, errs) m =>
     let (rm, mErrs) := resolveModule m shallow.globalScope shallow.knownTypes shallow.traitMethods shallow.traitImpls
     (acc ++ [rm], errs ++ mErrs)
   ) ([], [])
-  let allErrors := shallow.errors ++ bodyErrors
+  (resolved, shallow.errors ++ bodyErrors)
+
+def resolveBodies (modules : List Module) (shallow : ShallowResult) : Except Diagnostics (List ResolvedModule) :=
+  let (resolved, allErrors) := resolveBodiesPartial modules shallow
   if hasErrors allErrors then
     .error allErrors
   else
@@ -562,5 +570,16 @@ def resolveProgram (modules : List Module) (summaryTable : List (String × FileS
     | none => buildFileSummary m
   let shallow := resolveShallow moduleSummaries summaryTable
   resolveBodies modules shallow
+
+/-- Like `resolveProgram` but returns the (always structurally complete) resolved
+    modules ALONGSIDE diagnostics, never discarding them. For the error-tolerant
+    diagnostics path only (ROADMAP Phase 4 #12a) — proof/codegen use `resolveProgram`. -/
+def resolveProgramPartial (modules : List Module) (summaryTable : List (String × FileSummary) := []) : (List ResolvedModule × Diagnostics) :=
+  let moduleSummaries := modules.map fun m =>
+    match summaryTable.find? fun (n, _) => n == m.name with
+    | some (_, s) => s
+    | none => buildFileSummary m
+  let shallow := resolveShallow moduleSummaries summaryTable
+  resolveBodiesPartial modules shallow
 
 end Concrete

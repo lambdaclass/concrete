@@ -1,0 +1,11 @@
+// Phase 4 #12a fixture: an unknown reference in `a` must NOT erase the unrelated
+// type error in `b`. The error-tolerant diagnostics path runs the typechecker on
+// the (structurally complete) resolved program even though resolution failed.
+fn a() -> Int {
+    return unknown_fn();
+}
+fn b() -> Int {
+    let y: Int = true;   // type error, unrelated to a's bad reference
+    return y;
+}
+fn main() -> Int { return 0; }

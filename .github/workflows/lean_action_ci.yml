@@ -245,6 +245,9 @@ jobs:
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 
+      - name: Partial-facts gate (Phase 4 #12a — error-tolerant diagnostics)
+        run: bash scripts/tests/check_partial_facts.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 

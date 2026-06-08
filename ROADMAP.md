@@ -448,6 +448,25 @@ work depends on them.
     diagnostics, formatting, docs, hover, import facts, or audit context. Any
     partial fact must be labelled as partial and must never feed codegen,
     proof, policy, or release claims as if it were complete.
+    Staged:
+    - 12a. Cross-pass tolerant *diagnostics* driver (`runFrontendDiagnostics`)
+      that returns only `Diagnostics` + a `partial` flag — structurally
+      incapable of producing `ValidatedCore`, so it can never feed
+      codegen/proof/policy. When name resolution fails it still runs the
+      typechecker on the (always structurally complete, side-table-resolved)
+      program, so a bad reference in one function no longer erases type
+      diagnostics elsewhere. `partial` is set whenever a pass was skipped.
+      [DONE]
+    - 12b. Run ownership + capability (elaborate→coreCheck) diagnostics on the
+      tolerant path too, guarded so unresolved/ill-typed input never reaches them
+      (only when resolve AND check are clean, matching the strict precondition).
+      Cascade suppression drops a later-pass diagnostic that echoes an earlier
+      pass's diagnostic at the identical span. [DONE — folded into 12a]
+    - 12c. Parser error recovery: resync at statement/decl boundaries so a
+      single bad expression yields one diagnostic, not a truncated parse.
+    - 12d. Explicit `unknown`/`invalid` placeholder nodes for the typed IR so
+      downstream tooling (hover, docs, fmt) can render partial facts, each
+      marked partial.
 13. Preserve source maps through every lowering boundary: AST -> TypedIR,
    TypedIR -> Core, Core -> backend IR, generated C/LLVM/native debug info,
    runtime failures, audit facts, and proof/obligation artifacts.

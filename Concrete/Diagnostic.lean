@@ -156,11 +156,14 @@ def Diagnostic.toJson (d : Diagnostic) : String :=
     s!"{jq "evidence"}: {evJson}, ",
     s!"{jq "context"}: {ctxJson}", "}" ]
 
-/-- A versioned JSON envelope of a diagnostics list. -/
-def diagnosticsToJson (ds : Diagnostics) (schemaVer : Nat := 1) : String :=
+/-- A versioned JSON envelope of a diagnostics list. `partial` is true when the
+    diagnostics may be incomplete because a pass was skipped (Phase 4 #12a) — the
+    consumer must treat the set as best-effort, never as a complete verdict. -/
+def diagnosticsToJson (ds : Diagnostics) (schemaVer : Nat := 1) (isPartial : Bool := false) : String :=
   String.join [
     "{", s!"{jq "schema_version"}: {schemaVer}, ",
     s!"{jq "schema_kind"}: {jq "diagnostics"}, ",
+    s!"{jq "partial"}: {if isPartial then "true" else "false"}, ",
     s!"{jq "count"}: {ds.length}, ",
     s!"{jq "diagnostics"}: [", ", ".intercalate (ds.map Diagnostic.toJson), "]}" ]
 

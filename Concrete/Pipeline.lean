@@ -87,6 +87,13 @@ def resolve (prog : ParsedProgram) (summary : SummaryTable) : Except Diagnostics
   | .ok resolved => .ok { modules := resolved }
   | .error ds => .error ds
 
+/-- Name-resolution pass, error-tolerant: returns the (always structurally complete)
+    resolved program ALONGSIDE diagnostics, never discarding it. For the tolerant
+    diagnostics path only (ROADMAP Phase 4 #12a). -/
+def resolvePartial (prog : ParsedProgram) (summary : SummaryTable) : ResolvedProgram × Diagnostics :=
+  let (resolved, ds) := resolveProgramPartial prog.modules summary.entries
+  ({ modules := resolved }, ds)
+
 /-- Desugar destructuring let statements before Check and Elab see them. -/
 def desugar (resolved : ResolvedProgram) : ResolvedProgram :=
   { modules := resolved.modules.map fun rm =>
@@ -280,6 +287,66 @@ def runFrontend (inputPath source : String)
     match Pipeline.coreCheck elabProg with
     | .error ds => return .error ds
     | .ok validCore => return .ok (resolved, summary, validCore, srcMap)
+
+/-- Error-tolerant frontend for tooling and reports (ROADMAP Phase 4 #12a).
+
+    Unlike `runFrontend`, this never short-circuits at the first failing pass and
+    never produces a `ValidatedCore`: it returns ONLY `Diagnostics` plus a `partial`
+    flag, so it is structurally incapable of feeding codegen, proof, or policy as if
+    it were complete. A bad reference in one function no longer erases type
+    diagnostics elsewhere — when name resolution fails we still run the typechecker
+    on the (always structurally complete, side-table-resolved) program.
+
+    `partial = true` whenever a pass was SKIPPED (parse/file-resolution could not
+    produce their artifact, or name resolution failed so we did not run the
+    elaboration/core-check passes whose inputs must be fully resolved). When the
+    full chain runs, `partial = false` even if later passes reported errors. -/
+def runFrontendDiagnostics (inputPath source : String)
+    (resolveAllModules : String → List Module → String → IO (Except String (List Module × SourceMap)))
+    : IO (Diagnostics × Bool) := do
+  match Pipeline.parse source with
+  | .error ds => return (ds, true)   -- no AST: nothing downstream can run
+  | .ok parsed =>
+  let baseDir := let parts := inputPath.splitOn "/"
+    match parts.reverse with
+    | _ :: rest => "/".intercalate rest.reverse
+    | [] => "."
+  match ← Pipeline.resolveFiles baseDir parsed inputPath resolveAllModules with
+  | .error ds => return (ds, true)   -- could not load all modules
+  | .ok (resolved, _) =>
+    let summary := Pipeline.buildSummary resolved
+    let (resolvedProg, resolveDs) := Pipeline.resolvePartial resolved summary
+    let resolvedProg := Pipeline.desugar resolvedProg
+    -- Typechecking is safe on the structurally complete resolved program even when
+    -- name resolution reported errors, so run it regardless and merge diagnostics.
+    let checkResult := Pipeline.check resolvedProg summary
+    let checkDs0 := match checkResult with | .error ds => ds | .ok () => []
+    -- Cascade suppression: a check diagnostic at the SAME span as a resolve
+    -- diagnostic is an echo of that root cause (e.g. resolve's "unknown function"
+    -- and check's "call to undeclared function" at the identical call site). Keep
+    -- the root (resolve), drop the echo, so tolerance adds unrelated diagnostics
+    -- without re-reporting ones the earlier pass already owns.
+    let sameSpan : Option Span → Option Span → Bool
+      | some a, some b => a.line == b.line && a.col == b.col && a.endLine == b.endLine && a.endCol == b.endCol
+      | _, _ => false
+    let checkDs := checkDs0.filter fun c => !(resolveDs.any fun r => sameSpan c.span r.span)
+    -- Elaboration / core-check require fully-resolved AND type-correct input, so we
+    -- only run them when resolve and check are both clean — matching the strict
+    -- pipeline's precondition. This keeps ownership/capability (core-check)
+    -- diagnostics available without ever feeding them unresolved or ill-typed input.
+    -- `partial` is set whenever any pass was skipped, so the consumer knows later-
+    -- pass diagnostics may be missing.
+    if hasErrors resolveDs then
+      return (resolveDs ++ checkDs, true)
+    match checkResult with
+    | .error _ => return (resolveDs ++ checkDs, true)
+    | .ok () =>
+      match Pipeline.elaborate resolvedProg summary with
+      | .error eds => return (resolveDs ++ checkDs ++ eds, true)
+      | .ok elabProg =>
+        match Pipeline.coreCheck elabProg with
+        | .error cds => return (resolveDs ++ checkDs ++ cds, false)
+        | .ok _ => return (resolveDs ++ checkDs, false)
 
 end Pipeline
 end Concrete
