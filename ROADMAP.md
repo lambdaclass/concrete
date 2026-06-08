@@ -415,7 +415,21 @@ work depends on them.
 10. Treat diagnostics as compiler data, not formatted strings. Passes should
    emit structured diagnostics first; human text, JSON, LSP output, tests, and
    release bundles should render the same diagnostic records.
-11. Add error-tolerant partial facts for tooling and reports: parser,
+11. Add rich Elm/Gleam-style diagnostic rendering as a checked compiler
+    feature, not an incidental formatting pass. The renderer must support:
+    source snippets with underlines, primary and secondary spans, related-span
+    notes, reason/help/next-action sections, expected-vs-actual facts, policy
+    or evidence context when relevant, and stable diagnostic codes. It must
+    render from the same structured diagnostic records used by JSON/LSP, not
+    from hand-formatted strings. Add `examples/diagnostics_rich/` with exact
+    fixtures for parser error, unknown name, type mismatch, ownership/linearity
+    error, missing capability, array-bounds obligation failure, solver-policy
+    rejection, vacuous contract, and stale proof. Wire
+    `scripts/tests/check_rich_diagnostics.sh`; the gate must assert human and
+    JSON output agree on code, severity, spans, related spans, reason, help,
+    and evidence/policy payload, and that redaction/source-location privacy
+    modes still apply.
+12. Add error-tolerant partial facts for tooling and reports: parser,
     resolver, typechecker, ownership, and capability passes should be able to
     produce partial artifacts containing explicit `invalid` / `unknown`
     placeholders where safe. This is the LSP/product lesson from Gleam, Dafny,
@@ -423,14 +437,14 @@ work depends on them.
     diagnostics, formatting, docs, hover, import facts, or audit context. Any
     partial fact must be labelled as partial and must never feed codegen,
     proof, policy, or release claims as if it were complete.
-12. Preserve source maps through every lowering boundary: AST -> TypedIR,
+13. Preserve source maps through every lowering boundary: AST -> TypedIR,
    TypedIR -> Core, Core -> backend IR, generated C/LLVM/native debug info,
    runtime failures, audit facts, and proof/obligation artifacts.
-13. Normalize command plumbing for `build`, `run`, `test`, `audit`, `prove`,
+14. Normalize command plumbing for `build`, `run`, `test`, `audit`, `prove`,
    `inspect`, `fmt`, `doc`, and `clean`: shared project loading, shared target/
    policy/assumption loading, shared diagnostics, shared output conventions,
    and shared exit-code taxonomy.
-14. Add a golden CLI behavior matrix before broad command growth:
+15. Add a golden CLI behavior matrix before broad command growth:
     `scripts/tests/check_cli_contract.sh` must cover every public command's
     exit code, stdout/stderr split, `--json` behavior, quiet/verbose behavior,
     artifact output location, missing-file behavior, malformed-input behavior,
@@ -438,7 +452,7 @@ work depends on them.
     `audit`, `prove`, `inspect`, `fmt`, `doc`, `clean`, and one unknown command.
     Done when command UX is a checked contract, not an accidental consequence
     of each command's implementation.
-15. Define the compiler-internal API boundary before LSP, MCP, package tooling,
+16. Define the compiler-internal API boundary before LSP, MCP, package tooling,
     or editor integrations import random modules. V1 boundary:
     `ProjectContext` loading, `CompilerLedger` queries, diagnostic rendering,
     pass inspection, artifact lookup, `ObligationCore` queries, and release
@@ -446,19 +460,19 @@ work depends on them.
     `scripts/tests/check_compiler_api_boundary.sh`; the gate must fail if
     editor/package/tooling code reaches into parser/checker/report internals
     instead of the boundary modules.
-16. Define the backend contract boundary: integer overflow profile, division
+17. Define the backend contract boundary: integer overflow profile, division
    semantics, layout/ABI, panic/assert behavior, optimization assumptions,
    target triple/data layout, libc/runtime assumptions, and what is trusted.
-17. Add an interpreter-vs-compiled differential harness for ordinary language
+18. Add an interpreter-vs-compiled differential harness for ordinary language
     development. Every new executable language feature should be able to run
     through `interpret result == compiled result` where deterministic and
     target-independent.
-18. Add pass inspection commands for compiler developers and users:
+19. Add pass inspection commands for compiler developers and users:
     `concrete inspect --ast`, `--resolved`, `--typed`, `--core`,
     `--backend-ir`, `--ledger`, with stable redaction of local paths and
     deterministic ordering. `--ledger` must render the same `CompilerLedger`
     records that reports and release bundles consume.
-19. Add pass verifier gates, inspired by Swift's SIL verifier, Lean's IR
+20. Add pass verifier gates, inspired by Swift's SIL verifier, Lean's IR
     checker, Zig's AIR/codegen bookkeeping checks, and Go's SSA validation:
     `concrete verify-ir --pass parsed|resolved|typed|core|backend-ir` must
     check structural invariants for each representation. Examples: resolved
@@ -467,7 +481,7 @@ work depends on them.
     attached before lowering; Core must contain no source-only contract/ghost
     syntax; backend IR must preserve source maps and target assumptions. Wire
     this into `scripts/tests/check_ir_verifiers.sh`.
-20. Add structured compiler pipeline events, borrowing the useful part of
+21. Add structured compiler pipeline events, borrowing the useful part of
     Dafny's pipeline events and Gleam's build telemetry:
     `concrete build --events --json` emits start/finish/fail events for
     project-load, parse, resolve, canonicalize, typecheck, ownership,
@@ -475,27 +489,27 @@ work depends on them.
     and release-bundle capture. Events must include pass name, input artifact
     ids, output artifact ids, source counts, timing, diagnostic count, and
     command context.
-21. Add crash/repro bundles for compiler bugs, inspired by Zig's crash context
+22. Add crash/repro bundles for compiler bugs, inspired by Zig's crash context
     reports and Rust's ICE discipline: on an internal compiler failure,
     Concrete writes `.build/concrete-crash/<id>/` with `command.txt`,
     `toolchain.json`, `project.json`, redacted source inputs, last successful
     pass, current function/module/obligation id if known, structured
     diagnostics so far, and a replay command. User errors must never produce
     crash bundles; crash bundles are for compiler bugs only.
-22. Add crash triage taxonomy for internal compiler failures. Crash bundles
+23. Add crash triage taxonomy for internal compiler failures. Crash bundles
     must classify `parser_ice`, `resolver_ice`, `canonicalizer_ice`,
     `typechecker_ice`, `ownership_ice`, `capability_ice`, `lowering_ice`,
     `obligation_ice`, `backend_ice`, `report_ice`, and `prove_ice`.
     Add `scripts/tests/check_crash_triage.sh` with one synthetic internal-error
     trigger per broad area where feasible. User errors must still be ordinary
     diagnostics, never crash categories.
-23. Define canonical interned identities for names, types, literals, layouts,
+24. Define canonical interned identities for names, types, literals, layouts,
     and target facts before broad caching or package artifacts. This is the
     Zig `InternPool` / Rust stable-id lesson adapted to Concrete: reports,
     fingerprints, obligation ids, package interfaces, incremental facts, and
     proof artifacts should use stable canonical ids instead of re-rendered
     strings where possible.
-24. Define a query/dependency model for compiler facts before implementing
+25. Define a query/dependency model for compiler facts before implementing
     broad caching. Name facts such as `parse(file)`, `resolve(module)`,
     `typecheck(function)`, `capabilities(function)`, `typed_ir(function)`,
     `core(function)`, `obligations(function)`, `audit_facts(function)`,
@@ -503,11 +517,11 @@ work depends on them.
     The shape should be query-first, Salsa/rust-analyzer style, but Concrete
     should not take a cache dependency until invalidation and diagnostics are
     stable.
-25. Define incremental artifact dependencies: which source files/functions
+26. Define incremental artifact dependencies: which source files/functions
     affect which diagnostics, facts, obligations, proof checks, generated code,
     inspect output, and release-bundle entries. Do not implement caching broadly
     until the dependency model is named and validated.
-26. Eliminate hidden global compiler state before adding broad parallelism,
+27. Eliminate hidden global compiler state before adding broad parallelism,
     caching, LSP, or package builds. All mutable compiler facts must be owned by
     `ProjectContext`, `CompilerLedger`, `ObligationCore`, an explicit pass
     artifact, or a clearly named cache object with declared invalidation. Add
@@ -515,7 +529,7 @@ work depends on them.
     new module-level mutable state, command-local fact stores, ad hoc global
     caches, or pass-local side tables that are consumed by later commands
     without being recorded in the ledger.
-27. Add deterministic pipeline replay and serial/parallel equivalence before
+28. Add deterministic pipeline replay and serial/parallel equivalence before
     broad incremental compilation. The same project must produce the same
     diagnostics, artifact ids, source maps, ledger facts, obligation ids,
     emitted backend IR, and release-bundle facts under serial execution,
@@ -524,7 +538,7 @@ work depends on them.
     `examples/compiler_pipeline_probe/`; the gate must compare
     `--events --json`, `inspect --ledger`, `inspect --backend-ir`,
     `--json-errors`, and release-bundle summaries across repeated runs.
-28. Add schema-version rejection gates for every machine-readable artifact
+29. Add schema-version rejection gates for every machine-readable artifact
     while Concrete is moving fast. V1 stance: no old-schema compatibility and
     no migration promise before release. Every JSON/fact artifact must carry
     `schema_version`; a mismatched version must fail with a clear diagnostic
@@ -533,39 +547,39 @@ work depends on them.
     diagnostics, pass artifacts, release bundles, audit bundles, proof
     workspaces, package artifacts, and backend IR manifests. Add
     `scripts/tests/check_schema_version_rejection.sh`.
-29. Add compiler performance instrumentation before broad feature growth:
+30. Add compiler performance instrumentation before broad feature growth:
     `concrete build --timings --json` and `concrete report performance --json`
     must report parse/resolve/typecheck/ownership/capability/lowering/codegen/
     report/prove timings, peak memory if available, source-file/function counts,
     stdlib compile time, and toolchain identity. Performance data is a compiler
     fact, not a printed side channel.
-30. Add compiler performance regression budgets:
+31. Add compiler performance regression budgets:
     `scripts/tests/check_compiler_performance.sh` compares
     `tests/perf/small_project`, `tests/perf/stdlib_imports`,
     `tests/perf/proof_report`, and `tests/perf/codegen_loop` against committed
     JSON baselines. Done when CI fails on unexplained budget regressions and
     the report says which pass regressed.
-31. Add compiler fuzzing as a standing gate:
+32. Add compiler fuzzing as a standing gate:
     `scripts/fuzz/parser`, `scripts/fuzz/resolver`,
     `scripts/fuzz/typecheck`, `scripts/fuzz/ownership`,
     `scripts/fuzz/formatter`, `scripts/fuzz/lowering`, and
     `scripts/fuzz/obligations`. Done when `make test-fuzz` runs a bounded CI
     budget and proves crashes, parser panics, malformed JSON, and false
     `proved_*` statuses are rejected.
-32. Add fuzz minimization and fixture promotion:
+33. Add fuzz minimization and fixture promotion:
     `scripts/fuzz/minimize` writes reduced repros into
     `tests/fuzz_regressions/<area>/<name>.con` with an expected diagnostic or
     honest non-proof snapshot. Done when every promoted repro is run by CI and
     no fuzzer-only failure stays outside the checked-in corpus for a release.
-33. Document pass invariants and failure boundaries: what each pass guarantees,
+34. Document pass invariants and failure boundaries: what each pass guarantees,
     which errors are recoverable for reporting, which errors stop compilation,
     and which assumptions are trusted.
-34. Add a compiler-pipeline regression corpus: malformed modules, ambiguous
+35. Add a compiler-pipeline regression corpus: malformed modules, ambiguous
     names, type errors, ownership errors, capability errors, source-map
     preservation, interpreter/codegen mismatch, backend assumption reporting,
     canonicalization edge cases, dependency invalidation, and deterministic
     `inspect` output.
-35. Add metamorphic compiler tests. Equivalent source changes must preserve the
+36. Add metamorphic compiler tests. Equivalent source changes must preserve the
     relevant facts: local variable renaming, independent declaration ordering,
     whitespace/comments, equivalent parentheses, harmless block splitting,
     import ordering where semantics are unchanged, and equivalent literal
@@ -573,7 +587,7 @@ work depends on them.
     compare diagnostics, resolved ids where expected, typed/Core/backend facts,
     obligations, release-bundle summaries, and compiled output, while allowing
     source spans and source hashes to differ where they honestly should.
-36. Add source-location privacy modes, borrowing the useful part of Odin's
+37. Add source-location privacy modes, borrowing the useful part of Odin's
     source-location controls but making them audit-visible:
     `[build] source-location-mode = "normal" | "filename" | "obfuscated" |
     "none"` in `Concrete.toml`, plus `--source-location-mode <mode>` for
@@ -585,13 +599,13 @@ work depends on them.
     Done when local CI still sees full spans under `normal`, release bundles
     record `source_location_mode`, and redacted artifacts never pretend that
     redaction is proof or evidence.
-37. Add JSON diagnostic parity as a named gate, not just a renderer option:
+38. Add JSON diagnostic parity as a named gate, not just a renderer option:
     `concrete build --json-errors` or the equivalent command mode must emit the
     same diagnostic codes, spans, reasons, related spans, next actions, and
     payloads as the human renderer. Wire `scripts/tests/check_json_diagnostics.sh`
     with parser, resolver, type, ownership, capability, policy, backend, and
     internal-error fixtures.
-38. Add artifact-retention and emitted-pass files for debugging, inspired by
+39. Add artifact-retention and emitted-pass files for debugging, inspired by
     Odin's keep-temp-files workflow and QBE's printable IL discipline:
     `--keep-artifacts`, `--emit-ast`, `--emit-resolved`, `--emit-typed-ir`,
     `--emit-core`, `--emit-backend-ir`, `--emit-asm`, and
@@ -604,7 +618,7 @@ work depends on them.
     `examples/compiler_pipeline_probe/` and one negative case proving
     `--emit-backend-ir` is unavailable before backend IR exists rather than
     silently emitting stale output.
-39. Add artifact garbage-collection policy and `concrete clean` modes before
+40. Add artifact garbage-collection policy and `concrete clean` modes before
     retained artifacts, proof caches, crash bundles, and package artifacts grow
     without bound. Required modes: `concrete clean --build`, `--artifacts`,
     `--proof-cache`, `--crash-bundles`, `--all`, and `--dry-run --json`.
@@ -612,14 +626,14 @@ work depends on them.
     unless explicitly requested. Wire `scripts/tests/check_clean_artifacts.sh`
     to prove no source, proof, release bundle, or manually retained crash repro
     is deleted accidentally.
-40. Add compiler self-audit: `concrete audit --compiler` renders the
+41. Add compiler self-audit: `concrete audit --compiler` renders the
     `CompilerLedger` itself. Required output: passes run, artifact ids,
     diagnostics count, source-location privacy mode, target/toolchain identity,
     solver/tool versions, cache/dependency facts, replay commands, backend
     assumptions, emitted files, and links to the `ObligationCore` ledger. Wire
     `scripts/tests/check_compiler_self_audit.sh`; the gate must prove the
     self-audit is generated from `CompilerLedger`, not from text scraping.
-41. Keep the backend IR printable, verifier-checked, and regression-testable
+42. Keep the backend IR printable, verifier-checked, and regression-testable
     directly. This is the QBE lesson adapted to Concrete: even if LLVM remains
     the backend, Concrete's own backend contract should be a stable emitted
     artifact with a verifier, not an opaque stream of generated code. V1 must
@@ -632,7 +646,7 @@ work depends on them.
     `target_constants.con`. Wire `scripts/tests/check_backend_ir.sh` to run
     `concrete inspect --backend-ir`, `concrete verify-ir --pass backend-ir`,
     and a compiled execution check for each fixture.
-42. Add the Phase 4 validation artifact:
+43. Add the Phase 4 validation artifact:
     `examples/compiler_pipeline_probe/` plus
     `scripts/tests/check_phase4_pipeline.sh`. The fixture must run
     `concrete build`, `run`, `test`, `fmt --check`, `inspect --ast`,
@@ -645,8 +659,9 @@ work depends on them.
     output; assert source-map spans and source-location privacy modes survive;
     assert dependency facts are stable; assert every pass artifact has input
     ids, output ids, diagnostics, facts consumed/produced, timing, replay
-    command, and verifier status; assert schema-version mismatches reject
-    clearly; assert metamorphic variants preserve the right facts; assert
+    command, and verifier status; assert rich human diagnostics and JSON/LSP
+    diagnostics come from the same records; assert schema-version mismatches
+    reject clearly; assert metamorphic variants preserve the right facts; assert
     crash/repro bundles are emitted only for deliberate internal compiler
     failures; and run the fuzz-regression fixtures without relying on
     proof-specific machinery.
