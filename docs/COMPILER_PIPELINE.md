@@ -49,6 +49,11 @@ Those commands may stop at different stages, but they should not each invent
 their own project loading, source discovery, diagnostics, policy loading, or
 target-profile logic.
 
+Command behavior itself is part of the compiler contract. Public commands
+should have checked exit codes, stdout/stderr policy, JSON behavior,
+quiet/verbose behavior, artifact locations, and malformed-input behavior. This
+keeps tool integrations from depending on accidents.
+
 This is a product decision as much as an architecture decision. Concrete should
 feel like one coherent toolchain, not a compiler plus a pile of wrapper scripts.
 The lesson from languages with strong developer tooling is that `build`, `run`,
@@ -127,6 +132,11 @@ Mutable facts must live in one of the named places:
 
 Ad hoc module-level caches, command-local side tables, and report-only
 recomputations are design bugs unless they are recorded back into the ledger.
+
+While Concrete is moving fast, machine-readable schema compatibility is
+deliberately narrow: every artifact carries `schema_version`, and unsupported
+versions are rejected with a clear regeneration diagnostic. The project should
+not promise old-artifact migration until the public release policy says so.
 
 ## Pass Outputs
 
@@ -323,6 +333,11 @@ across repeated runs, clean builds, retained-artifact replay, and serial versus
 parallel pass scheduling where parallelism exists. If two modes differ, the
 compiler should report a pipeline bug, not silently pick one answer.
 
+Metamorphic tests should exercise the same idea at the source level. Renaming
+locals, reordering independent declarations, changing whitespace/comments, or
+rewriting harmless parentheses should not change compiler facts except for the
+facts that honestly depend on source text or spans.
+
 ## Backend Contract
 
 The backend boundary should name:
@@ -403,6 +418,31 @@ The pipeline should have three debugging surfaces:
 
 User errors should produce diagnostics, not crash bundles. Crash bundles are
 only for compiler bugs.
+
+Crash bundles should be classified by compiler area: parser, resolver,
+canonicalizer, typechecker, ownership, capability, lowering, obligation,
+backend, report, or prove. This makes triage and red-team regression work
+mechanical.
+
+Retained artifacts need cleanup policy. `concrete clean` should distinguish
+ordinary build outputs, retained pass artifacts, proof caches, crash bundles,
+and package artifacts, with a dry-run JSON mode before deletion.
+
+## Compiler API Boundary
+
+Editor, package, MCP, and future service integrations should not import random
+compiler internals. Their boundary is:
+
+- `ProjectContext` loading
+- `CompilerLedger` queries
+- diagnostic rendering
+- pass inspection
+- artifact lookup
+- `ObligationCore` queries
+- release-bundle capture
+
+If an integration needs a fact outside this boundary, the boundary should grow
+deliberately instead of letting tool code scrape internals.
 
 ## Why This Phase Comes Before Usability
 
