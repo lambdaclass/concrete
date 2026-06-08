@@ -462,8 +462,12 @@ work depends on them.
       (only when resolve AND check are clean, matching the strict precondition).
       Cascade suppression drops a later-pass diagnostic that echoes an earlier
       pass's diagnostic at the identical span. [DONE — folded into 12a]
-    - 12c. Parser error recovery: resync at statement/decl boundaries so a
-      single bad expression yields one diagnostic, not a truncated parse.
+    - 12c. Parser error recovery: resync at top-level declaration boundaries so a
+      single bad declaration yields its own diagnostic and the well-formed
+      declarations after it still parse and flow downstream (resolve/check), with
+      recovered parse errors collected in the threaded parser state. The strict
+      `parse` now reports every recovered error, not just the first.
+      [DONE — decl-level; finer statement-level recovery within a body is future]
     - 12d. Explicit `unknown`/`invalid` placeholder nodes for the typed IR so
       downstream tooling (hover, docs, fmt) can render partial facts, each
       marked partial.

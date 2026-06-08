@@ -30,6 +30,11 @@ structure ParserState where
   pos : Nat
   pendingGt : Bool := false  -- true when >> was split and one > remains
   loopContracts : List LoopContract := []  -- accumulator: #[invariant]/#[variant] collected before loops
+  -- Error-tolerant parsing (ROADMAP Phase 4 #12c): recovered top-level parse
+  -- errors collected so one bad declaration does not hide the rest. Lives in the
+  -- threaded state (not a `mut` local) precisely because `ExceptT` rolls `mut`
+  -- locals back on a throw but leaves the base `StateM` state intact.
+  errors : Diagnostics := []
   deriving Inhabited
 
 abbrev ParseM := ExceptT Diagnostics (StateM ParserState)
@@ -1829,7 +1834,28 @@ partial def parseExternFn : ParseM ExternFnDecl := do
   expect .semicolon
   return { name, params, retTy }
 
-/-- Parse the body of a module (shared between mod blocks and top-level). -/
+/-- Tokens that begin a new top-level item — the resync points for error recovery
+    (ROADMAP Phase 4 #12c). When a declaration fails to parse we skip to the next of
+    these so an unrelated, well-formed declaration is still parsed and reported. -/
+def isTopLevelStart : TokenKind → Bool
+  | .import_ | .pub_ | .trusted_ | .struct_ | .hash | .extern_ | .enum_ | .impl_
+  | .trait_ | .const_ | .type_ | .cap_ | .newtype_ | .«mod» | .fn => true
+  | .ident "spec" | .ident "union" => true
+  | _ => false
+
+/-- Record a recovered parse error into the threaded state (survives the throw). -/
+def recordParseErrors (ds : Diagnostics) : ParseM Unit :=
+  modify fun s => { s with errors := s.errors ++ ds }
+
+/-- Skip tokens until the next top-level item start, the body's stop token, or EOF.
+    Always advances at least once so recovery cannot loop forever. -/
+partial def skipToTopLevelBoundary (stopToken : TokenKind) : ParseM Unit := do
+  advance  -- guarantee progress past the offending token
+  let mut tk ← peek
+  while tk != .eof && tk != stopToken && !isTopLevelStart tk do
+    advance
+    tk ← peek
+
 partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
   let mut structs : List StructDef := []
   let mut enums : List EnumDef := []
@@ -1857,65 +1883,9 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
   let mut pendingFingerprint : Option String := none
   let mut tk ← peek
   while tk != stopToken && tk != .eof do
-    -- Parse attributes (but don't continue — let the next token be parsed)
-    if tk == .hash then
-      let (key, attrVal, reprOpts, ensExpr) ← parseAttribute
-      if key == "repr" then
-        pendingRepr := reprOpts
-      if key == "test" then
-        pendingIsTest := true
-      if key == "overflow_checked" then pendingOverflow := true
-      if key == "spec" then
-        if pendingSpecLink.isSome then throwParse s!"duplicate #[spec(...)] on one function" (span := none)
-        pendingSpecLink := attrVal
-      if key == "proof_by" then
-        if pendingProofBy.isSome then throwParse s!"duplicate #[proof_by(...)] on one function" (span := none)
-        pendingProofBy := attrVal
-      if key == "ensures_proof" then
-        if pendingEnsuresProof.isSome then throwParse s!"duplicate #[ensures_proof(...)] on one function" (span := none)
-        pendingEnsuresProof := attrVal
-      if key == "proof_coverage" then
-        if pendingCoverage.isSome then throwParse s!"duplicate #[proof_coverage(...)] on one function" (span := none)
-        pendingCoverage := attrVal
-      if key == "proof_fingerprint" then
-        if pendingFingerprint.isSome then throwParse s!"duplicate #[proof_fingerprint(...)] on one function" (span := none)
-        pendingFingerprint := attrVal
-      match ensExpr with
-      | some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
-                  else pendingEnsures := pendingEnsures ++ [e]
-      | none => pure ()
-      tk ← peek
-    if tk == .import_ then
-      if pendingRepr.isSome then
-        let sp ← peekSpan
-        throwParse "#[repr(...)] can only be applied to struct definitions" (span := some sp)
-      let imp ← parseImport
-      imports := imports ++ [imp]
-    else
-      let isPub := tk == .pub_
-      if isPub then advance; tk ← peek
-      -- Check for 'trusted' modifier (only valid before fn and impl)
-      let isTrusted := tk == .trusted_
-      if isTrusted then advance; tk ← peek
-      if tk == .struct_ then
-        if isTrusted then
-          let sp ← peekSpan
-          throwParse "'trusted' can only be applied to fn or impl" (span := some sp)
-        if pendingIsTest then
-          let sp ← peekSpan
-          throwParse "#[test] can only be applied to function definitions" (span := some sp)
-        let s ← parseStructDef
-        let reprC := pendingRepr.map (·.isReprC) |>.getD false
-        let packed := pendingRepr.map (·.isPacked) |>.getD false
-        let reprA := pendingRepr.bind (·.reprAlign)
-        structs := structs ++ [{ s with isPublic := isPub, isReprC := reprC,
-                                        isPacked := packed, reprAlign := reprA }]
-        pendingRepr := none
-      else if tk == .hash then
-        if isTrusted then
-          let sp ← peekSpan
-          throwParse "'trusted' can only be applied to fn or impl" (span := some sp)
-        -- Attribute before a declaration (after pub)
+    try
+      -- Parse attributes (but don't continue — let the next token be parsed)
+      if tk == .hash then
         let (key, attrVal, reprOpts, ensExpr) ← parseAttribute
         if key == "repr" then
           pendingRepr := reprOpts
@@ -1941,135 +1911,207 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
         | some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
                     else pendingEnsures := pendingEnsures ++ [e]
         | none => pure ()
-      else
-        -- Any non-struct declaration: reject dangling #[repr(...)]
+        tk ← peek
+      if tk == .import_ then
         if pendingRepr.isSome then
           let sp ← peekSpan
           throwParse "#[repr(...)] can only be applied to struct definitions" (span := some sp)
-        -- Reject #[test] on non-function declarations
-        if pendingIsTest && tk != .fn then
-          let sp ← peekSpan
-          throwParse "#[test] can only be applied to function definitions" (span := some sp)
-        -- Reject 'trusted' on non-fn/impl/extern declarations
-        if isTrusted && tk != .fn && tk != .impl_ && tk != .extern_ then
-          let sp ← peekSpan
-          throwParse "'trusted' can only be applied to fn, impl, or extern fn" (span := some sp)
-        if tk == .extern_ then
-          let ext ← parseExternFn
-          externFns := externFns ++ [{ ext with isPublic := isPub, isTrusted }]
-        else if tk == .enum_ then
-          let e ← parseEnumDef
-          enums := enums ++ [{ e with isPublic := isPub }]
-        else if tk == .impl_ then
-          let result ← parseImplBlock
-          match result with
-          | .inl ib => implBlocks := implBlocks ++ [{ ib with isTrusted }]
-          | .inr tb => traitImpls := traitImpls ++ [{ tb with isTrusted }]
-        else if tk == .trait_ then
-          let t ← parseTraitDef
-          traits := traits ++ [{ t with isPublic := isPub }]
-        else if tk == .const_ then
-          let c ← parseConstDef
-          constants := constants ++ [{ c with isPublic := isPub }]
-        else if tk == .type_ then
-          let ta ← parseTypeAlias
-          typeAliases := typeAliases ++ [{ ta with isPublic := isPub }]
-        else if tk == .cap_ then
-          let sp ← peekSpan
-          advance  -- consume 'cap'
-          let name ← expectIdent
-          expect .assign
-          let mut caps : List String := []
-          let firstName ← expectIdent
-          caps := [firstName]
-          let mut tk2 ← peek
-          while tk2 == .plus do
-            advance  -- consume '+'
-            let capName ← expectIdent
-            caps := caps ++ [capName]
-            tk2 ← peek
-          expect .semicolon
-          -- Expand "Std" macro inside alias definitions
-          let expanded := caps.flatMap fun c =>
-            if c == stdCapMacroName then stdCaps else [c]
-          -- Validate all names are known capabilities
-          for c in expanded do
-            if !validCaps.contains c then
-              throwParse s!"unknown capability '{c}' in cap alias '{name}'" (span := some sp)
-          capAliases := capAliases ++ [{ name, caps := expanded, isPublic := isPub, span := sp }]
-        else if tk == .newtype_ then
-          let nt ← parseNewtypeDef
-          newtypes := newtypes ++ [{ nt with isPublic := isPub }]
-        else if tk == .«mod» then
-          -- Nested submodule (or mod declaration)
-          advance  -- consume 'mod'
-          let subName ← expectIdent
-          let tk2 ← peek
-          if tk2 == .lbrace then
-            expect .lbrace
-            let sub ← parseModuleBody .rbrace
-            expect .rbrace
-            submodules := submodules ++ [{ sub with name := subName }]
-          else
-            -- "mod other;" - module declaration
-            expect .semicolon
-            submodules := submodules ++ [{ name := subName, structs := [], enums := [], functions := [] }]
-        else if tk == .ident "spec" then
-          -- `spec fn name(params) -> ret;` — erased pure specification function
-          advance  -- consume 'spec'
-          let sp ← peekSpan
-          expect .fn
-          let name ← expectIdent
-          expect .lparen
-          let params ← parseParamList
-          expect .rparen
-          let tkr ← peek
-          let retTy ← if tkr == .arrow then advance; parseType else pure .unit
-          expect .semicolon
-          specFns := specFns ++ [{ name, params, retTy, isPublic := isPub, span := sp }]
-        else if tk == .fn then
-          -- Check if function has a body or is body-less (intrinsic/declaration)
-          let f ← parseFnDefOrDecl
-          let proofLink : Option SourceProofLink :=
-            if pendingSpecLink.isSome || pendingProofBy.isSome
-                || pendingEnsuresProof.isSome || pendingCoverage.isSome
-                || pendingFingerprint.isSome
-            then some { spec := pendingSpecLink, proofBy := pendingProofBy
-                      , ensuresProof := pendingEnsuresProof, coverage := pendingCoverage
-                      , fingerprint := pendingFingerprint }
-            else none
-          match f with
-          | .inl fnDef => fns := fns ++ [{ fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures, proofLink, overflowChecked := pendingOverflow }]
-          | .inr extDef => externFns := externFns ++ [{ extDef with isPublic := isPub }]
-          pendingIsTest := false
-          pendingOverflow := false
-          pendingEnsures := []
-          pendingRequires := []
-          pendingSpecLink := none
-          pendingProofBy := none
-          pendingEnsuresProof := none
-          pendingCoverage := none
-          pendingFingerprint := none
-        else if tk == .ident "union" then
-          -- Parse union as a struct (all fields share memory)
-          advance  -- consume 'union'
-          let name ← expectIdent
-          let (typeParams, _typeBounds) ← parseTypeParams
-          expect .lbrace
-          let mut fields : List StructField := []
-          let mut tk3 ← peek
-          while tk3 != .rbrace && tk3 != .eof do
-            let fieldName ← expectIdent
-            expect .colon
-            let ty ← parseType
-            fields := fields ++ [{ name := fieldName, ty }]
-            tk3 ← peek
-            if tk3 == .comma then advance; tk3 ← peek
-          expect .rbrace
-          structs := structs ++ [{ name, typeParams, fields, isPublic := isPub, isUnion := true }]
+        let imp ← parseImport
+        imports := imports ++ [imp]
+      else
+        let isPub := tk == .pub_
+        if isPub then advance; tk ← peek
+        -- Check for 'trusted' modifier (only valid before fn and impl)
+        let isTrusted := tk == .trusted_
+        if isTrusted then advance; tk ← peek
+        if tk == .struct_ then
+          if isTrusted then
+            let sp ← peekSpan
+            throwParse "'trusted' can only be applied to fn or impl" (span := some sp)
+          if pendingIsTest then
+            let sp ← peekSpan
+            throwParse "#[test] can only be applied to function definitions" (span := some sp)
+          let s ← parseStructDef
+          let reprC := pendingRepr.map (·.isReprC) |>.getD false
+          let packed := pendingRepr.map (·.isPacked) |>.getD false
+          let reprA := pendingRepr.bind (·.reprAlign)
+          structs := structs ++ [{ s with isPublic := isPub, isReprC := reprC,
+                                          isPacked := packed, reprAlign := reprA }]
+          pendingRepr := none
+        else if tk == .hash then
+          if isTrusted then
+            let sp ← peekSpan
+            throwParse "'trusted' can only be applied to fn or impl" (span := some sp)
+          -- Attribute before a declaration (after pub)
+          let (key, attrVal, reprOpts, ensExpr) ← parseAttribute
+          if key == "repr" then
+            pendingRepr := reprOpts
+          if key == "test" then
+            pendingIsTest := true
+          if key == "overflow_checked" then pendingOverflow := true
+          if key == "spec" then
+            if pendingSpecLink.isSome then throwParse s!"duplicate #[spec(...)] on one function" (span := none)
+            pendingSpecLink := attrVal
+          if key == "proof_by" then
+            if pendingProofBy.isSome then throwParse s!"duplicate #[proof_by(...)] on one function" (span := none)
+            pendingProofBy := attrVal
+          if key == "ensures_proof" then
+            if pendingEnsuresProof.isSome then throwParse s!"duplicate #[ensures_proof(...)] on one function" (span := none)
+            pendingEnsuresProof := attrVal
+          if key == "proof_coverage" then
+            if pendingCoverage.isSome then throwParse s!"duplicate #[proof_coverage(...)] on one function" (span := none)
+            pendingCoverage := attrVal
+          if key == "proof_fingerprint" then
+            if pendingFingerprint.isSome then throwParse s!"duplicate #[proof_fingerprint(...)] on one function" (span := none)
+            pendingFingerprint := attrVal
+          match ensExpr with
+          | some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
+                      else pendingEnsures := pendingEnsures ++ [e]
+          | none => pure ()
         else
-          let sp ← peekSpan
-          throwParse s!"unexpected token {tk}" (span := some sp)
+          -- Any non-struct declaration: reject dangling #[repr(...)]
+          if pendingRepr.isSome then
+            let sp ← peekSpan
+            throwParse "#[repr(...)] can only be applied to struct definitions" (span := some sp)
+          -- Reject #[test] on non-function declarations
+          if pendingIsTest && tk != .fn then
+            let sp ← peekSpan
+            throwParse "#[test] can only be applied to function definitions" (span := some sp)
+          -- Reject 'trusted' on non-fn/impl/extern declarations
+          if isTrusted && tk != .fn && tk != .impl_ && tk != .extern_ then
+            let sp ← peekSpan
+            throwParse "'trusted' can only be applied to fn, impl, or extern fn" (span := some sp)
+          if tk == .extern_ then
+            let ext ← parseExternFn
+            externFns := externFns ++ [{ ext with isPublic := isPub, isTrusted }]
+          else if tk == .enum_ then
+            let e ← parseEnumDef
+            enums := enums ++ [{ e with isPublic := isPub }]
+          else if tk == .impl_ then
+            let result ← parseImplBlock
+            match result with
+            | .inl ib => implBlocks := implBlocks ++ [{ ib with isTrusted }]
+            | .inr tb => traitImpls := traitImpls ++ [{ tb with isTrusted }]
+          else if tk == .trait_ then
+            let t ← parseTraitDef
+            traits := traits ++ [{ t with isPublic := isPub }]
+          else if tk == .const_ then
+            let c ← parseConstDef
+            constants := constants ++ [{ c with isPublic := isPub }]
+          else if tk == .type_ then
+            let ta ← parseTypeAlias
+            typeAliases := typeAliases ++ [{ ta with isPublic := isPub }]
+          else if tk == .cap_ then
+            let sp ← peekSpan
+            advance  -- consume 'cap'
+            let name ← expectIdent
+            expect .assign
+            let mut caps : List String := []
+            let firstName ← expectIdent
+            caps := [firstName]
+            let mut tk2 ← peek
+            while tk2 == .plus do
+              advance  -- consume '+'
+              let capName ← expectIdent
+              caps := caps ++ [capName]
+              tk2 ← peek
+            expect .semicolon
+            -- Expand "Std" macro inside alias definitions
+            let expanded := caps.flatMap fun c =>
+              if c == stdCapMacroName then stdCaps else [c]
+            -- Validate all names are known capabilities
+            for c in expanded do
+              if !validCaps.contains c then
+                throwParse s!"unknown capability '{c}' in cap alias '{name}'" (span := some sp)
+            capAliases := capAliases ++ [{ name, caps := expanded, isPublic := isPub, span := sp }]
+          else if tk == .newtype_ then
+            let nt ← parseNewtypeDef
+            newtypes := newtypes ++ [{ nt with isPublic := isPub }]
+          else if tk == .«mod» then
+            -- Nested submodule (or mod declaration)
+            advance  -- consume 'mod'
+            let subName ← expectIdent
+            let tk2 ← peek
+            if tk2 == .lbrace then
+              expect .lbrace
+              let sub ← parseModuleBody .rbrace
+              expect .rbrace
+              submodules := submodules ++ [{ sub with name := subName }]
+            else
+              -- "mod other;" - module declaration
+              expect .semicolon
+              submodules := submodules ++ [{ name := subName, structs := [], enums := [], functions := [] }]
+          else if tk == .ident "spec" then
+            -- `spec fn name(params) -> ret;` — erased pure specification function
+            advance  -- consume 'spec'
+            let sp ← peekSpan
+            expect .fn
+            let name ← expectIdent
+            expect .lparen
+            let params ← parseParamList
+            expect .rparen
+            let tkr ← peek
+            let retTy ← if tkr == .arrow then advance; parseType else pure .unit
+            expect .semicolon
+            specFns := specFns ++ [{ name, params, retTy, isPublic := isPub, span := sp }]
+          else if tk == .fn then
+            -- Check if function has a body or is body-less (intrinsic/declaration)
+            let f ← parseFnDefOrDecl
+            let proofLink : Option SourceProofLink :=
+              if pendingSpecLink.isSome || pendingProofBy.isSome
+                  || pendingEnsuresProof.isSome || pendingCoverage.isSome
+                  || pendingFingerprint.isSome
+              then some { spec := pendingSpecLink, proofBy := pendingProofBy
+                        , ensuresProof := pendingEnsuresProof, coverage := pendingCoverage
+                        , fingerprint := pendingFingerprint }
+              else none
+            match f with
+            | .inl fnDef => fns := fns ++ [{ fnDef with isPublic := isPub, isTest := pendingIsTest, isTrusted, requires := pendingRequires, ensures := pendingEnsures, proofLink, overflowChecked := pendingOverflow }]
+            | .inr extDef => externFns := externFns ++ [{ extDef with isPublic := isPub }]
+            pendingIsTest := false
+            pendingOverflow := false
+            pendingEnsures := []
+            pendingRequires := []
+            pendingSpecLink := none
+            pendingProofBy := none
+            pendingEnsuresProof := none
+            pendingCoverage := none
+            pendingFingerprint := none
+          else if tk == .ident "union" then
+            -- Parse union as a struct (all fields share memory)
+            advance  -- consume 'union'
+            let name ← expectIdent
+            let (typeParams, _typeBounds) ← parseTypeParams
+            expect .lbrace
+            let mut fields : List StructField := []
+            let mut tk3 ← peek
+            while tk3 != .rbrace && tk3 != .eof do
+              let fieldName ← expectIdent
+              expect .colon
+              let ty ← parseType
+              fields := fields ++ [{ name := fieldName, ty }]
+              tk3 ← peek
+              if tk3 == .comma then advance; tk3 ← peek
+            expect .rbrace
+            structs := structs ++ [{ name, typeParams, fields, isPublic := isPub, isUnion := true }]
+          else
+            let sp ← peekSpan
+            throwParse s!"unexpected token {tk}" (span := some sp)
+    catch e =>
+      -- top-level recovery (#12c): record the error, drop any pending decl
+      -- modifiers from the failed item, resync to the next declaration.
+      recordParseErrors e
+      pendingRepr := none
+      pendingIsTest := false
+      pendingOverflow := false
+      pendingEnsures := []
+      pendingRequires := []
+      pendingSpecLink := none
+      pendingProofBy := none
+      pendingEnsuresProof := none
+      pendingCoverage := none
+      pendingFingerprint := none
+      skipToTopLevelBoundary stopToken
     tk ← peek
   return { name := "", structs, enums, functions := fns, imports, implBlocks, traits,
            traitImpls, constants, typeAliases, capAliases, externFns, specFns, newtypes, submodules }
@@ -2123,11 +2165,24 @@ partial def parseProgram : ParseM (List Module) := do
     let m ← parseModuleBody .eof
     return [{ m with name := "main" }]
 
-def parse (source : String) : Except Diagnostics (List Module) :=
+/-- Parse, returning the (best-effort) modules ALONGSIDE every recovered top-level
+    parse error, instead of stopping at the first (ROADMAP Phase 4 #12c). The
+    modules are well-formed for the declarations that parsed; declarations that
+    failed were skipped. For the error-tolerant diagnostics path only — callers that
+    feed proof/codegen use `parse` and must reject a non-empty diagnostics list. -/
+def parseProgramPartial (source : String) : (List Module × Diagnostics) :=
   let tokens := tokenize source
   let st := mkParserState tokens
-  match (parseProgram.run.run st).1 with
-  | .ok modules => .ok modules
-  | .error e => .error e
+  let (res, finalSt) := parseProgram.run.run st
+  match res with
+  | .ok modules => (modules, finalSt.errors)
+  -- An uncaught error (outside top-level recovery, e.g. a malformed `mod` header):
+  -- combine it with whatever was recovered before it.
+  | .error e => ([], finalSt.errors ++ e)
+
+def parse (source : String) : Except Diagnostics (List Module) :=
+  match parseProgramPartial source with
+  | (modules, []) => .ok modules
+  | (_, ds) => .error ds
 
 end Concrete

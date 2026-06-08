@@ -1,0 +1,9 @@
+// Phase 4 #12c: a malformed declaration must not erase diagnostics from the
+// well-formed declarations after it. The bad `fn` is recovered and skipped; the
+// good `fn` below still parses and is typechecked, surfacing its type error.
+fn bad( -> Int { return 0; }
+fn good() -> Int {
+    let y: Int = true;   // type error in a recovered declaration
+    return y;
+}
+fn main() -> Int { return 0; }

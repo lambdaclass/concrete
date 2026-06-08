@@ -65,6 +65,13 @@ def parse (source : String) : Except Diagnostics ParsedProgram :=
   | .ok modules => .ok { modules := modules.map Module.expandCapAliases }
   | .error ds => .error ds
 
+/-- Parse error-tolerantly: returns the (best-effort) program ALONGSIDE every
+    recovered parse error, so a single bad declaration does not hide the rest
+    (ROADMAP Phase 4 #12c). For the tolerant diagnostics path only. -/
+def parsePartial (source : String) : ParsedProgram × Diagnostics :=
+  let (modules, ds) := Concrete.parseProgramPartial source
+  ({ modules := modules.map Module.expandCapAliases }, ds)
+
 /-- Resolve `mod X;` declarations by reading sub-module files from disk.
     Wraps `resolveAllModules` (IO because it reads files).
     Returns the resolved program and a source map for diagnostics. -/
@@ -304,15 +311,15 @@ def runFrontend (inputPath source : String)
 def runFrontendDiagnostics (inputPath source : String)
     (resolveAllModules : String → List Module → String → IO (Except String (List Module × SourceMap)))
     : IO (Diagnostics × Bool) := do
-  match Pipeline.parse source with
-  | .error ds => return (ds, true)   -- no AST: nothing downstream can run
-  | .ok parsed =>
+  -- Parse error-tolerantly: recovered parse errors are collected and the
+  -- well-formed declarations still flow downstream (#12c).
+  let (parsed, parseDs) := Pipeline.parsePartial source
   let baseDir := let parts := inputPath.splitOn "/"
     match parts.reverse with
     | _ :: rest => "/".intercalate rest.reverse
     | [] => "."
   match ← Pipeline.resolveFiles baseDir parsed inputPath resolveAllModules with
-  | .error ds => return (ds, true)   -- could not load all modules
+  | .error ds => return (parseDs ++ ds, true)   -- could not load all modules
   | .ok (resolved, _) =>
     let summary := Pipeline.buildSummary resolved
     let (resolvedProg, resolveDs) := Pipeline.resolvePartial resolved summary
@@ -330,23 +337,24 @@ def runFrontendDiagnostics (inputPath source : String)
       | some a, some b => a.line == b.line && a.col == b.col && a.endLine == b.endLine && a.endCol == b.endCol
       | _, _ => false
     let checkDs := checkDs0.filter fun c => !(resolveDs.any fun r => sameSpan c.span r.span)
-    -- Elaboration / core-check require fully-resolved AND type-correct input, so we
-    -- only run them when resolve and check are both clean — matching the strict
-    -- pipeline's precondition. This keeps ownership/capability (core-check)
-    -- diagnostics available without ever feeding them unresolved or ill-typed input.
-    -- `partial` is set whenever any pass was skipped, so the consumer knows later-
-    -- pass diagnostics may be missing.
-    if hasErrors resolveDs then
-      return (resolveDs ++ checkDs, true)
+    -- Elaboration / core-check require fully-PARSED, fully-resolved AND type-correct
+    -- input, so we only run them when parse, resolve and check are all clean —
+    -- matching the strict pipeline's precondition. This keeps ownership/capability
+    -- (core-check) diagnostics available without ever feeding them incomplete,
+    -- unresolved, or ill-typed input. `partial` is set whenever any pass was skipped,
+    -- so the consumer knows later-pass diagnostics may be missing.
+    let base := parseDs ++ resolveDs ++ checkDs
+    if !parseDs.isEmpty || hasErrors resolveDs then
+      return (base, true)
     match checkResult with
-    | .error _ => return (resolveDs ++ checkDs, true)
+    | .error _ => return (base, true)
     | .ok () =>
       match Pipeline.elaborate resolvedProg summary with
-      | .error eds => return (resolveDs ++ checkDs ++ eds, true)
+      | .error eds => return (base ++ eds, true)
       | .ok elabProg =>
         match Pipeline.coreCheck elabProg with
-        | .error cds => return (resolveDs ++ checkDs ++ cds, false)
-        | .ok _ => return (resolveDs ++ checkDs, false)
+        | .error cds => return (base ++ cds, false)
+        | .ok _ => return (base, false)
 
 end Pipeline
 end Concrete

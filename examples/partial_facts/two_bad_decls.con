@@ -1,0 +1,5 @@
+// Phase 4 #12c: two malformed declarations. Parser recovery must report BOTH,
+// not just the first — recovery resyncs at the next top-level declaration.
+fn a( -> Int { return 0; }
+fn b( -> Int { return 0; }
+fn main() -> Int { return 0; }

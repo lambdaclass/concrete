@@ -54,11 +54,36 @@ printf '%s' "$CAP" | python3 -c "import json,sys;d=json.load(sys.stdin);sys.exit
   && ok "core-check (E0520) diagnostics preserved, partial=false (full chain ran)" \
   || no "capability diagnostics lost on tolerant path"
 
+echo "=== parser recovery: all top-level parse errors are reported, not just the first ==="
+TB="examples/partial_facts/two_bad_decls.con"
+nparse="$("$COMPILER" "$TB" --diagnostics-json 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print(sum(1 for x in d['diagnostics'] if x['pass']=='parse'))" 2>/dev/null)"
+[ "$nparse" = "2" ] && ok "two malformed declarations yield two parse errors (recovery resyncs)" \
+  || no "expected 2 parse errors from recovery, got $nparse"
+
+echo "=== parser recovery feeds downstream: a bad decl does not erase later diagnostics ==="
+BD="examples/partial_facts/bad_decl_then_typed_error.con"
+read -r hasParse hasType bdPartial < <("$COMPILER" "$BD" --diagnostics-json 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+passes=[x['pass'] for x in d['diagnostics']]
+codes=[x['code'] for x in d['diagnostics']]
+print('yes' if 'parse' in passes else 'no',
+      'yes' if 'E0220' in codes else 'no',
+      'yes' if d['partial'] else 'no')" 2>/dev/null)
+[ "$hasParse" = "yes" ] && ok "the malformed declaration is reported" || no "parse error missing"
+[ "$hasType" = "yes" ] && ok "the type error in the recovered good declaration survives" \
+  || no "downstream type error erased by the parse failure"
+[ "$bdPartial" = "yes" ] && ok "a run with parse errors is labelled partial=true" || no "partial flag not set on parse error"
+
 echo "=== SAFETY: partial facts never feed codegen — build still bails, emits nothing ==="
 TMPO="$(mktemp -d)/out.o"
 "$COMPILER" "$FIX" -o "$TMPO" --emit-llvm >/dev/null 2>&1; rc=$?
 [ "$rc" != "0" ] && ok "codegen on the resolve-error file fails (exit $rc)" || no "codegen did NOT fail (leak!)"
 [ ! -f "$TMPO" ] && ok "no object emitted for the failing file" || no "object emitted despite resolve failure (LEAK)"
+TMPO2="$(mktemp -d)/out2.o"
+"$COMPILER" "$BD" -o "$TMPO2" --emit-llvm >/dev/null 2>&1; rc2=$?
+[ "$rc2" != "0" ] && [ ! -f "$TMPO2" ] && ok "codegen on the parse-error file also bails, emits nothing" \
+  || no "parse-error file leaked into codegen (exit $rc2)"
 
 echo "=== STRUCTURAL: the tolerant driver yields only Diagnostics, never ValidatedCore ==="
 # runFrontendDiagnostics returns (Diagnostics × Bool) — it cannot construct the
