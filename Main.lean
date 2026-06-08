@@ -586,14 +586,20 @@ partial def loadDependency (depName : String) (depPath : String)
       let srcMap := [(libPath, source)] ++ srcMap
       return .ok (resolved, srcMap)
 
-/-- Shared context produced by loading a project from Concrete.toml. -/
+/-- The one typed project surface (ROADMAP Phase 4 #1). Every project-mode command
+    loads this ONCE via `loadProject` instead of re-discovering source, re-parsing
+    `Concrete.toml`, or re-deriving the policy. New project facts (target/build
+    profile, oracle manifests, …) are added here, not recomputed per command. -/
 structure ProjectContext where
-  validCore   : ValidatedCore
-  parsed      : ParsedProgram      -- merged modules (deps + project)
-  allSrcMap   : SourceMap
-  tomlContent : String
-  mainPath    : String
-  depNames    : List String
+  projectRoot   : String                 -- the project root (dir holding Concrete.toml)
+  validCore     : ValidatedCore
+  parsed        : ParsedProgram           -- merged modules (deps + project)
+  allSrcMap     : SourceMap
+  tomlContent   : String
+  mainPath      : String                  -- entry point (src/main.con)
+  depNames      : List String
+  policy        : Concrete.ProjectPolicy  -- the [policy] release profile, parsed once
+  policyWarnings : List String            -- structural warnings from parsing [policy]
 
 /-- Load a project to ValidatedCore. Shared by build, test, and check. -/
 partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : IO (Except UInt32 ProjectContext) := do
@@ -691,7 +697,10 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       IO.eprintln (renderDiagnostics ds (sourceMap := allSrcMap))
       return Except.error 1
     | .ok validCore =>
-    return Except.ok { validCore, parsed := merged, allSrcMap, tomlContent, mainPath, depNames }
+    -- Parse the release [policy] once, here, so no command re-derives it.
+    let (policy, policyWarnings) := parsePolicy tomlContent
+    return Except.ok { projectRoot, validCore, parsed := merged, allSrcMap, tomlContent,
+                       mainPath, depNames, policy, policyWarnings }
 
 /-- Discharge call-site contract obligations with `bv_decide`. Each candidate is
     `(index, leanBoolGoal)`; returns the indices that kernel-check. Runs one
@@ -1599,10 +1608,9 @@ def compileBuild (projectRoot : String) (outputPath : Option String) (emitLLVM :
   match ← loadProject projectRoot (stripTestFns := true) with
   | .error exitCode => return exitCode
   | .ok ctx =>
-    let { validCore, parsed, allSrcMap, tomlContent, mainPath, depNames, .. } := ctx
-    -- Enforce [policy] from Concrete.toml
-    let (policy, polWarnings) := parsePolicy tomlContent
-    for w in polWarnings do IO.eprintln w
+    let { validCore, parsed, allSrcMap, tomlContent, mainPath, depNames, policy, policyWarnings, .. } := ctx
+    -- Enforce [policy] from Concrete.toml (parsed once in loadProject).
+    for w in policyWarnings do IO.eprintln w
     -- Always compute ProofCore for summary and policy
     let policyLocMap := Report.buildFnLocMap parsed.modules mainPath
     let simpleLocMap := policyLocMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
@@ -1666,10 +1674,9 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
   match ← loadProject projectRoot with
   | .error exitCode => return exitCode
   | .ok ctx =>
-    let { validCore, parsed, allSrcMap, tomlContent, mainPath, depNames, .. } := ctx
-    -- Enforce [policy] from Concrete.toml
-    let (policy, polWarnings) := parsePolicy tomlContent
-    for w in polWarnings do IO.eprintln w
+    let { validCore, parsed, allSrcMap, mainPath, depNames, policy, policyWarnings, .. } := ctx
+    -- Enforce [policy] from Concrete.toml (parsed once in loadProject).
+    for w in policyWarnings do IO.eprintln w
     if !policy.isEmpty then
       let policyLocMap := Report.buildFnLocMap parsed.modules mainPath
       let simpleLocMap := policyLocMap.map fun e => (e.qualName, (e.file, e.fnSpan.line))
