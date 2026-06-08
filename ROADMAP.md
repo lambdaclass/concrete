@@ -35,6 +35,14 @@ work moves later in the same linear queue. There are no parallel tracks. Inline
 `NEXT` notes are allowed only as scoped follow-ups inside a numbered item; they
 do not create a second queue.
 
+Linear does not mean invisible. When a long internal phase risks delaying
+external credibility, add one narrow replayable vertical artifact inside the
+current linear queue. It must not become a side track or product fork; it exists
+to validate the bet, expose abstraction mistakes early, and give skeptics
+something real to run. Phase 4 may use `examples/compiler_pipeline_probe/` as
+that transcript for the compiler pipeline; Phase 12 carries the later
+`examples/credibility_slice/packet_window/` replayable flagship.
+
 North star: **systems code with explicit authority, bounded behavior, small
 trusted boundaries, and Lean-backed evidence tied to real source code, while
 keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
