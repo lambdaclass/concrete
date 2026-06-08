@@ -1,0 +1,5 @@
+// Phase 4 #4 fixture — type family: returning a bool where i32 is declared. Human
+// and JSON renderings must agree (one Diagnostic record).
+mod m {
+    fn f() -> i32 { return true; }
+}
