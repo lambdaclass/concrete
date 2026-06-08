@@ -49,6 +49,22 @@ grep -qE "declSpan := some f\.span" Concrete/Elab.lean \
 grep -qE "currentFnSpan := f\.declSpan" Concrete/CoreCheck.lean \
   && ok "core-check threads declSpan as the diagnostic span" || no "core-check does not use declSpan"
 
+echo "=== obligations from project code cite their source location ==="
+# Regression lock: every obligation generated for THIS file's functions must
+# carry a real (file, line) — file non-empty and line > 0 — so audit/proof
+# artifacts point at source. (Dependency/stdlib-internal obligation locations
+# are a separate, deeper item — see ROADMAP #13 — and are not asserted here.)
+OBF="examples/source_maps/obligation_located.con"
+read -r total located < <("$COMPILER" "$OBF" --report obligation-ledger --json 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+obs=d.get('obligations',[])
+loc=[o for o in obs if (o.get('loc') or {}).get('line',0)>0 and (o.get('loc') or {}).get('file','')]
+print(len(obs), len(loc))" 2>/dev/null)
+[ -n "$total" ] && [ "$total" -ge 1 ] && [ "$total" = "$located" ] \
+  && ok "all $total project obligations carry a source (file, line)" \
+  || no "project obligations missing source locations ($located of $total located)"
+
 echo "=== a clean file still yields zero diagnostics (no spurious spans) ==="
 "$COMPILER" examples/hmac_sha256/src/main.con --diagnostics-json 2>/dev/null \
   | python3 -c "import json,sys;d=json.load(sys.stdin);sys.exit(0 if d['count']==0 else 1)" \

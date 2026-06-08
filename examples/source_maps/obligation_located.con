@@ -1,0 +1,7 @@
+// Phase 4 #13: obligations from project code must cite their source location.
+// `divide` generates a division-safety obligation; its loc must point at the
+// function in this file (file non-empty, line > 0), not ("", 0).
+fn divide(a: Int, b: Int) -> Int {
+    return a / b;
+}
+fn main() -> Int { return divide(10, 2); }
