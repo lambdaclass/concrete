@@ -4,8 +4,8 @@
 # Diagnostics are structured records rendered to BOTH human text and JSON from the
 # SAME record (`Diagnostic.render` and `Diagnostic.toJson`), so the two outputs
 # cannot drift. This gate asserts, per diagnostic family, that the human and JSON
-# renderings agree on code / severity / pass / span. Families are added one per
-# commit; this commit covers the PARSER family.
+# renderings agree on code / severity / pass / span, then pins rich fields as
+# producers opt in.
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -57,6 +57,27 @@ if [ "$jexp" = "i32" ] && [ "$jact" = "bool" ] \
   ok "type mismatch: expected/actual structured + shown in human and JSON (i32 vs bool)"
 else
   no "type mismatch expected/actual mismatch (json exp=$jexp act=$jact)"
+fi
+
+echo "=== rich fields: related spans agree in human and JSON (ownership family) ==="
+UAM="examples/diagnostics_rich/use_after_move.con"
+UAMJ="$("$COMPILER" "$UAM" --diagnostics-json 2>/dev/null)"
+UAMH="$("$COMPILER" "$UAM" --report caps 2>&1)"
+read -r relCount relLine relNote < <(printf '%s' "$UAMJ" | python3 -c "
+import json,sys
+x=json.load(sys.stdin)['diagnostics'][0]
+r=x['related']
+if r:
+  print(len(r), r[0]['span']['line'], r[0]['note'])
+else:
+  print(0, '', '')" 2>/dev/null)
+if [ "$relCount" = "1" ] && [ "$relLine" = "9" ] \
+   && printf '%s' "$relNote" | grep -qF "moved here" \
+   && printf '%s' "$UAMH" | grep -qF "related (9:" \
+   && printf '%s' "$UAMH" | grep -qF "moved here"; then
+  ok "use-after-move: related move site structured + shown in human and JSON"
+else
+  no "use-after-move related span mismatch (json count=$relCount line=$relLine note=$relNote)"
 fi
 
 echo "=== JSON envelope is well-formed and versioned ==="

@@ -45,6 +45,7 @@ structure VarInfo where
   borrowCount : Nat := 0
   borrowedFrom : Option String := none
   mutable : Bool := true  -- whether the variable was declared with mut
+  movedAt : Option Span := none  -- where it was consumed (for use-after-move related spans)
   deriving Repr
 
 structure TypeEnv where
@@ -339,9 +340,11 @@ def CheckError.code : CheckError → String
   | .unknownModule _ => "E0284"
   | .notPublicInModule _ _ => "E0285"
 
-def throwCheck (e : CheckError) (span : Option Span := none) : CheckM α :=
+def throwCheck (e : CheckError) (span : Option Span := none)
+    (related : List (Span × String) := []) : CheckM α :=
   throw [{ severity := .error, message := e.message, pass := "check", span := span,
-           hint := e.hint, code := e.code, expected := e.expected, actual := e.actual }]
+           hint := e.hint, code := e.code, expected := e.expected, actual := e.actual,
+           related := related }]
 
 private def throwCheckMsg (msg : String) (span : Option Span := none) : CheckM α :=
   throw [{ severity := .error, message := msg, pass := "check", span := span, hint := none }]
@@ -620,7 +623,10 @@ def useVar (name : String) (span : Option Span := none) : CheckM Unit := do
     if info.isCopy then return ()
     if info.state == .unconsumed || info.state == .reserved then
       let vars' := env.vars.map fun (n, vi) =>
-        if n == name then (n, { vi with state := if info.state == .reserved then .reserved else .used })
+        if n == name then
+          (n, { vi with
+            state := if info.state == .reserved then .reserved else .used,
+            movedAt := if vi.movedAt.isSome then vi.movedAt else span })
         else (n, vi)
       setEnv { env with vars := vars' }
 
@@ -637,7 +643,9 @@ def consumeVar (name : String) (span : Option Span := none) : CheckM Unit := do
       throwCheck (.cannotMoveLinearBorrowed name) span
     match info.state with
     | .consumed =>
+      -- point the secondary span at where the value was moved (Phase 4 #11).
       throwCheck (.variableUsedAfterMove name) span
+        (related := info.movedAt.toList.map (fun sp => (sp, s!"'{name}' moved here")))
     | .reserved =>
       throwCheck (.variableReservedByDefer name) span
     | .frozen =>
@@ -648,7 +656,7 @@ def consumeVar (name : String) (span : Option Span := none) : CheckM Unit := do
         throwCheck (.cannotConsumeLinearInLoop name) span
       -- Mark consumed
       let vars' := env.vars.map fun (n, vi) =>
-        if n == name then (n, { vi with state := .consumed })
+        if n == name then (n, { vi with state := .consumed, movedAt := span })
         else (n, vi)
       setEnv { env with vars := vars' }
 
@@ -836,7 +844,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
     | some info =>
       -- Reading a variable (not consuming). Check it's not already consumed.
       if !info.isCopy && info.state == .consumed then
+        -- secondary span: where the value was moved (Phase 4 #11).
         throwCheck (.variableUsedAfterMove name) (some e.getSpan)
+          (related := info.movedAt.toList.map (fun sp => (sp, s!"'{name}' moved here")))
       useVar name (some e.getSpan)
       return info.ty
     | none =>
