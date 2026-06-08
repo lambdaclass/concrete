@@ -736,7 +736,22 @@ lemmas, and actionable failure diagnostics.
 17. Add a small verified/spec-checked standard proof library for common
     predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
     constant-time source shape.
-18. Add AI-assisted proof repair only after artifacts, statuses, and replay are
+18. Add bounded quantified specs for collections, not arbitrary open-ended
+    logic. V1 syntax should cover only finite, source-visible domains:
+    `forall i in 0..n { P(i) }`, `exists i in 0..n { P(i) }`, and library
+    predicates that lower to those bounded forms (`all_bytes_valid`, `bounded`,
+    `sorted`, `no_duplicates`, `prefix`, `fixed_length`). These specs must
+    lower into ProofCore with explicit bounds, source spans, and generated
+    theorem shapes; they may be proved by Lean, by kernel decision procedures
+    only for decidable finite fragments, or reported `needs_lean` / `blocked`
+    when the fragment is outside automation. Do not add general quantifier
+    syntax until a bounded collection fragment has examples and gates. Add
+    `examples/quantified_specs/` with `bounded_array`, `all_bytes_valid`,
+    `sorted_prefix`, and one rejected unbounded quantifier. Wire
+    `scripts/tests/check_quantified_specs.sh`; the gate must prove quantified
+    claims are never erased into a vague postcondition and never reported as
+    proved unless the generated finite theorem actually checks.
+19. Add AI-assisted proof repair only after artifacts, statuses, and replay are
     stable enough to validate suggestions mechanically. The binary surface is
     `concrete prove --repair-plan <obligation_id> --json`; it emits no edited
     source, only candidate next actions with required checks. Required JSON
@@ -747,7 +762,7 @@ lemmas, and actionable failure diagnostics.
     proof, missing frame fact, arithmetic bridge failure, and spec mismatch.
     No repair suggestion may change a proof status until `--check` or
     `check-proofs` verifies it.
-19. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
+20. **Frame inference (the proof-scaling cliff).** Every loop/state proof must
    establish not just what an iteration *changes* but what it *preserves* — the
    frame problem (Smallfoot 2006; later Infer; separation logic's frame rule:
    "a proof mentioning only its footprint preserves everything else"). Today
@@ -766,7 +781,7 @@ lemmas, and actionable failure diagnostics.
    majority of proof work. Gate: do not build it until a second update shape
    actually forces it (per the operating rules) — the current functional-list
    model gets framing for free.
-20. Deferred architecture refactor: split the current `Concrete.Proof` layering
+21. Deferred architecture refactor: split the current `Concrete.Proof` layering
    so registered example specs can move without a cycle, but do not let this
    block Phase 10 unless spec ownership or proof authoring starts depending on
    it. Target shape: `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation,
@@ -782,13 +797,14 @@ lemmas, and actionable failure diagnostics.
    example-owned theorem/spec definitions, `check-proofs` can reach moved
    modules through the umbrella import, and changing a moved example body still
    reports stale/spec-drift rather than silently accepting the old proof.
-21. Add the Phase 5 validation artifact: a proof-authoring project that
+22. Add the Phase 5 validation artifact: a proof-authoring project that
    exercises `--json`, `--show-obligation`, `--emit-lean`, `--emit-artifacts`,
    `--workspace`, `--check`, `--nearest-lemmas`, `--minimize`, and source-linked
    proof attachment across straight-line, array update, loop copy, fold,
-   composition, ghost, stale, missing, partial, and repair cases. The gate must
-   typecheck generated stubs, reject any `proof-registry.json`, and verify that
-   failing Lean proofs map back to stable obligation ids.
+   composition, bounded quantified specs, ghost, stale, missing, partial, and
+   repair cases. The gate must typecheck generated stubs, reject any
+   `proof-registry.json`, and verify that failing Lean proofs map back to stable
+   obligation ids.
 
 ## Phase 6: Audit Commands And Review Artifacts
 
@@ -908,11 +924,29 @@ under a stronger badge.
 12. Add vacuity gates to proof status: `proved` summaries must be downgraded or
     blocked when the proof depends on an unsatisfiable precondition,
     contradictory assumptions, unreachable code path, or invariant `false`.
-13. Add the Phase 7 validation artifact: a trust-gate pressure project that
+13. Add solver portfolio and cross-solver agreement as a strictly separate
+    evidence class, never as kernel evidence. External SMT V1 may start with
+    Z3 only, but the trust-gate roadmap must define how to run `z3`, `cvc5`,
+    and `bitwuzla` where the fragment applies. Result classes:
+    `solver_trusted` for one trusted solver, `solver_cross_checked` when two or
+    more independent solvers agree on the same `unsat` result for the same
+    normalized query, `solver_disagreement` when they differ, and
+    `solver_unavailable` / `solver_timeout` / `solver_unknown` for non-proofs.
+    Agreement must record solver names, versions, logic, query hash, timeout,
+    and replay commands. A cross-checked solver result is stronger than a
+    single solver but still below `proved_by_lean` and
+    `proved_by_kernel_decision`. Add `examples/solver_portfolio/` with one
+    QF_NIA query, one bitvector query, one unsupported-fragment case, one fake
+    disagreement wrapper, and one missing-solver case. Wire
+    `scripts/tests/check_solver_portfolio.sh`; the gate must prove no external
+    solver result can overwrite kernel evidence and that disagreement blocks
+    release claims unless explicitly assumed.
+14. Add the Phase 7 validation artifact: a trust-gate pressure project that
     includes transitive proof dependencies, stale dependency propagation,
     tool-version drift, assumption widening, spec-adequacy policy, vacuity
-    downgrade, weaker-evidence monotonicity, and a release gate proving each
-    status cannot be silently presented as stronger evidence.
+    downgrade, solver portfolio / disagreement handling, weaker-evidence
+    monotonicity, and a release gate proving each status cannot be silently
+    presented as stronger evidence.
 
 ## Phase 8: Provable And Predictable Subsets
 
@@ -1024,11 +1058,30 @@ zero, overflow profile, casts, and loop bounds with statuses
     waivers, never comments or hidden allowlists.
 15. Prove or validate obligation-generation soundness for the first obligation
     kinds through the compiler soundness bridge.
-16. Add the Phase 9 validation artifact: a runtime-safety corpus covering
+16. Add automatic invariant inference / abstract interpretation as an
+    annotation-reduction pass, not as trusted proof. V1 analysis is finite and
+    auditable: interval facts, simple relational facts (`i <= n`, `i < len`,
+    `0 <= i`), monotone loop counters, constant loop bounds, simple affine
+    equalities/inequalities, and fixed-array length facts. It may synthesize
+    candidate loop invariants and scoped facts for bounds, div/mod-zero,
+    overflow, cast, and loop-variant obligations. Every inferred fact must be
+    emitted in the obligation ledger with source span, analysis name, abstract
+    domain, dependencies, and a replay command, then independently discharged
+    by `omega`, `bv_decide`, or Lean before receiving
+    `proved_by_kernel_decision` / `proved_by_lean`. Unchecked inference is not
+    evidence. Add status detail `inferred_candidate` for facts proposed by the
+    analysis but not yet checked. Add `examples/inferred_invariants/` with
+    `array_sum_no_oob`, `copy_loop_bounds`, `ring_index_mod`, `overflow_counter`,
+    and negative cases for non-affine updates, alias-sensitive updates, and
+    widened bounds. Wire `scripts/tests/check_invariant_inference.sh`; the gate
+    must prove inferred facts reduce required user annotations without creating
+    false green obligations.
+17. Add the Phase 9 validation artifact: a runtime-safety corpus covering
     bounds, div/mod-zero, overflow, casts, panic/abort/assert, byte/text/path
-    boundaries, stack/recursion, and obligation suppression. Each case must show
-    one of `proved`, `enforced`, `assumed`, `missing`, or `blocked`, include a
-    negative variant, and run through policy gates plus human/JSON reports.
+    boundaries, stack/recursion, inferred invariant candidates, and obligation
+    suppression. Each case must show one of `proved`, `enforced`, `assumed`,
+    `missing`, or `blocked`, include a negative variant, and run through policy
+    gates plus human/JSON reports.
 
 ## Phase 10: Language Usability And Daily Workflow
 
@@ -1756,12 +1809,27 @@ and incremental build contracts are explicit enough for release evidence.
     emit the same source maps and target assumptions, pass the C ABI matrix for
     its supported subset, and report exactly which claims become backend/
     target-trusted.
-18. Add the Phase 14 validation artifact: a backend/std-lib contract project
+18. Add translation validation for codegen as the path out of a fully trusted
+    backend. V1 should validate a narrow backend-IR subset per compile:
+    integer arithmetic, fixed arrays, structs, direct calls, branches, bounded
+    loops, runtime checks, capability calls, and source-map annotations. The
+    validator compares checked Core / typed IR facts against emitted backend IR
+    facts and reports one of: `translation_validated`, `translation_trusted`,
+    `translation_blocked`, or `translation_mismatch`. This is not a promise to
+    prove the whole LLVM/native stack; it is a per-artifact check that the
+    Concrete lowering into the backend contract preserves the facts Concrete
+    claims. Add `examples/translation_validation/` with straight-line,
+    branch/loop, struct/array, runtime-check, and deliberate mismatch fixtures.
+    Wire `scripts/tests/check_translation_validation.sh`; the gate must prove a
+    Lean-proved/Core-level claim cannot be presented as native-code evidence
+    unless the backend artifact is either translation-validated or explicitly
+    backend-trusted in the audit bundle.
+19. Add the Phase 14 validation artifact: a backend/std-lib contract project
     with ABI/layout C round trips, C/ABI glue generation/import checks,
     the C ABI classification matrix, backend-IR emission/verifier checks,
-    sanitizer runs, compiled-oracle differential tests, native debug/source-map
-    smoke tests, clean-vs-incremental fact equivalence, and stdlib
-    authority/allocation/evidence gates.
+    translation-validation checks, sanitizer runs, compiled-oracle differential
+    tests, native debug/source-map smoke tests, clean-vs-incremental fact
+    equivalence, and stdlib authority/allocation/evidence gates.
 
 ## Phase 15: Freestanding And Embedded Target
 
