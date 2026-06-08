@@ -847,35 +847,61 @@ five graduated flagships and one package-scale example.
     - support metamorphic tests where no complete reference exists;
     - flag oracle evidence weakening in `concrete diff` when cases, seeds,
       reference, comparison mode, or boundary coverage shrink.
-11. Add spec provenance and adequacy facts to audit/release bundles: spec name,
+11. Add property-based contract testing as a cheap counterexample finder, not
+    proof. Command surface: `concrete test --contracts --property --json`
+    generates inputs satisfying `#[requires]`, executes the function, checks
+    `#[ensures]`, runtime obligations, and selected `assert` facts, then shrinks
+    failures to a minimal source-level witness. Evidence class:
+    `tested_by_property`, always below proof and below solver evidence. Required
+    report fields: function, contract id, seed, generator profile, case count,
+    shrunk witness, failing postcondition/obligation id, replay command, and
+    whether the witness was persisted as a regression. Add
+    `examples/property_contracts/` with `clamp`, `bounded_index`,
+    `checksum_range`, one precondition-filtered generator, and one deliberately
+    false postcondition. Wire `scripts/tests/check_property_contracts.sh`; the
+    gate must prove property testing finds and shrinks the false claim without
+    ever producing a `proved_*` status.
+12. Add counterexample-to-regression persistence for obligation witnesses from
+    SMT, property tests, oracle failures, and future fuzzed contracts. Command
+    surface: `concrete counterexample save <obligation_id> --out
+    tests/counterexamples/<name>.con` plus JSON mode. The saved fixture must
+    include source inputs, expected failing obligation id, expected status
+    (`counterexample`, `tested_by_property_failure`, `oracle_failure`, etc.),
+    replay command, and the original tool provenance. Wire
+    `scripts/tests/check_counterexample_regressions.sh` with one SMT overflow
+    witness, one property-test contract witness, and one oracle mismatch. The
+    gate must fail if a future refactor turns the same counterexample into
+    `proved_*` without changing the checked fixture expectation.
+13. Add spec provenance and adequacy facts to audit/release bundles: spec name,
     source standard or paper, independent reference if any, test-vector set,
     reviewer, review date, assumptions, and evidence class
     (`spec_trusted`, `spec_reviewed`, `tested_by_oracle`, or future
     `spec_refines_standard`). Do not let a source-to-spec proof imply the spec
     itself is adequate.
-12. Add evidence-level monotonicity checks to audit/diff output.
-13. Add one AI-audit demo where an agent answers authority/proof/trust
+14. Add evidence-level monotonicity checks to audit/diff output.
+15. Add one AI-audit demo where an agent answers authority/proof/trust
     questions using compiler facts rather than source guesses.
-14. Add review checklists generated from facts: what changed, what widened,
+16. Add review checklists generated from facts: what changed, what widened,
     what became trusted, what lost proof, what gained assumptions, and which
     obligations remain open.
-15. Add artifact redaction/stability rules so release bundles can be shared
+17. Add artifact redaction/stability rules so release bundles can be shared
     publicly without leaking local paths, secrets, or machine-specific noise.
-16. Keep audit, contracts, obligations, assumptions, policies, manifests, and
+18. Keep audit, contracts, obligations, assumptions, policies, manifests, and
     proof-status output on one shared vocabulary. Do not let each artifact grow
     its own mini-language for the same evidence classes.
-17. Keep public-facing docs and website copy grounded in the same evidence
+19. Keep public-facing docs and website copy grounded in the same evidence
     vocabulary. Use `docs/WHY_CONCRETE.md` as the source for a C/Rust-oriented
     "why this exists" page: small systems code, explicit authority, visible
     evidence classes, spec-drift-tied proofs, named trust boundaries, and what
     Concrete deliberately avoids. The website should show the end goal and the
     current honest status, not catchy slogans or one-badge proof claims.
-18. Add the Phase 6 validation artifact: one package-scale audit bundle fixture
+20. Add the Phase 6 validation artifact: one package-scale audit bundle fixture
     with human and JSON output, semantic diff before/after a change, artifact
-    viewer smoke test, oracle manifest, spec-provenance facts, redaction check,
-    replay command, and a README showing how a reviewer answers authority,
-    proof, trust, assumption, and runtime-obligation questions without reading
-    compiler internals.
+    viewer smoke test, oracle manifest, property-test manifest, persisted
+    counterexample regression, spec-provenance facts, redaction check, replay
+    command, and a README showing how a reviewer answers authority, proof,
+    trust, assumption, and runtime-obligation questions without reading compiler
+    internals.
 
 ## Phase 7: Proof Status And Trust Gates
 
@@ -941,12 +967,25 @@ under a stronger badge.
     `scripts/tests/check_solver_portfolio.sh`; the gate must prove no external
     solver result can overwrite kernel evidence and that disagreement blocks
     release claims unless explicitly assumed.
-14. Add the Phase 7 validation artifact: a trust-gate pressure project that
+14. Add spec/proof mutation testing to prove evidence is load-bearing. Command
+    surface: `concrete mutate-evidence --target <example> --json` creates
+    controlled mutants: change a function body under a proof link, weaken or
+    delete an `#[ensures]` clause, strengthen an impossible `#[requires]`,
+    remove a loop invariant, alter a spec PExpr/table entry, change a theorem
+    name, and perturb a trusted assumption. Expected outcomes must be explicit:
+    stale, missing, vacuous, partial, failed proof, widened trust, or unchanged
+    only when the mutation is semantically irrelevant and justified. Wire
+    `scripts/tests/check_evidence_mutation.sh` over `hmac_sha256`,
+    `constant_time_tag`, `proof_patterns`, and one contract-negative example.
+    The gate must fail if a mutated proof/spec still reports the original green
+    evidence class without an allowed explanation. This is evidence about the
+    evidence: proofs must constrain the implementation, not merely decorate it.
+15. Add the Phase 7 validation artifact: a trust-gate pressure project that
     includes transitive proof dependencies, stale dependency propagation,
     tool-version drift, assumption widening, spec-adequacy policy, vacuity
-    downgrade, solver portfolio / disagreement handling, weaker-evidence
-    monotonicity, and a release gate proving each status cannot be silently
-    presented as stronger evidence.
+    downgrade, solver portfolio / disagreement handling, evidence mutation
+    testing, weaker-evidence monotonicity, and a release gate proving each
+    status cannot be silently presented as stronger evidence.
 
 ## Phase 8: Provable And Predictable Subsets
 
@@ -1619,7 +1658,22 @@ they force a named surface or public claim.
     handling, handle-relative filesystem authority, exit-code compatibility,
     error behavior compatibility, ignored-result diagnostics, and oracle tests
     against a reference implementation.
-15. Add a graduated real-workload ladder. The goal is to make sure Concrete
+15. Add a thin end-to-end credibility slice before the larger workload ladder,
+    so skeptical users can replay one compelling artifact before the full
+    Phase 10/11/12 surface is complete. Target:
+    `examples/credibility_slice/packet_window/` or an equivalent protocol-like
+    example that exercises all of: explicit capabilities, one runtime-safety
+    obligation, one source contract, one Lean-checked proof, one
+    `proved_by_kernel_decision` discharge, one SMT counterexample or
+    solver-trusted residue, one property-test counterexample, one oracle or
+    interpreter-vs-compiled check, and one audit/release bundle. Wire
+    `scripts/tests/check_credibility_slice.sh`; the gate must compile and run
+    the example, replay the proof/evidence checks, persist any counterexample
+    as a regression, and produce a README transcript that a non-author can run
+    without understanding compiler internals. This is intentionally a vertical
+    slice, not a new parallel track; it exists to validate the bet before the
+    later 10k-line workload ladder.
+16. Add a graduated real-workload ladder. The goal is to make sure Concrete
     builds real things that can be checked against references, not only tiny
     proof demos. Each workload must name the surface or public claim it forces;
     otherwise it does not belong in this phase. Do not jump straight to multiple
@@ -1680,16 +1734,17 @@ they force a named surface or public claim.
     interpreter-vs-compiled differential tests, runtime-obligation audit, and
     explicit evidence/trust classification for what is proved, tested, assumed,
     or trusted.
-16. Do not run broad examples cleanup/polish sweeps. Clean examples
+17. Do not run broad examples cleanup/polish sweeps. Clean examples
     opportunistically when a roadmap task touches them. Improve examples only
     when they serve proof-link migration, `concrete prove` authoring,
     external validation, or a release-facing tutorial.
-17. Add the Phase 12 validation artifact: a showcase/workload dashboard that
+18. Add the Phase 12 validation artifact: a showcase/workload dashboard that
     proves every flagship and graduated workload has a check story, evidence
     bundle, oracle or reference when appropriate, interpreter-vs-compiled
-    coverage, runtime-obligation audit, trust/assumption classification, and
-    release-CI replay. The first external-user workload in this dashboard is
-    the external-validation-gate trial.
+    coverage, property-test/counterexample-regression coverage where relevant,
+    runtime-obligation audit, trust/assumption classification, and release-CI
+    replay. The first external-user workload in this dashboard is the
+    external-validation-gate trial.
 
 ## Phase 13: Compiler Soundness Bridge
 
