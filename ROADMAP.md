@@ -559,27 +559,53 @@ work depends on them.
     `tests/perf/proof_report`, and `tests/perf/codegen_loop` against committed
     JSON baselines. Done when CI fails on unexplained budget regressions and
     the report says which pass regressed.
-32. Add compiler fuzzing as a standing gate:
+32. Add correctness-gated compiler speed work, kept in its own fixture area.
+    All compilation-speed experiments must live under
+    `tests/perf/compiler_pipeline/` until promoted, and no speed change may land
+    without both measurement and correctness evidence. Required sub-gates:
+    `scripts/tests/check_compiler_perf_report.sh` proves
+    `concrete build --timings --json` and `concrete report performance --json`
+    are stable compiler-ledger views; `check_incremental_cache_correctness.sh`
+    proves cache keys include source hashes, toolchain id, target/build profile,
+    command mode, pass schema version, dependency facts, and obligation/proof
+    fingerprints, and that stale inputs never reuse old facts;
+    `check_parallel_determinism.sh` proves serial and parallel pass execution
+    produce byte-identical diagnostics, artifact ids, source maps, ledger facts,
+    obligation ids, backend IR, and release-bundle summaries;
+    `check_lazy_artifacts.sh` proves expensive JSON/Lean/workspace/audit/source
+    map artifacts are emitted only when requested or by an explicit gate; and
+    `check_data_layout_parity.sh` proves any data-oriented table/SoA prototype
+    is byte-identical at every public surface before measuring speed or memory.
+    V1 candidates for measured table layouts are exactly diagnostics, tokens,
+    typed/Core/backend IR instructions, `CompilerLedger` facts,
+    `ObligationCore` views, symbol tables, and source maps. Do not introduce a
+    general Zig-style reflection/comptime facility for this; Concrete may add an
+    explicit checked table/layout abstraction only after the performance report
+    proves a concrete structure is hot. Done when the separate fixture folder
+    contains clean-build, incremental, stale-cache, parallel, lazy-artifact, and
+    one narrow data-layout experiment, each with a committed before/after timing
+    and a correctness assertion.
+33. Add compiler fuzzing as a standing gate:
     `scripts/fuzz/parser`, `scripts/fuzz/resolver`,
     `scripts/fuzz/typecheck`, `scripts/fuzz/ownership`,
     `scripts/fuzz/formatter`, `scripts/fuzz/lowering`, and
     `scripts/fuzz/obligations`. Done when `make test-fuzz` runs a bounded CI
     budget and proves crashes, parser panics, malformed JSON, and false
     `proved_*` statuses are rejected.
-33. Add fuzz minimization and fixture promotion:
+34. Add fuzz minimization and fixture promotion:
     `scripts/fuzz/minimize` writes reduced repros into
     `tests/fuzz_regressions/<area>/<name>.con` with an expected diagnostic or
     honest non-proof snapshot. Done when every promoted repro is run by CI and
     no fuzzer-only failure stays outside the checked-in corpus for a release.
-34. Document pass invariants and failure boundaries: what each pass guarantees,
+35. Document pass invariants and failure boundaries: what each pass guarantees,
     which errors are recoverable for reporting, which errors stop compilation,
     and which assumptions are trusted.
-35. Add a compiler-pipeline regression corpus: malformed modules, ambiguous
+36. Add a compiler-pipeline regression corpus: malformed modules, ambiguous
     names, type errors, ownership errors, capability errors, source-map
     preservation, interpreter/codegen mismatch, backend assumption reporting,
     canonicalization edge cases, dependency invalidation, and deterministic
     `inspect` output.
-36. Add metamorphic compiler tests. Equivalent source changes must preserve the
+37. Add metamorphic compiler tests. Equivalent source changes must preserve the
     relevant facts: local variable renaming, independent declaration ordering,
     whitespace/comments, equivalent parentheses, harmless block splitting,
     import ordering where semantics are unchanged, and equivalent literal
@@ -587,7 +613,7 @@ work depends on them.
     compare diagnostics, resolved ids where expected, typed/Core/backend facts,
     obligations, release-bundle summaries, and compiled output, while allowing
     source spans and source hashes to differ where they honestly should.
-37. Add source-location privacy modes, borrowing the useful part of Odin's
+38. Add source-location privacy modes, borrowing the useful part of Odin's
     source-location controls but making them audit-visible:
     `[build] source-location-mode = "normal" | "filename" | "obfuscated" |
     "none"` in `Concrete.toml`, plus `--source-location-mode <mode>` for
@@ -599,13 +625,13 @@ work depends on them.
     Done when local CI still sees full spans under `normal`, release bundles
     record `source_location_mode`, and redacted artifacts never pretend that
     redaction is proof or evidence.
-38. Add JSON diagnostic parity as a named gate, not just a renderer option:
+39. Add JSON diagnostic parity as a named gate, not just a renderer option:
     `concrete build --json-errors` or the equivalent command mode must emit the
     same diagnostic codes, spans, reasons, related spans, next actions, and
     payloads as the human renderer. Wire `scripts/tests/check_json_diagnostics.sh`
     with parser, resolver, type, ownership, capability, policy, backend, and
     internal-error fixtures.
-39. Add artifact-retention and emitted-pass files for debugging, inspired by
+40. Add artifact-retention and emitted-pass files for debugging, inspired by
     Odin's keep-temp-files workflow and QBE's printable IL discipline:
     `--keep-artifacts`, `--emit-ast`, `--emit-resolved`, `--emit-typed-ir`,
     `--emit-core`, `--emit-backend-ir`, `--emit-asm`, and
@@ -618,7 +644,7 @@ work depends on them.
     `examples/compiler_pipeline_probe/` and one negative case proving
     `--emit-backend-ir` is unavailable before backend IR exists rather than
     silently emitting stale output.
-40. Add artifact garbage-collection policy and `concrete clean` modes before
+41. Add artifact garbage-collection policy and `concrete clean` modes before
     retained artifacts, proof caches, crash bundles, and package artifacts grow
     without bound. Required modes: `concrete clean --build`, `--artifacts`,
     `--proof-cache`, `--crash-bundles`, `--all`, and `--dry-run --json`.
@@ -626,14 +652,14 @@ work depends on them.
     unless explicitly requested. Wire `scripts/tests/check_clean_artifacts.sh`
     to prove no source, proof, release bundle, or manually retained crash repro
     is deleted accidentally.
-41. Add compiler self-audit: `concrete audit --compiler` renders the
+42. Add compiler self-audit: `concrete audit --compiler` renders the
     `CompilerLedger` itself. Required output: passes run, artifact ids,
     diagnostics count, source-location privacy mode, target/toolchain identity,
     solver/tool versions, cache/dependency facts, replay commands, backend
     assumptions, emitted files, and links to the `ObligationCore` ledger. Wire
     `scripts/tests/check_compiler_self_audit.sh`; the gate must prove the
     self-audit is generated from `CompilerLedger`, not from text scraping.
-42. Keep the backend IR printable, verifier-checked, and regression-testable
+43. Keep the backend IR printable, verifier-checked, and regression-testable
     directly. This is the QBE lesson adapted to Concrete: even if LLVM remains
     the backend, Concrete's own backend contract should be a stable emitted
     artifact with a verifier, not an opaque stream of generated code. V1 must
@@ -646,7 +672,7 @@ work depends on them.
     `target_constants.con`. Wire `scripts/tests/check_backend_ir.sh` to run
     `concrete inspect --backend-ir`, `concrete verify-ir --pass backend-ir`,
     and a compiled execution check for each fixture.
-43. Add the Phase 4 validation artifact:
+44. Add the Phase 4 validation artifact:
     `examples/compiler_pipeline_probe/` plus
     `scripts/tests/check_phase4_pipeline.sh`. The fixture must run
     `concrete build`, `run`, `test`, `fmt --check`, `inspect --ast`,
