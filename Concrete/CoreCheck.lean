@@ -212,12 +212,31 @@ def CoreCheckError.code : CoreCheckError → String
   | .missingTraitMethod _ _ => "E0581"
   | .traitMethodRetTyMismatch _ _ _ => "E0582"
 
-private def addError (msg : String) (hint : Option String := none) (code : String := "") : StateM CoreCheckEnv Unit := do
+/-- WHY this is an error (rich diagnostic surface, Phase 4 #11). Capability family
+    only; everything else defaults to `none` so its rendering is unchanged. -/
+def CoreCheckError.reason : CoreCheckError → Option String
+  | .insufficientCapabilities _ _ _ =>
+    some "capabilities are part of a function's contract: a caller may only invoke effects it has itself declared, so effects stay visible at every call site"
+  | .missingCapability _ _ _ =>
+    some "this operation has an ambient effect that must be declared as a capability, so the effect is visible in the function's signature"
+  | _ => none
+
+/-- Structured evidence (key → value) backing the diagnostic (Phase 4 #11).
+    Capability family only; everything else defaults to empty. -/
+def CoreCheckError.evidence : CoreCheckError → List (String × String)
+  | .insufficientCapabilities fn required available =>
+    [("function", fn), ("requires", required), ("caller_has", available)]
+  | .missingCapability callee cap caller =>
+    [("operation", callee), ("requires", cap), ("caller_has", caller)]
+  | _ => []
+
+private def addError (msg : String) (hint : Option String := none) (code : String := "")
+    (reason : Option String := none) (evidence : List (String × String) := []) : StateM CoreCheckEnv Unit := do
   let env ← getEnv
-  setEnv { env with errors := env.errors ++ [{ severity := .error, message := msg, pass := "core-check", span := none, hint := hint, code := code }] }
+  setEnv { env with errors := env.errors ++ [{ severity := .error, message := msg, pass := "core-check", span := none, hint := hint, code := code, reason := reason, evidence := evidence }] }
 
 private def addCCError (e : CoreCheckError) : StateM CoreCheckEnv Unit :=
-  addError e.message e.hint e.code
+  addError e.message e.hint e.code e.reason e.evidence
 
 private def addVar (name : String) (ty : Ty) : StateM CoreCheckEnv Unit := do
   let env ← getEnv

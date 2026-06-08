@@ -80,6 +80,24 @@ else
   no "use-after-move related span mismatch (json count=$relCount line=$relLine note=$relNote)"
 fi
 
+echo "=== rich fields: evidence + reason agree in human and JSON (capability family) ==="
+MC="examples/diagnostics_rich/missing_capability.con"
+MCJ="$("$COMPILER" "$MC" --diagnostics-json 2>/dev/null)"
+MCH="$("$COMPILER" "$MC" --report caps 2>&1)"
+read -r jcode jreq jhas jreason < <(printf '%s' "$MCJ" | python3 -c "
+import json,sys
+x=json.load(sys.stdin)['diagnostics'][0]
+ev={e['key']:e['value'] for e in x['evidence']}
+print(x['code'], ev.get('requires',''), ev.get('caller_has',''), 'yes' if x['reason'] else 'no')" 2>/dev/null)
+if [ "$jcode" = "E0520" ] && [ "$jreq" = "Alloc" ] && [ "$jhas" = "(none)" ] && [ "$jreason" = "yes" ] \
+   && printf '%s' "$MCH" | grep -qE "requires: Alloc" \
+   && printf '%s' "$MCH" | grep -qE "caller_has: \(none\)" \
+   && printf '%s' "$MCH" | grep -qE "reason: capabilities are part of"; then
+  ok "capability: evidence (requires/caller_has) + reason structured + shown in human and JSON"
+else
+  no "capability evidence/reason mismatch (json code=$jcode req=$jreq has=$jhas reason=$jreason)"
+fi
+
 echo "=== JSON envelope is well-formed and versioned ==="
 ENV_J="$("$COMPILER" examples/diagnostics_rich/parser_error.con --diagnostics-json 2>/dev/null)"
 printf '%s' "$ENV_J" | python3 -c "import json,sys;d=json.load(sys.stdin);sys.exit(0 if d['schema_kind']=='diagnostics' and d['schema_version']>=1 and d['count']==1 else 1)" \
