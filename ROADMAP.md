@@ -483,7 +483,12 @@ work depends on them.
      now point at the offending function instead of being location-less.
      `check_source_maps.sh`. [DONE]
    - 13b. Carry `declSpan` Core→SSA→emitted-symbol so backend diagnostics,
-     generated C/LLVM, and debug info can name the source function.
+     generated C/LLVM, and debug info can name the source function. `SFnDef`
+     gains `declSpan`; `lowerFn` carries it (and mono preserves it through
+     specialization); the SSA dump (`--emit-ssa`) names each function's source
+     line (`; source: divide @ line 4`). `check_source_maps.sh`. [DONE — SSA
+     dump; LLVM DWARF debug info is the heavier follow-on, with 13d's finer
+     spans.]
    - 13c. Attach the originating function/decl span to proof obligations and
      audit facts (ObligationCore), so witnesses/counterexamples cite source.
      Split by source of the function:

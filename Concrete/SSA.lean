@@ -66,6 +66,9 @@ structure SFnDef where
   isTest : Bool := false
   isEntryPoint : Bool := false
   modulePath : String := ""
+  -- Source declaration span, carried Core→SSA so backend IR / debug info can name
+  -- the originating source function (ROADMAP Phase 4 #13b). `none` if synthesized.
+  declSpan : Option Span := none
 
 structure SModule where
   name : String
@@ -189,7 +192,12 @@ private def ppSBlock (b : SBlock) : String :=
 def ppSFnDef (f : SFnDef) : String :=
   let paramsStr := f.params.map fun (n, t) => s!"{ssaTyToStr t} %{n}"
   let blocksStr := f.blocks.map ppSBlock
-  s!"define {ssaTyToStr f.retTy} @{f.name}({", ".intercalate paramsStr}) \{\n{"\n".intercalate blocksStr}\n}"
+  -- Source-location provenance carried Core→SSA (ROADMAP Phase 4 #13b): the
+  -- backend artifact names the source line of the function it lowers.
+  let locComment := match f.declSpan with
+    | some sp => s!"; source: {f.name} @ line {sp.line}\n"
+    | none => ""
+  s!"{locComment}define {ssaTyToStr f.retTy} @{f.name}({", ".intercalate paramsStr}) \{\n{"\n".intercalate blocksStr}\n}"
 
 def ppSModule (m : SModule) : String :=
   let parts : List String := []

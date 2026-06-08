@@ -65,6 +65,20 @@ print(len(obs), len(loc))" 2>/dev/null)
   && ok "all $total project obligations carry a source (file, line)" \
   || no "project obligations missing source locations ($located of $total located)"
 
+echo "=== source location survives Core→SSA into the emitted backend artifact (#13b) ==="
+# declSpan is carried CFnDef → (mono) → SFnDef → SSA dump, so the backend artifact
+# names the source line of each function it lowers.
+OBLINE="$(grep -n "fn divide" "$OBF" | head -1 | cut -d: -f1)"
+SSA="$("$COMPILER" "$OBF" --emit-ssa 2>/dev/null)"
+printf '%s' "$SSA" | grep -qE "^; source: divide @ line ${OBLINE}\$" \
+  && ok "the SSA dump names divide's source line ($OBLINE)" \
+  || no "SSA dump missing source-line provenance for divide"
+# pin the Core→SSA plumbing.
+grep -qE "declSpan : Option Span" Concrete/SSA.lean \
+  && ok "SFnDef carries declSpan" || no "SFnDef.declSpan missing"
+grep -qE "declSpan := f\.declSpan" Concrete/Lower.lean \
+  && ok "lowerFn carries declSpan Core→SSA" || no "lowerFn drops declSpan"
+
 echo "=== a clean file still yields zero diagnostics (no spurious spans) ==="
 "$COMPILER" examples/hmac_sha256/src/main.con --diagnostics-json 2>/dev/null \
   | python3 -c "import json,sys;d=json.load(sys.stdin);sys.exit(0 if d['count']==0 else 1)" \

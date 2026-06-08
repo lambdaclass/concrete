@@ -1835,6 +1835,7 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
       blocks := blocks'
       isTest := f.isTest
       isEntryPoint := f.isEntryPoint
+      declSpan := f.declSpan
     }, finalState.stringLits)
   | ((.error e), _) => .error e
 

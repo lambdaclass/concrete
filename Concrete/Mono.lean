@@ -384,6 +384,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
               isPublic := false
               isTest := false
               capSet := fnDef.capSet
+              declSpan := fnDef.declSpan
             }
             enqueueMono name monoFn
             return .call name [] args' (sub ty)
@@ -414,6 +415,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
         isPublic := false
         isTest := false
         capSet := fnDef.capSet
+        declSpan := fnDef.declSpan
       }
       enqueueMono name monoFn
       return .call name [] args' (sub ty)
