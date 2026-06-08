@@ -21,11 +21,20 @@ structure Diagnostic where
   severity : Severity
   message  : String
   pass     : String         -- "check", "elab", "ssa-verify", etc.
-  span     : Option Span    -- line/col from Token.lean
-  hint     : Option String  -- suggested fix
+  span     : Option Span    -- primary span (line/col from Token.lean)
+  hint     : Option String  -- suggested fix (the "help" section)
   code     : String := ""   -- stable error code (e.g. "E0201"), empty if unclassified
   file     : String := ""   -- source file path (empty = unknown)
   context  : List String := []  -- context chain, outermost first
+  -- rich diagnostic surface (Phase 4 #11). All default empty, so a diagnostic that
+  -- does not set them renders exactly as before; producers opt in. Human and JSON
+  -- both render from these same fields, so the two outputs cannot drift.
+  related   : List (Span × String) := []  -- secondary/related spans, each with a note
+  reason    : Option String := none        -- WHY this is an error
+  nextAction : Option String := none        -- the concrete next step
+  expected  : Option String := none        -- expected fact (for expected-vs-actual)
+  actual    : Option String := none         -- actual fact
+  evidence  : List (String × String) := []  -- policy / evidence context (key → value)
 
 abbrev Diagnostics := List Diagnostic
 
@@ -92,7 +101,21 @@ def Diagnostic.render (d : Diagnostic) (sourceMap : SourceMap := []) : String :=
   let ctxStr := if d.context.isEmpty then ""
     else "\n" ++ ("\n".intercalate (d.context.map fun c => s!"  = {c}"))
   let codeStr := if d.code.isEmpty then "" else s!"({d.code}) "
-  s!"{locStr}{severityStr d.severity}[{d.pass}]: {codeStr}{d.message}{snippetStr}{hintStr}{ctxStr}"
+  -- rich sections (Phase 4 #11): each rendered only when present.
+  let srcFor : Option String := if d.file.isEmpty then (match sourceMap with | (_, s) :: _ => some s | [] => none) else sourceMap.lookup d.file
+  let relatedStr := String.join (d.related.map fun (sp, note) =>
+    let snip := match srcFor with | some src => renderSnippet src sp | none => ""
+    s!"\n  related ({sp.line}:{sp.col}): {note}{snip}")
+  let reasonStr := match d.reason with | some r => s!"\n  reason: {r}" | none => ""
+  let exp := match d.expected, d.actual with
+    | some e, some a => s!"\n  expected: {e}\n  found:    {a}"
+    | some e, none   => s!"\n  expected: {e}"
+    | none,   some a => s!"\n  found:    {a}"
+    | none,   none   => ""
+  let nextStr := match d.nextAction with | some n => s!"\n  next: {n}" | none => ""
+  let evStr := if d.evidence.isEmpty then ""
+    else "\n" ++ ("\n".intercalate (d.evidence.map fun (k, v) => s!"  {k}: {v}"))
+  s!"{locStr}{severityStr d.severity}[{d.pass}]: {codeStr}{d.message}{snippetStr}{relatedStr}{reasonStr}{exp}{hintStr}{nextStr}{evStr}{ctxStr}"
 
 def renderDiagnostics (ds : Diagnostics) (sourceMap : SourceMap := []) : String :=
   "\n".intercalate (ds.map fun d => d.render sourceMap)
@@ -116,11 +139,21 @@ def Diagnostic.toJson (d : Diagnostic) : String :=
     | none => "null"
   let hintJson := match d.hint with | some h => jq h | none => "null"
   let ctxJson := "[" ++ ", ".intercalate (d.context.map jq) ++ "]"
+  let optJson := fun (o : Option String) => match o with | some x => jq x | none => "null"
+  let spanObj := fun (sp : Span) => s!"\{{jq "line"}: {sp.line}, {jq "col"}: {sp.col}, {jq "end_line"}: {sp.endLine}, {jq "end_col"}: {sp.endCol}}"
+  let relJson := "[" ++ ", ".intercalate (d.related.map fun (sp, note) =>
+    "{" ++ jq "span" ++ ": " ++ spanObj sp ++ ", " ++ jq "note" ++ ": " ++ jq note ++ "}") ++ "]"
+  let evJson := "[" ++ ", ".intercalate (d.evidence.map fun (k, v) =>
+    "{" ++ jq "key" ++ ": " ++ jq k ++ ", " ++ jq "value" ++ ": " ++ jq v ++ "}") ++ "]"
   String.join [
     "{", s!"{jq "severity"}: {jq (severityStr d.severity)}, ",
     s!"{jq "code"}: {jq d.code}, ", s!"{jq "pass"}: {jq d.pass}, ",
     s!"{jq "message"}: {jq d.message}, ", s!"{jq "file"}: {jq d.file}, ",
     s!"{jq "span"}: {spanJson}, ", s!"{jq "hint"}: {hintJson}, ",
+    s!"{jq "related"}: {relJson}, ", s!"{jq "reason"}: {optJson d.reason}, ",
+    s!"{jq "next_action"}: {optJson d.nextAction}, ",
+    s!"{jq "expected"}: {optJson d.expected}, ", s!"{jq "actual"}: {optJson d.actual}, ",
+    s!"{jq "evidence"}: {evJson}, ",
     s!"{jq "context"}: {ctxJson}", "}" ]
 
 /-- A versioned JSON envelope of a diagnostics list. -/
