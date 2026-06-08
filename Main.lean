@@ -734,6 +734,13 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
         { id := oid, pass := passName, inputIds := [inp], outputIds := [oid],
           replay := s!"concrete check  (pass: {passName})" }
       ledger := ledger.recordArtifact art
+    -- Record proof-registry validation diagnostics into the one store (Phase 4 #4):
+    -- commands render these from the ledger instead of recomputing them.
+    for issue in Concrete.validateRegistry pc registry do
+      let d : Concrete.CompilerLedger.Diag :=
+        { code := "registry", severity := if issue.isError then "error" else "warning",
+          message := Concrete.renderRegistryIssue issue }
+      ledger := ledger.recordDiagnostic d
     return Except.ok { projectRoot, validCore, parsed := merged, allSrcMap, tomlContent,
                        mainPath, depNames, policy, policyWarnings, policyLocMap, registry, pc, ledger }
 
@@ -1936,13 +1943,12 @@ def main (args : List String) : IO UInt32 := do
       | .error exitCode => return exitCode
       | .ok ctx =>
         let { validCore, parsed, allSrcMap, depNames, policy, policyWarnings,
-              policyLocMap, registry, pc, .. } := ctx
-        -- [policy], location map, registry, and ProofCore all come from loadProject.
+              policyLocMap, registry, pc, ledger, .. } := ctx
+        -- [policy], location map, registry, ProofCore, and diagnostics all come from
+        -- loadProject. Registry diagnostics are rendered FROM the ledger (Phase 4 #4).
         for w in policyWarnings do IO.eprintln w
-        -- Validate registry
-        let regIssues := Concrete.validateRegistry pc registry
-        for issue in regIssues do
-          IO.eprintln (Concrete.renderRegistryIssue issue)
+        for d in ledger.diagnostics do
+          if d.code == "registry" then IO.eprintln d.message
         if !policy.isEmpty then
           let (vac, asm, st) ← computePolicyQuals policy parsed.modules depNames policyLocMap registry
           let policyDs := enforcePolicy policy validCore.coreModules
@@ -1967,7 +1973,7 @@ def main (args : List String) : IO UInt32 := do
         -- Exit code: 0 if all user-package eligible proved, 1 if any stale/missing/blocked
         let hasIssues := userPc.obligations.any fun o =>
           o.status == .stale || o.status == .missing || o.status == .blocked
-        let hasRegistryErrors := regIssues.any (·.isError)
+        let hasRegistryErrors := ledger.diagnostics.any (fun d => d.code == "registry" && d.severity == "error")
         return (if hasIssues || hasRegistryErrors then 1 else 0)
   -- concrete diff <old.json> <new.json> [--json]
   if args.head? == some "diff" then
