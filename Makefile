@@ -217,8 +217,8 @@ test-cli-plumbing: build
 test-cli-contract: build
 	$(NIX_DEVELOP) bash ./scripts/tests/check_cli_contract.sh
 
-test-api-boundary:
-	bash ./scripts/tests/check_compiler_api_boundary.sh
+test-api-boundary: build
+	$(NIX_DEVELOP) bash ./scripts/tests/check_compiler_api_boundary.sh
 
 check-grammar:
 	$(NIX_DEVELOP) python3 scripts/check_ll1.py grammar/concrete.ebnf

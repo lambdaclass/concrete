@@ -19,7 +19,7 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 # The V1 boundary allowlist — must agree with docs/COMPILER_API.md.
-BOUNDARY=("Concrete.Pipeline" "Concrete.CompilerLedger" "Concrete.ObligationCore" "Concrete.Diagnostic" "Concrete.DebugBundle")
+BOUNDARY=("Concrete.Project" "Concrete.Pipeline" "Concrete.CompilerLedger" "Concrete.ObligationCore" "Concrete.Diagnostic" "Concrete.DebugBundle")
 CONSUMER_ROOTS=("editor" "tools" "integrations" "lsp" "mcp" "plugins")
 DOC="docs/COMPILER_API.md"
 
@@ -73,6 +73,29 @@ printf 'import Concrete\n'                                            > "$FIX/ba
   || no "scanner FAILED to flag an internal import — gate is a no-op"
 [ -n "$(scan_file "$FIX/bad_umbrella.lean")" ] && ok "scanner flags the bare umbrella import" \
   || no "scanner FAILED to flag the bare umbrella import"
+
+echo "=== a consumer loads a project THROUGH the boundary (Concrete.Project only) ==="
+PROBE="scripts/tests/fixtures/api_boundary/load_probe.lean"
+[ -f "$PROBE" ] || no "load probe fixture missing"
+# static: the probe imports only boundary modules (no internals, no umbrella).
+[ -z "$(scan_file "$PROBE")" ] && ok "load_probe imports only boundary modules" \
+  || no "load_probe reaches past the boundary: $(scan_file "$PROBE")"
+# the boundary actually exposes the loading API.
+grep -qE "def loadProject" Concrete/Project.lean && grep -qE "partial def findProjectRoot" Concrete/Project.lean \
+  && grep -qE "structure ProjectContext" Concrete/Project.lean \
+  && ok "Concrete.Project exposes findProjectRoot / loadProject / ProjectContext" \
+  || no "boundary module missing the project-loading API"
+# dynamic: compile + run the probe so we prove it actually loads a project (only
+# when a Lean toolchain is available — never a false fail on a bare runner).
+if command -v lake >/dev/null 2>&1; then
+  if lake env lean --run "$PROBE" 2>/dev/null | grep -q "PROBE-OK:"; then
+    ok "the probe loads a project at runtime via the boundary (PROBE-OK)"
+  else
+    no "the probe failed to load a project through the boundary"
+  fi
+else
+  echo "  --   (lake unavailable; skipped the runtime load-probe)"
+fi
 
 echo ""
 echo "API-BOUNDARY: PASS=$PASS  FAIL=$FAIL"

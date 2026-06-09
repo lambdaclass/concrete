@@ -574,7 +574,13 @@ work depends on them.
       [DONE — guard first; routing real consumers through it is incremental]
     - 16b. Migrate `ProjectContext` loading out of `Main.lean` into a boundary
       module so consumers can load a project without the CLI; then add it to the
-      allowlist.
+      allowlist. [DONE] `Concrete.Project` now holds `ProjectContext`,
+      `loadProject`, `findProjectRoot`, and the dependency/TOML/module-resolution
+      helpers (moved in four verified cuts: path/IO leaves → module resolution →
+      TOML/deps/registry → ProjectContext/loadProject, building after each).
+      Added to the boundary allowlist; a consumer probe imports ONLY
+      `Concrete.Project` and loads a project at runtime (PROBE-OK), gated by
+      `check_compiler_api_boundary.sh`. Main keeps only CLI glue.
 17. Define the backend contract boundary: integer overflow profile, division
    semantics, layout/ABI, panic/assert behavior, optimization assumptions,
    target triple/data layout, libc/runtime assumptions, and what is trusted.
