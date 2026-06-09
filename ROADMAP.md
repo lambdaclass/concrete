@@ -563,6 +563,18 @@ work depends on them.
     `scripts/tests/check_compiler_api_boundary.sh`; the gate must fail if
     editor/package/tooling code reaches into parser/checker/report internals
     instead of the boundary modules.
+    Staged:
+    - 16a. Boundary defined + guarded. `docs/COMPILER_API.md` names the V1
+      allowlist (`Pipeline`, `CompilerLedger`, `ObligationCore`, `Diagnostic`,
+      `DebugBundle`; ProjectContext loading is CLI-only for now). The gate scans
+      consumer roots (editor/tools/integrations/lsp/mcp/plugins) for any `.lean`
+      importing a non-allowlisted `Concrete.*` module or the bare umbrella, and
+      self-tests against a good/bad fixture pair so it can never become a no-op.
+      Doc ↔ gate allowlists are asserted to agree. `check_compiler_api_boundary.sh`.
+      [DONE — guard first; routing real consumers through it is incremental]
+    - 16b. Migrate `ProjectContext` loading out of `Main.lean` into a boundary
+      module so consumers can load a project without the CLI; then add it to the
+      allowlist.
 17. Define the backend contract boundary: integer overflow profile, division
    semantics, layout/ABI, panic/assert behavior, optimization assumptions,
    target triple/data layout, libc/runtime assumptions, and what is trusted.
