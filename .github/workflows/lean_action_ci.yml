@@ -309,7 +309,7 @@ jobs:
       - name: Source-maps gate (Phase 4 #13a — spans survive AST→Core)
         run: bash scripts/tests/check_source_maps.sh
 
-      - name: Capability-polymorphism design gate (Phase 5 #24a — fn-ptr smuggling closed, HOF freeze)
+      - name: Callable-values/capability design gate (Phase 5 #24a — fn-ptr smuggling closed, HOF freeze)
         run: bash scripts/tests/check_capability_polymorphism_design.sh
 
       - name: CLI-plumbing gate (Phase 4 #14a — shared prologue + exit-code taxonomy)

@@ -77,7 +77,7 @@ test-proof-gate: build ## Proof evidence gate (extraction, registry, Lean kernel
 test-axiom-inventory: build ## Axiom-inventory gate (#print axioms over every proof_by theorem; docs/AXIOMS.md)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_axiom_inventory.sh
 
-test-cap-poly-design: build ## Capability-polymorphism design gate (fn-ptr smuggling stays closed; stdlib HOF freeze)
+test-cap-poly-design: build ## Callable-values/capability design gate (fn-ptr smuggling stays closed; stdlib HOF freeze)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_capability_polymorphism_design.sh
 
 test-evidence-corpus: build ## Evidence-class corpus integrity gate

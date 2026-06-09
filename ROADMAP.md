@@ -887,6 +887,21 @@ rest of Phase 5 stays after that slab in the same linear queue.
 6. Define the collections story: fixed arrays, slices, dynamic `Vec`, maps,
    buffers, parser cursors, and which collections require `Alloc` or other
    capabilities.
+   - 6a. Decide narrow const generics before fixed-capacity collections become
+     stdlib APIs. This is load-bearing for the no-allocation story, not just an
+     expressiveness feature: `BoundedVec<T, N>`, `RingBuffer<T, N>`,
+     `PacketBuf<N>`, fixed hash tables, parser scratch buffers, and embedded
+     queues must not require one monomorphic type per capacity. V1 is limited
+     to integer literals and constant expressions that the compiler can
+     evaluate without general comptime execution; no type reflection, no
+     generated methods, no arbitrary compile-time programs. Monomorphization
+     must record the concrete `N` in the compiler ledger, layout report,
+     obligation ids, proof/evidence artifacts, and backend contracts. Add
+     `docs/CONST_GENERICS_V1.md`, `examples/const_generics/{bounded_vec,ring_buffer,packet_buf}/`,
+     and `scripts/tests/check_const_generics_v1.sh`; the gate must prove
+     distinct capacities specialize separately, layout is capacity-specific,
+     runtime-safety obligations name the instantiated size, and unsupported
+     non-integer/comptime-reflection forms are rejected.
 7. Add `concrete fmt`: stable formatting for source files, examples, docs
    snippets, and generated fixtures. Formatting must not churn semantic
    fingerprints.
@@ -923,19 +938,29 @@ rest of Phase 5 stays after that slab in the same linear queue.
    **Still open (each: implement, or explicitly defer with examples):**
    - match guards — `Pattern if condition => …`
    - OR patterns — `A | B => …`
+   - integer range patterns — `0x30..=0x39 => …`, exclusive/open ranges only
+     if the grammar and exhaustiveness checker can explain them clearly
    - `if let`
    - `while let`
    - nested patterns
+   - match-on-reference ergonomics for enums and structs behind `&T`/`&mut T`:
+     decide whether auto-deref in patterns exists, where it stops, and how
+     mutable-borrow frame facts are reported
    - tuple types, or a deliberate no-tuples decision (record which)
    - struct update syntax — `Struct { field: x, ..base }`
    - `_` wildcard *inside destructuring bindings* (distinct from the `_` match
      arm, which is done) — still deferred.
 
-   **Suggested order:** `if let` / `let … else` documentation and examples
-   first (they exercise the existing destructuring with the least new
-   machinery), then OR patterns or struct update — whichever hurts more in
-   practice (parser/service code tends to want OR patterns; SHA-style state
-   updates tend to want `..base`).
+   **Suggested order:** integer range patterns and match-on-`&T` first (they
+   immediately improve decoders, parsers, and interpreter-shaped workloads),
+   then `if let` / `let … else` documentation and examples (they exercise the
+   existing destructuring with the least new machinery), then OR patterns or
+   struct update — whichever hurts more in practice (parser/service code tends
+   to want OR patterns; SHA-style state updates tend to want `..base`). Add
+   `examples/patterns/{byte_ranges,ref_enum_match,parser_token_match}/` and
+   extend `scripts/tests/check_pattern_ergonomics.sh`; the gate must cover
+   range exhaustiveness, unreachable-arm diagnostics, reference-pattern
+   behavior, and negative ambiguity cases.
 12. Define numeric literal and cast rules: suffixes, inference/default integer
    type, signed/unsigned comparisons, narrowing, widening, checked/proved/
    wrapping overflow profiles, and diagnostics for ambiguous or lossy casts.
@@ -999,38 +1024,69 @@ rest of Phase 5 stays after that slab in the same linear queue.
     and `scripts/tests/check_iteration_protocol.sh`; the gate must report
     allocation/capability behavior for each iteration form and prove bounded
     loops stay visible to runtime-safety obligations.
-24. Decide capability polymorphism for higher-order stdlib functions before
-    adding `map`/`fold`/`for_each` families or structured concurrency. The
-    design must avoid a combinatorial split like `map`, `map_file`,
-    `map_alloc`; the expected shape is explicit capability-set polymorphism
-    such as `fn map<T, U, C>(xs, f: fn(T) with(C) -> U) with(C) -> ...`,
-    grounded in `research/language/capability-polymorphism.md`. The decision
-    must also specify proof scope: prove each monomorphized instance, prove the
-    generic once, or allow generic contracts with instance-level proof
-    artifacts. Audit output must distinguish `proved_for_instance` from any
-    future `proved_generic` class.
-    - 24a (design gate — prerequisite, not implementation). A capability-
-      polymorphism design doc (`docs/CAPABILITY_POLYMORPHISM.md`) must exist
-      BEFORE the Phase 6 stdlib iteration/HOF surface lands. Today's stdlib
+24. Decide explicit callable values and capability-polymorphic callbacks as one
+    model before adding `map`/`fold`/`for_each` families, structured
+    concurrency, or callback-heavy stdlib APIs. This replaces the narrower
+    "capability polymorphism only" question with the full design knot:
+    bare function pointers, bound callback values, explicit context structs,
+    callback mutability/linearity modes, and capability polymorphism must be
+    specified together.
+
+    The design must avoid a combinatorial split like `map`, `map_file`,
+    `map_alloc`; the expected use-site shape remains explicit capability-set
+    polymorphism such as
+    `fn map<T, U, C>(xs, f: fn(T) with(C) -> U) with(C) -> ...`, grounded in
+    `research/language/capability-polymorphism.md`. The doc must compare two
+    bound-callback representations explicitly:
+    - struct-level capability parameters, e.g. `BoundFn<Ctx, A, R, Caps>`;
+    - Concrete-shaped use-site binding, where the capset lives on the inner fn
+      type (`call: fn(&Ctx, A) with(C) -> R`) and `C` is bound by the caller's
+      ordinary function-level capability polymorphism.
+
+    The design must specify all three callable modes, without hidden captures:
+    shared context (`fn(&Ctx, A) -> R`), mutable context (`fn(&mut Ctx, A) ->
+    R`), and consuming context / `FnOnce` shape (`fn(Ctx, A) -> R` or an
+    explicit one-shot wrapper). It must say when the bound value is copyable,
+    movable, linear, or consumed; how reborrowing of `&mut Ctx` works; what
+    happens when `Ctx` holds linear resources; how `for x in ...` desugars
+    against this model; and how bound callbacks render in capability,
+    allocation, audit, and release reports.
+
+    The proof story is part of the same item: a call through a bound callback
+    must have a named obligation/evidence shape, and the design must choose
+    whether proofs are per monomorphized instance, generic once, or generic
+    contracts with instance-level proof artifacts. Audit output must
+    distinguish `proved_for_instance` from any future `proved_generic` class.
+    Add `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`,
+    `examples/callbacks/{bare_fn,bound_shared,bound_mut,bound_once,cap_polymorphic_map}/`,
+    and `scripts/tests/check_callable_values.sh`; the gate must prove hidden
+    captures are rejected, callback capabilities are not erased, context
+    resources remain visible, the three consumption modes behave differently,
+    and proof/evidence reports name the instantiated callable shape.
+    - 24a (design gate — prerequisite, not implementation). The widened design
+      doc (`docs/CALLABLE_VALUES_AND_CAPABILITIES.md`) must exist BEFORE the
+      Phase 6 stdlib iteration/HOF surface lands. Today's stdlib
       higher-order functions pin a fixed capability set in the fn-pointer type
       (e.g. `HashMap::fold`'s `f: fn(A, &K, &V) -> A` in `std/src/map.con`),
-      which forces the combinatorial split above. The smuggling hole this
-      item originally named — the checker's fn-pointer call path did not
-      require the caller to hold the fn type's declared capability set, so a
-      function with no `with(...)` could accept `f: fn(i32) with(Network) ->
-      i32` and call it — is CLOSED (2026-06-09): calling through a function
-      pointer now requires the fn type's capability set in both Check and
-      CoreCheck, locked by `adversarial_neg_cap_fnptr_smuggle.con` (rejected,
-      E0240) and `cap_fnptr_declared.con` (positive) in the main suite. The
-      design doc still owes the `with(C)` polymorphism shape for stdlib HOFs
-      before any `map`/`fold`/`for_each` family hardens. Red-team gate:
+      which forces the combinatorial split above and does not give explicit
+      standing to stateful callbacks. The smuggling hole this item originally
+      named — the checker's fn-pointer call path did not require the caller to
+      hold the fn type's declared capability set, so a function with no
+      `with(...)` could accept `f: fn(i32) with(Network) -> i32` and call it —
+      is CLOSED (2026-06-09): calling through a function pointer now requires
+      the fn type's capability set in both Check and CoreCheck, locked by
+      `adversarial_neg_cap_fnptr_smuggle.con` (rejected, E0240) and
+      `cap_fnptr_declared.con` (positive) in the main suite. The design doc
+      still owes the callable-values model before any `map`/`fold`/`for_each`
+      family hardens. Red-team gate:
       `scripts/tests/check_capability_polymorphism_design.sh` must fail if the
-      stdlib gains new HOF surface without the design doc, and must keep the
-      smuggling fixture rejected.
+      stdlib gains new HOF surface without the widened design doc, and must
+      keep the smuggling fixture rejected.
 25. Define the stdlib handoff contract for Phase 6. Phase 5 decides the
     language surfaces the stdlib depends on — modules/imports, project model,
-    tests, diagnostics, bytes/text/path types, collections, iteration,
-    capability polymorphism, build profiles, and CLI verbs — but the actual
+    tests, diagnostics, bytes/text/path types, collections, narrow const
+    generics for fixed-capacity APIs, iteration, explicit callable values,
+    capability-polymorphic callbacks, build profiles, and CLI verbs — but the actual
     library APIs are built in the dedicated stdlib phase. Write
     `docs/STDLIB_HANDOFF.md` and gate it with
     `scripts/tests/check_stdlib_handoff.sh`; the gate must assert each required
@@ -1121,12 +1177,13 @@ rest of Phase 5 stays after that slab in the same linear queue.
     expectations.
 41. Add the Phase 5 validation project: a small C/Rust-style CLI using the core
     slab plus daily workflow (`Concrete.toml`, modules/imports,
-    `concrete test`, bytes/text/path and collection decisions, diagnostics,
-    formatting, docs, lint/vet, benchmark/profile/coverage smoke tests, and
-    trace/debug commands). CI must build, run, test, format-check, lint, audit,
-    record compiler-known target constants, and compare interpreter-vs-compiled
-    behavior on macOS and Linux. It validates the language/tooling slab, not the
-    full stdlib.
+    `concrete test`, bytes/text/path and collection decisions, narrow const
+    generics, pattern ergonomics, callable/capability callback decisions,
+    diagnostics, formatting, docs, lint/vet, benchmark/profile/coverage smoke
+    tests, and trace/debug commands). CI must build, run, test, format-check,
+    lint, audit, record compiler-known target constants, and compare
+    interpreter-vs-compiled behavior on macOS and Linux. It validates the
+    language/tooling slab, not the full stdlib.
 
 ## Phase 6: Standard Library And Core APIs
 
@@ -1901,8 +1958,20 @@ promises.
    and assumed, no unbounded loops/recursion, explicit failure-path policy.
 2. Freeze the first arithmetic profiles:
    wrapping, checked, and proved/no-overflow.
-3. Carry arithmetic profile choices into diagnostics, reports, assumptions,
-   proof obligations, and release bundles.
+3. Make arithmetic profiles explicit named semantics, not inherited backend
+   habit. The default profile decision must be source-visible and
+   project-visible: e.g. debug may trap/check, release may require
+   obligation-or-wrap by policy, and intentionally wrapping arithmetic must be
+   written or inferred only through a named profile. A theorem about wrapping
+   code is not a theorem about trapping/checked code; the active arithmetic
+   profile is part of the spec semantics for any proved function. Carry
+   arithmetic profile choices into diagnostics, reports, assumptions, proof
+   obligations, release bundles, and backend contracts. Add
+   `docs/ARITHMETIC_PROFILES_V1.md`, `examples/arithmetic_profiles/{wrap,checked,proved_no_overflow,profile_mismatch}/`,
+   and `scripts/tests/check_arithmetic_profiles.sh`; the gate must prove the
+   same source expression is classified differently under different named
+   profiles, that proof/evidence artifacts record the profile, and that a
+   profile mismatch cannot be presented as compatible evidence.
 4. Define a first runtime failure model: abort, assertion failure, OOM, stack
    overflow, `defer`/cleanup, impossible branches, and what each does to
    proof/resource claims.
@@ -2016,9 +2085,24 @@ zero, overflow profile, casts, and loop bounds with statuses
     widened bounds. Wire `scripts/tests/check_invariant_inference.sh`; the gate
     must prove inferred facts reduce required user annotations without creating
     false green obligations.
-17. Add the Phase 12 validation artifact: a runtime-safety corpus covering
+17. Add newtype/type invariants as scoped obligation hypotheses after they are
+    checked at construction boundaries. This connects validated wrappers to the
+    proof/runtime-safety pipeline: a type such as
+    `#[invariant(self.0 > 0 && self.0 < 65536)] newtype Port = u16` must have
+    the invariant proved/enforced at every constructor or `try_new` admission
+    point, then injected as a named hypothesis for obligations in any function
+    receiving a `Port`. No invariant may enter scope from a raw cast, trusted
+    constructor, FFI boundary, stale proof, or unchecked assumption without a
+    ledger entry saying so. Add `docs/NEWTYPE_INVARIANT_OBLIGATIONS.md`,
+    `examples/newtype_invariants/{port,nonzero_len,bounded_index,ffi_trusted}/`,
+    and `scripts/tests/check_newtype_invariant_obligations.sh`; the gate must
+    prove constructor checks create reusable hypotheses, invalid constructors
+    are rejected or return `Result`, raw/trusted paths do not silently inject
+    facts, and obligation reports name the type invariant source.
+18. Add the Phase 12 validation artifact: a runtime-safety corpus covering
     bounds, div/mod-zero, overflow, casts, panic/abort/assert, byte/text/path
-    boundaries, stack/recursion, inferred invariant candidates, and obligation
+    boundaries, stack/recursion, inferred invariant candidates, newtype
+    invariant hypotheses, arithmetic-profile mismatches, and obligation
     suppression. Each case must show one of `proved`, `enforced`, `assumed`,
     `missing`, or `blocked`, include a negative variant, and run through policy
     gates plus human/JSON reports.
@@ -2447,11 +2531,30 @@ policies, provenance, and registry protocol.
     docs, package docs, release-note links, and
     `scripts/tests/check_docs_publish.sh` to prove generated docs are
     reproducible.
-15. Add the Phase 17 validation artifact: a multi-package workspace project
+15. Design evidence-typed imports before the package fact schema freezes. A
+    dependent package should be able to demand an evidence floor at the import
+    boundary, for example `import hmac.compute requires(proved_by_lean)` or a
+    manifest-level equivalent for all imports from a dependency. The compiler
+    must check the requirement against the dependency's interface/evidence
+    artifacts and fail the import if the evidence is missing, stale, vacuous,
+    downgraded, inherited only through an unaccepted assumption, or weaker than
+    the importing package's policy. This is a package-boundary trust-chain
+    feature, not a local proof feature: it must define how evidence classes are
+    ordered or deliberately non-ordered, how `solver_trusted`/assumed/trusted
+    dependencies are named, how proof revocation invalidates dependents, and
+    how release bundles explain the imported requirement. Write
+    `research/packages/evidence-typed-imports.md` before implementing the
+    surface, then add `docs/EVIDENCE_TYPED_IMPORTS.md`,
+    `examples/package_evidence_imports/{requires_lean,allows_solver_trusted,rejects_stale,rejects_vacuous}/`,
+    and `scripts/tests/check_evidence_typed_imports.sh`; the gate must prove
+    dependency evidence is read from package artifacts, not source-private side
+    channels, and that an evidence downgrade breaks the importing package.
+16. Add the Phase 17 validation artifact: a multi-package workspace project
     with dependency resolution, lockfile, package-aware tests, interface/body
     artifact split, dependency trust policy, assumption inheritance, authority
-    budgets, provenance, published docs, and release-bundle evidence for every
-    dependency. Wire it as `examples/package_workspace/` plus
+    budgets, provenance, evidence-typed imports, published docs, and
+    release-bundle evidence for every dependency. Wire it as
+    `examples/package_workspace/` plus
     `scripts/tests/check_phase17_packages.sh`.
 
 ## Phase 18: Editor And Human Tooling
