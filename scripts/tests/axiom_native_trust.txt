@@ -1,0 +1,17 @@
+# Theorems explicitly permitted to depend on Lean.ofReduceBool /
+# Lean.trustCompiler (native-code trust), one per line.
+#
+# These six use `bv_decide`, whose LRAT certificate checker runs as
+# *compiled* Lean — the kernel checks the reflection step, but the SAT
+# certificate validation itself is native code. That is a deliberate,
+# documented trust (docs/AXIOMS.md §native-code trust); kernel-only LRAT
+# checking is currently impractical for SHA-256-sized goals.
+#
+# Adding a theorem here is a trust-policy change: it must also be added to
+# docs/AXIOMS.md with a reason, or check_axiom_inventory.sh fails.
+Examples.HmacSha256.Proofs.hmac_sha256_refines_spec
+Examples.HmacSha256.Proofs.round_refines_list
+Examples.HmacSha256.Proofs.sha256_compress_at_refines_spec
+Examples.HmacSha256.Proofs.sha256_compress_refines_spec
+Examples.HmacSha256.Proofs.sha256_hash_refines_spec
+Examples.HmacSha256.Proofs.state_to_bytes_refines_spec
