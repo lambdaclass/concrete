@@ -32,7 +32,7 @@
 
 #[spec(check_nonce.spec)]
 #[proof_by(Examples.CryptoVerify.Proofs.check_nonce_correct)]
-#[proof_fingerprint("f15e2971d90b9095")]
+#[proof_fingerprint("f086f6e07241fddc8f6d11f7173b44db")]
 fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
     if nonce > 0 {
         if nonce <= max_nonce {
@@ -52,7 +52,7 @@ fn check_nonce(nonce: Int, max_nonce: Int) -> Int {
 
 #[spec(validate_header.spec)]
 #[proof_by(Examples.ElfHeader.Proofs.validate_header_correct)]
-#[proof_fingerprint("f8e64b113309c50")]
+#[proof_fingerprint("c7e023240bd950d3a3e81876df3b62b3")]
 fn validate_header(nonce: Int, max_nonce: Int, version: Int) -> Int {
     let nonce_result: Int = check_nonce(nonce, max_nonce);
     if nonce_result != 1 {
@@ -79,7 +79,7 @@ fn validate_header(nonce: Int, max_nonce: Int, version: Int) -> Int {
 // registry entry was (see #[proof_fingerprint] in CONTRACTS_GUIDE).
 #[spec(compute_checksum.spec)]
 #[proof_by(Concrete.Proof.compute_checksum_correct)]
-#[proof_fingerprint("f7c89517c809e99c")]
+#[proof_fingerprint("885e09af371d284a814eb52ac05ee180")]
 fn compute_checksum(key: Int, message: Int, salt: Int) -> Int {
     return key * message + salt + 1;
 }

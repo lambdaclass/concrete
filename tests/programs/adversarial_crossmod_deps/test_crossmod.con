@@ -6,7 +6,7 @@
 mod left {
     #[spec(left_add_spec)]
     #[proof_by(Concrete.Proof.left_add_correct)]
-    #[proof_fingerprint("9671eeae7fddc0cd")]
+    #[proof_fingerprint("de2a547f92ade3a8659292ab6adf0eef")]
     pub fn add(a: i64, b: i64) -> i64 {
         return a + b;
     }
@@ -19,7 +19,7 @@ mod left {
 mod right {
     #[spec(right_add_spec)]
     #[proof_by(Concrete.Proof.right_add_correct)]
-    #[proof_fingerprint("9671eeae7fddc0cd")]
+    #[proof_fingerprint("de2a547f92ade3a8659292ab6adf0eef")]
     pub fn add(a: i64, b: i64) -> i64 {
         return a + b;
     }

@@ -9,7 +9,7 @@ mod ghost {
     #[spec(Examples.ProofPatterns.Proofs.ghostSumExpr)]
     #[proof_by(Examples.ProofPatterns.Proofs.ghost_sum_correct)]
     #[proof_coverage(point)]
-    #[proof_fingerprint("580482017753f812")]
+    #[proof_fingerprint("7072d53ea9dd4588908227eb50c5c660")]
     fn with_ghost() -> i32 {
         ghost let n: i32 = 4;
         let mut acc: i32 = 0;
@@ -24,7 +24,7 @@ mod ghost {
     #[spec(Examples.ProofPatterns.Proofs.ghostSumExpr)]
     #[proof_by(Examples.ProofPatterns.Proofs.ghost_sum_correct)]
     #[proof_coverage(point)]
-    #[proof_fingerprint("580482017753f812")]
+    #[proof_fingerprint("7072d53ea9dd4588908227eb50c5c660")]
     fn plain() -> i32 {
         let mut acc: i32 = 0;
         #[invariant(0 <= i && i <= 4)]

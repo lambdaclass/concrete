@@ -5,7 +5,7 @@ mod arr {
     #[spec(Examples.ProofPatterns.Proofs.putExpr)]
     #[proof_by(Examples.ProofPatterns.Proofs.put_writes_index_1_frames_rest)]
     #[proof_coverage(point)]
-    #[proof_fingerprint("5dd61817ad08c4eb")]
+    #[proof_fingerprint("f1df212ff3c5c862c301d8c230828da7")]
     fn put(a: [i32; 4], v: i32) -> [i32; 4] {
         a[1] = v;
         return a;

@@ -119,7 +119,7 @@ concrete prove …/main.con constant_time_tag.ct_compare --emit-link
 #[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
 #[ensures_proof(Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct)]
 #[proof_coverage(iff)]
-#[proof_fingerprint("a3d98e2612d58dd5")]
+#[proof_fingerprint("46c44aefeb3a7a9dc90685169df94990")]
 ```
 
 Paste it above the function. (The full iff is two theorems — the same-tag and

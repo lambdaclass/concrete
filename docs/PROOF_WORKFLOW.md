@@ -144,7 +144,7 @@ concrete prove src/main.con main.check_nonce --emit-link
 #[spec(Concrete.Proof.checkNonceExpr)]
 #[proof_by(Examples.CryptoVerify.Proofs.check_nonce_correct)]
 #[proof_coverage(iff)]
-#[proof_fingerprint("f15e2971d90b9095")]
+#[proof_fingerprint("f086f6e07241fddc8f6d11f7173b44db")]
 fn check_nonce(nonce: i32, max_nonce: i32) -> i32 { … }
 ```
 

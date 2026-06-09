@@ -115,7 +115,7 @@ mod fixed_capacity {
     #[spec(Concrete.Proof.ringNewExpr)]
     #[proof_by(Examples.FixedCapacity.Proofs.ring_new_correct)]
     #[proof_coverage(point)]
-    #[proof_fingerprint("437c30cb5ed2b21d")]
+    #[proof_fingerprint("b0048c6d114dc9a4fe12a558b115397a")]
     fn ring_new() -> RingBuf {
         let data: [i32; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         return RingBuf { data: data, head: 0, count: 0 };
@@ -126,7 +126,7 @@ mod fixed_capacity {
     #[spec(Concrete.Proof.ringContainsExpr)]
     #[proof_by(Examples.FixedCapacity.Proofs.ring_push_then_contains_correct)]
     #[proof_coverage(point)]
-    #[proof_fingerprint("27cc8adc332e0850")]
+    #[proof_fingerprint("60c4266e0c133562541f142af1f87ea3")]
     fn ring_contains(rb: RingBuf, val: i32) -> i32 {
         let cap: i32 = 16;
         let scan: i32 = if rb.count < cap { rb.count } else { cap };
@@ -141,7 +141,7 @@ mod fixed_capacity {
     #[spec(Concrete.Proof.ringPushExpr)]
     #[proof_by(Examples.FixedCapacity.Proofs.ring_push_zero_correct)]
     #[proof_coverage(point)]
-    #[proof_fingerprint("5c9245b10fc5c9b7")]
+    #[proof_fingerprint("be91928f3dcc6ccee7863c43230df62b")]
     fn ring_push(rb: RingBuf, val: i32) -> RingBuf {
         let cap: i32 = 16;
         let mut d: [i32; 16] = rb.data;
@@ -157,7 +157,7 @@ mod fixed_capacity {
     #[spec(Concrete.Proof.fcTagExpr)]
     #[proof_by(Examples.FixedCapacity.Proofs.compute_tag_zero_correct)]
     #[proof_coverage(point)]
-    #[proof_fingerprint("11cc41ff87785325")]
+    #[proof_fingerprint("eb12d7d766fe9227e12e98552e06e211")]
     fn compute_tag(buf: MsgBuf) -> i32 {
         let mut acc: i32 = 0;
         for (let mut i: i32 = 0; i < 6; i = i + 1) {

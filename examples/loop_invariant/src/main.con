@@ -4,7 +4,7 @@ mod loop_invariant {
     #[spec(Examples.LoopInvariant.Proofs.count_upBody)]
     #[proof_by(Examples.LoopInvariant.Proofs.count_up_loop_preserves)]
     #[proof_coverage(invariant)]
-    #[proof_fingerprint("82ceeff21cfb6254")]
+    #[proof_fingerprint("40b964856119044ac9bbec490d2e86ff")]
     fn count_up() -> i32 {
         let mut acc: i32 = 0;
         #[invariant(0 <= i && i <= 8)]

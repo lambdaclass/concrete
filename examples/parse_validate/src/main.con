@@ -55,7 +55,7 @@ mod parse_validate {
     #[spec(Concrete.Proof.validateVersionExpr)]
     #[proof_by(Examples.ParseValidate.Proofs.validate_version_correct)]
     #[proof_coverage(iff)]
-    #[proof_fingerprint("8c799844e258f0da")]
+    #[proof_fingerprint("7bd1b593d6ac18e365deed30a834cc30")]
     fn validate_version(v: i32) -> i32 {
         if v == 1 { return 0; }
         return 1;
@@ -111,7 +111,7 @@ mod parse_validate {
     #[spec(Concrete.Proof.validateHeaderFieldsExpr)]
     #[proof_by(Examples.ParseValidate.Proofs.validate_header_fields_success)]
     #[proof_coverage(one_direction)]
-    #[proof_fingerprint("91be53c0e78153e3")]
+    #[proof_fingerprint("b2958d1097f22c9d57f511bb8c2fba95")]
     fn validate_header_fields(
         v: i32, t: i32, plen: i32,
         total_len: i32, cs_expected: i32, cs_computed: i32
@@ -133,7 +133,7 @@ mod parse_validate {
     #[spec(Concrete.Proof.parseHeaderExpr)]
     #[proof_by(Examples.ParseValidate.Proofs.parse_header_too_short)]
     #[proof_coverage(one_direction)]
-    #[proof_fingerprint("d9e9e36a63ab2a41")]
+    #[proof_fingerprint("9600276dc06b5565bd832424bc070355")]
     fn parse_header(data: [i32; 8], len: i32) -> Result<Header, ParseError> {
         // Gate: minimum 5 fields needed
         if validate_total_len(len, 5) != 0 {

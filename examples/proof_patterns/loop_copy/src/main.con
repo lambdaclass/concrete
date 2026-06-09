@@ -5,7 +5,7 @@ mod loopcopy {
     #[spec(Examples.ProofPatterns.Proofs.copy2Expr)]
     #[proof_by(Examples.ProofPatterns.Proofs.copy2_copies_faithfully)]
     #[proof_coverage(point)]
-    #[proof_fingerprint("e693ce90fababfc7")]
+    #[proof_fingerprint("35e83d6811f5ab98268115d9ba9e09bc")]
     fn copy2(src: [i32; 2]) -> [i32; 2] {
         let mut dst: [i32; 2] = [0; 2];
         #[invariant(0 <= i && i <= 2)]

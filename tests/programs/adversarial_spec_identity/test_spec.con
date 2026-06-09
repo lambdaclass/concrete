@@ -3,14 +3,14 @@
 
 #[spec(add_commutativity)]
 #[proof_by(Concrete.Proof.pure_add_correct)]
-#[proof_fingerprint("9671eeae7fddc0cd")]
+#[proof_fingerprint("de2a547f92ade3a8659292ab6adf0eef")]
 fn pure_add(a: i64, b: i64) -> i64 {
     return a + b;
 }
 
 #[spec(mul_associativity)]
 #[proof_by(Concrete.Proof.pure_mul_correct)]
-#[proof_fingerprint("69257ee73aec3ed")]
+#[proof_fingerprint("6f1cd1a45b382ac146ff3d2a785ffbfc")]
 fn pure_mul(a: i64, b: i64) -> i64 {
     return a * b;
 }

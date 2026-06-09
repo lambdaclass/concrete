@@ -25,7 +25,7 @@ mod states {
     #[spec(Examples.ProofPatterns.Proofs.addThreeExpr)]
     #[proof_by(Examples.ProofPatterns.Proofs.add_three_correct)]
     #[proof_coverage(one_direction)]
-    #[proof_fingerprint("24f8f09dfab3dee7")]
+    #[proof_fingerprint("650429bc5ee262d9880b34d607afabc2")]
     fn partial(x: i32) -> i32 {
         return x + 3;
     }

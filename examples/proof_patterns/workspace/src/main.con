@@ -9,7 +9,7 @@ mod workspace {
     #[spec(Examples.ProofPatterns.Proofs.scaleByTwoExpr)]
     #[proof_by(Examples.ProofPatterns.Proofs.scale_by_two_correct)]
     #[proof_coverage(iff)]
-    #[proof_fingerprint("95879500a4d022c")]
+    #[proof_fingerprint("9d54db9ae7b78dd6f3db9a77875f7622")]
     fn scale_by_two(x: i32) -> i32 {
         return x * 2;
     }

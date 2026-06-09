@@ -24,7 +24,7 @@ mod test_drift {
     // downgrades this from proved to stale. (Checked-in broken state on purpose.)
     #[spec(Concrete.Proof.driftTestSpec)]
     #[proof_by(Concrete.Proof.drift_test_theorem)]
-    #[proof_fingerprint("9671eeae7fddc0cd")]
+    #[proof_fingerprint("de2a547f92ade3a8659292ab6adf0eef")]
     fn simple_add(a: i32, b: i32) -> i32 {
         return a + b;
     }

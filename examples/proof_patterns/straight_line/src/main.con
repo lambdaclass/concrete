@@ -5,7 +5,7 @@ mod straight_line {
     #[spec(Examples.ProofPatterns.Proofs.addThreeExpr)]
     #[proof_by(Examples.ProofPatterns.Proofs.add_three_correct)]
     #[proof_coverage(iff)]
-    #[proof_fingerprint("24f8f09dfab3dee7")]
+    #[proof_fingerprint("650429bc5ee262d9880b34d607afabc2")]
     fn add_three(x: i32) -> i32 {
         return x + 3;
     }

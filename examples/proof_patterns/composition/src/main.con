@@ -11,7 +11,7 @@ mod calls {
     #[spec(Examples.ProofPatterns.Proofs.combineExpr)]
     #[proof_by(Examples.ProofPatterns.Proofs.combine_correct)]
     #[proof_coverage(iff)]
-    #[proof_fingerprint("99253f531fb8b7d9")]
+    #[proof_fingerprint("e39660b9356a1e28a7546a37100e6eb3")]
     fn combine(x: i32) -> i32 {
         return inc(x) + dbl(x);
     }
