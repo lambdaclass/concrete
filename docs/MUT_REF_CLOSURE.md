@@ -10,7 +10,7 @@ This checklist tracks what works, what needs fixing, what needs testing, and wha
 
 See [MUT_REF_SEMANTICS.md](MUT_REF_SEMANTICS.md) for the full specification. Summary:
 
-- `&mut T` is linear (non-Copy). Passing it to a function or returning it consumes it.
+- `&mut T` is linear (non-Copy). Passing a **borrow-block** ref to a function or returning it consumes it; **function parameter** refs are implicitly reborrowed at call sites and are not consumed.
 - Deref read (`*r`) and deref write (`*r = val`) do NOT consume.
 - Control-flow branches must agree on consumption state.
 - Cannot consume inside a loop if declared outside.
@@ -75,12 +75,16 @@ Tests to write or verify exist:
 
 These features are not yet implemented. Each is a separate work item:
 
-### Reborrowing
+### Explicit reborrow syntax (`&mut *r`)
 
-Creating `&mut *r` to pass a sub-borrow without consuming `r`. This would allow calling a function that takes `&mut T` while retaining ownership of the original `&mut T`. Requires:
-- Syntax support for `&mut *r` or equivalent.
-- Checker logic to create a temporary borrow of the pointee.
-- Lifetime/scope reasoning to ensure the reborrow does not outlive `r`.
+Note the scope of this gap carefully — it is narrower than "reborrowing is unimplemented":
+
+- **Implicit reborrowing of function-parameter refs IS implemented.** A `&mut T` received as a function parameter can be passed to any number of calls without being consumed; each call implicitly reborrows through the pointer (see MUT_REF_SEMANTICS.md sections 2 and 4; enforced in Check.lean by consuming a `&mut T` argument only when it is in `env.borrowRefs`).
+- **Borrow-block refs are linear and consumed when passed** (MUT_REF_SEMANTICS.md section 3). For these there is no way to pass a sub-borrow while retaining the original.
+- **What is missing is explicit syntax**: `&mut *r` does not parse. Adding it would let a borrow-block ref be lent to a callee without consumption. Requires:
+  - Syntax support for `&mut *r` or equivalent.
+  - Checker logic to create a temporary borrow of the pointee.
+  - Lifetime/scope reasoning to ensure the reborrow does not outlive `r`.
 
 ### Field access through `&mut T`
 
@@ -124,7 +128,7 @@ Completed:
 - Stronger-claim checklist updated with &mut T closure, no-codegen-crash, and no-leak boundary.
 
 Remaining open items (section 5 gaps — future work, not blockers):
-- Reborrowing (`&mut *r`) syntax and semantics.
+- Explicit reborrow syntax (`&mut *r`) for borrow-block refs. (Implicit reborrowing of function-parameter refs already works — see section 5.)
 - Field access/write through `&mut T`.
 - Array element access through `&mut T`.
 - `&mut T` in struct fields.

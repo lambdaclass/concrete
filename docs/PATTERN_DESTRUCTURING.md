@@ -1,6 +1,6 @@
 # Pattern Destructuring: LL(1)-Preserving `let` Destructuring and `let...else`
 
-Status: design document (Phase 3, item 62)
+Status: IMPLEMENTED (originally a design document, Phase 3 item 62). Enum-variant destructuring (`let Type::Variant { a, b } = expr;`), `let...else` with a diverging else block, and struct destructuring (`let StructType { a, b } = expr;`) are all shipped: parsed in `Concrete/Parser.lean` (`parseLet`), desugared to `match` / field-access lets in `Concrete/AST.lean` (`desugarStmts`) before Check and Elab, exactly as section 5 specifies. Tests: `tests/programs/let_else.con`, `tests/programs/struct_destructure.con`. The checker enforces that an arm/destructure binds all variant fields (core-check E0533). Section 11 (future extensions: `if let`, `while let`, `_` wildcards, nested patterns) remains unimplemented design.
 
 This document designs pattern destructuring for Concrete. The goal is to reduce match verbosity for common enum-extraction patterns without introducing name resolution magic, inference, or parser backtracking. Every form described here desugars to an existing `match` expression and preserves the LL(1) grammar invariant.
 

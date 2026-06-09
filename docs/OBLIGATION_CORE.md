@@ -103,6 +103,30 @@ The first ledger should cover the obligation families Concrete already has:
 New obligation kinds should be added to this list, not to a private report
 path.
 
+### `defer` and the proof story
+
+`defer` has no obligation kind of its own, and that is deliberate honesty, not
+an omission. Today:
+
+- **`defer` is an extraction blocker.** The ProvableV1 spec extractor
+  (`Concrete/ProofCore.lean`, `identifyUnsupported`) classifies any function
+  containing `defer` as unextractable, with the reason string `defer`. Such a
+  function surfaces through the existing **proof-ineligible construct** kind
+  (`ineligible` status, E0802); no Lean spec is generated for it.
+- **`defer` is visible to reports, not to proofs.** The defer collector in
+  `ProofCore.lean` (`collectDefersStmts`) feeds the allocation/cleanup report
+  surfaces in `Report.lean` (cleanup lines, alloc/free/defer counts), and the
+  checker's linearity rules account for it (`defer` *reserves* a linear value
+  rather than consuming it). None of that is proof evidence — it is reporting
+  and type discipline.
+
+So the honest ledger story is: a function that uses `defer` can carry
+runtime-safety, contract, and capability facts like any other function, but its
+body is outside the provable subset, and any "proved" claim about it must come
+from somewhere other than ProvableV1 extraction. If `defer` is later admitted
+to the provable subset, that change must add its semantics to the extraction
+layer and this document together, not quietly relax the blocker.
+
 ## Scoped Context
 
 There should be one scoped context collector. It supplies facts to every

@@ -46,9 +46,11 @@ When two modules export functions with the same name (e.g., `from_tag`), there's
 
 **Status:** Fixed. Constants now inline correctly during lowering. Added `constants` field to `LowerState` and constant lookup in the `.ident` case of `lowerExpr`.
 
-### 9. No destructuring let
+### ~~9. No destructuring let~~ — FIXED (enum/struct forms)
 
-`let (a, b) = ...;` is not supported. `parseLet` only expects a single identifier.
+**Status:** Fixed for the forms Concrete actually has. Enum-variant destructuring `let Type::Variant { a, b } = expr;` (with optional diverging `else { ... }`) and struct destructuring `let StructType { a, b } = expr;` are implemented in `parseLet` and desugar to `match` / field-access lets before Check and Elab. Tests: `tests/programs/let_else.con`, `tests/programs/struct_destructure.con`. Design: [PATTERN_DESTRUCTURING.md](PATTERN_DESTRUCTURING.md).
+
+Tuple destructuring `let (a, b) = ...;` remains unsupported, but only because Concrete has no tuple types — there is nothing to destructure.
 
 ### 10. Interpreter/runtime data-structure ergonomics are still thin
 
@@ -92,4 +94,5 @@ The right MAL fix is a frame-bounded environment design, not a language workarou
 ### Remaining findings:
 1. **Add string formatting** — cuts string-building verbosity by 5-7x
 2. **No qualified name access across modules** — no `Module.function()` syntax
-3. **No destructuring let** — `let (a, b) = ...` not supported
+
+(Destructuring let was on this list; it is now fixed for enum/struct forms — see item 9 above.)

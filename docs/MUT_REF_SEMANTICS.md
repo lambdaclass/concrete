@@ -24,6 +24,8 @@ The checker distinguishes two kinds of `&mut T` variable:
 
 This distinction exists because borrow-block refs are tied to a specific scope and alloca, while function parameter refs are incoming pointers with no scope to manage.
 
+To be precise about "reborrowable": the reborrowing of parameter refs is **implicit** — the checker simply does not consume a `&mut T` argument unless it is a borrow-block ref (it checks `env.borrowRefs` before consuming). There is **no explicit reborrow syntax** (`&mut *r` does not parse); see section 10. Borrow-block refs get no reborrowing of either kind — passing one to a function consumes it, per section 3.
+
 ## 3. What Consumes a Borrow-Block `&mut T` Ref
 
 | Operation | Consumes? | Mechanism |
@@ -115,7 +117,7 @@ This means any future change to consumption behavior must preserve the invariant
 
 These are known gaps, not yet implemented:
 
-- **Reborrowing.** Creating a shorter-lived `&mut T` from an existing `&mut T` (e.g., passing `&mut *r` to a function that needs `&mut T` without consuming `r`). Currently not supported.
+- **Explicit reborrow syntax (`&mut *r`).** There is no surface syntax for creating a shorter-lived `&mut T` from an existing `&mut T`. This matters only for **borrow-block refs**: a borrow-block ref is linear and is consumed when passed to a function (section 3), and there is no way to pass it on while retaining it. **Function parameter refs do not need this syntax** — they are implicitly reborrowed at every call site and are never consumed by calls (section 2 and section 4; the checker consumes a `&mut T` argument only when it is in `env.borrowRefs`). Implementing explicit `&mut *r` would require syntax support, a checker rule creating a temporary borrow of the pointee, and scope reasoning so the reborrow cannot outlive `r`.
 - **Field access through `&mut T`.** `r.field` auto-derefs for reads, but `r.field = val` (field write through a mutable reference) is not yet supported.
 - **Array element access through `&mut T`.** `r[i]` and `r[i] = val` through a mutable reference are not yet supported.
 - **`&mut T` in struct fields.** Storing a `&mut T` inside a struct and tracking its linearity through the struct is not yet addressed.

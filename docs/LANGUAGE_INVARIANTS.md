@@ -18,7 +18,8 @@ Every linear value must be consumed exactly once. Not zero (leak = compile error
 - Returning it from a function (`return x`)
 - Moving it into a struct field during construction (`Point { x: val }`)
 - `break val` inside a loop-as-expression
-- Destructuring via `match` or `let` (the original is consumed, the fields become new bindings)
+- Destructuring via `match` (the original is consumed, the fields become new bindings)
+- Pattern-destructuring `let`: enum-variant destructuring `let Type::Variant { a, b } = e;` (including the `let ... else { ... }` form) and struct destructuring `let S { a, b } = e;`. These desugar to `match` / field-access lets, so the scrutinee is consumed and the bound fields become the new owners. All fields of the variant must be bound (core-check E0533), so a linear field cannot be silently leaked by partial binding — see [PATTERN_DESTRUCTURING.md](PATTERN_DESTRUCTURING.md) section 7.
 - Storing into an array element during array literal construction (`[val1, val2]`)
 
 Each phase that adds a new consumption form must update this list.

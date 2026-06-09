@@ -213,6 +213,13 @@ the proof discipline (ProofKit + contracts + `concrete prove`) was worth the
 cost. Until this passes, the back half of Phases 10-18 is flagged **at-risk**,
 not green.
 
+**Scope of the gate.** Phases 7-9 (flagships, proof authoring, audit commands)
+are NOT gated — they proceed regardless, because they are what the trial runs
+on and what a negative result would teach against. A **fail** verdict does not
+silently park Phases 10-18 either: it forces an explicit decision recorded in
+this file — change the bet (redesign the discipline that failed), narrow the
+audience, or stop — before any Phase 10+ item may start.
+
 ## Phase 3: ObligationCore Pipeline Consolidation
 
 Goal: make every proof, contract, runtime-safety, assertion, SMT, policy, audit,
@@ -233,6 +240,18 @@ models/walkers. Do not call #14, #15, or #16 architecturally complete merely
 because a consistency gate passes; they are only complete when #18 has made
 `ObligationCore` the hub and the old side-channel model is gone. Do not move a
 consumer before the family records it needs exist in the ledger.
+
+Risk note on the remaining items (#8-#18): the migration is currently
+half-done, and a half-migrated ledger is itself a dual-truth-source /
+false-green risk. Assert, vacuity, and assume obligations are still computed
+by report-side walkers outside the ledger (`Report.lean` `vacuityGoals` /
+`collectAssertAssumeS` around lines 1053/1075, discharged directly in
+`Main.lean` ~659-661), so today one surface can classify an assert/vacuity
+fact differently from a future ledger view with no gate catching it. Until
+#8-#18 complete, every new report surface added on top of this state widens
+the window where two live truth sources can disagree — finish the migration
+before growing new report surface, and treat any interim addition as needing
+an explicit parity gate per #17.
 
 1. Define `ObligationCore` schema v1: stable id, source span, function,
    obligation kind, expression shape, typed variables, scoped hypotheses,
@@ -990,6 +1009,24 @@ rest of Phase 5 stays after that slab in the same linear queue.
     generic once, or allow generic contracts with instance-level proof
     artifacts. Audit output must distinguish `proved_for_instance` from any
     future `proved_generic` class.
+    - 24a (design gate — prerequisite, not implementation). A capability-
+      polymorphism design doc (`docs/CAPABILITY_POLYMORPHISM.md`) must exist
+      BEFORE the Phase 6 stdlib iteration/HOF surface lands. Today's stdlib
+      higher-order functions pin a fixed capability set in the fn-pointer type
+      (e.g. `HashMap::fold`'s `f: fn(A, &K, &V) -> A` in `std/src/map.con`),
+      which forces the combinatorial split above. The smuggling hole this
+      item originally named — the checker's fn-pointer call path did not
+      require the caller to hold the fn type's declared capability set, so a
+      function with no `with(...)` could accept `f: fn(i32) with(Network) ->
+      i32` and call it — is CLOSED (2026-06-09): calling through a function
+      pointer now requires the fn type's capability set in both Check and
+      CoreCheck, locked by `adversarial_neg_cap_fnptr_smuggle.con` (rejected,
+      E0240) and `cap_fnptr_declared.con` (positive) in the main suite. The
+      design doc still owes the `with(C)` polymorphism shape for stdlib HOFs
+      before any `map`/`fold`/`for_each` family hardens. Red-team gate:
+      `scripts/tests/check_capability_polymorphism_design.sh` must fail if the
+      stdlib gains new HOF surface without the design doc, and must keep the
+      smuggling fixture rejected.
 25. Define the stdlib handoff contract for Phase 6. Phase 5 decides the
     language surfaces the stdlib depends on — modules/imports, project model,
     tests, diagnostics, bytes/text/path types, collections, iteration,
@@ -1825,11 +1862,29 @@ under a stronger badge.
     toolchain bump, that a removed/renamed pinned lemma surfaces as
     `unavailable_dependency`, and that no `needs_recheck` obligation can reach a
     green badge without an actual kernel re-check.
-16. Add the Phase 10 validation artifact: a trust-gate pressure project that
+16. Add an axiom-inventory and clean-checkout proof replay gate. Every
+    `proved_by_lean` / `proved_by_kernel_decision` fact must record the Lean
+    axioms its theorem transitively depends on (the `#print axioms` walk):
+    `propext`, `Classical.choice`, and `Quot.sound` are the expected baseline;
+    any `sorryAx`, `ofReduceBool`/`native_decide`, or user-declared axiom must
+    downgrade the evidence class or surface as an explicit trusted-boundary
+    fact in the §10 inventory — never sit silently under a kernel-evidence
+    badge. Pair it with clean-checkout replay: the proof corpus must re-green
+    from a fresh checkout in a clean temp directory, proving no green badge
+    depends on stale `.lake` build artifacts, uncommitted files, or local
+    machine state. Wire `scripts/tests/check_axiom_inventory.sh` (red-team
+    case: a spec theorem patched to use `sorry` or a new `axiom` must lose its
+    kernel-evidence class) and
+    `scripts/tests/check_clean_checkout_replay.sh` (the flagship corpus —
+    `hmac_sha256`, `constant_time_tag` — must replay green from a pristine
+    copy, and a deliberately corrupted source-vs-artifact mismatch must fail
+    loudly, not reuse the stale artifact).
+17. Add the Phase 10 validation artifact: a trust-gate pressure project that
     includes transitive proof dependencies, stale dependency propagation,
     tool-version drift, proof-corpus migration across a simulated toolchain bump,
     assumption widening, spec-adequacy policy, vacuity downgrade, solver
-    portfolio / disagreement handling, evidence mutation testing, weaker-evidence
+    portfolio / disagreement handling, evidence mutation testing, axiom
+    inventory and clean-checkout replay, weaker-evidence
     monotonicity, and a release gate proving each status cannot be silently
     presented as stronger evidence.
 
@@ -2237,6 +2292,26 @@ audience):**
    presented as proved or graduated until their bars land.
 9. Add public security/soundness disclosure policy: compiler/proof pipeline
    bugs are security-relevant.
+   - 9a. Publish `SECURITY.md`: how to report a compiler/proof-system bug
+     privately, response-time commitment, advisory format, and severity
+     classes — a soundness bug that lets a false claim go green
+     (checker hole, extraction bug, stale-evidence upgrade) is treated as
+     highest severity even when nothing crashes. Advisories enumerate
+     affected claims by reading the obligation ledger of affected releases,
+     not by prose recollection.
+   - 9b. Define the proof-revocation procedure BEFORE the first release that
+     carries proof claims: when a shipped theorem/evidence class is
+     invalidated (proof bug, axiom-inventory violation, solver unsoundness,
+     spec error), there must be a mechanical path that (1) republishes the
+     release manifest with the affected facts downgraded to their honest
+     class (`open` / `needs_recheck` / `trusted`), (2) emits an advisory
+     listing every downgraded claim id, and (3) makes the old bundle
+     fail verification loudly rather than silently coexist. Red-team gate:
+     `scripts/tests/check_proof_revocation.sh` simulates revoking one
+     flagship theorem (e.g. remove it from the axiom-inventory allowlist or
+     break its fingerprint) and must show the release bundle flips to
+     failing with the downgraded claim named — no false green on a revoked
+     proof.
 10. Publish `THREAT_MODEL.md` and keep it linked from README, release bundles,
    showcase manifests, and assumptions docs.
 11. Add first-user workflow CI: install compiler, create/run one example,
@@ -2269,6 +2344,37 @@ audience):**
     mismatches fail loudly with a regeneration command. Wire
     `scripts/tests/check_reproducible_release_hash.sh`; the gate must build the
     same release artifact twice from a clean tree and compare all hashes.
+18a. Add a toolchain/dependency supply-chain lock and license inventory before
+    any release claim:
+    - The Lean toolchain (`lean-toolchain`), every Lake dependency
+      (`lake-manifest.json` pinned revisions), the SMT solver binary
+      (name + version + hash, per the SMT replay metadata), and clang/LLVM
+      versions are part of the evidence chain — a claim is only as
+      trustworthy as the unpinned link. The release manifest (#18) must
+      record all of them; drift between the lock and the build environment
+      fails the release gate, mirroring the Phase 10 #15
+      `proofs/lean-deps.lock` recheck trigger.
+    - Publish `docs/THIRD_PARTY.md`: every shipped dependency (Lean
+      toolchain, Lake packages, solver, runtime libs linked into emitted
+      binaries) with license and role; release claims are blocked while any
+      shipped dependency's license is unreviewed or incompatible.
+    - Red-team gate: `scripts/tests/check_supply_chain_lock.sh` must fail
+      when (a) `lake-manifest.json` and the recorded release manifest
+      disagree on any pinned revision, (b) a dependency is present in the
+      build but absent from `THIRD_PARTY.md`, or (c) the solver version
+      recorded in replay metadata differs from the one in the lock.
+18b. Add the language/stdlib/artifact deprecation policy (moved up from Phase
+    18 — users of a released language need the policy BEFORE the release, not
+    after): what stability the first release promises for syntax, stdlib API,
+    proof/fact schemas, and obligation ids; how deprecations are announced
+    (diagnostic with a replacement, minimum deprecation window measured in
+    releases); and what may never break silently (anything that would flip an
+    evidence class without `needs_recheck`). The Phase 18 migration tooling
+    (`concrete migrate`) implements this policy; the policy itself is a
+    release-bar document. Gate: `concrete api-diff` (#6) must classify every
+    public-surface change as `compatible`, `deprecated(window)`, or
+    `breaking`, and the release gate fails on `breaking` without a recorded
+    policy exception.
 19. Ship the first narrow public release only after the above are green.
 20. Add the Phase 16 validation artifact:
     `scripts/tests/check_release_candidate.sh` installs the dist archive into a
@@ -2277,8 +2383,12 @@ audience):**
     signatures if enabled, checks `release/perf-baseline.json`, runs
     `concrete api-diff` against the previous public interface snapshot, and
     confirms the bundle contains the claim matrix, threat model, public
-    examples policy, replay commands, schemas, assumptions/trust reports, and
-    tutorial transcript from someone who did not build the compiler.
+    examples policy, replay commands, schemas, assumptions/trust reports,
+    `SECURITY.md` (#9a), the supply-chain lock and `THIRD_PARTY.md` (#18a),
+    the deprecation policy and a clean `api-diff` classification (#18b), and
+    the tutorial transcript from someone who did not build the compiler. It
+    must also run the proof-revocation drill (#9b) against the candidate
+    bundle.
 
 ## Phase 17: Packages And Dependency Evidence
 
@@ -2362,9 +2472,10 @@ reports without inventing a second truth source.
 6. Add dependency audit UI for capability, allocation, FFI, trust, evidence,
    predictability, proof-obligation drift.
 7. Add backwards-compatibility regression corpus once public users exist.
-8. Add language/versioning/deprecation policy across syntax, stdlib, proof/fact
-   artifacts.
-9. Add migration/deprecation tooling after the policy exists:
+8. Language/versioning/deprecation policy: MOVED to Phase 16 #18b — the
+   policy must exist before the first public release; only the tooling that
+   implements it lives here.
+9. Add migration/deprecation tooling after the policy exists (Phase 16 #18b):
    `concrete migrate --check`, `concrete migrate --apply`, diagnostics for
    deprecated syntax/APIs, suggested replacements, edition/version notes where
    needed, and mechanical rewrites only for transformations that preserve
