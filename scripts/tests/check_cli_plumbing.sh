@@ -53,6 +53,19 @@ grep -qE "ExitCode.staleEvidence" Main.lean && grep -qE "ExitCode.obligationsMis
   && ok "prove exits route through named ExitCode constants" \
   || no "prove still uses magic exit-code literals"
 
+echo "=== shared flag parsing: one definition of hasFlag / flagValue (#14b) ==="
+grep -qE "def hasFlag" Main.lean && grep -qE "def flagValue" Main.lean \
+  && ok "Cli.hasFlag + Cli.flagValue helpers exist" || no "shared flag helpers missing"
+# the prove block no longer re-derives flags inline with rest.contains.
+nc="$(grep -c "rest.contains\|pargs.contains" Main.lean || true)"
+[ "$nc" = "0" ] && ok "prove flags route through Cli helpers (no inline rest.contains)" \
+  || no "found $nc inline rest/pargs.contains flag checks still in Main"
+# behavioural: a valued flag (`-o`) is parsed by flagValue and writes the binary there.
+BIN="$(mktemp -d)/out"
+(cd examples/hmac_sha256 && "$COMPILER" build -o "$BIN" >/dev/null 2>&1)
+[ -f "$BIN" ] && ok "build -o <path> parsed via flagValue (binary written)" \
+  || no "build -o did not produce a binary at the requested path"
+
 echo "=== the taxonomy and prove's runtime exits agree (0 proved / 2 missing / 3 stale) ==="
 CT="examples/constant_time_tag/src/main.con"
 "$COMPILER" prove "$CT" constant_time_tag.ct_compare --json >/dev/null 2>&1

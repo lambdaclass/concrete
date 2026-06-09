@@ -31,6 +31,23 @@ def helpBlock : List String :=
   "EXIT CODES:" :: taxonomy.map (fun (c, m) => s!"  {c}  {m}")
 end ExitCode
 
+-- Shared command-line flag parsing (ROADMAP Phase 4 #14b). One definition of what
+-- a boolean flag and a valued flag mean, so every command parses flags the same
+-- way instead of re-deriving `args.contains` / `dropWhile` inline.
+namespace Cli
+/-- True iff the boolean flag `name` is present. -/
+def hasFlag (args : List String) (name : String) : Bool := args.contains name
+
+/-- The value following `name` (e.g. `--out PATH`), or `none` if `name` is absent
+    or the next token is itself a flag — so `--out --json` does NOT capture
+    `--json` as the path. This guard is applied uniformly (several call sites
+    previously omitted it). -/
+def flagValue (args : List String) (name : String) : Option String :=
+  match args.dropWhile (· != name) with
+  | _ :: v :: _ => if v.startsWith "-" then none else some v
+  | _ => none
+end Cli
+
 def usage : String :=
   "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|vcs|obligation-ledger|compiler-ledger|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
@@ -1912,7 +1929,7 @@ def main (args : List String) : IO UInt32 := do
   -- fact store (Phase 4 #2). Project mode: loads the one ProjectContext and renders
   -- its CompilerLedger (toolchain id filled here, lazily).
   if args.head? == some "--report" && args[1]? == some "compiler-ledger" then
-    let json := args.contains "--json"
+    let json := Cli.hasFlag args "--json"
     return ← withProjectRoot (hint := "`--report compiler-ledger` reads a project; run from a project directory") fun root => do
       match ← loadProject root with
       | .error exitCode => return exitCode
@@ -1924,10 +1941,8 @@ def main (args : List String) : IO UInt32 := do
   -- Check for "build" command first (before generic single-arg pattern)
   if args.head? == some "build" then
     return ← withProjectRoot fun root => do
-      let emitLLVM := args.contains "--emit-llvm"
-      let outPath := match args with
-        | _ :: "-o" :: p :: _ => some p
-        | _ => none
+      let emitLLVM := Cli.hasFlag args "--emit-llvm"
+      let outPath := Cli.flagValue args "-o"
       compileBuild root outPath emitLLVM
   -- concrete run [-- args...]
   if args.head? == some "run" then
@@ -1955,9 +1970,7 @@ def main (args : List String) : IO UInt32 := do
   -- concrete test [--module <name>]
   if args.head? == some "test" then
     return ← withProjectRoot fun root => do
-      let modFilter := match args with
-        | _ :: "--module" :: m :: _ => some m
-        | _ => none
+      let modFilter := Cli.flagValue args "--module"
       compileTestBuild root modFilter
   -- concrete check — run frontend + proof status without codegen
   if args.head? == some "check" then
@@ -2227,37 +2240,27 @@ def main (args : List String) : IO UInt32 := do
   if args.head? == some "prove" then
     let pargs := args.drop 1
     -- Discovery commands (no file/function needed) — the agent entrypoint.
-    if pargs.contains "--help=agent" then IO.println proveAgentHelp; return 0
-    if pargs.contains "--capabilities" then IO.println proveCapabilitiesJson; return 0
-    if pargs.contains "--schema" then IO.println proveSchemaJson; return 0
+    if Cli.hasFlag pargs "--help=agent" then IO.println proveAgentHelp; return 0
+    if Cli.hasFlag pargs "--capabilities" then IO.println proveCapabilitiesJson; return 0
+    if Cli.hasFlag pargs "--schema" then IO.println proveSchemaJson; return 0
     match pargs with
     | inputPath :: target :: rest =>
-      let force := rest.contains "--force"
-      let emitLink := rest.contains "--emit-link"
-      let replay := rest.contains "--replay"
-      let proveJson := rest.contains "--json"
-      let nearestLemmas := rest.contains "--nearest-lemmas"
-      let nearestId := match rest.dropWhile (· != "--nearest-lemmas") with
-        | _ :: id :: _ => if id.startsWith "--" then none else some id
-        | _ => none
-      let emitLean := rest.contains "--emit-lean"
-      let emitArtifacts := rest.contains "--emit-artifacts"
-      let check := rest.contains "--check"
-      let workspace := if rest.contains "--workspace" then
-          some (match rest.dropWhile (· != "--workspace") with
-                | _ :: d :: _ => if d.startsWith "--" then "" else d
-                | _ => "")
-        else none
-      let stdout := rest.contains "--stdout"
-      let outDir := match rest.dropWhile (· != "--out-dir") with
-        | _ :: d :: _ => some d
-        | _ => none
-      let outPath := match rest.dropWhile (· != "--out") with
-        | _ :: p :: _ => some p
-        | _ => none
-      let showObl := match rest.dropWhile (· != "--show-obligation") with
-        | _ :: id :: _ => some id
-        | _ => none
+      let force := Cli.hasFlag rest "--force"
+      let emitLink := Cli.hasFlag rest "--emit-link"
+      let replay := Cli.hasFlag rest "--replay"
+      let proveJson := Cli.hasFlag rest "--json"
+      let nearestLemmas := Cli.hasFlag rest "--nearest-lemmas"
+      let nearestId := Cli.flagValue rest "--nearest-lemmas"
+      let emitLean := Cli.hasFlag rest "--emit-lean"
+      let emitArtifacts := Cli.hasFlag rest "--emit-artifacts"
+      let check := Cli.hasFlag rest "--check"
+      -- `--workspace` with no value means "default workspace" (empty string sentinel).
+      let workspace := if Cli.hasFlag rest "--workspace"
+        then some (Cli.flagValue rest "--workspace" |>.getD "") else none
+      let stdout := Cli.hasFlag rest "--stdout"
+      let outDir := Cli.flagValue rest "--out-dir"
+      let outPath := Cli.flagValue rest "--out"
+      let showObl := Cli.flagValue rest "--show-obligation"
       return (← compileAndReport inputPath "prove"
         (proveTarget := some target) (proveOut := outPath) (proveForce := force)
         (proveEmitLink := emitLink) (proveShowObl := showObl) (proveReplay := replay)

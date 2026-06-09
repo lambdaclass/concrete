@@ -517,8 +517,12 @@ work depends on them.
      both the exit values AND the generated `EXIT CODES` help block, so codes
      and docs cannot drift; `prove` routes through the named constants.
      `check_cli_plumbing.sh`. [DONE]
-   - 14b. Shared command-arg parsing (flags like `--json`/`-o`/`--module` parsed
-     once into a typed options record) instead of per-command `args.contains`.
+   - 14b. Shared command-arg parsing: `Cli.hasFlag` / `Cli.flagValue` give one
+     definition of a boolean and a valued flag, replacing scattered inline
+     `args.contains` / `dropWhile` (esp. the ~15-flag prove block). The valued-
+     flag `--`-guard (so `--out --json` does not capture `--json`) is now applied
+     uniformly — several sites previously omitted it. `check_cli_plumbing.sh`.
+     [DONE]
    - 14c. Route `audit`/`prove`/single-file reports through the same project
      loading + diagnostics path as build/test, so a file in a project sees its
      policy/assumptions/deps uniformly.
