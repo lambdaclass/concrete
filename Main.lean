@@ -1,6 +1,7 @@
 import Concrete
 import Concrete.ObligationCore
 import Concrete.CompilerLedger
+import Concrete.Backend
 import Concrete.Project
 
 open Concrete
@@ -965,6 +966,13 @@ def compileAndReport (inputPath : String) (reportType : String)
           writeFile path report
           IO.println s!"wrote proof scaffold to {path}"
           return 0
+    if reportType == "backend-contracts" then
+      -- The guarantees the code generator commits to (Phase 4 #17a), rendered from
+      -- the same Concrete.Backend facts the emitter uses, plus this program's
+      -- trusted boundaries. Human + JSON from one source.
+      if reportJson then IO.println (Concrete.Backend.toJson validCore.coreModules 1)
+      else IO.println (Concrete.Backend.report validCore.coreModules)
+      return 0
     if reportType == "contracts" then
       IO.println (← renderContracts parsed.modules registry)
       return 0
@@ -1263,7 +1271,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       | .ok mono =>
         IO.println (Report.monoReport validCore.coreModules mono.coreModules)
         return 0
-    IO.eprintln s!"Unknown report type: {reportType}. Use: caps, unsafe, layout, interface, alloc, mono, authority, proof, eligibility, proof-status, obligations, extraction, proof-diagnostics, proof-deps, proof-bundle, lean-stubs, check-proofs, traceability, diagnostics-json, schema, diagnostic-codes, effects, recursion, fingerprints, consistency, vcs, obligation-ledger, verify, audit"
+    IO.eprintln s!"Unknown report type: {reportType}. Use: caps, unsafe, layout, interface, alloc, mono, authority, proof, eligibility, proof-status, obligations, extraction, proof-diagnostics, proof-deps, proof-bundle, lean-stubs, check-proofs, traceability, diagnostics-json, schema, diagnostic-codes, effects, recursion, fingerprints, consistency, vcs, obligation-ledger, backend-contracts, verify, audit"
     return 1
 
 def compileAndCheck (inputPath : String) (checkType : String) : IO UInt32 := do

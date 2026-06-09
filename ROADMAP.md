@@ -584,6 +584,22 @@ work depends on them.
 17. Define the backend contract boundary: integer overflow profile, division
    semantics, layout/ABI, panic/assert behavior, optimization assumptions,
    target triple/data layout, libc/runtime assumptions, and what is trusted.
+   Staged:
+   - 17a. Make the contract VISIBLE: `--report backend-contracts [--json]`.
+     `Concrete.Backend` is the single source for target triple / data layout /
+     runtime functions / the contract clauses; the emitter (`EmitSSA`) and the
+     report both read it, so the documented contract cannot drift from what is
+     emitted. Clauses are honest about which guarantees are proof-linked (e.g.
+     div-by-zero is a proof obligation, UB at runtime if undischarged) vs runtime.
+     Program-derived trusted boundaries (trusted fns + externs) are listed.
+     `check_backend_contracts.sh` (incl. a no-drift report-vs-emitted check). [DONE]
+   - 17b. Expand the gate to a fixture matrix: arithmetic/division, structs/enums/
+     layout, assert/panic path, capability/runtime call, and an unknown/unsupported
+     target negative.
+   - 17c. Surface backend assumptions in audit + release bundles, beside the
+     proof/evidence facts.
+   - 17d. Tighten actual backend checks (overflow/division/layout first, since
+     those affect proof/runtime claims).
 18. Add an interpreter-vs-compiled differential harness for ordinary language
     development. Every new executable language feature should be able to run
     through `interpret result == compiled result` where deterministic and

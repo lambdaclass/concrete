@@ -260,6 +260,9 @@ jobs:
       - name: API-boundary gate (Phase 4 #16 — consumers use the boundary, not internals)
         run: bash scripts/tests/check_compiler_api_boundary.sh
 
+      - name: Backend-contract gate (Phase 4 #17a — codegen guarantees, no drift)
+        run: bash scripts/tests/check_backend_contracts.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 
