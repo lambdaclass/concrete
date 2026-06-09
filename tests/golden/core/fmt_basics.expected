@@ -1,9 +1,4 @@
 // module main
-struct Pair {
-  a: Int,
-  b: Int,
-}
-
 enum Option<T> {
   Some { value: T },
   None,
@@ -14,11 +9,16 @@ enum Result<T, E> {
   Err { error: E },
 }
 
-fn sum(p: Pair) -> Int {
-  return (p.a + p.b);
+fn add(x: Int, y: Int) -> Int {
+  return (x + y);
 }
 
 fn main() -> Int {
-  let p: Pair = Pair { a: 7, b: 3 };
-  return sum(p);
+  let a: Int = add(1, 2);
+  let b: Bool = true;
+  if b {
+    return a;
+  } else {
+    return 0;
+  }
 }

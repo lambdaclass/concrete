@@ -14,11 +14,10 @@ enum Result<T, E> {
   Err { error: E },
 }
 
-fn sum_point(p: Point) -> Int {
-  return (p.x + p.y);
+fn Point_new(x: Int, y: Int) -> Point {
+  return Point { x: x, y: y };
 }
 
-fn main() -> Int {
-  let p: Point = Point { x: 3, y: 4 };
-  return sum_point(p);
+fn Point_sum(self: &Point) -> Int {
+  return (self.x + self.y);
 }

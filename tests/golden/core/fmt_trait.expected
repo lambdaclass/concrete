@@ -1,4 +1,8 @@
 // module main
+struct Msg {
+  val: Int,
+}
+
 enum Option<T> {
   Some { value: T },
   None,
@@ -9,7 +13,6 @@ enum Result<T, E> {
   Err { error: E },
 }
 
-fn main() -> Int {
-  let arr: [Int; 3] = [10, 20, 30];
-  return (arr[0] + arr[2]);
+fn Msg_to_int(self: &Msg) -> Int {
+  return self.val;
 }

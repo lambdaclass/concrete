@@ -6,7 +6,7 @@ enum Option<T> {
 
 enum Result<T, E> {
   Ok { value: T },
-  Err { value: E },
+  Err { error: E },
 }
 
 trusted extern fn putchar(c: i32) -> i32;

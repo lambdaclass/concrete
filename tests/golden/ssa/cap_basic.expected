@@ -1,6 +1,7 @@
 ; module main
 declare i32 @putchar(i32)
 
+; source: print_int @ line 3
 define void @print_int(i64 %n) {
 entry:
   %agg.3 = alloca %String
@@ -30,12 +31,14 @@ while.exit2:
   ret void
 }
 
+; source: greet @ line 16
 define void @greet() {
 entry:
   call void @print_int(i64 42)
   ret void
 }
 
+; source: main @ line 20
 define i64 @main() {
 entry:
   call void @greet()

@@ -1,4 +1,5 @@
 ; module main
+; source: value @ line 3
 define i64 @value(%IntList %l) {
 entry:
   %t1 = load i32, %l
@@ -20,6 +21,7 @@ check24:
   unreachable
 }
 
+; source: main @ line 10
 define i64 @main() {
 entry:
   %t0 = alloca %IntList

@@ -1,10 +1,12 @@
 ; module main
+; source: consume @ line 9
 define i64 @consume(%Counter %c) {
 entry:
   %t1 = load i64, %c
   ret i64 %t1
 }
 
+; source: main @ line 11
 define i64 @main() {
 entry:
   %t0 = alloca %Counter
@@ -17,6 +19,7 @@ entry:
   ret i64 %t4
 }
 
+; source: Counter_get @ line 4
 define i64 @Counter_get(ptr(%Counter) %self) {
 entry:
   %t1 = load i64, %self

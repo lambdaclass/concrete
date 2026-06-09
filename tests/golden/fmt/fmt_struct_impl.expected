@@ -5,7 +5,7 @@ struct Point {
 
 impl Point {
     fn new(x: Int, y: Int) -> Point {
-        return Point { x: x, y: y };
+        return Point { x, y };
     }
 
     fn sum(&self) -> Int {

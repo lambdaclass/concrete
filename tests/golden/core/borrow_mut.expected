@@ -10,7 +10,7 @@ enum Option<T> {
 
 enum Result<T, E> {
   Ok { value: T },
-  Err { value: E },
+  Err { error: E },
 }
 
 fn set_value(b: &mut Box, v: Int) -> () {

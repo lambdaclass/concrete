@@ -1,16 +1,19 @@
 ; module main
+; source: read_a @ line 3
 define i64 @read_a(ptr(%Pair) %p) {
 entry:
   %t1 = load i64, %p
   ret i64 %t1
 }
 
+; source: consume @ line 7
 define i64 @consume(%Pair %p) {
 entry:
   %t1 = load i64, %p
   ret i64 %t1
 }
 
+; source: main @ line 9
 define i64 @main() {
 entry:
   %t0 = alloca %Pair

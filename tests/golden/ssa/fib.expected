@@ -1,4 +1,5 @@
 ; module main
+; source: fib @ line 1
 define i64 @fib(i64 %n) {
 entry:
   %t0 = sle i1 %n, 1
@@ -15,6 +16,7 @@ merge2:
   ret i64 %t5
 }
 
+; source: main @ line 8
 define i64 @main() {
 entry:
   %t0 = call i64 @fib(i64 10)

@@ -1,4 +1,5 @@
 ; module main
+; source: area @ line 3
 define i64 @area(%Shape %s) {
 entry:
   %t1 = load i32, %s
@@ -25,6 +26,7 @@ check24:
   unreachable
 }
 
+; source: main @ line 10
 define i64 @main() {
 entry:
   %t0 = alloca %Shape

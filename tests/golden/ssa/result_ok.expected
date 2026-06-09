@@ -1,4 +1,5 @@
 ; module main
+; source: safe_div @ line 3
 define %MyResult @safe_div(i64 %a, i64 %b) {
 entry:
   %t0 = eq i1 %b, 0
@@ -20,6 +21,7 @@ merge2:
   ret %MyResult %t9
 }
 
+; source: main @ line 10
 define i64 @main() {
 entry:
   %t0 = call %MyResult @safe_div(i64 10, i64 2)

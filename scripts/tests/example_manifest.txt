@@ -1,0 +1,202 @@
+# Example coverage manifest — single source of truth for CI example checking.
+#
+# Every .con file under examples/ MUST have exactly one line here:
+#   <path> <expected-outcome>
+#
+# Outcomes:
+#   compile        — must compile standalone: `concrete <file> -o <out>` exits 0.
+#   project-build  — file belongs to a project-form example; CI runs
+#                    `concrete build` once in the nearest ancestor directory
+#                    containing a Concrete.toml, which must exit 0.
+#   expected-error — intentionally-failing diagnostics example; standalone
+#                    compile MUST exit non-zero.
+#   skip           — not checked by this gate. Either a pressure example that
+#                    does not compile yet (see docs/EXAMPLE_LIFECYCLE.md), or a
+#                    file exercised by a dedicated gate with special flags
+#                    (proof_patterns, vc_discharge, vc_suite, smt/teaching,
+#                    contract_stability, obligation_core_probe, stale snippets).
+#
+# Checked by scripts/tests/check_examples.sh, which FAILS if a .con file under
+# examples/ is missing from this manifest (or listed here but deleted on disk).
+# When adding a new example, add it here with the outcome it must satisfy.
+examples/backend_contracts/arithmetic.con compile
+examples/backend_contracts/assert_path.con compile
+examples/backend_contracts/capability.con compile
+examples/backend_contracts/layout.con compile
+examples/constant_time_tag/catches/01_alloc_in_compare_core.con expected-error
+examples/constant_time_tag/src/main.con compile
+examples/contract_negatives/assert_obligation/src/main.con expected-error
+examples/contract_negatives/assert_scope_adversarial/src/main.con expected-error
+examples/contract_negatives/assume_scope_adversarial/src/main.con expected-error
+examples/contract_negatives/assume_taint/src/main.con compile
+examples/contract_negatives/bounds_scope_adversarial/src/main.con expected-error
+examples/contract_negatives/call_scope_adversarial/src/main.con expected-error
+examples/contract_negatives/div_scope_adversarial/src/main.con expected-error
+examples/contract_negatives/duplicate_links/src/main.con expected-error
+examples/contract_negatives/fabricated_proof/src/main.con expected-error
+examples/contract_negatives/invalid_attribute/src/main.con expected-error
+examples/contract_negatives/invalid_contract_expression/src/main.con expected-error
+examples/contract_negatives/invalid_invariant/src/main.con expected-error
+examples/contract_negatives/loop_scope_adversarial/src/main.con expected-error
+examples/contract_negatives/lowering_operators/src/main.con expected-error
+examples/contract_negatives/missing_postcondition/src/main.con expected-error
+examples/contract_negatives/obligation_redteam/src/main.con expected-error
+examples/contract_negatives/overflow_scope_adversarial/src/main.con expected-error
+examples/contract_negatives/precondition_callsite/src/main.con expected-error
+examples/contract_negatives/spec_ghost_totality/src/main.con expected-error
+examples/contract_negatives/vacuous_contract/src/main.con expected-error
+examples/contract_negatives/weakened_postcondition/src/main.con expected-error
+examples/contract_positive/valid_complex_contract_scope/src/main.con skip
+examples/contract_stability/v1.con skip
+examples/contract_stability/v2.con skip
+examples/crypto_verify/catches/01_alloc_in_pure_core.con expected-error
+examples/crypto_verify/src/main.con compile
+examples/crypto_verify/src/main_drifted.con compile
+examples/diagnostics_rich/missing_capability.con expected-error
+examples/diagnostics_rich/parser_error.con expected-error
+examples/diagnostics_rich/type_mismatch.con expected-error
+examples/diagnostics_rich/unknown_name.con expected-error
+examples/diagnostics_rich/use_after_move.con expected-error
+examples/elf_header/src/main.con compile
+examples/elf_header/src/main_drifted.con compile
+examples/evidence_classes/assumed_boundary/src/main.con compile
+examples/evidence_classes/partial_contract/src/main.con compile
+examples/evidence_classes/proved_by_kernel_decision_bv/src/main.con compile
+examples/evidence_classes/proved_by_kernel_decision_omega/src/main.con compile
+examples/evidence_classes/proved_by_lean/src/main.con compile
+examples/evidence_classes/runtime_checked/src/main.con compile
+examples/evidence_classes/stale_proof/src/main.con compile
+examples/evidence_classes/tested_by_oracle/src/main.con compile
+examples/evidence_classes/trusted_boundary/src/main.con compile
+examples/fixed_capacity/catches/01_alloc_in_bounded_core.con expected-error
+examples/fixed_capacity/src/main.con compile
+examples/fixed_point/src/main.con compile
+examples/float_unprofiled/src/main.con compile
+examples/ghost_state/catches/ghost_runtime_use.con expected-error
+examples/ghost_state/src/main.con compile
+examples/grep/src/main.con project-build
+examples/hmac_sha256/catches/01_alloc_in_compression_core.con expected-error
+examples/hmac_sha256/catches/02_ambient_key_read.con expected-error
+examples/hmac_sha256/src/main.con compile
+examples/http/src/main.con project-build
+examples/integrity/src/main.con project-build
+examples/json/main.con skip
+examples/kvstore/src/main.con project-build
+examples/loop_invariant/src/main.con compile
+examples/lox/src/main.con project-build
+examples/mal/main.con skip
+examples/obligation_core_probe/src/main.con skip
+examples/packet/src/main.con project-build
+examples/parse_validate/catches/01_authority_widening.con expected-error
+examples/parse_validate/src/main.con compile
+examples/partial_facts/bad_decl_then_typed_error.con expected-error
+examples/partial_facts/resolve_error_hides_nothing.con expected-error
+examples/partial_facts/two_bad_decls.con expected-error
+examples/policy_engine/main.con skip
+examples/project/src/main.con compile
+examples/project/src/mymod/mod.con project-build
+examples/project/src/mymod/submodule.con project-build
+examples/project/src/other.con project-build
+examples/proof_patterns/array_update/src/main.con skip
+examples/proof_patterns/composition/src/main.con skip
+examples/proof_patterns/fold/src/main.con skip
+examples/proof_patterns/ghost/src/main.con skip
+examples/proof_patterns/loop_copy/src/main.con skip
+examples/proof_patterns/repair/src/main.con skip
+examples/proof_patterns/runtime_safety/src/main.con skip
+examples/proof_patterns/stale_missing_partial/src/main.con skip
+examples/proof_patterns/straight_line/src/main.con skip
+examples/proof_patterns/workspace/src/main.con skip
+examples/proof_pressure/src/main.con compile
+examples/service_errors/src/main.con compile
+examples/smt/negatives/src/main.con expected-error
+examples/smt/nonlinear_overflow/src/main.con skip
+examples/smt/policy_allow/src/main.con compile
+examples/smt/policy_assumptions_missing/src/main.con compile
+examples/smt/policy_forbid/src/main.con compile
+examples/smt/red_team/src/main.con expected-error
+examples/smt/teaching/kernel_preferred.con skip
+examples/smt/teaching/path_feasibility.con skip
+examples/smt/teaching/range_block_count.con skip
+examples/smt/teaching/unsupported_theory.con skip
+examples/snippets/arithmetic.con compile
+examples/snippets/arrays.con skip
+examples/snippets/assoc_method.con skip
+examples/snippets/borrow.con compile
+examples/snippets/casts.con compile
+examples/snippets/chars.con skip
+examples/snippets/check_errors.con skip
+examples/snippets/collatz.con compile
+examples/snippets/constants.con compile
+examples/snippets/direct_module_use.con skip
+examples/snippets/enum.con skip
+examples/snippets/enum_match.con compile
+examples/snippets/error_flow.con compile
+examples/snippets/fact.con compile
+examples/snippets/factorial.con compile
+examples/snippets/factorial_if.con compile
+examples/snippets/fib.con compile
+examples/snippets/fib_generic.con compile
+examples/snippets/fib_if.con compile
+examples/snippets/floats.con skip
+examples/snippets/for.con compile
+examples/snippets/for_loop.con compile
+examples/snippets/for_loop_var.con compile
+examples/snippets/for_while.con compile
+examples/snippets/gcd.con compile
+examples/snippets/generic_enum_impl.con skip
+examples/snippets/generic_struct.con skip
+examples/snippets/generics_basic.con compile
+examples/snippets/hello_world.con skip
+examples/snippets/hello_world_array.con skip
+examples/snippets/hello_world_hacky.con skip
+examples/snippets/if_else.con compile
+examples/snippets/if_if_false.con compile
+examples/snippets/if_with_literals.con compile
+examples/snippets/impl_block.con skip
+examples/snippets/impl_block_mut.con skip
+examples/snippets/import.con compile
+examples/snippets/import_struct.con skip
+examples/snippets/import_struct_impl.con skip
+examples/snippets/is_prime.con compile
+examples/snippets/linearExample01.con skip
+examples/snippets/linearExample02.con skip
+examples/snippets/linearExample03if.con skip
+examples/snippets/linked_list.con compile
+examples/snippets/malloc.con skip
+examples/snippets/module_test.con compile
+examples/snippets/nested_calls.con compile
+examples/snippets/nested_if.con compile
+examples/snippets/opaque_vec.con skip
+examples/snippets/refs.con compile
+examples/snippets/simple.con compile
+examples/snippets/simple_trait.con skip
+examples/snippets/sizeof_intrinsic.con skip
+examples/snippets/string_processing.con skip
+examples/snippets/structs.con skip
+examples/snippets/trait_dispatch.con compile
+examples/snippets/type_alias.con compile
+examples/snippets/union.con skip
+examples/snippets/variable_inside_if.con compile
+examples/snippets/vec.con skip
+examples/snippets/while.con compile
+examples/snippets/while_if_false.con compile
+examples/snippets/while_loop.con compile
+examples/source_maps/capability_at_line.con expected-error
+examples/source_maps/obligation_located.con compile
+examples/thesis_demo/src/main.con compile
+examples/thesis_demo/src/main_drifted.con compile
+examples/toml/src/main.con project-build
+examples/vc_discharge/assumed.con skip
+examples/vc_discharge/bv_decide.con skip
+examples/vc_discharge/counterexample.con skip
+examples/vc_discharge/missing.con skip
+examples/vc_discharge/omega.con skip
+examples/vc_discharge/solver_trusted.con skip
+examples/vc_suite/chunked_hash_padding.con skip
+examples/vc_suite/fixed_point_filter.con skip
+examples/vc_suite/packet_window.con skip
+examples/vc_suite/rate_limiter.con skip
+examples/vc_suite/ring_buffer_indices.con skip
+examples/verify/src/main.con project-build
+examples/vm/main.con skip

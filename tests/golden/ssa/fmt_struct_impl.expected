@@ -1,0 +1,21 @@
+; module main
+; source: Point_new @ line 4
+define %Point @Point_new(i64 %x, i64 %y) {
+entry:
+  %t0 = alloca %Point
+  store i64 %x, %t0
+  %t2 = gep i8 %t0, i64 8
+  store i64 %y, %t2
+  %t3 = load %Point, %t0
+  ret %Point %t3
+}
+
+; source: Point_sum @ line 8
+define i64 @Point_sum(ptr(%Point) %self) {
+entry:
+  %t1 = load i64, %self
+  %t2 = gep i8 %self, i64 8
+  %t3 = load i64, %t2
+  %t4 = add i64 %t1, %t3
+  ret i64 %t4
+}

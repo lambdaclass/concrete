@@ -1,4 +1,5 @@
 ; module main
+; source: sum_point @ line 6
 define i64 @sum_point(%Point %p) {
 entry:
   %t1 = load i64, %p
@@ -8,6 +9,7 @@ entry:
   ret i64 %t4
 }
 
+; source: main @ line 10
 define i64 @main() {
 entry:
   %t0 = alloca %Point

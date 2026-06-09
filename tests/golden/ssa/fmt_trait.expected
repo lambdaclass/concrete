@@ -1,0 +1,7 @@
+; module main
+; source: Msg_to_int @ line 8
+define i64 @Msg_to_int(ptr(%Msg) %self) {
+entry:
+  %t1 = load i64, %self
+  ret i64 %t1
+}

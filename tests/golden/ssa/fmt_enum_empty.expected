@@ -25,13 +25,3 @@ check36:
 
   unreachable
 }
-
-; source: main @ line 11
-define i64 @main() {
-entry:
-  %t0 = alloca %Color
-  store i32 1, %t0
-  %t2 = load %Color, %t0
-  %t3 = call i64 @pick(%Color %t2)
-  ret i64 %t3
-}

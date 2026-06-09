@@ -16,7 +16,7 @@ enum Color {
 }
 
 fn pick(c: Color) -> Int {
-  match c {
+  let r: Int = match c {
   Color::Red -> {
       return 1;
   }
@@ -27,9 +27,5 @@ fn pick(c: Color) -> Int {
       return 3;
   }
 };
-}
-
-fn main() -> Int {
-  let c: Color = Color::Green;
-  return pick(c);
+  return r;
 }

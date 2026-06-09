@@ -1,16 +1,19 @@
 ; module main
+; source: set_value @ line 3
 define void @set_value(ptr(mut %Box) %b, i64 %v) {
 entry:
   store i64 %v, %b
   ret void
 }
 
+; source: consume @ line 7
 define i64 @consume(%Box %b) {
 entry:
   %t1 = load i64, %b
   ret i64 %t1
 }
 
+; source: main @ line 9
 define i64 @main() {
 entry:
   %mutref.3 = alloca %Box
