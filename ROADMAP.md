@@ -509,6 +509,19 @@ work depends on them.
    `inspect`, `fmt`, `doc`, and `clean`: shared project loading, shared target/
    policy/assumption loading, shared diagnostics, shared output conventions,
    and shared exit-code taxonomy.
+   Staged:
+   - 14a. Shared project-root prologue (`withProjectRoot`) — one canonical
+     "no Concrete.toml" diagnostic and one exit code for every project-scoped
+     command (build/run/test/check/`--report compiler-ledger` deduped from 5
+     copies). Shared exit-code taxonomy (`ExitCode`) is the single source for
+     both the exit values AND the generated `EXIT CODES` help block, so codes
+     and docs cannot drift; `prove` routes through the named constants.
+     `check_cli_plumbing.sh`. [DONE]
+   - 14b. Shared command-arg parsing (flags like `--json`/`-o`/`--module` parsed
+     once into a typed options record) instead of per-command `args.contains`.
+   - 14c. Route `audit`/`prove`/single-file reports through the same project
+     loading + diagnostics path as build/test, so a file in a project sees its
+     policy/assumptions/deps uniformly.
 15. Add a golden CLI behavior matrix before broad command growth:
     `scripts/tests/check_cli_contract.sh` must cover every public command's
     exit code, stdout/stderr split, `--json` behavior, quiet/verbose behavior,

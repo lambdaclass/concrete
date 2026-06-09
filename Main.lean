@@ -4,6 +4,33 @@ import Concrete.CompilerLedger
 
 open Concrete
 
+-- Shared CLI exit-code taxonomy (ROADMAP Phase 4 #14). One source of truth for
+-- every command's exit code AND the documented `EXIT CODES` help block, so the
+-- codes and their documentation cannot drift.
+namespace ExitCode
+def ok : UInt32 := 0
+def usage : UInt32 := 1
+def obligationsMissing : UInt32 := 2
+def staleEvidence : UInt32 := 3
+def proofCheckFailure : UInt32 := 4
+def solverFailure : UInt32 := 5
+def internalError : UInt32 := 6
+
+/-- (code, meaning) — the single source for both exits and the help block. -/
+def taxonomy : List (UInt32 × String) :=
+  [ (ok, "success (proved / clean / info printed)"),
+    (usage, "invalid invocation (bad args, unknown function)"),
+    (obligationsMissing, "obligations missing (eligible but unproved)"),
+    (staleEvidence, "stale evidence (body changed since the proof was linked)"),
+    (proofCheckFailure, "proof-check failure (Lean kernel rejected a referenced theorem)"),
+    (solverFailure, "solver/checker failure (omega/bv_decide/lake could not run)"),
+    (internalError, "internal compiler error") ]
+
+/-- The `EXIT CODES` help block, generated from `taxonomy` (no hand-kept copy). -/
+def helpBlock : List String :=
+  "EXIT CODES:" :: taxonomy.map (fun (c, m) => s!"  {c}  {m}")
+end ExitCode
+
 def usage : String :=
   "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|vcs|obligation-ledger|compiler-ledger|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
@@ -1297,7 +1324,10 @@ def compileAndReport (inputPath : String) (reportType : String)
         --   0 proved/clean · 2 obligations missing · 3 stale evidence.
         let proveStatus := (pc.obligations.find? (·.functionId.qualName == qual)).map (·.status.canonical) |>.getD "missing"
         let proveExit : UInt32 := match proveStatus with
-          | "stale" => 3 | "missing" => 2 | "blocked" => 2 | _ => 0
+          | "stale" => ExitCode.staleEvidence
+          | "missing" => ExitCode.obligationsMissing
+          | "blocked" => ExitCode.obligationsMissing
+          | _ => ExitCode.ok
         -- --json: structured proof context + next_actions.
         if proveJson then
           IO.println (Report.proveReportJson pc registry parsed.modules qual provedVCs inputPath proveSchemaVersion)
@@ -1781,7 +1811,7 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
 /-- `concrete prove --help=agent`: the agent entrypoint. Prints the
     proof-authoring sequence, stable output formats, the exit-code taxonomy, and
     the next command to run for each common status. -/
-def proveAgentHelp : String := String.intercalate "\n" [
+def proveAgentHelp : String := String.intercalate "\n" ([
   "concrete prove — agent guide (schema v" ++ proveSchemaVersion ++ ")",
   "",
   "PURPOSE: author and verify a Lean proof for one Concrete function.",
@@ -1813,17 +1843,10 @@ def proveAgentHelp : String := String.intercalate "\n" [
   "  JSON is stable and carries the same obligation ids/statuses as",
   "  `--report contracts` and `concrete audit`. Every JSON response has next_actions.",
   "",
-  "EXIT CODES:",
-  "  0  success (proved / clean / info printed)",
-  "  1  invalid invocation (bad args, unknown function)",
-  "  2  obligations missing (eligible but unproved)",
-  "  3  stale evidence (body changed since the proof was linked)",
-  "  4  proof-check failure (Lean kernel rejected a referenced theorem)",
-  "  5  solver/checker failure (omega/bv_decide/lake could not run)",
-  "  6  internal compiler error",
+  ] ++ ExitCode.helpBlock ++ [
   "",
   "PROOF MODEL: in-source links only (no proof-registry.json). A function carries",
-  "  #[spec]/#[proof_by]/#[ensures_proof]/#[proof_coverage]/#[proof_fingerprint]." ]
+  "  #[spec]/#[proof_by]/#[ensures_proof]/#[proof_coverage]/#[proof_fingerprint]." ])
 
 /-- `concrete prove --capabilities`: machine-readable feature discovery. -/
 def proveCapabilitiesJson : String := String.intercalate "\n" [
@@ -1871,18 +1894,26 @@ def proveSchemaJson : String := String.intercalate "\n" [
   "  \"required\": [\"schema_version\", \"function\", \"status\", \"next_actions\"]",
   "}" ]
 
+/-- Shared project-root prologue (ROADMAP Phase 4 #14): discover the enclosing
+    project root, or emit the one canonical "no Concrete.toml" diagnostic and exit
+    with `ExitCode.usage`. Every project-scoped command goes through here, so the
+    discovery, the message, and the exit code are defined once. -/
+def withProjectRoot (k : String → IO UInt32)
+    (hint : String := "create one with [package] section, or run from a project directory") : IO UInt32 := do
+  let cwd ← IO.currentDir
+  match ← findProjectRoot cwd.toString with
+  | none =>
+    IO.eprintln s!"error: no Concrete.toml found in current directory or parent\nhint: {hint}"
+    return ExitCode.usage
+  | some root => k root
+
 def main (args : List String) : IO UInt32 := do
   -- `concrete --report compiler-ledger [--json]` — the project-scoped non-proof
   -- fact store (Phase 4 #2). Project mode: loads the one ProjectContext and renders
   -- its CompilerLedger (toolchain id filled here, lazily).
   if args.head? == some "--report" && args[1]? == some "compiler-ledger" then
     let json := args.contains "--json"
-    let cwd ← IO.currentDir
-    match ← findProjectRoot cwd.toString with
-    | none =>
-      IO.eprintln "error: no Concrete.toml found in current directory or parent\nhint: `--report compiler-ledger` reads a project; run from a project directory"
-      return 1
-    | some root =>
+    return ← withProjectRoot (hint := "`--report compiler-ledger` reads a project; run from a project directory") fun root => do
       match ← loadProject root with
       | .error exitCode => return exitCode
       | .ok ctx =>
@@ -1892,25 +1923,15 @@ def main (args : List String) : IO UInt32 := do
         return 0
   -- Check for "build" command first (before generic single-arg pattern)
   if args.head? == some "build" then
-    let cwd ← IO.currentDir
-    match ← findProjectRoot cwd.toString with
-    | none =>
-      IO.eprintln "error: no Concrete.toml found in current directory or parent\nhint: create one with [package] section, or run from a project directory"
-      return 1
-    | some root =>
+    return ← withProjectRoot fun root => do
       let emitLLVM := args.contains "--emit-llvm"
       let outPath := match args with
         | _ :: "-o" :: p :: _ => some p
         | _ => none
-      return ← compileBuild root outPath emitLLVM
+      compileBuild root outPath emitLLVM
   -- concrete run [-- args...]
   if args.head? == some "run" then
-    let cwd ← IO.currentDir
-    match ← findProjectRoot cwd.toString with
-    | none =>
-      IO.eprintln "error: no Concrete.toml found in current directory or parent\nhint: create one with [package] section, or run from a project directory"
-      return 1
-    | some root =>
+    return ← withProjectRoot fun root => do
       -- Build to a temporary path
       let tmpBin := "/tmp/concrete_run_" ++ toString (← IO.monoMsNow)
       let buildResult ← compileBuild root (some tmpBin) (emitLLVM := false) (quiet := true)
@@ -1933,24 +1954,14 @@ def main (args : List String) : IO UInt32 := do
       return exitCode
   -- concrete test [--module <name>]
   if args.head? == some "test" then
-    let cwd ← IO.currentDir
-    match ← findProjectRoot cwd.toString with
-    | none =>
-      IO.eprintln "error: no Concrete.toml found in current directory or parent\nhint: create one with [package] section, or run from a project directory"
-      return 1
-    | some root =>
+    return ← withProjectRoot fun root => do
       let modFilter := match args with
         | _ :: "--module" :: m :: _ => some m
         | _ => none
-      return ← compileTestBuild root modFilter
+      compileTestBuild root modFilter
   -- concrete check — run frontend + proof status without codegen
   if args.head? == some "check" then
-    let cwd ← IO.currentDir
-    match ← findProjectRoot cwd.toString with
-    | none =>
-      IO.eprintln "error: no Concrete.toml found in current directory or parent\nhint: create one with [package] section, or run from a project directory"
-      return 1
-    | some root =>
+    return ← withProjectRoot fun root => do
       match ← loadProject root (stripTestFns := true) with
       | .error exitCode => return exitCode
       | .ok ctx =>

@@ -251,6 +251,9 @@ jobs:
       - name: Source-maps gate (Phase 4 #13a — spans survive AST→Core)
         run: bash scripts/tests/check_source_maps.sh
 
+      - name: CLI-plumbing gate (Phase 4 #14a — shared prologue + exit-code taxonomy)
+        run: bash scripts/tests/check_cli_plumbing.sh
+
       - name: concrete prove CLI gate
         run: bash scripts/tests/test_prove_cli.sh
 
