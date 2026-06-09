@@ -1,0 +1,15 @@
+heap.con: pub fn new(cmp_fn: fn(&T, &T) -> bool) -> BinaryHeap<T>
+map.con: pub fn fold<A>(&self, init: A, f: fn(A, &K, &V) -> A) -> A
+map.con: pub fn for_each(&self, f: fn(&K, &V))
+map.con: pub fn keys_fold<A>(&self, init: A, f: fn(A, &K) -> A) -> A
+map.con: pub fn keys_for_each(&self, f: fn(&K))
+map.con: pub fn new(hash_fn: fn(&K) -> u64, eq_fn: fn(&K, &K) -> bool) -> HashMap<K, V>
+map.con: pub fn values_fold<A>(&self, init: A, f: fn(A, &V) -> A) -> A
+map.con: pub fn values_for_each(&self, f: fn(&V))
+ordered_map.con: pub fn new(cmp_fn: fn(&K, &K) -> i32) -> OrderedMap<K, V>
+ordered_set.con: pub fn new(cmp_fn: fn(&K, &K) -> i32) -> OrderedSet<K>
+set.con: pub fn fold<A>(&self, init: A, f: fn(A, &K) -> A) -> A
+set.con: pub fn for_each(&self, f: fn(&K))
+set.con: pub fn new(hash_fn: fn(&K) -> u64, eq_fn: fn(&K, &K) -> bool) with(Alloc, Unsafe) -> HashSet<K>
+vec.con: pub fn fold<A>(&self, init: A, f: fn(A, &T) -> A) -> A
+vec.con: pub fn for_each(&self, f: fn(&T))

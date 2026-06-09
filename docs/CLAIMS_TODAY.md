@@ -25,7 +25,7 @@ For safe code that passes the checker, the compiler enforces at compile time:
 | No linear reassignment | Linear variables cannot be reassigned |
 | No `&mut T` aliasing | Borrow-block exclusive refs consumed on call |
 | Deterministic cleanup | `defer` runs LIFO at scope exit |
-| No capability escalation | Caller must declare superset of callee capabilities |
+| No capability escalation | Caller must declare superset of callee capabilities — including calls through function pointers: calling `f: fn(i32) with(Network) -> i32` requires the caller to hold `Network` (E0240; `adversarial_neg_cap_fnptr_smuggle.con`) |
 | No hidden effects | Capabilities visible in signatures |
 | Branch agreement | If/else and match arms agree on linear consumption |
 

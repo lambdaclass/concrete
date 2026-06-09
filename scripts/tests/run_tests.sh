@@ -2651,6 +2651,10 @@ run_err "$TESTDIR/adversarial_neg_private_struct_field.con" "unknown struct type
 # --- Negative adversarial: capability abuse ---
 run_err "$TESTDIR/adversarial_neg_cap_escalate_indirect.con" "but caller has"
 run_err "$TESTDIR/adversarial_neg_cap_forge.con" "but caller has"
+# fn-pointer smuggling: calling through a with(...) fn type requires the caps
+# (ROADMAP Phase 5 #24a red-team gate — closed)
+run_err "$TESTDIR/adversarial_neg_cap_fnptr_smuggle.con" "requires capability 'Network' but 'smuggle' does not declare it"
+run_ok  "$TESTDIR/cap_fnptr_declared.con" 0
 
 # --- Negative adversarial: type system abuse ---
 run_err "$TESTDIR/adversarial_neg_enum_variant_type_mismatch.con" "type mismatch"

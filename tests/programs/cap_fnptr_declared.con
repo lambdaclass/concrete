@@ -1,0 +1,13 @@
+// Positive: calling a capability-bearing function pointer is fine when the
+// caller declares the fn type's capability set. Counterpart to
+// adversarial_neg_cap_fnptr_smuggle.con.
+
+fn send(x: Int) with(Network) -> Int { return x + 1; }
+
+fn relay(f: fn(Int) with(Network) -> Int) with(Network) -> Int {
+    return f(41);
+}
+
+pub fn main() with(Network) -> Int {
+    return relay(send) - 42;
+}

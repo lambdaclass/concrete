@@ -1277,7 +1277,19 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
     -- Check if this is a function pointer call (variable with fn_ type)
     let fnPtrVarTy ← lookupVarTy fnName
     match fnPtrVarTy with
-    | some (.fn_ paramTys _fnPtrCapSet fnPtrRetTy) =>
+    | some (.fn_ paramTys fnPtrCapSet fnPtrRetTy) =>
+      -- Calling through a function pointer exercises the authority its type
+      -- declares: the caller must hold the fn type's capability set, exactly
+      -- as for a direct call. Without this, a function with no `with(...)`
+      -- could accept `f: fn(i32) with(Network) -> i32` and call it —
+      -- capability smuggling (ROADMAP Phase 5 #24a red-team gate).
+      do
+        let env ← getEnv
+        let (ptrCaps, ptrVars) := fnPtrCapSet.normalize
+        let (callerCaps, callerVars) := env.currentCapSet.normalize
+        for cap in ptrCaps ++ ptrVars do
+          unless callerCaps.contains cap || callerVars.contains cap do
+            throwCheck (.missingCapability fnName cap env.currentFnName) (some e.getSpan)
       -- Check argument count
       if args.length != paramTys.length then
         throwCheck (.wrongArgCount s!"function pointer '{fnName}'" paramTys.length args.length) (some e.getSpan)

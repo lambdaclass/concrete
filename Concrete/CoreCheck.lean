@@ -362,7 +362,17 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       let env ← getEnv
       if !capsContain env.currentCapSet calleeCaps then
         addCCError (.insufficientCapabilities fn (capSetToString calleeCaps) (capSetToString env.currentCapSet))
-    | none => pure ()  -- builtin or extern, skip cap check
+    | none =>
+      -- Not a known function: if it is a local fn-pointer variable, the call
+      -- exercises the authority the fn TYPE declares — enforce it like a
+      -- direct call (no capability smuggling through callbacks; mirrors the
+      -- Check-pass fn-pointer rule). Otherwise builtin/extern, skip.
+      let env ← getEnv
+      match env.vars.lookup fn with
+      | some (.fn_ _ ptrCaps _) =>
+        if !capsContain env.currentCapSet ptrCaps then
+          addCCError (.insufficientCapabilities fn (capSetToString ptrCaps) (capSetToString env.currentCapSet))
+      | _ => pure ()
     -- Check argument types
     match ← lookupFnSig fn with
     | some (params, _retTy) =>

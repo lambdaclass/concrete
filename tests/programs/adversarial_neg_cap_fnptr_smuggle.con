@@ -1,0 +1,14 @@
+// Adversarial: capability smuggling through a function-pointer parameter.
+// A function with NO `with(...)` accepts a callback whose fn TYPE declares
+// with(Network) and calls it. Before the fn-pointer capability rule this
+// compiled clean — a pure-looking wrapper could exercise Network authority.
+// Expected: compile error — the caller must hold the fn type's capability set
+// (ROADMAP Phase 5 #24a red-team gate).
+
+fn send(x: Int) with(Network) -> Int { return x; }
+
+fn smuggle(f: fn(Int) with(Network) -> Int) -> Int {
+    return f(7);
+}
+
+pub fn main() -> Int { return smuggle(send); }
