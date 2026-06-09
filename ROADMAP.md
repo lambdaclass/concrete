@@ -525,7 +525,18 @@ work depends on them.
      [DONE]
    - 14c. Route `audit`/`prove`/single-file reports through the same project
      loading + diagnostics path as build/test, so a file in a project sees its
-     policy/assumptions/deps uniformly.
+     policy/assumptions/deps uniformly. Split:
+     - 14c1. Dependency resolution: `compileAndReport` already routes through
+       `loadProject` in project mode, so audit/prove on a stdlib-using project
+       file resolve deps exactly as build/test. Verified and gated
+       (`check_cli_plumbing.sh`). [DONE]
+     - 14c2. Reuse `ctx.registry`/`ctx.pc`/`ctx.policyLocMap` from `loadProject`
+       instead of recomputing them, and reflect the project `[policy]`/
+       assumptions in audit/prove. [DEFERRED] Risky: the report path computes
+       these over the FULL user package with a different `file` stamp
+       (`inputPath` vs `mainPath`, which feeds the 13c2 file-attribution
+       behavior), and whether audit should ENFORCE policy is a design choice —
+       not a mechanical dedup. Needs care, not a forced swap.
 15. Add a golden CLI behavior matrix before broad command growth:
     `scripts/tests/check_cli_contract.sh` must cover every public command's
     exit code, stdout/stderr split, `--json` behavior, quiet/verbose behavior,

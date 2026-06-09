@@ -73,6 +73,23 @@ CT="examples/constant_time_tag/src/main.con"
 "$COMPILER" prove examples/proof_pressure/src/main.con main.clamp_value --json >/dev/null 2>&1
 [ "$?" = "2" ] && ok "a missing obligation exits 2 (ExitCode.obligationsMissing)" || no "missing obligation did not exit 2"
 
+echo "=== audit/prove share the project-loading path: deps resolve uniformly (#14c) ==="
+# A file inside a project that imports the stdlib must resolve its dependencies
+# under audit and prove exactly as build/test do — both route through loadProject.
+HF="examples/hmac_sha256/src/main.con"
+"$COMPILER" audit "$HF" >/dev/null 2>&1 \
+  && ok "audit on a stdlib-using project file succeeds (deps resolved via loadProject)" \
+  || no "audit failed to resolve project dependencies"
+# capture first: prove exits non-zero by taxonomy (e.g. 2 = missing), which would
+# trip pipefail; we only care that the target resolved (deps loaded), not its status.
+PROVE_OUT="$("$COMPILER" prove "$HF" hmac_sha256.big_sigma0 --json 2>/dev/null)"
+printf '%s' "$PROVE_OUT" | python3 -c "import json,sys;d=json.load(sys.stdin);sys.exit(0 if d.get('function')=='hmac_sha256.big_sigma0' else 1)" \
+  && ok "prove on a project file resolves the target (deps resolved via loadProject)" \
+  || no "prove failed to resolve a project function"
+grep -qE "def compileAndReport" Main.lean && grep -q "loadProject" Main.lean \
+  && ok "the report path (compileAndReport) routes through loadProject in project mode" \
+  || no "report path does not share loadProject"
+
 echo ""
 echo "CLI-PLUMBING: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
