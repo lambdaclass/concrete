@@ -1,6 +1,7 @@
 import Concrete
 import Concrete.ObligationCore
 import Concrete.CompilerLedger
+import Concrete.Project
 
 open Concrete
 
@@ -72,9 +73,6 @@ def compilerIdentity : IO String := do
 def writeFile (path : String) (content : String) : IO Unit := do
   IO.FS.writeFile ⟨path⟩ content
 
-def readFile (path : String) : IO String := do
-  IO.FS.readFile ⟨path⟩
-
 /-- Detect macOS SDK sysroot for clang linking. Returns `--sysroot=<path>` flag if found. -/
 def getMacOSSysrootFlags : IO (Array String) := do
   -- Only relevant on macOS
@@ -122,20 +120,6 @@ def validateLLVMIR (llPath : String) : IO Bool := do
     IO.eprintln result.stderr
     return false
   return true
-
-/-- Check if a module is an empty stub from `mod X;` declaration. -/
-def isModuleStub (m : Module) : Bool :=
-  m.functions.isEmpty && m.structs.isEmpty && m.enums.isEmpty &&
-  m.imports.isEmpty && m.implBlocks.isEmpty && m.traits.isEmpty &&
-  m.traitImpls.isEmpty && m.constants.isEmpty && m.typeAliases.isEmpty &&
-  m.externFns.isEmpty && m.newtypes.isEmpty && m.submodules.isEmpty
-
-/-- Get directory of a file path. -/
-def dirOf (path : String) : String :=
-  let parts := path.splitOn "/"
-  match parts.reverse with
-  | _ :: rest => "/".intercalate rest.reverse
-  | [] => "."
 
 /-- Resolve `mod X;` declarations by reading X.con files from the same directory.
     Detects circular imports via parsedPaths. Collects source map entries. -/
