@@ -67,6 +67,37 @@ echo "=== human and JSON agree on the target ==="
 "$C" "$F" --report backend-contracts 2>/dev/null | grep -qF "$rTriple" \
   && ok "human report shows the same target triple" || no "human/JSON target disagree"
 
+echo "=== fixture matrix: the report is robust + honest across program shapes (#17b) ==="
+# Each fixture exercises a different backend-contract surface. The static clauses
+# are program-independent, so per-shape we assert the report runs cleanly, is
+# well-formed, and stays drift-free (target == emitted) regardless of program shape.
+for fx in arithmetic layout assert_path capability; do
+  FF="examples/backend_contracts/$fx.con"
+  [ -f "$FF" ] || { no "fixture $fx missing"; continue; }
+  FJ="$("$C" "$FF" --report backend-contracts --json 2>/dev/null)"
+  rt="$(printf '%s' "$FJ" | python3 -c "import json,sys
+d=json.load(sys.stdin)
+need={'integer_overflow','division','layout_abi','panic_assert','optimization','target'}
+ok = d.get('schema_kind')=='backend_contract' and need<={c['topic'] for c in d['clauses']}
+print(d['target_triple'] if ok else '')" 2>/dev/null)"
+  et="$("$C" "$FF" --emit-llvm 2>/dev/null | sed -n 's/^target triple = "\(.*\)"/\1/p' | head -1)"
+  { [ -n "$rt" ] && [ "$rt" = "$et" ]; } \
+    && ok "$fx: report well-formed, all topics, target drift-free ($rt)" \
+    || no "$fx: report malformed or target drift (report=$rt emitted=$et)"
+done
+
+echo "=== honest target surface: one declared target, no target-selection flag yet ==="
+# An "unsupported/unknown target" negative is only meaningful if a target can be
+# requested. There is no `--target` surface today, so the contract honestly
+# advertises exactly ONE target and we assert we are not silently multi-target.
+ntargets="$("$C" "$F" --report backend-contracts --json 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print(1 if d['target_triple'] and d['data_layout'] else 0)")"
+[ "$ntargets" = "1" ] && ok "exactly one declared target/data-layout (single-target backend)" || no "target surface inconsistent"
+if grep -qE '"--target"' Main.lean; then
+  no "a --target flag exists but the contract still claims a single target (revisit 17b negative)"
+else
+  ok "no --target selection flag yet → unknown-target negative is NOT-YET (honestly skipped)"
+fi
+
 echo ""
 echo "BACKEND-CONTRACTS: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -1,0 +1,7 @@
+// #17b backend-contract fixture: fixed-width arithmetic + division.
+fn arith(a: i32, b: i32) -> i32 {
+    let s: i32 = a + b;
+    let p: i32 = a * b;
+    return (s + p) / b;
+}
+fn main() -> Int { return arith(10, 2) as Int; }

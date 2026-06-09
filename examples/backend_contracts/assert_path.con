@@ -1,0 +1,6 @@
+// #17b backend-contract fixture: assert/precondition path.
+fn checked(i: Int) -> Int {
+    assert(0 <= i && i < 16);
+    return i;
+}
+fn main() -> Int { return checked(3); }

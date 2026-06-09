@@ -594,8 +594,12 @@ work depends on them.
      Program-derived trusted boundaries (trusted fns + externs) are listed.
      `check_backend_contracts.sh` (incl. a no-drift report-vs-emitted check). [DONE]
    - 17b. Expand the gate to a fixture matrix: arithmetic/division, structs/enums/
-     layout, assert/panic path, capability/runtime call, and an unknown/unsupported
-     target negative.
+     layout, assert/panic path, capability/runtime call. Each asserts the report is
+     well-formed, covers all topics, and stays drift-free (report target == emitted)
+     regardless of program shape. The unknown/unsupported-target negative is NOT-YET:
+     there is no `--target` selection surface, so the contract honestly advertises a
+     single target and the gate asserts we are not silently multi-target (rather than
+     inventing a target to reject). `check_backend_contracts.sh` 14/0. [DONE]
    - 17c. Surface backend assumptions in audit + release bundles, beside the
      proof/evidence facts.
    - 17d. Tighten actual backend checks (overflow/division/layout first, since

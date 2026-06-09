@@ -1,0 +1,9 @@
+// #17b backend-contract fixture: capability + runtime (Alloc/Vec) call.
+fn build() with(Alloc) -> Int {
+    let mut v: Vec<Int> = vec_new::<Int>();
+    vec_push(&mut v, 7);
+    let x: Int = vec_get(&v, 0);
+    vec_free(v);
+    return x;
+}
+fn main() with(Std) -> Int { return build(); }

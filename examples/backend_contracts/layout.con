@@ -1,0 +1,7 @@
+// #17b backend-contract fixture: struct + enum layout.
+struct Copy Point { x: i32, y: i32 }
+enum Copy Dir { North, South }
+fn main() -> Int {
+    let p: Point = Point { x: 1, y: 2 };
+    return (p.x + p.y) as Int;
+}
