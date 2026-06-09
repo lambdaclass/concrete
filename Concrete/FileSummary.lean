@@ -240,7 +240,7 @@ def resolveImports (imports : List ImportDecl)
     : Except Diagnostics ResolvedImports := do
   let resolved ← imports.foldlM (init := ({} : ResolvedImports)) fun acc imp =>
     match summaryTable.lookup imp.moduleName with
-    | none => .error [{ severity := .error, message := unknownModuleMsg imp.moduleName, pass := pass, span := none, hint := none }]
+    | none => .error [{ severity := .error, message := unknownModuleMsg imp.moduleName, pass := pass, span := some imp.span, hint := none }]
     | some summary =>
       -- Build alias map from the exporting module's type aliases only.
       -- Newtypes are NOT erased at the module boundary anymore: Layout
@@ -298,7 +298,7 @@ def resolveImports (imports : List ImportDecl)
                                  implBlocks := acc.implBlocks ++ newtypeImpls,
                                  traitImpls := acc.traitImpls ++ newtypeTraitImpls,
                                  implMethodSigs := acc.implMethodSigs ++ matchingSigs }
-                | none => .error [{ severity := .error, message := notPublicMsg origName imp.moduleName, pass := pass, span := none, hint := none }]
+                | none => .error [{ severity := .error, message := notPublicMsg origName imp.moduleName, pass := pass, span := some imp.span, hint := none }]
   -- Auto-include impl methods for builtin types (String, Vec, etc.) from all
   -- loaded modules, so methods like String.drop() work without explicit import.
   let builtinNames := builtinTypeNames

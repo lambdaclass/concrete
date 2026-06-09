@@ -37,6 +37,9 @@ structure VerifyCtx where
   fnSigs : List (String × List Ty × Ty)
   /-- Return type of the current function. -/
   retTy : Ty
+  /-- Declaration span of the current function, so verifier errors point at
+      the source function instead of nowhere (ROADMAP Phase 4 #13b). -/
+  declSpan : Option Span := none
   errors : Diagnostics
 
 inductive SSAVerifyError where
@@ -102,7 +105,7 @@ def SSAVerifyError.code : SSAVerifyError → String
   | .binopTypeMismatch _ _ _ _ => "E0715"
 
 private def addError (ctx : VerifyCtx) (msg : String) (code : String := "") : VerifyCtx :=
-  { ctx with errors := ctx.errors ++ [{ severity := .error, message := s!"{ctx.fnName}: {msg}", pass := "ssa-verify", span := none, hint := none, code := code }] }
+  { ctx with errors := ctx.errors ++ [{ severity := .error, message := s!"{ctx.fnName}: {msg}", pass := "ssa-verify", span := ctx.declSpan, hint := none, code := code }] }
 
 private def addSSAError (ctx : VerifyCtx) (e : SSAVerifyError) : VerifyCtx :=
   addError ctx e.message e.code
@@ -475,7 +478,7 @@ private def checkBinOpTypes (ctx : VerifyCtx) (b : SBlock) : VerifyCtx :=
 
 private def verifyFn (f : SFnDef) (fnSigs : List (String × List Ty × Ty)) : Diagnostics :=
   if f.blocks.isEmpty then
-    [{ severity := .error, message := s!"{f.name}: {SSAVerifyError.message .functionHasNoBlocks}", pass := "ssa-verify", span := none, hint := none }]
+    [{ severity := .error, message := s!"{f.name}: {SSAVerifyError.message .functionHasNoBlocks}", pass := "ssa-verify", span := f.declSpan, hint := none }]
   else
     let blockLabels := f.blocks.map (·.label)
     let predecessors := buildPredecessors f.blocks
@@ -492,6 +495,7 @@ private def verifyFn (f : SFnDef) (fnSigs : List (String × List Ty × Ty)) : Di
       regTypes := regTypes
       fnSigs := fnSigs
       retTy := f.retTy
+      declSpan := f.declSpan
       errors := []
     }
     let ctx := f.blocks.foldl (fun ctx b =>

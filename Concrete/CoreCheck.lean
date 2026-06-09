@@ -729,8 +729,8 @@ private def isCopyTy (allStructs : List CStructDef) (allEnums : List CEnumDef) (
   | .array elem _ => isCopyTy allStructs allEnums elem
   | _ => false
 
-private def mkDeclDiag (e : CoreCheckError) : Diagnostic :=
-  { severity := .error, message := e.message, pass := "core-check", span := none, hint := e.hint }
+private def mkDeclDiag (e : CoreCheckError) (span : Option Span := none) : Diagnostic :=
+  { severity := .error, message := e.message, pass := "core-check", span := span, hint := e.hint }
 
 def ccCheckModuleDecls (m : CModule)
     (allStructs : List CStructDef) (allEnums : List CEnumDef) : Diagnostics :=
@@ -742,7 +742,7 @@ def ccCheckModuleDecls (m : CModule)
   for sd in m.structs do
     if sd.isCopy then
       if m.traitImpls.any fun ti => ti.builtinTraitId == some .destroy && ti.typeName == sd.name then
-        errors := errors ++ [mkDeclDiag (.copyDestroyConflict sd.name)]
+        errors := errors ++ [mkDeclDiag (.copyDestroyConflict sd.name) sd.declSpan]
       for (fname, fty) in sd.fields do
         -- Skip Copy check for fields whose type is a type parameter of this struct.
         -- After monomorphization, concrete types will be checked.
@@ -750,28 +750,28 @@ def ccCheckModuleDecls (m : CModule)
           | .named n => sd.typeParams.contains n
           | _ => false
         if !isTypeParam && !isCopyTy allStructs allEnums fty then
-          errors := errors ++ [mkDeclDiag (.copyFieldNotCopy sd.name fname)]
+          errors := errors ++ [mkDeclDiag (.copyFieldNotCopy sd.name fname) sd.declSpan]
   -- 2. Copy/Destroy conflict for enums
   for ed in m.enums do
     if ed.isCopy then
       if m.traitImpls.any fun ti => ti.builtinTraitId == some .destroy && ti.typeName == ed.name then
-        errors := errors ++ [mkDeclDiag (.copyDestroyConflict ed.name)]
+        errors := errors ++ [mkDeclDiag (.copyDestroyConflict ed.name) ed.declSpan]
   -- 3. repr(C) validation
   for sd in m.structs do
     if sd.isReprC then
       if !sd.typeParams.isEmpty then
-        errors := errors ++ [mkDeclDiag (.reprCHasGenerics sd.name)]
+        errors := errors ++ [mkDeclDiag (.reprCHasGenerics sd.name) sd.declSpan]
       for (fname, fty) in sd.fields do
         if !Layout.isFFISafe lctx fty then
-          errors := errors ++ [mkDeclDiag (.reprCFieldNotFFISafe sd.name fname (tyToString fty))]
+          errors := errors ++ [mkDeclDiag (.reprCFieldNotFFISafe sd.name fname (tyToString fty)) sd.declSpan]
   -- 4. repr(packed) + repr(align) conflict
   for sd in m.structs do
     if sd.isPacked && sd.reprAlign.isSome then
-      errors := errors ++ [mkDeclDiag (.reprPackedAndAlignConflict sd.name)]
+      errors := errors ++ [mkDeclDiag (.reprPackedAndAlignConflict sd.name) sd.declSpan]
     match sd.reprAlign with
     | some n =>
       if n == 0 || (n &&& (n - 1)) != 0 then
-        errors := errors ++ [mkDeclDiag (.reprAlignNotPowerOfTwo sd.name n)]
+        errors := errors ++ [mkDeclDiag (.reprAlignNotPowerOfTwo sd.name n) sd.declSpan]
     | none => ()
   -- 5. Extern fn FFI safety
   for (efName, efParams, efRetTy, _) in m.externFns do
@@ -784,26 +784,26 @@ def ccCheckModuleDecls (m : CModule)
   --    (user-defined traits have builtinId = none; the name check detects collisions)
   for td in m.traitDefs do
     if td.name == destroyTraitName then
-      errors := errors ++ [mkDeclDiag .builtinTraitRedeclared]
+      errors := errors ++ [mkDeclDiag .builtinTraitRedeclared td.declSpan]
   -- 7. Reserved function names
   for f in m.functions do
     if isReservedFnName f.name then
-      errors := errors ++ [mkDeclDiag (.reservedFnName f.name)]
+      errors := errors ++ [mkDeclDiag (.reservedFnName f.name) f.declSpan]
   -- 8. Trait impl validation
   let builtinDestroyTrait : CTraitDef := { name := destroyTraitName, methods := [{ name := destroyMethodName, retTy := .unit }], builtinId := some .destroy }
   let allTraits := builtinDestroyTrait :: m.traitDefs
   for ti in m.traitImpls do
     match allTraits.find? fun td => td.name == ti.traitName with
-    | none => errors := errors ++ [mkDeclDiag (.unknownTrait ti.traitName)]
+    | none => errors := errors ++ [mkDeclDiag (.unknownTrait ti.traitName) ti.declSpan]
     | some td =>
       for sig in td.methods do
         match ti.methodRetTys.find? fun (mn, _) => mn == sig.name with
-        | none => errors := errors ++ [mkDeclDiag (.missingTraitMethod ti.typeName sig.name)]
+        | none => errors := errors ++ [mkDeclDiag (.missingTraitMethod ti.typeName sig.name) ti.declSpan]
         | some (_, actualRetTy) =>
           let implTy := tyFromName ti.typeName
           let expectedRetTy := resolveSelfTy sig.retTy implTy
           if expectedRetTy != actualRetTy then
-            errors := errors ++ [mkDeclDiag (.traitMethodRetTyMismatch sig.name (tyToString expectedRetTy) (tyToString actualRetTy))]
+            errors := errors ++ [mkDeclDiag (.traitMethodRetTyMismatch sig.name (tyToString expectedRetTy) (tyToString actualRetTy)) ti.declSpan]
   errors
 
 -- ============================================================

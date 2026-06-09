@@ -79,6 +79,31 @@ grep -qE "declSpan : Option Span" Concrete/SSA.lean \
 grep -qE "declSpan := f\.declSpan" Concrete/Lower.lean \
   && ok "lowerFn carries declSpan Core→SSA" || no "lowerFn drops declSpan"
 
+echo "=== declaration-level diagnostics carry the declaration span ==="
+# Copy/Destroy conflict must point at the struct declaration, not nowhere.
+CDF="tests/programs/error_copy_destroy.con"
+CDLINE="$(grep -n "struct Copy Widget" "$CDF" | head -1 | cut -d: -f1)"
+CD="$("$COMPILER" "$CDF" 2>&1)"
+printf '%s' "$CD" | grep -qE "error_copy_destroy\.con:${CDLINE}:" \
+  && ok "Copy/Destroy conflict points at the struct declaration (line $CDLINE)" \
+  || no "Copy/Destroy conflict missing its declaration span"
+# pin the decl-span plumbing for structs/enums/traits/trait-impls.
+grep -qE "declSpan := some sd\.span" Concrete/Elab.lean \
+  && ok "Elab populates CStructDef.declSpan" || no "Elab drops struct decl spans"
+grep -qE "mkDeclDiag .* sd\.declSpan" Concrete/CoreCheck.lean \
+  && ok "core-check decl diagnostics attach the declaration span" \
+  || no "mkDeclDiag drops declaration spans"
+
+echo "=== import-resolution diagnostics carry the import span ==="
+grep -qE "span := some imp\.span" Concrete/FileSummary.lean \
+  && ok "unknown-module / not-public errors point at the import statement" \
+  || no "import-resolution diagnostics are location-less"
+
+echo "=== ssa-verify diagnostics carry the function declaration span ==="
+grep -qE "span := ctx\.declSpan" Concrete/SSAVerify.lean \
+  && ok "ssa-verify errors attach the function declSpan" \
+  || no "ssa-verify errors are location-less"
+
 echo "=== a clean file still yields zero diagnostics (no spurious spans) ==="
 "$COMPILER" examples/hmac_sha256/src/main.con --diagnostics-json 2>/dev/null \
   | python3 -c "import json,sys;d=json.load(sys.stdin);sys.exit(0 if d['count']==0 else 1)" \

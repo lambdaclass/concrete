@@ -2418,7 +2418,7 @@ def checkModule (m : Module) (summary : FileSummary)
     | .error e => .error e
     | .ok () =>
       if isReservedFnName f.name then
-        .error [{ severity := .error, message := CheckError.message (.reservedName f.name), pass := "check", span := none, hint := none }]
+        .error [{ severity := .error, message := CheckError.message (.reservedName f.name), pass := "check", span := some f.span, hint := none }]
       else .ok ()
   match reservedNameCheck with
   | .error e => .error e

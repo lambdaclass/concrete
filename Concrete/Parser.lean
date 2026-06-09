@@ -1404,6 +1404,7 @@ partial def parseMethodDef : ParseM (FnDef × Option SelfKind) := do
   return ({ name, typeParams, typeBounds, params, retTy, body, capSet, span := sp }, selfKind)
 
 partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
+  let declSp ← peekSpan
   expect .impl_
   let (typeParams, _typeBounds) ← parseTypeParams
   let firstName ← expectIdent
@@ -1441,7 +1442,7 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       methods := methods ++ [f]
       tk ← peek
     expect .rbrace
-    return .inr { traitName := firstName, typeName, typeParams, methods, capSet := implCapSet }
+    return .inr { traitName := firstName, typeName, typeParams, methods, capSet := implCapSet, span := declSp }
   | _ =>
     -- Inherent impl: impl TypeName { ... }
     let typeName := firstName
@@ -1464,9 +1465,10 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       methods := methods ++ [f]
       tk ← peek
     expect .rbrace
-    return .inl { typeName, typeParams, methods }
+    return .inl { typeName, typeParams, methods, span := declSp }
 
 partial def parseTraitDef : ParseM TraitDef := do
+  let declSp ← peekSpan
   expect .trait_
   let name ← expectIdent
   let (typeParams, _typeBounds) ← parseTypeParams
@@ -1525,7 +1527,7 @@ partial def parseTraitDef : ParseM TraitDef := do
     methods := methods ++ [{ name := methodName, params, retTy, selfKind, capSet }]
     tk ← peek
   expect .rbrace
-  return { name, typeParams, methods }
+  return { name, typeParams, methods, span := declSp }
 
 /-- Resolve capability variables: caps matching capParams become `.var`, rest stay `.concrete`. -/
 private def resolveCapVars (capParams : List String) (cs : CapSet) : CapSet :=
@@ -1585,6 +1587,7 @@ partial def parseFnDefOrDecl : ParseM (FnDef ⊕ ExternFnDecl) := do
     return .inl { name, typeParams, typeBounds, capParams, params, retTy, body, capSet, loopContracts, span := sp }
 
 partial def parseStructDef : ParseM StructDef := do
+  let declSp ← peekSpan
   expect .struct_
   -- Check for "Copy" marker: struct Copy Name { ... }
   let tk0 ← peek
@@ -1606,9 +1609,10 @@ partial def parseStructDef : ParseM StructDef := do
       advance
       tk ← peek
   expect .rbrace
-  return { name, typeParams, typeBounds, fields, isCopy }
+  return { name, typeParams, typeBounds, fields, isCopy, span := declSp }
 
 partial def parseEnumDef : ParseM EnumDef := do
+  let declSp ← peekSpan
   expect .enum_
   -- Check for "Copy" marker: enum Copy Name { ... }
   let tk0 ← peek
@@ -1648,7 +1652,7 @@ partial def parseEnumDef : ParseM EnumDef := do
     tk ← peek
     if tk == .comma then advance; tk ← peek
   expect .rbrace
-  return { name, typeParams, typeBounds, variants, isCopy }
+  return { name, typeParams, typeBounds, variants, isCopy, span := declSp }
 
 partial def parseImport : ParseM ImportDecl := do
   let sp ← peekSpan

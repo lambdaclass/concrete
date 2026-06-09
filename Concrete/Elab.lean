@@ -1560,7 +1560,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
     { name := sd.name, typeParams := sd.typeParams,
       fields := sd.fields.map fun f => (f.name, eraseTy f.ty),
       isPublic := sd.isPublic, isCopy := sd.isCopy, isReprC := sd.isReprC,
-      isPacked := sd.isPacked, reprAlign := sd.reprAlign : CStructDef }
+      isPacked := sd.isPacked, reprAlign := sd.reprAlign,
+      declSpan := some sd.span : CStructDef }
   -- Also convert imported structs so cross-module field offsets work in Lower/Layout
   let localStructNames := m.structs.map (·.name)
   let cImportedStructs := (imports.structs.filter fun sd =>
@@ -1568,7 +1569,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
     { name := sd.name, typeParams := sd.typeParams,
       fields := sd.fields.map fun f => (f.name, eraseTy f.ty),
       isPublic := sd.isPublic, isCopy := sd.isCopy, isReprC := sd.isReprC,
-      isPacked := sd.isPacked, reprAlign := sd.reprAlign : CStructDef }
+      isPacked := sd.isPacked, reprAlign := sd.reprAlign,
+      declSpan := some sd.span : CStructDef }
   -- Build extern fns
   let cExterns := m.externFns.map fun ef =>
     (ef.name, ef.params.map fun p => (p.name, p.ty), ef.retTy, ef.isTrusted)
@@ -1660,7 +1662,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
       { name := ed.name, typeParams := ed.typeParams,
         variants := ed.variants.map fun v =>
           (v.name, v.fields.map fun f => (f.name, eraseTy f.ty)),
-        isPublic := ed.isPublic, isCopy := ed.isCopy, builtinId := ed.builtinId : CEnumDef }
+        isPublic := ed.isPublic, isCopy := ed.isCopy, builtinId := ed.builtinId,
+        declSpan := some ed.span : CEnumDef }
     functions := fns
     externFns := cExterns
     constants := cConstants
@@ -1670,7 +1673,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
       { name := td.name,
         methods := td.methods.map fun sig =>
           { name := sig.name, retTy := sig.retTy },
-        builtinId := td.builtinId : CTraitDef }
+        builtinId := td.builtinId, declSpan := some td.span : CTraitDef }
     traitImpls := m.traitImpls.map fun tb =>
       let traitBuiltinId := match allTraits.find? fun td => td.name == tb.traitName with
         | some td => td.builtinId
@@ -1679,7 +1682,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
         typeName := tb.typeName,
         methodNames := tb.methods.map (·.name),
         methodRetTys := tb.methods.map fun f => (f.name, f.retTy),
-        builtinTraitId := traitBuiltinId : CTraitImpl }
+        builtinTraitId := traitBuiltinId, declSpan := some tb.span : CTraitImpl }
     linkerAliases :=
       -- Import aliases: imported bare name → prefixed definition (subName_fnName)
       -- When user writes `import math.{add}` and calls `add(...)`, the call emits `@add`

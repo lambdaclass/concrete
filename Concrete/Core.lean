@@ -100,6 +100,9 @@ structure CStructDef where
   isReprC : Bool := false
   isPacked : Bool := false
   reprAlign : Option Nat := none
+  -- Source location of the declaration (see CFnDef.declSpan). `none` for
+  -- synthesized definitions with no source form.
+  declSpan : Option Span := none
 
 structure CEnumDef where
   name : String
@@ -108,6 +111,7 @@ structure CEnumDef where
   isPublic : Bool := false
   isCopy : Bool := false
   builtinId : Option BuiltinEnumId := none
+  declSpan : Option Span := none
 
 structure CTraitMethodSig where
   name : String
@@ -117,6 +121,7 @@ structure CTraitDef where
   name : String
   methods : List CTraitMethodSig
   builtinId : Option BuiltinTraitId := none
+  declSpan : Option Span := none
 
 structure CTraitImpl where
   traitName : String
@@ -124,6 +129,7 @@ structure CTraitImpl where
   methodNames : List String
   methodRetTys : List (String × Ty)
   builtinTraitId : Option BuiltinTraitId := none
+  declSpan : Option Span := none
 
 structure CModule where
   name : String
