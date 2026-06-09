@@ -545,6 +545,16 @@ work depends on them.
     `audit`, `prove`, `inspect`, `fmt`, `doc`, `clean`, and one unknown command.
     Done when command UX is a checked contract, not an accidental consequence
     of each command's implementation.
+    Staged:
+    - 15a. First slice (existing commands): `check_cli_contract.sh` pins build,
+      run, test, check, prove, `--report`, `--version`, no-args, unknown
+      command, missing `Concrete.toml`, and malformed input — exit code,
+      stdout/stderr split, `--json` well-formedness, and artifact location.
+      Exposed and fixed an uncaught-exception on unknown command / missing input
+      (now a clean `ExitCode.usage` error). Future commands (inspect/fmt/doc/
+      clean) are asserted as NOT-YET (clean failure), not invented. [DONE]
+    - 15b. Extend the matrix to inspect/fmt/doc/clean and policy-failure
+      behavior once those command surfaces exist (depends on later phases).
 16. Define the compiler-internal API boundary before LSP, MCP, package tooling,
     or editor integrations import random modules. V1 boundary:
     `ProjectContext` loading, `CompilerLedger` queries, diagnostic rendering,

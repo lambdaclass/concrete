@@ -2288,6 +2288,14 @@ def main (args : List String) : IO UInt32 := do
     let (ds, isPartial) ← Pipeline.runFrontendDiagnostics inputPath source resolveAllModules
     IO.println (Concrete.diagnosticsToJson ds 1 isPartial)
     return (if Concrete.hasErrors ds then 1 else 0)
+  -- Unknown command / missing input file (Phase 4 #15): the single-file dispatch
+  -- below treats the first argument as a source path. If it is neither a recognized
+  -- subcommand (all handled above) nor a readable file, fail cleanly here instead of
+  -- letting the later `readFile` throw an uncaught exception.
+  if let some first := args.head? then
+    if !first.startsWith "-" && !(← System.FilePath.pathExists first) then
+      IO.eprintln s!"error: '{first}' is not a readable file or a known command\nhint: run `concrete` with no arguments to see usage"
+      return ExitCode.usage
   match args with
   | [] =>
     IO.eprintln usage
