@@ -52,15 +52,15 @@ architectural completion (roadmap Phase 3 preamble).
 
 **Closes when:**
 
-- [ ] Items #1-#43 of ROADMAP Phase 4 are done or explicitly re-scheduled with
+- [ ] Items #1-#44 of ROADMAP Phase 4 are done or explicitly re-scheduled with
   a reason recorded in the roadmap.
-- [ ] The validation artifact passes: ROADMAP Phase 4 #44's fixture
+- [ ] The validation artifact passes: ROADMAP Phase 4 #45's fixture
   (`examples/compiler_pipeline_probe/`) runs `concrete build`, `run`, `test`,
   `fmt --check`, inspect commands, and the fuzz-regression fixtures over one
   project, proving every command reads the same typed project context and
   ledger facts.
 
-**Current status**: #1-#17b done (see CHANGELOG / git log); #18-#44 open.
+**Current status**: #1-#17b done (see CHANGELOG / git log); #18-#45 open.
 Already-shipped tooling that the OLD checklist understated: `concrete fmt`
 path + golden fmt baselines (`make test-golden`), parser/program fuzzers
 (`scripts/tests/test_parser_fuzz.sh`, `test_fuzz.sh`), wrong-code corpus

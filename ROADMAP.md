@@ -524,6 +524,17 @@ work depends on them.
    - 13d. Expression/statement-granularity spans in Core (the invasive step):
      thread spans onto Core nodes or a node→span side table for precise
      within-function obligation and runtime-failure locations.
+   - 13e. Remaining declaration-span gaps deliberately deferred from the
+     2026-06-09 decl-span work (recorded here, not only in the commit
+     message): extern-fn declarations drop their span because `CModule`
+     carries them as a bare tuple (`String × params × Ty × Bool`) — promote
+     to a record with `declSpan`; and "module file not found" / circular
+     module-import resolver errors are location-less because `mod X;` stubs
+     carry no span and `resolveModules` returns `Except String` — give
+     module stubs a span and the resolver typed, span-carrying errors.
+     Extend `check_source_maps.sh` with an extern-fn FFI-safety fixture and
+     a missing-module-file fixture asserting both diagnostics point at
+     source.
 14. Normalize command plumbing for `build`, `run`, `test`, `audit`, `prove`,
    `inspect`, `fmt`, `doc`, and `clean`: shared project loading, shared target/
    policy/assumption loading, shared diagnostics, shared output conventions,
@@ -627,6 +638,18 @@ work depends on them.
     development. Every new executable language feature should be able to run
     through `interpret result == compiled result` where deterministic and
     target-independent.
+    - 18a. Prerequisite: move the interpreter onto structured diagnostics.
+      `Concrete/Interp.lean` is `Except String` throughout — no Diagnostic
+      records, no error codes, no source spans — so interpreter failures
+      cannot land in the ledger, differential mismatches cannot be classified
+      (interpreter bug vs compiler bug vs expected divergence), and
+      `tested_by_oracle` evidence would rest on string comparison. Replace
+      with `Except Diagnostics` (a dedicated `E06xx` range), attach spans
+      from Core `declSpan`, and record interpreter runs/failures as ledger
+      facts. Gate: `check_interp_diagnostics.sh` must show an interpreter
+      error carrying code + span + pass, and a forced
+      interpreter-vs-compiled divergence rendering as a classified,
+      replayable fact rather than a raw string mismatch.
 19. Add pass inspection commands for compiler developers and users:
     `concrete inspect --ast`, `--resolved`, `--typed`, `--core`,
     `--backend-ir`, `--ledger`, with stable redaction of local paths and
@@ -832,7 +855,20 @@ work depends on them.
     `target_constants.con`. Wire `scripts/tests/check_backend_ir.sh` to run
     `concrete inspect --backend-ir`, `concrete verify-ir --pass backend-ir`,
     and a compiled execution check for each fixture.
-44. Add the Phase 4 validation artifact:
+44. Add a docs-drift gate because docs are public claims too. Every standing
+    reference or claim-bearing doc must carry `Status:` and `Verified:` metadata
+    or explicitly opt out as generated/history-only. Add
+    `scripts/tests/check_docs_drift.sh`; the gate must fail when a doc contains
+    stale claim markers such as "not yet implemented", "0/N", "future", or
+    "TODO" past its verification window without an updated `Verified:` date,
+    and it must support grep-pinned claims where a doc names an implementation
+    fact (for example a command, gate, diagnostic code, or module path). The
+    gate should also check high-risk consistency pairs such as
+    `CLAIMS_TODAY.md` vs gates, `LANGUAGE_GAPS.md` vs parser/checker fixtures,
+    memory-semantics docs vs borrow/ref tests, and phase-exit checklists vs
+    shipped gates. Done when docs cannot silently drift into user-facing claims
+    that no command or fixture can replay.
+45. Add the Phase 4 validation artifact:
     `examples/compiler_pipeline_probe/` plus
     `scripts/tests/check_phase4_pipeline.sh`. The fixture must run
     `concrete build`, `run`, `test`, `fmt --check`, `inspect --ast`,
@@ -884,6 +920,20 @@ rest of Phase 5 stays after that slab in the same linear queue.
    for validated UTF-8, and `Path`/`OsString` for OS-native boundaries. Specify
    literals, ownership, slicing, indexing, formatting, conversions, parser/JSON
    interaction, diagnostics, and test output. No implicit lossy conversion.
+   - 5a. Define the owned zero-copy view idiom before bytes/text/parser APIs
+     freeze. Since Concrete does not use lifetimes and `from(param)` refs are
+     scalar-only, stored parser results must use owned offset/length views such
+     as `ByteView { off, len, buf_len }` rather than `&Bytes` fields. The design
+     must specify checked access back through an explicit buffer, buffer-length
+     or role branding to catch wrong-buffer use where possible, overflow/bounds
+     obligations for `off + len`, and how `Text`/UTF-8 validation composes with
+     raw byte views. Add `docs/BYTE_VIEW.md`,
+     `examples/byte_view/{http_header_view,tlv_packet_view,utf8_text_slice,wrong_buffer}/`,
+     and `scripts/tests/check_byte_view.sh`; the gate must prove views are
+     storable/returnable owned values, access produces runtime-safety
+     obligations, wrong-buffer and overflow cases do not silently pass, and
+     proved code can discharge checked-access costs through ordinary
+     obligations.
 6. Define the collections story: fixed arrays, slices, dynamic `Vec`, maps,
    buffers, parser cursors, and which collections require `Alloc` or other
    capabilities.
@@ -1068,6 +1118,10 @@ rest of Phase 5 stays after that slab in the same linear queue.
     be expressed with `#[requires(...)]`, not `Option<&T>`. The first consumer
     is collection access, e.g.
     `#[requires(i < v.len())] fn get_ref<T>(v: &Vec<T>, i: u64) -> &T from(v)`.
+    Single-provenance second-class view structs (`view struct Headers
+    from(Bytes) { ... }`) are explicitly deferred: record them as the escape
+    valve if Phase 7 workloads prove owned views plus scalar `from(param)` refs
+    insufficient, but do not add them as v1 syntax or patch them in ad hoc.
     Add `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`,
     `examples/callbacks/{bare_fn,bound_shared,bound_mut,bound_once,cap_polymorphic_map}/`,
     and `scripts/tests/check_callable_values.sh`; the gate must prove hidden
@@ -1114,6 +1168,26 @@ rest of Phase 5 stays after that slab in the same linear queue.
     `concrete test --json` with a stable event stream comparable to Go's
     `test2json`: discovered, started, passed, failed, skipped, expected-failed,
     oracle-compared, policy-blocked, and proof-status events.
+    - 26a. Add contract-guided property fuzzing as part of the same testing
+      surface: `concrete test --fuzz` generates inputs satisfying a function's
+      `#[requires(...)]` preconditions and checks `#[ensures(...)]`
+      postconditions in the interpreter (and optionally against the compiled
+      binary through the differential harness). This is distinct from the
+      Phase 4 compiler fuzzers (#33-#34, which fuzz the compiler itself): it
+      fuzzes USER programs, turning every contracted-but-unproved function
+      into `tested_by_oracle` evidence at zero additional annotation cost —
+      the cheapest way to widen the evidence pyramid below `proved`. Failures
+      must minimize to a concrete counterexample input, render as an ordinary
+      test failure with the violated clause and source span, and be storable
+      as a regression fixture. Audit output must record the evidence honestly
+      (`tested_by_oracle` with input-generation strategy and iteration count),
+      never as a proof. Add `docs/CONTRACT_FUZZING.md`,
+      `examples/contract_fuzz/{passing,ensures_violation,unsatisfiable_requires}/`,
+      and `scripts/tests/check_contract_fuzz.sh`; the gate must show a seeded
+      violation is found and minimized, an unsatisfiable precondition is
+      reported as such (not silently zero iterations / false green), and the
+      resulting evidence class appears in the obligation ledger and audit
+      report.
 27. Add `concrete lint` / `concrete vet` before public examples grow:
     semantic warnings that are not type errors, including ignored fallible
     results, suspicious capabilities, unreachable contracts, redundant
@@ -1157,7 +1231,15 @@ rest of Phase 5 stays after that slab in the same linear queue.
     `concrete build`, `concrete run`, `concrete test`, `concrete fmt`,
     `concrete lint`, `concrete vet`, `concrete audit`, `concrete prove`,
     `concrete eval`, `concrete inspect`, `concrete doc`, `concrete bench`,
-    `concrete trace`, and `concrete clean`.
+    `concrete trace`, and `concrete clean`. `concrete fmt` must be a real
+    subcommand with `--check`, `--write`, stdin/stdout behavior, and stable exit
+    codes, not only a legacy `--fmt` flag. Add `concrete new` / `concrete init`
+    for the project bootstrap path documented in `docs/PROJECT_BOOTSTRAP.md`.
+    Every public command, every missing subcommand, and top-level
+    `concrete --help` / `concrete help <cmd>` must fail or succeed through the
+    CLI contract rather than falling through to "open this as a file". Extend
+    `scripts/tests/check_cli_contract.sh` with help, init/new, fmt check/write,
+    unknown command, and missing-file cases.
 35. Add `concrete doc`: generate basic API/reference docs from source,
     capabilities, modules, and public comments without depending on proof
     infrastructure. Outputs must include `concrete doc --format json` and
@@ -1298,6 +1380,20 @@ class and authority/allocation story.
      and `scripts/tests/check_arena_index_safety.sh`; the gate must prove stale
      index reuse is rejected, trapped, or explicitly trusted, never silently
      treated as ordinary memory-safe access.
+   - 8c. Decide explicit-dictionary coherence before binary collection
+     operations harden. `HashMap<K, V>` values built with different `hash_fn` /
+     `eq_fn`, or ordered maps/sets built with different comparators, have the
+     same type but incompatible semantics; `union`, `merge`, `intersection`,
+     equality, and bulk transfer across them can silently produce nonsense.
+     Choose one v1 rule: canonical registered dictionary per key type,
+     dictionary/brand carried in the collection type or value, debug/runtime
+     identity checks on binary operations, or a documented sharp edge that
+     forbids binary ops across explicitly-different dictionaries. Add
+     `docs/COLLECTION_COHERENCE.md`,
+     `examples/collection_coherence/{same_dictionary_merge,different_eq_rejected,different_cmp_rejected}/`,
+     and `scripts/tests/check_collection_coherence.sh`; the gate must show the
+     chosen verdict for incompatible dictionaries and prove the API cannot
+     silently combine them.
 9. Build iterator and builder APIs in proposed `std.iter` and `std.builder`
    after the collection shape is known: `Iter<T>`-style adapters,
    `fold`/`map`/`filter`/`take`/`drop`, known-length reporting, byte/text
@@ -2496,6 +2592,23 @@ audience):**
     public-surface change as `compatible`, `deprecated(window)`, or
     `breaking`, and the release gate fails on `breaking` without a recorded
     policy exception.
+18c. Add the external-contributor and public-platform surface before release.
+    Write `CONTRIBUTING.md` as an operational checklist, not generic etiquette:
+    how to add a language feature, which compiler modules usually change, which
+    gates to run, which docs must be updated, how to add positive/negative/
+    adversarial fixtures, and how to update
+    `scripts/tests/example_manifest.txt` in the same commit as any new
+    `examples/` `.con` file (this broke CI twice on 2026-06-09/10). Add
+    `scripts/tests/check_contributing_contract.sh`; the gate must prove every
+    example project has a manifest entry, every roadmap-required gate is named
+    in either `Makefile` or CI, and contributor docs mention source changes,
+    tests, docs, roadmap/changelog, claims, and release-bundle impacts. Publish
+    a public platform-support statement (`docs/PLATFORM_SUPPORT.md`) naming
+    Tier 1/Tier 2/unsupported hosts and targets, including Linux/macOS
+    x86_64/aarch64 and Windows status. Add performance-claim discipline:
+    public copy may not imply "fast systems language" unless `concrete bench`
+    and release performance gates publish replayable numbers; otherwise docs
+    must say performance claims are not made yet.
 19. Ship the first narrow public release only after the above are green.
 20. Add the Phase 16 validation artifact:
     `scripts/tests/check_release_candidate.sh` installs the dist archive into a

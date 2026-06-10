@@ -10,6 +10,63 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Trust hardening sweep: capability hole closed, fingerprints cryptographic, axioms audited (2026-06-09/10)
+
+A full-project audit pass turned several silent gaps into shipped fixes or
+tracked, gated holes:
+
+- **fn-pointer capability escalation CLOSED** (soundness fix): calling through
+  `f: fn(T) with(C) -> R` now requires the caller to hold `C`, enforced in
+  both Check (E0240) and CoreCheck (E0520). Previously a function with no
+  `with(...)` could accept and call a `with(Network)` callback — authority
+  smuggling that contradicted the claims doc. Locked by
+  `adversarial_neg_cap_fnptr_smuggle.con` and the
+  `check_capability_polymorphism_design.sh` gate, which also freezes the
+  stdlib HOF surface until the callable-values design doc exists.
+- **`#[proof_fingerprint]` digests are truncated SHA-256** (was 64-bit
+  non-cryptographic `String.hash`, craftable into a silent stale→proved
+  upgrade). Reuses the in-repo FIPS 180-4 spec; all fresh fingerprints
+  migrated, deliberately-stale fixtures preserved.
+- **Axiom-inventory gate** (`check_axiom_inventory.sh`, `docs/AXIOMS.md`,
+  `make test-axiom-inventory`): `#print axioms` over every `#[proof_by]`
+  theorem; kernel allowlist only; `sorryAx` fails hard; native-code trust
+  (`Lean.ofReduceBool`/`trustCompiler`) must be declared per-theorem. First
+  run surfaced and documented that the six HMAC/SHA-256 flagship theorems
+  carry native trust via `bv_decide`'s compiled LRAT checker.
+- **Declaration/SSA/import diagnostics carry real source spans**: parser now
+  records struct/enum/trait/impl decl spans; core-check decl errors,
+  ssa-verify errors, and unknown-import errors point at source instead of
+  `0:0`/nothing. Extended `check_source_maps.sh` (17 checks). Deferred
+  remainders (extern-fn decls, module-file-not-found) recorded as ROADMAP
+  Phase 4 13e.
+- **Returned-reference provenance hole tracked and contained** (NOT fixed):
+  stdlib `get`/`get_mut`-style APIs return refs inside `Option`, the owner is
+  not frozen, and a saved ref can survive a rehash — use-after-realloc that
+  compiles. Known-hole fixtures (`examples/known_holes/`), a baseline-freeze
+  gate (`check_returned_ref_provenance.sh`) blocking any new public
+  aggregate-ref API, a `CLAIMS_TODAY.md` disclosure narrowing "no dangling
+  safe reference" to borrow-block refs, and a collections-freeze release
+  blocker. The fix is the scalar `from(param)` provenance design in the
+  callable-values roadmap item.
+- **CI/build hardening**: golden tests wired into make/CI (baselines had
+  silently drifted); all `examples/` files driven by a coverage manifest that
+  fails on unlisted files; macOS job; weekly clean-checkout proof-replay job
+  (no caches — stale-cache false greens become visible); `make help` over
+  ~75 annotated targets.
+- **Docs reconciled with code**: pattern destructuring marked implemented,
+  one consistent reborrow rule across the MUT_REF docs, `defer`'s proof
+  story stated in OBLIGATION_CORE, `PHASE_EXIT_CHECKLISTS.md` re-keyed to
+  the current phase structure (its old numbering claimed 0/12 tooling done
+  while the formatter, fuzzers, wrong-code corpus, and reducer had shipped).
+- **Roadmap design-debt sweep**: callable-values/capability design knot
+  (bound callbacks, three context modes, `from(param)` scalar returned refs,
+  deferred view-structs), owned `ByteView` zero-copy idiom, narrow const
+  generics, dictionary coherence, arena/index safety, contract-guided
+  property fuzzing, newtype-invariant obligations, arithmetic profiles,
+  evidence-typed imports, docs-drift gate, security/CVE + proof-revocation +
+  supply-chain/license + deprecation release policies, and the
+  external-contributor surface — each with a named gate.
+
 ### Phase 2 VC and SMT core completed through teaching examples (2026-06-07)
 
 Phase 2's completed VC/SMT foundation moved out of the active roadmap. The
