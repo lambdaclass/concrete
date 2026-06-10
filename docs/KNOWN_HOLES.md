@@ -137,6 +137,8 @@ whole picture is in one place.
   so the stdlib HOF surface is frozen, and writing it is also the fix for H1.
 - **Owned `ByteView` zero-copy stored idiom** — Phase 5 #5a.
 - **Narrow const generics** (`[T; N]`) — Phase 5 #6a.
+- **Generic inference through references** (`id<T>(x: &T)` can't infer `T`
+  from `&w` today; blocks every `&T`/`&K`/`&V` HOF) — Phase 5 #6b.
 - **Pattern completeness** (ranges/guards/or/nested) — Phase 5 #11.
 - **Explicit-dictionary coherence** — Phase 6 #8c.
 - **Arena/index safety** (stale-index use-after-remove) — Phase 6 #8b.

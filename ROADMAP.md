@@ -957,6 +957,20 @@ rest of Phase 5 stays after that slab in the same linear queue.
      distinct capacities specialize separately, layout is capacity-specific,
      runtime-safety obligations name the instantiated size, and unsupported
      non-integer/comptime-reflection forms are rejected.
+   - 6b. Fix generic type-argument inference through references before
+     collection/HOF APIs land. Today inference does NOT see through a `&`:
+     `fn id<T>(x: &T)` called as `id(&w)` fails with E0220 ("expected &T, got
+     &W") and forces an explicit `id::<W>(&w)`, while the by-value form
+     `id<T>(x: T)` infers fine. `unifyTypes` does not unify `&T` against `&W`
+     to learn `T = W`. This is fail-closed (it rejects, never miscompiles) but
+     it blocks essentially every generic-over-references API — `Vec::fold`,
+     `map`, `for_each`, `HashMap` callbacks all take `&T`/`&K`/`&V` — so the
+     Phase 6 stdlib HOF surface and the iteration/callable-values work (#23,
+     #24) cannot be ergonomic until it lands. Extend `unifyTypes` to recurse
+     through `&`/`&mut` (and ideally `[T; N]`, `Option<T>`, etc.). Add
+     `tests/programs/generic_infer_through_ref.con` (positive: `id(&w)` infers
+     without turbofish) and a negative pinning that a genuinely ambiguous case
+     still asks for an explicit type arg; gate via the main suite.
 7. Add `concrete fmt`: stable formatting for source files, examples, docs
    snippets, and generated fixtures. Formatting must not churn semantic
    fingerprints.
