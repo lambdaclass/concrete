@@ -1,0 +1,16 @@
+// Known soundness hole: a literal divide-by-zero compiles.
+//
+// `10 / 0` (and `10 / z` with a constant `z = 0`) builds and ships, even
+// though the result is a hardware trap / undefined behavior. The division
+// non-zero-divisor obligation exists but is `unproven`/violation and is not
+// enforced by default.
+//
+// Expected to BUILD until proven-violation obligations are hard errors by
+// default in safe code. Tracked by
+// scripts/tests/check_proven_violation_enforcement.sh.
+
+mod proven_div_zero {
+    pub fn main() -> Int {
+        return 10 / 0;
+    }
+}

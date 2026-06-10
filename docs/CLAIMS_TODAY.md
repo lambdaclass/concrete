@@ -48,6 +48,17 @@ soundness for aggregate-wrapped returned refs from these APIs.
 **What enforced does NOT cover:**
 - Runtime bounds checking (array access through checked APIs returns `Option`; unchecked is UB)
 - Integer overflow (wraps silently — runtime property)
+- **Compile-time-proven safety violations are not yet rejected by default**
+  (known hole, 2026-06-10): a runtime-safety obligation the compiler
+  discharges to `violation` — e.g. a constant index proven out of bounds
+  (`a[5]` on `[i64; 3]`) or a literal `10 / 0` — is reported in
+  `--report contracts` but still compiles and ships UB in safe code. A proven
+  violation is a compile-time proof the program is wrong, distinct from an
+  `unproven` obligation, and should be a hard error by default; until that
+  lands, "bounded behavior" depends on checked APIs / `#[requires]` and does
+  not cover statically-proven violations. Tracked by
+  `examples/known_holes/proven_{oob_index,div_zero}/` and
+  `scripts/tests/check_proven_violation_enforcement.sh`.
 - Stack overflow (depends on OS guard page)
 - Termination (no loop/recursion termination analysis)
 - Formal proof of checker soundness (tested adversarially, not mechanized)

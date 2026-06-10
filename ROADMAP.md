@@ -2165,6 +2165,30 @@ Done when: parser/security examples can show obligations for bounds, div/mod
 zero, overflow profile, casts, and loop bounds with statuses
 `proved`, `enforced`, `assumed`, `missing`, or `blocked`.
 
+0. PROVEN violations are hard errors by default in safe code — pull this
+   forward, do not leave it for the end of the phase. The obligation engine
+   already discharges some obligations to `violation` (a compile-time PROOF
+   the access is wrong), but a `violation` is currently only reported, so
+   safe code still compiles and ships UB: `a[5]` on `[i64; 3]` builds and
+   does an out-of-bounds read (the compiler prints "VIOLATION: index out of
+   bounds (constant index)" in `--report contracts`), and `10 / 0` builds.
+   This conflates `violation` with `unproven` — but they are categorically
+   different: `unproven` means "not discharged" (reasonably policy/profile
+   gated), `violation` means "discharged to false" (a proof of a bug, like a
+   type error). The default for safe code must be: any obligation with status
+   `violation` (constant OOB index, constant zero divisor, provably-truncating
+   constant cast, statically-false assertion) FAILS the build, suppressible
+   only via `trusted` / `with(Unsafe)` or a named assumption that appears in
+   audit output. This is cheap (the classification exists) and is a default
+   that examples will silently depend on, so it must land before broad Phase
+   6 examples, not after. Known hole filed now:
+   `examples/known_holes/proven_{oob_index,div_zero}/`,
+   `scripts/tests/check_proven_violation_enforcement.sh` (reproduce + freeze;
+   flips to expected-reject when enforcement lands), and the `CLAIMS_TODAY.md`
+   disclosure. The enforcement gate must prove safe code with each violation
+   kind is rejected, the same code under `trusted` compiles with the
+   assumption recorded, and `unproven` obligations are NOT swept into the same
+   hard-error path.
 1. Define stable obligation schema v1: id, kind, source span, function,
    expression, dependencies, evidence status, discharging theorem/check/
    assumption, and replay command.

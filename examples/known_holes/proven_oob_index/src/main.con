@@ -1,0 +1,19 @@
+// Known soundness hole: a statically PROVEN safety violation compiles.
+//
+// The compiler computes "VIOLATION: index out of bounds (constant index)" for
+// `a[5]` on `[i64; 3]` (see `concrete <file> --report contracts`), but the
+// build still succeeds and the binary performs an out-of-bounds read. A
+// discharged-to-`violation` obligation is a compile-time PROOF that the access
+// is always wrong — categorically different from an `unproven` obligation —
+// yet it is only reported, not enforced.
+//
+// Expected to BUILD until proven-violation obligations are hard errors by
+// default in safe code (suppressible only via trusted / with(Unsafe) / a named
+// assumption). Tracked by scripts/tests/check_proven_violation_enforcement.sh.
+
+mod proven_oob {
+    pub fn main() -> Int {
+        let a: [i64; 3] = [10, 20, 30];
+        return a[5];
+    }
+}

@@ -81,6 +81,8 @@ examples/hmac_sha256/src/main.con compile
 examples/http/src/main.con project-build
 examples/integrity/src/main.con project-build
 examples/json/main.con skip
+examples/known_holes/proven_div_zero/src/main.con skip
+examples/known_holes/proven_oob_index/src/main.con skip
 examples/known_holes/returned_ref_provenance_map/src/main.con skip
 examples/known_holes/returned_ref_provenance_vec/src/main.con skip
 examples/kvstore/src/main.con project-build

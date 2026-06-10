@@ -315,6 +315,9 @@ jobs:
       - name: Returned-ref provenance known-hole gate (aggregate-ref public API freeze)
         run: bash scripts/tests/check_returned_ref_provenance.sh
 
+      - name: Proven-violation enforcement known-hole gate (constant OOB / div-zero)
+        run: bash scripts/tests/check_proven_violation_enforcement.sh
+
       - name: CLI-plumbing gate (Phase 4 #14a — shared prologue + exit-code taxonomy)
         run: bash scripts/tests/check_cli_plumbing.sh
 
