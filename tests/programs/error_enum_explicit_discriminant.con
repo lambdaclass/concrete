@@ -1,0 +1,8 @@
+// Explicit enum discriminant values are not supported yet — they used to be
+// parsed and silently DISCARDED (variants got positional tags regardless),
+// a semantically dark construct that would corrupt FFI/protocol enums like
+// `enum Op { Get = 0x01, Set = 0x02 }`. Must be rejected at parse time, not
+// silently accepted.
+enum Op { Get = 1, Set = 2 }
+
+fn main() -> i64 { return 0; }

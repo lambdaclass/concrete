@@ -2208,6 +2208,21 @@ zero, overflow profile, casts, and loop bounds with statuses
 7. Generate byte/text/path boundary obligations: invalid UTF-8, lossy
    conversion, OS-string conversion, path normalization assumptions, and
    rejected implicit conversions.
+   - 7a. Implement explicit enum discriminant values for FFI/protocol enums
+     (`enum Op { Get = 0x01, Set = 0x02 }`). These are currently REJECTED at
+     parse time (E0001, "explicit enum discriminant values are not supported
+     yet") because the parser previously parsed and silently DISCARDED them,
+     assigning positional tags regardless — a semantically dark construct that
+     would corrupt any FFI/serialization enum. Implementing means: honor the
+     written value in the variant's tag/repr, reject duplicate discriminant
+     values (a collision is a bug, not a silent alias — Rust rejects it),
+     surface the chosen tag in the layout/ABI report, and tie it to the
+     `repr(C)` boundary so a C consumer and a round-trip decoder agree. Until
+     then the rejection stands (regression-locked by
+     `tests/programs/error_enum_explicit_discriminant.con`). Add
+     `examples/enum_discriminants/{protocol_ops,duplicate_rejected}/` and a
+     gate proving values are honored at the repr boundary and duplicates are
+     rejected.
 8. Generate stack/recursion obligations where the profile claims boundedness.
 9. Report runtime-error obligations in human and JSON forms.
 10. Add policy gates that can require selected runtime-error obligations to be

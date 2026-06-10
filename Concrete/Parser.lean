@@ -1642,10 +1642,16 @@ partial def parseEnumDef : ParseM EnumDef := do
       expect .rbrace
       variants := variants ++ [{ name := variantName, fields }]
     else if tk2 == .assign then
-      -- Discriminant value: Variant = 3
-      advance  -- consume '='
-      let _ ← parseExpr  -- parse and discard the discriminant value
-      variants := variants ++ [{ name := variantName, fields := [] }]
+      -- Explicit discriminant value: `Variant = 3`. NOT supported yet — the
+      -- value used to be parsed and silently discarded, so variants got
+      -- positional tags regardless of what the source wrote. That is a
+      -- semantically dark construct (the written value looks meaningful but is
+      -- ignored), exactly what would corrupt an FFI/protocol enum like
+      -- `enum Op { Get = 0x01, Set = 0x02 }`. Reject it honestly instead.
+      let sp ← peekSpan
+      throwParse "explicit enum discriminant values are not supported yet"
+        (span := some sp)
+        (hint := some "remove the `= <value>`; variant tags are assigned positionally. Explicit discriminants for FFI/protocol enums are a planned feature (ROADMAP Phase 12).")
     else
       -- Fieldless variant
       variants := variants ++ [{ name := variantName, fields := [] }]

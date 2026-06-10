@@ -1275,6 +1275,7 @@ run_err "$TESTDIR/error_continue_outside.con"    "continue outside of loop"
 # Phase 3: defer/destroy/Copy errors
 run_err "$TESTDIR/error_defer_move.con"          "reserved by defer"
 run_err "$TESTDIR/error_copy_destroy.con"        "implements Destroy and cannot be Copy"
+run_err "$TESTDIR/error_enum_explicit_discriminant.con" "explicit enum discriminant values are not supported"
 run_err "$TESTDIR/error_copy_linear_field.con"   "contains non-copy field"
 run_err "$TESTDIR/error_copy_generic_non_copy_instantiation.con" "non-Copy field"
 run_err "$TESTDIR/error_destroy_no_impl.con"     "does not implement Destroy"
