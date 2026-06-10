@@ -90,6 +90,22 @@ time (E0001) with a hint pointing at the planned feature.
 - **Feature:** ROADMAP Phase 12 #7a — honor the value at the repr/ABI
   boundary and reject duplicate discriminants.
 
+### C3. Unknown attributes silently ignored — CLOSED 2026-06-10
+
+`#[notreal]`, `#[trustedz(foo)]`, and any other unrecognized attribute were
+parsed and silently dropped — so a typo in a proof/capability/test attribute
+(`#[overflow_checkd]`, `#[tes]`, `#[proof_b]`) silently lost its meaning, and
+several such losses fail *open* (a typo'd `#[test]` silently doesn't run; a
+typo'd `#[overflow_checked]` silently drops overflow obligations). Now
+`parseAttribute` validates the key against a complete allowlist (repr, test,
+overflow_checked, spec, proof_by, ensures_proof, proof_coverage,
+proof_fingerprint, requires, ensures, invariant, variant, intrinsic, langitem)
+and rejects unknowns (E0001) with the known list as a hint.
+- **Locked by:** `tests/programs/error_unknown_attribute.con`.
+- **Maintenance:** a new attribute must be added to the `knownAttrs` list in
+  `Concrete/Parser.lean` as well as wired into its consumer, or it will be
+  rejected.
+
 ---
 
 ## Trust ledger (not a hole, but a tracked trust boundary)

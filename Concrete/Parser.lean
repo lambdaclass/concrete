@@ -1708,7 +1708,20 @@ structure ReprOpts where
 partial def parseAttribute : ParseM (String × Option String × Option ReprOpts × Option Expr) := do
   expect .hash
   expect .lbracket
+  let attrSp ← peekSpan
   let key ← expectIdent
+  -- Reject unknown attributes instead of silently ignoring them. Attributes
+  -- here carry proof/capability/trust/test meaning, so a typo like
+  -- `#[overflow_checkd]` or `#[tes]` would silently drop a security-relevant
+  -- annotation — a semantically dark construct. Keep this list complete; a new
+  -- attribute must be added here as well as wired into its consumer.
+  let knownAttrs := ["repr", "test", "overflow_checked", "spec", "proof_by",
+    "ensures_proof", "proof_coverage", "proof_fingerprint", "requires",
+    "ensures", "invariant", "variant", "intrinsic", "langitem"]
+  unless knownAttrs.contains key do
+    throwParse s!"unknown attribute '#[{key}]'"
+      (span := some attrSp)
+      (hint := some s!"known attributes: {", ".intercalate knownAttrs}")
   let tk ← peek
   if tk == .lparen && (key == "ensures" || key == "requires" || key == "invariant" || key == "variant") then
     -- source-contract expressions: ensures/requires (function level) and

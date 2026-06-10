@@ -1,0 +1,8 @@
+// Unknown attributes must be rejected, not silently ignored. Attributes carry
+// proof/capability/trust/test meaning, so a typo like `#[overflow_checkd]` or
+// `#[tes]` would silently drop a security-relevant annotation — a semantically
+// dark construct. Must be a parse error.
+#[overflow_checkd]
+fn f(x: i64) -> i64 { return x; }
+
+fn main() -> i64 { return f(1); }

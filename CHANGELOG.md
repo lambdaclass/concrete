@@ -74,6 +74,17 @@ tracked, gated holes:
   were discarded). Now a parse error (E0001) with a hint; honoring the values
   at the repr/ABI boundary is ROADMAP Phase 12 #7a. Nothing real used the old
   behavior. Regression: `tests/programs/error_enum_explicit_discriminant.con`.
+- **Unknown attributes rejected instead of silently ignored** (language
+  behavior change): `#[notreal]`, `#[trustedz(...)]`, and any unrecognized
+  attribute used to be parsed and dropped, so a typo in a
+  proof/capability/test attribute (`#[overflow_checkd]`, `#[tes]`) silently
+  lost its meaning — several failing *open* (a typo'd `#[test]` silently
+  doesn't run; a typo'd `#[overflow_checked]` silently drops overflow
+  obligations). `parseAttribute` now validates against a complete allowlist
+  (repr, test, overflow_checked, spec, proof_by, ensures_proof,
+  proof_coverage, proof_fingerprint, requires, ensures, invariant, variant,
+  intrinsic, langitem) and rejects unknowns (E0001) with the known list as a
+  hint. Regression: `tests/programs/error_unknown_attribute.con`.
 - **Proven-violation enforcement hole tracked** (NOT fixed): obligations the
   compiler discharges to `violation` — a constant index proven out of bounds
   (`a[5]` on `[i64; 3]`), a literal `10 / 0` — are reported but still build
