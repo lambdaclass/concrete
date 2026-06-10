@@ -66,6 +66,30 @@ tracked, gated holes:
   evidence-typed imports, docs-drift gate, security/CVE + proof-revocation +
   supply-chain/license + deprecation release policies, and the
   external-contributor surface — each with a named gate.
+- **Explicit enum discriminants rejected instead of silently discarded**
+  (language behavior change): `enum Op { Get = 0x01, Set = 0x02 }` used to
+  parse the values and throw them away, assigning positional tags 0/1
+  regardless — a semantically dark construct that would corrupt any
+  FFI/protocol enum (and let duplicate discriminants "compile" because both
+  were discarded). Now a parse error (E0001) with a hint; honoring the values
+  at the repr/ABI boundary is ROADMAP Phase 12 #7a. Nothing real used the old
+  behavior. Regression: `tests/programs/error_enum_explicit_discriminant.con`.
+- **Proven-violation enforcement hole tracked** (NOT fixed): obligations the
+  compiler discharges to `violation` — a constant index proven out of bounds
+  (`a[5]` on `[i64; 3]`), a literal `10 / 0` — are reported but still build
+  and ship UB in safe code, conflating `violation` (proof of a bug) with
+  `unproven` (undischarged). Known-hole fixtures
+  (`examples/known_holes/proven_{oob_index,div_zero}/`), gate
+  (`check_proven_violation_enforcement.sh`: reproduces the hole AND asserts
+  both are classified VIOLATION, so only enforcement is missing),
+  `CLAIMS_TODAY.md` disclosure, and ROADMAP Phase 12 #0 (proven violations
+  become hard errors by default in safe code, pulled to the front of the
+  phase).
+- **`docs/KNOWN_HOLES.md`**: single canonical index of every tracked
+  soundness/dark-construct gap — state (OPEN/CLOSED), reproducing fixture,
+  locking gate, scheduled fix — replacing the scatter across claims
+  disclosures, gate scripts, and roadmap items. Linked from ROADMAP and
+  CLAIMS_TODAY.
 
 ### Phase 2 VC and SMT core completed through teaching examples (2026-06-07)
 
