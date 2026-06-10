@@ -1,0 +1,3 @@
+struct Copy Inner { v: i64 }
+struct Copy Outer { inner: Inner, tag: i64 }
+fn main() -> i64 { let mut o: Outer = Outer { inner: Inner{v:1}, tag: 9 }; o.inner.v = 77; return o.inner.v * 100 + o.tag; }

@@ -1,0 +1,3 @@
+enum Opt { Some { v: i64 }, None }
+fn unwrap_or(o: Opt, d: i64) -> i64 { match o { Opt::Some { v } => { return v; } Opt::None {} => { return d; } } }
+fn main() -> i64 { return unwrap_or(Opt::Some { v: 7 }, 0) * 10 + unwrap_or(Opt::None {}, 3); }

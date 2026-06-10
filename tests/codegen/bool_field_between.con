@@ -1,0 +1,2 @@
+struct Copy F { x: i64, flag: bool, y: i64 }
+fn main() -> i64 { let f: F = F{x:10, flag:true, y:20}; if f.flag { return f.x + f.y; } return 0; }

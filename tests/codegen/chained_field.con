@@ -1,0 +1,4 @@
+struct Copy Inner { v: i64 }
+struct Copy Outer { i: Inner }
+fn mk() -> Outer { return Outer { i: Inner { v: 99 } }; }
+fn main() -> i64 { return mk().i.v; }

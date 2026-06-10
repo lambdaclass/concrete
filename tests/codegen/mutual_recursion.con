@@ -1,0 +1,3 @@
+fn is_even(n: i64) -> i64 { if n == 0 { return 1; } return is_odd(n - 1); }
+fn is_odd(n: i64) -> i64 { if n == 0 { return 0; } return is_even(n - 1); }
+fn main() -> i64 { return is_even(10) * 10 + is_odd(7); }

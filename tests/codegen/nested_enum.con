@@ -1,0 +1,4 @@
+enum Inner { Ok { v: i64 }, Bad }
+enum Outer { Some { i: Inner }, None }
+fn get(o: Outer) -> i64 { match o { Outer::Some { i } => { match i { Inner::Ok { v } => { return v; } Inner::Bad {} => { return 0-1; } } } Outer::None {} => { return 0-2; } } }
+fn main() -> i64 { return get(Outer::Some { i: Inner::Ok { v: 77 } }); }

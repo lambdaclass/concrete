@@ -1,0 +1,4 @@
+struct Copy Pt { x: i64, y: i64 }
+enum Shape { Dot { p: Pt }, Empty }
+fn px(s: Shape) -> i64 { match s { Shape::Dot { p } => { return p.x + p.y; } Shape::Empty {} => { return 0; } } }
+fn main() -> i64 { return px(Shape::Dot { p: Pt { x: 30, y: 12 } }); }

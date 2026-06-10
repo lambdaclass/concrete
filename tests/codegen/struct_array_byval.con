@@ -1,0 +1,3 @@
+struct Copy Buf { data: [i64; 3], n: i64 }
+fn total(b: Buf) -> i64 { return b.data[0] + b.data[1] + b.data[2] + b.n; }
+fn main() -> i64 { return total(Buf { data: [1,2,3], n: 100 }); }

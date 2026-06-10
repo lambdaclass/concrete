@@ -1,0 +1,3 @@
+enum E { V { a: u8, b: i64 }, Empty }
+fn get(e: E) -> i64 { match e { E::V { a, b } => { return (a as i64) + b; } E::Empty {} => { return 0; } } }
+fn main() -> i64 { return get(E::V { a: 5, b: 1000 }); }

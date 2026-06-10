@@ -1,0 +1,1 @@
+fn main() -> i64 { let x: i32 = 2147483647; let y: i32 = x + 1; return y as i64; }

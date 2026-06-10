@@ -1,0 +1,2 @@
+struct Copy P { x: i64, y: i64 }
+fn main() -> i64 { let mut a: [P; 2] = [P{x:1,y:2}, P{x:3,y:4}]; a[0].x = 50; return a[0].x + a[1].x; }

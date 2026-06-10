@@ -1,0 +1,10 @@
+fn main() -> i64 {
+    let a: i64 = 5; let b: i64 = 5; let mut r: i64 = 0;
+    if a == b { r = r + 1; }
+    if a <= b { r = r + 10; }
+    if a >= b { r = r + 100; }
+    if a != 6 { r = r + 1000; }
+    if a < 6 { r = r + 10000; }
+    if a > 4 { r = r + 100000; }
+    return r;
+}

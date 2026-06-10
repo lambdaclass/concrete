@@ -643,6 +643,14 @@ work depends on them.
     development. Every new executable language feature should be able to run
     through `interpret result == compiled result` where deterministic and
     target-independent.
+    - 18z. [PARTIAL 2026-06-10] `scripts/tests/check_codegen_execution.sh` +
+      `tests/codegen/*.con` is a lightweight precursor: 30 compile-run-assert
+      fixtures from the 2026-06 codegen sweep, locking in the cases that found
+      and now guard against H3/C5/C6 (the existing suite mostly checks
+      compile/reject/diagnostic and was blind to miscompiles). The full #18
+      harness (run the SAME program through interpreter and compiled binary,
+      assert agreement — needs #18a) supersedes hand-maintained expected
+      values and should fold this fixture set in.
     - 18a. Prerequisite: move the interpreter onto structured diagnostics.
       `Concrete/Interp.lean` is `Except String` throughout — no Diagnostic
       records, no error codes, no source spans — so interpreter failures

@@ -1,0 +1,2 @@
+struct Copy M { a: u8, b: i64, c: u16 }
+fn main() -> i64 { let m: M = M { a: 200, b: 1000, c: 50000 }; return (m.a as i64) + m.b + (m.c as i64); }

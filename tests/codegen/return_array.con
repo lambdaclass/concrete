@@ -1,0 +1,2 @@
+fn mk() -> [i64; 3] { return [10, 20, 30]; }
+fn main() -> i64 { let a: [i64; 3] = mk(); return a[0] + a[1] + a[2]; }

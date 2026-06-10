@@ -1,0 +1,1 @@
+fn main() -> i64 { let x: i64 = 0; if x != 0 && (10 / x) > 0 { return 1; } return 7; }

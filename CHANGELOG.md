@@ -142,7 +142,19 @@ tracked, gated holes:
   - Verified-correct design choice: signed floor division (interpreter and
     compiled agree, −7/3 = −3, identity `(a/b)*b + a%b == a` holds).
   - Also verified correct: enum struct/nested payloads, fn-pointer calls,
-    i64 multiplication-overflow wrap, returned arrays, unsigned comparison.
+    i64 multiplication-overflow wrap, returned arrays, unsigned comparison,
+    repr(C) layout, struct-with-array by value, recursion returning structs,
+    all comparison operators, chained field on returned struct, strings (via
+    grep/lox builds). Sweep CONVERGED — final batches found no new
+    miscompiles; all non-passes were fixture syntax or fail-closed linearity
+    rules (heap-deref consumes, raw-ptr-to-local = H5).
+  - **`scripts/tests/check_codegen_execution.sh`** (new standing gate): 30
+    compile-run-assert-value fixtures under `tests/codegen/`, making the
+    sweep's coverage permanent and replayable. The existing suite mostly
+    checks compile/reject/diagnostic and was blind to miscompiles (the class
+    behind H3/C5/C6); this gate runs each program and asserts its result. A
+    lightweight precursor to the full interpreter-vs-compiled differential
+    harness (ROADMAP Phase 4 #18).
 - **`docs/KNOWN_HOLES.md`**: single canonical index of every tracked
   soundness/dark-construct gap — state (OPEN/CLOSED), reproducing fixture,
   locking gate, scheduled fix — replacing the scatter across claims

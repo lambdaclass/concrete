@@ -330,6 +330,9 @@ jobs:
       - name: Struct field-layout regression gate (mixed-width store/read agree)
         run: bash scripts/tests/check_struct_field_layout.sh
 
+      - name: Codegen execution-oracle gate (compile-run-assert value)
+        run: bash scripts/tests/check_codegen_execution.sh
+
       - name: CLI-plumbing gate (Phase 4 #14a — shared prologue + exit-code taxonomy)
         run: bash scripts/tests/check_cli_plumbing.sh
 
