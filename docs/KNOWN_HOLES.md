@@ -89,6 +89,19 @@ miscompile.
 
 ## CLOSED this session (kept here so the fix can't silently regress)
 
+### C6. Struct mixed-width field-layout miscompile — CLOSED 2026-06-10
+
+The struct-literal store packed fields **tightly** (summing `computeTySize`)
+while field reads used `Layout.fieldOffset` (**aligned**). Any struct with a
+sub-word field followed by a wider one read garbage — `{a: u8, b: i64}` stored
+`b` at offset 1 but read it from offset 8. A silent miscompile in one of the
+most common constructs; only all-same-width or single-field structs were
+unaffected, which is why it survived. Fixed: `.structLit` lowering now stores
+each field at the same aligned `Layout.fieldOffset` that reads use.
+- **Locked by:** `scripts/tests/check_struct_field_layout.sh` (6 execution
+  oracles: u8+i64, three mixed, middle/trailing field, nested mixed-width,
+  all-i64 no-regression). Full suite 1548/0.
+
 ### C5. Nested place-write miscompile — CLOSED 2026-06-10
 
 `o.inner.v = x`, `a[i].x = x`, `m[i][j] = x`, `b.data[i] = x`, triple-nesting,

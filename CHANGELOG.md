@@ -132,8 +132,17 @@ tracked, gated holes:
     store through it doesn't reach `x`. Requires trusted + raw pointers
     (audit-responsibility). `examples/known_holes/raw_ptr_to_local/`,
     `scripts/tests/check_raw_ptr_to_local.sh`.
+  - **Struct mixed-width field-layout miscompile FIXED** (safe code, #44e):
+    the struct-literal store packed fields tightly while field reads used
+    aligned `Layout.fieldOffset`, so any struct with a sub-word field before a
+    wider one read garbage (`{a: u8, b: i64}` stored `b` at offset 1, read it
+    from offset 8) — a silent miscompile in a very common construct.
+    `.structLit` now stores at the same aligned offsets reads use. Regression
+    gate: 6 execution oracles. Suite 1548/0.
   - Verified-correct design choice: signed floor division (interpreter and
     compiled agree, −7/3 = −3, identity `(a/b)*b + a%b == a` holds).
+  - Also verified correct: enum struct/nested payloads, fn-pointer calls,
+    i64 multiplication-overflow wrap, returned arrays, unsigned comparison.
 - **`docs/KNOWN_HOLES.md`**: single canonical index of every tracked
   soundness/dark-construct gap — state (OPEN/CLOSED), reproducing fixture,
   locking gate, scheduled fix — replacing the scatter across claims

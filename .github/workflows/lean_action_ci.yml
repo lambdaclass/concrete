@@ -327,6 +327,9 @@ jobs:
       - name: Raw-ptr-to-local known-hole gate (&mut x does not alias local)
         run: bash scripts/tests/check_raw_ptr_to_local.sh
 
+      - name: Struct field-layout regression gate (mixed-width store/read agree)
+        run: bash scripts/tests/check_struct_field_layout.sh
+
       - name: CLI-plumbing gate (Phase 4 #14a — shared prologue + exit-code taxonomy)
         run: bash scripts/tests/check_cli_plumbing.sh
 

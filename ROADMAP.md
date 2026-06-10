@@ -900,6 +900,15 @@ work depends on them.
       reference/deref base; `.fieldAssign`/`.arrayIndexAssign` delegate to it.
       Regression-locked by `scripts/tests/check_nested_field_write.sh` (9
       execution oracles). Full suite 1548/0.
+    - 44e. [DONE 2026-06-10] Fixed struct mixed-width field-layout miscompile
+      (found by the codegen sweep). The struct-literal store packed fields
+      tightly (summing `computeTySize`) while field reads used the aligned
+      `Layout.fieldOffset`, so any struct with a sub-word field followed by a
+      wider one read garbage (`{a: u8, b: i64}` stored `b` at offset 1, read it
+      from offset 8). `.structLit` lowering now stores each field at the same
+      aligned `Layout` offset reads use. Regression-locked by
+      `scripts/tests/check_struct_field_layout.sh` (6 execution oracles). Full
+      suite 1548/0.
     - 44d. [OPEN] Promote address-taken locals to stack allocas. `&mut x as
       *mut i64` materializes a pointer to a COPY of the local (locals are SSA
       register values), so a store through it does not reach `x` — a raw

@@ -540,13 +540,19 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let dst ← freshReg
     emit (.alloca dst ty)
     let baseVal := SVal.reg dst ty
-    let mut byteOffset : Nat := 0
-    for (_, fieldExpr) in actualFields do
+    -- Store each field at the SAME aligned offset that `.fieldAccess` reads it
+    -- from (`Layout.fieldOffset`). Previously this packed fields tightly by
+    -- summing `computeTySize`, which disagreed with the aligned read offsets
+    -- for any struct with a sub-word field followed by a wider one — e.g.
+    -- `{a: u8, b: i64}` stored `b` at offset 1 but read it from offset 8,
+    -- a silent miscompile (ROADMAP Phase 4 #44e).
+    let structTyArgs := typeArgsFromTy ty
+    for (fname, fieldExpr) in actualFields do
       let fVal ← lowerExpr fieldExpr
+      let byteOffset ← fieldByteOffset name fname structTyArgs
       let gepDst ← freshReg
       emit (.gep gepDst baseVal [.intConst (Int.ofNat byteOffset) .int] .i8)
       emit (.store fVal (.reg gepDst fieldExpr.ty))
-      byteOffset := byteOffset + (← computeTySize fieldExpr.ty)
     let loadDst ← freshReg
     emit (.load loadDst baseVal ty)
     return .reg loadDst ty
