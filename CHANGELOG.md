@@ -113,6 +113,17 @@ tracked, gated holes:
   field-touching body over both layouts returns the right value). ROADMAP
   Phase 4 #44a. Adjacent, still open: the `mod`-wrapped form trips a separate
   fail-closed E0602 in nested-generic struct lowering (#44b).
+- **Adversarial codegen sweep (execution oracles)** — compile-run-assert-value
+  fixtures over casts, defer, recursion, enum payloads, arrays, nested structs,
+  signed division. Verified correct: integer cast truncation (300→u8→44,
+  −1→u8→255), recursion, enum payload round-trip, array read/write, signed
+  floor division (interpreter and compiled agree: −7/3 = −3, a defined design
+  choice). Found one new miscompile: **nested field assignment** `o.inner.v = x`
+  is silently dropped (mutates a discarded temporary copy; single-level
+  `o.v = x` works) — returns the stale value. Filed as known hole H4
+  (`examples/known_holes/nested_field_write/`,
+  `scripts/tests/check_nested_field_write.sh`, ROADMAP Phase 4 #44c); fix is
+  proper nested place/lvalue lowering.
 - **`docs/KNOWN_HOLES.md`**: single canonical index of every tracked
   soundness/dark-construct gap — state (OPEN/CLOSED), reproducing fixture,
   locking gate, scheduled fix — replacing the scatter across claims

@@ -887,6 +887,20 @@ work depends on them.
       `scripts/tests/check_mono_name_collision.sh` (distinct specializations,
       array type-args distinct, and an execution oracle proving a
       field-touching body over both layouts returns the right value).
+    - 44c. [OPEN] Fix nested field-assignment lowering (a miscompile found by
+      the codegen sweep). `o.inner.v = x` — a field assignment whose object is
+      itself a field access — is silently dropped: Lower's `.fieldAssign`
+      value-struct path mutates a temporary copy of `o.inner` and only writes
+      it back when the object is a plain `.ident`; a nested object hits
+      `_ => pure ()` and the copy is discarded. Single-level `o.v = x` works,
+      so it is fail-open (compiles, runs, returns the stale value). Fix:
+      proper nested place/lvalue lowering — compute the address of the target
+      place by chained GEP (or recurse the value writeback up the
+      field-access chain) and store in place. Tracked as a known hole:
+      `examples/known_holes/nested_field_write/` (returns 109 instead of
+      7709) and `scripts/tests/check_nested_field_write.sh`. The fix gate must
+      assert the nested write takes effect (returns 7709) and that array-index
+      and deref place expressions compose with it.
     - 44b. [OPEN] Fix the adjacent nested-generic struct lowering error
       surfaced while fixing 44a: the `mod`-wrapped form of a doubly-nested
       generic struct (`mod m { struct Hold<T>… }` with `Hold<Pair<i64>>`)

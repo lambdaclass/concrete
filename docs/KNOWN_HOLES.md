@@ -64,6 +64,26 @@ distinct from `unproven` (an undischarged obligation, reasonably policy-gated).
   in safe code, suppressible only via `trusted`/`with(Unsafe)` or a named
   assumption; `unproven` is NOT swept into the same path.
 
+### H4. Nested field assignment silently dropped — miscompile
+
+`o.inner.v = x` (a field assignment whose object is itself a field access) does
+not take effect. Lower's `.fieldAssign` value-struct path mutates a temporary
+**copy** of `o.inner` and only writes it back when the object is a plain
+`.ident` (single level); for a nested object it hits `_ => pure ()` and the
+mutated copy is discarded. Single-level `o.v = x` works. Reading back returns
+the stale value (sibling fields intact), so it is a fail-open miscompile.
+
+- **State:** OPEN. Fail-open (compiles, runs, wrong value).
+- **Reproduce:** `examples/known_holes/nested_field_write/` — returns 109
+  (stale) instead of 7709.
+- **Gate:** `scripts/tests/check_nested_field_write.sh` — asserts the fixture
+  builds and returns the wrong value (109) while broken, and that single-level
+  writes still work; flips to expect 7709 when fixed.
+- **Disclosed:** `CLAIMS_TODAY.md` (§1, "what enforced does NOT cover").
+- **Fix:** ROADMAP Phase 4 #44c — nested place/lvalue lowering: compute the
+  address of `o.inner.v` by chained GEP (or recurse the value writeback up the
+  field-access chain) and store in place, instead of copy-mutate-discard.
+
 ---
 
 ## CLOSED this session (kept here so the fix can't silently regress)

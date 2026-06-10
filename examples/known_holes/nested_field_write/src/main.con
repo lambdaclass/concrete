@@ -1,0 +1,22 @@
+// Known miscompile: a nested field assignment `o.inner.v = x` is silently
+// dropped. Lower's `.fieldAssign` value-struct path mutates a TEMPORARY COPY of
+// the inner struct and only writes it back when the object is a plain variable
+// (`.ident`); when the object is itself a field access (`o.inner`), the mutated
+// copy is discarded (`_ => pure ()`). Single-level writes (`o.v = x`) work.
+//
+// `o.inner.v = 77` then reading `o.inner.v` returns the stale 1; the sibling
+// field is intact, so this returns 109 (= 1*100 + 9) instead of 7709.
+// Fail-open: it compiles and runs with the wrong value.
+//
+// Compiled standalone. Expected to BUILD (and return the WRONG value) until
+// nested place/lvalue lowering computes the address by chained GEP and stores
+// in place. Tracked by scripts/tests/check_nested_field_write.sh.
+
+struct Copy Inner { v: i64 }
+struct Copy Outer { inner: Inner, tag: i64 }
+
+fn main() -> i64 {
+    let mut o: Outer = Outer { inner: Inner { v: 1 }, tag: 9 };
+    o.inner.v = 77;
+    return o.inner.v * 100 + o.tag;   // correct = 7709; bug yields 109
+}

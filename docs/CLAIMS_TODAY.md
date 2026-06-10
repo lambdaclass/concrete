@@ -48,6 +48,12 @@ soundness for aggregate-wrapped returned refs from these APIs.
 **What enforced does NOT cover:**
 - Runtime bounds checking (array access through checked APIs returns `Option`; unchecked is UB)
 - Integer overflow (wraps silently — runtime property)
+- **Nested field assignment is a known miscompile (2026-06-10):** `o.inner.v =
+  x` (object is itself a field access) is silently dropped — the write targets
+  a temporary copy and is discarded; reading back gives the stale value.
+  Single-level `o.v = x` works. Tracked by
+  `examples/known_holes/nested_field_write/` and
+  `scripts/tests/check_nested_field_write.sh`; fix is ROADMAP Phase 4 #44c.
 - **Compile-time-proven safety violations are not yet rejected by default**
   (known hole, 2026-06-10): a runtime-safety obligation the compiler
   discharges to `violation` — e.g. a constant index proven out of bounds
