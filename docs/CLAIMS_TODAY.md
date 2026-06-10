@@ -48,12 +48,14 @@ soundness for aggregate-wrapped returned refs from these APIs.
 **What enforced does NOT cover:**
 - Runtime bounds checking (array access through checked APIs returns `Option`; unchecked is UB)
 - Integer overflow (wraps silently — runtime property)
-- **Nested field assignment is a known miscompile (2026-06-10):** `o.inner.v =
-  x` (object is itself a field access) is silently dropped — the write targets
-  a temporary copy and is discarded; reading back gives the stale value.
-  Single-level `o.v = x` works. Tracked by
-  `examples/known_holes/nested_field_write/` and
-  `scripts/tests/check_nested_field_write.sh`; fix is ROADMAP Phase 4 #44c.
+- **Raw pointer to a local does not alias the local (unsafe path, known hole,
+  2026-06-10):** `&mut x as *mut i64` points at a copy (locals are SSA values,
+  not addressable slots), so a store through it does not reach `x`. Requires
+  `trusted` + raw pointers (audit-responsibility). Tracked by
+  `examples/known_holes/raw_ptr_to_local/` and
+  `scripts/tests/check_raw_ptr_to_local.sh`; fix is ROADMAP Phase 4 #44d.
+  (The related safe-code miscompile — nested place writes `o.inner.v = x` — is
+  now FIXED, #44c.)
 - **Compile-time-proven safety violations are not yet rejected by default**
   (known hole, 2026-06-10): a runtime-safety obligation the compiler
   discharges to `violation` — e.g. a constant index proven out of bounds

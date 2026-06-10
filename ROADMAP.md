@@ -887,20 +887,30 @@ work depends on them.
       `scripts/tests/check_mono_name_collision.sh` (distinct specializations,
       array type-args distinct, and an execution oracle proving a
       field-touching body over both layouts returns the right value).
-    - 44c. [OPEN] Fix nested field-assignment lowering (a miscompile found by
-      the codegen sweep). `o.inner.v = x` — a field assignment whose object is
-      itself a field access — is silently dropped: Lower's `.fieldAssign`
-      value-struct path mutates a temporary copy of `o.inner` and only writes
-      it back when the object is a plain `.ident`; a nested object hits
-      `_ => pure ()` and the copy is discarded. Single-level `o.v = x` works,
-      so it is fail-open (compiles, runs, returns the stale value). Fix:
-      proper nested place/lvalue lowering — compute the address of the target
-      place by chained GEP (or recurse the value writeback up the
-      field-access chain) and store in place. Tracked as a known hole:
-      `examples/known_holes/nested_field_write/` (returns 109 instead of
-      7709) and `scripts/tests/check_nested_field_write.sh`. The fix gate must
-      assert the nested write takes effect (returns 7709) and that array-index
-      and deref place expressions compose with it.
+    - 44c. [DONE 2026-06-10] Fixed nested place-write lowering (a miscompile
+      found by the codegen sweep). `o.inner.v = x`, `a[i].x = x`, `m[i][j] = x`,
+      `b.data[i] = x`, triple-nesting, and nested writes through a `&mut`
+      parameter were all silently dropped — Lower handled only single-level
+      assignment targets, and a compound base was lowered as a value copy whose
+      mutation was discarded (proximate root: no unified lvalue lowering; deeper
+      root: locals are SSA register values, not addressable slots, so the
+      single-level workarounds did not compose). Fixed by a unified
+      `storeToPlace` (`Concrete/Lower.lean`) that writes compound places in
+      place by value-writeback, terminating at a root variable or a
+      reference/deref base; `.fieldAssign`/`.arrayIndexAssign` delegate to it.
+      Regression-locked by `scripts/tests/check_nested_field_write.sh` (9
+      execution oracles). Full suite 1548/0.
+    - 44d. [OPEN] Promote address-taken locals to stack allocas. `&mut x as
+      *mut i64` materializes a pointer to a COPY of the local (locals are SSA
+      register values), so a store through it does not reach `x` — a raw
+      pointer to a local does not alias the local. Unsafe path (requires
+      `trusted` + raw pointers, audit-responsibility), but a real bug and the
+      remaining manifestation of the addressability root that #44c worked
+      around. Fix: lower locals whose address is taken (or that are assigned
+      through a pointer/place that escapes) into stack allocas so `&`/`&mut`/
+      `*mut` yield real addresses. Tracked:
+      `examples/known_holes/raw_ptr_to_local/` (returns 1 instead of 99) and
+      `scripts/tests/check_raw_ptr_to_local.sh`.
     - 44b. [OPEN] Fix the adjacent nested-generic struct lowering error
       surfaced while fixing 44a: the `mod`-wrapped form of a doubly-nested
       generic struct (`mod m { struct Hold<T>… }` with `Hold<Pair<i64>>`)

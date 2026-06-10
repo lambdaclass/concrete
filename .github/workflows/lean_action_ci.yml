@@ -321,8 +321,11 @@ jobs:
       - name: Mono name-collision known-hole gate (nested-generic specialization merge)
         run: bash scripts/tests/check_mono_name_collision.sh
 
-      - name: Nested field-write known-hole gate (o.inner.v = x dropped)
+      - name: Nested place-write regression gate (compound assignment targets)
         run: bash scripts/tests/check_nested_field_write.sh
+
+      - name: Raw-ptr-to-local known-hole gate (&mut x does not alias local)
+        run: bash scripts/tests/check_raw_ptr_to_local.sh
 
       - name: CLI-plumbing gate (Phase 4 #14a — shared prologue + exit-code taxonomy)
         run: bash scripts/tests/check_cli_plumbing.sh

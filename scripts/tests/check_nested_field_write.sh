@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
-# Nested field-write known-hole gate (miscompile).
+# Nested place-write regression gate (ROADMAP Phase 4 #44c — FIXED 2026-06-10).
 #
-# `o.inner.v = x` (a field assignment whose object is itself a field access) is
-# silently dropped: Lower's `.fieldAssign` value-struct path mutates a temporary
-# COPY of `o.inner` and only writes it back when the object is a plain `.ident`.
-# Single-level `o.v = x` works. This is a fail-open miscompile — it compiles and
-# runs with the stale value.
-#
-# Tracks the hole without pretending it is fixed:
-#   1. The fixture builds.
-#   2. It returns the WRONG value (109), proving the nested write was dropped.
-# When nested place/lvalue lowering lands, the program returns 7709; flip the
-# expected value then (and move this to a regression gate).
+# `o.inner.v = x` and friends (a place expression deeper than one level) used to
+# be silently dropped: Lower handled only single-level assignment targets and a
+# compound base was lowered as a value copy whose mutation was discarded. The
+# unified `storeToPlace` path now writes compound places in place by value
+# writeback. This gate runs execution oracles over the whole family.
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -23,35 +17,47 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
-F="examples/known_holes/nested_field_write/src/main.con"
-
-echo "=== known miscompile reproduces: nested field write is dropped ==="
-if "$COMPILER" "$F" -o "$TMP/nfw" >/dev/null 2>&1; then
-  OUT="$("$TMP/nfw" 2>/dev/null)"; RC=$?
-  VAL="$OUT"; [ -z "$VAL" ] && VAL="$RC"
-  if [ "$VAL" = "109" ]; then
-    ok "o.inner.v=77 dropped: returns 109 (stale) instead of 7709 (KNOWN HOLE)"
-  elif [ "$VAL" = "7709" ]; then
-    no "nested field write now works (got 7709) — FIXED; flip this gate to expect 7709"
+# run <name> <src> <expected>
+run() {
+  local name="$1" src="$2" exp="$3"
+  printf '%s' "$src" > "$TMP/$name.con"
+  if "$COMPILER" "$TMP/$name.con" -o "$TMP/$name" >/dev/null 2>&1; then
+    local out rc val; out="$("$TMP/$name" 2>/dev/null)"; rc=$?; val="$out"; [ -z "$val" ] && val="$rc"
+    [ "$val" = "$exp" ] && ok "$name = $exp" || no "$name: got '$val' expect $exp (write dropped?)"
   else
-    no "unexpected value '$VAL' (expected 109 while broken, 7709 when fixed)"
+    no "$name failed to compile"
   fi
-else
-  no "fixture failed to compile"
-fi
+}
 
-echo "=== single-level field write is unaffected (sanity, expect 77) ==="
-cat > "$TMP/single.con" <<'EOF'
-struct Copy Box { v: i64 }
-fn main() -> i64 { let mut o: Box = Box { v: 1 }; o.v = 77; return o.v; }
-EOF
-if "$COMPILER" "$TMP/single.con" -o "$TMP/single" >/dev/null 2>&1; then
-  OUT="$("$TMP/single" 2>/dev/null)"; RC=$?; VAL="$OUT"; [ -z "$VAL" ] && VAL="$RC"
-  [ "$VAL" = "77" ] && ok "single-level field write works (77)" \
-    || no "single-level field write also broken (got '$VAL') — wider than nested"
-else
-  no "single-level fixture failed to compile"
-fi
+echo "=== nested place writes take effect (execution oracles) ==="
+# canonical fixture
+if "$COMPILER" examples/known_holes/nested_field_write/src/main.con -o "$TMP/canon" >/dev/null 2>&1; then
+  V="$("$TMP/canon" 2>/dev/null)"; [ -z "$V" ] && V=$?
+  [ "$V" = "7709" ] && ok "nested field write fixture = 7709" || no "fixture: got '$V' expect 7709"
+else no "canonical fixture failed to compile"; fi
+
+run nested_field 'struct Copy I { v: i64 } struct Copy O { i: I, t: i64 }
+fn main() -> i64 { let mut o: O = O { i: I{v:1}, t: 9 }; o.i.v = 77; return o.i.v*100 + o.t; }' 7709
+
+run array_elem_field 'struct Copy P { x: i64, y: i64 }
+fn main() -> i64 { let mut a: [P;2] = [P{x:1,y:2}, P{x:3,y:4}]; a[0].x = 50; return a[0].x + a[1].x; }' 53
+
+run struct_array_elem 'struct Copy B { d: [i64;3], n: i64 }
+fn main() -> i64 { let mut b: B = B { d: [1,2,3], n: 3 }; b.d[1] = 99; return b.d[1] + b.n; }' 102
+
+run triple_nest 'struct Copy A { v: i64 } struct Copy B { a: A } struct Copy C { b: B }
+fn main() -> i64 { let mut c: C = C { b: B { a: A { v: 1 } } }; c.b.a.v = 88; return c.b.a.v; }' 88
+
+run two_d_array 'fn main() -> i64 { let mut m: [[i64;2];2] = [[1,2],[3,4]]; m[1][0] = 99; return m[1][0]; }' 99
+
+run nested_via_mut_ref 'struct Copy I { v: i64 } struct Copy O { i: I }
+fn setv(p: &mut O) -> i64 { p.i.v = 42; return 0; }
+fn main() -> i64 { let mut o: O = O { i: I{v:1} }; borrow mut o as r in R { let _: i64 = setv(r); } return o.i.v; }' 42
+
+echo "=== single-level writes still work (no regression) ==="
+run single_field 'struct Copy P { x: i64 }
+fn main() -> i64 { let mut p: P = P{x:1}; p.x = 5; p.x = p.x + 10; return p.x; }' 15
+run single_array 'fn main() -> i64 { let mut a: [i64;3] = [1,2,3]; a[2] = a[0]+a[1]; return a[2]; }' 3
 
 echo ""
 echo "NESTED-FIELD-WRITE: PASS=$PASS FAIL=$FAIL"

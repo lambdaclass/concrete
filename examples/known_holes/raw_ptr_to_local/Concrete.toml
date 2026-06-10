@@ -1,0 +1,3 @@
+[package]
+name = "raw_ptr_to_local"
+version = "0.1.0"

@@ -1310,6 +1310,76 @@ private partial def emitDeferredUntilLoop : LowerM Unit := do
     | .loop | .function => break
     | .block => emitFrameDeferredCalls frame
 
+/-- Store `newVal` into the location denoted by the place expression `place`.
+    This is the unified lvalue path: it recurses into compound places
+    (`o.inner.v`, `a[i].x`, `m[i][j]`, `p.inner.v`) by value-writeback —
+    `base.field = v` is `base = {base with field = v}` — terminating at a root
+    variable (`setVar`/promoted alloca) or a reference/deref base (a real
+    pointer store). Before this, only single-level places were handled and any
+    deeper write was silently dropped (ROADMAP Phase 4 #44c). -/
+partial def storeToPlace (place : CExpr) (newVal : SVal) : LowerM Unit := do
+  match place with
+  | .ident name _ =>
+    match ← isPromoted name with
+    | some (allocaReg, structTy) => emit (.store newVal (.reg allocaReg structTy))
+    | none => setVar name newVal
+  | .deref inner _ =>
+    let p ← lowerExpr inner
+    emit (.store newVal p)
+  | .fieldAccess obj field _ =>
+    let tyName ← structNameFromTy obj.ty
+    let byteOff ← fieldByteOffset tyName field (typeArgsFromTy obj.ty)
+    match obj.ty with
+    | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ =>
+      -- base is a pointer: GEP into the pointee and store in place
+      let oVal ← lowerExpr obj
+      let gepDst ← freshReg
+      emit (.gep gepDst oVal [.intConst (Int.ofNat byteOff) .int] .i8)
+      emit (.store newVal (.reg gepDst (SVal.ty newVal)))
+    | _ =>
+      -- base is a value: build the updated struct value, then write it back
+      -- into the base place (recursing to any depth)
+      let structTy := obj.ty
+      let oVal ← lowerExpr obj
+      let tmp ← freshReg
+      emitEntryAlloca (.alloca tmp structTy)
+      emit (.store oVal (.reg tmp structTy))
+      let gepDst ← freshReg
+      emit (.gep gepDst (.reg tmp structTy) [.intConst (Int.ofNat byteOff) .int] .i8)
+      emit (.store newVal (.reg gepDst (SVal.ty newVal)))
+      let newObjVal ← freshReg
+      emit (.load newObjVal (.reg tmp structTy) structTy)
+      storeToPlace obj (.reg newObjVal structTy)
+  | .arrayIndex arr index _ =>
+    let elemTy := match arr.ty with | .array t _ => t | _ => SVal.ty newVal
+    let iVal ← lowerExpr index
+    let storeVal ← if SVal.ty newVal == elemTy then pure newVal else do
+      let castDst ← freshReg
+      emit (.cast castDst newVal elemTy)
+      pure (SVal.reg castDst elemTy)
+    match arr.ty with
+    | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ =>
+      let aVal ← lowerExpr arr
+      let gepDst ← freshReg
+      emit (.gep gepDst aVal [iVal] elemTy)
+      emit (.store storeVal (.reg gepDst elemTy))
+    | _ =>
+      let arrTy := arr.ty
+      let aVal ← lowerExpr arr
+      let tmp ← freshReg
+      emitEntryAlloca (.alloca tmp arrTy)
+      emit (.store aVal (.reg tmp arrTy))
+      let gepDst ← freshReg
+      emit (.gep gepDst (.reg tmp arrTy) [iVal] elemTy)
+      emit (.store storeVal (.reg gepDst elemTy))
+      let newArrVal ← freshReg
+      emit (.load newArrVal (.reg tmp arrTy) arrTy)
+      storeToPlace arr (.reg newArrVal arrTy)
+  | _ =>
+    -- Fallback: lower the place as a pointer and store through it.
+    let p ← lowerExpr place
+    emit (.store newVal p)
+
 partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
   match stmt with
   | .letDecl name mutable ty value =>
@@ -1642,53 +1712,11 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       | none => pure ()
 
   | .fieldAssign obj field value =>
+    -- `obj.field = value` — assign through the unified place path so compound
+    -- bases (`o.inner.v`, `a[i].x`, `p.inner.v`) write in place instead of
+    -- mutating a discarded copy (ROADMAP Phase 4 #44c).
     let fVal ← lowerExpr value
-    let tyName ← structNameFromTy obj.ty
-    let byteOff ← fieldByteOffset tyName field (typeArgsFromTy obj.ty)
-    -- Check if obj is a deref expression (e.g., *p.field = val → GEP into p directly)
-    match obj with
-    | .deref inner _ =>
-      let ptrVal ← lowerExpr inner
-      let gepDst ← freshReg
-      emit (.gep gepDst ptrVal [.intConst (Int.ofNat byteOff) .int] .i8)
-      emit (.store fVal (.reg gepDst value.ty))
-    | _ =>
-    let oVal ← lowerExpr obj
-    -- Check if the object is a reference/pointer type (e.g. &mut self)
-    let isRefTy := match obj.ty with
-      | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ => true
-      | _ => false
-    if isRefTy then
-      -- oVal is already a pointer to the struct; GEP + store directly
-      let gepDst ← freshReg
-      emit (.gep gepDst oVal [.intConst (Int.ofNat byteOff) .int] .i8)
-      emit (.store fVal (.reg gepDst value.ty))
-    else
-      -- Check if the target is a promoted variable (aggregate in loop → stable alloca)
-      let promotedAlloca ← match obj with
-        | .ident name _ => isPromoted name
-        | _ => pure none
-      match promotedAlloca with
-      | some (allocaReg, structTy) =>
-        -- GEP directly into the stable alloca — no store/load round-trip
-        let gepDst ← freshReg
-        emit (.gep gepDst (.reg allocaReg structTy) [.intConst (Int.ofNat byteOff) .int] .i8)
-        emit (.store fVal (.reg gepDst value.ty))
-      | none =>
-        -- Struct value: alloca a temporary, mutate the field, load back,
-        -- and update the variable map with the new struct value.
-        let structTy := obj.ty
-        let tmpSlot ← freshReg
-        emitEntryAlloca (.alloca tmpSlot structTy)
-        emit (.store oVal (.reg tmpSlot structTy))
-        let gepDst ← freshReg
-        emit (.gep gepDst (.reg tmpSlot structTy) [.intConst (Int.ofNat byteOff) .int] .i8)
-        emit (.store fVal (.reg gepDst value.ty))
-        let newVal ← freshReg
-        emit (.load newVal (.reg tmpSlot structTy) structTy)
-        match obj with
-        | .ident name _ => setVar name (.reg newVal structTy)
-        | _ => pure ()
+    storeToPlace (.fieldAccess obj field value.ty) fVal
 
   | .derefAssign target value =>
     let tVal ← lowerExpr target
@@ -1696,24 +1724,10 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     emit (.store vVal tVal)
 
   | .arrayIndexAssign arr index value =>
-    let aVal ← lowerExpr arr
-    let iVal ← lowerExpr index
+    -- `arr[index] = value` — via the unified place path (handles nested
+    -- bases like `m[i][j]` and `b.data[i]`).
     let vVal ← lowerExpr value
-    let elemTy := match arr.ty with | .array t _ => t | _ => value.ty
-    let gepDst ← freshReg
-    emit (.gep gepDst aVal [iVal] elemTy)
-    -- Coerce the value to the element type before storing.  Without
-    -- this, an int literal (typed `Int`/i64) assigned to a narrower
-    -- slot (e.g. `b[i] = 9` where b : [u8; N]) would emit
-    -- `store i64 9` into a u8 cell, writing 8 bytes past the element
-    -- and corrupting the array.  Runtime values already carry the
-    -- slot type, so this only inserts a (truncating) cast for the
-    -- literal/width-mismatch case.
-    let storeVal ← if value.ty == elemTy then pure vVal else do
-      let castDst ← freshReg
-      emit (.cast castDst vVal elemTy)
-      pure (SVal.reg castDst elemTy)
-    emit (.store storeVal (.reg gepDst elemTy))
+    storeToPlace (.arrayIndex arr index value.ty) vVal
 
   | .break_ value breakLabel =>
     match ← findLoopByLabel breakLabel with

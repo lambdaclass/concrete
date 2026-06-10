@@ -113,17 +113,27 @@ tracked, gated holes:
   field-touching body over both layouts returns the right value). ROADMAP
   Phase 4 #44a. Adjacent, still open: the `mod`-wrapped form trips a separate
   fail-closed E0602 in nested-generic struct lowering (#44b).
-- **Adversarial codegen sweep (execution oracles)** — compile-run-assert-value
-  fixtures over casts, defer, recursion, enum payloads, arrays, nested structs,
-  signed division. Verified correct: integer cast truncation (300→u8→44,
-  −1→u8→255), recursion, enum payload round-trip, array read/write, signed
-  floor division (interpreter and compiled agree: −7/3 = −3, a defined design
-  choice). Found one new miscompile: **nested field assignment** `o.inner.v = x`
-  is silently dropped (mutates a discarded temporary copy; single-level
-  `o.v = x` works) — returns the stale value. Filed as known hole H4
-  (`examples/known_holes/nested_field_write/`,
-  `scripts/tests/check_nested_field_write.sh`, ROADMAP Phase 4 #44c); fix is
-  proper nested place/lvalue lowering.
+- **Adversarial codegen sweep (execution oracles)** — ~50 compile-run-assert
+  fixtures over casts, wrapping, shifts, bitwise, short-circuit, division/
+  modulo (incl. negative), precedence, generics (post-H3), ghost erasure,
+  recursion (incl. mutual), loops, match (multi-field payloads), arrays
+  (args, computed index, 2D, copy isolation), struct return/copy isolation,
+  large structs. All correct except one root cause with two faces:
+  - **Nested place-write miscompile FIXED** (safe code, #44c): `o.inner.v = x`,
+    `a[i].x`, `m[i][j]`, `b.data[i]`, triple-nest, and nested-via-`&mut` were
+    silently dropped — Lower handled only single-level assignment targets, and
+    a compound base was lowered as a value copy whose mutation was discarded.
+    Proximate root: no unified lvalue lowering. Deeper root: locals are SSA
+    register values, not addressable slots, so single-level workarounds didn't
+    compose. Fixed by a unified `storeToPlace` (value-writeback up the place
+    chain). Regression gate: 9 execution oracles. Suite 1548/0.
+  - **Raw-pointer-to-local hole filed** (H5, unsafe path, #44d): `&mut x as
+    *mut i64` points at a copy of the local (same addressability root), so a
+    store through it doesn't reach `x`. Requires trusted + raw pointers
+    (audit-responsibility). `examples/known_holes/raw_ptr_to_local/`,
+    `scripts/tests/check_raw_ptr_to_local.sh`.
+  - Verified-correct design choice: signed floor division (interpreter and
+    compiled agree, −7/3 = −3, identity `(a/b)*b + a%b == a` holds).
 - **`docs/KNOWN_HOLES.md`**: single canonical index of every tracked
   soundness/dark-construct gap — state (OPEN/CLOSED), reproducing fixture,
   locking gate, scheduled fix — replacing the scatter across claims

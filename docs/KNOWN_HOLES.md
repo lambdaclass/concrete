@@ -64,29 +64,48 @@ distinct from `unproven` (an undischarged obligation, reasonably policy-gated).
   in safe code, suppressible only via `trusted`/`with(Unsafe)` or a named
   assumption; `unproven` is NOT swept into the same path.
 
-### H4. Nested field assignment silently dropped — miscompile
+### H5. Raw pointer to a local does not alias the local — unsafe path
 
-`o.inner.v = x` (a field assignment whose object is itself a field access) does
-not take effect. Lower's `.fieldAssign` value-struct path mutates a temporary
-**copy** of `o.inner` and only writes it back when the object is a plain
-`.ident` (single level); for a nested object it hits `_ => pure ()` and the
-mutated copy is discarded. Single-level `o.v = x` works. Reading back returns
-the stale value (sibling fields intact), so it is a fail-open miscompile.
+`&mut x as *mut i64` materializes a pointer to a **copy** of the local, because
+local scalars are lowered as SSA register values, not addressable stack slots.
+A store through that pointer is internally consistent (store-then-load through
+the SAME pointer works), but the local read directly is unchanged. Requires
+`trusted` + raw pointers (audit-responsibility per CLAIMS_TODAY), but still a
+real bug. Same addressability root as the (now fixed) nested place-write
+miscompile.
 
-- **State:** OPEN. Fail-open (compiles, runs, wrong value).
-- **Reproduce:** `examples/known_holes/nested_field_write/` — returns 109
-  (stale) instead of 7709.
-- **Gate:** `scripts/tests/check_nested_field_write.sh` — asserts the fixture
-  builds and returns the wrong value (109) while broken, and that single-level
-  writes still work; flips to expect 7709 when fixed.
+- **State:** OPEN. Unsafe path; fail-open within `trusted` code.
+- **Reproduce:** `examples/known_holes/raw_ptr_to_local/` — returns 1 (stale)
+  instead of 99.
+- **Gate:** `scripts/tests/check_raw_ptr_to_local.sh` — asserts the local is
+  not aliased (returns 1) while broken, and that store+load through the same
+  pointer is consistent (isolating the bug to local aliasing); flips to 99
+  when fixed.
 - **Disclosed:** `CLAIMS_TODAY.md` (§1, "what enforced does NOT cover").
-- **Fix:** ROADMAP Phase 4 #44c — nested place/lvalue lowering: compute the
-  address of `o.inner.v` by chained GEP (or recurse the value writeback up the
-  field-access chain) and store in place, instead of copy-mutate-discard.
+- **Fix:** ROADMAP Phase 4 #44d — promote address-taken locals to stack
+  allocas so `&`/`&mut`/`*mut` of a local yield a real address.
 
 ---
 
 ## CLOSED this session (kept here so the fix can't silently regress)
+
+### C5. Nested place-write miscompile — CLOSED 2026-06-10
+
+`o.inner.v = x`, `a[i].x = x`, `m[i][j] = x`, `b.data[i] = x`, triple-nesting,
+and nested writes through a `&mut` parameter were all silently dropped: Lower
+handled only single-level assignment targets, and a compound base was lowered
+as a value copy whose mutation was discarded. Deeper root: locals are SSA
+register values, not addressable slots, so single-level workarounds (struct
+copy-writeback; arrays happen to be alloca-backed) did not compose. Fixed by a
+unified `storeToPlace` (`Concrete/Lower.lean`) that writes compound places in
+place by value-writeback, terminating at a root variable or a reference/deref
+base. `.fieldAssign` and `.arrayIndexAssign` now delegate to it.
+- **Locked by:** `scripts/tests/check_nested_field_write.sh` (9 execution
+  oracles: nested field, array-elem-field, struct-array, triple-nest, 2D
+  array, nested-via-&mut, plus single-level no-regression). Full suite 1548/0.
+- **Related still open:** H5 (raw pointer to a local) shares the
+  addressability root and is NOT fixed by this — it needs address-taken
+  locals promoted to allocas (#44d).
 
 ### C4. Monomorphization name collision — CLOSED 2026-06-10 (was the most severe)
 
