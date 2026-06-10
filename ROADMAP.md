@@ -60,6 +60,11 @@ North star: **systems code with explicit authority, bounded behavior, small
 trusted boundaries, and Lean-backed evidence tied to real source code, while
 keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
 
+Known holes index: every tracked soundness / dark-construct gap — what it is,
+whether it is open or closed, the gate that locks it, and the item here that
+fixes it — is consolidated in [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Keep
+it in sync when a hole is added or fixed.
+
 Governing frame: **no semantically dark constructs.** Every language
 construct is `proved`, `enforced`, `reported`, `assumed`, or `trusted` —
 never a vague middle. "Provable language" is not "everything in
@@ -1168,26 +1173,14 @@ rest of Phase 5 stays after that slab in the same linear queue.
     `concrete test --json` with a stable event stream comparable to Go's
     `test2json`: discovered, started, passed, failed, skipped, expected-failed,
     oracle-compared, policy-blocked, and proof-status events.
-    - 26a. Add contract-guided property fuzzing as part of the same testing
-      surface: `concrete test --fuzz` generates inputs satisfying a function's
-      `#[requires(...)]` preconditions and checks `#[ensures(...)]`
-      postconditions in the interpreter (and optionally against the compiled
-      binary through the differential harness). This is distinct from the
-      Phase 4 compiler fuzzers (#33-#34, which fuzz the compiler itself): it
-      fuzzes USER programs, turning every contracted-but-unproved function
-      into `tested_by_oracle` evidence at zero additional annotation cost —
-      the cheapest way to widen the evidence pyramid below `proved`. Failures
-      must minimize to a concrete counterexample input, render as an ordinary
-      test failure with the violated clause and source span, and be storable
-      as a regression fixture. Audit output must record the evidence honestly
-      (`tested_by_oracle` with input-generation strategy and iteration count),
-      never as a proof. Add `docs/CONTRACT_FUZZING.md`,
-      `examples/contract_fuzz/{passing,ensures_violation,unsatisfiable_requires}/`,
-      and `scripts/tests/check_contract_fuzz.sh`; the gate must show a seeded
-      violation is found and minimized, an unsatisfiable precondition is
-      reported as such (not silently zero iterations / false green), and the
-      resulting evidence class appears in the obligation ledger and audit
-      report.
+    - 26a. The testing-framework UX must leave room for contract/property
+      fuzzing — the actual implementation is Phase 9 #11 (`concrete test
+      --contracts --property`, evidence class `tested_by_property`), not a
+      second command here. Concretely: the `concrete test` event stream and
+      `--json` schema must be able to carry property/fuzz cases (seed,
+      generator profile, case count, shrunk witness, evidence class) without a
+      schema break when Phase 9 #11 lands. Do NOT add a separate `concrete
+      test --fuzz` surface; this item only reserves the UX space.
 27. Add `concrete lint` / `concrete vet` before public examples grow:
     semantic warnings that are not type errors, including ignored fallible
     results, suspicious capabilities, unreachable contracts, redundant

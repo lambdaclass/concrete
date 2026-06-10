@@ -51,10 +51,10 @@ else
 fi
 
 DIV_REP="$("$COMPILER" "$DIV/src/main.con" --report contracts 2>&1)"
-if printf '%s' "$DIV_REP" | grep -qi "division: non-zero divisor"; then
-  ok "compiler generates the division non-zero-divisor obligation"
+if printf '%s' "$DIV_REP" | grep -qi "VIOLATION: division by zero (constant divisor)"; then
+  ok "compiler classifies the literal 10/0 as VIOLATION (proven, not unproven)"
 else
-  no "division obligation no longer generated — detection regressed"
+  no "literal div-by-zero is no longer detected as a VIOLATION — detection regressed"
 fi
 
 echo ""

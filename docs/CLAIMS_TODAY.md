@@ -63,7 +63,11 @@ soundness for aggregate-wrapped returned refs from these APIs.
 - Termination (no loop/recursion termination analysis)
 - Formal proof of checker soundness (tested adversarially, not mechanized)
 
-References: [GUARANTEE_STATEMENT.md](GUARANTEE_STATEMENT.md), [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md), [SAFETY.md](SAFETY.md)
+The complete, current list of tracked soundness/dark-construct holes (with
+their gates and scheduled fixes) lives in one place:
+[KNOWN_HOLES.md](KNOWN_HOLES.md).
+
+References: [GUARANTEE_STATEMENT.md](GUARANTEE_STATEMENT.md), [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md), [SAFETY.md](SAFETY.md), [KNOWN_HOLES.md](KNOWN_HOLES.md)
 
 ---
 
