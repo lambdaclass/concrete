@@ -1,0 +1,38 @@
+// Known soundness hole: returned-reference provenance is not tracked.
+//
+// `HashMap::get_mut` returns `Option<&mut V>` into the table storage. The
+// checker currently does not freeze `m` while the returned reference lives,
+// because the reference is returned by a function call and hidden inside
+// `Option`. Insertions may grow/rehash the table, so writing through the saved
+// reference can target stale storage.
+//
+// This project is expected to BUILD until returned references require explicit
+// `from(self)` provenance and aggregate-wrapped refs are rejected.
+
+mod returned_ref_hole {
+    import std.map.{HashMap};
+    import std.hash.{hash_i32, eq_i32};
+
+    pub fn main() with(Alloc, Unsafe) -> Int {
+        let mut m: HashMap<i32, i32> = HashMap::<i32, i32>::new(hash_i32, eq_i32);
+        m.insert(1, 10);
+
+        let k: i32 = 1;
+        let saved: Option<&mut i32> = m.get_mut(&k);
+
+        let mut i: i32 = 2;
+        while i < 80 {
+            m.insert(i, i);
+            i = i + 1;
+        }
+
+        let mut status: Int = 0;
+        match saved {
+            Option::Some { value } => { *value = 99; }
+            Option::None => { status = 1; }
+        }
+
+        m.drop();
+        return status;
+    }
+}

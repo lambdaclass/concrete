@@ -31,6 +31,20 @@ For safe code that passes the checker, the compiler enforces at compile time:
 
 **Claim class:** Enforced. The program cannot violate these and compile.
 
+**Known exception under active tracking (2026-06-09): returned references from
+stdlib APIs.** Borrow-block references are scoped and frozen correctly, but the
+current checker does not yet track provenance for references returned by
+function calls and wrapped in aggregates such as `Option<&T>` or
+`Option<&mut T>`. Existing stdlib APIs including `HashMap::get`,
+`HashMap::get_mut`, `OrderedMap::get`, `Vec::get`, `Slice::get`, `Deque::get`,
+and `BinaryHeap::peek` expose this shape. A saved reference can survive an
+owner mutation that reallocates, removes, or reuses storage. This is tracked by
+`examples/known_holes/returned_ref_provenance_{map,vec}/` and
+`scripts/tests/check_returned_ref_provenance.sh`. Until scalar `from(param)`
+returned-reference provenance lands and aggregate-wrapped refs are rejected,
+"No dangling safe reference" means borrow-block references and does not claim
+soundness for aggregate-wrapped returned refs from these APIs.
+
 **What enforced does NOT cover:**
 - Runtime bounds checking (array access through checked APIs returns `Option`; unchecked is UB)
 - Integer overflow (wraps silently — runtime property)

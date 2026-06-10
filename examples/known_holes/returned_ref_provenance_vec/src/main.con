@@ -1,0 +1,36 @@
+// Known soundness hole: aggregate-wrapped returned refs lose provenance.
+//
+// The general bad shape is `Option<&T>` / `Option<&mut T>` (or any aggregate
+// containing a returned ref). The checker does not know the returned reference
+// keeps the owner borrowed, so later owner mutation can invalidate the saved
+// reference. This fixture uses `Vec::get` plus `push` growth to pin the class,
+// not only the HashMap-specific `get_mut` case.
+//
+// This project is expected to BUILD until safe public APIs stop returning refs
+// inside aggregates and scalar returned refs use explicit `from(owner)`.
+
+mod returned_ref_aggregate_hole {
+    import std.vec.{Vec};
+
+    pub fn main() with(Alloc) -> Int {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(7);
+
+        let saved: Option<&i32> = v.get(0);
+
+        let mut i: i32 = 0;
+        while i < 80 {
+            v.push(i);
+            i = i + 1;
+        }
+
+        let mut out: Int = 0;
+        match saved {
+            Option::Some { value } => { out = (*value) as Int; }
+            Option::None => { out = 1; }
+        }
+
+        v.drop();
+        return out - out;
+    }
+}

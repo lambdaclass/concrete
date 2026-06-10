@@ -1057,12 +1057,25 @@ rest of Phase 5 stays after that slab in the same linear queue.
     whether proofs are per monomorphized instance, generic once, or generic
     contracts with instance-level proof artifacts. Audit output must
     distinguish `proved_for_instance` from any future `proved_generic` class.
+    Returned-reference provenance belongs in this same design because current
+    stdlib APIs already expose the unsound informal version:
+    `get`/`get_mut`-style functions return refs inside `Option`, and the owner
+    is not frozen while the returned ref lives. The v1 rule must be scalar-only
+    and flat: a returned reference may be written as `&T from(param)` or
+    `&mut T from(param)`, may only live as a scalar binding inside the
+    originating borrow scope, and may never enter `Option`, `Result`, structs,
+    arrays, containers, callback contexts, or generic wrappers. Partiality must
+    be expressed with `#[requires(...)]`, not `Option<&T>`. The first consumer
+    is collection access, e.g.
+    `#[requires(i < v.len())] fn get_ref<T>(v: &Vec<T>, i: u64) -> &T from(v)`.
     Add `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`,
     `examples/callbacks/{bare_fn,bound_shared,bound_mut,bound_once,cap_polymorphic_map}/`,
     and `scripts/tests/check_callable_values.sh`; the gate must prove hidden
     captures are rejected, callback capabilities are not erased, context
     resources remain visible, the three consumption modes behave differently,
-    and proof/evidence reports name the instantiated callable shape.
+    `from` refs cannot be wrapped/captured/stored, nested projections
+    `sub(sub(buf, ...), ...)` keep source provenance, and proof/evidence
+    reports name the instantiated callable shape.
     - 24a (design gate — prerequisite, not implementation). The widened design
       doc (`docs/CALLABLE_VALUES_AND_CAPABILITIES.md`) must exist BEFORE the
       Phase 6 stdlib iteration/HOF surface lands. Today's stdlib
@@ -1261,6 +1274,30 @@ class and authority/allocation story.
    stable ordering helpers for ordered collections. Each API must state whether
    it requires `with(Alloc)`, whether it can fail, and which runtime
    obligations it creates.
+   - 8a. Release blocker: collection APIs must not freeze while public safe
+     APIs return aggregate-wrapped references such as `Option<&T>`,
+     `Option<&mut T>`, `Result<&T, E>`, or aliases/structs/containers hiding
+     those forms. The current stdlib has this known hole (`HashMap::get`,
+     `HashMap::get_mut`, `OrderedMap::get`, `Vec::get`, `Slice::get`,
+     `Deque::get`, `BinaryHeap::peek`, etc.). Until the callable-values design
+     lands scalar `from(param)` returned references, either withdraw/rename the
+     APIs as unsafe/trusted, replace them with copying/owned-view APIs, or
+     rewrite them as preconditioned scalar returned refs. Keep
+     `scripts/tests/check_returned_ref_provenance.sh` wired: it must reproduce
+     the known hole, freeze the existing violation baseline, reject new public
+     aggregate-ref APIs, and keep a positive case showing bare scalar `-> &T`
+     is not the banned shape.
+   - 8b. Design arena/index safety before any arena-backed structure becomes a
+     flagship or stable stdlib API. Array-backed linked structures use indices,
+     and a stale index into a removed/reused slot is a logic-level dangling
+     pointer that ordinary ownership does not see. V1 answer should compare
+     typed index newtypes (`NodeId`, not `u64`), generation-counted slots,
+     arena validity invariants, and proof obligations that inject newtype
+     invariants as scoped hypotheses. Add
+     `docs/ARENA_INDEX_SAFETY.md`, `examples/arena_indices/{stale_index,generation_checked,typed_node_id}/`,
+     and `scripts/tests/check_arena_index_safety.sh`; the gate must prove stale
+     index reuse is rejected, trapped, or explicitly trusted, never silently
+     treated as ordinary memory-safe access.
 9. Build iterator and builder APIs in proposed `std.iter` and `std.builder`
    after the collection shape is known: `Iter<T>`-style adapters,
    `fold`/`map`/`filter`/`take`/`drop`, known-length reporting, byte/text
