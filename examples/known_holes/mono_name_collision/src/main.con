@@ -1,0 +1,29 @@
+// Known soundness hole: monomorphization name mangling discards nested type
+// arguments, so distinct types with the same head constructor collide into ONE
+// specialization and ONE LLVM struct type — a silent miscompile.
+//
+// `Hold<Pair<i64>>` (inner layout 16 bytes) and `Hold<Pair<bool>>` (inner
+// layout 2 bytes) both mangle to `tag_for_Pair` taking one `%Hold_Pair` type.
+// `--emit-ssa` shows `store %Pair_Int ... %Hold_Pair` AND
+// `store %Pair_Bool ... %Hold_Pair` — the same struct type holding two
+// different layouts, both passed to the single merged function. The body here
+// returns a constant so nothing dereferences the mismatched bytes, but any
+// field access or by-value ABI pass corrupts memory.
+//
+// Compiled standalone (not project mode): the `mod` wrapper trips a separate
+// nested-generic lowering error (E0602), unrelated to this collision.
+//
+// Expected to BUILD until mono mangling keys on the FULL type (nested args),
+// not just the head constructor. Tracked by
+// scripts/tests/check_mono_name_collision.sh.
+
+struct Copy Pair<T> { a: T, b: T }
+struct Copy Hold<T> { item: T }
+
+fn tag<T>(h: Hold<T>) -> i64 { return 9; }
+
+fn main() -> i64 {
+    let a: Hold<Pair<i64>>  = Hold::<Pair<i64>>  { item: Pair::<i64>  { a: 1, b: 2 } };
+    let b: Hold<Pair<bool>> = Hold::<Pair<bool>> { item: Pair::<bool> { a: true, b: false } };
+    return tag(a) + tag(b);
+}

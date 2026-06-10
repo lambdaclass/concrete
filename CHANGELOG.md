@@ -96,6 +96,19 @@ tracked, gated holes:
   `CLAIMS_TODAY.md` disclosure, and ROADMAP Phase 12 #0 (proven violations
   become hard errors by default in safe code, pulled to the front of the
   phase).
+- **Monomorphization name-collision hole tracked** (NOT fixed; most severe
+  finding — a silent miscompile): mono mangles a specialization by the HEAD
+  constructor of the type argument and discards nested args, so
+  `tag<Hold<Pair<i64>>>` and `tag<Hold<Pair<bool>>>` collapse into one
+  `tag_for_Pair` over one `%Hold_Pair` struct type despite different layouts
+  (16B vs 2B inner) — ABI corruption when a field is touched. SSA-verify
+  (E0715) catches only the type-revealing subset. Hits common shapes
+  (`Vec<Pair<A>>` vs `Vec<Pair<B>>`). Known-hole fixture
+  (`examples/known_holes/mono_name_collision/`), gate
+  (`check_mono_name_collision.sh`: builds the collision, proves two inner
+  layouts exist yet one specialization is emitted), `CLAIMS_TODAY.md`
+  disclosure, and ROADMAP Phase 4 #44a (mangle by the full monomorphized
+  type) as the highest-priority compiler fix.
 - **`docs/KNOWN_HOLES.md`**: single canonical index of every tracked
   soundness/dark-construct gap — state (OPEN/CLOSED), reproducing fixture,
   locking gate, scheduled fix — replacing the scatter across claims

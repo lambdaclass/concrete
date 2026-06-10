@@ -318,6 +318,9 @@ jobs:
       - name: Proven-violation enforcement known-hole gate (constant OOB / div-zero)
         run: bash scripts/tests/check_proven_violation_enforcement.sh
 
+      - name: Mono name-collision known-hole gate (nested-generic specialization merge)
+        run: bash scripts/tests/check_mono_name_collision.sh
+
       - name: CLI-plumbing gate (Phase 4 #14a — shared prologue + exit-code taxonomy)
         run: bash scripts/tests/check_cli_plumbing.sh
 

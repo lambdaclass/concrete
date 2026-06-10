@@ -48,6 +48,16 @@ soundness for aggregate-wrapped returned refs from these APIs.
 **What enforced does NOT cover:**
 - Runtime bounds checking (array access through checked APIs returns `Option`; unchecked is UB)
 - Integer overflow (wraps silently — runtime property)
+- **Monomorphization name collision (silent miscompile, known hole,
+  2026-06-10):** nested-generic specializations whose type argument shares a
+  head constructor but differs in nested arguments
+  (`Hold<Pair<i64>>` vs `Hold<Pair<bool>>`) collapse into one mangled function
+  and one struct type with conflated layouts — ABI corruption when a field is
+  touched. Affects common shapes like `Vec<Pair<A>>` vs `Vec<Pair<B>>`. Tracked
+  by `examples/known_holes/mono_name_collision/` and
+  `scripts/tests/check_mono_name_collision.sh`; fix is ROADMAP Phase 4 #44a
+  (mangle by the full monomorphized type). Avoid two instantiations of the same
+  generic that differ only in a nested type argument until then.
 - **Compile-time-proven safety violations are not yet rejected by default**
   (known hole, 2026-06-10): a runtime-safety obligation the compiler
   discharges to `violation` — e.g. a constant index proven out of bounds

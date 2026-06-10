@@ -64,6 +64,37 @@ distinct from `unproven` (an undischarged obligation, reasonably policy-gated).
   in safe code, suppressible only via `trusted`/`with(Unsafe)` or a named
   assumption; `unproven` is NOT swept into the same path.
 
+### H3. Monomorphization name collision — silent miscompile (most severe)
+
+Monomorphization mangles a specialization by the **head constructor** of the
+type argument, discarding nested type arguments. So `tag<Hold<Pair<i64>>>` and
+`tag<Hold<Pair<bool>>>` both mangle to one `tag_for_Pair` over one `%Hold_Pair`
+LLVM struct type — but `Hold<Pair<i64>>` (inner 16 bytes) and `Hold<Pair<bool>>`
+(inner 2 bytes) have **different layouts**. One function body and one struct
+type for two distinct-layout types is a silent miscompile: ABI corruption the
+moment a field is touched or the value is passed by value. `--report mono`
+shows `Specializations: 1` (`tag<Pair> -> tag_for_Pair`) for two distinct
+instantiations; `--emit-ssa` shows both `%Pair_Int` and `%Pair_Bool` stored
+into the single `%Hold_Pair`. This is the most severe open hole — a
+code-generation soundness bug, not a checker gap — and it hits very common
+shapes (`Vec<Pair<i64>>` vs `Vec<Pair<bool>>`, `Option<Box<A>>` vs
+`Option<Box<B>>`).
+
+- **State:** OPEN. Fail-open (silent miscompile) when layouts differ and the
+  body does not expose the type to SSA-verify; SSA-verify (E0715) catches only
+  the subset where the merged body has type-revealing field ops.
+- **Reproduce:** `examples/known_holes/mono_name_collision/` (builds today;
+  compile standalone — a `mod` wrapper trips a separate nested-generic
+  lowering error, E0602, which is a different fail-closed issue).
+- **Gate:** `scripts/tests/check_mono_name_collision.sh` — builds the
+  colliding program, proves two distinct inner layouts exist
+  (`%Pair_Int` + `%Pair_Bool`), and that exactly one `@tag_for_Pair` is
+  emitted; flips when full-type mangling emits two specializations.
+- **Disclosed:** `CLAIMS_TODAY.md` (§1, "what enforced does NOT cover").
+- **Fix:** ROADMAP Phase 4 #44a — mono mangling must key on the FULL
+  monomorphized type (nested args included), so `Hold_Pair_Int` and
+  `Hold_Pair_Bool` are distinct symbols/struct types.
+
 ---
 
 ## CLOSED this session (kept here so the fix can't silently regress)
