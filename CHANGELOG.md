@@ -96,19 +96,23 @@ tracked, gated holes:
   `CLAIMS_TODAY.md` disclosure, and ROADMAP Phase 12 #0 (proven violations
   become hard errors by default in safe code, pulled to the front of the
   phase).
-- **Monomorphization name-collision hole tracked** (NOT fixed; most severe
-  finding — a silent miscompile): mono mangles a specialization by the HEAD
-  constructor of the type argument and discards nested args, so
-  `tag<Hold<Pair<i64>>>` and `tag<Hold<Pair<bool>>>` collapse into one
-  `tag_for_Pair` over one `%Hold_Pair` struct type despite different layouts
-  (16B vs 2B inner) — ABI corruption when a field is touched. SSA-verify
-  (E0715) catches only the type-revealing subset. Hits common shapes
-  (`Vec<Pair<A>>` vs `Vec<Pair<B>>`). Known-hole fixture
-  (`examples/known_holes/mono_name_collision/`), gate
-  (`check_mono_name_collision.sh`: builds the collision, proves two inner
-  layouts exist yet one specialization is emitted), `CLAIMS_TODAY.md`
-  disclosure, and ROADMAP Phase 4 #44a (mangle by the full monomorphized
-  type) as the highest-priority compiler fix.
+- **Monomorphization name-collision miscompile FIXED** (most severe finding
+  of the audit — a silent miscompile): mono mangled a specialization by the
+  HEAD constructor of the type argument and discarded nested args, so
+  `tag<Hold<Pair<i64>>>` and `tag<Hold<Pair<bool>>>` collapsed into one
+  `tag_for_Pair` / one `%Hold_Pair` struct type despite different layouts
+  (16B vs 2B inner) — ABI corruption when a field is touched; arrays, refs,
+  pointers, and fn-types fell through to `"unknown"`, collapsing even more.
+  `tyToSuffix` (`Concrete/Mono.lean`) is now total and keys on the FULL type
+  with bracketed nested args (`Hold_T_Pair_T_Int_E_E`); both the function-name
+  and struct-name manglers route through it, so symbols and struct layouts
+  stay consistent and distinct. Full suite stayed 1548/0 across the
+  mangling-format change. Regression-locked by
+  `scripts/tests/check_mono_name_collision.sh` (now a positive gate: distinct
+  specializations, array type-args distinct, and an execution oracle proving a
+  field-touching body over both layouts returns the right value). ROADMAP
+  Phase 4 #44a. Adjacent, still open: the `mod`-wrapped form trips a separate
+  fail-closed E0602 in nested-generic struct lowering (#44b).
 - **`docs/KNOWN_HOLES.md`**: single canonical index of every tracked
   soundness/dark-construct gap — state (OPEN/CLOSED), reproducing fixture,
   locking gate, scheduled fix — replacing the scatter across claims

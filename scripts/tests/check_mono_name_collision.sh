@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
-# Monomorphization name-collision known-hole gate.
+# Monomorphization name-collision regression gate (ROADMAP Phase 4 #44a — FIXED
+# 2026-06-10).
 #
-# Mono mangles a specialization by the HEAD constructor of the type argument,
-# discarding nested type arguments. So `tag<Hold<Pair<i64>>>` and
-# `tag<Hold<Pair<bool>>>` both mangle to one `tag_for_Pair` over one
-# `%Hold_Pair` LLVM type — but those two types have different layouts (inner
-# Pair<i64> is 16 bytes, Pair<bool> is 2 bytes). One function body + one struct
-# type for two distinct-layout types is a silent miscompile (ABI corruption the
-# moment a field is touched or the value is passed by-value).
+# Mono used to mangle a specialization by the HEAD constructor of the type
+# argument, discarding nested args, so `tag<Hold<Pair<i64>>>` and
+# `tag<Hold<Pair<bool>>>` collapsed into one `tag_for_Pair` / one `%Hold_Pair`
+# despite different layouts — a silent miscompile. `tyToSuffix` now keys on the
+# FULL type (bracketed nested args), so distinct instantiations get distinct
+# symbols and struct types.
 #
-# This gate tracks the hole without pretending it is fixed:
-#   1. Reproduces it: the colliding program still builds.
-#   2. Proves the collision: two distinct inner layouts (%Pair_Int and
-#      %Pair_Bool) exist, yet exactly ONE `define @tag_for_Pair` is emitted.
-# When mangling keys on the full type, two distinct specializations will be
-# emitted; flip the merged-define assertion to expect 2 at that point.
+# This gate now proves the fix HOLDS:
+#   1. Two same-head/different-arg instantiations emit TWO distinct functions.
+#   2. Array type-args (formerly all "unknown") are distinct.
+#   3. Execution oracle: a field-touching body over the two distinct layouts
+#      returns the correct value (would corrupt under the old merge).
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -24,34 +23,58 @@ COMPILER="$ROOT_DIR/.lake/build/bin/concrete"
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 F="examples/known_holes/mono_name_collision/src/main.con"
 
-echo "=== known hole reproduces: colliding generic program still builds ==="
-if "$COMPILER" "$F" >/dev/null 2>&1; then
-  ok "Hold<Pair<i64>> + Hold<Pair<bool>> program builds (KNOWN HOLE)"
+echo "=== distinct specializations for same-head / different-arg type args ==="
+SSA="$("$COMPILER" "$F" --emit-ssa 2>&1)"
+DEFS="$(printf '%s' "$SSA" | grep -cE "^define i64 @tag_for_")"
+if [ "$DEFS" -ge 2 ]; then
+  ok "two distinct tag specializations emitted (Pair<i64> and Pair<bool> no longer merge)"
 else
-  no "colliding program no longer builds — flip this gate to expected-reject"
+  no "expected >=2 tag specializations, got $DEFS — name-collision miscompile may have regressed"
 fi
 rm -f examples/known_holes/mono_name_collision/src/main
 
-SSA="$("$COMPILER" "$F" --emit-ssa 2>&1)"
+echo "=== array type-args are distinct (formerly all 'unknown') ==="
+cat > "$TMP/arr.con" <<'EOF'
+struct Copy Box<T> { v: T }
+fn tag<T>(b: Box<T>) -> i64 { return 1; }
+fn main() -> i64 {
+    let a: Box<[i64; 2]>  = Box::<[i64; 2]>  { v: [10, 20] };
+    let b: Box<[bool; 2]> = Box::<[bool; 2]> { v: [true, false] };
+    return tag(a) + tag(b);
+}
+EOF
+ARR="$("$COMPILER" "$TMP/arr.con" --report mono 2>&1 | grep -E "Specializations:[[:space:]]+[0-9]" | grep -oE "[0-9]+")"
+[ "${ARR:-0}" -ge 2 ] && ok "array type-args specialize separately ($ARR)" \
+  || no "array type-args collapsed (got ${ARR:-0} specializations)"
+rm -f "$TMP/arr"
 
-echo "=== two distinct inner layouts exist ==="
-if printf '%s' "$SSA" | grep -q "%Pair_Int" && printf '%s' "$SSA" | grep -q "%Pair_Bool"; then
-  ok "both %Pair_Int (16B) and %Pair_Bool (2B) inner types are present"
+echo "=== execution oracle: field access over two distinct layouts returns the right value ==="
+cat > "$TMP/exec.con" <<'EOF'
+struct Copy Pair<T> { a: T, b: T }
+struct Copy Hold<T> { item: T }
+fn first_i64(h: Hold<Pair<i64>>) -> i64 { return h.item.a; }
+fn count<T>(h: Hold<T>, base: i64) -> i64 { return base; }
+fn main() -> i64 {
+    let big: Hold<Pair<i64>>    = Hold::<Pair<i64>>  { item: Pair::<i64>  { a: 100, b: 200 } };
+    let small: Hold<Pair<bool>> = Hold::<Pair<bool>> { item: Pair::<bool> { a: true, b: false } };
+    let x: i64 = count(big, 10);
+    let y: i64 = count(small, 20);
+    return first_i64(big) + x + y;
+}
+EOF
+if "$COMPILER" "$TMP/exec.con" -o "$TMP/exec" >/dev/null 2>&1; then
+  OUT="$("$TMP/exec" 2>/dev/null)"; RC=$?
+  if [ "$OUT" = "130" ] || [ "$RC" = "130" ]; then
+    ok "field-touching body over distinct layouts yields 130 (no ABI corruption)"
+  else
+    no "execution oracle gave stdout='$OUT' rc=$RC, expected 130 — possible layout corruption"
+  fi
 else
-  no "expected both Pair_Int and Pair_Bool inner types in the SSA"
-fi
-
-echo "=== the collision: one merged function body for two distinct types ==="
-DEFS="$(printf '%s' "$SSA" | grep -cE "^define i64 @tag_for_")"
-if [ "$DEFS" = "1" ]; then
-  ok "exactly one @tag_for_Pair emitted for two distinct Hold<Pair<…>> types (the bug)"
-elif [ "$DEFS" -ge 2 ]; then
-  no "two+ tag specializations emitted — collision appears FIXED; flip this gate"
-else
-  no "no tag specialization emitted — detection regressed (got $DEFS)"
+  no "execution oracle fixture failed to compile"
 fi
 
 echo ""

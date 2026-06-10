@@ -1,21 +1,15 @@
-// Known soundness hole: monomorphization name mangling discards nested type
-// arguments, so distinct types with the same head constructor collide into ONE
-// specialization and ONE LLVM struct type — a silent miscompile.
+// Regression fixture (FIXED 2026-06-10): monomorphization name mangling used to
+// discard nested type arguments, so distinct types with the same head
+// constructor collided into ONE specialization and ONE LLVM struct type — a
+// silent miscompile. `tyToSuffix` now keys on the FULL type (bracketed nested
+// args), so `Hold<Pair<i64>>` and `Hold<Pair<bool>>` mangle to distinct
+// symbols (`tag_for_Hold_T_Pair_T_Int_E_E` vs `..._Bool_E_E`) and distinct
+// struct types. scripts/tests/check_mono_name_collision.sh asserts the two
+// stay distinct and that a field-touching body over both layouts returns the
+// right value (would corrupt under the old merge).
 //
-// `Hold<Pair<i64>>` (inner layout 16 bytes) and `Hold<Pair<bool>>` (inner
-// layout 2 bytes) both mangle to `tag_for_Pair` taking one `%Hold_Pair` type.
-// `--emit-ssa` shows `store %Pair_Int ... %Hold_Pair` AND
-// `store %Pair_Bool ... %Hold_Pair` — the same struct type holding two
-// different layouts, both passed to the single merged function. The body here
-// returns a constant so nothing dereferences the mismatched bytes, but any
-// field access or by-value ABI pass corrupts memory.
-//
-// Compiled standalone (not project mode): the `mod` wrapper trips a separate
-// nested-generic lowering error (E0602), unrelated to this collision.
-//
-// Expected to BUILD until mono mangling keys on the FULL type (nested args),
-// not just the head constructor. Tracked by
-// scripts/tests/check_mono_name_collision.sh.
+// Compiled standalone (not project mode): the `mod` wrapper still trips a
+// separate, fail-closed nested-generic lowering error (E0602) — its own item.
 
 struct Copy Pair<T> { a: T, b: T }
 struct Copy Hold<T> { item: T }

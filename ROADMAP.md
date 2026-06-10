@@ -874,35 +874,27 @@ work depends on them.
     shipped gates. Done when docs cannot silently drift into user-facing claims
     that no command or fixture can replay.
 
-    NOTE — highest-priority open compiler bug, do this before the Phase 4
-    validation artifact (#45):
-    - 44a. Fix the monomorphization name collision (a silent miscompile).
-      Mono mangles a specialization by the HEAD constructor of the type
-      argument and discards nested type arguments, so two distinct types that
-      share a head collapse into one function and one struct layout:
-      `tag<Hold<Pair<i64>>>` and `tag<Hold<Pair<bool>>>` both become
-      `tag_for_Pair` over one `%Hold_Pair`, but their layouts differ (inner
-      16 bytes vs 2 bytes). One body + one struct type for two layouts is ABI
-      corruption the moment a field is touched or the value is passed by
-      value. SSA-verify (E0715) catches only the subset where the merged body
-      has type-revealing field ops; the rest miscompiles silently. This hits
-      very common shapes (`Vec<Pair<A>>` vs `Vec<Pair<B>>`,
-      `Option<Box<A>>` vs `Option<Box<B>>`), so it blocks any real generic
-      code and must be fixed before the Phase 5/6 generic/collection surface
-      is built on top of it. Fix: mangle by the FULL monomorphized type
-      (recurse into nested type arguments) so `Hold_Pair_Int` and
-      `Hold_Pair_Bool` are distinct symbols and distinct struct types; the
-      same keying must flow into the SSA type names, layout, and the mono
-      report. Tracked now as a known hole:
-      `examples/known_holes/mono_name_collision/`,
-      `scripts/tests/check_mono_name_collision.sh` (reproduces the merge;
-      flips to expect two specializations when fixed), and the
-      `CLAIMS_TODAY.md` disclosure. The fix gate must prove two same-head
-      different-arg instantiations get distinct symbols and distinct layouts,
-      and that a field-touching body returns the right value for each.
-      (Separately, the `mod`-wrapped form of this program trips E0602 in
-      nested-generic struct lowering — a distinct, fail-closed bug worth its
-      own fixture when 44a is done.)
+    - 44a. [DONE 2026-06-10] Fixed the monomorphization name collision (a
+      silent miscompile). Mono mangled a specialization by the HEAD constructor
+      of the type argument and discarded nested args, so `tag<Hold<Pair<i64>>>`
+      and `tag<Hold<Pair<bool>>>` collapsed into one `tag_for_Pair` / one
+      `%Hold_Pair` despite different layouts (16B vs 2B inner) — ABI corruption
+      on field access; arrays/refs/pointers/fn-types fell through to "unknown",
+      collapsing more. `tyToSuffix` (`Concrete/Mono.lean`) is now total and
+      keys on the FULL type with bracketed nested args
+      (`Hold_T_Pair_T_Int_E_E`); both the function-name and struct-name
+      manglers route through it. Regression-locked by
+      `scripts/tests/check_mono_name_collision.sh` (distinct specializations,
+      array type-args distinct, and an execution oracle proving a
+      field-touching body over both layouts returns the right value).
+    - 44b. [OPEN] Fix the adjacent nested-generic struct lowering error
+      surfaced while fixing 44a: the `mod`-wrapped form of a doubly-nested
+      generic struct (`mod m { struct Hold<T>… }` with `Hold<Pair<i64>>`)
+      trips `E0602 Lower.lookupStructFields: struct 'Hold_Pair' not found`.
+      Fail-closed (it rejects, no miscompile), but it blocks legitimate
+      nested-generic code inside modules. Add a fixture and fix the
+      mono-struct registration so nested-generic struct defs inside modules
+      are found at lowering.
 45. Add the Phase 4 validation artifact:
     `examples/compiler_pipeline_probe/` plus
     `scripts/tests/check_phase4_pipeline.sh`. The fixture must run

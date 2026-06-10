@@ -227,7 +227,14 @@ end
 -- ============================================================
 
 /-- Produce a human-readable type suffix for mono name. -/
-private def tyToSuffix : Ty → String
+-- Mangle a type into an identifier-safe suffix. MUST be total and injective:
+-- two distinct monomorphized types must never produce the same suffix, or
+-- their specializations and struct layouts collide into one (a silent
+-- miscompile — see ROADMAP Phase 4 #44a). Compound types are bracketed
+-- (`_T_ … _E`) so a generic like `Pair<Int>` cannot collide with a flat
+-- user type literally named `Pair_Int`. `partial` because it recurses through
+-- `List Ty` in `.generic`/`.fn_`.
+private partial def tyToSuffix : Ty → String
   | .int => "Int"
   | .uint => "Uint"
   | .i8 => "i8"
@@ -240,12 +247,22 @@ private def tyToSuffix : Ty → String
   | .float64 => "Float64"
   | .float32 => "Float32"
   | .char => "Char"
+  | .unit => "Unit"
+  | .never => "Never"
   | .string => "String"
   | .named n => n
-  | .generic n _ => n
-  | .heap t => "Heap_" ++ tyToSuffix t
-  | .heapArray t => "HeapArray_" ++ tyToSuffix t
-  | _ => "unknown"
+  | .typeVar n => "TV_" ++ n          -- should not survive mono; encoded for safety
+  | .placeholder => "Placeholder"     -- ditto
+  | .generic n args => n ++ "_T_" ++ "_".intercalate (args.map tyToSuffix) ++ "_E"
+  | .array elem size => "Arr" ++ toString size ++ "_T_" ++ tyToSuffix elem ++ "_E"
+  | .ref t => "Ref_T_" ++ tyToSuffix t ++ "_E"
+  | .refMut t => "RefMut_T_" ++ tyToSuffix t ++ "_E"
+  | .ptrMut t => "PtrMut_T_" ++ tyToSuffix t ++ "_E"
+  | .ptrConst t => "PtrConst_T_" ++ tyToSuffix t ++ "_E"
+  | .heap t => "Heap_T_" ++ tyToSuffix t ++ "_E"
+  | .heapArray t => "HeapArray_T_" ++ tyToSuffix t ++ "_E"
+  | .fn_ params _ ret =>
+    "Fn_T_" ++ "_".intercalate (params.map tyToSuffix) ++ "_to_" ++ tyToSuffix ret ++ "_E"
 
 /-- Compute monomorphized function name: `fnName_for_T1_T2`. -/
 private def monoNameFor (fnName : String) (typeArgs : List Ty) : String :=
