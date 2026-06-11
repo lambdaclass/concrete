@@ -1,5 +1,5 @@
-// Known hole (unsafe path): a raw pointer to a LOCAL variable does not alias
-// the local. Local scalars are lowered as SSA register values, not addressable
+// Regression fixture (FIXED 2026-06-11, ROADMAP #44d): a raw pointer to a
+// LOCAL now aliases the local — returns 99. Previously it returned 1 because Local scalars are lowered as SSA register values, not addressable
 // stack slots, so `&mut x as *mut i64` materializes a pointer to a COPY. A
 // store through that pointer is consistent with reads through the SAME pointer
 // (store-then-load-through-ptr works), but the local `x` read directly is
@@ -9,8 +9,8 @@
 // Same root as the (now fixed) nested-place miscompile: locals are not
 // addressable. The fix is to promote address-taken locals to stack allocas.
 //
-// Expected to BUILD and return 1 (stale) instead of 99 until address-taken
-// locals are promoted. Tracked by scripts/tests/check_raw_ptr_to_local.sh.
+// Address-taken locals are now promoted to stack allocas, so `&mut x`/`*mut`
+// yield a real address. Tracked by scripts/tests/check_raw_ptr_to_local.sh.
 
 trusted fn store(p: *mut i64, val: i64) -> i64 { *p = val; return 0; }
 

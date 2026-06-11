@@ -390,6 +390,33 @@ private def snapshotVars : LowerM (List (String × SVal)) := do
 -- Expression and statement lowering
 -- ============================================================
 
+/-- Address-of a LOCAL variable. Returns a pointer (retyped to `refTy`) to the
+    local's stable storage, promoting the local to a stack alloca on first
+    address-take so that the pointer actually aliases the variable. Reads and
+    writes of the local then route through the alloca via `lookupVar`/`setVar`.
+    Returns `none` for non-local or already-addressable inners (arrays, refs,
+    pointers, heap), which the caller handles by its existing logic.
+    (ROADMAP Phase 4 #44d — fixes raw-pointer / `&mut`-to-local not aliasing.) -/
+private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := do
+  match inner with
+  | .ident name varTy =>
+    match varTy with
+    -- arrays are already stack-allocated; refs/ptrs/heap are already pointers
+    | .array _ _ | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ => return none
+    | _ =>
+      match ← isPromoted name with
+      | some (reg, _) => return some (.reg reg refTy)
+      | none =>
+        let cur ← lookupVar name
+        let slot ← freshReg "addr."
+        emitEntryAlloca (.alloca slot varTy)
+        match cur with
+        | some cv => emit (.store cv (.reg slot varTy))
+        | none => pure ()
+        addPromotedAlloca name slot varTy
+        return some (.reg slot refTy)
+  | _ => return none
+
 mutual
 
 partial def lowerExpr (e : CExpr) : LowerM SVal := do
@@ -906,6 +933,14 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       return .unit
 
   | .borrow inner ty =>
+    -- Taking the address of a LOCAL must yield the address of that local's
+    -- storage, not a fresh copy — otherwise a pointer/ref to a local does not
+    -- alias the local (ROADMAP Phase 4 #44d / H5). Promote the local to a
+    -- stable alloca; `lookupVar`/`setVar` then route all reads/writes through
+    -- it, so the returned pointer aliases the variable.
+    match ← addrOfLocal inner ty with
+    | some p => return p
+    | none =>
     let iVal ← lowerExpr inner
     let innerTy := iVal.ty
     -- Special case: borrowing a string literal → strConstRef (no heap alloc)
@@ -931,6 +966,9 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       return .reg slot ty
 
   | .borrowMut inner ty =>
+    match ← addrOfLocal inner ty with
+    | some p => return p
+    | none =>
     let iVal ← lowerExpr inner
     let innerTy := iVal.ty
     match innerTy with

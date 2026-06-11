@@ -48,14 +48,6 @@ soundness for aggregate-wrapped returned refs from these APIs.
 **What enforced does NOT cover:**
 - Runtime bounds checking (array access through checked APIs returns `Option`; unchecked is UB)
 - Integer overflow (wraps silently — runtime property)
-- **Raw pointer to a local does not alias the local (unsafe path, known hole,
-  2026-06-10):** `&mut x as *mut i64` points at a copy (locals are SSA values,
-  not addressable slots), so a store through it does not reach `x`. Requires
-  `trusted` + raw pointers (audit-responsibility). Tracked by
-  `examples/known_holes/raw_ptr_to_local/` and
-  `scripts/tests/check_raw_ptr_to_local.sh`; fix is ROADMAP Phase 4 #44d.
-  (The related safe-code miscompile — nested place writes `o.inner.v = x` — is
-  now FIXED, #44c.)
 - Stack overflow (depends on OS guard page)
 - Termination (no loop/recursion termination analysis)
 - Formal proof of checker soundness (tested adversarially, not mechanized)

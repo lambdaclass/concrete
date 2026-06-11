@@ -917,17 +917,17 @@ work depends on them.
       aligned `Layout` offset reads use. Regression-locked by
       `scripts/tests/check_struct_field_layout.sh` (6 execution oracles). Full
       suite 1548/0.
-    - 44d. [OPEN] Promote address-taken locals to stack allocas. `&mut x as
-      *mut i64` materializes a pointer to a COPY of the local (locals are SSA
-      register values), so a store through it does not reach `x` — a raw
-      pointer to a local does not alias the local. Unsafe path (requires
-      `trusted` + raw pointers, audit-responsibility), but a real bug and the
-      remaining manifestation of the addressability root that #44c worked
-      around. Fix: lower locals whose address is taken (or that are assigned
-      through a pointer/place that escapes) into stack allocas so `&`/`&mut`/
-      `*mut` yield real addresses. Tracked:
-      `examples/known_holes/raw_ptr_to_local/` (returns 1 instead of 99) and
-      `scripts/tests/check_raw_ptr_to_local.sh`.
+    - 44d. [DONE 2026-06-11] Promote address-taken locals to stack allocas.
+      `&mut x`/`&x`/`*mut x` of a local used to materialize a pointer to a COPY
+      (locals were SSA register values), so a store through it did not reach
+      `x`. This was the architectural root that #44c (nested places) worked
+      around. Fix: `addrOfLocal` (`Concrete/Lower.lean`) promotes a local to a
+      stable stack alloca on first address-take and returns that address;
+      `lookupVar`/`setVar` already route reads/writes through promoted allocas,
+      so the pointer aliases the variable and writes before/after the
+      address-take compose correctly. Regression-locked by
+      `scripts/tests/check_raw_ptr_to_local.sh` (6 oracles). Full suite 1548/0;
+      codegen/nested-write/struct-layout gates unaffected.
     - 44b. [OPEN] Fix the adjacent nested-generic struct lowering error
       surfaced while fixing 44a: the `mod`-wrapped form of a doubly-nested
       generic struct (`mod m { struct Hold<T>… }` with `Hold<Pair<i64>>`)

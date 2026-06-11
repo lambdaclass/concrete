@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Address-of-local now aliases the local (2026-06-11)
+
+- **C8 CLOSED (was H5)**: `&mut x` / `&x` / `*mut x` of a local used to point at
+  a COPY — local scalars were lowered as SSA register values, not addressable
+  stack slots, so a store through the pointer never reached `x`. This was the
+  architectural root the nested-place fix (C5) worked around. Fixed:
+  `addrOfLocal` (`Concrete/Lower.lean`) promotes a local to a stable stack
+  alloca on first address-take; reads/writes of the local route through the
+  alloca, so the pointer aliases the variable and writes before/after the
+  address-take compose correctly.
+- Locked by `scripts/tests/check_raw_ptr_to_local.sh` (now a 6-oracle
+  regression gate; the former known-hole fixture returns 99). Full suite
+  1548/0; codegen / nested-write / struct-layout gates unaffected. ROADMAP
+  Phase 4 #44d.
+
 ### Runtime-safety hardening: proven violations are hard errors (2026-06-11)
 
 - **H2 CLOSED**: safe code with a runtime-safety obligation classified as

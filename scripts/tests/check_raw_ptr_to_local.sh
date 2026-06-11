@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
-# Raw-pointer-to-local known-hole gate (unsafe path).
+# Raw-pointer / address-of-local aliasing regression gate
+# (ROADMAP Phase 4 #44d — FIXED 2026-06-11).
 #
-# `&mut x as *mut i64` does not alias the local `x`: locals are SSA register
-# values, not addressable stack slots, so taking a raw pointer materializes a
-# pointer to a COPY. Store-then-load through the SAME pointer is consistent, but
-# the local read directly is unchanged. Requires trusted + raw pointers
-# (audit-responsibility), and shares the addressability root with the nested
-# place-write bug (now fixed); the fix here is promoting address-taken locals to
-# stack allocas.
-#
-# Tracks the hole: the fixture builds and returns 1 (stale). Also asserts that
-# store+load through the SAME pointer is internally consistent (returns 99),
-# isolating the bug to local aliasing rather than deref-store itself.
+# Locals used to be lowered as SSA register values, so `&mut x as *mut i64`
+# (and `&mut x`) materialized a pointer to a COPY — a store through it did not
+# reach `x`. Now address-of a local promotes it to a stable stack alloca, so
+# the pointer aliases the variable; reads/writes of the local route through the
+# alloca. This gate asserts the aliasing now holds.
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -23,34 +18,36 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
-F="examples/known_holes/raw_ptr_to_local/src/main.con"
-
-echo "=== known hole reproduces: raw ptr to local does not alias the local ==="
-if "$COMPILER" "$F" -o "$TMP/rpl" >/dev/null 2>&1; then
-  OUT="$("$TMP/rpl" 2>/dev/null)"; RC=$?; VAL="$OUT"; [ -z "$VAL" ] && VAL="$RC"
-  if [ "$VAL" = "1" ]; then
-    ok "store through &mut-local-ptr does not reach the local: returns 1 (KNOWN HOLE)"
-  elif [ "$VAL" = "99" ]; then
-    no "raw ptr to local now aliases (got 99) — FIXED; flip this gate to expect 99"
+run() {
+  local name="$1" src="$2" exp="$3"
+  printf '%s' "$src" > "$TMP/$name.con"
+  if "$COMPILER" "$TMP/$name.con" -o "$TMP/$name" >/dev/null 2>&1; then
+    local out rc val; out="$("$TMP/$name" 2>/dev/null)"; rc=$?; val="$out"; [ -z "$val" ] && val="$rc"
+    [ "$val" = "$exp" ] && ok "$name = $exp" || no "$name: got '$val' expect $exp (pointer not aliasing local?)"
   else
-    no "unexpected value '$VAL' (1 while broken, 99 when fixed)"
+    no "$name failed to compile"
   fi
-else
-  no "fixture failed to compile"
-fi
+}
 
-echo "=== deref store/load are internally consistent (isolates the bug to aliasing) ==="
-cat > "$TMP/rw.con" <<'EOF'
-trusted fn rw(p: *mut i64, val: i64) -> i64 { *p = val; return *p; }
-fn main() -> i64 { let mut x: i64 = 1; return rw(&mut x as *mut i64, 99); }
-EOF
-if "$COMPILER" "$TMP/rw.con" -o "$TMP/rw" >/dev/null 2>&1; then
-  OUT="$("$TMP/rw" 2>/dev/null)"; RC=$?; VAL="$OUT"; [ -z "$VAL" ] && VAL="$RC"
-  [ "$VAL" = "99" ] && ok "store+load through the same pointer is consistent (99)" \
-    || no "deref store/load inconsistent (got '$VAL') — wider than local aliasing"
-else
-  no "rw fixture failed to compile"
-fi
+echo "=== address-of a local aliases its storage ==="
+# canonical fixture (raw *mut through trusted)
+if "$COMPILER" examples/known_holes/raw_ptr_to_local/src/main.con -o "$TMP/canon" >/dev/null 2>&1; then
+  V="$("$TMP/canon" 2>/dev/null)"; [ -z "$V" ] && V=$?
+  [ "$V" = "99" ] && ok "raw-ptr-to-local fixture = 99 (aliases)" || no "fixture: got '$V' expect 99"
+else no "canonical fixture failed to compile"; fi
+
+run raw_ptr_store 'trusted fn store(p: *mut i64, v: i64) -> i64 { *p = v; return 0; }
+fn main() -> i64 { let mut x: i64 = 1; let _: i64 = store(&mut x as *mut i64, 99); return x; }' 99
+run mutref_via_fn 'fn setit(p: &mut i64) -> i64 { *p = 42; return 0; }
+fn main() -> i64 { let mut x: i64 = 1; let _: i64 = setit(&mut x); return x; }' 42
+run repeated_mutate 'trusted fn bump(p: *mut i64) -> i64 { *p = *p + 10; return 0; }
+fn main() -> i64 { let mut x: i64 = 5; let _: i64 = bump(&mut x as *mut i64); let _: i64 = bump(&mut x as *mut i64); return x; }' 25
+run writes_around_addrof 'fn setit(p: &mut i64) -> i64 { *p = 42; return 0; }
+fn main() -> i64 { let mut x: i64 = 1; x = x + 100; let _: i64 = setit(&mut x); x = x + 1; return x; }' 43
+
+echo "=== deref store/load consistent (kept from the original isolation) ==="
+run deref_consistent 'trusted fn rw(p: *mut i64, v: i64) -> i64 { *p = v; return *p; }
+fn main() -> i64 { let mut x: i64 = 1; return rw(&mut x as *mut i64, 99); }' 99
 
 echo ""
 echo "RAW-PTR-TO-LOCAL: PASS=$PASS FAIL=$FAIL"

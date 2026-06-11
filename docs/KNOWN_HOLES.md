@@ -43,30 +43,25 @@ code. Affected: `HashMap::get`/`get_mut`, `OrderedMap::get`/`get_mut`,
   (flat no-aggregate rule, partiality via `#[requires]`); Phase 6 #8a is the
   collections-freeze blocker that forces the fix before the stdlib freezes.
 
-### H5. Raw pointer to a local does not alias the local — unsafe path
-
-`&mut x as *mut i64` materializes a pointer to a **copy** of the local, because
-local scalars are lowered as SSA register values, not addressable stack slots.
-A store through that pointer is internally consistent (store-then-load through
-the SAME pointer works), but the local read directly is unchanged. Requires
-`trusted` + raw pointers (audit-responsibility per CLAIMS_TODAY), but still a
-real bug. Same addressability root as the (now fixed) nested place-write
-miscompile.
-
-- **State:** OPEN. Unsafe path; fail-open within `trusted` code.
-- **Reproduce:** `examples/known_holes/raw_ptr_to_local/` — returns 1 (stale)
-  instead of 99.
-- **Gate:** `scripts/tests/check_raw_ptr_to_local.sh` — asserts the local is
-  not aliased (returns 1) while broken, and that store+load through the same
-  pointer is consistent (isolating the bug to local aliasing); flips to 99
-  when fixed.
-- **Disclosed:** `CLAIMS_TODAY.md` (§1, "what enforced does NOT cover").
-- **Fix:** ROADMAP Phase 4 #44d — promote address-taken locals to stack
-  allocas so `&`/`&mut`/`*mut` of a local yield a real address.
-
 ---
 
 ## CLOSED this session (kept here so the fix can't silently regress)
+
+### C8. Address-of-local did not alias the local — CLOSED 2026-06-11 (was H5)
+
+`&mut x as *mut i64` (and `&mut x` / `&x`) materialized a pointer to a **copy**
+of the local, because local scalars were lowered as SSA register values, not
+addressable stack slots — a store through the pointer did not reach `x`. This
+was the architectural root that the nested-place fix (C5) worked around and the
+last manifestation of the addressability problem. Fixed: `addrOfLocal`
+(`Concrete/Lower.lean`) promotes a local to a stable stack alloca on first
+address-take, so the pointer aliases the variable; `lookupVar`/`setVar` route
+all reads/writes through the alloca, including writes before and after the
+address-take.
+- **Locked by:** `scripts/tests/check_raw_ptr_to_local.sh` (6 oracles: raw
+  `*mut` store, `&mut` via fn, repeated mutate, writes around the address-of,
+  deref consistency). Full suite 1548/0; codegen/nested-write/struct-layout
+  gates unaffected.
 
 ### C7. Proven safety violations not enforced — CLOSED 2026-06-11
 
@@ -111,9 +106,9 @@ base. `.fieldAssign` and `.arrayIndexAssign` now delegate to it.
 - **Locked by:** `scripts/tests/check_nested_field_write.sh` (9 execution
   oracles: nested field, array-elem-field, struct-array, triple-nest, 2D
   array, nested-via-&mut, plus single-level no-regression). Full suite 1548/0.
-- **Related still open:** H5 (raw pointer to a local) shares the
-  addressability root and is NOT fixed by this — it needs address-taken
-  locals promoted to allocas (#44d).
+- **Related:** the addressability root this worked around is now fixed
+  outright — see C8 (address-of-local), which promotes address-taken locals
+  to stack allocas.
 
 ### C4. Monomorphization name collision — CLOSED 2026-06-10 (was the most severe)
 
