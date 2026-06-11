@@ -181,7 +181,10 @@ tracked, gated holes:
     checks compile/reject/diagnostic and was blind to miscompiles (the class
     behind H3/C5/C6); this gate runs each program and asserts its result. A
     lightweight precursor to the full interpreter-vs-compiled differential
-    harness (ROADMAP Phase 4 #18).
+    harness (ROADMAP Phase 4 #18). Later grown to 33 fixtures, adding
+    mod-wrapped nested-generic cases that confirm #44b (the E0602
+    `Hold_Pair not found` lowering error) was the same head-only mangling
+    collision as #44a and is resolved by it.
 - **`docs/KNOWN_HOLES.md`**: single canonical index of every tracked
   soundness/dark-construct gap — state (OPEN/CLOSED), reproducing fixture,
   locking gate, scheduled fix — replacing the scatter across claims

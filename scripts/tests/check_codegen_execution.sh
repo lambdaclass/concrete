@@ -66,6 +66,9 @@ expect bool_field_between 30
 expect nested_field_write 7709
 expect array_elem_field 53
 expect two_d_write 99
+expect mod_nested_generic 42
+expect mod_two_instantiations 18
+expect mod_triple_nested 55
 
 echo ""
 echo "CODEGEN-EXECUTION: PASS=$PASS FAIL=$FAIL"

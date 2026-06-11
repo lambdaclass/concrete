@@ -1,0 +1,5 @@
+mod m {
+    struct Copy Box<T> { v: T }
+    fn unwrap(b: Box<Box<i64>>) -> i64 { return b.v.v; }
+    pub fn main() -> i64 { let x: Box<Box<i64>> = Box::<Box<i64>> { v: Box::<i64> { v: 55 } }; return unwrap(x); }
+}

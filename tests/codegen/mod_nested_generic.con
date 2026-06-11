@@ -1,0 +1,6 @@
+mod m {
+    struct Copy Pair<T> { a: T, b: T }
+    struct Copy Hold<T> { item: T }
+    fn first(h: Hold<Pair<i64>>) -> i64 { return h.item.a; }
+    pub fn main() -> i64 { let a: Hold<Pair<i64>> = Hold::<Pair<i64>> { item: Pair::<i64> { a: 42, b: 7 } }; return first(a); }
+}

@@ -928,14 +928,28 @@ work depends on them.
       address-take compose correctly. Regression-locked by
       `scripts/tests/check_raw_ptr_to_local.sh` (6 oracles). Full suite 1548/0;
       codegen/nested-write/struct-layout gates unaffected.
-    - 44b. [OPEN] Fix the adjacent nested-generic struct lowering error
-      surfaced while fixing 44a: the `mod`-wrapped form of a doubly-nested
-      generic struct (`mod m { struct Hold<T>… }` with `Hold<Pair<i64>>`)
-      trips `E0602 Lower.lookupStructFields: struct 'Hold_Pair' not found`.
-      Fail-closed (it rejects, no miscompile), but it blocks legitimate
-      nested-generic code inside modules. Add a fixture and fix the
-      mono-struct registration so nested-generic struct defs inside modules
-      are found at lowering.
+    - 44b. [DONE 2026-06-11 — resolved by 44a] The `mod`-wrapped doubly-nested
+      generic struct that tripped `E0602 Lower.lookupStructFields: struct
+      'Hold_Pair' not found` was a symptom of the SAME head-only mangling
+      collision as 44a: `Hold<Pair<i64>>` mangled to `Hold_Pair`, which did not
+      match the registered specialization, so lowering could not find it.
+      Full-type mangling (44a) gives it a distinct, registered name, so the
+      mod-wrapped forms now compile AND run correctly. Locked by
+      `tests/codegen/mod_{nested_generic,two_instantiations,triple_nested}.con`
+      in `check_codegen_execution.sh` (return 42 / 18 / 55).
+    - 44f. [OPEN] Turn the manual codegen sweep into a generative
+      lowering/codegen red-team. The fixed bugs in 44a/44c/44d/44e were all
+      ordinary constructs that the previous mostly-compile/reject suite did not
+      observe at runtime: nested generic names, compound lvalues, address-taken
+      locals, and mixed-width layout. Keep `check_codegen_execution.sh` as the
+      deterministic seed corpus, then add a small generated corpus over structs,
+      arrays, enums, modules, generics, nested fields, mutation, references,
+      raw-pointer casts inside `trusted`, and expected return values. Done when
+      the gate produces replayable minimized fixtures, records each seed in the
+      manifest, and catches a deliberately injected lowering/layout/name-mangle
+      mutation. This is the lightweight precursor to the full
+      interpreter-vs-compiled differential harness in item 18, not a
+      replacement for it.
 45. Add the Phase 4 validation artifact:
     `examples/compiler_pipeline_probe/` plus
     `scripts/tests/check_phase4_pipeline.sh`. The fixture must run
@@ -1204,6 +1218,12 @@ rest of Phase 5 stays after that slab in the same linear queue.
     from(Bytes) { ... }`) are explicitly deferred: record them as the escape
     valve if Phase 7 workloads prove owned views plus scalar `from(param)` refs
     insufficient, but do not add them as v1 syntax or patch them in ad hoc.
+    After the 44d addressability fix, this is the remaining serious
+    memory-safety design blocker: H1 is tracked and frozen, but not fixed.
+    Do not expand the public collection, iterator, callback, or bytes/text
+    surface with new borrowed-return APIs until this document exists and the
+    aggregate-ref freeze gate has either flipped to expected-reject or has a
+    named transition plan.
     Add `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`,
     `examples/callbacks/{bare_fn,bound_shared,bound_mut,bound_once,cap_polymorphic_map}/`,
     and `scripts/tests/check_callable_values.sh`; the gate must prove hidden
@@ -1439,6 +1459,17 @@ class and authority/allocation story.
      the known hole, freeze the existing violation baseline, reject new public
      aggregate-ref APIs, and keep a positive case showing bare scalar `-> &T`
      is not the banned shape.
+   - 8a1. Implement the returned-reference provenance transition after
+     `docs/CALLABLE_VALUES_AND_CAPABILITIES.md` lands. Migrate collection
+     accessors away from `Option<&T>` / `Option<&mut T>` as a safe public
+     borrowed-return shape: partial borrowed access must become scalar
+     `&T from(self)` / `&mut T from(self)` with an explicit `#[requires(...)]`
+     precondition, or an owned/copying checked API that returns `Option<T>` /
+     a value-level result. The compiler must reject refs nested inside
+     `Option`, `Result`, structs, arrays, containers, callback contexts, and
+     aliases at public safe boundaries; it must freeze the owner while a scalar
+     `from` ref lives; and `scripts/tests/check_returned_ref_provenance.sh`
+     must flip from known-hole reproduction to expected-reject.
    - 8b. Design arena/index safety before any arena-backed structure becomes a
      flagship or stable stdlib API. Array-backed linked structures use indices,
      and a stale index into a removed/reused slot is a logic-level dangling

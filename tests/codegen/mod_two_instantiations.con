@@ -1,0 +1,10 @@
+mod m {
+    struct Copy Pair<T> { a: T, b: T }
+    struct Copy Hold<T> { item: T }
+    fn tag<T>(h: Hold<T>) -> i64 { return 9; }
+    pub fn main() -> i64 {
+        let a: Hold<Pair<i64>>  = Hold::<Pair<i64>>  { item: Pair::<i64>  { a: 1, b: 2 } };
+        let b: Hold<Pair<bool>> = Hold::<Pair<bool>> { item: Pair::<bool> { a: true, b: false } };
+        return tag(a) + tag(b);
+    }
+}
