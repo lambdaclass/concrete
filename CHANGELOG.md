@@ -10,6 +10,25 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### H1 resolution decided + validated against workloads (2026-06-11, design)
+
+- Decided to fix H1 (returned-ref provenance) **by subtraction** — withdraw the
+  aggregate-ref APIs (`Option<&T>` / `Option<&mut T>`) and replace with three
+  API tiers (operation/value APIs → owned `ByteView` → scoped callbacks), with
+  scalar `from(param)` deferred as an evidence-driven escape valve. Rationale:
+  keeps the language smaller and avoids inventing a lifetime system under
+  another name; tier 1 needs no new language feature (`update(k, fn(V) -> V)`
+  moves the value, works for non-Copy, uses today's fn-pointers), decoupling
+  the soundness fix from the harder callable-values design.
+- **Validated the bet against real workloads** (the validation gate the
+  decision required): `lox` uses no map accessors; `kvstore` is already 100%
+  tier-1 (`contains`/`insert`/`remove`/`fold`, zero migration); `integrity` has
+  the single aggregate-ref call site in the examples — one `get -> Option<&String>`
+  for a hash compare inside a `match` arm where the `&String` never escapes
+  (the scoped-read case). No workload needs a borrowed reference to escape a
+  scope, so `from()` deferral is empirically justified. Recorded in ROADMAP
+  #8a/#8a1/#24, KNOWN_HOLES H1, CLAIMS_TODAY.
+
 ### Interpreter-vs-compiled differential gate + interpreter fixes (2026-06-11)
 
 - **`scripts/tests/check_codegen_differential.sh`** (#44f, precursor to #18):

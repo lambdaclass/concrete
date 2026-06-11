@@ -1484,11 +1484,17 @@ class and authority/allocation story.
      **non-Copy** value (value-`get` needs Copy; `update` consumes) waits for
      tier 3. Keep `scripts/tests/check_returned_ref_provenance.sh` wired
      throughout; it flips from known-hole reproduction to expected-reject once
-     tier 1 lands and the aggregate-ref APIs are gone. Validation gate before
-     freezing the choice: the `lox` runtime-heavy workload (uses
-     `HashMap<String, Value>` with non-Copy `Value`) must carry on tiers 1-2;
-     if it forces contortions, that is the evidence tier 3 / `from()` is needed
-     sooner.
+     tier 1 lands and the aggregate-ref APIs are gone.
+     VALIDATION RESULT (2026-06-11): the bet holds against real workloads.
+     `lox` uses no map accessors (array-backed). `kvstore` is already 100%
+     tier 1 (`contains` / `insert -> Option<String>` / `remove -> Option<String>`
+     / `fold`) — zero migration. `integrity` has the ONLY aggregate-ref call
+     site across the examples: one `get -> Option<&String>` used for a hash
+     equality compare inside a `match` arm — the `&String` never escapes the
+     scope. That is the textbook scoped-read case (tier-2 `with_value`, or a
+     tier-1 clone for the compare). No workload needs a borrowed reference to
+     ESCAPE a scope — the only thing `from()` would add — so deferring
+     `from()` is empirically justified, not just speculative.
    - 8a1. Scalar `from(param)` returned references are DEFERRED, not the v1
      fix (revised 2026-06-11). They are the evidence-driven escape valve, added
      only if real workloads prove operation APIs + owned views + scoped
