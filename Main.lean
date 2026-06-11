@@ -104,6 +104,17 @@ def runCmd (cmd : String) (args : Array String) : IO UInt32 := do
     IO.eprintln stderr
   return exitCode
 
+/-- Hard-error gate for runtime-safety obligations already classified as
+    `VIOLATION`. This is intentionally narrower than the contracts report:
+    `unproven` obligations remain report/policy facts, while `violation` means
+    the compiler proved the safe program is wrong. -/
+def enforceProvenRuntimeViolations (modules : List Module) (sourceMap : SourceMap) : IO Bool := do
+  let ds := Report.provenViolationDiagnostics modules
+  if hasErrors ds then
+    IO.eprintln (renderDiagnostics ds (sourceMap := sourceMap))
+    return false
+  return true
+
 /-- Validate LLVM IR via `llvm-as` (parse-only, no output).
     Returns true if valid or if llvm-as is not found on PATH.
     Returns false (and prints errors) if the IR is malformed. -/
@@ -130,7 +141,9 @@ def compileSSA (inputPath : String) (outputPath : String) (emitLLVM : Bool) : IO
   | .error ds =>
     IO.eprintln (renderDiagnostics ds (sourceMap := [(inputPath, source)]))
     return 1
-  | .ok (_, _, validCore, srcMap) =>
+  | .ok (parsed, _, validCore, srcMap) =>
+  if !(← enforceProvenRuntimeViolations parsed.modules srcMap) then
+    return 1
   match Pipeline.monomorphize validCore with
   | .error ds =>
     IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
@@ -187,7 +200,9 @@ def compileTest (inputPath : String) (moduleFilter : Option String := none) : IO
   | .error ds =>
     IO.eprintln (renderDiagnostics ds (sourceMap := [(inputPath, source)]))
     return 1
-  | .ok (_, _, validCore, srcMap) =>
+  | .ok (parsed, _, validCore, srcMap) =>
+  if !(← enforceProvenRuntimeViolations parsed.modules srcMap) then
+    return 1
   match Pipeline.monomorphize validCore with
   | .error ds =>
     IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
@@ -238,11 +253,13 @@ def compileAndEmit (inputPath : String) (mode : String) : IO UInt32 := do
   | .error ds =>
     IO.eprintln (renderDiagnostics ds (sourceMap := [(inputPath, source)]))
     return 1
-  | .ok (_, _, validCore, srcMap) =>
+  | .ok (parsed, _, validCore, srcMap) =>
     if mode == "core" then
       for cm in validCore.coreModules do
         IO.println (ppCModule cm)
       return 0
+    if !(← enforceProvenRuntimeViolations parsed.modules srcMap) then
+      return 1
     match Pipeline.monomorphize validCore with
     | .error ds =>
       IO.eprintln (renderDiagnostics ds (sourceMap := srcMap))
@@ -1327,6 +1344,8 @@ def compileBuild (projectRoot : String) (outputPath : Option String) (emitLLVM :
           policyLocMap, registry, pc, .. } := ctx
     -- [policy], location map, registry, and ProofCore all come from loadProject.
     for w in policyWarnings do IO.eprintln w
+    if !(← enforceProvenRuntimeViolations parsed.modules allSrcMap) then
+      return 1
     if !policy.isEmpty then
       let (vac, asm, st) ← computePolicyQuals policy parsed.modules depNames policyLocMap registry
       let policyDs := enforcePolicy policy validCore.coreModules
@@ -1389,6 +1408,8 @@ partial def compileTestBuild (projectRoot : String) (moduleFilter : Option Strin
           policyLocMap, registry, pc, .. } := ctx
     -- [policy], location map, registry, and ProofCore all come from loadProject.
     for w in policyWarnings do IO.eprintln w
+    if !(← enforceProvenRuntimeViolations parsed.modules allSrcMap) then
+      return 1
     if !policy.isEmpty then
       let (vac, asm, st) ← computePolicyQuals policy parsed.modules depNames policyLocMap registry
       let policyDs := enforcePolicy policy validCore.coreModules
@@ -1597,6 +1618,8 @@ def main (args : List String) : IO UInt32 := do
         -- [policy], location map, registry, ProofCore, and diagnostics all come from
         -- loadProject. Registry diagnostics are rendered FROM the ledger (Phase 4 #4).
         for w in policyWarnings do IO.eprintln w
+        if !(← enforceProvenRuntimeViolations parsed.modules allSrcMap) then
+          return 1
         for d in ledger.diagnostics do
           if d.code == "registry" then IO.eprintln d.message
         if !policy.isEmpty then

@@ -43,27 +43,6 @@ code. Affected: `HashMap::get`/`get_mut`, `OrderedMap::get`/`get_mut`,
   (flat no-aggregate rule, partiality via `#[requires]`); Phase 6 #8a is the
   collections-freeze blocker that forces the fix before the stdlib freezes.
 
-### H2. Proven safety violations are not enforced by default
-
-A runtime-safety obligation the compiler discharges to `violation` is a
-compile-time **proof** the access is wrong — but `violation` is currently only
-reported, not enforced, so safe code still compiles and ships UB. This is
-distinct from `unproven` (an undischarged obligation, reasonably policy-gated).
-
-- **State:** OPEN. Detection works; only enforcement is missing.
-- **Reproduce:** `examples/known_holes/proven_oob_index/` (`a[5]` on
-  `[i64; 3]` builds and does an out-of-bounds read) and
-  `examples/known_holes/proven_div_zero/` (`10 / 0` builds). Both show
-  `VIOLATION: …` in `concrete <file> --report contracts`.
-- **Gate:** `scripts/tests/check_proven_violation_enforcement.sh` — confirms
-  both still build (hole present) AND that each is classified `VIOLATION`
-  (proven, not `unproven`), so only enforcement is missing; flips to
-  expected-reject when the fix lands.
-- **Disclosed:** `CLAIMS_TODAY.md` (§1, "what enforced does NOT cover").
-- **Fix:** ROADMAP Phase 12 #0 — `status = violation` ⇒ hard error by default
-  in safe code, suppressible only via `trusted`/`with(Unsafe)` or a named
-  assumption; `unproven` is NOT swept into the same path.
-
 ### H5. Raw pointer to a local does not alias the local — unsafe path
 
 `&mut x as *mut i64` materializes a pointer to a **copy** of the local, because
@@ -88,6 +67,22 @@ miscompile.
 ---
 
 ## CLOSED this session (kept here so the fix can't silently regress)
+
+### C7. Proven safety violations not enforced — CLOSED 2026-06-11
+
+A runtime-safety obligation the compiler discharges to `violation` is a
+compile-time **proof** the access is wrong. Previously `violation` was only
+reported, so safe code with `a[5]` on `[i64; 3]` or `10 / 0` still built and
+shipped UB. Fixed: safe code with a proven runtime-safety violation now fails
+the build with E0900; `trusted` / `with(Unsafe)` code remains an explicit
+audit-responsibility escape hatch; `unproven` obligations remain reportable
+and are NOT swept into the hard-error path.
+- **Locked by:** `scripts/tests/check_proven_violation_enforcement.sh` —
+  rejects constant OOB and literal div-zero, confirms `trusted` and
+  `with(Unsafe)` exemptions, and confirms a variable-index `unproven`
+  obligation still builds.
+- **Fixtures:** `examples/known_holes/proven_{oob_index,div_zero}/` are now
+  expected-error regression fixtures.
 
 ### C6. Struct mixed-width field-layout miscompile — CLOSED 2026-06-10
 

@@ -5,7 +5,11 @@
 //   - bounded by a #[requires]  → proved_by_kernel_decision (omega): statically
 //     safe, no runtime check needed;
 //   - constant in range         → checked: in bounds (constant index);
-//   - constant out of range     → VIOLATION: out of bounds (the audit catches it);
+//   - constant out of range     → VIOLATION: out of bounds. In SAFE code this
+//     is now a hard build error (E0900); the `trusted` functions below opt out
+//     of that enforcement so this example can still SHOW the VIOLATION
+//     disposition in the report. See examples/known_holes/proven_oob_index for
+//     the safe-code rejection.
 //   - unbounded variable        → unproven: needs a precondition or runtime check.
 mod demo {
     // omega-proved: the precondition bounds the index, so the access is safe.
@@ -19,9 +23,10 @@ mod demo {
         return a[3];
     }
 
-    // DELIBERATE out-of-bounds constant: the audit reports VIOLATION rather than
-    // letting an OOB read through (today there is no other static bounds check).
-    fn oob(a: [i32; 8]) -> i32 {
+    // DELIBERATE out-of-bounds constant: `--report contracts` reports VIOLATION.
+    // In safe code this is now a hard error (E0900); `trusted` opts out so the
+    // example can still display the disposition (audit-responsibility).
+    trusted fn oob(a: [i32; 8]) -> i32 {
         return a[9];
     }
 
@@ -49,9 +54,10 @@ mod demo {
         return n / d;
     }
 
-    // DELIBERATE division by a zero constant: the audit reports VIOLATION
-    // rather than letting a trap through.
-    fn divz(n: i32) -> i32 {
+    // DELIBERATE division by a zero constant: `--report contracts` reports
+    // VIOLATION. Hard error (E0900) in safe code; `trusted` opts out so the
+    // example can still display the disposition.
+    trusted fn divz(n: i32) -> i32 {
         return n / 0;
     }
 

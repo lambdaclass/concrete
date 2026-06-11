@@ -2176,6 +2176,55 @@ def renderOverflow (obls : List OverflowObl) (provedKeys : List String)
     out := out ++ s!"\n  {Concrete.fmtExpr o.opExpr}  (range [{o.lo}, {o.hi}])\n    status: {status}"
   return out ++ "\n"
 
+/-- Runtime-safety obligations that have already been discharged to FALSE.
+    These are compile-time proofs that the safe program is wrong, not merely
+    `unproven` obligations. Build/check paths use this as a hard-error gate;
+    report paths still render the obligations so users can inspect them. -/
+def provenViolationDiagnostics (modules : List Module) : Diagnostics := Id.run do
+  -- Safe-code only: functions marked `trusted` or holding the `Unsafe`
+  -- capability carry audit responsibility and are exempt (ROADMAP Phase 12 #0).
+  let unsafeQuals : List String := (modules.flatMap allFunctions).filterMap fun (pfx, f) =>
+    if f.isTrusted || f.capSet.concreteCaps.contains "Unsafe" then some (pfx ++ f.name) else none
+  let mut ds : Diagnostics := []
+  for o in boundsObligations modules do
+    if o.closedVerdict == some false && !unsafeQuals.contains o.fnQual then
+      let d : Diagnostic := {
+        severity := .error,
+        message := s!"proven runtime-safety violation: {o.arrName}[{Concrete.fmtExpr o.idxExpr}] is always out of bounds for array size {o.size}",
+        pass := "runtime-safety",
+        span := some o.idxExpr.getSpan,
+        hint := some "fix the index, change the array size, or move this behind an explicit trusted/Unsafe boundary",
+        code := "E0900",
+        evidence := [("obligation", o.key), ("status", "violation"), ("kind", "array_bounds")]
+      }
+      ds := ds ++ [d]
+  for o in divObligations modules do
+    if o.closedVerdict == some false && !unsafeQuals.contains o.fnQual then
+      let opname := if o.isMod then "%" else "/"
+      let d : Diagnostic := {
+        severity := .error,
+        message := s!"proven runtime-safety violation: {opname} divisor {Concrete.fmtExpr o.divExpr} is always zero",
+        pass := "runtime-safety",
+        span := some o.divExpr.getSpan,
+        hint := some "require/prove a nonzero divisor, use a checked API, or move this behind an explicit trusted/Unsafe boundary",
+        code := "E0900",
+        evidence := [("obligation", o.key), ("status", "violation"), ("kind", "division_nonzero")]
+      }
+      ds := ds ++ [d]
+  for o in overflowObligations modules do
+    if o.closedVerdict == some false && !unsafeQuals.contains o.fnQual then
+      let d : Diagnostic := {
+        severity := .error,
+        message := s!"proven runtime-safety violation: {Concrete.fmtExpr o.opExpr} always overflows range [{o.lo}, {o.hi}]",
+        pass := "runtime-safety",
+        span := some o.opExpr.getSpan,
+        hint := some "widen the type, bound the operands, or use an explicit wrapping/checked arithmetic profile",
+        code := "E0900",
+        evidence := [("obligation", o.key), ("status", "violation"), ("kind", "integer_overflow")]
+      }
+      ds := ds ++ [d]
+  return ds
+
 /-- Stable identity for one loop obligation, shared by the goal collector and
     the renderer so discharge results map back to the right line. -/
 def loopVCKey (fnQual : String) (line : Nat) (obl : String) : String :=

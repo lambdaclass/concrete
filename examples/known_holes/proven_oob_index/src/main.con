@@ -1,15 +1,13 @@
-// Known soundness hole: a statically PROVEN safety violation compiles.
+// Regression fixture: a statically PROVEN safety violation must not compile.
 //
 // The compiler computes "VIOLATION: index out of bounds (constant index)" for
-// `a[5]` on `[i64; 3]` (see `concrete <file> --report contracts`), but the
-// build still succeeds and the binary performs an out-of-bounds read. A
+// `a[5]` on `[i64; 3]` (see `concrete <file> --report contracts`). A
 // discharged-to-`violation` obligation is a compile-time PROOF that the access
-// is always wrong — categorically different from an `unproven` obligation —
-// yet it is only reported, not enforced.
+// is always wrong — categorically different from an `unproven` obligation.
 //
-// Expected to BUILD until proven-violation obligations are hard errors by
-// default in safe code (suppressible only via trusted / with(Unsafe) / a named
-// assumption). Tracked by scripts/tests/check_proven_violation_enforcement.sh.
+// Expected to REJECT with E0900 in safe code. Tracked by
+// scripts/tests/check_proven_violation_enforcement.sh. (trusted/with(Unsafe)
+// code remains exempt; unproven obligations still compile.)
 
 mod proven_oob {
     pub fn main() -> Int {

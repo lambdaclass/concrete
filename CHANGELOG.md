@@ -10,6 +10,18 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Runtime-safety hardening: proven violations are hard errors (2026-06-11)
+
+- **H2 CLOSED**: safe code with a runtime-safety obligation classified as
+  `violation` now fails the build with E0900. Constant OOB (`a[5]` on
+  `[i64; 3]`) and literal div-zero (`10 / 0`) are compile-time proofs that the
+  program is wrong, not ordinary `unproven` obligations.
+- `trusted` / `with(Unsafe)` code remains an explicit audit-responsibility
+  escape hatch, and the regression gate proves both exemptions plus the fact
+  that `unproven` obligations are not swept into the hard-error path.
+- Locked by `scripts/tests/check_proven_violation_enforcement.sh`; the former
+  known-hole fixtures are now expected-error regression cases.
+
 ### Trust hardening sweep: capability hole closed, fingerprints cryptographic, axioms audited (2026-06-09/10)
 
 A full-project audit pass turned several silent gaps into shipped fixes or

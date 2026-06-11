@@ -83,8 +83,8 @@ examples/integrity/src/main.con project-build
 examples/json/main.con skip
 examples/known_holes/mono_name_collision/src/main.con skip
 examples/known_holes/nested_field_write/src/main.con skip
-examples/known_holes/proven_div_zero/src/main.con skip
-examples/known_holes/proven_oob_index/src/main.con skip
+examples/known_holes/proven_div_zero/src/main.con expected-error
+examples/known_holes/proven_oob_index/src/main.con expected-error
 examples/known_holes/raw_ptr_to_local/src/main.con skip
 examples/known_holes/returned_ref_provenance_map/src/main.con skip
 examples/known_holes/returned_ref_provenance_vec/src/main.con skip

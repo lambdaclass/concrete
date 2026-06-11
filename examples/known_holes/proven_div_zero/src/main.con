@@ -1,13 +1,12 @@
-// Known soundness hole: a literal divide-by-zero compiles.
+// Regression fixture: a literal divide-by-zero must not compile in safe code.
 //
-// `10 / 0` (and `10 / z` with a constant `z = 0`) builds and ships, even
-// though the result is a hardware trap / undefined behavior. The division
-// non-zero-divisor obligation exists but is `unproven`/violation and is not
-// enforced by default.
+// `10 / 0` (and `10 / z` with a constant `z = 0`) is classified as
+// "VIOLATION: division by zero (constant divisor)", a compile-time proof that
+// the program is wrong.
 //
-// Expected to BUILD until proven-violation obligations are hard errors by
-// default in safe code. Tracked by
-// scripts/tests/check_proven_violation_enforcement.sh.
+// Expected to REJECT with E0900 in safe code. Tracked by
+// scripts/tests/check_proven_violation_enforcement.sh. (trusted/with(Unsafe)
+// code remains exempt; unproven obligations still compile.)
 
 mod proven_div_zero {
     pub fn main() -> Int {
