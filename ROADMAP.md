@@ -1210,35 +1210,32 @@ rest of Phase 5 stays after that slab in the same linear queue.
     whether proofs are per monomorphized instance, generic once, or generic
     contracts with instance-level proof artifacts. Audit output must
     distinguish `proved_for_instance` from any future `proved_generic` class.
-    Returned-reference provenance belongs in this same design because current
-    stdlib APIs already expose the unsound informal version:
-    `get`/`get_mut`-style functions return refs inside `Option`, and the owner
-    is not frozen while the returned ref lives. The v1 rule must be scalar-only
-    and flat: a returned reference may be written as `&T from(param)` or
-    `&mut T from(param)`, may only live as a scalar binding inside the
-    originating borrow scope, and may never enter `Option`, `Result`, structs,
-    arrays, containers, callback contexts, or generic wrappers. Partiality must
-    be expressed with `#[requires(...)]`, not `Option<&T>`. The first consumer
-    is collection access, e.g.
-    `#[requires(i < v.len())] fn get_ref<T>(v: &Vec<T>, i: u64) -> &T from(v)`.
-    Single-provenance second-class view structs (`view struct Headers
-    from(Bytes) { ... }`) are explicitly deferred: record them as the escape
-    valve if Phase 7 workloads prove owned views plus scalar `from(param)` refs
-    insufficient, but do not add them as v1 syntax or patch them in ad hoc.
-    After the 44d addressability fix, this is the remaining serious
-    memory-safety design blocker: H1 is tracked and frozen, but not fixed.
-    Do not expand the public collection, iterator, callback, or bytes/text
-    surface with new borrowed-return APIs until this document exists and the
-    aggregate-ref freeze gate has either flipped to expected-reject or has a
-    named transition plan.
+    Scoped borrowed access (the V1.1 tier of the H1 resolution, #8a) lives in
+    this design: `with_value`/`with_value_mut`/`modify` give borrowed access to
+    collection elements where the borrow is scoped to the call and cannot
+    escape — the borrow-block trick generalized to data structures. The
+    soundness keystone is a value-semantics + no-closures invariant the design
+    must specify and the gate must enforce: **the container being accessed must
+    not be reachable from the callback's context** (so the callback cannot
+    rehash/realloc the container while holding the borrowed element; this is
+    what makes scoped access sound WITHOUT a provenance system).
+    Returned-reference provenance (`from(param)`) is NOT this design's job and
+    is NOT the H1 fix — H1 is fixed by subtraction (#8a tier 1: withdraw
+    aggregate-ref returns, add operation/value APIs) plus owned views.
+    `from(param)` is deferred per #8a1; if ever added it stays flat/scalar with
+    the no-aggregate ban. View structs (`view struct Headers from(Bytes)`) are
+    likewise deferred. Do not expand the public collection/iterator/callback/
+    bytes-text surface with new BORROWED-access APIs until this document exists;
+    the value/operation APIs of #8a tier 1 may land first (they need no new
+    language feature).
     Add `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`,
-    `examples/callbacks/{bare_fn,bound_shared,bound_mut,bound_once,cap_polymorphic_map}/`,
+    `examples/callbacks/{bare_fn,bound_shared,bound_mut,bound_once,cap_polymorphic_map,with_value_mut}/`,
     and `scripts/tests/check_callable_values.sh`; the gate must prove hidden
     captures are rejected, callback capabilities are not erased, context
     resources remain visible, the three consumption modes behave differently,
-    `from` refs cannot be wrapped/captured/stored, nested projections
-    `sub(sub(buf, ...), ...)` keep source provenance, and proof/evidence
-    reports name the instantiated callable shape.
+    a callback whose context reaches the accessed container is rejected
+    (container-not-in-context), and proof/evidence reports name the
+    instantiated callable shape.
     - 24a (design gate — prerequisite, not implementation). The widened design
       doc (`docs/CALLABLE_VALUES_AND_CAPABILITIES.md`) must exist BEFORE the
       Phase 6 stdlib iteration/HOF surface lands. Today's stdlib
@@ -1453,30 +1450,55 @@ class and authority/allocation story.
    stable ordering helpers for ordered collections. Each API must state whether
    it requires `with(Alloc)`, whether it can fail, and which runtime
    obligations it creates.
-   - 8a. Release blocker: collection APIs must not freeze while public safe
-     APIs return aggregate-wrapped references such as `Option<&T>`,
-     `Option<&mut T>`, `Result<&T, E>`, or aliases/structs/containers hiding
-     those forms. The current stdlib has this known hole (`HashMap::get`,
-     `HashMap::get_mut`, `OrderedMap::get`, `Vec::get`, `Slice::get`,
-     `Deque::get`, `BinaryHeap::peek`, etc.). Until the callable-values design
-     lands scalar `from(param)` returned references, either withdraw/rename the
-     APIs as unsafe/trusted, replace them with copying/owned-view APIs, or
-     rewrite them as preconditioned scalar returned refs. Keep
-     `scripts/tests/check_returned_ref_provenance.sh` wired: it must reproduce
-     the known hole, freeze the existing violation baseline, reject new public
-     aggregate-ref APIs, and keep a positive case showing bare scalar `-> &T`
-     is not the banned shape.
-   - 8a1. Implement the returned-reference provenance transition after
-     `docs/CALLABLE_VALUES_AND_CAPABILITIES.md` lands. Migrate collection
-     accessors away from `Option<&T>` / `Option<&mut T>` as a safe public
-     borrowed-return shape: partial borrowed access must become scalar
-     `&T from(self)` / `&mut T from(self)` with an explicit `#[requires(...)]`
-     precondition, or an owned/copying checked API that returns `Option<T>` /
-     a value-level result. The compiler must reject refs nested inside
-     `Option`, `Result`, structs, arrays, containers, callback contexts, and
-     aliases at public safe boundaries; it must freeze the owner while a scalar
-     `from` ref lives; and `scripts/tests/check_returned_ref_provenance.sh`
-     must flip from known-hole reproduction to expected-reject.
+   - 8a. Release blocker + H1 RESOLUTION (decided 2026-06-11): fix H1 by
+     SUBTRACTION, not by adding a mini-lifetime system. No safe public API may
+     return a reference wrapped in an aggregate (`Option<&T>`, `Option<&mut T>`,
+     `Result<&T, E>`, or any alias/struct/container/callback-context hiding
+     one). The current stdlib has this known hole (`HashMap::get`/`get_mut`,
+     `OrderedMap::get`/`get_mut`/`min_key`/`max_key`, `OrderedSet::min`/`max`,
+     `Vec::get`, `Slice::get`/`MutSlice::get`, `Deque::get`,
+     `BinaryHeap::peek`). The resolution is three API tiers, in order of
+     preference:
+       1. **Operation APIs (default, NO new language features).** Expose the
+          operation, not a reference into storage: `contains(k)`,
+          value-returning `get(k) -> Option<V>` (Copy values), `insert`,
+          `remove(k) -> Option<V>`, `replace(k, v)`, and `update(k, f: fn(V) ->
+          V)`. `update` MOVES the value out, transforms it, and moves it back —
+          so it needs no borrow into storage and works for non-Copy values too,
+          using only today's plain fn-pointers. This tier alone closes H1 as a
+          pure stdlib refactor (compiler unchanged beyond the freeze gate).
+       2. **Owned views for stored zero-copy.** Parser results store
+          `ByteView { off, len, buf_len }` (Phase 5 #5a), not `&Bytes` fields;
+          access goes back through the buffer (`buf.view(header.name)`).
+       3. **Scoped callbacks — V1.1, after the callable-values doc.**
+          `with_value(k, f: fn(&V) -> R) -> Option<R>` / `with_value_mut(...)`
+          / `modify(k, f: fn(&mut V))` give borrowed access where the borrow
+          CANNOT escape (it is scoped to the call) — the borrow-block trick
+          generalized to data structures. Sound because Concrete has no
+          closures: the **container being accessed must not be reachable from
+          the callback's context** (a value-semantics + no-closures invariant;
+          trusted/raw-pointer smuggling stays audit-responsibility). This tier
+          is the only one that needs `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`
+          (#24) and is deliberately deferred out of the H1 fix.
+     Precisely-scoped deferred gap: borrowed, non-consuming access to a
+     **non-Copy** value (value-`get` needs Copy; `update` consumes) waits for
+     tier 3. Keep `scripts/tests/check_returned_ref_provenance.sh` wired
+     throughout; it flips from known-hole reproduction to expected-reject once
+     tier 1 lands and the aggregate-ref APIs are gone. Validation gate before
+     freezing the choice: the `lox` runtime-heavy workload (uses
+     `HashMap<String, Value>` with non-Copy `Value`) must carry on tiers 1-2;
+     if it forces contortions, that is the evidence tier 3 / `from()` is needed
+     sooner.
+   - 8a1. Scalar `from(param)` returned references are DEFERRED, not the v1
+     fix (revised 2026-06-11). They are the evidence-driven escape valve, added
+     only if real workloads prove operation APIs + owned views + scoped
+     callbacks insufficient for external borrowed returns. If ever added: flat
+     and scalar — `&T from(param)` may live only as a scalar binding in the
+     originating borrow scope, the owner is frozen while it lives, partiality
+     is `#[requires(...)]` not `Option<&T>`, and it may NEVER enter `Option`,
+     `Result`, structs, arrays, containers, callback contexts, or generic
+     wrappers (that no-aggregate ban is what keeps it from becoming lifetimes;
+     unfreezing it is a thesis-level decision, not an ordinary change).
    - 8b. Design arena/index safety before any arena-backed structure becomes a
      flagship or stable stdlib API. Array-backed linked structures use indices,
      and a stale index into a removed/reused slot is a logic-level dangling

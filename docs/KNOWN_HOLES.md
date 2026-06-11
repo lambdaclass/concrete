@@ -39,9 +39,20 @@ code. Affected: `HashMap::get`/`get_mut`, `OrderedMap::get`/`get_mut`,
   keeps a positive case proving bare scalar `-> &T` is not the banned shape.
 - **Disclosed:** `CLAIMS_TODAY.md` (§1, "No dangling safe reference" narrowed
   to borrow-block refs only).
-- **Fix:** ROADMAP Phase 5 #24 — scalar `from(param)` returned references
-  (flat no-aggregate rule, partiality via `#[requires]`); Phase 6 #8a is the
-  collections-freeze blocker that forces the fix before the stdlib freezes.
+- **Fix (decided 2026-06-11): by SUBTRACTION, not a mini-lifetime system.**
+  ROADMAP Phase 6 #8a, three tiers: (1) withdraw the aggregate-ref APIs and
+  replace with operation/value APIs — `contains`, value-`get` (Copy),
+  `remove -> Option<V>`, `replace`, `update(k, fn(V) -> V)` (moves, so works
+  for non-Copy too; uses only today's fn-pointers — closes H1 as a pure stdlib
+  refactor, no new language feature); (2) owned `ByteView` for stored
+  zero-copy (#5a); (3) scoped callbacks `with_value`/`with_value_mut`/`modify`
+  (V1.1, after the callable-values doc #24, with the container-not-in-context
+  invariant). Scalar `from(param)` is DEFERRED (#8a1), evidence-driven, never
+  the v1 fix. Precisely-scoped deferred gap: borrowed non-consuming access to a
+  non-Copy value (tier 3). Validation gate before freezing: `lox` must carry on
+  tiers 1-2. The flat no-aggregate ban (refs never inside Option/Result/struct/
+  array/container/callback-context) is permanent; unfreezing it is a
+  thesis-level decision.
 
 ---
 

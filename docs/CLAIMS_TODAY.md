@@ -40,10 +40,13 @@ function calls and wrapped in aggregates such as `Option<&T>` or
 and `BinaryHeap::peek` expose this shape. A saved reference can survive an
 owner mutation that reallocates, removes, or reuses storage. This is tracked by
 `examples/known_holes/returned_ref_provenance_{map,vec}/` and
-`scripts/tests/check_returned_ref_provenance.sh`. Until scalar `from(param)`
-returned-reference provenance lands and aggregate-wrapped refs are rejected,
-"No dangling safe reference" means borrow-block references and does not claim
-soundness for aggregate-wrapped returned refs from these APIs.
+`scripts/tests/check_returned_ref_provenance.sh`. The fix (decided 2026-06-11,
+ROADMAP Phase 6 #8a) is by subtraction: these aggregate-ref APIs will be
+withdrawn and replaced with value/operation APIs (`contains`, value-`get`,
+`update(k, fn(V) -> V)`, `remove`) plus owned `ByteView` and, in V1.1, scoped
+callbacks (`with_value`) — not a returned-reference provenance system. Until
+that lands, "No dangling safe reference" means borrow-block references and does
+not claim soundness for aggregate-wrapped returned refs from these APIs.
 
 **What enforced does NOT cover:**
 - Runtime bounds checking (array access through checked APIs returns `Option`; unchecked is UB)
