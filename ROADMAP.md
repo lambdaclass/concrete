@@ -937,19 +937,26 @@ work depends on them.
       mod-wrapped forms now compile AND run correctly. Locked by
       `tests/codegen/mod_{nested_generic,two_instantiations,triple_nested}.con`
       in `check_codegen_execution.sh` (return 42 / 18 / 55).
-    - 44f. [OPEN] Turn the manual codegen sweep into a generative
-      lowering/codegen red-team. The fixed bugs in 44a/44c/44d/44e were all
-      ordinary constructs that the previous mostly-compile/reject suite did not
-      observe at runtime: nested generic names, compound lvalues, address-taken
-      locals, and mixed-width layout. Keep `check_codegen_execution.sh` as the
-      deterministic seed corpus, then add a small generated corpus over structs,
-      arrays, enums, modules, generics, nested fields, mutation, references,
-      raw-pointer casts inside `trusted`, and expected return values. Done when
-      the gate produces replayable minimized fixtures, records each seed in the
-      manifest, and catches a deliberately injected lowering/layout/name-mangle
-      mutation. This is the lightweight precursor to the full
-      interpreter-vs-compiled differential harness in item 18, not a
-      replacement for it.
+    - 44f. [PARTIAL 2026-06-11] Turn the manual codegen sweep into a
+      differential / generative red-team. The fixed bugs in 44a/44c/44d/44e
+      were all ordinary constructs the previous mostly-compile/reject suite did
+      not observe at runtime: nested generic names, compound lvalues,
+      address-taken locals, mixed-width layout.
+      DONE so far: `scripts/tests/check_codegen_differential.sh` runs every
+      `tests/codegen/*.con` through BOTH the interpreter and the compiled
+      binary and asserts agreement — the interpreter is an independent oracle,
+      so no hand-written expected values are needed for the agreement check.
+      Two honest, gate-enforced exclusion lists: EXPECTED_DIVERGE (unbounded-
+      Int interpreter vs fixed-width compiled — casts/overflow) and
+      INTERP_UNSUPPORTED (e.g. function pointers). Building this surfaced and
+      fixed two interpreter gaps so it could serve as oracle: nested-place
+      assignment (`o.i.v`, `m[i][j]` — the interpreter twin of #44c) and
+      missing short-circuit `&&`/`||`.
+      REMAINING: a random program GENERATOR over the bug-prone shapes (feeding
+      the same interp==compiled oracle and minimizing failures), the
+      interpreter fixed-width mode that would shrink EXPECTED_DIVERGE to empty,
+      and interpreter support for the INTERP_UNSUPPORTED shapes. The full
+      interpreter-vs-compiled harness is item 18 (needs #18a).
 45. Add the Phase 4 validation artifact:
     `examples/compiler_pipeline_probe/` plus
     `scripts/tests/check_phase4_pipeline.sh`. The fixture must run

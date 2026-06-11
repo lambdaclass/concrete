@@ -10,6 +10,28 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Interpreter-vs-compiled differential gate + interpreter fixes (2026-06-11)
+
+- **`scripts/tests/check_codegen_differential.sh`** (#44f, precursor to #18):
+  runs every `tests/codegen/*.con` through BOTH the interpreter (`--interp`)
+  and the compiled binary and asserts agreement. The interpreter is an
+  independent oracle, so a divergence means one side is wrong — mechanizing the
+  manual sweep that found C4/C5/C6. Two gate-enforced (never silent) exclusion
+  lists: EXPECTED_DIVERGE (unbounded-Int interpreter vs fixed-width compiled —
+  casts/overflow) and INTERP_UNSUPPORTED (function pointers). 32 agree.
+- **Interpreter nested-place assignment** (the twin of C5): `Interp.lean` only
+  handled single-level field/array assignment (`interp: field assign on
+  non-ident expression`); now a `resolvePlaceSteps` helper handles `o.i.v`,
+  `a[i].x`, `m[i][j]` via `updateAt`, so the interpreter matches the compiled
+  semantics fixed in #44c.
+- **Interpreter short-circuit `&&`/`||`**: the interpreter evaluated both
+  operands eagerly, so `x != 0 && (10 / x) > 0` errored on `x == 0` where the
+  compiled code short-circuits. Now `.and_`/`.or_` short-circuit before the
+  RHS, matching compiled semantics.
+- Remaining for #44f: a random program generator over the bug-prone shapes
+  (same interp==compiled oracle), an interpreter fixed-width mode (to empty
+  EXPECTED_DIVERGE), and interpreter support for the unsupported shapes.
+
 ### Address-of-local now aliases the local (2026-06-11)
 
 - **C8 CLOSED (was H5)**: `&mut x` / `&x` / `*mut x` of a local used to point at

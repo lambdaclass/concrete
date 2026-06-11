@@ -385,9 +385,16 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
 
   | .binOp op lhs rhs _ => do
     let (env, lv) ← evalExprVal fns enums env lhs
-    let (env, rv) ← evalExprVal fns enums env rhs
-    let result ← evalBinOp op lv rv
-    return (env, .val result)
+    -- Short-circuit `&&`/`||` so the RHS is not evaluated when the result is
+    -- already determined — matching compiled semantics (and avoiding spurious
+    -- errors like `x != 0 && (10 / x) > 0` when x == 0).
+    match op, lv with
+    | .and_, .bool false => return (env, .val (.bool false))
+    | .or_, .bool true => return (env, .val (.bool true))
+    | _, _ =>
+      let (env, rv) ← evalExprVal fns enums env rhs
+      let result ← evalBinOp op lv rv
+      return (env, .val result)
 
   | .unaryOp op operand _ => do
     let (env, v) ← evalExprVal fns enums env operand
@@ -609,6 +616,27 @@ partial def evalMatch (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s
       let restored := bodyEnv.drop (bodyEnv.length - outerLen)
       return (restored, flow)
 
+/-- Resolve a place expression to its root variable and the `RefStep` path
+    reaching it, evaluating any array-index subexpressions. Mirrors the
+    compiler's `storeToPlace` so the interpreter handles nested assignment
+    targets (`o.i.v`, `a[i].x`, `m[i][j]`) instead of only single-level ones. -/
+partial def resolvePlaceSteps (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (place : CExpr)
+    : Except String (Env × String × List RefStep) := do
+  match place with
+  | .ident name _ => return (env, name, [])
+  | .fieldAccess obj field _ =>
+    let (env, root, steps) ← resolvePlaceSteps fns enums env obj
+    return (env, root, steps ++ [.field field])
+  | .arrayIndex arr idx _ =>
+    let (env, root, steps) ← resolvePlaceSteps fns enums env arr
+    let (env, iv) ← evalExprVal fns enums env idx
+    match iv with
+    | .int i _ =>
+      if i < 0 then .error s!"interp: negative array index {i} in place"
+      else return (env, root, steps ++ [.index i.toNat])
+    | _ => .error "interp: array index is not an integer (place)"
+  | _ => .error "interp: unsupported place expression"
+
 partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s : CStmt) : Except String (Env × Flow) := do
   match s with
   | .letDecl name _ _ value => do
@@ -670,42 +698,36 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
 
   | .fieldAssign obj field value => do
     let (env, newVal) ← evalExprVal fns enums env value
-    match obj with
-    | .ident name _ =>
-      match envGet env name with
-      | some (.struct_ sname fields) =>
-        let newFields := fields.map fun (n, v) =>
-          if n == field then (n, newVal) else (n, v)
-        return (envSet env name (.struct_ sname newFields), .val .unit)
-      | some (.ref p) =>
-        let p' := { p with steps := p.steps ++ [.field field] }
-        let env' ← updatePath env p' newVal
-        return (env', .val .unit)
-      | _ => .error s!"interp: field assign on non-struct variable '{name}'"
-    | _ => .error "interp: field assign on non-ident expression"
+    -- Resolve the (possibly nested) place `obj`, append the final field, and
+    -- write in place — handles `o.i.v`, `a[i].x`, etc., not just `o.f`.
+    let (env, root, steps) ← resolvePlaceSteps fns enums env obj
+    let finalSteps := steps ++ [.field field]
+    match envGet env root with
+    | some (.ref p) =>
+      let env' ← updatePath env { p with steps := p.steps ++ finalSteps } newVal
+      return (env', .val .unit)
+    | some baseVal =>
+      let newBase ← updateAt baseVal finalSteps newVal
+      return (envSet env root newBase, .val .unit)
+    | none => .error s!"interp: field-assign place root '{root}' not in env"
 
   | .arrayIndexAssign arr idx value => do
     let (env, newVal) ← evalExprVal fns enums env value
+    let (env, root, steps) ← resolvePlaceSteps fns enums env arr
     let (env, idxVal) ← evalExprVal fns enums env idx
     match idxVal with
     | .int i _ =>
       if i < 0 then .error s!"interp: negative array index {i} on assignment"
       else
-        match arr with
-        | .ident name _ =>
-          match envGet env name with
-          | some (.array elems elemTy size) =>
-            let n := i.toNat
-            if n < elems.size then
-              let newElems := elems.set! n newVal
-              return (envSet env name (.array newElems elemTy size), .val .unit)
-            else .error s!"interp: array index {i} out of bounds (size {elems.size})"
-          | some (.ref p) =>
-            let p' := { p with steps := p.steps ++ [.index i.toNat] }
-            let env' ← updatePath env p' newVal
-            return (env', .val .unit)
-          | _ => .error s!"interp: array index assign on non-array variable '{name}'"
-        | _ => .error "interp: array index assign on non-ident expression"
+        let finalSteps := steps ++ [.index i.toNat]
+        match envGet env root with
+        | some (.ref p) =>
+          let env' ← updatePath env { p with steps := p.steps ++ finalSteps } newVal
+          return (env', .val .unit)
+        | some baseVal =>
+          let newBase ← updateAt baseVal finalSteps newVal
+          return (envSet env root newBase, .val .unit)
+        | none => .error s!"interp: array-assign place root '{root}' not in env"
     | _ => .error "interp: array index is not an integer"
 
   | .derefAssign target value => do

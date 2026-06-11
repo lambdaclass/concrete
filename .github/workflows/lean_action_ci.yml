@@ -333,6 +333,9 @@ jobs:
       - name: Codegen execution-oracle gate (compile-run-assert value)
         run: bash scripts/tests/check_codegen_execution.sh
 
+      - name: Codegen differential gate (interpreter vs compiled agreement)
+        run: bash scripts/tests/check_codegen_differential.sh
+
       - name: CLI-plumbing gate (Phase 4 #14a — shared prologue + exit-code taxonomy)
         run: bash scripts/tests/check_cli_plumbing.sh
 
