@@ -1,5 +1,8 @@
 # Stdlib API Review
 
+> **Note (2026-06-11):** any `get -> Option<&T>` / `get_mut -> Option<&mut V>` borrowed-accessor API referenced below is the **H1 known hole** and is being withdrawn — see ROADMAP Phase 6 #8a and KNOWN_HOLES H1. The intended surface is value/operation APIs (`contains`, value-`get`, `remove -> Option<V>`, `update(k, fn(V) -> V)`), owned `ByteView`, and scoped callbacks (`with_value`, V1.1). References to the borrowed shape here are historical.
+
+
 Status: review (Phase 3, items 59/60)
 
 This document audits the current stdlib for naming consistency, API shape issues, module layout problems, and violations of the design principles in [STDLIB_DESIGN_PRINCIPLES.md](STDLIB_DESIGN_PRINCIPLES.md). Each finding includes a concrete recommendation.

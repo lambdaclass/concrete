@@ -1,5 +1,8 @@
 # Stdlib Documentation Plan
 
+> **Note (2026-06-11):** any `get -> Option<&T>` / `get_mut -> Option<&mut V>` borrowed-accessor API referenced below is the **H1 known hole** and is being withdrawn — see ROADMAP Phase 6 #8a and KNOWN_HOLES H1. The intended surface is value/operation APIs (`contains`, value-`get`, `remove -> Option<V>`, `update(k, fn(V) -> V)`), owned `ByteView`, and scoped callbacks (`with_value`, V1.1). References to the borrowed shape here are historical.
+
+
 Status: plan (Phase 3, items 59/60)
 
 This document defines what "documented" means for the Concrete stdlib, establishes documentation standards for every module, and provides a prioritized work plan. The goal is to make the stdlib discoverable for someone who has never read the source.

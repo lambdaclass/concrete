@@ -1,6 +1,17 @@
 # Runtime-Oriented Collection Maturity
 
-Status: stable direction (freeze-ready)
+Status: PARTIALLY SUPERSEDED (2026-06-11) — the borrowed-accessor design below
+is being withdrawn. The `map.get(&k) -> Option<&V>` / `map.get_mut(&k) ->
+Option<&mut V>` "lookup" and "mutating lookup" rows (§4) are the **H1 known
+hole**: aggregate-wrapped returned references that compile but are unsound (a
+saved ref can survive a rehash). Per the H1 resolution (ROADMAP Phase 6 #8a,
+[KNOWN_HOLES.md](KNOWN_HOLES.md) H1) they are replaced by value/operation APIs
+(`contains`, value-`get` for Copy, `remove -> Option<V>`, `update(k, fn(V) ->
+V)`), owned `ByteView` for stored zero-copy, and scoped callbacks
+(`with_value`/`with_value_mut`, V1.1). Treat the `Option<&V>` / `Option<&mut V>`
+accessor sections below as historical, not the intended surface.
+
+Original status: stable direction (freeze-ready)
 
 This document settles the question posed by ROADMAP item 57:
 
