@@ -27,6 +27,42 @@ For FFI and trust boundaries, see [FFI.md](FFI.md).
 - **Copy types** can be used multiple times and can be reassigned freely. Primitives, `&T`, raw pointers, and function pointers are always Copy. Structs and enums opt in with a `Copy` marker.
 - **Linear types** must be consumed exactly once. All structs and enums are linear by default. Branches must agree on consumption. Loops cannot consume linear variables from outer scope. **Linear variables cannot be reassigned** — one binding, one resource. Use a new binding instead.
 
+## The four-cell value model (Copy / Clone / Move / Borrow)
+
+Duplication and ownership transfer fall into four explicit, distinct cells.
+This frames the *deliberate* design of `Clone` (see ROADMAP #8a2) — and the
+deliberate decision NOT to rush it as a soundness patch:
+
+| Cell | Meaning | Status | Visibility |
+|------|---------|--------|------------|
+| **Copy** | Implicit bit duplication | Implemented (`Copy` marker, primitives, `&T`, raw ptrs, fn-ptrs) | Free; no effect |
+| **Move** | Ownership transfer of a linear value (the default) | Implemented (linear consumption) | Default; tracked by the checker |
+| **Borrow** | Scoped temporary access (`&T` / `&mut T` / borrow blocks) | Implemented; references may not escape their scope | Scoped, local |
+| **Clone** | Explicit *semantic* duplication of a non-Copy value | **Not yet — deliberate future design** | Capability-visible (`with(Alloc)`) and audit-visible |
+
+`Clone` is intentionally a separate, deliberate design item, **not** the answer
+to the returned-reference hole (H1). H1 closes by API design (operation/value
+APIs + owned views + scoped callbacks; ROADMAP #8a), independent of `Clone`.
+
+When `Clone` is designed, it must be:
+- **Explicit** — `x.clone()`, never implicit; the opposite of `Copy`'s
+  invisibility.
+- **Capability-visible** — cloning a heap-backed value allocates, so `clone`
+  carries `with(Alloc)`; this stays in the signature and audit output.
+- **Proof-honest** — `clone` is effectful (allocates), so a function that
+  clones is not pure and is outside `ProvableV1`.
+- **Library-expressible** — a stdlib `trait Clone { fn clone(&self) -> Self }`
+  rides the existing trait-bound dispatch; no builtin trait is required
+  (verified). It composes with `Destroy` (a cloned linear value must still be
+  consumed/destroyed exactly once).
+
+**Move-out vs copy-out.** `Clone` duplicates (copy-out). The ownership-transfer
+counterpart (move-out) is the default for owned values; for collections,
+`remove`/`update` already move a value out, and the one genuine gap is indexed
+containers — `swap(i, new) -> V` transfers ownership out of a slot without
+clone or delete, preserving the linear one-value-per-slot invariant. Like
+`Clone`, build it when a workload needs it (ROADMAP #8a2), not speculatively.
+
 ## Current Guarantee Boundary
 
 Today the language already relies on the checker to enforce the core ownership/borrow model:

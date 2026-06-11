@@ -1055,13 +1055,13 @@ rest of Phase 5 stays after that slab in the same linear queue.
      `tests/programs/generic_infer_through_ref.con` (positive: `id(&w)` infers
      without turbofish) and a negative pinning that a genuinely ambiguous case
      still asks for an explicit type arg; gate via the main suite.
-     NOTE (2026-06-11): this is now also the unblocker for the H1 tier-1 fix.
-     The `get_cloned<V: Clone>(k: &K) -> Option<V>` accessor calls clone on a
-     bounded type param, and a stdlib `trait Clone { fn clone(&self) -> Self }`
-     rides the existing trait-bound dispatch — VERIFIED it works with explicit
-     turbofish (`dup::<Box>(&b)` returns 42), but `map.get_cloned(&k)` without
-     turbofish hits exactly this `&`-inference gap. So #6b lands before Clone
-     to keep the value-access APIs ergonomic.
+     NOTE (2026-06-11): not on the H1 critical path (H1's tier-1 fix is
+     library-only and Clone-free, #8a). But this IS the prerequisite for
+     `Clone` whenever it is built (#8a2): `x.clone()` on a bounded `&T` infers
+     without turbofish only once `unifyTypes` recurses through `&`. Verified the
+     dispatch itself works (`dup::<Box>(&b)` returns 42); only the `&`-inference
+     is missing. Also the unblocker for ergonomic HOF/iteration call sites
+     generally.
 7. Add `concrete fmt`: stable formatting for source files, examples, docs
    snippets, and generated fixtures. Formatting must not churn semantic
    fingerprints.
@@ -1466,63 +1466,77 @@ class and authority/allocation story.
      `Vec::get`, `Slice::get`/`MutSlice::get`, `Deque::get`,
      `BinaryHeap::peek`). The resolution is three API tiers, in order of
      preference:
-       1. **Operation APIs (default, NO new language features).** Expose the
-          operation, not a reference into storage: `contains(k)`,
-          value-returning `get(k) -> Option<V>` (Copy values), `insert`,
-          `remove(k) -> Option<V>`, `replace(k, v)`, and `update(k, f: fn(V) ->
-          V)`. `update` MOVES the value out, transforms it, and moves it back —
-          so it needs no borrow into storage and works for non-Copy values too,
-          using only today's plain fn-pointers. This tier alone closes H1 as a
-          pure stdlib refactor (compiler unchanged beyond the freeze gate).
+     The fix is staged BY DANGER (refined 2026-06-11), and `Clone` is
+     deliberately NOT part of it:
+       1. **Mutable aggregate-refs — withdraw NOW (library-only, no Clone, no
+          callbacks).** `get_mut -> Option<&mut V>`, `peek`, `min_key`,
+          `max_key`, `min`/`max` are the actual use-after-realloc vector (hold
+          a `&mut V`, mutate the container, write through a dangling pointer).
+          Their entire use case is mutation/inspection, fully covered by
+          operation APIs over today's fn-pointers, no Clone, no callbacks:
+          `contains(k)`, `insert`, `remove(k) -> Option<V>`, `replace(k, v)`,
+          `update(k, f: fn(V) -> V)` (moves the value out/in — works for
+          non-Copy too), and value-`get(k) -> Option<V>` for Copy values. This
+          eliminates the part of H1 that actually corrupts memory, as a pure
+          stdlib refactor (compiler unchanged beyond the freeze gate).
        2. **Owned views for stored zero-copy.** Parser results store
           `ByteView { off, len, buf_len }` (Phase 5 #5a), not `&Bytes` fields;
           access goes back through the buffer (`buf.view(header.name)`).
-       3. **Scoped callbacks — V1.1, after the callable-values doc.**
-          `with_value(k, f: fn(&V) -> R) -> Option<R>` / `with_value_mut(...)`
-          / `modify(k, f: fn(&mut V))` give borrowed access where the borrow
-          CANNOT escape (it is scoped to the call) — the borrow-block trick
-          generalized to data structures. Sound because Concrete has no
-          closures: the **container being accessed must not be reachable from
-          the callback's context** (a value-semantics + no-closures invariant;
-          trusted/raw-pointer smuggling stays audit-responsibility). This tier
-          is the only one that needs `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`
-          (#24) and is deliberately deferred out of the H1 fix.
-     Precisely-scoped deferred gap: borrowed, non-consuming access to a
-     **non-Copy** value (value-`get` needs Copy; `update` consumes) waits for
-     tier 3. Keep `scripts/tests/check_returned_ref_provenance.sh` wired
-     throughout; it flips from known-hole reproduction to expected-reject once
-     tier 1 lands and the aggregate-ref APIs are gone.
-     VALIDATION RESULT (2026-06-11): the bet holds against real workloads.
-     `lox` uses no map accessors (array-backed). `kvstore` is already 100%
-     tier 1 (`contains` / `insert -> Option<String>` / `remove -> Option<String>`
-     / `fold`) — zero migration. `integrity` has the ONLY aggregate-ref call
-     site across the examples: one `get -> Option<&String>` used for a hash
-     equality compare inside a `match` arm — the `&String` never escapes the
-     scope. That is the textbook scoped-read case (tier-2 `with_value`, or a
-     tier-1 clone for the compare). No workload needs a borrowed reference to
-     ESCAPE a scope — the only thing `from()` would add — so deferring
-     `from()` is empirically justified, not just speculative.
-   - 8a2. Value-access primitive family (the tier-1 enabler, decided
-     2026-06-11 path (i)). `get_cloned(k) -> Option<V>` is how a non-Copy value
-     is read out without a borrowed return. It is LIBRARY-ONLY: a stdlib
-     `trait Clone { fn clone(&self) -> Self }` plus `impl Clone for T` rides the
-     existing trait-bound dispatch — no builtin trait needed (verified:
-     `dup::<Box>(&b)` returns 42). Two prerequisites discovered before it is
-     ergonomic/usable:
-       (a) #6b inference-through-references — `map.get_cloned(&k)` without
-           turbofish needs it; do #6b first.
-       (b) `impl Clone for String` (and other builtin types) must resolve the
-           type's inherent `clone` from inside the impl — verify/enable
-           trait-impl-for-builtin sees inherent methods.
-     Sibling primitive (your call to track): **`move`/`take`** — ownership-out,
-     not copy-out. `remove -> Option<V>` already takes-and-deletes; a `take`
-     (take by key/index leaving the slot empty or a default) or `swap` may be
-     wanted for in-place ownership transfer without clone. Specify the family
-     — `Clone` (copy-out), `take`/`swap` (move-out), value-`get` (Copy
-     copy-out) — together. Sequencing for the H1 tier-1 withdrawal: #6b →
-     stdlib `Clone` trait + impls + `get_cloned` (verify impl-for-builtin) →
-     `take`/`swap` if a workload needs them → withdraw aggregate-ref APIs +
-     migrate (kvstore/integrity `get` → `get_cloned`) + flip the gate.
+       3. **Immutable read accessor (`get -> Option<&V>`) — CONTAINED now,
+          withdrawn at V1.1.** It is also unsound in principle (the `&V` can
+          escape and outlive a rehash), but its real uses are scoped,
+          non-escaping reads, and there is no Clone-free / callback-free tier-1
+          replacement for reading a NON-COPY value out. So leave it in place,
+          disclosed and frozen (the gate prevents new ones), until V1.1 scoped
+          callbacks replace it; do not break `kvstore`/`integrity` in the
+          interim. `Clone` is explicitly NOT rushed in to close this — see the
+          value-model item below.
+       4. **Scoped callbacks — V1.1, after the callable-values doc (#24).**
+          `with_value(k, f: fn(&V) -> R) -> Option<R>` / `with_value_mut` /
+          `modify` give borrowed access scoped to the call (the borrow-block
+          trick generalized to data structures). The real read sites need the
+          callback to carry context and capabilities (kvstore's print needs
+          `Console`; integrity's compare needs the other value in context), so
+          this genuinely needs the callable-values design. Soundness keystone:
+          the **container being accessed must not be reachable from the
+          callback's context** (value-semantics + no-closures invariant;
+          trusted/raw-pointer smuggling stays audit-responsibility).
+     So "close H1 now" = close the dangerous MUTABLE half now (tier 1), and
+     the immutable-read half is contained-and-disclosed until V1.1 callbacks.
+     `Clone` is NOT a dependency of either half.
+     `scripts/tests/check_returned_ref_provenance.sh` stays wired: after tier-1
+     the mutable aggregate-ref APIs are gone (gate rejects them); the immutable
+     `get -> Option<&V>` stays an expected/known entry until V1.1, then the gate
+     goes fully expected-reject.
+     VALIDATION RESULT (2026-06-11): `lox` uses no map accessors (array-backed);
+     `kvstore` is already 100% tier-1 (`contains`/`insert`/`remove`/`fold`) —
+     zero migration; `integrity` has the ONLY read-accessor call site — one
+     `get -> Option<&String>` for a hash compare inside a `match` arm where the
+     `&String` never escapes (migrates to `with_value` at V1.1). No workload
+     needs a borrowed reference to ESCAPE a scope — the only thing `from()`
+     would add — so deferring `from()` is empirically justified.
+   - 8a2. `Clone` is a SEPARATE value-model design item, NOT an H1 patch
+     (decided 2026-06-11). Concrete should eventually have `Clone`, but
+     designed deliberately as part of the value model
+     ([docs/VALUE_MODEL.md](docs/VALUE_MODEL.md)), not rushed to make map reads
+     convenient. The four-cell model: **Copy** (implicit bit duplication,
+     existing), **Clone** (explicit semantic duplication, capability-visible —
+     carries `Alloc` — and audit-visible), **Move** (default for owned linear
+     values, existing), **Borrow** (scoped temporary access, existing). It is
+     library-expressible (a stdlib `trait Clone { fn clone(&self) -> Self }`
+     rides the existing trait-bound dispatch — verified `dup::<Box>(&b)`
+     returns 42; no builtin trait needed), but its allocation/effect/proof
+     story (clone is not pure → ineligible for ProvableV1; capability surface;
+     interaction with `Destroy`) must be designed, not assumed. Sibling
+     primitive **`move`/`take`**: ownership-out vs Clone's copy-out. Maps
+     already have it (`remove`/`update`); the genuine gap is indexed containers
+     — `swap(i, new) -> V` transfers ownership out of a slot without clone or
+     delete, preserving the linear one-value-per-slot invariant (a bare
+     `take(i)` leaving a hole needs `Option<T>` slots). Add
+     `docs/VALUE_MODEL.md` Clone/Move section now (recorded); build `Clone` /
+     `swap` only when a workload needs them, independent of H1.
+     Prerequisite when `Clone` is built: #6b inference-through-references, so
+     `x.clone()` on a bounded `&T` infers without turbofish.
    - 8a1. Scalar `from(param)` returned references are DEFERRED, not the v1
      fix (revised 2026-06-11). They are the evidence-driven escape valve, added
      only if real workloads prove operation APIs + owned views + scoped

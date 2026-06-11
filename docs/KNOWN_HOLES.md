@@ -39,21 +39,24 @@ code. Affected: `HashMap::get`/`get_mut`, `OrderedMap::get`/`get_mut`,
   keeps a positive case proving bare scalar `-> &T` is not the banned shape.
 - **Disclosed:** `CLAIMS_TODAY.md` (§1, "No dangling safe reference" narrowed
   to borrow-block refs only).
-- **Fix (decided 2026-06-11): by SUBTRACTION, not a mini-lifetime system.**
-  ROADMAP Phase 6 #8a, three tiers: (1) withdraw the aggregate-ref APIs and
-  replace with operation/value APIs — `contains`, value-`get` (Copy),
-  `remove -> Option<V>`, `replace`, `update(k, fn(V) -> V)` (moves, so works
-  for non-Copy too; uses only today's fn-pointers) plus `get_cloned(k) ->
-  Option<V>` for non-Copy reads via a LIBRARY-ONLY stdlib `trait Clone` (no
-  builtin needed — verified it rides existing trait-bound dispatch; gated on
-  #6b inference-through-refs for ergonomic call sites, see #8a2); (2) owned
-  `ByteView` for stored zero-copy (#5a); (3) scoped callbacks
-  `with_value`/`with_value_mut`/`modify`
-  (V1.1, after the callable-values doc #24, with the container-not-in-context
-  invariant). Scalar `from(param)` is DEFERRED (#8a1), evidence-driven, never
-  the v1 fix. Precisely-scoped deferred gap: borrowed non-consuming access to a
-  non-Copy value (tier 3). Validation gate before freezing: `lox` must carry on
-  tiers 1-2. The flat no-aggregate ban (refs never inside Option/Result/struct/
+- **Fix (decided 2026-06-11): by SUBTRACTION, staged by danger, Clone-free.**
+  ROADMAP Phase 6 #8a. **Now (library-only, no Clone, no callbacks):** withdraw
+  the MUTABLE aggregate-refs — `get_mut`, `peek`, `min_key`/`max_key`,
+  `min`/`max` (the actual use-after-realloc vector) — and replace with
+  operation APIs `contains` / `insert` / `remove -> Option<V>` / `replace` /
+  `update(k, fn(V) -> V)` (moves, works for non-Copy via today's fn-pointers)
+  plus value-`get -> Option<V>` for Copy. This eliminates the memory-corrupting
+  half as a pure stdlib refactor. **Contained until V1.1:** the immutable
+  `get -> Option<&V>` (also unsound in principle but its real uses are scoped
+  non-escaping reads, and there is no Clone-free/callback-free replacement for
+  reading a non-Copy value out) — kept disclosed and frozen, withdrawn when
+  V1.1 scoped callbacks (`with_value`, callable-values doc #24) land.
+  `ByteView` (#5a) for stored zero-copy. **`Clone` is NOT part of the H1 fix**
+  — it is a separate value-model design item (#8a2, VALUE_MODEL.md), not
+  rushed to make map reads convenient. Scalar `from(param)` is DEFERRED (#8a1).
+  Validation (2026-06-11): lox uses no map accessors; kvstore is 100% tier-1
+  (zero migration); integrity's single read site migrates to `with_value` at
+  V1.1. The flat no-aggregate ban (refs never inside Option/Result/struct/
   array/container/callback-context) is permanent; unfreezing it is a
   thesis-level decision.
 

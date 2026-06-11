@@ -10,6 +10,30 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### H1 refined: Clone decoupled from the fix; withdrawal staged by danger (2026-06-11, design)
+
+- Sharpened the H1 resolution: **do not make `Clone` the H1 patch.** H1 closes
+  by API design, independent of `Clone`. The withdrawal is staged by danger:
+  - **Now (library-only, no Clone, no callbacks):** withdraw the MUTABLE
+    aggregate-refs (`get_mut`, `peek`, `min_key`/`max_key`, `min`/`max`) — the
+    actual use-after-realloc vector — and replace with operation APIs
+    (`contains`/`insert`/`remove`/`replace`/`update`) + value-`get` for Copy.
+    Eliminates the memory-corrupting half as a pure stdlib refactor.
+  - **Contained until V1.1:** the immutable `get -> Option<&V>` (real uses are
+    scoped non-escaping reads; no Clone-free/callback-free replacement for
+    non-Copy reads) — disclosed and frozen, withdrawn when scoped callbacks
+    (`with_value`, callable-values doc #24) land.
+- `Clone` recorded as a SEPARATE, deliberate value-model design item, not a
+  soundness patch. Added the four-cell model to `docs/VALUE_MODEL.md`: Copy
+  (implicit bit-dup), Move (default ownership transfer), Borrow (scoped),
+  Clone (explicit, `Alloc`-visible, audit-visible, library-expressible via a
+  stdlib trait — not yet built). Sibling `move`/`take` = `swap(i, new) -> V`
+  for indexed ownership-out; build when a workload needs it. #6b is the
+  prerequisite for ergonomic `Clone` call sites, no longer on the H1 path.
+- Updated ROADMAP #8a (danger-staged) / #8a2 (Clone value-model item) / #6b
+  note, KNOWN_HOLES H1, VALUE_MODEL.md, CLAIMS_TODAY. No code changed.
+
+
 ### H1 tier-1 implementation scoping: Clone is library-only, gated on #6b (2026-06-11, design)
 
 - De-risked the tier-1 stdlib refactor before writing it. Key finding: the
