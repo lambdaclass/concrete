@@ -39,10 +39,15 @@ code. Affected: `HashMap::get`/`get_mut`, `OrderedMap::get`/`get_mut`,
   keeps a positive case proving bare scalar `-> &T` is not the banned shape.
 - **Disclosed:** `CLAIMS_TODAY.md` (§1, "No dangling safe reference" narrowed
   to borrow-block refs only).
+- **State (updated 2026-06-11): MUTABLE half FIXED, immutable half contained.**
+  The `get_mut -> Option<&mut V>` write-vector is withdrawn from HashMap and
+  OrderedMap, replaced by `update(k, fn(V) -> V) -> bool` (moves the value
+  out/in, no `&mut V` escapes). The gate asserts no `pub fn -> Option<&mut`
+  remains. The immutable read accessors (`get -> Option<&V>`, `peek`, `min`/
+  `max`/`min_key`/`max_key`) remain CONTAINED until V1.1 scoped callbacks.
 - **Fix (decided 2026-06-11): by SUBTRACTION, staged by danger, Clone-free.**
-  ROADMAP Phase 6 #8a. **Now (library-only, no Clone, no callbacks):** withdraw
-  the MUTABLE aggregate-refs — `get_mut`, `peek`, `min_key`/`max_key`,
-  `min`/`max` (the actual use-after-realloc vector) — and replace with
+  ROADMAP Phase 6 #8a. **Mutable half (DONE):** withdraw
+  `get_mut` (the actual use-after-realloc write vector) and replace with
   operation APIs `contains` / `insert` / `remove -> Option<V>` / `replace` /
   `update(k, fn(V) -> V)` (moves, works for non-Copy via today's fn-pointers)
   plus value-`get -> Option<V>` for Copy. This eliminates the memory-corrupting

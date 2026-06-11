@@ -1,13 +1,11 @@
 std/src/deque.con:Deque.get: pub fn get(&self, at: u64) -> Option<&T> {
 std/src/heap.con:BinaryHeap.peek: pub fn peek(&self) -> Option<&T> {
 std/src/map.con:HashMap.get: pub fn get(&self, key: &K) -> Option<&V> {
-std/src/map.con:HashMap.get_mut: pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
 std/src/ordered_map.con:OrderedMap.get: pub fn get(&self, key: &K) -> Option<&V> {
-std/src/ordered_map.con:OrderedMap.get_mut: pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
-std/src/ordered_map.con:OrderedMap.max_key: pub fn max_key(&self) -> Option<&K> {
 std/src/ordered_map.con:OrderedMap.min_key: pub fn min_key(&self) -> Option<&K> {
-std/src/ordered_set.con:OrderedSet.max: pub fn max(&self) -> Option<&K> {
+std/src/ordered_map.con:OrderedMap.max_key: pub fn max_key(&self) -> Option<&K> {
 std/src/ordered_set.con:OrderedSet.min: pub fn min(&self) -> Option<&K> {
-std/src/slice.con:MutSlice.get: pub fn get(&self, at: u64) -> Option<&T> {
+std/src/ordered_set.con:OrderedSet.max: pub fn max(&self) -> Option<&K> {
 std/src/slice.con:Slice.get: pub fn get(&self, at: u64) -> Option<&T> {
+std/src/slice.con:MutSlice.get: pub fn get(&self, at: u64) -> Option<&T> {
 std/src/vec.con:Vec.get: pub fn get(&self, at: u64) -> Option<&T> {

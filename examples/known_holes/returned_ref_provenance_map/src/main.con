@@ -1,13 +1,15 @@
-// Known soundness hole: returned-reference provenance is not tracked.
+// Known soundness hole (IMMUTABLE half of H1): returned-reference provenance
+// is not tracked for `HashMap::get -> Option<&V>`.
 //
-// `HashMap::get_mut` returns `Option<&mut V>` into the table storage. The
-// checker currently does not freeze `m` while the returned reference lives,
-// because the reference is returned by a function call and hidden inside
-// `Option`. Insertions may grow/rehash the table, so writing through the saved
-// reference can target stale storage.
+// `get` returns a `&V` into the table storage, hidden inside `Option`. The
+// checker does not freeze `m` while that reference lives, so an insertion that
+// grows/rehashes the table can leave the saved `&V` pointing at stale storage —
+// a read-stale use-after-realloc. (The MUTABLE half, `get_mut -> Option<&mut V>`,
+// has been WITHDRAWN — ROADMAP Phase 6 #8a; use `update(k, fn(V) -> V)`.)
 //
-// This project is expected to BUILD until returned references require explicit
-// `from(self)` provenance and aggregate-wrapped refs are rejected.
+// This project is expected to BUILD until the immutable read accessor is
+// withdrawn at V1.1 in favor of scoped callbacks (`with_value`). Tracked by
+// scripts/tests/check_returned_ref_provenance.sh.
 
 mod returned_ref_hole {
     import std.map.{HashMap};
@@ -18,7 +20,7 @@ mod returned_ref_hole {
         m.insert(1, 10);
 
         let k: i32 = 1;
-        let saved: Option<&mut i32> = m.get_mut(&k);
+        let saved: Option<&i32> = m.get(&k);
 
         let mut i: i32 = 2;
         while i < 80 {
@@ -28,7 +30,7 @@ mod returned_ref_hole {
 
         let mut status: Int = 0;
         match saved {
-            Option::Some { value } => { *value = 99; }
+            Option::Some { value } => { let v: i32 = *value; status = v as i64; }
             Option::None => { status = 1; }
         }
 

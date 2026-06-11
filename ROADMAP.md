@@ -1468,17 +1468,23 @@ class and authority/allocation story.
      preference:
      The fix is staged BY DANGER (refined 2026-06-11), and `Clone` is
      deliberately NOT part of it:
-       1. **Mutable aggregate-refs — withdraw NOW (library-only, no Clone, no
-          callbacks).** `get_mut -> Option<&mut V>`, `peek`, `min_key`,
-          `max_key`, `min`/`max` are the actual use-after-realloc vector (hold
-          a `&mut V`, mutate the container, write through a dangling pointer).
-          Their entire use case is mutation/inspection, fully covered by
-          operation APIs over today's fn-pointers, no Clone, no callbacks:
-          `contains(k)`, `insert`, `remove(k) -> Option<V>`, `replace(k, v)`,
-          `update(k, f: fn(V) -> V)` (moves the value out/in — works for
-          non-Copy too), and value-`get(k) -> Option<V>` for Copy values. This
-          eliminates the part of H1 that actually corrupts memory, as a pure
-          stdlib refactor (compiler unchanged beyond the freeze gate).
+       1. **Mutable aggregate-refs — WITHDRAWN 2026-06-11 (library-only, no
+          Clone, no callbacks).** `get_mut -> Option<&mut V>` (the actual
+          use-after-realloc WRITE vector) is removed from `HashMap` and
+          `OrderedMap` and replaced by `update(k, fn(V) -> V) -> bool` (moves
+          the value out, applies f, moves it back — no `&mut V` escapes). No
+          real callers existed (verified); the map `#[test]`s migrated to
+          `update`; full suite 1548/0. The gate
+          `check_returned_ref_provenance.sh` now asserts no `pub fn -> Option<&mut`
+          exists in std, and that `update` is present. The other operation APIs
+          (`contains`, `insert`, `remove -> Option<V>`, value-`get` for Copy)
+          already existed and cover the rest of the mutation/existence needs
+          with no Clone and no callbacks. NOTE: `peek`/`min`/`max`/`min_key`/
+          `max_key` are `&self` immutable reads, so they belong to the CONTAINED
+          immutable half (tier 3 below), not this mutable withdrawal. This step
+          eliminated the part of H1 that actually corrupts memory (write
+          through a dangling `&mut V` after a rehash) as a pure stdlib refactor,
+          compiler unchanged.
        2. **Owned views for stored zero-copy.** Parser results store
           `ByteView { off, len, buf_len }` (Phase 5 #5a), not `&Bytes` fields;
           access goes back through the buffer (`buf.view(header.name)`).

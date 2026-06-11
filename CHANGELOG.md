@@ -10,6 +10,25 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### H1 mutable half closed: get_mut withdrawn, replaced by update (2026-06-11)
+
+- Withdrew `HashMap::get_mut` and `OrderedMap::get_mut` (`-> Option<&mut V>`) —
+  the actual use-after-realloc WRITE vector of H1 — and replaced them with
+  `update(k, f: fn(V) -> V) -> bool`, which moves the value out of the slot,
+  applies `f`, and moves the result back, so no `&mut V` escapes into caller
+  code and the container cannot be reallocated while a borrow is held. Pure
+  stdlib refactor: no compiler change, no Clone, no callbacks, today's
+  fn-pointers. No real callers existed; the map `#[test]`s migrated to
+  `update`. Full suite 1548/0; examples 123/0.
+- `check_returned_ref_provenance.sh` rewritten for the danger-staged state: it
+  now asserts NO `pub fn -> Option<&mut` exists in std (mutable half gone) and
+  that `update` is present, while still reproducing and baseline-freezing the
+  CONTAINED immutable read accessors (`get -> Option<&V>`, `peek`, `min`/`max`/
+  `min_key`/`max_key`) that wait for V1.1 scoped callbacks. The `_map`
+  known-hole fixture migrated from `get_mut` to the immutable `get`.
+- ROADMAP #8a step 1 marked done; KNOWN_HOLES H1 state updated.
+
+
 ### H1 refined: Clone decoupled from the fix; withdrawal staged by danger (2026-06-11, design)
 
 - Sharpened the H1 resolution: **do not make `Clone` the H1 patch.** H1 closes
