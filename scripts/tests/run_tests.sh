@@ -754,6 +754,7 @@ run_ok "$TESTDIR/borrow_mut.con"       42
 run_ok "$TESTDIR/borrow_no_consume.con" 42
 run_ok "$TESTDIR/sequential_mut_borrow.con" 43
 run_ok "$TESTDIR/generic_fn.con"       42
+run_ok "$TESTDIR/generic_infer_through_ref.con" 42
 run_ok "$TESTDIR/generic_struct.con"   30
 run_ok "$TESTDIR/string_basic.con"    5
 run_ok "$TESTDIR/string_borrow.con"   10
@@ -1253,6 +1254,7 @@ run_err "$TESTDIR/error_borrow_after_move.con"    "used after move"
 run_err "$TESTDIR/error_linear_used_not_consumed.con" "was never consumed"
 run_err "$TESTDIR/error_deref_non_ref.con"        "cannot dereference"
 run_err "$TESTDIR/error_generic_count.con"       "expects 2 arguments"
+run_err "$TESTDIR/error_generic_infer_ambiguous.con" "type mismatch"
 run_err "$TESTDIR/error_generic_type.con"        "type mismatch"
 run_err "$TESTDIR/error_generic_unused_linear.con" "was never consumed"
 run_err "$TESTDIR/error_string_unconsumed.con"   "was never consumed"

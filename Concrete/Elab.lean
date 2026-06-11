@@ -321,6 +321,12 @@ private partial def peekExprType (e : Expr) : ElabM Ty := do
     | none => return .placeholder
   | .paren _ inner => peekExprType inner
   | .binOp _ _ lhs _ => peekExprType lhs
+  | .borrow _ inner => return .ref (← peekExprType inner)
+  | .borrowMut _ inner => return .refMut (← peekExprType inner)
+  | .deref _ inner =>
+    match ← peekExprType inner with
+    | .ref t | .refMut t | .ptrMut t | .ptrConst t | .heap t => return t
+    | _ => return .placeholder
   | _ => return .placeholder
 
 -- ============================================================

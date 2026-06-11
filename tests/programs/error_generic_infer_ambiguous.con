@@ -1,0 +1,15 @@
+// Negative companion to generic_infer_through_ref.con (ROADMAP #6b).
+//
+// Inference-through-references must NOT over-reach: when a type parameter
+// appears only in the return position and cannot be determined from any
+// argument, the compiler must still demand an explicit type — it must not
+// silently bind T to something or leak the formal type var. Here T is
+// un-inferable from the (i64) argument, so the `return x` body fails to
+// type-check against the unresolved T (E0220), pinning that genuinely
+// ambiguous calls are rejected rather than miscompiled.
+fn mk<T>(x: i64) -> T { return x; }
+
+fn main() -> i64 {
+    let v: i64 = mk(5);
+    return v;
+}

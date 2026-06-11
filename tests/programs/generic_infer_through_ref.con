@@ -1,0 +1,39 @@
+// Regression for ROADMAP #6b: generic type inference must see through
+// references. Before the fix, `id(&w)` left T unbound (peekExprType returned
+// .placeholder for `&w`), so Elab stamped the call with the *formal* type var
+// and monomorphization leaked `Ty.typeVar` into the specialized body
+// (post-mono E0601). The fix taught peekExprType the &/&mut/* cases in both
+// Check and Elab, so `&w : &i64` unifies `&T` with T := i64 — no turbofish.
+//
+// Exercises: by-ref infer, &mut infer + write-through, and a trait-bound
+// generic over a reference (the original motivating `dup(&b)` Clone case).
+
+trait Clone { fn clone(&self) -> Self; }
+
+struct Copy Box { v: i64 }
+
+impl Clone for Box {
+    fn clone(&self) -> Box { return Box { v: self.v }; }
+}
+
+// T inferred from &T argument, no explicit type args.
+fn id<T>(x: &T) -> i64 { return 0; }
+
+// T inferred from &mut T; writes through the mutable reference.
+fn set<T>(x: &mut T, v: T) -> i64 { *x = v; return 0; }
+
+// Trait-bound generic dispatched through a reference.
+fn dup<T: Clone>(x: &T) -> T { return x.clone(); }
+
+fn main() -> i64 {
+    let w: i64 = 5;
+    let a: i64 = id(&w);              // a = 0, infers T = i64
+
+    let mut m: i64 = 1;
+    let _z: i64 = set(&mut m, 41);    // m := 41, infers T = i64
+
+    let b: Box = Box { v: 1 };
+    let c: Box = dup(&b);             // infers T = Box, dispatches Box::clone
+
+    return a + m + c.v;               // 0 + 41 + 1 = 42
+}

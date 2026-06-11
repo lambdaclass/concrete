@@ -1041,27 +1041,28 @@ rest of Phase 5 stays after that slab in the same linear queue.
      distinct capacities specialize separately, layout is capacity-specific,
      runtime-safety obligations name the instantiated size, and unsupported
      non-integer/comptime-reflection forms are rejected.
-   - 6b. Fix generic type-argument inference through references before
-     collection/HOF APIs land. Today inference does NOT see through a `&`:
-     `fn id<T>(x: &T)` called as `id(&w)` fails with E0220 ("expected &T, got
-     &W") and forces an explicit `id::<W>(&w)`, while the by-value form
-     `id<T>(x: T)` infers fine. `unifyTypes` does not unify `&T` against `&W`
-     to learn `T = W`. This is fail-closed (it rejects, never miscompiles) but
-     it blocks essentially every generic-over-references API — `Vec::fold`,
-     `map`, `for_each`, `HashMap` callbacks all take `&T`/`&K`/`&V` — so the
-     Phase 6 stdlib HOF surface and the iteration/callable-values work (#23,
-     #24) cannot be ergonomic until it lands. Extend `unifyTypes` to recurse
-     through `&`/`&mut` (and ideally `[T; N]`, `Option<T>`, etc.). Add
-     `tests/programs/generic_infer_through_ref.con` (positive: `id(&w)` infers
-     without turbofish) and a negative pinning that a genuinely ambiguous case
-     still asks for an explicit type arg; gate via the main suite.
-     NOTE (2026-06-11): not on the H1 critical path (H1's tier-1 fix is
-     library-only and Clone-free, #8a). But this IS the prerequisite for
-     `Clone` whenever it is built (#8a2): `x.clone()` on a bounded `&T` infers
-     without turbofish only once `unifyTypes` recurses through `&`. Verified the
-     dispatch itself works (`dup::<Box>(&b)` returns 42); only the `&`-inference
-     is missing. Also the unblocker for ergonomic HOF/iteration call sites
-     generally.
+   - 6b. [DONE 2026-06-11] Fixed generic type-argument inference through
+     references. Before: inference did NOT see through a `&`: `fn id<T>(x: &T)`
+     called as `id(&w)` failed and forced an explicit `id::<W>(&w)`, while the
+     by-value form `id<T>(x: T)` inferred fine. ROOT CAUSE was not `unifyTypes`
+     (which already recursed through `&`/`&mut`) but `peekExprType` — the
+     side-effect-free type peek used to learn argument types during inference —
+     which lacked `.borrow`/`.borrowMut`/`.deref` cases and fell through to
+     `.placeholder`, so `&w` peeked as `.placeholder` and `unifyTypes(&T,
+     .placeholder)` learned nothing. The peek exists in BOTH `Check.lean`
+     (validation) and `Elab.lean` (which stamps the inferred type args onto the
+     `CExpr.call` node consumed by Mono); only fixing Check left Elab stamping
+     the *formal* type var, which Mono then "specialized" to `id_for_TV_T` and
+     post-mono verify caught the leaked `Ty.typeVar` (E0601). Fix taught
+     `peekExprType` the `&`/`&mut`/`*` cases in both files: `&e : &(peek e)`,
+     `&mut e : &mut (peek e)`, `*e` strips one ref/ptr/heap layer. Now `id(&w)`,
+     `set(&mut m, v)`, and trait-bound `dup(&b)` (the `Clone` motivator) all
+     infer without turbofish. Regression fixtures:
+     `tests/programs/generic_infer_through_ref.con` (positive, returns 42) and
+     `tests/programs/error_generic_infer_ambiguous.con` (negative: `T` only in
+     return position stays un-inferable and is rejected with E0220, not
+     miscompiled); both gated via the main suite. This unblocks `Clone` (#8a2)
+     and ergonomic HOF/iteration call sites (#23, #24) that take `&T`/`&K`/`&V`.
 7. Add `concrete fmt`: stable formatting for source files, examples, docs
    snippets, and generated fixtures. Formatting must not churn semantic
    fingerprints.
@@ -1542,7 +1543,8 @@ class and authority/allocation story.
      `docs/VALUE_MODEL.md` Clone/Move section now (recorded); build `Clone` /
      `swap` only when a workload needs them, independent of H1.
      Prerequisite when `Clone` is built: #6b inference-through-references, so
-     `x.clone()` on a bounded `&T` infers without turbofish.
+     `x.clone()` on a bounded `&T` infers without turbofish — [DONE 2026-06-11],
+     this prerequisite is now satisfied.
    - 8a1. Scalar `from(param)` returned references are DEFERRED, not the v1
      fix (revised 2026-06-11). They are the evidence-driven escape valve, added
      only if real workloads prove operation APIs + owned views + scoped

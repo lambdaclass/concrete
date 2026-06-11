@@ -717,6 +717,16 @@ def peekExprType (e : Expr) : CheckM Ty := do
     | none => return .placeholder
   | .paren _ inner => peekExprType inner
   | .binOp _ _ lhs _ => peekExprType lhs
+  -- Borrows must carry the reference wrapper so generic inference can unify
+  -- `&T` against `&i64` (ROADMAP Phase 5 #6b). Without these, `peekExprType
+  -- (&w)` fell through to `.placeholder` and `id(&w)` could not infer `T`,
+  -- forcing an explicit turbofish.
+  | .borrow _ inner => return .ref (← peekExprType inner)
+  | .borrowMut _ inner => return .refMut (← peekExprType inner)
+  | .deref _ inner =>
+    match ← peekExprType inner with
+    | .ref t | .refMut t | .ptrMut t | .ptrConst t | .heap t => return t
+    | _ => return .placeholder
   | _ => return .placeholder
 
 /-- Unify a pattern type with an actual type to discover type variable bindings. -/

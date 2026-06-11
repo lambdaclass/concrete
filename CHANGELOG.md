@@ -10,6 +10,30 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Generic type inference sees through references (#6b) (2026-06-11)
+
+- Fixed generic type-argument inference through `&`/`&mut`. Before, `fn
+  id<T>(x: &T)` called as `id(&w)` failed and forced an explicit `id::<W>(&w)`,
+  even though the by-value form `id<T>(x: T)` inferred fine. The root cause was
+  not `unifyTypes` (it already recursed through references) but `peekExprType`,
+  the side-effect-free type peek used during inference: it lacked
+  `.borrow`/`.borrowMut`/`.deref` cases and fell through to `.placeholder`, so
+  `&w` peeked as nothing and `unifyTypes(&T, .placeholder)` learned no binding.
+- The peek lives in BOTH `Check.lean` (validation) and `Elab.lean` (which
+  stamps inferred type args onto the `CExpr.call` node Mono consumes). Fixing
+  only Check left Elab stamping the *formal* type var, which Mono "specialized"
+  to `id_for_TV_T` — leaking `Ty.typeVar` into the body and tripping post-mono
+  verify (E0601). Fixed in both: `&e : &(peek e)`, `&mut e : &mut (peek e)`,
+  `*e` strips one ref/ptr/heap layer.
+- Now `id(&w)`, `set(&mut m, v)`, and trait-bound `dup(&b)` (the `Clone`
+  motivator) infer without turbofish. Genuinely ambiguous cases (a type param
+  only in return position) still stay un-inferable and are rejected with E0220
+  rather than miscompiled. Regressions:
+  `tests/programs/generic_infer_through_ref.con` (positive, 42) and
+  `tests/programs/error_generic_infer_ambiguous.con` (negative), both gated by
+  the main suite. Unblocks `Clone` (#8a2) and ergonomic HOF/iteration APIs that
+  take `&T`/`&K`/`&V` (#23/#24). Full suite 1550/0.
+
 ### H1 mutable half closed: get_mut withdrawn, replaced by update (2026-06-11)
 
 - Withdrew `HashMap::get_mut` and `OrderedMap::get_mut` (`-> Option<&mut V>`) —
