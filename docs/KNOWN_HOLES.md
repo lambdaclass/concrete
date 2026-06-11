@@ -43,9 +43,12 @@ code. Affected: `HashMap::get`/`get_mut`, `OrderedMap::get`/`get_mut`,
   ROADMAP Phase 6 #8a, three tiers: (1) withdraw the aggregate-ref APIs and
   replace with operation/value APIs — `contains`, value-`get` (Copy),
   `remove -> Option<V>`, `replace`, `update(k, fn(V) -> V)` (moves, so works
-  for non-Copy too; uses only today's fn-pointers — closes H1 as a pure stdlib
-  refactor, no new language feature); (2) owned `ByteView` for stored
-  zero-copy (#5a); (3) scoped callbacks `with_value`/`with_value_mut`/`modify`
+  for non-Copy too; uses only today's fn-pointers) plus `get_cloned(k) ->
+  Option<V>` for non-Copy reads via a LIBRARY-ONLY stdlib `trait Clone` (no
+  builtin needed — verified it rides existing trait-bound dispatch; gated on
+  #6b inference-through-refs for ergonomic call sites, see #8a2); (2) owned
+  `ByteView` for stored zero-copy (#5a); (3) scoped callbacks
+  `with_value`/`with_value_mut`/`modify`
   (V1.1, after the callable-values doc #24, with the container-not-in-context
   invariant). Scalar `from(param)` is DEFERRED (#8a1), evidence-driven, never
   the v1 fix. Precisely-scoped deferred gap: borrowed non-consuming access to a

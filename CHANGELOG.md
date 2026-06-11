@@ -10,6 +10,22 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### H1 tier-1 implementation scoping: Clone is library-only, gated on #6b (2026-06-11, design)
+
+- De-risked the tier-1 stdlib refactor before writing it. Key finding: the
+  `get_cloned(k) -> Option<V>` accessor needed for non-Copy value reads is
+  **library-only** — a stdlib `trait Clone { fn clone(&self) -> Self }` rides
+  the existing trait-bound dispatch (verified: `dup::<Box>(&b)` returns 42), so
+  no builtin trait or compiler change is required.
+- Two prerequisites surfaced: (a) #6b inference-through-references — without it
+  `map.get_cloned(&k)` needs explicit turbofish; (b) `impl Clone for String`
+  must resolve the type's inherent `clone` from inside the impl. Recorded the
+  sequencing (#6b → Clone trait + impls + get_cloned → withdraw + migrate +
+  flip gate) and a sibling `move`/`take` value-access primitive in ROADMAP
+  #8a2 / #6b. No code changed yet — investigation chose the safe order over a
+  rushed multi-system change.
+
+
 ### H1 resolution decided + validated against workloads (2026-06-11, design)
 
 - Decided to fix H1 (returned-ref provenance) **by subtraction** — withdraw the

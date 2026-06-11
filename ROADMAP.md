@@ -1055,6 +1055,13 @@ rest of Phase 5 stays after that slab in the same linear queue.
      `tests/programs/generic_infer_through_ref.con` (positive: `id(&w)` infers
      without turbofish) and a negative pinning that a genuinely ambiguous case
      still asks for an explicit type arg; gate via the main suite.
+     NOTE (2026-06-11): this is now also the unblocker for the H1 tier-1 fix.
+     The `get_cloned<V: Clone>(k: &K) -> Option<V>` accessor calls clone on a
+     bounded type param, and a stdlib `trait Clone { fn clone(&self) -> Self }`
+     rides the existing trait-bound dispatch — VERIFIED it works with explicit
+     turbofish (`dup::<Box>(&b)` returns 42), but `map.get_cloned(&k)` without
+     turbofish hits exactly this `&`-inference gap. So #6b lands before Clone
+     to keep the value-access APIs ergonomic.
 7. Add `concrete fmt`: stable formatting for source files, examples, docs
    snippets, and generated fixtures. Formatting must not churn semantic
    fingerprints.
@@ -1495,6 +1502,27 @@ class and authority/allocation story.
      tier-1 clone for the compare). No workload needs a borrowed reference to
      ESCAPE a scope — the only thing `from()` would add — so deferring
      `from()` is empirically justified, not just speculative.
+   - 8a2. Value-access primitive family (the tier-1 enabler, decided
+     2026-06-11 path (i)). `get_cloned(k) -> Option<V>` is how a non-Copy value
+     is read out without a borrowed return. It is LIBRARY-ONLY: a stdlib
+     `trait Clone { fn clone(&self) -> Self }` plus `impl Clone for T` rides the
+     existing trait-bound dispatch — no builtin trait needed (verified:
+     `dup::<Box>(&b)` returns 42). Two prerequisites discovered before it is
+     ergonomic/usable:
+       (a) #6b inference-through-references — `map.get_cloned(&k)` without
+           turbofish needs it; do #6b first.
+       (b) `impl Clone for String` (and other builtin types) must resolve the
+           type's inherent `clone` from inside the impl — verify/enable
+           trait-impl-for-builtin sees inherent methods.
+     Sibling primitive (your call to track): **`move`/`take`** — ownership-out,
+     not copy-out. `remove -> Option<V>` already takes-and-deletes; a `take`
+     (take by key/index leaving the slot empty or a default) or `swap` may be
+     wanted for in-place ownership transfer without clone. Specify the family
+     — `Clone` (copy-out), `take`/`swap` (move-out), value-`get` (Copy
+     copy-out) — together. Sequencing for the H1 tier-1 withdrawal: #6b →
+     stdlib `Clone` trait + impls + `get_cloned` (verify impl-for-builtin) →
+     `take`/`swap` if a workload needs them → withdraw aggregate-ref APIs +
+     migrate (kvstore/integrity `get` → `get_cloned`) + flip the gate.
    - 8a1. Scalar `from(param)` returned references are DEFERRED, not the v1
      fix (revised 2026-06-11). They are the evidence-driven escape valve, added
      only if real workloads prove operation APIs + owned views + scoped
