@@ -215,9 +215,13 @@ These are not holes (no current unsoundness) but are unmade decisions that must
 land before the relevant freeze. Full text in ROADMAP; listed here so the
 whole picture is in one place.
 
-- **Callable values + `from(param)` provenance** — ROADMAP Phase 5 #24/#24a.
-  THE keystone: `docs/CALLABLE_VALUES_AND_CAPABILITIES.md` does not exist yet,
-  so the stdlib HOF surface is frozen, and writing it is also the fix for H1.
+- **Callable values + capability-polymorphic callbacks** — ROADMAP Phase 5
+  #24/#24a. DESIGN DONE (2026-06-12): `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`
+  now exists and records the decided model; the HOF freeze is lifted (doc
+  governs). What remains is implementation — and in particular the scoped
+  collection callbacks (`with_value`/`with_value_mut`/`modify`) that the H1
+  immutable-half withdrawal below depends on. `from(param)` stays deferred
+  (#8a1) and is explicitly NOT the H1 fix.
 - **Owned `ByteView` zero-copy stored idiom** — Phase 5 #5a.
 - **Narrow const generics** (`[T; N]`) — Phase 5 #6a.
 - **Pattern completeness** (ranges/guards/or/nested) — Phase 5 #11.

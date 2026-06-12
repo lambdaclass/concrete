@@ -10,6 +10,39 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Callable-values + capability-polymorphic callbacks design checkpoint (#24) (2026-06-12)
+
+- Wrote `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`, the keystone design doc that
+  gated the Phase 6 HOF/iteration surface, scoped collection callbacks, and the
+  V1.1 immutable-read withdrawal (the last open half of H1). Decided model:
+  - **Bound callbacks are an explicit function pointer + context** — no closures,
+    no hidden captures. The "binding" is the combinator taking the context as its
+    own parameter and forwarding it.
+  - **Three context modes**: shared `&Ctx`, mutable `&mut Ctx`, consuming `Ctx`
+    (the last is one-shot, enforced by ordinary linearity).
+  - **Capabilities live on the callback fn type and are required at the call
+    site** — never erased by passing a function through a combinator.
+  - **Representation is use-site binding** (`cap C` + `fn(T) with(C) -> R`),
+    which the language already implements — *not* a first-class `BoundFn<…>`
+    value (deferred until a storage workload needs it).
+  - **Scoped collection callbacks** (`with_value`/`with_value_mut`/`modify`)
+    return owned values only and yield a borrow *into* the callback; sound via
+    the **container-not-in-context invariant**, which is largely a theorem about
+    the existing no-aggregate-ref ban plus the live receiver borrow, backed by a
+    residual gate check.
+  - **`for x in …` lowers to a direct loop, not a callback**; bound callbacks are
+    the explicit composable HOF surface.
+  - **Proof granularity**: generic contract + per-instance `proved_for_instance`.
+  - **`from(param)` stays deferred** — not this design's job, not the H1 fix.
+- The base machinery (`cap C`, fn-type capsets, call-site subset check,
+  fn-pointer capability requirement / smuggle rejection) was already implemented;
+  the doc builds on it. `check_capability_polymorphism_design.sh` now reports the
+  doc exists → the HOF freeze is lifted (the doc governs new surface), while the
+  smuggle fixture stays permanently rejected.
+- Remaining work is implementation, per the doc's §11 build order: context
+  threading, scoped callbacks + their gate, the immutable-read withdrawal, then
+  the capability-polymorphic HOF stdlib surface.
+
 ### Generic type inference sees through references (#6b) (2026-06-11)
 
 - Fixed generic type-argument inference through `&`/`&mut`. Before, `fn

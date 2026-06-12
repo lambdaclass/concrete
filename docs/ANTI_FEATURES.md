@@ -152,13 +152,13 @@ Each entry has:
 
 ## Premature Contracts and Ghost Code
 
-### No pre/post conditions in the first release
+### No decorative contracts
 
-**Why:** Contract annotations (`requires`, `ensures`, `invariant`) look like guarantees but are only as strong as the verification backing them. Adding contracts before the proof pipeline is mature creates unverified annotations that give false confidence. Concrete's ProofCore currently covers pure functions with no loops, no mutation, and no capabilities. Extending contracts to effectful code requires a more mature extraction and verification pipeline.
+**Why:** Contract annotations (`requires`, `ensures`, `invariant`) look like guarantees but are only as strong as the evidence backing them. Concrete now has source contracts, contract reports, VC generation, call-site precondition checking, loop obligations, vacuity detection, SMT counterexamples, and proof-link integration. The anti-feature is not "contracts"; the anti-feature is contracts that silently decorate code without producing an obligation, evidence class, policy result, or audit fact.
 
-**What Concrete does instead:** The proof model is function-level and theorem-shaped: a Lean 4 theorem is attached to a specific function's PExpr representation. `--report proof-status` shows what is actually proved. No annotation claims more than the proof pipeline can verify.
+**What Concrete does instead:** Every source contract is a claim. The compiler lowers contracts into stable obligations and reports their current evidence (`proved_by_kernel_decision`, `proved_by_lean`, `solver_trusted`, `counterexample`, `vacuous`, `unproven`, etc.) through `--report contracts`, `--report vcs`, `--report audit`, and release bundles. A contract that cannot be checked remains visible as an unresolved or weaker-evidence claim; it is never silently upgraded into a guarantee.
 
-**Status:** Deferred. Contracts may be added when ProofCore extraction covers a broader subset and the proof pipeline can verify the annotations mechanically. The prerequisite is real proof coverage, not annotation syntax.
+**Status:** Permanent for unchecked/decorative contracts. Shipped contracts are allowed only because they are obligation-backed and evidence-classed. See `CONTRACTS_GUIDE.md` and `CONTRACTS_AND_VCS.md`.
 
 **Comparison:**
 - Rust: No built-in contracts. `#[cfg(test)]` assertions only. Third-party tools (Kani, Prusti) add verification.
@@ -334,7 +334,7 @@ Each entry has:
 | Hindley-Milner inference | Permanent | Worse diagnostics; breaks phase separation |
 | Exceptions / unwinding | Permanent | Hidden control flow; breaks predictable profile |
 | Full algebraic effects | Permanent | Complexity; runtime cost |
-| Pre/post conditions | Deferred | Proof pipeline not mature enough |
+| Decorative contracts | Permanent | Contract claims must lower to obligations/evidence, never unchecked decoration |
 | Ghost code | Deferred | Erasure discipline not designed |
 | Trait objects / dyn dispatch | Permanent | Opaque call targets; breaks static analysis |
 | Closures | Permanent | Hidden capture; hidden data flow |

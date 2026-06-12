@@ -1192,6 +1192,25 @@ rest of Phase 5 stays after that slab in the same linear queue.
     bare function pointers, bound callback values, explicit context structs,
     callback mutability/linearity modes, and capability polymorphism must be
     specified together.
+    DESIGN CHECKPOINT DONE (2026-06-12): `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`
+    now exists and records the decided model — bound callbacks are an explicit
+    function pointer + context (no closures, no hidden captures); three context
+    modes `&Ctx`/`&mut Ctx`/`Ctx` (shared/mutable/consuming, the last one-shot);
+    capabilities live on the callback fn type and are required at the call site;
+    representation is use-site binding (`cap C` + `fn(T) with(C) -> R`, already
+    implemented), NOT a first-class `BoundFn<…>` (deferred until a storage
+    workload needs it); scoped collection callbacks `with_value`/`with_value_mut`/
+    `modify` return owned values only and are made sound by the
+    container-not-in-context invariant (largely a theorem about the existing
+    no-aggregate-ref ban + the live receiver borrow, plus a residual gate
+    check); `for x in …` lowers to a direct loop, not a callback; proof
+    granularity is generic-contract + per-instance `proved_for_instance`;
+    `from(param)` stays deferred. The HOF freeze is now lifted (the doc governs
+    new surface); the design gate
+    `scripts/tests/check_capability_polymorphism_design.sh` reports doc-exists
+    and keeps the smuggle fixture rejected. Remaining work is IMPLEMENTATION (see
+    the doc's §11 build order): context threading, scoped callbacks + their gate,
+    the immutable-read withdrawal (H1 tail), then the HOF stdlib surface (#23).
 
     The design must avoid a combinatorial split like `map`, `map_file`,
     `map_alloc`; the expected use-site shape remains explicit capability-set
@@ -1263,6 +1282,13 @@ rest of Phase 5 stays after that slab in the same linear queue.
       `scripts/tests/check_capability_polymorphism_design.sh` must fail if the
       stdlib gains new HOF surface without the widened design doc, and must
       keep the smuggling fixture rejected.
+      UPDATE (2026-06-12): the widened design doc
+      `docs/CALLABLE_VALUES_AND_CAPABILITIES.md` now exists, so the design gate
+      that #24a required is satisfied and the HOF freeze is lifted (the doc
+      governs new surface). Invariant 1 (smuggle rejection) remains permanent and
+      still locked by the gate. The Phase 6 iteration/HOF surface may now be
+      designed against the doc; the callable-values *implementation* (context
+      threading, scoped callbacks, withdrawal) is the remaining work.
 25. Define the stdlib handoff contract for Phase 6. Phase 5 decides the
     language surfaces the stdlib depends on — modules/imports, project model,
     tests, diagnostics, bytes/text/path types, collections, narrow const
