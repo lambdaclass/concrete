@@ -65,6 +65,41 @@ code. Affected: `HashMap::get`/`get_mut`, `OrderedMap::get`/`get_mut`,
   array/container/callback-context) is permanent; unfreezing it is a
   thesis-level decision.
 
+### C9. Address-taken loop variable → lost condition / infinite loop — OPEN
+
+A loop variable that is **both** loop-carried and address-taken (e.g. `&i`
+inside a `while i < n { … ; i = i + 1 }`) miscompiles: the variable is promoted
+to an alloca (because of `&i`, per C8) **and** kept as an SSA phi, the two
+diverge, the init `store 0` lands inside the loop body (resetting the counter
+every iteration), and the loop condition disappears entirely — producing a
+silent infinite loop (wrong answer / hang, no diagnostic). Root cause is the
+interaction between alloca-promotion (C8) and the loop SSA/phi construction: a
+promoted variable that is loop-carried must be driven entirely through memory
+(load/condition/increment/store via the alloca), not also through a phi.
+- **Repro:** `tests/known_bugs/loop_var_borrow.con` (currently hangs; lives
+  outside `tests/programs/` so no glob runs it — see roadmap).
+- **Scope:** does NOT affect the stdlib or the callable-values work — stdlib
+  loops use a plain counter and never borrow it; container callbacks borrow
+  *elements* via pointer walks. Surfaced while implementing #24 step 1.
+- **Disposition:** fail-closed candidate — until the loop-SSA/promotion
+  interaction is fixed, the checker should *reject* borrowing a loop-carried
+  mutable variable rather than miscompile. Tracked at ROADMAP Phase 5 #6c.
+
+### C10. Indexing an array behind a reference yields `&<unknown>` — OPEN
+
+Borrowing an element of an array reached through a `&[T; N]` (`&arr[i]` where
+`arr: &[T; N]`) fails type resolution with `&<unknown>` (E0220 at the use site),
+because the array-index element type is not resolved when the array operand is
+itself a reference. This is fail-closed (it rejects, never miscompiles) but
+blocks the ergonomic `&arr[i]` element-borrow loop form.
+- **Repro:** `tests/known_bugs/index_through_ref.con` (currently rejected with
+  E0220).
+- **Scope:** does NOT block the callable-values work — combinators iterate
+  container internals via pointer walks. Surfaced while implementing #24 step 1.
+- **Disposition:** resolve array-index element type through `&`/`&mut`/`*` in the
+  type checker (sibling of the #6b `peekExprType` fix). Tracked at ROADMAP
+  Phase 5 #6c.
+
 ---
 
 ## CLOSED this session (kept here so the fix can't silently regress)

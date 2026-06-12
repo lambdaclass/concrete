@@ -933,6 +933,19 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       return .unit
 
   | .borrow inner ty =>
+    -- Reborrow: `&(*r)` has the same address as `r`, so it must lower to the
+    -- pointer `r` itself — never a copy. Without this, `&*ctx` would load the
+    -- pointee into a temp and take *its* address, so the borrow would not alias
+    -- the original storage (the mutable-context-threading miscompile: a callback
+    -- given `&*ctx` repeatedly would see throwaway copies). Handle it before
+    -- addrOfLocal, since `*e` is never a plain local name.
+    match inner with
+    | .deref refExpr _ =>
+      let rVal ← lowerExpr refExpr
+      let dst ← freshReg
+      emit (.cast dst rVal ty)
+      return .reg dst ty
+    | _ =>
     -- Taking the address of a LOCAL must yield the address of that local's
     -- storage, not a fresh copy — otherwise a pointer/ref to a local does not
     -- alias the local (ROADMAP Phase 4 #44d / H5). Promote the local to a
@@ -966,6 +979,17 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       return .reg slot ty
 
   | .borrowMut inner ty =>
+    -- Reborrow: `&mut (*r)` has the same address as `r`. This is what makes a
+    -- `&mut Ctx` threadable across repeated callback calls — each `&mut *ctx`
+    -- is a fresh reborrow that ends when the callee returns, never a copy. See
+    -- the `.borrow` case above for why the copy path would be a miscompile.
+    match inner with
+    | .deref refExpr _ =>
+      let rVal ← lowerExpr refExpr
+      let dst ← freshReg
+      emit (.cast dst rVal ty)
+      return .reg dst ty
+    | _ =>
     match ← addrOfLocal inner ty with
     | some p => return p
     | none =>

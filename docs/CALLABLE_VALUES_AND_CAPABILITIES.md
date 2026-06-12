@@ -411,8 +411,19 @@ Examples to add under `examples/callbacks/`:
 
 1. **[done]** Capability polymorphism base (`cap C`, fn-type capsets, call-site
    subset check, fn-ptr capability requirement / smuggle rejection).
-2. **[this doc]** The model above — design gate for #24a satisfied by this file.
-3. Bound-callback context threading (§3) + the elision shortcut (§6).
+2. **[done]** The model above — design gate for #24a satisfied by this file.
+3. **[done 2026-06-12]** Bound-callback context threading (§3), all three modes.
+   The reborrow (`&mut *ctx`, §3.4) is what makes a `&mut Ctx` threadable across
+   repeated callback calls. Implementing it surfaced a real miscompile: `&mut *e`
+   / `&*e` lowered to "load the pointee into a fresh temp and take *its* address"
+   — so a reborrowed `&mut Ctx` aliased a throwaway copy and the callback's
+   mutations were lost (the combinator returned 0 instead of the accumulated
+   value). Fixed in `Concrete/Lower.lean`: `&(*e)` / `&mut (*e)` now lower to the
+   pointer `e` itself (a true reborrow, no copy). Gated by
+   `scripts/tests/check_callable_values.sh` (three modes thread correctly; the
+   reborrow aliases and has no temp alloca in IR; caps not erased) and
+   `tests/programs/callback_context_modes.con` in the main suite. The `with(f)`
+   elision shortcut (§6) is not yet built (combinators write `cap C` explicitly).
 4. Scoped collection callbacks (§5) + the container-not-in-context gate (§9).
 5. Withdraw the immutable read accessors (§5.2) — closes the H1 tail.
 6. The capability-polymorphic HOF stdlib surface (`map`/`fold`/`for_each`) and

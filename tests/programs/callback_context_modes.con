@@ -1,0 +1,57 @@
+// Bound-callback context threading — the three context modes from
+// docs/CALLABLE_VALUES_AND_CAPABILITIES.md §3 (ROADMAP Phase 5 #24, step 1).
+//
+// A bound callback is an explicit function pointer + context (no closures): the
+// combinator takes the context as its own parameter and forwards it. Each mode
+// threads the context differently:
+//   - shared   `&Ctx`     : Copy, freely reused across repeated calls;
+//   - mutable  `&mut Ctx`  : linear, so repeated calls REBORROW (`&mut *ctx`),
+//                            each reborrow scoped to the call (no copy — the
+//                            callee mutates the original storage);
+//   - consuming `Ctx`      : moved in, one-shot.
+//
+// All three are generic over `Ctx` and capability-polymorphic over `cap C`,
+// which exercises generic inference through `&`/`&mut` (ROADMAP #6b). The
+// mutable case is the regression for the reborrow miscompile: before the fix,
+// `&mut *ctx` copied the pointee into a temp and the callback mutated the
+// throwaway, so `into_mut` below returned 0 instead of 30.
+
+struct Copy SharedCtx { base: i64 }
+struct Copy MutCtx { total: i64 }
+struct Copy OwnCtx { seed: i64 }
+
+fn read_with(ctx: &SharedCtx, x: &i64) -> i64 { return ctx.base + *x; }
+fn accum(ctx: &mut MutCtx, x: &i64) { ctx.total = ctx.total + *x; }
+fn finish(ctx: OwnCtx, x: &i64) -> i64 { return ctx.seed * *x; }
+
+// shared &Ctx: reused across two calls (refs are Copy).
+fn sum_shared<Ctx, cap C>(ctx: &Ctx, a: &i64, b: &i64, f: fn(&Ctx, &i64) with(C) -> i64) with(C) -> i64 {
+    return f(ctx, a) + f(ctx, b);
+}
+
+// mutable &mut Ctx: reborrow `&mut *ctx` for each call.
+fn into_mut<Ctx, cap C>(ctx: &mut Ctx, a: &i64, b: &i64, f: fn(&mut Ctx, &i64) with(C)) with(C) {
+    f(&mut *ctx, a);
+    f(&mut *ctx, b);
+}
+
+// consuming Ctx: moved in, one-shot.
+fn once<Ctx, R, cap C>(ctx: Ctx, x: &i64, f: fn(Ctx, &i64) with(C) -> R) with(C) -> R {
+    return f(ctx, x);
+}
+
+fn main() -> i64 {
+    let sh: SharedCtx = SharedCtx { base: 100 };
+    let one: i64 = 1; let two: i64 = 2;
+    let s: i64 = sum_shared(&sh, &one, &two, read_with);    // (100+1)+(100+2) = 203
+
+    let mut mc: MutCtx = MutCtx { total: 0 };
+    let ten: i64 = 10; let twenty: i64 = 20;
+    into_mut(&mut mc, &ten, &twenty, accum);                 // mc.total -> 10+20 = 30
+
+    let oc: OwnCtx = OwnCtx { seed: 3 };
+    let four: i64 = 4;
+    let o: i64 = once(oc, &four, finish);                    // 3*4 = 12
+
+    return s + mc.total + o;                                 // 203 + 30 + 12 = 245
+}

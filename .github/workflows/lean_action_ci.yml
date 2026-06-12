@@ -312,6 +312,9 @@ jobs:
       - name: Callable-values/capability design gate (Phase 5 #24a — fn-ptr smuggling closed, HOF freeze)
         run: bash scripts/tests/check_capability_polymorphism_design.sh
 
+      - name: Callable-values gate (Phase 5 #24 step 1 — context modes; &mut *ctx reborrow aliases)
+        run: bash scripts/tests/check_callable_values.sh
+
       - name: Returned-ref provenance known-hole gate (aggregate-ref public API freeze)
         run: bash scripts/tests/check_returned_ref_provenance.sh
 

@@ -10,6 +10,33 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Bound-callback context threading + `&mut *` reborrow fix (#24 step 1) (2026-06-12)
+
+- Implemented the three context modes from the callable-values design
+  (`docs/CALLABLE_VALUES_AND_CAPABILITIES.md` §3): shared `&Ctx`, mutable
+  `&mut Ctx`, and consuming `Ctx`, all generic over `Ctx` and capability-
+  polymorphic over `cap C`. A bound callback is an explicit function pointer +
+  context — no closures, no captures.
+- The mutable mode needs to thread a `&mut Ctx` across repeated callback calls;
+  since `&mut` is linear, each call REBORROWS (`&mut *ctx`). Implementing this
+  surfaced a **silent miscompile**: `&mut *e` / `&*e` lowered to "load the
+  pointee into a fresh alloca and take *that* address," so a reborrowed
+  `&mut Ctx` aliased a throwaway copy and the callback's mutations were lost (a
+  combinator accumulating into a context returned 0 instead of the real sum).
+  Fixed in `Concrete/Lower.lean`: `&(*e)` / `&mut (*e)` now lower to the pointer
+  `e` itself — a true reborrow, no copy. Verified in IR (the reborrow call now
+  passes the context pointer directly, no `alloca`) and by execution.
+- Gated by `scripts/tests/check_callable_values.sh` (three modes thread
+  correctly; reborrow aliases and has no temp alloca; callback capabilities are
+  not erased) — wired into the Makefile (`test-callable-values`) and CI — plus
+  `tests/programs/callback_context_modes.con` (= 245) in the main suite. Full
+  suite 1551/0.
+- Filed two reference-handling bugs discovered during this work (neither on the
+  H1/callable-values path): **C9** — an address-taken, loop-carried variable
+  (`&i` in a mutating loop) miscompiles to a silent infinite loop (HIGH); **C10**
+  — `&arr[i]` through a `&[T; N]` resolves to `&<unknown>` (fail-closed). Repros
+  under `tests/known_bugs/`, tracked in `docs/KNOWN_HOLES.md` and ROADMAP #6c.
+
 ### Callable-values + capability-polymorphic callbacks design checkpoint (#24) (2026-06-12)
 
 - Wrote `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`, the keystone design doc that

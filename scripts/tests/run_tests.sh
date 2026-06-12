@@ -755,6 +755,7 @@ run_ok "$TESTDIR/borrow_no_consume.con" 42
 run_ok "$TESTDIR/sequential_mut_borrow.con" 43
 run_ok "$TESTDIR/generic_fn.con"       42
 run_ok "$TESTDIR/generic_infer_through_ref.con" 42
+run_ok "$TESTDIR/callback_context_modes.con" 245
 run_ok "$TESTDIR/generic_struct.con"   30
 run_ok "$TESTDIR/string_basic.con"    5
 run_ok "$TESTDIR/string_borrow.con"   10
