@@ -257,6 +257,45 @@ This is the borrow-block trick generalized from a lexical scope to a data
 structure: the element borrow is real, but it is provably confined to the
 callback's activation, so no provenance tracking is needed.
 
+For the broader design-space comparison (Rust lifetimes, Austral regions,
+Swift-style `with...` APIs, Go-style operation APIs, and Concrete's chosen
+tiers), see `research/language/borrowed-container-access.md`.
+
+### 5.0 Why a callback and not a lexical borrow block (decided 2026-06-12)
+
+The obvious alternative is to extend Concrete's existing borrow blocks to
+container elements, Austral-style:
+
+```con
+borrow v = m.get(k) in 'R {   // m frozen in 'R (cannot realloc); v cannot escape 'R
+    use(v)
+}
+```
+
+This is more ergonomic than a callback (no inversion of control, direct access
+to outer locals, natural early-return) and more native to Concrete, which
+*already* has borrow blocks and regions. It was considered and **deferred**, not
+chosen, for one decisive reason: it requires the checker to understand that
+`m.get(k)` **returns a reference borrowed from `self`**. That is
+returned-reference provenance — a *minimal* `from(self)` (just "borrows self,"
+with no region variables, inference, or outlives propagation, so far weaker than
+Rust lifetimes) — but it is still the `from()` machinery that ROADMAP #8a1
+deliberately defers and that H1's whole resolution was designed *not* to depend
+on. Re-opening it to close H1's tail would undo that decision.
+
+`with_value` needs none of it: the borrow is created **inside** the combinator
+and passed **down** to the callback, so it never appears in any return type and
+no provenance annotation exists to track. The callback boundary *is* the region.
+This is why `with_value` is the V1.1 mechanism and the borrow block is not.
+
+**Recorded direction.** V1.1 mechanism: scoped callbacks (this section). Future
+ergonomic alternative: borrow-block container projections (`borrow v = m.get(k)
+in 'R { … }`), to be designed **only if `with_value` proves too awkward in real
+code** — evidence-gated, exactly like `from()` itself. `from(self)` /
+returned-reference provenance remains deferred (#8a1) until such evidence
+exists. The borrow block, if ever built, is ergonomic syntax for an
+already-proven model, not the first mechanism.
+
 ### 5.1 The container-not-in-context invariant (soundness keystone)
 
 `with_value` is sound **iff the callback cannot reach the container through its

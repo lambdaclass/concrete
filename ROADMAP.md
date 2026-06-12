@@ -1551,6 +1551,22 @@ class and authority/allocation story.
           the **container being accessed must not be reachable from the
           callback's context** (value-semantics + no-closures invariant;
           trusted/raw-pointer smuggling stays audit-responsibility).
+          CALLBACK vs BORROW-BLOCK — DECIDED 2026-06-12: the V1.1 mechanism is
+          the scoped CALLBACK (`with_value`), not a lexical borrow block over a
+          container (`borrow v = m.get(k) in 'R { … }`, Austral-style). The
+          borrow block is more ergonomic and more native (Concrete already has
+          borrow blocks), but it requires the checker to know `m.get(k)`
+          *returns a reference borrowed from self* — a minimal `from(self)`,
+          i.e. returned-reference provenance, the very thing #8a1 defers and H1
+          was designed not to depend on. `with_value` creates the borrow inside
+          the combinator and passes it DOWN, so no return-position ref and no
+          provenance exist to track — the callback boundary is the region.
+          Borrow-block container projections are recorded as a FUTURE ergonomic
+          alternative, to be designed only if `with_value` proves too awkward in
+          real code (evidence-gated, like `from()` itself); `from(self)` stays
+          deferred until such evidence. See
+          `docs/CALLABLE_VALUES_AND_CAPABILITIES.md` §5.0 and
+          `research/language/borrowed-container-access.md`.
      So "close H1 now" = close the dangerous MUTABLE half now (tier 1), and
      the immutable-read half is contained-and-disclosed until V1.1 callbacks.
      `Clone` is NOT a dependency of either half.
