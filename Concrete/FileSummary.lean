@@ -101,7 +101,7 @@ def implBlocksToMethodSummaries (blocks : List ImplBlock) : List (String × FnSu
        { params := f.params.map fun p => (p.name, p.ty)
          retTy := f.retTy
          typeParams := ib.typeParams ++ f.typeParams
-         typeBounds := f.typeBounds
+         typeBounds := ib.typeBounds ++ f.typeBounds
          capParams := f.capParams
          capSet := f.capSet })
   ) []

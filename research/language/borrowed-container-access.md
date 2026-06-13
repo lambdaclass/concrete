@@ -61,11 +61,40 @@ the callback activation.
 This family is closer to Concrete's intended V1.1 mechanism: scoped access by
 construction rather than returned references.
 
+The similarity is the shape: "the API gives you a temporary view, and that view
+is only valid inside the callback." The differences are load-bearing for
+Concrete:
+
+- Swift closures can capture hidden state; Concrete callbacks use an explicit
+  function pointer plus explicit context.
+- Swift's `unsafe` variants rely partly on caller discipline; Concrete's safe
+  surface rejects returned references and keeps raw-pointer access behind
+  `Unsafe` / `trusted` audit boundaries.
+- Swift does not make callback capabilities part of the function type; Concrete
+  does, so authority remains visible in signatures and reports.
+
+So Concrete borrows the scoped-access pattern, not Swift's closure or unsafe
+pointer discipline.
+
 ### Haskell: `with` / `bracket`
 
 Haskell's `withFile` / `bracket` style scopes a resource to a callback. It is
 not a borrow checker, but the lifetime shape is the same: the resource is made
 available only within a delimited continuation.
+
+The useful lesson is the resource-shape invariant: acquire, pass downward to a
+user callback, then release/forget after the callback returns. Concrete applies
+that shape to borrowed container elements rather than file handles. The
+differences are equally important:
+
+- Haskell closures capture freely; Concrete callback state is explicit.
+- Haskell relies on GC/runtime/monadic structure; Concrete relies on ownership,
+  linearity, and capability-checked function types.
+- Haskell's pattern scopes resources; Concrete's pattern scopes borrows and must
+  also prevent references from escaping through return types.
+
+This makes `with_value` a systems/proof-oriented cousin of `withFile`, not the
+same runtime model.
 
 ### C++ and Zig: explicit discipline
 
@@ -226,4 +255,3 @@ design. It is the smallest design that preserves the language's thesis:
 - scoped callbacks over returned refs;
 - owned views over stored refs;
 - deferred provenance only with evidence.
-

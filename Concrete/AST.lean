@@ -354,6 +354,7 @@ structure FnSigDef where
 structure ImplBlock where
   typeName : String
   typeParams : List String := []
+  typeBounds : List (String × List String) := []  -- impl-level param bounds: V -> [Copy], enforced at method-call sites
   methods : List FnDef
   isTrusted : Bool := false        -- trusted impl: all methods inherit trusted boundary
   span : Span := default

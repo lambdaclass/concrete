@@ -957,6 +957,19 @@ work depends on them.
       interpreter fixed-width mode that would shrink EXPECTED_DIVERGE to empty,
       and interpreter support for the INTERP_UNSUPPORTED shapes. The full
       interpreter-vs-compiled harness is item 18 (needs #18a).
+    - 44g. [OPEN] Fix reference-typed return lowering as defense-in-depth after
+      the no-returned-refs invariant makes it unreachable from safe code. Finding
+      (2026-06-13): returning a reference-typed value materialized from a
+      reference identifier or `&place` emits a spurious extra load
+      (`fn id(x:&i64)->&i64 { return x; }` lowers like `load ptr, %x; ret`),
+      so the function returns the wrong pointer and can segfault on dereference.
+      Safe/public code should not be able to express returned refs once #8a3 is
+      complete, but trusted/internal lowering must still be correct. Add
+      fixtures that distinguish: safe ref returns are rejected by the checker;
+      trusted raw-pointer returns remain allowed/audit-visible; and any
+      remaining internal reference-valued return path returns the pointer value,
+      not the pointee. This is not the H1 fix — it is hardening once H1 has been
+      closed by subtraction.
 45. Add the Phase 4 validation artifact:
     `examples/compiler_pipeline_probe/` plus
     `scripts/tests/check_phase4_pipeline.sh`. The fixture must run
@@ -1063,6 +1076,20 @@ rest of Phase 5 stays after that slab in the same linear queue.
      return position stays un-inferable and is rejected with E0220, not
      miscompiled); both gated via the main suite. This unblocks `Clone` (#8a2)
      and ergonomic HOF/iteration call sites (#23, #24) that take `&T`/`&K`/`&V`.
+   - 6d. [OPEN] Enforce impl-block bounds at method/static-call resolution.
+     Finding (2026-06-13): free-function bounds are enforced
+     (`fn dup<T: Copy>(&T)` rejects non-Copy callers), but bounds declared on
+     an impl block are currently decorative at method-call sites:
+     `impl<V: Copy> Box<V> { fn dup(&self) -> V }` can be called on
+     `Box<NonCopy>`. That is a standalone soundness hole and it blocks the
+     value-model collection migration: `impl<V: Copy> HashMap<K,V> { get ->
+     Option<V> }` is only sound if `HashMap<K, String>.get(...)` is rejected.
+     Fix by applying the impl's declared trait bounds to the receiver's concrete
+     type arguments during method and static-method resolution, mirroring the
+     existing free-function `checkTraitBounds` path. Add positive/negative
+     fixtures for `Box<i32>.dup()` vs `Box<NonCopy>.dup()`, trait-bound impl
+     methods, and static methods on bounded impls. This must land before any
+     Copy-bounded value accessor is treated as sound.
    - 6c. Two reference-handling bugs surfaced while implementing #24 step 1
      (callback context threading). Neither blocks the H1/callable-values thread
      (stdlib loops use plain counters and pointer walks), but both are tracked
@@ -1574,6 +1601,26 @@ class and authority/allocation story.
      the mutable aggregate-ref APIs are gone (gate rejects them); the immutable
      `get -> Option<&V>` stays an expected/known entry until V1.1, then the gate
      goes fully expected-reject.
+     SECOND-CLASS REFERENCES INVARIANT (decided 2026-06-13): references flow
+     downward into calls, callbacks, and borrow blocks; safe-callable functions
+     and function types do not return references, directly or nested. This
+     subsumes the no-aggregate-ref ban and retires returned-reference provenance
+     from the v1 safe surface. Enforcement is staged:
+       * current partial enforcement rejects ref-returning function-pointer
+         types and generic instantiations that place a reference in a return
+         position (closing the `with_value R=&V` and `Option<R>, R=&V`
+         backdoors);
+       * after the legacy accessors migrate, blanket rejection must cover all
+         safe/public signatures (`-> &T`, `-> Option<&T>`, aliases, methods,
+         callbacks, and trusted-public functions);
+       * low-level access that intentionally exposes an address returns
+         `*const T` / `*mut T`, not `&T`; dereference remains `Unsafe` /
+         trusted-audit-visible.
+     Add/keep a gate with red-team fixtures for `fn id(x:&T)->&T`,
+     `fn bad()->&T { return &local; }`, `fn f()->Option<&T>`,
+     `fn(&V)->&V`, generic `Option<R>` instantiated with `R=&V`, trusted public
+     `-> &T` (rejected), trusted raw-pointer return (allowed), and trusted
+     downward `ptr as &V` into a scoped callback (allowed).
      VALIDATION RESULT (2026-06-11): `lox` uses no map accessors (array-backed);
      `kvstore` is already 100% tier-1 (`contains`/`insert`/`remove`/`fold`) —
      zero migration; `integrity` has the ONLY read-accessor call site — one
@@ -1604,6 +1651,26 @@ class and authority/allocation story.
      Prerequisite when `Clone` is built: #6b inference-through-references, so
      `x.clone()` on a bounded `&T` infers without turbofish — [DONE 2026-06-11],
      this prerequisite is now satisfied.
+   - 8a3. [OPEN] Finish the accessor migration that makes the invariant total.
+     Migrate every public returned-ref accessor container-by-container:
+     `get -> Option<&V>` becomes `get -> Option<V>` only under an enforced
+     `V: Copy` bound (#6d), or `with_value` for non-Copy reads;
+     `peek`/`min`/`max`/`min_key`/`max_key` move to value/scoped-callback
+     shapes; `get_unchecked` / `get_unchecked_mut` return raw pointers
+     (`*const T` / `*mut T`) rather than references. Only after the last
+     accessor is gone, flip the blanket safe/public no-returned-refs rejection
+     and change `scripts/tests/check_returned_ref_provenance.sh` from
+     contained-known-hole mode to fully expected-reject. The collection access
+     surface must mirror the value model: `get` = Copy, `with_value` = Borrow,
+     `remove`/`update` = Move, future `get_cloned` = Clone, raw pointer =
+     unsafe escape.
+   - 8a4. [OPEN] Defer `with_value_mut` / `modify` until their separate aliasing
+     invariant is enforced. Immutable `with_value` is enough to close the H1
+     read tail once returned-ref accessors are migrated. Mutable scoped callbacks
+     have an additional receiver/context aliasing hazard (`&mut self` plus a
+     context that can reach the same container); solve that with a
+     container-not-in-context gate before shipping `with_value_mut`, rather than
+     assuming the no-returned-refs invariant covers it.
    - 8a1. Scalar `from(param)` returned references are DEFERRED, not the v1
      fix (revised 2026-06-11). They are the evidence-driven escape valve, added
      only if real workloads prove operation APIs + owned views + scoped

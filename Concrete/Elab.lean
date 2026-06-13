@@ -1544,6 +1544,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
                   else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
     acc ++ ib.methods.map fun f =>
       ({ f with typeParams := ib.typeParams ++ f.typeParams,
+                typeBounds := ib.typeBounds ++ f.typeBounds,
                 isTrusted := f.isTrusted || ib.isTrusted }, some implTy)
   ) ([] : List (FnDef × Option Ty))
   let traitImplMethodPairs := m.traitImpls.foldl (fun acc tb =>

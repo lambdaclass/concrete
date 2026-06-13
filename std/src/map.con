@@ -52,16 +52,10 @@ mod map {
             return flag == 1;
         }
 
-        pub fn get(&self, key: &K) -> Option<&V> {
-            let idx: u64 = self.find_slot(key);
-            let flag_ptr: *mut u8 = self.flags + idx;
-            let flag: u8 = *flag_ptr;
-            if flag == 1 {
-                let val_ptr: *mut V = self.values + idx;
-                return Option::<&V>::Some { value: val_ptr as &V };
-            }
-            return Option::<&V>::None;
-        }
+        // Reading an element: see the `Copy`-bounded `impl` below for the value
+        // reader `get -> Option<V>` (the Copy cell of the value model). For
+        // non-Copy V, use `with_value` (borrow) or `remove` (move). No accessor
+        // returns a reference — references are second-class (VALUE_MODEL.md).
 
         // In-place mutation WITHOUT exposing a borrowed reference into storage.
         // Replaces the withdrawn `get_mut -> Option<&mut V>` (the H1 mutable
@@ -398,6 +392,23 @@ mod map {
         }
     }
 
+    // Value reader for Copy values — the Copy cell of the value model. The
+    // `V: Copy` bound is enforced (a non-Copy map cannot call `get`; use
+    // `with_value` to borrow or `remove` to move out). Copying a Copy value out
+    // is a real copy, so no owner is duplicated.
+    trusted impl<K, V: Copy> HashMap<K, V> {
+        pub fn get(&self, key: &K) -> Option<V> {
+            let idx: u64 = self.find_slot(key);
+            let flag_ptr: *mut u8 = self.flags + idx;
+            let flag: u8 = *flag_ptr;
+            if flag == 1 {
+                let val_ptr: *mut V = self.values + idx;
+                return Option::<V>::Some { value: *val_ptr };
+            }
+            return Option::<V>::None;
+        }
+    }
+
     // --- scoped-accessor (callable-values) test helpers ---
     struct Copy WvCtx { add: i64, calls: i64 }
     fn wv_read(c: &WvCtx, v: &i32) -> i64 { return c.add + (*v as i64); }
@@ -504,15 +515,15 @@ mod map {
         m.insert(10, 1000);
         let k5: i32 = 5;
         let k99: i32 = 99;
-        let r: Option<&i32> = m.get(&k5);
+        let r: Option<i32> = m.get(&k5);
         match r {
             Option::Some { value } => {
-                if *value != 500 { m.drop(); return 1; }
+                if value != 500 { m.drop(); return 1; }
             },
             Option::None => { m.drop(); return 1; }
         }
         // get non-existent key
-        let r2: Option<&i32> = m.get(&k99);
+        let r2: Option<i32> = m.get(&k99);
         match r2 {
             Option::Some { value } => { m.drop(); return 1; },
             Option::None => {}
@@ -548,10 +559,10 @@ mod map {
         if m.contains(&k) { m.drop(); return 1; }
         m.insert(1, 999);
         if !(m.contains(&k)) { m.drop(); return 1; }
-        let r: Option<&i32> = m.get(&k);
+        let r: Option<i32> = m.get(&k);
         match r {
             Option::Some { value } => {
-                if *value != 999 { m.drop(); return 1; }
+                if value != 999 { m.drop(); return 1; }
             },
             Option::None => { m.drop(); return 1; }
         }
@@ -629,9 +640,9 @@ mod map {
         let present: bool = m.update(&k, set_to_777);
         if !present { m.drop(); return 1; }
         // verify the in-place update took effect (immutable get is fine here)
-        let r: Option<&i32> = m.get(&k);
+        let r: Option<i32> = m.get(&k);
         match r {
-            Option::Some { value } => { if *value != 777 { m.drop(); return 1; } }
+            Option::Some { value } => { if value != 777 { m.drop(); return 1; } }
             Option::None => { m.drop(); return 1; }
         }
         m.drop();
@@ -668,10 +679,10 @@ mod map {
         }
         // Current value is the new one
         let k: i32 = 1;
-        let r3: Option<&i32> = m.get(&k);
+        let r3: Option<i32> = m.get(&k);
         match r3 {
             Option::Some { value } => {
-                if *value != 200 { m.drop(); return 1; }
+                if value != 200 { m.drop(); return 1; }
             },
             Option::None => { m.drop(); return 1; }
         }

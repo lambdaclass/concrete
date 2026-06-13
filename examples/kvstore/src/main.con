@@ -288,12 +288,20 @@ mod kvstore {
         println("Set '", key_arg, "' = '", val_arg, "'");
     }
 
+    // Stored values are `String` (non-Copy), so we read them through a scoped
+    // callback — the borrowed `&String` is confined to `print_value` and never
+    // escapes (references are second-class; no `get -> Option<&V>`).
+    struct Copy GetCtx { _u: i64 }
+    fn print_value(ctx: &GetCtx, value: &String) with(Std) -> i64 {
+        println(value);
+        return 0;
+    }
+
     fn cmd_get(map: &mut HashMap<String, String>, key_arg: &String) with(Std) {
-        let val_opt: Option<&String> = map.get(key_arg);
-        match val_opt {
-            Option::Some { value } => {
-                println(value);
-            },
+        let ctx: GetCtx = GetCtx { _u: 0 };
+        let found: Option<i64> = map.with_value(key_arg, &ctx, print_value);
+        match found {
+            Option::Some { value } => { },
             Option::None => {
                 println("Key '", key_arg, "' not found");
             }

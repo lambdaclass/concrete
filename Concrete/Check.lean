@@ -606,10 +606,15 @@ def lookupFn (name : String) : CheckM (Option FnSummary) := do
 /-- Normalize a type for comparison (normalize empty capsets in fn types). -/
 private def normalizeTyForCmp : Ty → Ty
   | .fn_ params capSet retTy =>
-    let normCap := match capSet with
-      | .concrete [] => .empty
-      | .empty => .empty
-      | cs => cs
+    -- Canonicalize the capability set so equal sets compare equal regardless of
+    -- order (e.g. a `with(Std)`-expanded callback vs an inferred capset that
+    -- holds the same caps in a different order). CapSet.normalize sorts the
+    -- concrete caps; rebuild a canonical CapSet from the sorted caps + vars.
+    let (cs, vars) := capSet.normalize
+    let svars := vars.mergeSort (· < ·)
+    let base := if cs.isEmpty then CapSet.empty else CapSet.concrete cs
+    let normCap := svars.foldl
+      (fun acc v => match acc with | .empty => CapSet.var v | other => CapSet.union other (CapSet.var v)) base
     .fn_ (params.map normalizeTyForCmp) normCap (normalizeTyForCmp retTy)
   | .ref t => .ref (normalizeTyForCmp t)
   | .refMut t => .refMut (normalizeTyForCmp t)
@@ -826,6 +831,32 @@ private def substTy (mapping : List (String × Ty)) : Ty → Ty
   | .heapArray inner => .heapArray (substTy mapping inner)
   | ty => ty
 
+/-- Check trait/`Copy` bounds: each bound type param's concrete instantiation
+    must satisfy the bound. `Copy` is the builtin marker (checked via
+    `isCopyType`, so Copy structs and primitives both satisfy it); other traits
+    require a matching trait impl. Used for free-function bounds AND for
+    impl-block bounds enforced at method-call sites (so `impl<V: Copy>` methods
+    are not callable on a non-Copy instantiation — closing the decorative-bound
+    soundness gap). -/
+private partial def checkTraitBounds (bounds : List (String × List String)) (mapping : List (String × Ty))
+    (context : String) : CheckM Unit := do
+  let env ← getEnv
+  for (paramName, requiredTraits) in bounds do
+    match mapping.lookup paramName with
+    | some concreteType =>
+      for traitName in requiredTraits do
+        if traitName == "Copy" then
+          if !(← isCopyType concreteType) then
+            let tn := match concreteType with | .named n => n | .generic n _ => n | _ => "<type>"
+            throwCheck (.traitBoundNotSatisfied tn "Copy" context)
+        else
+          match concreteType with
+          | .named tn | .generic tn _ =>
+            if !(env.traitImpls.any fun (t, tr) => t == tn && tr == traitName) then
+              throwCheck (.traitBoundNotSatisfied tn traitName context)
+          | _ => pure ()  -- primitive types, skip non-Copy bound checking
+    | none => pure ()
+
 /-- Infer a method's OWN type params and capability params from its argument
     types, mirroring the free-function call inference. `implMapping` already
     binds the impl's type params (e.g. K, V) from the receiver's type args.
@@ -854,6 +885,12 @@ private partial def inferMethodParamAndRetTys
             inferred := inferred ++ [(name, ty)]
       pure (methodTypeParams.map fun tp => (inferred.lookup tp).getD (.typeVar tp))
   let fullMapping := implMapping ++ methodTypeParams.zip methodArgs
+  -- Enforce the impl's + method's trait/Copy bounds at the call site (the impl's
+  -- bounds were prepended to sig.typeBounds). This makes e.g. a `Copy`-bounded
+  -- value accessor uncallable on a non-Copy container — closing the
+  -- decorative-impl-bound soundness gap.
+  if !sig.typeBounds.isEmpty then
+    checkTraitBounds sig.typeBounds fullMapping s!"method '{callName}'"
   -- References are second-class: a type parameter instantiated to a reference
   -- may not occur in the return type (else `m<R>(...) -> Option<R>` with R=&V is
   -- a generic backdoor to returning a reference). VALUE_MODEL.md.
@@ -918,25 +955,6 @@ private partial def inferMethodParamAndRetTys
   let resolvedParamTys := (sig.params.drop 1).map fun (n, t) => (n, resolveCapInTy (substTy fullMapping t))
   let resolvedRetTy := resolveCapInTy (substTy fullMapping sig.retTy)
   return (resolvedParamTys, resolvedRetTy)
-
-/-- Check trait bounds: for each type param with bounds, verify the concrete type implements the required traits. -/
-private def checkTraitBounds (bounds : List (String × List String)) (mapping : List (String × Ty))
-    (context : String) : CheckM Unit := do
-  let env ← getEnv
-  for (paramName, requiredTraits) in bounds do
-    match mapping.lookup paramName with
-    | some concreteType =>
-      let typeName := match concreteType with
-        | .named n => some n
-        | .generic n _ => some n
-        | _ => none
-      match typeName with
-      | some tn =>
-        for traitName in requiredTraits do
-          if !(env.traitImpls.any fun (t, tr) => t == tn && tr == traitName) then
-            throwCheck (.traitBoundNotSatisfied tn traitName context)
-      | none => pure ()  -- primitive types, skip bound checking
-    | none => pure ()
 
 -- ============================================================
 -- Type checking expressions and statements
@@ -2593,7 +2611,8 @@ def checkModule (m : Module) (summary : FileSummary)
     let implTy := if ib.typeParams.isEmpty then tyFromName ib.typeName
                   else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
     acc ++ ib.methods.map fun f =>
-      ({ f with typeParams := ib.typeParams ++ f.typeParams }, some implTy)
+      ({ f with typeParams := ib.typeParams ++ f.typeParams
+              , typeBounds := ib.typeBounds ++ f.typeBounds }, some implTy)
   ) []
   let traitImplMethodPairs : List (FnDef × Option Ty) := m.traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then tyFromName tb.typeName

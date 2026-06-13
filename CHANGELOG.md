@@ -10,6 +10,32 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Impl-block bounds enforced + HashMap `get` migrated to the value model (2026-06-13)
+
+- **Closed a latent soundness gap:** impl-block trait/`Copy` bounds
+  (`impl<V: Copy> Foo<V>`) were *decorative* — parsed then discarded, never
+  checked at method-call sites, so an `impl<V: Copy>` method was callable on a
+  `Foo<NonCopy>`. Now enforced: `ImplBlock` carries `typeBounds` (parser →
+  AST → method summaries), and the method-call path runs `checkTraitBounds`
+  against the receiver's type args. `checkTraitBounds` now resolves `Copy` via
+  `isCopyType` (so Copy structs and primitives both satisfy it, not just
+  whatever is in `traitImpls`).
+- **Fixed a capset-comparison bug** surfaced by capability-polymorphic
+  callbacks: `normalizeTyForCmp` compared fn-type capsets order-sensitively, so
+  two `with(Std)`-expanded sets in different order mismatched. Capsets are now
+  canonicalized (sorted) before comparison.
+- **Migrated `HashMap::get` to the value model** (begins the accessor migration
+  that completes "references are second-class"): `get -> Option<&V>` is replaced
+  by a `Copy`-bounded value reader `get -> Option<V>` (the Copy cell — sound now
+  that the bound is enforced: uncallable on non-Copy maps). Non-Copy reads use
+  `with_value` (Borrow) or `remove` (Move). Migrated consumers: map `#[test]`s
+  (Copy `i32` → value), `kvstore` `cmd_get` and `integrity`'s hash compare
+  (`String` → `with_value`). Full suite 1553/0; examples 123/0.
+- Remaining (tracked): `OrderedMap`/`OrderedSet`/`Vec`/`Slice`/`Deque`/`heap`
+  accessors, `get_unchecked -> &T` → raw pointer (~139 sites), then flip the
+  blanket `-> &T` definition-signature rejection + gate. H1 not fully closed
+  until that lands.
+
 ### References are second-class — never returned (H1 closure foundation) + immutable `with_value` (2026-06-13)
 
 - Adopted a language invariant: **references (`&T`/`&mut T`) are scoped access,

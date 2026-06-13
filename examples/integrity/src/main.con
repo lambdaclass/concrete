@@ -122,6 +122,13 @@ mod fcheck {
         println("  ", label, path);
     }
 
+    // Scoped-callback comparator for HashMap::with_value: compares the stored
+    // manifest hash (borrowed `&String`, confined to this call) against the
+    // expected hash carried as the context.
+    fn cmp_hash(expected: &String, value: &String) -> bool {
+        return expected.eq(value);
+    }
+
     fn report_scan_line(path: &String, hash: &String) with(Console) {
         println("  ", hash, "  ", path);
     }
@@ -247,8 +254,13 @@ mod fcheck {
                         chex.drop();
                         cnt_err = cnt_err + 1;
                     } else {
-                        let stored_opt: Option<&String> = manifest_map.get(&cpath);
-                        match stored_opt {
+                        // Stored manifest hashes are `String` (non-Copy): read
+                        // the stored hash through a scoped callback that compares
+                        // it to the freshly computed `chex`. The borrowed
+                        // `&String` is confined to `cmp_hash` and never escapes
+                        // (references are second-class; no `get -> Option<&V>`).
+                        let found: Option<bool> = manifest_map.with_value(&cpath, &chex, cmp_hash);
+                        match found {
                             Option::None => {
                                 report_status(&"ADDED    ", &cpath);
                                 cnt_add = cnt_add + 1;
@@ -257,8 +269,7 @@ mod fcheck {
                                 let cpath_copy: String = cpath.clone();
                                 checked.insert(cpath_copy);
 
-                                let eq: bool = chex.eq(value);
-                                if eq {
+                                if value {
                                     report_status(&"OK       ", &cpath);
                                     cnt_ok = cnt_ok + 1;
                                 } else {

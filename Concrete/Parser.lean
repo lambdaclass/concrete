@@ -1418,7 +1418,7 @@ partial def parseMethodDef : ParseM (FnDef × Option SelfKind) := do
 partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
   let declSp ← peekSpan
   expect .impl_
-  let (typeParams, _typeBounds) ← parseTypeParams
+  let (typeParams, typeBounds) ← parseTypeParams
   let firstName ← expectIdent
   -- Check for turbofish on impl type: impl<T> Name<T> { ... }
   let next0 ← peek
@@ -1477,7 +1477,7 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       methods := methods ++ [f]
       tk ← peek
     expect .rbrace
-    return .inl { typeName, typeParams, methods, span := declSp }
+    return .inl { typeName, typeParams, typeBounds, methods, span := declSp }
 
 partial def parseTraitDef : ParseM TraitDef := do
   let declSp ← peekSpan
