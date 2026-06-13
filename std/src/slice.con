@@ -6,10 +6,7 @@ mod slice {
 
     trusted impl<T> Slice<T> {
         // Value reader `get -> Option<T>` lives in the Copy-bounded impl below.
-        pub fn get_unchecked(&self, at: u64) -> &T {
-            let target_ptr: *const T = self.ptr + at;
-            return target_ptr as &T;
-        }
+        // Unchecked value reader lives in the Copy-bounded impl below.
 
         pub fn len(&self) -> u64 {
             return self.len;
@@ -27,10 +24,7 @@ mod slice {
 
     trusted impl<T> MutSlice<T> {
         // Value reader `get -> Option<T>` lives in the Copy-bounded impl below.
-        pub fn get_unchecked(&self, at: u64) -> &T {
-            let target_ptr: *mut T = self.ptr + at;
-            return target_ptr as &T;
-        }
+        // Unchecked value reader lives in the Copy-bounded impl below.
 
         pub fn set(&mut self, at: u64, value: T) -> bool {
             if at >= self.len {
@@ -57,6 +51,10 @@ mod slice {
 
     // Value readers for Copy elements (the Copy cell of the value model).
     trusted impl<T: Copy> Slice<T> {
+        pub fn get_unchecked(&self, at: u64) -> T {
+            return *(self.ptr + at);
+        }
+
         pub fn get(&self, at: u64) -> Option<T> {
             if at >= self.len {
                 return Option::<T>::None;
@@ -67,6 +65,10 @@ mod slice {
     }
 
     trusted impl<T: Copy> MutSlice<T> {
+        pub fn get_unchecked(&self, at: u64) -> T {
+            return *(self.ptr + at);
+        }
+
         pub fn get(&self, at: u64) -> Option<T> {
             if at >= self.len {
                 return Option::<T>::None;
@@ -99,10 +101,10 @@ mod slice {
         v.push(20);
         v.push(30);
         let s: Slice<i32> = Slice::<i32> { ptr: v.ptr as *const i32, len: v.len() };
-        let first: &i32 = s.get_unchecked(0);
-        if !assert_eq::<i32>(*first, 10, "first should be 10") { v.drop(); return 1; }
-        let last: &i32 = s.get_unchecked(2);
-        if !assert_eq::<i32>(*last, 30, "last should be 30") { v.drop(); return 1; }
+        let first: i32 = s.get_unchecked(0);
+        if !assert_eq::<i32>(first, 10, "first should be 10") { v.drop(); return 1; }
+        let last: i32 = s.get_unchecked(2);
+        if !assert_eq::<i32>(last, 30, "last should be 30") { v.drop(); return 1; }
         v.drop();
         return 0;
     }
@@ -125,10 +127,10 @@ mod slice {
         ms.set_unchecked(0, 100);
         ms.set_unchecked(1, 200);
         ms.set_unchecked(2, 300);
-        let r0: &i32 = ms.get_unchecked(0);
-        let r2: &i32 = ms.get_unchecked(2);
-        if !assert_eq::<i32>(*r0, 100, "slot 0 should be 100") { v.drop(); return 1; }
-        if !assert_eq::<i32>(*r2, 300, "slot 2 should be 300") { v.drop(); return 1; }
+        let r0: i32 = ms.get_unchecked(0);
+        let r2: i32 = ms.get_unchecked(2);
+        if !assert_eq::<i32>(r0, 100, "slot 0 should be 100") { v.drop(); return 1; }
+        if !assert_eq::<i32>(r2, 300, "slot 2 should be 300") { v.drop(); return 1; }
         v.drop();
         return 0;
     }
@@ -214,10 +216,10 @@ mod slice {
         if !assert_true(ok2, "set(1) should succeed") { v.drop(); return 1; }
 
         // Verify values
-        let r0: &i32 = ms.get_unchecked(0);
-        if !assert_eq::<i32>(*r0, 77, "slot 0 should be 77") { v.drop(); return 2; }
-        let r1: &i32 = ms.get_unchecked(1);
-        if !assert_eq::<i32>(*r1, 88, "slot 1 should be 88") { v.drop(); return 2; }
+        let r0: i32 = ms.get_unchecked(0);
+        if !assert_eq::<i32>(r0, 77, "slot 0 should be 77") { v.drop(); return 2; }
+        let r1: i32 = ms.get_unchecked(1);
+        if !assert_eq::<i32>(r1, 88, "slot 1 should be 88") { v.drop(); return 2; }
 
         // Out-of-bounds set should fail
         let bad: bool = ms.set(2, 99);

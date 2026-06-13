@@ -15,7 +15,7 @@ mod hex {
         let out: String = String::new();
         let i: u64 = 0;
         while i < data.len {
-            let b: u8 = *data.get_unchecked(i);
+            let b: u8 = data.get_unchecked(i);
             out.push_char(nibble_to_char((b >> 4) & 0xF));
             out.push_char(nibble_to_char(b & 0xF));
             i = i + 1;
@@ -39,7 +39,7 @@ mod hex {
         let out: String = String::new();
         let i: u64 = 0;
         while i < words.len {
-            let word: u32 = *words.get_unchecked(i);
+            let word: u32 = words.get_unchecked(i);
             encode_u32(word, &mut out);
             i = i + 1;
         }
@@ -117,12 +117,12 @@ mod hex {
             return 1;
         }
         // H=0x48, e=0x65, l=0x6c, l=0x6c, o=0x6f
-        if *bytes.get_unchecked(0) != 0x48 {
+        if bytes.get_unchecked(0) != 0x48 {
             input.drop();
             bytes.drop();
             return 1;
         }
-        if *bytes.get_unchecked(4) != 0x6f {
+        if bytes.get_unchecked(4) != 0x6f {
             input.drop();
             bytes.drop();
             return 1;

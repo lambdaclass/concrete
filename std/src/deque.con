@@ -65,11 +65,7 @@ mod deque {
         /// Bounds-checked access.
         // Value reader `get -> Option<T>` lives in the Copy-bounded impl below.
         /// Unchecked access.
-        pub fn get_unchecked(&self, at: u64) -> &T {
-            let idx: u64 = (self.head + at) & (self.cap - 1);
-            let target: *mut T = self.ptr + idx;
-            return target as &T;
-        }
+        // Unchecked value reader lives in the Copy-bounded impl below.
 
         pub fn len(&self) -> u64 {
             return self.len;
@@ -115,6 +111,11 @@ mod deque {
 
     // Value reader for Copy elements (the Copy cell of the value model).
     trusted impl<T: Copy> Deque<T> {
+        pub fn get_unchecked(&self, at: u64) -> T {
+            let idx: u64 = (self.head + at) & (self.cap - 1);
+            return *(self.ptr + idx);
+        }
+
         pub fn get(&self, at: u64) -> Option<T> {
             if at >= self.len {
                 return Option::<T>::None;
@@ -306,7 +307,7 @@ mod deque {
         let sum: i32 = 0;
         let i: u64 = 0;
         while i < d.len() {
-            sum = sum + *(d.get_unchecked(i));
+            sum = sum + (d.get_unchecked(i));
             i = i + 1;
         }
 
@@ -334,7 +335,7 @@ mod deque {
         // Pop 4 from front using get_unchecked to verify, then pop
         let j: u64 = 0;
         while j < 4 {
-            if *(d.get_unchecked(0)) != j as i32 { d.drop(); return 1; }
+            if (d.get_unchecked(0)) != j as i32 { d.drop(); return 1; }
             d.pop_front();
             j = j + 1;
         }
@@ -350,11 +351,11 @@ mod deque {
             return 1;
         }
         // Verify order using get_unchecked: [4, 5, 100..109]
-        if *(d.get_unchecked(0)) != 4 { d.drop(); return 1; }
-        if *(d.get_unchecked(1)) != 5 { d.drop(); return 1; }
+        if (d.get_unchecked(0)) != 4 { d.drop(); return 1; }
+        if (d.get_unchecked(1)) != 5 { d.drop(); return 1; }
         let m: u64 = 0;
         while m < 10 {
-            if *(d.get_unchecked(m + 2)) != (100 + m) as i32 { d.drop(); return 1; }
+            if (d.get_unchecked(m + 2)) != (100 + m) as i32 { d.drop(); return 1; }
             m = m + 1;
         }
         d.drop();

@@ -67,14 +67,20 @@ mod kvstore {
         return "kvstore.log";
     }
 
+    // Scoped comparison: the stored key (&String) is borrowed into the callback
+    // and compared to the searched key (the context). No &String is returned.
+    fn keys_eq_cb(key: &String, k: &String) -> bool {
+        return str_eq(k, key);
+    }
+
     fn keys_find(keys: &mut Vec<String>, key: &String) -> Int {
         let len: Int = keys.len() as Int;
         let mut i: Int = 0;
         while i < len {
-            let k: &String = keys.get_unchecked(i as u64);
-            let eq: bool = str_eq(k, key);
-            if eq {
-                return i;
+            let found: Option<bool> = keys.with_at(i as u64, key, keys_eq_cb);
+            match found {
+                Option::Some { value } => { if value { return i; } },
+                Option::None => {}
             }
             i = i + 1;
         }

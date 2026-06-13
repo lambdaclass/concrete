@@ -87,8 +87,8 @@ mod toml_parser {
         let meta_len: Int = meta.len() as Int;
         let mut buf_offset: i32 = 0;
         if meta_len >= 2 {
-            let last_off: i32 = *meta.get_unchecked((meta_len - 2) as u64);
-            let last_len: i32 = *meta.get_unchecked((meta_len - 1) as u64);
+            let last_off: i32 = meta.get_unchecked((meta_len - 2) as u64);
+            let last_len: i32 = meta.get_unchecked((meta_len - 1) as u64);
             buf_offset = last_off + last_len;
         }
         let slen: i32 = string_length(s) as i32;
@@ -107,8 +107,8 @@ mod toml_parser {
 
     // Retrieve a string from the pool as a new owned String
     fn pool_get(buf: &String, meta: &Vec<i32>, idx: i32) with(Alloc) -> String {
-        let off: i32 = *meta.get_unchecked((idx * 2) as u64);
-        let slen: i32 = *meta.get_unchecked((idx * 2 + 1) as u64);
+        let off: i32 = meta.get_unchecked((idx * 2) as u64);
+        let slen: i32 = meta.get_unchecked((idx * 2 + 1) as u64);
         if slen == 0 {
             return "";
         }
@@ -117,8 +117,8 @@ mod toml_parser {
 
     // Print a string from the pool without allocating a copy
     fn pool_print(buf: &String, meta: &Vec<i32>, idx: i32) with(Console, Alloc) {
-        let off: i32 = *meta.get_unchecked((idx * 2) as u64);
-        let slen: i32 = *meta.get_unchecked((idx * 2 + 1) as u64);
+        let off: i32 = meta.get_unchecked((idx * 2) as u64);
+        let slen: i32 = meta.get_unchecked((idx * 2 + 1) as u64);
         if slen > 0 {
             let s: String = string_slice(buf, off as Int, (off + slen) as Int);
             print(s);
@@ -551,9 +551,9 @@ mod toml_parser {
         let n: Int = staging.len() as Int;
         let mut si: Int = 0;
         while si < n {
-            let sk: i32 = *staging.get_unchecked(si as u64);
-            let sv: i32 = *staging.get_unchecked((si + 1) as u64);
-            let sd: i32 = *staging.get_unchecked((si + 2) as u64);
+            let sk: i32 = staging.get_unchecked(si as u64);
+            let sv: i32 = staging.get_unchecked((si + 1) as u64);
+            let sd: i32 = staging.get_unchecked((si + 2) as u64);
             kvpairs.push(KVPair { key: sk, val_tag: sv, val_data: sd });
             si = si + 3;
         }
@@ -626,9 +626,9 @@ mod toml_parser {
 
         let mut i: Int = staging_start;
         while i < n {
-            let key: i32 = *staging.get_unchecked(i as u64);
-            let vtag: i32 = *staging.get_unchecked((i + 1) as u64);
-            let vdata: i32 = *staging.get_unchecked((i + 2) as u64);
+            let key: i32 = staging.get_unchecked(i as u64);
+            let vtag: i32 = staging.get_unchecked((i + 1) as u64);
+            let vdata: i32 = staging.get_unchecked((i + 2) as u64);
             kvpairs.push(KVPair {
                 key: key,
                 val_tag: vtag,
@@ -772,7 +772,7 @@ mod toml_parser {
             return;
         }
         if v.tag == 3 {
-            let desc: ArrayDesc = *arrays.get_unchecked(v.data as u64);
+            let desc: ArrayDesc = arrays.get_unchecked(v.data as u64);
             if desc.len == 0 {
                 print("[]");
                 return;
@@ -781,7 +781,7 @@ mod toml_parser {
             let mut i: i32 = 0;
             while i < desc.len {
                 print_indent(depth + 1);
-                let elem: Val = *vals.get_unchecked((desc.start + i) as u64);
+                let elem: Val = vals.get_unchecked((desc.start + i) as u64);
                 print_val(elem, depth + 1, pool_buf, pool_meta, arrays, tables, kvpairs, vals);
                 if i < desc.len - 1 {
                     print(",");
@@ -794,7 +794,7 @@ mod toml_parser {
             return;
         }
         if v.tag == 4 {
-            let desc: TableDesc = *tables.get_unchecked(v.data as u64);
+            let desc: TableDesc = tables.get_unchecked(v.data as u64);
             if desc.len == 0 {
                 print("{}");
                 return;
@@ -802,7 +802,7 @@ mod toml_parser {
             println("{");
             let mut i: i32 = 0;
             while i < desc.len {
-                let kv: KVPair = *kvpairs.get_unchecked((desc.start + i) as u64);
+                let kv: KVPair = kvpairs.get_unchecked((desc.start + i) as u64);
                 print_indent(depth + 1);
                 pool_print(pool_buf, pool_meta, kv.key);
                 print(" = ");

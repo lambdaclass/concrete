@@ -129,6 +129,36 @@ mod fcheck {
         return expected.eq(value);
     }
 
+    // Scoped callback for Vec::with_at over manifest paths: the path (&String)
+    // is borrowed into the callback and confined to it. Reports REMOVED if the
+    // path was not checked; returns 1 if reported, 0 otherwise (the caller
+    // accumulates the count — no mutable context needed).
+    fn report_removed_cb(checked: &HashSet<String>, rp: &String) with(Console) -> i64 {
+        let was_checked: bool = checked.contains(rp);
+        if !was_checked {
+            report_status(&"REMOVED  ", rp);
+            return 1;
+        }
+        return 0;
+    }
+
+    // Iterate manifest paths, reporting any not present in `checked`. Each path
+    // is borrowed via Vec::with_at (scoped, never returned). Returns the count.
+    fn count_removed(manifest_paths: &Vec<String>, checked: &HashSet<String>) with(Console) -> i64 {
+        let m_count: u64 = manifest_paths.len();
+        let mut ki: u64 = 0;
+        let mut cnt: i64 = 0;
+        while ki < m_count {
+            let reported: Option<i64> = manifest_paths.with_at(ki, checked, report_removed_cb);
+            match reported {
+                Option::Some { value } => { cnt = cnt + value; },
+                Option::None => {}
+            }
+            ki = ki + 1;
+        }
+        return cnt;
+    }
+
     fn report_scan_line(path: &String, hash: &String) with(Console) {
         println("  ", hash, "  ", path);
     }
@@ -285,17 +315,7 @@ mod fcheck {
                 }
 
                 // Report removed files
-                let m_count: Int = manifest_paths.len() as Int;
-                let mut ki: Int = 0;
-                while ki < m_count {
-                    let rp: &String = manifest_paths.get_unchecked(ki as u64);
-                    let was_checked: bool = checked.contains(rp);
-                    if !was_checked {
-                        report_status(&"REMOVED  ", rp);
-                        cnt_rem = cnt_rem + 1;
-                    }
-                    ki = ki + 1;
-                }
+                cnt_rem = cnt_rem + count_removed(&manifest_paths, &checked);
 
                 // Summary
                 println("");

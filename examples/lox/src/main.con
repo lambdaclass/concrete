@@ -53,12 +53,12 @@ mod Lox {
 
     fn sp_eq(chars: &mut Vec<i32>, meta: &mut Vec<StrMeta>, a: i32, b: i32) -> bool {
         if a == b { return true; }
-        let ma: StrMeta = *meta.get_unchecked(a as u64);
-        let mb: StrMeta = *meta.get_unchecked(b as u64);
+        let ma: StrMeta = meta.get_unchecked(a as u64);
+        let mb: StrMeta = meta.get_unchecked(b as u64);
         if ma.length != mb.length { return false; }
         let mut i: i32 = 0;
         while i < ma.length {
-            if *chars.get_unchecked((ma.offset + i) as u64) != *chars.get_unchecked((mb.offset + i) as u64) {
+            if chars.get_unchecked((ma.offset + i) as u64) != chars.get_unchecked((mb.offset + i) as u64) {
                 return false;
             }
             i = i + 1;
@@ -67,27 +67,27 @@ mod Lox {
     }
 
     fn sp_print(chars: &mut Vec<i32>, meta: &mut Vec<StrMeta>, idx: i32) with(Console) {
-        let m: StrMeta = *meta.get_unchecked(idx as u64);
+        let m: StrMeta = meta.get_unchecked(idx as u64);
         let mut i: i32 = 0;
         while i < m.length {
-            print_char(*chars.get_unchecked((m.offset + i) as u64) as Int);
+            print_char(chars.get_unchecked((m.offset + i) as u64) as Int);
             i = i + 1;
         }
     }
 
     fn sp_concat(chars: &mut Vec<i32>, meta: &mut Vec<StrMeta>, a: i32, b: i32) with(Alloc) -> i32 {
-        let ma: StrMeta = *meta.get_unchecked(a as u64);
-        let mb: StrMeta = *meta.get_unchecked(b as u64);
+        let ma: StrMeta = meta.get_unchecked(a as u64);
+        let mb: StrMeta = meta.get_unchecked(b as u64);
         let idx: i32 = meta.len() as i32;
         let off: i32 = chars.len() as i32;
         let mut i: i32 = 0;
         while i < ma.length {
-            chars.push(*chars.get_unchecked((ma.offset + i) as u64));
+            chars.push(chars.get_unchecked((ma.offset + i) as u64));
             i = i + 1;
         }
         i = 0;
         while i < mb.length {
-            chars.push(*chars.get_unchecked((mb.offset + i) as u64));
+            chars.push(chars.get_unchecked((mb.offset + i) as u64));
             i = i + 1;
         }
         meta.push(StrMeta { offset: off, length: ma.length + mb.length });
@@ -326,10 +326,10 @@ mod Lox {
     struct Copy Parser { current: i32, }
 
     fn peek(p: &mut Parser, tokens: &mut Vec<Token>) -> Token {
-        return *tokens.get_unchecked(p.current as u64);
+        return tokens.get_unchecked(p.current as u64);
     }
     fn advance(p: &mut Parser, tokens: &mut Vec<Token>) -> Token {
-        let t: Token = *tokens.get_unchecked(p.current as u64);
+        let t: Token = tokens.get_unchecked(p.current as u64);
         p.current = p.current + 1;
         return t;
     }
@@ -537,7 +537,7 @@ mod Lox {
         let bs: i32 = stmts.len() as i32;
         let cnt: i32 = tmp.len() as i32;
         let mut i: i32 = 0;
-        while i<cnt { stmts.push(*tmp.get_unchecked(i as u64)); i=i+1; }
+        while i<cnt { stmts.push(tmp.get_unchecked(i as u64)); i=i+1; }
         tmp.drop();
         let bi: i32 = blks.len() as i32;
         blks.push(BlockInfo{start:bs,count:cnt});
@@ -566,7 +566,7 @@ mod Lox {
         let expr: i32 = parse_or(p,toks,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums);
         if expr<0 { return 0-1; }
         if match_tok(p,toks,14) { // =
-            let lnode: Node = *nodes.get_unchecked(expr as u64);
+            let lnode: Node = nodes.get_unchecked(expr as u64);
             if lnode.typ!=7 { return 0-1; }
             let val: i32 = parse_assignment(p,toks,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums);
             if val<0 { return 0-1; }
@@ -813,7 +813,7 @@ mod Lox {
         let bs: i32 = stmts.len() as i32;
         let cnt: i32 = tmp.len() as i32;
         let mut i: i32 = 0;
-        while i<cnt { stmts.push(*tmp.get_unchecked(i as u64)); i=i+1; }
+        while i<cnt { stmts.push(tmp.get_unchecked(i as u64)); i=i+1; }
         tmp.drop();
         let bi: i32 = blks.len() as i32;
         blks.push(BlockInfo{start:bs,count:cnt});
@@ -856,7 +856,7 @@ mod Lox {
     }
     fn lox_env_set(envs: &mut Vec<EnvMeta>, ebs: &mut Vec<Binding>,
                eid: i32, name: i32, v: RVal) with(Alloc) {
-        let meta: EnvMeta = *envs.get_unchecked(eid as u64);
+        let meta: EnvMeta = envs.get_unchecked(eid as u64);
         let idx: i32 = ebs.len() as i32;
         ebs.push(Binding{name_idx:name,val_tag:v.tag,val_data:v.data,prev:meta.last});
         envs.set_unchecked(eid as u64,EnvMeta{parent:meta.parent,last:idx});
@@ -865,10 +865,10 @@ mod Lox {
                eid: i32, name: i32, sp_chars: &mut Vec<i32>, sp_meta: &mut Vec<StrMeta>) -> RVal {
         let mut cur: i32 = eid;
         while cur>=0 {
-            let meta: EnvMeta = *envs.get_unchecked(cur as u64);
+            let meta: EnvMeta = envs.get_unchecked(cur as u64);
             let mut idx: i32 = meta.last;
             while idx>=0 {
-                let b: Binding = *ebs.get_unchecked(idx as u64);
+                let b: Binding = ebs.get_unchecked(idx as u64);
                 if sp_eq(sp_chars,sp_meta,name,b.name_idx) {
                     return RVal{tag:b.val_tag,data:b.val_data};
                 }
@@ -882,10 +882,10 @@ mod Lox {
                   eid: i32, name: i32, v: RVal, sp_chars: &mut Vec<i32>, sp_meta: &mut Vec<StrMeta>) -> bool {
         let mut cur: i32 = eid;
         while cur>=0 {
-            let meta: EnvMeta = *envs.get_unchecked(cur as u64);
+            let meta: EnvMeta = envs.get_unchecked(cur as u64);
             let mut idx: i32 = meta.last;
             while idx>=0 {
-                let b: Binding = *ebs.get_unchecked(idx as u64);
+                let b: Binding = ebs.get_unchecked(idx as u64);
                 if sp_eq(sp_chars,sp_meta,name,b.name_idx) {
                     ebs.set_unchecked(idx as u64,Binding{name_idx:b.name_idx,val_tag:v.tag,val_data:v.data,prev:b.prev});
                     return true;
@@ -914,7 +914,7 @@ mod Lox {
         envs: &mut Vec<EnvMeta>, ebs: &mut Vec<Binding>,
         closures: &mut Vec<ClosureInfo>, rvs: &mut Vec<RetVal>) with(Console, Alloc) -> RVal {
         if ni<0 { return rv_nil(); }
-        let nd: Node = *nodes.get_unchecked(ni as u64);
+        let nd: Node = nodes.get_unchecked(ni as u64);
 
         if nd.typ==0 { return rv_num(nd.data); }   // NUM_LIT
         if nd.typ==1 { return rv_str(nd.data); }   // STR_LIT
@@ -936,7 +936,7 @@ mod Lox {
         }
         // BINARY
         if nd.typ==6 {
-            let info: BinaryInfo = *bins.get_unchecked(nd.data as u64);
+            let info: BinaryInfo = bins.get_unchecked(nd.data as u64);
             let lv: RVal = eval_node(info.left,eid,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums,envs,ebs,closures,rvs);
             if lv.tag==5 { return lv; }
             let rv: RVal = eval_node(info.right,eid,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums,envs,ebs,closures,rvs);
@@ -962,7 +962,7 @@ mod Lox {
         if nd.typ==7 { return lox_env_get(envs,ebs,eid,nd.data,sp_chars,sp_meta); }
         // ASSIGN
         if nd.typ==8 {
-            let ai: AssignInfo = *asns.get_unchecked(nd.data as u64);
+            let ai: AssignInfo = asns.get_unchecked(nd.data as u64);
             let val: RVal = eval_node(ai.value_node,eid,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums,envs,ebs,closures,rvs);
             if val.tag==5 { return val; }
             lox_env_assign(envs,ebs,eid,ai.name_idx,val,sp_chars,sp_meta);
@@ -982,7 +982,7 @@ mod Lox {
         }
         // VAR_DECL
         if nd.typ==11 {
-            let vi: VarDeclInfo = *vds.get_unchecked(nd.data as u64);
+            let vi: VarDeclInfo = vds.get_unchecked(nd.data as u64);
             let mut val: RVal = rv_nil();
             if vi.init_node>=0 {
                 val = eval_node(vi.init_node,eid,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums,envs,ebs,closures,rvs);
@@ -993,12 +993,12 @@ mod Lox {
         }
         // BLOCK
         if nd.typ==12 {
-            let bi: BlockInfo = *blks.get_unchecked(nd.data as u64);
+            let bi: BlockInfo = blks.get_unchecked(nd.data as u64);
             let benv: i32 = lox_env_new(envs,eid);
             let mut result: RVal = rv_nil();
             let mut i: i32 = 0;
             while i<bi.count {
-                let si: i32 = *stmts.get_unchecked((bi.start+i) as u64);
+                let si: i32 = stmts.get_unchecked((bi.start+i) as u64);
                 result = eval_node(si,benv,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums,envs,ebs,closures,rvs);
                 if result.tag==5 { return result; }
                 i=i+1;
@@ -1007,7 +1007,7 @@ mod Lox {
         }
         // IF_STMT
         if nd.typ==13 {
-            let ii: IfInfo = *ifs.get_unchecked(nd.data as u64);
+            let ii: IfInfo = ifs.get_unchecked(nd.data as u64);
             let cond: RVal = eval_node(ii.cond,eid,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums,envs,ebs,closures,rvs);
             if cond.tag==5 { return cond; }
             if is_truthy(cond) {
@@ -1020,7 +1020,7 @@ mod Lox {
         }
         // WHILE_STMT
         if nd.typ==14 {
-            let wi: WhileInfo = *whs.get_unchecked(nd.data as u64);
+            let wi: WhileInfo = whs.get_unchecked(nd.data as u64);
             let mut wd: bool = false;
             while !wd {
                 let cond: RVal = eval_node(wi.cond,eid,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums,envs,ebs,closures,rvs);
@@ -1035,7 +1035,7 @@ mod Lox {
         }
         // FUN_DECL
         if nd.typ==15 {
-            let fi: FunInfo = *fns.get_unchecked(nd.data as u64);
+            let fi: FunInfo = fns.get_unchecked(nd.data as u64);
             let ci: i32 = closures.len() as i32;
             closures.push(ClosureInfo{fun_data:nd.data,env_id:eid});
             lox_env_set(envs,ebs,eid,fi.name_idx,rv_fun(ci));
@@ -1056,29 +1056,29 @@ mod Lox {
         }
         // CALL
         if nd.typ==17 {
-            let ci: CallInfo = *cls.get_unchecked(nd.data as u64);
+            let ci: CallInfo = cls.get_unchecked(nd.data as u64);
             let callee: RVal = eval_node(ci.callee,eid,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums,envs,ebs,closures,rvs);
             if callee.tag==5 { return callee; }
             if callee.tag!=4 { return rv_nil(); }
-            let cl: ClosureInfo = *closures.get_unchecked(callee.data as u64);
-            let fi: FunInfo = *fns.get_unchecked(cl.fun_data as u64);
+            let cl: ClosureInfo = closures.get_unchecked(callee.data as u64);
+            let fi: FunInfo = fns.get_unchecked(cl.fun_data as u64);
             let fenv: i32 = lox_env_new(envs,cl.env_id);
             let mut pi: i32 = 0;
             while pi<fi.params_count && pi<ci.args_count {
-                let pn: i32 = *params.get_unchecked((fi.params_start+pi) as u64);
-                let an: i32 = *args.get_unchecked((ci.args_start+pi) as u64);
+                let pn: i32 = params.get_unchecked((fi.params_start+pi) as u64);
+                let an: i32 = args.get_unchecked((ci.args_start+pi) as u64);
                 let av: RVal = eval_node(an,eid,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums,envs,ebs,closures,rvs);
                 if av.tag==5 { return av; }
                 lox_env_set(envs,ebs,fenv,pn,av);
                 pi=pi+1;
             }
             let br: RVal = eval_node(fi.body_node,fenv,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums,envs,ebs,closures,rvs);
-            if br.tag==5 { let rv: RetVal = *rvs.get_unchecked(br.data as u64); return RVal{tag:rv.tag,data:rv.data}; }
+            if br.tag==5 { let rv: RetVal = rvs.get_unchecked(br.data as u64); return RVal{tag:rv.tag,data:rv.data}; }
             return br;
         }
         // LOGICAL
         if nd.typ==18 {
-            let li: BinaryInfo = *bins.get_unchecked(nd.data as u64);
+            let li: BinaryInfo = bins.get_unchecked(nd.data as u64);
             let lv: RVal = eval_node(li.left,eid,nodes,bins,asns,vds,blks,ifs,whs,fns,cls,stmts,params,args,sp_chars,sp_meta,nums,envs,ebs,closures,rvs);
             if lv.tag==5 { return lv; }
             if li.op==1 { if is_truthy(lv) { return lv; } }
