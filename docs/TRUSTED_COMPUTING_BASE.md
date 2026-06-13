@@ -92,7 +92,7 @@ Each Phase 2 item has tightened this layer. The registry is no longer a blind tr
 
 **Remaining trust:**
 
-- The fingerprint algorithm is assumed to be collision-free for practical purposes (structural hash, not cryptographic)
+- The fingerprint algorithm is assumed to be collision-free for practical purposes (truncated SHA-256 over the structural encoding; hardened from the former 64-bit `String.hash`, which was craftable into a silent stale→proved upgrade)
 - The PExpr extraction is assumed to faithfully represent the Core IR semantics (no formal correspondence proof)
 - The `eval` function in `Proof.lean` is assumed to correctly model PExpr evaluation (no formal soundness proof of the evaluator)
 
