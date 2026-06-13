@@ -45,22 +45,10 @@ mod ordered_map {
             return lo;
         }
 
-        pub fn get(&self, key: &K) -> Option<&V> {
-            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
-            if self.len == 0 {
-                return Option::<&V>::None;
-            }
-            let idx: u64 = self.find_index(key);
-            if idx >= self.len {
-                return Option::<&V>::None;
-            }
-            let k: *mut K = self.keys + idx;
-            if cmp(key, k as &K) != 0 {
-                return Option::<&V>::None;
-            }
-            let v: *mut V = self.values + idx;
-            return Option::<&V>::Some { value: v as &V };
-        }
+        // Value readers (`get`/`min_key`/`max_key`) live in the Copy-bounded
+        // impls below — the Copy cell of the value model. Non-Copy reads use
+        // `with_value` (borrow) or `remove` (move). No accessor returns a
+        // reference (references are second-class — VALUE_MODEL.md).
 
         // In-place mutation without exposing a borrowed reference (replaces the
         // withdrawn `get_mut -> Option<&mut V>`, the H1 mutable aggregate-ref
@@ -178,20 +166,7 @@ mod ordered_map {
             return Option::<V>::Some { value: old };
         }
 
-        pub fn min_key(&self) -> Option<&K> {
-            if self.len == 0 {
-                return Option::<&K>::None;
-            }
-            return Option::<&K>::Some { value: self.keys as &K };
-        }
-
-        pub fn max_key(&self) -> Option<&K> {
-            if self.len == 0 {
-                return Option::<&K>::None;
-            }
-            let last: *mut K = self.keys + (self.len - 1);
-            return Option::<&K>::Some { value: last as &K };
-        }
+        // min_key/max_key value readers live in the `K: Copy` impl below.
 
         pub fn len(&self) -> u64 {
             return self.len;
@@ -220,6 +195,44 @@ mod ordered_map {
         }
     }
 
+    // Value reader for Copy values (the Copy cell). Uncallable on a non-Copy V.
+    trusted impl<K, V: Copy> OrderedMap<K, V> {
+        pub fn get(&self, key: &K) -> Option<V> {
+            let cmp: fn(&K, &K) -> i32 = self.cmp_fn;
+            if self.len == 0 {
+                return Option::<V>::None;
+            }
+            let idx: u64 = self.find_index(key);
+            if idx >= self.len {
+                return Option::<V>::None;
+            }
+            let k: *mut K = self.keys + idx;
+            if cmp(key, k as &K) != 0 {
+                return Option::<V>::None;
+            }
+            let v: *mut V = self.values + idx;
+            return Option::<V>::Some { value: *v };
+        }
+    }
+
+    // Min/max key value readers for Copy keys.
+    trusted impl<K: Copy, V> OrderedMap<K, V> {
+        pub fn min_key(&self) -> Option<K> {
+            if self.len == 0 {
+                return Option::<K>::None;
+            }
+            return Option::<K>::Some { value: *self.keys };
+        }
+
+        pub fn max_key(&self) -> Option<K> {
+            if self.len == 0 {
+                return Option::<K>::None;
+            }
+            let last: *mut K = self.keys + (self.len - 1);
+            return Option::<K>::Some { value: *last };
+        }
+    }
+
     fn omap_cmp_i32(a: &i32, b: &i32) -> i32 {
         if *a < *b { return -1; }
         if *a > *b { return 1; }
@@ -241,10 +254,10 @@ mod ordered_map {
         }
 
         let k: i32 = 20;
-        let r: Option<&i32> = m.get(&k);
+        let r: Option<i32> = m.get(&k);
         match r {
             Option::Some { value } => {
-                if *value != 200 { m.drop(); return 1; }
+                if value != 200 { m.drop(); return 1; }
             },
             Option::None => { m.drop(); return 1; }
         }
@@ -261,19 +274,19 @@ mod ordered_map {
         m.insert(30, 3);
 
         // min_key should be 10
-        let mn: Option<&i32> = m.min_key();
+        let mn: Option<i32> = m.min_key();
         match mn {
             Option::Some { value } => {
-                if *value != 10 { m.drop(); return 1; }
+                if value != 10 { m.drop(); return 1; }
             },
             Option::None => { m.drop(); return 1; }
         }
 
         // max_key should be 50
-        let mx: Option<&i32> = m.max_key();
+        let mx: Option<i32> = m.max_key();
         match mx {
             Option::Some { value } => {
-                if *value != 50 { m.drop(); return 1; }
+                if value != 50 { m.drop(); return 1; }
             },
             Option::None => { m.drop(); return 1; }
         }
@@ -296,10 +309,10 @@ mod ordered_map {
 
         // New value should be 999
         let k: i32 = 10;
-        let r: Option<&i32> = m.get(&k);
+        let r: Option<i32> = m.get(&k);
         match r {
             Option::Some { value } => {
-                if *value != 999 { m.drop(); return 1; }
+                if value != 999 { m.drop(); return 1; }
             },
             Option::None => { m.drop(); return 1; }
         }
@@ -344,7 +357,7 @@ mod ordered_map {
         let mut m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
         m.insert(10, 100);
         let k: i32 = 99;
-        let r: Option<&i32> = m.get(&k);
+        let r: Option<i32> = m.get(&k);
         match r {
             Option::Some { value } => { m.drop(); return 1; },
             Option::None => {}
@@ -369,12 +382,12 @@ mod ordered_map {
     #[test]
     fn test_omap_min_max_empty() with(Alloc) -> i32 {
         let m: OrderedMap<i32, i32> = OrderedMap::<i32, i32>::new(omap_cmp_i32);
-        let mn: Option<&i32> = m.min_key();
+        let mn: Option<i32> = m.min_key();
         match mn {
             Option::Some { value } => { m.drop(); return 1; },
             Option::None => {}
         }
-        let mx: Option<&i32> = m.max_key();
+        let mx: Option<i32> = m.max_key();
         match mx {
             Option::Some { value } => { m.drop(); return 1; },
             Option::None => {}
@@ -435,17 +448,17 @@ mod ordered_map {
         }
 
         // min should be 10, max should be 50
-        let mn: Option<&i32> = m.min_key();
+        let mn: Option<i32> = m.min_key();
         match mn {
             Option::Some { value } => {
-                if *value != 10 { m.drop(); return 1; }
+                if value != 10 { m.drop(); return 1; }
             },
             Option::None => { m.drop(); return 1; }
         }
-        let mx: Option<&i32> = m.max_key();
+        let mx: Option<i32> = m.max_key();
         match mx {
             Option::Some { value } => {
-                if *value != 50 { m.drop(); return 1; }
+                if value != 50 { m.drop(); return 1; }
             },
             Option::None => { m.drop(); return 1; }
         }
@@ -465,10 +478,10 @@ mod ordered_map {
         if !(m.contains(&r50)) { m.drop(); return 1; }
 
         // Verify a value
-        let v: Option<&i32> = m.get(&r30);
+        let v: Option<i32> = m.get(&r30);
         match v {
             Option::Some { value } => {
-                if *value != 300 { m.drop(); return 1; }
+                if value != 300 { m.drop(); return 1; }
             },
             Option::None => { m.drop(); return 1; }
         }

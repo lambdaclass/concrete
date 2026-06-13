@@ -33,13 +33,7 @@ mod ordered_set {
             }
         }
 
-        pub fn min(&self) -> Option<&K> {
-            return self.inner.min_key();
-        }
-
-        pub fn max(&self) -> Option<&K> {
-            return self.inner.max_key();
-        }
+        // min/max value readers live in the `K: Copy` impl below (the Copy cell).
 
         pub fn len(&self) -> u64 {
             return self.inner.len();
@@ -55,6 +49,17 @@ mod ordered_set {
 
         pub fn drop(self) with(Alloc) {
             self.inner.drop();
+        }
+    }
+
+    // Min/max value readers for Copy keys (the Copy cell of the value model).
+    impl<K: Copy> OrderedSet<K> {
+        pub fn min(&self) -> Option<K> {
+            return self.inner.min_key();
+        }
+
+        pub fn max(&self) -> Option<K> {
+            return self.inner.max_key();
         }
     }
 
@@ -113,18 +118,18 @@ mod ordered_set {
         s.insert(10);
         s.insert(30);
 
-        let mn: Option<&i32> = s.min();
+        let mn: Option<i32> = s.min();
         match mn {
             Option::Some { value } => {
-                if *value != 10 { s.drop(); return 1; }
+                if value != 10 { s.drop(); return 1; }
             },
             Option::None => { s.drop(); return 1; }
         }
 
-        let mx: Option<&i32> = s.max();
+        let mx: Option<i32> = s.max();
         match mx {
             Option::Some { value } => {
-                if *value != 50 { s.drop(); return 1; }
+                if value != 50 { s.drop(); return 1; }
             },
             Option::None => { s.drop(); return 1; }
         }
@@ -186,17 +191,17 @@ mod ordered_set {
         }
 
         // min should be 10, max should be 50
-        let mn: Option<&i32> = s.min();
+        let mn: Option<i32> = s.min();
         match mn {
             Option::Some { value } => {
-                if *value != 10 { s.drop(); return 1; }
+                if value != 10 { s.drop(); return 1; }
             },
             Option::None => { s.drop(); return 1; }
         }
-        let mx: Option<&i32> = s.max();
+        let mx: Option<i32> = s.max();
         match mx {
             Option::Some { value } => {
-                if *value != 50 { s.drop(); return 1; }
+                if value != 50 { s.drop(); return 1; }
             },
             Option::None => { s.drop(); return 1; }
         }

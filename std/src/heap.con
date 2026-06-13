@@ -52,12 +52,7 @@ mod heap {
             return Option::<T>::Some { value: first };
         }
 
-        pub fn peek(&self) -> Option<&T> {
-            if self.len == 0 {
-                return Option::<&T>::None;
-            }
-            return Option::<&T>::Some { value: self.data as &T };
-        }
+        // Value reader `peek -> Option<T>` lives in the Copy-bounded impl below.
 
         fn sift_up(&mut self, idx: u64) {
             let cmp: fn(&T, &T) -> bool = self.cmp_fn;
@@ -140,6 +135,16 @@ mod heap {
         }
     }
 
+    // Value reader for Copy elements (the Copy cell of the value model).
+    trusted impl<T: Copy> BinaryHeap<T> {
+        pub fn peek(&self) -> Option<T> {
+            if self.len == 0 {
+                return Option::<T>::None;
+            }
+            return Option::<T>::Some { value: *self.data };
+        }
+    }
+
     fn max_cmp(a: &i32, b: &i32) -> bool {
         return *a > *b;
     }
@@ -163,10 +168,10 @@ mod heap {
         }
 
         // Peek should be max
-        let pk: Option<&i32> = h.peek();
+        let pk: Option<i32> = h.peek();
         match pk {
             Option::Some { value } => {
-                if *value != 30 {
+                if value != 30 {
                     h.drop();
                     return 1;
                 }
@@ -345,7 +350,7 @@ mod heap {
     #[test]
     fn test_heap_peek_empty() with(Alloc) -> i32 {
         let h: BinaryHeap<i32> = BinaryHeap::<i32>::new(max_cmp);
-        let r: Option<&i32> = h.peek();
+        let r: Option<i32> = h.peek();
         match r {
             Option::Some { value } => { h.drop(); return 1; },
             Option::None => {}
@@ -366,10 +371,10 @@ mod heap {
         // reuse after clear
         h.push(99);
         if h.len() != 1 { h.drop(); return 1; }
-        let r: Option<&i32> = h.peek();
+        let r: Option<i32> = h.peek();
         match r {
             Option::Some { value } => {
-                if *value != 99 { h.drop(); return 1; }
+                if value != 99 { h.drop(); return 1; }
             },
             Option::None => { h.drop(); return 1; }
         }
