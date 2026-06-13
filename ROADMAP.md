@@ -3000,7 +3000,26 @@ policies, provenance, and registry protocol.
    `partial`, `stale`, `vacuous`, `missing`, and `ineligible`. The artifact
    must record whether evidence is package-local, inherited from a dependency,
    or trusted through a boundary.
-8. Add module/package authority budgets after package graphs are real.
+8. Add module/package authority budgets after package graphs are real, and make
+   imports fact-checked boundaries. Imports do not grant capabilities; they
+   declare and constrain facts about the imported interface. The first concrete
+   fact class is authority: support source-level or manifest-level constraints
+   such as `import std.parse requires(no File, no Network, no Unsafe)` and
+   package-wide budgets such as `allowed = ["Alloc"]`. A dependency capability
+   widening must be a build/audit diff and, when constrained, a build failure
+   until explicitly accepted. The design must leave room for the same import
+   mechanism to constrain allocation (`no Alloc` / bounded allocation), trust
+   (`no trusted`, `no extern`, `no Unsafe`), runtime-failure profile, platform
+   (`hosted` / `freestanding` / `posix`), arithmetic profile, determinism,
+   constant-time / secret-flow claims, and supply-chain facts such as source
+   verification or license. Write
+   `research/packages-tooling/import-fact-constraints.md`, then add
+   `docs/IMPORT_FACT_CONSTRAINTS.md`,
+   `examples/package_authority_imports/{rejects_network_widening,accepts_file_without_granting_file,rejects_unsafe_dependency,rejects_alloc_widening,rejects_hosted_dependency}/`,
+   and `scripts/tests/check_import_fact_constraints.sh`; the gate must prove
+   imports read summaries from interface artifacts, do not grant authority to the
+   importer, compose with package-level budgets, and reject capability/allocation/
+   trust/platform fact drift until explicitly accepted.
 9. Add dependency trust policy: trust widening across boundaries, review and
    inheritance.
 10. Add package-level assumption inheritance: dependency assumptions must be
@@ -3032,7 +3051,9 @@ policies, provenance, and registry protocol.
     dependencies are named, how proof revocation invalidates dependents, and
     how release bundles explain the imported requirement. Write
     `research/packages/evidence-typed-imports.md` before implementing the
-    surface, then add `docs/EVIDENCE_TYPED_IMPORTS.md`,
+    surface, and keep it consistent with import authority constraints from
+    Phase 17 #8 (e.g. `import hmac.compute requires(proved_by_lean, no Unsafe)`).
+    Then add `docs/EVIDENCE_TYPED_IMPORTS.md`,
     `examples/package_evidence_imports/{requires_lean,allows_solver_trusted,rejects_stale,rejects_vacuous}/`,
     and `scripts/tests/check_evidence_typed_imports.sh`; the gate must prove
     dependency evidence is read from package artifacts, not source-private side
