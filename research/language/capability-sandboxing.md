@@ -165,6 +165,34 @@ Risk:
 
 So this should be introduced only where the split buys real operational value.
 
+### 4a. Capability vocabulary additions (decided 2026-06-13)
+
+Forward-looking decisions on the capability *vocabulary* (distinct from the
+granularity splits above). The guiding lesson — reinforced by the H1 closure
+(`docs/KNOWN_HOLES.md`: smaller, sharper primitives win) — is to add capabilities
+only when they name a *distinct authority* a real workload needs, and to keep
+each one sharp.
+
+- **`Device` — near-term addition.** `with(Device)` (with `with(Mmio)` as a
+  possible companion) for memory-mapped I/O / volatile hardware access. Already
+  anticipated for the freestanding/embedded path (ROADMAP Phase 15); promote it
+  to the near-term vocabulary so hardware access is an explicit, audit-visible
+  authority rather than hiding under `Unsafe`.
+- **`Thread` — future concurrency vocabulary.** Reserve `with(Thread)` for the
+  structured-concurrency direction (alongside the existing `Async`/`Concurrent`
+  lattice nodes). Not added now — it lands with the concurrency model, not
+  before, so it is designed against real `spawn`/scope APIs
+  (`capability-polymorphism.md`, `async-concurrency-evidence.md`).
+- **`Random` — clarified, not changed.** `Random` is authority over **external
+  entropy** (the OS/hardware RNG — a genuine nondeterminism source), not
+  permission to run a pure PRNG. A deterministic PRNG seeded from a value is pure
+  and needs no capability; only drawing real entropy requires `with(Random)`.
+  This keeps the predictable/`ProvableV1` boundary honest. (Clarify in
+  `docs/SAFETY.md`.)
+- **`Signal` — deferred.** OS signal handling (`with(Signal)`) is deferred: its
+  control-flow/async-safety semantics are subtle and no current workload needs
+  it. Revisit only with concrete evidence.
+
 ### 5. Capability-aware stdlib design
 
 A better sandboxing story is not only syntax. It is also library discipline.

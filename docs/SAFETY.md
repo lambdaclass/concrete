@@ -40,6 +40,13 @@ fn serve() with(Network, Alloc) -> Int { ... }
 
 The nine capabilities are: `File`, `Network`, `Clock`, `Env`, `Random`, `Process`, `Console`, `Alloc`, `Unsafe`.
 
+`Random` is authority over **external entropy** (the OS/hardware RNG — a genuine
+nondeterminism source), not permission to run a PRNG: a deterministic PRNG seeded
+from a value is pure and needs no capability; only drawing real entropy requires
+`with(Random)`. (Planned vocabulary additions — `Device` near-term for MMIO,
+`Thread` with the concurrency model, `Signal` deferred — are recorded in
+`research/language/capability-sandboxing.md` §4a.)
+
 A function can only call functions whose capabilities are a subset of its own. This is checked at both the surface level (Check) and the Core IR level (CoreCheck). Capability errors include actionable hints suggesting `with(Cap)` additions or trusted wrapper alternatives.
 
 **Capability aliases** reduce signature repetition:
