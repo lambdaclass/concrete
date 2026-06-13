@@ -1,0 +1,22 @@
+// Regression for C9 (ROADMAP Phase 5 #6c): a loop variable that is BOTH
+// loop-carried AND address-taken (`&i` in a mutating `while`) used to miscompile
+// into a silent infinite loop — `i` got both a promoted alloca and an SSA phi,
+// the two diverged, the init store landed in the loop body (resetting i each
+// iteration), and the loop condition vanished. Fix: a scalar whose address is
+// taken in the loop body is promoted to a stable alloca BEFORE the loop (memory-
+// backed, single source of truth) rather than phi-carried, and promoted scalars
+// are excluded from loop/if/match value reconciliation.
+//
+// Expected: 3 (reads i = 0, 1, 2 via &i and sums them).
+
+fn rd(x: &i64) -> i64 { return *x; }
+
+fn main() -> i64 {
+    let mut i: i64 = 0;
+    let mut acc: i64 = 0;
+    while i < 3 {
+        acc = acc + rd(&i);
+        i = i + 1;
+    }
+    return acc;
+}

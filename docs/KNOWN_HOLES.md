@@ -99,25 +99,23 @@ that compiled in safe code. Affected (all now migrated): `HashMap::get`/`get_mut
   array/container/callback-context) is permanent; unfreezing it is a
   thesis-level decision.
 
-### C9. Address-taken loop variable → lost condition / infinite loop — OPEN
+### C9. Address-taken loop variable → lost condition / infinite loop — CLOSED 2026-06-13
 
-A loop variable that is **both** loop-carried and address-taken (e.g. `&i`
-inside a `while i < n { … ; i = i + 1 }`) miscompiles: the variable is promoted
-to an alloca (because of `&i`, per C8) **and** kept as an SSA phi, the two
-diverge, the init `store 0` lands inside the loop body (resetting the counter
-every iteration), and the loop condition disappears entirely — producing a
-silent infinite loop (wrong answer / hang, no diagnostic). Root cause is the
-interaction between alloca-promotion (C8) and the loop SSA/phi construction: a
-promoted variable that is loop-carried must be driven entirely through memory
-(load/condition/increment/store via the alloca), not also through a phi.
-- **Repro:** `tests/known_bugs/loop_var_borrow.con` (currently hangs; lives
-  outside `tests/programs/` so no glob runs it — see roadmap).
-- **Scope:** does NOT affect the stdlib or the callable-values work — stdlib
-  loops use a plain counter and never borrow it; container callbacks borrow
-  *elements* via pointer walks. Surfaced while implementing #24 step 1.
-- **Disposition:** fail-closed candidate — until the loop-SSA/promotion
-  interaction is fixed, the checker should *reject* borrowing a loop-carried
-  mutable variable rather than miscompile. Tracked at ROADMAP Phase 5 #6c.
+A loop variable that was **both** loop-carried and address-taken (e.g. `&i`
+inside a `while i < n { … ; i = i + 1 }`) miscompiled: the variable got both a
+promoted alloca (from `&i`, per C8) **and** an SSA phi, the two diverged, the
+init `store 0` landed inside the loop body (resetting the counter every
+iteration), and the loop condition disappeared — a silent infinite loop.
+**Fixed** (`Concrete/Lower.lean`): a scalar whose address is taken anywhere in
+the loop body is now promoted to a stable alloca BEFORE the loop (memory-backed,
+single source of truth) rather than phi-carried — so it is driven entirely
+through memory, like aggregates. Promoted scalars are excluded from loop / `if` /
+`match` value reconciliation (else the merge re-stores a stale snapshot), and a
+`&mut promotedVar` call argument passes the alloca directly (no copy/write-back
+that would desync from the alloca).
+- **Locked by:** `tests/programs/regress_loop_addr_taken_var.con` (= 3) in the
+  main suite; broader loop edge cases (single `&i`, `&mut i`, nested `&i`/`&j`)
+  verified. Full suite 1553/0; examples 123/0.
 
 ### C10. Indexing an array behind a reference yields `&<unknown>` — OPEN
 

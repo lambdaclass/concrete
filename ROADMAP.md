@@ -1101,14 +1101,15 @@ rest of Phase 5 stays after that slab in the same linear queue.
      (callback context threading). Neither blocks the H1/callable-values thread
      (stdlib loops use plain counters and pointer walks), but both are tracked
      so they are not lost — see `docs/KNOWN_HOLES.md` C9/C10.
-     * C9 (HIGH — silent miscompile): an address-taken loop variable that is
-       also loop-carried (`&i` inside `while i < n { …; i = i + 1 }`)
-       miscompiles to a silent infinite loop — `i` gets both a promoted alloca
-       (C8) and an SSA phi, they diverge, the init store lands in the body, and
-       the condition disappears. Repro `tests/known_bugs/loop_var_borrow.con`
-       (hangs). Fix: drive a promoted loop-carried variable entirely through
-       memory, not also a phi. Interim fail-closed option: reject borrowing a
-       loop-carried mutable variable rather than miscompile.
+     * C9 (HIGH — silent miscompile): FIXED 2026-06-13. An address-taken,
+       loop-carried variable (`&i` inside `while i < n { …; i = i + 1 }`)
+       miscompiled to a silent infinite loop (promoted alloca + SSA phi diverged,
+       init store landed in the body, condition disappeared). Fix: a scalar whose
+       address is taken in the loop body is promoted to a stable alloca BEFORE
+       the loop (driven through memory, not a phi); promoted scalars are excluded
+       from loop/if/match reconciliation; `&mut promotedVar` call args pass the
+       alloca directly. Locked by
+       `tests/programs/regress_loop_addr_taken_var.con` (= 3).
      * C10 (fail-closed): `&arr[i]` where `arr: &[T; N]` resolves to
        `&<unknown>` (E0220) — array-index element type is not resolved through a
        reference. Repro `tests/known_bugs/index_through_ref.con`. Fix: resolve

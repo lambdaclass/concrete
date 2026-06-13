@@ -10,6 +10,27 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### C9 fixed — silent infinite-loop miscompile on address-taken loop variables (2026-06-13)
+
+- A loop variable that was both loop-carried and address-taken (`&i` inside a
+  mutating `while`) miscompiled into a **silent infinite loop**: it got both a
+  promoted alloca (from `&i`) and an SSA phi, the two diverged, the init `store`
+  landed inside the body (resetting the counter), and the loop condition
+  vanished. Fixed in `Concrete/Lower.lean`:
+  - a scalar whose address is taken anywhere in the loop body is promoted to a
+    stable alloca **before** the loop (memory-backed, driven through load/store
+    like aggregates) instead of being phi-carried;
+  - promoted **scalars** are excluded from loop / `if` / `match` value
+    reconciliation (else the merge re-stores a stale pre-branch snapshot — which
+    surfaced as `sp` being reset to 0 every iteration in the stack-machine
+    examples); promoted aggregates keep their existing merge path (so `defer`
+    over strings is unaffected);
+  - a `&mut promotedVar` call argument now passes the alloca directly (no
+    copy/write-back that would desync from the alloca).
+- Locked by `tests/programs/regress_loop_addr_taken_var.con` (= 3). Full suite
+  1553/0; examples 123/0; no new `--full` failures vs baseline. (C10 — `&arr[i]`
+  through `&[T; N]` — remains open, tracked at ROADMAP #6c.)
+
 ### H1 CLOSED — returned-reference provenance resolved by subtraction (2026-06-13)
 
 - The returned-reference-provenance hole (H1) is **closed**. The checker now

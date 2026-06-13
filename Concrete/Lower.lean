@@ -417,6 +417,59 @@ private def addrOfLocal (inner : CExpr) (refTy : Ty) : LowerM (Option SVal) := d
         return some (.reg slot refTy)
   | _ => return none
 
+-- Does `&name` / `&mut name` (or a `borrow name as ...` block) appear anywhere
+-- in these expressions/statements? A scalar loop variable whose address is taken
+-- in the loop body must be promoted to a stable alloca BEFORE the loop (like
+-- aggregates) rather than phi-carried — otherwise the address-of promotes it to
+-- memory mid-body while the loop still phi-tracks it, and the two representations
+-- diverge (lost condition / re-initialized counter / silent infinite loop — C9).
+mutual
+partial def cexprTakesAddrOf (name : String) : CExpr → Bool
+  | .borrow inner _ => (match inner with | .ident n _ => n == name | _ => false) || cexprTakesAddrOf name inner
+  | .borrowMut inner _ => (match inner with | .ident n _ => n == name | _ => false) || cexprTakesAddrOf name inner
+  | .binOp _ l r _ => cexprTakesAddrOf name l || cexprTakesAddrOf name r
+  | .unaryOp _ o _ => cexprTakesAddrOf name o
+  | .call _ _ args _ => args.any (cexprTakesAddrOf name)
+  | .structLit _ _ fields _ => fields.any (fun fe => cexprTakesAddrOf name fe.2)
+  | .fieldAccess o _ _ => cexprTakesAddrOf name o
+  | .match_ s arms _ => cexprTakesAddrOf name s || arms.any (cmatchArmTakesAddrOf name)
+  | .deref inner _ => cexprTakesAddrOf name inner
+  | .arrayLit elems _ => elems.any (cexprTakesAddrOf name)
+  | .arrayIndex a i _ => cexprTakesAddrOf name a || cexprTakesAddrOf name i
+  | .cast inner _ => cexprTakesAddrOf name inner
+  | .try_ inner _ => cexprTakesAddrOf name inner
+  | .allocCall inner alloc _ => cexprTakesAddrOf name inner || cexprTakesAddrOf name alloc
+  | .whileExpr c b e _ => cexprTakesAddrOf name c || cstmtsTakeAddrOf name b || cstmtsTakeAddrOf name e
+  | .ifExpr c t e _ => cexprTakesAddrOf name c || cstmtsTakeAddrOf name t || cstmtsTakeAddrOf name e
+  | _ => false
+
+partial def cmatchArmTakesAddrOf (name : String) : CMatchArm → Bool
+  | .enumArm _ _ _ body => cstmtsTakeAddrOf name body
+  | .litArm v body => cexprTakesAddrOf name v || cstmtsTakeAddrOf name body
+  | .varArm _ _ body => cstmtsTakeAddrOf name body
+
+partial def cstmtTakesAddrOf (name : String) : CStmt → Bool
+  | .letDecl _ _ _ v => cexprTakesAddrOf name v
+  | .assign _ v => cexprTakesAddrOf name v
+  | .return_ (some v) _ => cexprTakesAddrOf name v
+  | .return_ none _ => false
+  | .expr e => cexprTakesAddrOf name e
+  | .ifElse c t e => cexprTakesAddrOf name c || cstmtsTakeAddrOf name t ||
+      (match e with | some el => cstmtsTakeAddrOf name el | none => false)
+  | .while_ c b _ step => cexprTakesAddrOf name c || cstmtsTakeAddrOf name b || cstmtsTakeAddrOf name step
+  | .fieldAssign o _ v => cexprTakesAddrOf name o || cexprTakesAddrOf name v
+  | .derefAssign t v => cexprTakesAddrOf name t || cexprTakesAddrOf name v
+  | .arrayIndexAssign a i v => cexprTakesAddrOf name a || cexprTakesAddrOf name i || cexprTakesAddrOf name v
+  | .break_ (some v) _ => cexprTakesAddrOf name v
+  | .break_ none _ => false
+  | .defer b => cexprTakesAddrOf name b
+  | .borrowIn var _ _ _ _ body => var == name || cstmtsTakeAddrOf name body
+  | .continue_ _ => false
+
+partial def cstmtsTakeAddrOf (name : String) (body : List CStmt) : Bool :=
+  body.any (cstmtTakesAddrOf name)
+end
+
 mutual
 
 partial def lowerExpr (e : CExpr) : LowerM SVal := do
@@ -507,16 +560,24 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     for arg in args do
       match arg with
       | .borrowMut (.ident varName innerTy) _ =>
-        -- For &mut borrows of variables: alloca, store current value, pass ptr
-        -- After the call we'll load back to propagate mutations.
-        -- The alloca is hoisted to the entry block so that loops don't
-        -- grow the stack on every iteration.
-        let curVal ← lowerExpr (.ident varName innerTy)
-        let slot ← freshReg "mutref."
-        emitEntryAlloca (.alloca slot innerTy)
-        emit (.store curVal (.reg slot innerTy))
-        aVals := aVals ++ [.reg slot (.refMut innerTy)]
-        mutBorrows := mutBorrows ++ [(varName, slot, innerTy)]
+        -- If the variable is already promoted to a stable alloca (address taken,
+        -- e.g. an address-taken loop counter), pass that alloca directly — the
+        -- alloca IS the storage, so no copy + write-back is needed (and a
+        -- write-back via setVar would desync from the promoted alloca).
+        match ← isPromoted varName with
+        | some (allocaReg, _) =>
+          aVals := aVals ++ [.reg allocaReg (.refMut innerTy)]
+        | none =>
+          -- For &mut borrows of variables: alloca, store current value, pass ptr
+          -- After the call we'll load back to propagate mutations.
+          -- The alloca is hoisted to the entry block so that loops don't
+          -- grow the stack on every iteration.
+          let curVal ← lowerExpr (.ident varName innerTy)
+          let slot ← freshReg "mutref."
+          emitEntryAlloca (.alloca slot innerTy)
+          emit (.store curVal (.reg slot innerTy))
+          aVals := aVals ++ [.reg slot (.refMut innerTy)]
+          mutBorrows := mutBorrows ++ [(varName, slot, innerTy)]
       | .borrowMut (.fieldAccess obj field fieldTy) _ =>
         -- For &mut borrows of struct fields: GEP directly into the parent struct
         -- to get a pointer to the field, avoiding copy + lost write-back.
@@ -844,6 +905,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let liveSnapshots := armEndSnapshots.filter fun (_, _, term) => !term
     if liveSnapshots.length >= 2 then
       for (name, preVal) in preMatchVars do
+        -- Promoted scalars are memory-backed; skip (see the ifElse-statement note).
+        if (← isPromoted name).isSome && !(← isAggregateForPromotion preVal.ty) then continue
         let varTy := preVal.ty
         -- Collect (value, label) for arms that changed this variable
         let mut incoming : List (SVal × String) := []
@@ -1291,6 +1354,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     startBlock mergeLabel
     if !term1 || !term2 then
       for (name, preVal) in preIfVars do
+        -- Promoted scalars are memory-backed; skip (see the ifElse-statement note).
+        if (← isPromoted name).isSome && !(← isAggregateForPromotion preVal.ty) then continue
         let thenV := if term1 then none
           else (thenEndVars.find? fun (n, _) => n == name).map (·.2)
         let elseV := if term2 then none
@@ -1513,6 +1578,11 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     startBlock mergeLabel
     if !term1 || !term2 then
       for (name, preVal) in preIfVars do
+        -- A promoted SCALAR is memory-backed and written through its alloca in
+        -- the branches, so the alloca is the single source of truth — reconciling
+        -- it would re-store the stale pre-if snapshot at the merge (C9-class
+        -- miscompile). Promoted aggregates still use the isAgg merge path below.
+        if (← isPromoted name).isSome && !(← isAggregateForPromotion preVal.ty) then continue
         let thenVal := if term1 then none
           else (thenEndVars.find? fun (n, _) => n == name).map (·.2)
         let elseVal := if term2 then none
@@ -1607,7 +1677,11 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
         allPromotedNames := allPromotedNames ++ [name]
       else
         let isAgg ← isAggregateForPromotion ty
-        if isAgg then
+        -- Also promote a scalar whose address is taken in the body: it must be
+        -- memory-backed (single source of truth) rather than phi-carried, else
+        -- the mid-body address-of promotion collides with the loop's phi for it
+        -- (lost condition / re-init counter / infinite loop — C9).
+        if isAgg || cstmtsTakeAddrOf name body then
           let allocaReg ← freshReg "agg."
           emitEntryAlloca (.alloca allocaReg ty)
           emit (.store val (.reg allocaReg ty))
