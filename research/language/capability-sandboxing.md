@@ -173,11 +173,14 @@ granularity splits above). The guiding lesson — reinforced by the H1 closure
 only when they name a *distinct authority* a real workload needs, and to keep
 each one sharp.
 
-- **`Device` — near-term addition.** `with(Device)` (with `with(Mmio)` as a
-  possible companion) for memory-mapped I/O / volatile hardware access. Already
-  anticipated for the freestanding/embedded path (ROADMAP Phase 15); promote it
-  to the near-term vocabulary so hardware access is an explicit, audit-visible
-  authority rather than hiding under `Unsafe`.
+- **`Device` — planned, deferred to the freestanding path (NOT added yet).**
+  `with(Device)` (with `with(Mmio)` as a possible companion) for memory-mapped
+  I/O / volatile hardware access. When added it will be a registered capability
+  **not** in `Std` — opt-in and audit-visible like `Unsafe`, so hardware access
+  is named distinctly rather than hiding under generic `Unsafe`. Deferred until
+  there is a real consumer: it lands with the freestanding/embedded work (ROADMAP
+  Phase 15), not speculatively — adding a capability with no consumer is exactly
+  the premature vocabulary growth this note warns against.
 - **`Thread` — future concurrency vocabulary.** Reserve `with(Thread)` for the
   structured-concurrency direction (alongside the existing `Async`/`Concurrent`
   lattice nodes). Not added now — it lands with the concurrency model, not
@@ -352,6 +355,35 @@ If Concrete wants better sandboxing, the best order is:
 8. later, use hosted vs freestanding support to strengthen the sandbox boundary further
 
 This keeps the model practical and readable.
+
+## Device Test Plan
+
+When `Device` is wired into the compiler vocabulary, it should come with a
+small permanent gate rather than only a documentation change.
+
+Future gate: `scripts/tests/check_device_capability.sh`.
+
+It should prove:
+
+- `with(Device)` parses, typechecks, appears in `--report caps`, and appears in
+  JSON capability facts.
+- `Device` is **not** part of `Std`; `with(Std)` must not authorize MMIO/device
+  helpers.
+- `Unsafe` does not imply `Device`, and `Device` does not imply `Unsafe`.
+  Hardware-facing raw-pointer helpers should normally require both:
+  `with(Device, Unsafe)`.
+- a pure or hosted-safe module can forbid device access with an import/package
+  constraint such as `requires(no Device)` or `forbidden = ["Device"]`.
+- a dependency that widens from no-device to `Device` breaks the importing
+  package until explicitly accepted.
+- freestanding/MMIO examples report `Device` separately from generic pointer
+  unsafety, so audit output can answer "which functions touch hardware?" without
+  treating every `Unsafe` wrapper as hardware authority.
+
+The first implementation should prefer one capability, `Device`, over a
+premature split into `Mmio`, `Gpio`, `Serial`, and similar names. If real
+embedded workloads later need finer review boundaries, those should be split
+from `Device` with evidence and their own gates.
 
 ## Relationship To Other Notes
 

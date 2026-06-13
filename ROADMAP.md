@@ -116,6 +116,13 @@ Name the evidence class before implementing freestanding/embedded targets:
 - **inline asm** — `trusted`, requires `with(Unsafe)`.
 - **volatile / MMIO** — explicit capability, e.g. `with(Device)` / `with(Mmio)`;
   reads/writes are audit-visible effects, never silently elided.
+  `with(Device)` is the planned next capability-vocabulary addition (a registered
+  cap NOT in `Std`, opt-in/audit-visible like `Unsafe`), but it is **deferred
+  until this freestanding/embedded work gives it a real consumer** — not added
+  speculatively (decided 2026-06-13; see
+  `research/language/capability-sandboxing.md` §4a). `Thread` is reserved for the
+  concurrency model; `Signal` is deferred; `Random` is clarified as authority
+  over external entropy.
 - **interrupt handlers** — a separate trusted/effectful boundary.
 
 ### Native debug info (see Phase 14)

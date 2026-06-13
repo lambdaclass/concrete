@@ -18,7 +18,9 @@ inductive CapSet where
 def stdCaps : List String :=
   ["File", "Network", "Clock", "Env", "Random", "Process", "Console", "Alloc"]
 
-/-- All valid capability names. -/
+/-- All valid capability names. (`Device` for MMIO/hardware is a planned future
+    addition — deferred until the freestanding/embedded path needs it; see
+    ROADMAP and research/language/capability-sandboxing.md §4a.) -/
 def validCaps : List String :=
   ["File", "Network", "Clock", "Env", "Random", "Process", "Console", "Alloc", "Unsafe"]
 
