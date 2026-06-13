@@ -1296,7 +1296,7 @@ run_err "$TESTDIR/error_borrow_shadow.con"     "shadows existing name"
 run_err "$TESTDIR/error_borrow_mut_conflict.con" "is frozen by borrow block"
 run_err "$TESTDIR/error_named_ref_mut_conflict.con" "already borrowed"
 # Additional escape analysis errors
-run_err "$TESTDIR/error_escape_return.con"     "cannot escape its borrow block"
+run_err "$TESTDIR/error_escape_return.con"     "may not return a reference"
 run_err "$TESTDIR/error_escape_field.con"      "cannot escape its borrow block"
 # While-as-expression errors
 run_err "$TESTDIR/error_while_expr_type.con"   "does not match else type"

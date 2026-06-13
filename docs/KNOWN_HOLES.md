@@ -19,15 +19,30 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-### H1. Returned-reference provenance — aggregate-wrapped refs are unsound
+### H1. Returned-reference provenance — CLOSED 2026-06-13
 
-Stdlib `get`/`get_mut`-style APIs return references inside aggregates
-(`Option<&T>`, `Option<&mut V>`). The owner is **not** frozen while the
-returned reference lives, so a saved reference can survive a mutation that
-reallocates/removes/reuses storage — a use-after-realloc that compiles in safe
-code. Affected: `HashMap::get`/`get_mut`, `OrderedMap::get`/`get_mut`,
-`OrderedMap::min_key`/`max_key`, `OrderedSet::min`/`max`, `Vec::get`,
-`Slice::get`/`MutSlice::get`, `Deque::get`, `BinaryHeap::peek`.
+**RESOLVED by the language invariant "references are second-class — never
+returned"** (`docs/VALUE_MODEL.md`): the checker rejects any safe-callable
+function or function *type* that returns a reference — directly, nested in an
+aggregate, or via generic instantiation. The accessor surface was migrated to
+the value model: `get -> Option<V>` (Copy cell, `V: Copy`); `with_value` /
+`with_at` to borrow (Borrow cell, scoped — the `&V` never escapes the callback);
+`remove`/`pop` to move out (Move cell); raw pointers (`*const`/`*mut`) for
+low-level/unsafe access. No lifetimes, regions, or `from()`. Locked by
+`scripts/tests/check_returned_ref_provenance.sh` (now asserts ref-returns are
+rejected) + the blanket signature rule in `Concrete/Check.lean` (`checkFn`) +
+the fn-type / generic-instantiation rules in `resolveType` / call sites. The
+`from(param)` escape valve remains deferred and evidence-gated (#8a1).
+Deferred follow-on: `with_value_mut`/`modify` (separate container-not-in-context
+obligation).
+
+ORIGINAL HOLE (for history): stdlib `get`/`get_mut`-style APIs returned
+references inside aggregates (`Option<&T>`, `Option<&mut V>`). The owner was
+**not** frozen while the returned reference lived, so a saved reference could
+survive a mutation that reallocated/removed/reused storage — a use-after-realloc
+that compiled in safe code. Affected (all now migrated): `HashMap::get`/`get_mut`,
+`OrderedMap::get`/`get_mut`, `OrderedMap::min_key`/`max_key`, `OrderedSet::min`/
+`max`, `Vec::get`, `Slice::get`/`MutSlice::get`, `Deque::get`, `BinaryHeap::peek`.
 
 - **State:** OPEN. Blast radius FROZEN (no new aggregate-ref public API may
   land).

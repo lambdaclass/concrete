@@ -1,3 +1,9 @@
+// H1 CLOSED (2026-06-13): this program DEMONSTRATES THE CLOSURE — it no longer
+// compiles. Reading a stored value by reference (`get -> Option<&V>`) is now
+// rejected: references are second-class and cannot be returned (VALUE_MODEL.md).
+// The safe replacement is `with_value` (scoped borrow) or a Copy value `get`.
+// Kept as a rejected-by-construction repro; gated by check_returned_ref_provenance.sh.
+
 // Known soundness hole: aggregate-wrapped returned refs lose provenance.
 //
 // The general bad shape is `Option<&T>` / `Option<&mut T>` (or any aggregate

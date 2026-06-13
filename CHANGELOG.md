@@ -10,6 +10,28 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### H1 CLOSED — returned-reference provenance resolved by subtraction (2026-06-13)
+
+- The returned-reference-provenance hole (H1) is **closed**. The checker now
+  rejects any safe-callable function or function *type* that returns a reference
+  — directly (`fn f() -> &T`), nested in an aggregate (`-> Option<&T>`), or via
+  generic instantiation (`R = &V` in return position). Implemented as: a blanket
+  signature rule in `checkFn`, the fn-pointer-type rule in `resolveType`, and the
+  generic-instantiation rule at call sites. The original segfault repro
+  (`fn make() -> &i64 { return &local; }`) is now ill-formed.
+- The entire stdlib accessor surface was migrated to the **value model**:
+  `get -> Option<V>` (Copy cell, `Copy`-bounded); `with_value`/`Vec::with_at` to
+  borrow (Borrow cell — the `&V` is confined to a scoped callback and never
+  returned); `remove`/`pop` to move out (Move cell); raw pointers (`*const`/`*mut`)
+  for low-level/unsafe access (`get_unchecked`, `get_mut`). No lifetimes, no
+  regions, no `from()`.
+- `scripts/tests/check_returned_ref_provenance.sh` flipped from
+  contained/frozen to **expected-reject** (10 closure assertions). The two
+  hole-repro examples no longer compile (their returned-ref reads are rejected).
+  `from(param)` stays deferred/evidence-gated (#8a1); `with_value_mut`/`modify`
+  deferred (separate container-not-in-context obligation).
+- Full suite 1553/0; examples 123/0; no new `--full` failures vs baseline.
+
 ### Impl-block bounds enforced + HashMap `get` migrated to the value model (2026-06-13)
 
 - **Closed a latent soundness gap:** impl-block trait/`Copy` bounds

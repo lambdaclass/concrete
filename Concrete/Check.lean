@@ -2465,6 +2465,13 @@ def checkFn (f : FnDef) : CheckM Unit := do
   setEnv { env3 with currentFnName := f.name }
   -- Resolve Self in return type (needs currentImplType from env)
   let retTy ← resolveType retTyRaw
+  -- References are second-class: NO function may return a reference, directly or
+  -- nested (VALUE_MODEL.md). This is the blanket signature rule that completes
+  -- the "never returned" invariant — references flow downward only. Return a
+  -- value, an owned view, a scoped callback (with_value/with_at), or a raw
+  -- pointer (*const/*mut) for low-level/unsafe access.
+  if tyContainsRef retTy then
+    throwCheckMsg s!"function '{f.name}' may not return a reference ('{tyToString retTy}'); references are second-class and cannot be returned — use a value, an owned view, a scoped callback (with_value), or a raw pointer for low-level access (VALUE_MODEL.md)" f.span
   modify fun env => { env with currentRetTy := retTy }
   -- Add params to env. Linear params are "consumed" by being received.
   let mut paramNames : List String := []
