@@ -27,6 +27,45 @@ For FFI and trust boundaries, see [FFI.md](FFI.md).
 - **Copy types** can be used multiple times and can be reassigned freely. Primitives, `&T`, raw pointers, and function pointers are always Copy. Structs and enums opt in with a `Copy` marker.
 - **Linear types** must be consumed exactly once. All structs and enums are linear by default. Branches must agree on consumption. Loops cannot consume linear variables from outer scope. **Linear variables cannot be reassigned** — one binding, one resource. Use a new binding instead.
 
+## References are second-class: they flow down, never up through returns
+
+**Invariant (language-level).** References (`&T`, `&mut T`) are *scoped access*,
+not values you return and carry around. They may flow **downward** — into
+function/method calls, into callback parameters, and into borrow blocks — but a
+**safe-callable function or function *type* may not *return* a reference**,
+directly or nested inside any aggregate, alias, or generic instantiation.
+
+Concretely, the following are rejected:
+
+- `fn id(x: &T) -> &T` and `fn bad() -> &T { return &local; }` — bare reference
+  returns (a returned ref has no provenance the checker can track without
+  lifetimes/regions, so the language does not allow it at all);
+- `fn f(...) -> Option<&T>` / `Result<&T, E>` / any aggregate-wrapped reference
+  return (this is the no-aggregate-ref ban — now a *corollary* of this rule);
+- `fn(&V) -> &V` as a **function-pointer type** (so a ref-returning callback
+  cannot be constructed or passed — this is what keeps scoped callbacks like
+  `with_value` sound: the callback cannot return the borrowed element);
+- a generic type parameter **instantiated to a reference** when that parameter
+  occurs in the return type (e.g. `wrap<R>(r: R) -> Option<R>` called with
+  `R = &V` — the generic backdoor to `Option<&V>`).
+
+This is the design that closes H1 (returned-reference provenance) *by
+subtraction* rather than by adding lifetimes, regions, or `from()`. To **observe**
+borrowed data without returning a reference, use a **scoped callback**
+(`with_value`, see `CALLABLE_VALUES_AND_CAPABILITIES.md` §5); to **store** a view,
+use an **owned view** (`ByteView`, ROADMAP #5a); to **mutate**, use an operation
+API (`update`, `remove`) or a scoped mutable callback; for cheap `Copy` data,
+return **by value**. Low-level code may return a **raw pointer** (`*const T` /
+`*mut T`, deref requires `Unsafe`, audit-visible) — never a `&T`. `from(param)`
+(returned-reference provenance) stays deferred and evidence-gated (ROADMAP #8a1).
+
+Comparison: Austral permits references as values tracked by *regions*
+(`Reference[T, R]`); Concrete is deliberately stricter — it removes the
+returned-reference shape from safe code entirely, so it needs no region/provenance
+machinery. The trade is less borrowed-return ergonomics for a smaller, more
+auditable language; the Austral-style region path stays an evidence-gated research
+escape valve if real workloads ever prove the restriction too costly.
+
 ## The four-cell value model (Copy / Clone / Move / Borrow)
 
 Duplication and ownership transfer fall into four explicit, distinct cells.

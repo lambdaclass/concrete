@@ -729,7 +729,25 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
         let objTypeArgs := match innerTy with | .generic _ args => args | _ => []
         let implTypeParams := sig.typeParams.take objTypeArgs.length
         let methodTypeParams := sig.typeParams.drop objTypeArgs.length
-        let mapping := implTypeParams.zip objTypeArgs ++ methodTypeParams.zip typeArgs
+        let implMapping := implTypeParams.zip objTypeArgs
+        -- Infer the method's OWN type params from argument types when not
+        -- turbofished, so the Core call carries concrete type args and Mono
+        -- specializes without leaking a `Ty.typeVar` (mirror of the Check-phase
+        -- method inference; required for capability-polymorphic / scoped-callback
+        -- methods — ROADMAP Phase 5 #24).
+        let methodArgs ← do
+          if !typeArgs.isEmpty || methodTypeParams.isEmpty then
+            pure typeArgs
+          else
+            let methodParamTys := (sig.params.drop 1).map fun (_, t) => substTy implMapping t
+            let mut inferred : List (String × Ty) := []
+            for (arg, pTy) in args.zip methodParamTys do
+              let argTy ← peekExprType arg
+              for (name, ty) in unifyTypes pTy argTy methodTypeParams do
+                if !(inferred.any fun (n, _) => n == name) then
+                  inferred := inferred ++ [(name, ty)]
+            pure (methodTypeParams.map fun tp => (inferred.lookup tp).getD (.typeVar tp))
+        let mapping := implMapping ++ methodTypeParams.zip methodArgs
         let methodParams := (sig.params.drop 1).map fun (_, t) => (substTy mapping t)
         let retTy := substTy mapping sig.retTy
         -- Wrap object with borrow/borrowMut if method expects a reference self
@@ -749,7 +767,7 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
         for (arg, pTy) in args.zip methodParams do
           let cArg ← elabExpr arg (some pTy)
           cArgs := cArgs ++ [cArg]
-        return .call mangledName (objTypeArgs ++ typeArgs) cArgs retTy
+        return .call mangledName (objTypeArgs ++ methodArgs) cArgs retTy
       | none => throwElab (.noMethodOnType methodName typeName) (some e.getSpan)
 
   | .staticMethodCall _ typeName methodName typeArgs args =>

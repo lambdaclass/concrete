@@ -420,6 +420,29 @@ def isReferenceType : Ty → Bool
   | .ref _ | .refMut _ => true
   | _ => false
 
+/-- Does this type contain a reference (`&T`/`&mut T`) anywhere? Used to enforce
+    the "references are second-class — never returned" invariant
+    (docs/VALUE_MODEL.md). Raw pointers (`*const`/`*mut`) are NOT references and
+    are allowed in return position (they are the audit-visible unsafe escape). -/
+partial def tyContainsRef : Ty → Bool
+  | .ref _ | .refMut _ => true
+  | .ptrMut inner | .ptrConst inner | .heap inner | .heapArray inner => tyContainsRef inner
+  | .array elem _ => tyContainsRef elem
+  | .generic _ args => args.any tyContainsRef
+  | .fn_ params _ retTy => params.any tyContainsRef || tyContainsRef retTy
+  | _ => false
+
+/-- Does the named type parameter occur anywhere in this type? -/
+partial def tyParamOccursIn (name : String) : Ty → Bool
+  | .typeVar n => n == name
+  | .named n => n == name
+  | .ref inner | .refMut inner | .ptrMut inner | .ptrConst inner | .heap inner | .heapArray inner =>
+    tyParamOccursIn name inner
+  | .array elem _ => tyParamOccursIn name elem
+  | .generic _ args => args.any (tyParamOccursIn name)
+  | .fn_ params _ retTy => params.any (tyParamOccursIn name) || tyParamOccursIn name retTy
+  | _ => false
+
 def getEnv : CheckM TypeEnv := get
 def setEnv (env : TypeEnv) : CheckM Unit := set env
 
@@ -466,6 +489,12 @@ def resolveType (ty : Ty) : CheckM Ty := do
   | .fn_ params capSet retTy =>
     let params' ← params.mapM resolveType
     let retTy' ← resolveType retTy
+    -- References are second-class: a function TYPE may not return a reference,
+    -- directly or nested (docs/VALUE_MODEL.md). This makes ref-returning
+    -- callbacks unconstructable, which keeps scoped callbacks (`with_value`)
+    -- sound — the callback cannot return the borrowed element it was handed.
+    if tyContainsRef retTy' then
+      throwCheckMsg s!"function type may not return a reference ('{tyToString retTy'}'); references are second-class and may not be returned (see VALUE_MODEL.md). Use a value, an owned view, or a scoped callback; for low-level access return a raw pointer (*const/*mut)."
     return .fn_ params' capSet retTy'
   | _ => return ty
 
@@ -796,6 +825,99 @@ private def substTy (mapping : List (String × Ty)) : Ty → Ty
   | .heap inner => .heap (substTy mapping inner)
   | .heapArray inner => .heapArray (substTy mapping inner)
   | ty => ty
+
+/-- Infer a method's OWN type params and capability params from its argument
+    types, mirroring the free-function call inference. `implMapping` already
+    binds the impl's type params (e.g. K, V) from the receiver's type args.
+    Returns the method's parameter types (self dropped) and return type with the
+    full type mapping AND resolved capability variables applied, and checks the
+    caller holds the resolved capabilities. This is what makes capability-
+    polymorphic methods (`fn m<…, cap C>(…) with(C)`) inferable without
+    turbofish — the prerequisite for the HOF/scoped-callback stdlib surface
+    (ROADMAP Phase 5 #24). -/
+private partial def inferMethodParamAndRetTys
+    (sig : FnSummary) (implMapping : List (String × Ty)) (methodTypeParams : List String)
+    (explicitTypeArgs : List Ty) (args : List Expr) (callName : String) (sp : Span)
+    : CheckM (List (String × Ty) × Ty) := do
+  -- Method param types (self dropped) with the impl mapping applied.
+  let methodParamTys := (sig.params.drop 1).map fun (n, t) => (n, substTy implMapping t)
+  -- 1. Infer the method's own type params from argument types (unless turbofished).
+  let methodArgs : List Ty ←
+    if !explicitTypeArgs.isEmpty || methodTypeParams.isEmpty then
+      pure explicitTypeArgs
+    else do
+      let mut inferred : List (String × Ty) := []
+      for (arg, (_, pTy)) in args.zip methodParamTys do
+        let argTy ← peekExprType arg
+        for (name, ty) in unifyTypes pTy argTy methodTypeParams do
+          if !(inferred.any fun (n, _) => n == name) then
+            inferred := inferred ++ [(name, ty)]
+      pure (methodTypeParams.map fun tp => (inferred.lookup tp).getD (.typeVar tp))
+  let fullMapping := implMapping ++ methodTypeParams.zip methodArgs
+  -- References are second-class: a type parameter instantiated to a reference
+  -- may not occur in the return type (else `m<R>(...) -> Option<R>` with R=&V is
+  -- a generic backdoor to returning a reference). VALUE_MODEL.md.
+  for (pName, pTy) in fullMapping do
+    if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
+      throwCheckMsg s!"method '{callName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
+  -- 2. Infer capability-variable bindings from fn-typed arguments.
+  let mut capBindings : List (String × List String) := []
+  if !sig.capParams.isEmpty then
+    for (arg, (_, pTy)) in args.zip methodParamTys do
+      match pTy with
+      | .fn_ _ (.concrete caps) _ =>
+        for cap in caps do
+          if sig.capParams.contains cap then
+            let argCapSet ← do
+              let argTy ← peekExprType arg
+              match argTy with
+              | .fn_ _ cs _ => pure cs
+              | _ =>
+                match arg with
+                | .ident _ varName =>
+                  match ← lookupFn varName with
+                  | some argSig => pure argSig.capSet
+                  | none => pure CapSet.empty
+                | _ => pure CapSet.empty
+            let (argCaps, _) := argCapSet.normalize
+            capBindings := capBindings ++ [(cap, argCaps)]
+      | _ => pure ()
+  -- 3. Resolve the method's declared capset against the inferred bindings, and
+  --    check the caller holds the result.
+  if !sig.capParams.isEmpty then
+    let (concreteCaps, capVars) := sig.capSet.normalize
+    let mut resolvedCaps : List String := []
+    for cap in concreteCaps do
+      if sig.capParams.contains cap then
+        match capBindings.find? fun (n, _) => n == cap with
+        | some (_, caps) => resolvedCaps := resolvedCaps ++ caps
+        | none => throwCheck (.cannotInferCapVariable cap callName) (some sp)
+      else resolvedCaps := resolvedCaps ++ [cap]
+    for cv in capVars do
+      match capBindings.find? fun (n, _) => n == cv with
+      | some (_, caps) => resolvedCaps := resolvedCaps ++ caps
+      | none => throwCheck (.cannotInferCapVariable cv callName) (some sp)
+    let env ← getEnv
+    let (callerCaps, callerVars) := env.currentCapSet.normalize
+    for cap in resolvedCaps do
+      unless callerCaps.contains cap || callerVars.contains cap do
+        throwCheck (.missingCapability callName cap env.currentFnName) (some sp)
+  -- 4. Resolve cap variables inside fn-typed param types so a pure/empty-cap
+  --    callback argument matches the declared `with(C)` parameter.
+  let resolveCapInTy : Ty → Ty := fun ty =>
+    match ty with
+    | .fn_ ps (.concrete caps) ret =>
+      let newCaps := caps.foldl (fun acc cap =>
+        if sig.capParams.contains cap then
+          match capBindings.find? fun (n, _) => n == cap with
+          | some (_, resolved) => acc ++ resolved
+          | none => acc
+        else acc ++ [cap]) []
+      .fn_ ps (.concrete newCaps) ret
+    | t => t
+  let resolvedParamTys := (sig.params.drop 1).map fun (n, t) => (n, resolveCapInTy (substTy fullMapping t))
+  let resolvedRetTy := resolveCapInTy (substTy fullMapping sig.retTy)
+  return (resolvedParamTys, resolvedRetTy)
 
 /-- Check trait bounds: for each type param with bounds, verify the concrete type implements the required traits. -/
 private def checkTraitBounds (bounds : List (String × List String)) (mapping : List (String × Ty))
@@ -1337,6 +1459,11 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
             | none => .typeVar tp)
       -- Build type substitution
       let mapping := sig.typeParams.zip inferredTypeArgs
+      -- References are second-class: a type parameter instantiated to a
+      -- reference may not occur in the return type (VALUE_MODEL.md).
+      for (pName, pTy) in mapping do
+        if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
+          throwCheckMsg s!"generic function '{fnName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md). Return a value, an owned view, or use a scoped callback."
       -- Check trait bounds
       if !sig.typeBounds.isEmpty then
         checkTraitBounds sig.typeBounds mapping s!"generic function '{fnName}'"
@@ -1855,9 +1982,12 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         | _ => []
       let implTypeParams := sig.typeParams.take objTypeArgs.length
       let methodTypeParams := sig.typeParams.drop objTypeArgs.length
-      let mapping := implTypeParams.zip objTypeArgs ++ methodTypeParams.zip typeArgs
-      let methodParams := (sig.params.drop 1).map fun (n, t) => (n, substTy mapping t)
-      let retTy := substTy mapping sig.retTy
+      let implMapping := implTypeParams.zip objTypeArgs
+      -- Infer the method's own type params + cap params from argument types
+      -- (mirrors free-fn inference), so capability-polymorphic methods work
+      -- without turbofish.
+      let (methodParams, retTy) ←
+        inferMethodParamAndRetTys sig implMapping methodTypeParams typeArgs args methodName e.getSpan
       if args.length != methodParams.length then
         throwCheck (.wrongArgCount s!"method '{methodName}'" methodParams.length args.length) (some e.getSpan)
       for (arg, (pName, pTy)) in args.zip methodParams do
@@ -1900,6 +2030,9 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
     match ← lookupFn mangledName with
     | some sig =>
       let mapping := sig.typeParams.zip typeArgs
+      for (pName, pTy) in mapping do
+        if tyContainsRef pTy && tyParamOccursIn pName sig.retTy then
+          throwCheckMsg s!"static method '{methodName}': type parameter '{pName}' is instantiated to a reference ('{tyToString pTy}') and occurs in the return type; references may not be returned (VALUE_MODEL.md)."
       let paramTypes := sig.params.map fun (n, t) => (n, substTy mapping t)
       let retTy := substTy mapping sig.retTy
       if args.length != paramTypes.length then

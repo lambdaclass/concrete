@@ -89,6 +89,82 @@ else
   ok "pure caller invoking a with(File) callback is rejected (caps not erased)"
 fi
 
+echo "=== capability-polymorphic METHODS infer cap + type vars without turbofish ==="
+# Prerequisite for scoped collection callbacks (with_value): a `cap C` method
+# must infer C (and its own type params) from the callback argument.
+run method_cap_infer 'mod m { pub struct Copy H { v: i64 }
+  impl H { pub fn run<cap C>(&self, f: fn(i64) with(C) -> i64) with(C) -> i64 { return f(self.v); } } }
+import m.{H};
+fn pure_inc(x: i64) -> i64 { return x + 1; }
+fn main() -> i64 { let h: H = H { v: 41 }; return h.run(pure_inc); }' 42
+
+run method_ret_infer 'mod m { pub struct Copy H { v: i64 }
+  impl H { pub fn run<R>(&self, f: fn(i64) -> R) -> R { return f(self.v); } } }
+import m.{H};
+fn to_i(x: i64) -> i64 { return x + 2; }
+fn main() -> i64 { let h: H = H { v: 40 }; return h.run(to_i); }' 42
+
+# A cap-polymorphic method must require the callback's caps at the call site:
+# a caller lacking them is rejected with the capability error (E0240), NOT a
+# spurious type mismatch.
+printf '%s' 'mod m { pub struct Copy H { v: i64 }
+  impl H { pub fn run<cap C>(&self, f: fn(i64) with(C) -> i64) with(C) -> i64 { return f(self.v); } } }
+import m.{H};
+fn nf(x: i64) with(File) -> i64 { return x; }
+fn main() -> i64 { let h: H = H { v: 1 }; return h.run(nf); }' > "$TMP/method_cap_no.con"
+ERR="$("$COMPILER" "$TMP/method_cap_no.con" -o "$TMP/method_cap_no" 2>&1)"
+if "$COMPILER" "$TMP/method_cap_no.con" -o "$TMP/method_cap_no" >/dev/null 2>&1; then
+  no "cap-poly method invoked without the required capability was NOT rejected"
+elif echo "$ERR" | grep -q "E0240"; then
+  ok "cap-poly method without required cap rejected with E0240 (capability, not type mismatch)"
+else
+  no "cap-poly method rejected, but not with E0240: $(echo "$ERR" | grep -i error | head -1)"
+fi
+
+echo "=== references are second-class: no function/callback may RETURN a reference ==="
+# This is what makes scoped callbacks sound WITHOUT lifetimes/provenance: the
+# callback cannot return the borrowed element, so the borrow cannot escape.
+# (1) a function-pointer TYPE returning a ref is rejected.
+printf '%s' 'fn apply(x: &i64, f: fn(&i64) -> &i64) -> i64 { return *f(x); }
+fn id(x: &i64) -> &i64 { return x; }
+fn main() -> i64 { let a: i64 = 5; return apply(&a, id); }' > "$TMP/fnret.con"
+if "$COMPILER" "$TMP/fnret.con" -o "$TMP/fnret" >/dev/null 2>&1; then
+  no "fn(&T) -> &T type was NOT rejected (ref-returning callback constructable)"
+else
+  ok "fn(&T) -> &T function-pointer type is rejected"
+fi
+# (2) the with_value backdoor: a callback that returns its borrowed &V (R=&V).
+printf '%s' 'mod m { pub struct Copy H { v: i64 }
+  trusted impl H { pub fn with_value<R, cap C>(&self, f: fn(&i64) with(C) -> R) with(C) -> R { return f(&self.v); } } }
+import m.{H};
+fn ret_ref(x: &i64) -> &i64 { return x; }
+fn main() -> i64 { let h: H = H { v: 42 }; return *h.with_value(ret_ref); }' > "$TMP/wvbackdoor.con"
+if "$COMPILER" "$TMP/wvbackdoor.con" -o "$TMP/wvbackdoor" >/dev/null 2>&1; then
+  no "with_value with an R=&V callback was NOT rejected (H1 escape reintroduced)"
+else
+  ok "with_value with a ref-returning callback (R=&V) is rejected"
+fi
+# (3) the generic backdoor: a type param instantiated to a ref in return position.
+printf '%s' 'fn wrap<R>(r: R) -> Option<R> { return Option::<R>::Some { value: r }; }
+fn make() -> Option<&i64> { let x: i64 = 42; return wrap::<&i64>(&x); }
+fn main() -> i64 { match make() { Option::Some { value } => { return *value; } Option::None => { return 0; } } }' > "$TMP/genbackdoor.con"
+if "$COMPILER" "$TMP/genbackdoor.con" -o "$TMP/genbackdoor" >/dev/null 2>&1; then
+  no "generic R instantiated to a reference in return position was NOT rejected (Option<&T> backdoor)"
+else
+  ok "generic R=&T in return position is rejected (no Option<&T> backdoor)"
+fi
+# (4) a value-returning callback (R = a value) still works — the sound case.
+run wv_value_ok 'mod m { pub struct Copy H { v: i64 }
+  trusted impl H { pub fn with_value<R, cap C>(&self, f: fn(&i64) with(C) -> R) with(C) -> R { return f(&self.v); } } }
+import m.{H};
+fn rd(x: &i64) -> i64 { return *x; }
+fn main() -> i64 { let h: H = H { v: 42 }; return h.with_value(rd); }' 42
+
+echo ""
+echo "NOTE: immutable HashMap::with_value behavior is gated by the map stdlib"
+echo "      #[test]s (run via --stdlib-module map): test_map_with_value,"
+echo "      test_map_with_value_missing. with_value_mut/modify are DEFERRED"
+echo "      (separate container-not-in-context obligation)."
 echo ""
 echo "CALLABLE-VALUES: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

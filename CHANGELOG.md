@@ -10,6 +10,41 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### References are second-class — never returned (H1 closure foundation) + immutable `with_value` (2026-06-13)
+
+- Adopted a language invariant: **references (`&T`/`&mut T`) are scoped access,
+  not values you return.** They flow *downward* (into calls, callback params,
+  borrow blocks) but a safe-callable function or function *type* may not *return*
+  a reference — directly, nested in an aggregate, or via generic instantiation.
+  This closes the returned-reference-provenance hole (H1) *by subtraction* — no
+  lifetimes, no regions, no `from()`. The no-aggregate-ref ban becomes a
+  corollary. (`docs/VALUE_MODEL.md`.)
+- Discovered during this work: returning a reference computed from a reference
+  *identifier* or `&place` was a silent miscompile (spurious load → wrong
+  pointer → segfault even with a live referent), and `with_value`'s generic `R`
+  could be instantiated to `&V`, re-creating `Option<&V>` (the exact H1 shape)
+  through a generic backdoor. Both are now ill-formed by the invariant.
+- Implemented the two suite-green enforcement points in `Concrete/Check.lean`:
+  (a) `resolveType` rejects a **function-pointer type** whose return contains a
+  reference (so a ref-returning callback is unconstructable — this is what makes
+  scoped callbacks sound); (b) generic call/method/static-call sites reject a
+  **type parameter instantiated to a reference that occurs in the return type**
+  (closes `wrap<R>->Option<R>` at `R=&V`). Neither breaks existing code:
+  grandfathered accessors like `get -> Option<&V>` instantiate `V` to a non-ref
+  (the `&` is declared, not introduced by instantiation). Full suite 1554/0; no
+  new `--full` failures.
+- Landed **immutable `HashMap::with_value(key, ctx, f) -> Option<R>`** — now
+  sound (the backdoor is closed, so `R` can't be `&V`); the borrowed `&V` flows
+  *into* the callback via the cast idiom and never escapes. Gated by
+  `scripts/tests/check_callable_values.sh` (fn-type / callback / generic
+  backdoors all rejected; value callback works) and `test_map_with_value`.
+- **Deferred** (tracked): blanket rejection of bare `-> &T` *definition
+  signatures* (needs the existing accessor migration first), the accessor
+  migration itself (`get`/`peek`/`get_unchecked`/`get_mut`/`min`/`max` →
+  value/`with_value`/raw-pointer), `with_value_mut`/`modify` (separate
+  container-not-in-context obligation), and the codegen ref-return fix
+  (defense-in-depth, now unreachable from safe code).
+
 ### Bound-callback context threading + `&mut *` reborrow fix (#24 step 1) (2026-06-12)
 
 - Implemented the three context modes from the callable-values design

@@ -1338,6 +1338,15 @@ partial def parseExprOrAssign : ParseM Stmt := do
 
 end
 
+/-- Resolve capability variables: caps matching capParams become `.var`, rest stay `.concrete`. -/
+private def resolveCapVars (capParams : List String) (cs : CapSet) : CapSet :=
+  match cs with
+  | .concrete caps =>
+    let (vars, concretes) := caps.partition fun c => capParams.contains c
+    let base := if concretes.isEmpty then CapSet.empty else CapSet.concrete concretes
+    vars.foldl (fun acc v => match acc with | .empty => .var v | other => .union other (.var v)) base
+  | other => other
+
 partial def parseMethodParamList (selfKind : Option SelfKind) : ParseM (List Param) := do
   -- If we already consumed self/&self/&mut self, check for comma then rest
   if selfKind.isSome then
@@ -1355,7 +1364,7 @@ partial def parseMethodDef : ParseM (FnDef × Option SelfKind) := do
   let sp ← peekSpan
   expect .fn
   let name ← expectIdent
-  let (typeParams, typeBounds) ← parseTypeParams
+  let (typeParams, typeBounds, capParams) ← parseTypeAndCapParams
   expect .lparen
   -- Check for self, &self, &mut self
   let tk ← peek
@@ -1392,8 +1401,11 @@ partial def parseMethodDef : ParseM (FnDef × Option SelfKind) := do
     let params ← parseParamList
     pure (none, params)
   expect .rparen
-  -- Parse with(...) capabilities on methods
-  let capSet ← parseWithCaps
+  -- Parse with(...) capabilities on methods; resolve `cap C` variables to
+  -- `.var` so capability-polymorphic methods (`fn m<…, cap C>(…) with(C)`)
+  -- propagate the callback's capability set the same way free functions do.
+  let withCaps ← parseWithCaps
+  let capSet := resolveCapVars capParams withCaps
   let tk ← peek
   let retTy ← if tk == .arrow then
     advance
@@ -1401,7 +1413,7 @@ partial def parseMethodDef : ParseM (FnDef × Option SelfKind) := do
   else
     pure .unit
   let body ← parseBlock
-  return ({ name, typeParams, typeBounds, params, retTy, body, capSet, span := sp }, selfKind)
+  return ({ name, typeParams, typeBounds, capParams, params, retTy, body, capSet, span := sp }, selfKind)
 
 partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
   let declSp ← peekSpan
@@ -1528,15 +1540,6 @@ partial def parseTraitDef : ParseM TraitDef := do
     tk ← peek
   expect .rbrace
   return { name, typeParams, methods, span := declSp }
-
-/-- Resolve capability variables: caps matching capParams become `.var`, rest stay `.concrete`. -/
-private def resolveCapVars (capParams : List String) (cs : CapSet) : CapSet :=
-  match cs with
-  | .concrete caps =>
-    let (vars, concretes) := caps.partition fun c => capParams.contains c
-    let base := if concretes.isEmpty then CapSet.empty else CapSet.concrete concretes
-    vars.foldl (fun acc v => match acc with | .empty => .var v | other => .union other (.var v)) base
-  | other => other
 
 partial def parseFnDef : ParseM FnDef := do
   let sp ← peekSpan

@@ -39,12 +39,31 @@ code. Affected: `HashMap::get`/`get_mut`, `OrderedMap::get`/`get_mut`,
   keeps a positive case proving bare scalar `-> &T` is not the banned shape.
 - **Disclosed:** `CLAIMS_TODAY.md` (§1, "No dangling safe reference" narrowed
   to borrow-block refs only).
-- **State (updated 2026-06-11): MUTABLE half FIXED, immutable half contained.**
-  The `get_mut -> Option<&mut V>` write-vector is withdrawn from HashMap and
-  OrderedMap, replaced by `update(k, fn(V) -> V) -> bool` (moves the value
-  out/in, no `&mut V` escapes). The gate asserts no `pub fn -> Option<&mut`
-  remains. The immutable read accessors (`get -> Option<&V>`, `peek`, `min`/
-  `max`/`min_key`/`max_key`) remain CONTAINED until V1.1 scoped callbacks.
+- **State (updated 2026-06-13): RESOLUTION is now a language invariant —
+  "references are second-class, never returned".** A safe-callable function or
+  function *type* may not return a reference (directly, nested in an aggregate,
+  or via generic instantiation). This subsumes the no-aggregate-ref ban and
+  retires the returned-reference-provenance question entirely — no lifetimes,
+  regions, or `from()`. See `docs/VALUE_MODEL.md`. Status:
+  - MUTABLE half: FIXED earlier (`get_mut` withdrawn → `update`).
+  - Enforcement LANDED (2026-06-13): the checker rejects (a) function-pointer
+    types returning a reference and (b) generic type params instantiated to a
+    reference in return position — closing the `with_value` `R=&V` backdoor and
+    the `wrap<R>->Option<R>` backdoor. Immutable `HashMap::with_value` landed
+    (sound replacement for reading a non-Copy value). Gate
+    `scripts/tests/check_callable_values.sh`.
+  - STAGED (V1.1 window): blanket rejection of bare `-> &T` *definition
+    signatures* (switches on only AFTER the existing accessors are migrated, else
+    the stdlib build breaks); migrate `get -> Option<&V>` / `peek` / `min` /
+    `max` / `get_unchecked` / `get_mut` to value / `with_value` / raw-pointer
+    (`*const T`/`*mut T`); `with_value_mut`/`modify` (separate
+    container-not-in-context obligation). Until migrated, the grandfathered
+    accessors remain CONTAINED (they instantiate `V` to a non-ref; the `&` is
+    declared, so checks (a)/(b) do not fire on them).
+  - Related codegen bug (defense-in-depth, now unreachable from safe code):
+    returning a reference computed from a ref *identifier*/`&place` miscompiles
+    (spurious load → segfault). Tracked; low priority since the invariant makes
+    the shape ill-formed in safe code.
 - **Fix (decided 2026-06-11): by SUBTRACTION, staged by danger, Clone-free.**
   ROADMAP Phase 6 #8a. **Mutable half (DONE):** withdraw
   `get_mut` (the actual use-after-realloc write vector) and replace with
