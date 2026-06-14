@@ -10,6 +10,18 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### C10 fixed — array indexing through a reference (2026-06-14)
+
+- Indexing an array reached through a `&[T; N]` / `&mut [T; N]` (`arr[i]`,
+  `&arr[i]`, `arr[i] = v`) used to resolve the element type to `<unknown>`
+  (E0220 / E0552 / E0501) — indexing did not auto-deref a reference to the array.
+  Fail-closed (rejected, never miscompiled), but it blocked the ergonomic
+  `&arr[i]` element-borrow form. Fixed by resolving the element type through one
+  ref/ptr/heap layer in `Check`, `CoreCheck`, and `Elab`; lowering unchanged (a
+  `&[T; N]` is already the array base pointer). Locked by
+  `tests/programs/regress_index_through_ref.con` (= 78). Closes ROADMAP #6c
+  (C9 + C10 both fixed). Full suite 1557/0; examples 123/0.
+
 ### Phase 6 HOF surface: capability-polymorphic fold/for_each/map (2026-06-14)
 
 - The stdlib higher-order combinators are now **capability-polymorphic**

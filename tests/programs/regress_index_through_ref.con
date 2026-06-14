@@ -1,0 +1,30 @@
+// Regression for C10 (ROADMAP Phase 5 #6c): indexing an array reached through a
+// reference (`arr: &[T; N]` / `&mut [T; N]`) used to resolve the element type to
+// `<unknown>` (E0220 / E0552 / E0501) — indexing did not auto-deref a reference
+// to the array. Fixed in Check, CoreCheck, and Elab: `arr[i]` (by value),
+// `&arr[i]` (borrow), and `arr[i] = v` (index-assign) all resolve through one
+// ref/ptr/heap layer to the array element type.
+//
+// Expected: 78  (sum_ref(&a)=60, then setall sets [5,6,7], sum_ref(&a)=18).
+
+fn rd(x: &i64) -> i64 { return *x; }
+
+// Mixes &arr[i] (borrow) and arr[i] (by value) through a shared &[T; N].
+fn sum_ref(arr: &[i64; 3]) -> i64 {
+    return rd(&arr[0]) + arr[1] + rd(&arr[2]);
+}
+
+// Index-assign through a &mut [T; N].
+fn setall(arr: &mut [i64; 3]) {
+    arr[0] = 5;
+    arr[1] = 6;
+    arr[2] = 7;
+}
+
+fn main() -> i64 {
+    let mut a: [i64; 3] = [10, 20, 30];
+    let s1: i64 = sum_ref(&a);   // 60
+    setall(&mut a);              // a = [5, 6, 7]
+    let s2: i64 = sum_ref(&a);   // 18
+    return s1 + s2;              // 78
+}

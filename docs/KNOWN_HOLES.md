@@ -117,20 +117,20 @@ that would desync from the alloca).
   main suite; broader loop edge cases (single `&i`, `&mut i`, nested `&i`/`&j`)
   verified. Full suite 1553/0; examples 123/0.
 
-### C10. Indexing an array behind a reference yields `&<unknown>` — OPEN
+### C10. Indexing an array behind a reference yields `<unknown>` — CLOSED 2026-06-14
 
-Borrowing an element of an array reached through a `&[T; N]` (`&arr[i]` where
-`arr: &[T; N]`) fails type resolution with `&<unknown>` (E0220 at the use site),
-because the array-index element type is not resolved when the array operand is
-itself a reference. This is fail-closed (it rejects, never miscompiles) but
-blocks the ergonomic `&arr[i]` element-borrow loop form.
-- **Repro:** `tests/known_bugs/index_through_ref.con` (currently rejected with
-  E0220).
-- **Scope:** does NOT block the callable-values work — combinators iterate
-  container internals via pointer walks. Surfaced while implementing #24 step 1.
-- **Disposition:** resolve array-index element type through `&`/`&mut`/`*` in the
-  type checker (sibling of the #6b `peekExprType` fix). Tracked at ROADMAP
-  Phase 5 #6c.
+Indexing an array reached through a `&[T; N]` / `&mut [T; N]` (`arr[i]`,
+`&arr[i]`, `arr[i] = v`) used to resolve the element type to `<unknown>`
+(E0220 / E0552 / E0501) — indexing did not auto-deref a reference to the array.
+Fail-closed (it rejected, never miscompiled), but it blocked the ergonomic
+`&arr[i]` element-borrow form. **Fixed** by resolving the array-index element
+type through one ref/ptr/heap layer in all three places that compute it:
+`Check` (`.arrayIndex`), `CoreCheck` (`.arrayIndex` / `.arrayIndexAssign`), and
+`Elab` (`.arrayIndex`). Lowering needed no change — a `&[T; N]` already *is* the
+array base pointer. Sibling of the #6b `peekExprType` fix.
+- **Locked by:** `tests/programs/regress_index_through_ref.con` (= 78: read by
+  value, read by `&`, and index-assign through `&mut`). Full suite 1557/0;
+  examples 123/0.
 
 ---
 

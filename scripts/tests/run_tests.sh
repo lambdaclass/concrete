@@ -6597,6 +6597,7 @@ run_ok "$TESTDIR/regress_ref_no_spill.con"            42
 run_ok "$TESTDIR/regress_string_field_access.con"     42
 run_ok "$TESTDIR/regress_void_phi.con"                0
 run_ok "$TESTDIR/regress_loop_addr_taken_var.con"     3
+run_ok "$TESTDIR/regress_index_through_ref.con"      78
 run_ok "$TESTDIR/test_linear_drop.con"                0
 run_ok "$TESTDIR/test_typevar_copy_bound.con"         0
 run_ok "$TESTDIR/test_generic_linearity.con"          0

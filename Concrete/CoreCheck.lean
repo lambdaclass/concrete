@@ -468,8 +468,13 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     ccCheckExpr index
     if !isInteger index.ty then
       addCCError (.arrayIndexNotInteger (toString (repr index.ty)))
+    -- Indexing auto-derefs a reference/pointer to an array (`&[T;N]` etc.), so
+    -- those are valid index bases too (C10).
     match arr.ty with
     | .array _ _ => pure ()
+    | .ref (.array _ _) | .refMut (.array _ _)
+    | .ptrConst (.array _ _) | .ptrMut (.array _ _)
+    | .heap (.array _ _) => pure ()
     | _ => addCCError (.indexingNonArray (toString (repr arr.ty)))
   | .cast inner targetTy =>
     ccCheckExpr inner
@@ -660,8 +665,13 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
     ccCheckExpr value
     if !isInteger index.ty then
       addCCError (.arrayIndexNotInteger (toString (repr index.ty)))
+    -- Indexing auto-derefs a reference/pointer to an array (`&[T;N]` etc.), so
+    -- those are valid index bases too (C10).
     match arr.ty with
     | .array _ _ => pure ()
+    | .ref (.array _ _) | .refMut (.array _ _)
+    | .ptrConst (.array _ _) | .ptrMut (.array _ _)
+    | .heap (.array _ _) => pure ()
     | _ => addCCError (.indexingNonArray (toString (repr arr.ty)))
 
   | .break_ _value _label =>

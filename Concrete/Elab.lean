@@ -667,8 +667,13 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
   | .arrayIndex _ arr index =>
     let cArr ← elabExpr arr
     let cIdx ← elabExpr index (some .int)
+    -- Indexing auto-derefs a reference/pointer to an array (`&[T;N]` etc.), so
+    -- the element type resolves through one ref/ptr/heap layer (C10).
     let elemTy := match cArr.ty with
       | .array t _ => t
+      | .ref (.array t _) | .refMut (.array t _)
+      | .ptrConst (.array t _) | .ptrMut (.array t _)
+      | .heap (.array t _) => t
       | _ => .placeholder
     return .arrayIndex cArr cIdx elemTy
 

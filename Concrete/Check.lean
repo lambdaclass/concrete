@@ -1942,9 +1942,15 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
   | .arrayIndex _ arr index =>
     let arrTy ← checkExpr arr
     let _idxTy ← checkExpr index
-    -- CoreCheck validates index type and array type
+    -- CoreCheck validates index type and array type. Resolve the element type
+    -- through a reference/pointer to the array (`&[T;N]`, `&mut [T;N]`, raw ptr,
+    -- heap) — indexing auto-derefs, so `arr[i]` / `&arr[i]` work when `arr` is a
+    -- reference to an array, not only a bare array (C10; sibling of #6b).
     match arrTy with
     | .array elemTy _ => return elemTy
+    | .ref (.array elemTy _) | .refMut (.array elemTy _)
+    | .ptrConst (.array elemTy _) | .ptrMut (.array elemTy _)
+    | .heap (.array elemTy _) => return elemTy
     | _ => return .placeholder
   | .cast _ inner targetTy =>
     let _innerTy ← checkExpr inner

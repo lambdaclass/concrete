@@ -1110,11 +1110,13 @@ rest of Phase 5 stays after that slab in the same linear queue.
        from loop/if/match reconciliation; `&mut promotedVar` call args pass the
        alloca directly. Locked by
        `tests/programs/regress_loop_addr_taken_var.con` (= 3).
-     * C10 (fail-closed): `&arr[i]` where `arr: &[T; N]` resolves to
-       `&<unknown>` (E0220) — array-index element type is not resolved through a
-       reference. Repro `tests/known_bugs/index_through_ref.con`. Fix: resolve
-       array-index element type through `&`/`&mut`/`*` in the checker (sibling
-       of the #6b `peekExprType` fix).
+     * C10 (fail-closed): FIXED 2026-06-14. Indexing an array through a
+       `&[T; N]` / `&mut [T; N]` (`arr[i]`, `&arr[i]`, `arr[i] = v`) resolved the
+       element type to `<unknown>`. Fixed by auto-deref'ing one ref/ptr/heap
+       layer in Check / CoreCheck / Elab array-index type resolution (lowering
+       unchanged — the ref is the array base pointer). Locked by
+       `tests/programs/regress_index_through_ref.con` (= 78).
+     Both C9 and C10 are now closed; #6c is resolved.
 7. Add `concrete fmt`: stable formatting for source files, examples, docs
    snippets, and generated fixtures. Formatting must not churn semantic
    fingerprints.
