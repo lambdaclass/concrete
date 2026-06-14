@@ -365,9 +365,18 @@ def paramTyToLLVM (ctx : Ctx) (ty : Ty) : String :=
 -- LLVM type definition generators
 -- ============================================================
 
+/-- LLVM type for a struct/variant FIELD. Unlike `tyToLLVM`, a Unit/never field
+    becomes a zero-size member (`[0 x i8]`) rather than `void` — LLVM only allows
+    `void` as a function result, never as an aggregate member. Field access is by
+    byte-offset GEP (Unit has size 0, align 1), so a zero-size member is correct
+    and keeps field indices stable. -/
+def fieldTyToLLVM (ctx : Ctx) : Ty → String
+  | .unit | .never => "[0 x i8]"
+  | t => tyToLLVM ctx t
+
 /-- Generate LLVM type definition for a struct. -/
 def structTypeDef (ctx : Ctx) (sd : CStructDef) : String :=
-  let fieldTypes := ", ".intercalate (sd.fields.map fun (_, t) => tyToLLVM ctx t)
+  let fieldTypes := ", ".intercalate (sd.fields.map fun (_, t) => fieldTyToLLVM ctx t)
   if sd.isPacked then s!"%struct.{sd.name} = type <\{ {fieldTypes} }>"
   else s!"%struct.{sd.name} = type \{ {fieldTypes} }"
 
@@ -378,7 +387,7 @@ def enumTypeDefs (ctx : Ctx) (ed : CEnumDef) (typeArgs : List Ty := []) : List S
   let variantDefs := substEd.variants.map fun (vn, fields) =>
     if fields.isEmpty then s!"%variant.{ed.name}.{vn} = type \{}"
     else
-      let fieldTypes := ", ".intercalate (fields.map fun (_, t) => tyToLLVM ctx t)
+      let fieldTypes := ", ".intercalate (fields.map fun (_, t) => fieldTyToLLVM ctx t)
       s!"%variant.{ed.name}.{vn} = type \{ {fieldTypes} }"
   -- Compute total size using the substituted enum's fields directly
   let maxPayload := substEd.variants.foldl (fun maxSz (_, vfields) =>

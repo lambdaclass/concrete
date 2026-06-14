@@ -676,11 +676,15 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let payloadPtr ← freshReg
     emit (.gep payloadPtr baseVal [.intConst (Int.ofNat payloadOff) .int] .i8)
     for (idx, (_, fieldExpr)) in enumerate fields do
-      let fVal ← lowerExpr fieldExpr
-      let gepDst ← freshReg
-      let foff := Layout.variantFieldOffset layoutCtx vfields idx
-      emit (.gep gepDst (.reg payloadPtr .i8) [.intConst (Int.ofNat foff) .int] .i8)
-      emit (.store fVal (.reg gepDst fieldExpr.ty))
+      let fVal ← lowerExpr fieldExpr   -- always evaluate (may have side effects)
+      -- A Unit/void field is zero-size: evaluate it (e.g. a void-returning call)
+      -- but store nothing — `store void ...` is not valid (e.g. Option<R> where a
+      -- generic R was instantiated to Unit by a void-returning HOF callback).
+      if fieldExpr.ty != .unit then
+        let gepDst ← freshReg
+        let foff := Layout.variantFieldOffset layoutCtx vfields idx
+        emit (.gep gepDst (.reg payloadPtr .i8) [.intConst (Int.ofNat foff) .int] .i8)
+        emit (.store fVal (.reg gepDst fieldExpr.ty))
     let loadDst ← freshReg
     emit (.load loadDst baseVal ty)
     return .reg loadDst ty

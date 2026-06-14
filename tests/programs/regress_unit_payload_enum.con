@@ -1,0 +1,35 @@
+// Regression for the Unit-payload enum miscompile (ROADMAP Phase 6 friction pass).
+//
+// A callback that returns nothing (Unit) passed to a combinator like
+// `with_value` makes the result type `Option<Unit>`. Constructing
+// `Option::<Unit>::Some { value: <unit-call> }` used to crash codegen two ways:
+//   1. The variant TYPE DEF was emitted as `%variant.Option.Some = type { void }`
+//      — LLVM rejects `void` as an aggregate member ("void type only allowed for
+//      function results"). Fixed in Layout.fieldTyToLLVM: a Unit/never field is a
+//      zero-size member `[0 x i8]`, not `void`.
+//   2. Construction emitted `store void undef` for the Unit field. Fixed in
+//      Lower's enum-lit lowering: the field expr is still evaluated (side effects)
+//      but the store is skipped when the field type is Unit.
+//
+// Unit payloads are reachable only through type inference (you cannot spell `()`
+// as a type annotation), so this exercises the built-in Option enum, which is
+// exactly the surface the friction pass hit via `HashMap.with_value(.., nop)`.
+//
+// Expected: 7  (the callback runs for its side effect of returning Unit; the
+// Some-branch is taken and `n` is set to 7, proving the Unit-payload Some was
+// constructed and matched correctly).
+
+fn apply<R>(f: fn(i64) -> R, x: i64) -> Option<R> {
+    return Option::<R>::Some { value: f(x) };
+}
+
+fn nop(x: i64) { }
+
+fn main() -> i64 {
+    let mut n: i64 = 99;
+    match apply(nop, 5) {
+        Option::Some { value } => { n = 7; }
+        Option::None => { n = 42; }
+    }
+    return n;
+}

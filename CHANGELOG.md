@@ -10,6 +10,30 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Unit-payload enum miscompile fixed — void-returning scoped callbacks (2026-06-14)
+
+- The external-workload friction pass found a real miscompile: a callback that
+  returns nothing (Unit) passed to a scoped combinator like `HashMap.with_value`
+  makes the result `Option<Unit>`, and constructing `Option::<Unit>::Some { .. }`
+  crashed codegen. Two distinct lowerings emitted illegal `void`:
+  1. **Type definition** — the variant was emitted as
+     `%variant.Option.Some = type { void }`; LLVM rejects `void` as an aggregate
+     member ("void type only allowed for function results"). Fixed in
+     `Layout.fieldTyToLLVM`: a Unit/`never` struct-or-variant field is now a
+     zero-size member (`[0 x i8]`), not `void`. Field access is byte-offset GEP
+     (Unit has size 0, align 1), so a zero-size member is correct and keeps field
+     indices stable.
+  2. **Construction** — building the variant emitted `store void undef`. Fixed in
+     `Lower`'s enum-lit lowering: the field expression is still evaluated (side
+     effects preserved) but the store is skipped when the field type is Unit.
+- Unit payloads are reachable only through inference (you cannot spell `()` as a
+  type annotation), so this only ever hit the built-in `Option`/`Result` enums —
+  exactly the scoped-callback surface (`with_value`, `with_at`) the value model
+  relies on. Verified end-to-end: `HashMap.with_value(&k, &ctx, nop)` with a
+  Unit-returning `nop` now compiles and runs. Locked by
+  `tests/programs/regress_unit_payload_enum.con` (= 7). Full suite 1559/0;
+  examples 123/0.
+
 ### C10 fixed — array indexing through a reference (2026-06-14)
 
 - Indexing an array reached through a `&[T; N]` / `&mut [T; N]` (`arr[i]`,
