@@ -19,6 +19,13 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
+**No soundness holes are currently open** (as of 2026-06-14). The H1 / C9 / C10
+entries below were recently closed and are retained here (with `CLOSED` markers
+and regression gates) so the thread is legible and the fixes cannot silently
+regress; the longer-standing closed set is under "CLOSED this session" further
+down. Deferred *design* items that are not holes are listed under "Open design
+decisions" near the end.
+
 ### H1. Returned-reference provenance — CLOSED 2026-06-13
 
 **RESOLVED by the language invariant "references are second-class — never
@@ -44,60 +51,20 @@ that compiled in safe code. Affected (all now migrated): `HashMap::get`/`get_mut
 `OrderedMap::get`/`get_mut`, `OrderedMap::min_key`/`max_key`, `OrderedSet::min`/
 `max`, `Vec::get`, `Slice::get`/`MutSlice::get`, `Deque::get`, `BinaryHeap::peek`.
 
-- **State:** OPEN. Blast radius FROZEN (no new aggregate-ref public API may
-  land).
-- **Reproduce:** `examples/known_holes/returned_ref_provenance_{map,vec}/`
-  (build today = hole present).
-- **Gate:** `scripts/tests/check_returned_ref_provenance.sh` — reproduces the
-  hole, freezes the existing public aggregate-ref baseline
-  (`scripts/tests/returned_ref_aggregate_baseline.txt`), rejects new ones, and
-  keeps a positive case proving bare scalar `-> &T` is not the banned shape.
-- **Disclosed:** `CLAIMS_TODAY.md` (§1, "No dangling safe reference" narrowed
-  to borrow-block refs only).
-- **State (updated 2026-06-13): RESOLUTION is now a language invariant —
-  "references are second-class, never returned".** A safe-callable function or
-  function *type* may not return a reference (directly, nested in an aggregate,
-  or via generic instantiation). This subsumes the no-aggregate-ref ban and
-  retires the returned-reference-provenance question entirely — no lifetimes,
-  regions, or `from()`. See `docs/VALUE_MODEL.md`. Status:
-  - MUTABLE half: FIXED earlier (`get_mut` withdrawn → `update`).
-  - Enforcement LANDED (2026-06-13): the checker rejects (a) function-pointer
-    types returning a reference and (b) generic type params instantiated to a
-    reference in return position — closing the `with_value` `R=&V` backdoor and
-    the `wrap<R>->Option<R>` backdoor. Immutable `HashMap::with_value` landed
-    (sound replacement for reading a non-Copy value). Gate
-    `scripts/tests/check_callable_values.sh`.
-  - STAGED (V1.1 window): blanket rejection of bare `-> &T` *definition
-    signatures* (switches on only AFTER the existing accessors are migrated, else
-    the stdlib build breaks); migrate `get -> Option<&V>` / `peek` / `min` /
-    `max` / `get_unchecked` / `get_mut` to value / `with_value` / raw-pointer
-    (`*const T`/`*mut T`); `with_value_mut`/`modify` (separate
-    container-not-in-context obligation). Until migrated, the grandfathered
-    accessors remain CONTAINED (they instantiate `V` to a non-ref; the `&` is
-    declared, so checks (a)/(b) do not fire on them).
-  - Related codegen bug (defense-in-depth, now unreachable from safe code):
-    returning a reference computed from a ref *identifier*/`&place` miscompiles
-    (spurious load → segfault). Tracked; low priority since the invariant makes
-    the shape ill-formed in safe code.
-- **Fix (decided 2026-06-11): by SUBTRACTION, staged by danger, Clone-free.**
-  ROADMAP Phase 6 #8a. **Mutable half (DONE):** withdraw
-  `get_mut` (the actual use-after-realloc write vector) and replace with
-  operation APIs `contains` / `insert` / `remove -> Option<V>` / `replace` /
-  `update(k, fn(V) -> V)` (moves, works for non-Copy via today's fn-pointers)
-  plus value-`get -> Option<V>` for Copy. This eliminates the memory-corrupting
-  half as a pure stdlib refactor. **Contained until V1.1:** the immutable
-  `get -> Option<&V>` (also unsound in principle but its real uses are scoped
-  non-escaping reads, and there is no Clone-free/callback-free replacement for
-  reading a non-Copy value out) — kept disclosed and frozen, withdrawn when
-  V1.1 scoped callbacks (`with_value`, callable-values doc #24) land.
-  `ByteView` (#5a) for stored zero-copy. **`Clone` is NOT part of the H1 fix**
-  — it is a separate value-model design item (#8a2, VALUE_MODEL.md), not
-  rushed to make map reads convenient. Scalar `from(param)` is DEFERRED (#8a1).
-  Validation (2026-06-11): lox uses no map accessors; kvstore is 100% tier-1
-  (zero migration); integrity's single read site migrates to `with_value` at
-  V1.1. The flat no-aggregate ban (refs never inside Option/Result/struct/
-  array/container/callback-context) is permanent; unfreezing it is a
-  thesis-level decision.
+- **Disclosed:** `CLAIMS_TODAY.md` — "No dangling safe reference" now covers the
+  whole safe surface (borrow-block refs *and* the absence of any returned ref).
+- **Deferred (evidence-gated):** `from(param)` returned references (#8a1); the
+  mutable scoped callback `with_value_mut`/`modify` — parked, nothing pulls it
+  (the surface is covered by `update` for single-key mutation, `for_each_ctx` for
+  mutable-context traversal, `with_value`/`with_at` for borrowed reads).
+- **History (resolved by subtraction, not patched):** the fix was staged by
+  danger — mutable half first (`get_mut` → `update`, the use-after-realloc write
+  vector), then the immutable read accessors migrated to the value model
+  (`get -> Option<V>` for Copy; `with_value`/`with_at` to borrow), then the
+  blanket "no returned references" rule turned on once the surface was migrated.
+  `Clone` was deliberately NOT used as the patch (separate value-model item,
+  #8a2). No lifetimes, regions, or `from()`. The flat no-aggregate-ref ban is now
+  a corollary of the broader invariant.
 
 ### C9. Address-taken loop variable → lost condition / infinite loop — CLOSED 2026-06-13
 

@@ -19,7 +19,7 @@ For safe code that passes the checker, the compiler enforces at compile time:
 | No use-after-move | Linear ownership tracking |
 | No double free | Second consumption is use-after-move |
 | No memory leak | Every linear value consumed or reserved by scope exit |
-| No dangling safe reference | Borrow-block scoping + escape analysis |
+| No dangling safe reference | References are second-class — never returned (no `&T`/`&mut T` in any safe return, directly/aggregate-wrapped/generic); borrow-block scoping + escape analysis |
 | No borrow conflict | Exclusive mutable; shared precludes mutable |
 | No frozen-variable access | Owner frozen during active borrow block |
 | No linear reassignment | Linear variables cannot be reassigned |
@@ -31,22 +31,19 @@ For safe code that passes the checker, the compiler enforces at compile time:
 
 **Claim class:** Enforced. The program cannot violate these and compile.
 
-**Known exception under active tracking (2026-06-09): returned references from
-stdlib APIs.** Borrow-block references are scoped and frozen correctly, but the
-current checker does not yet track provenance for references returned by
-function calls and wrapped in aggregates such as `Option<&T>` or
-`Option<&mut T>`. Existing stdlib APIs including `HashMap::get`,
-`HashMap::get_mut`, `OrderedMap::get`, `Vec::get`, `Slice::get`, `Deque::get`,
-and `BinaryHeap::peek` expose this shape. A saved reference can survive an
-owner mutation that reallocates, removes, or reuses storage. This is tracked by
-`examples/known_holes/returned_ref_provenance_{map,vec}/` and
-`scripts/tests/check_returned_ref_provenance.sh`. The fix (decided 2026-06-11,
-ROADMAP Phase 6 #8a) is by subtraction: these aggregate-ref APIs will be
-withdrawn and replaced with value/operation APIs (`contains`, value-`get`,
-`update(k, fn(V) -> V)`, `remove`) plus owned `ByteView` and, in V1.1, scoped
-callbacks (`with_value`) — not a returned-reference provenance system. Until
-that lands, "No dangling safe reference" means borrow-block references and does
-not claim soundness for aggregate-wrapped returned refs from these APIs.
+**Returned-reference provenance (H1): CLOSED 2026-06-13.** Resolved by
+subtraction — the language invariant *references are second-class, never
+returned*: the checker rejects any safe-callable function or function type that
+returns a reference, directly, nested in an aggregate (`Option<&T>`), or via
+generic instantiation (`Concrete/Check.lean`, `resolveType`; gate
+`scripts/tests/check_returned_ref_provenance.sh`). The former aggregate-ref
+accessors were migrated to the value model: `get -> Option<V>` (Copy),
+`with_value` / `with_at` to borrow (scoped, the `&V` never escapes the callback),
+`remove`/`pop` to move out, capability-polymorphic `fold`/`for_each`/`map` to
+iterate. No lifetimes, regions, or `from()`. So "No dangling safe reference" now
+covers the whole safe surface — borrow-block refs *and* the absence of any
+returned reference. (Deferred, evidence-gated: `from(param)`, and the mutable
+scoped callback `with_value_mut` — parked, nothing pulls it.)
 
 **What enforced does NOT cover:**
 - Runtime bounds checking (array access through checked APIs returns `Option`; unchecked is UB)
