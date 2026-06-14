@@ -10,6 +10,25 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 HOF surface: capability-polymorphic fold/for_each/map (2026-06-14)
+
+- The stdlib higher-order combinators are now **capability-polymorphic**
+  (`CALLABLE_VALUES §6`): each carries whatever its callback carries (`cap C`),
+  so a pure callback keeps the combinator pure and an effectful one (printing,
+  allocating) requires the callback's capabilities at the call site — no
+  combinatorial `map`/`map_io`/`map_alloc` split. Upgraded `Vec::fold`/`for_each`,
+  `HashMap::fold`/`for_each`/`keys_fold`/`values_fold`/`keys_for_each`/
+  `values_for_each`, and `HashSet::fold`/`for_each`. Backward-compatible: existing
+  pure callers infer `C = {}`.
+- New `Vec` combinators: `map<U, cap C>(f) with(C, Alloc) -> Vec<U>` (transform
+  into a fresh Vec) and `for_each_ctx<Ctx, cap C>(&mut ctx, f)` — the Borrow-cell
+  iterator that threads a caller-owned mutable sink and reborrows it per call
+  (the element borrow stays confined; no value returned). This is what the
+  earlier integrity/kvstore migrations wanted and is now a first-class API.
+- Gated by new `std.vec` `#[test]`s (`test_vec_fold_cap`, `test_vec_for_each_ctx`
+  with an `Alloc`-requiring sink callback, `test_vec_map`). Full suite 1557/0;
+  examples 123/0; no new `--full` failures vs baseline.
+
 ### C9 fixed — silent infinite-loop miscompile on address-taken loop variables (2026-06-13)
 
 - A loop variable that was both loop-carried and address-taken (`&i` inside a

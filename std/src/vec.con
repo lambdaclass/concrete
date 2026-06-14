@@ -95,8 +95,11 @@ mod vec {
             dealloc(self.ptr);
         }
 
-        /// Fold over all elements, threading an accumulator.
-        pub fn fold<A>(&self, init: A, f: fn(A, &T) -> A) -> A {
+        /// Fold over all elements, threading an accumulator. Capability-
+        /// polymorphic: the fold carries whatever its callback carries (`cap C`),
+        /// so a pure fold is pure and an effectful one (e.g. printing) requires
+        /// the callback's caps at the call site. CALLABLE_VALUES §6.
+        pub fn fold<A, cap C>(&self, init: A, f: fn(A, &T) with(C) -> A) with(C) -> A {
             let mut acc: A = init;
             let i: u64 = 0;
             while i < self.len {
@@ -107,14 +110,40 @@ mod vec {
             return acc;
         }
 
-        /// Call a function for each element in the vec.
-        pub fn for_each(&self, f: fn(&T)) {
+        /// Call a function for each element in the vec (capability-polymorphic).
+        pub fn for_each<cap C>(&self, f: fn(&T) with(C)) with(C) {
             let i: u64 = 0;
             while i < self.len {
                 let target_ptr: *mut T = self.ptr + i;
                 f(target_ptr as &T);
                 i = i + 1;
             }
+        }
+
+        /// for_each threading a caller-owned mutable context (the Borrow cell):
+        /// `ctx` is reborrowed for each call, so the callback can accumulate into
+        /// a sink and use its capabilities, with no value returned. The element
+        /// borrow is confined to each call (never returned). CALLABLE_VALUES §3.
+        pub fn for_each_ctx<Ctx, cap C>(&self, ctx: &mut Ctx, f: fn(&mut Ctx, &T) with(C)) with(C) {
+            let i: u64 = 0;
+            while i < self.len {
+                let target_ptr: *mut T = self.ptr + i;
+                f(&mut *ctx, target_ptr as &T);
+                i = i + 1;
+            }
+        }
+
+        /// Map each element through `f` into a new Vec (allocates the result, so
+        /// `with(Alloc)`; capability-polymorphic over the callback's `cap C`).
+        pub fn map<U, cap C>(&self, f: fn(&T) with(C) -> U) with(C, Alloc) -> Vec<U> {
+            let mut result: Vec<U> = Vec::<U>::new();
+            let i: u64 = 0;
+            while i < self.len {
+                let target_ptr: *mut T = self.ptr + i;
+                result.push(f(target_ptr as &T));
+                i = i + 1;
+            }
+            return result;
         }
 
         // Scoped read of element `at` by reference: the borrowed `&T` is passed
@@ -148,6 +177,52 @@ mod vec {
             let target_ptr: *mut T = self.ptr + at;
             return Option::<T>::Some { value: *target_ptr };
         }
+    }
+
+    // --- HOF test helpers ---
+    fn vsum(acc: i64, x: &i32) -> i64 { return acc + (*x as i64); }
+    fn vdbl(x: &i32) -> i32 { return *x * 2; }
+    // Effectful, capability-polymorphic callback (requires Alloc): collects
+    // elements into a caller-owned sink Vec via for_each_ctx.
+    fn vcollect(out: &mut Vec<i32>, x: &i32) with(Alloc) { out.push(*x); }
+
+    #[test]
+    fn test_vec_fold_cap() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(1); v.push(2); v.push(3);
+        let s: i64 = v.fold(0, vsum);   // pure callback -> C = {}
+        v.drop();
+        if s == 6 { return 0; }
+        return 1;
+    }
+
+    #[test]
+    fn test_vec_for_each_ctx() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(1); v.push(2); v.push(3);
+        let mut out: Vec<i32> = Vec::<i32>::new();
+        v.for_each_ctx(&mut out, vcollect);   // C = {Alloc} inferred from vcollect
+        let mut ok: i32 = 0;
+        if out.len() != 3 { ok = 1; }
+        let g0: Option<i32> = out.get(0);
+        match g0 { Option::Some { value } => { if value != 1 { ok = 1; } } Option::None => { ok = 1; } }
+        let g2: Option<i32> = out.get(2);
+        match g2 { Option::Some { value } => { if value != 3 { ok = 1; } } Option::None => { ok = 1; } }
+        v.drop(); out.drop();
+        return ok;
+    }
+
+    #[test]
+    fn test_vec_map() with(Alloc) -> i32 {
+        let mut v: Vec<i32> = Vec::<i32>::new();
+        v.push(1); v.push(2); v.push(3);
+        let mut m: Vec<i32> = v.map(vdbl);
+        let mut ok: i32 = 0;
+        if m.len() != 3 { ok = 1; }
+        let g1: Option<i32> = m.get(1);
+        match g1 { Option::Some { value } => { if value != 4 { ok = 1; } } Option::None => { ok = 1; } }
+        v.drop(); m.drop();
+        return ok;
     }
 
     #[test]

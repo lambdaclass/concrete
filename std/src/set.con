@@ -58,12 +58,12 @@ mod set {
         }
 
         /// Fold over all elements, threading an accumulator.
-        pub fn fold<A>(&self, init: A, f: fn(A, &K) -> A) -> A {
+        pub fn fold<A, cap C>(&self, init: A, f: fn(A, &K) with(C) -> A) with(C) -> A {
             return self.inner.keys_fold::<A>(init, f);
         }
 
         /// Call a function for each element in the set.
-        pub fn for_each(&self, f: fn(&K)) {
+        pub fn for_each<cap C>(&self, f: fn(&K) with(C)) with(C) {
             self.inner.keys_for_each(f);
         }
 

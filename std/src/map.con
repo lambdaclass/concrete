@@ -246,7 +246,7 @@ mod map {
         }
 
         /// Fold over all key-value pairs, threading an accumulator.
-        pub fn fold<A>(&self, init: A, f: fn(A, &K, &V) -> A) -> A {
+        pub fn fold<A, cap C>(&self, init: A, f: fn(A, &K, &V) with(C) -> A) with(C) -> A {
             let mut acc: A = init;
             let i: u64 = 0;
             while i < self.cap {
@@ -263,7 +263,7 @@ mod map {
         }
 
         /// Call a function for each key-value pair in the map.
-        pub fn for_each(&self, f: fn(&K, &V)) {
+        pub fn for_each<cap C>(&self, f: fn(&K, &V) with(C)) with(C) {
             let i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
@@ -278,7 +278,7 @@ mod map {
         }
 
         /// Fold over keys only, threading an accumulator.
-        pub fn keys_fold<A>(&self, init: A, f: fn(A, &K) -> A) -> A {
+        pub fn keys_fold<A, cap C>(&self, init: A, f: fn(A, &K) with(C) -> A) with(C) -> A {
             let mut acc: A = init;
             let i: u64 = 0;
             while i < self.cap {
@@ -294,7 +294,7 @@ mod map {
         }
 
         /// Fold over values only, threading an accumulator.
-        pub fn values_fold<A>(&self, init: A, f: fn(A, &V) -> A) -> A {
+        pub fn values_fold<A, cap C>(&self, init: A, f: fn(A, &V) with(C) -> A) with(C) -> A {
             let mut acc: A = init;
             let i: u64 = 0;
             while i < self.cap {
@@ -310,7 +310,7 @@ mod map {
         }
 
         /// Call a function for each key in the map.
-        pub fn keys_for_each(&self, f: fn(&K)) {
+        pub fn keys_for_each<cap C>(&self, f: fn(&K) with(C)) with(C) {
             let i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
@@ -324,7 +324,7 @@ mod map {
         }
 
         /// Call a function for each value in the map.
-        pub fn values_for_each(&self, f: fn(&V)) {
+        pub fn values_for_each<cap C>(&self, f: fn(&V) with(C)) with(C) {
             let i: u64 = 0;
             while i < self.cap {
                 let flag_ptr: *mut u8 = self.flags + i;
