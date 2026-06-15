@@ -269,9 +269,10 @@ path (`vacuityGoals`/`assertGoals`/`boundsGoals`/`divGoals`/`overflowGoals` →
 its own `kernelDischargeLoopVCs`) with no ledger-consistency gate. `--report
 proof-status` and `concrete prove` also recompute, but are held to the ledger
 by consistency gates (sound today). The remaining real work is therefore #15
-(contracts as a ledger view / parity-gated), #13's missing adapter gate, and
-the #18e shim deletion — not a from-scratch migration. Do not re-do #4–#11,
-#14, or #18a–d; they are done. Treat any new report surface as needing a
+(contracts as a ledger view / parity-gated) and the #18e shim deletion — not a
+from-scratch migration. Do not re-do #4–#14 or #18a–d; they are done (the
+discharge-adapter firewall #13 is kernel-checked + gated by
+`check_discharge_adapters.sh`). Treat any new report surface as needing a
 ledger-parity gate per #17.
 
 1. [DONE] Define `ObligationCore` schema v1: stable id, source span, function,
@@ -327,17 +328,18 @@ ledger-parity gate per #17.
     with round-trip cases for linear arithmetic, bitvectors, sound division,
     nonlinear SMT terms, branch/path facts, and invalid expressions. (Gate
     present + wired.)
-13. [OPEN — gate missing] Add backend-owned discharge adapters over
-    `ObligationCore`: constant fold, `omega`, `bv_decide`, linked Lean theorem,
-    Lean replay, external SMT, oracle/test evidence, runtime enforcement,
-    assumption, and trust boundary. Each adapter may only produce its declared
-    evidence class. Add `scripts/tests/check_obligation_discharge_adapters.sh` to
-    prove a solver adapter cannot emit kernel evidence, a runtime check cannot
-    emit proof evidence, and a Lean/kernel adapter cannot depend on external
-    solver state. NOTE (2026-06-15): the adapter *firewall* property
-    (solver↛kernel, kernel↛solver) is already exercised by
-    `check_obligation_redteam.sh`, but the dedicated per-adapter gate above does
-    not yet exist — write it or formally fold it into redteam.
+13. [DONE] Add backend-owned discharge adapters over `ObligationCore`: constant
+    fold, `omega`, `bv_decide`, linked Lean theorem, Lean replay, external SMT,
+    oracle/test evidence, runtime enforcement, assumption, and trust boundary.
+    Each adapter may only produce its declared evidence class. (Implemented as a
+    typed `DischargeAdapter` with a declared evidence-class set and a
+    `DischargeAdapter.fold` that rejects a foreign class — `omega`/`bv`/`smt`/
+    `replay`/`constantFold`/`linkedLean`/`oracle` adapters in `Report.lean`. The
+    firewall is KERNEL-CHECKED by compile-time `example`s, so a green build
+    already proves it.) The gate is `scripts/tests/check_discharge_adapters.sh`
+    (Makefile `test-discharge-adapters`) — NOTE: it is named
+    `check_discharge_adapters.sh`, not the `check_obligation_discharge_adapters.sh`
+    this item's text originally specified.
 14. [DONE] Make policies consume the final ledger instead of recomputing facts:
     forbid-assume, forbid-vacuous, solver-evidence policy, stale-proof policy,
     runtime-safety requirements, trusted-boundary policy, and release gates.

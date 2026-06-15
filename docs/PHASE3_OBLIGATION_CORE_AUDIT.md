@@ -73,7 +73,7 @@ synced to anything except a manually-updated self-snapshot.
 | 10 | `#[requires/ensures/invariant/variant]` clauses → ledger | DONE | contract-clause diagnostics ride in as VCs (`ObligationCore.lean:88–91`) |
 | 11 | Proof-link freshness / fingerprint / spec-drift → ledger | DONE | `ofProofStatus` + `proofLinkLedger` (`ObligationCore.lean:108`); single-truth gate checks it |
 | 12 | Unified obligation expression lowering | DONE (gated) | `check_obligation_lowering.sh` (present, in Makefile) |
-| 13 | Backend discharge adapters + per-adapter class gate | PARTIAL / **GAP** | adapter *firewall* property covered by `check_obligation_redteam.sh` (solver↛kernel, kernel↛solver); but the dedicated **`check_obligation_discharge_adapters.sh` is MISSING** |
+| 13 | Backend discharge adapters + per-adapter class gate | DONE | typed `DischargeAdapter` + `DischargeAdapter.fold` rejecting foreign classes (`Report.lean:4380+`); KERNEL-CHECKED by compile-time `example`s; behavioral gate `check_discharge_adapters.sh` (Makefile `test-discharge-adapters`). *(Corrected 2026-06-15: the gate exists under `check_discharge_adapters.sh`, not the `check_obligation_discharge_adapters.sh` name #13's text specified — the initial audit missed it by searching the literal name.)* |
 | 14 | Policies consume the ledger | DONE | `computePolicyQuals` reads `vacuousFunctions`/`assumeFunctions`/`solverTrustedIds` from `ledger` (`Main.lean:659–664`); `check_obligation_policy_views.sh` |
 | 15 | Reports consume the ledger | PARTIAL | `--report vcs`/`obligation-ledger`/JSON/audit = literal views (`Main.lean:997–1006`); `--report proof-status` = GATED-INTERIM; **`--report contracts` = OPEN** (`renderContracts`, `Main.lean:669–694`) |
 | 16 | `concrete prove` consumes the ledger | GATED-INTERIM | `proveReport`/`proveReportJson` (`Main.lean:974/976`) reconstruct; `check_obligation_prove_views.sh` pins to ledger |
@@ -88,16 +88,20 @@ synced to anything except a manually-updated self-snapshot.
 
 ## Gate inventory
 
-Present and wired into the Makefile (`obligation-*` targets, lines ~168–222):
-`check_obligation_core`, `check_obligation_lowering`, `check_obligation_report_views`,
-`check_no_duplicate_obligation_walkers`, `check_obligation_single_truth_source`,
-`check_obligation_policy_views`, `check_obligation_prove_views`,
-`check_phase3_obligation_core`, `check_obligation_redteam`.
+Present and wired into the Makefile (`obligation-*` / `test-*` targets, lines
+~167–222): `check_obligation_core`, `check_scoped_collector`,
+`check_call_site_migration`, `check_bounds_migration`, `check_div_migration`,
+`check_overflow_migration`, `check_assume_migration`, `check_loop_migration`,
+`check_contract_clause_migration`, `check_proof_link_migration`,
+`check_obligation_lowering`, **`check_discharge_adapters`** (#13),
+`check_obligation_report_views`, `check_no_duplicate_obligation_walkers`,
+`check_obligation_single_truth_source`, `check_obligation_policy_views`,
+`check_obligation_prove_views`, `check_phase3_obligation_core`,
+`check_obligation_redteam`.
 
-**Missing:** `check_obligation_discharge_adapters.sh` (ROADMAP #13). The
-soundness property it would assert (no adapter emits a stronger evidence class
-than its tier) is *partially* covered by the redteam firewall, but there is no
-dedicated per-adapter gate.
+**No gate is missing.** (An earlier draft of this audit claimed #13's gate was
+absent; it is present as `check_discharge_adapters.sh` — the literal-name search
+missed it. Per-family migration gates `check_*_migration.sh` also exist for #4–#11.)
 
 ## Current gate baseline (2026-06-15)
 
@@ -127,9 +131,11 @@ Neither blocks the structural conclusions below.
    them from it (#8 DONE). The accurate residual risk is narrower:
    `--report contracts` recomputes the families on a path with no
    ledger-consistency gate.
-3. **#13's gate is referenced as if it exists.** It does not; either write
-   `check_obligation_discharge_adapters.sh` or fold its assertions into redteam
-   explicitly and update the ROADMAP.
+3. **#13's gate filename in the ROADMAP is wrong (not the gate).** The text
+   references `check_obligation_discharge_adapters.sh`, but the gate exists and
+   passes as `check_discharge_adapters.sh` (Makefile `test-discharge-adapters`),
+   backed by a kernel-checked `DischargeAdapter` model. Reconciled 2026-06-15:
+   #13 marked DONE with the filename caveat noted.
 
 ## Prioritized remaining work
 
@@ -140,10 +146,9 @@ Neither blocks the structural conclusions below.
    ledger-parity gate (the proof-status pattern in `check_obligation_report_views.sh`)
    so contracts cannot silently drift. **Highest value: it is the only OPEN
    surface.**
-2. **Add `check_obligation_discharge_adapters.sh` (#13)** or formally retire it
-   into redteam, and reconcile the ROADMAP.
-3. **Reconcile the ROADMAP Phase 3 prose** (items above) so the spec stops being
-   a second truth source about the truth-source migration.
-4. Convert `--report proof-status` and `concrete prove` from GATED-INTERIM to
+2. **Reconcile the ROADMAP Phase 3 prose** (done 2026-06-15) so the spec stops
+   being a second truth source about the truth-source migration. (#13 was found
+   already done — gate `check_discharge_adapters.sh`; no new gate needed.)
+3. Convert `--report proof-status` and `concrete prove` from GATED-INTERIM to
    literal hub views once their presentation fields live in the record (lower
    priority — both are consistency-gated, so sound today).
