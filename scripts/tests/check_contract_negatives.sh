@@ -31,7 +31,7 @@ assert_block(){ local l="$1" anchor="$2" needle="$3" file="$4"
 echo "=== precondition_callsite (unmet precondition at call site) ==="
 F="$CN/precondition_callsite/src/main.con"
 # always-on (constant fold / honest gap — no Lean needed):
-assert_block "constant violation → failed_at_callsite" "cn.violation" "failed_at_callsite" "$F"
+assert_block "constant violation → counterexample" "cn.violation" "counterexample" "$F"
 assert_block "genuine gap → unproven (caller does not establish)" "cn.unmet" "caller does not establish" "$F"
 # omega-discharged (needs lake):
 if command -v lake >/dev/null 2>&1; then

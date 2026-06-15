@@ -10,7 +10,8 @@ cn.clean
 cn.main
   call clean(3)
     requires 0 < 3 && 3 < 10
-    status:  proved_at_callsite
+    status:  proved_by_kernel_decision
+    engine:  constant_fold (precondition constant-folds true)
 
 
 === assert / assume ===

@@ -279,6 +279,9 @@ jobs:
       - name: Reports-as-views gate (Phase 3 #15 ledger consistency)
         run: bash scripts/tests/check_obligation_report_views.sh
 
+      - name: Contracts↔ledger parity gate (Phase 3 #15/#18e)
+        run: bash scripts/tests/check_contracts_ledger_parity.sh
+
       - name: No-duplicate-obligation-walkers guard (Phase 3 #18d)
         run: bash scripts/tests/check_no_duplicate_obligation_walkers.sh
 

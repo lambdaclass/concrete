@@ -912,6 +912,11 @@ def renderCallSites (obs : List CallObligation) (provedByBV : List Nat)
         if provedByOmega.contains o.key then "proved_by_kernel_decision\n    engine:  omega (from caller's #[requires] / guards)"
         else if provedByBV.contains i then "proved_by_kernel_decision\n    engine:  bv_decide"
         else "unproven_at_callsite (caller does not establish the precondition)"
+      -- Constant-folded call-site verdicts: render the CANONICAL status (matching
+      -- the ObligationCore ledger's `ofVC`/mkVC mapping), not the internal
+      -- `*_at_callsite` baseStatus token — one vocabulary across surfaces (#2/#15).
+      | "proved_at_callsite" => "proved_by_kernel_decision\n    engine:  constant_fold (precondition constant-folds true)"
+      | "failed_at_callsite" => "counterexample\n    engine:  constant_fold (precondition constant-folds false at this call site)"
       | s => s
     out := out ++ s!"\n    status:  {status}"
   return out ++ "\n"

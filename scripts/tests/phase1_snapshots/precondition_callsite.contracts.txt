@@ -26,7 +26,8 @@ cn.ok_via_guard
 cn.violation
   call ratio(10, 0)
     requires 0 < 0
-    status:  failed_at_callsite
+    status:  counterexample
+    engine:  constant_fold (precondition constant-folds false at this call site)
 
 cn.unmet
   call ratio(10, x)

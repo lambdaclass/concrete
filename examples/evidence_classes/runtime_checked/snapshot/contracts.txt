@@ -15,7 +15,7 @@ demo.add_bounded
 
 === Loop contracts ===
 
-demo.sum_loop  (loop @ line 85)
+demo.sum_loop  (loop @ line 91)
   invariant 0 <= i && i <= 8
   variant   8 - i
   obligations:
@@ -40,7 +40,7 @@ demo.sum_loop  (loop @ line 85)
                                 engine:  omega
        generated VC:  ∀ (i : Int), (0 ≤ i ∧ i ≤ 8) → i < 8 → (8 - (i + 1)) < (8 - i)
 
-demo.sum_loop_unsound  (loop @ line 100)
+demo.sum_loop_unsound  (loop @ line 106)
   invariant 0 <= i && i <= 7
   variant   8 - i
   obligations:

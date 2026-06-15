@@ -14,7 +14,8 @@ fixed_point.mix
 fixed_point.main
   call scale_clamp(200, 128)
     requires 0 <= 200 && 200 <= 255 && 0 <= 128 && 128 <= 256
-    status:  proved_at_callsite
+    status:  proved_by_kernel_decision
+    engine:  constant_fold (precondition constant-folds true)
   call mix(s, 50)
     requires 0 <= s && s <= 255 && 0 <= 50 && 50 <= 255
     status:  unproven_at_callsite (caller does not establish the precondition)

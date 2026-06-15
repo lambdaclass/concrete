@@ -10,5 +10,6 @@ demo.at
 demo.good_caller
   call at(3)
     requires 0 <= 3 && 3 < 16
-    status:  proved_at_callsite
+    status:  proved_by_kernel_decision
+    engine:  constant_fold (precondition constant-folds true)
 

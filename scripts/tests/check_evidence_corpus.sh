@@ -40,7 +40,7 @@ want "omega → engine omega"                   contracts    proved_by_kernel_de
 want "bv → engine bv_decide"                  contracts    proved_by_kernel_decision_bv "bv_decide"
 want "partial → partial status"               contracts    partial_contract "partial — one direction proved_by_lean"
 want "assumed → assumed_at_entry"             contracts    assumed_boundary "assumed_at_entry"
-want "assumed → proved_at_callsite"           contracts    assumed_boundary "proved_at_callsite"
+want "assumed → call-site proved (kernel)"    contracts    assumed_boundary "proved_by_kernel_decision"
 want "trusted → trusted/bypassed"             proof-status trusted_boundary "trusted"
 want "runtime → omega-safe access"            contracts    runtime_checked "proved_by_kernel_decision (omega)"
 want "runtime → constant in bounds"           contracts    runtime_checked "checked: in bounds"
