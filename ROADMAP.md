@@ -266,11 +266,12 @@ has been retired.
 The ONE genuinely open dual-truth-source is **`--report contracts`**
 (`renderContracts`): it still walks and re-discharges every family on its own
 path (`vacuityGoals`/`assertGoals`/`boundsGoals`/`divGoals`/`overflowGoals` →
-its own `kernelDischargeLoopVCs`) with no ledger-consistency gate. `--report
-proof-status` and `concrete prove` also recompute, but are held to the ledger
-by consistency gates (sound today). The remaining real work is therefore #15
-(contracts as a ledger view / parity-gated) and the #18e shim deletion — not a
-from-scratch migration. Do not re-do #4–#14 or #18a–d; they are done (the
+its own `kernelDischargeLoopVCs`). As of 2026-06-15 it is held to the ledger by
+a consistency gate (`check_contracts_ledger_parity.sh`), like `--report
+proof-status` and `concrete prove` — all sound today. The remaining real work is
+the LITERAL-view refactor of `renderContracts` (read the discharged ledger
+instead of re-discharging) = the #18e shim deletion — not a from-scratch
+migration. Do not re-do #4–#14 or #18a–d; they are done (the
 discharge-adapter firewall #13 is kernel-checked + gated by
 `check_discharge_adapters.sh`). Treat any new report surface as needing a
 ledger-parity gate per #17.
@@ -358,10 +359,16 @@ ledger-parity gate per #17.
     read the hub model, not `Report.VC` / proof-status side structures.
     STATUS (2026-06-15): `--report vcs`, `--report obligation-ledger`,
     obligation JSON, and the audit VC summary are literal hub views;
-    `--report proof-status` is consistency-gated. **`--report contracts`
-    (`renderContracts`) is still an independent walk+discharge with NO
-    ledger-consistency gate — the one remaining open dual-truth-source.** This
-    is the next migration target.
+    `--report proof-status` is consistency-gated. `--report contracts`
+    (`renderContracts`) is now CONSISTENCY-GATED too:
+    `scripts/tests/check_contracts_ledger_parity.sh` (Makefile + CI) asserts its
+    per-(function,family) discharge statuses match the ledger. Building that gate
+    exposed and fixed a real vocabulary drift — `renderCallSites` was printing the
+    internal `proved_at_callsite`/`failed_at_callsite` tokens raw; it now renders
+    the canonical `proved_by_kernel_decision`/`counterexample` the ledger uses.
+    REMAINING (the literal-view refactor): `renderContracts` still independently
+    re-discharges (its own `kernelDischargeLoopVCs` per family) rather than
+    reading the discharged ledger — tied to #18e.
 16. [PARTIAL — consistency-gated] Make `concrete prove` consume the ledger:
     `--json`, `--show-obligation`,
     `--emit-lean`, `--emit-artifacts`, `--workspace`, `--check`, `--replay`,
@@ -409,8 +416,9 @@ ledger-parity gate per #17.
       approved collector/backend adapters.
     The presentation-rich report `--report contracts` converts to a literal hub
     consumer only once its contract-clause presentation fields live in the model;
-    until then a #15 parity gate must hold it to the ledger (not yet present —
-    this is the open work).
+    until then the #15 parity gate (`check_contracts_ledger_parity.sh`, landed
+    2026-06-15) holds it to the ledger. The literal-view refactor of
+    `renderContracts` is the remaining open work here.
 19. [DONE] Add the Phase 3 validation artifact: one fixture project that exercises
     every migrated obligation kind and proves the ledger is the only truth
     source by checking contracts, VCs, proof status, audit, policy, JSON,
