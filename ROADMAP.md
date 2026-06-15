@@ -253,90 +253,115 @@ because a consistency gate passes; they are only complete when #18 has made
 `ObligationCore` the hub and the old side-channel model is gone. Do not move a
 consumer before the family records it needs exist in the ledger.
 
-Risk note on the remaining items (#8-#18): the migration is currently
-half-done, and a half-migrated ledger is itself a dual-truth-source /
-false-green risk. Assert, vacuity, and assume obligations are still computed
-by report-side walkers outside the ledger (`Report.lean` `vacuityGoals` /
-`collectAssertAssumeS` around lines 1053/1075, discharged directly in
-`Main.lean` ~659-661), so today one surface can classify an assert/vacuity
-fact differently from a future ledger view with no gate catching it. Until
-#8-#18 complete, every new report surface added on top of this state widens
-the window where two live truth sources can disagree — finish the migration
-before growing new report surface, and treat any interim addition as needing
-an explicit parity gate per #17.
+Current state (audited 2026-06-15 — see
+[docs/PHASE3_OBLIGATION_CORE_AUDIT.md](docs/PHASE3_OBLIGATION_CORE_AUDIT.md)):
+the hub is real and is already the single truth source for **policy**,
+`--report vcs`, `--report obligation-ledger`, obligation JSON, and the audit VC
+summary. The records are unified (`abbrev VC := Report.Obligation`, one
+`structure Obligation`) and `ofVC` is lossless. Obligation families #4–#11 —
+including assert/assume/vacuity (#8) — land in the ledger, and policy reads
+them from it. So most of the earlier "half-migrated / dual-truth-source" risk
+has been retired.
 
-1. Define `ObligationCore` schema v1: stable id, source span, function,
+The ONE genuinely open dual-truth-source is **`--report contracts`**
+(`renderContracts`): it still walks and re-discharges every family on its own
+path (`vacuityGoals`/`assertGoals`/`boundsGoals`/`divGoals`/`overflowGoals` →
+its own `kernelDischargeLoopVCs`) with no ledger-consistency gate. `--report
+proof-status` and `concrete prove` also recompute, but are held to the ledger
+by consistency gates (sound today). The remaining real work is therefore #15
+(contracts as a ledger view / parity-gated), #13's missing adapter gate, and
+the #18e shim deletion — not a from-scratch migration. Do not re-do #4–#11,
+#14, or #18a–d; they are done. Treat any new report surface as needing a
+ledger-parity gate per #17.
+
+1. [DONE] Define `ObligationCore` schema v1: stable id, source span, function,
    obligation kind, expression shape, typed variables, scoped hypotheses,
    conclusion, semantic profile, dependencies, allowed engines, status,
    evidence class, replay command, counterexample, policy impact, and
-   originating source construct.
-2. Define the single evidence/status vocabulary used by the ledger:
+   originating source construct. (`Report.Obligation`; `kindVocabulary`.)
+2. [DONE] Define the single evidence/status vocabulary used by the ledger:
    `proved_by_lean`, `proved_by_kernel_decision`, `proved_by_lean_replay`,
    `solver_trusted`, `tested_by_oracle`, `runtime_checked`, `enforced`,
    `assumed`, `trusted`, `partial`, `stale`, `vacuous`, `missing`,
    `unproven`, `counterexample`, `unknown`, `timeout`, `solver_error`, and
    `ineligible`. Reports may summarize these statuses, but may not invent a
    second vocabulary.
-3. Build one scoped context collector for all obligation kinds. It must thread
-   function `#[requires]`, branch guards and negated fall-through facts, loop
-   invariants, already-proved assertions, local constants, ghost bindings, and
-   let substitutions; it must drop stale hypotheses after assignments using
-   one shared invalidation rule.
-4. Migrate call-site precondition obligations to `ObligationCore` first. This
-   is the smallest forcing case because the current behavior already works and
-   has positive/negative fixtures.
-5. Migrate array-bounds obligations to the same collector and ledger. Keep the
-   existing constant, `omega`, unproven, and violation classifications exactly
-   stable.
-6. Migrate div/mod nonzero obligations and sound division/modulo lowering.
-   Preserve the non-negative-dividend guard that prevents Lean floor-division
-   semantics from being confused with Concrete truncating division.
-7. Migrate opt-in overflow obligations, including interval/bv-discharge and
+3. [DONE] Build one scoped context collector for all obligation kinds. It must
+   thread function `#[requires]`, branch guards and negated fall-through facts,
+   loop invariants, already-proved assertions, local constants, ghost bindings,
+   and let substitutions; it must drop stale hypotheses after assignments using
+   one shared invalidation rule. (Shared `hyps` threading +
+   `loopHypsAt`/`dropStaleHyps`/`assignedScalarsS`; the single-truth gate
+   forbids per-family `scoped*S` collectors.)
+4. [DONE] Migrate call-site precondition obligations to `ObligationCore` first.
+   This is the smallest forcing case because the current behavior already works
+   and has positive/negative fixtures.
+5. [DONE] Migrate array-bounds obligations to the same collector and ledger.
+   Keep the existing constant, `omega`, unproven, and violation classifications
+   exactly stable.
+6. [DONE] Migrate div/mod nonzero obligations and sound division/modulo
+   lowering. Preserve the non-negative-dividend guard that prevents Lean
+   floor-division semantics from being confused with Concrete truncating
+   division.
+7. [DONE] Migrate opt-in overflow obligations, including interval/bv-discharge and
    nonlinear SMT routing. Preserve the rule that external SMT may only touch
    VCs the kernel tiers left unproved.
-8. Migrate `assert` and `assume`: `assert` becomes an obligation with scoped
-   hypotheses; `assume` becomes an audit-loud assumption fact and policy input,
-   never a proof.
-9. Migrate loop obligations O1-O5, including loop invariant initialization,
-   preservation, variant/decrease, and the split status for arithmetic-closed
-   but operationally-unproved obligations.
-10. Migrate `#[requires]`, `#[ensures]`, `#[invariant]`, and `#[variant]`
+8. [DONE] Migrate `assert` and `assume`: `assert` becomes an obligation with
+   scoped hypotheses; `assume` becomes an audit-loud assumption fact and policy
+   input, never a proof. (Kinds `assert`/`assume`/`vacuity` are in the ledger;
+   `vacuousFunctions`/`assumeFunctions` read them from it.)
+9. [DONE] Migrate loop obligations O1-O5, including loop invariant
+   initialization, preservation, variant/decrease, and the split status for
+   arithmetic-closed but operationally-unproved obligations.
+10. [DONE] Migrate `#[requires]`, `#[ensures]`, `#[invariant]`, and `#[variant]`
     clauses into the ledger, including invalid expression, impure call,
     vacuity, partial proof, and source-linked proof statuses.
-11. Migrate proof-link freshness, `#[proof_fingerprint]`, spec-drift, missing
-    theorem, blocked proof, and ineligible extraction facts into the same
-    ledger instead of keeping proof-status as a separate model.
-12. Unify expression lowering through one typed obligation expression layer:
-    human rendering, Lean proposition rendering, SMT-LIB rendering,
+11. [DONE] Migrate proof-link freshness, `#[proof_fingerprint]`, spec-drift,
+    missing theorem, blocked proof, and ineligible extraction facts into the
+    same ledger instead of keeping proof-status as a separate model. (`ofProofStatus`
+    + `proofLinkLedger`.)
+12. [DONE] Unify expression lowering through one typed obligation expression
+    layer: human rendering, Lean proposition rendering, SMT-LIB rendering,
     counterexample source-variable mapping, and JSON serialization must lower
     from the same structure. Add `scripts/tests/check_obligation_lowering.sh`
     with round-trip cases for linear arithmetic, bitvectors, sound division,
-    nonlinear SMT terms, branch/path facts, and invalid expressions.
-13. Add backend-owned discharge adapters over `ObligationCore`: constant fold,
-    `omega`, `bv_decide`, linked Lean theorem, Lean replay, external SMT,
-    oracle/test evidence, runtime enforcement, assumption, and trust boundary.
-    Each adapter may only produce its declared evidence class. Add
-    `scripts/tests/check_obligation_discharge_adapters.sh` to prove a solver
-    adapter cannot emit kernel evidence, a runtime check cannot emit proof
-    evidence, and a Lean/kernel adapter cannot depend on external solver state.
-14. Make policies consume the final ledger instead of recomputing facts:
+    nonlinear SMT terms, branch/path facts, and invalid expressions. (Gate
+    present + wired.)
+13. [OPEN — gate missing] Add backend-owned discharge adapters over
+    `ObligationCore`: constant fold, `omega`, `bv_decide`, linked Lean theorem,
+    Lean replay, external SMT, oracle/test evidence, runtime enforcement,
+    assumption, and trust boundary. Each adapter may only produce its declared
+    evidence class. Add `scripts/tests/check_obligation_discharge_adapters.sh` to
+    prove a solver adapter cannot emit kernel evidence, a runtime check cannot
+    emit proof evidence, and a Lean/kernel adapter cannot depend on external
+    solver state. NOTE (2026-06-15): the adapter *firewall* property
+    (solver↛kernel, kernel↛solver) is already exercised by
+    `check_obligation_redteam.sh`, but the dedicated per-adapter gate above does
+    not yet exist — write it or formally fold it into redteam.
+14. [DONE] Make policies consume the final ledger instead of recomputing facts:
     forbid-assume, forbid-vacuous, solver-evidence policy, stale-proof policy,
     runtime-safety requirements, trusted-boundary policy, and release gates.
     Add `scripts/tests/check_obligation_policy_views.sh` with one fixture per
     policy decision and one negative case proving stale/vacuous/solver-trusted
-    evidence is rejected when policy says so. A temporary consistency gate is
-    allowed during migration, but the item is not complete until policy
-    enforcement reads `ObligationCore` records directly and the old
-    side-channel qualifier collection is deleted.
-15. Make reports consume the ledger: `--report contracts`, `--report vcs`,
-    `--report proof-status`, `--report check-proofs`, audit bundles, release
-    bundles, JSON, snapshots, and evidence corpus gates become views over the
-    same records. Add `scripts/tests/check_obligation_report_views.sh` to assert
-    the same stable ids and statuses appear in every report surface. A
+    evidence is rejected when policy says so. (`computePolicyQuals` reads
+    `vacuousFunctions`/`assumeFunctions`/`solverTrustedIds` from the ledger; the
+    side-channel `compute*Quals` collection is gone.)
+15. [PARTIAL] Make reports consume the ledger: `--report contracts`, `--report
+    vcs`, `--report proof-status`, `--report check-proofs`, audit bundles,
+    release bundles, JSON, snapshots, and evidence corpus gates become views
+    over the same records. Add `scripts/tests/check_obligation_report_views.sh`
+    to assert the same stable ids and statuses appear in every report surface. A
     consistency gate proves parity during migration; it does not replace the
     full renderer refactor. This item is complete only when report renderers
     read the hub model, not `Report.VC` / proof-status side structures.
-16. Make `concrete prove` consume the ledger: `--json`, `--show-obligation`,
+    STATUS (2026-06-15): `--report vcs`, `--report obligation-ledger`,
+    obligation JSON, and the audit VC summary are literal hub views;
+    `--report proof-status` is consistency-gated. **`--report contracts`
+    (`renderContracts`) is still an independent walk+discharge with NO
+    ledger-consistency gate — the one remaining open dual-truth-source.** This
+    is the next migration target.
+16. [PARTIAL — consistency-gated] Make `concrete prove` consume the ledger:
+    `--json`, `--show-obligation`,
     `--emit-lean`, `--emit-artifacts`, `--workspace`, `--check`, `--replay`,
     `--nearest-lemmas`, and future `--minimize` should not reconstruct
     obligation context independently. Add
@@ -346,44 +371,45 @@ an explicit parity gate per #17.
     prove surface obtains obligation context, statuses, replay commands,
     nearest-lemma hints, and check targets from `ObligationCore`, not from a
     private prove/report reconstruction path.
-17. Add a migration parity gate after each migrated obligation family:
+17. [DONE] Add a migration parity gate after each migrated obligation family:
     compare old and new human reports, JSON, policy behavior, stable ids,
     counterexamples, solver provenance, and proof-workspace output on the
-    existing corpus before deleting the old path.
-18. Collapse the duplicate obligation models so there is ONE truth source, then
-    delete the old report/prove/policy-specific models and walkers.
-    `ObligationCore` is today a lossy
-    projection of `Report.VC` (it drops `smtHash`/`smtQuery`/`solver`/
-    `dischargeMode`/`leanReplay`, and never carried the contract/proof-link
-    presentation fields), so consumers still read `VC`/`ProofCore.Obligation`
-    directly and `ObligationCore` is a leaf, not the hub. Making it the hub is a
-    prerequisite for #14/#15/#16 being real consumers rather than consistency gates,
-    so this is staged, each sub-step verified byte-identical before the next:
-    - 18a. Widen `ObligationCore.Obligation` to a SUPERSET of the VC surface
-      (solver provenance, discharge mode, replay) and make `ofVC` lossless. Pure
+    existing corpus before deleting the old path. (Served by the report-views,
+    prove-views, redteam, and snapshot gates.)
+18. [MOSTLY DONE] Collapse the duplicate obligation models so there is ONE truth
+    source, then delete the old report/prove/policy-specific models and walkers.
+    The records are now UNIFIED: there is one `structure Obligation` in `Report`,
+    `abbrev VC := Obligation`, and `ofVC` is lossless (it enriches view fields
+    only). `ObligationCore` is the hub, not a leaf — so 18a–18d are done. (The
+    earlier "lossy projection / leaf, not the hub" description no longer holds;
+    corrected 2026-06-15.) Each sub-step was verified byte-identical:
+    - 18a. [DONE] Widen the record to a SUPERSET of the VC surface (solver
+      provenance, discharge mode, replay) and make `ofVC` lossless. Pure
       addition — no output change.
-    - 18b. Make `--report vcs` render from `ObligationCore` (not `VC`),
-      byte-identical — the first real report-as-view over the hub.
-    - 18c. Make the audit VC summary and the obligation JSON consume the hub,
-      byte-identical.
-    - 18d. Fold the `ProofCore.Obligation` proof-status surface into the hub and
-      reduce `Report.VC` to a view/alias (or delete it). No obligation family may
-      keep two live truth sources. Add
-      `scripts/tests/check_no_duplicate_obligation_walkers.sh` to fail on
-      reintroduced family-specific collectors or report-side recomputation.
-    - 18e. Delete compatibility shims that allow reports, policies, or prove to
-      bypass the hub: no `collectVCs`-only report path, no policy-side
+    - 18b. [DONE] Make `--report vcs` render from the hub, byte-identical — the
+      first real report-as-view over the hub.
+    - 18c. [DONE] Make the audit VC summary and the obligation JSON consume the
+      hub, byte-identical.
+    - 18d. [DONE] Fold the `ProofCore.Obligation` proof-status surface into the
+      hub (`ofProofStatus`) and reduce `Report.VC` to an alias. No obligation
+      family keeps two live truth sources. `check_no_duplicate_obligation_walkers.sh`
+      fails on reintroduced family-specific collectors or report-side recomputation.
+    - 18e. [PARTIAL] Delete compatibility shims that allow reports, policies, or
+      prove to bypass the hub: no `collectVCs`-only report path, no policy-side
       `compute*Quals` side channel, no prove-side obligation reconstruction, and
-      no proof-status-only table that is not projected from the hub.
-    - 18f. Add a negative source guard:
+      no proof-status-only table that is not projected from the hub. REMAINING:
+      `renderContracts` (`--report contracts`) is still a hub-bypassing parallel
+      discharge path — the last shim to remove (tied to #15).
+    - 18f. [DONE] Add a negative source guard:
       `scripts/tests/check_obligation_single_truth_source.sh` must fail if new
       code introduces `Report.VC` as a storage model, a second proof-status
       obligation record, or a family-specific scoped walker outside the
       approved collector/backend adapters.
-    The presentation-rich reports (`--report contracts`, `--report proof-status`)
-    convert to literal hub consumers only once their fields live in the model;
-    until then the #15 consistency gate holds them to the ledger.
-19. Add the Phase 3 validation artifact: one fixture project that exercises
+    The presentation-rich report `--report contracts` converts to a literal hub
+    consumer only once its contract-clause presentation fields live in the model;
+    until then a #15 parity gate must hold it to the ledger (not yet present —
+    this is the open work).
+19. [DONE] Add the Phase 3 validation artifact: one fixture project that exercises
     every migrated obligation kind and proves the ledger is the only truth
     source by checking contracts, VCs, proof status, audit, policy, JSON,
     workspace, replay, and release-bundle output for the same stable ids. Use
