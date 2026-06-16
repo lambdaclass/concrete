@@ -253,27 +253,26 @@ because a consistency gate passes; they are only complete when #18 has made
 `ObligationCore` the hub and the old side-channel model is gone. Do not move a
 consumer before the family records it needs exist in the ledger.
 
-Current state (audited 2026-06-15 — see
+Current state (audited 2026-06-15, updated 2026-06-16 — see
 [docs/PHASE3_OBLIGATION_CORE_AUDIT.md](docs/PHASE3_OBLIGATION_CORE_AUDIT.md)):
-the hub is real and is already the single truth source for **policy**,
-`--report vcs`, `--report obligation-ledger`, obligation JSON, and the audit VC
-summary. The records are unified (`abbrev VC := Report.Obligation`, one
-`structure Obligation`) and `ofVC` is lossless. Obligation families #4–#11 —
-including assert/assume/vacuity (#8) — land in the ledger, and policy reads
-them from it. So most of the earlier "half-migrated / dual-truth-source" risk
-has been retired.
+the hub is the single truth source for **policy**, `--report vcs`,
+`--report obligation-ledger`, obligation JSON, the audit VC summary, AND
+`--report contracts`. The records are unified (`abbrev VC := Report.Obligation`,
+one `structure Obligation`) and `ofVC` is lossless. Obligation families #4–#11 —
+including assert/assume/vacuity (#8) — land in the ledger, and policy reads them
+from it.
 
-The ONE genuinely open dual-truth-source is **`--report contracts`**
-(`renderContracts`): it still walks and re-discharges every family on its own
-path (`vacuityGoals`/`assertGoals`/`boundsGoals`/`divGoals`/`overflowGoals` →
-its own `kernelDischargeLoopVCs`). As of 2026-06-15 it is held to the ledger by
-a consistency gate (`check_contracts_ledger_parity.sh`), like `--report
-proof-status` and `concrete prove` — all sound today. The remaining real work is
-the LITERAL-view refactor of `renderContracts` (read the discharged ledger
-instead of re-discharging) = the #18e shim deletion — not a from-scratch
-migration. Do not re-do #4–#14 or #18a–d; they are done (the
-discharge-adapter firewall #13 is kernel-checked + gated by
-`check_discharge_adapters.sh`). Treat any new report surface as needing a
+The former last open dual-truth-source, `--report contracts` (`renderContracts`),
+was closed 2026-06-16 (#18e): it now reads `computeVCsDischarged` — the one
+discharged ledger — and slices the omega/bv proved-key sets out of it by engine,
+instead of running its own per-family `kernelDischargeLoopVCs`. Byte-identical
+(snapshots unchanged), locked by `check_contracts_ledger_parity.sh` (behavioral)
++ a source guard in `check_obligation_single_truth_source.sh`. The only report
+surface that still recomputes is `--report proof-status` (consistency-gated,
+sound today) — its literal-view conversion is the remaining #15 work. `concrete
+prove` likewise recomputes but is consistency-gated (#16). Do not re-do #4–#14,
+#18a–e; they are done (discharge-adapter firewall #13 is kernel-checked + gated
+by `check_discharge_adapters.sh`). Treat any new report surface as needing a
 ledger-parity gate per #17.
 
 1. [DONE] Define `ObligationCore` schema v1: stable id, source span, function,
@@ -357,18 +356,19 @@ ledger-parity gate per #17.
     consistency gate proves parity during migration; it does not replace the
     full renderer refactor. This item is complete only when report renderers
     read the hub model, not `Report.VC` / proof-status side structures.
-    STATUS (2026-06-15): `--report vcs`, `--report obligation-ledger`,
-    obligation JSON, and the audit VC summary are literal hub views;
-    `--report proof-status` is consistency-gated. `--report contracts`
-    (`renderContracts`) is now CONSISTENCY-GATED too:
-    `scripts/tests/check_contracts_ledger_parity.sh` (Makefile + CI) asserts its
-    per-(function,family) discharge statuses match the ledger. Building that gate
-    exposed and fixed a real vocabulary drift — `renderCallSites` was printing the
-    internal `proved_at_callsite`/`failed_at_callsite` tokens raw; it now renders
-    the canonical `proved_by_kernel_decision`/`counterexample` the ledger uses.
-    REMAINING (the literal-view refactor): `renderContracts` still independently
-    re-discharges (its own `kernelDischargeLoopVCs` per family) rather than
-    reading the discharged ledger — tied to #18e.
+    STATUS (2026-06-16): `--report vcs`, `--report obligation-ledger`,
+    obligation JSON, the audit VC summary, AND `--report contracts` are now
+    literal hub views; `--report proof-status` remains consistency-gated.
+    `renderContracts` was refactored (#18e) to read `computeVCsDischarged` — the
+    one discharged ledger — and slice the omega/bv proved-key sets out of it by
+    engine, instead of running its own per-family `kernelDischargeLoopVCs`. Output
+    is byte-identical (snapshots unchanged) and the change is locked two ways:
+    `check_contracts_ledger_parity.sh` (behavioral, Makefile + CI) and a source
+    guard in `check_obligation_single_truth_source.sh` (renderContracts may not
+    re-introduce a private discharge path). Building the parity gate also exposed
+    and fixed a real vocabulary drift — `renderCallSites` printed the internal
+    `proved_at_callsite`/`failed_at_callsite` tokens raw; it now renders the
+    canonical `proved_by_kernel_decision`/`counterexample` the ledger uses.
 16. [PARTIAL — consistency-gated] Make `concrete prove` consume the ledger:
     `--json`, `--show-obligation`,
     `--emit-lean`, `--emit-artifacts`, `--workspace`, `--check`, `--replay`,
@@ -403,22 +403,24 @@ ledger-parity gate per #17.
       hub (`ofProofStatus`) and reduce `Report.VC` to an alias. No obligation
       family keeps two live truth sources. `check_no_duplicate_obligation_walkers.sh`
       fails on reintroduced family-specific collectors or report-side recomputation.
-    - 18e. [PARTIAL] Delete compatibility shims that allow reports, policies, or
+    - 18e. [DONE] Delete compatibility shims that allow reports, policies, or
       prove to bypass the hub: no `collectVCs`-only report path, no policy-side
       `compute*Quals` side channel, no prove-side obligation reconstruction, and
-      no proof-status-only table that is not projected from the hub. REMAINING:
-      `renderContracts` (`--report contracts`) is still a hub-bypassing parallel
-      discharge path — the last shim to remove (tied to #15).
+      no proof-status-only table that is not projected from the hub. The last
+      shim — `renderContracts` (`--report contracts`) running its own per-family
+      discharge — was removed 2026-06-16: it now reads `computeVCsDischarged` (the
+      one ledger) and slices the proved-key sets by engine, byte-identical. A
+      source guard in `check_obligation_single_truth_source.sh` keeps it that way.
     - 18f. [DONE] Add a negative source guard:
       `scripts/tests/check_obligation_single_truth_source.sh` must fail if new
       code introduces `Report.VC` as a storage model, a second proof-status
       obligation record, or a family-specific scoped walker outside the
       approved collector/backend adapters.
-    The presentation-rich report `--report contracts` converts to a literal hub
-    consumer only once its contract-clause presentation fields live in the model;
-    until then the #15 parity gate (`check_contracts_ledger_parity.sh`, landed
-    2026-06-15) holds it to the ledger. The literal-view refactor of
-    `renderContracts` is the remaining open work here.
+    `--report contracts` is now a literal hub consumer (`renderContracts` reads
+    the discharged ledger; landed 2026-06-16), held byte-identical by the #15
+    parity gate (`check_contracts_ledger_parity.sh`) plus the #18e source guard.
+    The remaining literal-view work in #15 is `--report proof-status`, which still
+    recomputes (consistency-gated, sound today).
 19. [DONE] Add the Phase 3 validation artifact: one fixture project that exercises
     every migrated obligation kind and proves the ledger is the only truth
     source by checking contracts, VCs, proof status, audit, policy, JSON,

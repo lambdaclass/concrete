@@ -32,20 +32,19 @@ The hub is real and is already the single truth source for **policy**,
 **audit VC summary**. The records are unified (`abbrev VC := Report.Obligation`,
 one `structure Obligation`), and `ofVC` is lossless.
 
-The remaining live parallel paths are the three presentation-rich / interactive
-surfaces:
+`--report contracts` joined them as a literal hub view on 2026-06-16 (see below).
+The two surfaces that still recompute (both consistency-gated, sound today):
 
 | Surface | State | Why |
 |---|---|---|
 | `--report proof-status` | GATED-INTERIM | recomputes, but `check_obligation_report_views.sh` pins its totals to the ledger's `#prooflink` projection |
 | `concrete prove` (obligation facts) | GATED-INTERIM | reconstructs, but `check_obligation_prove_views.sh` pins its ids+statuses to the ledger |
-| `--report contracts` (`renderContracts`) | GATED-INTERIM (was OPEN) | full independent walk+discharge (`vacuityGoals`/`assertGoals`/`boundsGoals`/`divGoals`/`overflowGoals` → its own `kernelDischargeLoopVCs`). As of 2026-06-15 held to the ledger by `check_contracts_ledger_parity.sh` (per-(fn,family) status parity). Building that gate fixed a real vocabulary drift (`renderCallSites` printed internal `*_at_callsite` tokens raw → now canonical). REMAINING: the literal-view refactor (read the ledger instead of re-discharging) = #18e. |
+| `--report contracts` (`renderContracts`) | DONE (literal hub view) | as of 2026-06-16 reads `computeVCsDischarged` (the one ledger) and slices omega/bv proved-key sets by engine — no private discharge. Byte-identical (snapshots unchanged); locked by `check_contracts_ledger_parity.sh` + a source guard in `check_obligation_single_truth_source.sh`. Building the gate also fixed a real `*_at_callsite` vocabulary drift in `renderCallSites`. |
 
-UPDATE (2026-06-15): the parity gate was added
-(`check_contracts_ledger_parity.sh`) and `--report contracts` is now
-consistency-gated like proof-status/prove. The single highest-value remaining
-Phase 3 increment is now the **literal-view refactor** of `renderContracts`
-(read the discharged ledger instead of re-discharging) = #18e.
+UPDATE (2026-06-16): `renderContracts` was refactored to consume the ledger
+(#18e); the only report surface still recomputing is `--report proof-status`
+(consistency-gated). The remaining literal-view work is the proof-status
+renderer.
 
 ### Live evidence of the gap (now resolved)
 
@@ -77,14 +76,14 @@ synced to anything except a manually-updated self-snapshot.
 | 12 | Unified obligation expression lowering | DONE (gated) | `check_obligation_lowering.sh` (present, in Makefile) |
 | 13 | Backend discharge adapters + per-adapter class gate | DONE | typed `DischargeAdapter` + `DischargeAdapter.fold` rejecting foreign classes (`Report.lean:4380+`); KERNEL-CHECKED by compile-time `example`s; behavioral gate `check_discharge_adapters.sh` (Makefile `test-discharge-adapters`). *(Corrected 2026-06-15: the gate exists under `check_discharge_adapters.sh`, not the `check_obligation_discharge_adapters.sh` name #13's text specified — the initial audit missed it by searching the literal name.)* |
 | 14 | Policies consume the ledger | DONE | `computePolicyQuals` reads `vacuousFunctions`/`assumeFunctions`/`solverTrustedIds` from `ledger` (`Main.lean:659–664`); `check_obligation_policy_views.sh` |
-| 15 | Reports consume the ledger | PARTIAL | `--report vcs`/`obligation-ledger`/JSON/audit = literal views (`Main.lean:997–1006`); `--report proof-status` = GATED-INTERIM; `--report contracts` = GATED-INTERIM as of 2026-06-15 (`check_contracts_ledger_parity.sh`); literal-view refactor of `renderContracts` (`Main.lean:669–694`) remains (#18e) |
+| 15 | Reports consume the ledger | PARTIAL | `--report vcs`/`obligation-ledger`/JSON/audit/**contracts** = literal views (`--report contracts` refactored 2026-06-16, `Main.lean:677+`); `--report proof-status` = GATED-INTERIM (the remaining literal-view work) |
 | 16 | `concrete prove` consumes the ledger | GATED-INTERIM | `proveReport`/`proveReportJson` (`Main.lean:974/976`) reconstruct; `check_obligation_prove_views.sh` pins to ledger |
 | 17 | Migration parity gate per family | DONE | report-views + prove-views + redteam + snapshot gates serve as the parity corpus |
 | 18a | Widen record to VC superset, `ofVC` lossless | DONE | `Report.Obligation` carries solver/replay/view fields (`Report.lean:4140–4149`); `ofVC` enriches only (`ObligationCore.lean:82`, proof at `:96`) |
 | 18b | `--report vcs` renders from hub, byte-identical | DONE | `Report.vcsJson dvcs`; single-truth gate asserts it |
 | 18c | Audit VC summary + JSON consume hub | DONE | `vcAuditSummary auditVCs`; report-views gate |
 | 18d | Fold proof-status in; `Report.VC` → alias | DONE | `abbrev VC := Obligation` (`Report.lean:4153`); `check_obligation_single_truth_source.sh` |
-| 18e | Delete hub-bypass shims | PARTIAL | `renderContracts` is still a hub-bypassing parallel discharge path (the remaining shim) |
+| 18e | Delete hub-bypass shims | DONE | the last shim — `renderContracts`'s private per-family discharge — removed 2026-06-16; it now reads `computeVCsDischarged`. Source-guarded in `check_obligation_single_truth_source.sh` |
 | 18f | Negative source guard | DONE | `check_obligation_single_truth_source.sh` (in Makefile + the no-duplicate-walkers gate) |
 | 19 | Phase 3 validation artifact | DONE | `examples/obligation_core_probe/` + `check_phase3_obligation_core.sh` (present, in Makefile) |
 
@@ -141,16 +140,15 @@ Neither blocks the structural conclusions below.
 
 ## Prioritized remaining work
 
-1. **Literal-view refactor of `--report contracts` (#15 / #18e).** The interim
-   parity gate (`check_contracts_ledger_parity.sh`) landed 2026-06-15 and now
-   holds contracts to the ledger (and fixed a real call-site vocabulary drift).
-   The remaining work is the renderer itself: make `renderContracts` read the
-   discharged ledger instead of re-discharging each family via its own
-   `kernelDischargeLoopVCs`. If its presentation-rich contract-clause fields
-   don't yet live in the record, widen the record first, then convert.
-2. **Reconcile the ROADMAP Phase 3 prose** (done 2026-06-15) so the spec stops
+1. **`--report contracts` literal-view refactor (#15 / #18e)** — DONE 2026-06-16.
+   `renderContracts` now reads `computeVCsDischarged` and slices the proved-key
+   sets by engine; byte-identical, locked by `check_contracts_ledger_parity.sh`
+   + the single-truth source guard. (The parity gate, landed 2026-06-15, also
+   fixed a real call-site vocabulary drift.)
+2. **Reconcile the ROADMAP Phase 3 prose** (done 2026-06-15/16) so the spec stops
    being a second truth source about the truth-source migration. (#13 was found
    already done — gate `check_discharge_adapters.sh`; no new gate needed.)
-3. Convert `--report proof-status` and `concrete prove` from GATED-INTERIM to
-   literal hub views once their presentation fields live in the record (lower
-   priority — both are consistency-gated, so sound today).
+3. **Remaining:** convert `--report proof-status` and `concrete prove` from
+   GATED-INTERIM to literal hub views once their presentation fields live in the
+   record (lower priority — both are consistency-gated, so sound today). This is
+   now the only open Phase 3 literal-view work.

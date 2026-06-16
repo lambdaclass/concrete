@@ -663,35 +663,38 @@ def computePolicyQuals (policy : Concrete.ProjectPolicy) (modules : List Concret
   let st := Concrete.ObligationCore.solverTrustedIds ledger
   return (vac, asm, st)
 
-/-- Render the contracts report plus the call-site obligation section, running
-    the `bv_decide` backend on the closed-but-non-literal call-site obligations
-    and `omega` on the loop init/variant VCs. -/
-def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.ProofRegistry) : IO String := do
+/-- Render the contracts report plus the call-site obligation section AS A VIEW
+    over the one discharged ObligationCore ledger (Phase 3 #15 / #18e).
+
+    Instead of re-running the per-family discharge (the old duplicate path that
+    `check_contracts_ledger_parity.sh` guards), this reads `computeVCsDischarged`
+    — the exact same ledger `--report obligation-ledger` and policy consume — and
+    slices the proved-key sets out of it: a key is omega-proved iff its discharged
+    VC carries engine `omega`, bv-proved iff engine `bv_decide` (`dischargeVCs`
+    sets the engine per adapter). Each render helper matches only its own family's
+    keys, so passing the shared sets is byte-identical to the former separate
+    discharge — now single-source, so the two surfaces cannot diverge. -/
+def renderContracts (parsedModules : List Concrete.Module) (registry : Concrete.ProofRegistry)
+    (locMap : Report.FnLocMap) : IO String := do
+  let dvcs ← computeVCsDischarged parsedModules locMap registry
+  let omegaProved := dvcs.filterMap fun v => if v.engine == "omega" then some v.id else none
+  let bvProved    := dvcs.filterMap fun v => if v.engine == "bv_decide" then some v.id else none
   let obs := Report.callSiteObligations parsedModules
-  let cands := ((List.range obs.length).zip obs).filterMap fun (i, o) => o.leanGoal.map (fun g => (i, g))
-  let proved ← bvDischargeCallSites cands
-  -- discharge call-site preconditions from the caller's #[requires]/guards via omega
-  let provedCallPre ← kernelDischargeLoopVCs (Report.callPrecondGoals parsedModules)
-  -- vacuity: omega proves a contract is unsatisfiable (∀ vars, ¬P) → report vacuous, not proved
-  let provedVacuous ← kernelDischargeLoopVCs (Report.vacuityGoals parsedModules)
-  -- assert obligations: omega proves `∀ vars, e` → the assert holds
-  let provedAsserts ← kernelDischargeLoopVCs (Report.assertGoals parsedModules)
-  let provedVCs ← kernelDischargeLoopVCs (Report.loopVCGoals parsedModules)
+  -- renderCallSites wants bv-proved call sites as obligation INDICES, not keys.
+  let bvCallIdx := (List.range obs.length).filter fun i =>
+    match obs[i]? with | some o => bvProved.contains o.key | none => false
   let boundsObls := Report.boundsObligations parsedModules
-  let provedBounds ← kernelDischargeLoopVCs (Report.boundsGoals parsedModules)
   let divObls := Report.divObligations parsedModules
-  let provedDiv ← kernelDischargeLoopVCs (Report.divGoals parsedModules)
   let ovfObls := Report.overflowObligations parsedModules
-  let provedOvf ← kernelDischargeLoopVCs (Report.overflowGoals parsedModules)
-  -- nonlinear fallback: only the bv goals omega did NOT already discharge.
-  let bvOvfCands := (Report.overflowBVGoals parsedModules).filter (fun (k, _) => !provedOvf.contains k)
-  let provedOvfBV ← bvDischargeOverflow bvOvfCands
-  return Report.contractsReport parsedModules registry provedVCs provedVacuous
-    ++ Report.renderCallSites obs proved provedCallPre
-    ++ Report.renderAssertAssume parsedModules provedAsserts
-    ++ Report.renderBounds boundsObls provedBounds
-    ++ Report.renderDiv divObls provedDiv
-    ++ Report.renderOverflow ovfObls provedOvf provedOvfBV
+  -- Every helper below is handed the SAME omega/bv proved-key sets and filters its
+  -- own family's keys (loop / vacuity / assert / #pre / #bounds / #div / #ovf are
+  -- disjoint key spaces). overflow alone needs both (omega vs bv rendering).
+  return Report.contractsReport parsedModules registry omegaProved omegaProved
+    ++ Report.renderCallSites obs bvCallIdx omegaProved
+    ++ Report.renderAssertAssume parsedModules omegaProved
+    ++ Report.renderBounds boundsObls omegaProved
+    ++ Report.renderDiv divObls omegaProved
+    ++ Report.renderOverflow ovfObls omegaProved bvProved
 
 /-- Run pipeline and check a profile constraint.
     If the input file lives inside a `Concrete.toml` project, route
@@ -991,7 +994,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       else IO.println (Concrete.Backend.report validCore.coreModules)
       return 0
     if reportType == "contracts" then
-      IO.println (← renderContracts parsed.modules registry)
+      IO.println (← renderContracts parsed.modules registry locMap)
       return 0
     if reportType == "obligation-ledger" then
       -- Phase 3: the unified ObligationCore ledger — the discharged VC families
@@ -1255,7 +1258,7 @@ def compileAndReport (inputPath : String) (reportType : String)
       let vcSum := Report.vcAuditSummary auditVCs
       IO.println (Report.auditReport validCore.coreModules locMap srcMap (registry := registry) (pc := pc) (vcSummary := vcSum))
       if Report.hasContracts parsed.modules then
-        IO.println (← renderContracts parsed.modules registry)
+        IO.println (← renderContracts parsed.modules registry locMap)
       return (if hasRegistryErrors then 1 else 0)
     if reportType == "verify" then
       -- Pass-by-pass verify gates: post-elab, post-mono, post-lower,

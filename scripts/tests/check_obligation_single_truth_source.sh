@@ -64,6 +64,18 @@ grep -q "Report.vcsJson dvcs" "$M" && grep -q "vcAuditSummary auditVCs" "$M" \
   && ok "--report vcs / audit render the discharged obligation schedule" \
   || no "a VC report is not rendering the obligation schedule"
 
+echo "=== --report contracts renders the ledger, not a private discharge (Phase 3 #18e) ==="
+# renderContracts must read computeVCsDischarged (the one ledger) and must NOT run
+# its own per-family discharge (kernelDischargeLoopVCs / bvDischarge*). Extract just
+# its body (def → next top-level def) and assert the shim has not crept back.
+rc_body="$(awk '/^def renderContracts /{f=1;print;next} /^def [A-Za-z]/{f=0} f{print}' "$M")"
+if printf '%s' "$rc_body" | grep -q "computeVCsDischarged" \
+   && ! printf '%s' "$rc_body" | grep -qE "kernelDischargeLoopVCs|bvDischargeCallSites|bvDischargeOverflow"; then
+  ok "renderContracts consumes the ledger (no private kernel/bv discharge path)"
+else
+  no "renderContracts re-introduced a private discharge path (#18e shim returned)"
+fi
+
 echo ""
 echo "SINGLE-TRUTH-SOURCE: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
