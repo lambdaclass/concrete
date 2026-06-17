@@ -450,6 +450,22 @@ schema; interpreter and compiled execution can be compared through one harness;
 and backend/target assumptions are explicit before Phase 5 language usability
 work depends on them.
 
+Status (audited 2026-06-17 — see
+[docs/PHASE4_COMPILER_LEDGER_AUDIT.md](docs/PHASE4_COMPILER_LEDGER_AUDIT.md)):
+the Phase 4 **core is done and gated** — #1–#4 (ProjectContext, CompilerLedger,
+pass-chain artifacts, one diagnostic schema), #9–#13 (diagnostics-as-data, rich
+rendering [5/9 fixtures], tolerant partial facts, function-granularity source
+maps), and #14–#17 (command plumbing, golden CLI matrix, compiler API boundary,
+backend-contract report). The **open tail #18–#45** is unbuilt advanced tooling
+(inspect/`verify-ir`/events/`clean`/self-audit commands, perf budgets, fuzz
+harness, intern/query/incremental, schema-version + docs-drift + metamorphic
+gates, source-location modes, backend-IR-as-artifact, the #45 validation
+artifact) and is **workload-gateable — none of it is an active soundness or
+dual-truth-source risk** (verified: reports do not re-infer ownership/capability
+facts, and the #44g ref-return miscompile is unreachable because reference
+returns are rejected at the type level — H1). Per-item status is in the audit
+doc; do not build #18–#45 speculatively (deferral discipline).
+
 1. Define `ProjectContext`: source roots, modules, entry points, tests,
    policies, assumptions, target profile, build profile, oracle manifests,
    source maps, toolchain identity, and command mode. All commands must load
@@ -854,7 +870,7 @@ work depends on them.
     compare diagnostics, resolved ids where expected, typed/Core/backend facts,
     obligations, release-bundle summaries, and compiled output, while allowing
     source spans and source hashes to differ where they honestly should.
-38. Add source-location privacy modes, borrowing the useful part of Odin's
+38. [OPEN] Add source-location privacy modes, borrowing the useful part of Odin's
     source-location controls but making them audit-visible:
     `[build] source-location-mode = "normal" | "filename" | "obfuscated" |
     "none"` in `Concrete.toml`, plus `--source-location-mode <mode>` for
@@ -885,7 +901,7 @@ work depends on them.
     `examples/compiler_pipeline_probe/` and one negative case proving
     `--emit-backend-ir` is unavailable before backend IR exists rather than
     silently emitting stale output.
-41. Add artifact garbage-collection policy and `concrete clean` modes before
+41. [OPEN — `concrete clean` does not exist yet] Add artifact garbage-collection policy and `concrete clean` modes before
     retained artifacts, proof caches, crash bundles, and package artifacts grow
     without bound. Required modes: `concrete clean --build`, `--artifacts`,
     `--proof-cache`, `--crash-bundles`, `--all`, and `--dry-run --json`.
@@ -893,14 +909,14 @@ work depends on them.
     unless explicitly requested. Wire `scripts/tests/check_clean_artifacts.sh`
     to prove no source, proof, release bundle, or manually retained crash repro
     is deleted accidentally.
-42. Add compiler self-audit: `concrete audit --compiler` renders the
+42. [OPEN — `concrete audit --compiler` does not exist yet] Add compiler self-audit: `concrete audit --compiler` renders the
     `CompilerLedger` itself. Required output: passes run, artifact ids,
     diagnostics count, source-location privacy mode, target/toolchain identity,
     solver/tool versions, cache/dependency facts, replay commands, backend
     assumptions, emitted files, and links to the `ObligationCore` ledger. Wire
     `scripts/tests/check_compiler_self_audit.sh`; the gate must prove the
     self-audit is generated from `CompilerLedger`, not from text scraping.
-43. Keep the backend IR printable, verifier-checked, and regression-testable
+43. [OPEN — no `inspect --backend-ir` / `verify-ir` routing yet] Keep the backend IR printable, verifier-checked, and regression-testable
     directly. This is the QBE lesson adapted to Concrete: even if LLVM remains
     the backend, Concrete's own backend contract should be a stable emitted
     artifact with a verifier, not an opaque stream of generated code. V1 must
