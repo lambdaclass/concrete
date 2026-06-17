@@ -929,19 +929,26 @@ doc; do not build #18–#45 speculatively (deferral discipline).
     `target_constants.con`. Wire `scripts/tests/check_backend_ir.sh` to run
     `concrete inspect --backend-ir`, `concrete verify-ir --pass backend-ir`,
     and a compiled execution check for each fixture.
-44. Add a docs-drift gate because docs are public claims too. Every standing
-    reference or claim-bearing doc must carry `Status:` and `Verified:` metadata
-    or explicitly opt out as generated/history-only. Add
-    `scripts/tests/check_docs_drift.sh`; the gate must fail when a doc contains
-    stale claim markers such as "not yet implemented", "0/N", "future", or
-    "TODO" past its verification window without an updated `Verified:` date,
-    and it must support grep-pinned claims where a doc names an implementation
-    fact (for example a command, gate, diagnostic code, or module path). The
-    gate should also check high-risk consistency pairs such as
-    `CLAIMS_TODAY.md` vs gates, `LANGUAGE_GAPS.md` vs parser/checker fixtures,
-    memory-semantics docs vs borrow/ref tests, and phase-exit checklists vs
-    shipped gates. Done when docs cannot silently drift into user-facing claims
-    that no command or fixture can replay.
+44. [PARTIAL — grep-pinned referential-integrity core DONE 2026-06-17]
+    Add a docs-drift gate because docs are public claims too.
+    `scripts/tests/check_docs_drift.sh` (Makefile + CI) implements the robust
+    core: in the present-tense doc set (`CLAIMS_TODAY`, `KNOWN_HOLES`, the phase
+    audits, `CHANGELOG`), every referenced gate (`scripts/tests/*.sh`), module
+    (`Concrete/*.lean`), doc link (`docs/*.md`), and stdlib file
+    (`std/src/*.con`) must exist, and every `--report <kind>` must be a real CLI
+    report. This is the grep-pinned-implementation-fact part — and it would have
+    caught the Phase 3 audit's own slip (citing the nonexistent
+    `check_obligation_discharge_adapters.sh`).
+    DELIBERATELY DEFERRED as not mechanically robust (verified during design —
+    they make the gate a false-positive generator): `Status:`/`Verified:`
+    metadata regime; stale-prose-marker detection ("not yet"/"future"/"TODO"/
+    "0/N"); `concrete <subcommand>` existence ("concrete" is the language name
+    and an English adjective); ROADMAP command honesty (a roadmap's job is to
+    propose future commands); `examples/...` paths (docs cite unbuilt/historical
+    examples). The semantic side (is a `[DONE]`/`[OPEN]` prose claim actually
+    true) stays the job of the phase audits; this gate makes "named artifact
+    exists" a mechanical invariant so the audits focus on semantics. Consistency
+    pairs (`LANGUAGE_GAPS` vs fixtures, etc.) remain future.
 
     - 44a. [DONE 2026-06-10] Fixed the monomorphization name collision (a
       silent miscompile). Mono mangled a specialization by the HEAD constructor

@@ -113,9 +113,14 @@ risk-driven. Ranked:
    - **#11 — complete the 4 missing rich-diagnostic fixtures + assert them in
      `check_rich_diagnostics.sh`.** Concrete, bounded, locks a user-facing contract
      that currently can bitrot. Best "one item" pick.
-   - **#44 docs-drift gate** — meta-leverage: would mechanically catch the ROADMAP↔code
-     staleness this audit (and the Phase 3 one) had to fix by hand. Higher ceiling,
-     fuzzier scope.
+   - **#44 docs-drift gate** — DONE 2026-06-17 (`scripts/tests/check_docs_drift.sh`,
+     Makefile + CI). Robust grep-pinned core: present-tense docs (CLAIMS_TODAY,
+     KNOWN_HOLES, the phase audits, CHANGELOG) may reference only real gates /
+     modules / doc-links / stdlib files, and only real `--report` kinds. The
+     ambitious Status:/Verified: + stale-prose-marker + command-honesty parts were
+     deferred as not mechanically robust (false-positive generators — "concrete" is
+     an adjective; a roadmap proposes future commands); the phase audits keep the
+     semantic side.
    - **#29 schema-version rejection gate** — cheap future-proofing against silent
      artifact misread; low urgency (no current misread).
    Everything else (#18–#45) is genuinely workload-gateable — do not build speculatively
