@@ -513,20 +513,32 @@ doc; do not build #18–#45 speculatively (deferral discipline).
 10. Treat diagnostics as compiler data, not formatted strings. Passes should
    emit structured diagnostics first; human text, JSON, LSP output, tests, and
    release bundles should render the same diagnostic records.
-11. Add rich Elm/Gleam-style diagnostic rendering as a checked compiler
-    feature, not an incidental formatting pass. The renderer must support:
-    source snippets with underlines, primary and secondary spans, related-span
-    notes, reason/help/next-action sections, expected-vs-actual facts, policy
-    or evidence context when relevant, and stable diagnostic codes. It must
-    render from the same structured diagnostic records used by JSON/LSP, not
-    from hand-formatted strings. Add `examples/diagnostics_rich/` with exact
-    fixtures for parser error, unknown name, type mismatch, ownership/linearity
-    error, missing capability, array-bounds obligation failure, solver-policy
-    rejection, vacuous contract, and stale proof. Wire
-    `scripts/tests/check_rich_diagnostics.sh`; the gate must assert human and
-    JSON output agree on code, severity, spans, related spans, reason, help,
-    and evidence/policy payload, and that redaction/source-location privacy
-    modes still apply.
+11. [PARTIAL — frontend families DONE; obligation/proof/policy routing
+    workload-gated] Add rich Elm/Gleam-style diagnostic rendering as a checked
+    compiler feature, not an incidental formatting pass. The renderer must
+    support: source snippets with underlines, primary and secondary spans,
+    related-span notes, reason/help/next-action sections, expected-vs-actual
+    facts, policy or evidence context when relevant, and stable diagnostic codes.
+    It must render from the same structured diagnostic records used by JSON/LSP,
+    not from hand-formatted strings. `examples/diagnostics_rich/` +
+    `scripts/tests/check_rich_diagnostics.sh` assert human↔JSON parity (code,
+    severity, pass, span, rich fields) for the FRONTEND diagnostic families:
+    parser (E0001), unknown name (E0101), type mismatch (E0220),
+    ownership/linearity (E0205), missing capability (E0520). These flow through
+    the `Diagnostic` record / `--diagnostics-json` and are DONE.
+    DEFERRED — the four remaining families named here (array-bounds obligation
+    failure, solver-policy rejection, vacuous contract, stale proof) are NOT
+    missing example files: obligation / proof / policy facts do not currently
+    enter the `Diagnostic` record / `--diagnostics-json` channel at all (verified
+    2026-06-17: a constant OOB index and a vacuous contract both yield
+    `diagnostics: []` from `--diagnostics-json`; they render in `--report
+    contracts` / the ObligationCore ledger instead). Completing them is therefore
+    an ARCHITECTURAL BRIDGE — "define how obligation/proof/policy facts become
+    structured diagnostics for JSON/LSP without duplicating the ledger/report
+    model" — not a fixture pass. It should be pulled by a consumer (LSP, a CI JSON
+    diagnostic parser, editor integration, or a unified diagnostic-contract
+    effort), not built speculatively to satisfy the checklist. Redaction /
+    source-location privacy modes (#38) remain future.
 12. Add error-tolerant partial facts for tooling and reports: parser,
     resolver, typechecker, ownership, and capability passes should be able to
     produce partial artifacts containing explicit `invalid` / `unknown`

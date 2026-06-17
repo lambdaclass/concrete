@@ -43,7 +43,7 @@ Legend: DONE / PARTIAL / DEFERRED (by design, blocker documented) / OPEN (unbuil
 | 8 Attach ownership/capability facts once (not re-inferred in reports) | OPEN (not active risk — see below) | facts checked in `CoreCheck` but not recorded into the ledger; reports do **not** re-infer them today |
 | 9 One diagnostic schema | DONE | same record as #4 |
 | 10 Diagnostics as data (human/JSON/LSP/tests render one record) | DONE | `Diagnostic.render`/`toJson`; `check_rich_diagnostics.sh` |
-| 11 Rich Elm/Gleam rendering + 9 fixtures | PARTIAL | renderer + 5/9 fixtures (parser, unknown-name, type, use-after-move, missing-capability); **missing 4**: array-bounds obligation, solver-policy rejection, vacuous contract, stale proof; gate doesn't assert the missing ones |
+| 11 Rich Elm/Gleam rendering | PARTIAL | FRONTEND families DONE: renderer + 5 fixtures (parser/unknown-name/type/use-after-move/missing-capability) gated for human↔JSON parity via the `Diagnostic` record / `--diagnostics-json`. The 4 named-but-absent families (array-bounds, solver-policy, vacuous-contract, stale-proof) are an **architectural bridge, not missing files** — see Active-risk note 3 / Recommendation |
 | 12a/b tolerant diagnostics driver (+ownership/cap) | DONE | `runFrontendDiagnostics`; b84678bf; partial-facts gate |
 | 12c parser decl-level error recovery | DONE | 0d507ef0 (statement-level recovery is future) |
 | 12d explicit `unknown`/`invalid` placeholder nodes | OPEN | no such Core/AST variants |
@@ -86,10 +86,20 @@ The Phase 3 lesson — don't trust literal-name or first-pass risk claims — ap
    reference (the H1 resolution). So the miscompiling path cannot be written in safe
    code; #44g is defense-in-depth for an unreachable case, correctly deferred (see
    the value-model memory / `VALUE_MODEL.md`). Not regression-locked, but not live.
-3. **Real but mild gaps** (feature-completeness, not soundness): #11 rich-diagnostic
-   fixtures (4/9 missing, gate silent on them); #29 schema-version rejection gate
-   absent (a future-proofing gap, no current misread); the #44 docs-drift gate is
-   absent (which is *why* ROADMAP staleness keeps recurring — see below).
+3. **#11 reclassified (2026-06-17): not "4 missing fixtures" — an architectural
+   bridge.** The four absent families (array-bounds, solver-policy, vacuous-contract,
+   stale-proof) are absent because obligation / proof / policy facts do not enter
+   the `Diagnostic` record / `--diagnostics-json` channel at all (verified: a
+   constant OOB index and a vacuous contract both yield `diagnostics: []`; they
+   render via `--report contracts` / the ObligationCore ledger). Completing them
+   means *defining how obligation/proof/policy facts become structured diagnostics
+   for JSON/LSP without duplicating the ledger/report model* — workload-gated, pull
+   it from a real consumer (LSP, CI JSON parser, editor integration). Adding 4
+   `.con` files would NOT satisfy the gate and would be building a half-bridge to a
+   misleading checklist.
+4. **Other mild gaps** (feature-completeness, not soundness): #29 schema-version
+   rejection gate absent (future-proofing, no current misread); #44 docs-drift gate
+   — now DONE (see below).
 
 **Conclusion: no Phase-3-class active risk exists in Phase 4.** The dual-truth-source
 work is genuinely Phase-3-local; Phase 4's open items are unbuilt features.
@@ -107,21 +117,21 @@ Reconciliation: add a status line per top-level item (done in this pass).
 Because **no active risk exists**, the choice is workload-driven / value-driven, not
 risk-driven. Ranked:
 
-1. **Reconcile the ROADMAP Phase 4 markers** (cheap, high-value — stops the recurring
-   "untracked partially-done phase" trap; done alongside this audit).
-2. **Then, if picking one open item**, the highest-leverage bounded candidates are:
-   - **#11 — complete the 4 missing rich-diagnostic fixtures + assert them in
-     `check_rich_diagnostics.sh`.** Concrete, bounded, locks a user-facing contract
-     that currently can bitrot. Best "one item" pick.
-   - **#44 docs-drift gate** — DONE 2026-06-17 (`scripts/tests/check_docs_drift.sh`,
-     Makefile + CI). Robust grep-pinned core: present-tense docs (CLAIMS_TODAY,
-     KNOWN_HOLES, the phase audits, CHANGELOG) may reference only real gates /
-     modules / doc-links / stdlib files, and only real `--report` kinds. The
-     ambitious Status:/Verified: + stale-prose-marker + command-honesty parts were
-     deferred as not mechanically robust (false-positive generators — "concrete" is
-     an adjective; a roadmap proposes future commands); the phase audits keep the
-     semantic side.
-   - **#29 schema-version rejection gate** — cheap future-proofing against silent
-     artifact misread; low urgency (no current misread).
+1. **Reconcile the ROADMAP Phase 4 markers** — DONE alongside this audit (cheap,
+   high-value — stops the recurring "untracked partially-done phase" trap).
+2. **#44 docs-drift gate** — DONE 2026-06-17 (`scripts/tests/check_docs_drift.sh`,
+   Makefile + CI). Robust grep-pinned core: present-tense docs (CLAIMS_TODAY,
+   KNOWN_HOLES, the phase audits, CHANGELOG) may reference only real gates /
+   modules / doc-links / stdlib files, and only real `--report` kinds. The
+   ambitious Status:/Verified: + stale-prose-marker + command-honesty parts were
+   deferred as not mechanically robust (false-positive generators — "concrete" is
+   an adjective; a roadmap proposes future commands); the phase audits keep the
+   semantic side.
+3. **NOT #11 as a quick pass** (reclassified — see Active-risk note 3): its four
+   absent families are an architectural bridge (obligation/proof/policy facts →
+   structured diagnostics for JSON/LSP), not missing files. Pull it from a real
+   consumer, don't build a half-bridge for the checklist.
+4. **If picking one cheap open item later**: **#29 schema-version rejection gate** —
+   future-proofing against silent artifact misread; low urgency (no current misread).
    Everything else (#18–#45) is genuinely workload-gateable — do not build speculatively
    (per the deferral-discipline principle).
