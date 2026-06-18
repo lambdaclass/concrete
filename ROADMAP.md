@@ -1037,6 +1037,14 @@ doc; do not build #18–#45 speculatively (deferral discipline).
       interpreter fixed-width mode that would shrink EXPECTED_DIVERGE to empty,
       and interpreter support for the INTERP_UNSUPPORTED shapes. The full
       interpreter-vs-compiled harness is item 18 (needs #18a).
+      The generator must cover the recurring TYPE/SLOT-DERIVATION-THROUGH-
+      REFERENCES family that the 2026-06-18 workload passes proved is still
+      bug-prone (see 44h) — specifically: array READS through a ref/ptr
+      (C10), array WRITES through a ref/ptr (44h), non-i64 element widths
+      (u8/i16/i32 stride), void/Unit payload and result slots (enum payloads,
+      if-expression results), and nested aggregate writes through a ref
+      (`(&mut s).a.b[i] = v`). These are exactly the shapes where lowering must
+      choose a storage type or stride and historically defaulted to i64/Unit.
     - 44g. [OPEN] Fix reference-typed return lowering as defense-in-depth after
       the no-returned-refs invariant makes it unreachable from safe code. Finding
       (2026-06-13): returning a reference-typed value materialized from a
@@ -1050,6 +1058,25 @@ doc; do not build #18–#45 speculatively (deferral discipline).
       remaining internal reference-valued return path returns the pointer value,
       not the pointee. This is not the H1 fix — it is hardening once H1 has been
       closed by subtraction.
+    - 44h. [DONE 2026-06-18] Fixed the TYPE/SLOT-DERIVATION-THROUGH-REFERENCES
+      family, found by the parser/decoder and fixed-buffer/no-alloc workload
+      passes. Three silent/crashing miscompiles, all where lowering chose a
+      storage type or stride and defaulted wrongly:
+      (1) `a[i] = v` through `&mut [T; N]` used the stored value's type (i64) as
+          the element type — an i64-strided GEP + clobbering `store i64` into a
+          `[i32]`/`[u8]` array → SILENT memory corruption. The write-path
+          analogue of C10 (which fixed array READS through a ref). Fixed in
+          `Lower.storeToPlace .arrayIndex` by resolving elemTy through one
+          ref/ptr/heap layer. Locked by `regress_mut_array_elem_writeback.con`.
+      (2) An if-expression as a value with no type hint (e.g. a match-arm value
+          `=> if c { 0 } else { 1 }`) defaulted its result type to Unit →
+          `alloca void`. Fixed in `Elab` (infer the if-expr type from its
+          branches). Locked by `regress_if_expr_match_arm.con`.
+      (3) An if-expression whose one branch diverges stored `void undef` into the
+          result slot from the dead branch. Fixed in `Lower` (only a live branch
+          writes the slot). Locked by `regress_if_expr_divergent_branch.con`.
+      Lesson: codegen bugs cluster around through-reference type resolution and
+      void/wrong-type slots; the 44f generator should target this family (above).
 45. Add the Phase 4 validation artifact:
     `examples/compiler_pipeline_probe/` plus
     `scripts/tests/check_phase4_pipeline.sh`. The fixture must run
