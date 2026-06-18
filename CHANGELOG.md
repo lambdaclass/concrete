@@ -10,6 +10,26 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### if-expression-as-value miscompile fixed — `alloca void` result slot (2026-06-18)
+
+- Found by a workload-driven pass (building a WebSocket frame decoder against the
+  real stdlib): an `if`-expression used as a **match-arm value** — e.g.
+  `match decode(c) { Result::Ok { v } => if v.opcode == 1 { 0 } else { 1 }, .. }` —
+  crashed codegen with `alloca void` (`void type only allowed for function
+  results`). Reachable from entirely idiomatic code; `let x: T = if …` was fine
+  because it carried a type hint.
+- Root cause in `Elab`: an if-expression's result type was `hint ?? .unit`, so a
+  hintless value position (a match arm) defaulted the type to Unit, and `Lower`
+  faithfully emitted `alloca void` for the result slot. Fix: a hintless
+  if-expression now infers its result type from its branches' trailing expression
+  (an if-expression's type *is* its branch type — which the existing code comment
+  already claimed but didn't do). The let-RHS path (with a hint) is unchanged.
+- Locked by `tests/programs/regress_if_expr_match_arm.con` (= 42). Full suite
+  1560/0; examples 123/0; `--full` baseline unchanged (29 pre-existing). The
+  workload also confirmed the byte/cursor decoder surface is otherwise sound —
+  bitfield extraction, big-endian multi-byte reads, variable-length (7/16/64-bit),
+  and nested Result/enum matching all codegen correctly.
+
 ### Unit-payload enum miscompile fixed — void-returning scoped callbacks (2026-06-14)
 
 - The external-workload friction pass found a real miscompile: a callback that

@@ -1,0 +1,24 @@
+// Regression: an `if`-expression used as a match-arm value (and any value
+// position with no type hint) emitted `%ifslot = alloca void`, which LLVM
+// rejects ("void type only allowed for function results"). Root cause: Elab
+// defaulted an if-expression's result type to `.unit` whenever it was
+// elaborated with no type hint — true for a match-arm value `=> if c {a} else {b}`
+// (a `let x: T = if ...` has a hint and was fine). Found by the parser/decoder
+// workload pass (a WebSocket frame decoder whose `match decode(..) { Ok => if .. }`
+// arm crashed codegen). Fixed in Elab: a hintless if-expression now infers its
+// result type from its branches' trailing expression.
+//
+// Expected: 42  (Left + x>0 -> 42; exercises both arms and both if-branches.)
+
+enum Copy Tag { Left, Right }
+
+fn pick(t: Tag, x: i64) -> i64 {
+    return match t {
+        Tag::Left  => if x > 0 { 42 } else { 7 },
+        Tag::Right => if x > 0 { 8 } else { 9 },
+    };
+}
+
+fn main() -> i64 {
+    return pick(Tag::Left, 1);
+}

@@ -447,8 +447,21 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
     let cCond ← elabExpr cond
     let cThen ← elabStmts then_
     let cElse ← elabStmts else_
-    -- Result type comes from the last statement in the then branch
-    let resultTy := match hint with | some t => t | none => .unit
+    -- Result type: an explicit hint wins; otherwise infer from the branches'
+    -- trailing expression — an if-expression's type IS its branch type. Defaulting
+    -- to `.unit` when there is no hint produced an `alloca void` result slot
+    -- whenever an if-expression was used as a value without one, e.g. a match-arm
+    -- value `=> if c { 0 } else { 1 }` (LLVM rejects `alloca void`).
+    let resultTy ← match hint with
+      | some t => pure t
+      | none =>
+        let lastExprOf := fun (stmts : List Stmt) =>
+          stmts.reverse.findSome? fun s => match s with | .expr _ e => some e | _ => none
+        match lastExprOf then_ with
+        | some e => peekExprType e
+        | none => match lastExprOf else_ with
+                  | some e => peekExprType e
+                  | none => pure .unit
     return .ifExpr cCond cThen cElse resultTy
 
   | .call _ fnName typeArgs args =>
