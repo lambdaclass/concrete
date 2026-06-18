@@ -71,6 +71,39 @@ The right MAL fix is a frame-bounded environment design, not a language workarou
 
 **Status:** Fixed. Added `clock_monotonic_ns() -> Int` builtin with `Clock` capability. Returns nanoseconds from monotonic clock via `clock_gettime`.
 
+### 12. No statement-vs-trailing-expression distinction in blocks/match arms
+
+**Status:** OPEN — filed 2026-06-18 (found by the CLI/config workload pass). This is
+an AST-modeling gap, not a checker bug; it needs a deliberate, coordinated change.
+
+Concrete does not distinguish `expr;` (a statement that should discard its value and
+type as `Unit`) from a trailing `expr` (which should be the block/arm's value). The
+parser collapses both into a single `AST.Stmt.expr` node with no record of the
+trailing `;`, so downstream passes cannot tell them apart.
+
+Two observable consequences:
+
+- A statement-position `match` whose arm block ends in a `;`-terminated expression
+  statement is typed by that expression instead of `Unit`, so it disagrees with a
+  unit arm and is rejected with a spurious `E0225` ("match arm type … does not match
+  first arm type …"). Minimal repro: `match x { 1 => { side(); }, _ => { } }` where
+  `side() -> i64`. Workaround: end statement-arms in a non-expression statement
+  (e.g. a `let`), or use a direct `=> expr` arm for value-producing arms.
+- The dual of gap #5 (if-*expression* in value position now works): a block still
+  has no trailing-expression value, so `=> { ...; value }` and `let x = { ...; value }`
+  are not expressible — you must use a direct `=> expr` / `let x = expr`.
+
+**Effect:** surprising arm-type errors in statement-position matches; no block-as-value
+form. Both stem from the same missing distinction.
+
+**Proper fix (deliberate, cross-cutting):** model the statement-vs-trailing-expression
+distinction in the **parser + AST** (e.g. a dedicated trailing-expression slot on a
+block, or a `discarded` flag on `Stmt.expr`), then teach the **checker** (block/arm
+type = the trailing expression's type, or `Unit` when the last item is a statement),
+the **formatter**, and **diagnostics** to respect it. This settles the
+"blocks have no trailing value" question at the same time. Found and root-caused, NOT
+half-patched — a checker-only workaround would be unsound or ad hoc.
+
 ## Not Actually Missing (Previously Claimed Incorrectly)
 
 - **print/println** — Exists in stdlib (`std.io`). The gap is standalone access, not absence.

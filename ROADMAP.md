@@ -459,7 +459,8 @@ maps), and #14–#17 (command plumbing, golden CLI matrix, compiler API boundary
 backend-contract report). The **open tail #18–#45** is unbuilt advanced tooling
 (inspect/`verify-ir`/events/`clean`/self-audit commands, perf budgets, fuzz
 harness, intern/query/incremental, schema-version + docs-drift + metamorphic
-gates, source-location modes, backend-IR-as-artifact, the #45 validation
+semantic checks + metamorphic gates, source-location modes,
+backend-IR-as-artifact, the #45 validation
 artifact) and is **workload-gateable — none of it is an active soundness or
 dual-truth-source risk** (verified: reports do not re-infer ownership/capability
 facts, and the #44g ref-return miscompile is unreachable because reference
@@ -1167,7 +1168,14 @@ rest of Phase 5 stays after that slab in the same linear queue.
 8. Add `docs/GRAMMAR.md`: LL(1) grammar, reserved keywords, attribute syntax,
    contract syntax, `ghost`/`assert`/`assume`, iteration syntax, and negative
    parser fixtures. This is a syntax reference, not a language-design
-   committee.
+   committee. As part of this grammar pass, model the distinction between
+   expression statements (`expr;`) and trailing value expressions in
+   blocks/match arms. Today `Stmt.expr` loses whether a semicolon discarded the
+   value, so a statement-position match arm ending in `side();` can be typed as
+   the side-effect expression's value instead of `Unit` (E0225). The fix should
+   define block/trailing-expression semantics, update parser/checker/formatter
+   behavior, and add fixtures for statement match arms, value match arms, and
+   mixed `Unit`/value arms.
 9. Add plain type aliases before the larger stdlib/examples slab:
    `type Digest = [u8; 32]`, `type Tag = [u8; 16]`, etc. Aliases must be
    transparent to layout, extraction, and proof unless explicitly declared as a
@@ -1505,6 +1513,18 @@ rest of Phase 5 stays after that slab in the same linear queue.
     lint, audit, record compiler-known target constants, and compare
     interpreter-vs-compiled behavior on macOS and Linux. It validates the
     language/tooling slab, not the full stdlib.
+42. [OPEN — filed 2026-06-18, see docs/LANGUAGE_GAPS.md #12] Model the
+    statement-vs-trailing-expression distinction in blocks and match arms. Today
+    the parser collapses `expr;` (a statement that should discard its value and
+    type as `Unit`) and a trailing `expr` (which should be the block/arm value)
+    into one `AST.Stmt.expr` node with no record of the `;`, so the checker cannot
+    tell them apart — a statement-position `match` arm ending in `side();` is typed
+    by `side()` and rejected with a spurious `E0225`, and `{ ...; value }` block-as-
+    value is not expressible (the dual of the now-fixed if-*expression* gap,
+    LANGUAGE_GAPS #5). DELIBERATE, cross-cutting change: a trailing-expression slot
+    (or a `discarded` flag) in the parser/AST, then checker block/arm-type rules,
+    formatter, and diagnostics. Found by the CLI/config workload pass and
+    root-caused; not to be patched checker-only.
 
 ## Phase 6: Standard Library And Core APIs
 
