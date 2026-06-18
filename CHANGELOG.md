@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Unary-prefix vs postfix precedence fixed — `!x.method()` (2026-06-18)
+
+- Found by a CLI/config workload pass (the natural `while !cur.is_eof()`). Unary
+  prefix operators (`!`, `-`, `~`) bound TIGHTER than postfix (`.field` /
+  `.method()` / `[i]`), so `!c.is_zero()` parsed as `(!c).is_zero()` (E0264 "no
+  method on Bool"), `-c.n` as `(-c).n`, `!c.arr[0]` as `(!c).arr[0]`. The
+  ubiquitous `!x.method()` form required parentheses; free-function calls `!f(x)`
+  were unaffected (a call is a primary). Fail-closed (type error, not miscompile),
+  but pervasive ergonomic friction.
+- Fix in `Parser`: unary `neg`/`not_`/`bitnot` now parse their operand's postfix
+  chain (`parsePrimary >>= parsePostfixNoAs`), exactly as borrow/deref (`&`/`&mut`/
+  `*`) already did — so `!c.m()` is `!(c.m())`, with `as` still binding loosest.
+  Locked by `tests/programs/regress_unary_postfix_precedence.con` (= 42). Full
+  suite 1563/0; examples 123/0; `--full` baseline unchanged (29).
+
 ### `&mut [T; N]` element-write miscompile fixed — wrong element stride (2026-06-18)
 
 - Found by a fixed-buffer/no-alloc workload pass. Assigning `a[i] = v` through a

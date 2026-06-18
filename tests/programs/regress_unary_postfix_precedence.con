@@ -1,0 +1,24 @@
+// Regression: unary prefix operators (! - ~) bound TIGHTER than postfix
+// (.field / .method() / [i]), so `!c.is_zero()` parsed as `(!c).is_zero()`
+// (E0264 'no method on Bool'), `-c.n` as `(-c).n`, etc. — forcing parens on the
+// ubiquitous `!x.method()` form. Free-function calls `!f(x)` were unaffected
+// (a call is a primary). Found by the CLI/config workload pass (`while
+// !cur.is_eof()`). Fixed in Parser: unary neg/not/bitnot now parse their
+// operand's postfix chain, the same way borrow/deref already did.
+//
+// Expected: 42  (!is_zero -> +40, !flag -> +2, (-c.n)+c.n -> 0).
+
+struct Copy C { n: i64, flag: bool }
+
+impl C {
+    fn is_zero(&self) -> bool { return self.n == 0; }
+}
+
+fn main() -> i64 {
+    let c: C = C { n: 5, flag: false };
+    let mut acc: i64 = 0;
+    if !c.is_zero() { acc = acc + 40; }
+    if !c.flag { acc = acc + 2; }
+    acc = acc + (-c.n) + c.n;
+    return acc;
+}

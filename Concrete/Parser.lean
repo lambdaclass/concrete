@@ -574,17 +574,20 @@ partial def parsePrimary : ParseM Expr := do
   | .minus =>
     let sp ← peekSpan
     advance
-    let operand ← parsePrimary
+    -- Postfix (`.field` / `.method()` / `[i]`) binds TIGHTER than a unary prefix:
+    -- `-c.n` is `-(c.n)`, not `(-c).n`. Parse the operand's postfix chain here, the
+    -- same way borrow/deref above do (without `as`, which binds loosest).
+    let operand ← parsePrimary >>= parsePostfixNoAs
     return .unaryOp sp .neg operand
   | .not_ =>
     let sp ← peekSpan
     advance
-    let operand ← parsePrimary
+    let operand ← parsePrimary >>= parsePostfixNoAs
     return .unaryOp sp .not_ operand
   | .tilde =>
     let sp ← peekSpan
     advance
-    let operand ← parsePrimary
+    let operand ← parsePrimary >>= parsePostfixNoAs
     return .unaryOp sp .bitnot operand
   | .lbracket =>
     -- Array literal: [expr, expr, ...] or [expr; count]
