@@ -1494,7 +1494,18 @@ partial def storeToPlace (place : CExpr) (newVal : SVal) : LowerM Unit := do
       emit (.load newObjVal (.reg tmp structTy) structTy)
       storeToPlace obj (.reg newObjVal structTy)
   | .arrayIndex arr index _ =>
-    let elemTy := match arr.ty with | .array t _ => t | _ => SVal.ty newVal
+    -- Resolve the element type THROUGH one ref/ptr/heap layer: when the array is
+    -- reached via `&mut [T; N]` (etc.), `arr.ty` is `.refMut (.array T N)`, not a
+    -- bare `.array`. Without the deref this fell back to the stored value's type
+    -- (i64 for an int literal), so `a[i] = v` through a `&mut [i32; N]` emitted an
+    -- i64-strided GEP + `store i64` — wrong offset and a clobbering 8-byte store.
+    -- This is the write-path analogue of the C10 read-path fix.
+    let elemTy := match arr.ty with
+      | .array t _ => t
+      | .ref (.array t _) | .refMut (.array t _)
+      | .ptrMut (.array t _) | .ptrConst (.array t _)
+      | .heap (.array t _) => t
+      | _ => SVal.ty newVal
     let iVal ← lowerExpr index
     let storeVal ← if SVal.ty newVal == elemTy then pure newVal else do
       let castDst ← freshReg

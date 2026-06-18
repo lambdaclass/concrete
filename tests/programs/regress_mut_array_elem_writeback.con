@@ -1,0 +1,27 @@
+// Regression: assigning `a[i] = v` through a `&mut [T; N]` parameter (the array
+// reached via a reference) used the WRONG element type. `storeToPlace` resolved
+// the element type only from a bare `.array`, so for `arr.ty = .refMut (.array T N)`
+// it fell back to the stored value's type — i64 for an int literal — emitting an
+// i64-strided GEP and a clobbering `store i64` into a `[i32]`/`[u8]` array. Writes
+// landed at the wrong offsets and corrupted adjacent slots: a SILENT miscompile
+// (data corruption), not fail-closed. This is the write-path analogue of C10
+// (which fixed array READS through a reference). Found by the fixed-buffer/no-alloc
+// workload pass. Fixed in Lower: `storeToPlace .arrayIndex` resolves the element
+// type through one ref/ptr/heap layer.
+//
+// Expected: 26741  (position-weighted: a0*1 + a1*10 + a2*100 + a3*1000 with
+// a = [11,33,44,22] = 11 + 330 + 4400 + 22000. The bug scrambled the writes
+// (a became [11,0,33,0]), so any mis-stride fails this exactly.)
+
+fn fill(a: &mut [i32; 4]) {
+    a[0] = 11;
+    a[1] = 33;
+    a[2] = 44;
+    a[3] = 22;
+}
+
+fn main() -> i64 {
+    let mut a: [i32; 4] = [0; 4];
+    fill(&mut a);
+    return (a[0] + a[1] * 10 + a[2] * 100 + a[3] * 1000) as i64;
+}

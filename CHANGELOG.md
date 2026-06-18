@@ -10,6 +10,27 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### `&mut [T; N]` element-write miscompile fixed — wrong element stride (2026-06-18)
+
+- Found by a fixed-buffer/no-alloc workload pass. Assigning `a[i] = v` through a
+  `&mut [T; N]` parameter (an array reached via a reference) used the WRONG element
+  type and **silently corrupted memory** — not fail-closed. `fill(a: &mut [i32;4])`
+  doing `a[0]=11; a[1]=33; a[2]=44; a[3]=22` read back as `[11, 0, 33, 0]`: the
+  stores landed at the wrong offsets and clobbered adjacent slots.
+- Root cause in `Lower` (`storeToPlace .arrayIndex`): the element type was resolved
+  only from a bare `.array`, so for `arr.ty = .refMut (.array T N)` it fell back to
+  the stored value's type — i64 for an int literal — emitting an i64-strided
+  `getelementptr` and a clobbering `store i64` into an `[i32]`/`[u8]` array. This is
+  the write-path analogue of C10 (which fixed array READS through a reference). Fix:
+  resolve the element type through one ref/ptr/heap layer.
+- Affected any element write through a `&mut`/`*mut` array with a non-i64 element
+  type (buffer fills, in-place transforms, mask/unmask loops). Locked by
+  `tests/programs/regress_mut_array_elem_writeback.con` (= 26741, position-weighted
+  so any mis-stride fails). Full suite 1562/0; examples 123/0; `--full` baseline
+  unchanged (29). The no-alloc array surface is otherwise sound: local `[T; N]`
+  read/write, 2D arrays, array-of-structs element mutation, nested struct-with-array
+  deep mutation, and Copy-struct-with-array return-by-value all codegen correctly.
+
 ### if-expression-as-value miscompile fixed — `alloca void` result slot (2026-06-18)
 
 - Found by a workload-driven pass (building a WebSocket frame decoder against the
