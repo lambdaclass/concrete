@@ -24,8 +24,17 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
   if-expression now infers its result type from its branches' trailing expression
   (an if-expression's type *is* its branch type — which the existing code comment
   already claimed but didn't do). The let-RHS path (with a hint) is unchanged.
+- A follow-up probe of the expression-position family (codegen bugs cluster) found
+  a SECOND, distinct void bug: an if-expression in value position whose one branch
+  **diverges** (e.g. `if c { return .. } else { 8 }`) emitted `store void undef`
+  into the result slot from the diverging branch. Root cause in `Lower`: the
+  branch-value store was emitted unconditionally, before checking whether the
+  branch had terminated. Fix: only a live (non-terminated) branch writes the slot.
+  Locked by `tests/programs/regress_if_expr_divergent_branch.con` (= 8). (The
+  degenerate both-branches-diverge case — `let r = if c { return 1 } else { return 2 }`
+  — is fail-closed: rejected by SSA-verify E0703, never miscompiled.)
 - Locked by `tests/programs/regress_if_expr_match_arm.con` (= 42). Full suite
-  1560/0; examples 123/0; `--full` baseline unchanged (29 pre-existing). The
+  1561/0; examples 123/0; `--full` baseline unchanged (29 pre-existing). The
   workload also confirmed the byte/cursor decoder surface is otherwise sound —
   bitfield extraction, big-endian multi-byte reads, variable-length (7/16/64-bit),
   and nested Result/enum matching all codegen correctly.

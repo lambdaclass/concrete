@@ -1,0 +1,21 @@
+// Regression: an if-expression in value position whose ONE branch diverges
+// (return/break/continue) stored `void undef` into the result slot from the
+// diverging branch. Lower emitted the branch-value store unconditionally, BEFORE
+// checking whether the branch had terminated, so a `{ return .. }` branch (no
+// value) produced `store void undef` — dead code after the terminator, but LLVM
+// still type-checks it and rejects the void store. Found by the expression-
+// position probe that followed the if-expr-as-value type fix
+// (regress_if_expr_match_arm.con). Fixed in Lower: only a live (non-terminated)
+// branch writes the if-expression's result slot.
+//
+// Expected: 8  (c=false -> else branch value 8; the then branch returns, so it
+// is the live path only when c=true and must NOT store into the slot).
+
+fn pick(c: bool) -> i64 {
+    let r: i64 = if c { return 99; } else { 8 };
+    return r;
+}
+
+fn main() -> i64 {
+    return pick(false);
+}

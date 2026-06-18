@@ -1320,20 +1320,25 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     emit (.alloca resultSlot ty)
     let preIfVars ← snapshotVars
     terminateBlock (.condBr condVal thenLabel elseLabel)
-    -- Then block
+    -- Then block. Compute termination BEFORE storing the branch value: a branch
+    -- that diverged (ended in return/break/continue) has no value, so storing
+    -- `lastExprVal` would emit `store void undef` into the result slot — dead code
+    -- after the terminator, but LLVM still type-checks it and rejects the void
+    -- store. Only the live, value-producing branch writes the slot.
     startBlock thenLabel
     lowerStmts then_
-    let thenVal ← lastExprVal then_ ty
-    -- Cast if branch result type differs from expected type (e.g., Int → i32)
-    let thenVal ← if thenVal.ty != ty && thenVal.ty != .unit then do
-      let castReg ← freshReg "ifcast."
-      emit (.cast castReg thenVal ty)
-      pure (.reg castReg ty)
-    else pure thenVal
-    emit (.store thenVal (.reg resultSlot ty))
+    let term1 ← currentBlockTerminated
+    if !term1 then
+      let thenVal ← lastExprVal then_ ty
+      -- Cast if branch result type differs from expected type (e.g., Int → i32)
+      let thenVal ← if thenVal.ty != ty && thenVal.ty != .unit then do
+        let castReg ← freshReg "ifcast."
+        emit (.cast castReg thenVal ty)
+        pure (.reg castReg ty)
+      else pure thenVal
+      emit (.store thenVal (.reg resultSlot ty))
     let thenEndVars ← snapshotVars
     let thenEndLabel ← getCurrentLabel
-    let term1 ← currentBlockTerminated
     if !term1 then
       terminateBlock (.br mergeLabel)
     -- Else block
@@ -1341,17 +1346,18 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     setState { s with vars := preIfVars }
     startBlock elseLabel
     lowerStmts else_
-    let elseVal ← lastExprVal else_ ty
-    -- Cast if branch result type differs from expected type (e.g., Int → i32)
-    let elseVal ← if elseVal.ty != ty && elseVal.ty != .unit then do
-      let castReg ← freshReg "ifcast."
-      emit (.cast castReg elseVal ty)
-      pure (.reg castReg ty)
-    else pure elseVal
-    emit (.store elseVal (.reg resultSlot ty))
+    let term2 ← currentBlockTerminated
+    if !term2 then
+      let elseVal ← lastExprVal else_ ty
+      -- Cast if branch result type differs from expected type (e.g., Int → i32)
+      let elseVal ← if elseVal.ty != ty && elseVal.ty != .unit then do
+        let castReg ← freshReg "ifcast."
+        emit (.cast castReg elseVal ty)
+        pure (.reg castReg ty)
+      else pure elseVal
+      emit (.store elseVal (.reg resultSlot ty))
     let elseEndVars ← snapshotVars
     let elseEndLabel ← getCurrentLabel
-    let term2 ← currentBlockTerminated
     if !term2 then
       terminateBlock (.br mergeLabel)
     -- Merge block with phi nodes for variables that differ between branches
