@@ -458,8 +458,8 @@ rendering [5/9 fixtures], tolerant partial facts, function-granularity source
 maps), and #14–#17 (command plumbing, golden CLI matrix, compiler API boundary,
 backend-contract report). The **open tail #18–#45** is unbuilt advanced tooling
 (inspect/`verify-ir`/events/`clean`/self-audit commands, perf budgets, fuzz
-harness, intern/query/incremental, schema-version + docs-drift + metamorphic
-semantic checks + metamorphic gates, source-location modes,
+harness, intern/query/incremental, schema-version + docs-drift semantic checks
+and metamorphic gates, source-location modes,
 backend-IR-as-artifact, the #45 validation
 artifact) and is **workload-gateable — none of it is an active soundness or
 dual-truth-source risk** (verified: reports do not re-infer ownership/capability
