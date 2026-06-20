@@ -46,6 +46,7 @@ structure VarInfo where
   borrowedFrom : Option String := none
   mutable : Bool := true  -- whether the variable was declared with mut
   movedAt : Option Span := none  -- where it was consumed (for use-after-move related spans)
+  declSpan : Option Span := none  -- where it was declared (locates unconsumed-linear E0208)
   deriving Repr
 
 structure TypeEnv where
@@ -549,10 +550,10 @@ def lookupVarTy (name : String) : CheckM (Option Ty) := do
   | some info => return some info.ty
   | none => return none
 
-def addVar (name : String) (ty : Ty) (mutable : Bool := true) : CheckM Unit := do
+def addVar (name : String) (ty : Ty) (mutable : Bool := true) (declSpan : Option Span := none) : CheckM Unit := do
   let env ← getEnv
   let copy ← isCopyType ty
-  let info : VarInfo := { ty, state := .unconsumed, isCopy := copy, loopDepth := env.loopDepth, mutable }
+  let info : VarInfo := { ty, state := .unconsumed, isCopy := copy, loopDepth := env.loopDepth, mutable, declSpan }
   let env ← getEnv
   setEnv { env with vars := (name, info) :: env.vars }
 
@@ -708,7 +709,9 @@ def checkScopeExit (varNames : List String) (span : Option Span := none) : Check
     match env.vars.lookup name with
     | some info =>
       if !info.isCopy && info.state != .consumed && info.state != .reserved then
-        throwCheck (.linearVariableNeverConsumed name) span
+        -- Point at the variable's declaration when we have it (E0208 used to be
+        -- spanless); fall back to the scope-exit span.
+        throwCheck (.linearVariableNeverConsumed name) (info.declSpan.orElse (fun _ => span))
     | none => pure ()
 
 -- ============================================================
@@ -2095,7 +2098,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let finalTy ← match ty with
       | some t => resolveType t
       | none => pure valTy
-    addVar name finalTy mutable
+    addVar name finalTy mutable (declSpan := some stmt.getSpan)
     match value with
     | .borrow _ (.ident _ sourceName) =>
       modify fun env =>

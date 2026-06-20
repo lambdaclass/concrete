@@ -308,6 +308,19 @@ or project layout.
 4. Improve diagnostics for parser, resolver, type checker, ownership, linearity,
    capability, unsupported-construct, and codegen/interpreter mismatch errors:
    every diagnostic has a source span, reason, and next action.
+   STATUS (2026-06-20): the structured `Diagnostic` record (span / reason / hint
+   / next-action / code, human+JSON from one record) is in place and the SPAN
+   FLOOR is now gated by `scripts/tests/check_diagnostics_quality.sh` (Makefile
+   `test-diagnostics-quality` + CI): representative parser / resolver / type /
+   linearity / capability diagnostics all carry a source span, and the capability
+   diagnostic is pinned as the reason+next-action exemplar. The audit fixed a
+   location-less diagnostic — E0208 (unconsumed linear variable) was spanless; it
+   now points at the variable's declaration (`VarInfo.declSpan`, see CHANGELOG).
+   REMAINING (the actual gap, iterative per-code content work): populate `reason`
+   and `next-action` on the remaining codes — today parser/resolver/type carry a
+   span but not reason/next-action; only capability has the full set. Also the two
+   #1 follow-ups (nonexistent-import says "not public"; circular-import lacks an
+   E-code/span) are diagnostic-quality items that belong here.
 5. Define strings, bytes, paths, and OS strings: `Bytes` for raw data, `Text`
    for validated UTF-8, and `Path`/`OsString` for OS-native boundaries. Specify
    literals, ownership, slicing, indexing, formatting, conversions, parser/JSON

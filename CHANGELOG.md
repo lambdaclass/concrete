@@ -10,6 +10,17 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Diagnostics-quality: E0208 (unconsumed linear variable) now has a source span (2026-06-20)
+
+- Found by a Phase 5 #4 audit. E0208 ("linear variable 'x' was never consumed")
+  was location-less — it printed the file but no `line:col`, the worst diagnostic
+  failure. `VarInfo` gained a `declSpan` populated at the `let` declaration, and
+  `checkScopeExit` now points the diagnostic at the variable's declaration. Gated
+  by `scripts/tests/check_diagnostics_quality.sh` (Phase 5 #4 span floor), which
+  also asserts parser/resolver/type/linearity/capability diagnostics all carry a
+  span. (Reason/next-action enrichment on the remaining codes is the tracked #4
+  content work.) Full suite 1564/0; snapshots green.
+
 ### `concrete test` (project mode) miscompile fixed — duplicate `@__concrete_argc` (2026-06-20)
 
 - Found by a Phase 5 #3 audit of `concrete test`. Project-mode `concrete test`

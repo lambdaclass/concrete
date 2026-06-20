@@ -315,6 +315,9 @@ jobs:
       - name: `concrete test` gate (Phase 5 #3 — project test runner)
         run: bash scripts/tests/check_concrete_test.sh
 
+      - name: Diagnostics-quality gate (Phase 5 #4 — span floor)
+        run: bash scripts/tests/check_diagnostics_quality.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 
