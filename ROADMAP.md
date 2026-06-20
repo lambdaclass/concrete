@@ -1444,11 +1444,14 @@ gate.
     was made value-bearing too), and the checker, elaborator, lowering, and
     formatter all respect it. Fixes the spurious `E0225` statement-match-arm class
     (`=> { side(); }` is now Unit and agrees with a unit arm `{ }`). Done in 3
-    staged commits (flag threading → semantics flip → formatter), each full-suite
-    green; locked by `tests/programs/regress_stmt_match_arm_unit.con`.
+    implementation stages plus the docs update (flag threading → semantics flip
+    → formatter → docs), each full-suite green; locked by
+    `tests/programs/regress_stmt_match_arm_unit.con`.
     REMAINING (deliberately deferred, separate follow-ups, not the bug):
     - braced block-as-value in arbitrary expression position (`let x = { …; v }`)
       is still not parsed (additive grammar feature);
+    - implicit trailing-return function bodies remain out of scope; function
+      bodies still require explicit `return`;
     - the formatter block-wraps a direct value-arm containing an if-expression
       (`=> if c {1} else {2}`) so it does not round-trip — fix by rendering
       single-value-expr arms directly instead of `=> { … }`.
