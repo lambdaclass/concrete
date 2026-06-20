@@ -124,7 +124,7 @@ These are features, not the bug; keep them out so the fix stays bounded.
    agrees with a unit arm) and keep the existing value-arm fixtures green.
 3. **Formatter + diagnostics.** Round-trip formatting (value expr no `;`,
    statement with `;`); confirm E0225 only fires on real value disagreement.
-4. **Docs + gates.** Update LANGUAGE_GAPS #12 → fixed, ROADMAP #42 → done, this
+4. **Docs + gates.** Update LANGUAGE_GAPS #12 → fixed, ROADMAP #36 → done, this
    doc → implemented; CHANGELOG entry; `--full` baseline unchanged.
 
 ## Risks

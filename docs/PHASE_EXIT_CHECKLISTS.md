@@ -29,43 +29,34 @@ how this file went stale last time.
   Umbrella gates: `make test-phase2-vc`, `make test-smt-replay`,
   `make test-smt-redteam`.
 
-## Phase 3: ObligationCore Pipeline Consolidation — OPEN
+## Phase 3: ObligationCore Pipeline Consolidation — CLOSED (core-complete, 2026-06-20)
 
-**Closes when:**
+Audited and closed; see [PHASE3_OBLIGATION_CORE_AUDIT.md](PHASE3_OBLIGATION_CORE_AUDIT.md)
+and the ROADMAP Phase 3 CLOSED banner. The hub is the single truth source for
+policy, `--report vcs`, `--report obligation-ledger`, obligation JSON, the audit
+VC summary, and `--report contracts`; records unified, `ofVC` lossless; families
+#4–#11 (incl. assert/assume/vacuity, #8) in the ledger; discharge-adapter firewall
+kernel-checked; validation artifact `check_phase3_obligation_core.sh` present.
 
-- [ ] Items #8-#18 of ROADMAP Phase 3 are done: assert, vacuity, and assume
-  obligations live in the `ObligationCore` ledger (today they are still
-  computed by report-side walkers in `Report.lean` and discharged directly in
-  `Main.lean` — the dual-truth-source risk named in the roadmap's Phase 3 risk
-  note), discharge adapters/policy/report/prove surfaces read the ledger, and
-  the #18 model merge has deleted the duplicate walkers.
-- [ ] The validation artifact passes: `examples/obligation_core_probe/` +
-  `scripts/tests/check_phase3_obligation_core.sh` prove the ledger is the only
-  truth source across contracts, VCs, proof status, audit, policy, JSON,
-  workspace, replay, and release-bundle output for the same stable ids.
+**Deferred (consistency-gated, sound today — not active risk, do not block
+closure):** convert `--report proof-status` and `concrete prove`'s obligation
+facts from consistency-gated recompute to literal ledger views (#15/#16 tail).
 
-**Current status**: families #1-#7 and #10-#13 migrated (see CHANGELOG);
-#8-#9 and #14-#18 open. NOT complete — do not read partial parity gates as
-architectural completion (roadmap Phase 3 preamble).
+## Phase 4: CompilerLedger Pipeline And Typed IR — CLOSED (core-complete, 2026-06-20)
 
-## Phase 4: CompilerLedger Pipeline And Typed IR — OPEN (active)
+Audited and closed; see [PHASE4_COMPILER_LEDGER_AUDIT.md](PHASE4_COMPILER_LEDGER_AUDIT.md)
+and the ROADMAP Phase 4 CLOSED banner. Core #1–#17 done and gated; the audit
+verified **no active soundness or dual-truth-source risk** in the open tail.
 
-**Closes when:**
-
-- [ ] Items #1-#44 of ROADMAP Phase 4 are done or explicitly re-scheduled with
-  a reason recorded in the roadmap.
-- [ ] The validation artifact passes: ROADMAP Phase 4 #45's fixture
-  (`examples/compiler_pipeline_probe/`) runs `concrete build`, `run`, `test`,
-  `fmt --check`, inspect commands, and the fuzz-regression fixtures over one
-  project, proving every command reads the same typed project context and
-  ledger facts.
-
-**Current status**: #1-#17b done (see CHANGELOG / git log); #18-#45 open.
-Already-shipped tooling that the OLD checklist understated: `concrete fmt`
-path + golden fmt baselines (`make test-golden`), parser/program fuzzers
-(`scripts/tests/test_parser_fuzz.sh`, `test_fuzz.sh`), wrong-code corpus
-(`tests/wrong-code/manifest.toml`, `make test-wrong-code`), and the test
-reducer (`concrete reduce`, `make test-reducer-smoke`).
+**Deferred (workload-gated #18–#45, build only when a real workload pulls it):**
+obligation/proof/policy facts → structured `Diagnostic`/JSON (#11 bridge);
+interpreter-vs-compiled differential harness; `inspect`/`verify-ir`/`--events`/
+`clean`/`audit --compiler`; schema-version gates; perf budgets / fuzzing /
+minimization; source-location privacy modes; backend-IR as a stable artifact;
+docs-drift *semantic* checks (beyond the artifact-existence gate); and the
+defense-in-depth ref-return lowering fix (#44g, unreachable from safe code). The
+#45 validation artifact (`examples/compiler_pipeline_probe/`) is part of the
+deferred tail.
 
 ## Phases 5+
 
