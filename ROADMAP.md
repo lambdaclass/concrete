@@ -3,6 +3,12 @@
 This document is the active execution plan. It answers one question:
 **what should happen next, in what order?**
 
+**Current frontier: Phase 5.** Phases 1–4 are CLOSED (core-complete): Phases 1–2
+were folded into CHANGELOG.md and design docs; Phases 3 and 4 retain deferred,
+no-active-soundness-risk tails (consistency-gated for #3, workload-gated for #4)
+documented under their CLOSED banners below. Start new work at Phase 5 unless a
+real workload pulls a specific deferred item forward.
+
 The roadmap is linear. Phases are ordered, and items inside a phase are ordered
 unless explicitly marked as a constraint or a deferred research note. Read the
 document as one queue:
@@ -234,6 +240,16 @@ audience, or stop — before any Phase 11+ item may start.
 
 ## Phase 3: ObligationCore Pipeline Consolidation
 
+**CLOSED — core-complete (2026-06-20).** The hub is the single truth source for
+policy, `--report vcs`, `--report obligation-ledger`, obligation JSON, the audit
+VC summary, and `--report contracts`; records unified, `ofVC` lossless; families
+#4–#11 in the ledger; discharge-adapter firewall kernel-checked. Audit:
+[docs/PHASE3_OBLIGATION_CORE_AUDIT.md](docs/PHASE3_OBLIGATION_CORE_AUDIT.md).
+DEFERRED (consistency-gated, sound today — NOT active soundness risks, so they do
+not block closure): convert `--report proof-status` and `concrete prove`'s
+obligation facts from consistency-gated recompute to literal ledger views (#15/
+#16 tail). The active roadmap frontier is Phase 5.
+
 Goal: make every proof, contract, runtime-safety, assertion, SMT, policy, audit,
 and proof-authoring surface read from one typed obligation ledger instead of
 parallel report-specific walkers.
@@ -429,6 +445,24 @@ ledger-parity gate per #17.
     `scripts/tests/check_phase3_obligation_core.sh` as the final umbrella gate.
 
 ## Phase 4: CompilerLedger Pipeline And Typed IR
+
+**CLOSED — core-complete (2026-06-20).** Core #1–#17 done and gated:
+`ProjectContext`, `CompilerLedger` fact store, pass-chain artifacts, one
+diagnostic schema + rich rendering, tolerant partial facts, function-granularity
+source maps, command plumbing, CLI matrix, compiler API boundary, backend-contract
+report, the discharge-adapter firewall, and the docs-drift gate (artifact-existence
+core). Audit:
+[docs/PHASE4_COMPILER_LEDGER_AUDIT.md](docs/PHASE4_COMPILER_LEDGER_AUDIT.md). The
+audit verified there is **no active soundness or dual-truth-source risk** in the
+open tail (reports don't re-infer ownership/capability; the #44g ref-return
+miscompile is unreachable — reference returns are rejected at the type level).
+DEFERRED (workload-gated #18–#45, do not build speculatively): obligation/proof/
+policy facts → structured `Diagnostic`/JSON (the #11 bridge); interpreter-vs-
+compiled differential harness; `inspect`/`verify-ir`/`--events`/`clean`/`audit
+--compiler`; schema-version gates; perf budgets / fuzzing / minimization;
+source-location privacy modes; backend-IR as a stable artifact; docs-drift
+*semantic* checks (beyond the artifact-existence gate); and the defense-in-depth
+ref-return lowering fix (#44g, unreachable). The active roadmap frontier is Phase 5.
 
 Goal: make the ordinary compiler pipeline a typed, replayable fact pipeline.
 Project loading, parsing, resolution, canonicalization, type checking,
