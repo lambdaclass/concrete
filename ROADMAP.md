@@ -1435,18 +1435,23 @@ gate.
     lint, audit, record compiler-known target constants, and compare
     interpreter-vs-compiled behavior on macOS and Linux. It validates the
     language/tooling slab, not the full stdlib.
-36. [OPEN — filed 2026-06-18, see docs/LANGUAGE_GAPS.md #12] Model the
-    statement-vs-trailing-expression distinction in blocks and match arms. Today
-    the parser collapses `expr;` (a statement that should discard its value and
-    type as `Unit`) and a trailing `expr` (which should be the block/arm value)
-    into one `AST.Stmt.expr` node with no record of the `;`, so the checker cannot
-    tell them apart — a statement-position `match` arm ending in `side();` is typed
-    by `side()` and rejected with a spurious `E0225`, and `{ ...; value }` block-as-
-    value is not expressible (the dual of the now-fixed if-*expression* gap,
-    LANGUAGE_GAPS #5). DELIBERATE, cross-cutting change: a trailing-expression slot
-    (or a `discarded` flag) in the parser/AST, then checker block/arm-type rules,
-    formatter, and diagnostics. Found by the CLI/config workload pass and
-    root-caused; not to be patched checker-only.
+36. [DONE (core) — implemented 2026-06-20; see docs/STATEMENT_EXPRESSION_MODEL.md
+    and LANGUAGE_GAPS #12] Model the statement-vs-trailing-expression distinction
+    in blocks and match arms. `AST.Stmt.expr` / `Core.CStmt.expr` now carry an
+    `isValue` flag: a trailing expression with no `;` is the block/arm value, a
+    `;`-terminated one is a discarded statement (Unit). The parser sets it
+    (`parseExprBlock` + the direct `=> expr` arm; the while-expression else branch
+    was made value-bearing too), and the checker, elaborator, lowering, and
+    formatter all respect it. Fixes the spurious `E0225` statement-match-arm class
+    (`=> { side(); }` is now Unit and agrees with a unit arm `{ }`). Done in 3
+    staged commits (flag threading → semantics flip → formatter), each full-suite
+    green; locked by `tests/programs/regress_stmt_match_arm_unit.con`.
+    REMAINING (deliberately deferred, separate follow-ups, not the bug):
+    - braced block-as-value in arbitrary expression position (`let x = { …; v }`)
+      is still not parsed (additive grammar feature);
+    - the formatter block-wraps a direct value-arm containing an if-expression
+      (`=> if c {1} else {2}`) so it does not round-trip — fix by rendering
+      single-value-expr arms directly instead of `=> { … }`.
 
 ## Phase 7: Standard Library And Core APIs
 

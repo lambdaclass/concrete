@@ -71,10 +71,23 @@ The right MAL fix is a frame-bounded environment design, not a language workarou
 
 **Status:** Fixed. Added `clock_monotonic_ns() -> Int` builtin with `Clock` capability. Returns nanoseconds from monotonic clock via `clock_gettime`.
 
-### 12. No statement-vs-trailing-expression distinction in blocks/match arms
+### ~~12. No statement-vs-trailing-expression distinction in blocks/match arms~~ — FIXED (core)
 
-**Status:** OPEN — filed 2026-06-18 (found by the CLI/config workload pass). This is
-an AST-modeling gap, not a checker bug; it needs a deliberate, coordinated change.
+**Status:** FIXED (core) 2026-06-20. `AST.Stmt.expr` / `Core.CStmt.expr` carry an
+`isValue` flag: a trailing expression with no `;` is the block/arm value, a
+`;`-terminated one is a discarded statement (`Unit`). Parser sets it (`parseExprBlock`,
+the direct `=> expr` arm, and the while-expression else branch); checker, elaborator,
+lowering, and formatter respect it. The spurious **E0225** statement-match-arm class is
+gone (`=> { side(); }` is now `Unit` and agrees with a unit arm). Done in 3 staged
+commits (flag threading → semantics flip → formatter); locked by
+`tests/programs/regress_stmt_match_arm_unit.con`. See ROADMAP #36 and
+[STATEMENT_EXPRESSION_MODEL.md](STATEMENT_EXPRESSION_MODEL.md). Deferred follow-ups
+(not the bug): braced block-as-value in arbitrary position (`let x = { …; v }`) is
+still not parsed; and the formatter doesn't round-trip a direct value-arm containing an
+if-expression (block-wraps it). Original report below.
+
+**(original)** This is an AST-modeling gap, not a checker bug; it needs a deliberate,
+coordinated change.
 
 Concrete does not distinguish `expr;` (a statement that should discard its value and
 type as `Unit`) from a trailing `expr` (which should be the block/arm's value). The

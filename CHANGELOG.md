@@ -10,6 +10,32 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Statement vs trailing-expression distinction — fixes the E0225 match-arm class (2026-06-20)
+
+- The AST collapsed `expr;` (a discarded statement → `Unit`) and a trailing `expr`
+  (a block/arm value) into one `Stmt.expr` with no record of the `;`, so a
+  statement-position match arm `=> { side(); }` was typed by `side()` and rejected
+  with a spurious **E0225** ("match arm type … does not match first arm type"). The
+  dual gap: a block had no trailing-expression value. (ROADMAP #36 / LANGUAGE_GAPS
+  #12, found by the CLI/config workload pass; design in
+  `docs/STATEMENT_EXPRESSION_MODEL.md`.)
+- Fixed by modeling the distinction (Option A): `AST.Stmt.expr` and `Core.CStmt.expr`
+  carry an `isValue : Bool` flag — a trailing expression with no `;` is the value,
+  a `;`-terminated one is a discarded statement (`Unit`). The parser sets it
+  (`parseExprBlock`, the direct `=> expr` arm, and the while-expression `else`
+  branch, made value-bearing); the checker, elaborator, lowering, and formatter all
+  respect it. Implemented in three staged, each-full-suite-green commits: flag
+  threading (behavior-preserving) → semantics flip → formatter.
+- Effect: `=> { side(); }` is now `Unit` and agrees with a unit arm; value arms
+  (`=> expr`, `=> if c {..} else {..}`, trailing `=> { …; v }`) and let-RHS
+  if-expressions are unchanged. Locked by
+  `tests/programs/regress_stmt_match_arm_unit.con` (= 42). Full suite 1564/0;
+  examples 123/0; `--full` baseline unchanged (29).
+- Deferred follow-ups (kept out per bounded scope): braced block-as-value in
+  arbitrary expression position (`let x = { …; v }`), implicit trailing-`return`
+  function bodies, and a formatter fix to render single-value-expr arms directly
+  (it block-wraps `=> if …`, so that one construct doesn't round-trip).
+
 ### Unary-prefix vs postfix precedence fixed — `!x.method()` (2026-06-18)
 
 - Found by a CLI/config workload pass (the natural `while !cur.is_eof()`). Unary

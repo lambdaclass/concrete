@@ -1,7 +1,21 @@
 # Statement vs Trailing-Expression Model (design)
 
-Status: design — scoping pass for ROADMAP Phase 6 #36 / LANGUAGE_GAPS #12
+Status: IMPLEMENTED (core) 2026-06-20 — ROADMAP #36 / LANGUAGE_GAPS #12
 Date: 2026-06-20
+
+> **Implemented as designed (Option A).** `AST.Stmt.expr` / `Core.CStmt.expr`
+> carry an `isValue` flag; the parser sets it (`parseExprBlock`, the direct
+> `=> expr` arm, and — a scope correction found during implementation — the
+> while-expression `else` branch, now value-bearing); checker, elaborator,
+> lowering, and formatter respect it. Landed in 3 staged commits (flag threading
+> → semantics flip → formatter), each full-suite green; the spurious E0225
+> statement-match-arm class is fixed; locked by
+> `tests/programs/regress_stmt_match_arm_unit.con`. Deferred follow-ups (kept out,
+> per the bounded scope): braced block-as-value in arbitrary expression position
+> (`let x = { …; v }`), implicit trailing-`return` function bodies, and a
+> formatter fix to render single-value-expr arms directly (it currently
+> block-wraps `=> if …`, breaking round-trip). The design below is the as-built
+> plan.
 
 ## Problem
 
