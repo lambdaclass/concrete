@@ -3,25 +3,31 @@
 This document is the active execution plan. It answers one question:
 **what should happen next, in what order?**
 
-**Current frontier: Phase 5.** Phases 1–4 are CLOSED (core-complete): Phases 1–2
-were folded into CHANGELOG.md and design docs; Phases 3 and 4 retain deferred,
-no-active-soundness-risk tails (consistency-gated for #3, workload-gated for #4)
-documented under their CLOSED banners below. Start new work at Phase 5 unless a
-real workload pulls a specific deferred item forward.
+**Current frontier: Phase 5.** Phases 1–4 are done and have been removed from this
+plan. Phases 1–2 were folded into CHANGELOG.md and design docs; Phases 3–4 closed
+(core-complete) — their detailed records are
+[docs/PHASE3_OBLIGATION_CORE_AUDIT.md](docs/PHASE3_OBLIGATION_CORE_AUDIT.md) and
+[docs/PHASE4_COMPILER_LEDGER_AUDIT.md](docs/PHASE4_COMPILER_LEDGER_AUDIT.md), and
+their few deferred, no-active-soundness-risk tails were folded into later phases:
+proof-status / `prove` literal-ledger views → Phase 11; interpreter-vs-compiled
+harness + ref-return hardening → Phase 14; `audit --compiler` self-audit → Phase
+10; obligation→structured-`Diagnostic` bridge → Phase 19; schema-version /
+source-location-privacy / docs-drift-semantic → Phase 17. Start new work at Phase
+5 unless a real workload pulls a deferred item forward.
 
 The roadmap is linear. Phases are ordered, and items inside a phase are ordered
 unless explicitly marked as a constraint or a deferred research note. Read the
 document as one queue:
 
-1. consolidate the compiler's obligation pipeline so contracts, VCs, runtime
-   safety, asserts, SMT, policy, reports, and proof workspaces all read from
-   one typed evidence ledger;
-2. consolidate the ordinary compiler pipeline: project loading, pass
-   boundaries, typed IR, diagnostics, source maps, backend contracts, and
-   command plumbing;
-3. broaden the ordinary language surface immediately after the compiler
-   pipeline can support it: patterns, bytes/text/path, collections, iteration,
-   capability polymorphism, tests, project ergonomics, and daily workflow;
+1. *(done — Phase 3, closed)* consolidate the compiler's obligation pipeline so
+   contracts, VCs, runtime safety, asserts, SMT, policy, reports, and proof
+   workspaces all read from one typed evidence ledger;
+2. *(done — Phase 4, closed)* consolidate the ordinary compiler pipeline: project
+   loading, pass boundaries, typed IR, diagnostics, source maps, backend
+   contracts, and command plumbing;
+3. **(active frontier — Phase 5+)** broaden the ordinary language surface now that
+   the compiler pipeline supports it: patterns, bytes/text/path, collections,
+   iteration, capability polymorphism, tests, project ergonomics, daily workflow;
 4. build the standard library and core APIs before relying on real workloads,
    packages, editor tooling, freestanding targets, or release examples;
 5. validate the bet with flagships, real workloads, and at least one external
@@ -47,8 +53,9 @@ Linear does not mean invisible. When a long internal phase risks delaying
 external credibility, add one narrow replayable vertical artifact inside the
 current linear queue. It must not become a side track or product fork; it exists
 to validate the bet, expose abstraction mistakes early, and give skeptics
-something real to run. Phase 4 may use `examples/compiler_pipeline_probe/` as
-that transcript for the compiler pipeline; Phase 8 carries the later
+something real to run. The compiler-pipeline transcript
+(`examples/compiler_pipeline_probe/`) is part of the closed-Phase-4 deferred tail
+(now tracked across Phases 10/14/19); Phase 8 carries the later
 `examples/credibility_slice/packet_window/` replayable flagship.
 
 Every phase must leave behind checked evidence that it works. A phase item is
@@ -237,900 +244,6 @@ on and what a negative result would teach against. A **fail** verdict does not
 silently park Phases 11-19 either: it forces an explicit decision recorded in
 this file — change the bet (redesign the discipline that failed), narrow the
 audience, or stop — before any Phase 11+ item may start.
-
-## Phase 3: ObligationCore Pipeline Consolidation
-
-**CLOSED — core-complete (2026-06-20).** The hub is the single truth source for
-policy, `--report vcs`, `--report obligation-ledger`, obligation JSON, the audit
-VC summary, and `--report contracts`; records unified, `ofVC` lossless; families
-#4–#11 in the ledger; discharge-adapter firewall kernel-checked. Audit:
-[docs/PHASE3_OBLIGATION_CORE_AUDIT.md](docs/PHASE3_OBLIGATION_CORE_AUDIT.md).
-DEFERRED (consistency-gated, sound today — NOT active soundness risks, so they do
-not block closure): convert `--report proof-status` and `concrete prove`'s
-obligation facts from consistency-gated recompute to literal ledger views (#15/
-#16 tail). The active roadmap frontier is Phase 5.
-
-Goal: make every proof, contract, runtime-safety, assertion, SMT, policy, audit,
-and proof-authoring surface read from one typed obligation ledger instead of
-parallel report-specific walkers.
-
-Design reference: [docs/OBLIGATION_CORE.md](docs/OBLIGATION_CORE.md).
-
-Done when: call-site preconditions, bounds, div/mod, overflow, assertions,
-loop VCs, contract clauses, proof links, SMT queries, counterexamples, policies,
-audit reports, JSON, and `concrete prove --workspace` all agree because they
-consume the same typed `ObligationCore` records and evidence classifications.
-
-Execution order: migrate obligation families first, then expression lowering
-and backend adapters, then policies/reports/prove workspaces as temporary
-views/parity gates, then perform the full model merge and delete the duplicate
-models/walkers. Do not call #14, #15, or #16 architecturally complete merely
-because a consistency gate passes; they are only complete when #18 has made
-`ObligationCore` the hub and the old side-channel model is gone. Do not move a
-consumer before the family records it needs exist in the ledger.
-
-Current state (audited 2026-06-15, updated 2026-06-16 — see
-[docs/PHASE3_OBLIGATION_CORE_AUDIT.md](docs/PHASE3_OBLIGATION_CORE_AUDIT.md)):
-the hub is the single truth source for **policy**, `--report vcs`,
-`--report obligation-ledger`, obligation JSON, the audit VC summary, AND
-`--report contracts`. The records are unified (`abbrev VC := Report.Obligation`,
-one `structure Obligation`) and `ofVC` is lossless. Obligation families #4–#11 —
-including assert/assume/vacuity (#8) — land in the ledger, and policy reads them
-from it.
-
-The former last open dual-truth-source, `--report contracts` (`renderContracts`),
-was closed 2026-06-16 (#18e): it now reads `computeVCsDischarged` — the one
-discharged ledger — and slices the omega/bv proved-key sets out of it by engine,
-instead of running its own per-family `kernelDischargeLoopVCs`. Byte-identical
-(snapshots unchanged), locked by `check_contracts_ledger_parity.sh` (behavioral)
-+ a source guard in `check_obligation_single_truth_source.sh`. The only report
-surface that still recomputes is `--report proof-status` (consistency-gated,
-sound today) — its literal-view conversion is the remaining #15 work. `concrete
-prove` likewise recomputes but is consistency-gated (#16). Do not re-do #4–#14,
-#18a–e; they are done (discharge-adapter firewall #13 is kernel-checked + gated
-by `check_discharge_adapters.sh`). Treat any new report surface as needing a
-ledger-parity gate per #17.
-
-1. [DONE] Define `ObligationCore` schema v1: stable id, source span, function,
-   obligation kind, expression shape, typed variables, scoped hypotheses,
-   conclusion, semantic profile, dependencies, allowed engines, status,
-   evidence class, replay command, counterexample, policy impact, and
-   originating source construct. (`Report.Obligation`; `kindVocabulary`.)
-2. [DONE] Define the single evidence/status vocabulary used by the ledger:
-   `proved_by_lean`, `proved_by_kernel_decision`, `proved_by_lean_replay`,
-   `solver_trusted`, `tested_by_oracle`, `runtime_checked`, `enforced`,
-   `assumed`, `trusted`, `partial`, `stale`, `vacuous`, `missing`,
-   `unproven`, `counterexample`, `unknown`, `timeout`, `solver_error`, and
-   `ineligible`. Reports may summarize these statuses, but may not invent a
-   second vocabulary.
-3. [DONE] Build one scoped context collector for all obligation kinds. It must
-   thread function `#[requires]`, branch guards and negated fall-through facts,
-   loop invariants, already-proved assertions, local constants, ghost bindings,
-   and let substitutions; it must drop stale hypotheses after assignments using
-   one shared invalidation rule. (Shared `hyps` threading +
-   `loopHypsAt`/`dropStaleHyps`/`assignedScalarsS`; the single-truth gate
-   forbids per-family `scoped*S` collectors.)
-4. [DONE] Migrate call-site precondition obligations to `ObligationCore` first.
-   This is the smallest forcing case because the current behavior already works
-   and has positive/negative fixtures.
-5. [DONE] Migrate array-bounds obligations to the same collector and ledger.
-   Keep the existing constant, `omega`, unproven, and violation classifications
-   exactly stable.
-6. [DONE] Migrate div/mod nonzero obligations and sound division/modulo
-   lowering. Preserve the non-negative-dividend guard that prevents Lean
-   floor-division semantics from being confused with Concrete truncating
-   division.
-7. [DONE] Migrate opt-in overflow obligations, including interval/bv-discharge and
-   nonlinear SMT routing. Preserve the rule that external SMT may only touch
-   VCs the kernel tiers left unproved.
-8. [DONE] Migrate `assert` and `assume`: `assert` becomes an obligation with
-   scoped hypotheses; `assume` becomes an audit-loud assumption fact and policy
-   input, never a proof. (Kinds `assert`/`assume`/`vacuity` are in the ledger;
-   `vacuousFunctions`/`assumeFunctions` read them from it.)
-9. [DONE] Migrate loop obligations O1-O5, including loop invariant
-   initialization, preservation, variant/decrease, and the split status for
-   arithmetic-closed but operationally-unproved obligations.
-10. [DONE] Migrate `#[requires]`, `#[ensures]`, `#[invariant]`, and `#[variant]`
-    clauses into the ledger, including invalid expression, impure call,
-    vacuity, partial proof, and source-linked proof statuses.
-11. [DONE] Migrate proof-link freshness, `#[proof_fingerprint]`, spec-drift,
-    missing theorem, blocked proof, and ineligible extraction facts into the
-    same ledger instead of keeping proof-status as a separate model. (`ofProofStatus`
-    + `proofLinkLedger`.)
-12. [DONE] Unify expression lowering through one typed obligation expression
-    layer: human rendering, Lean proposition rendering, SMT-LIB rendering,
-    counterexample source-variable mapping, and JSON serialization must lower
-    from the same structure. Add `scripts/tests/check_obligation_lowering.sh`
-    with round-trip cases for linear arithmetic, bitvectors, sound division,
-    nonlinear SMT terms, branch/path facts, and invalid expressions. (Gate
-    present + wired.)
-13. [DONE] Add backend-owned discharge adapters over `ObligationCore`: constant
-    fold, `omega`, `bv_decide`, linked Lean theorem, Lean replay, external SMT,
-    oracle/test evidence, runtime enforcement, assumption, and trust boundary.
-    Each adapter may only produce its declared evidence class. (Implemented as a
-    typed `DischargeAdapter` with a declared evidence-class set and a
-    `DischargeAdapter.fold` that rejects a foreign class — `omega`/`bv`/`smt`/
-    `replay`/`constantFold`/`linkedLean`/`oracle` adapters in `Report.lean`. The
-    firewall is KERNEL-CHECKED by compile-time `example`s, so a green build
-    already proves it.) The gate is `scripts/tests/check_discharge_adapters.sh`
-    (Makefile `test-discharge-adapters`) — NOTE: it is named
-    `check_discharge_adapters.sh`, not the `check_obligation_discharge_adapters.sh`
-    this item's text originally specified.
-14. [DONE] Make policies consume the final ledger instead of recomputing facts:
-    forbid-assume, forbid-vacuous, solver-evidence policy, stale-proof policy,
-    runtime-safety requirements, trusted-boundary policy, and release gates.
-    Add `scripts/tests/check_obligation_policy_views.sh` with one fixture per
-    policy decision and one negative case proving stale/vacuous/solver-trusted
-    evidence is rejected when policy says so. (`computePolicyQuals` reads
-    `vacuousFunctions`/`assumeFunctions`/`solverTrustedIds` from the ledger; the
-    side-channel `compute*Quals` collection is gone.)
-15. [PARTIAL] Make reports consume the ledger: `--report contracts`, `--report
-    vcs`, `--report proof-status`, `--report check-proofs`, audit bundles,
-    release bundles, JSON, snapshots, and evidence corpus gates become views
-    over the same records. Add `scripts/tests/check_obligation_report_views.sh`
-    to assert the same stable ids and statuses appear in every report surface. A
-    consistency gate proves parity during migration; it does not replace the
-    full renderer refactor. This item is complete only when report renderers
-    read the hub model, not `Report.VC` / proof-status side structures.
-    STATUS (2026-06-16): `--report vcs`, `--report obligation-ledger`,
-    obligation JSON, the audit VC summary, AND `--report contracts` are now
-    literal hub views; `--report proof-status` remains consistency-gated.
-    `renderContracts` was refactored (#18e) to read `computeVCsDischarged` — the
-    one discharged ledger — and slice the omega/bv proved-key sets out of it by
-    engine, instead of running its own per-family `kernelDischargeLoopVCs`. Output
-    is byte-identical (snapshots unchanged) and the change is locked two ways:
-    `check_contracts_ledger_parity.sh` (behavioral, Makefile + CI) and a source
-    guard in `check_obligation_single_truth_source.sh` (renderContracts may not
-    re-introduce a private discharge path). Building the parity gate also exposed
-    and fixed a real vocabulary drift — `renderCallSites` printed the internal
-    `proved_at_callsite`/`failed_at_callsite` tokens raw; it now renders the
-    canonical `proved_by_kernel_decision`/`counterexample` the ledger uses.
-16. [PARTIAL — consistency-gated] Make `concrete prove` consume the ledger:
-    `--json`, `--show-obligation`,
-    `--emit-lean`, `--emit-artifacts`, `--workspace`, `--check`, `--replay`,
-    `--nearest-lemmas`, and future `--minimize` should not reconstruct
-    obligation context independently. Add
-    `scripts/tests/check_obligation_prove_views.sh` to compare prove JSON,
-    workspace files, emitted Lean, replay commands, and check output against the
-    ledger for the same obligation ids. This item is complete only when the
-    prove surface obtains obligation context, statuses, replay commands,
-    nearest-lemma hints, and check targets from `ObligationCore`, not from a
-    private prove/report reconstruction path.
-17. [DONE] Add a migration parity gate after each migrated obligation family:
-    compare old and new human reports, JSON, policy behavior, stable ids,
-    counterexamples, solver provenance, and proof-workspace output on the
-    existing corpus before deleting the old path. (Served by the report-views,
-    prove-views, redteam, and snapshot gates.)
-18. [MOSTLY DONE] Collapse the duplicate obligation models so there is ONE truth
-    source, then delete the old report/prove/policy-specific models and walkers.
-    The records are now UNIFIED: there is one `structure Obligation` in `Report`,
-    `abbrev VC := Obligation`, and `ofVC` is lossless (it enriches view fields
-    only). `ObligationCore` is the hub, not a leaf — so 18a–18d are done. (The
-    earlier "lossy projection / leaf, not the hub" description no longer holds;
-    corrected 2026-06-15.) Each sub-step was verified byte-identical:
-    - 18a. [DONE] Widen the record to a SUPERSET of the VC surface (solver
-      provenance, discharge mode, replay) and make `ofVC` lossless. Pure
-      addition — no output change.
-    - 18b. [DONE] Make `--report vcs` render from the hub, byte-identical — the
-      first real report-as-view over the hub.
-    - 18c. [DONE] Make the audit VC summary and the obligation JSON consume the
-      hub, byte-identical.
-    - 18d. [DONE] Fold the `ProofCore.Obligation` proof-status surface into the
-      hub (`ofProofStatus`) and reduce `Report.VC` to an alias. No obligation
-      family keeps two live truth sources. `check_no_duplicate_obligation_walkers.sh`
-      fails on reintroduced family-specific collectors or report-side recomputation.
-    - 18e. [DONE] Delete compatibility shims that allow reports, policies, or
-      prove to bypass the hub: no `collectVCs`-only report path, no policy-side
-      `compute*Quals` side channel, no prove-side obligation reconstruction, and
-      no proof-status-only table that is not projected from the hub. The last
-      shim — `renderContracts` (`--report contracts`) running its own per-family
-      discharge — was removed 2026-06-16: it now reads `computeVCsDischarged` (the
-      one ledger) and slices the proved-key sets by engine, byte-identical. A
-      source guard in `check_obligation_single_truth_source.sh` keeps it that way.
-    - 18f. [DONE] Add a negative source guard:
-      `scripts/tests/check_obligation_single_truth_source.sh` must fail if new
-      code introduces `Report.VC` as a storage model, a second proof-status
-      obligation record, or a family-specific scoped walker outside the
-      approved collector/backend adapters.
-    `--report contracts` is now a literal hub consumer (`renderContracts` reads
-    the discharged ledger; landed 2026-06-16), held byte-identical by the #15
-    parity gate (`check_contracts_ledger_parity.sh`) plus the #18e source guard.
-    The remaining literal-view work in #15 is `--report proof-status`, which still
-    recomputes (consistency-gated, sound today).
-19. [DONE] Add the Phase 3 validation artifact: one fixture project that exercises
-    every migrated obligation kind and proves the ledger is the only truth
-    source by checking contracts, VCs, proof status, audit, policy, JSON,
-    workspace, replay, and release-bundle output for the same stable ids. Use
-    `examples/obligation_core_probe/` and
-    `scripts/tests/check_phase3_obligation_core.sh` as the final umbrella gate.
-
-## Phase 4: CompilerLedger Pipeline And Typed IR
-
-**CLOSED — core-complete (2026-06-20).** Core #1–#17 done and gated:
-`ProjectContext`, `CompilerLedger` fact store, pass-chain artifacts, one
-diagnostic schema + rich rendering, tolerant partial facts, function-granularity
-source maps, command plumbing, CLI matrix, compiler API boundary, backend-contract
-report, the discharge-adapter firewall, and the docs-drift gate (artifact-existence
-core). Audit:
-[docs/PHASE4_COMPILER_LEDGER_AUDIT.md](docs/PHASE4_COMPILER_LEDGER_AUDIT.md). The
-audit verified there is **no active soundness or dual-truth-source risk** in the
-open tail (reports don't re-infer ownership/capability; the #44g ref-return
-miscompile is unreachable — reference returns are rejected at the type level).
-DEFERRED (workload-gated #18–#45, do not build speculatively): obligation/proof/
-policy facts → structured `Diagnostic`/JSON (the #11 bridge); interpreter-vs-
-compiled differential harness; `inspect`/`verify-ir`/`--events`/`clean`/`audit
---compiler`; schema-version gates; perf budgets / fuzzing / minimization;
-source-location privacy modes; backend-IR as a stable artifact; docs-drift
-*semantic* checks (beyond the artifact-existence gate); and the defense-in-depth
-ref-return lowering fix (#44g, unreachable). The active roadmap frontier is Phase 5.
-
-Goal: make the ordinary compiler pipeline a typed, replayable fact pipeline.
-Project loading, parsing, resolution, canonicalization, type checking,
-ownership, capabilities, lowering, diagnostics, source maps, interpreter,
-backend, and command plumbing should produce named artifacts and write their
-facts into one `CompilerLedger` / `ProjectFacts` structure. Reports, editor
-tooling, crash bundles, release bundles, cache keys, and backend validation
-must render those facts instead of recomputing them.
-
-Design reference: [docs/COMPILER_PIPELINE.md](docs/COMPILER_PIPELINE.md).
-Research reference:
-[docs/COMPILER_PIPELINE_RESEARCH.md](docs/COMPILER_PIPELINE_RESEARCH.md).
-
-Done when: every user-facing command loads the same typed project context; each
-pass emits a typed artifact with id, input ids, output ids, consumed facts,
-produced facts, diagnostics, source maps, timing, replay command, and verified
-invariants; all compiler facts live in `CompilerLedger`; diagnostics share one
-schema; interpreter and compiled execution can be compared through one harness;
-and backend/target assumptions are explicit before Phase 5 language usability
-work depends on them.
-
-Status (audited 2026-06-17 — see
-[docs/PHASE4_COMPILER_LEDGER_AUDIT.md](docs/PHASE4_COMPILER_LEDGER_AUDIT.md)):
-the Phase 4 **core is done and gated** — #1–#4 (ProjectContext, CompilerLedger,
-pass-chain artifacts, one diagnostic schema), #9–#13 (diagnostics-as-data, rich
-rendering [5/9 fixtures], tolerant partial facts, function-granularity source
-maps), and #14–#17 (command plumbing, golden CLI matrix, compiler API boundary,
-backend-contract report). The **open tail #18–#45** is unbuilt advanced tooling
-(inspect/`verify-ir`/events/`clean`/self-audit commands, perf budgets, fuzz
-harness, intern/query/incremental, schema-version + docs-drift semantic checks
-and metamorphic gates, source-location modes,
-backend-IR-as-artifact, the #45 validation
-artifact) and is **workload-gateable — none of it is an active soundness or
-dual-truth-source risk** (verified: reports do not re-infer ownership/capability
-facts, and the #44g ref-return miscompile is unreachable because reference
-returns are rejected at the type level — H1). Per-item status is in the audit
-doc; do not build #18–#45 speculatively (deferral discipline).
-
-1. Define `ProjectContext`: source roots, modules, entry points, tests,
-   policies, assumptions, target profile, build profile, oracle manifests,
-   source maps, toolchain identity, and command mode. All commands must load
-   this once instead of growing command-specific project discovery.
-   This is the Gleam-style product lesson: one coherent toolchain surface, not
-   separate mini-compilers behind `build`, `test`, `fmt`, `audit`, and `prove`.
-2. Define `CompilerLedger` / `ProjectFacts`, the non-proof compiler fact store.
-   It must contain names, modules, imports, types, ownership facts, capability
-   facts, diagnostics, source maps, pass artifacts, pass timings, target facts,
-   backend assumptions, emitted files, cache/dependency facts, and links to the
-   `ObligationCore` ledger. Required API shape: `recordArtifact`,
-   `recordDiagnostic`, `recordFact`, `recordDependency`, `recordTiming`,
-   `recordSourceMap`, and `recordReplayCommand`. Add
-   `scripts/tests/check_compiler_ledger.sh`; the gate must prove `build`,
-   `test`, `audit`, `prove`, `inspect`, and `doc` read the same project facts
-   rather than constructing command-local fact stores.
-3. Split the frontend into named pass outputs: parsed AST, resolved AST,
-   canonical IR, typed surface IR, ownership-checked IR,
-   capability-checked IR, contract/ghost/assert metadata, lowered Core, and
-   backend IR. Each pass must state what facts it consumes and produces, and
-   must write its artifact id into `CompilerLedger`.
-4. Define a `ResolvedAST` representation with stable resolved names,
-   module-qualified references, proof/spec names, source spans, and import
-   provenance. Later passes should not redo textual name lookup.
-5. Add an explicit canonicalization pass between resolution and type checking.
-   It should remove surface-only syntax before the rest of the compiler sees
-   it: normalize patterns, desugar `if let`/`while let` once they exist,
-   normalize attributes, resolve field puns, make early-return and fall-through
-   edges explicit, and keep source-span provenance for diagnostics and reports.
-6. Define a multi-level IR policy: no pass may erase a fact until every
-   downstream consumer has either consumed it or copied it into a typed fact
-   table. Capabilities, source spans, ownership facts, failure points, and
-   target assumptions must not disappear during lowering.
-7. Define a `TypedIR` representation after type checking but before proof/
-   obligation lowering. It should carry expression types, lvalue/rvalue
-   classification, array/struct/enum shapes, control-flow form, and source
-   spans.
-8. Attach ownership and capability facts once, in the checked IR, rather than
-   rediscovering them in reports. Reports may render these facts; they should
-   not re-infer them from raw syntax.
-9. Define one diagnostic schema and renderer: diagnostic code, severity, source
-   span, message, reason, help/next action, related spans, command context, and
-   optional machine-readable payload. Parser, resolver, type, ownership,
-   capability, policy, runtime-obligation, and backend diagnostics must use it.
-10. Treat diagnostics as compiler data, not formatted strings. Passes should
-   emit structured diagnostics first; human text, JSON, LSP output, tests, and
-   release bundles should render the same diagnostic records.
-11. [PARTIAL — frontend families DONE; obligation/proof/policy routing
-    workload-gated] Add rich Elm/Gleam-style diagnostic rendering as a checked
-    compiler feature, not an incidental formatting pass. The renderer must
-    support: source snippets with underlines, primary and secondary spans,
-    related-span notes, reason/help/next-action sections, expected-vs-actual
-    facts, policy or evidence context when relevant, and stable diagnostic codes.
-    It must render from the same structured diagnostic records used by JSON/LSP,
-    not from hand-formatted strings. `examples/diagnostics_rich/` +
-    `scripts/tests/check_rich_diagnostics.sh` assert human↔JSON parity (code,
-    severity, pass, span, rich fields) for the FRONTEND diagnostic families:
-    parser (E0001), unknown name (E0101), type mismatch (E0220),
-    ownership/linearity (E0205), missing capability (E0520). These flow through
-    the `Diagnostic` record / `--diagnostics-json` and are DONE.
-    DEFERRED — the four remaining families named here (array-bounds obligation
-    failure, solver-policy rejection, vacuous contract, stale proof) are NOT
-    missing example files: obligation / proof / policy facts do not currently
-    enter the `Diagnostic` record / `--diagnostics-json` channel at all (verified
-    2026-06-17: a constant OOB index and a vacuous contract both yield
-    `diagnostics: []` from `--diagnostics-json`; they render in `--report
-    contracts` / the ObligationCore ledger instead). Completing them is therefore
-    an ARCHITECTURAL BRIDGE — "define how obligation/proof/policy facts become
-    structured diagnostics for JSON/LSP without duplicating the ledger/report
-    model" — not a fixture pass. It should be pulled by a consumer (LSP, a CI JSON
-    diagnostic parser, editor integration, or a unified diagnostic-contract
-    effort), not built speculatively to satisfy the checklist. Redaction /
-    source-location privacy modes (#38) remain future.
-12. Add error-tolerant partial facts for tooling and reports: parser,
-    resolver, typechecker, ownership, and capability passes should be able to
-    produce partial artifacts containing explicit `invalid` / `unknown`
-    placeholders where safe. This is the LSP/product lesson from Gleam, Dafny,
-    Lean, Rust, and Swift: one bad expression should not erase unrelated
-    diagnostics, formatting, docs, hover, import facts, or audit context. Any
-    partial fact must be labelled as partial and must never feed codegen,
-    proof, policy, or release claims as if it were complete.
-    Staged:
-    - 12a. Cross-pass tolerant *diagnostics* driver (`runFrontendDiagnostics`)
-      that returns only `Diagnostics` + a `partial` flag — structurally
-      incapable of producing `ValidatedCore`, so it can never feed
-      codegen/proof/policy. When name resolution fails it still runs the
-      typechecker on the (always structurally complete, side-table-resolved)
-      program, so a bad reference in one function no longer erases type
-      diagnostics elsewhere. `partial` is set whenever a pass was skipped.
-      [DONE]
-    - 12b. Run ownership + capability (elaborate→coreCheck) diagnostics on the
-      tolerant path too, guarded so unresolved/ill-typed input never reaches them
-      (only when resolve AND check are clean, matching the strict precondition).
-      Cascade suppression drops a later-pass diagnostic that echoes an earlier
-      pass's diagnostic at the identical span. [DONE — folded into 12a]
-    - 12c. Parser error recovery: resync at top-level declaration boundaries so a
-      single bad declaration yields its own diagnostic and the well-formed
-      declarations after it still parse and flow downstream (resolve/check), with
-      recovered parse errors collected in the threaded parser state. The strict
-      `parse` now reports every recovered error, not just the first.
-      [DONE — decl-level; finer statement-level recovery within a body is future]
-    - 12d. Explicit `unknown`/`invalid` placeholder nodes for the typed IR so
-      downstream tooling (hover, docs, fmt) can render partial facts, each
-      marked partial.
-13. Preserve source maps through every lowering boundary: AST -> TypedIR,
-   TypedIR -> Core, Core -> backend IR, generated C/LLVM/native debug info,
-   runtime failures, audit facts, and proof/obligation artifacts.
-   Staged:
-   - 13a. AST→Core function-granularity: `CFnDef.declSpan` carries the function
-     declaration span across elaboration (which previously dropped all spans —
-     Core/SSA had zero span fields). Core-check diagnostics (capability, etc.)
-     now point at the offending function instead of being location-less.
-     `check_source_maps.sh`. [DONE]
-   - 13b. Carry `declSpan` Core→SSA→emitted-symbol so backend diagnostics,
-     generated C/LLVM, and debug info can name the source function. `SFnDef`
-     gains `declSpan`; `lowerFn` carries it (and mono preserves it through
-     specialization); the SSA dump (`--emit-ssa`) names each function's source
-     line (`; source: divide @ line 4`). `check_source_maps.sh`. [DONE — SSA
-     dump; LLVM DWARF debug info is the heavier follow-on, with 13d's finer
-     spans.]
-   - 13c. Attach the originating function/decl span to proof obligations and
-     audit facts (ObligationCore), so witnesses/counterexamples cite source.
-     Split by source of the function:
-     - 13c1. Project-code obligations cite source (file, line). Verified and
-       gated (`check_source_maps.sh`: `main.divide → file:4`). [DONE]
-     - 13c2. Dependency/stdlib obligation source locations. [DEFERRED] Two
-       blockers: `buildFnLocMap` stamps the entry-point path as the file for
-       every module (so a dependency function's span line is paired with the
-       wrong file), and the obligation-naming origin of stdlib-qualified names
-       (e.g. `sha256.bsig0`) is not yet pinned — main.con neither declares nor
-       imports those modules. Needs per-module source-file tracking (a loader
-       change) plus obligation-origin investigation. NOT bodged with suffix
-       matching: a wrong file in an audit tool is worse than an honest unknown.
-   - 13d. Expression/statement-granularity spans in Core (the invasive step):
-     thread spans onto Core nodes or a node→span side table for precise
-     within-function obligation and runtime-failure locations.
-   - 13e. Remaining declaration-span gaps deliberately deferred from the
-     2026-06-09 decl-span work (recorded here, not only in the commit
-     message): extern-fn declarations drop their span because `CModule`
-     carries them as a bare tuple (`String × params × Ty × Bool`) — promote
-     to a record with `declSpan`; and "module file not found" / circular
-     module-import resolver errors are location-less because `mod X;` stubs
-     carry no span and `resolveModules` returns `Except String` — give
-     module stubs a span and the resolver typed, span-carrying errors.
-     Extend `check_source_maps.sh` with an extern-fn FFI-safety fixture and
-     a missing-module-file fixture asserting both diagnostics point at
-     source.
-14. Normalize command plumbing for `build`, `run`, `test`, `audit`, `prove`,
-   `inspect`, `fmt`, `doc`, and `clean`: shared project loading, shared target/
-   policy/assumption loading, shared diagnostics, shared output conventions,
-   and shared exit-code taxonomy.
-   Staged:
-   - 14a. Shared project-root prologue (`withProjectRoot`) — one canonical
-     "no Concrete.toml" diagnostic and one exit code for every project-scoped
-     command (build/run/test/check/`--report compiler-ledger` deduped from 5
-     copies). Shared exit-code taxonomy (`ExitCode`) is the single source for
-     both the exit values AND the generated `EXIT CODES` help block, so codes
-     and docs cannot drift; `prove` routes through the named constants.
-     `check_cli_plumbing.sh`. [DONE]
-   - 14b. Shared command-arg parsing: `Cli.hasFlag` / `Cli.flagValue` give one
-     definition of a boolean and a valued flag, replacing scattered inline
-     `args.contains` / `dropWhile` (esp. the ~15-flag prove block). The valued-
-     flag `--`-guard (so `--out --json` does not capture `--json`) is now applied
-     uniformly — several sites previously omitted it. `check_cli_plumbing.sh`.
-     [DONE]
-   - 14c. Route `audit`/`prove`/single-file reports through the same project
-     loading + diagnostics path as build/test, so a file in a project sees its
-     policy/assumptions/deps uniformly. Split:
-     - 14c1. Dependency resolution: `compileAndReport` already routes through
-       `loadProject` in project mode, so audit/prove on a stdlib-using project
-       file resolve deps exactly as build/test. Verified and gated
-       (`check_cli_plumbing.sh`). [DONE]
-     - 14c2. Reuse `ctx.registry`/`ctx.pc`/`ctx.policyLocMap` from `loadProject`
-       instead of recomputing them, and reflect the project `[policy]`/
-       assumptions in audit/prove. [DEFERRED] Risky: the report path computes
-       these over the FULL user package with a different `file` stamp
-       (`inputPath` vs `mainPath`, which feeds the 13c2 file-attribution
-       behavior), and whether audit should ENFORCE policy is a design choice —
-       not a mechanical dedup. Needs care, not a forced swap.
-15. Add a golden CLI behavior matrix before broad command growth:
-    `scripts/tests/check_cli_contract.sh` must cover every public command's
-    exit code, stdout/stderr split, `--json` behavior, quiet/verbose behavior,
-    artifact output location, missing-file behavior, malformed-input behavior,
-    and policy-failure behavior. Fixtures must include `build`, `run`, `test`,
-    `audit`, `prove`, `inspect`, `fmt`, `doc`, `clean`, and one unknown command.
-    Done when command UX is a checked contract, not an accidental consequence
-    of each command's implementation.
-    Staged:
-    - 15a. First slice (existing commands): `check_cli_contract.sh` pins build,
-      run, test, check, prove, `--report`, `--version`, no-args, unknown
-      command, missing `Concrete.toml`, and malformed input — exit code,
-      stdout/stderr split, `--json` well-formedness, and artifact location.
-      Exposed and fixed an uncaught-exception on unknown command / missing input
-      (now a clean `ExitCode.usage` error). Future commands (inspect/fmt/doc/
-      clean) are asserted as NOT-YET (clean failure), not invented. [DONE]
-    - 15b. Extend the matrix to inspect/fmt/doc/clean and policy-failure
-      behavior once those command surfaces exist (depends on later phases).
-16. Define the compiler-internal API boundary before LSP, MCP, package tooling,
-    or editor integrations import random modules. V1 boundary:
-    `ProjectContext` loading, `CompilerLedger` queries, diagnostic rendering,
-    pass inspection, artifact lookup, `ObligationCore` queries, and release
-    bundle capture. Add `docs/COMPILER_API.md` and
-    `scripts/tests/check_compiler_api_boundary.sh`; the gate must fail if
-    editor/package/tooling code reaches into parser/checker/report internals
-    instead of the boundary modules.
-    Staged:
-    - 16a. Boundary defined + guarded. `docs/COMPILER_API.md` names the V1
-      allowlist (`Pipeline`, `CompilerLedger`, `ObligationCore`, `Diagnostic`,
-      `DebugBundle`; ProjectContext loading is CLI-only for now). The gate scans
-      consumer roots (editor/tools/integrations/lsp/mcp/plugins) for any `.lean`
-      importing a non-allowlisted `Concrete.*` module or the bare umbrella, and
-      self-tests against a good/bad fixture pair so it can never become a no-op.
-      Doc ↔ gate allowlists are asserted to agree. `check_compiler_api_boundary.sh`.
-      [DONE — guard first; routing real consumers through it is incremental]
-    - 16b. Migrate `ProjectContext` loading out of `Main.lean` into a boundary
-      module so consumers can load a project without the CLI; then add it to the
-      allowlist. [DONE] `Concrete.Project` now holds `ProjectContext`,
-      `loadProject`, `findProjectRoot`, and the dependency/TOML/module-resolution
-      helpers (moved in four verified cuts: path/IO leaves → module resolution →
-      TOML/deps/registry → ProjectContext/loadProject, building after each).
-      Added to the boundary allowlist; a consumer probe imports ONLY
-      `Concrete.Project` and loads a project at runtime (PROBE-OK), gated by
-      `check_compiler_api_boundary.sh`. Main keeps only CLI glue.
-17. Define the backend contract boundary: integer overflow profile, division
-   semantics, layout/ABI, panic/assert behavior, optimization assumptions,
-   target triple/data layout, libc/runtime assumptions, and what is trusted.
-   Staged:
-   - 17a. Make the contract VISIBLE: `--report backend-contracts [--json]`.
-     `Concrete.Backend` is the single source for target triple / data layout /
-     runtime functions / the contract clauses; the emitter (`EmitSSA`) and the
-     report both read it, so the documented contract cannot drift from what is
-     emitted. Clauses are honest about which guarantees are proof-linked (e.g.
-     div-by-zero is a proof obligation, UB at runtime if undischarged) vs runtime.
-     Program-derived trusted boundaries (trusted fns + externs) are listed.
-     `check_backend_contracts.sh` (incl. a no-drift report-vs-emitted check). [DONE]
-   - 17b. Expand the gate to a fixture matrix: arithmetic/division, structs/enums/
-     layout, assert/panic path, capability/runtime call. Each asserts the report is
-     well-formed, covers all topics, and stays drift-free (report target == emitted)
-     regardless of program shape. The unknown/unsupported-target negative is NOT-YET:
-     there is no `--target` selection surface, so the contract honestly advertises a
-     single target and the gate asserts we are not silently multi-target (rather than
-     inventing a target to reject). `check_backend_contracts.sh` 14/0. [DONE]
-   - 17c. Surface backend assumptions in audit + release bundles, beside the
-     proof/evidence facts.
-   - 17d. Tighten actual backend checks (overflow/division/layout first, since
-     those affect proof/runtime claims).
-18. Add an interpreter-vs-compiled differential harness for ordinary language
-    development. Every new executable language feature should be able to run
-    through `interpret result == compiled result` where deterministic and
-    target-independent.
-    - 18z. [PARTIAL 2026-06-10] `scripts/tests/check_codegen_execution.sh` +
-      `tests/codegen/*.con` is a lightweight precursor: 30 compile-run-assert
-      fixtures from the 2026-06 codegen sweep, locking in the cases that found
-      and now guard against H3/C5/C6 (the existing suite mostly checks
-      compile/reject/diagnostic and was blind to miscompiles). The full #18
-      harness (run the SAME program through interpreter and compiled binary,
-      assert agreement — needs #18a) supersedes hand-maintained expected
-      values and should fold this fixture set in.
-    - 18a. Prerequisite: move the interpreter onto structured diagnostics.
-      `Concrete/Interp.lean` is `Except String` throughout — no Diagnostic
-      records, no error codes, no source spans — so interpreter failures
-      cannot land in the ledger, differential mismatches cannot be classified
-      (interpreter bug vs compiler bug vs expected divergence), and
-      `tested_by_oracle` evidence would rest on string comparison. Replace
-      with `Except Diagnostics` (a dedicated `E06xx` range), attach spans
-      from Core `declSpan`, and record interpreter runs/failures as ledger
-      facts. Gate: `check_interp_diagnostics.sh` must show an interpreter
-      error carrying code + span + pass, and a forced
-      interpreter-vs-compiled divergence rendering as a classified,
-      replayable fact rather than a raw string mismatch.
-19. Add pass inspection commands for compiler developers and users:
-    `concrete inspect --ast`, `--resolved`, `--typed`, `--core`,
-    `--backend-ir`, `--ledger`, with stable redaction of local paths and
-    deterministic ordering. `--ledger` must render the same `CompilerLedger`
-    records that reports and release bundles consume.
-20. Add pass verifier gates, inspired by Swift's SIL verifier, Lean's IR
-    checker, Zig's AIR/codegen bookkeeping checks, and Go's SSA validation:
-    `concrete verify-ir --pass parsed|resolved|typed|core|backend-ir` must
-    check structural invariants for each representation. Examples: resolved
-    names must point at existing declarations; typed expressions must carry
-    types; ownership facts must not mention dead locals; capabilities must be
-    attached before lowering; Core must contain no source-only contract/ghost
-    syntax; backend IR must preserve source maps and target assumptions. Wire
-    this into `scripts/tests/check_ir_verifiers.sh`.
-21. Add structured compiler pipeline events, borrowing the useful part of
-    Dafny's pipeline events and Gleam's build telemetry:
-    `concrete build --events --json` emits start/finish/fail events for
-    project-load, parse, resolve, canonicalize, typecheck, ownership,
-    capability, obligation collection, proof/evidence reports, codegen, link,
-    and release-bundle capture. Events must include pass name, input artifact
-    ids, output artifact ids, source counts, timing, diagnostic count, and
-    command context.
-22. Add crash/repro bundles for compiler bugs, inspired by Zig's crash context
-    reports and Rust's ICE discipline: on an internal compiler failure,
-    Concrete writes `.build/concrete-crash/<id>/` with `command.txt`,
-    `toolchain.json`, `project.json`, redacted source inputs, last successful
-    pass, current function/module/obligation id if known, structured
-    diagnostics so far, and a replay command. User errors must never produce
-    crash bundles; crash bundles are for compiler bugs only.
-23. Add crash triage taxonomy for internal compiler failures. Crash bundles
-    must classify `parser_ice`, `resolver_ice`, `canonicalizer_ice`,
-    `typechecker_ice`, `ownership_ice`, `capability_ice`, `lowering_ice`,
-    `obligation_ice`, `backend_ice`, `report_ice`, and `prove_ice`.
-    Add `scripts/tests/check_crash_triage.sh` with one synthetic internal-error
-    trigger per broad area where feasible. User errors must still be ordinary
-    diagnostics, never crash categories.
-24. Define canonical interned identities for names, types, literals, layouts,
-    and target facts before broad caching or package artifacts. This is the
-    Zig `InternPool` / Rust stable-id lesson adapted to Concrete: reports,
-    fingerprints, obligation ids, package interfaces, incremental facts, and
-    proof artifacts should use stable canonical ids instead of re-rendered
-    strings where possible.
-25. Define a query/dependency model for compiler facts before implementing
-    broad caching. Name facts such as `parse(file)`, `resolve(module)`,
-    `typecheck(function)`, `capabilities(function)`, `typed_ir(function)`,
-    `core(function)`, `obligations(function)`, `audit_facts(function)`,
-    `codegen(function)`, and `release_bundle(project)`.
-    The shape should be query-first, Salsa/rust-analyzer style, but Concrete
-    should not take a cache dependency until invalidation and diagnostics are
-    stable.
-26. Define incremental artifact dependencies: which source files/functions
-    affect which diagnostics, facts, obligations, proof checks, generated code,
-    inspect output, and release-bundle entries. Do not implement caching broadly
-    until the dependency model is named and validated.
-27. Eliminate hidden global compiler state before adding broad parallelism,
-    caching, LSP, or package builds. All mutable compiler facts must be owned by
-    `ProjectContext`, `CompilerLedger`, `ObligationCore`, an explicit pass
-    artifact, or a clearly named cache object with declared invalidation. Add
-    `scripts/tests/check_no_hidden_compiler_state.sh`; the gate must fail on
-    new module-level mutable state, command-local fact stores, ad hoc global
-    caches, or pass-local side tables that are consumed by later commands
-    without being recorded in the ledger.
-28. Add deterministic pipeline replay and serial/parallel equivalence before
-    broad incremental compilation. The same project must produce the same
-    diagnostics, artifact ids, source maps, ledger facts, obligation ids,
-    emitted backend IR, and release-bundle facts under serial execution,
-    parallel pass scheduling where enabled, clean builds, and replay from
-    retained artifacts. Add `scripts/tests/check_pipeline_determinism.sh` over
-    `examples/compiler_pipeline_probe/`; the gate must compare
-    `--events --json`, `inspect --ledger`, `inspect --backend-ir`,
-    `--json-errors`, and release-bundle summaries across repeated runs.
-29. Add schema-version rejection gates for every machine-readable artifact
-    while Concrete is moving fast. V1 stance: no old-schema compatibility and
-    no migration promise before release. Every JSON/fact artifact must carry
-    `schema_version`; a mismatched version must fail with a clear diagnostic
-    naming the artifact kind, expected version, found version, and regeneration
-    command. Covered artifacts: `CompilerLedger`, `ObligationCore`,
-    diagnostics, pass artifacts, release bundles, audit bundles, proof
-    workspaces, package artifacts, and backend IR manifests. Add
-    `scripts/tests/check_schema_version_rejection.sh`.
-30. Add compiler performance instrumentation before broad feature growth:
-    `concrete build --timings --json` and `concrete report performance --json`
-    must report parse/resolve/typecheck/ownership/capability/lowering/codegen/
-    report/prove timings, peak memory if available, source-file/function counts,
-    stdlib compile time, and toolchain identity. Performance data is a compiler
-    fact, not a printed side channel.
-31. Add compiler performance regression budgets:
-    `scripts/tests/check_compiler_performance.sh` compares
-    `tests/perf/small_project`, `tests/perf/stdlib_imports`,
-    `tests/perf/proof_report`, and `tests/perf/codegen_loop` against committed
-    JSON baselines. Done when CI fails on unexplained budget regressions and
-    the report says which pass regressed.
-32. Add correctness-gated compiler speed work, kept in its own fixture area.
-    All compilation-speed experiments must live under
-    `tests/perf/compiler_pipeline/` until promoted, and no speed change may land
-    without both measurement and correctness evidence. Required sub-gates:
-    `scripts/tests/check_compiler_perf_report.sh` proves
-    `concrete build --timings --json` and `concrete report performance --json`
-    are stable compiler-ledger views; `check_incremental_cache_correctness.sh`
-    proves cache keys include source hashes, toolchain id, target/build profile,
-    command mode, pass schema version, dependency facts, and obligation/proof
-    fingerprints, and that stale inputs never reuse old facts;
-    `check_parallel_determinism.sh` proves serial and parallel pass execution
-    produce byte-identical diagnostics, artifact ids, source maps, ledger facts,
-    obligation ids, backend IR, and release-bundle summaries;
-    `check_lazy_artifacts.sh` proves expensive JSON/Lean/workspace/audit/source
-    map artifacts are emitted only when requested or by an explicit gate; and
-    `check_data_layout_parity.sh` proves any data-oriented table/SoA prototype
-    is byte-identical at every public surface before measuring speed or memory.
-    V1 candidates for measured table layouts are exactly diagnostics, tokens,
-    typed/Core/backend IR instructions, `CompilerLedger` facts,
-    `ObligationCore` views, symbol tables, and source maps. Do not introduce a
-    general Zig-style reflection/comptime facility for this; Concrete may add an
-    explicit checked table/layout abstraction only after the performance report
-    proves a concrete structure is hot. Done when the separate fixture folder
-    contains clean-build, incremental, stale-cache, parallel, lazy-artifact, and
-    one narrow data-layout experiment, each with a committed before/after timing
-    and a correctness assertion.
-33. Add compiler fuzzing as a standing gate:
-    `scripts/fuzz/parser`, `scripts/fuzz/resolver`,
-    `scripts/fuzz/typecheck`, `scripts/fuzz/ownership`,
-    `scripts/fuzz/formatter`, `scripts/fuzz/lowering`, and
-    `scripts/fuzz/obligations`. Done when `make test-fuzz` runs a bounded CI
-    budget and proves crashes, parser panics, malformed JSON, and false
-    `proved_*` statuses are rejected.
-34. Add fuzz minimization and fixture promotion:
-    `scripts/fuzz/minimize` writes reduced repros into
-    `tests/fuzz_regressions/<area>/<name>.con` with an expected diagnostic or
-    honest non-proof snapshot. Done when every promoted repro is run by CI and
-    no fuzzer-only failure stays outside the checked-in corpus for a release.
-35. Document pass invariants and failure boundaries: what each pass guarantees,
-    which errors are recoverable for reporting, which errors stop compilation,
-    and which assumptions are trusted.
-36. Add a compiler-pipeline regression corpus: malformed modules, ambiguous
-    names, type errors, ownership errors, capability errors, source-map
-    preservation, interpreter/codegen mismatch, backend assumption reporting,
-    canonicalization edge cases, dependency invalidation, and deterministic
-    `inspect` output.
-37. Add metamorphic compiler tests. Equivalent source changes must preserve the
-    relevant facts: local variable renaming, independent declaration ordering,
-    whitespace/comments, equivalent parentheses, harmless block splitting,
-    import ordering where semantics are unchanged, and equivalent literal
-    spelling. Wire `scripts/tests/check_metamorphic_compiler.sh`; the gate must
-    compare diagnostics, resolved ids where expected, typed/Core/backend facts,
-    obligations, release-bundle summaries, and compiled output, while allowing
-    source spans and source hashes to differ where they honestly should.
-38. [OPEN] Add source-location privacy modes, borrowing the useful part of Odin's
-    source-location controls but making them audit-visible:
-    `[build] source-location-mode = "normal" | "filename" | "obfuscated" |
-    "none"` in `Concrete.toml`, plus `--source-location-mode <mode>` for
-    one-off commands. The mode must affect human diagnostics,
-    `--json-errors`, crash bundles, audit bundles, release bundles, generated
-    C/LLVM/native debug info, proof workspaces, and emitted pass artifacts
-    consistently. Add `scripts/tests/check_source_location_modes.sh` with
-    `tests/programs/source_locations/{normal,filename,obfuscated,none}.con`.
-    Done when local CI still sees full spans under `normal`, release bundles
-    record `source_location_mode`, and redacted artifacts never pretend that
-    redaction is proof or evidence.
-39. Add JSON diagnostic parity as a named gate, not just a renderer option:
-    `concrete build --json-errors` or the equivalent command mode must emit the
-    same diagnostic codes, spans, reasons, related spans, next actions, and
-    payloads as the human renderer. Wire `scripts/tests/check_json_diagnostics.sh`
-    with parser, resolver, type, ownership, capability, policy, backend, and
-    internal-error fixtures.
-40. Add artifact-retention and emitted-pass files for debugging, inspired by
-    Odin's keep-temp-files workflow and QBE's printable IL discipline:
-    `--keep-artifacts`, `--emit-ast`, `--emit-resolved`, `--emit-typed-ir`,
-    `--emit-core`, `--emit-backend-ir`, `--emit-asm`, and
-    `--emit-link-command`. Artifacts must live under `.build/concrete-artifacts/`
-    by default, obey source-location privacy mode, and include
-    `artifact-manifest.json` with `command`, `toolchain`, `target`,
-    `build_profile`, `source_location_mode`, `pass_ids`, `input_hashes`,
-    `output_files`, and `replay_command`. Add
-    `scripts/tests/check_emit_artifacts.sh` with
-    `examples/compiler_pipeline_probe/` and one negative case proving
-    `--emit-backend-ir` is unavailable before backend IR exists rather than
-    silently emitting stale output.
-41. [OPEN — `concrete clean` does not exist yet] Add artifact garbage-collection policy and `concrete clean` modes before
-    retained artifacts, proof caches, crash bundles, and package artifacts grow
-    without bound. Required modes: `concrete clean --build`, `--artifacts`,
-    `--proof-cache`, `--crash-bundles`, `--all`, and `--dry-run --json`.
-    Default clean must remove ordinary build outputs but preserve crash bundles
-    unless explicitly requested. Wire `scripts/tests/check_clean_artifacts.sh`
-    to prove no source, proof, release bundle, or manually retained crash repro
-    is deleted accidentally.
-42. [OPEN — `concrete audit --compiler` does not exist yet] Add compiler self-audit: `concrete audit --compiler` renders the
-    `CompilerLedger` itself. Required output: passes run, artifact ids,
-    diagnostics count, source-location privacy mode, target/toolchain identity,
-    solver/tool versions, cache/dependency facts, replay commands, backend
-    assumptions, emitted files, and links to the `ObligationCore` ledger. Wire
-    `scripts/tests/check_compiler_self_audit.sh`; the gate must prove the
-    self-audit is generated from `CompilerLedger`, not from text scraping.
-43. [OPEN — no `inspect --backend-ir` / `verify-ir` routing yet] Keep the backend IR printable, verifier-checked, and regression-testable
-    directly. This is the QBE lesson adapted to Concrete: even if LLVM remains
-    the backend, Concrete's own backend contract should be a stable emitted
-    artifact with a verifier, not an opaque stream of generated code. V1 must
-    cover exactly these backend constructs: integer arithmetic, fixed arrays,
-    structs, enums, direct calls, bounded loops, branches, runtime checks,
-    capability calls, and source-map annotations. Add
-    backend-IR golden tests under `tests/backend_ir/`:
-    `arith.con`, `calls.con`, `if_loop.con`, `structs.con`, `arrays.con`,
-    `runtime_checks.con`, `capabilities.con`, `source_maps.con`, and
-    `target_constants.con`. Wire `scripts/tests/check_backend_ir.sh` to run
-    `concrete inspect --backend-ir`, `concrete verify-ir --pass backend-ir`,
-    and a compiled execution check for each fixture.
-44. [PARTIAL — grep-pinned referential-integrity core DONE 2026-06-17]
-    Add a docs-drift gate because docs are public claims too.
-    `scripts/tests/check_docs_drift.sh` (Makefile + CI) implements the robust
-    core: in the present-tense doc set (`CLAIMS_TODAY`, `KNOWN_HOLES`, the phase
-    audits, `CHANGELOG`), every referenced gate (`scripts/tests/*.sh`), module
-    (`Concrete/*.lean`), doc link (`docs/*.md`), and stdlib file
-    (`std/src/*.con`) must exist, and every `--report <kind>` must be a real CLI
-    report. This is the grep-pinned-implementation-fact part — and it would have
-    caught the Phase 3 audit's own slip (citing the nonexistent
-    `check_obligation_discharge_adapters.sh`).
-    DELIBERATELY DEFERRED as not mechanically robust (verified during design —
-    they make the gate a false-positive generator): `Status:`/`Verified:`
-    metadata regime; stale-prose-marker detection ("not yet"/"future"/"TODO"/
-    "0/N"); `concrete <subcommand>` existence ("concrete" is the language name
-    and an English adjective); ROADMAP command honesty (a roadmap's job is to
-    propose future commands); `examples/...` paths (docs cite unbuilt/historical
-    examples). The semantic side (is a `[DONE]`/`[OPEN]` prose claim actually
-    true) stays the job of the phase audits; this gate makes "named artifact
-    exists" a mechanical invariant so the audits focus on semantics. Consistency
-    pairs (`LANGUAGE_GAPS` vs fixtures, etc.) remain future.
-
-    - 44a. [DONE 2026-06-10] Fixed the monomorphization name collision (a
-      silent miscompile). Mono mangled a specialization by the HEAD constructor
-      of the type argument and discarded nested args, so `tag<Hold<Pair<i64>>>`
-      and `tag<Hold<Pair<bool>>>` collapsed into one `tag_for_Pair` / one
-      `%Hold_Pair` despite different layouts (16B vs 2B inner) — ABI corruption
-      on field access; arrays/refs/pointers/fn-types fell through to "unknown",
-      collapsing more. `tyToSuffix` (`Concrete/Mono.lean`) is now total and
-      keys on the FULL type with bracketed nested args
-      (`Hold_T_Pair_T_Int_E_E`); both the function-name and struct-name
-      manglers route through it. Regression-locked by
-      `scripts/tests/check_mono_name_collision.sh` (distinct specializations,
-      array type-args distinct, and an execution oracle proving a
-      field-touching body over both layouts returns the right value).
-    - 44c. [DONE 2026-06-10] Fixed nested place-write lowering (a miscompile
-      found by the codegen sweep). `o.inner.v = x`, `a[i].x = x`, `m[i][j] = x`,
-      `b.data[i] = x`, triple-nesting, and nested writes through a `&mut`
-      parameter were all silently dropped — Lower handled only single-level
-      assignment targets, and a compound base was lowered as a value copy whose
-      mutation was discarded (proximate root: no unified lvalue lowering; deeper
-      root: locals are SSA register values, not addressable slots, so the
-      single-level workarounds did not compose). Fixed by a unified
-      `storeToPlace` (`Concrete/Lower.lean`) that writes compound places in
-      place by value-writeback, terminating at a root variable or a
-      reference/deref base; `.fieldAssign`/`.arrayIndexAssign` delegate to it.
-      Regression-locked by `scripts/tests/check_nested_field_write.sh` (9
-      execution oracles). Full suite 1548/0.
-    - 44e. [DONE 2026-06-10] Fixed struct mixed-width field-layout miscompile
-      (found by the codegen sweep). The struct-literal store packed fields
-      tightly (summing `computeTySize`) while field reads used the aligned
-      `Layout.fieldOffset`, so any struct with a sub-word field followed by a
-      wider one read garbage (`{a: u8, b: i64}` stored `b` at offset 1, read it
-      from offset 8). `.structLit` lowering now stores each field at the same
-      aligned `Layout` offset reads use. Regression-locked by
-      `scripts/tests/check_struct_field_layout.sh` (6 execution oracles). Full
-      suite 1548/0.
-    - 44d. [DONE 2026-06-11] Promote address-taken locals to stack allocas.
-      `&mut x`/`&x`/`*mut x` of a local used to materialize a pointer to a COPY
-      (locals were SSA register values), so a store through it did not reach
-      `x`. This was the architectural root that #44c (nested places) worked
-      around. Fix: `addrOfLocal` (`Concrete/Lower.lean`) promotes a local to a
-      stable stack alloca on first address-take and returns that address;
-      `lookupVar`/`setVar` already route reads/writes through promoted allocas,
-      so the pointer aliases the variable and writes before/after the
-      address-take compose correctly. Regression-locked by
-      `scripts/tests/check_raw_ptr_to_local.sh` (6 oracles). Full suite 1548/0;
-      codegen/nested-write/struct-layout gates unaffected.
-    - 44b. [DONE 2026-06-11 — resolved by 44a] The `mod`-wrapped doubly-nested
-      generic struct that tripped `E0602 Lower.lookupStructFields: struct
-      'Hold_Pair' not found` was a symptom of the SAME head-only mangling
-      collision as 44a: `Hold<Pair<i64>>` mangled to `Hold_Pair`, which did not
-      match the registered specialization, so lowering could not find it.
-      Full-type mangling (44a) gives it a distinct, registered name, so the
-      mod-wrapped forms now compile AND run correctly. Locked by
-      `tests/codegen/mod_{nested_generic,two_instantiations,triple_nested}.con`
-      in `check_codegen_execution.sh` (return 42 / 18 / 55).
-    - 44f. [PARTIAL 2026-06-11] Turn the manual codegen sweep into a
-      differential / generative red-team. The fixed bugs in 44a/44c/44d/44e
-      were all ordinary constructs the previous mostly-compile/reject suite did
-      not observe at runtime: nested generic names, compound lvalues,
-      address-taken locals, mixed-width layout.
-      DONE so far: `scripts/tests/check_codegen_differential.sh` runs every
-      `tests/codegen/*.con` through BOTH the interpreter and the compiled
-      binary and asserts agreement — the interpreter is an independent oracle,
-      so no hand-written expected values are needed for the agreement check.
-      Two honest, gate-enforced exclusion lists: EXPECTED_DIVERGE (unbounded-
-      Int interpreter vs fixed-width compiled — casts/overflow) and
-      INTERP_UNSUPPORTED (e.g. function pointers). Building this surfaced and
-      fixed two interpreter gaps so it could serve as oracle: nested-place
-      assignment (`o.i.v`, `m[i][j]` — the interpreter twin of #44c) and
-      missing short-circuit `&&`/`||`.
-      REMAINING: a random program GENERATOR over the bug-prone shapes (feeding
-      the same interp==compiled oracle and minimizing failures), the
-      interpreter fixed-width mode that would shrink EXPECTED_DIVERGE to empty,
-      and interpreter support for the INTERP_UNSUPPORTED shapes. The full
-      interpreter-vs-compiled harness is item 18 (needs #18a).
-      The generator must cover the recurring TYPE/SLOT-DERIVATION-THROUGH-
-      REFERENCES family that the 2026-06-18 workload passes proved is still
-      bug-prone (see 44h) — specifically: array READS through a ref/ptr
-      (C10), array WRITES through a ref/ptr (44h), non-i64 element widths
-      (u8/i16/i32 stride), void/Unit payload and result slots (enum payloads,
-      if-expression results), and nested aggregate writes through a ref
-      (`(&mut s).a.b[i] = v`). These are exactly the shapes where lowering must
-      choose a storage type or stride and historically defaulted to i64/Unit.
-    - 44g. [OPEN] Fix reference-typed return lowering as defense-in-depth after
-      the no-returned-refs invariant makes it unreachable from safe code. Finding
-      (2026-06-13): returning a reference-typed value materialized from a
-      reference identifier or `&place` emits a spurious extra load
-      (`fn id(x:&i64)->&i64 { return x; }` lowers like `load ptr, %x; ret`),
-      so the function returns the wrong pointer and can segfault on dereference.
-      Safe/public code should not be able to express returned refs once #8a3 is
-      complete, but trusted/internal lowering must still be correct. Add
-      fixtures that distinguish: safe ref returns are rejected by the checker;
-      trusted raw-pointer returns remain allowed/audit-visible; and any
-      remaining internal reference-valued return path returns the pointer value,
-      not the pointee. This is not the H1 fix — it is hardening once H1 has been
-      closed by subtraction.
-    - 44h. [DONE 2026-06-18] Fixed the TYPE/SLOT-DERIVATION-THROUGH-REFERENCES
-      family, found by the parser/decoder and fixed-buffer/no-alloc workload
-      passes. Three silent/crashing miscompiles, all where lowering chose a
-      storage type or stride and defaulted wrongly:
-      (1) `a[i] = v` through `&mut [T; N]` used the stored value's type (i64) as
-          the element type — an i64-strided GEP + clobbering `store i64` into a
-          `[i32]`/`[u8]` array → SILENT memory corruption. The write-path
-          analogue of C10 (which fixed array READS through a ref). Fixed in
-          `Lower.storeToPlace .arrayIndex` by resolving elemTy through one
-          ref/ptr/heap layer. Locked by `regress_mut_array_elem_writeback.con`.
-      (2) An if-expression as a value with no type hint (e.g. a match-arm value
-          `=> if c { 0 } else { 1 }`) defaulted its result type to Unit →
-          `alloca void`. Fixed in `Elab` (infer the if-expr type from its
-          branches). Locked by `regress_if_expr_match_arm.con`.
-      (3) An if-expression whose one branch diverges stored `void undef` into the
-          result slot from the dead branch. Fixed in `Lower` (only a live branch
-          writes the slot). Locked by `regress_if_expr_divergent_branch.con`.
-      Lesson: codegen bugs cluster around through-reference type resolution and
-      void/wrong-type slots; the 44f generator should target this family (above).
-45. Add the Phase 4 validation artifact:
-    `examples/compiler_pipeline_probe/` plus
-    `scripts/tests/check_phase4_pipeline.sh`. The fixture must run
-    `concrete build`, `run`, `test`, `fmt --check`, `inspect --ast`,
-    `inspect --resolved`, `inspect --typed`, `inspect --core`,
-    `inspect --backend-ir`, `verify-ir --pass typed`,
-    `verify-ir --pass backend-ir`, `build --events --json`,
-    `build --json-errors`, `build --keep-artifacts`,
-    `inspect --ledger`, `audit --compiler`, `report performance --json`,
-    `clean --dry-run --json`, and `audit`; compare interpreter-vs-compiled
-    output; assert source-map spans and source-location privacy modes survive;
-    assert dependency facts are stable; assert every pass artifact has input
-    ids, output ids, diagnostics, facts consumed/produced, timing, replay
-    command, and verifier status; assert rich human diagnostics and JSON/LSP
-    diagnostics come from the same records; assert schema-version mismatches
-    reject clearly; assert metamorphic variants preserve the right facts; assert
-    crash/repro bundles are emitted only for deliberate internal compiler
-    failures; and run the fuzz-regression fixtures without relying on
-    proof-specific machinery.
 
 ## Phase 5: Core Language Slab
 
@@ -1450,8 +563,9 @@ gate.
     `examples/daily/*/catches/`.
 32. Add basic benchmarking UX: `concrete bench` runs small benchmarks, compares
     interpreter versus compiled performance, emits `--json`, and detects
-    obvious generated-code regressions. This is separate from compiler
-    performance budgets in Phase 4.
+    obvious generated-code regressions. This is separate from the compiler
+    performance-budget gates (a closed-Phase-4 deferral, now folded into
+    Phase 17's artifact/stability hardening).
 33. Document the memory model for ordinary users: move/copy/drop behavior,
     cleanup, borrows, linear values, trusted/Unsafe escape hatches, definite
     assignment, and what is rejected. State the invariant explicitly: safe
@@ -2165,7 +1279,11 @@ five graduated flagships and one package-scale example.
     evidence classes, spec-drift-tied proofs, named trust boundaries, and what
     Concrete deliberately avoids. The website should show the end goal and the
     current honest status, not catchy slogans or one-badge proof claims.
-20. Add the Phase 10 validation artifact: one package-scale audit bundle fixture
+20. [relocated from closed Phase 4 — #42] Add compiler self-audit: `concrete audit
+    --compiler` renders the `CompilerLedger` / `ObligationCore` as a reviewable
+    bundle (ledger-from-ledger), proving the compiler's own facts are
+    audit-visible through the same surface user programs use.
+21. Add the Phase 10 validation artifact: one package-scale audit bundle fixture
     with human and JSON output, semantic diff before/after a change, artifact
     viewer smoke test, oracle manifest, property-test manifest, persisted
     counterexample regression, spec-provenance facts, redaction check, replay
@@ -2283,7 +1401,12 @@ under a stronger badge.
     `hmac_sha256`, `constant_time_tag` — must replay green from a pristine
     copy, and a deliberately corrupted source-vs-artifact mismatch must fail
     loudly, not reuse the stale artifact).
-17. Add the Phase 11 validation artifact: a trust-gate pressure project that
+17. [relocated from closed Phase 3 — #15/#16 tail] Convert `--report proof-status`
+    and `concrete prove`'s obligation facts from consistency-gated recompute to
+    literal `ObligationCore`-ledger views — the last Phase 3 surfaces that
+    recompute (sound today because consistency-gated). They are the
+    proof-status / trust surfaces, so they belong in this phase.
+18. Add the Phase 11 validation artifact: a trust-gate pressure project that
     includes transitive proof dependencies, stale dependency propagation,
     tool-version drift, proof-corpus migration across a simulated toolchain bump,
     assumption widening, spec-adequacy policy, vacuity downgrade, solver
@@ -2534,7 +1657,17 @@ machine-readable.
     theorem proves a specific generated instance (`proved_for_instance`) or a
     generic body (`proved_generic`), and it must prevent one instance proof from
     being presented as proof for every future instantiation.
-13. Add the Phase 14 validation artifact: a compiler-soundness dashboard with
+13. [relocated from closed Phase 4 — #44f tail / #44g] Compiler-correctness
+    hardening: (a) a full interpreter-vs-compiled differential harness with a
+    random program GENERATOR over the through-reference / void-slot bug-prone
+    shapes (extends `check_codegen_differential.sh`; needs interpreter structured
+    diagnostics, the deferred Phase-4 #18a); and (b) the defense-in-depth
+    ref-return lowering fix — a reference-typed return materialized from a ref
+    identifier / `&place` emits a spurious extra load. (b) is unreachable from
+    safe code (reference returns are rejected at the type level — H1), so it is
+    internal-lowering hardening; fixtures must distinguish rejected safe returns,
+    allowed trusted raw-pointer returns, and a correct internal ref-valued return.
+14. Add the Phase 14 validation artifact: a compiler-soundness dashboard with
     one witness program per shipped ProofCore construct, one status per
     R-rule, replay commands for proved/mechanically-validated facts, and
     regressions proving report facts (`proved`, `stale`, `blocked`, `missing`,
@@ -2850,7 +1983,15 @@ audience):**
     and release performance gates publish replayable numbers; otherwise docs
     must say performance claims are not made yet.
 19. Ship the first narrow public release only after the above are green.
-20. Add the Phase 17 validation artifact:
+20. [relocated from closed Phase 4] Artifact and docs stability hardening:
+    schema-version rejection gates (refuse to silently misread an artifact whose
+    schema version differs from the compiler's), source-location privacy /
+    redaction modes for emitted diagnostics and artifacts (Phase-4 #38), and
+    docs-drift SEMANTIC checks beyond the artifact-existence gate
+    (`check_docs_drift.sh`) — e.g. `Status:`/`Verified:` metadata and stale-claim
+    marker detection. (Found not mechanically robust as a default during the #44
+    work; they belong here, gated for the release bar.)
+21. Add the Phase 17 validation artifact:
     `scripts/tests/check_release_candidate.sh` installs the dist archive into a
     clean temp prefix on every supported host, runs `concrete --version --json`,
     builds one example, runs one proof/audit workflow, verifies checksums and
@@ -3005,7 +2146,15 @@ reports without inventing a second truth source.
     preloaded examples, no hidden claims, visible evidence class, audit output,
     and clear sandbox/timeout/resource assumptions. This is a teaching surface,
     not a second compiler pipeline.
-12. Add the Phase 19 validation artifact:
+12. [relocated from closed Phase 4 — #11 tail] Route obligation / proof / policy
+   facts into the structured `Diagnostic` record / `--diagnostics-json` channel so
+   LSP/editor and CI-JSON consumers see them (array-bounds, solver-policy,
+   vacuous-contract, stale-proof, …) — without duplicating the
+   `ObligationCore`/report model. Includes interpreter structured diagnostics
+   (the deferred Phase-4 #18a). Pull when a real consumer (LSP / CI JSON parser)
+   needs machine-readable obligation diagnostics; see LANGUAGE_GAPS for the
+   frontend-vs-obligation diagnostic split.
+13. Add the Phase 19 validation artifact:
    `scripts/tests/check_phase18_editor.sh` runs a scripted LSP/editor session
    or golden transcript over one real project, proving hover, diagnostics,
    obligation navigation, proof/evidence facts, dependency audit UI, refactor
