@@ -243,24 +243,24 @@ reflection over a *natively executed* certificate check, a larger TCB than
 
 ---
 
-## Open design decisions that gate the Phase 5/6 freeze
+## Open design decisions that gate the Phase 5/6/7 freeze
 
 These are not holes (no current unsoundness) but are unmade decisions that must
 land before the relevant freeze. Full text in ROADMAP; listed here so the
 whole picture is in one place.
 
-- **Callable values + capability-polymorphic callbacks** — ROADMAP Phase 5
-  #24/#24a. DESIGN DONE (2026-06-12): `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`
+- **Callable values + capability-polymorphic callbacks** — ROADMAP Phase 6
+  #18. DESIGN DONE (2026-06-12): `docs/CALLABLE_VALUES_AND_CAPABILITIES.md`
   now exists and records the decided model; the HOF freeze is lifted (doc
-  governs). What remains is implementation — and in particular the scoped
-  collection callbacks (`with_value`/`with_value_mut`/`modify`) that the H1
-  immutable-half withdrawal below depends on. `from(param)` stays deferred
-  (#8a1) and is explicitly NOT the H1 fix.
+  governs). What remains is implementation only when workloads pull it:
+  `with_value_mut`/`modify` need the container-not-in-context gate, stored
+  `BoundFn` values need a storage workload, and `from(param)` stays deferred
+  (Phase 7 #8e) and is explicitly NOT the H1 fix.
 - **Owned `ByteView` zero-copy stored idiom** — Phase 5 #5a.
 - **Narrow const generics** (`[T; N]`) — Phase 5 #6a.
-- **Pattern completeness** (ranges/guards/or/nested) — Phase 5 #11.
-- **Explicit-dictionary coherence** — Phase 6 #8c.
-- **Arena/index safety** (stale-index use-after-remove) — Phase 6 #8b.
+- **Pattern completeness** (ranges/guards/or/nested) — Phase 6 #5.
+- **Explicit-dictionary coherence** — Phase 7 #8c.
+- **Arena/index safety** (stale-index use-after-remove) — Phase 7 #8b.
 - **Interpreter structured diagnostics** (prereq for the differential harness)
   — Phase 4 #18a.
 - **Declaration-span remainders** (extern-fn, module-file-not-found) —

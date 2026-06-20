@@ -1,7 +1,7 @@
 # Callable Values and Capability-Polymorphic Callbacks
 
-Status: design checkpoint (ROADMAP Phase 5 #24 / #24a) — the single model that
-must exist before the Phase 6 stdlib iteration/HOF surface, scoped collection
+Status: design checkpoint (ROADMAP Phase 6 #18) — the single model that
+must exist before the Phase 7 stdlib iteration/HOF surface, scoped collection
 callbacks, and the V1.1 immutable-read withdrawal land. This document records
 the *decided* design. Items marked **[implemented]** already hold today; items
 marked **[specified]** are settled design that is not yet built; items marked
@@ -476,6 +476,6 @@ Examples to add under `examples/callbacks/`:
   capture nothing.
 - `docs/KNOWN_HOLES.md` — H1 (returned-reference provenance), mutable half
   closed, immutable half withdrawn by §5 here.
-- ROADMAP Phase 5 #24 / #24a (this item), #8a / #8a1 (H1 by subtraction,
-  `from()` deferred), #23 (iteration), #6b (inference through references — done,
-  the prerequisite for `&T`-callback ergonomics).
+- ROADMAP Phase 6 #18 (this item), Phase 7 #8a / #8e (H1 by subtraction,
+  `from()` deferred), Phase 6 #17 (iteration), and the completed inference
+  through references work that made `&T`-callback ergonomics viable.

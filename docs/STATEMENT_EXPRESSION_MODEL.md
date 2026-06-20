@@ -1,6 +1,6 @@
 # Statement vs Trailing-Expression Model (design)
 
-Status: design — scoping pass for ROADMAP Phase 5 #42 / LANGUAGE_GAPS #12
+Status: design — scoping pass for ROADMAP Phase 6 #36 / LANGUAGE_GAPS #12
 Date: 2026-06-20
 
 ## Problem
