@@ -1,0 +1,125 @@
+# Statement vs Trailing-Expression Model (design)
+
+Status: design — scoping pass for ROADMAP Phase 5 #42 / LANGUAGE_GAPS #12
+Date: 2026-06-20
+
+## Problem
+
+Concrete does not distinguish, in the AST, a discarded expression statement
+(`expr;`) from a trailing value expression (`expr` with no `;`). Both become the
+same `AST.Stmt.expr span e`. So a value-bearing block's type is computed from its
+last `.expr` regardless of the `;`, which:
+
+- types a statement-position match arm `=> { side(); }` (where `side() -> i64`) as
+  `i64`, so it disagrees with a unit arm `{ }` and is rejected with a spurious
+  **E0225** ("match arm type … does not match first arm type …"); and
+- is the dual of the now-fixed if-*expression* gap (LANGUAGE_GAPS #5): a block
+  cannot serve as a value (`{ …; v }`) because the trailing expression is not
+  modeled distinctly.
+
+## Root cause (pinpointed)
+
+`Concrete/Parser.lean`:
+- `parseExprBlock` (the value-bearing block parser, used for if-expression
+  branches and `{ … }` match-arm bodies): a trailing expression with **no** `;`
+  (line ~846) and a `;`-terminated statement (line ~862) both emit the identical
+  `Stmt.expr sp e`. The `;` is observed and then discarded.
+- `parseMatchArmBody` bare arm `=> expr` (line ~1208) emits `[.expr sp e]` too.
+
+Everything downstream that computes a block/arm value or type reads the last
+statement and, for `.expr e`, uses `e` — there is no flag to say "this one was
+discarded."
+
+## Current model (verified)
+
+- **Function bodies require explicit `return`** (`fn f()->i64 { 5 }` is a parse
+  error) — no implicit trailing-expression return. Parsed by `parseBlock`
+  (statement-only).
+- **if/while/for statement bodies**: `parseBlock` (statement-only).
+- **Value-bearing blocks**: ONLY `parseExprBlock` — if-expression branches and
+  `{ … }` match-arm bodies — plus the direct `=> expr` arm.
+- **Braced block as a free expression** (`let x = { …; v }`): not supported.
+
+So the value/discard distinction only needs to be tracked where `parseExprBlock`
+or the direct arm runs. Function/loop bodies are out of scope.
+
+## Chosen representation
+
+**Option A (chosen): a `isValue : Bool` flag on `Stmt.expr`.**
+`| expr (span : Span) (e : Expr) (isValue : Bool)` — `isValue = true` iff this is
+the block's trailing value expression (no `;`); only the last statement of a
+value-bearing block may be `true`. The parser already has the `;` information at
+the branch point, so it sets the flag directly; everywhere else constructs
+`isValue := false` (a plain discarded statement). Block/arm value+type:
+
+    last stmt is  .expr e true   → type/value = e
+    last stmt is  .return_/break  → diverges (never)
+    otherwise                     → Unit
+
+Rejected alternatives:
+- **Option B — a `Block` record `{ stmts, trailing : Option Expr }`.** Cleaner
+  separation, but every `List Stmt` body field (if/while/for/fn/arm) changes
+  type — large, invasive churn for no extra correctness over Option A.
+- **A distinct `Stmt.tailExpr` constructor.** Avoids touching `.expr` build sites
+  but adds a constructor to handle in every `Stmt` match; about the same churn as
+  the flag, less uniform. The flag keeps one expression-statement shape.
+
+The flag forces every `.expr` construction site to be updated (Lean won't
+compile otherwise), so there is no risk of a missed site.
+
+## Scope
+
+IN (this change):
+- Record value-vs-discard and make block/arm type respect it. This fixes E0225
+  and makes match-arm typing principled.
+
+OUT (separate, additive follow-ups — not required by #42):
+- Braced block as a free expression (`let x = { …; v }`).
+- Implicit trailing-expression `return` for function bodies.
+These are features, not the bug; keep them out so the fix stays bounded.
+
+## Touch points
+
+- `Concrete/AST.lean`: `Stmt.expr` gains `isValue : Bool`.
+- `Concrete/Parser.lean`: set `isValue` in `parseExprBlock` (trailing-no-`;` →
+  true; `;` → false) and `parseMatchArmBody` (bare `=> expr` → true). `parseBlock`
+  and all other `.expr` builders → false.
+- `Concrete/Check.lean`: the arm/branch type sites (`body.getLast?` at ~1116,
+  ~1135, ~1727, ~1800; if-branch at ~1090): `.expr e true` → typeof e, else Unit.
+- `Concrete/Elab.lean`: if-expression result-type inference and arm elaboration
+  use the same rule; carry the flag onto `CExpr`/`CStmt` if Core needs it.
+- `Concrete/Core.lean` + `Concrete/CoreCanonicalize.lean`: thread the flag (or
+  the trailing-expr notion) so Lower can see it.
+- `Concrete/Lower.lean`: `lastExprVal` returns the trailing value only for
+  `.expr … true`; a `;`-terminated last `.expr` contributes no value (Unit) —
+  also removes a class of `store void`/wrong-slot hazards.
+- Formatter: print a trailing value expression without `;`, a statement with `;`.
+- Diagnostics: E0225 should no longer fire for statement-position arms; keep it
+  for genuine value-arm type disagreement.
+
+## Staged plan (each stage: full suite green)
+
+1. **AST + parser, behavior-preserving.** Add the flag; set it correctly in the
+   parser; make every type/value site treat `isValue=false` last-`.expr` the SAME
+   as today *for now* (i.e. keep current behavior) to isolate the mechanical
+   change. Build + full suite green.
+2. **Flip the semantics.** Make block/arm type = Unit when the last `.expr` is
+   discarded (`isValue=false`), and the trailing value only when `true`. This is
+   the behavior change that fixes E0225. Update Lower's `lastExprVal` in lockstep.
+   Add `tests/programs/regress_stmt_match_arm_unit.con` (the `{ side(); }` arm now
+   agrees with a unit arm) and keep the existing value-arm fixtures green.
+3. **Formatter + diagnostics.** Round-trip formatting (value expr no `;`,
+   statement with `;`); confirm E0225 only fires on real value disagreement.
+4. **Docs + gates.** Update LANGUAGE_GAPS #12 → fixed, ROADMAP #42 → done, this
+   doc → implemented; CHANGELOG entry; `--full` baseline unchanged.
+
+## Risks
+
+- Any value-bearing block that today relies on a `;`-terminated last expression
+  being its value would flip to Unit. Given function bodies require `return` and
+  block-as-value isn't supported, the only such sites are if-expression branches
+  and match-arm blocks — and those legitimately wanting a value use the no-`;`
+  trailing form or a direct `=> expr`. The full suite + examples + `--full` are
+  the safety net; Stage 1/2 separation localizes any fallout to the flip.
+- `&&`/`||` short-circuit, `defer`, and ghost lets all build `.expr`/statements —
+  mechanical flag updates only; covered by the compile-forces-all-sites property.
