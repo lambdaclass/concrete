@@ -843,7 +843,7 @@ partial def parseExprBlock : ParseM (List Stmt) := do
       let nextTk ← peek
       if nextTk == .rbrace then
         -- Trailing expression without semicolon — this is the block's value
-        stmts := stmts ++ [Stmt.expr sp e]
+        stmts := stmts ++ [Stmt.expr sp e true]
       else if nextTk == .assign then
         -- Assignment: x = expr;
         advance
@@ -859,7 +859,7 @@ partial def parseExprBlock : ParseM (List Stmt) := do
       else
         -- Normal expression statement, need semicolon
         expect .semicolon
-        stmts := stmts ++ [Stmt.expr sp e]
+        stmts := stmts ++ [Stmt.expr sp e false]
     tk ← peek
   expect .rbrace
   return stmts
@@ -1161,7 +1161,7 @@ partial def parseExprOrAssignNoSemicolon : ParseM Stmt := do
     | _ =>
       let sp ← peekSpan
       throwParse "invalid assignment target" (span := some sp)
-  | _ => return .expr e.getSpan e
+  | _ => return .expr e.getSpan e false
 
 partial def parseMatchStmt : ParseM Stmt := do
   let sp ← peekSpan
@@ -1170,7 +1170,7 @@ partial def parseMatchStmt : ParseM Stmt := do
   expect .lbrace
   let arms ← parseMatchArms
   expect .rbrace
-  return .expr sp (.match_ sp scrutinee arms)
+  return .expr sp (.match_ sp scrutinee arms) false
 
 partial def parseMatchArms : ParseM (List MatchArm) := do
   let mut arms : List MatchArm := []
@@ -1200,12 +1200,13 @@ partial def parseMatchArmBody : ParseM (List Stmt) := do
     if tk2 == .semicolon then advance
     pure [.return_ sp value]
   else do
-    -- Bare expression arm body (for match-as-expression: => expr,)
+    -- Bare expression arm body (for match-as-expression: => expr,) — this is the
+    -- arm's VALUE.
     let sp ← peekSpan
     let expr ← parseExpr
     let nextTk ← peek
     if nextTk == .semicolon then advance
-    pure [.expr sp expr]
+    pure [.expr sp expr true]
 
 partial def parseMatchArm : ParseM MatchArm := do
   let sp ← peekSpan
@@ -1334,7 +1335,7 @@ partial def parseExprOrAssign : ParseM Stmt := do
       throwParse "invalid assignment target" (span := some sp)
   | .semicolon =>
     advance
-    return .expr e.getSpan e
+    return .expr e.getSpan e false
   | other =>
     let sp ← peekSpan
     throwParse s!"expected ';' or '=', got {other}" (span := some sp)

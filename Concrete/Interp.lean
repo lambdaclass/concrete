@@ -664,7 +664,7 @@ partial def evalStmt (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s 
   | .return_ none _ =>
     return (env, .ret .unit)
 
-  | .expr e => do
+  | .expr e _ => do
     let (env, f) ← evalExpr fns enums env e
     match f with
     | .val _ => return (env, .val .unit)

@@ -88,7 +88,7 @@ partial def findCallSpan (targets : List String) : List Stmt → Option Span
     | none => findCallSpan targets rest
 where
   findCallSpanExpr (targets : List String) : Stmt → Option Span
-    | .expr _ e => findCallSpanInExpr targets e
+    | .expr _ e _ => findCallSpanInExpr targets e
     | .letDecl _ _ _ _ e _ => findCallSpanInExpr targets e
     | .assign _ _ e => findCallSpanInExpr targets e
     | .return_ _ (some e) => findCallSpanInExpr targets e
@@ -623,7 +623,7 @@ mutual
     | _ => []
   /-- Collect every `(span, fnName, args)` call in a statement. -/
   partial def collectCallsS : Stmt → List (Span × String × List Expr)
-    | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v => collectCallsE v
+    | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v => collectCallsE v
     | .return_ _ (some v) => collectCallsE v
     | .ifElse _ c t el => collectCallsE c ++ t.flatMap collectCallsS ++ (el.getD []).flatMap collectCallsS
     | .while_ _ c b _ => collectCallsE c ++ b.flatMap collectCallsS
@@ -740,7 +740,7 @@ mutual
   partial def localNamesS : Stmt → List String
     | .letDecl _ n _ _ v _ => n :: localNamesE v
     | .assign _ n v => n :: localNamesE v
-    | .return_ _ (some v) | .expr _ v | .defer _ v => localNamesE v
+    | .return_ _ (some v) | .expr _ v _ | .defer _ v => localNamesE v
     | .return_ _ none | .break_ _ none _ | .continue_ _ _ => []
     | .ifElse _ c t el => localNamesE c ++ localNamesB t ++ localNamesB (el.getD [])
     | .while_ _ c b _ => localNamesE c ++ localNamesB b
@@ -812,7 +812,7 @@ mutual
     | .letDecl _ _ _ _ v _ => validateContractExpr allowedVars callables v
     | .assign _ n v =>
       (if allowedVars.contains n then [] else [s!"unknown identifier '{n}'"]) ++ validateContractExpr allowedVars callables v
-    | .return_ _ (some v) | .expr _ v | .defer _ v => validateContractExpr allowedVars callables v
+    | .return_ _ (some v) | .expr _ v _ | .defer _ v => validateContractExpr allowedVars callables v
     | .return_ _ none | .break_ _ none _ | .continue_ _ _ => []
     | .ifElse _ c t el => validateContractExpr allowedVars callables c ++ t.flatMap (validateContractStmt allowedVars callables) ++ (el.getD []).flatMap (validateContractStmt allowedVars callables)
     | .while_ _ c b _ => validateContractExpr allowedVars callables c ++ b.flatMap (validateContractStmt allowedVars callables)
@@ -1314,7 +1314,7 @@ partial def collectIndexUsesE : Expr → List (String × Expr)
   | .match_ _ s _ => collectIndexUsesE s
   | _ => []
 partial def collectIndexUsesS : Stmt → List (String × Expr)
-  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v => collectIndexUsesE v
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v => collectIndexUsesE v
   | .return_ _ (some v) => collectIndexUsesE v
   | .ifElse _ c t el => collectIndexUsesE c ++ t.flatMap collectIndexUsesS ++ (el.getD []).flatMap collectIndexUsesS
   | .while_ _ c b _ => collectIndexUsesE c ++ b.flatMap collectIndexUsesS
@@ -1420,7 +1420,7 @@ end
     A store `a[idx] = v` carries its target bound `(a, idx)` FIRST, matching the
     old walker's ordering exactly. -/
 def boundsLeaf (scope : List Expr) : Stmt → List (String × Expr × List Expr)
-  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v =>
       (collectIndexUsesE v).map fun (a, i) => (a, i, scope)
   | .return_ _ (some v) => (collectIndexUsesE v).map fun (a, i) => (a, i, scope)
   | .ifElse _ c _ _ => (collectIndexUsesE c).map fun (a, i) => (a, i, scope)
@@ -1449,7 +1449,7 @@ def scopedBoundsB (lcs : List LoopContract) (scope : List Expr) (body : List Stm
     walker owns recursion into branches, loop bodies, and for-loop init/step, so
     `.ifElse`/`.while_`/`.forLoop` contribute only their condition's calls). -/
 def callLeaf (scope : List Expr) : Stmt → List (String × List Expr × List Expr)
-  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v =>
       (collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
   | .return_ _ (some v) => (collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
   | .ifElse _ c _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope)
@@ -1688,7 +1688,7 @@ partial def collectDivisorsE : Expr → List (Bool × Expr)
   | .match_ _ s _ => collectDivisorsE s
   | _ => []
 partial def collectDivisorsS : Stmt → List (Bool × Expr)
-  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v => collectDivisorsE v
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v => collectDivisorsE v
   | .return_ _ (some v) => collectDivisorsE v
   | .ifElse _ c t el => collectDivisorsE c ++ t.flatMap collectDivisorsS ++ (el.getD []).flatMap collectDivisorsS
   | .while_ _ c b _ => collectDivisorsE c ++ b.flatMap collectDivisorsS
@@ -1705,7 +1705,7 @@ end
     `.ifElse`/`.while_`/`.forLoop` contribute only their condition's divisors).
     Each item is `(isMod, divisorExpr, scope)`. -/
 def divLeaf (scope : List Expr) : Stmt → List (Bool × Expr × List Expr)
-  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v =>
       (collectDivisorsE v).map fun (m, e) => (m, e, scope)
   | .return_ _ (some v) => (collectDivisorsE v).map fun (m, e) => (m, e, scope)
   | .ifElse _ c _ _ => (collectDivisorsE c).map fun (m, e) => (m, e, scope)
@@ -1830,7 +1830,7 @@ partial def collectArithE : Expr → List Expr
   | .match_ _ s _ => collectArithE s
   | _ => []
 partial def collectArithS : Stmt → List Expr
-  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v => collectArithE v
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v => collectArithE v
   | .return_ _ (some v) => collectArithE v
   | .ifElse _ c t el => collectArithE c ++ t.flatMap collectArithS ++ (el.getD []).flatMap collectArithS
   | .while_ _ c b _ => collectArithE c ++ b.flatMap collectArithS
@@ -1846,7 +1846,7 @@ end
     positions (the walker owns recursion into branches/loops/init/step, so
     `.ifElse`/`.while_`/`.forLoop` contribute only their condition's op nodes). -/
 def arithLeaf (scope : List Expr) : Stmt → List (Expr × List Expr)
-  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v | .defer _ v =>
+  | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v =>
       (collectArithE v).map fun e => (e, scope)
   | .return_ _ (some v) => (collectArithE v).map fun e => (e, scope)
   | .ifElse _ c _ _ => (collectArithE c).map fun e => (e, scope)
@@ -3916,7 +3916,7 @@ private partial def proveArmFeatures : CMatchArm → List String
   | .enumArm _ _ _ body | .litArm _ body | .varArm _ _ body => body.flatMap proveStmtFeatures
 
 private partial def proveStmtFeatures : CStmt → List String
-  | .letDecl _ _ _ v | .assign _ v | .expr v => proveExprFeatures v
+  | .letDecl _ _ _ v | .assign _ v | .expr v _ => proveExprFeatures v
   | .return_ (some v) _ => proveExprFeatures v
   | .return_ none _ => []
   | .ifElse c t e =>

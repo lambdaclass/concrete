@@ -1088,7 +1088,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
     let elseInit := elseBody.dropLast
     checkStmts elseInit env.currentRetTy
     let elseTy ← match elseBody.getLast? with
-      | some (.expr _ e) => checkExpr e hint
+      | some (.expr _ e _) => checkExpr e hint
       | some (.return_ _ v) =>
         match v with
         | some rv => let _ ← checkExpr rv; pure Ty.never
@@ -1114,7 +1114,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
     let thenInit := then_.dropLast
     checkStmts thenInit env.currentRetTy
     let thenTy ← match then_.getLast? with
-      | some (.expr _ tExpr) => do
+      | some (.expr _ tExpr _) => do
         let ty ← checkExpr tExpr hint
         -- Trailing expression is a value move — consume linear variables
         match tExpr with
@@ -1133,7 +1133,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
     let elseInit := else_.dropLast
     checkStmts elseInit env.currentRetTy
     let elseTy ← match else_.getLast? with
-      | some (.expr _ eExpr) => do
+      | some (.expr _ eExpr _) => do
         let ty ← checkExpr eExpr hint
         match eExpr with
         | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
@@ -1725,7 +1725,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
           let curEnv ← getEnv
           checkStmts bodyInit curEnv.currentRetTy
           let armTy ← match body.getLast? with
-            | some (.expr _ armExpr) => do
+            | some (.expr _ armExpr _) => do
               let ty ← checkExpr armExpr hint
               -- Trailing expression is a value move — consume linear variables
               match armExpr with
@@ -1798,7 +1798,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         let bodyInit := body.dropLast
         checkStmts bodyInit envBefore.currentRetTy
         let armTy ← match body.getLast? with
-          | some (.expr _ armExpr) => do
+          | some (.expr _ armExpr _) => do
             let ty ← checkExpr armExpr hint
             -- Trailing expression is a value move — consume linear variables
             match armExpr with
@@ -2142,7 +2142,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | _ => pure ()
   | .return_ _ none =>
     expectTy .unit retTy "return (void)" (some stmt.getSpan)
-  | .expr _ e =>
+  | .expr _ e _ =>
     let _ ← checkExpr e
     pure ()
   | .ifElse _ cond thenBody elseBody =>

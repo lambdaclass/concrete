@@ -55,7 +55,9 @@ inductive CStmt where
   | letDecl (name : String) (mutable : Bool) (ty : Ty) (value : CExpr)
   | assign (name : String) (value : CExpr)
   | return_ (value : Option CExpr) (retTy : Ty)
-  | expr (e : CExpr)
+  -- `isValue`: trailing value expression of a value-bearing block/arm (no `;`)
+  -- vs a discarded statement (`;`). Carried from `AST.Stmt.expr`. Phase 5 #42.
+  | expr (e : CExpr) (isValue : Bool)
   | ifElse (cond : CExpr) (then_ : List CStmt) (else_ : Option (List CStmt))
   | while_ (cond : CExpr) (body : List CStmt) (label : Option String)
            (step : List CStmt)
@@ -293,7 +295,7 @@ partial def ppCStmt (ind : Nat) (s : CStmt) : String :=
   | .assign n v => s!"{pfx}{n} = {ppCExpr v};"
   | .return_ (some v) _ => s!"{pfx}return {ppCExpr v};"
   | .return_ none _ => s!"{pfx}return;"
-  | .expr e => s!"{pfx}{ppCExpr e};"
+  | .expr e _ => s!"{pfx}{ppCExpr e};"
   | .ifElse c t el =>
     let thenStr := t.map (ppCStmt (ind + 1))
     let elseStr := match el with

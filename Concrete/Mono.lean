@@ -82,7 +82,7 @@ private partial def substStmt (sub : Ty → Ty) : CStmt → CStmt
   | .assign n val => .assign n (substExpr sub val)
   | .return_ (some v) ty => .return_ (some (substExpr sub v)) (sub ty)
   | .return_ none ty => .return_ none (sub ty)
-  | .expr e => .expr (substExpr sub e)
+  | .expr e iv => .expr (substExpr sub e) iv
   | .ifElse c t el =>
     .ifElse (substExpr sub c) (substStmts sub t) (el.map (substStmts sub))
   | .while_ c body lbl step => .while_ (substExpr sub c) (substStmts sub body) lbl (substStmts sub step)
@@ -147,7 +147,7 @@ private partial def rewriteCallNamesStmt (nameMap : List (String × String)) : C
   | .letDecl n m ty val => .letDecl n m ty (rewriteCallNames nameMap val)
   | .assign n val => .assign n (rewriteCallNames nameMap val)
   | .return_ (some v) ty => .return_ (some (rewriteCallNames nameMap v)) ty
-  | .expr e => .expr (rewriteCallNames nameMap e)
+  | .expr e iv => .expr (rewriteCallNames nameMap e) iv
   | .ifElse c t el =>
     .ifElse (rewriteCallNames nameMap c) (rewriteCallNamesStmts nameMap t) (el.map (rewriteCallNamesStmts nameMap))
   | .while_ c body lbl step =>
@@ -205,7 +205,7 @@ partial def injectTypeArgsStmt (genericNames : List String) (typeArgs : List Ty)
   | .letDecl n m ty val => .letDecl n m ty (injectTypeArgsExpr genericNames typeArgs val)
   | .assign n val => .assign n (injectTypeArgsExpr genericNames typeArgs val)
   | .return_ (some v) ty => .return_ (some (injectTypeArgsExpr genericNames typeArgs v)) ty
-  | .expr e => .expr (injectTypeArgsExpr genericNames typeArgs e)
+  | .expr e iv => .expr (injectTypeArgsExpr genericNames typeArgs e) iv
   | .ifElse c t el =>
     .ifElse (injectTypeArgsExpr genericNames typeArgs c) (injectTypeArgsStmts genericNames typeArgs t) (el.map (injectTypeArgsStmts genericNames typeArgs))
   | .while_ c body lbl step =>
@@ -479,7 +479,7 @@ partial def monoStmt (s : CStmt) : MonoM CStmt := do
   | .assign n val => return .assign n (← monoExpr val)
   | .return_ (some v) ty => return .return_ (some (← monoExpr v)) ty
   | .return_ none ty => return .return_ none ty
-  | .expr e => return .expr (← monoExpr e)
+  | .expr e iv => return .expr (← monoExpr e) iv
   | .ifElse c t el =>
     let el' ← match el with
       | none => pure none
@@ -635,7 +635,7 @@ private partial def collectStmtInstances (gn : List String) : CStmt → List (St
   | .assign _ val => collectExprInstances gn val
   | .return_ (some v) ty => collectExprInstances gn v ++ collectGenericTyInstances gn ty
   | .return_ none ty => collectGenericTyInstances gn ty
-  | .expr e => collectExprInstances gn e
+  | .expr e _ => collectExprInstances gn e
   | .ifElse c t el =>
     collectExprInstances gn c ++ collectStmtsInstances gn t ++
     match el with | some s => collectStmtsInstances gn s | none => []
@@ -751,7 +751,7 @@ private partial def rewriteStmtTys (m : List (String × List Ty × String)) : CS
   | .assign n val => .assign n (rewriteExprTys m val)
   | .return_ (some v) ty => .return_ (some (rewriteExprTys m v)) (rewriteTy m ty)
   | .return_ none ty => .return_ none (rewriteTy m ty)
-  | .expr e => .expr (rewriteExprTys m e)
+  | .expr e iv => .expr (rewriteExprTys m e) iv
   | .ifElse c t el =>
     .ifElse (rewriteExprTys m c) (rewriteStmtsTys m t) (el.map (rewriteStmtsTys m))
   | .while_ c body lbl step =>

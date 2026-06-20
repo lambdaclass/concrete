@@ -66,7 +66,7 @@ partial def collectCallsStmt (s : CStmt) : List String :=
   | .assign _ v => collectCallsExpr v
   | .return_ (some v) _ => collectCallsExpr v
   | .return_ none _ => []
-  | .expr e => collectCallsExpr e
+  | .expr e _ => collectCallsExpr e
   | .ifElse c t el =>
     collectCallsExpr c ++ collectCallsStmts t ++
     match el with | some stmts => collectCallsStmts stmts | none => []
@@ -124,7 +124,7 @@ partial def collectDefersStmt (s : CStmt) : List String :=
   | .assign _ v => collectDefersExpr v
   | .return_ (some v) _ => collectDefersExpr v
   | .return_ none _ => []
-  | .expr e => collectDefersExpr e
+  | .expr e _ => collectDefersExpr e
   | .ifElse c t el =>
     collectDefersExpr c ++ collectDefersStmts t ++
     match el with | some stmts => collectDefersStmts stmts | none => []
@@ -181,7 +181,7 @@ partial def hasRawPtrOpsStmt (s : CStmt) : Bool :=
   | .assign _ v => hasRawPtrOpsExpr v
   | .return_ (some v) _ => hasRawPtrOpsExpr v
   | .return_ none _ => false
-  | .expr e => hasRawPtrOpsExpr e
+  | .expr e _ => hasRawPtrOpsExpr e
   | .ifElse c t el =>
     hasRawPtrOpsExpr c || hasRawPtrOpsStmts t ||
     match el with | some stmts => hasRawPtrOpsStmts stmts | none => false
@@ -451,7 +451,7 @@ partial def collectLoopBoundsStmt (s : CStmt) : List LoopBound :=
   | .assign _ v => collectLoopBoundsExpr v
   | .return_ (some v) _ => collectLoopBoundsExpr v
   | .return_ none _ => []
-  | .expr e => collectLoopBoundsExpr e
+  | .expr e _ => collectLoopBoundsExpr e
   | .ifElse c t el =>
     collectLoopBoundsExpr c ++ collectLoopBoundsStmts t ++
     match el with | some stmts => collectLoopBoundsStmts stmts | none => []
@@ -522,7 +522,7 @@ where
     | .assign name val => s!"(set {name} {fingerprintExpr val})"
     | .return_ (some val) _ => s!"(ret {fingerprintExpr val})"
     | .return_ none _ => "(ret)"
-    | .expr e => fingerprintExpr e
+    | .expr e _ => fingerprintExpr e
     | .ifElse cond th (some el) => s!"(if {fingerprintExpr cond} {fingerprintStmts th} {fingerprintStmts el})"
     | .ifElse cond th none => s!"(if {fingerprintExpr cond} {fingerprintStmts th})"
     | .while_ cond body _ step => s!"(while {fingerprintExpr cond} {fingerprintStmts body} {fingerprintStmts step})"
@@ -829,7 +829,7 @@ def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
 def cStmtsToPExprKImpl : List CStmt → Option Proof.PExpr → Option Proof.PExpr
   | [], k => k
   | [.return_ (some e) _], _ => cExprToPExprImpl e
-  | [.expr e], _ => cExprToPExprImpl e
+  | [.expr e _], _ => cExprToPExprImpl e
   | (.letDecl name _ _ val) :: rest, k => do
     let pv ← cExprToPExprImpl val
     let pb ← cStmtsToPExprKImpl rest k
@@ -1094,7 +1094,7 @@ def cExprToPExpr : CExpr → Option Proof.PExpr
 def cStmtsToPExprK : List CStmt → Option Proof.PExpr → Option Proof.PExpr
   | [], k => k
   | [.return_ (some e) _], _ => cExprToPExpr e
-  | [.expr e], _ => cExprToPExpr e
+  | [.expr e _], _ => cExprToPExpr e
   | (.letDecl name _ _ val) :: rest, k => do
     let pv ← cExprToPExpr val
     let pb ← cStmtsToPExprK rest k
@@ -1203,7 +1203,7 @@ private partial def identifyUnsupportedExpr : CExpr → List String
 private partial def identifyUnsupportedStmt : CStmt → List String
   | .letDecl _ _ _ val => identifyUnsupportedExpr val
   | .return_ (some e) _ => identifyUnsupportedExpr e
-  | .expr e => identifyUnsupportedExpr e
+  | .expr e _ => identifyUnsupportedExpr e
   | .ifElse cond thenBr elseBr =>
     -- if without else is supported by cStmtsToPExprK as
     -- early-return-with-fall-through. Do NOT flag it here.

@@ -456,7 +456,7 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
       | some t => pure t
       | none =>
         let lastExprOf := fun (stmts : List Stmt) =>
-          stmts.reverse.findSome? fun s => match s with | .expr _ e => some e | _ => none
+          stmts.reverse.findSome? fun s => match s with | .expr _ e _ => some e | _ => none
         match lastExprOf then_ with
         | some e => peekExprType e
         | none => match lastExprOf else_ with
@@ -1061,7 +1061,7 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
     let env ← getEnv
     return [.return_ none env.currentRetTy]
 
-  | .expr sp (.call _sp fnName _typeArgs args) =>
+  | .expr sp (.call _sp fnName _typeArgs args) iv =>
     -- Desugar print/println into individual typed print calls
     -- Only if not shadowed by a user/stdlib function with the same name
     let existingFn ← lookupFnSig fnName
@@ -1071,22 +1071,22 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
         let cArg ← elabExpr arg
         let printCall := match cArg.ty with
           | .string =>
-            CStmt.expr (CExpr.call "print_string" [] [CExpr.borrow cArg (.ref .string)] .unit)
+            CStmt.expr (CExpr.call "print_string" [] [CExpr.borrow cArg (.ref .string)] .unit) false
           | .ref .string | .refMut .string =>
-            CStmt.expr (CExpr.call "print_string" [] [cArg] .unit)
+            CStmt.expr (CExpr.call "print_string" [] [cArg] .unit) false
           | .int =>
-            CStmt.expr (CExpr.call "print_int" [] [cArg] .unit)
+            CStmt.expr (CExpr.call "print_int" [] [cArg] .unit) false
           | .uint | .i32 | .i16 | .i8 | .u32 | .u16 | .u8 =>
-            CStmt.expr (CExpr.call "print_int" [] [CExpr.cast cArg .int] .unit)
+            CStmt.expr (CExpr.call "print_int" [] [CExpr.cast cArg .int] .unit) false
           | .bool =>
-            CStmt.expr (CExpr.call "print_bool" [] [cArg] .unit)
+            CStmt.expr (CExpr.call "print_bool" [] [cArg] .unit) false
           | .char =>
-            CStmt.expr (CExpr.call "print_char" [] [CExpr.cast cArg .int] .unit)
+            CStmt.expr (CExpr.call "print_char" [] [CExpr.cast cArg .int] .unit) false
           | _ =>
-            CStmt.expr (CExpr.call "print_string" [] [CExpr.strLit "<unprintable>"] .unit)
+            CStmt.expr (CExpr.call "print_string" [] [CExpr.strLit "<unprintable>"] .unit) false
         stmts := stmts ++ [printCall]
       if fnName == "println" then
-        stmts := stmts ++ [CStmt.expr (CExpr.call "print_char" [] [CExpr.intLit 10 .int] .unit)]
+        stmts := stmts ++ [CStmt.expr (CExpr.call "print_char" [] [CExpr.intLit 10 .int] .unit) false]
       return stmts
     -- Desugar variadic append(&mut buf, ...) into typed string_append calls.
     -- Only fires if (a) not shadowed by a user fn, (b) at least one arg,
@@ -1103,17 +1103,17 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
           let cArg ← elabExpr arg
           let call ← match cArg.ty with
             | .string =>
-              pure (CStmt.expr (CExpr.call "string_append" [] [cBuf, CExpr.borrow cArg (.ref .string)] .unit))
+              pure (CStmt.expr (CExpr.call "string_append" [] [cBuf, CExpr.borrow cArg (.ref .string)] .unit) false)
             | .ref .string | .refMut .string =>
-              pure (CStmt.expr (CExpr.call "string_append" [] [cBuf, cArg] .unit))
+              pure (CStmt.expr (CExpr.call "string_append" [] [cBuf, cArg] .unit) false)
             | .int =>
-              pure (CStmt.expr (CExpr.call "string_append_int" [] [cBuf, cArg] .unit))
+              pure (CStmt.expr (CExpr.call "string_append_int" [] [cBuf, cArg] .unit) false)
             | .uint | .i32 | .i16 | .i8 | .u32 | .u16 | .u8 =>
-              pure (CStmt.expr (CExpr.call "string_append_int" [] [cBuf, CExpr.cast cArg .int] .unit))
+              pure (CStmt.expr (CExpr.call "string_append_int" [] [cBuf, CExpr.cast cArg .int] .unit) false)
             | .bool =>
-              pure (CStmt.expr (CExpr.call "string_append_bool" [] [cBuf, cArg] .unit))
+              pure (CStmt.expr (CExpr.call "string_append_bool" [] [cBuf, cArg] .unit) false)
             | .char =>
-              pure (CStmt.expr (CExpr.call "string_push_char" [] [cBuf, CExpr.cast cArg .int] .unit))
+              pure (CStmt.expr (CExpr.call "string_push_char" [] [cBuf, CExpr.cast cArg .int] .unit) false)
             | _ =>
               throw [{ severity := .error
                      , message := s!"append() argument has unsupported type; expected String/&String/&mut String, Int/Uint/i8..i32/u8..u32, bool, or char"
@@ -1125,17 +1125,17 @@ partial def elabStmt (stmt : Stmt) : ElabM (List CStmt) := do
         return stmts
       | _ =>
         let cE ← elabExpr (.call _sp fnName _typeArgs args)
-        return [.expr cE]
+        return [.expr cE iv]
     | [] =>
       let cE ← elabExpr (.call _sp fnName _typeArgs args)
-      return [.expr cE]
+      return [.expr cE iv]
     else
       let cE ← elabExpr (.call _sp fnName _typeArgs args)
-      return [.expr cE]
+      return [.expr cE iv]
 
-  | .expr _ e =>
+  | .expr _ e iv =>
     let cE ← elabExpr e
-    return [.expr cE]
+    return [.expr cE iv]
 
   | .ifElse _ cond then_ else_ =>
     let cCond ← elabExpr cond (some .bool)
@@ -1425,7 +1425,7 @@ partial def renameFnStmt (rmap : List (String × String)) : CStmt → CStmt
   | .letDecl n m ty val => .letDecl n m ty (renameFnExpr rmap val)
   | .assign n val => .assign n (renameFnExpr rmap val)
   | .return_ (some v) ty => .return_ (some (renameFnExpr rmap v)) ty
-  | .expr e => .expr (renameFnExpr rmap e)
+  | .expr e iv => .expr (renameFnExpr rmap e) iv
   | .ifElse c t el =>
     .ifElse (renameFnExpr rmap c)
       (renameFnStmts rmap t) (el.map (renameFnStmts rmap))

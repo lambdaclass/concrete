@@ -453,7 +453,7 @@ partial def cstmtTakesAddrOf (name : String) : CStmt → Bool
   | .assign _ v => cexprTakesAddrOf name v
   | .return_ (some v) _ => cexprTakesAddrOf name v
   | .return_ none _ => false
-  | .expr e => cexprTakesAddrOf name e
+  | .expr e _ => cexprTakesAddrOf name e
   | .ifElse c t e => cexprTakesAddrOf name c || cstmtsTakeAddrOf name t ||
       (match e with | some el => cstmtsTakeAddrOf name el | none => false)
   | .while_ c b _ step => cexprTakesAddrOf name c || cstmtsTakeAddrOf name b || cstmtsTakeAddrOf name step
@@ -1405,7 +1405,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     Uses the __last_expr var that lowerStmt(.expr) sets. -/
 partial def lastExprVal (body : List CStmt) (_ty : Ty) : LowerM SVal := do
   match body.getLast? with
-  | some (.expr _) =>
+  | some (.expr _ _) =>
     match ← lookupVar "__last_expr" with
     | some val => pure val
     | none => pure .unit
@@ -1563,7 +1563,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     emitAllDeferredCalls
     terminateBlock (.ret none)
 
-  | .expr e =>
+  | .expr e _ =>
     let v ← lowerExpr e
     setVar "__last_expr" v
 

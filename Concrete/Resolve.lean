@@ -281,7 +281,7 @@ partial def resolveStmt (ctx : ResolveCtx) (stmt : Stmt) : ResolveCtx :=
     resolveExpr ctx value
   | .return_ _ (some e) => resolveExpr ctx e
   | .return_ _ none => ctx
-  | .expr _ e => resolveExpr ctx e
+  | .expr _ e _ => resolveExpr ctx e
   | .ifElse _ cond then_ else_ =>
     let ctx := resolveExpr ctx cond
     let ctx := pushScope ctx

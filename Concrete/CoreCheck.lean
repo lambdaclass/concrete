@@ -622,7 +622,7 @@ partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
 
   | .return_ none _ => pure ()
 
-  | .expr e => ccCheckExpr e
+  | .expr e _ => ccCheckExpr e
 
   | .ifElse cond then_ else_ =>
     ccCheckExpr cond

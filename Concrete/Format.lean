@@ -205,7 +205,7 @@ partial def fmtStmt (ind : Nat) (s : Stmt) : String :=
   | .assign _ name value => s!"{pfx}{name} = {fmtExprAt ind value};"
   | .return_ _ (some value) => s!"{pfx}return {fmtExprAt ind value};"
   | .return_ _ none => s!"{pfx}return;"
-  | .expr _ e =>
+  | .expr _ e _ =>
     -- match/while expressions used as statements don't need trailing semicolons
     let needsSemi := match e with
       | .match_ .. | .whileExpr .. | .ifExpr .. => false
@@ -229,11 +229,11 @@ partial def fmtStmt (ind : Nat) (s : Stmt) : String :=
         let tyStr := match t with | some t => s!": {fmtTy t}" | none => ""
         s!"let {mutStr}{n}{tyStr} = {fmtExprAt ind v}"
       | some (.assign _ n v) => s!"{n} = {fmtExprAt ind v}"
-      | some (.expr _ e) => fmtExprAt ind e
+      | some (.expr _ e _) => fmtExprAt ind e
       | _ => ""
     let stepStr := match step with
       | some (.assign _ n v) => s!"{n} = {fmtExprAt ind v}"
-      | some (.expr _ e) => fmtExprAt ind e
+      | some (.expr _ e _) => fmtExprAt ind e
       | _ => ""
     s!"{pfx}{lblStr}for ({initStr}; {fmtExprAt ind cond}; {stepStr}) \{\n{"\n".intercalate (body.map (fmtStmt (ind + 1)))}\n{pfx}}"
   | .fieldAssign _ obj field value => s!"{pfx}{fmtExprAt ind obj}.{field} = {fmtExprAt ind value};"

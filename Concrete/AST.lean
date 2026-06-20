@@ -145,7 +145,13 @@ inductive Stmt where
   | letDecl (span : Span) (name : String) (mutable : Bool) (ty : Option Ty) (value : Expr) (isGhost : Bool)
   | assign (span : Span) (name : String) (value : Expr)
   | return_ (span : Span) (value : Option Expr)
-  | expr (span : Span) (e : Expr)
+  -- `isValue`: in a value-bearing block/arm (parseExprBlock / direct `=> expr`),
+  -- a trailing expression with NO `;` is the block's value (`isValue := true`); a
+  -- `;`-terminated expression is a discarded statement (`isValue := false`). Only
+  -- the last statement of a value-bearing block may be `true`; statement-only
+  -- blocks (fn/loop/if-statement bodies via parseBlock) are always `false`.
+  -- (Phase 5 #42 — docs/STATEMENT_EXPRESSION_MODEL.md.)
+  | expr (span : Span) (e : Expr) (isValue : Bool)
   | ifElse (span : Span) (cond : Expr) (then_ : List Stmt) (else_ : Option (List Stmt))
   | while_ (span : Span) (cond : Expr) (body : List Stmt) (label : Option String)
   | forLoop (span : Span) (init : Option Stmt) (cond : Expr) (step : Option Stmt) (body : List Stmt) (label : Option String)
@@ -181,7 +187,7 @@ def Expr.getSpan : Expr → Span
   | .allocCall sp _ _ | .whileExpr sp _ _ _ | .ifExpr sp _ _ _ => sp
 
 def Stmt.getSpan : Stmt → Span
-  | .letDecl sp _ _ _ _ _ | .assign sp _ _ | .return_ sp _ | .expr sp _ => sp
+  | .letDecl sp _ _ _ _ _ | .assign sp _ _ | .return_ sp _ | .expr sp _ _ => sp
   | .ifElse sp _ _ _ | .while_ sp _ _ _ | .forLoop sp _ _ _ _ _ => sp
   | .fieldAssign sp _ _ _ | .derefAssign sp _ _ | .arrayIndexAssign sp _ _ _ => sp
   | .break_ sp _ _ | .continue_ sp _ | .defer sp _ => sp
@@ -521,7 +527,7 @@ partial def collectFreeVarsStmts (stmts : List Stmt) (bound : List String) : Lis
         (collectFreeVarsExpr value bound ++ (if bound.contains name then [] else [name]), bound)
       | .return_ _ (some value) => (collectFreeVarsExpr value bound, bound)
       | .return_ _ none => ([], bound)
-      | .expr _ e => (collectFreeVarsExpr e bound, bound)
+      | .expr _ e _ => (collectFreeVarsExpr e bound, bound)
       | .ifElse _ cond thenBody elseBody =>
         let condFree := collectFreeVarsExpr cond bound
         let thenFree := collectFreeVarsStmts thenBody bound
@@ -579,11 +585,11 @@ partial def desugarStmts : List Stmt → List Stmt
     let continuation := desugarStmts rest
     let successArm := MatchArm.mk sp enumName variant bindings continuation
     let wildcardArm := MatchArm.varArm sp "_" elseBody
-    [Stmt.expr sp (Expr.match_ sp value [successArm, wildcardArm])]
+    [Stmt.expr sp (Expr.match_ sp value [successArm, wildcardArm]) false]
   | (.letDestructure sp enumName variant bindings value none) :: rest =>
     let continuation := desugarStmts rest
     let successArm := MatchArm.mk sp enumName variant bindings continuation
-    [Stmt.expr sp (Expr.match_ sp value [successArm])]
+    [Stmt.expr sp (Expr.match_ sp value [successArm]) false]
   | (.letStructDestructure sp structName bindings value) :: rest =>
     let tmpName := "__destr_" ++ structName
     let tmpLet := Stmt.letDecl sp tmpName false none value false

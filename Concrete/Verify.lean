@@ -149,7 +149,7 @@ partial def collectStmtViolations (fnName : String) (pred : Ty → Bool) (label 
     collectExprViolations fnName pred label value
   | .return_ none retTy =>
     if pred retTy then [{ fnName, message := s!"{label} in return type: {tyToStr retTy}" }] else []
-  | .expr e => collectExprViolations fnName pred label e
+  | .expr e _ => collectExprViolations fnName pred label e
   | .ifElse cond then_ else_ =>
     collectExprViolations fnName pred label cond ++
     then_.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) [] ++

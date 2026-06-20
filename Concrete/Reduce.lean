@@ -302,12 +302,12 @@ where
   /-- Generate candidates by removing one match arm from any match in a statement. -/
   stmtMatchCandidates (stmt : Stmt) : List Stmt :=
     match stmt with
-    | .expr sp (.match_ msp scrut arms) =>
+    | .expr sp (.match_ msp scrut arms) iv =>
       if arms.length <= 1 then []
       else (List.range arms.length).filterMap fun i =>
         let newArms := removeAt arms i
         if newArms.isEmpty then none
-        else some (.expr sp (.match_ msp scrut newArms))
+        else some (.expr sp (.match_ msp scrut newArms) iv)
     | .return_ sp (some (.match_ msp scrut arms)) =>
       if arms.length <= 1 then []
       else (List.range arms.length).filterMap fun i =>
