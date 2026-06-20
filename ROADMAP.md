@@ -262,6 +262,14 @@ or project layout.
 1. Stabilize modules and imports before packages grow: module names, file
    layout, visibility, import resolution, cycle diagnostics, and generated
    interface summaries.
+   STATUS (2026-06-20): the core is implemented and now GATED by
+   `scripts/tests/check_module_visibility.sh` (Makefile `test-module-visibility`
+   + CI): public cross-module imports work, non-`pub` names are not importable
+   (E0111), unknown modules are rejected (E0110), circular file-imports are
+   diagnosed, and `--report interface` summarizes only the public surface. See
+   docs/VISIBILITY_AND_MODULE_HYGIENE.md. Minor diagnostic follow-ups (fail-closed,
+   not blocking): importing a NONEXISTENT name reports E0111 "not public" rather
+   than "no such name"; and the circular-import error lacks an E-code/span.
 2. Add a minimal project model before full packages: `Concrete.toml` fields for
    name, entry points, tests, policies, assumptions, source roots, build
    profiles, target profiles, oracle manifests, and evidence gates. The file

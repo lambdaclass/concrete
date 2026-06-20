@@ -306,6 +306,9 @@ jobs:
       - name: Docs-drift gate (Phase 4 #44 — present-tense docs reference only real artifacts)
         run: bash scripts/tests/check_docs_drift.sh
 
+      - name: Module/import/visibility gate (Phase 5 #1)
+        run: bash scripts/tests/check_module_visibility.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 
