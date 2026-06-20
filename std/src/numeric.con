@@ -227,6 +227,95 @@ mod numeric {
         }
     }
 
+    // ---- ByteView: owned, Copy, reference-free [off, len) handle ----
+    //
+    // See docs/BYTE_VIEW.md. A ByteView stores no pointer and borrows nothing, so
+    // it is freely storable in struct fields, returnable, and Copy — the stored
+    // zero-copy parse-result idiom without lifetimes or stored references. Access
+    // goes back through an explicit buffer and is checked for overflow, bounds, and
+    // a cheap wrong-buffer brand (buf_len); any failure yields None.
+
+    pub struct Copy ByteView {
+        off: u64,
+        len: u64,
+        buf_len: u64,
+    }
+
+    trusted impl ByteView {
+        /// Construct a view of [off, off+len) branded to `buf`. Returns None if
+        /// off+len overflows u64 or exceeds buf.len() (a view that cannot be valid
+        /// is never constructed).
+        pub fn new(off: u64, len: u64, buf: &Bytes) -> Option<ByteView> {
+            let max_u64: u64 = 18446744073709551615;
+            if off > max_u64 - len {
+                return Option::<ByteView>::None;
+            }
+            if off + len > buf.len() {
+                return Option::<ByteView>::None;
+            }
+            return Option::<ByteView>::Some { value: ByteView { off: off, len: len, buf_len: buf.len() } };
+        }
+
+        /// Parser idiom: capture [start, cur.pos()) over the cursor's buffer.
+        /// If start exceeds the cursor position, the view is empty.
+        pub fn of_cursor(start: u64, cur: &ByteCursor) -> ByteView {
+            let p: u64 = cur.pos();
+            let vlen: u64 = if start <= p { p - start } else { 0 };
+            return ByteView { off: start, len: vlen, buf_len: cur.len };
+        }
+
+        pub fn off(&self) -> u64 {
+            return self.off;
+        }
+
+        pub fn len(&self) -> u64 {
+            return self.len;
+        }
+
+        pub fn is_empty(&self) -> bool {
+            return self.len == 0;
+        }
+
+        /// True iff this view validly describes `buf`: right buffer length brand,
+        /// no off+len overflow, and in bounds.
+        fn describes(&self, buf: &Bytes) -> bool {
+            if buf.len() != self.buf_len {
+                return false;
+            }
+            let max_u64: u64 = 18446744073709551615;
+            if self.off > max_u64 - self.len {
+                return false;
+            }
+            if self.off + self.len > buf.len() {
+                return false;
+            }
+            return true;
+        }
+
+        /// A ByteCursor over [off, off+len) of `buf`, or None if the view does not
+        /// validly describe `buf`. The returned cursor is Copy and owns no
+        /// reference — value-model compliant.
+        pub fn cursor(&self, buf: &Bytes) -> Option<ByteCursor> {
+            if !self.describes(buf) {
+                return Option::<ByteCursor>::None;
+            }
+            let base: *const u8 = (buf.ptr as *const u8) + self.off;
+            return Option::<ByteCursor>::Some { value: ByteCursor::from_raw(base, self.len) };
+        }
+
+        /// The i-th byte of the view, or None if i is out of range or the view
+        /// does not validly describe `buf`.
+        pub fn byte(&self, buf: &Bytes, i: u64) -> Option<u8> {
+            if i >= self.len {
+                return Option::<u8>::None;
+            }
+            if !self.describes(buf) {
+                return Option::<u8>::None;
+            }
+            return buf.get(self.off + i);
+        }
+    }
+
     // ---- Standalone endian functions (no cursor needed) ----
 
     trusted fn read_be16_at(data: *const u8, offset: u64) -> u64 {
@@ -691,5 +780,106 @@ mod numeric {
             Option::Some { value } => { return 1; }
             Option::None => { return 0; }
         }
+    }
+
+    // ---- ByteView tests ----
+
+    #[test]
+    fn test_byteview_new_and_access() with(Alloc) -> i32 {
+        let mut b: Bytes = Bytes::new();
+        b.push(10); b.push(20); b.push(30); b.push(40); b.push(50);
+        let mut rc: i32 = 0;
+        match ByteView::new(1, 3, &b) {
+            Option::Some { value } => {
+                let v: ByteView = value;
+                if !assert_eq::<u64>(v.off(), 1, "off should be 1") { rc = 1; }
+                if !assert_eq::<u64>(v.len(), 3, "len should be 3") { rc = 1; }
+                match v.byte(&b, 0) {
+                    Option::Some { value } => { if !assert_eq::<u8>(value, 20, "byte 0 should be 20") { rc = 1; } },
+                    Option::None => { rc = 1; }
+                }
+                // index 3 is out of the 3-byte view
+                match v.byte(&b, 3) {
+                    Option::Some { value } => { rc = 1; },
+                    Option::None => {}
+                }
+            },
+            Option::None => { rc = 1; }
+        }
+        b.drop();
+        return rc;
+    }
+
+    #[test]
+    fn test_byteview_out_of_bounds_rejected() with(Alloc) -> i32 {
+        let mut b: Bytes = Bytes::new();
+        b.push(1); b.push(2);
+        let mut rc: i32 = 0;
+        // off+len = 5 > len 2
+        match ByteView::new(0, 5, &b) {
+            Option::Some { value } => { rc = 1; },
+            Option::None => {}
+        }
+        b.drop();
+        return rc;
+    }
+
+    #[test]
+    fn test_byteview_overflow_rejected() with(Alloc) -> i32 {
+        let mut b: Bytes = Bytes::new();
+        b.push(1);
+        let mut rc: i32 = 0;
+        let big: u64 = 18446744073709551610;
+        match ByteView::new(big, 100, &b) {
+            Option::Some { value } => { rc = 1; },
+            Option::None => {}
+        }
+        b.drop();
+        return rc;
+    }
+
+    #[test]
+    fn test_byteview_wrong_buffer_rejected() with(Alloc) -> i32 {
+        let mut a: Bytes = Bytes::new();
+        a.push(1); a.push(2); a.push(3); a.push(4);
+        let mut c: Bytes = Bytes::new();
+        c.push(9); c.push(8); // different length
+        let mut rc: i32 = 0;
+        match ByteView::new(0, 2, &a) {
+            Option::Some { value } => {
+                let v: ByteView = value;
+                // right buffer: Some
+                match v.cursor(&a) {
+                    Option::Some { value } => {},
+                    Option::None => { rc = 1; }
+                }
+                // wrong-length buffer: None
+                match v.cursor(&c) {
+                    Option::Some { value } => { rc = 1; },
+                    Option::None => {}
+                }
+            },
+            Option::None => { rc = 1; }
+        }
+        a.drop();
+        c.drop();
+        return rc;
+    }
+
+    #[test]
+    fn test_byteview_of_cursor() with(Alloc) -> i32 {
+        let mut b: Bytes = Bytes::new();
+        b.push(7); b.push(3); b.push(10); b.push(20); b.push(30);
+        let mut cur: ByteCursor = ByteCursor::from_bytes(&b);
+        let _r0: Result<u8, CursorError> = cur.read_u8();
+        let _r1: Result<u8, CursorError> = cur.read_u8();
+        let start: u64 = cur.pos();
+        let _sk: Result<u64, CursorError> = cur.skip(3);
+        let v: ByteView = ByteView::of_cursor(start, &cur);
+        let mut rc: i32 = 0;
+        if !assert_eq::<u64>(v.off(), 2, "of_cursor off should be 2") { rc = 1; }
+        if !assert_eq::<u64>(v.len(), 3, "of_cursor len should be 3") { rc = 1; }
+        b.drop();
+        return rc;
     }
 }

@@ -1,0 +1,89 @@
+// ByteView example: the safety checks fire (negative/guard example).
+//
+// A ByteView has no lifetime, so nothing at the type level stops you from
+// applying a view built against one buffer to a different buffer, or from
+// constructing an out-of-range / overflowing view. ByteView's checked access is
+// what makes those mistakes return None instead of reading out of bounds:
+//
+//   1. wrong buffer (length brand) — view from buf A, accessed against buf B
+//      of a different length => None
+//   2. construction out of bounds — off+len > buf.len() => None
+//   3. construction overflow — off+len wraps u64 => None
+//
+// This program SUCCEEDS (exit 0) exactly when every unsafe use is rejected.
+// See docs/BYTE_VIEW.md.
+
+mod wrong_buffer {
+
+    import std.bytes.{Bytes};
+    import std.numeric.{ByteView, ByteCursor};
+
+    fn cursor_is_none(o: Option<ByteCursor>) -> bool {
+        match o {
+            Option::Some { value } => { return false; },
+            Option::None => { return true; }
+        }
+    }
+
+    fn byte_is_none(o: Option<u8>) -> bool {
+        match o {
+            Option::Some { value } => { return false; },
+            Option::None => { return true; }
+        }
+    }
+
+    fn view_is_none(o: Option<ByteView>) -> bool {
+        match o {
+            Option::Some { value } => { return false; },
+            Option::None => { return true; }
+        }
+    }
+
+    // Build a valid view [1, 3) over a buffer of length `n` (n >= 4 here).
+    fn valid_view(buf: &Bytes) -> Option<ByteView> {
+        return ByteView::new(1, 3, buf);
+    }
+
+    pub fn main() with(Std) -> Int {
+        let mut a: Bytes = Bytes::new();
+        a.push(10); a.push(11); a.push(12); a.push(13); a.push(14); // len 5
+
+        // A different-length buffer.
+        let mut b: Bytes = Bytes::new();
+        b.push(99); b.push(98); b.push(97); // len 3
+
+        let mut rc: Int = 1;
+
+        let v: Option<ByteView> = valid_view(&a);
+        match v {
+            Option::Some { value } => {
+                let view: ByteView = value;
+                // (1) right buffer works; wrong-length buffer is rejected.
+                let ok_cur: bool = !cursor_is_none(view.cursor(&a));
+                let wrong_cur: bool = cursor_is_none(view.cursor(&b));
+                let wrong_byte: bool = byte_is_none(view.byte(&b, 0));
+
+                // (2) construction out of bounds: off+len > a.len() (5)
+                let oob: bool = view_is_none(ByteView::new(3, 10, &a));
+
+                // (3) construction overflow: off+len wraps u64
+                let big: u64 = 18446744073709551610;
+                let overflow: bool = view_is_none(ByteView::new(big, 100, &a));
+
+                if ok_cur && wrong_cur && wrong_byte && oob && overflow {
+                    println("byte_view wrong_buffer: all unsafe uses rejected");
+                    rc = 0;
+                } else {
+                    println("byte_view wrong_buffer: a guard did not fire");
+                }
+            },
+            Option::None => {
+                println("byte_view wrong_buffer: valid view unexpectedly rejected");
+            }
+        }
+
+        a.drop();
+        b.drop();
+        return rc;
+    }
+}

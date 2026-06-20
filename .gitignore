@@ -41,6 +41,9 @@ examples/crypto_verify/crypto_verify
 examples/parse_validate/parse_validate
 examples/proof_pressure/proof_pressure
 examples/service_errors/service_errors
+examples/byte_view/http_header_view/http_header_view
+examples/byte_view/tlv_packet_view/tlv_packet_view
+examples/byte_view/wrong_buffer/wrong_buffer
 
 # C benchmark binaries (compiled from bench_c.c)
 examples/grep/cgrep_c

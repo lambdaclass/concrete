@@ -1,0 +1,93 @@
+// ByteView example: TLV (type-length-value) parsing with of_cursor.
+//
+// A TLV record is | type:u8 | len:u8 | value[len] |. We read the header with a
+// ByteCursor (sequential, bounds-checked), then capture the value region as a
+// stored ByteView via ByteView::of_cursor — the parser idiom: mark a start,
+// advance the cursor over the field, then snapshot [start, cur.pos()) as an
+// owned handle. The returned Tlv stores the type tag plus the value VIEW, with
+// zero copying of the payload bytes. See docs/BYTE_VIEW.md.
+
+mod tlv_packet_view {
+
+    import std.bytes.{Bytes};
+    import std.numeric.{ByteView, ByteCursor, CursorError};
+
+    struct Tlv {
+        tag: u8,
+        value: ByteView,
+    }
+
+    // Read one TLV record starting at cursor position 0 of a cursor over `buf`.
+    fn parse_tlv(buf: &Bytes) -> Option<Tlv> {
+        let mut cur: ByteCursor = ByteCursor::from_bytes(buf);
+        let tag_r: Result<u8, CursorError> = cur.read_u8();
+        let mut tag: u8 = 0;
+        match tag_r {
+            Result::Ok { value } => { tag = value; },
+            Result::Err { error } => { return Option::<Tlv>::None; }
+        }
+        let len_r: Result<u8, CursorError> = cur.read_u8();
+        let mut vlen: u64 = 0;
+        match len_r {
+            Result::Ok { value } => { vlen = value as u64; },
+            Result::Err { error } => { return Option::<Tlv>::None; }
+        }
+        // Mark the value start, then advance the cursor over the value bytes.
+        let vstart: u64 = cur.pos();
+        let skip_r: Result<u64, CursorError> = cur.skip(vlen);
+        match skip_r {
+            Result::Ok { value } => {},
+            Result::Err { error } => { return Option::<Tlv>::None; }
+        }
+        // Capture [vstart, cur.pos()) as a stored, owned view.
+        let view: ByteView = ByteView::of_cursor(vstart, &cur);
+        return Option::<Tlv>::Some { value: Tlv { tag: tag, value: view } };
+    }
+
+    // Small unwrap helpers keep the verification flat (every Option match
+    // consumes both arms, avoiding linear-divergence in deep nesting).
+    fn u8_or(o: Option<u8>, d: u8) -> u8 {
+        match o {
+            Option::Some { value } => { return value; },
+            Option::None => { return d; }
+        }
+    }
+
+    fn is_none_u8(o: Option<u8>) -> bool {
+        match o {
+            Option::Some { value } => { return false; },
+            Option::None => { return true; }
+        }
+    }
+
+    pub fn main() with(Std) -> Int {
+        // type=7, len=3, value=[10,20,30], trailing junk byte 99
+        let mut buf: Bytes = Bytes::new();
+        buf.push(7); buf.push(3);
+        buf.push(10); buf.push(20); buf.push(30);
+        buf.push(99);
+
+        let parsed: Option<Tlv> = parse_tlv(&buf);
+        let mut rc: Int = 1;
+        match parsed {
+            Option::Some { value } => {
+                let t: Tlv = value;
+                // value view covers exactly [2, 5): the three payload bytes
+                let b0: u8 = u8_or(t.value.byte(&buf, 0), 0);
+                let b2: u8 = u8_or(t.value.byte(&buf, 2), 0);
+                // index 3 is out of the 3-byte view: must be None
+                let oob: bool = is_none_u8(t.value.byte(&buf, 3));
+                if t.tag == 7 && t.value.off() == 2 && t.value.len() == 3
+                    && b0 == 10 && b2 == 30 && oob {
+                    println("byte_view tlv: tag=7 value=[10,20,30]");
+                    rc = 0;
+                }
+            },
+            Option::None => {
+                println("byte_view tlv: parse failed");
+            }
+        }
+        buf.drop();
+        return rc;
+    }
+}

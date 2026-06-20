@@ -10,6 +10,31 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### `ByteView` — owned, reference-free, stored zero-copy byte views (2026-06-20)
+
+- Phase 5 #5a core. Concrete has no lifetimes and references are second-class
+  (never stored, never returned from safe code), so a stored `&[u8]` parser-result
+  field is not expressible. `ByteView` is the value-model-clean substitute: an
+  owned `pub struct Copy ByteView { off, len, buf_len }` in `std.numeric` — pure
+  coordinates, no pointer, freely storable in struct fields and returnable.
+- Access goes back through an explicit buffer and never yields a reference:
+  `cursor(&self, buf: &Bytes) -> Option<ByteCursor>`, `byte(&self, buf, i) ->
+  Option<u8>`, plus `new`/`of_cursor` (the parser capture idiom) and
+  `off`/`len`/`is_empty`. Every access enforces, returning `None` on failure:
+  no `off+len` u64 overflow, `off+len <= buf.len()`, and a buffer-length brand
+  (`buf.len() == buf_len`) that rejects applying a view to a different-length
+  buffer.
+- `docs/BYTE_VIEW.md` is the design. `examples/byte_view/{http_header_view,
+  tlv_packet_view,wrong_buffer}/` store views in result structs, reach the bytes
+  back through the buffer, and self-verify that wrong-buffer / out-of-bounds /
+  overflow uses return `None`. Gated by `scripts/tests/check_byte_view.sh`
+  (Makefile `test-byte-view` + CI), which locks the reference-free value model,
+  the Option-returning access surface, and the running guards.
+- Deferred to its own increment (not silently dropped): a region→`Text` path
+  (`try_text` + `utf8_text_slice` example) needs `Text::from_raw` and a UTF-8
+  validator — std validates only ASCII today, and `Text` exposes only
+  `from_string(&String)`. Full suite 1569/0; examples 126/0.
+
 ### Diagnostics-quality: E0208 (unconsumed linear variable) now has a source span (2026-06-20)
 
 - Found by a Phase 5 #4 audit. E0208 ("linear variable 'x' was never consumed")

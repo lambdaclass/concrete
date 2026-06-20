@@ -339,6 +339,19 @@ or project layout.
      obligations, wrong-buffer and overflow cases do not silently pass, and
      proved code can discharge checked-access costs through ordinary
      obligations.
+     - STATUS (core landed): `docs/BYTE_VIEW.md` is the design; `std.numeric`
+       has `pub struct Copy ByteView { off, len, buf_len }` with checked
+       `new`/`of_cursor`/`cursor`/`byte`/`off`/`len`/`is_empty` — access goes
+       back through an explicit `&Bytes` and returns `Option` (no returned
+       reference), with overflow, in-bounds, and a buffer-length wrong-buffer
+       brand enforced. `examples/byte_view/{http_header_view,tlv_packet_view,
+       wrong_buffer}/` self-verify the guards; `scripts/tests/check_byte_view.sh`
+       (Makefile `test-byte-view` + CI) locks the reference-free value model, the
+       Option-returning access surface, and the running guards. REMAINING (own
+       increment): `Text::from_raw` + a UTF-8 validator (std validates only ASCII
+       today), then the `utf8_text_slice` example and a `try_text` access method —
+       `Text` has private fields and only `from_string(&String)`, so the
+       region→`Text` path is deferred, not silently dropped.
 6. Define the collections story: fixed arrays, slices, dynamic `Vec`, maps,
    buffers, parser cursors, and which collections require `Alloc` or other
    capabilities.

@@ -1,0 +1,116 @@
+// ByteView example: stored zero-copy HTTP-style header fields.
+//
+// A "Name: Value" line is parsed once into a Header struct that stores TWO
+// ByteViews — owned, Copy, reference-free handles into the input buffer. The
+// struct is returned from the parser and outlives the parse call, yet copies no
+// bytes: each field is just [off, len) coordinates branded to the buffer length.
+//
+// This is the idiom that a `&[u8]` field would express in a language with
+// lifetimes. Concrete has none, and references are second-class (never stored,
+// never returned), so the stored view is the value-model-clean substitute.
+// See docs/BYTE_VIEW.md.
+
+mod http_header_view {
+
+    import std.bytes.{Bytes};
+    import std.numeric.{ByteView};
+
+    // A parsed header: name and value are stored views into one buffer.
+    struct Header {
+        name: ByteView,
+        value: ByteView,
+    }
+
+    // Find the index of `b` at or after `start`, or buf.len() if absent.
+    fn index_of(buf: &Bytes, start: u64, b: u8) -> u64 {
+        let mut i: u64 = start;
+        while i < buf.len() {
+            if buf.get_unchecked(i) == b {
+                return i;
+            }
+            i = i + 1;
+        }
+        return buf.len();
+    }
+
+    // Parse "Name: Value" into stored views. The ": " separator (colon+space)
+    // splits name from value. Returns None if there is no colon.
+    fn parse_header(buf: &Bytes) -> Option<Header> {
+        let colon: u64 = index_of(buf, 0, 58); // ':'
+        if colon >= buf.len() {
+            return Option::<Header>::None;
+        }
+        // value starts after ": " when a space follows the colon, else after ":"
+        let mut vstart: u64 = colon + 1;
+        if vstart < buf.len() {
+            if buf.get_unchecked(vstart) == 32 { // ' '
+                vstart = vstart + 1;
+            }
+        }
+        let name_view: Option<ByteView> = ByteView::new(0, colon, buf);
+        match name_view {
+            Option::Some { value } => {
+                let nv: ByteView = value;
+                let value_view: Option<ByteView> = ByteView::new(vstart, buf.len() - vstart, buf);
+                match value_view {
+                    Option::Some { value } => {
+                        return Option::<Header>::Some { value: Header { name: nv, value: value } };
+                    },
+                    Option::None => { return Option::<Header>::None; }
+                }
+            },
+            Option::None => { return Option::<Header>::None; }
+        }
+    }
+
+    // Sum the bytes of a stored view, reached back through the buffer. Returns 0
+    // if the view does not validly describe `buf`.
+    fn checksum(view: &ByteView, buf: &Bytes) -> u64 {
+        let mut acc: u64 = 0;
+        let mut i: u64 = 0;
+        while i < view.len() {
+            let b: Option<u8> = view.byte(buf, i);
+            match b {
+                Option::Some { value } => { acc = acc + (value as u64); },
+                Option::None => { return 0; }
+            }
+            i = i + 1;
+        }
+        return acc;
+    }
+
+    pub fn main() with(Std) -> Int {
+        // "Host: example" — bytes pushed explicitly (no string literal needed).
+        let mut buf: Bytes = Bytes::new();
+        buf.push(72); buf.push(111); buf.push(115); buf.push(116);   // Host
+        buf.push(58); buf.push(32);                                   // ": "
+        buf.push(101); buf.push(120); buf.push(97); buf.push(109);    // exam
+        buf.push(112); buf.push(108); buf.push(101);                  // ple
+
+        let parsed: Option<Header> = parse_header(&buf);
+        let mut rc: Int = 1;
+        match parsed {
+            Option::Some { value } => {
+                let h: Header = value;
+                // name = "Host" (4 bytes), value = "example" (7 bytes)
+                if h.name.len() == 4 {
+                    if h.value.len() == 7 {
+                        // 'H'+'o'+'s'+'t' = 72+111+115+116 = 414
+                        if checksum(&h.name, &buf) == 414 {
+                            // value offset must be past the ": "
+                            if h.value.off() == 6 {
+                                println("byte_view http header: name=Host value=example");
+                                rc = 0;
+                            }
+                        }
+                    }
+                }
+            },
+            Option::None => {
+                println("byte_view http header: parse failed");
+            }
+        }
+        buf.drop();
+        return rc;
+    }
+}

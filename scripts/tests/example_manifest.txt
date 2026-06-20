@@ -23,6 +23,9 @@ examples/backend_contracts/arithmetic.con compile
 examples/backend_contracts/assert_path.con compile
 examples/backend_contracts/capability.con compile
 examples/backend_contracts/layout.con compile
+examples/byte_view/http_header_view/src/main.con project-build
+examples/byte_view/tlv_packet_view/src/main.con project-build
+examples/byte_view/wrong_buffer/src/main.con project-build
 examples/constant_time_tag/catches/01_alloc_in_compare_core.con expected-error
 examples/constant_time_tag/src/main.con compile
 examples/contract_negatives/assert_obligation/src/main.con expected-error

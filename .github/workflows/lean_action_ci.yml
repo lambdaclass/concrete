@@ -318,6 +318,9 @@ jobs:
       - name: Diagnostics-quality gate (Phase 5 #4 — span floor)
         run: bash scripts/tests/check_diagnostics_quality.sh
 
+      - name: ByteView gate (Phase 5 #5a — owned stored zero-copy view)
+        run: bash scripts/tests/check_byte_view.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 
