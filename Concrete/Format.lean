@@ -205,11 +205,13 @@ partial def fmtStmt (ind : Nat) (s : Stmt) : String :=
   | .assign _ name value => s!"{pfx}{name} = {fmtExprAt ind value};"
   | .return_ _ (some value) => s!"{pfx}return {fmtExprAt ind value};"
   | .return_ _ none => s!"{pfx}return;"
-  | .expr _ e _ =>
-    -- match/while expressions used as statements don't need trailing semicolons
-    let needsSemi := match e with
+  | .expr _ e isValue =>
+    -- A trailing VALUE expression (isValue) must print WITHOUT `;` — adding one
+    -- would turn it into a discarded statement (Unit) on reformat (#42). Otherwise,
+    -- match/while/if expressions used as statements also omit the `;`.
+    let needsSemi := !isValue && (match e with
       | .match_ .. | .whileExpr .. | .ifExpr .. => false
-      | _ => true
+      | _ => true)
     let semi := if needsSemi then ";" else ""
     s!"{pfx}{fmtExprAt ind e}{semi}"
   | .ifElse _ cond then_ else_ =>
