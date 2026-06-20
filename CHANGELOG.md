@@ -10,6 +10,19 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### `concrete test` (project mode) miscompile fixed — duplicate `@__concrete_argc` (2026-06-20)
+
+- Found by a Phase 5 #3 audit of `concrete test`. Project-mode `concrete test`
+  emitted a duplicate `@__concrete_argc` global and llvm-as rejected the test
+  binary ("redefinition of global"); the single-file `--test` flag (what the suite
+  used) was unaffected. Root cause: the test-mode argc/argv stubs were emitted
+  per module in `emitSModule`, so any multi-module test build — and every project
+  build pulls in the std dependency — emitted the global N times. Fixed by
+  emitting the stubs once in `emitTestRunner` (which already runs once at program
+  level). `concrete test` now builds, runs `#[test]`s across the project, reports
+  PASS/FAIL, exits nonzero on failure, and `--module` scopes correctly. Locked by
+  `scripts/tests/check_concrete_test.sh` (Phase 5 #3 gate). Full suite 1564/0.
+
 ### Statement vs trailing-expression distinction — fixes the E0225 match-arm class (2026-06-20)
 
 - The AST collapsed `expr;` (a discarded statement → `Unit`) and a trailing `expr`

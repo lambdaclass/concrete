@@ -295,6 +295,16 @@ or project layout.
    expected-failure tests, interpreter-vs-compiled differential tests,
    snapshot tests, oracle tests, and policy/assumption gates through one
    command.
+   STATUS (2026-06-20): the core runner is implemented and now GATED by
+   `scripts/tests/check_concrete_test.sh` (Makefile `test-concrete-test` + CI):
+   `concrete test` discovers and runs `#[test]` functions across a multi-module
+   project, reports PASS/FAIL per test, exits nonzero on any failure, and
+   `--module` scopes to one module. The audit found and fixed a project-mode
+   miscompile (duplicate `@__concrete_argc` from per-module test stubs — see
+   CHANGELOG). REMAINING (the actual gap): fold the OTHER test kinds into the one
+   command — example tests, expected-failure tests, interpreter-vs-compiled
+   differential, snapshot, oracle, and policy/assumption gates (today these run
+   via separate `scripts/tests/*.sh` harnesses, not `concrete test`).
 4. Improve diagnostics for parser, resolver, type checker, ownership, linearity,
    capability, unsupported-construct, and codegen/interpreter mismatch errors:
    every diagnostic has a source span, reason, and next action.
