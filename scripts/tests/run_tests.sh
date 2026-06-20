@@ -6603,6 +6603,7 @@ run_ok "$TESTDIR/regress_if_expr_match_arm.con"      42
 run_ok "$TESTDIR/regress_if_expr_divergent_branch.con"  8
 run_ok "$TESTDIR/regress_mut_array_elem_writeback.con"  26741
 run_ok "$TESTDIR/regress_unary_postfix_precedence.con"  42
+run_ok "$TESTDIR/regress_stmt_match_arm_unit.con"      42
 run_ok "$TESTDIR/test_linear_drop.con"                0
 run_ok "$TESTDIR/test_typevar_copy_bound.con"         0
 run_ok "$TESTDIR/test_generic_linearity.con"          0

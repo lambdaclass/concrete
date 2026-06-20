@@ -10,7 +10,7 @@ fn main() -> Int {
             break sum;
         }
     } else {
-        0;
+        0
     };
     return result;
 }

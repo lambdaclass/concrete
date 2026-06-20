@@ -4,7 +4,7 @@ fn main() -> Int {
     let x: Int = while false {
         break 1;
     } else {
-        99;
+        99
     };
     return x;
 }

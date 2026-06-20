@@ -8,7 +8,7 @@ fn main() -> Int {
             break i;
         }
     } else {
-        0;
+        0
     };
     return x;
 }

@@ -455,8 +455,11 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
     let resultTy ← match hint with
       | some t => pure t
       | none =>
+        -- Infer from a branch's TRAILING VALUE expression (isValue=true) only; a
+        -- `;`-terminated last statement or a diverging branch contributes no value,
+        -- so a branch with no trailing value makes the if-expression Unit (#42).
         let lastExprOf := fun (stmts : List Stmt) =>
-          stmts.reverse.findSome? fun s => match s with | .expr _ e _ => some e | _ => none
+          stmts.reverse.findSome? fun s => match s with | .expr _ e true => some e | _ => none
         match lastExprOf then_ with
         | some e => peekExprType e
         | none => match lastExprOf else_ with

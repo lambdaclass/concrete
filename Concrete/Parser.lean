@@ -407,7 +407,11 @@ partial def parsePrimary : ParseM Expr := do
     let cond ← parseExpr
     let body ← parseBlock
     expect .else_
-    let elseBody ← parseBlock
+    -- The else branch is value-bearing (it provides the while-expression's value
+    -- when the loop never breaks), so it parses as a value block: a trailing
+    -- expression with no `;` is the value (#42). The body's value comes from
+    -- `break v`, so it stays statement-only.
+    let elseBody ← parseExprBlock
     return .whileExpr sp cond body elseBody
   | .if_ =>
     -- if-as-expression: if cond { then } else { else }

@@ -1405,7 +1405,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     Uses the __last_expr var that lowerStmt(.expr) sets. -/
 partial def lastExprVal (body : List CStmt) (_ty : Ty) : LowerM SVal := do
   match body.getLast? with
-  | some (.expr _ _) =>
+  | some (.expr _ true) =>
     match ← lookupVar "__last_expr" with
     | some val => pure val
     | none => pure .unit
@@ -1563,9 +1563,11 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     emitAllDeferredCalls
     terminateBlock (.ret none)
 
-  | .expr e _ =>
+  | .expr e iv =>
     let v ← lowerExpr e
-    setVar "__last_expr" v
+    -- Only a trailing value expression (no `;`) is the block's value; a discarded
+    -- statement still lowers (side effects) but does not set the block value (#42).
+    if iv then setVar "__last_expr" v else pure ()
 
   | .ifElse cond then_ else_ =>
     let condVal ← lowerExpr cond

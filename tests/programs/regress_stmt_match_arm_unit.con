@@ -1,0 +1,28 @@
+// Regression for the statement-vs-trailing-expression model (ROADMAP Phase 6 #36
+// / LANGUAGE_GAPS #12). A statement-position match arm ending in a `;`-terminated
+// expression statement (`{ side(); }`, where `side() -> i64`) used to be typed by
+// that expression, so it disagreed with a unit arm `{ }` and was rejected with a
+// spurious E0225. Now `expr;` is a discarded statement (Unit) and only a trailing
+// expression with NO `;` is the arm/block value. Found by the CLI/config workload
+// pass (`while !cur.is_eof() { match cur.peek() { .. } }`).
+//
+// Expected: 42  (statement-match arm runs side() + sets acc=40, no E0225; the
+// value-match yields 2; 40 + 2 = 42).
+
+fn side() -> i64 { return 99; }
+
+fn main() -> i64 {
+    let x: i64 = 1;
+    let mut acc: i64 = 0;
+    // statement-position match: each arm ends in `;` -> Unit, arms agree, no E0225
+    match x {
+        1 => { side(); acc = 40; },
+        _ => { },
+    }
+    // value-position match: trailing expression (no `;`) is the value
+    let v: i64 = match x {
+        1 => 2,
+        _ => 3,
+    };
+    return acc + v;
+}

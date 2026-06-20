@@ -11,13 +11,13 @@ fn main() -> Int {
                 break j;
             }
         } else {
-            0;
+            0
         };
         if inner + i == 6 {
             break inner + i;
         }
     } else {
-        0;
+        0
     };
     return x;
 }
