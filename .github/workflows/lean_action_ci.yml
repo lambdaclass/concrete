@@ -309,6 +309,9 @@ jobs:
       - name: Module/import/visibility gate (Phase 5 #1)
         run: bash scripts/tests/check_module_visibility.sh
 
+      - name: Project-model gate (Phase 5 #2 — Concrete.toml structure)
+        run: bash scripts/tests/check_project_model.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 

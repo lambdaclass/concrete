@@ -275,6 +275,22 @@ or project layout.
    profiles, target profiles, oracle manifests, and evidence gates. The file
    must make authority, assumptions, runtime-check policy, and proof policy
    visible; it must not become an ambient hidden configuration channel.
+   STATUS (2026-06-20): the core is implemented and now GATED by
+   `scripts/tests/check_project_model.sh` (Makefile `test-project-model` + CI) for
+   the manifest STRUCTURE — `[package]` name/version, `[dependencies]` path deps,
+   a valid manifest builds warning-free, and the **anti-ambient-config guard** is
+   live (an unrecognized section warns, so new config surface cannot be added
+   silently); missing `[package]`/`name` warn; the entry point is `src/main.con`
+   and its absence is a clean error. `[policy]` ENFORCEMENT (predictable / no_alloc
+   / no_unsafe / no_trusted / no_externs / forbidden+allowed capabilities / release
+   / opt_level) is gated by `check_policy.sh`. See docs/POLICY_FILES.md,
+   PROJECT_BOOTSTRAP.md, STANDALONE_VS_PROJECT.md.
+   REMAINING (the actual gap, build only as needed): configurable entry points and
+   source roots (today fixed at `src/main.con` / `src/`); target profiles and
+   build profiles beyond `opt_level`/`release`; and surfacing assumptions / oracle
+   manifests / evidence gates IN the manifest (today separate `assumptions.toml`,
+   `oracle/` dirs) so authority/assumptions/runtime-check/proof policy are visible
+   from one place.
 3. Add `concrete test`: discover and run user tests, example tests,
    expected-failure tests, interpreter-vs-compiled differential tests,
    snapshot tests, oracle tests, and policy/assumption gates through one
