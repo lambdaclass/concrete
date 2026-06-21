@@ -3,17 +3,27 @@
 This document is the active execution plan. It answers one question:
 **what should happen next, in what order?**
 
-**Current frontier: Phase 5.** Phases 1–4 are done and have been removed from this
-plan. Phases 1–2 were folded into CHANGELOG.md and design docs; Phases 3–4 closed
-(core-complete) — their detailed records are
+**Current frontier: Phase 6.** Phases 1–5 are done. Phases 1–2 were folded into
+CHANGELOG.md and design docs; Phases 3–4 closed (core-complete) — their detailed
+records are
 [docs/PHASE3_OBLIGATION_CORE_AUDIT.md](docs/PHASE3_OBLIGATION_CORE_AUDIT.md) and
 [docs/PHASE4_COMPILER_LEDGER_AUDIT.md](docs/PHASE4_COMPILER_LEDGER_AUDIT.md), and
 their few deferred, no-active-soundness-risk tails were folded into later phases:
 proof-status / `prove` literal-ledger views → Phase 11; interpreter-vs-compiled
 harness + ref-return hardening → Phase 14; `audit --compiler` self-audit → Phase
 10; obligation→structured-`Diagnostic` bridge → Phase 19; schema-version /
-source-location-privacy / docs-drift-semantic → Phase 17. Start new work at Phase
-5 unless a real workload pulls a deferred item forward.
+source-location-privacy / docs-drift-semantic → Phase 17.
+
+**Phase 5 is CLOSED (core-complete; const generics deferred by trigger)**, same
+closure model as Phases 3/4. All six items are documented + gated: #1 modules/
+imports, #2 project model, #3 `concrete test`, #4 diagnostics, #5 bytes/text/path
++ ByteView/Text path, #6 collections. The one deferred item, #6a narrow const
+generics, is not a hidden hole: it has a fixed design boundary, a difficulty/risk
+assessment, rejected forms, a staged build plan, explicit forcing triggers, and
+recorded evidence that current workloads don't pull it
+([docs/CONST_GENERICS_V1.md](docs/CONST_GENERICS_V1.md)). Start new work at Phase
+6 unless a real workload trips a const-generics forcing trigger (then #6a comes
+forward).
 
 The roadmap is linear. Phases are ordered, and items inside a phase are ordered
 unless explicitly marked as a constraint or a deferred research note. Read the
@@ -25,9 +35,13 @@ document as one queue:
 2. *(done — Phase 4, closed)* consolidate the ordinary compiler pipeline: project
    loading, pass boundaries, typed IR, diagnostics, source maps, backend
    contracts, and command plumbing;
-3. **(active frontier — Phase 5+)** broaden the ordinary language surface now that
-   the compiler pipeline supports it: patterns, bytes/text/path, collections,
-   iteration, capability polymorphism, tests, project ergonomics, daily workflow;
+3. *(done — Phase 5, closed; const generics deferred by trigger)* broaden the
+   ordinary language surface now that the compiler pipeline supports it: modules/
+   imports, project shape, tests, diagnostics, bytes/text/path + owned byte/text
+   views, collections;
+3b. **(active frontier — Phase 6+)** make Concrete usable as a normal everyday
+   language: patterns, iteration, capability polymorphism, daily-workflow UX,
+   project ergonomics;
 4. build the standard library and core APIs before relying on real workloads,
    packages, editor tooling, freestanding targets, or release examples;
 5. validate the bet with flagships, real workloads, and at least one external
@@ -245,7 +259,16 @@ silently park Phases 11-19 either: it forces an explicit decision recorded in
 this file — change the bet (redesign the discipline that failed), narrow the
 audience, or stop — before any Phase 11+ item may start.
 
-## Phase 5: Core Language Slab
+## Phase 5: Core Language Slab — CLOSED (core-complete; const generics deferred by trigger)
+
+CLOSURE (2026-06-21): all six items are documented + gated — #1 modules/imports,
+#2 project model, #3 `concrete test`, #4 diagnostics, #5 bytes/text/path +
+ByteView/Text path, #6 collections. The sole deferred item, #6a narrow const
+generics, is designed and workload-gated (not a hidden hole): see
+[docs/CONST_GENERICS_V1.md](docs/CONST_GENERICS_V1.md) for the fixed boundary,
+rejected forms, staged build plan, difficulty assessment, and forcing triggers.
+Per-item STATUS notes below are retained as the record. Active frontier is now
+Phase 6; #6a comes forward only if a real workload trips a forcing trigger.
 
 Goal: establish the minimum ordinary-language surface needed before broader
 daily-workflow UX, stdlib hardening, real workloads, or external validation can
@@ -254,10 +277,6 @@ be honest.
 Done when: modules/imports, project shape, tests, core diagnostics, bytes/text/
 path boundaries, and collections have documented semantics, gates, and enough
 implementation to support the next usability phase.
-
-Build these six items before the external-validation trial, medium real-workload
-examples, or any contract/VC syntax that depends on collections, bytes/text/path,
-or project layout.
 
 1. Stabilize modules and imports before packages grow: module names, file
    layout, visibility, import resolution, cycle diagnostics, and generated
@@ -1260,8 +1279,8 @@ lemmas, and actionable failure diagnostics.
    model gets framing for free.
 21. Deferred architecture refactor: split the current `Concrete.Proof` layering
    so registered example specs can move without a cycle, but do not let this
-   block Phase 5 unless spec ownership or proof authoring starts depending on
-   it. Target shape: `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation,
+   block the active frontier unless spec ownership or proof authoring starts
+   depending on it. Target shape: `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation,
    `FnTable`, and source-independent semantics; `Concrete.SpecRegistry` owns
    the spec-drift table and imports whichever example spec modules it registers;
    `Concrete.Proof` becomes the generic proof-theorem / compatibility umbrella.
