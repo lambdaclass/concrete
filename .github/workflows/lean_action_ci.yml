@@ -324,6 +324,9 @@ jobs:
       - name: Collections gate (Phase 5 #6 — H1-clean collection surface)
         run: bash scripts/tests/check_collections.sh
 
+      - name: `concrete fmt` gate (Phase 6 #1 — subcommand + semantics-preserving)
+        run: bash scripts/tests/check_concrete_fmt.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 

@@ -264,6 +264,17 @@ gate.
 1. Add `concrete fmt`: stable formatting for source files, examples, docs
    snippets, and generated fixtures. Formatting must not churn semantic
    fingerprints.
+   STATUS (2026-06-21, done + gated): the formatter (Concrete/Format.lean) is
+   promoted from the legacy `--fmt` flag to a real `concrete fmt` subcommand —
+   `concrete fmt <file>` (stdout), `--check` (exit nonzero if reformatting would
+   change the file), `--write` (rewrite in place), `--stdin` (stdin→stdout). The
+   legacy `--fmt` flag is kept (golden baselines use it) and documented as
+   deprecated. Gated by `scripts/tests/check_concrete_fmt.sh` (Makefile
+   `test-concrete-fmt` + CI): tool contract (stdout/--check/--write idempotence/
+   --stdin), and the load-bearing property that formatting is SEMANTICS-PRESERVING
+   — `--report fingerprints` is byte-identical before/after formatting, so running
+   `fmt` cannot invalidate proof links/manifests. This is CLI promotion only; the
+   broader CLI normalization (init/new/clean, help/exit-code matrix) stays in #28.
 2. Add `docs/GRAMMAR.md`: LL(1) grammar, reserved keywords, attribute syntax,
    contract syntax, `ghost`/`assert`/`assume`, iteration syntax, and negative
    parser fixtures. This is a syntax reference, not a language-design

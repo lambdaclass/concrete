@@ -51,7 +51,7 @@ def flagValue (args : List String) (name : String) : Option String :=
 end Cli
 
 def usage : String :=
-  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|vcs|obligation-ledger|compiler-ledger|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
+  "Usage: concrete <file.con> [-o output] [--emit-llvm] [--emit-core] [--emit-ssa] [--test] [--test --module <name>] [--interp] [--report caps|unsafe|layout|interface|alloc|mono|authority|proof|eligibility|proof-status|obligations|extraction|lean-stubs|check-proofs|proof-diagnostics|proof-deps|proof-bundle|traceability|diagnostics-json|effects|recursion|stack-depth|fingerprints|consistency|contracts|vcs|obligation-ledger|compiler-ledger|verify|audit] [--query KIND|KIND:FUNCTION|fn:FUNCTION] [--fmt (legacy; use `concrete fmt`)]\n       concrete build [-o output] [--emit-llvm]\n       concrete check\n       concrete fmt <file.con> [--check | --write | --stdin]\n       concrete audit <file.con>\n       concrete prove <file.con> <module.function> [--json] [--out <path>] [--force] [--emit-link] [--emit-lean] [--emit-artifacts] [--out-dir <dir>] [--show-obligation <id>] [--replay] [--nearest-lemmas] [--check] [--workspace <dir>]\n       concrete prove --help=agent | --capabilities | --schema\n       concrete run [-- args...]\n       concrete test [--module <name>]\n       concrete diff <old.json> <new.json> [--json]\n       concrete snapshot <file.con> [-o output.json]\n       concrete debug-bundle <file.con> [-o dir]\n       concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]\n       concrete --version"
 
 /-- Capture compiler identity: version, git commit, lean toolchain. -/
 def compilerIdentity : IO String := do
@@ -1867,6 +1867,46 @@ def main (args : List String) : IO UInt32 := do
           let redLines := (result.splitOn "\n").length
           IO.println s!"Reduced: {origLines} → {redLines} lines — {outputPath}"
           return 0
+  -- concrete fmt — format source files (Phase 6 #1). CLI promotion of the legacy
+  -- `--fmt` flag to a real subcommand. Default: format to stdout. `--check`: exit
+  -- nonzero if formatting would change the file. `--write`: rewrite in place.
+  -- `--stdin`: read stdin, write stdout. A file is "formatted" iff
+  -- formatProgram(parse(it)) == it (formatProgram emits exactly one trailing \n).
+  if args.head? == some "fmt" then
+    let rest := args.drop 1
+    let check := Cli.hasFlag rest "--check"
+    let write := Cli.hasFlag rest "--write"
+    let stdin := Cli.hasFlag rest "--stdin"
+    if stdin then
+      let source ← (← IO.getStdin).readToEnd
+      match parse source with
+      | .error e => IO.eprintln s!"parse error: {renderDiagnostics e}"; return 1
+      | .ok modules => IO.print (formatProgram modules); return 0
+    -- positional path = first non-flag argument
+    match rest.filter (fun a => !a.startsWith "-") |>.head? with
+    | none =>
+      IO.eprintln "Usage: concrete fmt <file.con> [--check | --write | --stdin]"
+      return 1
+    | some path =>
+      let source ← readFile path
+      match parse source with
+      | .error e => IO.eprintln s!"parse error in {path}: {renderDiagnostics e}"; return 1
+      | .ok modules =>
+        let formatted := formatProgram modules
+        if check then
+          if formatted == source then return 0
+          else
+            IO.eprintln s!"{path}: not formatted (run `concrete fmt --write {path}`)"
+            return 1
+        else if write then
+          if formatted == source then return 0
+          else
+            writeFile path formatted
+            IO.println s!"formatted {path}"
+            return 0
+        else
+          IO.print formatted
+          return 0
   -- concrete audit <file.con> — alias for `concrete <file> --report audit`
   if args.head? == some "audit" then
     match args.drop 1 with
@@ -1984,6 +2024,9 @@ def main (args : List String) : IO UInt32 := do
     compileAndReport inputPath reportType (smtRun := true) (smtTimeoutMs := ms.toNat?)
   | [inputPath, "--query", query] =>
     compileAndQuery inputPath query
+  -- LEGACY: `--fmt` flag, superseded by the `concrete fmt` subcommand (Phase 6
+  -- #1). Kept byte-identical for the golden-format baselines; documented as
+  -- deprecated. New usage should prefer `concrete fmt`.
   | [inputPath, "--fmt"] =>
     let source ← readFile inputPath
     match parse source with
