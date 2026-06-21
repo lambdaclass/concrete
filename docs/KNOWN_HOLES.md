@@ -263,7 +263,15 @@ whole picture is in one place.
   (`std.text` `try_from_raw`/`validate_utf8`, `ByteView::try_text`) +
   `examples/byte_view/*` + gated by `scripts/tests/check_byte_view.sh`. No open
   hole.
-- **Narrow const generics** (`[T; N]`) — Phase 5 #6a.
+- **Narrow const generics** (`[T; N]`) — Phase 5 #6a. DESIGN DECIDED, BUILD
+  DEFERRED (2026-06-21): `docs/CONST_GENERICS_V1.md` fixes the V1 boundary
+  (`struct Buf<T, const N: u64>`, integer params, literal/const-foldable args,
+  per-N monomorphization recording N in name/layout/obligations; type-level
+  computation / reflection / comptime / runtime-bound params rejected). A forcing
+  probe found no current workload needs it — every fixed array in `examples/` is
+  a single-use domain constant, none instantiate one container at multiple
+  capacities, and the single-fixed-capacity workaround is clean. Workload-driven:
+  build only when the doc's forcing conditions appear. No open soundness hole.
 - **Pattern completeness** (ranges/guards/or/nested) — Phase 6 #5.
 - **Explicit-dictionary coherence** — Phase 7 #8c.
 - **Arena/index safety** (stale-index use-after-remove) — Phase 7 #8b.

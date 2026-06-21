@@ -390,6 +390,19 @@ or project layout.
      distinct capacities specialize separately, layout is capacity-specific,
      runtime-safety obligations name the instantiated size, and unsupported
      non-integer/comptime-reflection forms are rejected.
+     - STATUS (DESIGN DECIDED, BUILD DEFERRED): `docs/CONST_GENERICS_V1.md` fixes
+       the V1 boundary (syntax `struct Buf<T, const N: u64>`; integer params only;
+       literal/const-foldable args; per-N monomorphization with N in the
+       name/layout/obligation ids; type-level computation, reflection, comptime,
+       and runtime-bound params rejected). A forcing probe (2026-06-21) found NO
+       current workload needs it: every fixed array in `examples/` is a
+       domain constant used once (SHA-256 `[u32;8]`/`[u32;64]`, CT `[u8;16]`,
+       `fixed_capacity` `[u8;256]`/`[i32;16]`, HTTP `[u8;4096]`), and no example
+       instantiates one container type at multiple capacities — the single-
+       fixed-capacity workaround is clean and builds today. Building now would be
+       symmetry-driven. Tracked as designed/deferred; the doc lists the forcing
+       conditions that flip the verdict (same type at multiple N, or a
+       capacity-parameterized stdlib API). No compiler change made.
 
 ## Phase 6: Language Usability And Daily Workflow
 
