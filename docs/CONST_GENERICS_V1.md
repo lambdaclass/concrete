@@ -1,6 +1,6 @@
 # Narrow Const Generics V1 — decision & scoping (build deferred)
 
-Status: DESIGN DECIDED, BUILD DEFERRED (2026-06-21) — ROADMAP Phase 5 #6a.
+Status: DESIGN DECIDED, BUILD DEFERRED (2026-06-21) — ROADMAP Phase 7 #8f.
 This doc fixes the V1 boundary so the feature is unambiguous when a workload
 pulls it, and records the forcing probe that says *no current workload pulls it
 yet*. Per the project's workload-driven (not symmetry-driven) discipline, no
@@ -161,4 +161,4 @@ The riskiest stages (4–6) are exactly where N must be threaded *everywhere* or
 silent collisions/wrong layouts result — see Implementation difficulty above.
 
 Until then this remains a recorded decision, not code — see KNOWN_HOLES.md
-("unmade decisions / designed-deferred") and ROADMAP Phase 5 #6a.
+("unmade decisions / designed-deferred") and ROADMAP Phase 7 #8f.

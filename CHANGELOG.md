@@ -10,6 +10,29 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 5 core language slab closed (2026-06-21)
+
+- Phase 5 is CLOSED under the same core-complete model used for Phases 3/4. The
+  active roadmap now begins at Phase 6; the detailed Phase 5 completion record
+  has moved out of `ROADMAP.md`.
+- Gated completed items:
+  - modules/imports/visibility — `scripts/tests/check_module_visibility.sh`
+  - project model / `Concrete.toml` — `scripts/tests/check_project_model.sh`
+  - `concrete test` project-mode runner — `scripts/tests/check_concrete_test.sh`
+  - diagnostics span floor — `scripts/tests/check_diagnostics_quality.sh`
+  - bytes/text/path + `ByteView` + UTF-8 `Text` conversion —
+    `scripts/tests/check_byte_view.sh`
+  - collections / H1-clean value-operation surface —
+    `scripts/tests/check_collections.sh`
+- Defects fixed during the Phase 5 closure pass included the project-mode
+  `concrete test` duplicate `@__concrete_argc` global, spanless E0208
+  unconsumed-linear diagnostics, and the ByteView/Text UTF-8 validation gap.
+- Narrow const generics are DESIGN DECIDED / BUILD DEFERRED, not a hidden Phase
+  5 hole. `docs/CONST_GENERICS_V1.md` records the V1 boundary, rejected forms,
+  difficulty/risk assessment, staged implementation plan, forcing triggers, and
+  evidence that current workloads do not pull the feature. Implementation is now
+  tracked as a workload-triggered Phase 7 stdlib/fixed-capacity item.
+
 ### `ByteView` → `Text`: explicit UTF-8-validated raw-bytes-to-text step (2026-06-21)
 
 - Closes the byte/text split for stored zero-copy views (Phase 5 #5a follow-up;

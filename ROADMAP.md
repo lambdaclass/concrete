@@ -3,7 +3,7 @@
 This document is the active execution plan. It answers one question:
 **what should happen next, in what order?**
 
-**Current frontier: Phase 6.** Phases 1–5 are done. Phases 1–2 were folded into
+**Current frontier: Phase 6.** Phases 1–5 are done and removed from this active roadmap. Phases 1–2 were folded into
 CHANGELOG.md and design docs; Phases 3–4 closed (core-complete) — their detailed
 records are
 [docs/PHASE3_OBLIGATION_CORE_AUDIT.md](docs/PHASE3_OBLIGATION_CORE_AUDIT.md) and
@@ -13,17 +13,6 @@ proof-status / `prove` literal-ledger views → Phase 11; interpreter-vs-compile
 harness + ref-return hardening → Phase 14; `audit --compiler` self-audit → Phase
 10; obligation→structured-`Diagnostic` bridge → Phase 19; schema-version /
 source-location-privacy / docs-drift-semantic → Phase 17.
-
-**Phase 5 is CLOSED (core-complete; const generics deferred by trigger)**, same
-closure model as Phases 3/4. All six items are documented + gated: #1 modules/
-imports, #2 project model, #3 `concrete test`, #4 diagnostics, #5 bytes/text/path
-+ ByteView/Text path, #6 collections. The one deferred item, #6a narrow const
-generics, is not a hidden hole: it has a fixed design boundary, a difficulty/risk
-assessment, rejected forms, a staged build plan, explicit forcing triggers, and
-recorded evidence that current workloads don't pull it
-([docs/CONST_GENERICS_V1.md](docs/CONST_GENERICS_V1.md)). Start new work at Phase
-6 unless a real workload trips a const-generics forcing trigger (then #6a comes
-forward).
 
 The roadmap is linear. Phases are ordered, and items inside a phase are ordered
 unless explicitly marked as a constraint or a deferred research note. Read the
@@ -35,10 +24,10 @@ document as one queue:
 2. *(done — Phase 4, closed)* consolidate the ordinary compiler pipeline: project
    loading, pass boundaries, typed IR, diagnostics, source maps, backend
    contracts, and command plumbing;
-3. *(done — Phase 5, closed; const generics deferred by trigger)* broaden the
-   ordinary language surface now that the compiler pipeline supports it: modules/
-   imports, project shape, tests, diagnostics, bytes/text/path + owned byte/text
-   views, collections;
+3. *(done — Phase 5, closed; const generics deferred to Phase 7 #8f by trigger)*
+   broaden the ordinary language surface now that the compiler pipeline supports
+   it: modules/imports, project shape, tests, diagnostics, bytes/text/path +
+   owned byte/text views, collections;
 3b. **(active frontier — Phase 6+)** make Concrete usable as a normal everyday
    language: patterns, iteration, capability polymorphism, daily-workflow UX,
    project ergonomics;
@@ -258,170 +247,6 @@ on and what a negative result would teach against. A **fail** verdict does not
 silently park Phases 11-19 either: it forces an explicit decision recorded in
 this file — change the bet (redesign the discipline that failed), narrow the
 audience, or stop — before any Phase 11+ item may start.
-
-## Phase 5: Core Language Slab — CLOSED (core-complete; const generics deferred by trigger)
-
-CLOSURE (2026-06-21): all six items are documented + gated — #1 modules/imports,
-#2 project model, #3 `concrete test`, #4 diagnostics, #5 bytes/text/path +
-ByteView/Text path, #6 collections. The sole deferred item, #6a narrow const
-generics, is designed and workload-gated (not a hidden hole): see
-[docs/CONST_GENERICS_V1.md](docs/CONST_GENERICS_V1.md) for the fixed boundary,
-rejected forms, staged build plan, difficulty assessment, and forcing triggers.
-Per-item STATUS notes below are retained as the record. Active frontier is now
-Phase 6; #6a comes forward only if a real workload trips a forcing trigger.
-
-Goal: establish the minimum ordinary-language surface needed before broader
-daily-workflow UX, stdlib hardening, real workloads, or external validation can
-be honest.
-
-Done when: modules/imports, project shape, tests, core diagnostics, bytes/text/
-path boundaries, and collections have documented semantics, gates, and enough
-implementation to support the next usability phase.
-
-1. Stabilize modules and imports before packages grow: module names, file
-   layout, visibility, import resolution, cycle diagnostics, and generated
-   interface summaries.
-   STATUS (2026-06-20): the core is implemented and now GATED by
-   `scripts/tests/check_module_visibility.sh` (Makefile `test-module-visibility`
-   + CI): public cross-module imports work, non-`pub` names are not importable
-   (E0111), unknown modules are rejected (E0110), circular file-imports are
-   diagnosed, and `--report interface` summarizes only the public surface. See
-   docs/VISIBILITY_AND_MODULE_HYGIENE.md. Minor diagnostic follow-ups (fail-closed,
-   not blocking): importing a NONEXISTENT name reports E0111 "not public" rather
-   than "no such name"; and the circular-import error lacks an E-code/span.
-2. Add a minimal project model before full packages: `Concrete.toml` fields for
-   name, entry points, tests, policies, assumptions, source roots, build
-   profiles, target profiles, oracle manifests, and evidence gates. The file
-   must make authority, assumptions, runtime-check policy, and proof policy
-   visible; it must not become an ambient hidden configuration channel.
-   STATUS (2026-06-20): the core is implemented and now GATED by
-   `scripts/tests/check_project_model.sh` (Makefile `test-project-model` + CI) for
-   the manifest STRUCTURE — `[package]` name/version, `[dependencies]` path deps,
-   a valid manifest builds warning-free, and the **anti-ambient-config guard** is
-   live (an unrecognized section warns, so new config surface cannot be added
-   silently); missing `[package]`/`name` warn; the entry point is `src/main.con`
-   and its absence is a clean error. `[policy]` ENFORCEMENT (predictable / no_alloc
-   / no_unsafe / no_trusted / no_externs / forbidden+allowed capabilities / release
-   / opt_level) is gated by `check_policy.sh`. See docs/POLICY_FILES.md,
-   PROJECT_BOOTSTRAP.md, STANDALONE_VS_PROJECT.md.
-   REMAINING (the actual gap, build only as needed): configurable entry points and
-   source roots (today fixed at `src/main.con` / `src/`); target profiles and
-   build profiles beyond `opt_level`/`release`; and surfacing assumptions / oracle
-   manifests / evidence gates IN the manifest (today separate `assumptions.toml`,
-   `oracle/` dirs) so authority/assumptions/runtime-check/proof policy are visible
-   from one place.
-3. Add `concrete test`: discover and run user tests, example tests,
-   expected-failure tests, interpreter-vs-compiled differential tests,
-   snapshot tests, oracle tests, and policy/assumption gates through one
-   command.
-   STATUS (2026-06-20): the core runner is implemented and now GATED by
-   `scripts/tests/check_concrete_test.sh` (Makefile `test-concrete-test` + CI):
-   `concrete test` discovers and runs `#[test]` functions across a multi-module
-   project, reports PASS/FAIL per test, exits nonzero on any failure, and
-   `--module` scopes to one module. The audit found and fixed a project-mode
-   miscompile (duplicate `@__concrete_argc` from per-module test stubs — see
-   CHANGELOG). REMAINING (the actual gap): fold the OTHER test kinds into the one
-   command — example tests, expected-failure tests, interpreter-vs-compiled
-   differential, snapshot, oracle, and policy/assumption gates (today these run
-   via separate `scripts/tests/*.sh` harnesses, not `concrete test`).
-4. Improve diagnostics for parser, resolver, type checker, ownership, linearity,
-   capability, unsupported-construct, and codegen/interpreter mismatch errors:
-   every diagnostic has a source span, reason, and next action.
-   STATUS (2026-06-20): the structured `Diagnostic` record (span / reason / hint
-   / next-action / code, human+JSON from one record) is in place and the SPAN
-   FLOOR is now gated by `scripts/tests/check_diagnostics_quality.sh` (Makefile
-   `test-diagnostics-quality` + CI): representative parser / resolver / type /
-   linearity / capability diagnostics all carry a source span, and the capability
-   diagnostic is pinned as the reason+next-action exemplar. The audit fixed a
-   location-less diagnostic — E0208 (unconsumed linear variable) was spanless; it
-   now points at the variable's declaration (`VarInfo.declSpan`, see CHANGELOG).
-   REMAINING (the actual gap, iterative per-code content work): populate `reason`
-   and `next-action` on the remaining codes — today parser/resolver/type carry a
-   span but not reason/next-action; only capability has the full set. Also the two
-   #1 follow-ups (nonexistent-import says "not public"; circular-import lacks an
-   E-code/span) are diagnostic-quality items that belong here.
-5. Define strings, bytes, paths, and OS strings: `Bytes` for raw data, `Text`
-   for validated UTF-8, and `Path`/`OsString` for OS-native boundaries. Specify
-   literals, ownership, slicing, indexing, formatting, conversions, parser/JSON
-   interaction, diagnostics, and test output. No implicit lossy conversion.
-   - STATUS (done): the split is documented (`docs/STRING_TEXT_CONTRACT.md`,
-     `docs/VALIDATED_WRAPPERS.md`): `Bytes` (raw), `Text` (validated UTF-8 view),
-     `AsciiText` (owned ASCII newtype), `Path`/`PathBuf`, `ByteCursor`/`ByteWriter`
-     (std.numeric), `Cursor`/parse helpers (std.parse). The owned stored-view
-     idiom (#5a) and the explicit raw-bytes→`Text` UTF-8 step both landed; there is
-     no implicit lossy conversion. `OsString` is intentionally not built (fs uses
-     `&String`); it folds into a later OS-boundary workload (Phase 14/19) when one
-     pulls it, and is tracked there rather than blocking this item.
-   - 5a. Define the owned zero-copy view idiom before bytes/text/parser APIs
-     freeze. Since Concrete does not use lifetimes and `from(param)` refs are
-     scalar-only, stored parser results must use owned offset/length views such
-     as `ByteView { off, len, buf_len }` rather than `&Bytes` fields. The design
-     must specify checked access back through an explicit buffer, buffer-length
-     or role branding to catch wrong-buffer use where possible, overflow/bounds
-     obligations for `off + len`, and how `Text`/UTF-8 validation composes with
-     raw byte views. Add `docs/BYTE_VIEW.md`,
-     `examples/byte_view/{http_header_view,tlv_packet_view,utf8_text_slice,wrong_buffer}/`,
-     and `scripts/tests/check_byte_view.sh`; the gate must prove views are
-     storable/returnable owned values, access produces runtime-safety
-     obligations, wrong-buffer and overflow cases do not silently pass, and
-     proved code can discharge checked-access costs through ordinary
-     obligations.
-     - STATUS (DONE): `docs/BYTE_VIEW.md` is the design; `std.numeric` has
-       `pub struct Copy ByteView { off, len, buf_len }` with checked
-       `new`/`of_cursor`/`cursor`/`byte`/`try_text`/`off`/`len`/`is_empty` —
-       access goes back through an explicit `&Bytes` and returns `Option` (no
-       returned reference), with overflow, in-bounds, and a buffer-length
-       wrong-buffer brand enforced. The raw-bytes→`Text` step is explicit and
-       UTF-8-validated: `std.text` gained `Text::from_raw` (trusted) and
-       `Text::try_from_raw` (well-formed UTF-8 per RFC 3629 / Table 3-7, rejecting
-       overlong/surrogate/out-of-range), and `ByteView::try_text` composes them.
-       `examples/byte_view/{http_header_view,tlv_packet_view,utf8_text_slice,
-       wrong_buffer}/` self-verify the guards; `scripts/tests/check_byte_view.sh`
-       (Makefile `test-byte-view` + CI) locks the reference-free value model, the
-       Option-returning access surface (incl. UTF-8-validated `try_text`), and the
-       running guards.
-6. Define the collections story: fixed arrays, slices, dynamic `Vec`, maps,
-   buffers, parser cursors, and which collections require `Alloc` or other
-   capabilities.
-   - STATUS (built + gated): the runtime collections exist and are documented in
-     `docs/RUNTIME_COLLECTIONS.md` — `Vec<T>`, `HashMap<K,V>`, `OrderedMap<K,V>`,
-     `OrderedSet`, `Set`, `Deque`, `BitSet`, `BinaryHeap`, and `slice`, plus the
-     `ByteCursor`/`ByteWriter` (std.numeric) and `Cursor` (std.parse) parser
-     surfaces. The surface is the H1-clean value/operation + scoped-callback shape
-     (`get -> Option<V>`, `remove -> Option<V>`, `update(k, fn(V)->V)`,
-     `with_value`/`with_at`) with NO returned Concrete references — borrowed
-     accessors were withdrawn (H1). `scripts/tests/check_collections.sh` (Makefile
-     `test-collections` + CI) locks that H1 invariant and the operation surface;
-     std `#[test]`s cover behavior. Alloc-requiring ops carry `with(Alloc)`.
-     What remains under this heading is #6a (const generics), below.
-   - 6a. Decide narrow const generics before fixed-capacity collections become
-     stdlib APIs. This is load-bearing for the no-allocation story, not just an
-     expressiveness feature: `BoundedVec<T, N>`, `RingBuffer<T, N>`,
-     `PacketBuf<N>`, fixed hash tables, parser scratch buffers, and embedded
-     queues must not require one monomorphic type per capacity. V1 is limited
-     to integer literals and constant expressions that the compiler can
-     evaluate without general comptime execution; no type reflection, no
-     generated methods, no arbitrary compile-time programs. Monomorphization
-     must record the concrete `N` in the compiler ledger, layout report,
-     obligation ids, proof/evidence artifacts, and backend contracts. Add
-     `docs/CONST_GENERICS_V1.md`, `examples/const_generics/{bounded_vec,ring_buffer,packet_buf}/`,
-     and `scripts/tests/check_const_generics_v1.sh`; the gate must prove
-     distinct capacities specialize separately, layout is capacity-specific,
-     runtime-safety obligations name the instantiated size, and unsupported
-     non-integer/comptime-reflection forms are rejected.
-     - STATUS (DESIGN DECIDED, BUILD DEFERRED): `docs/CONST_GENERICS_V1.md` fixes
-       the V1 boundary (syntax `struct Buf<T, const N: u64>`; integer params only;
-       literal/const-foldable args; per-N monomorphization with N in the
-       name/layout/obligation ids; type-level computation, reflection, comptime,
-       and runtime-bound params rejected). A forcing probe (2026-06-21) found NO
-       current workload needs it: every fixed array in `examples/` is a
-       domain constant used once (SHA-256 `[u32;8]`/`[u32;64]`, CT `[u8;16]`,
-       `fixed_capacity` `[u8;256]`/`[i32;16]`, HTTP `[u8;4096]`), and no example
-       instantiates one container type at multiple capacities — the single-
-       fixed-capacity workaround is clean and builds today. Building now would be
-       symmetry-driven. Tracked as designed/deferred; the doc lists the forcing
-       conditions that flip the verdict (same type at multiple N, or a
-       capacity-parameterized stdlib API). No compiler change made.
 
 ## Phase 6: Language Usability And Daily Workflow
 
@@ -834,6 +659,16 @@ class and authority/allocation story.
      `Result`, structs, arrays, containers, callback contexts, or generic
      wrappers. This is the escape valve only if real workloads prove operation
      APIs, owned views, and scoped callbacks insufficient.
+   - 8f. Pull narrow const generics forward only when fixed-capacity stdlib APIs
+     need reusable capacities. `docs/CONST_GENERICS_V1.md` is the closed Phase 5
+     design record; implementation is deferred until a real Phase 7 consumer
+     appears (`BoundedVec<T, N>`, `RingBuffer<T, N>`, `PacketBuf<N>`, fixed hash
+     table, parser scratch buffer, freestanding reusable buffer, or a
+     capacity-indexed proof API). When triggered, implement the staged V1 from
+     that doc and wire `scripts/tests/check_const_generics_v1.sh` to prove
+     distinct capacities specialize separately, layout is capacity-specific,
+     runtime-safety obligations name the instantiated size, and unsupported
+     comptime/reflection/runtime-bound forms are rejected.
 9. Build iterator and builder APIs in proposed `std.iter` and `std.builder`
    after the collection shape is known: `Iter<T>`-style adapters,
    `fold`/`map`/`filter`/`take`/`drop`, known-length reporting, byte/text
