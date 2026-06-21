@@ -1,0 +1,14 @@
+// Loop control: while-as-expression where the loop completes normally (no
+// break), so its value is the `else` block value. Non-i64 width regression
+// (else value must be coerced to i32, not stored as i64). Expected: 42
+mod m {
+    fn main() -> Int {
+        let mut i: i32 = 0;
+        let v: i32 = while i < 3 {
+            i = i + 1;
+        } else {
+            42
+        };
+        return v as Int;
+    }
+}

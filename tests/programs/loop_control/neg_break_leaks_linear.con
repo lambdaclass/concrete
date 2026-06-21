@@ -1,0 +1,17 @@
+// Loop control (negative): `break` that would skip an unconsumed linear value
+// is rejected. `r` is live and unconsumed at the break. Expect: E0210
+mod m {
+    struct R { x: i32 }
+    fn mk() -> R { return R { x: 1 }; }
+    fn use_r(r: R) -> i32 { return r.x; }
+    fn main() -> Int {
+        let mut i: i32 = 0;
+        while i < 3 {
+            let r: R = mk();
+            if i == 1 { break; }     // r not consumed on this path
+            let v: i32 = use_r(r);
+            i = i + 1;
+        }
+        return 0;
+    }
+}

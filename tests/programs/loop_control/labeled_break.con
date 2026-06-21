@@ -1,0 +1,14 @@
+// Loop control: a labeled `break 'outer` exits the named outer loop, not just
+// the innermost one. c reaches 1 then both loops exit. Expected: 1
+mod m {
+    fn main() -> Int {
+        let mut c: i32 = 0;
+        'outer: while c < 10 {
+            while true {
+                c = c + 1;
+                break 'outer;
+            }
+        }
+        return c as Int;
+    }
+}

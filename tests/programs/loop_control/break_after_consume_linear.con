@@ -1,0 +1,18 @@
+// Loop control: a linear (non-Copy) value consumed BEFORE a conditional break
+// is accepted — break only has to account for values still live at the break.
+// Expected: 0
+mod m {
+    struct R { x: i32 }
+    fn mk() -> R { return R { x: 1 }; }
+    fn use_r(r: R) -> i32 { return r.x; }
+    fn main() -> Int {
+        let mut i: i32 = 0;
+        while i < 3 {
+            let r: R = mk();
+            let v: i32 = use_r(r);   // consumed unconditionally, before the break
+            if v == 1 && i == 1 { break; }
+            i = i + 1;
+        }
+        return 0;
+    }
+}

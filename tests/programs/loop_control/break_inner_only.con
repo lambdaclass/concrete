@@ -1,0 +1,18 @@
+// Loop control: an unlabeled `break` exits only the innermost loop.
+// Outer runs 3 times; inner increments c once then breaks at j==1. Expected: 3
+mod m {
+    fn main() -> Int {
+        let mut c: i32 = 0;
+        let mut i: i32 = 0;
+        while i < 3 {
+            let mut j: i32 = 0;
+            while j < 3 {
+                if j == 1 { break; }
+                c = c + 1;
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return c as Int;
+    }
+}

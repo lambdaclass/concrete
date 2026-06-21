@@ -1,0 +1,17 @@
+// Loop control (negative): `continue` that would skip an unconsumed linear
+// value is rejected — the value would leak on the back-edge. Expect: E0211
+mod m {
+    struct R { x: i32 }
+    fn mk() -> R { return R { x: 1 }; }
+    fn use_r(r: R) -> i32 { return r.x; }
+    fn main() -> Int {
+        let mut i: i32 = 0;
+        while i < 3 {
+            i = i + 1;
+            let r: R = mk();
+            if i == 2 { continue; }   // r not consumed on this path
+            let v: i32 = use_r(r);
+        }
+        return 0;
+    }
+}

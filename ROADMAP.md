@@ -301,6 +301,19 @@ gate.
     invariant preservation, variant/decrease, and runtime-safety facts. If they
     are deferred, the gate must pin the rejection diagnostics and show the
     explicit-state alternative in `examples/daily/packet_decoder`.
+    STATUS (2026-06-21, done + gated): `break`/`continue` ARE admitted (they were
+    already implemented); the decision is documented in `docs/LOOP_CONTROL.md` and
+    locked by `scripts/tests/check_loop_control.sh` (Makefile `test-loop-control`
+    + CI) over `tests/programs/loop_control/`. Behavior: unlabeled break/continue
+    act on the innermost loop; labeled `break 'l`/`continue 'l` act on the named
+    loop; `for` supports both; while-as-expression yields a value via `break <v>`
+    or the `else` block (types must agree — E0222). Cleanup: a break/continue that
+    would skip an unconsumed linear value is rejected (E0210/E0211); runtime-safety
+    obligations and `#[invariant]`/`#[variant]` loop contracts are unaffected by
+    break/continue edges. The gate audit also FOUND AND FIXED a real miscompile:
+    while-expression break/else values at non-i64 widths were stored as i64 into a
+    narrower result slot (an `i32` while-expr read back 0); now coerced to the
+    result type before the store (see CHANGELOG).
 5. Close the match/pattern ergonomics gap before broad `Result`/`Option` and
    protocol-decoder work. This is one compound usability block: algebraic data
    types are already in the language, so the pattern language must be

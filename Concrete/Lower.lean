@@ -1264,11 +1264,16 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       let flagCmp ← freshReg "bfcmp."
       emit (.binOp flagCmp .eq (.reg flagReg .int) (.intConst 1 .int) .bool)
       terminateBlock (.condBr (.reg flagCmp .bool) finalLabel elseBlockLabel)
-      -- Else block: store else value
+      -- Else block: store else value (coerced to result type, as for break)
       startBlock elseBlockLabel
       if !_elseBody.isEmpty then
         lowerStmts _elseBody
         let elseVal ← lastExprVal _elseBody _ty
+        let elseVal ← if elseVal.ty != _ty && elseVal.ty != .unit then do
+          let castReg ← freshReg "ecast."
+          emit (.cast castReg elseVal _ty)
+          pure (.reg castReg _ty)
+        else pure elseVal
         emit (.store elseVal (.reg resultSlot _ty))
       terminateBlock (.br finalLabel)
       -- Final block: load result
@@ -1300,10 +1305,16 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           removePromotedAllocas [name]
           setVar name (.reg loadDst ty)
         | none => pure ()
-      -- Store else value into result slot (loop ended without break)
+      -- Store else value into result slot (loop ended without break), coerced
+      -- to the result type as in the break path.
       if !_elseBody.isEmpty then
         lowerStmts _elseBody
         let elseVal ← lastExprVal _elseBody _ty
+        let elseVal ← if elseVal.ty != _ty && elseVal.ty != .unit then do
+          let castReg ← freshReg "ecast."
+          emit (.cast castReg elseVal _ty)
+          pure (.reg castReg _ty)
+        else pure elseVal
         emit (.store elseVal (.reg resultSlot _ty))
       -- Load result from slot
       let loadDst ← freshReg "wload."
@@ -1897,10 +1908,18 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
   | .break_ value breakLabel =>
     match ← findLoopByLabel breakLabel with
     | some info =>
-      -- Store break value into result slot (for while-as-expression)
+      -- Store break value into result slot (for while-as-expression). Coerce to
+      -- the loop's result type first — a bare `break 7` lowers the literal as the
+      -- default int width (i64), and storing i64 into an i32 result slot (then
+      -- loading i32) corrupts the value. Mirrors the if-expression cast below.
       match value, info.resultSlot with
       | some valExpr, some slot =>
         let bVal ← lowerExpr valExpr
+        let bVal ← if bVal.ty != info.resultTy && bVal.ty != .unit then do
+          let castReg ← freshReg "bcast."
+          emit (.cast castReg bVal info.resultTy)
+          pure (.reg castReg info.resultTy)
+        else pure bVal
         emit (.store bVal (.reg slot info.resultTy))
       | _, _ => pure ()
       emitDeferredUntilLoop

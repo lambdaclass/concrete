@@ -10,6 +10,25 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Loop control documented + gated; while-expression width miscompile fixed (2026-06-21)
+
+- Phase 6 #4. `break`/`continue`/labeled loops/while-as-expression were already
+  implemented; their behavior is now documented (`docs/LOOP_CONTROL.md`) and
+  locked by `scripts/tests/check_loop_control.sh` over
+  `tests/programs/loop_control/`: innermost-by-default break/continue, labeled
+  `break 'l`/`continue 'l`, `for` break+continue, while-expression value via
+  `break <v>` / `else { v }` (type agreement E0222), and linear-cleanup safety —
+  a break/continue that would skip an unconsumed linear value is rejected
+  (E0210/E0211).
+- The audit FOUND AND FIXED a real miscompile (`Concrete/Lower.lean`): a
+  while-as-expression's `break <value>` and `else` value at a non-i64 width were
+  stored as i64 into a narrower result slot — e.g. `let v: i32 = while … { break
+  7; } else { 0 }` emitted `store i64 7, ptr %wslot` into an `alloca i32` and read
+  back `0`. The value is now coerced to the result type before the store
+  (`trunc`/`sext`), mirroring the `if`-expression value path. Regressions:
+  `tests/programs/loop_control/while_expr_{break_value,else_value}_i32.con`. Full
+  suite 1576/0; examples 127/0; snapshots 95/0.
+
 ### Phase 5 core language slab closed (2026-06-21)
 
 - Phase 5 is CLOSED under the same core-complete model used for Phases 3/4. The
