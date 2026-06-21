@@ -364,6 +364,17 @@ or project layout.
 6. Define the collections story: fixed arrays, slices, dynamic `Vec`, maps,
    buffers, parser cursors, and which collections require `Alloc` or other
    capabilities.
+   - STATUS (built + gated): the runtime collections exist and are documented in
+     `docs/RUNTIME_COLLECTIONS.md` — `Vec<T>`, `HashMap<K,V>`, `OrderedMap<K,V>`,
+     `OrderedSet`, `Set`, `Deque`, `BitSet`, `BinaryHeap`, and `slice`, plus the
+     `ByteCursor`/`ByteWriter` (std.numeric) and `Cursor` (std.parse) parser
+     surfaces. The surface is the H1-clean value/operation + scoped-callback shape
+     (`get -> Option<V>`, `remove -> Option<V>`, `update(k, fn(V)->V)`,
+     `with_value`/`with_at`) with NO returned Concrete references — borrowed
+     accessors were withdrawn (H1). `scripts/tests/check_collections.sh` (Makefile
+     `test-collections` + CI) locks that H1 invariant and the operation surface;
+     std `#[test]`s cover behavior. Alloc-requiring ops carry `with(Alloc)`.
+     What remains under this heading is #6a (const generics), below.
    - 6a. Decide narrow const generics before fixed-capacity collections become
      stdlib APIs. This is load-bearing for the no-allocation story, not just an
      expressiveness feature: `BoundedVec<T, N>`, `RingBuffer<T, N>`,
