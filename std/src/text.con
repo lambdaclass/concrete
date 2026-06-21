@@ -72,6 +72,102 @@ mod text {
 
             return true;
         }
+
+        /// Build a Text view over a raw [ptr, ptr+len) region WITHOUT validation.
+        /// Trusted: the caller asserts the region is valid, live UTF-8 for `len`
+        /// bytes. Prefer try_from_raw at untrusted boundaries.
+        pub fn from_raw(ptr: *const u8, len: u64) -> Text {
+            return Text { ptr: ptr, len: len };
+        }
+
+        /// Build a Text view over [ptr, ptr+len) only if the region is
+        /// well-formed UTF-8 (RFC 3629 / Unicode Table 3-7); else None. This is
+        /// the explicit raw-bytes -> Text validation step — no implicit lossy
+        /// conversion. The caller must ensure the pointer is live for `len` bytes.
+        pub fn try_from_raw(ptr: *const u8, len: u64) -> Option<Text> {
+            if validate_utf8(ptr, len) {
+                return Option::<Text>::Some { value: Text { ptr: ptr, len: len } };
+            }
+            return Option::<Text>::None;
+        }
+    }
+
+    // ---- UTF-8 well-formedness (RFC 3629 / Unicode Table 3-7) ----
+
+    trusted fn byte_at(ptr: *const u8, i: u64) -> u8 {
+        let p: *const u8 = ptr + i;
+        return *(p as *mut u8);
+    }
+
+    fn in_range(b: u8, lo: u8, hi: u8) -> bool {
+        return b >= lo && b <= hi;
+    }
+
+    /// True iff [ptr, ptr+len) is well-formed UTF-8. Rejects overlong encodings,
+    /// surrogates (U+D800..U+DFFF), and code points above U+10FFFF via the
+    /// per-leading-byte continuation ranges.
+    trusted fn validate_utf8(ptr: *const u8, len: u64) -> bool {
+        let mut i: u64 = 0;
+        while i < len {
+            let b0: u8 = byte_at(ptr, i);
+            if b0 < (128 as u8) {
+                i = i + 1;
+            } else if in_range(b0, 194 as u8, 223 as u8) {
+                // 2-byte: C2..DF | 80..BF
+                if i + 2 > len { return false; }
+                if !in_range(byte_at(ptr, i + 1), 128 as u8, 191 as u8) { return false; }
+                i = i + 2;
+            } else if b0 == (224 as u8) {
+                // E0 | A0..BF | 80..BF
+                if i + 3 > len { return false; }
+                if !in_range(byte_at(ptr, i + 1), 160 as u8, 191 as u8) { return false; }
+                if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
+                i = i + 3;
+            } else if in_range(b0, 225 as u8, 236 as u8) {
+                // E1..EC | 80..BF | 80..BF
+                if i + 3 > len { return false; }
+                if !in_range(byte_at(ptr, i + 1), 128 as u8, 191 as u8) { return false; }
+                if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
+                i = i + 3;
+            } else if b0 == (237 as u8) {
+                // ED | 80..9F | 80..BF  (excludes surrogates)
+                if i + 3 > len { return false; }
+                if !in_range(byte_at(ptr, i + 1), 128 as u8, 159 as u8) { return false; }
+                if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
+                i = i + 3;
+            } else if in_range(b0, 238 as u8, 239 as u8) {
+                // EE..EF | 80..BF | 80..BF
+                if i + 3 > len { return false; }
+                if !in_range(byte_at(ptr, i + 1), 128 as u8, 191 as u8) { return false; }
+                if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
+                i = i + 3;
+            } else if b0 == (240 as u8) {
+                // F0 | 90..BF | 80..BF | 80..BF
+                if i + 4 > len { return false; }
+                if !in_range(byte_at(ptr, i + 1), 144 as u8, 191 as u8) { return false; }
+                if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
+                if !in_range(byte_at(ptr, i + 3), 128 as u8, 191 as u8) { return false; }
+                i = i + 4;
+            } else if in_range(b0, 241 as u8, 243 as u8) {
+                // F1..F3 | 80..BF | 80..BF | 80..BF
+                if i + 4 > len { return false; }
+                if !in_range(byte_at(ptr, i + 1), 128 as u8, 191 as u8) { return false; }
+                if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
+                if !in_range(byte_at(ptr, i + 3), 128 as u8, 191 as u8) { return false; }
+                i = i + 4;
+            } else if b0 == (244 as u8) {
+                // F4 | 80..8F | 80..BF | 80..BF  (caps at U+10FFFF)
+                if i + 4 > len { return false; }
+                if !in_range(byte_at(ptr, i + 1), 128 as u8, 143 as u8) { return false; }
+                if !in_range(byte_at(ptr, i + 2), 128 as u8, 191 as u8) { return false; }
+                if !in_range(byte_at(ptr, i + 3), 128 as u8, 191 as u8) { return false; }
+                i = i + 4;
+            } else {
+                // C0, C1, F5..FF, or a stray continuation byte 80..BF as leader
+                return false;
+            }
+        }
+        return true;
     }
 
     import std.test.{assert_eq, assert_true};
@@ -159,5 +255,73 @@ mod text {
         if !assert_eq::<u64>(t.len(), 0, "empty text len should be 0") { s.drop(); return 1; }
         s.drop();
         return 0;
+    }
+
+    // ---- UTF-8 validation (try_from_raw / validate_utf8) ----
+
+    #[test]
+    trusted fn test_try_from_raw_valid_utf8() with(Unsafe) -> i32 {
+        // "café" = 63 61 66 C3 A9 (the é is the 2-byte U+00E9)
+        let buf: [u8; 5] = [0x63, 0x61, 0x66, 0xC3, 0xA9];
+        match Text::try_from_raw(&buf as *const u8, 5) {
+            Option::Some { value } => {
+                if !assert_eq::<u64>(value.len(), 5, "valid utf8 len should be 5 bytes") { return 1; }
+                return 0;
+            },
+            Option::None => { return 2; }
+        }
+    }
+
+    #[test]
+    trusted fn test_try_from_raw_split_codepoint_rejected() with(Unsafe) -> i32 {
+        // 0xC3 lead byte with no continuation -> invalid
+        let buf: [u8; 4] = [0x63, 0x61, 0x66, 0xC3];
+        match Text::try_from_raw(&buf as *const u8, 4) {
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
+        }
+    }
+
+    #[test]
+    trusted fn test_try_from_raw_surrogate_rejected() with(Unsafe) -> i32 {
+        // ED A0 80 = U+D800 (a surrogate) -> invalid in UTF-8
+        let buf: [u8; 3] = [0xED, 0xA0, 0x80];
+        match Text::try_from_raw(&buf as *const u8, 3) {
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
+        }
+    }
+
+    #[test]
+    trusted fn test_try_from_raw_overlong_rejected() with(Unsafe) -> i32 {
+        // C0 80 = overlong encoding of NUL; C0 is never a valid lead byte
+        let buf: [u8; 2] = [0xC0, 0x80];
+        match Text::try_from_raw(&buf as *const u8, 2) {
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
+        }
+    }
+
+    #[test]
+    trusted fn test_try_from_raw_4byte_valid() with(Unsafe) -> i32 {
+        // F0 9F 98 80 = U+1F600 GRINNING FACE -> valid
+        let buf: [u8; 4] = [0xF0, 0x9F, 0x98, 0x80];
+        match Text::try_from_raw(&buf as *const u8, 4) {
+            Option::Some { value } => {
+                if !assert_eq::<u64>(value.len(), 4, "4-byte sequence is 4 bytes") { return 1; }
+                return 0;
+            },
+            Option::None => { return 2; }
+        }
+    }
+
+    #[test]
+    trusted fn test_try_from_raw_4byte_too_large_rejected() with(Unsafe) -> i32 {
+        // F5 .. would encode beyond U+10FFFF; F5 is not a valid lead byte
+        let buf: [u8; 4] = [0xF5, 0x80, 0x80, 0x80];
+        match Text::try_from_raw(&buf as *const u8, 4) {
+            Option::Some { value } => { return 1; },
+            Option::None => { return 0; }
+        }
     }
 }

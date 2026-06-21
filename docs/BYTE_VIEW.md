@@ -1,9 +1,9 @@
-# Owned Byte Views (design)
+# Owned Byte Views
 
-Status: design — ROADMAP Phase 5 #5a / KNOWN_HOLES "Owned ByteView zero-copy
-stored idiom". Implementation pending (this doc precedes the std type + examples +
-gate).
-Date: 2026-06-20
+Status: IMPLEMENTED — ROADMAP Phase 5 #5a. Design + `std.numeric.ByteView` +
+`std.text` UTF-8 path + `examples/byte_view/*`, gated by
+`scripts/tests/check_byte_view.sh`.
+Date: 2026-06-20 (core), 2026-06-21 (Text/UTF-8 composition)
 
 ## Problem
 
@@ -44,6 +44,7 @@ view does not validly describe that buffer:
 ```
 pub fn cursor(&self, buf: &Bytes) -> Option<ByteCursor>   // bounds + brand checked
 pub fn byte(&self, buf: &Bytes, i: u64) -> Option<u8>     // single checked element
+pub fn try_text(&self, buf: &Bytes) -> Option<Text>       // UTF-8-validated Text view
 pub fn off(&self) -> u64
 pub fn len(&self) -> u64
 pub fn is_empty(&self) -> bool
@@ -83,17 +84,22 @@ pub fn of_cursor(start: u64, cur: &ByteCursor) -> ByteView        // [start, cur
 valid is never constructed). `of_cursor` is the parser idiom: mark a start, read
 fields via the cursor, then capture `[start, cur.pos())` as a stored view.
 
-## Text / UTF-8 composition (deferred follow-up)
+## Text / UTF-8 composition
 
-The intended composition is: a `ByteView` over raw bytes becomes a `Text` view
-only after explicit UTF-8 validation of the region (no implicit lossy conversion —
-raw `ByteView` stays bytes until validated, matching the Bytes/Text split). This is
-**not in the first ByteView increment** because `Text` (std.text) has private
-fields and only a `from_string(&String)` constructor — a region→`Text` path needs a
-`Text::from_raw(*const u8, len)` constructor (and, separately, a UTF-8 validator;
-std today validates only ASCII, via `AsciiText::try_new`). Both are tracked as the
-follow-up to this increment; the core view+access idiom below ships first and does
-not depend on them.
+A `ByteView` over raw bytes becomes a `Text` view only after **explicit** UTF-8
+validation of the region — there is no implicit lossy conversion; raw `ByteView`
+stays bytes until validated, matching the Bytes/Text split. `try_text(&buf)`:
+
+1. checks the view validly describes `buf` (overflow / bounds / brand), then
+2. runs the region through `Text::try_from_raw`, which validates well-formed
+   UTF-8 (RFC 3629 / Unicode Table 3-7 — rejecting overlong encodings,
+   surrogates `U+D800..U+DFFF`, and code points above `U+10FFFF`),
+
+returning `Some(Text)` only when both hold, else `None`. The returned `Text` is a
+non-owning view (`ptr + len`), so the buffer must outlive it — the same scoping
+rule as any view. std.text gained `Text::from_raw(ptr, len)` (trusted, unchecked)
+and `Text::try_from_raw(ptr, len)` (validated) to support this; the previous
+ASCII-only `AsciiText::try_new` remains for the owned-ASCII-newtype case.
 
 ## Limitations (documented, not hidden)
 
@@ -103,19 +109,19 @@ not depend on them.
 - ByteView indexes one **contiguous** buffer; scatter/gather views are out of
   scope.
 
-## Deliverables
+## Deliverables (landed)
 
-First increment (this build):
 - `std.numeric` (alongside `ByteCursor`): the `ByteView` type + `new`/`of_cursor`/
-  `cursor`/`byte`/`off`/`len`/`is_empty`, in a `trusted impl` whose boundary is
-  documented.
-- `examples/byte_view/{http_header_view,tlv_packet_view,wrong_buffer}/` — store
-  views in a result struct, access through the buffer, and show the wrong-buffer /
-  overflow cases returning `None` (not silently passing).
-- `scripts/tests/check_byte_view.sh`: proves views are storable/returnable owned
-  `Copy` values; access goes back through an explicit buffer (no returned ref);
-  and wrong-buffer / overflow / out-of-range cases return `None` rather than
-  silently passing.
-
-Follow-up (separate increment): `Text::from_raw` + a UTF-8 validator, then
-`examples/byte_view/utf8_text_slice/` and a `try_text` access method.
+  `cursor`/`byte`/`try_text`/`off`/`len`/`is_empty`, in a `trusted impl` whose
+  boundary is documented.
+- `std.text`: `Text::from_raw(ptr, len)` (trusted, unchecked) and
+  `Text::try_from_raw(ptr, len)` (validated) + the `validate_utf8` well-formedness
+  checker.
+- `examples/byte_view/{http_header_view,tlv_packet_view,utf8_text_slice,wrong_buffer}/`
+  — store views in a result struct, access through the buffer, validate a region
+  into `Text`, and show the wrong-buffer / overflow / split-codepoint cases
+  returning `None` (not silently passing).
+- `scripts/tests/check_byte_view.sh` (Makefile `test-byte-view` + CI): proves
+  views are storable/returnable owned `Copy` values; access goes back through an
+  explicit buffer (no returned ref); the raw→`Text` step is UTF-8-validated; and
+  wrong-buffer / overflow / out-of-range / invalid-UTF-8 cases return `None`.

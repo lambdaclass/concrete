@@ -10,6 +10,25 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### `ByteView` → `Text`: explicit UTF-8-validated raw-bytes-to-text step (2026-06-21)
+
+- Closes the byte/text split for stored zero-copy views (Phase 5 #5a follow-up;
+  Phase 5 #5 is now fully done). A `ByteView` is raw bytes; turning a region into
+  a `Text` (validated UTF-8 view) is an explicit step that can fail.
+- `std.text` gained `Text::from_raw(ptr, len)` (trusted, unchecked) and
+  `Text::try_from_raw(ptr, len)` (validated), backed by a `validate_utf8`
+  well-formedness checker implementing RFC 3629 / Unicode Table 3-7 — it rejects
+  overlong encodings, surrogates (U+D800..U+DFFF), and code points above U+10FFFF
+  via per-leading-byte continuation ranges.
+- `ByteView::try_text(&self, buf: &Bytes) -> Option<Text>` composes the view's
+  describe-checks (overflow/bounds/brand) with UTF-8 validation: `Some(Text)` only
+  when the region validly describes the buffer AND is well-formed UTF-8, else
+  `None`. No implicit lossy conversion — raw bytes stay bytes until validated.
+- `examples/byte_view/utf8_text_slice/` shows a valid "café" region validating and
+  a view that cuts a multi-byte code point in half being rejected. The ByteView
+  gate now also locks the `try_text` / `try_from_raw` / `validate_utf8` surface.
+  Full suite 1576/0; examples 127/0.
+
 ### `ByteView` — owned, reference-free, stored zero-copy byte views (2026-06-20)
 
 - Phase 5 #5a core. Concrete has no lifetimes and references are second-class
@@ -30,10 +49,9 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
   overflow uses return `None`. Gated by `scripts/tests/check_byte_view.sh`
   (Makefile `test-byte-view` + CI), which locks the reference-free value model,
   the Option-returning access surface, and the running guards.
-- Deferred to its own increment (not silently dropped): a region→`Text` path
-  (`try_text` + `utf8_text_slice` example) needs `Text::from_raw` and a UTF-8
-  validator — std validates only ASCII today, and `Text` exposes only
-  `from_string(&String)`. Full suite 1569/0; examples 126/0.
+- The region→`Text` path (`try_text` + `utf8_text_slice` example) was split into
+  its own increment and landed the next day — see the 2026-06-21 entry above.
+  At this commit: full suite 1569/0; examples 126/0.
 
 ### Diagnostics-quality: E0208 (unconsumed linear variable) now has a source span (2026-06-20)
 

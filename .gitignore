@@ -43,6 +43,7 @@ examples/proof_pressure/proof_pressure
 examples/service_errors/service_errors
 examples/byte_view/http_header_view/http_header_view
 examples/byte_view/tlv_packet_view/tlv_packet_view
+examples/byte_view/utf8_text_slice/utf8_text_slice
 examples/byte_view/wrong_buffer/wrong_buffer
 
 # C benchmark binaries (compiled from bench_c.c)

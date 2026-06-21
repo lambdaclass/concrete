@@ -325,6 +325,14 @@ or project layout.
    for validated UTF-8, and `Path`/`OsString` for OS-native boundaries. Specify
    literals, ownership, slicing, indexing, formatting, conversions, parser/JSON
    interaction, diagnostics, and test output. No implicit lossy conversion.
+   - STATUS (done): the split is documented (`docs/STRING_TEXT_CONTRACT.md`,
+     `docs/VALIDATED_WRAPPERS.md`): `Bytes` (raw), `Text` (validated UTF-8 view),
+     `AsciiText` (owned ASCII newtype), `Path`/`PathBuf`, `ByteCursor`/`ByteWriter`
+     (std.numeric), `Cursor`/parse helpers (std.parse). The owned stored-view
+     idiom (#5a) and the explicit raw-bytes→`Text` UTF-8 step both landed; there is
+     no implicit lossy conversion. `OsString` is intentionally not built (fs uses
+     `&String`); it folds into a later OS-boundary workload (Phase 14/19) when one
+     pulls it, and is tracked there rather than blocking this item.
    - 5a. Define the owned zero-copy view idiom before bytes/text/parser APIs
      freeze. Since Concrete does not use lifetimes and `from(param)` refs are
      scalar-only, stored parser results must use owned offset/length views such
@@ -339,19 +347,20 @@ or project layout.
      obligations, wrong-buffer and overflow cases do not silently pass, and
      proved code can discharge checked-access costs through ordinary
      obligations.
-     - STATUS (core landed): `docs/BYTE_VIEW.md` is the design; `std.numeric`
-       has `pub struct Copy ByteView { off, len, buf_len }` with checked
-       `new`/`of_cursor`/`cursor`/`byte`/`off`/`len`/`is_empty` — access goes
-       back through an explicit `&Bytes` and returns `Option` (no returned
-       reference), with overflow, in-bounds, and a buffer-length wrong-buffer
-       brand enforced. `examples/byte_view/{http_header_view,tlv_packet_view,
+     - STATUS (DONE): `docs/BYTE_VIEW.md` is the design; `std.numeric` has
+       `pub struct Copy ByteView { off, len, buf_len }` with checked
+       `new`/`of_cursor`/`cursor`/`byte`/`try_text`/`off`/`len`/`is_empty` —
+       access goes back through an explicit `&Bytes` and returns `Option` (no
+       returned reference), with overflow, in-bounds, and a buffer-length
+       wrong-buffer brand enforced. The raw-bytes→`Text` step is explicit and
+       UTF-8-validated: `std.text` gained `Text::from_raw` (trusted) and
+       `Text::try_from_raw` (well-formed UTF-8 per RFC 3629 / Table 3-7, rejecting
+       overlong/surrogate/out-of-range), and `ByteView::try_text` composes them.
+       `examples/byte_view/{http_header_view,tlv_packet_view,utf8_text_slice,
        wrong_buffer}/` self-verify the guards; `scripts/tests/check_byte_view.sh`
        (Makefile `test-byte-view` + CI) locks the reference-free value model, the
-       Option-returning access surface, and the running guards. REMAINING (own
-       increment): `Text::from_raw` + a UTF-8 validator (std validates only ASCII
-       today), then the `utf8_text_slice` example and a `try_text` access method —
-       `Text` has private fields and only `from_string(&String)`, so the
-       region→`Text` path is deferred, not silently dropped.
+       Option-returning access surface (incl. UTF-8-validated `try_text`), and the
+       running guards.
 6. Define the collections story: fixed arrays, slices, dynamic `Vec`, maps,
    buffers, parser cursors, and which collections require `Alloc` or other
    capabilities.

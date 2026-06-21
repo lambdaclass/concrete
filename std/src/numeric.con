@@ -314,6 +314,18 @@ mod numeric {
             }
             return buf.get(self.off + i);
         }
+
+        /// A validated Text view over the region, or None if the view does not
+        /// validly describe `buf` OR the bytes are not well-formed UTF-8. This is
+        /// the explicit raw-bytes -> Text step (no implicit lossy conversion); the
+        /// returned Text is a non-owning view, so `buf` must outlive it.
+        pub fn try_text(&self, buf: &Bytes) -> Option<Text> {
+            if !self.describes(buf) {
+                return Option::<Text>::None;
+            }
+            let base: *const u8 = (buf.ptr as *const u8) + self.off;
+            return Text::try_from_raw(base, self.len);
+        }
     }
 
     // ---- Standalone endian functions (no cursor needed) ----
@@ -863,6 +875,38 @@ mod numeric {
         }
         a.drop();
         c.drop();
+        return rc;
+    }
+
+    #[test]
+    fn test_byteview_try_text() with(Alloc) -> i32 {
+        // "caf" + é(0xC3 0xA9) + '!'  -> valid view [0,5), split view [0,4) invalid
+        let mut b: Bytes = Bytes::new();
+        b.push(99); b.push(97); b.push(102); b.push(195); b.push(169); b.push(33);
+        let mut rc: i32 = 0;
+        match ByteView::new(0, 5, &b) {
+            Option::Some { value } => {
+                let v: ByteView = value;
+                match v.try_text(&b) {
+                    Option::Some { value } => {
+                        if !assert_eq::<u64>(value.len(), 5, "text view is 5 bytes") { rc = 1; }
+                    },
+                    Option::None => { rc = 1; }
+                }
+            },
+            Option::None => { rc = 1; }
+        }
+        match ByteView::new(0, 4, &b) {
+            Option::Some { value } => {
+                let v: ByteView = value;
+                match v.try_text(&b) {
+                    Option::Some { value } => { rc = 1; }, // split codepoint must reject
+                    Option::None => {}
+                }
+            },
+            Option::None => { rc = 1; }
+        }
+        b.drop();
         return rc;
     }
 

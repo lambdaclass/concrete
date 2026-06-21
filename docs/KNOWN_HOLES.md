@@ -256,12 +256,13 @@ whole picture is in one place.
   `with_value_mut`/`modify` need the container-not-in-context gate, stored
   `BoundFn` values need a storage workload, and `from(param)` stays deferred
   (Phase 7 #8e) and is explicitly NOT the H1 fix.
-- **Owned `ByteView` zero-copy stored idiom** — Phase 5 #5a. CORE DONE
-  (2026-06-20): `docs/BYTE_VIEW.md` design + `std.numeric` `ByteView { off, len,
-  buf_len }` (reference-free Copy, checked Option-returning access, overflow /
-  bounds / wrong-buffer-length brand) + `examples/byte_view/*` + gated by
-  `scripts/tests/check_byte_view.sh`. Remaining (own increment): `Text::from_raw`
-  + UTF-8 validator → `try_text` + `utf8_text_slice` example.
+- **Owned `ByteView` zero-copy stored idiom** — Phase 5 #5a. DONE (2026-06-21):
+  `docs/BYTE_VIEW.md` design + `std.numeric` `ByteView { off, len, buf_len }`
+  (reference-free Copy, checked Option-returning access, overflow / bounds /
+  wrong-buffer-length brand) + the explicit UTF-8-validated raw→`Text` step
+  (`std.text` `try_from_raw`/`validate_utf8`, `ByteView::try_text`) +
+  `examples/byte_view/*` + gated by `scripts/tests/check_byte_view.sh`. No open
+  hole.
 - **Narrow const generics** (`[T; N]`) — Phase 5 #6a.
 - **Pattern completeness** (ranges/guards/or/nested) — Phase 6 #5.
 - **Explicit-dictionary coherence** — Phase 7 #8c.

@@ -60,15 +60,28 @@ grep -qE 'pub fn new\(off: u64, len: u64, buf: &Bytes\) -> Option<ByteView>' "$N
   && ok "new(...) -> Option<ByteView> (checked construction)" \
   || no "checked constructor new(...) -> Option<ByteView> changed/missing"
 # No access method may return a bare ByteView reference or Bytes — only Option/scalars/views.
-if grep -E 'pub fn (cursor|byte|new|of_cursor)\(' "$NUMERIC" | grep -qE -- '->[[:space:]]*&'; then
+if grep -E 'pub fn (cursor|byte|new|of_cursor|try_text)\(' "$NUMERIC" | grep -qE -- '->[[:space:]]*&'; then
   no "a ByteView API returns a reference (violates value model)"
 else
   ok "no ByteView API returns a reference"
 fi
 
+echo "=== 2b. raw-bytes -> Text is an explicit, UTF-8-validated step ==="
+grep -qE 'pub fn try_text\(&self, buf: &Bytes\) -> Option<Text>' "$NUMERIC" \
+  && ok "ByteView::try_text(&self, buf) -> Option<Text>" \
+  || no "ByteView::try_text signature changed/missing"
+TEXT="std/src/text.con"
+[ -f "$TEXT" ] || { echo "error: $TEXT missing" >&2; exit 2; }
+grep -qE 'pub fn try_from_raw\(ptr: \*const u8, len: u64\) -> Option<Text>' "$TEXT" \
+  && ok "Text::try_from_raw(ptr, len) -> Option<Text> (validated)" \
+  || no "Text::try_from_raw changed/missing"
+grep -q 'fn validate_utf8(' "$TEXT" \
+  && ok "UTF-8 validator (validate_utf8) present" \
+  || no "validate_utf8 missing (try_from_raw would be unvalidated)"
+
 echo "=== 3. the guards fire: example programs self-verify and exit 0 ==="
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-for ex in http_header_view tlv_packet_view wrong_buffer; do
+for ex in http_header_view tlv_packet_view utf8_text_slice wrong_buffer; do
   proj="examples/byte_view/$ex"
   if [ ! -f "$proj/Concrete.toml" ]; then
     no "$ex: project missing ($proj/Concrete.toml)"

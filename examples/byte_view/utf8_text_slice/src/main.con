@@ -1,0 +1,76 @@
+// ByteView example: raw bytes -> validated Text, the explicit UTF-8 step.
+//
+// A ByteView is just bytes. Turning a stored view into a Text (a validated
+// UTF-8 view) is an EXPLICIT step — ByteView::try_text validates the region as
+// well-formed UTF-8 and returns None on invalid bytes. There is no implicit
+// lossy conversion: raw bytes stay bytes until you validate them. This closes
+// the byte/text split for stored zero-copy views. See docs/BYTE_VIEW.md and
+// docs/STRING_TEXT_CONTRACT.md.
+
+mod utf8_text_slice {
+
+    import std.bytes.{Bytes};
+    import std.numeric.{ByteView};
+    import std.text.{Text};
+
+    fn text_is_none(o: Option<Text>) -> bool {
+        match o {
+            Option::Some { value } => { return false; },
+            Option::None => { return true; }
+        }
+    }
+
+    // Return the Text length if the view is valid UTF-8, else a sentinel.
+    fn text_len_or(o: Option<Text>, sentinel: u64) -> u64 {
+        match o {
+            Option::Some { value } => { return value.len(); },
+            Option::None => { return sentinel; }
+        }
+    }
+
+    pub fn main() with(Std) -> Int {
+        // Buffer: "café!" where 'é' is the 2-byte UTF-8 sequence 0xC3 0xA9.
+        //   bytes: c(99) a(97) f(102) [0xC3=195][0xA9=169] !(33)   -> len 6
+        let mut buf: Bytes = Bytes::new();
+        buf.push(99); buf.push(97); buf.push(102);  // caf
+        buf.push(195); buf.push(169);               // é (U+00E9)
+        buf.push(33);                               // !
+
+        let mut rc: Int = 1;
+
+        // A view over "café" = bytes [0, 5): 3 ASCII + the 2-byte é. Valid UTF-8.
+        let good: Option<ByteView> = ByteView::new(0, 5, &buf);
+
+        match good {
+            Option::Some { value } => {
+                let gv: ByteView = value;
+                // Text view length is in BYTES (5), validated as 4 code points.
+                let glen: u64 = text_len_or(gv.try_text(&buf), 0);
+                // A view over [0, 4): cuts the é in half (lands on the lead byte
+                // 0xC3 with no continuation). Must NOT validate as UTF-8.
+                let split: Option<ByteView> = ByteView::new(0, 4, &buf);
+                match split {
+                    Option::Some { value } => {
+                        let sv: ByteView = value;
+                        let bad_rejected: bool = text_is_none(sv.try_text(&buf));
+                        if glen == 5 && bad_rejected {
+                            println("byte_view utf8: 'cafe\\u{e9}' validates (5 bytes); split-codepoint rejected");
+                            rc = 0;
+                        } else {
+                            println("byte_view utf8: validation result unexpected");
+                        }
+                    },
+                    Option::None => {
+                        println("byte_view utf8: split view construction failed");
+                    }
+                }
+            },
+            Option::None => {
+                println("byte_view utf8: good view construction failed");
+            }
+        }
+
+        buf.drop();
+        return rc;
+    }
+}
