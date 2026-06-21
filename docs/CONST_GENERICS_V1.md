@@ -101,8 +101,8 @@ unambiguous.
 
 ## Forcing conditions (when to build)
 
-Build V1 when any ONE of these appears in a real workload (not a symmetry
-argument):
+Marker: **DESIGNED / DEFERRED — workload-gated.** Build V1 when any ONE of these
+appears in a real workload (not a symmetry argument):
 
 - A program needs the **same** fixed-capacity container type at **two or more**
   capacities, and over-provisioning to a single max wastes meaningful stack/space
@@ -110,22 +110,55 @@ argument):
 - A stdlib fixed-capacity API (`BoundedVec`, `RingBuffer`, `PacketBuf`) is about
   to be written and would otherwise ship as N hand-duplicated types or a single
   hard-coded capacity that callers cannot choose.
-- A parser/embedded workload needs capacity to be a caller-chosen compile-time
-  parameter of a reusable type.
+- A no-alloc parser/buffer workload **duplicates types by size** (the same logic
+  copy-pasted for `[u8; 64]` and `[u8; 384]`, etc.).
+- Freestanding/embedded work needs reusable stack/static buffers parameterized by
+  a caller-chosen compile-time capacity.
+- Proof/runtime obligations need reusable **capacity-indexed** APIs (one proved
+  container reused at several N, rather than re-proving per hand-specialized type).
 
-## Deliverables (when the verdict flips — NOT built now)
+## Implementation difficulty (for when the verdict flips)
 
-- Parser: `const N: u64` in the generic param list; const args in type
-  application.
-- Resolver/Check: `N` as a `u64`-typed value in scope, usable in `[T; N]` and
-  body expressions; reject the V1-excluded forms above with clear diagnostics.
-- Mono: specialize per concrete `N`; thread `N` into the monomorphic name,
-  layout, obligation ids, ledger, and backend contracts.
-- `examples/const_generics/{bounded_vec,ring_buffer,packet_buf}/` and
-  `scripts/tests/check_const_generics_v1.sh` — the gate must prove distinct
-  capacities specialize separately, layout is capacity-specific, obligations name
-  the instantiated size, and the excluded non-integer/comptime/reflection forms
-  are rejected.
+Narrow V1 is **moderate-to-hard (~7/10)** — not a research feature, but it is
+cross-cutting: it touches parser, type representation (types must carry *value*
+parameters, not just type parameters), resolver/checker (N is a compile-time
+integer, substituted into `[T; N]`), monomorphization (distinct specialization +
+mangled name per concrete N), layout/backend (N resolved before size/offset; no
+symbolic-N array reaches lowering), and obligation/report identity (bounds
+obligations, layout reports, proof artifacts must embed the concrete N). The
+**riskiest** parts are monomorphization + layout + obligation identity — that is
+where a missing-N path causes silent symbol/evidence collisions or wrong layouts.
+If V1 stays narrow it is feasible; if it drifts into general comptime or
+type-level arithmetic it becomes a major language subsystem (hence the hard
+exclusions above). The staged build is in Deliverables below.
+
+## Deliverables — staged build (when the verdict flips; NOT built now)
+
+Each stage lands behind tests before the next, mirroring how every Phase 5 item
+shipped (build the gap, gate it, then proceed):
+
+1. **Design** — this doc (done).
+2. **Parse + type model** — `const N: u64` in the generic param list and const
+   args in type application; types carry value parameters. Rejected *before use*
+   (parse/resolve), with the V1-excluded forms (`Buf<n + 1>` non-foldable,
+   `Buf<runtime_len>`, non-integer params, missing const args) producing clear
+   diagnostics.
+3. **`[T; N]` inside generic structs/functions** — substitute `N` into array
+   sizes and body bounds expressions.
+4. **Monomorphize by concrete literal N** — distinct specialization + mangled
+   name per N (`Buf$u8$256` vs `Buf$u8$4096`); never collide.
+5. **Layout/backend** — resolve `N` before size/offset; no symbolic-N array
+   reaches lowering unspecialized.
+6. **Obligation/report identity** — bounds obligations, layout reports, ledger,
+   proof/evidence artifacts, and backend contracts all embed the concrete `N`
+   (`index < 256`, not `index < N`) so evidence never collides or stales.
+7. **Gate** — `examples/const_generics/{bounded_vec,ring_buffer,packet_buf}/` and
+   `scripts/tests/check_const_generics_v1.sh` proving `PacketBuf<16>` vs
+   `PacketBuf<32>` specialize to distinct layouts AND distinct obligations, and
+   that the excluded non-integer/comptime/reflection forms are rejected.
+
+The riskiest stages (4–6) are exactly where N must be threaded *everywhere* or
+silent collisions/wrong layouts result — see Implementation difficulty above.
 
 Until then this remains a recorded decision, not code — see KNOWN_HOLES.md
 ("unmade decisions / designed-deferred") and ROADMAP Phase 5 #6a.
