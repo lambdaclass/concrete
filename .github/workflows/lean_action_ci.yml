@@ -237,6 +237,9 @@ jobs:
       - name: End-of-Phase-2 VC/SMT examples gate
         run: bash scripts/tests/check_vc_examples.sh
 
+      - name: Operational-VC-auto-discharge forcing-probe gate (Phase 9 #16a)
+        run: bash scripts/tests/check_operational_vc_auto_discharge.sh
+
       - name: Phase 2 VC/discharge validation artifact (umbrella)
         run: bash scripts/tests/check_phase2_vc.sh
 

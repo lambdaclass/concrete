@@ -10,6 +10,23 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Operational VC auto-discharge forcing probe gated — verdict GO (2026-06-22)
+
+- Ran and locked the Phase 9 #16a forcing probe. A fixed mechanical tactic over
+  six real hand-proof-shaped VCs closes 4/6 today: HMAC/SHA `ch` and `maj`
+  bitvector refinements via `bv_decide`, `count_up` invariant preservation via
+  `omega`, and a branching parser postcondition once the guard is split.
+- Added `scripts/tests/check_operational_vc_auto_discharge.sh` plus Lean
+  fixtures under `scripts/tests/fixtures/operational_vc_autodischarge/` and
+  wired the gate into Makefile/CI. The positive file must close; the boundary
+  file must continue failing until V1 cast-normalization / guard-splitting work
+  lands.
+- ROADMAP #16a and the research note now name the V1 core precisely:
+  symbolically execute a narrow Core/ProofCore fragment, split conjunctions and
+  guards, normalize `Int`/`Nat`/`BitVec` casts, route arithmetic leaves to
+  `omega`, route bitvector leaves to `bv_decide`, and report surviving leaves as
+  `needs_lean` / `not_supported`.
+
 ### Pattern ergonomics: `if let` / `while let` (2026-06-22)
 
 - Phase 6 #5, increment 2. Conditional destructuring, desugared to a `match` at

@@ -1,6 +1,9 @@
 # Operational VC Auto-Discharge
 
-Status: research / roadmap candidate
+Status: **forcing probe RUN (2026-06-22) — verdict GO.** Was: research /
+roadmap candidate. The "Forcing Probe" section below now records the measured
+result, not a plan. Gate: `scripts/tests/check_operational_vc_auto_discharge.sh`;
+fixtures: `scripts/tests/fixtures/operational_vc_autodischarge/{closes,boundary}.lean`.
 
 Priority: P0
 
@@ -94,28 +97,57 @@ V1 should not attempt to solve the full verification problem:
 Unsupported cases must stay visible and must still be eligible for explicit
 Lean proofs.
 
-## Forcing Probe
+## Forcing Probe — RESULT (2026-06-22)
 
-Before building the feature, run a forcing probe over existing obligations that
-currently rely on hand Lean or are missing:
+The probe was run, not just planned. Six verbatim copies of real, currently
+hand-proved VC statements were attacked with ONE *fixed, mechanical* tactic
+allowed only what an auto-discharger would have — unfold the evaluator (a fixed
+reusable lemma set), unfold the extracted body def and the named spec it
+refines, the reusable Int↔Nat↔BitVec round-trip collapse lemmas, a mechanical
+conjunction split / guard `by_cases`, then route the leaf to `bv_decide` /
+`omega` / `rfl` / `simp`. **No** per-obligation `rw [show … by omega]`, bespoke
+helper lemma, or hand-picked rewrite was permitted.
 
-1. `examples/loop_invariant`: operational preservation for the counting loop
-   and the `count_to_eight` style postcondition.
-2. HMAC / SHA bitvector identities such as `ch_refines` or
-   `ch_selects_high`.
-3. One bounded parser, codec, or fixed-buffer obligation from a workload once it
-   exists in the examples tree.
+| VC (real obligation)                  | Class                    | Mechanical tactic         | Result |
+|---------------------------------------|--------------------------|---------------------------|:------:|
+| `ch` refines spec                     | pure bitwise word fn     | eval-unfold → `bv_decide` | closes |
+| `maj` refines spec                    | pure bitwise word fn     | eval-unfold → `bv_decide` | closes |
+| `count_up` invariant preservation     | straight-line loop body  | eval-unfold → `omega`     | closes |
+| `validate_version` postcond (+split)  | branching parser         | `by_cases` → `simp`/`omega` | closes |
+| `rotr` refines spec                   | shift-amount arithmetic  | eval-unfold → `bv_decide` | **fails** |
+| `validate_version` postcond (no split)| branching parser         | eval-unfold → `omega`     | **fails** |
 
-For each case, emit the candidate operational VC and measure:
+**4 of 6 close with a fixed tactic — verdict GO.** The dominant cost is *not*
+"can the SMT engines decide these" (they can); it is the **cast-normalization
+fragment** between the evaluator's `Int` world and the spec's `Nat`/`BitVec`
+world. The two failures are the boundary, and each is a bounded fragment
+feature, not a research wall:
 
-- whether `omega` or `bv_decide` can close it without a human bridge theorem;
-- how much source/Core context is needed;
-- which unsupported constructs block automation;
-- whether the report can explain the fallback cleanly.
+1. **`rotr` / sigmas / packing / indexing:** the goal stalls at
+   `X >>> (↑n).toNat ||| X <<< (32 - ↑n).toNat` vs `X >>> n ||| X <<< (32 - n)`.
+   The evaluator binds shift amounts as `Int`; the spec shifts by `Nat`; the
+   leftover `(↑n).toNat` / `(32 - ↑n).toNat` casts block `bv_decide` (not a pure
+   BitVec goal) and `rfl` (not def-eq). The hand proof bridges with one
+   mechanical line: `rw [show ((n:Int)).toNat = n by omega, …]`. So V1 must
+   **emit the `toNat`/`ofInt` round-trip + linear-bound side-goals and discharge
+   them with `omega` before handing the BitVec leaf to `bv_decide`** — step 3 in
+   the build order below is therefore the load-bearing one.
+2. **branching postconditions:** fail only because the fixed tactic did not
+   split the guard; the `+split` row proves a mechanical `by_cases` closes it.
+   So this is "the discharger must split guards," a fragment feature.
 
-If the probe cannot close any real obligation, keep the feature deferred and
-use the probe results to improve proof stubs instead. If it closes even a small
-repeatable class, build V1 with gates.
+This result is locked by `scripts/tests/check_operational_vc_auto_discharge.sh`:
+the passing four live in `closes.lean` (must type-check); the two boundary cases
+live in `boundary.lean` (must fail — the open-gap tripwire). When V1's
+cast-normalization fragment lands, the boundary cases start closing, the gate
+flips, and the flip is the explicit signal to promote them and update this note.
+
+**Deferred edge — measured but out of the 80/20:** the full compression `round`
+needs a reusable `v ^^^ 0xFFFFFFFF = ~~~v` not-mask lemma (bakeable) *and* ~4M
+heartbeats, so it is a real prover-COST question — V1 should bound or refuse it,
+not silently attempt it; the message schedule is genuinely inductive and stays
+`needs_lean`. The VC-*generation* half already exists (`genPreservationVC` and
+the operational-step printer in `Report.lean`), so generation is not a new gap.
 
 ## Build Order
 

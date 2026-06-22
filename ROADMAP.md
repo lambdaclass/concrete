@@ -1200,16 +1200,30 @@ lemmas, and actionable failure diagnostics.
     to `omega` / `bv_decide`, while `operational` and `refinement` obligations
     route to Lean proof links; that leaves ordinary `#[ensures]` bodies and
     loop operational-preservation steps dependent on hand-written bridge
-    theorems. First run a forcing probe over three existing proof-heavy shapes:
-    the `examples/loop_invariant` operational step, one HMAC/SHA bitvector
-    identity such as `ch_refines` / `ch_selects_high`, and one bounded
-    parser/codec/fixed-buffer postcondition. If the probe shows useful
-    coverage, build V1 by symbolically executing a narrow Core/ProofCore
-    fragment, generating operational VCs, routing decidable integer/bitvector
-    leaves to `omega` / `bv_decide`, and reporting unsupported cases as
-    `needs_lean` / `not_supported` rather than false green. Design note:
-    `research/proof-evidence/operational-vc-auto-discharge.md`; eventual gate:
-    `scripts/tests/check_operational_vc_auto_discharge.sh`.
+    theorems.
+
+    **STATUS (2026-06-22): forcing probe RUN — verdict GO.** A fixed mechanical
+    tactic over six real hand-proof-shaped VCs closed 4/6 with no bespoke human
+    proof step: HMAC/SHA `ch` and `maj` bitvector refinements via `bv_decide`,
+    `count_up` loop invariant preservation via `omega`, and a branching
+    `validate_version` postcondition after mechanical guard splitting. The two
+    misses were crisp V1 engineering gaps, not research walls: `rotr` needs
+    generated `Int`/`Nat`/`BitVec` shift-amount cast-normalization side-goals
+    discharged by `omega` before the bitvector leaf reaches `bv_decide`, and the
+    failing parser case needs automatic guard splitting. The probe gate is
+    `scripts/tests/check_operational_vc_auto_discharge.sh` with fixtures under
+    `scripts/tests/fixtures/operational_vc_autodischarge/`; it must keep one
+    positive file that closes and one boundary file that fails for the expected
+    cast/guard gap until the real implementation lands.
+
+    V1 core: symbolically execute a narrow Core/ProofCore fragment, unfold the
+    generated eval and named spec, split conjunctions and guards mechanically,
+    normalize `Int`/`Nat`/`BitVec` casts, route arithmetic leaves to `omega`,
+    route bitvector leaves to `bv_decide`, and report surviving leaves as
+    `needs_lean` / `not_supported` rather than false green. Defer whole SHA
+    compression rounds, message schedules, heap/alias-heavy code, effectful code,
+    and induction-heavy specs until separate evidence shows they fit. Design
+    note: `research/proof-evidence/operational-vc-auto-discharge.md`.
 16b. Add an automation trust-upgrade firewall for every proof automation path.
     Any auto-discharge, generated proof, solver route, cache hit, replay helper,
     agent suggestion, or future MCP proof tool must emit a replayable artifact,
