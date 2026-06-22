@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #5 (pattern ergonomics) closed; nested patterns deferred (2026-06-22)
+
+- The compound pattern-ergonomics block is complete. Built + gated across this
+  session: integer range patterns, `if let` / `while let`, match guards, OR
+  patterns, match on `&T`, struct functional update `..base`, and `_`-wildcard
+  destructuring. Decided (workload-gated): no anonymous tuples (`docs/TUPLES.md`).
+- Nested patterns (`E::W { P { x, y } }`, `Some(Some(n))`) are the one remaining
+  item, now **deferred** (`docs/NESTED_PATTERNS.md`): a match arm destructures one
+  level; deeper nesting stays a clean parse error. It is fully expressive via the
+  one-level + field-access / nested-`match` workaround. A recursive `Pattern` type
+  is a large pipeline refactor for pure sugar with no forcing workload — the same
+  workload-driven call made for const generics and tuples. Gated by
+  `scripts/tests/check_nested_patterns.sh` (rejection + both workarounds).
+- The pattern language is now complete for decoder / parser / interpreter work.
+
 ### `_` wildcard in destructuring bindings (2026-06-22)
 
 - Phase 6 #5. A field binding named `_` in an enum-variant (or `let`-)

@@ -455,7 +455,20 @@ gate.
      codegen. Fixed in Resolve/Check/Elab/Lower (skip binding `_`); previously it
      was a readable binding named `_`. Fixtures + `_ wildcard in destructuring`
      gate section.
-   - nested patterns (e.g. `Some(Pair { x, y })`) — the last remaining #5 item.
+   - ~~nested patterns (e.g. `Some(Pair { x, y })`)~~ — DEFERRED (workload-gated;
+     `docs/NESTED_PATTERNS.md`). One level of destructure per arm; deeper nesting
+     stays a clean parse error. Fully expressive via the one-level + field-access
+     / nested-`match` workaround. A recursive `Pattern` type is a large pipeline
+     refactor for pure sugar with no forcing workload — same call as const
+     generics / tuples. Gated by `scripts/tests/check_nested_patterns.sh`.
+
+   **#5 CLOSED (2026-06-22):** the compound pattern-ergonomics block is done.
+   BUILT + gated: range patterns, `if let`/`while let`, match guards, OR
+   patterns, match-on-`&T`, struct-update `..base`, `_`-wildcard destructuring.
+   DECIDED (workload-gated): no anonymous tuples, nested patterns deferred. The
+   pattern language is complete for decoder/parser/interpreter work; the two
+   deferrals are sugar with clean, equally-expressive workarounds and recorded
+   forcing conditions.
 
    **Suggested order:** integer range patterns and match-on-`&T` first (they
    immediately improve decoders, parsers, and interpreter-shaped workloads),

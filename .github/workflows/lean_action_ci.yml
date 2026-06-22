@@ -345,6 +345,9 @@ jobs:
       - name: No-tuples decision gate (Phase 6 #5 — tuple syntax stays rejected)
         run: bash scripts/tests/check_no_tuples.sh
 
+      - name: Nested-patterns decision gate (Phase 6 #5 — one level/arm + workarounds)
+        run: bash scripts/tests/check_nested_patterns.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 
