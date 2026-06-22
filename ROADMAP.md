@@ -443,8 +443,13 @@ gate.
      field (no new Core/lowering); base must be the same struct type (E0220).
      Use a variable as the base (complex base re-reads per copied field).
      Fixtures + `scripts/tests/check_struct_update.sh`.
+   - ~~tuple types, or a deliberate no-tuples decision~~ — DECIDED: NO anonymous
+     tuples in V1; named structs are the one product type (`docs/TUPLES.md`).
+     Tuple type/literal/index syntax stays a clean parse error (use a `struct`);
+     newtype `.0` extraction is unaffected. Gated by
+     `scripts/tests/check_no_tuples.sh`. Workload-driven — reconsidered only if a
+     real workload proves named structs insufficient.
    - nested patterns
-   - tuple types, or a deliberate no-tuples decision (record which)
    - `_` wildcard *inside destructuring bindings* (distinct from the `_` match
      arm, which is done) — still deferred.
 

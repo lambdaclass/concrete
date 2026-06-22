@@ -10,6 +10,19 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### No-tuples decision (V1) (2026-06-22)
+
+- Phase 6 #5. Decided: Concrete V1 has no anonymous tuples — the named `struct`
+  is the one product type; a multiple-value return is a small `struct Copy` with
+  named fields. Rationale in `docs/TUPLES.md`: field names flow into evidence /
+  reports / proofs (`result.remainder`, not `result.1`), one product type instead
+  of two, consistency with the language's named/explicit style, and no current
+  workload needs tuples (workload-driven, cf. the const-generics decision).
+- No compiler change: tuple type/literal/index syntax was already a clean parse
+  error. `scripts/tests/check_no_tuples.sh` pins that it stays rejected (never
+  silently half-accepted), that the named-struct replacement compiles, and that
+  newtype `.0` extraction (a named wrapper, not a tuple) is unaffected.
+
 ### Struct functional update `..base` (2026-06-22)
 
 - Phase 6 #5, increment 6. `S { f: x, ..base }` builds a struct value taking the

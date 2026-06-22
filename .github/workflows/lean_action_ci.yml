@@ -342,6 +342,9 @@ jobs:
       - name: Struct-update gate (Phase 6 #5 — S { ..base })
         run: bash scripts/tests/check_struct_update.sh
 
+      - name: No-tuples decision gate (Phase 6 #5 — tuple syntax stays rejected)
+        run: bash scripts/tests/check_no_tuples.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 
