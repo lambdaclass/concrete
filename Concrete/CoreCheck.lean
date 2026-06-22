@@ -401,7 +401,8 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       | .ref t => t | .refMut t => t | t => t
     let tyName := match scrTy with | .named n => some n | .generic n _ => some n | _ => none
     let hasWildcard := arms.any fun arm =>
-      match arm with | .varArm _ _ _ => true | _ => false
+      -- Only an UNGUARDED var arm is a true catch-all; a guarded one can fall through.
+      match arm with | .varArm _ _ none _ => true | _ => false
     match tyName with
     | some name =>
       match ← lookupEnum name with
@@ -410,15 +411,17 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         let mut seenVariants : List String := []
         for arm in arms do
           match arm with
-          | .enumArm armEnum variant bindings _ =>
+          | .enumArm armEnum variant bindings guard _ =>
             -- Check arm references the right enum
             if armEnum != name then
               addCCError (.matchArmWrongEnum armEnum name)
-            -- Check for duplicate arms
-            if seenVariants.contains variant then
-              addCCError (.duplicateMatchArm variant)
-            seenVariants := seenVariants ++ [variant]
-            -- Check field count matches variant
+            -- A GUARDED arm can fall through, so it neither covers its variant for
+            -- exhaustiveness nor counts as a duplicate; only unguarded arms do.
+            if guard.isNone then
+              if seenVariants.contains variant then
+                addCCError (.duplicateMatchArm variant)
+              seenVariants := seenVariants ++ [variant]
+            -- Check field count matches variant (regardless of guard)
             match ed.variants.find? fun (vn, _) => vn == variant with
             | some (_, vfields) =>
               if bindings.length != 0 && bindings.length != vfields.length then
@@ -437,8 +440,8 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       -- Non-named type (Int, Bool, etc.): require default arm unless Bool is fully covered
       if !hasWildcard then
         let boolExhaustive := scrTy == .bool &&
-          (arms.any fun a => match a with | .litArm (.boolLit true) _ => true | _ => false) &&
-          (arms.any fun a => match a with | .litArm (.boolLit false) _ => true | _ => false)
+          (arms.any fun a => match a with | .litArm (.boolLit true) none _ => true | _ => false) &&
+          (arms.any fun a => match a with | .litArm (.boolLit false) none _ => true | _ => false)
         if !boolExhaustive then
           addCCError .matchNonEnumNoDefault
     for arm in arms do
@@ -587,19 +590,23 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
 
 partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
   match arm with
-  | .enumArm _ _ bindings body =>
+  | .enumArm _ _ bindings guard body =>
     for (bname, bty) in bindings do
       addVar bname bty
+    match guard with | some g => ccCheckExpr g | none => pure ()
     for s in body do ccCheckStmt s
-  | .litArm value body =>
+  | .litArm value guard body =>
     ccCheckExpr value
+    match guard with | some g => ccCheckExpr g | none => pure ()
     for s in body do ccCheckStmt s
-  | .varArm binding bindTy body =>
+  | .varArm binding bindTy guard body =>
     addVar binding bindTy
+    match guard with | some g => ccCheckExpr g | none => pure ()
     for s in body do ccCheckStmt s
-  | .rangeArm lo hi _ body =>
+  | .rangeArm lo hi _ guard body =>
     ccCheckExpr lo
     ccCheckExpr hi
+    match guard with | some g => ccCheckExpr g | none => pure ()
     for s in body do ccCheckStmt s
 
 partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do

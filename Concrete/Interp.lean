@@ -587,35 +587,54 @@ partial def evalMatch (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s
   match arms with
   | [] => .error "interp: no matching arm in match expression"
   | arm :: rest =>
+    -- A guard (if present) is evaluated in the arm's bound env; a false guard
+    -- falls through to the next arm.
+    let guardOk := fun (armEnv : Env) (guard : Option CExpr) =>
+      match guard with
+      | none => Except.ok true
+      | some g => do
+        let (_, gv) ← evalExprVal fns enums armEnv g
+        match gv with
+        | .bool b => Except.ok b
+        | _ => Except.error "interp: match guard is not a bool"
     match arm with
-    | .enumArm enumName variant bindings body =>
+    | .enumArm enumName variant bindings guard body =>
       match scrutinee with
       | .enum_ sEnum sVariant sFields =>
         if sEnum == enumName && sVariant == variant then do
           let outerLen := env.length
           let armEnv := bindEnumFields env bindings sFields
-          let (bodyEnv, flow) ← evalStmts fns enums armEnv body
+          if ← guardOk armEnv guard then
+            let (bodyEnv, flow) ← evalStmts fns enums armEnv body
+            let restored := bodyEnv.drop (bodyEnv.length - outerLen)
+            return (restored, flow)
+          else
+            evalMatch fns enums env scrutinee rest
+        else
+          evalMatch fns enums env scrutinee rest
+      | _ => evalMatch fns enums env scrutinee rest
+    | .litArm value guard body => do
+      let (env, litVal) ← evalExprVal fns enums env value
+      if matchLit scrutinee litVal then do
+        let outerLen := env.length
+        if ← guardOk env guard then
+          let (bodyEnv, flow) ← evalStmts fns enums env body
           let restored := bodyEnv.drop (bodyEnv.length - outerLen)
           return (restored, flow)
         else
           evalMatch fns enums env scrutinee rest
-      | _ => evalMatch fns enums env scrutinee rest
-    | .litArm value body => do
-      let (env, litVal) ← evalExprVal fns enums env value
-      if matchLit scrutinee litVal then do
-        let outerLen := env.length
-        let (bodyEnv, flow) ← evalStmts fns enums env body
+      else
+        evalMatch fns enums env scrutinee rest
+    | .varArm binding _ guard body => do
+      let outerLen := env.length
+      let armEnv := if binding == "_" then env else envBind env binding scrutinee
+      if ← guardOk armEnv guard then
+        let (bodyEnv, flow) ← evalStmts fns enums armEnv body
         let restored := bodyEnv.drop (bodyEnv.length - outerLen)
         return (restored, flow)
       else
         evalMatch fns enums env scrutinee rest
-    | .varArm binding _ body => do
-      let outerLen := env.length
-      let armEnv := if binding == "_" then env else envBind env binding scrutinee
-      let (bodyEnv, flow) ← evalStmts fns enums armEnv body
-      let restored := bodyEnv.drop (bodyEnv.length - outerLen)
-      return (restored, flow)
-    | .rangeArm lo hi inclusive body => do
+    | .rangeArm lo hi inclusive guard body => do
       let (env, loVal) ← evalExprVal fns enums env lo
       let (env, hiVal) ← evalExprVal fns enums env hi
       let inRange := match scrutinee, loVal, hiVal with
@@ -623,9 +642,12 @@ partial def evalMatch (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s
         | _, _, _ => false
       if inRange then do
         let outerLen := env.length
-        let (bodyEnv, flow) ← evalStmts fns enums env body
-        let restored := bodyEnv.drop (bodyEnv.length - outerLen)
-        return (restored, flow)
+        if ← guardOk env guard then
+          let (bodyEnv, flow) ← evalStmts fns enums env body
+          let restored := bodyEnv.drop (bodyEnv.length - outerLen)
+          return (restored, flow)
+        else
+          evalMatch fns enums env scrutinee rest
       else
         evalMatch fns enums env scrutinee rest
 

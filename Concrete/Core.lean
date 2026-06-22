@@ -46,11 +46,13 @@ inductive CExpr where
   | whileExpr (cond : CExpr) (body : List CStmt) (elseBody : List CStmt) (ty : Ty)
   | ifExpr (cond : CExpr) (then_ : List CStmt) (else_ : List CStmt) (ty : Ty)
 
+-- `guard` is an optional condition tested after the pattern matches; false falls
+-- through to the next arm. (See AST.MatchArm.)
 inductive CMatchArm where
-  | enumArm (enumName variant : String) (bindings : List (String × Ty)) (body : List CStmt)
-  | litArm (value : CExpr) (body : List CStmt)
-  | varArm (binding : String) (bindTy : Ty) (body : List CStmt)
-  | rangeArm (lo : CExpr) (hi : CExpr) (inclusive : Bool) (body : List CStmt)
+  | enumArm (enumName variant : String) (bindings : List (String × Ty)) (guard : Option CExpr) (body : List CStmt)
+  | litArm (value : CExpr) (guard : Option CExpr) (body : List CStmt)
+  | varArm (binding : String) (bindTy : Ty) (guard : Option CExpr) (body : List CStmt)
+  | rangeArm (lo : CExpr) (hi : CExpr) (inclusive : Bool) (guard : Option CExpr) (body : List CStmt)
 
 inductive CStmt where
   | letDecl (name : String) (mutable : Bool) (ty : Ty) (value : CExpr)
@@ -277,18 +279,19 @@ partial def ppCExpr (e : CExpr) : String :=
     s!"if {ppCExpr cond} \{\n{"\n".intercalate thenStr}\n  } else \{\n{"\n".intercalate elseStr}\n  }"
 
 partial def ppCMatchArm (arm : CMatchArm) : String :=
+  let guardStr := fun (g : Option CExpr) => match g with | some e => s!" if {ppCExpr e}" | none => ""
   match arm with
-  | .enumArm en v binds body =>
+  | .enumArm en v binds guard body =>
     let bindsStr := if binds.isEmpty then ""
                     else s!" \{ {", ".intercalate (binds.map fun (n, t) => s!"{n}: {tyToStr t}")} }"
-    s!"  {en}::{v}{bindsStr} -> \{\n{"\n".intercalate (body.map (ppCStmt 3))}\n  }"
-  | .litArm val body =>
-    s!"  {ppCExpr val} -> \{\n{"\n".intercalate (body.map (ppCStmt 3))}\n  }"
-  | .varArm b _ body =>
-    s!"  {b} -> \{\n{"\n".intercalate (body.map (ppCStmt 3))}\n  }"
-  | .rangeArm lo hi incl body =>
+    s!"  {en}::{v}{bindsStr}{guardStr guard} -> \{\n{"\n".intercalate (body.map (ppCStmt 3))}\n  }"
+  | .litArm val guard body =>
+    s!"  {ppCExpr val}{guardStr guard} -> \{\n{"\n".intercalate (body.map (ppCStmt 3))}\n  }"
+  | .varArm b _ guard body =>
+    s!"  {b}{guardStr guard} -> \{\n{"\n".intercalate (body.map (ppCStmt 3))}\n  }"
+  | .rangeArm lo hi incl guard body =>
     let op := if incl then "..=" else ".."
-    s!"  {ppCExpr lo}{op}{ppCExpr hi} -> \{\n{"\n".intercalate (body.map (ppCStmt 3))}\n  }"
+    s!"  {ppCExpr lo}{op}{ppCExpr hi}{guardStr guard} -> \{\n{"\n".intercalate (body.map (ppCStmt 3))}\n  }"
 
 partial def ppCStmt (ind : Nat) (s : CStmt) : String :=
   let pfx := indent ind

@@ -72,11 +72,11 @@ private partial def substExpr (sub : Ty → Ty) : CExpr → CExpr
     .ifExpr (substExpr sub cond) (substStmts sub then_) (substStmts sub else_) (sub ty)
 
 private partial def substArm (sub : Ty → Ty) : CMatchArm → CMatchArm
-  | .enumArm en v binds body =>
-    .enumArm en v (binds.map fun (n, t) => (n, sub t)) (substStmts sub body)
-  | .litArm val body => .litArm (substExpr sub val) (substStmts sub body)
-  | .varArm b ty body => .varArm b (sub ty) (substStmts sub body)
-  | .rangeArm lo hi incl body => .rangeArm (substExpr sub lo) (substExpr sub hi) incl (substStmts sub body)
+  | .enumArm en v binds guard body =>
+    .enumArm en v (binds.map fun (n, t) => (n, sub t)) (guard.map (substExpr sub)) (substStmts sub body)
+  | .litArm val guard body => .litArm (substExpr sub val) (guard.map (substExpr sub)) (substStmts sub body)
+  | .varArm b ty guard body => .varArm b (sub ty) (guard.map (substExpr sub)) (substStmts sub body)
+  | .rangeArm lo hi incl guard body => .rangeArm (substExpr sub lo) (substExpr sub hi) incl (guard.map (substExpr sub)) (substStmts sub body)
 
 private partial def substStmt (sub : Ty → Ty) : CStmt → CStmt
   | .letDecl n m ty val => .letDecl n m (sub ty) (substExpr sub val)
@@ -140,10 +140,10 @@ private partial def rewriteCallNames (nameMap : List (String × String)) : CExpr
   | e => e
 
 private partial def rewriteCallNamesArm (nameMap : List (String × String)) : CMatchArm → CMatchArm
-  | .enumArm en v binds body => .enumArm en v binds (rewriteCallNamesStmts nameMap body)
-  | .litArm val body => .litArm (rewriteCallNames nameMap val) (rewriteCallNamesStmts nameMap body)
-  | .varArm b ty body => .varArm b ty (rewriteCallNamesStmts nameMap body)
-  | .rangeArm lo hi incl body => .rangeArm (rewriteCallNames nameMap lo) (rewriteCallNames nameMap hi) incl (rewriteCallNamesStmts nameMap body)
+  | .enumArm en v binds guard body => .enumArm en v binds (guard.map (rewriteCallNames nameMap)) (rewriteCallNamesStmts nameMap body)
+  | .litArm val guard body => .litArm (rewriteCallNames nameMap val) (guard.map (rewriteCallNames nameMap)) (rewriteCallNamesStmts nameMap body)
+  | .varArm b ty guard body => .varArm b ty (guard.map (rewriteCallNames nameMap)) (rewriteCallNamesStmts nameMap body)
+  | .rangeArm lo hi incl guard body => .rangeArm (rewriteCallNames nameMap lo) (rewriteCallNames nameMap hi) incl (guard.map (rewriteCallNames nameMap)) (rewriteCallNamesStmts nameMap body)
 
 private partial def rewriteCallNamesStmt (nameMap : List (String × String)) : CStmt → CStmt
   | .letDecl n m ty val => .letDecl n m ty (rewriteCallNames nameMap val)
@@ -199,10 +199,10 @@ partial def injectTypeArgsExpr (genericNames : List String) (typeArgs : List Ty)
   | e => e
 
 partial def injectTypeArgsArm (genericNames : List String) (typeArgs : List Ty) : CMatchArm → CMatchArm
-  | .enumArm en v binds body => .enumArm en v binds (injectTypeArgsStmts genericNames typeArgs body)
-  | .litArm val body => .litArm (injectTypeArgsExpr genericNames typeArgs val) (injectTypeArgsStmts genericNames typeArgs body)
-  | .varArm b ty body => .varArm b ty (injectTypeArgsStmts genericNames typeArgs body)
-  | .rangeArm lo hi incl body => .rangeArm (injectTypeArgsExpr genericNames typeArgs lo) (injectTypeArgsExpr genericNames typeArgs hi) incl (injectTypeArgsStmts genericNames typeArgs body)
+  | .enumArm en v binds guard body => .enumArm en v binds (guard.map (injectTypeArgsExpr genericNames typeArgs)) (injectTypeArgsStmts genericNames typeArgs body)
+  | .litArm val guard body => .litArm (injectTypeArgsExpr genericNames typeArgs val) (guard.map (injectTypeArgsExpr genericNames typeArgs)) (injectTypeArgsStmts genericNames typeArgs body)
+  | .varArm b ty guard body => .varArm b ty (guard.map (injectTypeArgsExpr genericNames typeArgs)) (injectTypeArgsStmts genericNames typeArgs body)
+  | .rangeArm lo hi incl guard body => .rangeArm (injectTypeArgsExpr genericNames typeArgs lo) (injectTypeArgsExpr genericNames typeArgs hi) incl (guard.map (injectTypeArgsExpr genericNames typeArgs)) (injectTypeArgsStmts genericNames typeArgs body)
 
 partial def injectTypeArgsStmt (genericNames : List String) (typeArgs : List Ty) : CStmt → CStmt
   | .letDecl n m ty val => .letDecl n m ty (injectTypeArgsExpr genericNames typeArgs val)
@@ -472,10 +472,10 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
 
 partial def monoArm (arm : CMatchArm) : MonoM CMatchArm := do
   match arm with
-  | .enumArm en v binds body => return .enumArm en v binds (← monoStmts body)
-  | .litArm val body => return .litArm (← monoExpr val) (← monoStmts body)
-  | .varArm b ty body => return .varArm b ty (← monoStmts body)
-  | .rangeArm lo hi incl body => return .rangeArm (← monoExpr lo) (← monoExpr hi) incl (← monoStmts body)
+  | .enumArm en v binds guard body => return .enumArm en v binds (← guard.mapM monoExpr) (← monoStmts body)
+  | .litArm val guard body => return .litArm (← monoExpr val) (← guard.mapM monoExpr) (← monoStmts body)
+  | .varArm b ty guard body => return .varArm b ty (← guard.mapM monoExpr) (← monoStmts body)
+  | .rangeArm lo hi incl guard body => return .rangeArm (← monoExpr lo) (← monoExpr hi) incl (← guard.mapM monoExpr) (← monoStmts body)
 
 partial def monoStmt (s : CStmt) : MonoM CStmt := do
   match s with
@@ -628,12 +628,12 @@ private partial def collectExprInstances (gn : List String) : CExpr → List (St
     collectStmtsInstances gn else_ ++ collectGenericTyInstances gn ty
 
 private partial def collectArmInstances (gn : List String) : CMatchArm → List (String × List Ty)
-  | .enumArm _ _ binds body =>
+  | .enumArm _ _ binds guard body =>
     binds.foldl (fun acc (_, t) => acc ++ collectGenericTyInstances gn t) [] ++
-    collectStmtsInstances gn body
-  | .litArm val body => collectExprInstances gn val ++ collectStmtsInstances gn body
-  | .varArm _ ty body => collectGenericTyInstances gn ty ++ collectStmtsInstances gn body
-  | .rangeArm lo hi _ body => collectExprInstances gn lo ++ collectExprInstances gn hi ++ collectStmtsInstances gn body
+    (guard.map (collectExprInstances gn)).getD [] ++ collectStmtsInstances gn body
+  | .litArm val guard body => collectExprInstances gn val ++ (guard.map (collectExprInstances gn)).getD [] ++ collectStmtsInstances gn body
+  | .varArm _ ty guard body => collectGenericTyInstances gn ty ++ (guard.map (collectExprInstances gn)).getD [] ++ collectStmtsInstances gn body
+  | .rangeArm lo hi _ guard body => collectExprInstances gn lo ++ collectExprInstances gn hi ++ (guard.map (collectExprInstances gn)).getD [] ++ collectStmtsInstances gn body
 
 private partial def collectStmtInstances (gn : List String) : CStmt → List (String × List Ty)
   | .letDecl _ _ ty val => collectGenericTyInstances gn ty ++ collectExprInstances gn val
@@ -746,11 +746,11 @@ private partial def rewriteExprTys (m : List (String × List Ty × String)) : CE
     .ifExpr (rewriteExprTys m cond) (rewriteStmtsTys m then_) (rewriteStmtsTys m else_) (rewriteTy m ty)
 
 private partial def rewriteArmTys (m : List (String × List Ty × String)) : CMatchArm → CMatchArm
-  | .enumArm en v binds body =>
-    .enumArm en v (binds.map fun (n, t) => (n, rewriteTy m t)) (rewriteStmtsTys m body)
-  | .litArm val body => .litArm (rewriteExprTys m val) (rewriteStmtsTys m body)
-  | .varArm b ty body => .varArm b (rewriteTy m ty) (rewriteStmtsTys m body)
-  | .rangeArm lo hi incl body => .rangeArm (rewriteExprTys m lo) (rewriteExprTys m hi) incl (rewriteStmtsTys m body)
+  | .enumArm en v binds guard body =>
+    .enumArm en v (binds.map fun (n, t) => (n, rewriteTy m t)) (guard.map (rewriteExprTys m)) (rewriteStmtsTys m body)
+  | .litArm val guard body => .litArm (rewriteExprTys m val) (guard.map (rewriteExprTys m)) (rewriteStmtsTys m body)
+  | .varArm b ty guard body => .varArm b (rewriteTy m ty) (guard.map (rewriteExprTys m)) (rewriteStmtsTys m body)
+  | .rangeArm lo hi incl guard body => .rangeArm (rewriteExprTys m lo) (rewriteExprTys m hi) incl (guard.map (rewriteExprTys m)) (rewriteStmtsTys m body)
 
 private partial def rewriteStmtTys (m : List (String × List Ty × String)) : CStmt → CStmt
   | .letDecl n mu ty val => .letDecl n mu (rewriteTy m ty) (rewriteExprTys m val)

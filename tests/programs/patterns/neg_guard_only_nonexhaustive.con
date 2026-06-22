@@ -1,0 +1,6 @@
+// Pattern (negative): a match whose only arm is guarded is non-exhaustive — the
+// guard can fail, so it is not a catch-all. Expect: E0534
+mod m {
+    fn f(x: i32) -> i32 { match x { n if n > 0 => { return 1; } } }
+    fn main() -> Int { return f(5) as Int; }
+}

@@ -1715,20 +1715,25 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         for arm in arms do
           setEnv envBefore
           let body ← match arm with
-          | .mk _ _armEnum armVariant bindings body => do
+          | .mk _ _armEnum armVariant bindings guard body => do
             -- Bind variant fields in scope (substitute generic type args)
             let ev := (ed.variants.find? fun v => v.name == armVariant).get!
             let typeMapping := ed.typeParams.zip enumTypeArgs
             for (binding, sf) in bindings.zip ev.fields do
               addVar binding (substTy typeMapping sf.ty)
+            match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
             pure body
-          | .litArm _ _val body => pure body
-          | .varArm _ binding body => do
+          | .litArm _ _val guard body => do
+            match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
+            pure body
+          | .varArm _ binding guard body => do
             if binding != "_" then addVar binding innerTyR
+            match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
             pure body
-          | .rangeArm _ lo hi _ body => do
+          | .rangeArm _ lo hi _ guard body => do
             let _ ← checkExpr lo
             let _ ← checkExpr hi
+            match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
             pure body
           -- Check all stmts except the last, then extract type from last
           let bodyInit := body.dropLast
@@ -1799,15 +1804,21 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       for arm in arms do
         setEnv envBefore
         let body ← match arm with
-        | .litArm _ _val body => pure body
-        | .varArm _ binding body => do
-          if binding != "_" then addVar binding scrTy
+        | .litArm _ _val guard body => do
+          match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
           pure body
-        | .rangeArm _ lo hi _ body => do
+        | .varArm _ binding guard body => do
+          if binding != "_" then addVar binding scrTy
+          match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
+          pure body
+        | .rangeArm _ lo hi _ guard body => do
           let _ ← checkExpr lo
           let _ ← checkExpr hi
+          match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
           pure body
-        | .mk _ _ _ _ body => pure body
+        | .mk _ _ _ _ guard body => do
+          match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
+          pure body
         -- Check all stmts except the last, then extract type from last
         let bodyInit := body.dropLast
         checkStmts bodyInit envBefore.currentRetTy

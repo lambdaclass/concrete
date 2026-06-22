@@ -164,11 +164,13 @@ inductive Expr where
   | whileExpr (span : Span) (cond : Expr) (body : List Stmt) (elseBody : List Stmt)  -- while cond { body } else { elseBody }
   | ifExpr (span : Span) (cond : Expr) (then_ : List Stmt) (else_ : List Stmt)    -- if cond { expr } else { expr }
 
+-- `guard` is an optional `if <cond>` tested after the pattern matches (and its
+-- bindings are in scope); if it is false, matching falls through to the next arm.
 inductive MatchArm where
-  | mk (span : Span) (enumName : String) (variant : String) (bindings : List String) (body : List Stmt)
-  | litArm (span : Span) (value : Expr) (body : List Stmt)           -- literal pattern: 0 -> ...
-  | varArm (span : Span) (binding : String) (body : List Stmt)        -- variable pattern: n -> ...
-  | rangeArm (span : Span) (lo : Expr) (hi : Expr) (inclusive : Bool) (body : List Stmt)  -- range: lo..=hi / lo..hi -> ...
+  | mk (span : Span) (enumName : String) (variant : String) (bindings : List String) (guard : Option Expr) (body : List Stmt)
+  | litArm (span : Span) (value : Expr) (guard : Option Expr) (body : List Stmt)           -- literal pattern: 0 [if g] -> ...
+  | varArm (span : Span) (binding : String) (guard : Option Expr) (body : List Stmt)        -- variable pattern: n [if g] -> ...
+  | rangeArm (span : Span) (lo : Expr) (hi : Expr) (inclusive : Bool) (guard : Option Expr) (body : List Stmt)  -- range: lo..=hi [if g] -> ...
 
 inductive Stmt where
   -- `isGhost`: a `ghost let` — proof-only binding. Erased before Core/codegen
@@ -521,13 +523,17 @@ partial def collectFreeVarsExpr (e : Expr) (bound : List String) : List String :
   | .match_ _ scrutinee arms =>
     collectFreeVarsExpr scrutinee bound ++
     arms.flatMap (fun arm => match arm with
-      | .mk _ _ _ bindings body =>
+      | .mk _ _ _ bindings guard body =>
         let newBound := bound ++ bindings
-        collectFreeVarsStmts body newBound
-      | .litArm _ _ body => collectFreeVarsStmts body bound
-      | .varArm _ binding body => collectFreeVarsStmts body (binding :: bound)
-      | .rangeArm _ lo hi _ body =>
-        collectFreeVarsExpr lo bound ++ collectFreeVarsExpr hi bound ++ collectFreeVarsStmts body bound)
+        (guard.map (collectFreeVarsExpr · newBound)).getD [] ++ collectFreeVarsStmts body newBound
+      | .litArm _ _ guard body =>
+        (guard.map (collectFreeVarsExpr · bound)).getD [] ++ collectFreeVarsStmts body bound
+      | .varArm _ binding guard body =>
+        let newBound := binding :: bound
+        (guard.map (collectFreeVarsExpr · newBound)).getD [] ++ collectFreeVarsStmts body newBound
+      | .rangeArm _ lo hi _ guard body =>
+        collectFreeVarsExpr lo bound ++ collectFreeVarsExpr hi bound ++
+        (guard.map (collectFreeVarsExpr · bound)).getD [] ++ collectFreeVarsStmts body bound)
   | .borrow _ inner | .borrowMut _ inner | .deref _ inner | .try_ _ inner =>
     collectFreeVarsExpr inner bound
   | .arrayLit _ elems => elems.flatMap (fun e => collectFreeVarsExpr e bound)
@@ -618,12 +624,12 @@ partial def desugarStmts : List Stmt → List Stmt
   | [] => []
   | (.letDestructure sp enumName variant bindings value (some elseBody)) :: rest =>
     let continuation := desugarStmts rest
-    let successArm := MatchArm.mk sp enumName variant bindings continuation
-    let wildcardArm := MatchArm.varArm sp "_" elseBody
+    let successArm := MatchArm.mk sp enumName variant bindings none continuation
+    let wildcardArm := MatchArm.varArm sp "_" none elseBody
     [Stmt.expr sp (Expr.match_ sp value [successArm, wildcardArm]) false]
   | (.letDestructure sp enumName variant bindings value none) :: rest =>
     let continuation := desugarStmts rest
-    let successArm := MatchArm.mk sp enumName variant bindings continuation
+    let successArm := MatchArm.mk sp enumName variant bindings none continuation
     [Stmt.expr sp (Expr.match_ sp value [successArm]) false]
   | (.letStructDestructure sp structName bindings value) :: rest =>
     let tmpName := "__destr_" ++ structName

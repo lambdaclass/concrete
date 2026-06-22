@@ -218,24 +218,29 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
     fields.foldl (fun ctx (_, e) => resolveExpr ctx e) ctx
   | .match_ _ scrutinee arms =>
     let ctx := resolveExpr ctx scrutinee
+    let resolveGuard := fun ctx (g : Option Expr) => match g with | some e => resolveExpr ctx e | none => ctx
     arms.foldl (fun ctx arm =>
       match arm with
-      | .mk _ _ _ bindings body =>
+      | .mk _ _ _ bindings guard body =>
         let ctx := pushScope ctx
         let ctx := bindings.foldl (fun ctx b => addLocal ctx b (.var none false)) ctx
+        let ctx := resolveGuard ctx guard
         let ctx := resolveStmts ctx body
         popScope ctx
-      | .litArm _ val body =>
+      | .litArm _ val guard body =>
         let ctx := resolveExpr ctx val
+        let ctx := resolveGuard ctx guard
         resolveStmts ctx body
-      | .varArm _ binding body =>
+      | .varArm _ binding guard body =>
         let ctx := pushScope ctx
         let ctx := addLocal ctx binding (.var none false)
+        let ctx := resolveGuard ctx guard
         let ctx := resolveStmts ctx body
         popScope ctx
-      | .rangeArm _ lo hi _ body =>
+      | .rangeArm _ lo hi _ guard body =>
         let ctx := resolveExpr ctx lo
         let ctx := resolveExpr ctx hi
+        let ctx := resolveGuard ctx guard
         resolveStmts ctx body
     ) ctx
   | .borrow _ inner | .borrowMut _ inner | .deref _ inner | .try_ _ inner =>

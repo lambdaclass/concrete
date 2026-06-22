@@ -125,19 +125,20 @@ partial def collectExprViolations (fnName : String) (pred : Ty → Bool) (label 
 /-- Scan a match arm for type violations. -/
 partial def collectArmViolations (fnName : String) (pred : Ty → Bool) (label : String)
     (arm : CMatchArm) : List VerifyViolation :=
+  let gv := fun (g : Option CExpr) => (g.map (collectExprViolations fnName pred label ·)).getD []
   match arm with
-  | .enumArm _ _ bindings body =>
+  | .enumArm _ _ bindings guard body =>
     bindings.foldl (fun acc (_, t) => acc ++ if pred t then [{ fnName, message := s!"{label} in match binding type: {tyToStr t}" }] else []) [] ++
+    gv guard ++ body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
+  | .litArm value guard body =>
+    collectExprViolations fnName pred label value ++ gv guard ++
     body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
-  | .litArm value body =>
-    collectExprViolations fnName pred label value ++
-    body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
-  | .varArm _ bindTy body =>
+  | .varArm _ bindTy guard body =>
     (if pred bindTy then [{ fnName, message := s!"{label} in match var binding type: {tyToStr bindTy}" }] else []) ++
-    body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
-  | .rangeArm lo hi _ body =>
+    gv guard ++ body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
+  | .rangeArm lo hi _ guard body =>
     collectExprViolations fnName pred label lo ++
-    collectExprViolations fnName pred label hi ++
+    collectExprViolations fnName pred label hi ++ gv guard ++
     body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
 
 /-- Scan a CStmt for type violations. -/

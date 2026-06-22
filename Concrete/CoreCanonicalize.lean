@@ -36,7 +36,7 @@ private def canonTy : Ty → Ty
 -- ============================================================
 
 private def armIsWildcard : CMatchArm → Bool
-  | .varArm _ _ _ => true
+  | .varArm _ _ none _ => true   -- a GUARDED var arm can fall through, so it is not a catch-all
   | _ => false
 
 /-- Sort match arms: specific arms first, var/wildcard arms last. -/
@@ -101,14 +101,14 @@ partial def canonExpr (structs : List CStructDef) : CExpr → CExpr
     .ifExpr (canonExpr structs cond) (canonStmts structs then_) (canonStmts structs else_) (canonTy ty)
 
 partial def canonArm (structs : List CStructDef) : CMatchArm → CMatchArm
-  | .enumArm en v binds body =>
-    .enumArm en v (binds.map fun (n, t) => (n, canonTy t)) (canonStmts structs body)
-  | .litArm val body =>
-    .litArm (canonExpr structs val) (canonStmts structs body)
-  | .varArm b ty body =>
-    .varArm b (canonTy ty) (canonStmts structs body)
-  | .rangeArm lo hi incl body =>
-    .rangeArm (canonExpr structs lo) (canonExpr structs hi) incl (canonStmts structs body)
+  | .enumArm en v binds guard body =>
+    .enumArm en v (binds.map fun (n, t) => (n, canonTy t)) (guard.map (canonExpr structs)) (canonStmts structs body)
+  | .litArm val guard body =>
+    .litArm (canonExpr structs val) (guard.map (canonExpr structs)) (canonStmts structs body)
+  | .varArm b ty guard body =>
+    .varArm b (canonTy ty) (guard.map (canonExpr structs)) (canonStmts structs body)
+  | .rangeArm lo hi incl guard body =>
+    .rangeArm (canonExpr structs lo) (canonExpr structs hi) incl (guard.map (canonExpr structs)) (canonStmts structs body)
 
 partial def canonStmt (structs : List CStructDef) : CStmt → CStmt
   | .letDecl n m ty val => .letDecl n m (canonTy ty) (canonExpr structs val)

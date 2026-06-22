@@ -1096,8 +1096,8 @@ partial def parseIfLet (sp : Span) : ParseM Stmt := do
     parseBlock
   else
     pure []
-  let successArm := MatchArm.mk sp enumName variant bindings thenBody
-  let wildcardArm := MatchArm.varArm sp "_" elseBody
+  let successArm := MatchArm.mk sp enumName variant bindings none thenBody
+  let wildcardArm := MatchArm.varArm sp "_" none elseBody
   return .expr sp (.match_ sp scrutinee [successArm, wildcardArm]) false
 
 partial def parseIf : ParseM Stmt := do
@@ -1137,8 +1137,8 @@ partial def parseWhileLet (sp : Span) (lbl : Option String) : ParseM Stmt := do
   expect .assign
   let scrutinee ← parseExpr
   let body ← parseBlock
-  let successArm := MatchArm.mk sp enumName variant bindings body
-  let breakArm := MatchArm.varArm sp "_" [Stmt.break_ sp none none]
+  let successArm := MatchArm.mk sp enumName variant bindings none body
+  let breakArm := MatchArm.varArm sp "_" none [Stmt.break_ sp none none]
   let matchStmt := Stmt.expr sp (Expr.match_ sp scrutinee [successArm, breakArm]) false
   return .while_ sp (.boolLit sp true) [matchStmt] lbl
 
@@ -1271,29 +1271,39 @@ partial def parseRangeBoundExpr (sp : Span) : ParseM Expr := do
     | other => throwParse s!"expected integer after '-' in range pattern, got {other}"
   | other => throwParse s!"expected integer bound in range pattern, got {other}"
 
+/-- Parse an optional match-arm guard `if <cond>` followed by the `=>`/`->`
+    arrow. Returns the guard expression (the `if` keyword introduces it; the
+    expression stops at the arrow). -/
+partial def parseArmGuard : ParseM (Option Expr) := do
+  let guard ← if (← peek) == .if_ then do
+    advance
+    let g ← parseExpr
+    pure (some g)
+  else pure none
+  let arrowTk ← peek
+  if arrowTk == .fatArrow then advance
+  else if arrowTk == .arrow then advance
+  else throwParse s!"expected => or -> in match arm, got {arrowTk}"
+  return guard
+
 /-- After the low bound `lo` of a match pattern is parsed, finish either a range
-    arm (`lo..hi` / `lo..=hi`) or a plain literal arm, then its `=>`/`->` body. -/
+    arm (`lo..hi` / `lo..=hi`) or a plain literal arm, an optional `if` guard,
+    then its `=>`/`->` body. -/
 partial def finishLitOrRangeArm (sp : Span) (lo : Expr) : ParseM MatchArm := do
   let rngTk ← peek
   if rngTk == .dotDot || rngTk == .dotDotEq then
     let incl := rngTk == .dotDotEq
     advance
     let hi ← parseRangeBoundExpr sp
-    let arrowTk ← peek
-    if arrowTk == .fatArrow then advance
-    else if arrowTk == .arrow then advance
-    else throwParse s!"expected => or -> in match arm, got {arrowTk}"
+    let guard ← parseArmGuard
     let body ← parseMatchArmBody
     if (← peek) == .comma then advance
-    return .rangeArm sp lo hi incl body
+    return .rangeArm sp lo hi incl guard body
   else
-    let arrowTk ← peek
-    if arrowTk == .fatArrow then advance
-    else if arrowTk == .arrow then advance
-    else throwParse s!"expected => or -> in match arm, got {arrowTk}"
+    let guard ← parseArmGuard
     let body ← parseMatchArmBody
     if (← peek) == .comma then advance
-    return .litArm sp lo body
+    return .litArm sp lo guard body
 
 partial def parseMatchArm : ParseM MatchArm := do
   let sp ← peekSpan
@@ -1315,14 +1325,11 @@ partial def parseMatchArm : ParseM MatchArm := do
   | .true_ | .false_ =>
     let boolVal := firstTk == .true_
     advance
-    let arrowTk ← peek
-    if arrowTk == .fatArrow then advance
-    else if arrowTk == .arrow then advance
-    else throwParse s!"expected => or -> in match arm, got {arrowTk}"
+    let guard ← parseArmGuard
     let body ← parseMatchArmBody
     let tk2 ← peek
     if tk2 == .comma then advance
-    return .litArm sp (.boolLit sp boolVal) body
+    return .litArm sp (.boolLit sp boolVal) guard body
   | .ident name =>
     advance
     let next ← peek
@@ -1353,24 +1360,18 @@ partial def parseMatchArm : ParseM MatchArm := do
         pure bindings
       else
         pure []
-      let arrowTk ← peek
-      if arrowTk == .fatArrow then advance
-      else if arrowTk == .arrow then advance
-      else throwParse s!"expected => or -> in match arm, got {arrowTk}"
+      let guard ← parseArmGuard
       let body ← parseMatchArmBody
       let tk2 ← peek
       if tk2 == .comma then advance
-      return .mk sp enumName variant bindings body
+      return .mk sp enumName variant bindings guard body
     else
-      -- Variable binding pattern: name -> body
-      let arrowTk := next
-      if arrowTk == .fatArrow then advance
-      else if arrowTk == .arrow then advance
-      else throwParse s!"expected => or -> in match arm, got {arrowTk}"
+      -- Variable binding pattern: name [if guard] -> body
+      let guard ← parseArmGuard
       let body ← parseMatchArmBody
       let tk2 ← peek
       if tk2 == .comma then advance
-      return .varArm sp name body
+      return .varArm sp name guard body
   | _ => throwParse s!"expected match pattern, got {firstTk}"
 
 partial def parseExprOrAssign : ParseM Stmt := do

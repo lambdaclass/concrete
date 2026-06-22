@@ -56,10 +56,10 @@ partial def collectCallsExpr (e : CExpr) : List String :=
 
 partial def collectCallsArm (arm : CMatchArm) : List String :=
   match arm with
-  | .enumArm _ _ _ body => collectCallsStmts body
-  | .litArm v body => collectCallsExpr v ++ collectCallsStmts body
-  | .varArm _ _ body => collectCallsStmts body
-  | .rangeArm lo hi _ body => collectCallsExpr lo ++ collectCallsExpr hi ++ collectCallsStmts body
+  | .enumArm _ _ _ guard body => (guard.map collectCallsExpr).getD [] ++ collectCallsStmts body
+  | .litArm v guard body => collectCallsExpr v ++ (guard.map collectCallsExpr).getD [] ++ collectCallsStmts body
+  | .varArm _ _ guard body => (guard.map collectCallsExpr).getD [] ++ collectCallsStmts body
+  | .rangeArm lo hi _ guard body => collectCallsExpr lo ++ collectCallsExpr hi ++ (guard.map collectCallsExpr).getD [] ++ collectCallsStmts body
 
 partial def collectCallsStmt (s : CStmt) : List String :=
   match s with
@@ -110,10 +110,10 @@ partial def collectDefersExpr (e : CExpr) : List String :=
 
 partial def collectDefersArm (arm : CMatchArm) : List String :=
   match arm with
-  | .enumArm _ _ _ body => collectDefersStmts body
-  | .litArm v body => collectDefersExpr v ++ collectDefersStmts body
-  | .varArm _ _ body => collectDefersStmts body
-  | .rangeArm lo hi _ body => collectDefersExpr lo ++ collectDefersExpr hi ++ collectDefersStmts body
+  | .enumArm _ _ _ guard body => (guard.map collectDefersExpr).getD [] ++ collectDefersStmts body
+  | .litArm v guard body => collectDefersExpr v ++ (guard.map collectDefersExpr).getD [] ++ collectDefersStmts body
+  | .varArm _ _ guard body => (guard.map collectDefersExpr).getD [] ++ collectDefersStmts body
+  | .rangeArm lo hi _ guard body => collectDefersExpr lo ++ collectDefersExpr hi ++ (guard.map collectDefersExpr).getD [] ++ collectDefersStmts body
 
 partial def collectDefersStmt (s : CStmt) : List String :=
   match s with
@@ -172,10 +172,10 @@ partial def hasRawPtrOpsExpr (e : CExpr) : Bool :=
 
 partial def hasRawPtrOpsArm (arm : CMatchArm) : Bool :=
   match arm with
-  | .enumArm _ _ _ body => hasRawPtrOpsStmts body
-  | .litArm v body => hasRawPtrOpsExpr v || hasRawPtrOpsStmts body
-  | .varArm _ _ body => hasRawPtrOpsStmts body
-  | .rangeArm lo hi _ body => hasRawPtrOpsExpr lo || hasRawPtrOpsExpr hi || hasRawPtrOpsStmts body
+  | .enumArm _ _ _ guard body => ((guard.map hasRawPtrOpsExpr).getD false) || hasRawPtrOpsStmts body
+  | .litArm v guard body => hasRawPtrOpsExpr v || ((guard.map hasRawPtrOpsExpr).getD false) || hasRawPtrOpsStmts body
+  | .varArm _ _ guard body => ((guard.map hasRawPtrOpsExpr).getD false) || hasRawPtrOpsStmts body
+  | .rangeArm lo hi _ guard body => hasRawPtrOpsExpr lo || hasRawPtrOpsExpr hi || ((guard.map hasRawPtrOpsExpr).getD false) || hasRawPtrOpsStmts body
 
 partial def hasRawPtrOpsStmt (s : CStmt) : Bool :=
   match s with
@@ -440,10 +440,10 @@ partial def collectLoopBoundsExpr (e : CExpr) : List LoopBound :=
 
 partial def collectLoopBoundsArm (arm : CMatchArm) : List LoopBound :=
   match arm with
-  | .enumArm _ _ _ body => collectLoopBoundsStmts body
-  | .litArm v body => collectLoopBoundsExpr v ++ collectLoopBoundsStmts body
-  | .varArm _ _ body => collectLoopBoundsStmts body
-  | .rangeArm lo hi _ body => collectLoopBoundsExpr lo ++ collectLoopBoundsExpr hi ++ collectLoopBoundsStmts body
+  | .enumArm _ _ _ guard body => (guard.map collectLoopBoundsExpr).getD [] ++ collectLoopBoundsStmts body
+  | .litArm v guard body => collectLoopBoundsExpr v ++ (guard.map collectLoopBoundsExpr).getD [] ++ collectLoopBoundsStmts body
+  | .varArm _ _ guard body => (guard.map collectLoopBoundsExpr).getD [] ++ collectLoopBoundsStmts body
+  | .rangeArm lo hi _ guard body => collectLoopBoundsExpr lo ++ collectLoopBoundsExpr hi ++ (guard.map collectLoopBoundsExpr).getD [] ++ collectLoopBoundsStmts body
 
 partial def collectLoopBoundsStmt (s : CStmt) : List LoopBound :=
   match s with
@@ -518,10 +518,10 @@ where
   fingerprintExprs (es : List CExpr) : String :=
     " ".intercalate (es.map fingerprintExpr)
   fingerprintArm : CMatchArm → String
-    | .enumArm en v binds body => s!"(arm {en}::{v} [{" ".intercalate (binds.map Prod.fst)}] {fingerprintStmts body})"
-    | .litArm val body => s!"(lit {fingerprintExpr val} {fingerprintStmts body})"
-    | .varArm b _ body => s!"(var {b} {fingerprintStmts body})"
-    | .rangeArm lo hi incl body => s!"(range {fingerprintExpr lo} {fingerprintExpr hi} {incl} {fingerprintStmts body})"
+    | .enumArm en v binds guard body => s!"(arm {en}::{v} [{" ".intercalate (binds.map Prod.fst)}]{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
+    | .litArm val guard body => s!"(lit {fingerprintExpr val}{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
+    | .varArm b _ guard body => s!"(var {b}{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
+    | .rangeArm lo hi incl guard body => s!"(range {fingerprintExpr lo} {fingerprintExpr hi} {incl}{(guard.map fun g => s!" if {fingerprintExpr g}").getD ""} {fingerprintStmts body})"
   fingerprintStmt : CStmt → String
     | .letDecl name _ _ val => s!"(let {name} {fingerprintExpr val})"
     | .assign name val => s!"(set {name} {fingerprintExpr val})"
@@ -801,10 +801,12 @@ def cExprToPExprImpl : CExpr → Option Proof.PExpr
     with `none` continuation — match arm bodies must terminate
     (return or yield a value), not fall through. -/
 def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
-  | .enumArm enumName variant bindings body => do
+  -- A guarded arm is not modelled in the proof path (V1); like range patterns,
+  -- it makes the function non-proof-extractable (disclosed in identifyUnsupported).
+  | .enumArm enumName variant bindings none body => do
     let pbody ← cStmtsToPExpr body
     some (.enumPat enumName variant (bindings.map Prod.fst), pbody)
-  | .litArm value body => do
+  | .litArm value none body => do
     -- Literal patterns must extract to PExpr values; we then read
     -- the literal value back out for the pattern shape. Only int
     -- and bool literals are supported as match-arm values today.
@@ -814,10 +816,11 @@ def cMatchArmToP : CMatchArm → Option (Proof.PMatchPat × Proof.PExpr)
       | _ => none
     let pbody ← cStmtsToPExpr body
     some (.litPat v, pbody)
-  | .varArm binding _bindTy body => do
+  | .varArm binding _bindTy none body => do
     let pbody ← cStmtsToPExpr body
     some (.varPat binding, pbody)
-  | .rangeArm _ _ _ _ =>
+  | .enumArm _ _ _ (some _) _ | .litArm _ (some _) _ | .varArm _ _ (some _) _ => none
+  | .rangeArm _ _ _ _ _ =>
     -- Range patterns are not yet modelled in the proof path (V1). A function
     -- using one is simply not proof-extractable — disclosed via
     -- identifyUnsupported below — rather than silently mis-modelled.
@@ -1169,14 +1172,19 @@ private partial def identifyUnsupportedExpr : CExpr → List String
     -- construct inside the scrutinee or arm bodies is reported.
     let scrutUns := identifyUnsupportedExpr scrutinee
     let armUns := arms.foldl (fun acc arm =>
-      -- Range patterns are not modelled in the proof path yet (V1); disclose them.
+      -- Range patterns and match guards are not modelled in the proof path yet
+      -- (V1); disclose them so a function using one is flagged, not mis-modelled.
       let armMarker := match arm with | .rangeArm .. => ["range pattern"] | _ => []
+      let guardMarker := match arm with
+        | .enumArm _ _ _ (some _) _ | .litArm _ (some _) _
+        | .varArm _ _ (some _) _ | .rangeArm _ _ _ (some _) _ => ["match guard"]
+        | _ => []
       let body := match arm with
-        | .enumArm _ _ _ b => b
-        | .litArm _ b => b
-        | .varArm _ _ b => b
-        | .rangeArm _ _ _ b => b
-      acc ++ armMarker ++ body.foldl (fun a s => a ++ identifyUnsupportedStmt s) []) []
+        | .enumArm _ _ _ _ b => b
+        | .litArm _ _ b => b
+        | .varArm _ _ _ b => b
+        | .rangeArm _ _ _ _ b => b
+      acc ++ armMarker ++ guardMarker ++ body.foldl (fun a s => a ++ identifyUnsupportedStmt s) []) []
     scrutUns ++ armUns
   | .borrow .. => ["borrow"]
   | .borrowMut .. => ["mutable borrow"]

@@ -1,0 +1,18 @@
+// Pattern: a guarded enum arm does not cover its variant — when the guard fails,
+// matching falls through to a later Some arm. Some(50)->2, Some(5)->1, None->0.
+// Expected: 1  (2 + 1*? we verify all three)
+mod m {
+    fn f(o: Option<i32>) -> i32 {
+        match o {
+            Option::Some { value } if value > 10 => { return 2; }
+            Option::Some { value } => { return 1; }
+            Option::None => { return 0; }
+        }
+    }
+    fn main() -> Int {
+        if f(Option::<i32>::Some { value: 50 }) == 2
+            && f(Option::<i32>::Some { value: 5 }) == 1
+            && f(Option::<i32>::None) == 0 { return 1; }
+        return 9;
+    }
+}

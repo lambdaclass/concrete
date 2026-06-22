@@ -772,10 +772,10 @@ mutual
     | _ => []
 
   partial def localNamesArm : MatchArm → List String
-    | .mk _ _ _ bs b => bs ++ localNamesB b
-    | .litArm _ v b => localNamesE v ++ localNamesB b
-    | .varArm _ bnd b => bnd :: localNamesB b
-    | .rangeArm _ lo hi _ b => localNamesE lo ++ localNamesE hi ++ localNamesB b
+    | .mk _ _ _ bs g b => (g.map localNamesE).getD [] ++ bs ++ localNamesB b
+    | .litArm _ v g b => localNamesE v ++ (g.map localNamesE).getD [] ++ localNamesB b
+    | .varArm _ bnd g b => bnd :: ((g.map localNamesE).getD [] ++ localNamesB b)
+    | .rangeArm _ lo hi _ g b => localNamesE lo ++ localNamesE hi ++ (g.map localNamesE).getD [] ++ localNamesB b
 end
 
 mutual
@@ -828,11 +828,19 @@ mutual
     | .assert_ _ c | .assume_ _ c => validateContractExpr allowedVars callables c
 
   partial def validateContractArm (allowedVars callables : List String) : MatchArm → List String
-    | .mk _ _ _ bs b => b.flatMap (validateContractStmt (bs ++ allowedVars) callables)
-    | .litArm _ v b => validateContractExpr allowedVars callables v ++ b.flatMap (validateContractStmt allowedVars callables)
-    | .varArm _ bnd b => b.flatMap (validateContractStmt (bnd :: allowedVars) callables)
-    | .rangeArm _ lo hi _ b =>
+    | .mk _ _ _ bs g b =>
+      (g.map (validateContractExpr (bs ++ allowedVars) callables)).getD [] ++
+      b.flatMap (validateContractStmt (bs ++ allowedVars) callables)
+    | .litArm _ v g b =>
+      validateContractExpr allowedVars callables v ++
+      (g.map (validateContractExpr allowedVars callables)).getD [] ++
+      b.flatMap (validateContractStmt allowedVars callables)
+    | .varArm _ bnd g b =>
+      (g.map (validateContractExpr (bnd :: allowedVars) callables)).getD [] ++
+      b.flatMap (validateContractStmt (bnd :: allowedVars) callables)
+    | .rangeArm _ lo hi _ g b =>
       validateContractExpr allowedVars callables lo ++ validateContractExpr allowedVars callables hi ++
+      (g.map (validateContractExpr allowedVars callables)).getD [] ++
       b.flatMap (validateContractStmt allowedVars callables)
 end
 
@@ -3917,7 +3925,7 @@ private partial def proveExprFeatures : CExpr → List String
   | _ => []
 
 private partial def proveArmFeatures : CMatchArm → List String
-  | .enumArm _ _ _ body | .litArm _ body | .varArm _ _ body | .rangeArm _ _ _ body => body.flatMap proveStmtFeatures
+  | .enumArm _ _ _ _ body | .litArm _ _ body | .varArm _ _ _ body | .rangeArm _ _ _ _ body => body.flatMap proveStmtFeatures
 
 private partial def proveStmtFeatures : CStmt → List String
   | .letDecl _ _ _ v | .assign _ v | .expr v _ => proveExprFeatures v

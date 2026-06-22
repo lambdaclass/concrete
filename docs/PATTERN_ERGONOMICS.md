@@ -72,9 +72,43 @@ while let Option::Some { value } = next() { consume(value); }
 - Because both desugar to `match`, exhaustiveness, binding, linear-cleanup, and
   lowering all behave exactly as the equivalent `match` would.
 
+## Landed: match guards
+
+Any arm may carry a guard — an `if <cond>` tested *after* the pattern matches and
+its bindings are in scope. If the guard is false, matching falls through to the
+next arm:
+
+```
+match x {
+    n if n > 0 => positive(),
+    n if n < 0 => negative(),
+    _          => zero(),
+}
+match opt {
+    Option::Some { value } if value > 10 => big(value),
+    Option::Some { value }               => small(value),
+    Option::None                         => none(),
+}
+```
+
+- Guards work on every arm shape (enum / literal / range / variable) and in
+  value-position matches.
+- The guard sees the arm's pattern bindings (e.g. `value` above).
+- **Exhaustiveness:** a guarded arm is *not* a catch-all — it can fall through.
+  A guarded var arm does not make a match exhaustive, and a guarded enum arm does
+  not cover its variant; both still require a fallback (E0534 / missing-variant
+  otherwise). A guarded arm also never counts as a duplicate of an unguarded one.
+- Guards are not yet modelled in the proof path: a proof/`predictable` function
+  using a guard is reported as having an unsupported construct (`match guard`),
+  not silently mis-modelled.
+
+Implementation: `guard : Option Expr` on each `MatchArm` (and `Option CExpr` on
+each `CMatchArm`); lowered as a test inserted after the pattern's bindings and
+before the body, branching to the next arm's check on failure (`Concrete/
+Lower.lean`, `finishMatchArmBody`).
+
 ## Still open (each lands as its own increment + gate section)
 
-- match guards — `pattern if cond => …`
 - OR patterns — `A | B => …`
 - nested patterns; `_` inside destructuring bindings
 - match-on-reference ergonomics for `&T` / `&mut T`

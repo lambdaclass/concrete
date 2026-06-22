@@ -10,6 +10,25 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Pattern ergonomics: match guards (2026-06-22)
+
+- Phase 6 #5, increment 3. Any match arm may carry a guard — `pattern if cond
+  => …` — tested after the pattern matches (with its bindings in scope); a false
+  guard falls through to the next arm.
+- `guard : Option Expr` on every `MatchArm` / `Option CExpr` on every `CMatchArm`,
+  threaded through the full pipeline (parse, resolve, check, elab, mono,
+  corecheck, lower, interp, format, report, proofcore). Lowered as a test
+  inserted after the pattern's bindings and before the body, branching to the
+  next arm's check on failure (`Concrete/Lower.lean`, `finishMatchArmBody`).
+- Exhaustiveness is sound: a guarded arm is not a catch-all — a guarded var arm
+  is not a wildcard, and a guarded enum arm neither covers its variant nor counts
+  as a duplicate (`Concrete/CoreCheck.lean`, `CoreCanonicalize.lean`). Guards are
+  disclosed as an unsupported construct (`match guard`) in the proof path rather
+  than mis-modelled.
+- Verified for var/enum/literal/range arms and value position. Fixtures +
+  `match guards` section of `scripts/tests/check_pattern_ergonomics.sh` (12/12).
+  Full suite 1576/0; examples 128/0; snapshots 95/0; golden 54/0.
+
 ### Production-readiness slice and example-refresh cadence added (2026-06-22)
 
 - ROADMAP Phase 8 now spells out the concrete "solid enough to show" artifact:

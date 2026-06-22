@@ -458,10 +458,10 @@ partial def cexprTakesAddrOf (name : String) : CExpr → Bool
   | _ => false
 
 partial def cmatchArmTakesAddrOf (name : String) : CMatchArm → Bool
-  | .enumArm _ _ _ body => cstmtsTakeAddrOf name body
-  | .litArm v body => cexprTakesAddrOf name v || cstmtsTakeAddrOf name body
-  | .varArm _ _ body => cstmtsTakeAddrOf name body
-  | .rangeArm lo hi _ body => cexprTakesAddrOf name lo || cexprTakesAddrOf name hi || cstmtsTakeAddrOf name body
+  | .enumArm _ _ _ guard body => ((guard.map (cexprTakesAddrOf name)).getD false) || cstmtsTakeAddrOf name body
+  | .litArm v guard body => cexprTakesAddrOf name v || ((guard.map (cexprTakesAddrOf name)).getD false) || cstmtsTakeAddrOf name body
+  | .varArm _ _ guard body => ((guard.map (cexprTakesAddrOf name)).getD false) || cstmtsTakeAddrOf name body
+  | .rangeArm lo hi _ guard body => cexprTakesAddrOf name lo || cexprTakesAddrOf name hi || ((guard.map (cexprTakesAddrOf name)).getD false) || cstmtsTakeAddrOf name body
 
 partial def cstmtTakesAddrOf (name : String) : CStmt → Bool
   | .letDecl _ _ _ v => cexprTakesAddrOf name v
@@ -737,7 +737,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         let armLabel ← freshLabel s!"arm{idx}"
         let nextCheck ← freshLabel s!"check{idx + 1}"
         match arm with
-        | .enumArm enumName variant bindings body =>
+        | .enumArm enumName variant bindings guard body =>
           let vidx ← variantIndex enumName variant
           let cmpDst ← freshReg
           emit (.binOp cmpDst .eq (.reg tagVal .int) (.intConst (Int.ofNat vidx) .int) .bool)
@@ -761,7 +761,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
             let loadDst ← freshReg
             emit (.load loadDst (.reg gepDst bty) bty)
             setVar bname (.reg loadDst bty)
-          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
             phiIncoming := phiIncoming ++ [i]
@@ -769,11 +769,11 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           | none => pure ()
           armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
-        | .varArm binding _bindTy body =>
+        | .varArm binding _bindTy guard body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
           if binding != "_" then setVar binding scrVal
-          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
             phiIncoming := phiIncoming ++ [i]
@@ -781,13 +781,13 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           | none => pure ()
           armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
-        | .litArm litVal body =>
+        | .litArm litVal guard body =>
           let litSVal ← lowerExpr litVal
           let cmpDst ← freshReg
           emit (.binOp cmpDst .eq scrVal litSVal .bool)
           terminateBlock (.condBr (.reg cmpDst .bool) armLabel nextCheck)
           startBlock armLabel
-          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
             phiIncoming := phiIncoming ++ [i]
@@ -795,7 +795,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           | none => pure ()
           armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
-        | .rangeArm loE hiE inclusive body =>
+        | .rangeArm loE hiE inclusive guard body =>
           -- Range pattern: lo <= scr && scr (<|<=) hi. (On an enum scrutinee this
           -- is ill-typed and won't occur in valid code; lowered for totality.)
           let loV ← lowerExpr loE
@@ -808,7 +808,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           emit (.binOp inRange .and_ (.reg geLo .bool) (.reg leHi .bool) .bool)
           terminateBlock (.condBr (.reg inRange .bool) armLabel nextCheck)
           startBlock armLabel
-          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
             phiIncoming := phiIncoming ++ [i]
@@ -830,13 +830,13 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         let armLabel ← freshLabel s!"arm{idx}"
         let nextCheck ← freshLabel s!"check{idx + 1}"
         match arm with
-        | .litArm litVal body =>
+        | .litArm litVal guard body =>
           let litSVal ← lowerExpr litVal
           let cmpDst ← freshReg
           emit (.binOp cmpDst .eq scrVal litSVal .bool)
           terminateBlock (.condBr (.reg cmpDst .bool) armLabel nextCheck)
           startBlock armLabel
-          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
             phiIncoming := phiIncoming ++ [i]
@@ -844,7 +844,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           | none => pure ()
           armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
-        | .rangeArm loE hiE inclusive body =>
+        | .rangeArm loE hiE inclusive guard body =>
           -- Range pattern: matches when lo <= scr && scr (<= | <) hi. Comparison
           -- signedness follows the scrutinee's type in EmitSSA (u8 -> unsigned).
           let loV ← lowerExpr loE
@@ -857,7 +857,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           emit (.binOp inRange .and_ (.reg geLo .bool) (.reg leHi .bool) .bool)
           terminateBlock (.condBr (.reg inRange .bool) armLabel nextCheck)
           startBlock armLabel
-          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
             phiIncoming := phiIncoming ++ [i]
@@ -865,11 +865,11 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           | none => pure ()
           armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
-        | .varArm binding _bindTy body =>
+        | .varArm binding _bindTy guard body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
           if binding != "_" then setVar binding scrVal
-          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
             phiIncoming := phiIncoming ++ [i]
@@ -877,10 +877,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           | none => pure ()
           armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
-        | .enumArm _ _ _ body =>
+        | .enumArm _ _ _ guard body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
-          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
             phiIncoming := phiIncoming ++ [i]
@@ -1526,8 +1526,18 @@ partial def storeToPlace (place : CExpr) (newVal : SVal) : LowerM Unit := do
     match's `phiIncoming` / `armEndSnapshots` and clear `allArmsTerminated`. This
     is the single shared tail for every arm shape (literal, variable, range, and
     future guard/OR arms). -/
-partial def finishMatchArmBody (body : List CStmt) (ty : Ty) (mergeLabel : String)
+partial def finishMatchArmBody (guard : Option CExpr) (body : List CStmt) (ty : Ty)
+    (mergeLabel : String) (nextCheck : String)
     : LowerM (Option (SVal × String) × (List (String × SVal) × String × Bool)) := do
+  -- A guard is tested after the pattern bindings are live: if it is false, fall
+  -- through to the next arm's check; otherwise run the body.
+  match guard with
+  | some g =>
+    let gVal ← lowerExpr g
+    let okLabel ← freshLabel "guard.ok"
+    terminateBlock (.condBr gVal okLabel nextCheck)
+    startBlock okLabel
+  | none => pure ()
   lowerStmts body
   let bodyVal ← lastExprVal body ty
   let bodyVal ← coerceVal bodyVal ty "matchcast."

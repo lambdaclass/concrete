@@ -406,8 +406,18 @@ gate.
    re-evaluated each iteration). Fixtures in `tests/programs/patterns/` and the
    `if let / while let` section of `scripts/tests/check_pattern_ergonomics.sh`.
 
+   **STATUS (2026-06-22, increment 3): match guards LANDED + gated.**
+   `guard : Option Expr`/`Option CExpr` on each arm; parsed as `pattern if cond
+   => …`; lowered as a test after the pattern's bindings, branching to the next
+   arm on failure (`finishMatchArmBody`, `Concrete/Lower.lean`). Guards work on
+   every arm shape + value position, see the pattern bindings, and — critically —
+   a guarded arm is NOT a catch-all (CoreCheck: guarded var arm isn't a wildcard,
+   guarded enum arm doesn't cover its variant or count as a duplicate). Not in the
+   proof path yet (disclosed as unsupported `match guard`). Fixtures +
+   `match guards` section of `scripts/tests/check_pattern_ergonomics.sh`.
+
    **Still open (each: implement, or explicitly defer with examples):**
-   - match guards — `Pattern if condition => …`
+   - ~~match guards~~ — DONE (increment 3)
    - OR patterns — `A | B => …`
    - ~~integer range patterns~~ — DONE (increment 1)
    - ~~`if let`~~ — DONE (increment 2)

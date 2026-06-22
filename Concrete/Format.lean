@@ -175,22 +175,23 @@ partial def fmtExprParensAt (ind : Nat) (e : Expr) : String :=
 partial def fmtMatchArm (baseInd : Nat) (arm : MatchArm) : String :=
   let pfx := indent (baseInd + 1)
   let bodyInd := baseInd + 2
+  let guardStr := fun (g : Option Expr) => match g with | some e => s!" if {fmtExprAt baseInd e}" | none => ""
   match arm with
-  | .mk _ enumName variant bindings body =>
+  | .mk _ enumName variant bindings guard body =>
     let bindsStr := if bindings.isEmpty then ""
       else s!" \{ {", ".intercalate bindings} }"
     let bodyStr := body.map (fmtStmt bodyInd)
-    s!"{pfx}{enumName}::{variant}{bindsStr} => \{\n{"\n".intercalate bodyStr}\n{pfx}},"
-  | .litArm _ value body =>
+    s!"{pfx}{enumName}::{variant}{bindsStr}{guardStr guard} => \{\n{"\n".intercalate bodyStr}\n{pfx}},"
+  | .litArm _ value guard body =>
     let bodyStr := body.map (fmtStmt bodyInd)
-    s!"{pfx}{fmtExprAt baseInd value} => \{\n{"\n".intercalate bodyStr}\n{pfx}},"
-  | .varArm _ binding body =>
+    s!"{pfx}{fmtExprAt baseInd value}{guardStr guard} => \{\n{"\n".intercalate bodyStr}\n{pfx}},"
+  | .varArm _ binding guard body =>
     let bodyStr := body.map (fmtStmt bodyInd)
-    s!"{pfx}{binding} => \{\n{"\n".intercalate bodyStr}\n{pfx}},"
-  | .rangeArm _ lo hi inclusive body =>
+    s!"{pfx}{binding}{guardStr guard} => \{\n{"\n".intercalate bodyStr}\n{pfx}},"
+  | .rangeArm _ lo hi inclusive guard body =>
     let op := if inclusive then "..=" else ".."
     let bodyStr := body.map (fmtStmt bodyInd)
-    s!"{pfx}{fmtExprAt baseInd lo}{op}{fmtExprAt baseInd hi} => \{\n{"\n".intercalate bodyStr}\n{pfx}},"
+    s!"{pfx}{fmtExprAt baseInd lo}{op}{fmtExprAt baseInd hi}{guardStr guard} => \{\n{"\n".intercalate bodyStr}\n{pfx}},"
 
 -- ============================================================
 -- Statement formatting

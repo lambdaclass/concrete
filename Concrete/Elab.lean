@@ -586,7 +586,7 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
         for arm in arms do
           setEnv envBefore
           match arm with
-          | .mk _ _armEnum armVariant bindings body =>
+          | .mk _ _armEnum armVariant bindings guard body =>
             let ev := (ed.variants.find? fun v => v.name == armVariant).getD
               { name := armVariant, fields := [] }
             let typeMapping := ed.typeParams.zip enumTypeArgs
@@ -595,65 +595,77 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
               let bty := substTy typeMapping sf.ty
               typedBindings := typedBindings ++ [(binding, bty)]
               addVar binding bty
+            let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body
-            cArms := cArms ++ [.enumArm enumName armVariant typedBindings cBody]
-          | .litArm _ val body =>
+            cArms := cArms ++ [.enumArm enumName armVariant typedBindings cGuard cBody]
+          | .litArm _ val guard body =>
             let cVal ← elabExpr val
+            let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body
-            cArms := cArms ++ [.litArm cVal cBody]
-          | .varArm _ binding body =>
+            cArms := cArms ++ [.litArm cVal cGuard cBody]
+          | .varArm _ binding guard body =>
             if binding != "_" then addVar binding innerTyR
+            let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body
-            cArms := cArms ++ [.varArm binding innerTyR cBody]
-          | .rangeArm _ lo hi incl body =>
+            cArms := cArms ++ [.varArm binding innerTyR cGuard cBody]
+          | .rangeArm _ lo hi incl guard body =>
             let cLo ← elabExpr lo (some innerTyR)
             let cHi ← elabExpr hi (some innerTyR)
+            let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body
-            cArms := cArms ++ [.rangeArm cLo cHi incl cBody]
+            cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
         setEnv envBefore
       | none =>
         let envBefore ← getEnv
         for arm in arms do
           setEnv envBefore
           match arm with
-          | .litArm _ val body =>
+          | .litArm _ val guard body =>
             let cVal ← elabExpr val
+            let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body
-            cArms := cArms ++ [.litArm cVal cBody]
-          | .varArm _ binding body =>
+            cArms := cArms ++ [.litArm cVal cGuard cBody]
+          | .varArm _ binding guard body =>
             if binding != "_" then addVar binding innerTyR
+            let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body
-            cArms := cArms ++ [.varArm binding innerTyR cBody]
-          | .mk _ en v _ body =>
+            cArms := cArms ++ [.varArm binding innerTyR cGuard cBody]
+          | .mk _ en v _ guard body =>
+            let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body
-            cArms := cArms ++ [.enumArm en v [] cBody]
-          | .rangeArm _ lo hi incl body =>
+            cArms := cArms ++ [.enumArm en v [] cGuard cBody]
+          | .rangeArm _ lo hi incl guard body =>
             let cLo ← elabExpr lo (some innerTyR)
             let cHi ← elabExpr hi (some innerTyR)
+            let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body
-            cArms := cArms ++ [.rangeArm cLo cHi incl cBody]
+            cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
         setEnv envBefore
     else
       let envBefore ← getEnv
       for arm in arms do
         setEnv envBefore
         match arm with
-        | .litArm _ val body =>
+        | .litArm _ val guard body =>
           let cVal ← elabExpr val (some innerTyR)
+          let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
           let cBody ← elabStmts body
-          cArms := cArms ++ [.litArm cVal cBody]
-        | .varArm _ binding body =>
+          cArms := cArms ++ [.litArm cVal cGuard cBody]
+        | .varArm _ binding guard body =>
           if binding != "_" then addVar binding innerTyR
+          let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
           let cBody ← elabStmts body
-          cArms := cArms ++ [.varArm binding innerTyR cBody]
-        | .mk _ en v _ body =>
+          cArms := cArms ++ [.varArm binding innerTyR cGuard cBody]
+        | .mk _ en v _ guard body =>
+          let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
           let cBody ← elabStmts body
-          cArms := cArms ++ [.enumArm en v [] cBody]
-        | .rangeArm _ lo hi incl body =>
+          cArms := cArms ++ [.enumArm en v [] cGuard cBody]
+        | .rangeArm _ lo hi incl guard body =>
           let cLo ← elabExpr lo (some innerTyR)
           let cHi ← elabExpr hi (some innerTyR)
+          let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
           let cBody ← elabStmts body
-          cArms := cArms ++ [.rangeArm cLo cHi incl cBody]
+          cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
       setEnv envBefore
     -- Result type comes from the arm bodies (checked by Check), not the scrutinee
     let resultTy := match hint with | some t => t | none => .unit
@@ -1435,12 +1447,12 @@ partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
   | e => e
 
 partial def renameFnArm (rmap : List (String × String)) : CMatchArm → CMatchArm
-  | .enumArm en v binds body => .enumArm en v binds (renameFnStmts rmap body)
-  | .litArm val body =>
-    .litArm (renameFnExpr rmap val) (renameFnStmts rmap body)
-  | .varArm b ty body => .varArm b ty (renameFnStmts rmap body)
-  | .rangeArm lo hi incl body =>
-    .rangeArm (renameFnExpr rmap lo) (renameFnExpr rmap hi) incl (renameFnStmts rmap body)
+  | .enumArm en v binds guard body => .enumArm en v binds (guard.map (renameFnExpr rmap)) (renameFnStmts rmap body)
+  | .litArm val guard body =>
+    .litArm (renameFnExpr rmap val) (guard.map (renameFnExpr rmap)) (renameFnStmts rmap body)
+  | .varArm b ty guard body => .varArm b ty (guard.map (renameFnExpr rmap)) (renameFnStmts rmap body)
+  | .rangeArm lo hi incl guard body =>
+    .rangeArm (renameFnExpr rmap lo) (renameFnExpr rmap hi) incl (guard.map (renameFnExpr rmap)) (renameFnStmts rmap body)
 
 partial def renameFnStmt (rmap : List (String × String)) : CStmt → CStmt
   | .letDecl n m ty val => .letDecl n m ty (renameFnExpr rmap val)

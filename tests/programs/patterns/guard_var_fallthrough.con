@@ -1,0 +1,9 @@
+// Pattern: a var-arm guard that fails falls through to the next arm.
+// f(5)=1 (guard n>0 holds), f(-3)=0 (guard fails -> wildcard). Expected: 1
+mod m {
+    fn f(x: i32) -> i32 { match x { n if n > 0 => { return 1; }, _ => { return 0; } } }
+    fn main() -> Int {
+        if f(5) == 1 && f(-3) == 0 && f(0) == 0 { return 1; }
+        return 9;
+    }
+}
