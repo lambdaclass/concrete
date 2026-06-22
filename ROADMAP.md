@@ -286,6 +286,24 @@ gate.
    define block/trailing-expression semantics, update parser/checker/formatter
    behavior, and add fixtures for statement match arms, value match arms, and
    mixed `Unit`/value arms.
+2a. Add qualified name access and import aliases for module hygiene. Phase 5
+   closed the core modules/imports/visibility surface, but daily use still has
+   a namespace gap: if two imported modules export the same public name, the
+   caller must manually rename one because calls resolve through unqualified
+   names. Design the v1 surface for qualified paths (choose `mod::name`,
+   `mod.name`, or another syntax that does not conflict with method calls or
+   enum variants), import aliases (`import long.module as m` or equivalent),
+   and diagnostics for ambiguous unqualified names. Add
+   `examples/module_qualification/{ambiguous_exports,qualified_call,import_alias}/`
+   and `scripts/tests/check_qualified_names.sh`; the gate must prove private
+   names remain inaccessible, qualified public names resolve without local
+   renaming, import aliases do not grant visibility, and ambiguous unqualified
+   imports produce a clear diagnostic. This item is name hygiene, not a package
+   security boundary, but the syntax must compose with Phase 18 import fact
+   constraints such as `import dep.mod requires(no Network, no Unsafe,
+   proved_by_lean)`: aliases never grant authority, and a dependency capability
+   or evidence widening must remain a build/audit fact rather than being hidden
+   by the alias.
 3. Add plain type aliases before the larger stdlib/examples slab:
    `type Digest = [u8; 32]`, `type Tag = [u8; 16]`, etc. Aliases must be
    transparent to layout, extraction, and proof unless explicitly declared as a
@@ -2085,14 +2103,28 @@ policies, provenance, and registry protocol.
    (`no trusted`, `no extern`, `no Unsafe`), runtime-failure profile, platform
    (`hosted` / `freestanding` / `posix`), arithmetic profile, determinism,
    constant-time / secret-flow claims, and supply-chain facts such as source
-   verification or license. Write
+   verification or license.
+   Security threat model: if a dependency is compromised or upgraded to do more
+   than it used to do, the importer must be able to fail closed. Examples:
+   `import json as j requires(no File, no Network, no Unsafe, no trusted)`;
+   `import hmac.compute requires(proved_by_lean, no Unsafe)`; package-wide
+   `allowed_caps = ["Alloc"]`; or `requires(freestanding, deterministic,
+   license = "MIT OR Apache-2.0")`. The checked fact set must include at least:
+   public capability set, allocation authority/profile, `trusted`/extern/FFI/
+   `Unsafe` use, assumption set, evidence class floor, proof staleness/vacuity,
+   runtime-failure/arithmetic profile, hosted/freestanding/platform facts,
+   dependency provenance/source hash, license status, and supply-chain lock
+   identity. A change in any constrained fact is not a warning hidden in prose:
+   it is either a build failure or an explicit audit diff requiring acceptance.
+   Write
    `research/packages-tooling/import-fact-constraints.md`, then add
    `docs/IMPORT_FACT_CONSTRAINTS.md`,
-   `examples/package_authority_imports/{rejects_network_widening,accepts_file_without_granting_file,rejects_unsafe_dependency,rejects_alloc_widening,rejects_hosted_dependency}/`,
+   `examples/package_authority_imports/{rejects_network_widening,accepts_file_without_granting_file,rejects_unsafe_dependency,rejects_alloc_widening,rejects_hosted_dependency,rejects_trusted_widening,rejects_evidence_downgrade,rejects_new_assumption,rejects_license_drift}/`,
    and `scripts/tests/check_import_fact_constraints.sh`; the gate must prove
    imports read summaries from interface artifacts, do not grant authority to the
    importer, compose with package-level budgets, and reject capability/allocation/
-   trust/platform fact drift until explicitly accepted.
+   trust/platform/evidence/assumption/supply-chain fact drift until explicitly
+   accepted.
 9. Add dependency trust policy: trust widening across boundaries, review and
    inheritance.
 10. Add package-level assumption inheritance: dependency assumptions must be

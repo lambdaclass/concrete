@@ -42,6 +42,8 @@ Added `ifExpr` to `AST.Expr`, `Core.CExpr`, parser (`parseExprBlock`), elaborati
 
 When two modules export functions with the same name (e.g., `from_tag`), there's no way to disambiguate except renaming one. `Module.function()` syntax does not exist. Confirmed: call expressions take a plain `String` name, not a qualified path.
 
+**Tracked:** ROADMAP Phase 6 #2a (qualified paths + import aliases).
+
 ### ~~8. Const declarations are parsed but broken at SSA lowering (Bug 009)~~ — FIXED
 
 **Status:** Fixed. Constants now inline correctly during lowering. Added `constants` field to `LowerState` and constant lookup in the `.ident` case of `lowerExpr`.
