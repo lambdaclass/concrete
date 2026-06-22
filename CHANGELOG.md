@@ -10,6 +10,19 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### `_` wildcard in destructuring bindings (2026-06-22)
+
+- Phase 6 #5. A field binding named `_` in an enum-variant (or `let`-)
+  destructure is now a true wildcard: it holds its field position (so the other
+  fields still bind correctly) but is not added to scope. Reading `_` is now
+  E0100 (was wrongly accepted, returning the field value), and the `_` field is
+  not even loaded in codegen.
+- Fixed in Resolve / Check / Elab / Lower by skipping the bind for a `_` field
+  while keeping it in the positional binding list. Verified positional binding,
+  all-`_`, and the read-rejection. Fixtures + `_ wildcard in destructuring`
+  section of `scripts/tests/check_pattern_ergonomics.sh` (19/19). Full suite
+  1576/0; golden 54/0; snapshots 95/0; examples 128/0.
+
 ### No-tuples decision (V1) (2026-06-22)
 
 - Phase 6 #5. Decided: Concrete V1 has no anonymous tuples — the named `struct`

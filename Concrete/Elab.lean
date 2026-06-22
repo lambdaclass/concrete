@@ -600,8 +600,10 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
             let mut typedBindings : List (String × Ty) := []
             for (binding, sf) in bindings.zip ev.fields do
               let bty := substTy typeMapping sf.ty
+              -- Keep `_` in the binding list (positional field mapping) but do not
+              -- bind it in scope — it is a wildcard, not a readable variable.
               typedBindings := typedBindings ++ [(binding, bty)]
-              addVar binding bty
+              if binding != "_" then addVar binding bty
             let cGuard ← guard.mapM (fun g => elabExpr g (some Ty.bool))
             let cBody ← elabStmts body
             cArms := cArms ++ [.enumArm enumName armVariant typedBindings cGuard cBody]

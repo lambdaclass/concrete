@@ -1,0 +1,7 @@
+// Pattern (negative): a `_` destructuring binding is not a readable variable.
+// Expect: E0100
+mod m {
+    enum E { Pair { a: i32, b: i32 } }
+    fn f(e: E) -> i32 { match e { E::Pair { a, _ } => { return _; } } }
+    fn main() -> Int { return f(E::Pair { a: 7, b: 9 }) as Int; }
+}

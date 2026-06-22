@@ -59,6 +59,10 @@ run_expect guard_var_fallthrough 1   # failing var guard falls to next arm
 run_expect guard_enum 1              # guarded enum arm falls to later Some
 reject_with neg_guard_only_nonexhaustive E0534  # guarded-only match is non-exhaustive
 
+echo "=== _ wildcard in destructuring bindings ==="
+run_expect wildcard_destructure 1          # positional bind, others unaffected
+reject_with neg_wildcard_read E0100        # `_` is not a readable variable
+
 echo "=== match on &T (reference scrutinee) ==="
 run_expect match_ref_scalar 1   # &i32: literal/range/var all see the value
 run_expect match_ref_enum 1     # &enum: tag + payload through the reference

@@ -755,12 +755,14 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           let payloadGep ← freshReg
           emit (.gep payloadGep scrVal [.intConst (Int.ofNat payloadOff) .int] .i8)
           for (fieldIdx, (bname, bty)) in enumerate bindings do
-            let gepDst ← freshReg
-            let foff := Layout.variantFieldOffset layoutCtx vfields fieldIdx
-            emit (.gep gepDst (.reg payloadGep .i8) [.intConst (Int.ofNat foff) .int] .i8)
-            let loadDst ← freshReg
-            emit (.load loadDst (.reg gepDst bty) bty)
-            setVar bname (.reg loadDst bty)
+            -- `_` is a wildcard field: skip the load/bind entirely (not read).
+            if bname != "_" then
+              let gepDst ← freshReg
+              let foff := Layout.variantFieldOffset layoutCtx vfields fieldIdx
+              emit (.gep gepDst (.reg payloadGep .i8) [.intConst (Int.ofNat foff) .int] .i8)
+              let loadDst ← freshReg
+              emit (.load loadDst (.reg gepDst bty) bty)
+              setVar bname (.reg loadDst bty)
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>

@@ -224,7 +224,8 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
       match arm with
       | .mk _ _ _ bindings guard body =>
         let ctx := pushScope ctx
-        let ctx := bindings.foldl (fun ctx b => addLocal ctx b (.var none false)) ctx
+        -- `_` is a wildcard field binding: positional, but not added to scope.
+        let ctx := bindings.foldl (fun ctx b => if b == "_" then ctx else addLocal ctx b (.var none false)) ctx
         let ctx := resolveGuard ctx guard
         let ctx := resolveStmts ctx body
         popScope ctx

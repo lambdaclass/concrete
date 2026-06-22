@@ -1727,7 +1727,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
             let ev := (ed.variants.find? fun v => v.name == armVariant).get!
             let typeMapping := ed.typeParams.zip enumTypeArgs
             for (binding, sf) in bindings.zip ev.fields do
-              addVar binding (substTy typeMapping sf.ty)
+              if binding != "_" then addVar binding (substTy typeMapping sf.ty)
             match guard with | some g => discard (checkExpr g (some .bool)) | none => pure ()
             pure body
           | .litArm _ _val guard body => do

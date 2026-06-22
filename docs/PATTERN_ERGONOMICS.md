@@ -172,10 +172,30 @@ let copy = State { ..state };                  // every field from state
 - Cleanest for `Copy` structs (the typical state-update case); a non-`Copy` base
   follows the usual linearity/borrow rules through the generated field reads.
 
-## Still open (each lands as its own increment + gate section)
+## Landed: `_` wildcard in destructuring bindings
 
-- nested patterns; `_` inside destructuring bindings
-- tuple types (or a deliberate no-tuples decision)
+A field binding named `_` in an enum-variant (or `let`-) destructure is a true
+wildcard: it holds its field position so the other fields still bind correctly,
+but it is **not** added to scope (reading `_` is E0100), and its field is not
+even loaded in codegen.
+
+```
+match e {
+    E::Tri { _, b, _ } => use(b),   // only `b` is bound; the two `_` fields ignore
+}
+let E::Pair { a, _ } = p;           // binds `a`, ignores the second field
+```
+
+(Previously `_` was a readable binding named `_` — now corrected to a wildcard.)
+
+## Decided / closed
+
+- **Tuples** — no anonymous tuples in V1; use named structs. See
+  `docs/TUPLES.md` (gated by `scripts/tests/check_no_tuples.sh`).
+
+## Still open
+
+- nested patterns (e.g. `Some(Pair { x, y })`) — destructure-within-destructure.
 - match-on-reference ergonomics for `&T` / `&mut T`
 - struct update syntax — `Struct { f: x, ..base }`
 - tuple types (or a deliberate no-tuples decision)

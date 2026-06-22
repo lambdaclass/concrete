@@ -449,9 +449,13 @@ gate.
      newtype `.0` extraction is unaffected. Gated by
      `scripts/tests/check_no_tuples.sh`. Workload-driven — reconsidered only if a
      real workload proves named structs insufficient.
-   - nested patterns
-   - `_` wildcard *inside destructuring bindings* (distinct from the `_` match
-     arm, which is done) — still deferred.
+   - ~~`_` wildcard *inside destructuring bindings*~~ — DONE (increment 7): a
+     field binding named `_` is now a true wildcard — positional (other fields
+     still bind), not added to scope (reading it is E0100), field not loaded in
+     codegen. Fixed in Resolve/Check/Elab/Lower (skip binding `_`); previously it
+     was a readable binding named `_`. Fixtures + `_ wildcard in destructuring`
+     gate section.
+   - nested patterns (e.g. `Some(Pair { x, y })`) — the last remaining #5 item.
 
    **Suggested order:** integer range patterns and match-on-`&T` first (they
    immediately improve decoders, parsers, and interpreter-shaped workloads),

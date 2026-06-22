@@ -1,0 +1,10 @@
+// Pattern: `_` as a destructuring field binding is a true wildcard — positional
+// (the other fields still bind correctly) but not itself readable. Expected: 1
+mod m {
+    enum E { Tri { a: i32, b: i32, c: i32 }, X }
+    fn mid(e: E) -> i32 { match e { E::Tri { _, b, _ } => { return b; }, E::X => { return 0; } } }
+    fn main() -> Int {
+        if mid(E::Tri { a: 1, b: 9, c: 3 }) == 9 && mid(E::X) == 0 { return 1; }
+        return 0;
+    }
+}
