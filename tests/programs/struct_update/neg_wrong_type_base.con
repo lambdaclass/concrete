@@ -1,0 +1,11 @@
+// Struct update (negative): the `..base` source must be the same struct type.
+// Expect: E0220
+mod m {
+    struct Copy S { a: i32 }
+    struct Copy T { a: i32 }
+    fn main() -> Int {
+        let t: T = T { a: 1 };
+        let s: S = S { ..t };
+        return s.a as Int;
+    }
+}

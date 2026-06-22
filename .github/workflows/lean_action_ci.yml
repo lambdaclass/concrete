@@ -339,6 +339,9 @@ jobs:
       - name: Pattern-ergonomics gate (Phase 6 #5 — range patterns)
         run: bash scripts/tests/check_pattern_ergonomics.sh
 
+      - name: Struct-update gate (Phase 6 #5 — S { ..base })
+        run: bash scripts/tests/check_struct_update.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 

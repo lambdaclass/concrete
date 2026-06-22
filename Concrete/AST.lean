@@ -145,7 +145,10 @@ inductive Expr where
   | unaryOp (span : Span) (op : UnaryOp) (operand : Expr)
   | call (span : Span) (fn : String) (typeArgs : List Ty) (args : List Expr)
   | paren (span : Span) (inner : Expr)
-  | structLit (span : Span) (name : String) (typeArgs : List Ty) (fields : List (String × Expr))
+  -- `base` is the optional functional-update source: `Struct { f: x, ..base }`
+  -- copies every field not in `fields` from `base`. Filled in during Elab, where
+  -- the struct definition is known; `none` for an ordinary struct literal.
+  | structLit (span : Span) (name : String) (typeArgs : List Ty) (fields : List (String × Expr)) (base : Option Expr)
   | fieldAccess (span : Span) (obj : Expr) (field : String)
   | enumLit (span : Span) (enumName variant : String) (typeArgs : List Ty) (fields : List (String × Expr))
   | match_ (span : Span) (scrutinee : Expr) (arms : List MatchArm)
@@ -214,7 +217,7 @@ def Expr.getSpan : Expr → Span
   | .intLit sp _ | .floatLit sp _ | .boolLit sp _ | .strLit sp _ | .charLit sp _ => sp
   | .ident sp _ | .fnRef sp _ => sp
   | .binOp sp _ _ _ | .unaryOp sp _ _ | .paren sp _ => sp
-  | .call sp _ _ _ | .structLit sp _ _ _ | .enumLit sp _ _ _ _ => sp
+  | .call sp _ _ _ | .structLit sp _ _ _ _ | .enumLit sp _ _ _ _ => sp
   | .fieldAccess sp _ _ | .arrowAccess sp _ _ => sp
   | .match_ sp _ _ | .borrow sp _ | .borrowMut sp _ | .deref sp _ | .try_ sp _ => sp
   | .arrayLit sp _ | .arrayIndex sp _ _ | .cast sp _ _ => sp
@@ -515,8 +518,9 @@ partial def collectFreeVarsExpr (e : Expr) (bound : List String) : List String :
     let fnFree := if bound.contains fn then [fn] else []
     fnFree ++ args.flatMap (fun a => collectFreeVarsExpr a bound)
   | .paren _ inner => collectFreeVarsExpr inner bound
-  | .structLit _ _ _ fields =>
-    fields.flatMap (fun (_, e) => collectFreeVarsExpr e bound)
+  | .structLit _ _ _ fields base =>
+    fields.flatMap (fun (_, e) => collectFreeVarsExpr e bound) ++
+    (base.map (collectFreeVarsExpr · bound)).getD []
   | .fieldAccess _ obj _ => collectFreeVarsExpr obj bound
   | .enumLit _ _ _ _ fields =>
     fields.flatMap (fun (_, e) => collectFreeVarsExpr e bound)

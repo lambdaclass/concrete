@@ -154,10 +154,27 @@ fn tag(e: &E) -> i32 { match e { E::A { x } => x, E::B => 0 } }  // reads throug
   consumed, so it must be consumed/dropped elsewhere (an unconsumed one is E0208,
   the normal linearity rule).
 
+## Landed: struct functional update (`..base`)
+
+A struct literal may end with `..base` to copy every not-listed field from
+another value of the same struct type:
+
+```
+let next = State { round: r + 1, ..state };   // round overridden, rest from state
+let copy = State { ..state };                  // every field from state
+```
+
+- The listed fields take their given values; every omitted field is filled from
+  `base`. `base` must be the same struct type (else E0220).
+- Desugared in Elab to `base.field` for each omitted field (`Concrete/Elab.lean`),
+  so no new Core/lowering. **Use a variable (or simple place) as the base** — a
+  complex base expression is re-read once per copied field.
+- Cleanest for `Copy` structs (the typical state-update case); a non-`Copy` base
+  follows the usual linearity/borrow rules through the generated field reads.
+
 ## Still open (each lands as its own increment + gate section)
 
 - nested patterns; `_` inside destructuring bindings
-- struct update syntax — `Struct { field: x, ..base }`
 - tuple types (or a deliberate no-tuples decision)
 - match-on-reference ergonomics for `&T` / `&mut T`
 - struct update syntax — `Struct { f: x, ..base }`

@@ -1,0 +1,10 @@
+// Struct update: `S { ..base }` copies every field from base. Expected: 1
+mod m {
+    struct Copy S { a: i32, b: i32 }
+    fn main() -> Int {
+        let x: S = S { a: 4, b: 5 };
+        let y: S = S { ..x };
+        if y.a == 4 && y.b == 5 { return 1; }
+        return 0;
+    }
+}

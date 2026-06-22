@@ -615,7 +615,8 @@ mutual
     | .arrayIndex _ a i => collectCallsE a ++ collectCallsE i
     | .methodCall _ o _ _ args => collectCallsE o ++ args.flatMap collectCallsE
     | .staticMethodCall _ _ _ _ args => args.flatMap collectCallsE
-    | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectCallsE fe)
+    | .structLit _ _ _ fs base => fs.flatMap (fun (_, fe) => collectCallsE fe) ++ (base.map collectCallsE).getD []
+    | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectCallsE fe)
     | .allocCall _ x a => collectCallsE x ++ collectCallsE a
     | .ifExpr _ c t el | .whileExpr _ c t el =>
         collectCallsE c ++ t.flatMap collectCallsS ++ el.flatMap collectCallsS
@@ -728,7 +729,8 @@ partial def contractImpureCalls (impureFns : List String) : Expr → List String
   | .binOp _ _ l r => contractImpureCalls impureFns l ++ contractImpureCalls impureFns r
   | .unaryOp _ _ e | .paren _ e | .borrow _ e | .borrowMut _ e | .deref _ e
   | .try_ _ e | .cast _ e _ | .fieldAccess _ e _ | .arrowAccess _ e _ => contractImpureCalls impureFns e
-  | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => contractImpureCalls impureFns e)
+  | .structLit _ _ _ fs base => fs.flatMap (fun (_, e) => contractImpureCalls impureFns e) ++ (base.map (contractImpureCalls impureFns)).getD []
+  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => contractImpureCalls impureFns e)
   | .arrayLit _ es => es.flatMap (contractImpureCalls impureFns)
   | .arrayIndex _ a i => contractImpureCalls impureFns a ++ contractImpureCalls impureFns i
   | _ => []
@@ -763,7 +765,8 @@ mutual
     | .try_ _ e | .cast _ e _ | .fieldAccess _ e _ | .arrowAccess _ e _ => localNamesE e
     | .call _ _ _ args | .staticMethodCall _ _ _ _ args => args.flatMap localNamesE
     | .methodCall _ o _ _ args => localNamesE o ++ args.flatMap localNamesE
-    | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => localNamesE e)
+    | .structLit _ _ _ fs base => fs.flatMap (fun (_, e) => localNamesE e) ++ (base.map localNamesE).getD []
+    | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => localNamesE e)
     | .match_ _ s arms => localNamesE s ++ arms.flatMap localNamesArm
     | .arrayLit _ es => es.flatMap localNamesE
     | .arrayIndex _ a i => localNamesE a ++ localNamesE i
@@ -800,7 +803,8 @@ mutual
     | .binOp _ _ l r => validateContractExpr allowedVars callables l ++ validateContractExpr allowedVars callables r
     | .unaryOp _ _ e | .paren _ e | .borrow _ e | .borrowMut _ e | .deref _ e
     | .try_ _ e | .cast _ e _ | .fieldAccess _ e _ | .arrowAccess _ e _ => validateContractExpr allowedVars callables e
-    | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => validateContractExpr allowedVars callables e)
+    | .structLit _ _ _ fs base => fs.flatMap (fun (_, e) => validateContractExpr allowedVars callables e) ++ (base.map (validateContractExpr allowedVars callables)).getD []
+    | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, e) => validateContractExpr allowedVars callables e)
     | .match_ _ s arms => validateContractExpr allowedVars callables s ++ arms.flatMap (validateContractArm allowedVars callables)
     | .arrayLit _ es => es.flatMap (validateContractExpr allowedVars callables)
     | .arrayIndex _ a i => validateContractExpr allowedVars callables a ++ validateContractExpr allowedVars callables i
@@ -1319,7 +1323,8 @@ partial def collectIndexUsesE : Expr → List (String × Expr)
   | .call _ _ _ args => args.flatMap collectIndexUsesE
   | .methodCall _ o _ _ args => collectIndexUsesE o ++ args.flatMap collectIndexUsesE
   | .staticMethodCall _ _ _ _ args => args.flatMap collectIndexUsesE
-  | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectIndexUsesE fe)
+  | .structLit _ _ _ fs base => fs.flatMap (fun (_, fe) => collectIndexUsesE fe) ++ (base.map collectIndexUsesE).getD []
+  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectIndexUsesE fe)
   | .allocCall _ x a => collectIndexUsesE x ++ collectIndexUsesE a
   | .ifExpr _ c t el | .whileExpr _ c t el =>
       collectIndexUsesE c ++ t.flatMap collectIndexUsesS ++ el.flatMap collectIndexUsesS
@@ -1693,7 +1698,8 @@ partial def collectDivisorsE : Expr → List (Bool × Expr)
   | .call _ _ _ args => args.flatMap collectDivisorsE
   | .methodCall _ o _ _ args => collectDivisorsE o ++ args.flatMap collectDivisorsE
   | .staticMethodCall _ _ _ _ args => args.flatMap collectDivisorsE
-  | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectDivisorsE fe)
+  | .structLit _ _ _ fs base => fs.flatMap (fun (_, fe) => collectDivisorsE fe) ++ (base.map collectDivisorsE).getD []
+  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectDivisorsE fe)
   | .allocCall _ x a => collectDivisorsE x ++ collectDivisorsE a
   | .ifExpr _ c t el | .whileExpr _ c t el =>
       collectDivisorsE c ++ t.flatMap collectDivisorsS ++ el.flatMap collectDivisorsS
@@ -1835,7 +1841,8 @@ partial def collectArithE : Expr → List Expr
   | .call _ _ _ args => args.flatMap collectArithE
   | .methodCall _ o _ _ args => collectArithE o ++ args.flatMap collectArithE
   | .staticMethodCall _ _ _ _ args => args.flatMap collectArithE
-  | .structLit _ _ _ fs | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectArithE fe)
+  | .structLit _ _ _ fs base => fs.flatMap (fun (_, fe) => collectArithE fe) ++ (base.map collectArithE).getD []
+  | .enumLit _ _ _ _ fs => fs.flatMap (fun (_, fe) => collectArithE fe)
   | .allocCall _ x a => collectArithE x ++ collectArithE a
   | .ifExpr _ c t el | .whileExpr _ c t el =>
       collectArithE c ++ t.flatMap collectArithS ++ el.flatMap collectArithS

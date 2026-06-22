@@ -311,7 +311,7 @@ private partial def peekExprType (e : Expr) : ElabM Ty := do
         let paramTys := sig.params.map Prod.snd
         return .fn_ paramTys sig.capSet sig.retTy
       | none => return .placeholder
-  | .structLit _ name typeArgs _ =>
+  | .structLit _ name typeArgs _ _ =>
     if typeArgs.isEmpty then return .named name else return .generic name typeArgs
   | .enumLit _ enumName _ typeArgs _ =>
     if typeArgs.isEmpty then return .named enumName else return .generic enumName typeArgs
@@ -471,11 +471,16 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
   | .call _ fnName typeArgs args =>
     elabCall fnName typeArgs args hint (some e.getSpan)
 
-  | .structLit _ name typeArgs fields =>
+  | .structLit _ name typeArgs fields base =>
     match ← lookupStruct name with
     | some sd =>
       let typeArgs ← typeArgs.mapM resolveTypeE
       let mapping := sd.typeParams.zip typeArgs
+      let resultTy := if typeArgs.isEmpty then Ty.named name else Ty.generic name typeArgs
+      -- Functional update `..base`: elaborate the base once; any field not given
+      -- explicitly is filled with `base.field`. (Use a variable as the base — a
+      -- complex base expression is re-read per copied field.)
+      let cBase ← base.mapM (fun b => elabExpr b (some resultTy))
       let mut cFields : List (String × CExpr) := []
       for sf in sd.fields do
         let fieldTy := substTy mapping sf.ty
@@ -483,8 +488,10 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
         | some (_, expr) =>
           let cExpr ← elabExpr expr (some fieldTy)
           cFields := cFields ++ [(sf.name, cExpr)]
-        | none => pure ()  -- union partial init
-      let resultTy := if typeArgs.isEmpty then Ty.named name else Ty.generic name typeArgs
+        | none =>
+          match cBase with
+          | some cb => cFields := cFields ++ [(sf.name, .fieldAccess cb sf.name fieldTy)]
+          | none => pure ()  -- union partial init
       return .structLit name typeArgs cFields resultTy
     | none => throwElab (.unknownStructType name) (some e.getSpan)
 

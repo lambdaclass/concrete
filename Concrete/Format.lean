@@ -114,12 +114,13 @@ partial def fmtExprAt (ind : Nat) : Expr → String
     let targsStr := if typeArgs.isEmpty then "" else s!"::<{", ".intercalate (typeArgs.map fmtTy)}>"
     s!"{fn}{targsStr}({", ".intercalate (args.map (fmtExprAt ind))})"
   | .paren _ inner => s!"({fmtExprAt ind inner})"
-  | .structLit _ name typeArgs fields =>
+  | .structLit _ name typeArgs fields base =>
     let targsStr := if typeArgs.isEmpty then "" else s!"::<{", ".intercalate (typeArgs.map fmtTy)}>"
     let fs := fields.map fun (k, v) =>
       match v with
       | .ident _ n => if n == k then k else s!"{k}: {fmtExprAt ind v}"
       | _ => s!"{k}: {fmtExprAt ind v}"
+    let fs := match base with | some b => fs ++ [s!"..{fmtExprAt ind b}"] | none => fs
     s!"{name}{targsStr} \{ {", ".intercalate fs} }"
   | .fieldAccess _ obj field => s!"{fmtExprAt ind obj}.{field}"
   | .enumLit _ enumName variant typeArgs fields =>

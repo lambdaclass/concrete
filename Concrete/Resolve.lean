@@ -202,10 +202,11 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
                else addError ctx (.unknownFunction fn) (some sp)
     args.foldl resolveExpr ctx
   | .paren _ inner => resolveExpr ctx inner
-  | .structLit sp name _typeArgs fields =>
+  | .structLit sp name _typeArgs fields base =>
     let ctx := if isKnownType ctx name then ctx
                else addError ctx (.unknownStructType name) (some sp)
-    fields.foldl (fun ctx (_, e) => resolveExpr ctx e) ctx
+    let ctx := fields.foldl (fun ctx (_, e) => resolveExpr ctx e) ctx
+    match base with | some b => resolveExpr ctx b | none => ctx
   | .fieldAccess _ obj _ => resolveExpr ctx obj
   | .enumLit sp enumName variant _typeArgs fields =>
     let ctx := match lookupSymKind ctx enumName with

@@ -437,9 +437,14 @@ gate.
      the value (fixed an E0715 ptr-vs-int miscompile). Auto-deref is on the
      scrutinee (matching Check); a borrowed non-Copy value stays linear (E0208 if
      unconsumed). Fixtures + `match on &T` gate section.
+   - ~~struct update syntax — `Struct { field: x, ..base }`~~ — DONE
+     (increment 6): optional `base : Option Expr` on `AST.structLit`; parsed by
+     `parseStructLitFields`; desugared in Elab to `base.field` for each omitted
+     field (no new Core/lowering); base must be the same struct type (E0220).
+     Use a variable as the base (complex base re-reads per copied field).
+     Fixtures + `scripts/tests/check_struct_update.sh`.
    - nested patterns
    - tuple types, or a deliberate no-tuples decision (record which)
-   - struct update syntax — `Struct { field: x, ..base }`
    - `_` wildcard *inside destructuring bindings* (distinct from the `_` match
      arm, which is done) — still deferred.
 

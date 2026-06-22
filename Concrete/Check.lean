@@ -742,7 +742,7 @@ def peekExprType (e : Expr) : CheckM Ty := do
         let paramTys := sig.params.map fun (_, t) => t
         return .fn_ paramTys sig.capSet sig.retTy
       | none => return .placeholder
-  | .structLit _ name typeArgs _ =>
+  | .structLit _ name typeArgs _ _ =>
     if typeArgs.isEmpty then return .named name
     else return .generic name typeArgs
   | .enumLit _ enumName _ typeArgs _ =>
@@ -1589,11 +1589,18 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       if intrinsic == some .sizeof || fnName.endsWith sizeofSuffix then return .uint
       else throwCheck (.undeclaredFunction fnName) (some e.getSpan)
   | .paren _ inner => checkExpr inner hint
-  | .structLit _ name typeArgs fields =>
+  | .structLit _ name typeArgs fields base =>
     match ← lookupStruct name with
     | some sd =>
       -- Build type substitution from struct type params + provided type args
       let mapping := sd.typeParams.zip typeArgs
+      let structTy := if typeArgs.isEmpty then Ty.named name else .generic name typeArgs
+      -- A `..base` functional-update source must itself be this struct type.
+      match base with
+      | some b =>
+        let bTy ← checkExpr b (some structTy)
+        expectTy structTy bTy s!"`..base` of struct '{name}'" (some e.getSpan)
+      | none => pure ()
       for sf in sd.fields do
         let fieldTy ← resolveType (substTy mapping sf.ty)
         match fields.find? fun (fn, _) => fn == sf.name with
@@ -1605,15 +1612,15 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
           | .ident _ varName => consumeVarIfExists varName (some e.getSpan)
           | _ => pure ()
         | none =>
-          -- Unions allow partial initialization (only one field set)
-          if !sd.isUnion then
+          -- A missing field is supplied by `..base` if present; otherwise it is a
+          -- real omission (unions allow partial initialization).
+          if base.isNone && !sd.isUnion then
             throwCheck (.missingFieldInLiteral sf.name s!"struct literal '{name}'") (some e.getSpan)
       for (fn, _) in fields do
         match sd.fields.find? fun sf => sf.name == fn with
         | some _ => pure ()
         | none => throwCheck (.unknownFieldInLiteral fn s!"struct literal '{name}'") (some e.getSpan)
-      if typeArgs.isEmpty then return .named name
-      else return .generic name typeArgs
+      return structTy
     | none => throwCheck (.unknownStructType name) (some e.getSpan)
   | .fieldAccess _ obj field =>
     let objTy ← checkExpr obj

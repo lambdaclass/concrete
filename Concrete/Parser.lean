@@ -463,7 +463,7 @@ partial def parsePrimary : ParseM Expr := do
               return .staticMethodCall sp name nextName [] args
             else if next2 == .lbrace then
               expect .lbrace
-              let fields ← parseStructLitFields
+              let (fields, _) ← parseStructLitFields
               expect .rbrace
               return .enumLit sp name nextName [] fields
             else
@@ -511,7 +511,7 @@ partial def parsePrimary : ParseM Expr := do
         return .staticMethodCall sp name memberName typeArgs args
       else if next3 == .lbrace then
         expect .lbrace
-        let fields ← parseStructLitFields
+        let (fields, _) ← parseStructLitFields
         expect .rbrace
         return .enumLit sp name memberName typeArgs fields
       else
@@ -538,9 +538,9 @@ partial def parsePrimary : ParseM Expr := do
       -- Could be struct literal: Name[::<Type>] { field: val, ... }
       if name.length > 0 && (name.toList.head!).isUpper then
         advance
-        let fields ← parseStructLitFields
+        let (fields, base) ← parseStructLitFields
         expect .rbrace
-        return .structLit sp name typeArgs fields
+        return .structLit sp name typeArgs fields base
       else
         return .ident sp name
     else
@@ -635,9 +635,14 @@ partial def parsePrimary : ParseM Expr := do
     let sp ← peekSpan
     throwParse s!"expected expression, got {other}" (span := some sp)
 
-partial def parseStructLitFields : ParseM (List (String × Expr)) := do
+partial def parseStructLitFields : ParseM (List (String × Expr) × Option Expr) := do
   let tk ← peek
-  if tk == .rbrace then return []
+  if tk == .rbrace then return ([], none)
+  -- `{ ..base }`: all fields from base.
+  if tk == .dotDot then
+    advance
+    let base ← parseExpr
+    return ([], some base)
   let mut fields : List (String × Expr) := []
   let sp ← peekSpan
   let firstName ← expectIdent
@@ -649,11 +654,17 @@ partial def parseStructLitFields : ParseM (List (String × Expr)) := do
     -- Field punning: { value } means { value: value }
     pure (.ident sp firstName)
   fields := [(firstName, firstVal)]
+  let mut base : Option Expr := none
   let mut tk ← peek
   while tk == .comma do
     advance
     tk ← peek
     if tk == .rbrace then break  -- trailing comma
+    -- `..base` functional update; must be the last field.
+    if tk == .dotDot then
+      advance
+      base := some (← parseExpr)
+      break
     let fsp ← peekSpan
     let fieldName ← expectIdent
     let tk3 ← peek
@@ -665,7 +676,7 @@ partial def parseStructLitFields : ParseM (List (String × Expr)) := do
       pure (.ident fsp fieldName)
     fields := fields ++ [(fieldName, fieldVal)]
     tk ← peek
-  return fields
+  return (fields, base)
 
 partial def parsePostfixNoAs (e : Expr) : ParseM Expr := do
   let mut result := e

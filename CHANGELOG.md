@@ -10,6 +10,19 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Struct functional update `..base` (2026-06-22)
+
+- Phase 6 #5, increment 6. `S { f: x, ..base }` builds a struct value taking the
+  listed fields from the literal and every other field from `base` (same struct
+  type required, else E0220). `S { ..base }` copies all fields.
+- Optional `base : Option Expr` on `AST.structLit` (Core/lowering unchanged);
+  parsed by `parseStructLitFields` (`..` introduces the base); desugared in Elab
+  to `base.field` for each omitted field. Base should be a variable/simple place
+  — a complex base expression is re-read once per copied field.
+- Verified: override-some-copy-rest, all-from-base, and wrong-type-base
+  rejection. Fixtures + `scripts/tests/check_struct_update.sh` (3/3). Full suite
+  1576/0; golden 54/0; snapshots 95/0; examples 128/0.
+
 ### Pattern ergonomics: match on a reference scrutinee (2026-06-22)
 
 - Phase 6 #5, increment 5. `match` auto-derefs a `&T` / `&mut T` scrutinee so the
