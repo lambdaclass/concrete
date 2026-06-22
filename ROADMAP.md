@@ -1193,6 +1193,18 @@ lemmas, and actionable failure diagnostics.
     `needs_lean` / `not_supported` rather than false green. Design note:
     `research/proof-evidence/operational-vc-auto-discharge.md`; eventual gate:
     `scripts/tests/check_operational_vc_auto_discharge.sh`.
+16b. Add an automation trust-upgrade firewall for every proof automation path.
+    Any auto-discharge, generated proof, solver route, cache hit, replay helper,
+    agent suggestion, or future MCP proof tool must emit a replayable artifact,
+    name the engine that closed the fact, preserve the evidence class
+    (`proved_by_kernel_decision`, `proved_by_lean`, `solver_trusted`,
+    `assumed`, `runtime_checked`, `needs_lean`, `not_supported`, etc.), and
+    include a negative gate proving unsupported / stale / effectful / trusted /
+    out-of-fragment obligations do not become green. This is the guardrail that
+    prevents proof automation from becoming a hidden trust upgrade. Wire the
+    first version into the structural and operational auto-discharge gates, then
+    extend it to proof-result caching, agent-facing proof suggestions, and any
+    external solver path.
 17. Add a small verified/spec-checked standard proof library for common
     predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
     constant-time source shape.

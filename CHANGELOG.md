@@ -10,6 +10,14 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Proof automation trust-upgrade firewall recorded (2026-06-22)
+
+- ROADMAP Phase 9 now has item #16b: every proof automation path must preserve
+  the evidence class, name the closing engine, emit a replayable artifact, and
+  include a negative gate proving unsupported / stale / trusted /
+  out-of-fragment obligations do not become green. This explicitly prevents
+  automation from becoming a hidden trust upgrade.
+
 ### Operational VC auto-discharge recorded as proof-automation lever (2026-06-22)
 
 - Added `research/proof-evidence/operational-vc-auto-discharge.md`, defining
