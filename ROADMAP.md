@@ -1152,6 +1152,21 @@ lemmas, and actionable failure diagnostics.
     `scripts/tests/check_structural_auto_discharge.sh`; auto-discharge may only
     emit `proved_by_kernel_decision` or a linked Lean theorem when the kernel
     actually checks the generated proof.
+16a. Add operational VC auto-discharge as the next automation tier after
+    structural auto-discharge. Today `linear` and `bitvector` obligations route
+    to `omega` / `bv_decide`, while `operational` and `refinement` obligations
+    route to Lean proof links; that leaves ordinary `#[ensures]` bodies and
+    loop operational-preservation steps dependent on hand-written bridge
+    theorems. First run a forcing probe over three existing proof-heavy shapes:
+    the `examples/loop_invariant` operational step, one HMAC/SHA bitvector
+    identity such as `ch_refines` / `ch_selects_high`, and one bounded
+    parser/codec/fixed-buffer postcondition. If the probe shows useful
+    coverage, build V1 by symbolically executing a narrow Core/ProofCore
+    fragment, generating operational VCs, routing decidable integer/bitvector
+    leaves to `omega` / `bv_decide`, and reporting unsupported cases as
+    `needs_lean` / `not_supported` rather than false green. Design note:
+    `research/proof-evidence/operational-vc-auto-discharge.md`; eventual gate:
+    `scripts/tests/check_operational_vc_auto_discharge.sh`.
 17. Add a small verified/spec-checked standard proof library for common
     predicates: sorted, bounded, no-duplicates, fixed-length, prefix, checksum,
     constant-time source shape.

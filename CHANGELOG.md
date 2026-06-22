@@ -10,6 +10,19 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Operational VC auto-discharge recorded as proof-automation lever (2026-06-22)
+
+- Added `research/proof-evidence/operational-vc-auto-discharge.md`, defining
+  the missing automation tier between local syntactic discharge and hand Lean:
+  generate operational VCs from Core / ProofCore for a narrow fragment, route
+  decidable integer/bitvector leaves through `omega` / `bv_decide`, and report
+  unsupported cases honestly as `needs_lean` / `not_supported`.
+- ROADMAP Phase 9 now has item #16a with a forcing probe over three existing
+  proof-heavy shapes: the `examples/loop_invariant` operational step, one
+  HMAC/SHA bitvector identity, and one bounded parser/codec/fixed-buffer
+  postcondition. This records the evidence-cost problem explicitly before
+  committing to a verifier build.
+
 ### Pattern ergonomics: integer range patterns (2026-06-22)
 
 - Phase 6 #5, first increment. Match arms can match an integer/`u8` against a
