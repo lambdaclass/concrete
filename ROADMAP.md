@@ -997,18 +997,29 @@ they force a named surface or public claim.
 15. Add a thin end-to-end credibility slice before the larger workload ladder,
     so skeptical users can replay one compelling artifact before the full
     Phase 5/6/12/13 surface is complete. Target:
-    `examples/credibility_slice/packet_window/` or an equivalent protocol-like
-    example that exercises all of: explicit capabilities, one runtime-safety
-    obligation, one source contract, one Lean-checked proof, one
-    `proved_by_kernel_decision` discharge, one SMT counterexample or
-    solver-trusted residue, one property-test counterexample, one oracle or
-    interpreter-vs-compiled check, and one audit/release bundle. Wire
+    `examples/credibility_slice/packet_window/` or an equivalent no-alloc
+    protocol parser/verifier (WebSocket frame decoder, TLS record-header parser,
+    DNS packet parser, or HTTP/1 header parser). The slice must demonstrate the
+    actual production-readiness claim, not a toy proof: fixed buffers, `Bytes`,
+    `ByteView`, arrays, `Result`, pattern matching, explicit capabilities,
+    value-model accessors / scoped borrows, no returned references, and bounded
+    allocation or no allocation. It must include positive and negative corpus
+    fixtures, fuzz/property-style generated cases with persisted
+    counterexamples, an oracle or interpreter-vs-compiled check, one
+    runtime-safety obligation, one source contract, one Lean-checked proof, one
+    `proved_by_kernel_decision` discharge, and one audit/release bundle. Wire
     `scripts/tests/check_credibility_slice.sh`; the gate must compile and run
-    the example, replay the proof/evidence checks, persist any counterexample
-    as a regression, and produce a README transcript that a non-author can run
-    without understanding compiler internals. This is intentionally a vertical
-    slice, not a new parallel track; it exists to validate the bet before the
-    later 10k-line workload ladder.
+    the example, replay the proof/evidence checks, emit `--report contracts`,
+    `--report obligation-ledger`, `--report caps`, `--report layout`, and
+    `--report fingerprints`, persist any counterexample as a regression, and
+    produce a README transcript that a non-author can run without understanding
+    compiler internals. This is intentionally a vertical slice, not a new
+    parallel track; it exists to validate the bet before the later 10k-line
+    workload ladder. Do not start this slice until the immediate Phase 6
+    blockers that directly affect parser/buffer code are either done or
+    explicitly deferred with examples: array-literal element inference (#6),
+    match guards / OR patterns / match-on-reference (#5), and `defer`/cleanup
+    (#7) if the chosen slice owns resources.
 16. Add a graduated real-workload ladder. The goal is to make sure Concrete
     builds real things that can be checked against references, not only tiny
     proof demos. Each workload must name the surface or public claim it forces;
@@ -1073,7 +1084,21 @@ they force a named surface or public claim.
 17. Do not run broad examples cleanup/polish sweeps. Clean examples
     opportunistically when a roadmap task touches them. Improve examples only
     when they serve proof-link migration, `concrete prove` authoring,
-    external validation, or a release-facing tutorial.
+    external validation, or a release-facing tutorial. Add an example-refresh
+    checkpoint at every phase closure, and after every two substantial
+    Phase-6/7 usability increments. The checkpoint is not a broad rewrite; it
+    is a small, gate-backed audit that asks whether graduated examples and
+    release-facing docs still teach the current language. It must remove stale
+    "deferred" language for newly landed features; update examples that should
+    now use the preferred surface (`if let` / `while let`, range patterns,
+    future guards/OR patterns, value-model collection access, `ByteView`,
+    explicit capabilities); keep legacy examples only when they intentionally
+    demonstrate the old/low-level form; and record any skipped update with a
+    reason. Add `scripts/tests/check_example_refresh.sh` once the first refresh
+    has enough concrete assertions; until then, each phase closure commit must
+    name the examples/docs it checked and why no refresh was needed. The goal is
+    to prevent tutorial/showcase drift without turning every feature into a
+    repo-wide churn pass.
 18. Upgrade the constant-time flagship from `reported` to `enforced` with a
     secret-dependent-flow checker. Today `constant_time_tag` reports a
     constant-time source shape and leaves machine timing `assumed`; add a

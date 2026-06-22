@@ -10,6 +10,19 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Production-readiness slice and example-refresh cadence added (2026-06-22)
+
+- ROADMAP Phase 8 now spells out the concrete "solid enough to show" artifact:
+  a no-alloc protocol parser/verifier credibility slice with fixed buffers,
+  `Bytes`/`ByteView`, arrays, `Result`, pattern matching, explicit capabilities,
+  runtime-safety obligations, source contracts, a Lean proof, a
+  `proved_by_kernel_decision` discharge, oracle/differential checks, and an
+  audit/release bundle.
+- Phase 8 also now requires example-refresh checkpoints at phase closure and
+  after every two substantial Phase-6/7 usability increments, so tutorials,
+  showcase examples, and release-facing docs do not keep teaching stale
+  surfaces after features land.
+
 ### Operational VC auto-discharge forcing probe gated — verdict GO (2026-06-22)
 
 - Ran and locked the Phase 9 #16a forcing probe. A fixed mechanical tactic over
