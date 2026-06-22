@@ -52,6 +52,7 @@ inductive ResolveError where
   | selfOutsideImpl
   | unknownModule (name : String)
   | notPublicInModule (symbol : String) (moduleName : String)
+  | recursiveTypeAlias (name : String)
 
 def ResolveError.message : ResolveError → String
   | .undeclaredVariable name => s!"undeclared variable '{name}'"
@@ -66,6 +67,7 @@ def ResolveError.message : ResolveError → String
   | .selfOutsideImpl => "Self can only be used inside impl blocks"
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
+  | .recursiveTypeAlias name => s!"recursive type alias '{name}' (a type alias may not refer to itself, directly or through other aliases)"
 
 structure Scope where
   symbols : List (String × SymKind)
@@ -115,6 +117,7 @@ def ResolveError.code : ResolveError → String
   | .selfOutsideImpl => "E0109"
   | .unknownModule _ => "E0110"
   | .notPublicInModule _ _ => "E0111"
+  | .recursiveTypeAlias _ => "E0112"
 
 private def addError (ctx : ResolveCtx) (err : ResolveError) (span : Option Span := none) : ResolveCtx :=
   { ctx with errors := ctx.errors ++ [{ severity := .error, message := err.message, pass := "resolve", span := span, hint := none, code := err.code }] }
@@ -430,10 +433,45 @@ private def resolveFnBody (globalScope : Scope) (knownTypes : List String) (f : 
   let ctx := resolveStmts ctx f.body
   ctx.errors
 
+/-- Immediate bare-name target of an alias, if the target is a plain `.named`. -/
+private def aliasNamedTarget : Ty → Option String
+  | .named n => some n
+  | _ => none
+
+/-- True if following the alias-name chain from `cur` revisits a name (the alias
+    is part of a cycle). `aliasMap` maps each alias name to its bare-named target,
+    restricted to targets that are themselves aliases. `fuel` bounds recursion for
+    totality (set to #aliases+1, longer than any acyclic chain). -/
+private def aliasChaseCyclic (aliasMap : List (String × String)) : Nat → List String → String → Bool
+  | 0, _, _ => true
+  | fuel+1, seen, cur =>
+    match aliasMap.lookup cur with
+    | some next => if seen.contains next then true else aliasChaseCyclic aliasMap fuel (cur :: seen) next
+    | none => false
+
+/-- Validate a module's type-alias targets: every name in a target must be known
+    (`type A = Nope` → E0108), and no alias may be recursive (`type A = A` or
+    `type A = B; type B = A` → E0112). -/
+private def resolveTypeAliases (m : Module) (globalScope : Scope) (knownTypes : List String) : Diagnostics :=
+  let aliasCtx : ResolveCtx :=
+    { globalScope := globalScope, localScopes := [[]], errors := [], knownTypes := knownTypes }
+  let aliasNames := m.typeAliases.map (·.name)
+  let aliasMapAliasesOnly : List (String × String) := m.typeAliases.filterMap (fun ta =>
+    match aliasNamedTarget ta.targetTy with
+    | some tgt => if aliasNames.contains tgt then some (ta.name, tgt) else none
+    | none => none)
+  m.typeAliases.foldl (fun acc ta =>
+    let tErrs := (checkTyDeep { aliasCtx with errors := [] } ta.targetTy (some ta.span)).errors
+    let recErrs := if aliasChaseCyclic aliasMapAliasesOnly (aliasNames.length + 1) [] ta.name
+                   then [mkResolveDiag (.recursiveTypeAlias ta.name) (some ta.span)] else []
+    acc ++ tErrs ++ recErrs) []
+
 /-- Resolve all names in a module's function bodies. -/
 private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List String)
     (traitMethods : List (String × List String))
     (traitImpls_ : List (String × String)) : ResolvedModule × Diagnostics :=
+  -- Validate type-alias targets (unknown target types, recursive aliases)
+  let aliasErrors := resolveTypeAliases m globalScope knownTypes
   -- Check top-level functions
   let fnErrors := m.functions.foldl (fun acc f =>
     acc ++ resolveFnBody globalScope knownTypes f none traitMethods traitImpls_) []
@@ -445,7 +483,7 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
   let traitImplErrors := m.traitImpls.foldl (fun acc ti =>
     acc ++ ti.methods.foldl (fun acc method =>
       acc ++ resolveFnBody globalScope (knownTypes ++ ti.typeParams) method (some ti.typeName) traitMethods traitImpls_) []) []
-  let allErrors := fnErrors ++ implErrors ++ traitImplErrors
+  let allErrors := aliasErrors ++ fnErrors ++ implErrors ++ traitImplErrors
   ({ module := m, globalScope := globalScope }, allErrors)
 
 -- ============================================================

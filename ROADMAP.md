@@ -291,6 +291,21 @@ gate.
    transparent to layout, extraction, and proof unless explicitly declared as a
    future opaque/newtype form. This is an ordinary readability feature, not a
    proof abstraction.
+   STATUS (2026-06-22, done + gated): type aliases were already parsed and
+   resolved; documented in `docs/TYPE_ALIASES.md` and locked by
+   `scripts/tests/check_type_alias.sh` (Makefile `test-type-alias` + CI) over
+   `tests/programs/type_alias/`. Aliases are transparent over arrays/structs/
+   generic-instantiations/fn-signatures, both directions, and the gate proves
+   `--report layout` + `--report fingerprints` are byte-identical to the
+   underlying type (no new layout/proof identity). The audit FOUND AND FIXED four
+   real transparency gaps (see CHANGELOG): (a) alias targets weren't validated —
+   `type A = Nope` was silently accepted (now E0108); (b) recursive aliases gave a
+   confusing downstream error (now a dedicated E0112); (c) alias chains and
+   aliases nested in other types only expanded one level (now expanded deeply +
+   transitively via `closeAliasMap`/`expandAliasDeep`); (d) a `Copy` struct field
+   typed by an alias to a `Copy` type was wrongly rejected as non-Copy (alias now
+   expanded in field types before the CoreCheck Copy/repr check). Opaque/distinct
+   aliases remain `newtype`'s job; alias type parameters are not in V1.
 4. Decide user-facing loop control before broad parser/service examples:
     `break`, `continue`, and whether labeled loops exist. The decision must
     state how each interacts with bounded-loop analysis, cleanup/defer,
@@ -1043,6 +1058,14 @@ lemmas, and actionable failure diagnostics.
     should summarize the binary workflow and point to the ProofKit guide, but
     they must not be the source of truth for agents using only an installed
     binary.
+5a. Keep AI/agent assurance guidance aligned with the implemented proof surface.
+    `docs/SPARK_CLASS_ASSURANCE.md` is the current design-target guide for
+    agents: it tells Claude/Codex-style tools which assurance annotations are
+    implemented today, which are future-only, and which replay commands must
+    validate a claim. When loop invariants, frame/dependency contracts,
+    ghost/spec code, or package evidence land, update this guide in the same
+    commit as the feature and add at least one agent-facing example of the
+    intended suggestion pattern.
 6. Add MCP only after the CLI/JSON/stub/workspace surfaces are stable. The MCP
     server should wrap the binary rather than duplicate logic, exposing resources such
     as `concrete://prove/<fn>/obligations`, `concrete://proofkit/lemmas`, and
@@ -1463,6 +1486,17 @@ promises.
     shape, stack/runtime-failure assumptions, and negative examples for every
     exclusion. The gate must prove reports never call excluded code proof
     eligible.
+19. Define the SPARK-class contract layer in Concrete's vocabulary, not Ada's:
+    frame/read/write contracts, dependency-flow contracts, ghost/spec purity,
+    and proof classes for each fact. Candidate surface may include
+    `#[reads(...)]`, `#[writes(...)]`, `#[modifies(...)]`, and
+    `#[depends(out <- in1, in2)]`, but syntax is not frozen until a flagship or
+    external workload pulls it. The design must explain how these facts differ
+    from capabilities: capabilities name external authority; frame/dependency
+    contracts name memory/state/data influence. Add
+    `docs/SPARK_CLASS_ASSURANCE.md` updates, examples with one parser/buffer
+    loop and one policy/data-flow function, and a gate proving facts are
+    reported as proved/enforced/reported/assumed/trusted rather than prose-only.
 
 ## Phase 13: Runtime Safety Obligations
 
@@ -1552,6 +1586,12 @@ zero, overflow profile, casts, and loop bounds with statuses
     widened bounds. Wire `scripts/tests/check_invariant_inference.sh`; the gate
     must prove inferred facts reduce required user annotations without creating
     false green obligations.
+16a. Connect runtime-safety obligations to loop, frame, and dependency facts.
+    Bounds/cast/overflow obligations should be dischargeable from explicit loop
+    invariants, generated invariant candidates, and future `reads`/`writes`/
+    `modifies` facts without duplicating the ledger. The report must show which
+    invariant or frame fact discharged each obligation, and missing facts must
+    produce actionable diagnostics rather than generic "unproven" output.
 17. Add newtype/type invariants as scoped obligation hypotheses after they are
     checked at construction boundaries. This connects validated wrappers to the
     proof/runtime-safety pipeline: a type such as
@@ -1873,6 +1913,14 @@ audience):**
      break its fingerprint) and must show the release bundle flips to
      failing with the downgraded claim named — no false green on a revoked
      proof.
+9c. Add a certification-style assurance bundle profile before any
+    SPARK-class comparison claim. The bundle must include the claim matrix,
+    authority/capability report, obligation ledger, proof status, runtime-safety
+    status, assumptions, trusted boundaries, package/dependency evidence,
+    toolchain versions, replay commands, and any SPARK-class flow/frame facts.
+    It must also include an agent-readable summary naming which annotations were
+    checked and which were only suggested or future-only. This is a release
+    artifact over existing facts, not a second evidence system.
 10. Publish `THREAT_MODEL.md` and keep it linked from README, release bundles,
    showcase manifests, and assumptions docs.
 11. Add first-user workflow CI: install compiler, create/run one example,
@@ -2072,6 +2120,13 @@ policies, provenance, and registry protocol.
     and `scripts/tests/check_evidence_typed_imports.sh`; the gate must prove
     dependency evidence is read from package artifacts, not source-private side
     channels, and that an evidence downgrade breaks the importing package.
+15a. Add package-level SPARK-class assurance summaries once frame/dependency
+    contracts exist. Interface artifacts should expose public contract facts,
+    read/write/modifies summaries, dependency-flow summaries, ghost/spec
+    assumptions, capability requirements, trusted boundaries, and evidence
+    class per public function. Package consumers and agents must be able to ask
+    "what may this dependency read, write, depend on, assume, trust, or prove?"
+    without inspecting private bodies.
 16. Add the Phase 18 validation artifact: a multi-package workspace project
     with dependency resolution, lockfile, package-aware tests, interface/body
     artifact split, dependency trust policy, assumption inheritance, authority
@@ -2118,14 +2173,20 @@ reports without inventing a second truth source.
     and clear sandbox/timeout/resource assumptions. This is a teaching surface,
     not a second compiler pipeline.
 12. [relocated from closed Phase 4 — #11 tail] Route obligation / proof / policy
-   facts into the structured `Diagnostic` record / `--diagnostics-json` channel so
-   LSP/editor and CI-JSON consumers see them (array-bounds, solver-policy,
-   vacuous-contract, stale-proof, …) — without duplicating the
-   `ObligationCore`/report model. Includes interpreter structured diagnostics
-   (the deferred Phase-4 #18a). Pull when a real consumer (LSP / CI JSON parser)
-   needs machine-readable obligation diagnostics; see LANGUAGE_GAPS for the
-   frontend-vs-obligation diagnostic split.
-13. Add the Phase 19 validation artifact:
+    facts into the structured `Diagnostic` record / `--diagnostics-json` channel
+    so LSP/editor and CI-JSON consumers see them (array-bounds, solver-policy,
+    vacuous-contract, stale-proof, …) — without duplicating the
+    `ObligationCore`/report model. Includes interpreter structured diagnostics
+    (the deferred Phase-4 #18a). Pull when a real consumer (LSP / CI JSON parser)
+    needs machine-readable obligation diagnostics; see LANGUAGE_GAPS for the
+    frontend-vs-obligation diagnostic split.
+13. Add editor and agent diagnostics for SPARK-class assurance facts after the
+    facts exist: failed loop invariants, weak variants, missing frame facts,
+    over-broad `writes`, unsatisfied `depends`, ghost/spec partiality, package
+    evidence downgrades, and runtime-safety obligations that need a frame or
+    invariant. The LSP/JSON payload must reuse the obligation/evidence ledger
+    and point agents to the validation command; no editor-only proof status.
+14. Add the Phase 19 validation artifact:
    `scripts/tests/check_phase18_editor.sh` runs a scripted LSP/editor session
    or golden transcript over one real project, proving hover, diagnostics,
    obligation navigation, proof/evidence facts, dependency audit UI, refactor

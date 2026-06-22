@@ -10,6 +10,47 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### SPARK-class assurance target and AI agent guide recorded (2026-06-22)
+
+- Added `docs/SPARK_CLASS_ASSURANCE.md` as the stable design-target guide for
+  SPARK-class assurance in Concrete: contracts, loop invariants/variants,
+  frame/read/write facts, dependency-flow facts, ghost/spec code, package/import
+  evidence, and certification-style bundles.
+- The doc is explicitly AI-facing: Claude/Codex-style agents should use it to
+  distinguish implemented annotations from future-only suggestions, preserve
+  honest evidence classes, and attach replay commands before claiming proof.
+- ROADMAP hooks were added in the phases that own the work: Phase 9 agent proof
+  guidance, Phase 12 contract-layer design, Phase 13 runtime obligations using
+  loop/frame facts, Phase 17 assurance bundles, Phase 18 package assurance
+  summaries, and Phase 19 editor/agent diagnostics.
+
+### Type aliases documented + gated; four transparency gaps fixed (2026-06-22)
+
+- Phase 6 #3. Type aliases (`type Digest = [u8; 32]`) were parsed/resolved but
+  undocumented, ungated, and only shallowly transparent. Now documented
+  (`docs/TYPE_ALIASES.md`) and locked by `scripts/tests/check_type_alias.sh` over
+  `tests/programs/type_alias/`: aliases are transparent over arrays / structs /
+  generic instantiations / function signatures, both directions, and the gate
+  proves `--report layout` + `--report fingerprints` are byte-identical to the
+  underlying type — an alias creates no new layout or proof identity.
+- The audit found and fixed four real transparency bugs:
+  - **Unknown alias target silently accepted** — `type A = Nope;` compiled (the
+    target was never validated). Alias targets now go through `checkTyDeep`;
+    unknown targets are rejected with **E0108** at the declaration
+    (`Concrete/Resolve.lean`).
+  - **Recursive aliases gave a confusing error** — `type A = A;` (and mutual
+    cycles) produced a misdirected downstream type-mismatch. Now detected during
+    resolution and rejected with a dedicated **E0112** (`recursive type alias`).
+  - **Alias chains / nested aliases expanded only one level** — `type C = B;
+    type B = A; type A = i32` and `type Arr = [E; 3]` did not fully resolve. The
+    alias map is now transitively + deeply closed (`closeAliasMap` /
+    `expandAliasDeep` in `Concrete/AST.lean`) before Check/Elab use it.
+  - **`Copy` struct field typed by a Copy alias rejected** — `type Id = i32;
+    struct Copy S { a: Id }` failed CoreCheck's Copy/repr check because the field
+    type wasn't alias-expanded. Field types are now alias-expanded alongside
+    newtype-erasure at module build (`Concrete/Elab.lean`).
+- Full suite 1576/0; examples 127/0; snapshots 95/0.
+
 ### Loop control documented + gated; while-expression width miscompile fixed (2026-06-21)
 
 - Phase 6 #4. `break`/`continue`/labeled loops/while-as-expression were already

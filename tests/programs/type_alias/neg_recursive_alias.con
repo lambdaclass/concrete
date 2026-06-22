@@ -1,0 +1,6 @@
+// Type alias (negative): a directly self-referential alias is rejected with a
+// dedicated diagnostic (not a confusing downstream type error). Expect: E0112
+mod m {
+    type A = A;
+    fn main() -> Int { return 0; }
+}

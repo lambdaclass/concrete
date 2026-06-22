@@ -330,6 +330,9 @@ jobs:
       - name: Loop-control gate (Phase 6 #4 — break/continue/while-expr + linear cleanup)
         run: bash scripts/tests/check_loop_control.sh
 
+      - name: Type-alias gate (Phase 6 #3 — transparency + no-new-identity)
+        run: bash scripts/tests/check_type_alias.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 

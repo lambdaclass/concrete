@@ -210,6 +210,7 @@ private partial def resolveTypeE (ty : Ty) : ElabM Ty := do
     else if env.currentTypeParams.contains name then return .typeVar name
     else
       match env.typeAliases.lookup name with
+      -- Alias map is transitively pre-closed at build time (`closeAliasMap`).
       | some resolved => return resolved
       | none =>
         -- Newtypes are NOT erased here: type identity is preserved through
@@ -1536,7 +1537,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let allStructs := imports.structs ++ m.structs
   let allEnums := builtinEnumList ++ imports.enums ++ m.enums
   let localTypeAliases := m.typeAliases.map fun ta => (ta.name, ta.targetTy)
-  let typeAliasMap := imports.typeAliases ++ localTypeAliases
+  -- Transitively close alias chains (see closeAliasMap); cycles rejected upstream.
+  let typeAliasMap := closeAliasMap (imports.typeAliases ++ localTypeAliases)
   let constantsMap := m.constants.map fun c => (c.name, c.ty)
   let builtinDestroyTrait : TraitDef := {
     name := destroyTraitName
@@ -1599,9 +1601,12 @@ partial def elabModule (m : Module) (summary : FileSummary)
   ) (([] : List CFnDef), ([] : Diagnostics), initEnv)
   if !fnErrors.isEmpty then .error fnErrors
   else
-  -- Build Core structs (local definitions). Erase newtypes in field types so that
-  -- layout, copy-checking, and lowering see the wrapper's inner type.
-  let eraseTy := eraseNewtypeTy m.newtypes
+  -- Build Core structs (local definitions). Expand type aliases AND erase
+  -- newtypes in field types so that layout, copy-checking, and lowering see the
+  -- underlying type — a `Copy` struct field typed by an alias to a Copy type
+  -- (`type Id = i32; struct Copy S { a: Id }`) must read as Copy, not opaque.
+  let eraseTy := fun (t : Ty) =>
+    eraseNewtypeTy m.newtypes (expandAliasDeep typeAliasMap (typeAliasMap.length + 64) t)
   let cStructs := m.structs.map fun sd =>
     { name := sd.name, typeParams := sd.typeParams,
       fields := sd.fields.map fun f => (f.name, eraseTy f.ty),

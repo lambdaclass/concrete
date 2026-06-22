@@ -1,0 +1,7 @@
+// Type alias (negative): a cycle through more than one alias is also rejected.
+// Expect: E0112
+mod m {
+    type A = B;
+    type B = A;
+    fn main() -> Int { return 0; }
+}

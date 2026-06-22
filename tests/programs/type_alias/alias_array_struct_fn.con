@@ -1,0 +1,22 @@
+// Type aliases are transparent: an alias names an existing type and is
+// interchangeable with it in every position. Covers array, struct, and
+// function-signature aliases. Expected: 7
+mod m {
+    type Digest = [u8; 4];
+    struct Copy P { x: i32, y: i32 }
+    type Point = P;
+    type Id = i32;
+
+    fn first(d: Digest) -> u8 { return d[0]; }      // alias as param type
+    fn px(p: Point) -> i32 { return p.x; }          // alias over a struct
+    fn inc(n: Id) -> Id { return n + 1; }           // alias as param + return
+
+    fn main() -> Int {
+        let d: Digest = [7 as u8, 0 as u8, 0 as u8, 0 as u8];
+        let p: Point = P { x: 3, y: 4 };
+        let _b: u8 = first(d);
+        let _q: i32 = px(p);
+        let _r: Id = inc(5);
+        return first(d) as Int;
+    }
+}

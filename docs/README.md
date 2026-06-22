@@ -29,6 +29,7 @@ Use these files as the primary reference once a design has moved out of explorat
 - [DECISIONS.md](DECISIONS.md) — first-class "no" and "not yet" decisions
 - [LANGUAGE_SHAPE.md](LANGUAGE_SHAPE.md) — long-term structural commitments for the language
 - [PROOF_WORKFLOW.md](PROOF_WORKFLOW.md) — proof-authoring and maintenance workflow: choose, generate, write, attach, verify, diagnose, repair, refactor
+- [SPARK_CLASS_ASSURANCE.md](SPARK_CLASS_ASSURANCE.md) — SPARK-class assurance target and AI-facing guide for contracts, loop invariants, frame/dependency facts, ghost/spec code, and package evidence
 - [PROVABLE_V1.md](PROVABLE_V1.md) — the first named, release-facing provable subset contract
 - [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md) — current proof-eligible subset and its boundary
 - [LANGUAGE_INVARIANTS.md](LANGUAGE_INVARIANTS.md) — the language rules that must hold across every phase

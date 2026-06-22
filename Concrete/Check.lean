@@ -461,6 +461,9 @@ def resolveType (ty : Ty) : CheckM Ty := do
     else if env.currentTypeParams.contains name then return .typeVar name
     else
       match env.typeAliases.lookup name with
+      -- The alias map is transitively pre-closed at build time (`closeAliasMap`),
+      -- so this single lookup already yields the fully-expanded target
+      -- (`type B = A; type A = i32` => B resolves straight to i32).
       | some resolved => return resolved
       | none => return ty
   | .ref inner =>
@@ -2585,7 +2588,8 @@ def checkModule (m : Module) (summary : FileSummary)
   let allEnums := builtinEnumList ++ imports.enums ++ m.enums
   -- Build type aliases map
   let localTypeAliases : List (String × Ty) := m.typeAliases.map fun ta => (ta.name, ta.targetTy)
-  let typeAliasMap : List (String × Ty) := imports.typeAliases ++ localTypeAliases
+  -- Transitively close so chains (`type B = A; type A = i32`) resolve in one lookup.
+  let typeAliasMap : List (String × Ty) := closeAliasMap (imports.typeAliases ++ localTypeAliases)
   -- Build constants map
   let constantsMap : List (String × Ty) := m.constants.map fun c => (c.name, c.ty)
   -- Build trait impl pairs for bound checking

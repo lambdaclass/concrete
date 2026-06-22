@@ -1,0 +1,6 @@
+// Type alias (negative): an alias whose target names an unknown type is rejected
+// at the alias declaration, even when the alias is otherwise unused. Expect: E0108
+mod m {
+    type Bad = Nope;
+    fn main() -> Int { return 0; }
+}

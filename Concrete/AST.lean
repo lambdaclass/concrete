@@ -85,6 +85,38 @@ inductive Ty where
   | placeholder             -- internal placeholder during checking/inference
   deriving Repr, BEq
 
+/-- Deeply expand every alias name in `ty` through alias map `m`: follows
+    `.named` alias chains AND recurses into nested positions (`[E; N]`, `&T`,
+    `Box<E>`, fn types, …). `fuel` bounds the recursion for totality — cyclic
+    aliases are rejected earlier (Resolve, E0112), so realistic inputs are
+    acyclic; if fuel is exhausted on pathologically deep nesting, expansion stops
+    safely (leaving the type as-is) rather than looping. -/
+def expandAliasDeep (m : List (String × Ty)) : Nat → Ty → Ty
+  | 0, ty => ty
+  | fuel + 1, ty =>
+    match ty with
+    | .named n =>
+      match m.lookup n with
+      | some t => expandAliasDeep m fuel t
+      | none => ty
+    | .ref t => .ref (expandAliasDeep m fuel t)
+    | .refMut t => .refMut (expandAliasDeep m fuel t)
+    | .ptrMut t => .ptrMut (expandAliasDeep m fuel t)
+    | .ptrConst t => .ptrConst (expandAliasDeep m fuel t)
+    | .heap t => .heap (expandAliasDeep m fuel t)
+    | .heapArray t => .heapArray (expandAliasDeep m fuel t)
+    | .array e n => .array (expandAliasDeep m fuel e) n
+    | .generic nm args => .generic nm (args.map (expandAliasDeep m fuel))
+    | .fn_ ps cs r => .fn_ (ps.map (expandAliasDeep m fuel)) cs (expandAliasDeep m fuel r)
+    | other => other
+
+/-- Transitively + deeply close an alias map so a single lookup yields the
+    fully-expanded, alias-free target: `type B = A; type A = i32` makes `B`
+    resolve straight to `i32`, and `type Arr = [E; 3]; type E = i32` makes `Arr`
+    resolve to `[i32; 3]`. -/
+def closeAliasMap (m : List (String × Ty)) : List (String × Ty) :=
+  m.map (fun (n, t) => (n, expandAliasDeep m (m.length + 64) t))
+
 inductive BinOp where
   | add | sub | mul | div | mod
   | eq | neq | lt | gt | leq | geq

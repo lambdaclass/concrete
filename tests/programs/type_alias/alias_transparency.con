@@ -1,0 +1,15 @@
+// Transparency both ways: an alias-typed value is usable where the underlying
+// type is expected, and vice versa — `Id` and `i32` are the same type, not a
+// nominal newtype. Expected: 12
+mod m {
+    type Id = i32;
+    fn want_underlying(x: i32) -> i32 { return x; }
+    fn want_alias(x: Id) -> Id { return x; }
+    fn main() -> Int {
+        let a: Id = 5;
+        let b: i32 = a;              // alias -> underlying
+        let c: Id = want_underlying(b);   // underlying -> alias (param + return)
+        let d: i32 = want_alias(7);
+        return (c + d) as Int;       // 5 + 7 = 12
+    }
+}

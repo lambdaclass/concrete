@@ -1,0 +1,18 @@
+// Transitive alias chains and aliases nested inside other types both fully
+// expand: C -> B -> A -> i32, and Arr = [E; 3] with E = i32 becomes [i32; 3].
+// Expected: 16
+mod m {
+    type A = i32;
+    type B = A;
+    type C = B;
+    type E = i32;
+    type Arr = [E; 3];
+
+    fn head(a: Arr) -> E { return a[0]; }
+
+    fn main() -> Int {
+        let x: C = 9;                         // chain expands to i32
+        let arr: Arr = [7 as i32, 0 as i32, 0 as i32];
+        return (x + head(arr)) as Int;        // 9 + 7 = 16
+    }
+}
