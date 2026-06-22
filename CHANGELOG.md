@@ -10,6 +10,20 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Pattern ergonomics: `if let` / `while let` (2026-06-22)
+
+- Phase 6 #5, increment 2. Conditional destructuring, desugared to a `match` at
+  parse time (`parseIfLet` / `parseWhileLet` in `Concrete/Parser.lean`) — no new
+  AST/Core/lowering, reusing all match machinery (binding, exhaustiveness,
+  linear-cleanup, codegen).
+- `if let Enum::Variant { binds } = e { … } [else { … }]` →
+  `match e { Variant { binds } => …, _ => … }` (no-else ⇒ `_ => {}`).
+  `while let … = e { … }` → `while true { match e { Variant { binds } => …,
+  _ => break; } }`, re-evaluating the scrutinee each iteration.
+- Verified for Option and Result, with/without else. Fixtures in
+  `tests/programs/patterns/` and a new section of
+  `scripts/tests/check_pattern_ergonomics.sh` (9/9). Full suite 1576/0.
+
 ### Proof automation trust-upgrade firewall recorded (2026-06-22)
 
 - ROADMAP Phase 9 now has item #16b: every proof automation path must preserve

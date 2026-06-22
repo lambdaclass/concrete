@@ -1,0 +1,17 @@
+// Pattern: `while let` loops while the scrutinee matches, re-evaluating it each
+// iteration; the non-matching case ends the loop. Sum 3+2+1 = 6. Expected: 6
+mod m {
+    fn next_val(n: i32) -> Option<i32> {
+        if n > 0 { return Option::<i32>::Some { value: n }; }
+        return Option::<i32>::None;
+    }
+    fn main() -> Int {
+        let mut i: i32 = 3;
+        let mut sum: i32 = 0;
+        while let Option::Some { value } = next_val(i) {
+            sum = sum + value;
+            i = i - 1;
+        }
+        return sum as Int;
+    }
+}

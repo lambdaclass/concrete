@@ -1,0 +1,13 @@
+// Pattern: `if let` binds on match, else runs otherwise. Expected: 7 (Some) then
+// verified None-path returns 0 via a second call. Expected: 7
+mod m {
+    fn unwrap_or(o: Option<i32>, d: i32) -> i32 {
+        if let Option::Some { value } = o { return value; } else { return d; }
+    }
+    fn main() -> Int {
+        let s: Option<i32> = Option::<i32>::Some { value: 7 };
+        let n: Option<i32> = Option::<i32>::None;
+        if unwrap_or(s, 99) == 7 && unwrap_or(n, 0) == 0 { return 7; }
+        return 1;
+    }
+}

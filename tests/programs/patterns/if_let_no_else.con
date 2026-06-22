@@ -1,0 +1,10 @@
+// Pattern: `if let` with no else leaves state unchanged on the None path.
+// Expected: 5
+mod m {
+    fn main() -> Int {
+        let mut acc: i32 = 5;
+        let n: Option<i32> = Option::<i32>::None;
+        if let Option::Some { value } = n { acc = value; }
+        return acc as Int;
+    }
+}

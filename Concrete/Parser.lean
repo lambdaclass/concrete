@@ -1077,9 +1077,35 @@ partial def parseAssertOrAssume (isAssert : Bool) : ParseM Stmt := do
   expect .semicolon
   return (if isAssert then .assert_ sp e else .assume_ sp e)
 
+/-- `if let Enum::Variant { binds } = scrutinee { thenBody } [else { elseBody }]`
+    desugars to a `match` statement:
+      match scrutinee { Enum::Variant { binds } => { thenBody }, _ => { elseBody } }
+    Reuses all existing match machinery (binding, exhaustiveness, lowering). -/
+partial def parseIfLet (sp : Span) : ParseM Stmt := do
+  expect .«let»
+  let enumName ← expectIdent
+  expect .doubleColon
+  let variant ← expectIdent
+  expect .lbrace
+  let bindings ← parseBindingList
+  expect .assign
+  let scrutinee ← parseExpr
+  let thenBody ← parseBlock
+  let elseBody ← if (← peek) == .else_ then do
+    advance
+    parseBlock
+  else
+    pure []
+  let successArm := MatchArm.mk sp enumName variant bindings thenBody
+  let wildcardArm := MatchArm.varArm sp "_" elseBody
+  return .expr sp (.match_ sp scrutinee [successArm, wildcardArm]) false
+
 partial def parseIf : ParseM Stmt := do
   let sp ← peekSpan
   expect .if_
+  -- `if let` is a destructuring conditional; desugar to a match.
+  if (← peek) == .«let» then
+    return ← parseIfLet sp
   let cond ← parseExpr
   let thenBody ← parseBlock
   let tk ← peek
@@ -1097,9 +1123,31 @@ partial def parseIf : ParseM Stmt := do
     pure none
   return .ifElse sp cond thenBody elseBody
 
+/-- `while let Enum::Variant { binds } = scrutinee { body }` desugars to
+      while true { match scrutinee { Enum::Variant { binds } => { body }, _ => { break; } } }
+    The scrutinee is re-evaluated each iteration; the non-matching case breaks the
+    (innermost) desugared loop. Reuses match + loop-control machinery. -/
+partial def parseWhileLet (sp : Span) (lbl : Option String) : ParseM Stmt := do
+  expect .«let»
+  let enumName ← expectIdent
+  expect .doubleColon
+  let variant ← expectIdent
+  expect .lbrace
+  let bindings ← parseBindingList
+  expect .assign
+  let scrutinee ← parseExpr
+  let body ← parseBlock
+  let successArm := MatchArm.mk sp enumName variant bindings body
+  let breakArm := MatchArm.varArm sp "_" [Stmt.break_ sp none none]
+  let matchStmt := Stmt.expr sp (Expr.match_ sp scrutinee [successArm, breakArm]) false
+  return .while_ sp (.boolLit sp true) [matchStmt] lbl
+
 partial def parseWhile (lbl : Option String) : ParseM Stmt := do
   let sp ← peekSpan
   expect .while_
+  -- `while let` is a destructuring loop; desugar to a `while true` + match + break.
+  if (← peek) == .«let» then
+    return ← parseWhileLet sp lbl
   let cond ← parseExpr
   let body ← parseBlock
   return .while_ sp cond body lbl

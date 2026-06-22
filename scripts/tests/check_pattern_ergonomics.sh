@@ -49,6 +49,11 @@ run_expect range_negative 1         # negative bounds
 echo "=== range patterns: exhaustiveness (a range is not a catch-all) ==="
 reject_with neg_range_no_default E0534
 
+echo "=== if let / while let (desugar to match) ==="
+run_expect if_let_some_else 7    # binds on Some, else on None
+run_expect if_let_no_else 5      # no-else leaves state unchanged on None
+run_expect while_let_drain 6     # loops while matching; re-evaluates scrutinee
+
 echo "=== range patterns: end-to-end example builds, runs, exits 0 ==="
 ex="examples/patterns/byte_ranges"
 if (cd "$ex" && "$C" build >"$TMP/ex.build" 2>&1) && [ -x "$ex/byte_ranges" ]; then

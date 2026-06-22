@@ -397,12 +397,21 @@ gate.
    patterns are not yet in the proof path (disclosed as an unsupported construct,
    not silently mis-modelled).
 
+   **STATUS (2026-06-22, increment 2): `if let` / `while let` LANDED + gated.**
+   Both desugar to a `match` at parse time (`parseIfLet`/`parseWhileLet` in
+   `Concrete/Parser.lean`) — no new AST/Core/lowering, reusing all match
+   machinery. `if let Enum::Variant { binds } = e { … } [else { … }]` →
+   `match e { Variant { binds } => …, _ => … }`; `while let … = e { … }` →
+   `while true { match e { Variant { binds } => …, _ => break; } }` (scrutinee
+   re-evaluated each iteration). Fixtures in `tests/programs/patterns/` and the
+   `if let / while let` section of `scripts/tests/check_pattern_ergonomics.sh`.
+
    **Still open (each: implement, or explicitly defer with examples):**
    - match guards — `Pattern if condition => …`
    - OR patterns — `A | B => …`
-   - ~~integer range patterns~~ — DONE (see STATUS above)
-   - `if let`
-   - `while let`
+   - ~~integer range patterns~~ — DONE (increment 1)
+   - ~~`if let`~~ — DONE (increment 2)
+   - ~~`while let`~~ — DONE (increment 2)
    - nested patterns
    - match-on-reference ergonomics for enums and structs behind `&T`/`&mut T`:
      decide whether auto-deref in patterns exists, where it stops, and how

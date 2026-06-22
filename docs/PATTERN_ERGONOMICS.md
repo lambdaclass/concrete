@@ -50,11 +50,32 @@ Implementation: lexer tokens `..` / `..=`; `MatchArm.rangeArm` /
 `CMatchArm.rangeArm`; lowered to a `lo <= scr && scr (<=|<) hi` comparison-branch
 (`Concrete/Lower.lean`), mirroring the literal-arm branch.
 
+## Landed: `if let` / `while let`
+
+Conditional destructuring, desugared to a `match` at parse time (no new AST/Core/
+lowering — reuses everything):
+
+```
+if let Option::Some { value } = opt { use(value); } else { fallback(); }
+//  =>  match opt { Option::Some { value } => { use(value); }, _ => { fallback(); } }
+
+while let Option::Some { value } = next() { consume(value); }
+//  =>  while true { match next() { Option::Some { value } => { consume(value); }, _ => { break; } } }
+```
+
+- The pattern is an enum variant pattern (`Enum::Variant { binds }`) — the same
+  form match arms and `let`-destructuring use.
+- `if let` takes an optional `else` block; with no `else`, the non-matching case
+  is a no-op (`_ => {}`).
+- `while let` re-evaluates the scrutinee each iteration and ends the loop when it
+  stops matching (the desugared `_ => break` targets the innermost loop).
+- Because both desugar to `match`, exhaustiveness, binding, linear-cleanup, and
+  lowering all behave exactly as the equivalent `match` would.
+
 ## Still open (each lands as its own increment + gate section)
 
 - match guards — `pattern if cond => …`
 - OR patterns — `A | B => …`
-- `if let` / `while let`
 - nested patterns; `_` inside destructuring bindings
 - match-on-reference ergonomics for `&T` / `&mut T`
 - struct update syntax — `Struct { f: x, ..base }`
