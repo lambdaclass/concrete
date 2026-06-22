@@ -10,6 +10,28 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Pattern ergonomics: integer range patterns (2026-06-22)
+
+- Phase 6 #5, first increment. Match arms can match an integer/`u8` against a
+  range: `lo..=hi` (inclusive) and `lo..hi` (exclusive). This is the
+  decoder/parser shape that previously required `if x >= lo && x <= hi` chains.
+- New lexer tokens `..` / `..=`; `MatchArm.rangeArm` / `CMatchArm.rangeArm`
+  threaded through the full pipeline (parse, resolve, check, elab, mono,
+  corecheck, lower, interp, format, report). Lowered to a `lo <= scr && scr (<=|<)
+  hi` comparison-branch (`Concrete/Lower.lean`), with comparison signedness
+  following the scrutinee type — a `u8` scrutinee compares unsigned, so
+  `200..=255` works.
+- Endpoints, high-endpoint exclusion, value-position (match-as-expression) arms,
+  negative bounds, and the exhaustiveness rule (a range is not a catch-all — a
+  range-only match still requires `_`, E0534) are documented in
+  `docs/PATTERN_ERGONOMICS.md` and locked by
+  `scripts/tests/check_pattern_ergonomics.sh` over `tests/programs/patterns/` +
+  `examples/patterns/byte_ranges/`.
+- Range patterns are not yet modelled in the proof path: a proof/`predictable`
+  function using one is reported as having an unsupported construct
+  (`range pattern`), not silently mis-modelled. Full suite 1576/0; examples
+  127/0; snapshots 95/0.
+
 ### SPARK-class assurance target and AI agent guide recorded (2026-06-22)
 
 - Added `docs/SPARK_CLASS_ASSURANCE.md` as the stable design-target guide for

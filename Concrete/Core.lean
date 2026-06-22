@@ -50,6 +50,7 @@ inductive CMatchArm where
   | enumArm (enumName variant : String) (bindings : List (String × Ty)) (body : List CStmt)
   | litArm (value : CExpr) (body : List CStmt)
   | varArm (binding : String) (bindTy : Ty) (body : List CStmt)
+  | rangeArm (lo : CExpr) (hi : CExpr) (inclusive : Bool) (body : List CStmt)
 
 inductive CStmt where
   | letDecl (name : String) (mutable : Bool) (ty : Ty) (value : CExpr)
@@ -285,6 +286,9 @@ partial def ppCMatchArm (arm : CMatchArm) : String :=
     s!"  {ppCExpr val} -> \{\n{"\n".intercalate (body.map (ppCStmt 3))}\n  }"
   | .varArm b _ body =>
     s!"  {b} -> \{\n{"\n".intercalate (body.map (ppCStmt 3))}\n  }"
+  | .rangeArm lo hi incl body =>
+    let op := if incl then "..=" else ".."
+    s!"  {ppCExpr lo}{op}{ppCExpr hi} -> \{\n{"\n".intercalate (body.map (ppCStmt 3))}\n  }"
 
 partial def ppCStmt (ind : Nat) (s : CStmt) : String :=
   let pfx := indent ind

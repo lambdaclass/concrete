@@ -135,6 +135,10 @@ partial def collectArmViolations (fnName : String) (pred : Ty → Bool) (label :
   | .varArm _ bindTy body =>
     (if pred bindTy then [{ fnName, message := s!"{label} in match var binding type: {tyToStr bindTy}" }] else []) ++
     body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
+  | .rangeArm lo hi _ body =>
+    collectExprViolations fnName pred label lo ++
+    collectExprViolations fnName pred label hi ++
+    body.foldl (fun acc s => acc ++ collectStmtViolations fnName pred label s) []
 
 /-- Scan a CStmt for type violations. -/
 partial def collectStmtViolations (fnName : String) (pred : Ty → Bool) (label : String)

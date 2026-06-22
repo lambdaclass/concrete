@@ -168,6 +168,7 @@ inductive MatchArm where
   | mk (span : Span) (enumName : String) (variant : String) (bindings : List String) (body : List Stmt)
   | litArm (span : Span) (value : Expr) (body : List Stmt)           -- literal pattern: 0 -> ...
   | varArm (span : Span) (binding : String) (body : List Stmt)        -- variable pattern: n -> ...
+  | rangeArm (span : Span) (lo : Expr) (hi : Expr) (inclusive : Bool) (body : List Stmt)  -- range: lo..=hi / lo..hi -> ...
 
 inductive Stmt where
   -- `isGhost`: a `ghost let` — proof-only binding. Erased before Core/codegen
@@ -524,7 +525,9 @@ partial def collectFreeVarsExpr (e : Expr) (bound : List String) : List String :
         let newBound := bound ++ bindings
         collectFreeVarsStmts body newBound
       | .litArm _ _ body => collectFreeVarsStmts body bound
-      | .varArm _ binding body => collectFreeVarsStmts body (binding :: bound))
+      | .varArm _ binding body => collectFreeVarsStmts body (binding :: bound)
+      | .rangeArm _ lo hi _ body =>
+        collectFreeVarsExpr lo bound ++ collectFreeVarsExpr hi bound ++ collectFreeVarsStmts body bound)
   | .borrow _ inner | .borrowMut _ inner | .deref _ inner | .try_ _ inner =>
     collectFreeVarsExpr inner bound
   | .arrayLit _ elems => elems.flatMap (fun e => collectFreeVarsExpr e bound)

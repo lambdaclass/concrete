@@ -615,6 +615,19 @@ partial def evalMatch (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (s
       let (bodyEnv, flow) ← evalStmts fns enums armEnv body
       let restored := bodyEnv.drop (bodyEnv.length - outerLen)
       return (restored, flow)
+    | .rangeArm lo hi inclusive body => do
+      let (env, loVal) ← evalExprVal fns enums env lo
+      let (env, hiVal) ← evalExprVal fns enums env hi
+      let inRange := match scrutinee, loVal, hiVal with
+        | .int s _, .int l _, .int h _ => l <= s && (if inclusive then s <= h else s < h)
+        | _, _, _ => false
+      if inRange then do
+        let outerLen := env.length
+        let (bodyEnv, flow) ← evalStmts fns enums env body
+        let restored := bodyEnv.drop (bodyEnv.length - outerLen)
+        return (restored, flow)
+      else
+        evalMatch fns enums env scrutinee rest
 
 /-- Resolve a place expression to its root variable and the `RefStep` path
     reaching it, evaluating any array-index subexpressions. Mirrors the

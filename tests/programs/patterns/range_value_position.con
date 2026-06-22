@@ -1,0 +1,8 @@
+// Pattern: range arms in a value-position match (match-as-expression). Expected: 7
+mod m {
+    fn main() -> Int {
+        let x: i32 = 5;
+        let r: i32 = match x { 0..=4 => 1, 5..=9 => 7, _ => 0 };
+        return r as Int;
+    }
+}

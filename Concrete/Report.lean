@@ -775,6 +775,7 @@ mutual
     | .mk _ _ _ bs b => bs ++ localNamesB b
     | .litArm _ v b => localNamesE v ++ localNamesB b
     | .varArm _ bnd b => bnd :: localNamesB b
+    | .rangeArm _ lo hi _ b => localNamesE lo ++ localNamesE hi ++ localNamesB b
 end
 
 mutual
@@ -830,6 +831,9 @@ mutual
     | .mk _ _ _ bs b => b.flatMap (validateContractStmt (bs ++ allowedVars) callables)
     | .litArm _ v b => validateContractExpr allowedVars callables v ++ b.flatMap (validateContractStmt allowedVars callables)
     | .varArm _ bnd b => b.flatMap (validateContractStmt (bnd :: allowedVars) callables)
+    | .rangeArm _ lo hi _ b =>
+      validateContractExpr allowedVars callables lo ++ validateContractExpr allowedVars callables hi ++
+      b.flatMap (validateContractStmt allowedVars callables)
 end
 
 def contractIssueStatus (issues : List String) : String :=
@@ -3913,7 +3917,7 @@ private partial def proveExprFeatures : CExpr → List String
   | _ => []
 
 private partial def proveArmFeatures : CMatchArm → List String
-  | .enumArm _ _ _ body | .litArm _ body | .varArm _ _ body => body.flatMap proveStmtFeatures
+  | .enumArm _ _ _ body | .litArm _ body | .varArm _ _ body | .rangeArm _ _ _ body => body.flatMap proveStmtFeatures
 
 private partial def proveStmtFeatures : CStmt → List String
   | .letDecl _ _ _ v | .assign _ v | .expr v _ => proveExprFeatures v

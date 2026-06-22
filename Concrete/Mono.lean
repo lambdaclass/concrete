@@ -76,6 +76,7 @@ private partial def substArm (sub : Ty → Ty) : CMatchArm → CMatchArm
     .enumArm en v (binds.map fun (n, t) => (n, sub t)) (substStmts sub body)
   | .litArm val body => .litArm (substExpr sub val) (substStmts sub body)
   | .varArm b ty body => .varArm b (sub ty) (substStmts sub body)
+  | .rangeArm lo hi incl body => .rangeArm (substExpr sub lo) (substExpr sub hi) incl (substStmts sub body)
 
 private partial def substStmt (sub : Ty → Ty) : CStmt → CStmt
   | .letDecl n m ty val => .letDecl n m (sub ty) (substExpr sub val)
@@ -142,6 +143,7 @@ private partial def rewriteCallNamesArm (nameMap : List (String × String)) : CM
   | .enumArm en v binds body => .enumArm en v binds (rewriteCallNamesStmts nameMap body)
   | .litArm val body => .litArm (rewriteCallNames nameMap val) (rewriteCallNamesStmts nameMap body)
   | .varArm b ty body => .varArm b ty (rewriteCallNamesStmts nameMap body)
+  | .rangeArm lo hi incl body => .rangeArm (rewriteCallNames nameMap lo) (rewriteCallNames nameMap hi) incl (rewriteCallNamesStmts nameMap body)
 
 private partial def rewriteCallNamesStmt (nameMap : List (String × String)) : CStmt → CStmt
   | .letDecl n m ty val => .letDecl n m ty (rewriteCallNames nameMap val)
@@ -200,6 +202,7 @@ partial def injectTypeArgsArm (genericNames : List String) (typeArgs : List Ty) 
   | .enumArm en v binds body => .enumArm en v binds (injectTypeArgsStmts genericNames typeArgs body)
   | .litArm val body => .litArm (injectTypeArgsExpr genericNames typeArgs val) (injectTypeArgsStmts genericNames typeArgs body)
   | .varArm b ty body => .varArm b ty (injectTypeArgsStmts genericNames typeArgs body)
+  | .rangeArm lo hi incl body => .rangeArm (injectTypeArgsExpr genericNames typeArgs lo) (injectTypeArgsExpr genericNames typeArgs hi) incl (injectTypeArgsStmts genericNames typeArgs body)
 
 partial def injectTypeArgsStmt (genericNames : List String) (typeArgs : List Ty) : CStmt → CStmt
   | .letDecl n m ty val => .letDecl n m ty (injectTypeArgsExpr genericNames typeArgs val)
@@ -472,6 +475,7 @@ partial def monoArm (arm : CMatchArm) : MonoM CMatchArm := do
   | .enumArm en v binds body => return .enumArm en v binds (← monoStmts body)
   | .litArm val body => return .litArm (← monoExpr val) (← monoStmts body)
   | .varArm b ty body => return .varArm b ty (← monoStmts body)
+  | .rangeArm lo hi incl body => return .rangeArm (← monoExpr lo) (← monoExpr hi) incl (← monoStmts body)
 
 partial def monoStmt (s : CStmt) : MonoM CStmt := do
   match s with
@@ -629,6 +633,7 @@ private partial def collectArmInstances (gn : List String) : CMatchArm → List 
     collectStmtsInstances gn body
   | .litArm val body => collectExprInstances gn val ++ collectStmtsInstances gn body
   | .varArm _ ty body => collectGenericTyInstances gn ty ++ collectStmtsInstances gn body
+  | .rangeArm lo hi _ body => collectExprInstances gn lo ++ collectExprInstances gn hi ++ collectStmtsInstances gn body
 
 private partial def collectStmtInstances (gn : List String) : CStmt → List (String × List Ty)
   | .letDecl _ _ ty val => collectGenericTyInstances gn ty ++ collectExprInstances gn val
@@ -745,6 +750,7 @@ private partial def rewriteArmTys (m : List (String × List Ty × String)) : CMa
     .enumArm en v (binds.map fun (n, t) => (n, rewriteTy m t)) (rewriteStmtsTys m body)
   | .litArm val body => .litArm (rewriteExprTys m val) (rewriteStmtsTys m body)
   | .varArm b ty body => .varArm b (rewriteTy m ty) (rewriteStmtsTys m body)
+  | .rangeArm lo hi incl body => .rangeArm (rewriteExprTys m lo) (rewriteExprTys m hi) incl (rewriteStmtsTys m body)
 
 private partial def rewriteStmtTys (m : List (String × List Ty × String)) : CStmt → CStmt
   | .letDecl n mu ty val => .letDecl n mu (rewriteTy m ty) (rewriteExprTys m val)

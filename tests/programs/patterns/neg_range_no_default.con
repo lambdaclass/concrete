@@ -1,0 +1,6 @@
+// Pattern (negative): a range-only match is non-exhaustive and requires a
+// default '_' arm — a range does not count as a catch-all. Expect: E0534
+mod m {
+    fn f(x: i32) -> i32 { match x { 0..=9 => { return 1; } } }
+    fn main() -> Int { return f(3) as Int; }
+}

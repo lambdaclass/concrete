@@ -31,6 +31,8 @@ inductive TokenKind where
   -- Delimiters
   | lparen | rparen | lbrace | rbrace | lbracket | rbracket
   | comma | colon | semicolon | dot
+  | dotDot     -- ..  (range pattern, exclusive)
+  | dotDotEq   -- ..= (range pattern, inclusive)
   | hash      -- #
   | fatArrow  -- =>
   | doubleColon  -- ::
@@ -124,6 +126,8 @@ def TokenKind.toString : TokenKind → String
   | .colon => ":"
   | .semicolon => ";"
   | .dot => "."
+  | .dotDot => ".."
+  | .dotDotEq => "..="
   | .hash => "#"
   | .fatArrow => "=>"
   | .doubleColon => "::"

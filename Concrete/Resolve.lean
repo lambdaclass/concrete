@@ -233,6 +233,10 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
         let ctx := addLocal ctx binding (.var none false)
         let ctx := resolveStmts ctx body
         popScope ctx
+      | .rangeArm _ lo hi _ body =>
+        let ctx := resolveExpr ctx lo
+        let ctx := resolveExpr ctx hi
+        resolveStmts ctx body
     ) ctx
   | .borrow _ inner | .borrowMut _ inner | .deref _ inner | .try_ _ inner =>
     resolveExpr ctx inner

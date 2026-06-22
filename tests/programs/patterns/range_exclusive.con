@@ -1,0 +1,9 @@
+// Pattern: exclusive range lo..hi excludes the high endpoint. Expected: 1
+mod m {
+    fn f(x: i32) -> i32 { match x { 0..10 => { return 1; }, _ => { return 0; } } }
+    fn main() -> Int {
+        // 0..9 inside (1), 10 excluded (0), -1 outside (0)
+        if f(0) == 1 && f(9) == 1 && f(10) == 0 && f(-1) == 0 { return 1; }
+        return 0;
+    }
+}

@@ -1,0 +1,10 @@
+// Pattern: inclusive range lo..=hi matches both endpoints. Expected: 1
+mod m {
+    fn classify(c: u8) -> i32 { match c { 48..=57 => { return 1; }, _ => { return 0; } } }
+    fn main() -> Int {
+        // 48 and 57 (endpoints) and 53 (inside) all classify as 1; 47 and 58 as 0.
+        if classify(48) == 1 && classify(57) == 1 && classify(53) == 1
+            && classify(47) == 0 && classify(58) == 0 { return 1; }
+        return 0;
+    }
+}

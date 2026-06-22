@@ -1212,6 +1212,41 @@ partial def parseMatchArmBody : ParseM (List Stmt) := do
     if nextTk == .semicolon then advance
     pure [.expr sp expr true]
 
+/-- Parse a range-pattern bound: an integer literal or a negated integer literal. -/
+partial def parseRangeBoundExpr (sp : Span) : ParseM Expr := do
+  match (← peek) with
+  | .intLit n => advance; return .intLit sp n
+  | .minus =>
+    advance
+    match (← peek) with
+    | .intLit n => advance; return .unaryOp sp .neg (.intLit sp n)
+    | other => throwParse s!"expected integer after '-' in range pattern, got {other}"
+  | other => throwParse s!"expected integer bound in range pattern, got {other}"
+
+/-- After the low bound `lo` of a match pattern is parsed, finish either a range
+    arm (`lo..hi` / `lo..=hi`) or a plain literal arm, then its `=>`/`->` body. -/
+partial def finishLitOrRangeArm (sp : Span) (lo : Expr) : ParseM MatchArm := do
+  let rngTk ← peek
+  if rngTk == .dotDot || rngTk == .dotDotEq then
+    let incl := rngTk == .dotDotEq
+    advance
+    let hi ← parseRangeBoundExpr sp
+    let arrowTk ← peek
+    if arrowTk == .fatArrow then advance
+    else if arrowTk == .arrow then advance
+    else throwParse s!"expected => or -> in match arm, got {arrowTk}"
+    let body ← parseMatchArmBody
+    if (← peek) == .comma then advance
+    return .rangeArm sp lo hi incl body
+  else
+    let arrowTk ← peek
+    if arrowTk == .fatArrow then advance
+    else if arrowTk == .arrow then advance
+    else throwParse s!"expected => or -> in match arm, got {arrowTk}"
+    let body ← parseMatchArmBody
+    if (← peek) == .comma then advance
+    return .litArm sp lo body
+
 partial def parseMatchArm : ParseM MatchArm := do
   let sp ← peekSpan
   let firstTk ← peek
@@ -1219,28 +1254,15 @@ partial def parseMatchArm : ParseM MatchArm := do
   match firstTk with
   | .intLit n =>
     advance
-    let arrowTk ← peek
-    if arrowTk == .fatArrow then advance
-    else if arrowTk == .arrow then advance
-    else throwParse s!"expected => or -> in match arm, got {arrowTk}"
-    let body ← parseMatchArmBody
-    let tk2 ← peek
-    if tk2 == .comma then advance
-    return .litArm sp (.intLit sp n) body
+    -- literal `n => …` or range `n..hi => …` / `n..=hi => …`
+    finishLitOrRangeArm sp (.intLit sp n)
   | .minus =>
     advance
     let numTk ← peek
     match numTk with
     | .intLit n =>
       advance
-      let arrowTk ← peek
-      if arrowTk == .fatArrow then advance
-      else if arrowTk == .arrow then advance
-      else throwParse s!"expected => or -> in match arm, got {arrowTk}"
-      let body ← parseMatchArmBody
-      let tk2 ← peek
-      if tk2 == .comma then advance
-      return .litArm sp (.unaryOp sp .neg (.intLit sp n)) body
+      finishLitOrRangeArm sp (.unaryOp sp .neg (.intLit sp n))
     | _ => throwParse s!"expected integer after '-' in match pattern, got {numTk}"
   | .true_ | .false_ =>
     let boolVal := firstTk == .true_

@@ -107,6 +107,8 @@ partial def canonArm (structs : List CStructDef) : CMatchArm → CMatchArm
     .litArm (canonExpr structs val) (canonStmts structs body)
   | .varArm b ty body =>
     .varArm b (canonTy ty) (canonStmts structs body)
+  | .rangeArm lo hi incl body =>
+    .rangeArm (canonExpr structs lo) (canonExpr structs hi) incl (canonStmts structs body)
 
 partial def canonStmt (structs : List CStructDef) : CStmt → CStmt
   | .letDecl n m ty val => .letDecl n m (canonTy ty) (canonExpr structs val)

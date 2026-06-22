@@ -187,6 +187,10 @@ partial def fmtMatchArm (baseInd : Nat) (arm : MatchArm) : String :=
   | .varArm _ binding body =>
     let bodyStr := body.map (fmtStmt bodyInd)
     s!"{pfx}{binding} => \{\n{"\n".intercalate bodyStr}\n{pfx}},"
+  | .rangeArm _ lo hi inclusive body =>
+    let op := if inclusive then "..=" else ".."
+    let bodyStr := body.map (fmtStmt bodyInd)
+    s!"{pfx}{fmtExprAt baseInd lo}{op}{fmtExprAt baseInd hi} => \{\n{"\n".intercalate bodyStr}\n{pfx}},"
 
 -- ============================================================
 -- Statement formatting

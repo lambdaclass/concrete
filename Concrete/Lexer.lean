@@ -293,7 +293,14 @@ partial def lexToken (s : LexerState) : LexerState × TokenKind :=
           | some ':' => (s.advance, .doubleColon)
           | _ => (s, .colon)
         | ';' => (s, .semicolon)
-        | '.' => (s, .dot)
+        | '.' =>
+          match s.peek with
+          | some '.' =>
+            let s2 := s.advance
+            match s2.peek with
+            | some '=' => (s2.advance, .dotDotEq)
+            | _ => (s2, .dotDot)
+          | _ => (s, .dot)
         | '-' =>
           match s.peek with
           | some '>' => (s.advance, .arrow)

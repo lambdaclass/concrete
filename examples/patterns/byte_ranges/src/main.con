@@ -1,0 +1,48 @@
+// Pattern ergonomics: integer RANGE patterns in match arms.
+//
+// A byte classifier — the canonical decoder/parser shape that range patterns
+// exist for. Without ranges this is a stack of `if b >= 0x30 && b <= 0x39`
+// chains; with them each class is one arm. Inclusive ranges use `lo..=hi`,
+// exclusive use `lo..hi`. Comparisons follow the scrutinee's type, so a `u8`
+// scrutinee compares UNSIGNED. See docs/PATTERN_ERGONOMICS.md.
+
+mod byte_ranges {
+
+    // Character classes, encoded as small ints.
+    //   1 = digit, 2 = uppercase, 3 = lowercase, 4 = space/tab/newline, 0 = other
+    fn class_of(b: u8) -> i32 {
+        match b {
+            48..=57  => { return 1; }   // '0'..='9'
+            65..=90  => { return 2; }   // 'A'..='Z'
+            97..=122 => { return 3; }   // 'a'..='z'
+            9..=10   => { return 4; }   // tab, newline
+            32       => { return 4; }   // space (a plain literal arm beside ranges)
+            _        => { return 0; }
+        }
+    }
+
+    // Count digits in a fixed test buffer using the range classifier.
+    pub fn main() with(Std) -> Int {
+        let buf: [u8; 8] = [72, 105, 53, 51, 32, 97, 90, 57]; // "Hi53 aZ9"
+        let mut digits: i32 = 0;
+        let mut uppers: i32 = 0;
+        let mut lowers: i32 = 0;
+        let mut spaces: i32 = 0;
+        for (let mut i: u64 = 0; i < 8; i = i + 1) {
+            match class_of(buf[i]) {
+                1 => { digits = digits + 1; }
+                2 => { uppers = uppers + 1; }
+                3 => { lowers = lowers + 1; }
+                4 => { spaces = spaces + 1; }
+                _ => {}
+            }
+        }
+        // "Hi53 aZ9" -> digits=3 (5,3,9), uppers=2 (H,Z), lowers=2 (i,a), spaces=1
+        if digits == 3 && uppers == 2 && lowers == 2 && spaces == 1 {
+            println("byte_ranges: digits=3 uppers=2 lowers=2 spaces=1");
+            return 0;
+        }
+        println("byte_ranges: classification mismatch");
+        return 1;
+    }
+}

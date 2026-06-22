@@ -111,3 +111,4 @@ examples/service_errors/service_errors
 examples/obligation_core_probe/obligation_core_probe
 examples/contract_negatives/obligation_redteam/obligation_redteam
 examples/smt/policy_forbid/smt_policy_forbid
+examples/patterns/byte_ranges/byte_ranges

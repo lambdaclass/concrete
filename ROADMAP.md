@@ -358,11 +358,23 @@ gate.
    (`letDestructure` with `elseBody`); struct destructuring
    (`let Struct { fields } = expr;`, `letStructDestructure`).
 
+   **STATUS (2026-06-22): integer range patterns LANDED + gated.** First #5
+   increment: lexer `..`/`..=`, `MatchArm.rangeArm`/`CMatchArm.rangeArm` threaded
+   through the whole pipeline (parse → check → elab → mono → corecheck → lower →
+   interp), lowered to a `lo <= scr && scr (<=|<) hi` comparison-branch with
+   signedness following the scrutinee type (u8 → unsigned). Inclusive/exclusive,
+   value-position arms, negative bounds, and the exhaustiveness rule (a range is
+   not a catch-all; range-only match needs `_`, E0534) are documented in
+   `docs/PATTERN_ERGONOMICS.md` and locked by
+   `scripts/tests/check_pattern_ergonomics.sh` (Makefile `test-pattern-ergonomics`
+   + CI) over `tests/programs/patterns/` + `examples/patterns/byte_ranges/`. Range
+   patterns are not yet in the proof path (disclosed as an unsupported construct,
+   not silently mis-modelled).
+
    **Still open (each: implement, or explicitly defer with examples):**
    - match guards — `Pattern if condition => …`
    - OR patterns — `A | B => …`
-   - integer range patterns — `0x30..=0x39 => …`, exclusive/open ranges only
-     if the grammar and exhaustiveness checker can explain them clearly
+   - ~~integer range patterns~~ — DONE (see STATUS above)
    - `if let`
    - `while let`
    - nested patterns

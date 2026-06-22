@@ -597,6 +597,10 @@ partial def ccCheckMatchArm (arm : CMatchArm) : StateM CoreCheckEnv Unit := do
   | .varArm binding bindTy body =>
     addVar binding bindTy
     for s in body do ccCheckStmt s
+  | .rangeArm lo hi _ body =>
+    ccCheckExpr lo
+    ccCheckExpr hi
+    for s in body do ccCheckStmt s
 
 partial def ccCheckStmt (stmt : CStmt) : StateM CoreCheckEnv Unit := do
   match stmt with

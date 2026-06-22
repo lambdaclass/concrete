@@ -1726,6 +1726,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
           | .varArm _ binding body => do
             if binding != "_" then addVar binding innerTyR
             pure body
+          | .rangeArm _ lo hi _ body => do
+            let _ ← checkExpr lo
+            let _ ← checkExpr hi
+            pure body
           -- Check all stmts except the last, then extract type from last
           let bodyInit := body.dropLast
           let curEnv ← getEnv
@@ -1798,6 +1802,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
         | .litArm _ _val body => pure body
         | .varArm _ binding body => do
           if binding != "_" then addVar binding scrTy
+          pure body
+        | .rangeArm _ lo hi _ body => do
+          let _ ← checkExpr lo
+          let _ ← checkExpr hi
           pure body
         | .mk _ _ _ _ body => pure body
         -- Check all stmts except the last, then extract type from last

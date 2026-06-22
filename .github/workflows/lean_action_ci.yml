@@ -333,6 +333,9 @@ jobs:
       - name: Type-alias gate (Phase 6 #3 — transparency + no-new-identity)
         run: bash scripts/tests/check_type_alias.sh
 
+      - name: Pattern-ergonomics gate (Phase 6 #5 — range patterns)
+        run: bash scripts/tests/check_pattern_ergonomics.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 

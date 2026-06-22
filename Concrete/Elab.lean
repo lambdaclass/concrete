@@ -605,6 +605,11 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
             if binding != "_" then addVar binding innerTyR
             let cBody ← elabStmts body
             cArms := cArms ++ [.varArm binding innerTyR cBody]
+          | .rangeArm _ lo hi incl body =>
+            let cLo ← elabExpr lo (some innerTyR)
+            let cHi ← elabExpr hi (some innerTyR)
+            let cBody ← elabStmts body
+            cArms := cArms ++ [.rangeArm cLo cHi incl cBody]
         setEnv envBefore
       | none =>
         let envBefore ← getEnv
@@ -622,6 +627,11 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
           | .mk _ en v _ body =>
             let cBody ← elabStmts body
             cArms := cArms ++ [.enumArm en v [] cBody]
+          | .rangeArm _ lo hi incl body =>
+            let cLo ← elabExpr lo (some innerTyR)
+            let cHi ← elabExpr hi (some innerTyR)
+            let cBody ← elabStmts body
+            cArms := cArms ++ [.rangeArm cLo cHi incl cBody]
         setEnv envBefore
     else
       let envBefore ← getEnv
@@ -639,6 +649,11 @@ partial def elabExpr (e : Expr) (hint : Option Ty := none) : ElabM CExpr := do
         | .mk _ en v _ body =>
           let cBody ← elabStmts body
           cArms := cArms ++ [.enumArm en v [] cBody]
+        | .rangeArm _ lo hi incl body =>
+          let cLo ← elabExpr lo (some innerTyR)
+          let cHi ← elabExpr hi (some innerTyR)
+          let cBody ← elabStmts body
+          cArms := cArms ++ [.rangeArm cLo cHi incl cBody]
       setEnv envBefore
     -- Result type comes from the arm bodies (checked by Check), not the scrutinee
     let resultTy := match hint with | some t => t | none => .unit
@@ -1424,6 +1439,8 @@ partial def renameFnArm (rmap : List (String × String)) : CMatchArm → CMatchA
   | .litArm val body =>
     .litArm (renameFnExpr rmap val) (renameFnStmts rmap body)
   | .varArm b ty body => .varArm b ty (renameFnStmts rmap body)
+  | .rangeArm lo hi incl body =>
+    .rangeArm (renameFnExpr rmap lo) (renameFnExpr rmap hi) incl (renameFnStmts rmap body)
 
 partial def renameFnStmt (rmap : List (String × String)) : CStmt → CStmt
   | .letDecl n m ty val => .letDecl n m ty (renameFnExpr rmap val)

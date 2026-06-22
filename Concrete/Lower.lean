@@ -447,6 +447,7 @@ partial def cmatchArmTakesAddrOf (name : String) : CMatchArm → Bool
   | .enumArm _ _ _ body => cstmtsTakeAddrOf name body
   | .litArm v body => cexprTakesAddrOf name v || cstmtsTakeAddrOf name body
   | .varArm _ _ body => cstmtsTakeAddrOf name body
+  | .rangeArm lo hi _ body => cexprTakesAddrOf name lo || cexprTakesAddrOf name hi || cstmtsTakeAddrOf name body
 
 partial def cstmtTakesAddrOf (name : String) : CStmt → Bool
   | .letDecl _ _ _ v => cexprTakesAddrOf name v
@@ -813,6 +814,37 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           else
             armEndSnapshots := armEndSnapshots ++ [([], "", true)]
           startBlock nextCheck
+        | .rangeArm loE hiE inclusive body =>
+          -- Range pattern: lo <= scr && scr (<|<=) hi. (On an enum scrutinee this
+          -- is ill-typed and won't occur in valid code; lowered for totality.)
+          let loV ← lowerExpr loE
+          let hiV ← lowerExpr hiE
+          let geLo ← freshReg
+          emit (.binOp geLo .geq scrVal loV .bool)
+          let leHi ← freshReg
+          emit (.binOp leHi (if inclusive then .leq else .lt) scrVal hiV .bool)
+          let inRange ← freshReg
+          emit (.binOp inRange .and_ (.reg geLo .bool) (.reg leHi .bool) .bool)
+          terminateBlock (.condBr (.reg inRange .bool) armLabel nextCheck)
+          startBlock armLabel
+          lowerStmts body
+          let bodyVal ← lastExprVal body ty
+          let bodyVal ← if bodyVal.ty != ty && bodyVal.ty != .unit then do
+            let castReg ← freshReg "matchcast."
+            emit (.cast castReg bodyVal ty)
+            pure (.reg castReg ty)
+          else pure bodyVal
+          let term ← currentBlockTerminated
+          if !term then
+            allArmsTerminated := false
+            let curLabel ← getCurrentLabel
+            phiIncoming := phiIncoming ++ [(bodyVal, curLabel)]
+            let armEndVars ← snapshotVars
+            armEndSnapshots := armEndSnapshots ++ [(armEndVars, curLabel, false)]
+            terminateBlock (.br mergeLabel)
+          else
+            armEndSnapshots := armEndSnapshots ++ [([], "", true)]
+          startBlock nextCheck
       -- After all checks: fallthrough is unreachable (match is exhaustive or
       -- catch-all arms consume remaining cases). Mark as unreachable.
       let term ← currentBlockTerminated
@@ -836,6 +868,37 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           lowerStmts body
           let bodyVal ← lastExprVal body ty
           -- Cast if arm result type differs from expected type (e.g., Int → i32)
+          let bodyVal ← if bodyVal.ty != ty && bodyVal.ty != .unit then do
+            let castReg ← freshReg "matchcast."
+            emit (.cast castReg bodyVal ty)
+            pure (.reg castReg ty)
+          else pure bodyVal
+          let term ← currentBlockTerminated
+          if !term then
+            allArmsTerminated := false
+            let curLabel ← getCurrentLabel
+            phiIncoming := phiIncoming ++ [(bodyVal, curLabel)]
+            let armEndVars ← snapshotVars
+            armEndSnapshots := armEndSnapshots ++ [(armEndVars, curLabel, false)]
+            terminateBlock (.br mergeLabel)
+          else
+            armEndSnapshots := armEndSnapshots ++ [([], "", true)]
+          startBlock nextCheck
+        | .rangeArm loE hiE inclusive body =>
+          -- Range pattern: matches when lo <= scr && scr (<= | <) hi. Comparison
+          -- signedness follows the scrutinee's type in EmitSSA (u8 -> unsigned).
+          let loV ← lowerExpr loE
+          let hiV ← lowerExpr hiE
+          let geLo ← freshReg
+          emit (.binOp geLo .geq scrVal loV .bool)
+          let leHi ← freshReg
+          emit (.binOp leHi (if inclusive then .leq else .lt) scrVal hiV .bool)
+          let inRange ← freshReg
+          emit (.binOp inRange .and_ (.reg geLo .bool) (.reg leHi .bool) .bool)
+          terminateBlock (.condBr (.reg inRange .bool) armLabel nextCheck)
+          startBlock armLabel
+          lowerStmts body
+          let bodyVal ← lastExprVal body ty
           let bodyVal ← if bodyVal.ty != ty && bodyVal.ty != .unit then do
             let castReg ← freshReg "matchcast."
             emit (.cast castReg bodyVal ty)
