@@ -585,8 +585,6 @@ These are designed, LL(1)-verified, and approved. They may be implemented before
 
 | Form | Reason | Reference |
 |------|--------|-----------|
-| `if let` | `let...else` covers the primary use case; deferred until demand | [PATTERN_DESTRUCTURING.md](PATTERN_DESTRUCTURING.md) |
-| `while let` | Requires iterator protocol | [PATTERN_DESTRUCTURING.md](PATTERN_DESTRUCTURING.md) |
 | Closures / anonymous functions | Permanent exclusion: hidden capture, hidden data flow | [ANTI_FEATURES.md](ANTI_FEATURES.md) |
 | `async` / `await` | No async runtime; permanent for hidden runtimes | [ANTI_FEATURES.md](ANTI_FEATURES.md) |
 | Macros | Permanent exclusion: breaks phase separation and auditability | [ANTI_FEATURES.md](ANTI_FEATURES.md) |
@@ -763,7 +761,6 @@ These cannot be added without rethinking fundamental language invariants.
 
 | Feature | Condition for reconsideration |
 |---------|-------------------------------|
-| `if let`, `while let` | Post-release demand; `let...else` proves insufficient |
 | `for x in collection` | Iterator protocol design compatible with no-closures, no-dyn-dispatch |
 | Compound assignment (`+=`) | Sustained post-release feedback |
 | Pre/post conditions | Proof pipeline covers broader subset |

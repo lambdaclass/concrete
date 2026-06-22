@@ -340,27 +340,33 @@ let Option::Some { inner } = value else { return err2; };
 
 Nested patterns require recursive pattern parsing, complicate error messages, and make the desugaring non-trivial (multiple match levels). Staged destructuring is more explicit and produces better error locations.
 
-### No `if let`
+### `if let`
 
 ```
-// NOT supported:
 if let Option::Some { value } = expr {
     // use value
 }
 ```
 
-`if let` is syntactic sugar over `let...else` with a negated condition. It can be added later without breaking existing code. It is deferred because `let...else` covers the more common "extract or bail" pattern, and adding both at once doubles the parser/checker surface for one design cycle.
+Status: IMPLEMENTED (Phase 6 #5 increment 2). `if let` is parsed as a
+destructuring conditional and desugared to a `match` before Check/Elab:
+`if let Type::Variant { binds } = e { then } else { else }` becomes
+`match e { Variant { binds } => then, _ => else }`. With no `else`, the
+non-matching arm is an empty block. See `docs/PATTERN_ERGONOMICS.md` and
+`scripts/tests/check_pattern_ergonomics.sh`.
 
-### No `while let`
+### `while let`
 
 ```
-// NOT supported:
 while let Option::Some { item } = iter.next() {
     // process item
 }
 ```
 
-Same reasoning as `if let`. Deferred. When Concrete gains iterator patterns, `while let` becomes more valuable. Adding it now would be premature.
+Status: IMPLEMENTED (Phase 6 #5 increment 2). `while let` is parsed as a
+destructuring loop and desugared to `while true { match e { Variant { binds } =>
+body, _ => break; } }`, re-evaluating the scrutinee each iteration. It inherits
+match binding, loop cleanup, break/continue, and lowering behavior.
 
 ### No pattern matching in function parameters
 
@@ -807,8 +813,6 @@ No changes are needed to Core IR, SSA, LLVM emission, or the proof pipeline. The
 
 These are not part of this design but would be natural additions later:
 
-- **`if let`**: `if let Type::Variant { x } = expr { ... }` -- syntactic sugar for a match with two arms (one matching, one fallthrough). Adds convenience for "do something if it matches" without the divergence requirement.
-- **`while let`**: `while let Type::Variant { x } = expr { ... }` -- loop while a pattern matches. Useful with iterators.
 - **`_` wildcard in binding lists**: Allow `_` to discard a field without binding it. Requires special-casing `_` in the binding list parser. Useful for Copy types where not all fields are needed.
 - **Nested patterns**: `let Result::Ok { value: Option::Some { inner } } = expr else { ... }` -- multi-level destructuring in a single statement. Requires recursive pattern parsing.
 - **Else block with error access**: `let Result::Ok { value } = expr else |other| { ... }` -- the else block receives the non-matching value. Requires a binding syntax in the else clause.
