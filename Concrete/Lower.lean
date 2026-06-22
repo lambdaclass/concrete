@@ -822,7 +822,16 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       if !term then
         terminateBlock .unreachable
     else
-      -- Non-enum match (literal/variable patterns)
+      -- Non-enum match (literal/variable patterns). If the scrutinee is a
+      -- reference (`match &x { 0 => … }`), deref it once so scalar comparisons
+      -- and variable bindings see the value, mirroring Check's auto-deref of the
+      -- scrutinee type. (The enum branch above already loads through the pointer.)
+      let scrVal ← match scrutinee.ty with
+        | .ref t | .refMut t => do
+          let d ← freshReg "mderef."
+          emit (.load d scrVal t)
+          pure (.reg d t)
+        | _ => pure scrVal
       for (idx, arm) in enumerate arms do
         -- Restore vars to pre-match state for each arm
         let st ← getState

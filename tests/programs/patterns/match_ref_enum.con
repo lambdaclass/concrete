@@ -1,0 +1,12 @@
+// Pattern: matching an enum behind &E reads tag + payload through the reference.
+// Expected: 1
+mod m {
+    enum Copy E { A { x: i32 }, B }
+    fn get(e: &E) -> i32 { match e { E::A { x } => { return x; }, E::B => { return -1; } } }
+    fn main() -> Int {
+        let a: E = E::A { x: 7 };
+        let b: E = E::B;
+        if get(&a) == 7 && get(&b) == -1 { return 1; }
+        return 9;
+    }
+}

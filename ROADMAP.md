@@ -430,10 +430,14 @@ gate.
    - ~~integer range patterns~~ — DONE (increment 1)
    - ~~`if let`~~ — DONE (increment 2)
    - ~~`while let`~~ — DONE (increment 2)
+   - ~~match-on-reference (`&T`/`&mut T`)~~ — DONE (increment 5): match
+     auto-derefs a reference scrutinee. Enum-behind-`&E` already read tag/payload
+     through the pointer; the value-pattern branch now derefs a `&scalar`
+     scrutinee once (`Concrete/Lower.lean`) so literals/ranges/var-bindings see
+     the value (fixed an E0715 ptr-vs-int miscompile). Auto-deref is on the
+     scrutinee (matching Check); a borrowed non-Copy value stays linear (E0208 if
+     unconsumed). Fixtures + `match on &T` gate section.
    - nested patterns
-   - match-on-reference ergonomics for enums and structs behind `&T`/`&mut T`:
-     decide whether auto-deref in patterns exists, where it stops, and how
-     mutable-borrow frame facts are reported
    - tuple types, or a deliberate no-tuples decision (record which)
    - struct update syntax — `Struct { field: x, ..base }`
    - `_` wildcard *inside destructuring bindings* (distinct from the `_` match

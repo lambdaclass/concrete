@@ -1,0 +1,19 @@
+// Pattern: matching a scalar behind &T derefs the scrutinee — literals, ranges,
+// and variable bindings all see the value. Expected: 1
+mod m {
+    fn classify(x: &i32) -> i32 {
+        match x {
+            0 => { return 100; }
+            1..=9 => { return 1; }
+            n => { return n + 1000; }
+        }
+    }
+    fn main() -> Int {
+        let zero: i32 = 0;
+        let five: i32 = 5;
+        let big: i32 = 50;
+        // 0 -> 100, 5 -> 1 (range), 50 -> 1050 (var bound to deref'd value)
+        if classify(&zero) == 100 && classify(&five) == 1 && classify(&big) == 1050 { return 1; }
+        return 9;
+    }
+}

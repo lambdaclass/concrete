@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Pattern ergonomics: match on a reference scrutinee (2026-06-22)
+
+- Phase 6 #5, increment 5. `match` auto-derefs a `&T` / `&mut T` scrutinee so the
+  pointee is matched directly. Enum-behind-`&E` already read the tag and payload
+  through the pointer; the fix makes the **scalar** path work too.
+- Bug fixed (`Concrete/Lower.lean`, value-pattern branch): matching a `&scalar`
+  against a literal emitted a pointer-vs-int comparison (E0715 ssa-verify). The
+  branch now derefs a reference scrutinee once before literal/range comparisons
+  and variable bindings, so `match x { 0 => …, 1..=9 => …, n => … }` on `x: &i32`
+  compares and binds the value. Mirrors Check's auto-deref of the scrutinee type.
+- A borrowed non-`Copy` value remains linear (read, not consumed — unconsumed is
+  the normal E0208). Verified for `&i32` (literal/range/var) and `&E`
+  (tag+payload). Fixtures + `match on &T` section of
+  `scripts/tests/check_pattern_ergonomics.sh` (17/17). Full suite 1576/0.
+
 ### Pattern ergonomics: OR patterns (2026-06-22)
 
 - Phase 6 #5, increment 4. A match arm may list alternatives separated by `|`:

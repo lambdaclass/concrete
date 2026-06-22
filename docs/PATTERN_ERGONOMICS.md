@@ -130,9 +130,35 @@ match c {
   body uses (an alternative that fails to bind a name the body references is a
   resolve error in that alternative's copy) — the standard OR-pattern rule.
 
+## Landed: match on a reference scrutinee (`&T` / `&mut T`)
+
+`match` auto-derefs a reference scrutinee, so you can match the pointee directly:
+
+```
+fn classify(x: &i32) -> i32 {
+    match x {
+        0     => zero(),
+        1..=9 => small(),
+        n     => big(n),   // `n` binds the value (i32), not the reference
+    }
+}
+fn tag(e: &E) -> i32 { match e { E::A { x } => x, E::B => 0 } }  // reads through &E
+```
+
+- Enum scrutinees behind `&E` read the tag and payload through the pointer.
+- Scalar scrutinees behind `&i32` are dereferenced once before literal/range
+  comparisons and variable bindings, so `n` binds the value and `0 => …` /
+  `1..=9 => …` compare against the value (not the pointer). This matches Check's
+  auto-deref of the scrutinee type (`Concrete/Lower.lean`, value-pattern branch).
+- A non-`Copy` value borrowed in a match is still linear: it is read, not
+  consumed, so it must be consumed/dropped elsewhere (an unconsumed one is E0208,
+  the normal linearity rule).
+
 ## Still open (each lands as its own increment + gate section)
 
 - nested patterns; `_` inside destructuring bindings
+- struct update syntax — `Struct { field: x, ..base }`
+- tuple types (or a deliberate no-tuples decision)
 - match-on-reference ergonomics for `&T` / `&mut T`
 - struct update syntax — `Struct { f: x, ..base }`
 - tuple types (or a deliberate no-tuples decision)
