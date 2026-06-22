@@ -47,6 +47,32 @@ document as one queue:
    opt-in overflow obligations;
 9. keep later research items later unless a prior gate forces them.
 
+Cross-cutting items that must stay visible while the linear queue advances:
+
+- **Pattern ergonomics and daily language friction** live in Phase 6 #5 and #7:
+  match guards, OR patterns, `if let` / `while let`, match-on-reference,
+  tuples / no-tuples, struct update, wildcard destructuring, and `defer` /
+  cleanup semantics.
+- **Import/dependency authority constraints** live in Phase 18 #8: imports do
+  not grant capability by themselves, and dependencies can be constrained by
+  capability budget, trusted/Unsafe use, assumptions, evidence floor, platform,
+  source hash, license, and supply-chain identity.
+- **SPARK-class assurance** is split by owner phase, not tracked as a side
+  project: proof/agent guidance in Phase 9 #5a, flow/frame/dependency contracts
+  in Phase 12 #19, runtime-safety use of loop/frame facts in Phase 13, release
+  assurance bundles in Phase 17, package evidence summaries in Phase 18 #15a,
+  and editor/agent diagnostics in Phase 19 #13.
+- **Proof-cost reduction** is Phase 9 work: proof minimization/stubs/diagnostics
+  are #2–#15, structural auto-discharge is #16, and operational VC
+  auto-discharge is #16a. The operational tier is the key path for reducing
+  hand-written Lean bridge theorems on ordinary postconditions and loop steps.
+- **AI/agent learnability** must be updated with the feature that creates the
+  proof surface: `docs/SPARK_CLASS_ASSURANCE.md` is the stable agent guide, and
+  Phase 9 #5a requires an agent-facing example whenever a new assurance
+  annotation lands.
+- **Package evidence summaries** are Phase 18 #15a, after import constraints
+  have real facts to summarize.
+
 Completed work moves to [CHANGELOG.md](CHANGELOG.md). Deferred or conditional
 work moves later in the same linear queue. There are no parallel tracks. Inline
 `NEXT` notes are allowed only as scoped follow-ups inside a numbered item; they
