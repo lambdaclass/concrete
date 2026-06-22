@@ -9,13 +9,14 @@ entry:
 ; source: main @ line 11
 define i64 @main() {
 entry:
+  %addr.3 = alloca %Counter
   %t0 = alloca %Counter
   store i64 42, %t0
   %t2 = load %Counter, %t0
-  %borrow.3 = alloca %Counter
-  store %Counter %t2, %borrow.3
-  %t4 = call i64 @Counter_get(ptr(%Counter) %borrow.3)
-  %t5 = call i64 @consume(%Counter %t2)
+  store %Counter %t2, %addr.3
+  %t4 = call i64 @Counter_get(ptr(%Counter) %addr.3)
+  %pload.5 = load %Counter, %addr.3
+  %t6 = call i64 @consume(%Counter %pload.5)
   ret i64 %t4
 }
 

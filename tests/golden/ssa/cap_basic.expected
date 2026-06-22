@@ -4,30 +4,25 @@ declare i32 @putchar(i32)
 ; source: print_int @ line 3
 define void @print_int(i64 %n) {
 entry:
-  %agg.3 = alloca %String
+  %addr.1 = alloca %String
   %t0 = call %String @int_to_string(i64 %n)
-  %borrow.1 = alloca %String
-  store %String %t0, %borrow.1
-  %t2 = call i64 @string_length(ptr(%String) %borrow.1)
-  store %String %t0, %agg.3
+  store %String %t0, %addr.1
+  %t2 = call i64 @string_length(ptr(%String) %addr.1)
   br label %while.hdr0
 while.hdr0:
-  %phi.6 = phi i64 [0, %entry], [%t13, %while.body1]
-  %t7 = slt i1 %phi.6, %t2
-  br i1 %t7, label %while.body1, label %while.exit2
+  %phi.5 = phi i64 [0, %entry], [%t10, %while.body1]
+  %t6 = slt i1 %phi.5, %t2
+  br i1 %t6, label %while.body1, label %while.exit2
 while.body1:
-  %pload.8 = load %String, %agg.3
-  %borrow.9 = alloca %String
-  store %String %pload.8, %borrow.9
-  %t10 = call i64 @string_char_at(ptr(%String) %borrow.9, i64 %phi.6)
-  %t11 = cast i64 %t10 to i32
-  %t12 = call i32 @putchar(i32 %t11)
-  %t13 = add i64 %phi.6, 1
+  %t7 = call i64 @string_char_at(ptr(%String) %addr.1, i64 %phi.5)
+  %t8 = cast i64 %t7 to i32
+  %t9 = call i32 @putchar(i32 %t8)
+  %t10 = add i64 %phi.5, 1
   br label %while.hdr0
 while.exit2:
-  %unpro.14 = load %String, %agg.3
-  %t15 = call i32 @putchar(i32 10)
-  call void @drop_string(%String %unpro.14)
+  %t11 = call i32 @putchar(i32 10)
+  %pload.12 = load %String, %addr.1
+  call void @drop_string(%String %pload.12)
   ret void
 }
 
