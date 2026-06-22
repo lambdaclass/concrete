@@ -103,6 +103,20 @@ private def emit (inst : SInst) : LowerM Unit := do
   let s ← getState
   setState { s with currentInsts := s.currentInsts ++ [inst] }
 
+/-- Coerce an SSA value to `ty` with an explicit cast when its type differs
+    (e.g. an `Int` branch value into an `i32` result slot). No-op when the types
+    already match or the value is unit. This is the single place value-producing
+    constructs — if-expression, while-expression, and match arms — normalize a
+    branch/break/else value to the expected width before it is stored or fed to a
+    phi. Keeping it in one spot is what prevents the "value stored at the wrong
+    width" bug class (cf. the while-expression i32 miscompile). -/
+private def coerceVal (val : SVal) (ty : Ty) (pfx : String := "cast.") : LowerM SVal := do
+  if val.ty != ty && val.ty != .unit then do
+    let castReg ← freshReg pfx
+    emit (.cast castReg val ty)
+    pure (.reg castReg ty)
+  else pure val
+
 /-- Emit an alloca that will be hoisted to the function entry block.
     This prevents dynamic stack growth when allocas occur inside loops. -/
 private def emitEntryAlloca (inst : SInst) : LowerM Unit := do
@@ -747,47 +761,25 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
             let loadDst ← freshReg
             emit (.load loadDst (.reg gepDst bty) bty)
             setVar bname (.reg loadDst bty)
-          lowerStmts body
-          let bodyVal ← lastExprVal body ty
-          -- Cast if arm result type differs from expected type (e.g., Int → i32)
-          let bodyVal ← if bodyVal.ty != ty && bodyVal.ty != .unit then do
-            let castReg ← freshReg "matchcast."
-            emit (.cast castReg bodyVal ty)
-            pure (.reg castReg ty)
-          else pure bodyVal
-          let term ← currentBlockTerminated
-          if !term then
+          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          match inc? with
+          | some i =>
+            phiIncoming := phiIncoming ++ [i]
             allArmsTerminated := false
-            let curLabel ← getCurrentLabel
-            phiIncoming := phiIncoming ++ [(bodyVal, curLabel)]
-            let armEndVars ← snapshotVars
-            armEndSnapshots := armEndSnapshots ++ [(armEndVars, curLabel, false)]
-            terminateBlock (.br mergeLabel)
-          else
-            armEndSnapshots := armEndSnapshots ++ [([], "", true)]
+          | none => pure ()
+          armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
         | .varArm binding _bindTy body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
           if binding != "_" then setVar binding scrVal
-          lowerStmts body
-          let bodyVal ← lastExprVal body ty
-          -- Cast if arm result type differs from expected type (e.g., Int → i32)
-          let bodyVal ← if bodyVal.ty != ty && bodyVal.ty != .unit then do
-            let castReg ← freshReg "matchcast."
-            emit (.cast castReg bodyVal ty)
-            pure (.reg castReg ty)
-          else pure bodyVal
-          let term ← currentBlockTerminated
-          if !term then
+          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          match inc? with
+          | some i =>
+            phiIncoming := phiIncoming ++ [i]
             allArmsTerminated := false
-            let curLabel ← getCurrentLabel
-            phiIncoming := phiIncoming ++ [(bodyVal, curLabel)]
-            let armEndVars ← snapshotVars
-            armEndSnapshots := armEndSnapshots ++ [(armEndVars, curLabel, false)]
-            terminateBlock (.br mergeLabel)
-          else
-            armEndSnapshots := armEndSnapshots ++ [([], "", true)]
+          | none => pure ()
+          armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
         | .litArm litVal body =>
           let litSVal ← lowerExpr litVal
@@ -795,24 +787,13 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           emit (.binOp cmpDst .eq scrVal litSVal .bool)
           terminateBlock (.condBr (.reg cmpDst .bool) armLabel nextCheck)
           startBlock armLabel
-          lowerStmts body
-          let bodyVal ← lastExprVal body ty
-          -- Cast if arm result type differs from expected type (e.g., Int → i32)
-          let bodyVal ← if bodyVal.ty != ty && bodyVal.ty != .unit then do
-            let castReg ← freshReg "matchcast."
-            emit (.cast castReg bodyVal ty)
-            pure (.reg castReg ty)
-          else pure bodyVal
-          let term ← currentBlockTerminated
-          if !term then
+          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          match inc? with
+          | some i =>
+            phiIncoming := phiIncoming ++ [i]
             allArmsTerminated := false
-            let curLabel ← getCurrentLabel
-            phiIncoming := phiIncoming ++ [(bodyVal, curLabel)]
-            let armEndVars ← snapshotVars
-            armEndSnapshots := armEndSnapshots ++ [(armEndVars, curLabel, false)]
-            terminateBlock (.br mergeLabel)
-          else
-            armEndSnapshots := armEndSnapshots ++ [([], "", true)]
+          | none => pure ()
+          armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
         | .rangeArm loE hiE inclusive body =>
           -- Range pattern: lo <= scr && scr (<|<=) hi. (On an enum scrutinee this
@@ -827,23 +808,13 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           emit (.binOp inRange .and_ (.reg geLo .bool) (.reg leHi .bool) .bool)
           terminateBlock (.condBr (.reg inRange .bool) armLabel nextCheck)
           startBlock armLabel
-          lowerStmts body
-          let bodyVal ← lastExprVal body ty
-          let bodyVal ← if bodyVal.ty != ty && bodyVal.ty != .unit then do
-            let castReg ← freshReg "matchcast."
-            emit (.cast castReg bodyVal ty)
-            pure (.reg castReg ty)
-          else pure bodyVal
-          let term ← currentBlockTerminated
-          if !term then
+          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          match inc? with
+          | some i =>
+            phiIncoming := phiIncoming ++ [i]
             allArmsTerminated := false
-            let curLabel ← getCurrentLabel
-            phiIncoming := phiIncoming ++ [(bodyVal, curLabel)]
-            let armEndVars ← snapshotVars
-            armEndSnapshots := armEndSnapshots ++ [(armEndVars, curLabel, false)]
-            terminateBlock (.br mergeLabel)
-          else
-            armEndSnapshots := armEndSnapshots ++ [([], "", true)]
+          | none => pure ()
+          armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
       -- After all checks: fallthrough is unreachable (match is exhaustive or
       -- catch-all arms consume remaining cases). Mark as unreachable.
@@ -865,24 +836,13 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           emit (.binOp cmpDst .eq scrVal litSVal .bool)
           terminateBlock (.condBr (.reg cmpDst .bool) armLabel nextCheck)
           startBlock armLabel
-          lowerStmts body
-          let bodyVal ← lastExprVal body ty
-          -- Cast if arm result type differs from expected type (e.g., Int → i32)
-          let bodyVal ← if bodyVal.ty != ty && bodyVal.ty != .unit then do
-            let castReg ← freshReg "matchcast."
-            emit (.cast castReg bodyVal ty)
-            pure (.reg castReg ty)
-          else pure bodyVal
-          let term ← currentBlockTerminated
-          if !term then
+          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          match inc? with
+          | some i =>
+            phiIncoming := phiIncoming ++ [i]
             allArmsTerminated := false
-            let curLabel ← getCurrentLabel
-            phiIncoming := phiIncoming ++ [(bodyVal, curLabel)]
-            let armEndVars ← snapshotVars
-            armEndSnapshots := armEndSnapshots ++ [(armEndVars, curLabel, false)]
-            terminateBlock (.br mergeLabel)
-          else
-            armEndSnapshots := armEndSnapshots ++ [([], "", true)]
+          | none => pure ()
+          armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
         | .rangeArm loE hiE inclusive body =>
           -- Range pattern: matches when lo <= scr && scr (<= | <) hi. Comparison
@@ -897,68 +857,36 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           emit (.binOp inRange .and_ (.reg geLo .bool) (.reg leHi .bool) .bool)
           terminateBlock (.condBr (.reg inRange .bool) armLabel nextCheck)
           startBlock armLabel
-          lowerStmts body
-          let bodyVal ← lastExprVal body ty
-          let bodyVal ← if bodyVal.ty != ty && bodyVal.ty != .unit then do
-            let castReg ← freshReg "matchcast."
-            emit (.cast castReg bodyVal ty)
-            pure (.reg castReg ty)
-          else pure bodyVal
-          let term ← currentBlockTerminated
-          if !term then
+          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          match inc? with
+          | some i =>
+            phiIncoming := phiIncoming ++ [i]
             allArmsTerminated := false
-            let curLabel ← getCurrentLabel
-            phiIncoming := phiIncoming ++ [(bodyVal, curLabel)]
-            let armEndVars ← snapshotVars
-            armEndSnapshots := armEndSnapshots ++ [(armEndVars, curLabel, false)]
-            terminateBlock (.br mergeLabel)
-          else
-            armEndSnapshots := armEndSnapshots ++ [([], "", true)]
+          | none => pure ()
+          armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
         | .varArm binding _bindTy body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
           if binding != "_" then setVar binding scrVal
-          lowerStmts body
-          let bodyVal ← lastExprVal body ty
-          -- Cast if arm result type differs from expected type (e.g., Int → i32)
-          let bodyVal ← if bodyVal.ty != ty && bodyVal.ty != .unit then do
-            let castReg ← freshReg "matchcast."
-            emit (.cast castReg bodyVal ty)
-            pure (.reg castReg ty)
-          else pure bodyVal
-          let term ← currentBlockTerminated
-          if !term then
+          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          match inc? with
+          | some i =>
+            phiIncoming := phiIncoming ++ [i]
             allArmsTerminated := false
-            let curLabel ← getCurrentLabel
-            phiIncoming := phiIncoming ++ [(bodyVal, curLabel)]
-            let armEndVars ← snapshotVars
-            armEndSnapshots := armEndSnapshots ++ [(armEndVars, curLabel, false)]
-            terminateBlock (.br mergeLabel)
-          else
-            armEndSnapshots := armEndSnapshots ++ [([], "", true)]
+          | none => pure ()
+          armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
         | .enumArm _ _ _ body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
-          lowerStmts body
-          let bodyVal ← lastExprVal body ty
-          -- Cast if arm result type differs from expected type (e.g., Int → i32)
-          let bodyVal ← if bodyVal.ty != ty && bodyVal.ty != .unit then do
-            let castReg ← freshReg "matchcast."
-            emit (.cast castReg bodyVal ty)
-            pure (.reg castReg ty)
-          else pure bodyVal
-          let term ← currentBlockTerminated
-          if !term then
+          let (inc?, snap) ← finishMatchArmBody body ty mergeLabel
+          match inc? with
+          | some i =>
+            phiIncoming := phiIncoming ++ [i]
             allArmsTerminated := false
-            let curLabel ← getCurrentLabel
-            phiIncoming := phiIncoming ++ [(bodyVal, curLabel)]
-            let armEndVars ← snapshotVars
-            armEndSnapshots := armEndSnapshots ++ [(armEndVars, curLabel, false)]
-            terminateBlock (.br mergeLabel)
-          else
-            armEndSnapshots := armEndSnapshots ++ [([], "", true)]
+          | none => pure ()
+          armEndSnapshots := armEndSnapshots ++ [snap]
           startBlock nextCheck
       let term ← currentBlockTerminated
       if !term then
@@ -1332,11 +1260,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       if !_elseBody.isEmpty then
         lowerStmts _elseBody
         let elseVal ← lastExprVal _elseBody _ty
-        let elseVal ← if elseVal.ty != _ty && elseVal.ty != .unit then do
-          let castReg ← freshReg "ecast."
-          emit (.cast castReg elseVal _ty)
-          pure (.reg castReg _ty)
-        else pure elseVal
+        let elseVal ← coerceVal elseVal _ty "ecast."
         emit (.store elseVal (.reg resultSlot _ty))
       terminateBlock (.br finalLabel)
       -- Final block: load result
@@ -1373,11 +1297,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       if !_elseBody.isEmpty then
         lowerStmts _elseBody
         let elseVal ← lastExprVal _elseBody _ty
-        let elseVal ← if elseVal.ty != _ty && elseVal.ty != .unit then do
-          let castReg ← freshReg "ecast."
-          emit (.cast castReg elseVal _ty)
-          pure (.reg castReg _ty)
-        else pure elseVal
+        let elseVal ← coerceVal elseVal _ty "ecast."
         emit (.store elseVal (.reg resultSlot _ty))
       -- Load result from slot
       let loadDst ← freshReg "wload."
@@ -1404,12 +1324,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let term1 ← currentBlockTerminated
     if !term1 then
       let thenVal ← lastExprVal then_ ty
-      -- Cast if branch result type differs from expected type (e.g., Int → i32)
-      let thenVal ← if thenVal.ty != ty && thenVal.ty != .unit then do
-        let castReg ← freshReg "ifcast."
-        emit (.cast castReg thenVal ty)
-        pure (.reg castReg ty)
-      else pure thenVal
+      let thenVal ← coerceVal thenVal ty "ifcast."
       emit (.store thenVal (.reg resultSlot ty))
     let thenEndVars ← snapshotVars
     let thenEndLabel ← getCurrentLabel
@@ -1423,12 +1338,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let term2 ← currentBlockTerminated
     if !term2 then
       let elseVal ← lastExprVal else_ ty
-      -- Cast if branch result type differs from expected type (e.g., Int → i32)
-      let elseVal ← if elseVal.ty != ty && elseVal.ty != .unit then do
-        let castReg ← freshReg "ifcast."
-        emit (.cast castReg elseVal ty)
-        pure (.reg castReg ty)
-      else pure elseVal
+      let elseVal ← coerceVal elseVal ty "ifcast."
       emit (.store elseVal (.reg resultSlot ty))
     let elseEndVars ← snapshotVars
     let elseEndLabel ← getCurrentLabel
@@ -1607,6 +1517,28 @@ partial def storeToPlace (place : CExpr) (newVal : SVal) : LowerM Unit := do
     -- Fallback: lower the place as a pointer and store through it.
     let p ← lowerExpr place
     emit (.store newVal p)
+
+/-- Lower a match-arm body once its guard branch has landed in the current block.
+    Lowers the body, coerces its value to the match result type `ty`, and either
+    branches to `mergeLabel` (returning the phi incoming `(value, block)` and the
+    arm-end variable snapshot) or, if the body diverged (return/break/continue),
+    returns `none` and an empty snapshot. Callers append the results to the
+    match's `phiIncoming` / `armEndSnapshots` and clear `allArmsTerminated`. This
+    is the single shared tail for every arm shape (literal, variable, range, and
+    future guard/OR arms). -/
+partial def finishMatchArmBody (body : List CStmt) (ty : Ty) (mergeLabel : String)
+    : LowerM (Option (SVal × String) × (List (String × SVal) × String × Bool)) := do
+  lowerStmts body
+  let bodyVal ← lastExprVal body ty
+  let bodyVal ← coerceVal bodyVal ty "matchcast."
+  let term ← currentBlockTerminated
+  if !term then
+    let curLabel ← getCurrentLabel
+    let armEndVars ← snapshotVars
+    terminateBlock (.br mergeLabel)
+    return (some (bodyVal, curLabel), (armEndVars, curLabel, false))
+  else
+    return (none, ([], "", true))
 
 partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
   match stmt with
@@ -1971,18 +1903,13 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
   | .break_ value breakLabel =>
     match ← findLoopByLabel breakLabel with
     | some info =>
-      -- Store break value into result slot (for while-as-expression). Coerce to
-      -- the loop's result type first — a bare `break 7` lowers the literal as the
-      -- default int width (i64), and storing i64 into an i32 result slot (then
-      -- loading i32) corrupts the value. Mirrors the if-expression cast below.
+      -- Store break value into result slot (for while-as-expression), coerced to
+      -- the loop's result type (see coerceVal — a bare `break 7` lowers as i64 and
+      -- must not be stored into a narrower i32 result slot).
       match value, info.resultSlot with
       | some valExpr, some slot =>
         let bVal ← lowerExpr valExpr
-        let bVal ← if bVal.ty != info.resultTy && bVal.ty != .unit then do
-          let castReg ← freshReg "bcast."
-          emit (.cast castReg bVal info.resultTy)
-          pure (.reg castReg info.resultTy)
-        else pure bVal
+        let bVal ← coerceVal bVal info.resultTy "bcast."
         emit (.store bVal (.reg slot info.resultTy))
       | _, _ => pure ()
       emitDeferredUntilLoop
