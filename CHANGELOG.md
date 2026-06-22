@@ -10,6 +10,22 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Pattern ergonomics: OR patterns (2026-06-22)
+
+- Phase 6 #5, increment 4. A match arm may list alternatives separated by `|`:
+  `48..=57 | 97..=102 => …`, `1 | 2 | 3 => …`, `E::A | E::B => …`. An optional
+  guard applies to the whole arm.
+- Implemented as a parse-time desugar (`Concrete/Parser.lean`): `parsePatternHead`
+  parses one pattern and returns an arm-builder; `parseMatchArm` collects
+  `|`-separated heads and emits one ordinary `MatchArm` per alternative, all
+  sharing the guard and body. No new AST/Core/lowering — every alternative reuses
+  the existing arm machinery. Standard OR rule: all alternatives must bind the
+  names the body uses.
+- Verified for literals, ranges, mixed lit|range, enum variants, with guards, and
+  value position. Fixtures + `OR patterns` section of
+  `scripts/tests/check_pattern_ergonomics.sh` (15/15). Full suite 1576/0;
+  examples 128/0; snapshots 95/0; golden 54/0.
+
 ### Pattern ergonomics: match guards (2026-06-22)
 
 - Phase 6 #5, increment 3. Any match arm may carry a guard — `pattern if cond

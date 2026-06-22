@@ -1,0 +1,8 @@
+// Pattern: OR of literals — `1 | 2 | 3` matches any alternative. Expected: 1
+mod m {
+    fn f(x: i32) -> i32 { match x { 1 | 2 | 3 => { return 1; }, _ => { return 0; } } }
+    fn main() -> Int {
+        if f(1) == 1 && f(2) == 1 && f(3) == 1 && f(0) == 0 && f(4) == 0 { return 1; }
+        return 9;
+    }
+}

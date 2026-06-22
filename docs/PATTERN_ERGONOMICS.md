@@ -107,9 +107,31 @@ each `CMatchArm`); lowered as a test inserted after the pattern's bindings and
 before the body, branching to the next arm's check on failure (`Concrete/
 Lower.lean`, `finishMatchArmBody`).
 
+## Landed: OR patterns
+
+An arm may list several patterns separated by `|`; the arm matches if any
+alternative matches:
+
+```
+match c {
+    48..=57 | 97..=102 => hex_digit(),   // ranges
+    1 | 2 | 3           => small(),       // literals
+    E::A | E::B         => ab(),          // enum variants
+    _                   => other(),
+}
+```
+
+- Alternatives may be literals, ranges, enum variants, or bools, and an optional
+  guard applies to the whole arm (`1 | 2 if c => …`).
+- Implemented as a **parse-time desugar**: `P1 | P2 | … [if g] => body` becomes
+  one ordinary arm per alternative, each with the same guard and body. No new
+  AST/Core/lowering — every alternative reuses the existing arm machinery.
+- Because of the desugar, all alternatives must bind the same variables that the
+  body uses (an alternative that fails to bind a name the body references is a
+  resolve error in that alternative's copy) — the standard OR-pattern rule.
+
 ## Still open (each lands as its own increment + gate section)
 
-- OR patterns — `A | B => …`
 - nested patterns; `_` inside destructuring bindings
 - match-on-reference ergonomics for `&T` / `&mut T`
 - struct update syntax — `Struct { f: x, ..base }`

@@ -1,0 +1,9 @@
+// Pattern: OR of enum variants — `E::A | E::B` shares one body. Expected: 1
+mod m {
+    enum E { A, B, C }
+    fn f(e: E) -> i32 { match e { E::A | E::B => { return 1; }, E::C => { return 0; } } }
+    fn main() -> Int {
+        if f(E::A) == 1 && f(E::B) == 1 && f(E::C) == 0 { return 1; }
+        return 9;
+    }
+}

@@ -49,6 +49,11 @@ run_expect range_negative 1         # negative bounds
 echo "=== range patterns: exhaustiveness (a range is not a catch-all) ==="
 reject_with neg_range_no_default E0534
 
+echo "=== OR patterns (A | B) ==="
+run_expect or_literals 1   # 1 | 2 | 3
+run_expect or_ranges 1     # ranges + mixed lit|range
+run_expect or_enum 1       # E::A | E::B
+
 echo "=== match guards (pattern if cond) ==="
 run_expect guard_var_fallthrough 1   # failing var guard falls to next arm
 run_expect guard_enum 1              # guarded enum arm falls to later Some

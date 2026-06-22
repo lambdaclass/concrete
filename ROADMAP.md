@@ -416,9 +416,17 @@ gate.
    proof path yet (disclosed as unsupported `match guard`). Fixtures +
    `match guards` section of `scripts/tests/check_pattern_ergonomics.sh`.
 
+   **STATUS (2026-06-22, increment 4): OR patterns LANDED + gated.** `P1 | P2 |
+   … [if g] => body` is a parse-time desugar (`parsePatternHead` returns an arm
+   builder; `parseMatchArm` collects `|`-separated heads and emits one ordinary
+   arm per alternative sharing the guard+body) — no new AST/Core/lowering.
+   Alternatives may be literals/ranges/enum-variants/bools; standard OR rule (all
+   alternatives bind the same body-referenced names). Fixtures + `OR patterns`
+   section of `scripts/tests/check_pattern_ergonomics.sh`.
+
    **Still open (each: implement, or explicitly defer with examples):**
    - ~~match guards~~ — DONE (increment 3)
-   - OR patterns — `A | B => …`
+   - ~~OR patterns~~ — DONE (increment 4)
    - ~~integer range patterns~~ — DONE (increment 1)
    - ~~`if let`~~ — DONE (increment 2)
    - ~~`while let`~~ — DONE (increment 2)

@@ -1,0 +1,10 @@
+// Pattern: OR of ranges (and mixed lit|range) — hex-digit classifier. Expected: 1
+mod m {
+    fn hex(c: u8) -> i32 { match c { 48..=57 | 97..=102 => { return 1; }, _ => { return 0; } } }
+    fn f(x: i32) -> i32 { match x { 0 | 5..=9 => { return 1; }, _ => { return 0; } } }
+    fn main() -> Int {
+        if hex(48) == 1 && hex(57) == 1 && hex(100) == 1 && hex(58) == 0
+            && f(0) == 1 && f(7) == 1 && f(3) == 0 { return 1; }
+        return 9;
+    }
+}

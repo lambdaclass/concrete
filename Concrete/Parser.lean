@@ -1228,8 +1228,7 @@ partial def parseMatchArms : ParseM (List MatchArm) := do
   let mut arms : List MatchArm := []
   let mut tk ← peek
   while tk != .rbrace && tk != .eof do
-    let arm ← parseMatchArm
-    arms := arms ++ [arm]
+    arms := arms ++ (← parseMatchArm)   -- one arm normally; several for an OR pattern
     tk ← peek
   return arms
 
@@ -1286,55 +1285,40 @@ partial def parseArmGuard : ParseM (Option Expr) := do
   else throwParse s!"expected => or -> in match arm, got {arrowTk}"
   return guard
 
-/-- After the low bound `lo` of a match pattern is parsed, finish either a range
-    arm (`lo..hi` / `lo..=hi`) or a plain literal arm, an optional `if` guard,
-    then its `=>`/`->` body. -/
-partial def finishLitOrRangeArm (sp : Span) (lo : Expr) : ParseM MatchArm := do
-  let rngTk ← peek
-  if rngTk == .dotDot || rngTk == .dotDotEq then
-    let incl := rngTk == .dotDotEq
-    advance
-    let hi ← parseRangeBoundExpr sp
-    let guard ← parseArmGuard
-    let body ← parseMatchArmBody
-    if (← peek) == .comma then advance
-    return .rangeArm sp lo hi incl guard body
-  else
-    let guard ← parseArmGuard
-    let body ← parseMatchArmBody
-    if (← peek) == .comma then advance
-    return .litArm sp lo guard body
-
-partial def parseMatchArm : ParseM MatchArm := do
+/-- Parse a single match PATTERN (no guard/arrow/body) and return a builder that,
+    given the shared guard and body, produces the `MatchArm`. Splitting pattern
+    parsing out lets OR patterns (`A | B => …`) reuse one guard+body across
+    several patterns. Handles literal, negative-literal, range, bool, enum-variant
+    (with bindings), and variable patterns. -/
+partial def parsePatternHead : ParseM (Option Expr → List Stmt → MatchArm) := do
   let sp ← peekSpan
   let firstTk ← peek
-  -- Check for literal pattern (integer, negative integer, bool)
+  -- For an int/`-int` low value, build either a range head or a literal head.
+  let litOrRange := fun (lo : Expr) => do
+    let rngTk ← peek
+    if rngTk == .dotDot || rngTk == .dotDotEq then
+      let incl := rngTk == .dotDotEq
+      advance
+      let hi ← parseRangeBoundExpr sp
+      pure (fun g b => MatchArm.rangeArm sp lo hi incl g b)
+    else
+      pure (fun g b => MatchArm.litArm sp lo g b)
   match firstTk with
   | .intLit n =>
     advance
-    -- literal `n => …` or range `n..hi => …` / `n..=hi => …`
-    finishLitOrRangeArm sp (.intLit sp n)
+    litOrRange (.intLit sp n)
   | .minus =>
     advance
-    let numTk ← peek
-    match numTk with
-    | .intLit n =>
-      advance
-      finishLitOrRangeArm sp (.unaryOp sp .neg (.intLit sp n))
-    | _ => throwParse s!"expected integer after '-' in match pattern, got {numTk}"
+    match (← peek) with
+    | .intLit n => advance; litOrRange (.unaryOp sp .neg (.intLit sp n))
+    | other => throwParse s!"expected integer after '-' in match pattern, got {other}"
   | .true_ | .false_ =>
     let boolVal := firstTk == .true_
     advance
-    let guard ← parseArmGuard
-    let body ← parseMatchArmBody
-    let tk2 ← peek
-    if tk2 == .comma then advance
-    return .litArm sp (.boolLit sp boolVal) guard body
+    pure (fun g b => MatchArm.litArm sp (.boolLit sp boolVal) g b)
   | .ident name =>
     advance
-    let next ← peek
-    if next == .doubleColon then
-      let enumName := name
+    if (← peek) == .doubleColon then
       advance
       let _typeArgs ← if (← peek) == .lt then
         expect .lt
@@ -1345,34 +1329,29 @@ partial def parseMatchArm : ParseM MatchArm := do
       else
         pure []
       let variant ← expectIdent
-      -- Check for field bindings
-      let next2 ← peek
-      let bindings ← if next2 == .lbrace then
+      let bindings ← if (← peek) == .lbrace then
         advance
-        let mut bindings : List String := []
-        let mut tk ← peek
-        while tk != .rbrace && tk != .eof do
-          let bindName ← expectIdent
-          bindings := bindings ++ [bindName]
-          tk ← peek
-          if tk == .comma then advance; tk ← peek
-        expect .rbrace
-        pure bindings
+        parseBindingList
       else
         pure []
-      let guard ← parseArmGuard
-      let body ← parseMatchArmBody
-      let tk2 ← peek
-      if tk2 == .comma then advance
-      return .mk sp enumName variant bindings guard body
+      pure (fun g b => MatchArm.mk sp name variant bindings g b)
     else
-      -- Variable binding pattern: name [if guard] -> body
-      let guard ← parseArmGuard
-      let body ← parseMatchArmBody
-      let tk2 ← peek
-      if tk2 == .comma then advance
-      return .varArm sp name guard body
+      pure (fun g b => MatchArm.varArm sp name g b)
   | _ => throwParse s!"expected match pattern, got {firstTk}"
+
+/-- Parse one match arm, which may be an OR of patterns sharing a guard and body:
+    `P1 | P2 | … [if g] => body`. Desugars to one `MatchArm` per pattern (all with
+    the same guard and body) — OR support with no new AST/Core/lowering. -/
+partial def parseMatchArm : ParseM (List MatchArm) := do
+  let firstHead ← parsePatternHead
+  let mut heads := [firstHead]
+  while (← peek) == .pipe do
+    advance
+    heads := heads ++ [← parsePatternHead]
+  let guard ← parseArmGuard
+  let body ← parseMatchArmBody
+  if (← peek) == .comma then advance
+  return heads.map (fun mk => mk guard body)
 
 partial def parseExprOrAssign : ParseM Stmt := do
   let e ← parseExpr
