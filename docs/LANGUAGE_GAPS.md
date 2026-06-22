@@ -52,7 +52,7 @@ When two modules export functions with the same name (e.g., `from_tag`), there's
 
 Tuple destructuring `let (a, b) = ...;` remains unsupported, but only because Concrete has no tuple types — there is nothing to destructure.
 
-### 10. Interpreter/runtime data-structure ergonomics are still thin
+### 10. Interpreter/runtime data-structure ergonomics are still maturing
 
 MAL exposed an important distinction:
 
@@ -61,11 +61,19 @@ MAL exposed an important distinction:
 
 The right MAL fix is a frame-bounded environment design, not a language workaround. But the language/stdlib still makes this class of runtime somewhat harder than it should be:
 
-- no hashmap/dictionary yet
-- no obvious nested collection patterns for runtime structures
-- string-heavy runtime code is already under pressure from Bugs 010 and 011
+- maps/sets/Vec now exist, but higher-level runtime patterns still want more
+  proven examples: scoped lookup/update across frame stacks, intern pools,
+  arena/index safety, and dictionary-coherence rules for binary map/set ops
+- no obvious stdlib-level nested collection patterns for interpreter
+  environments yet; `lox` and related examples show the shape, not a reusable
+  abstraction
+- string-heavy runtime code is improved, but formatting/interpolation remains
+  intentionally unbuilt
 
-**Effect:** Concrete can support better interpreter designs than the first MAL attempt, but the supporting runtime/data-structure toolbox is still thinner than ideal for this workload class.
+**Effect:** Concrete can support better interpreter designs than the first MAL
+attempt, but the supporting runtime/data-structure toolbox is still thinner than
+ideal for this workload class. This is now a Phase 7 stdlib/examples issue, not
+a missing core collection feature.
 
 ### ~~11. Standalone benchmark programs lack an easy timing path (Bug 012)~~ — FIXED
 

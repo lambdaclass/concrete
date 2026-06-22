@@ -82,7 +82,7 @@ These are areas where the current design may evolve, but only under explicit cri
 | Concurrency | Single-threaded | Real-program pressure showing structured concurrency is needed |
 | Freestanding mode | Hosted only | Stable stdlib boundary, clear core/hosted split |
 | Capability hiding | Caps always visible | Sustained ergonomic pain in real programs |
-| Pre/post conditions | None | ProofCore extraction mature, at least one Lean proof |
+| Source contracts | Basic `#[requires]` / `#[ensures]` admitted and obligation-backed | SPARK-class frame/dependency/ghost layer pulled by a flagship or external workload |
 | Derived equality | Manual only | Trait/derive mechanism design settled |
 | Package model | Single-file/lakefile | Real multi-package projects written |
 

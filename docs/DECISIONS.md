@@ -101,14 +101,26 @@ Concrete should only broaden concurrency once it can do so without importing asy
 
 **Prerequisite:** Language surface and safety model stable enough that concurrency does not distort them.
 
-### Pre/post conditions — not yet
+### Source contracts — admitted; SPARK-class contract depth not yet
 
-**Status:** Deferred
+**Status:** Basic source contracts admitted; deeper assurance layer deferred
 **Detail:** [../research/language/pre-post-conditions.md](../research/language/pre-post-conditions.md)
 
-Contract annotations on functions (requires/ensures) would strengthen the proof story. Deferred because the ProofCore extraction and Lean proof story must mature first. Adding contracts before the proof pipeline is ready creates unverified annotations that look like guarantees.
+Basic source contracts (`#[requires]` / `#[ensures]`) are now part of Concrete's
+language surface. They are allowed because they lower into obligations and
+evidence classes; they are not decorative comments. The anti-feature remains
+unchecked contracts that look like guarantees without producing a ledger fact,
+policy result, report entry, or replay command.
 
-**Prerequisite:** ProofCore extraction working, at least one proven function in Lean.
+The deferred part is the SPARK-class assurance layer: loop
+invariants/variants as a mature authoring UX, frame/read/write contracts,
+dependency-flow contracts, ghost/spec erasure discipline, and package/release
+evidence summaries. See [SPARK_CLASS_ASSURANCE.md](SPARK_CLASS_ASSURANCE.md)
+and ROADMAP Phase 12 #19 / Phase 13 #16a.
+
+**Prerequisite for the deferred layer:** a workload or flagship that needs
+frame/dependency/ghost facts, plus gates proving those facts are reported
+through the existing obligation/evidence ledger rather than a parallel system.
 
 ### Derived structural equality — not yet
 
