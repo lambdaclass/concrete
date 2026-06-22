@@ -440,6 +440,17 @@ gate.
     `BoundFn` values only after a storage workload needs them. `from(param)` and
     view structs remain deferred escape valves, not part of the v1 callback
     surface.
+    Deferred ergonomics note: local no-capture functions are compatible with
+    the no-closures rule, but not admitted for v1. They add locality, not
+    expressive power, and carry a capture-by-expectation footgun because nested
+    functions look like they should see enclosing locals. Reconsider only if
+    real HOF-heavy workloads show top-level helper namespace noise is the
+    dominant friction after pattern ergonomics, block-as-value follow-ups,
+    `defer`, and explicit `std.fmt` builders land. If reconsidered, decide
+    whether local functions can see enclosing type parameters, whether they can
+    be passed as function pointers, name mangling, attempted-capture
+    diagnostics, formatter style, and a refactor/migration command for one-use
+    top-level callbacks.
 19. Define the stdlib handoff contract for Phase 7. Phases 5-6 decide the
     language surfaces the stdlib depends on — modules/imports, project model,
     tests, diagnostics, bytes/text/path types, collections, narrow const
