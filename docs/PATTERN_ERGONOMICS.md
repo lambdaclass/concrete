@@ -41,6 +41,11 @@ function that uses a range pattern is reported as having an unsupported construc
 (`range pattern`) rather than being silently mis-modelled. Lifting this is a
 later step.
 
+Known small gap: a range arm written against an *enum* scrutinee
+(`match someEnum { 0..=9 => … }`) is type-nonsensical but not rejected with a
+clean diagnostic in Check today — it is handled defensively in lowering. A
+dedicated "range pattern on non-integer scrutinee" diagnostic is a follow-up.
+
 Implementation: lexer tokens `..` / `..=`; `MatchArm.rangeArm` /
 `CMatchArm.rangeArm`; lowered to a `lo <= scr && scr (<=|<) hi` comparison-branch
 (`Concrete/Lower.lean`), mirroring the literal-arm branch.
