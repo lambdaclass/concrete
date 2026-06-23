@@ -17,6 +17,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Workflow-YAML gate (every workflow file parses)
+        run: |
+          python3 -m pip install --quiet pyyaml || true
+          bash scripts/tests/check_workflow_yaml.sh
+
       - name: Run Python LL(1) checker
         run: python3 scripts/check_ll1.py grammar/concrete.ebnf
 
@@ -315,7 +320,7 @@ jobs:
       - name: Project-model gate (Phase 5 #2 — Concrete.toml structure)
         run: bash scripts/tests/check_project_model.sh
 
-      - name: `concrete test` gate (Phase 5 #3 — project test runner)
+      - name: "`concrete test` gate (Phase 5 #3 — project test runner)"
         run: bash scripts/tests/check_concrete_test.sh
 
       - name: Diagnostics-quality gate (Phase 5 #4 — span floor)
@@ -327,7 +332,7 @@ jobs:
       - name: Collections gate (Phase 5 #6 — H1-clean collection surface)
         run: bash scripts/tests/check_collections.sh
 
-      - name: `concrete fmt` gate (Phase 6 #1 — subcommand + semantics-preserving)
+      - name: "`concrete fmt` gate (Phase 6 #1 — subcommand + semantics-preserving)"
         run: bash scripts/tests/check_concrete_fmt.sh
 
       - name: Loop-control gate (Phase 6 #4 — break/continue/while-expr + linear cleanup)

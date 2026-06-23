@@ -10,6 +10,20 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Fix: CI was silently dead — backtick in workflow YAML (2026-06-23)
+
+- `lean_action_ci.yml` had been reporting a 0-second "completed failure" with no
+  logs for **40+ consecutive pushes**: not a test failure but a *parse* failure,
+  so the entire gate suite (proof gate, SMT gates, contract gates, every
+  `check_*.sh`) never ran. Cause: two `name:` values began with a backtick
+  (`` `concrete test` gate `` / `` `concrete fmt` gate ``) — `` ` `` is a reserved
+  YAML indicator and cannot start a plain scalar, so GitHub rejected the file
+  before running any job. Quoted both. Added a **workflow-YAML gate**
+  (`scripts/tests/check_workflow_yaml.sh`, `make test-workflow-yaml`, plus an
+  early CI step) that parses every workflow file with PyYAML/psych so a malformed
+  workflow is caught locally instead of leaving CI dark. This is the same
+  "no silent failures" discipline applied to CI config itself.
+
 ### Fix: re-stale the proof-staleness fixture (2026-06-23)
 
 - The `compute_checksum` fixture in `examples/proof_pressure/src/main.con` is a
