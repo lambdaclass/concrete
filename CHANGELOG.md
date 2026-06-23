@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Fix: re-stale the proof-staleness fixture (2026-06-23)
+
+- The `compute_checksum` fixture in `examples/proof_pressure/src/main.con` is a
+  *deliberately stale* proof — its `#[proof_fingerprint]` is meant to be the hash
+  of the ORIGINAL body while the body itself carries a `+ 1` shift, so the
+  staleness machinery must flag it. A prior blanket fingerprint regeneration
+  (the truncated-SHA-256 migration) had silently rewritten the stored digest to
+  match the *current* (`+ 1`) body, un-staling the fixture: `proof-status`
+  reported "matches current body", `proof_gate.sh` failed 2/20 (`expected at
+  least 1 stale proof, got 0`), and `test_prove_cli.sh`'s `exit stale=3` no
+  longer held. Restored the digest to the original body's hash
+  (`243d15e5…`) and pinned a comment warning against blanket regeneration.
+  Stale *detection* was never broken — only the fixture. Proof gate back to
+  20/20, prove-CLI 68/0.
+
 ### Grammar reference re-synced + GRAMMAR.md (2026-06-23)
 
 - Phase 6 #2. The canonical grammar `grammar/concrete.ebnf` had drifted behind

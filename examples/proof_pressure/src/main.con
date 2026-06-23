@@ -72,14 +72,16 @@ fn validate_header(nonce: Int, max_nonce: Int, version: Int) -> Int {
 
 // ---- 3. STALE: body was changed after proof was linked ----
 // The #[proof_fingerprint] below is the hash of the ORIGINAL body:
-//   return key * message + salt
+//   return key * message + salt   (digest 243d15e5b8803dec08c7013c29575b45)
 // but the body has since been changed to add a shift (+ 1). Since
 // hash(current body) != the stored fingerprint, this must show as "stale" —
 // the in-source link is subject to the same staleness machinery a JSON
 // registry entry was (see #[proof_fingerprint] in CONTRACTS_GUIDE).
+// NB: keep this digest pinned to the ORIGINAL body; a blanket fingerprint
+// regeneration would silently un-stale this fixture (see proof_gate.sh).
 #[spec(compute_checksum.spec)]
 #[proof_by(Concrete.Proof.compute_checksum_correct)]
-#[proof_fingerprint("885e09af371d284a814eb52ac05ee180")]
+#[proof_fingerprint("243d15e5b8803dec08c7013c29575b45")]
 fn compute_checksum(key: Int, message: Int, salt: Int) -> Int {
     return key * message + salt + 1;
 }
