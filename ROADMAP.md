@@ -469,6 +469,12 @@ gate.
    pattern language is complete for decoder/parser/interpreter work; the two
    deferrals are sugar with clean, equally-expressive workarounds and recorded
    forcing conditions.
+   KNOWN DIAGNOSTIC FOLLOW-UP (fail-closed, not a soundness gap; recorded in
+   `docs/PATTERN_ERGONOMICS.md`): a range arm on a non-integer (e.g. enum)
+   scrutinee — `match someEnum { 0..=9 => … }` — is type-nonsensical but is not
+   rejected with a clean Check diagnostic today; it is handled defensively in
+   lowering. Add a dedicated "range pattern on non-integer scrutinee" diagnostic
+   and a negative fixture in the pattern-ergonomics gate.
 
    **Suggested order:** integer range patterns and match-on-`&T` first (they
    immediately improve decoders, parsers, and interpreter-shaped workloads),
@@ -521,6 +527,14 @@ gate.
    - Lossy/ambiguous cast diagnostics are unbuilt: `300 as u8`, `-1 as u32`, and
      `3.9 as i32` compile silently today — add with an explicit
      acknowledgement/escape shape for intentional truncation.
+   - Signed/unsigned comparison rule is incomplete (probed 2026-06-23): a
+     same-WIDTH mixed-sign comparison (`i32 < u32`, `i64 < u64`) compiles
+     SILENTLY today, and its truth depends on signed-vs-unsigned interpretation
+     (e.g. `-1` as i32 vs a u32) — a latent footgun; a different-WIDTH comparison
+     (`u8 < i32`) is already rejected (E0715). Decide the same-width mixed-sign
+     case — reject it and require an explicit cast, or define+document the
+     interpretation — and gate it. This is the #6 "signed/unsigned comparisons"
+     sub-part.
 
    **Track C — overflow policy is a real design fork, not a quick checker patch.**
    Arithmetic already produces overflow obligations and proven overflow should
