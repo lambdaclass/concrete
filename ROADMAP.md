@@ -500,16 +500,13 @@ gate.
    (main suite). This was the single most pervasive papercut.
    REMAINING for #6 (re-scoped by probe, 2026-06-23):
 
-   **Track A — lock the de-facto numeric model first.** Several #6 sub-parts
-   already work and should be documented/gated before changing semantics:
-   default integer type is `i64`; hex (`0xFF`) and binary (`0b1010`) literal
-   bases work; typed contexts can hint integer literals; comparisons are
-   type-driven (e.g. `u8` compares unsigned, so `200 < 100` is false);
-   explicit `as` conversions work for widen/narrow/signed/unsigned/float cases;
-   and implicit widening/narrowing is rejected (E0220), preserving the
-   no-implicit-conversion rule. Add `docs/NUMERIC_MODEL.md` and
-   `scripts/tests/check_numeric_model.sh` to pin these facts, including negative
-   fixtures for implicit conversion.
+   **Track A — lock the de-facto numeric model.** DONE (2026-06-23):
+   `docs/NUMERIC_MODEL.md` documents default-`i64`, hex/binary bases, type-driven
+   comparison signedness (`u8` compares unsigned), explicit-`as`-only conversion
+   (no implicit widen/narrow, E0220), out-of-range literal rejection (E0227), and
+   the overflow semantics. Pinned by `scripts/tests/check_numeric_literals.sh`
+   (the model-invariant section: implicit-conversion rejected, u8-comparison
+   unsigned, explicit-`as` truncation).
 
    **Track B — build the genuine gaps.**
    - ~~Out-of-range integer literal in a typed context~~ — DONE (2026-06-23):
@@ -523,18 +520,24 @@ gate.
      `let a: u8 = -1` / `let a: i8 = -129` are rejected (the `unaryOp neg` case
      range-checks the *negated* value `-N`, so the signed minimum `i8 = -128`
      still compiles even though its inner literal 128 exceeds i8's positive max).
-   - Literal suffixes (`7u8`, `5i32`, `0xFFu8`) are not parsed — still to build.
-   - Lossy/ambiguous cast diagnostics are unbuilt: `300 as u8`, `-1 as u32`, and
-     `3.9 as i32` compile silently today — add with an explicit
-     acknowledgement/escape shape for intentional truncation.
+   - Literal suffixes (`7u8`, `5i32`, `0xFFu8`) — DEFERRED (workload-gated):
+     pure convenience (annotations already cover the need); needs lexer+token+
+     parser work to attach the suffix at lex time. Revisit if a workload shows
+     annotations are too noisy. (`docs/NUMERIC_MODEL.md`.)
+   - Lossy/ambiguous cast diagnostics — ROUTED to #21 (lint/vet): `as` is the
+     explicit opt-in lossy escape, so a blanket warning would be noise; the right
+     shape is a lint on *provably* lossy casts, which belongs in `concrete
+     lint`/`vet`, not as a type error here.
    - Signed/unsigned comparison rule is incomplete (probed 2026-06-23): a
      same-WIDTH mixed-sign comparison (`i32 < u32`, `i64 < u64`) compiles
      SILENTLY today, and its truth depends on signed-vs-unsigned interpretation
      (e.g. `-1` as i32 vs a u32) — a latent footgun; a different-WIDTH comparison
      (`u8 < i32`) is already rejected (E0715). Decide the same-width mixed-sign
      case — reject it and require an explicit cast, or define+document the
-     interpretation — and gate it. This is the #6 "signed/unsigned comparisons"
-     sub-part.
+     interpretation — and gate it. ROUTED to #21 (lint/vet): same-width
+     mixed-sign comparison is a lint candidate, not a silent reinterpretation
+     (both sides keep their declared types today). Recorded in
+     `docs/NUMERIC_MODEL.md`.
 
    **Track C — overflow policy is a real design fork, not a quick checker patch.**
    Arithmetic already produces overflow obligations and proven overflow should
@@ -547,9 +550,17 @@ gate.
    should be explicit (`wrapping_*` / `saturating_*` or equivalent), never hidden
    in the default arithmetic story.
 
-   Suggested #6 order: (1) `NUMERIC_MODEL.md` + gate for the existing model;
-   (2) reject out-of-range literals; (3) literal suffixes; (4) lossy/narrowing
-   cast diagnostics; (5) overflow-profile design with #10.
+   **#6 CORE-COMPLETE (2026-06-23).** The numeric model is documented
+   (`docs/NUMERIC_MODEL.md`) and gated (`scripts/tests/check_numeric_literals.sh`,
+   8 checks). BUILT: out-of-range literal rejection (E0227, pos+neg — the one
+   soundness footgun), and the model invariants (default-i64, type-driven
+   signedness, no-implicit-conversion, explicit-`as`). ROUTED to their natural
+   homes (recorded in the doc): overflow runtime profiles + `wrapping_*`/
+   `saturating_*` helpers + proven-overflow folder completion → **#10** (build
+   profiles); lossy-cast and same-width mixed-sign-comparison lints → **#21**
+   (lint/vet). DEFERRED workload-gated: literal suffixes. Overflow obligations
+   already exist and proven overflow is an E0900 hard error (folder partial);
+   unproven overflow wraps, consistent with unproven bounds/division.
 7. Define resource cleanup semantics: `defer`, drop/cleanup ordering,
     early-return cleanup, failure during cleanup, move-after-defer behavior, and
     linear-value interaction.

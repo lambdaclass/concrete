@@ -10,6 +10,24 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #6 (numeric literal/cast rules) core-complete (2026-06-23)
+
+- The numeric model is now documented (`docs/NUMERIC_MODEL.md`) and gated
+  (`scripts/tests/check_numeric_literals.sh`, 8 checks): default integer type is
+  `Int`/i64; hex/binary literal bases; comparison signedness is type-driven
+  (`u8` compares unsigned); conversion is explicit-`as`-only (no implicit
+  widen/narrow, E0220); out-of-range literals are rejected (E0227, positive and
+  negative); `as` is the opt-in lossy/truncating path.
+- The one numeric *soundness* gap — silent out-of-range literal truncation — is
+  closed (see prior entry). The remaining #6 sub-parts are features/decisions,
+  routed to their natural homes rather than left as hidden gaps: overflow runtime
+  profiles + `wrapping_*`/`saturating_*` helpers + proven-overflow folder
+  completion → **#10** (build profiles); lossy-cast and same-width mixed-sign
+  comparison lints → **#21** (lint/vet); literal suffixes deferred (workload-gated,
+  annotations cover the need). Overflow obligations already exist and proven
+  overflow is an E0900 hard error (folding partial); unproven overflow wraps,
+  consistent with unproven bounds/division. Full suite 1576/0; all gates green.
+
 ### Out-of-range integer literals rejected (2026-06-23)
 
 - Phase 6 #6, first sub-fix. An integer literal that cannot fit its annotated

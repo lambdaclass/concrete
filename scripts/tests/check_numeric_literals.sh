@@ -46,6 +46,25 @@ echo "=== in-range / valid-negative literals compile; explicit as-cast still tru
 run_expect in_range_literals 1
 run_expect valid_negative_literals 1            # i8 = -128 (signed min), -var
 
+echo "=== numeric model invariants (docs/NUMERIC_MODEL.md) ==="
+# inline probes: reject <label> <src>  /  accept <label> <src>
+inl_reject(){ printf '%s' "$2" > "$TMP/m.con"
+  "$C" "$TMP/m.con" -o "$TMP/m.bin" >"$TMP/m.out" 2>&1 \
+    && no "$1: expected rejection, compiled" \
+    || ok "$1: rejected ($(grep -oE '\([A-Z0-9]+\)' "$TMP/m.out" | head -1))"; }
+inl_run(){ printf '%s' "$2" > "$TMP/m.con"
+  if "$C" "$TMP/m.con" -o "$TMP/m.bin" >"$TMP/m.out" 2>&1; then
+    local g; g="$("$TMP/m.bin" 2>/dev/null)"
+    [ "$g" = "$3" ] && ok "$1 -> $g" || no "$1: got '$g' want '$3'"
+  else no "$1: expected to compile"; sed 's/^/        /' "$TMP/m.out" | head -2; fi; }
+
+# No implicit numeric conversion — even widening needs `as`.
+inl_reject "implicit widen u8->u64" 'mod m { fn want(x: u64) -> u64 { return x; } fn main() -> Int { let a: u8 = 5; return want(a) as Int; } }'
+# Comparison signedness is type-driven: (200:u8) < (100:u8) is false.
+inl_run "u8 comparison is unsigned" 'mod m { fn main() -> Int { let a: u8 = 200; let b: u8 = 100; if a < b { return 1; } return 0; } }' 0
+# Explicit `as` truncation is allowed (the opt-in lossy path).
+inl_run "explicit as truncation" 'mod m { fn main() -> Int { let a: i64 = 300; let b: u8 = a as u8; return b as Int; } }' 44
+
 echo ""
 echo "NUMERIC-LITERALS: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
