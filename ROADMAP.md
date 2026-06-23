@@ -492,37 +492,42 @@ gate.
    (u8/u16/i16), negative literals, nested arrays, function-arg, and struct-field
    contexts. Locked by `tests/programs/regress_array_literal_elem_infer.con`
    (main suite). This was the single most pervasive papercut.
-   REMAINING for #6: literal suffixes, the default-integer-type rule, signed/
-   unsigned comparison rules, narrowing/widening, the overflow profiles, and
-   ambiguous/lossy-cast diagnostics.
-   CURRENT BEHAVIOR (probed 2026-06-23) — what exists vs is missing:
-   - Default integer type is i64 (`let x = 5` → i64); hex (`0xFF`) and binary
-     (`0b1010`) literal bases work. EXISTS.
-   - Literal suffixes (`7u8`, `5i32`) are NOT parsed — E0001. MISSING.
-   - Casts (`as`) are fully permissive and ALWAYS silent: narrowing
-     (i64 300 → u8 44), signed↔unsigned (i32 -1 → u32 4294967295), neg→unsigned
-     (-1 → u8 255), float→int truncation (3.9 → 3) all compile with NO
-     diagnostic. The "ambiguous/lossy cast diagnostics" goal is unbuilt.
-   - FOOTGUN (do first): an out-of-range integer LITERAL is silently truncated,
-     not rejected — `let a: u8 = 300;` runs as 44, no warning. This is a silent
-     lossy construct (against the no-dark-constructs rule); rejecting out-of-range
-     literals is the cheapest, highest-value first sub-fix.
-   - Overflow: default arithmetic wraps silently (opt-in model — expected).
-     `#[overflow_checked]` is parsed and emits a "Runtime-safety obligations
-     (integer overflow)" report entry that the compiler tries to PROVE statically
-     (status proved / unproven), but it is REPORT-ONLY: it does not trap at
-     runtime and does not hard-error even on provable overflow —
-     `#[overflow_checked] go(250,10): u8` still runs to 4 (rc=0), status
-     `unproven`. So the runtime "checked" profile and the "wrapping"/"saturating"
-     profiles do NOT exist; wrapping/saturating/checked helper fns are absent
-     (`wrapping_add` → E0101 unknown). Only the static "proved" path is partial.
-   - Signed/unsigned MIXED comparison (`i32 < u32`) is silently ALLOWED with no
-     diagnostic (compiled; gave the signed-correct answer in the case tested).
-     No mixed-sign comparison rule exists.
-   Suggested #6 order: (1) reject out-of-range literals [footgun/soundness,
-   cheap]; (2) literal suffixes; (3) lossy/narrowing cast diagnostics;
-   (4) the runtime "checked" overflow profile + wrapping/saturating helpers;
-   (5) signed/unsigned comparison rules.
+   REMAINING for #6 (re-scoped by probe, 2026-06-23):
+
+   **Track A — lock the de-facto numeric model first.** Several #6 sub-parts
+   already work and should be documented/gated before changing semantics:
+   default integer type is `i64`; hex (`0xFF`) and binary (`0b1010`) literal
+   bases work; typed contexts can hint integer literals; comparisons are
+   type-driven (e.g. `u8` compares unsigned, so `200 < 100` is false);
+   explicit `as` conversions work for widen/narrow/signed/unsigned/float cases;
+   and implicit widening/narrowing is rejected (E0220), preserving the
+   no-implicit-conversion rule. Add `docs/NUMERIC_MODEL.md` and
+   `scripts/tests/check_numeric_model.sh` to pin these facts, including negative
+   fixtures for implicit conversion.
+
+   **Track B — build the genuine gaps.** Literal suffixes (`7u8`, `5i32`,
+   `0xFFu8`) are not parsed. Lossy/ambiguous cast diagnostics are unbuilt:
+   `300 as u8`, `-1 as u32`, and `3.9 as i32` compile silently today. The sharpest
+   immediate footgun is an out-of-range integer literal in a typed context:
+   `let a: u8 = 300;` silently truncates to 44. Fix this first by rejecting
+   out-of-range literals at Check/Elab with a dedicated diagnostic and negative
+   fixture; then add suffixes; then add lossy-cast diagnostics with an explicit
+   acknowledgement/escape shape for intentional truncation.
+
+   **Track C — overflow policy is a real design fork, not a quick checker patch.**
+   Arithmetic already produces overflow obligations and proven overflow should
+   stay a hard error. But unproven overflow currently wraps at runtime unless
+   policy/reporting catches it; no user-facing checked/wrapping/saturating
+   profile exists, and helper functions such as `wrapping_add` are absent. Decide
+   this together with #10 build profiles: strict/provable/predictable profiles
+   should reject or require runtime checks for unproven overflow; ordinary builds
+   must report the evidence class honestly; intentional wrapping and saturation
+   should be explicit (`wrapping_*` / `saturating_*` or equivalent), never hidden
+   in the default arithmetic story.
+
+   Suggested #6 order: (1) `NUMERIC_MODEL.md` + gate for the existing model;
+   (2) reject out-of-range literals; (3) literal suffixes; (4) lossy/narrowing
+   cast diagnostics; (5) overflow-profile design with #10.
 7. Define resource cleanup semantics: `defer`, drop/cleanup ordering,
     early-return cleanup, failure during cleanup, move-after-defer behavior, and
     linear-value interaction.
