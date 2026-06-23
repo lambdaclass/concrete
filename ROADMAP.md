@@ -495,6 +495,34 @@ gate.
    REMAINING for #6: literal suffixes, the default-integer-type rule, signed/
    unsigned comparison rules, narrowing/widening, the overflow profiles, and
    ambiguous/lossy-cast diagnostics.
+   CURRENT BEHAVIOR (probed 2026-06-23) — what exists vs is missing:
+   - Default integer type is i64 (`let x = 5` → i64); hex (`0xFF`) and binary
+     (`0b1010`) literal bases work. EXISTS.
+   - Literal suffixes (`7u8`, `5i32`) are NOT parsed — E0001. MISSING.
+   - Casts (`as`) are fully permissive and ALWAYS silent: narrowing
+     (i64 300 → u8 44), signed↔unsigned (i32 -1 → u32 4294967295), neg→unsigned
+     (-1 → u8 255), float→int truncation (3.9 → 3) all compile with NO
+     diagnostic. The "ambiguous/lossy cast diagnostics" goal is unbuilt.
+   - FOOTGUN (do first): an out-of-range integer LITERAL is silently truncated,
+     not rejected — `let a: u8 = 300;` runs as 44, no warning. This is a silent
+     lossy construct (against the no-dark-constructs rule); rejecting out-of-range
+     literals is the cheapest, highest-value first sub-fix.
+   - Overflow: default arithmetic wraps silently (opt-in model — expected).
+     `#[overflow_checked]` is parsed and emits a "Runtime-safety obligations
+     (integer overflow)" report entry that the compiler tries to PROVE statically
+     (status proved / unproven), but it is REPORT-ONLY: it does not trap at
+     runtime and does not hard-error even on provable overflow —
+     `#[overflow_checked] go(250,10): u8` still runs to 4 (rc=0), status
+     `unproven`. So the runtime "checked" profile and the "wrapping"/"saturating"
+     profiles do NOT exist; wrapping/saturating/checked helper fns are absent
+     (`wrapping_add` → E0101 unknown). Only the static "proved" path is partial.
+   - Signed/unsigned MIXED comparison (`i32 < u32`) is silently ALLOWED with no
+     diagnostic (compiled; gave the signed-correct answer in the case tested).
+     No mixed-sign comparison rule exists.
+   Suggested #6 order: (1) reject out-of-range literals [footgun/soundness,
+   cheap]; (2) literal suffixes; (3) lossy/narrowing cast diagnostics;
+   (4) the runtime "checked" overflow profile + wrapping/saturating helpers;
+   (5) signed/unsigned comparison rules.
 7. Define resource cleanup semantics: `defer`, drop/cleanup ordering,
     early-return cleanup, failure during cleanup, move-after-defer behavior, and
     linear-value interaction.
