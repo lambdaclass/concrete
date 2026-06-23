@@ -1,23 +1,13 @@
 +++
-title = "Concrete Documentation"
+title = "Concrete"
 +++
 
-This site is the web entry point for Concrete’s documentation.
+Concrete is an experimental systems language for inspectable safety claims.
 
-Concrete is a small systems language for C and Rust programmers where
-authority, runtime risk, assumptions, and proof evidence are visible in the
-toolchain.
+The site is organized around evidence: what the source claims, which checks
+the compiler enforces, what the reports prove, what tests only exercise, and
+which assumptions or trusted boundaries remain.
 
-Its distinctiveness is the composition: no GC systems code, linear ownership,
-explicit capabilities, contracts in source, Lean checked proof links, drift
-detection, multiple evidence classes instead of one green badge, and audit
-reports that refuse to hide trust.
-
-The homepage shows the important distinction with small examples: a Lean linked
-proof, a kernel decision procedure, oracle evidence that is useful but not
-proof, external SMT with named solver trust, and the lower evidence statuses
-that keep reports honest.
-
-Use the reference section for stable contracts and project rules. Use the guide
-section for a smaller narrative path through the language, tooling, and current
-implementation.
+Use the guide for a narrative path through the language. Use the reference for
+the stable invariants, value model, safety model, and compiler/reporting
+contracts.

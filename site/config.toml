@@ -1,6 +1,6 @@
 base_url = "https://unbalancedparentheses.github.io/concrete2"
-title = "Concrete Documentation"
-description = "Reference and guide documentation for Concrete"
+title = "Concrete"
+description = "An experimental systems language for inspectable safety claims"
 compile_sass = false
 build_search_index = true
 generate_feeds = false

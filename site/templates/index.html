@@ -1,286 +1,320 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="whitepaper-home">
-  <aside class="paper-sidebar" aria-label="Homepage table of contents">
-    <p class="sidebar-title">Concrete</p>
-    <nav>
-      <a href="#abstract">1. Abstract</a>
-      <a href="#distinctive">2. What Makes It Different</a>
-      <a href="#tiny-claims">3. Tiny Claims</a>
-      <a href="#model">4. Evidence Model</a>
-      <a href="#example">5. Running Example</a>
-      <a href="#status">6. Current Status</a>
-      <a href="#hmac">7. HMAC Work</a>
-      <a href="#limits">8. Limits</a>
-      <a href="#read">9. Read Next</a>
-    </nav>
-    <div class="sidebar-links">
-      <a href="{{ get_url(path='@/paper.md') }}">Paper</a>
-      <a href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">Roadmap</a>
-      <a href="{{ config.extra.repo_url }}">Repository</a>
+<article class="evidence-home">
+  <section class="hero-section" aria-labelledby="hero-title">
+    <div class="hero-copy">
+      <p class="eyebrow">Concrete</p>
+      <h1 id="hero-title">Systems code whose safety claims are inspectable.</h1>
+      <p class="lede">
+        Concrete is an experimental systems language where authority, runtime
+        risk, proof evidence, assumptions, and trusted boundaries are visible
+        in source and replayable through reports.
+      </p>
+      <div class="hero-badges" aria-label="Project status">
+        <span>Experimental</span>
+        <span>Phase 6 frontier</span>
+        <span>No broad production claim yet</span>
+      </div>
+      <div class="hero-actions">
+        <a class="button primary" href="#replay">Replay path</a>
+        <a class="button" href="#evidence">Evidence classes</a>
+        <a class="button" href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">Roadmap</a>
+      </div>
     </div>
-  </aside>
 
-  <article class="paper-document">
-    <header class="paper-title">
-      <p class="eyebrow">Concrete documentation</p>
-      <h2>Concrete</h2>
-      <p class="paper-subtitle">
-        A small systems language for C and Rust programmers where authority, runtime risk,
-        assumptions, and proof evidence are visible in the toolchain.
-      </p>
-      <p class="paper-meta">
-        Project status: experimental. Compiler correctness and backend
-        correctness are not fully proved today.
-      </p>
-    </header>
-
-    <section id="abstract" class="paper-section">
-      <h3>1. Abstract</h3>
-      <p>
-        Concrete's claim is the composition: systems control and evidence
-        accounting in the same toolchain. It combines no GC systems code, linear
-        ownership, explicit capabilities, contracts in source, Lean checked
-        proof links, drift detection, and audit reports that refuse to hide
-        trust.
-      </p>
-      <p>
-        The immediate claim is narrow: the toolchain should not let evidence
-        silently lie. If a function body changes, authority widens, allocation
-        appears, or a proof no longer matches the source, normal reports and CI
-        gates should show that change.
-      </p>
-    </section>
-
-    <section id="distinctive" class="paper-section">
-      <h3>2. What Makes It Different</h3>
-      <p>
-        Most nearby systems pick only part of this shape: Rust has strong
-        ownership but external proofs; Zig and C give excellent control but
-        little built in evidence tracking; SPARK, Dafny, F*, and Why3 have
-        strong verification but are usually SMT heavy and not shaped like a
-        small no GC systems language; Lean and Coq have excellent
-        proof kernels but are not ordinary systems languages.
-      </p>
-      <ol class="paper-list">
-        <li>No GC systems code: fixed arrays, explicit control, no hidden runtime story by default.</li>
-        <li>Linear ownership plus explicit capabilities: functions show what they can touch.</li>
-        <li>Proofs attached to source: contracts and source linked Lean evidence can go stale when bodies drift.</li>
-        <li>Multiple evidence classes, not one green badge: Lean proof, kernel decision, SMT with named solver trust, oracle test, enforced, assumed, trusted, partial, stale, and vacuous are distinct.</li>
-        <li>Audit first philosophy: reports say what is proved, enforced, tested, assumed, and trusted.</li>
-        <li>Lean as compiler and proof substrate: selected user proofs are checked by Lean's kernel, and compiler soundness work can live in the same ecosystem.</li>
-      </ol>
-    </section>
-
-    <section id="tiny-claims" class="paper-section">
-      <h3>3. Claim Shapes</h3>
-      <p>
-        The audit class matters as much as the code. A Lean theorem, a kernel
-        decision procedure, an oracle test, and an external solver do not mean
-        the same thing.
-      </p>
-      <figure class="listing">
-        <pre><code>#[proof_by(Examples.ConstantTimeTag.Proofs.ct_compare_same_tag_correct)]
-#[ensures_proof(Examples.ConstantTimeTag.Proofs.ct_compare_different_tag_correct)]
-#[proof_coverage(iff)]
-#[ensures((a == b &amp;&amp; result == 1) || (a != b &amp;&amp; result == 0))]
-fn ct_compare(a: [u8; 16], b: [u8; 16]) -&gt; i32 {
-    let mut diff: u8 = 0;
-    for (let mut i: i32 = 0; i &lt; 16; i = i + 1) {
-        diff = diff | (a[i] ^ b[i]);
-    }
-    if diff == 0 { return 1; }
-    return 0;
-}</code></pre>
-        <figcaption>
-          Functional correctness, proved in Lean: <code>proved_by_lean</code>,
-          coverage <code>iff</code>.
-        </figcaption>
-      </figure>
-      <figure class="listing">
-        <pre><code>#[overflow_checked]
-#[requires(0 &lt;= off &amp;&amp; off + 1 &lt; len &amp;&amp; len &lt;= 512)]
-fn read_u16_be(packet: [u8; 512], off: i32, len: i32) -&gt; i32 {
-    let hi: i32 = packet[off] as i32;
-    let lo: i32 = packet[off + 1] as i32;
-    return hi * 256 + lo;
-}</code></pre>
-        <figcaption>
-          Runtime safety discharged by kernel decision procedures:
-          <code>omega</code> for bounds, <code>bv_decide</code> for overflow.
-        </figcaption>
-      </figure>
-      <figure class="listing">
-        <pre><code>$ make test-hmac-oracle
-
-hmac_sha256
-  reference: Python hmac/hashlib
-  vectors: RFC 4231, FIPS 180-4, 600 generated cases
-  status: tested_by_oracle
-  proof level: regression evidence, not proof</code></pre>
-        <figcaption>
-          Oracle evidence is useful, but it stays below proof in the ledger.
-        </figcaption>
-      </figure>
-      <figure class="listing">
-        <pre><code>#[requires(0 &lt;= msg_len &amp;&amp; msg_len &lt;= 256)]
-#[ensures(result &lt;= 5)]
-fn sha256_padded_blocks(msg_len: i32) -&gt; i32 {
-    return (msg_len + 9 + 63) / 64;
-}
-
-status: proved_by_smt
-solver: z3
-trust: solver_trusted
-replay: none</code></pre>
-        <figcaption>
-          External SMT is useful when policy allows it, but the solver and trust
-          class are named.
-        </figcaption>
-      </figure>
-      <figure class="listing">
-        <pre><code>assumed    explicit assumption, not proof
-trusted    outside the proof model, named in audit
-partial    one direction or point proved, not the full claim
-stale      source changed after the proof was linked
-vacuous    contract holds only because the premise is impossible
-missing    proof eligible, but no proof is linked yet
-unproven   obligation generated, not discharged
-violation  runtime safety failure detected
-invalid    malformed or ill scoped contract expression</code></pre>
-        <figcaption>
-          Other statuses are not failures of vocabulary. They are how Concrete
-          refuses to hide weaker evidence.
-        </figcaption>
-      </figure>
-    </section>
-
-    <section id="model" class="paper-section">
-      <h3>4. Evidence Model</h3>
-      <p>
-        Concrete separates claim classes instead of reducing everything to one
-        green badge. The current audit vocabulary is deliberately explicit:
-      </p>
-      <div class="paper-table-wrap">
-        <table class="paper-table">
-          <thead>
-            <tr><th>Claim</th><th>Status class</th><th>Current meaning</th></tr>
-          </thead>
-          <tbody>
-            <tr><th>Capabilities</th><td>enforced</td><td>Function authority is tracked and reported.</td></tr>
-            <tr><th>User theorems</th><td>Lean kernel</td><td>Attached theorems are checked by Lean.</td></tr>
-            <tr><th>Proof drift</th><td>CI gated</td><td>Body/spec fingerprints downgrade stale proofs.</td></tr>
-            <tr><th>Oracle behavior</th><td>tested</td><td>Flagships carry differential or reference tests.</td></tr>
-            <tr><th>Extraction soundness</th><td>partial</td><td>Some source-to-ProofCore rules are proved; work continues.</td></tr>
-            <tr><th>LLVM/backend</th><td>trusted</td><td>Generated binary correctness is still in the trusted base.</td></tr>
-          </tbody>
-        </table>
+    <div class="hero-artifact" aria-label="Evidence report preview">
+      <div class="artifact-head">
+        <span class="dot green"></span>
+        <span class="dot amber"></span>
+        <span class="dot red"></span>
+        <strong>audit transcript</strong>
       </div>
-    </section>
+      <pre><code>$ concrete examples/hmac_sha256/src/main.con --report contracts
 
-    <section id="example" class="paper-section">
-      <h3>5. Running Example</h3>
+runtime safety
+  bounds        proved_by_kernel_decision
+  overflow      proved_by_kernel_decision
+  violation     none
+
+authority
+  capabilities  Alloc
+  Unsafe        none in caller surface
+  returned refs rejected in safe signatures
+
+evidence
+  ch_refines    proved_by_lean
+  oracle tests  tested_by_oracle
+  assumptions   named, not hidden</code></pre>
+    </div>
+  </section>
+
+  <section id="thesis" class="split-section">
+    <div class="section-label">Thesis</div>
+    <div class="section-copy">
+      <h2>Not another “safe systems language” slogan.</h2>
       <p>
-        The narrow real-crypto example is a constant-time tag comparison. Its
-        proof does not claim machine-level constant time. It proves a source
-        property and names the remaining timing assumptions.
+        Concrete’s differentiator is not a single feature. It is the accounting:
+        what a function can touch, what was proved, what was only tested, what
+        must be trusted, and what remains assumed are separate facts instead of
+        one green badge.
       </p>
-      <figure class="listing">
-        <pre><code>fn ct_compare(a: [u8; 16], b: [u8; 16]) -&gt; Int {
-    let diff: u8 = 0;
-    let i: Int = 0;
+    </div>
+  </section>
 
-    while i &lt; 16 {
-        set diff = diff | (a[i] ^ b[i]);
-        set i = i + 1;
-    }
+  <section class="evidence-slice" aria-labelledby="slice-title">
+    <div class="section-head">
+      <p class="eyebrow">Credibility Slice</p>
+      <h2 id="slice-title">The homepage should show the thing you can audit.</h2>
+      <p>
+        The production-readiness path is a narrow, replayable slice: a real
+        parser/codec or crypto core, its contracts, its capability report, its
+        oracle tests, and its proof status. The site is now shaped around that
+        standard, not around generic language marketing.
+      </p>
+    </div>
 
-    if diff == 0 { return 1; }
-    return 0;
+    <div class="slice-grid">
+      <article>
+        <span>source</span>
+        <h3>Ordinary systems code</h3>
+        <pre><code>#[requires(cursor.remaining() &gt;= 2)]
+fn read_header(cursor: ByteCursor)
+  -&gt; Result&lt;FrameHeader, DecodeErr&gt; {
+    let tag: u8 = cursor.read_u8()?;
+    let len: u8 = cursor.read_u8()?;
+    return Result::Ok { value:
+      FrameHeader { tag, len } };
 }</code></pre>
-        <figcaption>
-          Listing 1. Source code stays ordinary: fixed arrays, byte operations,
-          bounded loop, no allocation, no ambient authority.
-        </figcaption>
-      </figure>
-      <figure class="listing">
-        <pre><code>$ concrete audit examples/constant_time_tag/src/main.con
+      </article>
+      <article>
+        <span>claims</span>
+        <h3>Evidence, not vibes</h3>
+        <pre><code>contracts:
+  precondition      checked
+  bounds            proved
+  overflow          proved
+  parser result     tested_by_oracle
 
-proof:
-  ct_compare_same_tag_correct: proved_by_lean
-  coverage: one_direction
+caps:
+  Alloc             no
+  IO                no
+  Unsafe            no</code></pre>
+      </article>
+      <article>
+        <span>review</span>
+        <h3>Replayable boundary</h3>
+        <pre><code>$ make test-byte-view
+$ make test-pattern-ergonomics
+$ concrete examples/codec/src/main.con --report contracts
+$ concrete examples/codec/src/main.con --report obligation-ledger
 
-authority:
-  capabilities: none
-  allocation: none
-  trusted code: none
+trusted:
+  backend, explicit trusted std internals
+assumed:
+  named environment facts</code></pre>
+      </article>
+    </div>
+  </section>
 
-assumptions:
-  machine-level constant-time: assumed
-  backend timing preservation: trusted</code></pre>
-        <figcaption>
-          Listing 2. Audit output keeps proved facts separate from assumptions
-          and trusted backend behavior.
-        </figcaption>
-      </figure>
-    </section>
-
-    <section id="status" class="paper-section">
-      <h3>6. Current Status</h3>
-      <div class="paper-table-wrap">
-        <table class="paper-table">
-          <thead>
-            <tr><th>Example</th><th>Status</th><th>Purpose</th></tr>
-          </thead>
-          <tbody>
-            <tr><th>parse_validate</th><td>graduated</td><td>Parser/protocol validation evidence.</td></tr>
-            <tr><th>crypto_verify</th><td>graduated</td><td>Authentication scaffolding with a toy MAC.</td></tr>
-            <tr><th>fixed_capacity</th><td>graduated</td><td>Bounded mutable state and array-update proofs.</td></tr>
-            <tr><th>constant_time_tag</th><td>graduated</td><td>Narrow real-crypto source proof with timing assumptions.</td></tr>
-            <tr><th>hmac_sha256</th><td>graduated</td><td>SHA-256/HMAC refinement chain against an independent spec.</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="hmac" class="paper-section">
-      <h3>7. HMAC Work</h3>
+  <section id="evidence" class="matrix-section" aria-labelledby="evidence-title">
+    <div class="section-head narrow">
+      <p class="eyebrow">Evidence Model</p>
+      <h2 id="evidence-title">Concrete reports the strength of a claim.</h2>
       <p>
-        HMAC-SHA256 is the deepest proof artifact. The extracted Concrete
-        source is linked to Lean checked refinements against an independent
-        SHA-256/HMAC specification, with drift gates tying the proof claim to
-        the exact source body.
+        A Lean theorem, a kernel decision, an oracle test, and an assumption are
+        different things. Concrete keeps them different in the source, ledger,
+        reports, and gates.
       </p>
-      <ol class="paper-list">
-        <li>Source contracts and proof links stay in source.</li>
-        <li>Loop and bitvector obligations use reusable ProofKit machinery.</li>
-        <li>Oracle tests remain regression evidence, not proof.</li>
-        <li>Backend and machine-level behavior remain named trust boundaries.</li>
-      </ol>
-    </section>
+    </div>
+    <div class="table-wrap">
+      <table class="claim-table">
+        <thead>
+          <tr>
+            <th>Class</th>
+            <th>Means</th>
+            <th>Concrete surface</th>
+            <th>Not claiming</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>proved_by_lean</th>
+            <td>Checked by Lean’s kernel through a linked theorem.</td>
+            <td><code>#[proof_by(...)]</code>, proof fingerprints, stale gates.</td>
+            <td>Backend or machine timing correctness.</td>
+          </tr>
+          <tr>
+            <th>proved_by_kernel_decision</th>
+            <td>Discharged by built-in decision procedures.</td>
+            <td>Bounds, div/mod, overflow, loop arithmetic obligations.</td>
+            <td>A general theorem prover for arbitrary specs.</td>
+          </tr>
+          <tr>
+            <th>enforced</th>
+            <td>Rejected or constrained by the compiler.</td>
+            <td>Capabilities, no returned refs, value model, provenance rules.</td>
+            <td>A proof that the program does the intended job.</td>
+          </tr>
+          <tr>
+            <th>runtime_checked</th>
+            <td>Kept safe by generated or library checks.</td>
+            <td>Checked accessors, fallible parsers, explicit policy reports.</td>
+            <td>A static proof.</td>
+          </tr>
+          <tr>
+            <th>tested_by_oracle</th>
+            <td>Compared against an independent implementation or corpus.</td>
+            <td>Execution oracles, snapshot tests, differential fixtures.</td>
+            <td>Complete correctness.</td>
+          </tr>
+          <tr>
+            <th>assumed / trusted</th>
+            <td>Outside the proved model and named for audit.</td>
+            <td>Trusted std internals, backend assumptions, environment facts.</td>
+            <td>Something hidden under a “safe” label.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
 
-    <section id="limits" class="paper-section">
-      <h3>8. What Concrete Does Not Claim Yet</h3>
+  <section class="language-tour" aria-labelledby="tour-title">
+    <div class="section-head">
+      <p class="eyebrow">Language Shape</p>
+      <h2 id="tour-title">Small rules with audit consequences.</h2>
+    </div>
+    <div class="tour-grid">
+      <article>
+        <h3>Explicit authority</h3>
+        <p>Functions carry capabilities, so allocation, IO, process access, and unsafe authority are reviewable facts.</p>
+      </article>
+      <article>
+        <h3>Value model</h3>
+        <p>Copy, move, borrow, and future clone are distinct API cells. A map read does not hide a clone or escaping reference.</p>
+      </article>
+      <article>
+        <h3>No returned refs</h3>
+        <p>Safe-callable functions cannot return references. Borrowed data flows downward through scoped callbacks and blocks.</p>
+      </article>
+      <article>
+        <h3>Contracts in source</h3>
+        <p>Preconditions, postconditions, runtime-safety obligations, and proof links stay next to the code they describe.</p>
+      </article>
+      <article>
+        <h3>Parser ergonomics</h3>
+        <p>Ranges, guards, OR patterns, if let, while let, match-on-reference, and struct update serve decoder workloads.</p>
+      </article>
+      <article>
+        <h3>ByteView</h3>
+        <p>Stored zero-copy byte views are coordinates, not references, so they fit the no-lifetimes memory model.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="compare-section" aria-labelledby="compare-title">
+    <div class="section-head narrow">
+      <p class="eyebrow">Positioning</p>
+      <h2 id="compare-title">Concrete sits between systems control and proof accounting.</h2>
+    </div>
+    <div class="compare-grid">
+      <article>
+        <h3>Rust</h3>
+        <p>Rust gives mature ownership and industrial tooling. Concrete trades maturity for explicit capability reports, proof evidence, and a smaller returned-reference story.</p>
+      </article>
+      <article>
+        <h3>Zig</h3>
+        <p>Zig gives transparent control and excellent build ergonomics. Concrete adds source-level contracts, evidence classes, and authority accounting.</p>
+      </article>
+      <article>
+        <h3>SPARK / Ada</h3>
+        <p>SPARK has a mature assurance discipline. Concrete aims for a smaller systems surface with capabilities, ownership, and a replayable evidence ledger.</p>
+      </article>
+      <article>
+        <h3>Lean / F*</h3>
+        <p>Proof-first systems can express deeper mathematics. Concrete keeps ordinary systems code central and reserves hand proofs for the hard edge.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="replay" class="replay-section" aria-labelledby="replay-title">
+    <div class="section-head">
+      <p class="eyebrow">Try It</p>
+      <h2 id="replay-title">Start with gates, not a brochure.</h2>
       <p>
-        Concrete is not a verified compiler today. It does not yet prove
-        generated binary correctness, whole-program constant-time behavior, or
-        every source-to-ProofCore extraction rule. Source contracts, generated
-        verification conditions, SMT assistance, ghost state, and gradual
-        runtime checks are roadmap work, not shipped language features.
+        The current repository is still experimental. The useful first contact
+        is running focused gates that show what the language already locks down.
       </p>
-    </section>
+    </div>
+    <div class="command-panel">
+      <pre><code>$ git clone https://github.com/unbalancedparentheses/concrete2
+$ cd concrete2
+$ make test-byte-view
+$ make test-pattern-ergonomics
+$ make test-loop-control
+$ make test-docs-drift</code></pre>
+    </div>
+  </section>
 
-    <section id="read" class="paper-section read-next">
-      <h3>9. Read Next</h3>
-      <ul class="paper-links">
-        <li><a href="{{ get_url(path='@/guide/getting_started.md') }}">Getting started</a><span>Build the compiler and run a program.</span></li>
-        <li><a href="{{ get_url(path='@/reference/PROVABLE_SUBSET.md') }}">Provable subset</a><span>What can carry Lean backed evidence today.</span></li>
-        <li><a href="{{ get_url(path='@/reference/SAFETY.md') }}">Safety</a><span>Capabilities, trusted code, Unsafe, and proof boundaries.</span></li>
-        <li><a href="{{ get_url(path='@/paper.md') }}">Paper</a><span>Research-style statement and build notes.</span></li>
-        <li><a href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">Roadmap</a><span>Active sequencing and open proof work.</span></li>
-      </ul>
-    </section>
-  </article>
-</div>
+  <section class="status-section" aria-labelledby="status-title">
+    <div class="section-head narrow">
+      <p class="eyebrow">Status</p>
+      <h2 id="status-title">Strong experimental core, not a production promise.</h2>
+    </div>
+    <div class="status-grid">
+      <article>
+        <h3>Solid today</h3>
+        <ul>
+          <li>Phases 1-5 core closed or workload-deferred.</li>
+          <li>Phase 6 formatter, aliases, loop control, and pattern ergonomics gated.</li>
+          <li>H1 returned-reference class closed by the type rule.</li>
+          <li>Obligation ledger is the single source for major reports.</li>
+        </ul>
+      </article>
+      <article>
+        <h3>Still being built</h3>
+        <ul>
+          <li>Numeric literal and cast policy.</li>
+          <li>Defer and cleanup ergonomics.</li>
+          <li>Operational VC automation for fewer hand-written Lean bridges.</li>
+          <li>Certification-style release bundles and production examples.</li>
+        </ul>
+      </article>
+      <article>
+        <h3>Deliberately deferred</h3>
+        <ul>
+          <li>Const generics until a real capacity-parametric workload pulls them.</li>
+          <li>Clone and mutable scoped callbacks until their value-model rules are forced.</li>
+          <li>Device capability until freestanding hardware code exists.</li>
+          <li>from(param) only if scoped-borrow APIs prove insufficient.</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <section class="read-next" aria-labelledby="read-title">
+    <div>
+      <p class="eyebrow">Read Next</p>
+      <h2 id="read-title">Follow the evidence trail.</h2>
+    </div>
+    <nav class="link-grid" aria-label="Primary documentation links">
+      <a href="{{ get_url(path='@/guide/_index.md') }}">
+        <strong>Guide</strong>
+        <span>Language tour, project workflow, and reports.</span>
+      </a>
+      <a href="{{ get_url(path='@/reference/_index.md') }}">
+        <strong>Reference</strong>
+        <span>Stable invariants, safety model, value model, and passes.</span>
+      </a>
+      <a href="{{ get_url(path='@/paper.md') }}">
+        <strong>Paper</strong>
+        <span>The research framing and design argument.</span>
+      </a>
+      <a href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">
+        <strong>Roadmap</strong>
+        <span>Current frontier, deferred triggers, and production-readiness path.</span>
+      </a>
+    </nav>
+  </section>
+</article>
 {% endblock content %}

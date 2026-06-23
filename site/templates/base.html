@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% if page and page.title %}{{ page.title }} | {% elif section and section.title %}{{ section.title }} | {% endif %}{{ config.title }}</title>
+  <title>{% if page and page.title and page.title != config.title %}{{ page.title }} | {% elif section and section.title and section.title != config.title %}{{ section.title }} | {% endif %}{{ config.title }}</title>
   <meta name="description" content="{{ config.description }}">
-  <link rel="stylesheet" href="{{ get_url(path='site.css') }}?v=paper2">
-  <link rel="stylesheet" href="/site.css?v=paper2">
+  <link rel="stylesheet" href="{{ get_url(path='site.css') }}?v=evidence1">
+  <link rel="stylesheet" href="/site.css?v=evidence1">
 </head>
 <body>
   <header class="site-header">
@@ -16,11 +16,11 @@
       </a>
       <div class="header-main">
         <div class="header-title">
-          <h1><a href="{{ get_url(path='@/_index.md') }}">Concrete documentation</a></h1>
+          <h1><a href="{{ get_url(path='@/_index.md') }}">Concrete</a></h1>
         </div>
         <nav class="main-nav">
         <a href="{{ get_url(path='@/_index.md') }}">Home</a>
-        <a href="{{ get_url(path='@/reference/_index.md') }}">Docs</a>
+        <a href="{{ get_url(path='@/reference/_index.md') }}">Reference</a>
         <a href="{{ get_url(path='@/guide/_index.md') }}">Guide</a>
         <a href="{{ get_url(path='@/paper.md') }}">Paper</a>
         <a href="{{ config.extra.repo_url }}">Repository</a>
