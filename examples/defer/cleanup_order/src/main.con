@@ -1,0 +1,23 @@
+// `defer <call>;` runs the call at scope exit, in LIFO order, on every exit path
+// (fall-through and early return). The defer body must be a call expression
+// (deferBodyNotCall otherwise); here we defer no-argument cleanup functions.
+// See docs/DEFER.md. Output order proves the semantics.
+mod cleanup_order {
+    fn d1() with(Std) { println("d1"); }
+    fn d2() with(Std) { println("d2"); }
+
+    fn f(early: bool) with(Std) {
+        defer d1();          // registered first  -> runs LAST
+        defer d2();          // registered second -> runs FIRST (LIFO)
+        println("body-start");
+        if early { println("early-return"); return; }   // defers still run
+        println("body-end");
+    }
+
+    pub fn main() with(Std) -> Int {
+        f(true);             // expect: body-start, early-return, d2, d1
+        println("----");
+        f(false);            // expect: body-start, body-end, d2, d1
+        return 0;
+    }
+}

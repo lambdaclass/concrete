@@ -28,6 +28,7 @@ examples/byte_view/tlv_packet_view/src/main.con project-build
 examples/byte_view/utf8_text_slice/src/main.con project-build
 examples/byte_view/wrong_buffer/src/main.con project-build
 examples/patterns/byte_ranges/src/main.con project-build
+examples/defer/cleanup_order/src/main.con project-build
 examples/constant_time_tag/catches/01_alloc_in_compare_core.con expected-error
 examples/constant_time_tag/src/main.con compile
 examples/contract_negatives/assert_obligation/src/main.con expected-error

@@ -10,6 +10,21 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #7 (`defer` / cleanup) core-complete (2026-06-23)
+
+- `defer <call>;` is documented (`docs/DEFER.md`) and gated
+  (`scripts/tests/check_defer.sh` + `examples/defer/cleanup_order/`). The core
+  cleanup semantics — already implemented in lowering — are now locked: deferred
+  calls run **LIFO**, at scope exit, on **every exit path** (fall-through, early
+  `return`, `break`/`continue`, `?`/`Err`), per scope inner-to-outer. The example
+  asserts the exact output order across early-return and fall-through paths.
+- V1 boundaries documented: the defer body must be a **call** (block form
+  `defer { … }` rejected, pinned by the gate), and a deferred call doesn't apply
+  the literal/auto-borrow argument coercion a normal call does (defer a no-arg
+  cleanup fn). Deferred design — failure-during-cleanup, move-after-defer/linear
+  interaction, explicit-vs-implicit-drop ordering — recorded for a later pass.
+  Full suite 1576/0; examples 129/0; all gates green.
+
 ### Phase 6 #6 (numeric literal/cast rules) core-complete (2026-06-23)
 
 - The numeric model is now documented (`docs/NUMERIC_MODEL.md`) and gated

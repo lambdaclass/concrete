@@ -564,6 +564,18 @@ gate.
 7. Define resource cleanup semantics: `defer`, drop/cleanup ordering,
     early-return cleanup, failure during cleanup, move-after-defer behavior, and
     linear-value interaction.
+    **CORE-COMPLETE (2026-06-23).** `defer <call>;` is implemented with the core
+    cleanup semantics, documented (`docs/DEFER.md`) and gated
+    (`scripts/tests/check_defer.sh` + `examples/defer/cleanup_order/`): deferred
+    calls run **LIFO**, at scope exit, on **every exit path** (fall-through, early
+    `return`, `break`/`continue`, `?`/`Err` propagation), per-scope inner-to-outer.
+    V1 boundaries (documented): the defer body must be a **call** (block form
+    `defer { … }` rejected), and a deferred call does not apply the literal/
+    auto-borrow argument coercion a normal call site does (defer a no-arg cleanup
+    fn, or pass typed values). DEFERRED design (recorded in the doc, need their
+    own pass): failure-during-cleanup, move-after-defer / linear-value
+    interaction, and explicit-`defer`-vs-implicit-drop ordering — revisit when a
+    workload exercises cleanup on error paths or over linear resources.
 8. Define the FFI language surface: `extern` syntax, layout restrictions,
     ABI/calling convention annotations, ownership crossing the boundary,
     capability/trust requirements, and what cannot be expressed safely.
