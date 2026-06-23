@@ -788,6 +788,26 @@ gate.
     lint, audit, record compiler-known target constants, and compare
     interpreter-vs-compiled behavior on macOS and Linux. It validates the
     language/tooling slab, not the full stdlib.
+35a. After the resurrected CI gate suite is green, add targeted red-team
+    coverage for the failure classes it exposed. Do **not** add these while the
+    baseline is red; first fix/classify the deterministic `phase1_contracts`,
+    `trust-gate`, ProofCore, and match/lowering failures. Then add
+    `scripts/tests/check_phase6_redteam.sh` with fixtures for:
+    parser recovery and duplicate attributes (`#[spec]`/proof-link duplicates
+    must keep the intended diagnostic rather than degrading to generic
+    `unexpected token`);
+    match linear-consumption agreement across range/guard/OR/desugared arms;
+    match lowering correctness for width coercions, match-on-reference,
+    guarded arms, OR desugaring, and struct-update-in-arm values;
+    ProofCore/fingerprint stability for new arm forms (semantic changes must
+    change fingerprints; formatting-only changes must not);
+    and trust/proof fixtures whose deliberately stale state must remain stale
+    after any regeneration tool. The gate becomes the reusable
+    "new syntax feature red-team checklist": every future parser/lowering
+    feature needs positive parse, negative parse, type/check negative, linear
+    ownership edge, lowering execution oracle, formatter round-trip,
+    ProofCore/fingerprint assertion, and report/snapshot coverage if it affects
+    evidence.
 36. [DONE (core) — implemented 2026-06-20; see docs/STATEMENT_EXPRESSION_MODEL.md
     and LANGUAGE_GAPS #12] Model the statement-vs-trailing-expression distinction
     in blocks and match arms. `AST.Stmt.expr` / `Core.CStmt.expr` now carry an
