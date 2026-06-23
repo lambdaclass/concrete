@@ -983,17 +983,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       if isInteger tyR || tyR == .char then
         -- Reject a literal that cannot fit its target integer type, rather than
         -- silently truncating it (e.g. `let a: u8 = 300` must not become 44).
-        let range : Option (Int × Int × String) := match tyR with
-          | .i8   => some (-128, 127, "i8")
-          | .i16  => some (-32768, 32767, "i16")
-          | .i32  => some (-2147483648, 2147483647, "i32")
-          | .int  => some (-9223372036854775808, 9223372036854775807, "Int")
-          | .u8   => some (0, 255, "u8")
-          | .u16  => some (0, 65535, "u16")
-          | .u32  => some (0, 4294967295, "u32")
-          | .uint => some (0, 18446744073709551615, "Uint")
-          | _ => none  -- char, type vars, etc.: not range-checked here
-        match range with
+        match intTyRange tyR with
         | some (lo, hi, nm) =>
           if n < lo || n > hi then
             throwCheck (.intLiteralOutOfRange n nm lo hi) (some sp)
@@ -1059,17 +1049,33 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       if isInteger lTyR && lTyR == rTyR then return lTy
       else if isTypeVarL || isTypeVarR then return lTy
       else return lTy  -- CoreCheck validates bitwise operator types
-  | .unaryOp _ op operand =>
-    let ty ← checkExpr operand hint
+  | .unaryOp usp op operand =>
     match op with
     | .neg =>
-      if isInteger ty || isFloatType ty then return ty
-      else return ty  -- CoreCheck validates negation types
+      -- A negated integer literal (`-N`) must fit the target type: reject
+      -- `let a: u8 = -1` (would wrap to 255) and `let a: i8 = -200`. Range-check
+      -- the *negated* value `-N` directly — do NOT range-check the positive inner
+      -- literal, since e.g. i8's valid minimum -128 has inner 128 > i8 max (127).
+      match operand with
+      | .intLit _ litN =>
+        let ty ← match hint with
+          | some h => do let hr ← resolveType h; pure (if isInteger hr then hr else Ty.int)
+          | none => pure Ty.int
+        match intTyRange ty with
+        | some (lo, hi, nm) =>
+          if (-litN) < lo || (-litN) > hi then
+            throwCheck (.intLiteralOutOfRange (-litN) nm lo hi) (some usp)
+        | none => pure ()
+        return ty
+      | _ =>
+        let ty ← checkExpr operand hint
+        return ty  -- CoreCheck validates negation types
     | .not_ =>
+      let _ ← checkExpr operand hint
       return .bool  -- CoreCheck validates logical not types
     | .bitnot =>
-      if isInteger ty then return ty
-      else return ty  -- CoreCheck validates bitwise not types
+      let ty ← checkExpr operand hint
+      return ty  -- CoreCheck validates bitwise not types
   | .arrowAccess _ obj field =>
     let objTy ← checkExpr obj
     -- obj must be Heap<T> or HeapArray<T>

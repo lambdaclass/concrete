@@ -1,0 +1,13 @@
+// Numeric: valid negative literals at the signed boundary compile (i8 min is
+// -128, whose inner literal 128 exceeds i8's positive max — the negation must be
+// range-checked, not the inner literal). Expected: 1
+mod m {
+    fn main() -> Int {
+        let a: i8 = -128;     // exact signed minimum
+        let b: i32 = -5;
+        let c: i32 = 7;
+        let d: i32 = -c;      // negating a variable still works
+        if a as Int == -128 && b as Int == -5 && d as Int == -7 { return 1; }
+        return 0;
+    }
+}

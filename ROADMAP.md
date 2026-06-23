@@ -513,9 +513,10 @@ gate.
      at every width still compile; explicit `as` casts may still truncate (the
      opt-in lossy path). Closes the "semantically dark construct" footgun. Gated by
      `scripts/tests/check_numeric_literals.sh` (Makefile `test-numeric-literals` +
-     CI); fixtures in `tests/programs/numeric/`. (Follow-up: negative literals into
-     unsigned types — `let a: u8 = -1` — flow through `unaryOp neg` and are not yet
-     caught here.)
+     CI); fixtures in `tests/programs/numeric/`. Negative literals are covered too:
+     `let a: u8 = -1` / `let a: i8 = -129` are rejected (the `unaryOp neg` case
+     range-checks the *negated* value `-N`, so the signed minimum `i8 = -128`
+     still compiles even though its inner literal 128 exceeds i8's positive max).
    - Literal suffixes (`7u8`, `5i32`, `0xFFu8`) are not parsed — still to build.
    - Lossy/ambiguous cast diagnostics are unbuilt: `300 as u8`, `-1 as u32`, and
      `3.9 as i32` compile silently today — add with an explicit

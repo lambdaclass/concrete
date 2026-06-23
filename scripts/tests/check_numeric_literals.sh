@@ -40,9 +40,11 @@ run_expect(){ local n="$1" e="$2"
 echo "=== out-of-range integer literals are rejected (not truncated) ==="
 reject_with neg_u8_out_of_range E0227
 reject_with neg_i32_out_of_range E0227
+reject_with neg_negative_into_unsigned E0227   # negative literal into unsigned
 
-echo "=== in-range literals compile; explicit as-cast truncation still allowed ==="
+echo "=== in-range / valid-negative literals compile; explicit as-cast still truncates ==="
 run_expect in_range_literals 1
+run_expect valid_negative_literals 1            # i8 = -128 (signed min), -var
 
 echo ""
 echo "NUMERIC-LITERALS: PASS=$PASS  FAIL=$FAIL"

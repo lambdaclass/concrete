@@ -20,6 +20,20 @@ def isInteger : Ty → Bool
   | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true
   | _ => false
 
+/-- Inclusive `(min, max, display-name)` for a fixed-width integer type, used to
+    reject literals that cannot fit (e.g. `let a: u8 = 300`). `none` for
+    non-integer types (and `char`, which is not literal-range-checked). -/
+def intTyRange : Ty → Option (Int × Int × String)
+  | .i8   => some (-128, 127, "i8")
+  | .i16  => some (-32768, 32767, "i16")
+  | .i32  => some (-2147483648, 2147483647, "i32")
+  | .int  => some (-9223372036854775808, 9223372036854775807, "Int")
+  | .u8   => some (0, 255, "u8")
+  | .u16  => some (0, 65535, "u16")
+  | .u32  => some (0, 4294967295, "u32")
+  | .uint => some (0, 18446744073709551615, "Uint")
+  | _ => none
+
 /-- Check if two types are compatible (equal or both numeric). -/
 def typesCompatible (a b : Ty) : Bool :=
   a == b || (isNumeric a && isNumeric b) ||

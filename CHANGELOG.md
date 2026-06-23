@@ -22,9 +22,12 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
   i64 default for un-annotated literals); explicit `as` casts may still truncate
   (the intentional, opt-in lossy path). Gated by
   `scripts/tests/check_numeric_literals.sh` over `tests/programs/numeric/`. Full
-  suite 1576/0; examples 128/0; golden 54/0; snapshots 95/0. (Follow-up: a
-  negative literal into an unsigned type, `let a: u8 = -1`, flows through
-  `unaryOp neg` and is not yet caught.)
+  suite 1576/0; examples 128/0; golden 54/0; snapshots 95/0.
+- Negative literals are covered too (`let a: u8 = -1` / `let a: i8 = -129`
+  rejected): the `unaryOp neg` case range-checks the *negated* value `-N` against
+  the target, so the signed minimum `i8 = -128` still compiles even though its
+  inner literal 128 exceeds i8's positive max. The shared `intTyRange` helper
+  (`Concrete/Shared.lean`) backs both checks.
 
 ### Phase 6 #5 (pattern ergonomics) closed; nested patterns deferred (2026-06-22)
 

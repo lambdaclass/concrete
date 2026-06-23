@@ -1,0 +1,8 @@
+// Numeric (negative): a negative literal cannot fit an unsigned type — reject
+// rather than wrap (`let a: u8 = -1` must not become 255). Expect: E0227
+mod m {
+    fn main() -> Int {
+        let a: u8 = -1;
+        return a as Int;
+    }
+}
