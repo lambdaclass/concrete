@@ -217,9 +217,17 @@ Each entry has:
 
 **Why:** Source-generating macros (Rust's `macro_rules!` / proc macros, C preprocessor, Lisp macros) destroy file-local parsing, couple early compilation phases to late semantic information, and make audit output unreliable. A `#[derive(Debug)]` in Rust generates code that the programmer never wrote and the auditor cannot see without expansion tools. This violates phase separation, locality, and auditability.
 
-**What Concrete does instead:** Monomorphized generics for code reuse. Explicit code generation as a build step (not a language feature). A small surface of compiler-recognized attributes.
+**What Concrete does instead:** Monomorphized generics for code reuse, ordinary
+functions, explicit stdlib APIs, and external code generation as a build step
+whose output is audited as ordinary source. A small surface of
+compiler-recognized attributes may classify evidence or policy, but it does not
+generate source.
 
 **Status:** Permanent. See [DECISIONS.md](DECISIONS.md).
+
+There is no derive-helper exception. `#[derive(...)]`-style generation is macro
+machinery by another name and stays out unless a future external tool generates
+reviewable source files outside the language.
 
 **Comparison:**
 - Rust: Powerful macro system (declarative + procedural). Essential to the ecosystem but a source of compile-time complexity and audit difficulty.

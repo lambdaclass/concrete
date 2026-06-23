@@ -51,8 +51,9 @@ Cross-cutting items that must stay visible while the linear queue advances:
 
 - **Pattern ergonomics and daily language friction** live in Phase 6 #5 and #7:
   match guards, OR patterns, `if let` / `while let`, match-on-reference,
-  tuples / no-tuples, struct update, wildcard destructuring, and `defer` /
-  cleanup semantics.
+  the no-tuples decision, struct update, wildcard destructuring, and `defer` /
+  cleanup semantics. Anonymous tuples remain a non-goal unless named structs
+  fail a real workload.
 - **Import/dependency authority constraints** live in Phase 18 #8: imports do
   not grant capability by themselves, and dependencies can be constrained by
   capability budget, trusted/Unsafe use, assumptions, evidence floor, platform,
@@ -158,10 +159,10 @@ Name the evidence class before implementing freestanding/embedded targets:
 - **inline asm** — `trusted`, requires `with(Unsafe)`.
 - **volatile / MMIO** — explicit capability, e.g. `with(Device)` / `with(Mmio)`;
   reads/writes are audit-visible effects, never silently elided.
-  `with(Device)` is the planned next capability-vocabulary addition (a registered
-  cap NOT in `Std`, opt-in/audit-visible like `Unsafe`), but it is **deferred
-  until this freestanding/embedded work gives it a real consumer** — not added
-  speculatively (decided 2026-06-13; see
+  `with(Device)` is reserved as the capability-vocabulary addition for real
+  freestanding/MMIO code (registered cap, NOT in `Std`, opt-in/audit-visible
+  like `Unsafe`), but it is **not added before that consumer exists** — no
+  speculative vocabulary growth (decided 2026-06-13; see
   `research/language/capability-sandboxing.md` §4a). `Thread` is reserved for the
   concurrency model; `Signal` is deferred; `Random` is clarified as authority
   over external entropy.
@@ -587,12 +588,23 @@ gate.
 10. Define language-visible build profiles: debug/release, overflow checks,
     assertions, runtime checks, optimization assumptions, and proof/audit
     compatibility.
-11. State the macro/metaprogramming stance for v1: no unrestricted macro
-    system. Allow only controlled, audited compile-time generation /
-    derive-like helpers for boring repeated artifacts such as equality,
-    debug/display, serializers/parsers, proof stubs, contract boilerplate, and
-    small table generation. Generated code must preserve source spans and
-    evidence/audit traceability.
+11. **DONE / PERMANENT DECISION (2026-06-23).** State the
+    macro/metaprogramming stance: **no language macros**. Concrete
+    does not admit hygienic macros, proc macros, syntax macros, derive helpers,
+    compile-time code generation, or arbitrary `comptime` evaluation in the
+    language. Repetition is handled by ordinary functions, generics, explicit
+    stdlib APIs, or external build-time generators whose generated files are
+    audited as ordinary source. This is a permanent auditability decision, not a
+    missing v1 convenience feature. Locked by `docs/MACRO_STANCE.md` and
+    `scripts/tests/check_no_macros.sh`, which rejects macro declarations, bang
+    invocations, and derive-like attributes so macro-shaped proposals do not
+    re-enter as "derive" or "helper" exceptions.
+    DECIDED (2026-06-23): `docs/MACRO_STANCE.md` records the permanent non-goal
+    (no `macro`/`macro_rules`, proc/syntax macros, `foo!()`, `#[derive]`, or
+    in-language comptime generation); repetition uses functions/generics/explicit
+    stdlib APIs/external generators (output audited as ordinary source). Pinned by
+    `scripts/tests/check_no_macros.sh` (Makefile `test-no-macros` + CI): macro
+    definition, bang invocation, and `#[derive(...)]` all stay clean parse errors.
 12. Define handle-relative filesystem APIs as the preferred capability shape:
     directory/file handles are capabilities; privileged code should operate
     relative to opened handles rather than repeated ambient path lookup. The
@@ -642,19 +654,16 @@ gate.
     `with_value_mut` / `modify` only after a container-not-in-context gate proves
     the mutable receiver/context aliasing invariant, and first-class stored
     `BoundFn` values only after a storage workload needs them. `from(param)` and
-    view structs remain deferred escape valves, not part of the v1 callback
-    surface.
-    Deferred ergonomics note: local no-capture functions are compatible with
-    the no-closures rule, but not admitted for v1. They add locality, not
-    expressive power, and carry a capture-by-expectation footgun because nested
-    functions look like they should see enclosing locals. Reconsider only if
-    real HOF-heavy workloads show top-level helper namespace noise is the
-    dominant friction after pattern ergonomics, block-as-value follow-ups,
-    `defer`, and explicit `std.fmt` builders land. If reconsidered, decide
-    whether local functions can see enclosing type parameters, whether they can
-    be passed as function pointers, name mangling, attempted-capture
-    diagnostics, formatter style, and a refactor/migration command for one-use
-    top-level callbacks.
+    view structs are **deep research escape valves**, not planned language work:
+    they come forward only if operation APIs, owned views, and scoped callbacks
+    fail a real workload badly enough to justify returned-reference provenance.
+    Negative ergonomics decision: **do not add local no-capture functions**.
+    They add locality but no expressive power, and nested functions create a
+    capture-by-expectation footgun because they look like they should see
+    enclosing locals. Use top-level helpers, explicit context structs, and
+    ordinary function pointers instead. Reopen only with a concrete workload and
+    a separate design note proving the capture/type-parameter/mangling story is
+    worth the added surface.
 19. Define the stdlib handoff contract for Phase 7. Phases 5-6 decide the
     language surfaces the stdlib depends on — modules/imports, project model,
     tests, diagnostics, bytes/text/path types, collections, narrow const
@@ -871,13 +880,16 @@ class and authority/allocation story.
    stable ordering helpers for ordered collections. Each API must state whether
    it requires `with(Alloc)`, whether it can fail, and which runtime
    obligations it creates.
-   - 8a. Design `Clone` and indexed move/swap as value-model work, separate from
-     H1. `Clone` should be explicit semantic duplication (capability-visible,
-     usually `with(Alloc)`, audit-visible, and not silently proof-eligible). The
-     sibling move-out primitive for indexed containers is `swap(i, new) -> V`,
-     which transfers ownership out while preserving the linear one-value-per-slot
-     invariant. Build these only when a workload needs them; do not use `Clone`
-     as a patch for borrowed reads.
+   - 8a. Keep `Clone` and indexed move/swap as **workload-gated value-model
+     research**, separate from H1 and not assumed inevitable. If admitted,
+     `Clone` is explicit semantic duplication (capability-visible, usually
+     `with(Alloc)`, audit-visible, and not silently proof-eligible), not a
+     convenience patch for borrowed reads. The sibling move-out primitive for
+     indexed containers is `swap(i, new) -> V`, which transfers ownership out
+     while preserving the linear one-value-per-slot invariant. Build either only
+     after a real workload repeatedly needs owned duplication or indexed
+     ownership-out and the existing `Copy` / move / borrow APIs are the wrong
+     fit.
    - 8b. Design arena/index safety before any arena-backed structure becomes a
      flagship or stable stdlib API. Array-backed linked structures use indices,
      and a stale index into a removed/reused slot is a logic-level dangling
@@ -903,16 +915,16 @@ class and authority/allocation story.
      and `scripts/tests/check_collection_coherence.sh`; the gate must show the
      chosen verdict for incompatible dictionaries and prove the API cannot
      silently combine them.
-   - 8d. Keep `with_value_mut` / `modify` parked until their separate aliasing
-     invariant is enforced. Mutable scoped callbacks have a receiver/context
-     aliasing hazard (`&mut self` plus a context that can reach the same
-     container); solve that with a container-not-in-context gate before shipping
-     them.
-   - 8e. Keep scalar `from(param)` returned references deferred and
+   - 8d. Keep `with_value_mut` / `modify` parked, not scheduled. Mutable scoped
+     callbacks have a receiver/context aliasing hazard (`&mut self` plus a
+     context that can reach the same container); ship them only if a workload
+     requires single-element mutable borrowed access and a
+     container-not-in-context gate enforces the invariant.
+   - 8e. Keep scalar `from(param)` returned references deeply deferred and
      evidence-gated. If ever added, they stay flat and scalar: no `Option`,
      `Result`, structs, arrays, containers, callback contexts, or generic
-     wrappers. This is the escape valve only if real workloads prove operation
-     APIs, owned views, and scoped callbacks insufficient.
+     wrappers. This is a research escape valve only if real workloads prove
+     operation APIs, owned views, and scoped callbacks insufficient.
    - 8f. Pull narrow const generics forward only when fixed-capacity stdlib APIs
      need reusable capacities. `docs/CONST_GENERICS_V1.md` is the closed Phase 5
      design record; implementation is deferred until a real Phase 7 consumer

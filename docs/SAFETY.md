@@ -43,9 +43,10 @@ The nine capabilities are: `File`, `Network`, `Clock`, `Env`, `Random`, `Process
 `Random` is authority over **external entropy** (the OS/hardware RNG — a genuine
 nondeterminism source), not permission to run a PRNG: a deterministic PRNG seeded
 from a value is pure and needs no capability; only drawing real entropy requires
-`with(Random)`. (Planned vocabulary additions — `Device` (MMIO/hardware) on the
-freestanding path, `Thread` with the concurrency model, `Signal` deferred — are
-recorded in `research/language/capability-sandboxing.md` §4a and the ROADMAP.)
+`with(Random)`. (Reserved vocabulary additions — `Device` (MMIO/hardware) only
+when freestanding code needs it, `Thread` with the concurrency model, `Signal`
+deferred — are recorded in `research/language/capability-sandboxing.md` §4a and
+the ROADMAP.)
 
 A function can only call functions whose capabilities are a subset of its own. This is checked at both the surface level (Check) and the Core IR level (CoreCheck). Capability errors include actionable hints suggesting `with(Cap)` additions or trusted wrapper alternatives.
 
@@ -58,7 +59,8 @@ fn log(msg: &String) with(IO) { ... }
 
 Aliases expand at parse time. The rest of the compiler sees only concrete capability names. See [FFI.md](FFI.md) for details.
 
-**`Std` macro**: `with(Std)` expands to all standard capabilities except `Unsafe`.
+**`Std` capability alias**: `with(Std)` expands to all standard capabilities
+except `Unsafe`. This is not a macro system; it is a fixed capability-set alias.
 
 ### Trusted Boundaries
 
@@ -222,8 +224,8 @@ The profile direction is documented in detail in [../research/language/high-inte
 Capabilities ─── what authority code may use (compile-time, signature-visible)
      │
      ├── cap aliases reduce repetition (cap IO = File + Console)
-     ├── Std macro expands to hosted standard caps except Unsafe today
-     │   (planned Device authority also stays outside Std when added)
+     ├── Std capability alias expands to hosted standard caps except Unsafe today
+     │   (reserved Device authority also stays outside Std if/when added)
      ├── --report caps shows per-function capability requirements
      └── --report authority shows transitive capability chains
 

@@ -57,7 +57,8 @@ use an **owned view** (`ByteView`, ROADMAP #5a); to **mutate**, use an operation
 API (`update`, `remove`) or a scoped mutable callback; for cheap `Copy` data,
 return **by value**. Low-level code may return a **raw pointer** (`*const T` /
 `*mut T`, deref requires `Unsafe`, audit-visible) — never a `&T`. `from(param)`
-(returned-reference provenance) stays deferred and evidence-gated (ROADMAP #8a1).
+(returned-reference provenance) stays deeply deferred and evidence-gated
+(ROADMAP Phase 7 #8e).
 
 Comparison: Austral permits references as values tracked by *regions*
 (`Reference[T, R]`); Concrete is deliberately stricter — it removes the
@@ -69,19 +70,21 @@ escape valve if real workloads ever prove the restriction too costly.
 ## The four-cell value model (Copy / Clone / Move / Borrow)
 
 Duplication and ownership transfer fall into four explicit, distinct cells.
-This frames the *deliberate* design of `Clone` (see ROADMAP #8a2) — and the
-deliberate decision NOT to rush it as a soundness patch:
+This frames the *possible* design of `Clone` (see ROADMAP Phase 7 #8a) — and
+the deliberate decision NOT to treat it as foundational language machinery:
 
 | Cell | Meaning | Status | Visibility |
 |------|---------|--------|------------|
 | **Copy** | Implicit bit duplication | Implemented (`Copy` marker, primitives, `&T`, raw ptrs, fn-ptrs) | Free; no effect |
 | **Move** | Ownership transfer of a linear value (the default) | Implemented (linear consumption) | Default; tracked by the checker |
 | **Borrow** | Scoped temporary access (`&T` / `&mut T` / borrow blocks) | Implemented; references may not escape their scope | Scoped, local |
-| **Clone** | Explicit *semantic* duplication of a non-Copy value | **Not yet — deliberate future design** | Capability-visible (`with(Alloc)`) and audit-visible |
+| **Clone** | Explicit *semantic* duplication of a non-Copy value | **Not built — workload-gated research** | Capability-visible (`with(Alloc)`) and audit-visible |
 
-`Clone` is intentionally a separate, deliberate design item, **not** the answer
-to the returned-reference hole (H1). H1 closes by API design (operation/value
-APIs + owned views + scoped callbacks; ROADMAP #8a), independent of `Clone`.
+`Clone` is intentionally **not** the answer to the returned-reference hole (H1)
+and not assumed inevitable. H1 closes by API design (operation/value APIs +
+owned views + scoped callbacks), independent of `Clone`. Add `Clone` only if a
+real workload repeatedly needs owned duplication and the existing Copy / Move /
+Borrow cells are the wrong fit.
 
 When `Clone` is designed, it must be:
 - **Explicit** — `x.clone()`, never implicit; the opposite of `Copy`'s
@@ -95,12 +98,12 @@ When `Clone` is designed, it must be:
   (verified). It composes with `Destroy` (a cloned linear value must still be
   consumed/destroyed exactly once).
 
-**Move-out vs copy-out.** `Clone` duplicates (copy-out). The ownership-transfer
-counterpart (move-out) is the default for owned values; for collections,
+**Move-out vs copy-out.** If admitted, `Clone` duplicates (copy-out). The
+ownership-transfer counterpart (move-out) is the default for owned values; for collections,
 `remove`/`update` already move a value out, and the one genuine gap is indexed
 containers — `swap(i, new) -> V` transfers ownership out of a slot without
 clone or delete, preserving the linear one-value-per-slot invariant. Like
-`Clone`, build it when a workload needs it (ROADMAP #8a2), not speculatively.
+`Clone`, build it when a workload needs it, not speculatively.
 
 ## Current Guarantee Boundary
 

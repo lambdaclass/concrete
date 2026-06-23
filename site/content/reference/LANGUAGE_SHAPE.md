@@ -73,7 +73,9 @@ These are standing constraints, not temporary limitations.
 
 - **Not a convenience-first language.** Verbosity is acceptable when it buys visibility.
 - **Not an inference-heavy language.** Types are written where they matter. No HM-style global inference.
-- **Not a metaprogramming language.** No source-generating macros. No comptime evaluation (may revisit for constants only).
+- **Not a metaprogramming language.** No source-generating macros, no derive
+  helpers, no local source generation. No comptime evaluation beyond a possible
+  future constants-only profile.
 - **Not an ecosystem-first language.** Language clarity comes before ecosystem breadth.
 - **Not a runtime-dependent language.** No GC, no async runtime, no thread pool. The runtime is minimal (startup, abort, optional allocator).
 
@@ -86,8 +88,8 @@ These are areas where the current design may evolve, but only under explicit cri
 | Concurrency | Single-threaded | Real-program pressure showing structured concurrency is needed |
 | Freestanding mode | Hosted only | Stable stdlib boundary, clear core/hosted split |
 | Capability hiding | Caps always visible | Sustained ergonomic pain in real programs |
-| Pre/post conditions | None | ProofCore extraction mature, at least one Lean proof |
-| Derived equality | Manual only | Trait/derive mechanism design settled |
+| Source contracts | Basic `#[requires]` / `#[ensures]` admitted and obligation-backed | SPARK-class frame/dependency/ghost layer pulled by a flagship or external workload |
+| Derived equality | Manual only | Not planned as language machinery; external generators must emit reviewable source |
 | Package model | Single-file/lakefile | Real multi-package projects written |
 
 ## Shape Principles

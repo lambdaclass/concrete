@@ -153,7 +153,7 @@ fn serve() with(Host) -> Int { ... }
 fn log(msg: &String) with(IO) { ... }
 ```
 
-An alias expands to its constituent capabilities at parse time — the rest of the compiler sees only concrete capability names. Aliases can use the `Std` macro (`cap All = Std;` expands to all standard capabilities except `Unsafe`).
+An alias expands to its constituent capabilities at parse time — the rest of the compiler sees only concrete capability names. Aliases can use the fixed `Std` capability alias (`cap All = Std;` expands to all standard capabilities except `Unsafe`). This is not a macro system.
 
 Aliases are validated at definition time: all constituent names must be known capabilities. Unknown names produce a parse error.
 

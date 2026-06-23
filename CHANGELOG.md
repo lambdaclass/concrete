@@ -10,6 +10,20 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Macro/metaprogramming stance decided — permanent non-goal (2026-06-23)
+
+- Phase 6 #11. Concrete has **no language macro system** — permanently, not a v1
+  omission: no `macro`/`macro_rules`, procedural/syntax macros, `foo!()`
+  bang-invocation, `#[derive(...)]`, in-language source generation, or `comptime`
+  codegen. Hidden expansion would defeat the audit model (spans, capabilities,
+  obligations, evidence all assume the code in the file is the code that runs).
+- Repetition uses ordinary functions, monomorphized generics, explicit stdlib
+  APIs, and — when codegen is genuinely needed — external build-time generators
+  whose output is checked in and audited as ordinary source. Recorded in
+  `docs/MACRO_STANCE.md`; pinned by `scripts/tests/check_no_macros.sh` (Makefile
+  `test-no-macros` + CI): macro definitions, bang invocations, and derive
+  attributes all stay clean parse errors.
+
 ### Phase 6 #7 (`defer` / cleanup) core-complete (2026-06-23)
 
 - `defer <call>;` is documented (`docs/DEFER.md`) and gated

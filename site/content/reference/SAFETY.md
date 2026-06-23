@@ -48,7 +48,8 @@ fn log(msg: &String) with(IO) { ... }
 
 Aliases expand at parse time. The rest of the compiler sees only concrete capability names. See [FFI](@/reference/FFI.md) for details.
 
-**`Std` macro**: `with(Std)` expands to all standard capabilities except `Unsafe`.
+**`Std` capability alias**: `with(Std)` expands to all standard capabilities
+except `Unsafe`. This is not a macro system; it is a fixed capability-set alias.
 
 ### Trusted Boundaries
 
@@ -200,7 +201,7 @@ The profile direction is documented in detail in [../research/language/high-inte
 Capabilities ─── what authority code may use (compile-time, signature-visible)
      │
      ├── cap aliases reduce repetition (cap IO = File + Console)
-     ├── Std macro expands to all standard caps except Unsafe
+     ├── Std capability alias expands to all standard caps except Unsafe
      ├── --report caps shows per-function capability requirements
      └── --report authority shows transitive capability chains
 

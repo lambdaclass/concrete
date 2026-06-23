@@ -56,8 +56,9 @@ constrain everything below.
    borrowed `&V` / `&mut V` *into* the callback for the duration of the call; the
    combinator returns only owned values (`Option<R>`, counts, etc.). This is the
    same no-aggregate-ref subtraction that fixes H1 (ROADMAP #8a).
-7. **`from(param)` returned references stay deferred** (ROADMAP #8a1). They are
-   not this design's job and are not the H1 fix.
+7. **`from(param)` returned references stay deeply deferred** (ROADMAP Phase 7
+   #8e). They are not this design's job, not the H1 fix, and not planned unless
+   real workloads prove scoped callbacks / owned views insufficient.
 
 ## 2. What already exists today [implemented]
 
@@ -279,7 +280,7 @@ chosen, for one decisive reason: it requires the checker to understand that
 `m.get(k)` **returns a reference borrowed from `self`**. That is
 returned-reference provenance — a *minimal* `from(self)` (just "borrows self,"
 with no region variables, inference, or outlives propagation, so far weaker than
-Rust lifetimes) — but it is still the `from()` machinery that ROADMAP #8a1
+Rust lifetimes) — but it is still the `from()` machinery that ROADMAP Phase 7 #8e
 deliberately defers and that H1's whole resolution was designed *not* to depend
 on. Re-opening it to close H1's tail would undo that decision.
 
@@ -292,8 +293,8 @@ This is why `with_value` is the V1.1 mechanism and the borrow block is not.
 ergonomic alternative: borrow-block container projections (`borrow v = m.get(k)
 in 'R { … }`), to be designed **only if `with_value` proves too awkward in real
 code** — evidence-gated, exactly like `from()` itself. `from(self)` /
-returned-reference provenance remains deferred (#8a1) until such evidence
-exists. The borrow block, if ever built, is ergonomic syntax for an
+returned-reference provenance remains deeply deferred (ROADMAP Phase 7 #8e)
+until such evidence exists. The borrow block, if ever built, is ergonomic syntax for an
 already-proven model, not the first mechanism.
 
 ### 5.1 The container-not-in-context invariant (soundness keystone)
@@ -434,12 +435,15 @@ Examples to add under `examples/callbacks/`:
 ## 10. What this design explicitly does NOT add [decided]
 
 - **No closures / no environment.** Captures are always explicit context.
+- **No local no-capture functions.** They add locality but no expressive power,
+  and create capture-by-expectation confusion. Use top-level helpers and
+  explicit context structs.
 - **No `BoundFn<…>` first-class callable value** (§4) — deferred until a storage
   workload needs it.
 - **No returned references from these APIs** (§1.6). Scoped access yields a
   borrow *into* the callback only.
-- **No `from(param)` returned references** (ROADMAP #8a1, deferred). Not the H1
-  fix; H1 is fixed by subtraction + scoped callbacks.
+- **No `from(param)` returned references** (ROADMAP Phase 7 #8e, deeply
+  deferred). Not the H1 fix; H1 is fixed by subtraction + scoped callbacks.
 - **No `view struct … from(Bytes)`** (deferred with the above).
 - **No first-class capability values, no effect handlers, no capability
   subtraction, no row-polymorphic effects** (research note "what not to add").

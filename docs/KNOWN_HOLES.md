@@ -39,7 +39,8 @@ low-level/unsafe access. No lifetimes, regions, or `from()`. Locked by
 `scripts/tests/check_returned_ref_provenance.sh` (now asserts ref-returns are
 rejected) + the blanket signature rule in `Concrete/Check.lean` (`checkFn`) +
 the fn-type / generic-instantiation rules in `resolveType` / call sites. The
-`from(param)` escape valve remains deferred and evidence-gated (#8a1).
+`from(param)` escape valve remains deeply deferred and evidence-gated (ROADMAP
+Phase 7 #8e).
 Deferred follow-on: `with_value_mut`/`modify` (separate container-not-in-context
 obligation).
 
@@ -53,7 +54,8 @@ that compiled in safe code. Affected (all now migrated): `HashMap::get`/`get_mut
 
 - **Disclosed:** `CLAIMS_TODAY.md` — "No dangling safe reference" now covers the
   whole safe surface (borrow-block refs *and* the absence of any returned ref).
-- **Deferred (evidence-gated):** `from(param)` returned references (#8a1); the
+- **Deferred (evidence-gated):** `from(param)` returned references (ROADMAP
+  Phase 7 #8e); the
   mutable scoped callback `with_value_mut`/`modify` — parked, nothing pulls it
   (the surface is covered by `update` for single-key mutation, `for_each_ctx` for
   mutable-context traversal, `with_value`/`with_at` for borrowed reads).

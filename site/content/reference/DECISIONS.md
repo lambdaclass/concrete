@@ -50,12 +50,15 @@ Trait objects (`dyn Trait`) hide dispatch behind an opaque vtable at runtime. Th
 
 ### No source-generating macros
 
-**Status:** Decided (2026-03-09)
+**Status:** Permanent
 **Detail:** [../research/meta/candidate-ideas](https://github.com/unbalancedparentheses/concrete2/blob/main/research/meta/candidate-ideas.md) (rejected candidates section)
 
 Source-generating macros destroy file-local parsing, couple early phases to late semantic information, and make audit output unreliable. They violate phase separation and locality.
 
-**What Concrete does instead:** Monomorphized generics, explicit code generation as a build step (not a language feature), and a small surface of compiler-recognized attributes.
+**What Concrete does instead:** Monomorphized generics, ordinary functions,
+explicit stdlib APIs, and external code generation as a build step whose output
+is audited as ordinary source. There are no derive helpers, proc macros,
+syntax macros, or compile-time source generation inside the language.
 
 ### No hidden dynamic dispatch
 
@@ -114,12 +117,14 @@ Contract annotations on functions (requires/ensures) would strengthen the proof 
 
 **Prerequisite:** ProofCore extraction working, at least one proven function in Lean.
 
-### Derived structural equality — not yet
+### Derived structural equality — not planned
 
-**Status:** Deferred
+**Status:** Not planned as a language feature
 **Detail:** [../research/language/derived-equality-design](https://github.com/unbalancedparentheses/concrete2/blob/main/research/language/derived-equality-design.md)
 
-Auto-deriving `==` for structs with all-Copy fields. Deferred because it requires deciding the trait/derive mechanism more carefully.
+Concrete has no derive mechanism. Equality for structs is written explicitly or
+provided by ordinary library functions. External generators may produce source
+files, but their output is reviewed and gated like any other source.
 
 ### Package/dependency model — not yet
 
