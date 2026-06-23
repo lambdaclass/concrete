@@ -30,7 +30,7 @@
         <span class="dot red"></span>
         <strong>audit transcript</strong>
       </div>
-      <pre><code>$ concrete examples/hmac_sha256/src/main.con --report contracts
+      <pre><code>$ concrete examples/hmac_sha256 --report contracts
 
 runtime safety
   bounds        proved_by_kernel_decision
@@ -52,12 +52,11 @@ evidence
   <section id="thesis" class="split-section">
     <div class="section-label">Thesis</div>
     <div class="section-copy">
-      <h2>Not another “safe systems language” slogan.</h2>
+      <h2>Safety claims you can review, replay, and challenge.</h2>
       <p>
-        Concrete’s differentiator is not a single feature. It is the accounting:
-        what a function can touch, what was proved, what was only tested, what
-        must be trusted, and what remains assumed are separate facts instead of
-        one green badge.
+        Concrete is built around explicit accounting: what a function can touch,
+        what was proved, what was only tested, what must be trusted, and what
+        remains assumed are separate facts instead of one green badge.
       </p>
     </div>
   </section>
@@ -65,12 +64,11 @@ evidence
   <section class="evidence-slice" aria-labelledby="slice-title">
     <div class="section-head">
       <p class="eyebrow">Credibility Slice</p>
-      <h2 id="slice-title">The homepage should show the thing you can audit.</h2>
+      <h2 id="slice-title">A narrow slice you can inspect and replay.</h2>
       <p>
-        The production-readiness path is a narrow, replayable slice: a real
-        parser/codec or crypto core, its contracts, its capability report, its
-        oracle tests, and its proof status. The site is now shaped around that
-        standard, not around generic language marketing.
+        The production-readiness path is a real parser, codec, or crypto core
+        with its source, contracts, capability report, oracle tests, proof
+        status, and trusted boundaries shown together.
       </p>
     </div>
 
@@ -106,13 +104,55 @@ caps:
         <h3>Replayable boundary</h3>
         <pre><code>$ make test-byte-view
 $ make test-pattern-ergonomics
-$ concrete examples/codec/src/main.con --report contracts
-$ concrete examples/codec/src/main.con --report obligation-ledger
+$ concrete examples/codec --report contracts
+$ concrete examples/codec --report obligation-ledger
 
 trusted:
   backend, explicit trusted std internals
 assumed:
   named environment facts</code></pre>
+      </article>
+    </div>
+  </section>
+
+  <section class="examples-section" aria-labelledby="examples-title">
+    <div class="section-head">
+      <p class="eyebrow">Examples</p>
+      <h2 id="examples-title">Concrete examples are evidence fixtures, not just demos.</h2>
+      <p>
+        The strongest examples pair a small system with the reports and gates
+        that keep its claims honest. Some are complete today; others define the
+        production-readiness bar the project is working toward.
+      </p>
+    </div>
+    <div class="example-grid">
+      <article>
+        <span class="tag">Shipped</span>
+        <h3>HMAC-SHA256</h3>
+        <p>Crypto workload with oracle tests, capability reports, proof-status snapshots, and linked Lean refinement evidence.</p>
+        <pre><code>$ make test-hmac-oracle
+$ concrete examples/hmac_sha256 --report proof-status</code></pre>
+      </article>
+      <article>
+        <span class="tag">Shipped</span>
+        <h3>ByteView packet slices</h3>
+        <p>Owned zero-copy byte views: stored offsets, fallible access, wrong-buffer guards, and no stored references.</p>
+        <pre><code>$ make test-byte-view
+$ concrete examples/byte_view/http_header_view</code></pre>
+      </article>
+      <article>
+        <span class="tag">Shipped</span>
+        <h3>Pattern parser workload</h3>
+        <p>Ranges, guards, OR patterns, if let, while let, match-on-reference, and struct update exercised by parser-style code.</p>
+        <pre><code>$ make test-pattern-ergonomics
+$ concrete examples/patterns/byte_ranges</code></pre>
+      </article>
+      <article>
+        <span class="tag">Target</span>
+        <h3>Production credibility slice</h3>
+        <p>A no-alloc protocol parser or verifier with contracts, capability budget, oracle corpus, proof ledger, and release bundle.</p>
+        <pre><code>$ concrete audit examples/prod_slice
+$ concrete bundle evidence examples/prod_slice</code></pre>
       </article>
     </div>
   </section>
@@ -216,23 +256,36 @@ assumed:
     <div class="section-head narrow">
       <p class="eyebrow">Positioning</p>
       <h2 id="compare-title">Concrete sits between systems control and proof accounting.</h2>
+      <p>
+        The point is not to beat mature languages on their home ground. It is to
+        make a different trade: smaller systems-language surface, explicit
+        authority, and replayable evidence in one workflow.
+      </p>
     </div>
     <div class="compare-grid">
       <article>
         <h3>Rust</h3>
-        <p>Rust gives mature ownership and industrial tooling. Concrete trades maturity for explicit capability reports, proof evidence, and a smaller returned-reference story.</p>
+        <p>Rust is the maturity benchmark for ownership, libraries, and tooling. Concrete is smaller and less mature, but makes authority and evidence part of the language reports instead of external process.</p>
       </article>
       <article>
         <h3>Zig</h3>
-        <p>Zig gives transparent control and excellent build ergonomics. Concrete adds source-level contracts, evidence classes, and authority accounting.</p>
+        <p>Zig is excellent at explicit low-level control and build ergonomics. Concrete keeps the control story small, then adds contracts, proof status, and capability accounting.</p>
       </article>
       <article>
         <h3>SPARK / Ada</h3>
-        <p>SPARK has a mature assurance discipline. Concrete aims for a smaller systems surface with capabilities, ownership, and a replayable evidence ledger.</p>
+        <p>SPARK has the strongest production assurance precedent. Concrete borrows the discipline but aims for a modern systems surface with ownership, capabilities, and explicit trusted boundaries.</p>
       </article>
       <article>
         <h3>Lean / F*</h3>
-        <p>Proof-first systems can express deeper mathematics. Concrete keeps ordinary systems code central and reserves hand proofs for the hard edge.</p>
+        <p>Lean and F* can express deeper proofs. Concrete keeps ordinary systems code central, uses Lean where it pays, and pushes common operational obligations toward automation.</p>
+      </article>
+      <article>
+        <h3>C + analyzers</h3>
+        <p>C plus static analyzers is still the deployed baseline. Concrete’s bet is that the evidence ledger and capability surface should be native, not bolted on after the fact.</p>
+      </article>
+      <article>
+        <h3>Dafny / Why3</h3>
+        <p>Verifier-first languages prove more by default. Concrete accepts a narrower proof story to stay close to systems workloads and explicit runtime authority.</p>
       </article>
     </div>
   </section>

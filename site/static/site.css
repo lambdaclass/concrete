@@ -169,7 +169,7 @@ pre code {
   margin: 0.7rem 0 0;
   max-width: 12ch;
   color: var(--ink);
-  font-size: 4.85rem;
+  font-size: 4.55rem;
   line-height: 0.94;
   letter-spacing: 0;
 }
@@ -286,6 +286,14 @@ pre code {
   border-radius: 0;
 }
 
+.hero-artifact pre,
+.slice-grid pre,
+.example-grid pre,
+.command-panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .split-section {
   display: grid;
   grid-template-columns: 12rem minmax(0, 1fr);
@@ -337,6 +345,7 @@ pre code {
 }
 
 .evidence-slice,
+.examples-section,
 .matrix-section,
 .language-tour,
 .compare-section,
@@ -354,6 +363,7 @@ pre code {
 }
 
 .slice-grid article,
+.example-grid article,
 .tour-grid article,
 .compare-grid article,
 .status-grid article,
@@ -374,6 +384,7 @@ pre code {
 }
 
 .slice-grid h3,
+.example-grid h3,
 .tour-grid h3,
 .compare-grid h3,
 .status-grid h3 {
@@ -386,6 +397,27 @@ pre code {
 
 .slice-grid pre {
   min-height: 17rem;
+  font-size: 0.76rem;
+}
+
+.example-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.example-grid article {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.example-grid p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.example-grid pre {
+  min-height: 7.8rem;
   font-size: 0.78rem;
 }
 
@@ -613,6 +645,7 @@ pre code {
   }
 
   .slice-grid,
+  .example-grid,
   .tour-grid,
   .compare-grid,
   .status-grid {
@@ -674,6 +707,7 @@ pre code {
   }
 
   .slice-grid,
+  .example-grid,
   .tour-grid,
   .compare-grid,
   .status-grid,
