@@ -346,6 +346,7 @@ pre code {
 
 .evidence-slice,
 .examples-section,
+.code-section,
 .matrix-section,
 .language-tour,
 .compare-section,
@@ -364,6 +365,7 @@ pre code {
 
 .slice-grid article,
 .example-grid article,
+.code-example-grid article,
 .tour-grid article,
 .compare-grid article,
 .status-grid article,
@@ -385,6 +387,7 @@ pre code {
 
 .slice-grid h3,
 .example-grid h3,
+.code-example-grid h3,
 .tour-grid h3,
 .compare-grid h3,
 .status-grid h3 {
@@ -406,12 +409,24 @@ pre code {
   gap: 1rem;
 }
 
+.code-example-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
 .example-grid article {
   display: grid;
   gap: 0.65rem;
 }
 
-.example-grid p {
+.code-example-grid article {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.example-grid p,
+.code-example-grid p {
   margin: 0;
   color: var(--muted);
 }
@@ -419,6 +434,13 @@ pre code {
 .example-grid pre {
   min-height: 7.8rem;
   font-size: 0.78rem;
+}
+
+.code-example-grid pre {
+  min-height: 18rem;
+  font-size: 0.76rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .table-wrap {
@@ -646,6 +668,7 @@ pre code {
 
   .slice-grid,
   .example-grid,
+  .code-example-grid,
   .tour-grid,
   .compare-grid,
   .status-grid {
@@ -708,6 +731,7 @@ pre code {
 
   .slice-grid,
   .example-grid,
+  .code-example-grid,
   .tour-grid,
   .compare-grid,
   .status-grid,

@@ -157,6 +157,61 @@ $ concrete bundle evidence examples/prod_slice</code></pre>
     </div>
   </section>
 
+  <section class="code-section" aria-labelledby="code-title">
+    <div class="section-head">
+      <p class="eyebrow">Code Shape</p>
+      <h2 id="code-title">Concrete code keeps cost, authority, and evidence visible.</h2>
+      <p>
+        The syntax is intentionally ordinary. The important part is what the
+        surface refuses to hide: capabilities, checked obligations, value
+        access, and scoped borrowing.
+      </p>
+    </div>
+    <div class="code-example-grid">
+      <article>
+        <h3>Contracts and authority</h3>
+        <pre><code>#[overflow_checked]
+#[requires(0 &lt;= sample &amp;&amp; sample &lt;= 255)]
+fn scale(sample: i32, gain: i32) -&gt; i32 {
+    return (sample * gain) / 256;
+}
+
+pub fn main() with(Console) -&gt; i32 {
+    Console::print_i64(scale(120, 200) as i64);
+    return 0;
+}</code></pre>
+        <p>Reports can say which obligations were proved, which were checked, and that this entry point needs Console authority.</p>
+      </article>
+      <article>
+        <h3>Value-model collection access</h3>
+        <pre><code>let value: Option&lt;i32&gt; = counts.get(key);
+
+let present: bool = counts.update(&amp;key, bump);
+if !present {
+    counts.insert(key, 1);
+}
+
+let seen: Option&lt;bool&gt; =
+    names.with_value(&amp;id, &amp;needle, same_name);</code></pre>
+        <p>Copy reads return values; mutation is an operation; non-Copy borrowed reads stay scoped inside <code>with_value</code>.</p>
+      </article>
+      <article>
+        <h3>Parser-friendly patterns</h3>
+        <pre><code>match byte {
+    0x00..=0x1f =&gt; return Token::Control,
+    0x30..=0x39 =&gt; return Token::Digit,
+    b if b == quote =&gt; return Token::Quote,
+    _ =&gt; return Token::Other,
+}
+
+if let Result::Ok { value } = read_header(c) {
+    return value.len as i32;
+}</code></pre>
+        <p>Pattern ergonomics target real decoder/parser code while keeping exhaustiveness and lowering behavior gated.</p>
+      </article>
+    </div>
+  </section>
+
   <section id="evidence" class="matrix-section" aria-labelledby="evidence-title">
     <div class="section-head narrow">
       <p class="eyebrow">Evidence Model</p>
@@ -366,6 +421,10 @@ $ make test-docs-drift</code></pre>
       <a href="https://github.com/unbalancedparentheses/concrete2/blob/main/ROADMAP.md">
         <strong>Roadmap</strong>
         <span>Current frontier, deferred triggers, and production-readiness path.</span>
+      </a>
+      <a href="https://github.com/unbalancedparentheses/concrete2/blob/main/CHANGELOG.md">
+        <strong>Changelog</strong>
+        <span>What changed, what was fixed, and which gates were added.</span>
       </a>
     </nav>
   </section>
