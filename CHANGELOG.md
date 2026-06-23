@@ -10,6 +10,22 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Out-of-range integer literals rejected (2026-06-23)
+
+- Phase 6 #6, first sub-fix. An integer literal that cannot fit its annotated
+  type is now a hard error instead of a silent truncation: `let a: u8 = 300;`
+  was running as `44` — a "semantically dark construct" (a literal silently
+  becoming a different value). Now **E0227** (`integer literal 300 is out of
+  range for type 'u8' (0..=255)`), checked in `Concrete/Check.lean` at the
+  literal's typed position for i8/i16/i32/Int and u8/u16/u32/Uint.
+- In-range literals at every width still compile (incl. hex/binary bases and the
+  i64 default for un-annotated literals); explicit `as` casts may still truncate
+  (the intentional, opt-in lossy path). Gated by
+  `scripts/tests/check_numeric_literals.sh` over `tests/programs/numeric/`. Full
+  suite 1576/0; examples 128/0; golden 54/0; snapshots 95/0. (Follow-up: a
+  negative literal into an unsigned type, `let a: u8 = -1`, flows through
+  `unaryOp neg` and is not yet caught.)
+
 ### Phase 6 #5 (pattern ergonomics) closed; nested patterns deferred (2026-06-22)
 
 - The compound pattern-ergonomics block is complete. Built + gated across this

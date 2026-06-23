@@ -1,0 +1,7 @@
+// Numeric (negative): out-of-range for a signed type is also rejected. Expect: E0227
+mod m {
+    fn main() -> Int {
+        let a: i32 = 5000000000;
+        return 0;
+    }
+}

@@ -1,0 +1,14 @@
+// Numeric: in-range literals at every width compile and keep their value;
+// explicit `as` truncation remains available. Expected: 1
+mod m {
+    fn main() -> Int {
+        let a: u8 = 255;
+        let b: u16 = 65535;
+        let c: i32 = 2147483647;
+        let d: u8 = 0xFF;            // hex base
+        let e: u8 = (300 as i64) as u8;   // explicit truncation still allowed -> 44
+        if a as Int == 255 && b as Int == 65535 && c as Int == 2147483647
+            && d as Int == 255 && e as Int == 44 { return 1; }
+        return 0;
+    }
+}

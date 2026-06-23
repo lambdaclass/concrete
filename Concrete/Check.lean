@@ -154,6 +154,7 @@ inductive CheckError where
   | reservedName (name : String)
   | unknownModule (name : String)
   | notPublicInModule (symbol : String) (moduleName : String)
+  | intLiteralOutOfRange (value : Int) (tyName : String) (lo : Int) (hi : Int)
   -- Slices 7-9: Module-level validation (Copy/Destroy, repr, FFI, traits) moved to CoreCheck
 
 def CheckError.message : CheckError → String
@@ -238,6 +239,8 @@ def CheckError.message : CheckError → String
   | .reservedName name => s!"'{name}' is a reserved identifier"
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
+  | .intLiteralOutOfRange value tyName lo hi =>
+    s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
 def CheckError.hint : CheckError → Option String
   | .variableUsedAfterMove _ => some "consider cloning or restructuring to avoid the move"
@@ -252,6 +255,7 @@ def CheckError.hint : CheckError → Option String
   | .assignOverwritesLinear _ => some "linear variables cannot be reassigned — use a new binding instead"
   | .missingCapability _ cap caller => some s!"add 'with({cap})' to '{caller}', or wrap the call in a function that declares it"
   | .cannotInferCapVariable cap _ => some s!"provide an explicit capability for '{cap}' at the call site"
+  | .intLiteralOutOfRange _ tyName _ _ => some s!"use a value within '{tyName}' range, a wider type, or an explicit `as {tyName}` cast"
   | _ => none
 
 /-- Expected/actual facts for the rich diagnostic surface (Phase 4 #11). Only the
@@ -293,6 +297,7 @@ def CheckError.code : CheckError → String
   | .ifBranchTypeMismatch _ _ => "E0224"
   | .matchArmTypeMismatch _ _ => "E0225"
   | .breakTypeMismatch _ _ => "E0226"
+  | .intLiteralOutOfRange _ _ _ _ => "E0227"
   -- Slice 3: Borrow/escape (E0230–E0239)
   | .cannotBorrowMoved _ => "E0230"
   | .cannotBorrowMutablyBorrowed _ => "E0231"
@@ -970,12 +975,30 @@ mutual
 
 partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
   match e with
-  | .intLit _ _ =>
+  | .intLit sp n =>
     -- Use hint to infer integer literal type (resolve aliases first)
     match hint with
     | some ty =>
       let tyR ← resolveType ty
-      if isInteger tyR || tyR == .char then return tyR
+      if isInteger tyR || tyR == .char then
+        -- Reject a literal that cannot fit its target integer type, rather than
+        -- silently truncating it (e.g. `let a: u8 = 300` must not become 44).
+        let range : Option (Int × Int × String) := match tyR with
+          | .i8   => some (-128, 127, "i8")
+          | .i16  => some (-32768, 32767, "i16")
+          | .i32  => some (-2147483648, 2147483647, "i32")
+          | .int  => some (-9223372036854775808, 9223372036854775807, "Int")
+          | .u8   => some (0, 255, "u8")
+          | .u16  => some (0, 65535, "u16")
+          | .u32  => some (0, 4294967295, "u32")
+          | .uint => some (0, 18446744073709551615, "Uint")
+          | _ => none  -- char, type vars, etc.: not range-checked here
+        match range with
+        | some (lo, hi, nm) =>
+          if n < lo || n > hi then
+            throwCheck (.intLiteralOutOfRange n nm lo hi) (some sp)
+        | none => pure ()
+        return tyR
       else
         match tyR with
         | .typeVar _ => return tyR  -- Type variables accept integer literals

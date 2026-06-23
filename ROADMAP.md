@@ -505,14 +505,21 @@ gate.
    `scripts/tests/check_numeric_model.sh` to pin these facts, including negative
    fixtures for implicit conversion.
 
-   **Track B — build the genuine gaps.** Literal suffixes (`7u8`, `5i32`,
-   `0xFFu8`) are not parsed. Lossy/ambiguous cast diagnostics are unbuilt:
-   `300 as u8`, `-1 as u32`, and `3.9 as i32` compile silently today. The sharpest
-   immediate footgun is an out-of-range integer literal in a typed context:
-   `let a: u8 = 300;` silently truncates to 44. Fix this first by rejecting
-   out-of-range literals at Check/Elab with a dedicated diagnostic and negative
-   fixture; then add suffixes; then add lossy-cast diagnostics with an explicit
-   acknowledgement/escape shape for intentional truncation.
+   **Track B — build the genuine gaps.**
+   - ~~Out-of-range integer literal in a typed context~~ — DONE (2026-06-23):
+     `let a: u8 = 300;` (and any literal exceeding its target int type) is now
+     rejected at Check with **E0227** (`integer literal N is out of range for
+     type 'T' (lo..=hi)`) instead of silently truncating to 44. In-range literals
+     at every width still compile; explicit `as` casts may still truncate (the
+     opt-in lossy path). Closes the "semantically dark construct" footgun. Gated by
+     `scripts/tests/check_numeric_literals.sh` (Makefile `test-numeric-literals` +
+     CI); fixtures in `tests/programs/numeric/`. (Follow-up: negative literals into
+     unsigned types — `let a: u8 = -1` — flow through `unaryOp neg` and are not yet
+     caught here.)
+   - Literal suffixes (`7u8`, `5i32`, `0xFFu8`) are not parsed — still to build.
+   - Lossy/ambiguous cast diagnostics are unbuilt: `300 as u8`, `-1 as u32`, and
+     `3.9 as i32` compile silently today — add with an explicit
+     acknowledgement/escape shape for intentional truncation.
 
    **Track C — overflow policy is a real design fork, not a quick checker patch.**
    Arithmetic already produces overflow obligations and proven overflow should

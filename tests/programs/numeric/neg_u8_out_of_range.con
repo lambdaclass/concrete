@@ -1,0 +1,9 @@
+// Numeric (negative): an integer literal that cannot fit its target type is
+// rejected, not silently truncated (`let a: u8 = 300` must not become 44).
+// Expect: E0227
+mod m {
+    fn main() -> Int {
+        let a: u8 = 300;
+        return a as Int;
+    }
+}
