@@ -788,9 +788,15 @@ gate.
     lint, audit, record compiler-known target constants, and compare
     interpreter-vs-compiled behavior on macOS and Linux. It validates the
     language/tooling slab, not the full stdlib.
-35a. After the resurrected CI gate suite is green, add targeted red-team
-    coverage for the failure classes it exposed. Do **not** add these while the
-    baseline is red; first fix/classify the deterministic `phase1_contracts`,
+35a. [DONE — 2026-06-24; scripts/tests/check_phase6_redteam.sh (make
+    test-phase6-redteam + CI step). Found+fixed a real interp/compiled
+    disagreement while writing it: the interpreter did not deref a `&T` match
+    scrutinee, so a var/guard arm bound the reference instead of the pointee
+    (lowering already derefed via the E0715 fix). All five classes covered;
+    11/11 green.] After the resurrected CI gate suite is green, add targeted
+    red-team coverage for the failure classes it exposed. Do **not** add these
+    while the baseline is red; first fix/classify the deterministic
+    `phase1_contracts`,
     `trust-gate`, ProofCore, and match/lowering failures. Then add
     `scripts/tests/check_phase6_redteam.sh` with fixtures for:
     parser recovery and duplicate attributes (`#[spec]`/proof-link duplicates

@@ -362,6 +362,9 @@ jobs:
       - name: Macro-stance gate (Phase 6 #11 — no v1 macros)
         run: bash scripts/tests/check_no_macros.sh
 
+      - name: Red-team gate (Phase 6 #35a — recovery / match / fingerprint / stale fixtures)
+        run: bash scripts/tests/check_phase6_redteam.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 

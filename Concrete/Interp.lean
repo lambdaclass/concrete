@@ -470,6 +470,11 @@ partial def evalExpr (fns : List CFnDef) (enums : List CEnumDef) (env : Env) (e 
 
   | .match_ scrutinee arms _ => do
     let (env, sv) ← evalExprVal fns enums env scrutinee
+    -- Match on `&T`: match the pointee, not the reference. Lowering derefs a
+    -- reference scrutinee once before matching (the E0715 fix); the interpreter
+    -- must agree, or a var/guard arm binds the ref instead of the value (e.g.
+    -- `match p { n if n > 5 => .. }` on `p : &Int` would compare a ref to an int).
+    let sv ← autoDeref env sv
     evalMatch fns enums env sv arms
 
   | .arrayLit elems ty => do

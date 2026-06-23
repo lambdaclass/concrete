@@ -10,6 +10,25 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #35a: red-team hardening gate (2026-06-24)
+
+With the resurrected CI suite green, added `scripts/tests/check_phase6_redteam.sh`
+(`make test-phase6-redteam` + CI step) — targeted coverage for exactly the failure
+classes the dead-CI window hid: parser recovery + duplicate proof-link attributes
+(precise diagnostic, no `unexpected token` cascade), match linear-consumption
+agreement across range/guard/OR/wildcard arms, match lowering correctness as
+interp-vs-compiled execution oracles (match-on-`&T`, guards, OR desugaring, range
+arms, width coercion), ProofCore fingerprint stability (semantic change ⇒ new
+fingerprint; formatting-only ⇒ same), and the deliberately-stale trust fixture
+staying stale. It doubles as the reusable "new syntax feature red-team checklist".
+
+Writing the gate immediately found a **real interp/compiled disagreement**: the
+interpreter did not dereference a `&T` match scrutinee, so a var/guard arm bound
+the reference instead of the pointee (e.g. `match p { n if n > 5 => .. }` on
+`p : &Int` errored `unsupported binop`, and `match p { n => return n }` returned
+the wrong value) — while the compiled path already derefed via the E0715 fix.
+Fixed in `Concrete/Interp.lean` by `autoDeref`-ing the match scrutinee. 11/11 green.
+
 ### CI-fallout triage: green the resurrected gate suite (2026-06-24)
 
 Resurrecting CI (the backtick-YAML fix below) exposed gate failures that had
