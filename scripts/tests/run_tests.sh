@@ -3620,12 +3620,16 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# Output is valid JSON envelope (starts with { and ends with })
-if echo "$json_output" | grep -q '^\{' && echo "$json_output" | grep -q '\}$'; then
-    echo "  ok  diagnostics-json: output is JSON envelope"
+# Output is a well-formed JSON envelope. Validate by PARSING, not by grepping for
+# a leading `{` / trailing `}`: the brace grep was fragile to trailing whitespace
+# and line endings and failed nondeterministically on some CI runners (notably the
+# macOS runner) even though the JSON was valid. Parsing is what "is an envelope"
+# actually means.
+if printf '%s' "$json_output" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if isinstance(d, dict) and 'schema_version' in d else 1)" 2>/dev/null; then
+    echo "  ok  diagnostics-json: output is a well-formed JSON envelope"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  diagnostics-json: output should be a JSON envelope"
+    echo "FAIL  diagnostics-json: output should be a well-formed JSON envelope"
     echo "$json_output"
     FAIL=$((FAIL + 1))
 fi
@@ -7620,7 +7624,9 @@ fi
 pp_ext=$($COMPILER examples/proof_pressure/src/main.con --report extraction 2>/dev/null)
 
 # 8. Extraction: check_nonce has correct ProofCore form
-if echo "$pp_ext" | grep -A2 "check_nonce" | grep -q "if (nonce < 0) then 1 else if (nonce > max_nonce) then 2 else 0"; then
+# (Body was aligned to crypto_verify's shared spec in commit 8a53c3db: returns 1
+#  iff 0 < nonce <= max_nonce, else 0 — so it rides the registered spec/proof.)
+if echo "$pp_ext" | grep -A2 "check_nonce" | grep -q "if (nonce > 0) then if (nonce <= max_nonce) then 1 else 0 else 0"; then
     echo "  ok  pressure-ext: check_nonce ProofCore form correct"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -7646,12 +7652,15 @@ else
     evidence_fail=$((evidence_fail + 1))
 fi
 
-# 11. Extraction: classify_range blocked by field access
-if echo "$pp_ext" | grep -A5 "classify_range" | grep -q "field access"; then
-    echo "  ok  pressure-ext: classify_range blocked by field access"
+# 11. Extraction: classify_range blocked by integer division
+# (Field access became extractable in e2ab5eef, so the blocker was repointed at
+#  integer division `/` in commit 8a53c3db — no PBinOp.div, durably unmodeled.
+#  The function still reads the Bounds struct, now as a supported construct.)
+if echo "$pp_ext" | grep -A5 "classify_range" | grep -q "Concrete.BinOp.div"; then
+    echo "  ok  pressure-ext: classify_range blocked by integer division"
     evidence_pass=$((evidence_pass + 1))
 else
-    echo "  FAIL pressure-ext: classify_range should cite field access as blocker"
+    echo "  FAIL pressure-ext: classify_range should cite integer division as blocker"
     evidence_fail=$((evidence_fail + 1))
 fi
 
@@ -7959,7 +7968,9 @@ else
 fi
 
 # 49. E2E: source-linked proof name matches check-proofs theorem name
-if echo "$cp_pp" | grep -q "check_nonce.*Concrete.Proof.check_nonce_correct"; then
+# (Example proof theorems were migrated out of Concrete.Proof.* into
+#  Examples.CryptoVerify.Proofs.* — check_nonce rides crypto_verify's proof.)
+if echo "$cp_pp" | grep -q "check_nonce.*Examples.CryptoVerify.Proofs.check_nonce_correct"; then
     echo "  ok  e2e-lean: source-linked proof name matches kernel-checked theorem"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -8120,21 +8131,24 @@ else
     evidence_fail=$((evidence_fail + 1))
 fi
 
-# 71. Blocked: struct literal named in unsupported
-if echo "$blocked_ps" | grep -A8 "uses_struct" | grep -q "struct literal"; then
-    echo "  ok  blocked-pressure: struct literal named in unsupported"
+# 71. Blocked: integer division named in unsupported
+# (struct literal became extractable in e2ab5eef; repointed at integer division,
+#  which has no PBinOp.div and stays durably unmodeled — see fixture header.)
+if echo "$blocked_ps" | grep -A8 "uses_div" | grep -q "Concrete.BinOp.div"; then
+    echo "  ok  blocked-pressure: integer division named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
-    echo "  FAIL blocked-pressure: struct literal should be named in unsupported"
+    echo "  FAIL blocked-pressure: integer division should be named in unsupported"
     evidence_fail=$((evidence_fail + 1))
 fi
 
-# 72. Blocked: match expression named in unsupported
-if echo "$blocked_ps" | grep -A8 "uses_match" | grep -q "match expression"; then
-    echo "  ok  blocked-pressure: match expression named in unsupported"
+# 72. Blocked: field assignment named in unsupported
+# (match expression became extractable in e2ab5eef; repointed at field assignment.)
+if echo "$blocked_ps" | grep -A8 "uses_field_assign" | grep -q "field assignment"; then
+    echo "  ok  blocked-pressure: field assignment named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
-    echo "  FAIL blocked-pressure: match expression should be named in unsupported"
+    echo "  FAIL blocked-pressure: field assignment should be named in unsupported"
     evidence_fail=$((evidence_fail + 1))
 fi
 
@@ -8156,12 +8170,13 @@ else
     evidence_fail=$((evidence_fail + 1))
 fi
 
-# 75. Blocked: if without else named in unsupported
-if echo "$blocked_ps" | grep -A8 "uses_if_no_else" | grep -q "if without else"; then
-    echo "  ok  blocked-pressure: if-without-else named in unsupported"
+# 75. Blocked: deref named in unsupported
+# (if-without-else became extractable in e2ab5eef; repointed at deref/borrow.)
+if echo "$blocked_ps" | grep -A8 "uses_deref" | grep -q "deref"; then
+    echo "  ok  blocked-pressure: deref named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
-    echo "  FAIL blocked-pressure: if-without-else should be named in unsupported"
+    echo "  FAIL blocked-pressure: deref should be named in unsupported"
     evidence_fail=$((evidence_fail + 1))
 fi
 
@@ -9517,9 +9532,11 @@ else
     fc_fail=$((fc_fail + 1))
 fi
 
-# 9. Extraction report shows pure validators as eligible
+# 9. Extraction report shows pure validators as proof-eligible.
+# Since struct-literal + if-without-else extraction landed (e2ab5eef) the
+# validators now fully EXTRACT (a strict superset of "eligible") — accept either.
 fc_extract=$("$COMPILER" "$FC_SRC" --report extraction 2>&1)
-if echo "$fc_extract" | grep -A2 "validate_version" | grep -q "eligible"; then
+if echo "$fc_extract" | grep -A2 "validate_version" | grep -qE "eligible|extracted"; then
     echo "  ok  fixedcap: pure validators are proof-eligible"
     fc_pass=$((fc_pass + 1))
 else
@@ -9527,17 +9544,20 @@ else
     fc_fail=$((fc_fail + 1))
 fi
 
-# 10. Extraction blocked on struct literal and if-without-else (known gaps)
-if echo "$fc_extract" | grep -q "struct literal" && echo "$fc_extract" | grep -q "if without else"; then
-    echo "  ok  fixedcap: extraction blocked on known gaps (struct literal, if-without-else)"
+# 10. Struct literal + if-without-else became proof-EXTRACTABLE (e2ab5eef), so
+# the former "known gaps" are closed: the validators that use them now extract
+# and the example has zero eligible-but-not-extractable functions.
+if echo "$fc_extract" | grep -q "0 eligible but not extractable"; then
+    echo "  ok  fixedcap: struct-literal/if-without-else gaps closed (0 not-extractable)"
     fc_pass=$((fc_pass + 1))
 else
-    echo "  FAIL fixedcap: extraction should show struct literal and if-without-else gaps"
+    echo "  FAIL fixedcap: extraction should show struct-literal/if-without-else gaps closed"
     fc_fail=$((fc_fail + 1))
 fi
 
-# 11. Concrete.toml has predictable policy
-if grep -q 'predictable = true' "$FC_DIR/Concrete.toml"; then
+# 11. Concrete.toml has predictable policy (whitespace-insensitive: the toml
+# aligns values with padding, e.g. `predictable            = true`).
+if grep -qE 'predictable[[:space:]]*=[[:space:]]*true' "$FC_DIR/Concrete.toml"; then
     echo "  ok  fixedcap: Concrete.toml declares predictable=true"
     fc_pass=$((fc_pass + 1))
 else
@@ -9611,13 +9631,16 @@ else
     pv_fail=$((pv_fail + 1))
 fi
 
-# 4. All 9 functions are pure with evidence=enforced
+# 4. All 10 functions are pure with real evidence (proved or enforced, none merely
+# reported). Three validators became `proved` once struct-literal/if-without-else
+# extraction landed (e2ab5eef); the remainder stay `enforced`. The "0 reported"
+# check is the invariant: every pure function carries enforced-or-stronger evidence.
 pv_effects=$("$COMPILER" "$PV_SRC" --report effects 2>&1)
-if echo "$pv_effects" | grep -q "9 pure" && echo "$pv_effects" | grep -q "9 enforced"; then
-    echo "  ok  parsevalidate: all 9 functions are pure with evidence=enforced"
+if echo "$pv_effects" | grep -q "10 pure" && echo "$pv_effects" | grep -q "0 reported"; then
+    echo "  ok  parsevalidate: all 10 functions are pure with evidence (proved/enforced)"
     pv_pass=$((pv_pass + 1))
 else
-    echo "  FAIL parsevalidate: all 9 functions should be pure with evidence=enforced"
+    echo "  FAIL parsevalidate: all 10 functions should be pure with evidence (proved/enforced)"
     pv_fail=$((pv_fail + 1))
 fi
 
@@ -9658,7 +9681,7 @@ else
 fi
 
 # 9. Concrete.toml has predictable policy
-if grep -q 'predictable = true' "$PV_DIR/Concrete.toml"; then
+if grep -qE 'predictable[[:space:]]*=[[:space:]]*true' "$PV_DIR/Concrete.toml"; then
     echo "  ok  parsevalidate: Concrete.toml declares predictable=true"
     pv_pass=$((pv_pass + 1))
 else
@@ -9779,7 +9802,7 @@ else
 fi
 
 # 9. Concrete.toml has predictable policy
-if grep -q 'predictable = true' "$SE_DIR/Concrete.toml"; then
+if grep -qE 'predictable[[:space:]]*=[[:space:]]*true' "$SE_DIR/Concrete.toml"; then
     echo "  ok  serviceerrors: Concrete.toml declares predictable=true"
     se_pass=$((se_pass + 1))
 else
@@ -10159,19 +10182,19 @@ enum Copy Result {
     Err { code: i32 },
 }
 fn try_parse(ok: i32) -> Result {
-    if ok == 1 { return Result#Ok { val: 42 }; }
-    return Result#Err { code: 99 };
+    if ok == 1 { return Result::Ok { val: 42 }; }
+    return Result::Err { code: 99 };
 }
 pub fn main() -> Int {
     match try_parse(1) {
-        Result#Ok { val } => {
+        Result::Ok { val } => {
             if val != 42 { return 1; }
         },
-        Result#Err { code } => { return 2; },
+        Result::Err { code } => { return 2; },
     }
     match try_parse(0) {
-        Result#Ok { val } => { return 3; },
-        Result#Err { code } => {
+        Result::Ok { val } => { return 3; },
+        Result::Err { code } => {
             if code != 99 { return 4; }
         },
     }
@@ -10299,10 +10322,10 @@ fi
 cat > /tmp/interp_test_match_mut.con << 'TESTEOF'
 enum Copy E { A }
 pub fn main() -> Int {
-    let e: E = E#A;
+    let e: E = E::A;
     let mut x: i32 = 1;
     match e {
-        E#A => { x = 2; },
+        E::A => { x = 2; },
     }
     if x == 2 { return 0; }
     return 1;

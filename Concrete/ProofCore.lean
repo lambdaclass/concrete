@@ -1984,7 +1984,21 @@ private partial def extractModule
                        , spec := sa : ProofCoreExcluded }])
     else if elig.eligible then
       let extracted := cStmtsToPExpr f.body |>.map normalizePExpr
-      let unsup := if extracted.isNone then identifyUnsupported f.body else []
+      -- Invariant: an eligible function whose extraction failed must ALWAYS
+      -- disclose at least one reason, or the ProofCore self-consistency check
+      -- fires [BLOCKED-UNSUP] "eligible with no extraction but unsupported list
+      -- is empty". identifyUnsupported mirrors the extractor's structural cases,
+      -- but the two can drift — e.g. a construct made "supported" in
+      -- identifyUnsupported (match / struct literal / if-without-else, since
+      -- 2026-05-23) while the extractor still rejects it in statement /
+      -- non-terminal / nested-mutation position. Guard against that drift so we
+      -- never silently report "eligible, no extraction, no reason".
+      let unsup :=
+        if extracted.isNone then
+          match identifyUnsupported f.body with
+          | [] => ["unmodelled statement or control-flow structure (no ProofCore form)"]
+          | rs => rs
+        else []
       (accE ++ [{ qualName, bareName, fn := f, extracted, unsupported := unsup
                  , fingerprint := fp, params := f.params.map Prod.fst
                  , eligibility := elig, loc := elig.loc

@@ -2,33 +2,35 @@
 // Each function is eligible but uses exactly one unsupported construct.
 // The diagnostic must name the specific construct, not just "blocked".
 //
+// NB: struct literal, match, and if-without-else became proof-EXTRACTABLE
+// (commit e2ab5eef, 2026-05-23: "ProofCore extracts struct literal + field
+// access"), so the original struct/match/if-without-else blockers no longer
+// block. To keep five distinct named-blocker cases, those three were repointed
+// at constructs that remain durably unmodeled in ProvableV1 — integer division
+// (no PBinOp.div), field assignment, and deref — the same approach used for the
+// classify_range fix in commit 8a53c3db.
+//
 // Expected:
-//   uses_struct      → blocked: struct literal
-//   uses_match       → blocked: match expression (+ no return statement)
-//   uses_mut         → blocked: mutable assignment
-//   uses_string      → blocked: string literal
-//   uses_if_no_else  → blocked: if without else
-//   extractable_fn   → eligible, extractable (control: should be missing)
+//   uses_div          → blocked: unsupported operator (integer division)
+//   uses_field_assign → blocked: field assignment
+//   uses_mut          → blocked: mutable assignment
+//   uses_string       → blocked: string literal
+//   uses_deref        → blocked: deref (borrow, deref)
+//   extractable_fn    → eligible, extractable (control: should be missing)
 
 struct Copy Point {
     x: Int,
     y: Int,
 }
 
-enum Color {
-    Red,
-    Blue,
+fn uses_div(x: Int) -> Int {
+    return x / 2;
 }
 
-fn uses_struct(x: Int, y: Int) -> Point {
-    return Point { x: x, y: y };
-}
-
-fn uses_match(c: Color) -> Int {
-    match c {
-        Color::Red => { return 1; },
-        Color::Blue => { return 2; },
-    }
+fn uses_field_assign(x: Int) -> Int {
+    let mut p: Point = Point { x: x, y: x };
+    p.x = x;
+    return p.x;
 }
 
 fn uses_mut(x: Int) -> Int {
@@ -41,11 +43,9 @@ fn uses_string() -> String {
     return "hello";
 }
 
-fn uses_if_no_else(x: Int) -> Int {
-    if x > 0 {
-        return x;
-    }
-    return 0;
+fn uses_deref(x: Int) -> Int {
+    let r: &Int = &x;
+    return *r;
 }
 
 fn extractable_fn(a: Int, b: Int) -> Int {

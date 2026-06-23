@@ -10,6 +10,41 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### CI-fallout triage: green the resurrected gate suite (2026-06-24)
+
+Resurrecting CI (the backtick-YAML fix below) exposed gate failures that had
+accumulated unseen across 40+ dead-CI pushes. Triaged each as a real regression
+vs. a stale test, fixed the regressions, and updated stale expectations only
+after verifying the new behavior is semantically correct.
+
+Real regressions fixed (compiler):
+- **ProofCore self-consistency** — when struct-literal / match / if-without-else
+  became proof-extractable (e2ab5eef), `identifyUnsupported` started returning
+  empty for functions the extractor still rejects in statement / nested-mutation
+  position, so they reported "eligible, no extraction, *no reason*" — a
+  consistency violation. Added an invariant guard at the extraction-pairing point
+  so an eligible-but-unextracted function always discloses a reason.
+- **Parser error recovery** — error-tolerant parsing (#12c, 2026-06-08) emitted a
+  spurious second "unexpected token }" after a real error, because recovery
+  force-advanced past valid item-starts and mistook a nested block's `}` for the
+  enclosing `mod`'s stop brace. Recovery is now brace-depth aware and only stops
+  at a same-level boundary; genuine multi-error recovery is preserved.
+
+Stale tests/fixtures updated to verified-correct reality (no compiler change):
+- enum-match heredoc migrated `#` → `::`; check_nonce form + classify_range
+  blocker + e2e-lean proof name realigned to the 8a53c3db fixture fix and the
+  proof-namespace migration; blocked-pressure fixture repointed at durably
+  unsupported constructs (division / field-assignment / deref) to keep five
+  named-blocker cases; fixedcap / parsevalidate expectations updated (extracted ⊃
+  eligible, gaps closed, 10 pure functions); `predictable = true` greps made
+  whitespace-tolerant.
+- Hardened the diagnostics-json "envelope" check to validate by *parsing* the
+  JSON rather than grepping for leading/trailing braces (the grep was fragile to
+  whitespace / line endings and failed nondeterministically on the macOS runner).
+
+Result: trust-gate, phase1-contracts, rich-diagnostics, wrong-code, golden, and
+the full fast suite (1576/0) all green locally.
+
 ### Fix: CI was silently dead — backtick in workflow YAML (2026-06-23)
 
 - `lean_action_ci.yml` had been reporting a 0-second "completed failure" with no

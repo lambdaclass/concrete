@@ -1942,12 +1942,40 @@ def isTopLevelStart : TokenKind → Bool
 def recordParseErrors (ds : Diagnostics) : ParseM Unit :=
   modify fun s => { s with errors := s.errors ++ ds }
 
-/-- Skip tokens until the next top-level item start, the body's stop token, or EOF.
-    Always advances at least once so recovery cannot loop forever. -/
-partial def skipToTopLevelBoundary (stopToken : TokenKind) : ParseM Unit := do
-  advance  -- guarantee progress past the offending token
+/-- Skip tokens until the next top-level item start, the body's stop token, or EOF
+    — but only when that boundary sits at the SAME brace-nesting level the failed
+    item started at. `itemStartPos` is the parser position when the item began.
+
+    Two recovery hazards this guards against, both of which produced a spurious
+    second "unexpected token }" error before error-tolerant parsing was tightened:
+
+    1. The item made progress and now sits on a valid item-start (e.g. consumed
+       `#[spec(...)]` attributes before a duplicate-link error, cursor on `fn`).
+       We must NOT advance past it, or the whole following declaration is lost.
+    2. The item left a block brace open (e.g. an unfinished `fn` body
+       `{ return x + }`). The first `}` we meet closes THAT body, not the
+       enclosing `mod`; treating it as the stop brace consumes the mod's real
+       close and dangles a stray `}`. We track depth so nested closers are
+       skipped and only a same-level stop brace / item-start ends recovery. -/
+partial def skipToTopLevelBoundary (itemStartPos : Nat) (stopToken : TokenKind) : ParseM Unit := do
+  let st ← get
+  -- Brace imbalance the failed item left open: `{` minus `}` over what it consumed.
+  let mut depth := 0
+  for i in [itemStartPos:st.pos] do
+    match st.tokens[i]? with
+    | some t =>
+      match t.kind with
+      | .lbrace => depth := depth + 1
+      | .rbrace => if depth > 0 then depth := depth - 1
+      | _       => pure ()
+    | none => pure ()
+  -- Progress guarantee: if the item consumed nothing, advance once so recovery
+  -- cannot loop forever (no item-start was over-run in this case).
+  if st.pos == itemStartPos then advance
   let mut tk ← peek
-  while tk != .eof && tk != stopToken && !isTopLevelStart tk do
+  while tk != .eof && !(depth == 0 && (tk == stopToken || isTopLevelStart tk)) do
+    if tk == .lbrace then depth := depth + 1
+    else if tk == .rbrace && depth > 0 then depth := depth - 1
     advance
     tk ← peek
 
@@ -1978,6 +2006,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
   let mut pendingFingerprint : Option String := none
   let mut tk ← peek
   while tk != stopToken && tk != .eof do
+    let itemStartPos := (← get).pos
     try
       -- Parse attributes (but don't continue — let the next token be parsed)
       if tk == .hash then
@@ -2206,7 +2235,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
       pendingEnsuresProof := none
       pendingCoverage := none
       pendingFingerprint := none
-      skipToTopLevelBoundary stopToken
+      skipToTopLevelBoundary itemStartPos stopToken
     tk ← peek
   return { name := "", structs, enums, functions := fns, imports, implBlocks, traits,
            traitImpls, constants, typeAliases, capAliases, externFns, specFns, newtypes, submodules }
