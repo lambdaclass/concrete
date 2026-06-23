@@ -10,6 +10,22 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Grammar reference re-synced + GRAMMAR.md (2026-06-23)
+
+- Phase 6 #2. The canonical grammar `grammar/concrete.ebnf` had drifted behind
+  this session's parser work; brought back in sync (and kept LL(1), verified by
+  all three checkers `scripts/check_ll1.{py,c,rs}`): match arms now model OR
+  patterns (`A | B`), guards (`pat if cond`), and integer ranges
+  (`lo..hi`/`lo..=hi`) incl. negative and bool patterns; `if`/`while` model the
+  `let` destructuring forms; struct literals model field punning and the `..base`
+  functional update. (Two pre-existing omissions — bool patterns, field punning —
+  were filled in too.)
+- Added `docs/GRAMMAR.md` as the reference page: points at the canonical EBNF and
+  indexes reserved keywords, attribute syntax (fixed compiler set, no user
+  attrs/macros), contract/`ghost`/`assert`/`assume` syntax, and the
+  negative-parser-fixture gates. The stmt-vs-trailing-expression distinction
+  folded into #2 is already implemented (#36). 60 grammar rules, all LL(1).
+
 ### Macro/metaprogramming stance decided — permanent non-goal (2026-06-23)
 
 - Phase 6 #11. Concrete has **no language macro system** — permanently, not a v1

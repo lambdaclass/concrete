@@ -189,8 +189,8 @@ impl_method = [ 'pub' ] 'fn' IDENT [ type_params ] '(' [ method_params ] ')' [ c
 (* or ';' it falls through to expr_or_assign handling.              *)
 stmt = 'let' [ 'mut' ] IDENT [ ':' type ] '=' expr ';'
      | 'return' [ expr ] ';'
-     | 'if' expr block [ 'else' else_tail ]
-     | 'while' expr block
+     | 'if' if_tail
+     | 'while' while_tail
      | 'for' for_tail
      | 'match' expr '{' { match_arm } '}' [ match_stmt_tail ]
      | 'break' [ LABEL | expr ] ';'
@@ -204,7 +204,20 @@ stmt = 'let' [ 'mut' ] IDENT [ ':' type ] '=' expr ';'
 (* After match expr { arms }: optional postfix/binop/assign then ';' *)
 match_stmt_tail = { postfix_op } { binop unary_expr } [ '=' expr ] ';' ;
 
-else_tail = 'if' expr block [ 'else' else_tail ]
+(* After 'if'/'while', peek for 'let' (destructuring conditional, which     *)
+(* desugars to a match) vs. an ordinary boolean condition.                   *)
+if_tail = 'let' enum_pattern '=' expr block [ 'else' block ]
+        | expr block [ 'else' else_tail ]
+        ;
+
+while_tail = 'let' enum_pattern '=' expr block
+           | expr block
+           ;
+
+(* if-let / while-let pattern: an enum variant with field bindings. *)
+enum_pattern = IDENT '#' IDENT '{' binding_list '}' ;
+
+else_tail = 'if' if_tail
           | block
           ;
 
@@ -219,7 +232,7 @@ for_init = 'let' [ 'mut' ] IDENT [ ':' type ] '=' expr
 
 for_step = expr_or_assign ;
 
-labeled_tail = 'while' expr block
+labeled_tail = 'while' while_tail
              | 'for' for_tail
              ;
 
@@ -232,18 +245,27 @@ block = '{' { stmt } [ expr ] '}' ;
 (* Match                                                            *)
 (* ================================================================ *)
 
-match_arm = match_pattern '=>' match_body [ ',' ] ;
+(* An arm may list several '|'-separated patterns (OR), then an       *)
+(* optional 'if' guard, before '=>'. After a pattern, '|' continues   *)
+(* the OR list, 'if' starts the guard, '=>' ends the head.            *)
+match_arm = match_pattern { '|' match_pattern } [ 'if' expr ] '=>' match_body [ ',' ] ;
 
-(* INT and IDENT have distinct first tokens.                        *)
-(* After IDENT, peek for '#' or '{' to disambiguate.               *)
-match_pattern = INT
+(* INT / '-' / 'true' / 'false' / IDENT have distinct first tokens.   *)
+(* An integer pattern may be a range ('lo..hi' exclusive, 'lo..=hi'   *)
+(* inclusive); after IDENT, peek for '::' or '{' to disambiguate.     *)
+match_pattern = int_lit_pat [ ( '..' | '..=' ) int_lit_pat ]
+              | 'true'
+              | 'false'
               | IDENT [ match_pattern_tail ]
               ;
+
+int_lit_pat = INT | '-' INT ;
 
 match_pattern_tail = '#' IDENT [ '{' binding_list '}' ]
                    | '{' binding_list '}'
                    ;
 
+(* '_' in a binding position is a wildcard (positional, not bound). *)
 binding_list = IDENT { ',' IDENT } ;
 
 match_body = block | stmt ;
@@ -326,8 +348,15 @@ ident_tail = '::' type_args [ '::' IDENT call_args ]
            ;
 
 call_args    = '(' [ expr { ',' expr } ] ')' ;
-field_values = field_value { ',' field_value } [ ',' ] ;
-field_value  = IDENT ':' expr ;
+
+(* Struct/enum literal body: named fields (with field punning `{ x }`), and an  *)
+(* optional trailing `..base` functional update (`S { f: v, ..base }` or         *)
+(* `S { ..base }`). After a field the next token is ',' (more) or '}' (done);    *)
+(* '..' introduces the base.                                                     *)
+field_values = '..' expr
+             | field_value { ',' field_value } [ ',' [ '..' expr ] ]
+             ;
+field_value  = IDENT [ ':' expr ] ;
 
 (* After '[' expr: ';' means repeat, ',' means list, ']' means singleton/empty *)
 array_body = expr array_body_tail

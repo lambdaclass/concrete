@@ -307,12 +307,17 @@ gate.
    parser fixtures. This is a syntax reference, not a language-design
    committee. As part of this grammar pass, model the distinction between
    expression statements (`expr;`) and trailing value expressions in
-   blocks/match arms. Today `Stmt.expr` loses whether a semicolon discarded the
-   value, so a statement-position match arm ending in `side();` can be typed as
-   the side-effect expression's value instead of `Unit` (E0225). The fix should
-   define block/trailing-expression semantics, update parser/checker/formatter
-   behavior, and add fixtures for statement match arms, value match arms, and
-   mixed `Unit`/value arms.
+   blocks/match arms.
+   DONE (2026-06-23): the canonical grammar is `grammar/concrete.ebnf` (LL(1),
+   verified by three independent checkers — `scripts/check_ll1.{py,c,rs}` — in
+   CI). It was brought back in sync with the parser for this session's syntax
+   (range patterns, OR patterns, match guards, `if let`/`while let`, struct
+   functional update `..base`, field punning). `docs/GRAMMAR.md` is the reference
+   page: it points at the canonical EBNF and indexes reserved keywords, attribute
+   syntax (fixed compiler set; no user attrs/macros — see MACRO_STANCE.md),
+   contract/`ghost`/`assert`/`assume` syntax, and the negative-parser-fixture
+   gates. The statement-vs-trailing-expression distinction is implemented (#36:
+   `isValue` on `Stmt.expr`/`CStmt.expr`; fixes the spurious E0225 class).
 2a. Add qualified name access and import aliases for module hygiene. Phase 5
    closed the core modules/imports/visibility surface, but daily use still has
    a namespace gap: if two imported modules export the same public name, the
