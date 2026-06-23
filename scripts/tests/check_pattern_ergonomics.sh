@@ -1,16 +1,10 @@
 #!/usr/bin/env bash
 # Pattern-ergonomics gate (ROADMAP Phase 6 #5).
 #
-# #5 is a compound usability block, built incrementally. This gate grows one
-# section per landed sub-feature. LANDED so far:
-#
-#   - Integer RANGE patterns: `lo..=hi` (inclusive) and `lo..hi` (exclusive) in
-#     match arms. Endpoints, exclusion of the high bound, value-position arms,
-#     negative bounds, and the exhaustiveness rule (a range is NOT a catch-all —
-#     a range-only match still needs a `_` arm) are all locked.
-#
-# STILL OPEN (each becomes a new section here when it lands): match guards,
-# OR patterns, if-let / while-let, struct-update, tuples, match-on-&T.
+# #5 is closed for V1. This gate locks the built features: integer ranges,
+# match guards, OR patterns, match-on-&T, struct update (via its own gate),
+# `_` wildcard destructuring, and `if let` / `while let`. Tuples and nested
+# patterns are explicit workload-gated decisions with separate gates/docs.
 #
 # Fixtures: tests/programs/patterns/. Example: examples/patterns/byte_ranges/.
 # See docs/PATTERN_ERGONOMICS.md.

@@ -1,8 +1,9 @@
 # Pattern Ergonomics
 
-Status: IN PROGRESS — ROADMAP Phase 6 #5. This is a compound usability block
-built incrementally; this doc grows one section per landed sub-feature. Gated by
-`scripts/tests/check_pattern_ergonomics.sh`.
+Status: CLOSED — ROADMAP Phase 6 #5. The compound usability block is complete
+for V1: built features are gated by `scripts/tests/check_pattern_ergonomics.sh`,
+and the two non-built items are explicitly workload-gated decisions rather than
+hidden holes.
 Date: 2026-06-22
 
 ## Baseline (already present)
@@ -188,14 +189,17 @@ let E::Pair { a, _ } = p;           // binds `a`, ignores the second field
 
 (Previously `_` was a readable binding named `_` — now corrected to a wildcard.)
 
-## Decided / closed
+## Closed / Workload-Gated Decisions
 
 - **Tuples** — no anonymous tuples in V1; use named structs. See
   `docs/TUPLES.md` (gated by `scripts/tests/check_no_tuples.sh`).
+- **Nested patterns** — deferred. Use staged destructuring, field access, or
+  nested `match`; see `docs/NESTED_PATTERNS.md` (gated by
+  `scripts/tests/check_nested_patterns.sh`). The trigger to reconsider is a
+  real workload where the workaround obscures correctness or materially bloats
+  pattern-heavy code.
 
-## Still open
-
-- nested patterns (e.g. `Some(Pair { x, y })`) — destructure-within-destructure.
-- match-on-reference ergonomics for `&T` / `&mut T`
-- struct update syntax — `Struct { f: x, ..base }`
-- tuple types (or a deliberate no-tuples decision)
+No Phase 6 #5 feature remains untracked: ranges, `if let` / `while let`, match
+guards, OR patterns, match-on-reference, struct update, and `_` destructuring
+wildcards are implemented; tuples and nested patterns are deliberate
+workload-gated decisions.

@@ -398,14 +398,16 @@ let (a, b) = expr;
 
 Concrete does not have tuple types. Structs serve the same role with named fields. Struct destructuring (section 2) handles this case.
 
-### No `_` wildcard in patterns
+### `_` wildcard in destructuring bindings
 
 ```
-// NOT supported:
 let Result::Ok { value: _ } = expr;
 ```
 
-For the first release, every binding name in a destructuring pattern binds a variable. There is no wildcard. If a field is not needed, bind it and let the unused-variable checker flag it (or, for Copy types, simply ignore it). Wildcards can be added later without grammar changes -- `_` is already a valid identifier character, but a standalone `_` would need to be special-cased.
+Status: IMPLEMENTED (Phase 6 #5 increment 7). A field binding named `_` in an
+enum-variant or `let` destructure is a true wildcard: it preserves field
+position so other bindings still line up, but it is not added to scope and
+reading `_` is rejected (E0100). The ignored field is not loaded in codegen.
 
 ---
 
@@ -813,7 +815,6 @@ No changes are needed to Core IR, SSA, LLVM emission, or the proof pipeline. The
 
 These are not part of this design but would be natural additions later:
 
-- **`_` wildcard in binding lists**: Allow `_` to discard a field without binding it. Requires special-casing `_` in the binding list parser. Useful for Copy types where not all fields are needed.
 - **Nested patterns**: `let Result::Ok { value: Option::Some { inner } } = expr else { ... }` -- multi-level destructuring in a single statement. Requires recursive pattern parsing.
 - **Else block with error access**: `let Result::Ok { value } = expr else |other| { ... }` -- the else block receives the non-matching value. Requires a binding syntax in the else clause.
 
