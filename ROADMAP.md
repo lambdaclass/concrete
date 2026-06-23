@@ -483,14 +483,18 @@ gate.
 6. Define numeric literal and cast rules: suffixes, inference/default integer
    type, signed/unsigned comparisons, narrowing, widening, checked/proved/
    wrapping overflow profiles, and diagnostics for ambiguous or lossy casts.
-   HEADLINE GAP (recurring, found repeatedly across #3/#4/#5 work): an integer
-   literal does NOT infer its type from the expected/annotated type inside an
-   array literal — `let a: [i32; 3] = [7, 0, 0];` fails E0220 because `[7,0,0]`
-   defaults to `[i64; 3]`; every fixture/example had to write `[7 as i32, …]`.
-   (Scalar contexts like `let v: i32 = match … => 7` DO infer.) This per-element
-   literal-from-hint inference is the single most pervasive papercut and should be
-   the first thing #6 fixes — it currently forces `as`-casts throughout array/
-   buffer code.
+   HEADLINE GAP — RESOLVED (2026-06-23, verified; landed during #5 churn): an
+   integer literal now infers its type from the expected/annotated element type
+   inside an array literal. `let a: [i32; 3] = [7, 0, 0];` compiles with no
+   `as`-casts (previously E0220 because `[7,0,0]` defaulted to `[i64; 3]`). The
+   element hint is pushed into each element in both Check (`.arrayLit`, ~L1966)
+   and Elab (`.arrayLit`, ~L711); verified across let-binding, sub-word widths
+   (u8/u16/i16), negative literals, nested arrays, function-arg, and struct-field
+   contexts. Locked by `tests/programs/regress_array_literal_elem_infer.con`
+   (main suite). This was the single most pervasive papercut.
+   REMAINING for #6: literal suffixes, the default-integer-type rule, signed/
+   unsigned comparison rules, narrowing/widening, the overflow profiles, and
+   ambiguous/lossy-cast diagnostics.
 7. Define resource cleanup semantics: `defer`, drop/cleanup ordering,
     early-return cleanup, failure during cleanup, move-after-defer behavior, and
     linear-value interaction.

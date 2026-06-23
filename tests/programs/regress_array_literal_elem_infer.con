@@ -1,0 +1,35 @@
+// Regression for ROADMAP Phase 6 #6 HEADLINE GAP: an integer literal inside an
+// array literal must infer its type from the expected/annotated element type,
+// instead of defaulting to i64. Before the fix, `let a: [i32; 3] = [7, 0, 0];`
+// failed E0220 ([7,0,0] was [i64;3]), forcing `[7 as i32, …]` casts throughout
+// array/buffer code. The hint is now pushed into each element in both Check and
+// Elab (the array-literal element-from-hint path).
+//
+// Covers let-binding, sub-word widths (u8/u16/i16), negative literals, nested
+// arrays, and function-argument context — all WITHOUT any `as`-casts. Returns 0
+// iff every element inferred and stored at its annotated width correctly.
+// Expected: 0.
+
+fn sum3_i32(xs: [i32; 3]) -> i32 { return xs[0] + xs[1] + xs[2]; }
+
+fn main() -> i64 {
+    // let-binding at i32 — the canonical papercut.
+    let a: [i32; 3] = [7, 0, 35];
+    // sub-word unsigned buffer, no casts.
+    let b: [u8; 4] = [1, 2, 3, 255];
+    // sub-word signed with a negative literal.
+    let c: [i16; 2] = [-5, 9];
+    // nested array literal: hint must reach the inner elements too.
+    let d: [[i32; 2]; 2] = [[1, 2], [3, 4]];
+    // function-argument context (hint from the parameter type).
+    let s: i32 = sum3_i32([10, 20, 12]);  // 42
+
+    let got: i64 =
+        (a[0] as i64) + (a[2] as i64)        // 7 + 35  = 42
+      + (b[3] as i64)                        // 255
+      + (c[0] as i64)                        // -5
+      + (d[1][0] as i64)                     // 3
+      + (s as i64);                          // 42
+    // 42 + 255 - 5 + 3 + 42 = 337
+    return got - 337;  // 0 iff all element inferences are correct
+}
