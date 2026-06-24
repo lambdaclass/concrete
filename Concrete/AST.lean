@@ -134,6 +134,10 @@ inductive BinOp where
   -- lower to the LLVM `llvm.{s,u}{add,sub}.sat` intrinsics; mul (Stage 2.2b) uses
   -- `*.with.overflow` + select. Integer-only, same-type operands.
   | saturatingAdd | saturatingSub
+  -- saturating multiply (Stage 2.2b) — no direct `*.sat` intrinsic, so it lowers
+  -- via `*.with.overflow` + clamp-select (the shared overflow infra the checked
+  -- flip also uses).
+  | saturatingMul
   deriving Repr, BEq
 
 inductive UnaryOp where

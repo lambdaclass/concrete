@@ -197,6 +197,7 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   -- llvm.{s,u}{add,sub}.sat intrinsics. ROADMAP #10 Stage 2.2.
   | .saturatingAdd, .int a ty, .int b _ => .ok (.int (saturateToType ty (a + b)) ty)
   | .saturatingSub, .int a ty, .int b _ => .ok (.int (saturateToType ty (a - b)) ty)
+  | .saturatingMul, .int a ty, .int b _ => .ok (.int (saturateToType ty (a * b)) ty)
   | .div, .int _ _, .int 0 _ => .error "interp: division by zero"
   | .div, .int a ty, .int b _ => .ok (.int (maskWidth ty (a / b)) ty)
   | .mod, .int _ _, .int 0 _ => .error "interp: modulo by zero"

@@ -21,10 +21,14 @@ signedness/width-mangled and statically declared (following the existing
 interpreter clamps to the type's range so interp == compiled. Gated by
 `scripts/tests/check_saturating_arith.sh` (`make test-saturating-arith` + CI).
 
-`saturating_mul` has no direct `.sat` intrinsic, so it lands next on the shared
-`*.with.overflow` + clamp/select infrastructure — the same infra the checked-`+`
-flip will use. The headline goal remains making ordinary `+ - *` checked;
-saturating add/sub exercised the simpler single-value intrinsic-call path first.
+`saturating_mul` (Stage 2.2b) followed, on the shared `*.with.overflow`
+infrastructure: the struct-returning `{iW,i1}` intrinsic + `extractvalue` are
+emitted as raw LLVM IR (LLVM auto-declares the intrinsic), then a branchless
+clamp `select` (unsigned → MAX; signed → MIN/MAX by the sign of the true
+product). Validated interp==compiled across signed/unsigned boundaries. This is
+the **same overflow infrastructure the checked-`+` flip (Stage 2.3) reuses** —
+swapping the clamp select for a `condBr`→abort. The headline goal remains making
+ordinary `+ - *` checked; the explicit wrap/clamp spellings now all exist.
 
 ### Phase 6 #10 Stage 2.1: explicit wrapping arithmetic (2026-06-24)
 

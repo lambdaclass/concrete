@@ -331,7 +331,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         if !typesCompatible lTy rTy && !hasTypeVar lTy && !hasTypeVar rTy then
           addCCError (.binaryOperandMismatch (toString (repr lTy)) (toString (repr rTy)))
     | .wrappingAdd | .wrappingSub | .wrappingMul
-    | .saturatingAdd | .saturatingSub =>
+    | .saturatingAdd | .saturatingSub | .saturatingMul =>
       -- Explicit wrapping/saturating arithmetic is INTEGER-ONLY (no
       -- float/bool/char/ptr) and operands must share the type. ROADMAP #10 Stage 2.
       let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false

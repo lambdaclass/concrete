@@ -632,15 +632,18 @@ gate.
         declared) + interp clamp; scripts/tests/check_saturating_arith.sh]
         `saturating_add`/`saturating_sub` — explicit clamping. Used the simple
         `.sat` intrinsic path (no overflow-struct infra needed).
-      - Stages 2.2b-2.6 [remaining backend build — build the shared infra first]:
-          (i)   LLVM IR support for overflow-intrinsic result handling
-                (`llvm.{s,u}{add,sub,mul}.with.overflow` → `{iN, i1}`);
-          (ii)  `extractvalue` + `select`/branch lowering;
-          (iii) an abort-block emission primitive (reuse existing condBr/abort);
-          (iv)  `saturating_mul` on it (with.overflow + clamp/select, branchless);
-          (v)   checked `+ - *` flip on the SAME infra (with.overflow + condBr→
-                abort), then migrate std/examples that intentionally wrap onto
-                `wrapping_*`.
+      - Stage 2.2b: [DONE — 2026-06-24; BinOp.saturatingMul → raw
+        `*.with.overflow` ({iW,i1} + extractvalue) + sign-aware clamp `select` in
+        EmitSSA + interp clamp; gate extended] `saturating_mul`. This BUILT the
+        shared overflow infrastructure (struct-returning intrinsic via raw IR +
+        extractvalue; LLVM auto-declares) and validated it interp==compiled.
+      - Stages 2.3-2.6 [remaining — REUSE the Stage 2.2b overflow infra]:
+          (i)   checked `+ - *` flip: `*.with.overflow` + `condBr`→abort block
+                (instead of the clamp select), then migrate std/examples that
+                intentionally wrap onto `wrapping_*`;
+          (ii)  div/mod-zero traps (2.4), shift-amount checks (2.5), same abort;
+          (iii) reports/audit (2.6): classify each site proved / runtime-checked /
+                explicit-wrapping / explicit-saturating (ARITHMETIC_POLICY §3.2).
         Then 2.4 div/mod-zero traps, 2.5 shift checks, 2.6 proof/audit (a proof
         omits a *redundant* runtime check; it never changes source meaning).
         `SInst` models single-value calls today — struct-returning intrinsics +

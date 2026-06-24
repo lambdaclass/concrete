@@ -53,6 +53,23 @@ pub fn main() -> Int {
 EOF
 oracle sat
 
+# saturating_mul (Stage 2.2b — via *.with.overflow + sign-aware clamp/select).
+cat > "$TMP/satmul.con" <<'EOF'
+pub fn main() -> Int {
+    let u200: u8 = 200;
+    let two8: u8 = 2;
+    if saturating_mul(u200, two8) != 255 { return 1; }            // unsigned overflow -> MAX
+    let ten: u8 = 10;
+    if saturating_mul(ten, ten) != 100 { return 2; }             // in range
+    let big: i32 = 100000;
+    if saturating_mul(big, big) != 2147483647 { return 3; }      // signed pos overflow -> MAX
+    let nbig: i32 = -100000;
+    if saturating_mul(nbig, big) != -2147483648 { return 4; }    // signed neg overflow -> MIN
+    return 0;
+}
+EOF
+oracle satmul
+
 echo "=== integer-only: reject float, mixed-width, wrong arity ==="
 cat > "$TMP/float.con" <<'EOF'
 pub fn main() -> Int { let x: f64 = saturating_add(1.0, 2.0); return 0; }

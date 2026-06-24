@@ -23,7 +23,7 @@ private def binOpToStr : BinOp → String
   -- wrapping_* are call-syntax in source, never AST binary operators; defensive
   -- spellings only (this formatter handles AST `binaryOp`, which never holds them).
   | .wrappingAdd => "wrapping+" | .wrappingSub => "wrapping-" | .wrappingMul => "wrapping*"
-  | .saturatingAdd => "saturating+" | .saturatingSub => "saturating-"
+  | .saturatingAdd => "saturating+" | .saturatingSub => "saturating-" | .saturatingMul => "saturating*"
 
 private def unaryOpToStr : UnaryOp → String
   | .neg => "-" | .not_ => "!" | .bitnot => "~"

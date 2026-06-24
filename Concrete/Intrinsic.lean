@@ -56,7 +56,7 @@ inductive IntrinsicId where
   | wrappingAdd | wrappingSub | wrappingMul
 
   -- Explicit saturating (clamping) arithmetic — ROADMAP #10 Stage 2.2.
-  | saturatingAdd | saturatingSub
+  | saturatingAdd | saturatingSub | saturatingMul
   deriving BEq, Hashable, Repr
 
 /-- Look up an IntrinsicId from a source-level function name.
@@ -133,6 +133,7 @@ def resolveIntrinsic (name : String) : Option IntrinsicId :=
   -- Explicit saturating arithmetic
   | "saturating_add" => some .saturatingAdd
   | "saturating_sub" => some .saturatingSub
+  | "saturating_mul" => some .saturatingMul
 
   | _ => none
 
@@ -191,6 +192,7 @@ def IntrinsicId.canonicalName : IntrinsicId → String
   | .wrappingMul => "wrapping_mul"
   | .saturatingAdd => "saturating_add"
   | .saturatingSub => "saturating_sub"
+  | .saturatingMul => "saturating_mul"
 
 /-- Required capability set for an intrinsic, if any. -/
 def IntrinsicId.capability : IntrinsicId → Option String

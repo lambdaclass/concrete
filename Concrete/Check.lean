@@ -1042,7 +1042,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       else if isTypeVarL || isTypeVarR then return lTy
       else return lTy  -- CoreCheck validates operator type constraints
     | .wrappingAdd | .wrappingSub | .wrappingMul
-    | .saturatingAdd | .saturatingSub =>
+    | .saturatingAdd | .saturatingSub | .saturatingMul =>
       -- wrapping_*/saturating_* never reach here via AST `binaryOp` — they are
       -- call-syntax intrinsics, type-checked in the call path. Defensive.
       return lTy
@@ -1239,7 +1239,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
     -- arithmetic. Integer-only, both operands the same type; result is that type.
     if intrinsic == some .wrappingAdd || intrinsic == some .wrappingSub
        || intrinsic == some .wrappingMul || intrinsic == some .saturatingAdd
-       || intrinsic == some .saturatingSub then
+       || intrinsic == some .saturatingSub || intrinsic == some .saturatingMul then
       if args.length != 2 then
         throwCheckMsg s!"{fnName} takes exactly 2 arguments, got {args.length}"
       let a := match args with | a :: _ => a | [] => Expr.intLit default 0

@@ -149,7 +149,7 @@ private def binOpToStr : BinOp → String
   | .wrappingAdd => "add" | .wrappingSub => "sub" | .wrappingMul => "mul"
   -- saturating_* are emitted as intrinsic CALLS in EmitSSA, never as a plain SSA
   -- binOp; these strings are defensive (this is the SInst pretty-printer).
-  | .saturatingAdd => "sadd.sat" | .saturatingSub => "ssub.sat"
+  | .saturatingAdd => "sadd.sat" | .saturatingSub => "ssub.sat" | .saturatingMul => "smul.sat"
 
 private def unaryOpToStr : UnaryOp → String
   | .neg => "neg" | .not_ => "not" | .bitnot => "not"

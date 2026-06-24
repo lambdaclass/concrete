@@ -229,7 +229,7 @@ private def binOpToStr : BinOp → String
   | .and_ => "&&" | .or_ => "||"
   | .bitand => "&" | .bitor => "|" | .bitxor => "^" | .shl => "<<" | .shr => ">>"
   | .wrappingAdd => "wrapping+" | .wrappingSub => "wrapping-" | .wrappingMul => "wrapping*"
-  | .saturatingAdd => "saturating+" | .saturatingSub => "saturating-"
+  | .saturatingAdd => "saturating+" | .saturatingSub => "saturating-" | .saturatingMul => "saturating*"
 
 private def unaryOpToStr : UnaryOp → String
   | .neg => "-" | .not_ => "!" | .bitnot => "~"

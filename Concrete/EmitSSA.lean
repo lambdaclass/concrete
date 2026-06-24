@@ -523,6 +523,36 @@ private def emitBinOp (s : EmitSSAState) (dst : String) (op : BinOp) (lhs rhs : 
       let sign := if ssaIsSignedInt operandTy then "s" else "u"
       let name := s!"llvm.{sign}sub.sat.i{intTyBitWidth operandTy}"
       emitStructured s (.call (some dst) iTy (.global name) [(iTy, lOp), (iTy, rOp)])
+    -- saturating_mul: no direct `.sat` intrinsic — use `*.with.overflow` (the
+    -- shared infra) then clamp via select. Branchless. ROADMAP #10 Stage 2.2b.
+    | .saturatingMul =>
+      let w := intTyBitWidth operandTy
+      let signed := ssaIsSignedInt operandTy
+      let lStr := printLLVMOperand lOp
+      let rStr := printLLVMOperand rOp
+      let sname := if signed then "smul" else "umul"
+      let st := "{i" ++ toString w ++ ", i1}"   -- the `{iW, i1}` struct the intrinsic returns
+      let (s, tmp) := freshLocal s
+      let (s, res) := freshLocal s
+      let (s, ovf) := freshLocal s
+      let s := emitStructured s (.raw s!"  {tmp} = call {st} @llvm.{sname}.with.overflow.i{w}(i{w} {lStr}, i{w} {rStr})")
+      let s := emitStructured s (.raw s!"  {res} = extractvalue {st} {tmp}, 0")
+      let s := emitStructured s (.raw s!"  {ovf} = extractvalue {st} {tmp}, 1")
+      if signed then
+        -- signed: clamp to MIN if the true product is negative (operands differ
+        -- in sign), else MAX.
+        let maxV : Int := (2 : Int) ^ (w - 1) - 1
+        let minV : Int := -((2 : Int) ^ (w - 1))
+        let (s, xorv) := freshLocal s
+        let (s, isNeg) := freshLocal s
+        let (s, clampV) := freshLocal s
+        let s := emitStructured s (.raw s!"  {xorv} = xor i{w} {lStr}, {rStr}")
+        let s := emitStructured s (.raw s!"  {isNeg} = icmp slt i{w} {xorv}, 0")
+        let s := emitStructured s (.raw s!"  {clampV} = select i1 {isNeg}, i{w} {minV}, i{w} {maxV}")
+        emitStructured s (.raw s!"  %{dst} = select i1 {ovf}, i{w} {clampV}, i{w} {res}")
+      else
+        let maxV : Int := (2 : Int) ^ w - 1
+        emitStructured s (.raw s!"  %{dst} = select i1 {ovf}, i{w} {maxV}, i{w} {res}")
     | .div =>
       if ssaIsSignedInt operandTy then emitStructured s (.binOp dst .sdiv iTy lOp rOp)
       else emitStructured s (.binOp dst .udiv iTy lOp rOp)
