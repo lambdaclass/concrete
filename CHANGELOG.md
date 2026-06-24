@@ -10,6 +10,27 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #10 Stage 2.3: checked-`+` flip proven; blocked on std migration (2026-06-24)
+
+The checked `+` flip (ordinary `+` traps on overflow) was implemented and verified
+correct in isolation — compiled overflow aborts (SIGABRT), the interpreter traps,
+in-range arithmetic is unchanged, `wrapping_add` still escapes, and interp==compiled.
+Codegen uses per-type `internal` runtime helpers (`*.with.overflow` + `condBr`→abort,
+emitted into the module header as raw IR); ordinary `+` becomes a single-value call,
+so there is no mid-expression block split, and the blast radius is user `+` only
+(internal index/offset arithmetic uses GEP).
+
+It is **not yet landed**: flipping `+` failed ~127 std system-module tests
+(Fs/Process/Net) — a cascade from a few trapping sites that abort each module's test
+binary. Per the project's thesis, that is exactly what checked arithmetic is meant to
+surface: real stdlib sentinel/overflow assumptions. Rather than bulk-replace the traps
+with `wrapping_add` (which would preserve bugs under a new spelling), the flip is
+reverted to keep the tree green at Stage 2.2b, and landing it is a focused,
+green-preserving migration: audit the std sites by family, decide each (intentional
+modular → `wrapping_*`; error-path-masking → fix the error handling; never-sentinel →
+guard/Result), add a sentinel-wrap regression gate, then re-apply the flip. See
+ROADMAP #10 / memory `phase6-10-arithmetic-flip-state`.
+
 ### Phase 6 #10 Stage 2.2: explicit saturating arithmetic (add/sub) (2026-06-24)
 
 Added `saturating_add` / `saturating_sub` — the explicit spelling for intentional

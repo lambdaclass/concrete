@@ -637,10 +637,23 @@ gate.
         EmitSSA + interp clamp; gate extended] `saturating_mul`. This BUILT the
         shared overflow infrastructure (struct-returning intrinsic via raw IR +
         extractvalue; LLVM auto-declares) and validated it interp==compiled.
-      - Stages 2.3-2.6 [remaining — REUSE the Stage 2.2b overflow infra]:
-          (i)   checked `+ - *` flip: `*.with.overflow` + `condBr`→abort block
-                (instead of the clamp select), then migrate std/examples that
-                intentionally wrap onto `wrapping_*`;
+      - Stage 2.3 [checked `+ - *` flip — IMPLEMENTATION PROVEN, BLOCKED ON STD
+        MIGRATION; see memory `phase6-10-arithmetic-flip-state`]: `+` was flipped
+        and verified correct (compiled overflow → SIGABRT, interp traps, in-range
+        works, `wrapping_add` escapes, interp==compiled). Codegen = per-type
+        `internal` helper fns (`*.with.overflow` + `condBr`→abort, emitted into the
+        module header as raw IR; ordinary `+` becomes a single-value `call`, no
+        mid-expr block split; blast radius is user `+` only — internal index/offset
+        uses GEP). Interp = `checkedToType` (trap on overflow). REVERTED to keep the
+        tree green: flipping `+` failed ~127 std system-module tests (Fs/Process/
+        Net) — a CASCADE from a few trapping sites that abort each module's test
+        binary. This is migration EVIDENCE (the check found real sentinel/overflow
+        assumptions), NOT a defect. Land it via a focused, green-preserving
+        migration: audit by family (fs/process/net/shared bytes·alloc); per site
+        choose intentional-modular → `wrapping_*`, error-path-masking → fix the
+        error handling before the arithmetic, or never-sentinel-here → guard/
+        assert/Result; add a sentinel-wrap regression gate; THEN re-apply checked
+        `+` (then `-`, then `*`). Do NOT bulk-replace traps with `wrapping_add`.
           (ii)  div/mod-zero traps (2.4), shift-amount checks (2.5), same abort;
           (iii) reports/audit (2.6): classify each site proved / runtime-checked /
                 explicit-wrapping / explicit-saturating (ARITHMETIC_POLICY §3.2).
