@@ -150,6 +150,39 @@ Explicit opt-in for code that wants clamped-to-bounds behavior.
 
 The default is the same across all profiles: checked. The difference is that the provable subset excludes wrapping and saturating intrinsics because the proof model does not have modular arithmetic semantics. Wrapping intrinsics may be used in predictable code — the five gates (no recursion, bounded loops, no allocation, no FFI, no blocking) do not restrict arithmetic mode.
 
+### 3.1 Enforcement strategy (per profile)
+
+The *meaning* of `a + b` is checked in every profile (overflow is a bug). What a
+profile chooses is **how that checked guarantee is met** — never whether it holds.
+This is the axis where profiles differ; it changes enforcement and reporting, not
+source meaning.
+
+| Profile | How `checked` is enforced for an overflow-capable `+ - *` site |
+|---------|----------------------------------------------------------------|
+| Safe / debug | Insert a runtime overflow check → abort, wherever the site is not statically proved safe. |
+| Release | Same checked meaning. A discharged proof MAY omit the now-redundant runtime check (sound elision); an unproved site keeps its check unless a check is *explicitly configured off and reported*. **Never silently wraps.** |
+| Predictable | Runtime-checked as Safe (the predictable gates do not change arithmetic meaning), or rejects unproved overflow if the project opts into stricter admission. |
+| Provable / high-integrity | Overflow must be discharged by proof: an unproved overflow site is **rejected**, not silently downgraded to a runtime check. Static evidence is the admission floor. |
+
+The invariant across the table: a profile may turn an overflow into a
+*compile-time rejection*, a *runtime abort*, or a *proof-discharged no-op* — but
+never into a wrap. Wrapping/clamping only ever come from the explicit
+`wrapping_*` / `saturating_*` spellings.
+
+### 3.2 Audit classification
+
+For auditability, every arithmetic site is classifiable (via `--report arithmetic`
+/ `--report effects`, §9) as exactly one of:
+
+- **proved** — overflow discharged by a proof; no runtime check needed.
+- **runtime-checked** — a runtime overflow check (abort on overflow) is emitted.
+- **explicit-wrapping** — `wrapping_*`, modular by intent.
+- **explicit-saturating** — `saturating_*`, clamping by intent.
+
+A reviewer can therefore see, per operation, both its *meaning* (checked vs.
+wrapping vs. saturating — from the source spelling) and *how the checked ones are
+discharged* (proved vs. runtime-checked — from the profile + proof state).
+
 ---
 
 ## 4. Source-Level Visibility

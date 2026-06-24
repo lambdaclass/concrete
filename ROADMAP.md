@@ -644,6 +644,28 @@ gate.
         `SInst` models single-value calls today — struct-returning intrinsics +
         branching are the infra gap. No external users → the flip targets the
         final model directly, no compat migration.
+
+    End-state model (the destination, profile-INVARIANT):
+      - `a + b` → checked: overflow is a bug, in every profile.
+      - `wrapping_add(a, b)` → modular (DONE, Stage 2.1).
+      - `saturating_add(a, b)` → clamping (planned, 2.2).
+    Profiles choose only how the checked guarantee is *enforced/reported*, never
+    its meaning — the per-profile enforcement matrix (Safe runtime-checks,
+    Release proof-omits-or-checks-never-wraps, Provable/high-integrity
+    rejects-unproved) and the per-site audit classification (proved /
+    runtime-checked / explicit-wrapping / explicit-saturating) are specified in
+    ARITHMETIC_POLICY.md §3.1–§3.2. Current truth (mid-transition): `+ - *` still
+    wrap today — a tracked implementation gap, NOT the intended semantics — while
+    `wrapping_*` already provides the visible modular spelling.
+
+    Still-missing deliverables for "done" (beyond the lowering stages above):
+      - `--report arithmetic` (per-function mode + op counts; ARITHMETIC_POLICY
+        §9.1) and the §3.2 per-site classification in `--report effects`;
+      - PREDICTABLE_BOUNDARIES.md update: move "integer overflow: silent wrap"
+        from the UB table to "trap (abort)" once 2.3 lands;
+      - `#[overflow_checked]` obligation generation wired to the checked default
+        (§13 step 11), so audit distinguishes proved-no-overflow from
+        not-yet-checked.
 11. **DONE / PERMANENT DECISION (2026-06-23).** State the
     macro/metaprogramming stance: **no language macros**. Concrete
     does not admit hygienic macros, proc macros, syntax macros, derive helpers,
