@@ -10,6 +10,25 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #10 Stage 1: build-profile mechanism (2026-06-24)
+
+First stage of build profiles — the *mechanism* only, no codegen or semantic
+change. `Concrete/Profile.lean` defines the profiles (debug/release/predictable/
+proof/high-integrity); `--profile <name>` (CLI), `[profile] name = "..."` in
+Concrete.toml, and `--report profile` are wired in `Main.lean` with precedence
+CLI > manifest > default (debug). The report shows the active profile, its
+selection source, and the policy bundle (runtime-check / diagnostics /
+optimization / evidence). Gated by `scripts/tests/check_build_profiles.sh`
+(`make test-build-profiles` + CI step).
+
+Governing principle, enforced by the gate: **a build profile is a policy bundle,
+never an arithmetic mode.** The `arithmetic:` line is identical across profiles
+(semantics are profile-invariant) and states the current implementation gap
+explicitly — `+ - *` are *checked semantics* but still *lower to silent wrapping*
+until #10 Stage 2. A reviewer never needs the build mode to know whether `a + b`
+wraps. Arithmetic-lowering changes (the ARITHMETIC_POLICY.md §13 sequence) are
+deliberately separate, later stages.
+
 ### Phase 6 #19: stdlib handoff contract (2026-06-24)
 
 Added `docs/STDLIB_HANDOFF.md` + `scripts/tests/check_stdlib_handoff.sh`

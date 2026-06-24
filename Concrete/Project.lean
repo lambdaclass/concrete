@@ -170,7 +170,7 @@ def validateToml (content : String) : List String :=
     if !inPkg.2 then ["warning: Concrete.toml [package] missing 'name' field"]
     else []
   -- Warn about unknown top-level sections
-  let knownSections := ["[package]", "[dependencies]", "[policy]"]
+  let knownSections := ["[package]", "[dependencies]", "[policy]", "[profile]"]
   let sectionWarns := trimmedLines.filterMap fun l =>
     if l.startsWith "[" && !l.startsWith "#" then
       if knownSections.any (l.startsWith ·) then none

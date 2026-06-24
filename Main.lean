@@ -1562,6 +1562,41 @@ def withProjectRoot (k : String → IO UInt32)
     return ExitCode.usage
   | some root => k root
 
+/-- `concrete <file> --report profile [--profile <name>]` — ROADMAP #10 Stage 1
+    (profile mechanism only; no compilation, no codegen). Resolve the active build
+    profile with precedence CLI flag > Concrete.toml `[profile]` > default, then
+    print its policy bundle. An unknown profile name is rejected. -/
+def reportProfile (inputPath : String) (cliProfile : Option String) : IO UInt32 := do
+  match cliProfile with
+  | some nm =>
+    -- 1. CLI flag wins.
+    match Concrete.BuildProfile.ofString? nm with
+    | some p => IO.println (Concrete.renderProfileReport p .cli); return 0
+    | none =>
+      IO.eprintln s!"error: unknown profile '{nm}' (known: {Concrete.BuildProfile.known})"
+      return ExitCode.usage
+  | none =>
+    -- 2. Concrete.toml [profile] name, if the file is inside a project.
+    let manifestName ← (do
+      match ← findProjectRoot (dirOf inputPath) with
+      | some root =>
+        let tomlPath := root ++ "/Concrete.toml"
+        if ← System.FilePath.pathExists tomlPath then
+          return Concrete.parseProfileName (← IO.FS.readFile tomlPath)
+        else return none
+      | none => return none)
+    match manifestName with
+    | some nm =>
+      match Concrete.BuildProfile.ofString? nm with
+      | some p => IO.println (Concrete.renderProfileReport p .manifest); return 0
+      | none =>
+        IO.eprintln s!"error: Concrete.toml [profile] name '{nm}' is unknown (known: {Concrete.BuildProfile.known})"
+        return ExitCode.usage
+    | none =>
+      -- 3. Default profile.
+      IO.println (Concrete.renderProfileReport Concrete.defaultProfile .default)
+      return 0
+
 def main (args : List String) : IO UInt32 := do
   -- `concrete --report compiler-ledger [--json]` — the project-scoped non-proof
   -- fact store (Phase 4 #2). Project mode: loads the one ProjectContext and renders
@@ -2001,6 +2036,12 @@ def main (args : List String) : IO UInt32 := do
     compileSSA inputPath outputPath false
   | [inputPath, "--check", checkType] =>
     compileAndCheck inputPath checkType
+  -- ROADMAP #10 Stage 1: build-profile report (must precede the generic
+  -- `--report <type>` arm; "profile" is not a compileAndReport report type).
+  | [inputPath, "--report", "profile"] =>
+    reportProfile inputPath none
+  | [inputPath, "--report", "profile", "--profile", name] =>
+    reportProfile inputPath (some name)
   | [inputPath, "--report", reportType] =>
     compileAndReport inputPath reportType
   | [inputPath, "--report", reportType, "--json"] =>

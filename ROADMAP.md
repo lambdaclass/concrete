@@ -612,9 +612,14 @@ gate.
     silent two's-complement wrap (ARITHMETIC_POLICY.md §1); the profile selector
     and `--report arithmetic` do not exist yet. Build in stages, profile surface
     BEFORE arithmetic-lowering changes, each its own commit:
-      - Stage 1: profile *mechanism* only — a `--profile` CLI flag + `[profile]`
-        in Concrete.toml + a report that makes the active profile and the
-        (currently-wrapping, policy-checked) arithmetic status visible. No
+      - Stage 1: [DONE — 2026-06-24; Concrete/Profile.lean, `--profile` +
+        `[profile]` + `--report profile` in Main.lean,
+        scripts/tests/check_build_profiles.sh (make test-build-profiles + CI
+        step)] profile *mechanism* only — a `--profile` CLI flag + `[profile]` in
+        Concrete.toml (precedence CLI > manifest > default=debug) + a
+        `--report profile` that makes the active profile, its selection source,
+        and the policy bundle visible. The arithmetic line is profile-invariant
+        and states the current wrapping-lowering gap explicitly. No
         codegen/semantic change.
       - Stages 2-6: the ARITHMETIC_POLICY.md §13 sequence — checked add/sub/mul/
         neg lowering with abort blocks, div/mod-zero checks, explicit
