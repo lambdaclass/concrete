@@ -672,8 +672,15 @@ gate.
 16. Add source style guidance alongside `concrete fmt`: idiomatic layout for
     functions, modules, contracts, matches, error handling, examples, and
     proof-bearing code.
-17. Decide the v1 iteration protocol before broad stdlib work. Evaluate and
-    document the replacement for closures/trait-object iterators in
+17. [DONE — 2026-06-24; docs/ITERATION_PROTOCOL.md +
+    scripts/tests/check_iteration_protocol.sh (make test-iteration-protocol + CI
+    step). Audit-and-gate: documented the fixed traversal hierarchy (for/indexed,
+    cursor structs, cap-polymorphic for_each/fold/map, explicit for_each_ctx
+    context threading) and gated the existing forms + the exclusions (no Iterator
+    trait, no dyn trait-objects, no closures, allocation visible — map carries
+    Alloc, for_each/fold do not). Iteration promoted to stable_for_stdlib in
+    STDLIB_HANDOFF.md.] Decide the v1 iteration protocol before broad stdlib work.
+    Evaluate and document the replacement for closures/trait-object iterators in
     `docs/ITERATION_PROTOCOL.md`:
     index-based `for i in 0..len { xs[i] }`, explicit cursor/iterator structs
     with `next() -> Option<T>`, and monomorphized `for_each`-style helpers. The

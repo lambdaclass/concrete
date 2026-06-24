@@ -371,6 +371,9 @@ jobs:
       - name: Build-profiles gate (Phase 6 #10 Stage 1 — profile mechanism + reporting, no codegen)
         run: bash scripts/tests/check_build_profiles.sh
 
+      - name: Iteration-protocol gate (Phase 6 #17 — blessed traversal forms; no Iterator trait)
+        run: bash scripts/tests/check_iteration_protocol.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 

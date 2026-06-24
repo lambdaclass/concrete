@@ -10,6 +10,23 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #17: iteration protocol (audit + gate) (2026-06-24)
+
+Documented Concrete's traversal story as a fixed hierarchy in
+`docs/ITERATION_PROTOCOL.md` — there is no `Iterator` trait, no closures, no
+trait-object iterators. Pick the first form that fits: `for`/indexed loop
+(simple bounded), cursor structs (`ByteCursor`, for parsers/readers),
+capability-polymorphic `for_each`/`fold`/`map` (collections), and explicit
+`for_each_ctx` context threading for stateful callbacks. Authority and
+allocation stay visible in the signature (`for_each`/`fold` are `Alloc`-free;
+`map` carries `Alloc`). Gated by `scripts/tests/check_iteration_protocol.sh`
+(`make test-iteration-protocol` + CI step): the `for` loop runs (interp ==
+compiled), the cap-polymorphic forms exist with the right shapes, allocation
+visibility holds, and the exclusions are enforced (no `Iterator` trait, no `dyn`
+in std). With the protocol written and gated, the `iteration` surface was
+promoted from `provisional_with_gate` to `stable_for_stdlib` in the stdlib
+handoff contract.
+
 ### Phase 6 #10 Stage 1: build-profile mechanism (2026-06-24)
 
 First stage of build profiles — the *mechanism* only, no codegen or semantic
