@@ -637,23 +637,24 @@ gate.
         EmitSSA + interp clamp; gate extended] `saturating_mul`. This BUILT the
         shared overflow infrastructure (struct-returning intrinsic via raw IR +
         extractvalue; LLVM auto-declares) and validated it interp==compiled.
-      - Stage 2.3 [checked `+ - *` flip — IMPLEMENTATION PROVEN, BLOCKED ON STD
-        MIGRATION; see memory `phase6-10-arithmetic-flip-state`]: `+` was flipped
-        and verified correct (compiled overflow → SIGABRT, interp traps, in-range
-        works, `wrapping_add` escapes, interp==compiled). Codegen = per-type
-        `internal` helper fns (`*.with.overflow` + `condBr`→abort, emitted into the
-        module header as raw IR; ordinary `+` becomes a single-value `call`, no
-        mid-expr block split; blast radius is user `+` only — internal index/offset
-        uses GEP). Interp = `checkedToType` (trap on overflow). REVERTED to keep the
-        tree green: flipping `+` failed ~127 std system-module tests (Fs/Process/
-        Net) — a CASCADE from a few trapping sites that abort each module's test
-        binary. This is migration EVIDENCE (the check found real sentinel/overflow
-        assumptions), NOT a defect. Land it via a focused, green-preserving
-        migration: audit by family (fs/process/net/shared bytes·alloc); per site
-        choose intentional-modular → `wrapping_*`, error-path-masking → fix the
-        error handling before the arithmetic, or never-sentinel-here → guard/
-        assert/Result; add a sentinel-wrap regression gate; THEN re-apply checked
-        `+` (then `-`, then `*`). Do NOT bulk-replace traps with `wrapping_add`.
+      - Stage 2.3a: [DONE — 2026-06-24] checked `+` LANDED green. Ordinary `+`
+        traps on overflow (compiled SIGABRT, interp errors); codegen = per-type
+        `internal` helper fns (`*.with.overflow`+`condBr`→abort in the module
+        header; `+` is a single-value `call`, no mid-expr block split; blast radius
+        is user `+` only — internal index/offset uses GEP); interp =
+        `checkedToType`. The ~127-failure "blast" was a CASCADE from a SINGLE root
+        cause: SHA-256's intentional mod-2^32 additions (`std/src/sha256.con`)
+        aborting the std test binary. Migrated those to `wrapping_add` (the correct
+        explicit spelling — SHA-256 IS modular) and everything went green:
+        std 265/0, fast suite 1576/0, golden 54/0. The check did its job — it found
+        real intentional-wrap that was relying on silence. Gated by
+        `scripts/tests/check_checked_arith.sh` (incl. a modular-wrap regression).
+      - Stage 2.3b/c [remaining]: flip `-` then `*` the same way (per-op helpers +
+        interp `checkedToType`), each preceded by the same per-family audit
+        (intentional-modular → `wrapping_*`; error-path-masking → fix error
+        handling; never-sentinel → guard/Result). Do NOT bulk-replace traps with
+        `wrapping_*`. After all three, update PREDICTABLE_BOUNDARIES.md (overflow:
+        silent-wrap → trap).
           (ii)  div/mod-zero traps (2.4), shift-amount checks (2.5), same abort;
           (iii) reports/audit (2.6): classify each site proved / runtime-checked /
                 explicit-wrapping / explicit-saturating (ARITHMETIC_POLICY §3.2).

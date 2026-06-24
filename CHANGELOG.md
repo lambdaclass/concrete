@@ -10,26 +10,26 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
-### Phase 6 #10 Stage 2.3: checked-`+` flip proven; blocked on std migration (2026-06-24)
+### Phase 6 #10 Stage 2.3a: checked `+` LANDED (overflow traps) (2026-06-24)
 
-The checked `+` flip (ordinary `+` traps on overflow) was implemented and verified
-correct in isolation — compiled overflow aborts (SIGABRT), the interpreter traps,
-in-range arithmetic is unchanged, `wrapping_add` still escapes, and interp==compiled.
-Codegen uses per-type `internal` runtime helpers (`*.with.overflow` + `condBr`→abort,
-emitted into the module header as raw IR); ordinary `+` becomes a single-value call,
-so there is no mid-expression block split, and the blast radius is user `+` only
-(internal index/offset arithmetic uses GEP).
+Ordinary `+` is now **checked**: it traps (abort) on overflow in every profile,
+while intentional modular arithmetic uses the explicit `wrapping_add`. Codegen
+emits per-type `internal` runtime helpers (`*.with.overflow` + `condBr`→abort, raw
+IR in the module header); ordinary `+` becomes a single-value call to the helper —
+no mid-expression block split — and the blast radius is user `+` only (internal
+index/offset arithmetic uses GEP). The interpreter traps via `checkedToType`, so
+interp == compiled.
 
-It is **not yet landed**: flipping `+` failed ~127 std system-module tests
-(Fs/Process/Net) — a cascade from a few trapping sites that abort each module's test
-binary. Per the project's thesis, that is exactly what checked arithmetic is meant to
-surface: real stdlib sentinel/overflow assumptions. Rather than bulk-replace the traps
-with `wrapping_add` (which would preserve bugs under a new spelling), the flip is
-reverted to keep the tree green at Stage 2.2b, and landing it is a focused,
-green-preserving migration: audit the std sites by family, decide each (intentional
-modular → `wrapping_*`; error-path-masking → fix the error handling; never-sentinel →
-guard/Result), add a sentinel-wrap regression gate, then re-apply the flip. See
-ROADMAP #10 / memory `phase6-10-arithmetic-flip-state`.
+Landing it was a **migration**, exactly as the thesis intends: the flip first
+appeared to fail ~127 std system-module tests, but that was a **cascade from a
+single root cause** — SHA-256's intentional mod-2³² additions
+(`std/src/sha256.con`) aborting the std test binary. Migrating those to
+`wrapping_add` (the correct explicit spelling — SHA-256 *is* modular arithmetic)
+turned everything green: std 265/0, fast suite 1576/0, golden 54/0. The check did
+its job: it surfaced real intentional-wrap that had been relying on silence, and we
+made the intent explicit rather than papering over it. Gated by
+`scripts/tests/check_checked_arith.sh` (overflow traps + a modular-wrap regression).
+`-` and `*` flip next, each behind the same per-family audit.
 
 ### Phase 6 #10 Stage 2.2: explicit saturating arithmetic (add/sub) (2026-06-24)
 

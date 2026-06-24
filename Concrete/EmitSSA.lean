@@ -184,6 +184,28 @@ private def intTyBitWidth : Ty → Nat
   | .i32 | .u32 => 32
   | _ => 64
 
+/-- A checked-arithmetic runtime helper (ROADMAP #10 Stage 2.3). The helper
+    computes via `*.with.overflow` and aborts on overflow, else returns the value;
+    ordinary `+ - *` become single-value calls to it (no mid-expression block
+    split). Emitted into the module header as raw IR with `internal` linkage. -/
+private def checkedHelper (mnem : String) (w : Nat) : String :=
+  let wt := "i" ++ toString w
+  let st := "{" ++ wt ++ ", i1}"
+  "define internal " ++ wt ++ " @__cc_" ++ mnem ++ "_" ++ wt ++ "(" ++ wt ++ " %a, " ++ wt ++ " %b) {\n"
+    ++ "  %t = call " ++ st ++ " @llvm." ++ mnem ++ ".with.overflow." ++ wt ++ "(" ++ wt ++ " %a, " ++ wt ++ " %b)\n"
+    ++ "  %o = extractvalue " ++ st ++ " %t, 1\n"
+    ++ "  br i1 %o, label %ovf, label %ok\n"
+    ++ "ovf:\n  call void @abort()\n  unreachable\n"
+    ++ "ok:\n  %r = extractvalue " ++ st ++ " %t, 0\n  ret " ++ wt ++ " %r\n}"
+
+/-- Checked-arithmetic helpers for the operations flipped so far (Stage 2.3
+    flips `+` first). -/
+private def checkedHelperDefs : List String :=
+  ([8, 16, 32, 64] : List Nat).flatMap fun w => [checkedHelper "sadd" w, checkedHelper "uadd" w]
+
+private def checkedCallName (mnem : String) (ty : Ty) : String :=
+  "__cc_" ++ mnem ++ "_i" ++ toString (intTyBitWidth ty)
+
 /-- Map float Concrete type to structured LLVM type. -/
 private def floatTyToLLVMTy : Ty → LLVMTy
   | .float32 => .float_
@@ -505,7 +527,11 @@ private def emitBinOp (s : EmitSSAState) (dst : String) (op : BinOp) (lhs rhs : 
     let lOp := svalToOperand s lhs
     let rOp := svalToOperand s rhs
     match op with
-    | .add => emitStructured s (.binOp dst .add iTy lOp rOp)
+    -- Ordinary `+` is CHECKED (ROADMAP #10 Stage 2.3): call the per-type helper
+    -- that aborts on overflow. (`-`/`*` flip in later sub-slices.)
+    | .add =>
+      let mnem := if ssaIsSignedInt operandTy then "sadd" else "uadd"
+      emitStructured s (.call (some dst) iTy (.global (checkedCallName mnem operandTy)) [(iTy, lOp), (iTy, rOp)])
     | .sub => emitStructured s (.binOp dst .sub iTy lOp rOp)
     | .mul => emitStructured s (.binOp dst .mul iTy lOp rOp)
     -- Explicit wrapping arithmetic emits the SAME plain LLVM ops (no nsw/nuw, no
@@ -1425,6 +1451,9 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   -- (`--report backend-contracts`) cannot disagree (Phase 4 #17).
   let s := { s with moduleHeader := s.moduleHeader.push s!"target datalayout = \"{Concrete.Backend.dataLayout}\"" }
   let s := { s with moduleHeader := s.moduleHeader.push s!"target triple = \"{Concrete.Backend.targetTriple}\"" }
+  -- Checked-arithmetic helpers (ROADMAP #10 Stage 2.3): ordinary `+` traps on
+  -- overflow by calling these. `internal` linkage → LLVM DCEs the unused ones.
+  let s := checkedHelperDefs.foldl (fun s def_ => { s with moduleHeader := s.moduleHeader.push def_ }) s
   -- Well-known struct types (String, Vec)
   let s := Layout.builtinTypeDefs.foldl (fun s line => emitTypeDef s line) s
   -- Mark builtins as emitted so user-defined versions don't duplicate them

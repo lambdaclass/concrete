@@ -169,6 +169,17 @@ private def wrapToType (ty : Ty) (n : Int) : Int :=
   | some (w, signed) => if signed then (BitVec.ofInt w n).toInt else Int.ofNat (BitVec.ofInt w n).toNat
   | none             => n
 
+/-- Checked arithmetic (ROADMAP #10 Stage 2.3): `some n` if `n` fits `ty`'s range,
+    else `none` (overflow → the interpreter traps, matching the compiled abort). -/
+private def checkedToType (ty : Ty) (n : Int) : Option Int :=
+  match intBitWidth ty with
+  | some (w, signed) =>
+    let (lo, hi) : Int × Int :=
+      if signed then (-((2 : Int) ^ (w - 1)), (2 : Int) ^ (w - 1) - 1)
+      else (0, (2 : Int) ^ w - 1)
+    if n < lo || n > hi then none else some n
+  | none => some n
+
 /-- Clamp `n` to `ty`'s representable range — what `saturating_*` mean, matching
     the `llvm.{s,u}{add,sub}.sat` intrinsics. -/
 private def saturateToType (ty : Ty) (n : Int) : Int :=
@@ -185,7 +196,12 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   -- shifted value's width, not the shift-count's.  maskWidth then
   -- wraps unsigned results to that width.
   match op, lhs, rhs with
-  | .add, .int a ty, .int b _ => .ok (.int (maskWidth ty (a + b)) ty)
+  -- Ordinary `+` is CHECKED (ROADMAP #10 Stage 2.3): trap on overflow, matching
+  -- the compiled abort. (`-`/`*` flip in later sub-slices.)
+  | .add, .int a ty, .int b _ =>
+    match checkedToType ty (a + b) with
+    | some v => .ok (.int v ty)
+    | none   => .error "interp: arithmetic overflow (checked +)"
   | .sub, .int a ty, .int b _ => .ok (.int (maskWidth ty (a - b)) ty)
   | .mul, .int a ty, .int b _ => .ok (.int (maskWidth ty (a * b)) ty)
   -- Explicit wrapping arithmetic: true two's-complement wrap (signed + unsigned),

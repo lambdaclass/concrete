@@ -166,7 +166,8 @@ mod sha256 {
                 let w16p: *mut u32 = (w_buf + (((wi - 16) * 4) as u64)) as *mut u32;
                 let s0: u32 = ssig0(*w15p);
                 let s1: u32 = ssig1(*w2p);
-                let new_w: u32 = *w16p + s0 + *w7p + s1;
+                // SHA-256 is defined over mod-2^32 addition — explicit wrapping.
+                let new_w: u32 = wrapping_add(wrapping_add(wrapping_add(*w16p, s0), *w7p), s1);
                 let nwp: *mut u32 = (w_buf + ((wi * 4) as u64)) as *mut u32;
                 *nwp = new_w;
                 wi = wi + 1;
@@ -184,27 +185,27 @@ mod sha256 {
             let mut ri: i32 = 0;
             while ri < 64 {
                 let rwp: *mut u32 = (w_buf + ((ri as u32 * 4) as u64)) as *mut u32;
-                let t1: u32 = h + bsig1(e) + ch(e, f, g) + k_val(ri) + *rwp;
-                let t2: u32 = bsig0(a) + maj(a, b, c);
+                let t1: u32 = wrapping_add(wrapping_add(wrapping_add(wrapping_add(h, bsig1(e)), ch(e, f, g)), k_val(ri)), *rwp);
+                let t2: u32 = wrapping_add(bsig0(a), maj(a, b, c));
                 h = g;
                 g = f;
                 f = e;
-                e = d + t1;
+                e = wrapping_add(d, t1);
                 d = c;
                 c = b;
                 b = a;
-                a = t1 + t2;
+                a = wrapping_add(t1, t2);
                 ri = ri + 1;
             }
 
-            h0 = h0 + a;
-            h1 = h1 + b;
-            h2 = h2 + c;
-            h3 = h3 + d;
-            h4 = h4 + e;
-            h5 = h5 + f;
-            h6 = h6 + g;
-            h7 = h7 + h;
+            h0 = wrapping_add(h0, a);
+            h1 = wrapping_add(h1, b);
+            h2 = wrapping_add(h2, c);
+            h3 = wrapping_add(h3, d);
+            h4 = wrapping_add(h4, e);
+            h5 = wrapping_add(h5, f);
+            h6 = wrapping_add(h6, g);
+            h7 = wrapping_add(h7, h);
 
             block = block + 1;
         }
