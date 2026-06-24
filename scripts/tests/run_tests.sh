@@ -6249,23 +6249,39 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# Strength reduction: x * 8 should become shl x, 3
+# Strength reduction REMOVED for `*` under checked arithmetic (ROADMAP #10):
+# `x * 8 → x << 3` is unsound — the checked shift helper validates only the shift
+# AMOUNT, not value overflow, so the rewrite would silently drop the overflow
+# trap that `*` must raise. So `x * 8` MUST stay a `mul` (it lowers to the checked
+# `@__cc_smul_i64` helper). This is a regression guard that the unsound reduction
+# stays gone. (Unsigned `div` by a power of two → `shr` is still applied; it is
+# sound — the quotient always fits.)
 ssa_output=$(cached_emit "$TESTDIR/codegen_strength.con" "--emit-ssa")
-if echo "$ssa_output" | grep -q "shl i64 %x, 3"; then
-    echo "  ok  codegen_strength.con --emit-ssa strength-reduced *8 to shl 3"
+if echo "$ssa_output" | grep -q "mul i64"; then
+    echo "  ok  codegen_strength.con --emit-ssa keeps mul (checked, no unsound *→shl)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  codegen_strength.con --emit-ssa missing shl i64 %x, 3 (strength reduction)"
+    echo "FAIL  codegen_strength.con --emit-ssa lost the mul (unsound *→shl reduction is back?)"
     echo "$ssa_output"
     FAIL=$((FAIL + 1))
 fi
 
-if ! echo "$ssa_output" | grep -q "mul i64"; then
-    echo "  ok  codegen_strength.con --emit-ssa no residual mul i64"
+if ! echo "$ssa_output" | grep -q "shl i64 %x"; then
+    echo "  ok  codegen_strength.con --emit-ssa did NOT rewrite the mul to a shift"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  codegen_strength.con --emit-ssa still contains mul i64 (reduction missed)"
+    echo "FAIL  codegen_strength.con --emit-ssa rewrote *8 to a shift (drops the overflow trap)"
     echo "$ssa_output"
+    FAIL=$((FAIL + 1))
+fi
+
+llvm_output=$(cached_emit "$TESTDIR/codegen_strength.con" "--emit-llvm")
+if echo "$llvm_output" | grep -q "@__cc_smul_i64"; then
+    echo "  ok  codegen_strength.con --emit-llvm *8 lowers to the checked smul helper"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  codegen_strength.con --emit-llvm missing @__cc_smul_i64 (checked mul lowering)"
+    echo "$llvm_output"
     FAIL=$((FAIL + 1))
 fi
 
