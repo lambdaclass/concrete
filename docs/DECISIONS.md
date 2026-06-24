@@ -81,7 +81,7 @@ These are not rejected. They are explicitly sequenced as "not yet" to avoid prem
 ### Freestanding / no-std mode — not yet
 
 **Status:** Deferred
-**Detail:** [../research/stdlib-runtime/no-std-freestanding.md](../research/stdlib-runtime/no-std-freestanding.md)
+**Detail:** [../research/stdlib/no-std-freestanding.md](../research/stdlib/no-std-freestanding.md)
 
 A freestanding mode (no libc, no hosted stdlib, explicit allocator) would be valuable for embedded, kernel, and audit-critical targets. Deferred because the hosted stdlib boundary is not yet stable enough. The capability system and explicit allocation model make this easier to add later.
 
@@ -98,7 +98,7 @@ A mechanism where a trusted wrapper could absorb `with(Unsafe)` and expose only 
 ### Concurrency — not yet
 
 **Status:** Deferred
-**Detail:** [../research/stdlib-runtime/concurrency.md](../research/stdlib-runtime/concurrency.md)
+**Detail:** [../research/stdlib/concurrency.md](../research/stdlib/concurrency.md)
 
 Concrete should only broaden concurrency once it can do so without importing async fragmentation and hidden runtime culture. The current implementation is single-threaded; the planned direction is explicit, threads-first concurrency with structured long-term evolution. No async/await, no goroutines, no thread pool runtime.
 

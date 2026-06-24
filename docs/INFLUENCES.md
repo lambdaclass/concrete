@@ -102,7 +102,7 @@ Concrete takes:
 Concrete is researching a related async/concurrency direction, but adapting it
 into capabilities, structured scopes, linear handles, and evidence reports
 rather than a pervasive `io` parameter or generic async/await color. See
-[../research/stdlib-runtime/async-concurrency-evidence.md](../research/stdlib-runtime/async-concurrency-evidence.md).
+[../research/stdlib/async-concurrency-evidence.md](../research/stdlib/async-concurrency-evidence.md).
 
 Concrete does not take:
 

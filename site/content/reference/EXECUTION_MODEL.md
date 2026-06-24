@@ -46,7 +46,7 @@ Freestanding would mean:
 - explicit target contract for startup, failure, and memory
 - stdlib limited to a core subset (Option, Result, math, ptr, slice, mem)
 
-The hosted/freestanding split is a later milestone (see `research/stdlib-runtime/no-std-freestanding.md`). The current priority is making the hosted boundary explicit so the split is straightforward when needed.
+The hosted/freestanding split is a later milestone (see `research/stdlib/no-std-freestanding.md`). The current priority is making the hosted boundary explicit so the split is straightforward when needed.
 
 ### Stdlib layer classification
 
@@ -601,7 +601,7 @@ The signature makes visible: this function spawns threads, may block, and alloca
 - Function coloring that forces non-concurrent code into async signatures
 - Ambient concurrency — spawning should be as visible as allocation
 
-See `research/stdlib-runtime/concurrency.md` for the full near-term design and `research/stdlib-runtime/long-term-concurrency.md` for the long-term layered model.
+See `research/stdlib/concurrency.md` for the full near-term design and `research/stdlib/long-term-concurrency.md` for the long-term layered model.
 
 ---
 

@@ -6,7 +6,7 @@
 
 ## Purpose
 
-This note specifies the formal-model fragment for the structured-concurrency direction. The umbrella direction is in [../stdlib-runtime/async-concurrency-evidence.md](../stdlib-runtime/async-concurrency-evidence.md); the worked evidence example is in [concurrency-evidence-example.md](concurrency-evidence-example.md). This note defines the formal grounding that lets evidence claims like "no missing-concurrency deadlock — enforced" carry weight.
+This note specifies the formal-model fragment for the structured-concurrency direction. The umbrella direction is in [../stdlib/async-concurrency-evidence.md](../stdlib/async-concurrency-evidence.md); the worked evidence example is in [concurrency-evidence-example.md](concurrency-evidence-example.md). This note defines the formal grounding that lets evidence claims like "no missing-concurrency deadlock — enforced" carry weight.
 
 The mechanization target is Lean 4, alongside the existing core formalization. The point is that no other production language designing async I/O has shipped a mechanized model of its concurrency fragment. Doing so is a credible move that fits Concrete's audit positioning.
 
@@ -22,8 +22,8 @@ This note covers:
 
 It does not cover:
 
-1. Channel semantics in detail (see [../stdlib-runtime/channel-model.md](../stdlib-runtime/channel-model.md)); the model treats channels as a primitive sync object with a small algebra.
-2. Cancellation across FFI (see [../stdlib-runtime/ffi-cancellation-boundary.md](../stdlib-runtime/ffi-cancellation-boundary.md)).
+1. Channel semantics in detail (see [../stdlib/channel-model.md](../stdlib/channel-model.md)); the model treats channels as a primitive sync object with a small algebra.
+2. Cancellation across FFI (see [../stdlib/ffi-cancellation-boundary.md](../stdlib/ffi-cancellation-boundary.md)).
 3. Per-task stack analysis (see [../predictable-execution/concurrent-stack-analysis.md](../predictable-execution/concurrent-stack-analysis.md)).
 4. Capability polymorphism elaboration (see [../language/capability-polymorphism.md](../language/capability-polymorphism.md)); this note assumes capability sets are checkable.
 
@@ -325,10 +325,10 @@ A formal model is good if a future change to the concurrency surface can be eval
 
 ## Relationship To Other Notes
 
-- [../stdlib-runtime/async-concurrency-evidence.md](../stdlib-runtime/async-concurrency-evidence.md) — umbrella; this note formalizes the behavior described there
+- [../stdlib/async-concurrency-evidence.md](../stdlib/async-concurrency-evidence.md) — umbrella; this note formalizes the behavior described there
 - [concurrency-evidence-example.md](concurrency-evidence-example.md) — worked example; theorems here back the enforced claims there
-- [../stdlib-runtime/channel-model.md](../stdlib-runtime/channel-model.md) — channel algebra; this note treats it abstractly
-- [../stdlib-runtime/ffi-cancellation-boundary.md](../stdlib-runtime/ffi-cancellation-boundary.md) — trusted-region semantics
+- [../stdlib/channel-model.md](../stdlib/channel-model.md) — channel algebra; this note treats it abstractly
+- [../stdlib/ffi-cancellation-boundary.md](../stdlib/ffi-cancellation-boundary.md) — trusted-region semantics
 - [../predictable-execution/concurrent-stack-analysis.md](../predictable-execution/concurrent-stack-analysis.md) — stack discipline interacts with cancellation termination
 - [../language/capability-polymorphism.md](../language/capability-polymorphism.md) — polymorphism over capability sets; this note assumes elaborated sets
 - [concrete-to-lean-pipeline.md](concrete-to-lean-pipeline.md) — pipeline for surfacing Lean proofs as evidence

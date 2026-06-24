@@ -67,7 +67,7 @@ This note connects to:
 1. [high-integrity-profile.md](high-integrity-profile.md)
 2. [../predictable-execution/predictable-execution.md](../predictable-execution/predictable-execution.md)
 3. [../predictable-execution/analyzable-concurrency.md](../predictable-execution/analyzable-concurrency.md)
-4. [../stdlib-runtime/no-std-freestanding.md](../stdlib-runtime/no-std-freestanding.md)
+4. [../stdlib/no-std-freestanding.md](../stdlib/no-std-freestanding.md)
 
 ## Bottom Line
 

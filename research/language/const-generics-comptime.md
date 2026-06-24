@@ -288,7 +288,7 @@ fn matmul<const M: usize, const N: usize, const P: usize>(
 ## Relation to Existing Research
 
 - `mlir-backend-shape.md`: Comptime could target MLIR for optimization
-- `builtin-vs-stdlib.md`: Comptime reduces need for compiler magic
+- `../stdlib/builtin-vs-stdlib.md`: Comptime reduces need for compiler magic
 - `high-integrity-profile.md`: Comptime enables zero-cost abstractions in restricted profiles
 - `proving-concrete-functions-in-lean.md`: Need to model comptime in proof system
 

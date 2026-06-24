@@ -42,7 +42,7 @@ Freestanding would mean:
 - explicit target contract for startup, failure, and memory
 - stdlib limited to a core subset (Option, Result, math, ptr, slice, mem)
 
-The hosted/freestanding split is a later milestone (see `research/stdlib-runtime/no-std-freestanding.md`). The current priority is making the hosted boundary explicit so the split is straightforward when needed.
+The hosted/freestanding split is a later milestone (see `research/stdlib/no-std-freestanding.md`). The current priority is making the hosted boundary explicit so the split is straightforward when needed.
 
 ### Stdlib layer classification
 
@@ -532,7 +532,7 @@ Structural boundedness means the compiler can statically determine resource usag
 
 ## Concurrency and Execution Model
 
-Concrete does not yet implement concurrency. This section documents the intended direction so that runtime, capability, and ownership decisions made now remain compatible with the concurrency model. The more specific async/evidence research direction lives in [../research/stdlib-runtime/async-concurrency-evidence.md](../research/stdlib-runtime/async-concurrency-evidence.md).
+Concrete does not yet implement concurrency. This section documents the intended direction so that runtime, capability, and ownership decisions made now remain compatible with the concurrency model. The more specific async/evidence research direction lives in [../research/stdlib/async-concurrency-evidence.md](../research/stdlib/async-concurrency-evidence.md).
 
 ### Design principles
 
@@ -603,7 +603,7 @@ eventually show exactly which functions in a module require optional overlap
 - Ambient concurrency — spawning should be as visible as allocation
 - Detached tasks outside a structured scope as the default lifecycle model
 
-See [../research/stdlib-runtime/concurrency.md](../research/stdlib-runtime/concurrency.md) for the full near-term design, [../research/stdlib-runtime/long-term-concurrency.md](../research/stdlib-runtime/long-term-concurrency.md) for the long-term layered model, and [../research/stdlib-runtime/async-concurrency-evidence.md](../research/stdlib-runtime/async-concurrency-evidence.md) for the evidence-bearing async/concurrency research direction.
+See [../research/stdlib/concurrency.md](../research/stdlib/concurrency.md) for the full near-term design, [../research/stdlib/long-term-concurrency.md](../research/stdlib/long-term-concurrency.md) for the long-term layered model, and [../research/stdlib/async-concurrency-evidence.md](../research/stdlib/async-concurrency-evidence.md) for the evidence-bearing async/concurrency research direction.
 
 ---
 

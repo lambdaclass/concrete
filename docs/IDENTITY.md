@@ -216,13 +216,13 @@ See [../research/packages-tooling/authority-budgets.md](../research/packages-too
 
 The intended direction is more compositional than the usual whole-program or whole-crate story. Ada/SPARK have pool-level bounds; Rust gets `no_std` by convention. Concrete's proposed version is per-function and compositional.
 
-See [../research/stdlib-runtime/allocation-budgets.md](../research/stdlib-runtime/allocation-budgets.md).
+See [../research/stdlib/allocation-budgets.md](../research/stdlib/allocation-budgets.md).
 
 ### Execution Cost Tracking
 
 Structural classification of functions: bounded or unbounded loops, recursive or not, max static call depth. For bounded functions, abstract instruction counts via IPET. Concrete is unusually tractable for this: no dynamic dispatch, no closures, no hidden allocation, clean SSA CFG.
 
-See [../research/stdlib-runtime/execution-cost.md](../research/stdlib-runtime/execution-cost.md).
+See [../research/stdlib/execution-cost.md](../research/stdlib/execution-cost.md).
 
 ### Semantic Diff and Trust Drift
 

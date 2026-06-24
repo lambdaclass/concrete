@@ -4,10 +4,10 @@ Status: provisional reference
 
 This document captures the current stable direction for the standard library.
 
-For the exploratory design notes behind it, see [../research/stdlib-runtime/stdlib-design.md](../research/stdlib-runtime/stdlib-design.md). For active priorities, see [../ROADMAP.md](../ROADMAP.md).
+For the exploratory design notes behind it, see [../research/stdlib/stdlib-design.md](../research/stdlib/stdlib-design.md). For active priorities, see [../ROADMAP.md](../ROADMAP.md).
 
 Use this file for the stable direction.
-Use [../research/stdlib-runtime/stdlib-design.md](../research/stdlib-runtime/stdlib-design.md) for the broader exploratory comparisons, language borrowings, and future-facing design space.
+Use [../research/stdlib/stdlib-design.md](../research/stdlib/stdlib-design.md) for the broader exploratory comparisons, language borrowings, and future-facing design space.
 If this file and the research note ever differ, treat this file as the stable project direction and the research note as exploratory background.
 
 ## Design Rules

@@ -15,7 +15,7 @@ These files are exploratory unless they explicitly say otherwise. Once a design 
 ## Directory Layout
 
 - `research/language/` — language-surface decisions, exclusions, and evidence-gated language ideas
-- `research/stdlib-runtime/` — stdlib shape, text/string direction, collections, execution/runtime pressure, targets, resource models, and concurrency research
+- `research/stdlib/` — stdlib shape, text/string direction, collections, execution/runtime pressure, targets, resource models, and concurrency research
 - `research/compiler/` — compiler architecture, backend direction, artifact/dataflow work, semantic diffing, and performance/backend research
 - `research/proof-evidence/` — formalization, proof workflows, evidence artifacts, trust bundles, and review/report direction
 - `research/packages-tooling/` — package model, testing workflow, developer tooling, authority budgets, and project/workspace UX
@@ -60,11 +60,11 @@ If you want the highest-leverage current research first:
 16. [proof-evidence/evidence-review-workflows.md](proof-evidence/evidence-review-workflows.md) — evidence bundles, machine-readable reports, and review workflows (`P0`, `Open`)
 17. [meta/ai-assisted-optimization.md](meta/ai-assisted-optimization.md) — optimization/refactoring loops driven by structured compiler reports (`P1`, `Research`)
 18. [proof-evidence/vericoding-and-evidence-product.md](proof-evidence/vericoding-and-evidence-product.md) — how Concrete should compete on reviewable verification products rather than NL-to-spec hype (`P0`, `Open`)
-19. [stdlib-runtime/async-concurrency-evidence.md](stdlib-runtime/async-concurrency-evidence.md) — research direction for evidence-bearing structured concurrency; not implemented (`P1`, `Open`)
+19. [stdlib/async-concurrency-evidence.md](stdlib/async-concurrency-evidence.md) — research direction for evidence-bearing structured concurrency; not implemented (`P1`, `Open`)
 
 ## Language
 
-- [language/builtin-vs-stdlib.md](language/builtin-vs-stdlib.md) — what belongs in compiler/runtime builtins versus the public stdlib (`P0`, `Open`, partially adopted)
+- [stdlib/builtin-vs-stdlib.md](stdlib/builtin-vs-stdlib.md) — what belongs in compiler/runtime builtins versus the public stdlib (`P0`, `Open`, partially adopted)
 - [language/checked-indexing-and-slice-views.md](language/checked-indexing-and-slice-views.md) — checked access, borrowed views, and the safe/unchecked split for arrays and buffers (`P0`, `Open`)
 - [language/arithmetic-overflow-policy.md](language/arithmetic-overflow-policy.md) — explicit overflow modes, profile defaults, and proof/report visibility (`P0`, `Open`)
 - [language/capability-sandboxing.md](language/capability-sandboxing.md) — restricted authority and sandboxing direction (`P0`, `Open`, partially adopted)
@@ -93,25 +93,26 @@ If you want the highest-leverage current research first:
 
 ## Stdlib And Runtime
 
-- [stdlib-runtime/stdlib-design.md](stdlib-runtime/stdlib-design.md) — stdlib direction, priorities, and style rules (`P1`, `Open`, partially adopted)
-- [stdlib-runtime/stdlib-api-cleanup.md](stdlib-runtime/stdlib-api-cleanup.md) — cleaning builtin-shaped names and ownership surprises out of the public stdlib (`P1`, `Open`)
-- [stdlib-runtime/text-and-output-design.md](stdlib-runtime/text-and-output-design.md) — mixed-arg printing first, interpolation later if needed (`P0`, `Open`)
-- [stdlib-runtime/runtime-collections.md](stdlib-runtime/runtime-collections.md) — collection maturity for interpreter/runtime workloads (`P1`, `Open`)
-- [stdlib-runtime/iterators.md](stdlib-runtime/iterators.md) — explicit traversal support and the case against a broad iterator ecosystem (`P1`, `Open`)
-- [stdlib-runtime/arena-allocation.md](stdlib-runtime/arena-allocation.md) — arena/bump allocation for parser/interpreter-style workloads (`P1`, `Open`)
-- [stdlib-runtime/allocation-budgets.md](stdlib-runtime/allocation-budgets.md) — `NoAlloc`, `BoundedAlloc(N)`, and allocation reporting (`P0`, `Open`)
-- [stdlib-runtime/execution-cost.md](stdlib-runtime/execution-cost.md) — structural cost reports and bounded execution direction (`P1`, `Open`)
-- [stdlib-runtime/execution-cost-tracking.md](stdlib-runtime/execution-cost-tracking.md) — tracking/externalizing execution-cost obligations (`P1`, `Open`)
-- [stdlib-runtime/layout-reports.md](stdlib-runtime/layout-reports.md) — layout/ABI audit report improvements (`P1`, `Open`)
-- [stdlib-runtime/concurrency.md](stdlib-runtime/concurrency.md) — near-term concurrency direction (`P1`, `Open`)
-- [stdlib-runtime/long-term-concurrency.md](stdlib-runtime/long-term-concurrency.md) — long-horizon layered concurrency model (`P1`, `Open`)
-- [stdlib-runtime/async-concurrency-evidence.md](stdlib-runtime/async-concurrency-evidence.md) — `Async` versus `Concurrent`, structured scopes, linear handles, simulation-backed evidence; not implemented (`P1`, `Open`)
-- [stdlib-runtime/channel-model.md](stdlib-runtime/channel-model.md) — first bounded channel model for structured concurrency (`P1`, `Open`)
-- [stdlib-runtime/ffi-cancellation-boundary.md](stdlib-runtime/ffi-cancellation-boundary.md) — cancellation semantics across FFI and trusted regions (`P1`, `Open`)
-- [stdlib-runtime/no-std-freestanding.md](stdlib-runtime/no-std-freestanding.md) — hosted vs freestanding / `no_std` split (`P1`, `Open`)
-- [stdlib-runtime/runtime-execution-pressure.md](stdlib-runtime/runtime-execution-pressure.md) — runtime/stack pressure from deep-recursive workloads (`P1`, `Open`)
-- [stdlib-runtime/target-platform-policy.md](stdlib-runtime/target-platform-policy.md) — support tiers, ABI promises, and target policy (`P1`, `Open`)
-- [stdlib-runtime/hardware-capability-mapping.md](stdlib-runtime/hardware-capability-mapping.md) — hardware-backed capability ideas (`P2`, `Research`)
+- [stdlib/stdlib-design.md](stdlib/stdlib-design.md) — stdlib direction, priorities, and style rules (`P1`, `Open`, partially adopted)
+- [stdlib/stdlib-comparative-inventory.md](stdlib/stdlib-comparative-inventory.md) — inventory of what Zig, Odin, Rust, C++, Go, Clojure, Elixir, Roc, Gleam, and OCaml expose, and how Concrete should classify each family (`P0`, `Open`)
+- [stdlib/stdlib-api-cleanup.md](stdlib/stdlib-api-cleanup.md) — cleaning builtin-shaped names and ownership surprises out of the public stdlib (`P1`, `Open`)
+- [stdlib/text-and-output-design.md](stdlib/text-and-output-design.md) — mixed-arg printing first, interpolation later if needed (`P0`, `Open`)
+- [stdlib/runtime-collections.md](stdlib/runtime-collections.md) — collection maturity for interpreter/runtime workloads (`P1`, `Open`)
+- [stdlib/iterators.md](stdlib/iterators.md) — explicit traversal support and the case against a broad iterator ecosystem (`P1`, `Open`)
+- [stdlib/arena-allocation.md](stdlib/arena-allocation.md) — arena/bump allocation for parser/interpreter-style workloads (`P1`, `Open`)
+- [stdlib/allocation-budgets.md](stdlib/allocation-budgets.md) — `NoAlloc`, `BoundedAlloc(N)`, and allocation reporting (`P0`, `Open`)
+- [stdlib/execution-cost.md](stdlib/execution-cost.md) — structural cost reports and bounded execution direction (`P1`, `Open`)
+- [stdlib/execution-cost-tracking.md](stdlib/execution-cost-tracking.md) — tracking/externalizing execution-cost obligations (`P1`, `Open`)
+- [stdlib/layout-reports.md](stdlib/layout-reports.md) — layout/ABI audit report improvements (`P1`, `Open`)
+- [stdlib/concurrency.md](stdlib/concurrency.md) — near-term concurrency direction (`P1`, `Open`)
+- [stdlib/long-term-concurrency.md](stdlib/long-term-concurrency.md) — long-horizon layered concurrency model (`P1`, `Open`)
+- [stdlib/async-concurrency-evidence.md](stdlib/async-concurrency-evidence.md) — `Async` versus `Concurrent`, structured scopes, linear handles, simulation-backed evidence; not implemented (`P1`, `Open`)
+- [stdlib/channel-model.md](stdlib/channel-model.md) — first bounded channel model for structured concurrency (`P1`, `Open`)
+- [stdlib/ffi-cancellation-boundary.md](stdlib/ffi-cancellation-boundary.md) — cancellation semantics across FFI and trusted regions (`P1`, `Open`)
+- [stdlib/no-std-freestanding.md](stdlib/no-std-freestanding.md) — hosted vs freestanding / `no_std` split (`P1`, `Open`)
+- [stdlib/runtime-execution-pressure.md](stdlib/runtime-execution-pressure.md) — runtime/stack pressure from deep-recursive workloads (`P1`, `Open`)
+- [stdlib/target-platform-policy.md](stdlib/target-platform-policy.md) — support tiers, ABI promises, and target policy (`P1`, `Open`)
+- [stdlib/hardware-capability-mapping.md](stdlib/hardware-capability-mapping.md) — hardware-backed capability ideas (`P2`, `Research`)
 
 ## Compiler
 

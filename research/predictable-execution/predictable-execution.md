@@ -196,10 +196,10 @@ This note is the umbrella for the predictable-execution direction.
 
 Related work:
 
-1. [../stdlib-runtime/execution-cost.md](../stdlib-runtime/execution-cost.md)
-2. [../stdlib-runtime/allocation-budgets.md](../stdlib-runtime/allocation-budgets.md)
-3. [../stdlib-runtime/concurrency.md](../stdlib-runtime/concurrency.md)
-4. [../stdlib-runtime/long-term-concurrency.md](../stdlib-runtime/long-term-concurrency.md)
+1. [../stdlib/execution-cost.md](../stdlib/execution-cost.md)
+2. [../stdlib/allocation-budgets.md](../stdlib/allocation-budgets.md)
+3. [../stdlib/concurrency.md](../stdlib/concurrency.md)
+4. [../stdlib/long-term-concurrency.md](../stdlib/long-term-concurrency.md)
 
 Supporting notes:
 
@@ -207,7 +207,7 @@ Supporting notes:
 2. [analyzable-concurrency.md](analyzable-concurrency.md)
 3. [ffi-boundaries.md](ffi-boundaries.md)
 4. [blocking-effects.md](blocking-effects.md)
-5. [fixed-capacity-stdlib.md](fixed-capacity-stdlib.md)
+5. [../stdlib/fixed-capacity-stdlib.md](../stdlib/fixed-capacity-stdlib.md)
 6. [stack-bounds.md](stack-bounds.md)
 
 ## Bottom Line

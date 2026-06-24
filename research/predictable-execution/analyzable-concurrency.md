@@ -73,7 +73,7 @@ The constraint flows both ways.
 
 ## Relationship To Async/Concurrent Capabilities
 
-The long-term direction in [../stdlib-runtime/async-concurrency-evidence.md](../stdlib-runtime/async-concurrency-evidence.md)
+The long-term direction in [../stdlib/async-concurrency-evidence.md](../stdlib/async-concurrency-evidence.md)
 separates optional overlap from required concurrent progress:
 
 1. `with(Async)` means order-independent work may run sequentially.
@@ -90,5 +90,5 @@ and reportable.
 
 1. [predictable-execution.md](predictable-execution.md) — umbrella
 2. [blocking-effects.md](blocking-effects.md) — blocking from synchronization overlaps here
-3. [../../stdlib-runtime/concurrency.md](../stdlib-runtime/concurrency.md) — Phase M base design
-4. [../../stdlib-runtime/long-term-concurrency.md](../stdlib-runtime/long-term-concurrency.md) — longer-term concurrency directions
+3. [../../stdlib/concurrency.md](../stdlib/concurrency.md) — Phase M base design
+4. [../../stdlib/long-term-concurrency.md](../stdlib/long-term-concurrency.md) — longer-term concurrency directions

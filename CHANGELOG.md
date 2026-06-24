@@ -3289,8 +3289,8 @@ The active roadmap now lists remaining work only. Completed Phase A/B/C task lin
 
 The roadmap now uses lettered phases (`A`-`N`) with task numbering restarting inside each phase, and the concurrency/parallelism direction is documented as research rather than shipped behavior.
 
-- **Evidence-bearing concurrency direction**: `research/stdlib-runtime/async-concurrency-evidence.md` defines the long-term target: capability-gated structured concurrency, optional-overlap versus required concurrent progress, linear task handles, bounded channels, deterministic simulation, and concurrency evidence reports. README links the direction while explicitly saying async/concurrency is not implemented.
-- **Supporting research notes**: added focused notes for permission-set polymorphism (`research/language/capability-polymorphism.md`), bounded channels (`research/stdlib-runtime/channel-model.md`), FFI/cancellation boundaries (`research/stdlib-runtime/ffi-cancellation-boundary.md`), per-task stack analysis (`research/predictable-execution/concurrent-stack-analysis.md`), a concurrency formal model (`research/proof-evidence/concurrency-formal-model.md`), and a worked `--report concurrency` example (`research/proof-evidence/concurrency-evidence-example.md`).
+- **Evidence-bearing concurrency direction**: `research/stdlib/async-concurrency-evidence.md` defines the long-term target: capability-gated structured concurrency, optional-overlap versus required concurrent progress, linear task handles, bounded channels, deterministic simulation, and concurrency evidence reports. README links the direction while explicitly saying async/concurrency is not implemented.
+- **Supporting research notes**: added focused notes for permission-set polymorphism (`research/language/capability-polymorphism.md`), bounded channels (`research/stdlib/channel-model.md`), FFI/cancellation boundaries (`research/stdlib/ffi-cancellation-boundary.md`), per-task stack analysis (`research/predictable-execution/concurrent-stack-analysis.md`), a concurrency formal model (`research/proof-evidence/concurrency-formal-model.md`), and a worked `--report concurrency` example (`research/proof-evidence/concurrency-evidence-example.md`).
 - **Gated capability framing**: capability polymorphism is now framed as static permission-set polymorphism, not effect-row polymorphism. Capabilities are documented as permission gates checked at call sites, with no handlers, resume semantics, continuation capture, or runtime capability values.
 - **Roadmap cleanup**: `ROADMAP.md` now has Phases `A`-`N`, per-phase task numbering, and a linear Phase L concurrency track. The active concurrency work starts with a pressure-test suite and v1 design freeze before any compiler implementation.
 
@@ -4468,7 +4468,7 @@ That makes grep a useful continuing pressure test for text/output and string-I/O
 
 ### Phase H: builder builtins, JSON parser, cleanup ergonomics, future feature research
 
-**Builder builtins:** Added `string_append_int(&mut String, Int)` and `string_append_bool(&mut String, bool)` builtins for zero-grammar-cost mixed-type string building. These avoid intermediate allocations and interpolation syntax while keeping capabilities explicit. Design rationale in `research/stdlib-runtime/text-and-output-design.md`.
+**Builder builtins:** Added `string_append_int(&mut String, Int)` and `string_append_bool(&mut String, bool)` builtins for zero-grammar-cost mixed-type string building. These avoid intermediate allocations and interpolation syntax while keeping capabilities explicit. Design rationale in `research/stdlib/text-and-output-design.md`.
 
 **Bug 010 semantics fix:** `string_substr(s, start, len)` was previously aliased to `string_slice(s, start, end)` despite different contracts. Now has its own intrinsic ID and LLVM implementation that computes `end = start + len` before delegating to `string_slice`.
 
@@ -4477,12 +4477,12 @@ That makes grep a useful continuing pressure test for text/output and string-I/O
 **Cleanup ergonomics design:** Documented 5 options for reducing linear ownership friction in `research/language/cleanup-ergonomics.md`. Immediate priorities: (1) `defer` statement for scope-end cleanup, (2) additional mutation-oriented string APIs. Deferred: Destroy trait, scoped helpers, borrowed slices. Roadmap updated with all items and revisit triggers.
 
 **Future feature research:** Six research notes analyzing difficulty and design for features that multiply Concrete's value beyond capabilities:
-- `research/stdlib-runtime/allocation-budgets.md` — NoAlloc/BoundedAlloc sub-capabilities; report-only classification (1-2 days) → enforcement (1-2 weeks) → byte-level budgets (3-4 weeks)
-- `research/stdlib-runtime/arena-allocation.md` — bump-pointer arenas replacing manual Vec pools; ~1 week; simpler than Vec (no realloc)
-- `research/stdlib-runtime/execution-cost-tracking.md` — structural boundedness reports (1-2 days) → abstract cost counting (2-3 weeks) → WCET (external tool)
+- `research/stdlib/allocation-budgets.md` — NoAlloc/BoundedAlloc sub-capabilities; report-only classification (1-2 days) → enforcement (1-2 weeks) → byte-level budgets (3-4 weeks)
+- `research/stdlib/arena-allocation.md` — bump-pointer arenas replacing manual Vec pools; ~1 week; simpler than Vec (no realloc)
+- `research/stdlib/execution-cost-tracking.md` — structural boundedness reports (1-2 days) → abstract cost counting (2-3 weeks) → WCET (external tool)
 - `research/language/typestate.md` — ownership-based two-state works today; phantom types for multi-state (2-3 weeks) deferred pending evidence
 - `research/packages-tooling/authority-budgets.md` — updated with module-level `#[authority(...)]` path (~1 week); package-level deferred to Phase J
-- `research/stdlib-runtime/layout-reports.md` — padding visualization, enum layout, ABI flags; 3-4 days; pure report formatting
+- `research/stdlib/layout-reports.md` — padding visualization, enum layout, ABI flags; 3-4 days; pure report formatting
 
 ### Phase H bug fixes: Bug 005, 008, 009 fixed; if-expression, const lowering, enum-in-struct
 
@@ -4645,8 +4645,8 @@ The roadmap now separates:
 
 Research notes now include:
 
-- `research/stdlib-runtime/concurrency.md` for the near-term Phase E direction
-- `research/stdlib-runtime/long-term-concurrency.md` for the long-horizon layered concurrency target
+- `research/stdlib/concurrency.md` for the near-term Phase E direction
+- `research/stdlib/long-term-concurrency.md` for the long-horizon layered concurrency target
 
 This makes the sequencing explicit: define the runtime boundary first, then broaden concurrency only after runtime, safety, package, and operational foundations are stable enough to support it well.
 

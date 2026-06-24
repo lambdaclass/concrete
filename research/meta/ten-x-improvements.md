@@ -344,7 +344,7 @@ Closely related:
 
 - a stronger `Unsafe` structure and audit story — see [unsafe-structure.md](unsafe-structure.md)
 - the `trusted fn` / `trusted impl` boundary for containing pointer-level implementation unsafety behind safe APIs, keeping the three-way split clean: semantic effects (capabilities) / implementation trust (`trusted`) / foreign boundaries (`Unsafe`) — see [trusted-boundary.md](trusted-boundary.md)
-- builtin minimization and stdlib-owned public APIs, which shrink the trusted computing base and make those boundaries easier to audit — see [builtin-vs-stdlib.md](builtin-vs-stdlib.md)
+- builtin minimization and stdlib-owned public APIs, which shrink the trusted computing base and make those boundaries easier to audit — see [../stdlib/builtin-vs-stdlib.md](../stdlib/builtin-vs-stdlib.md)
 
 ### 7. A truly strong concurrency/runtime model
 

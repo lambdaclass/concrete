@@ -6,7 +6,7 @@
 
 ## Purpose
 
-This note extends [stack-bounds.md](stack-bounds.md) to per-task analysis. The existing note covers what Concrete can say about stack use in single-threaded code. The structured-concurrency direction in [../stdlib-runtime/async-concurrency-evidence.md](../stdlib-runtime/async-concurrency-evidence.md) introduces spawned tasks, each of which needs its own stack. The question is what the compiler can say about per-task stack bounds and how that feeds the evented runtime backend.
+This note extends [stack-bounds.md](stack-bounds.md) to per-task analysis. The existing note covers what Concrete can say about stack use in single-threaded code. The structured-concurrency direction in [../stdlib/async-concurrency-evidence.md](../stdlib/async-concurrency-evidence.md) introduces spawned tasks, each of which needs its own stack. The question is what the compiler can say about per-task stack bounds and how that feeds the evented runtime backend.
 
 This is a place where Concrete is positioned to do something other languages can't yet. Zig is explicitly waiting on stack analysis as a language feature before its evented runtime can ship cleanly. Concrete already has the analysis pass for sequential code; extending it to per-task is incremental work, not a new mechanism.
 
@@ -114,7 +114,7 @@ FFI calls have unknown stack bounds unless declared. Three approaches:
 
 The first option is the right starting point. The second can be added once the FFI declaration syntax is rich enough to carry assumptions.
 
-This connects to [ffi-boundaries.md](ffi-boundaries.md) and [../stdlib-runtime/ffi-cancellation-boundary.md](../stdlib-runtime/ffi-cancellation-boundary.md): FFI is the analysis boundary in many predictable-execution questions, not just stack.
+This connects to [ffi-boundaries.md](ffi-boundaries.md) and [../stdlib/ffi-cancellation-boundary.md](../stdlib/ffi-cancellation-boundary.md): FFI is the analysis boundary in many predictable-execution questions, not just stack.
 
 ## Evidence Levels
 
@@ -175,6 +175,6 @@ The stack analysis is good if a function declared `with(Stack(N))` can be compil
 - [analyzable-concurrency.md](analyzable-concurrency.md) — predictable concurrent profile; per-task stack bound is part of it
 - [bounded-loops.md](bounded-loops.md) — sister analysis for loops; similar bound discipline
 - [ffi-boundaries.md](ffi-boundaries.md) — FFI cuts across this analysis
-- [../stdlib-runtime/async-concurrency-evidence.md](../stdlib-runtime/async-concurrency-evidence.md) — concurrency direction; depends on this for evented backend
-- [../stdlib-runtime/allocation-budgets.md](../stdlib-runtime/allocation-budgets.md) — sibling resource-bounded capability for heap
+- [../stdlib/async-concurrency-evidence.md](../stdlib/async-concurrency-evidence.md) — concurrency direction; depends on this for evented backend
+- [../stdlib/allocation-budgets.md](../stdlib/allocation-budgets.md) — sibling resource-bounded capability for heap
 - [../proof-evidence/concurrency-evidence-example.md](../proof-evidence/concurrency-evidence-example.md) — stack appears in worked evidence example

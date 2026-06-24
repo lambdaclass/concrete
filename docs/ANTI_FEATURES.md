@@ -44,7 +44,7 @@ Each entry has:
 
 **Why:** Async runtimes (Tokio-style executors, goroutine schedulers, libuv-style event loops) create hidden concurrency, hidden scheduling, and function coloring. A function that looks like a normal call may suspend, resume on a different thread, or block a shared executor. This violates "no hidden runtime model" and "all code paths known at compile time."
 
-**What Concrete does instead:** Single-threaded execution today. Future concurrency is research-only and must remain explicit: OS threads first, structured scopes, capability-gated concurrency authority, no implicit executor, and no function coloring. The current research direction separates optional overlap (`Async`) from required concurrent progress (`Concurrent`) without implementing either yet. See [EXECUTION_MODEL.md](EXECUTION_MODEL.md) and [../research/stdlib-runtime/async-concurrency-evidence.md](../research/stdlib-runtime/async-concurrency-evidence.md).
+**What Concrete does instead:** Single-threaded execution today. Future concurrency is research-only and must remain explicit: OS threads first, structured scopes, capability-gated concurrency authority, no implicit executor, and no function coloring. The current research direction separates optional overlap (`Async`) from required concurrent progress (`Concurrent`) without implementing either yet. See [EXECUTION_MODEL.md](EXECUTION_MODEL.md) and [../research/stdlib/async-concurrency-evidence.md](../research/stdlib/async-concurrency-evidence.md).
 
 **Status:** Permanent for hidden runtimes. Deferred for explicit structured concurrency.
 

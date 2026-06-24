@@ -6,7 +6,7 @@
 
 ## Purpose
 
-This note grounds the evidence-bearing concurrency direction in a concrete worked example. The umbrella direction is in [../stdlib-runtime/async-concurrency-evidence.md](../stdlib-runtime/async-concurrency-evidence.md); that note lists candidate evidence properties as a table. This note shows what an actual `--report concurrency` output should look like for a small program, and what each line of the report ties back to in the source.
+This note grounds the evidence-bearing concurrency direction in a concrete worked example. The umbrella direction is in [../stdlib/async-concurrency-evidence.md](../stdlib/async-concurrency-evidence.md); that note lists candidate evidence properties as a table. This note shows what an actual `--report concurrency` output should look like for a small program, and what each line of the report ties back to in the source.
 
 The point is to force the design to answer: who reads this report, what question are they trying to answer, and what does the source have to look like for the answer to be machine-checked rather than narrated.
 
@@ -205,8 +205,8 @@ A concurrency evidence report is good if a reviewer reading only the report (not
 
 ## Relationship To Other Notes
 
-- [../stdlib-runtime/async-concurrency-evidence.md](../stdlib-runtime/async-concurrency-evidence.md) — umbrella direction; this note is the worked example
-- [../stdlib-runtime/channel-model.md](../stdlib-runtime/channel-model.md) — channel evidence properties
+- [../stdlib/async-concurrency-evidence.md](../stdlib/async-concurrency-evidence.md) — umbrella direction; this note is the worked example
+- [../stdlib/channel-model.md](../stdlib/channel-model.md) — channel evidence properties
 - [evidence-review-workflows.md](evidence-review-workflows.md) — how reports are consumed in audit workflows
 - [proof-evidence-artifacts.md](proof-evidence-artifacts.md) — artifact format and stability
 - [provable-properties.md](provable-properties.md) — what can be proved vs reported vs trusted

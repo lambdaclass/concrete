@@ -8,7 +8,7 @@
 
 This note defines how higher-order code in Concrete should remain usable when callbacks have arbitrary capability requirements. Without an answer here, the standard library either bans higher-order code or duplicates every combinator across capability sets.
 
-This is a prerequisite for the structured concurrency direction in [async-concurrency-evidence.md](../stdlib-runtime/async-concurrency-evidence.md). Scope methods like `s.spawn(f, ...)` and combinators like `iter.map(f)` need a single signature that works whether `f` is pure, does I/O, spawns tasks, or holds `with(Concurrent)`.
+This is a prerequisite for the structured concurrency direction in [async-concurrency-evidence.md](../stdlib/async-concurrency-evidence.md). Scope methods like `s.spawn(f, ...)` and combinators like `iter.map(f)` need a single signature that works whether `f` is pure, does I/O, spawns tasks, or holds `with(Concurrent)`.
 
 ## Framing
 
@@ -219,8 +219,8 @@ A capability-polymorphic feature is good if writing a higher-order combinator re
 
 ## Relationship To Other Notes
 
-- [../stdlib-runtime/async-concurrency-evidence.md](../stdlib-runtime/async-concurrency-evidence.md) — depends on this for scope/spawn signatures
-- [../stdlib-runtime/concurrency.md](../stdlib-runtime/concurrency.md) — near-term threads-first plan; capability polymorphism is needed before the long-term direction
-- [../stdlib-runtime/stdlib-design.md](../stdlib-runtime/stdlib-design.md) — stdlib shape; this note constrains it
+- [../stdlib/async-concurrency-evidence.md](../stdlib/async-concurrency-evidence.md) — depends on this for scope/spawn signatures
+- [../stdlib/concurrency.md](../stdlib/concurrency.md) — near-term threads-first plan; capability polymorphism is needed before the long-term direction
+- [../stdlib/stdlib-design.md](../stdlib/stdlib-design.md) — stdlib shape; this note constrains it
 - [no-trait-objects.md](no-trait-objects.md) — related decision about higher-order machinery
-- [../stdlib-runtime/iterators.md](../stdlib-runtime/iterators.md) — iterators are the canonical higher-order combinator surface
+- [../stdlib/iterators.md](../stdlib/iterators.md) — iterators are the canonical higher-order combinator surface
