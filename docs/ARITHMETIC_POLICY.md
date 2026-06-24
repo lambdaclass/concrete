@@ -451,7 +451,13 @@ This closes the interpreter-vs-compiled divergence for the first time.
 
 ## 13. Implementation Sequence
 
-1. **Add wrapping intrinsics**: `wrapping_add`, `wrapping_sub`, `wrapping_mul` as compiler intrinsics that emit plain LLVM `add`/`sub`/`mul`. No behavior change for existing code yet.
+1. **[DONE — 2026-06-24; ROADMAP #10 Stage 2.1]** Add wrapping intrinsics:
+   `wrapping_add`, `wrapping_sub`, `wrapping_mul` as compiler intrinsics that emit
+   plain LLVM `add`/`sub`/`mul`. No behavior change for existing code yet. Modeled
+   as distinct `BinOp.wrappingAdd/Sub/Mul` (so ordinary `+ - *` can later flip to
+   checked while these stay plain); integer-only, same-type operands; interpreter
+   wraps both signed and unsigned to match compiled. Gated by
+   `scripts/tests/check_wrapping_arith.sh` (`make test-wrapping-arith` + CI step).
 2. **Add saturating intrinsics**: `saturating_add`, `saturating_sub`, `saturating_mul` emitting LLVM `llvm.*.sat` intrinsics.
 3. **Add division-by-zero checks**: emit zero-check + abort branch before every `sdiv`/`udiv`/`srem`/`urem`. This fixes real UB immediately.
 4. **Add shift-range checks**: emit bitwidth-check + abort branch before every `shl`/`ashr`/`lshr`.

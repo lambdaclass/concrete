@@ -153,6 +153,22 @@ private def maskWidth (ty : Ty) (n : Int) : Int :=
   | some w => Int.ofNat (BitVec.ofInt w n).toNat
   | none   => n
 
+/-- (bit width, signed?) for each fixed-width integer type, including the
+    64-bit `Int`/`Uint`. -/
+private def intBitWidth : Ty → Option (Nat × Bool)
+  | .i8 => some (8, true)  | .i16 => some (16, true)  | .i32 => some (32, true)  | .int  => some (64, true)
+  | .u8 => some (8, false) | .u16 => some (16, false) | .u32 => some (32, false) | .uint => some (64, false)
+  | _   => none
+
+/-- True two's-complement wrap of `n` into `ty`'s width, for BOTH signed and
+    unsigned — what `wrapping_add`/`wrapping_sub`/`wrapping_mul` mean and exactly
+    what the compiled plain LLVM add/sub/mul produce. Unlike `maskWidth`, this
+    also wraps signed types (e.g. `wrapping_add(i32::MAX, 1) == i32::MIN`). -/
+private def wrapToType (ty : Ty) (n : Int) : Int :=
+  match intBitWidth ty with
+  | some (w, signed) => if signed then (BitVec.ofInt w n).toInt else Int.ofNat (BitVec.ofInt w n).toNat
+  | none             => n
+
 def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   -- Result type is the LHS (value) type; for shifts this is the
   -- shifted value's width, not the shift-count's.  maskWidth then
@@ -161,6 +177,11 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   | .add, .int a ty, .int b _ => .ok (.int (maskWidth ty (a + b)) ty)
   | .sub, .int a ty, .int b _ => .ok (.int (maskWidth ty (a - b)) ty)
   | .mul, .int a ty, .int b _ => .ok (.int (maskWidth ty (a * b)) ty)
+  -- Explicit wrapping arithmetic: true two's-complement wrap (signed + unsigned),
+  -- matching the compiled plain LLVM add/sub/mul. ROADMAP #10 Stage 2.1.
+  | .wrappingAdd, .int a ty, .int b _ => .ok (.int (wrapToType ty (a + b)) ty)
+  | .wrappingSub, .int a ty, .int b _ => .ok (.int (wrapToType ty (a - b)) ty)
+  | .wrappingMul, .int a ty, .int b _ => .ok (.int (wrapToType ty (a * b)) ty)
   | .div, .int _ _, .int 0 _ => .error "interp: division by zero"
   | .div, .int a ty, .int b _ => .ok (.int (maskWidth ty (a / b)) ty)
   | .mod, .int _ _, .int 0 _ => .error "interp: modulo by zero"

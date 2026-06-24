@@ -621,11 +621,19 @@ gate.
         and the policy bundle visible. The arithmetic line is profile-invariant
         and states the current wrapping-lowering gap explicitly. No
         codegen/semantic change.
-      - Stages 2-6: the ARITHMETIC_POLICY.md §13 sequence — checked add/sub/mul/
-        neg lowering with abort blocks, div/mod-zero checks, explicit
-        `wrapping_*`, explicit `saturating_*`, and report/audit of active
+      - Stage 2.1: [DONE — 2026-06-24; BinOp.wrappingAdd/Sub/Mul + intrinsics in
+        Intrinsic/Check/Elab + plain-LLVM lowering in EmitSSA + signed/unsigned
+        interp wrap; scripts/tests/check_wrapping_arith.sh] explicit `wrapping_*`
+        — the visible spelling for intentional modular arithmetic. Behavior-
+        preserving (plain add/sub/mul); the prerequisite escape hatch before the
+        flip.
+      - Stages 2.2-2.6: the ARITHMETIC_POLICY.md §13 sequence — explicit
+        `saturating_*`, then checked `+ - *` lowering with abort blocks (the
+        flip), div/mod-zero checks, shift checks, and report/audit of active
         checked/proved/runtime status. A proof may justify omitting a *redundant*
-        runtime check; it never changes source meaning.
+        runtime check; it never changes source meaning. (No external users, so
+        the flip targets the final model directly; std/examples migrate onto
+        `wrapping_*` where they intentionally rely on wrap.)
 11. **DONE / PERMANENT DECISION (2026-06-23).** State the
     macro/metaprogramming stance: **no language macros**. Concrete
     does not admit hygienic macros, proc macros, syntax macros, derive helpers,

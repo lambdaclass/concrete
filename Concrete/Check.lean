@@ -1041,6 +1041,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       else if isPointerType lTyR && isInteger rTyR then return lTy
       else if isTypeVarL || isTypeVarR then return lTy
       else return lTy  -- CoreCheck validates operator type constraints
+    | .wrappingAdd | .wrappingSub | .wrappingMul =>
+      -- wrapping_* never reach here via AST `binaryOp` — they are call-syntax
+      -- intrinsics, type-checked in the call path. Integer-only, defensive.
+      return lTy
     | .eq | .neq | .lt | .gt | .leq | .geq =>
       return .bool  -- CoreCheck validates operand type compatibility
     | .and_ | .or_ =>
@@ -1230,6 +1234,23 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
           | _ => pure ()
           return nt.innerTy
         | none => throwCheckMsg s!"unwrap() requires a newtype argument, '{ntName}' is not a newtype"
+    -- Intercept wrapping_add/sub/mul(a, b) — explicit modular arithmetic.
+    -- Integer-only, both operands the same type; result is that type.
+    if intrinsic == some .wrappingAdd || intrinsic == some .wrappingSub
+       || intrinsic == some .wrappingMul then
+      if args.length != 2 then
+        throwCheckMsg s!"{fnName} takes exactly 2 arguments, got {args.length}"
+      let a := match args with | a :: _ => a | [] => Expr.intLit default 0
+      let b := match args with | _ :: b :: _ => b | _ => Expr.intLit default 0
+      let aTy ← checkExpr a hint
+      let aTyR ← resolveType aTy
+      if !isInteger aTyR then
+        throwCheckMsg s!"{fnName} requires integer operands, got {tyToString aTyR}"
+      let bTy ← checkExpr b (some aTyR)
+      let bTyR ← resolveType bTy
+      if aTyR != bTyR then
+        throwCheckMsg s!"{fnName} operands must have the same integer type, got {tyToString aTyR} and {tyToString bTyR}"
+      return aTy
     -- Intercept print(...) / println(...) — variadic mixed-arg output
     if intrinsic == some .print || intrinsic == some .println then
       if args.isEmpty then throwCheckMsg s!"{fnName}() requires at least 1 argument"

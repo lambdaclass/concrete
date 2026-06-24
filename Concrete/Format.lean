@@ -20,6 +20,9 @@ private def binOpToStr : BinOp → String
   | .eq => "==" | .neq => "!=" | .lt => "<" | .gt => ">" | .leq => "<=" | .geq => ">="
   | .and_ => "&&" | .or_ => "||"
   | .bitand => "&" | .bitor => "|" | .bitxor => "^" | .shl => "<<" | .shr => ">>"
+  -- wrapping_* are call-syntax in source, never AST binary operators; defensive
+  -- spellings only (this formatter handles AST `binaryOp`, which never holds them).
+  | .wrappingAdd => "wrapping+" | .wrappingSub => "wrapping-" | .wrappingMul => "wrapping*"
 
 private def unaryOpToStr : UnaryOp → String
   | .neg => "-" | .not_ => "!" | .bitnot => "~"

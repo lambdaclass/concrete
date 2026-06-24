@@ -228,6 +228,7 @@ private def binOpToStr : BinOp → String
   | .eq => "==" | .neq => "!=" | .lt => "<" | .gt => ">" | .leq => "<=" | .geq => ">="
   | .and_ => "&&" | .or_ => "||"
   | .bitand => "&" | .bitor => "|" | .bitxor => "^" | .shl => "<<" | .shr => ">>"
+  | .wrappingAdd => "wrapping+" | .wrappingSub => "wrapping-" | .wrappingMul => "wrapping*"
 
 private def unaryOpToStr : UnaryOp → String
   | .neg => "-" | .not_ => "!" | .bitnot => "~"

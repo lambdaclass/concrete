@@ -143,6 +143,10 @@ private def binOpToStr : BinOp → String
   | .eq => "eq" | .neq => "ne" | .lt => "slt" | .gt => "sgt" | .leq => "sle" | .geq => "sge"
   | .and_ => "and" | .or_ => "or"
   | .bitand => "and" | .bitor => "or" | .bitxor => "xor" | .shl => "shl" | .shr => "ashr"
+  -- wrapping_* lower to the SAME plain LLVM ops as add/sub/mul — no nsw/nuw, no
+  -- trap (ROADMAP #10 Stage 2.1). They are distinct only so ordinary +/-/* can
+  -- later flip to checked while these stay plain.
+  | .wrappingAdd => "add" | .wrappingSub => "sub" | .wrappingMul => "mul"
 
 private def unaryOpToStr : UnaryOp → String
   | .neg => "neg" | .not_ => "not" | .bitnot => "not"

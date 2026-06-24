@@ -10,6 +10,24 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #10 Stage 2.1: explicit wrapping arithmetic (2026-06-24)
+
+Added `wrapping_add` / `wrapping_sub` / `wrapping_mul` — the explicit, visible
+spelling for intentional two's-complement modular arithmetic
+(ARITHMETIC_POLICY.md §13 step 1). Modeled as distinct `BinOp.wrappingAdd/Sub/Mul`
+variants (resolved from the intrinsic names in `Intrinsic.lean`, type-checked in
+`Check.lean`, elaborated in `Elab.lean`) that lower in `EmitSSA.lean` to the SAME
+plain LLVM `add`/`sub`/`mul` ordinary `+ - *` emit today — **behavior-preserving**.
+They are integer-only with same-type operands (float/bool/mixed-width rejected),
+and the interpreter wraps both signed and unsigned to match compiled output
+(interp == compiled). Gated by `scripts/tests/check_wrapping_arith.sh`
+(`make test-wrapping-arith` + CI step).
+
+This is the prerequisite for the later flip: keeping them distinct from
+`BinOp.add/sub/mul` means that when ordinary `+ - *` become checked/trapping
+(Stage 2.3), the wrapping forms keep their plain semantics — so intentional
+modular code has a spelling that never silently changes meaning.
+
 ### Phase 6 #17: iteration protocol (audit + gate) (2026-06-24)
 
 Documented Concrete's traversal story as a fixed hierarchy in

@@ -122,6 +122,13 @@ inductive BinOp where
   | eq | neq | lt | gt | leq | geq
   | and_ | or_
   | bitand | bitor | bitxor | shl | shr
+  -- Explicit modular (wrapping) arithmetic — ROADMAP #10 Stage 2.1. These are
+  -- the visible spelling for intentional two's-complement wrap (`wrapping_add`
+  -- etc.). They lower to plain LLVM add/sub/mul with NO overflow flags and NO
+  -- trap — identical to what `add`/`sub`/`mul` emit today. They stay distinct so
+  -- that when ordinary `+ - *` flip to checked/trapping (Stage 2.3), the wrapping
+  -- forms keep their plain semantics.
+  | wrappingAdd | wrappingSub | wrappingMul
   deriving Repr, BEq
 
 inductive UnaryOp where

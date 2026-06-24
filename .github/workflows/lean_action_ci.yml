@@ -374,6 +374,9 @@ jobs:
       - name: Iteration-protocol gate (Phase 6 #17 — blessed traversal forms; no Iterator trait)
         run: bash scripts/tests/check_iteration_protocol.sh
 
+      - name: Wrapping-arith gate (Phase 6 #10 Stage 2.1 — wrapping_* wrap correctly, integer-only)
+        run: bash scripts/tests/check_wrapping_arith.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 

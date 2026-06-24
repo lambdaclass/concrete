@@ -50,6 +50,10 @@ inductive IntrinsicId where
 
   -- Type operations
   | unwrap  -- newtype unwrapping
+
+  -- Explicit wrapping (modular) arithmetic — ROADMAP #10 Stage 2.1.
+  -- `wrapping_add(a, b)` etc. lower to plain two's-complement add/sub/mul.
+  | wrappingAdd | wrappingSub | wrappingMul
   deriving BEq, Hashable, Repr
 
 /-- Look up an IntrinsicId from a source-level function name.
@@ -118,6 +122,11 @@ def resolveIntrinsic (name : String) : Option IntrinsicId :=
   -- Type operations
   | "unwrap" => some .unwrap
 
+  -- Explicit wrapping arithmetic
+  | "wrapping_add" => some .wrappingAdd
+  | "wrapping_sub" => some .wrappingSub
+  | "wrapping_mul" => some .wrappingMul
+
   | _ => none
 
 /-- Check whether a source-level name is a known intrinsic. -/
@@ -170,6 +179,9 @@ def IntrinsicId.canonicalName : IntrinsicId → String
   | .sizeof => "sizeof"
   | .alignof => "alignof"
   | .unwrap => "unwrap"
+  | .wrappingAdd => "wrapping_add"
+  | .wrappingSub => "wrapping_sub"
+  | .wrappingMul => "wrapping_mul"
 
 /-- Required capability set for an intrinsic, if any. -/
 def IntrinsicId.capability : IntrinsicId → Option String

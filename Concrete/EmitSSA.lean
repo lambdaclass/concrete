@@ -500,6 +500,11 @@ private def emitBinOp (s : EmitSSAState) (dst : String) (op : BinOp) (lhs rhs : 
     | .add => emitStructured s (.binOp dst .add iTy lOp rOp)
     | .sub => emitStructured s (.binOp dst .sub iTy lOp rOp)
     | .mul => emitStructured s (.binOp dst .mul iTy lOp rOp)
+    -- Explicit wrapping arithmetic emits the SAME plain LLVM ops (no nsw/nuw, no
+    -- trap) as +/-/* do today — ROADMAP #10 Stage 2.1, behavior-preserving.
+    | .wrappingAdd => emitStructured s (.binOp dst .add iTy lOp rOp)
+    | .wrappingSub => emitStructured s (.binOp dst .sub iTy lOp rOp)
+    | .wrappingMul => emitStructured s (.binOp dst .mul iTy lOp rOp)
     | .div =>
       if ssaIsSignedInt operandTy then emitStructured s (.binOp dst .sdiv iTy lOp rOp)
       else emitStructured s (.binOp dst .udiv iTy lOp rOp)
