@@ -129,6 +129,11 @@ inductive BinOp where
   -- that when ordinary `+ - *` flip to checked/trapping (Stage 2.3), the wrapping
   -- forms keep their plain semantics.
   | wrappingAdd | wrappingSub | wrappingMul
+  -- Explicit saturating (clamping) arithmetic — ROADMAP #10 Stage 2.2. Visible
+  -- spelling for intentional clamp-to-range (`saturating_add` etc.). add/sub
+  -- lower to the LLVM `llvm.{s,u}{add,sub}.sat` intrinsics; mul (Stage 2.2b) uses
+  -- `*.with.overflow` + select. Integer-only, same-type operands.
+  | saturatingAdd | saturatingSub
   deriving Repr, BEq
 
 inductive UnaryOp where

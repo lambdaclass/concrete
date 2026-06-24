@@ -147,6 +147,9 @@ private def binOpToStr : BinOp → String
   -- trap (ROADMAP #10 Stage 2.1). They are distinct only so ordinary +/-/* can
   -- later flip to checked while these stay plain.
   | .wrappingAdd => "add" | .wrappingSub => "sub" | .wrappingMul => "mul"
+  -- saturating_* are emitted as intrinsic CALLS in EmitSSA, never as a plain SSA
+  -- binOp; these strings are defensive (this is the SInst pretty-printer).
+  | .saturatingAdd => "sadd.sat" | .saturatingSub => "ssub.sat"
 
 private def unaryOpToStr : UnaryOp → String
   | .neg => "neg" | .not_ => "not" | .bitnot => "not"

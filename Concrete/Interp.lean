@@ -169,6 +169,17 @@ private def wrapToType (ty : Ty) (n : Int) : Int :=
   | some (w, signed) => if signed then (BitVec.ofInt w n).toInt else Int.ofNat (BitVec.ofInt w n).toNat
   | none             => n
 
+/-- Clamp `n` to `ty`'s representable range — what `saturating_*` mean, matching
+    the `llvm.{s,u}{add,sub}.sat` intrinsics. -/
+private def saturateToType (ty : Ty) (n : Int) : Int :=
+  match intBitWidth ty with
+  | some (w, signed) =>
+    let (lo, hi) : Int × Int :=
+      if signed then (-((2 : Int) ^ (w - 1)), (2 : Int) ^ (w - 1) - 1)
+      else (0, (2 : Int) ^ w - 1)
+    if n < lo then lo else if n > hi then hi else n
+  | none => n
+
 def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   -- Result type is the LHS (value) type; for shifts this is the
   -- shifted value's width, not the shift-count's.  maskWidth then
@@ -182,6 +193,10 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   | .wrappingAdd, .int a ty, .int b _ => .ok (.int (wrapToType ty (a + b)) ty)
   | .wrappingSub, .int a ty, .int b _ => .ok (.int (wrapToType ty (a - b)) ty)
   | .wrappingMul, .int a ty, .int b _ => .ok (.int (wrapToType ty (a * b)) ty)
+  -- Explicit saturating arithmetic: clamp to the type's range, matching the
+  -- llvm.{s,u}{add,sub}.sat intrinsics. ROADMAP #10 Stage 2.2.
+  | .saturatingAdd, .int a ty, .int b _ => .ok (.int (saturateToType ty (a + b)) ty)
+  | .saturatingSub, .int a ty, .int b _ => .ok (.int (saturateToType ty (a - b)) ty)
   | .div, .int _ _, .int 0 _ => .error "interp: division by zero"
   | .div, .int a ty, .int b _ => .ok (.int (maskWidth ty (a / b)) ty)
   | .mod, .int _ _, .int 0 _ => .error "interp: modulo by zero"

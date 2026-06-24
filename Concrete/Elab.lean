@@ -902,13 +902,16 @@ partial def elabCall (fnName : String) (typeArgs : List Ty) (args : List Expr)
   -- Check has already validated 2 integer operands of the same type, so the
   -- result type is the operand type. Lowers to plain LLVM add/sub/mul.
   if intrinsic == some .wrappingAdd || intrinsic == some .wrappingSub
-     || intrinsic == some .wrappingMul then
+     || intrinsic == some .wrappingMul || intrinsic == some .saturatingAdd
+     || intrinsic == some .saturatingSub then
     let cA ← elabExpr (match args with | a :: _ => a | [] => Expr.intLit default 0) hint
     let cB ← elabExpr (match args with | _ :: b :: _ => b | _ => Expr.intLit default 0) (some cA.ty)
     let bop := match intrinsic with
-      | some .wrappingSub => BinOp.wrappingSub
-      | some .wrappingMul => BinOp.wrappingMul
-      | _                 => BinOp.wrappingAdd
+      | some .wrappingSub   => BinOp.wrappingSub
+      | some .wrappingMul   => BinOp.wrappingMul
+      | some .saturatingAdd => BinOp.saturatingAdd
+      | some .saturatingSub => BinOp.saturatingSub
+      | _                   => BinOp.wrappingAdd
     return .binOp bop cA cB cA.ty
   -- Intercept sizeof/alignof
   if intrinsic == some .sizeof || intrinsic == some .alignof || fnName.endsWith sizeofSuffix then

@@ -330,9 +330,10 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
           addCCError (.arithmeticOnNonNumeric (toString (repr lTy)))
         if !typesCompatible lTy rTy && !hasTypeVar lTy && !hasTypeVar rTy then
           addCCError (.binaryOperandMismatch (toString (repr lTy)) (toString (repr rTy)))
-    | .wrappingAdd | .wrappingSub | .wrappingMul =>
-      -- Explicit wrapping arithmetic is INTEGER-ONLY (no float/bool/char/ptr) and
-      -- operands must share the type. ROADMAP #10 Stage 2.1.
+    | .wrappingAdd | .wrappingSub | .wrappingMul
+    | .saturatingAdd | .saturatingSub =>
+      -- Explicit wrapping/saturating arithmetic is INTEGER-ONLY (no
+      -- float/bool/char/ptr) and operands must share the type. ROADMAP #10 Stage 2.
       let hasTypeVar := fun (t : Ty) => match t with | .typeVar _ | .named _ => true | _ => false
       if !isInteger lTy && !hasTypeVar lTy then
         addCCError (.arithmeticOnNonNumeric (toString (repr lTy)))

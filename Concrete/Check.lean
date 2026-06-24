@@ -1041,9 +1041,10 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
       else if isPointerType lTyR && isInteger rTyR then return lTy
       else if isTypeVarL || isTypeVarR then return lTy
       else return lTy  -- CoreCheck validates operator type constraints
-    | .wrappingAdd | .wrappingSub | .wrappingMul =>
-      -- wrapping_* never reach here via AST `binaryOp` — they are call-syntax
-      -- intrinsics, type-checked in the call path. Integer-only, defensive.
+    | .wrappingAdd | .wrappingSub | .wrappingMul
+    | .saturatingAdd | .saturatingSub =>
+      -- wrapping_*/saturating_* never reach here via AST `binaryOp` — they are
+      -- call-syntax intrinsics, type-checked in the call path. Defensive.
       return lTy
     | .eq | .neq | .lt | .gt | .leq | .geq =>
       return .bool  -- CoreCheck validates operand type compatibility
@@ -1234,10 +1235,11 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) : CheckM Ty := do
           | _ => pure ()
           return nt.innerTy
         | none => throwCheckMsg s!"unwrap() requires a newtype argument, '{ntName}' is not a newtype"
-    -- Intercept wrapping_add/sub/mul(a, b) — explicit modular arithmetic.
-    -- Integer-only, both operands the same type; result is that type.
+    -- Intercept wrapping_*/saturating_*(a, b) — explicit modular/clamping
+    -- arithmetic. Integer-only, both operands the same type; result is that type.
     if intrinsic == some .wrappingAdd || intrinsic == some .wrappingSub
-       || intrinsic == some .wrappingMul then
+       || intrinsic == some .wrappingMul || intrinsic == some .saturatingAdd
+       || intrinsic == some .saturatingSub then
       if args.length != 2 then
         throwCheckMsg s!"{fnName} takes exactly 2 arguments, got {args.length}"
       let a := match args with | a :: _ => a | [] => Expr.intLit default 0

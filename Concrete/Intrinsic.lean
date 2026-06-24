@@ -54,6 +54,9 @@ inductive IntrinsicId where
   -- Explicit wrapping (modular) arithmetic — ROADMAP #10 Stage 2.1.
   -- `wrapping_add(a, b)` etc. lower to plain two's-complement add/sub/mul.
   | wrappingAdd | wrappingSub | wrappingMul
+
+  -- Explicit saturating (clamping) arithmetic — ROADMAP #10 Stage 2.2.
+  | saturatingAdd | saturatingSub
   deriving BEq, Hashable, Repr
 
 /-- Look up an IntrinsicId from a source-level function name.
@@ -127,6 +130,10 @@ def resolveIntrinsic (name : String) : Option IntrinsicId :=
   | "wrapping_sub" => some .wrappingSub
   | "wrapping_mul" => some .wrappingMul
 
+  -- Explicit saturating arithmetic
+  | "saturating_add" => some .saturatingAdd
+  | "saturating_sub" => some .saturatingSub
+
   | _ => none
 
 /-- Check whether a source-level name is a known intrinsic. -/
@@ -182,6 +189,8 @@ def IntrinsicId.canonicalName : IntrinsicId → String
   | .wrappingAdd => "wrapping_add"
   | .wrappingSub => "wrapping_sub"
   | .wrappingMul => "wrapping_mul"
+  | .saturatingAdd => "saturating_add"
+  | .saturatingSub => "saturating_sub"
 
 /-- Required capability set for an intrinsic, if any. -/
 def IntrinsicId.capability : IntrinsicId → Option String

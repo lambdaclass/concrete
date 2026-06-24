@@ -627,18 +627,20 @@ gate.
         — the visible spelling for intentional modular arithmetic. Behavior-
         preserving (plain add/sub/mul); the prerequisite escape hatch before the
         flip.
-      - Stages 2.2-2.6 [HELD — dedicated backend-build session; see memory
-        `phase6-10-arithmetic-flip-state`]. These need codegen INFRASTRUCTURE
-        that does not exist yet, so the next session starts with the infra slice,
-        NOT "saturating" directly:
+      - Stage 2.2: [DONE — 2026-06-24; BinOp.saturatingAdd/Sub →
+        `llvm.{s,u}{add,sub}.sat.iW` (single-value intrinsics, statically
+        declared) + interp clamp; scripts/tests/check_saturating_arith.sh]
+        `saturating_add`/`saturating_sub` — explicit clamping. Used the simple
+        `.sat` intrinsic path (no overflow-struct infra needed).
+      - Stages 2.2b-2.6 [remaining backend build — build the shared infra first]:
           (i)   LLVM IR support for overflow-intrinsic result handling
                 (`llvm.{s,u}{add,sub,mul}.with.overflow` → `{iN, i1}`);
           (ii)  `extractvalue` + `select`/branch lowering;
-          (iii) an abort-block emission primitive;
-          (iv)  use it for `saturating_*` (add/sub may use `*.sat`; mul needs
-                `with.overflow` + clamp);
-          (v)   use the SAME path for checked `+ - *` (the flip), then migrate
-                std/examples that intentionally wrap onto `wrapping_*`.
+          (iii) an abort-block emission primitive (reuse existing condBr/abort);
+          (iv)  `saturating_mul` on it (with.overflow + clamp/select, branchless);
+          (v)   checked `+ - *` flip on the SAME infra (with.overflow + condBr→
+                abort), then migrate std/examples that intentionally wrap onto
+                `wrapping_*`.
         Then 2.4 div/mod-zero traps, 2.5 shift checks, 2.6 proof/audit (a proof
         omits a *redundant* runtime check; it never changes source meaning).
         `SInst` models single-value calls today — struct-returning intrinsics +

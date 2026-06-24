@@ -176,6 +176,14 @@ private def intTyToLLVMTy : Ty → LLVMTy
   | .bool => .i1
   | _ => .i64
 
+/-- Bit width of an integer Concrete type, for type-mangled LLVM intrinsic names
+    (e.g. `llvm.sadd.sat.i8`). -/
+private def intTyBitWidth : Ty → Nat
+  | .i8 | .u8 | .char => 8
+  | .i16 | .u16 => 16
+  | .i32 | .u32 => 32
+  | _ => 64
+
 /-- Map float Concrete type to structured LLVM type. -/
 private def floatTyToLLVMTy : Ty → LLVMTy
   | .float32 => .float_
@@ -505,6 +513,16 @@ private def emitBinOp (s : EmitSSAState) (dst : String) (op : BinOp) (lhs rhs : 
     | .wrappingAdd => emitStructured s (.binOp dst .add iTy lOp rOp)
     | .wrappingSub => emitStructured s (.binOp dst .sub iTy lOp rOp)
     | .wrappingMul => emitStructured s (.binOp dst .mul iTy lOp rOp)
+    -- Explicit saturating arithmetic → the LLVM `llvm.{s,u}{add,sub}.sat.iW`
+    -- intrinsics (single-value, clamp-on-overflow). ROADMAP #10 Stage 2.2.
+    | .saturatingAdd =>
+      let sign := if ssaIsSignedInt operandTy then "s" else "u"
+      let name := s!"llvm.{sign}add.sat.i{intTyBitWidth operandTy}"
+      emitStructured s (.call (some dst) iTy (.global name) [(iTy, lOp), (iTy, rOp)])
+    | .saturatingSub =>
+      let sign := if ssaIsSignedInt operandTy then "s" else "u"
+      let name := s!"llvm.{sign}sub.sat.i{intTyBitWidth operandTy}"
+      emitStructured s (.call (some dst) iTy (.global name) [(iTy, lOp), (iTy, rOp)])
     | .div =>
       if ssaIsSignedInt operandTy then emitStructured s (.binOp dst .sdiv iTy lOp rOp)
       else emitStructured s (.binOp dst .udiv iTy lOp rOp)
@@ -957,6 +975,13 @@ private def emitExternDecls (s : EmitSSAState) (externFns : List (String × List
   let s := emitDecl s { name := "free", retTy := .void, params := [.ptr] }
   let s := emitDecl s { name := "realloc", retTy := .ptr, params := [.ptr, .i64] }
   let s := emitDecl s { name := "llvm.memcpy.p0.p0.i64", retTy := .void, params := [.ptr, .ptr, .i64, .i1] }
+  -- Saturating-arithmetic intrinsics (ROADMAP #10 Stage 2.2), per width + signedness.
+  let s := [LLVMTy.i8, .i16, .i32, .i64].foldl (fun s w =>
+    let wn := match w with | .i8 => "8" | .i16 => "16" | .i32 => "32" | _ => "64"
+    let s := emitDecl s { name := s!"llvm.sadd.sat.i{wn}", retTy := w, params := [w, w] }
+    let s := emitDecl s { name := s!"llvm.uadd.sat.i{wn}", retTy := w, params := [w, w] }
+    let s := emitDecl s { name := s!"llvm.ssub.sat.i{wn}", retTy := w, params := [w, w] }
+    emitDecl s { name := s!"llvm.usub.sat.i{wn}", retTy := w, params := [w, w] }) s
   let s := emitDecl s { name := "write", retTy := .i64, params := [.i32, .ptr, .i64] }
   let s := emitDecl s { name := "abort", retTy := .void, params := [] }
   let s := emitDecl s { name := "printf", retTy := .i32, params := [.ptr], variadic := true }

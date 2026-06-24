@@ -10,6 +10,22 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #10 Stage 2.2: explicit saturating arithmetic (add/sub) (2026-06-24)
+
+Added `saturating_add` / `saturating_sub` — the explicit spelling for intentional
+clamp-to-range arithmetic (ARITHMETIC_POLICY.md §13 step 2). Modeled as
+`BinOp.saturatingAdd/Sub` (same intrinsic→BinOp→type-check→elaborate→lower path as
+the wrapping ops) that lower to the LLVM `llvm.{s,u}{add,sub}.sat.iW` intrinsics —
+signedness/width-mangled and statically declared (following the existing
+`llvm.memcpy` declaration precedent). Integer-only with same-type operands; the
+interpreter clamps to the type's range so interp == compiled. Gated by
+`scripts/tests/check_saturating_arith.sh` (`make test-saturating-arith` + CI).
+
+`saturating_mul` has no direct `.sat` intrinsic, so it lands next on the shared
+`*.with.overflow` + clamp/select infrastructure — the same infra the checked-`+`
+flip will use. The headline goal remains making ordinary `+ - *` checked;
+saturating add/sub exercised the simpler single-value intrinsic-call path first.
+
 ### Phase 6 #10 Stage 2.1: explicit wrapping arithmetic (2026-06-24)
 
 Added `wrapping_add` / `wrapping_sub` / `wrapping_mul` — the explicit, visible
