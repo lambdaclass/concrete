@@ -1133,6 +1133,20 @@ class and authority/allocation story.
     `std.net`, and `std.time`. Authority must be visible in function types and
     audit reports; no API may smuggle ambient authority through a convenience
     wrapper.
+    Add an explicit **boundary-module pattern**, borrowing the useful part of
+    Elm's ports without copying Elm's web-application architecture: authority
+    enters through a small named module, the wrapper exposes a narrow safe API,
+    and the audit report names the capability, trusted/FFI boundary,
+    assumptions, allocation behavior, and evidence class. Concrete examples:
+    `std.fs.boundary` wraps ambient filesystem entry points behind directory
+    handles; `std.net.boundary` wraps socket creation before pure parsers see
+    bytes; `std.libc.boundary` wraps extern calls before safe code sees owned
+    values. Add `docs/STDLIB_BOUNDARY_MODULES.md`,
+    `examples/stdlib_recipes/{fs_boundary,net_boundary,ffi_boundary}/`, and
+    `scripts/tests/check_stdlib_boundary_modules.sh`; the gate must prove that
+    the public safe wrapper surface has narrower authority than the underlying
+    trusted/extern implementation and that the audit transcript shows both
+    sides of the boundary.
 27. Build handle-relative filesystem APIs in `std.fs` as the preferred
     file/path shape: directory/file handles carry authority; operations are
     relative to handles for `open`, `create`, `read`, `write`, `metadata`,
@@ -1179,6 +1193,16 @@ class and authority/allocation story.
     `base64_cli`, `uri_parse`, `checksum`, `deterministic_rand`, `time_log`,
     and `capability_io`. Each recipe must show the exact `std.*` imports,
     capability set, allocation behavior, and expected audit line.
+    Add one blessed systems-program shape, inspired by Elm's success at
+    teaching a single architecture but adapted to Concrete's domain:
+    **read/acquire -> parse -> validate -> transform -> emit/release**. This is
+    not a framework and not hidden control flow; it is an example/documentation
+    convention for ordinary tools and protocol handlers. The guide must show
+    which stages are pure, which carry capabilities, where `Result` flows, where
+    runtime obligations attach, and which report proves each claim. Add
+    `examples/stdlib_recipes/pipeline_shape/` with a tiny byte-oriented CLI and
+    a no-alloc parser variant; both must include the source, expected
+    `--report caps`, `--report contracts`, and `--report profile` snippets.
 37. Add a stdlib compatibility/oracle corpus under
     `examples/stdlib_compat/`: `fmt_parse_vectors`, `bytes_text_vectors`,
     `path_vectors`, `collection_vectors`, `base64_vectors`, `uri_vectors`,
@@ -1309,6 +1333,12 @@ they force a named surface or public claim.
       only when at least two medium programs build, run, pass
       interpreter-vs-compiled checks, carry full evidence/trust classification,
       and are covered by runtime-obligation audit.
+      At least two of these must follow the Phase 7 pipeline recipe
+      (`read/acquire -> parse -> validate -> transform -> emit/release`) and
+      include a short transcript showing where capabilities enter and where the
+      pure core starts. This borrows the teaching value of Elm's one clear app
+      shape and Roc's host/application split, while keeping Concrete's
+      authority/evidence boundaries explicit.
     - **Separate workload repo later** (`concrete-workloads`): use it for
       larger ports, 2k-10k line
       programs, compatibility suites, external-user programs, benchmark
@@ -1829,27 +1859,33 @@ Goal: give users a named small subset they can rely on for serious
 proof/evidence work.
 
 Done when: the subset family has public names, allowed constructs, rejected
-constructs, arithmetic profiles, runtime-error policy, and compatibility
+constructs, arithmetic-site policy, runtime-error policy, and compatibility
 promises.
 
 1. Define `PredictableV1`: no allocation unless bounded, no FFI unless trusted
    and assumed, no unbounded loops/recursion, explicit failure-path policy.
-2. Freeze the first arithmetic profiles:
-   wrapping, checked, and proved/no-overflow.
-3. Make arithmetic profiles explicit named semantics, not inherited backend
-   habit. The default profile decision must be source-visible and
-   project-visible: e.g. debug may trap/check, release may require
-   obligation-or-wrap by policy, and intentionally wrapping arithmetic must be
-   written or inferred only through a named profile. A theorem about wrapping
-   code is not a theorem about trapping/checked code; the active arithmetic
-   profile is part of the spec semantics for any proved function. Carry
-   arithmetic profile choices into diagnostics, reports, assumptions, proof
-   obligations, release bundles, and backend contracts. Add
-   `docs/ARITHMETIC_PROFILES_V1.md`, `examples/arithmetic_profiles/{wrap,checked,proved_no_overflow,profile_mismatch}/`,
-   and `scripts/tests/check_arithmetic_profiles.sh`; the gate must prove the
-   same source expression is classified differently under different named
-   profiles, that proof/evidence artifacts record the profile, and that a
-   profile mismatch cannot be presented as compatible evidence.
+2. Freeze arithmetic-site semantics for subset claims. This item is reconciled
+   with Phase 6 #10 and `docs/ARITHMETIC_POLICY.md`: build/profile names are
+   policy bundles, not arithmetic modes, and the same source expression must not
+   mean wrap in one profile and checked in another. Ordinary `+ - *` are checked
+   in every profile; intentional modular arithmetic is written as
+   `wrapping_*`; intentional clamping is written as `saturating_*`. Subset
+   reports must classify arithmetic sites as `checked`, `proved`, `runtime-
+   checked`, `explicit-wrapping`, or `explicit-saturating`; they must never
+   infer an ambient arithmetic mode from `debug`, `release`, `predictable`, or
+   `proof`.
+3. Carry arithmetic-site facts into diagnostics, reports, assumptions, proof
+   obligations, release bundles, and backend contracts. A theorem about checked
+   arithmetic is not a theorem about modular arithmetic; a function using
+   `wrapping_*` is either outside the default proof subset or proved against an
+   explicit modular model. Add
+   `docs/ARITHMETIC_SITE_EVIDENCE.md`,
+   `examples/arithmetic_site_evidence/{checked,wrapping,saturating,profile_invariant}/`,
+   and `scripts/tests/check_arithmetic_site_evidence.sh`; the gate must prove
+   profile-invariance (the same expression has the same semantics under
+   different build profiles), explicit classification of every arithmetic site,
+   and rejection/downgrade of proof claims that confuse checked and wrapping
+   semantics.
 4. Define a first runtime failure model: abort, assertion failure, OOM, stack
    overflow, `defer`/cleanup, impossible branches, and what each does to
    proof/resource claims.
@@ -1911,6 +1947,21 @@ promises.
     `docs/SPARK_CLASS_ASSURANCE.md` updates, examples with one parser/buffer
     loop and one policy/data-flow function, and a gate proving facts are
     reported as proved/enforced/reported/assumed/trusted rather than prose-only.
+20. Define a development-only expectation policy, borrowing Roc's useful
+    lightweight `expect` idea but fitting Concrete's evidence model. The goal is
+    a clear place for "this should hold during tests/dev" that cannot be
+    mistaken for proof, runtime-safety evidence, or a release assumption.
+    Candidate surface may be an attribute, a test helper, or a restricted
+    `expect` form, but the semantics must be decided before syntax: it is
+    allowed in tests/examples and development profiles; it produces
+    `tested`/`dev_checked` evidence only; it is excluded from `ProvableV1`
+    unless translated into an explicit contract/obligation; and release bundles
+    must either omit it, downgrade it, or list it as non-release evidence. Add
+    `docs/EXPECTATION_POLICY.md`,
+    `examples/expectation_policy/{dev_expect,test_expect,release_reject,contract_replacement}/`,
+    and `scripts/tests/check_expectation_policy.sh`; the gate must prove that a
+    passing expectation is never reported as `proved` and that a release/high-
+    integrity profile cannot silently rely on it.
 
 ## Phase 13: Runtime Safety Obligations
 
@@ -2023,7 +2074,7 @@ zero, overflow profile, casts, and loop bounds with statuses
 18. Add the Phase 13 validation artifact: a runtime-safety corpus covering
     bounds, div/mod-zero, overflow, casts, panic/abort/assert, byte/text/path
     boundaries, stack/recursion, inferred invariant candidates, newtype
-    invariant hypotheses, arithmetic-profile mismatches, and obligation
+    invariant hypotheses, arithmetic-site evidence mismatches, and obligation
     suppression. Each case must show one of `proved`, `enforced`, `assumed`,
     `missing`, or `blocked`, include a negative variant, and run through policy
     gates plus human/JSON reports.
@@ -2486,9 +2537,16 @@ policies, provenance, and registry protocol.
    until explicitly accepted. The design must leave room for the same import
    mechanism to constrain allocation (`no Alloc` / bounded allocation), trust
    (`no trusted`, `no extern`, `no Unsafe`), runtime-failure profile, platform
-   (`hosted` / `freestanding` / `posix`), arithmetic profile, determinism,
+   (`hosted` / `freestanding` / `posix`), arithmetic-site policy, determinism,
    constant-time / secret-flow claims, and supply-chain facts such as source
    verification or license.
+   This is the package/dependency analogue of Elm ports and Elm package
+   discipline, adapted to Concrete rather than web apps: code may import a
+   dependency's values, but it does not inherit ambient authority, hidden host
+   effects, or private assumptions. The imported interface artifact is the
+   boundary contract. Roc's platform/host separation is also a useful warning:
+   host authority must be explicit at the boundary, never a package-local
+   convenience that disappears from reports.
    Security threat model: if a dependency is compromised or upgraded to do more
    than it used to do, the importer must be able to fail closed. Examples:
    `import json as j requires(no File, no Network, no Unsafe, no trusted)`;
@@ -2497,7 +2555,7 @@ policies, provenance, and registry protocol.
    license = "MIT OR Apache-2.0")`. The checked fact set must include at least:
    public capability set, allocation authority/profile, `trusted`/extern/FFI/
    `Unsafe` use, assumption set, evidence class floor, proof staleness/vacuity,
-   runtime-failure/arithmetic profile, hosted/freestanding/platform facts,
+   runtime-failure policy, arithmetic-site classification, hosted/freestanding/platform facts,
    dependency provenance/source hash, license status, and supply-chain lock
    identity. A change in any constrained fact is not a warning hidden in prose:
    it is either a build failure or an explicit audit diff requiring acceptance.
@@ -2510,6 +2568,12 @@ policies, provenance, and registry protocol.
    importer, compose with package-level budgets, and reject capability/allocation/
    trust/platform/evidence/assumption/supply-chain fact drift until explicitly
    accepted.
+   The first report view should be deliberately small and agent-readable:
+   `concrete audit dependency <pkg>` or the package-audit bundle must show
+   `public capabilities`, `allocation`, `trusted/Unsafe/extern`, `assumptions`,
+   `minimum evidence`, `platform`, `license`, and `source hash` in a stable
+   table. This report is the thing an AI assistant, reviewer, or CI policy reads
+   before accepting a dependency update.
 9. Add dependency trust policy: trust widening across boundaries, review and
    inheritance.
 10. Add package-level assumption inheritance: dependency assumptions must be
@@ -2580,6 +2644,12 @@ reports without inventing a second truth source.
 5. Add refactor support that preserves or updates facts/proofs where possible.
 6. Add dependency audit UI for capability, allocation, FFI, trust, evidence,
    predictability, proof-obligation drift.
+   The UI must expose the same boundary facts as Phase 18 #8, not a prose
+   summary: public capabilities, allocation authority, trusted/Unsafe/extern
+   use, assumptions, evidence floor, platform, license, and source hash. This
+   is explicitly for humans and AI agents reviewing imports: an editor hover or
+   command palette action should answer "what can this dependency do, what does
+   it assume, and what evidence does it carry?" without reading private bodies.
 7. Add backwards-compatibility regression corpus once public users exist.
 8. Language/versioning/deprecation policy: MOVED to Phase 17 #18b — the
    policy must exist before the first public release; only the tooling that
@@ -2614,6 +2684,10 @@ reports without inventing a second truth source.
     evidence downgrades, and runtime-safety obligations that need a frame or
     invariant. The LSP/JSON payload must reuse the obligation/evidence ledger
     and point agents to the validation command; no editor-only proof status.
+    Also surface development-only expectations from Phase 12 #20 as
+    `dev_checked` / `tested` facts, never as proof. Editor and agent prompts
+    should suggest "promote this to a contract/obligation" when release or
+    high-integrity policy requires stronger evidence.
 14. Add the Phase 19 validation artifact:
    `scripts/tests/check_phase18_editor.sh` runs a scripted LSP/editor session
    or golden transcript over one real project, proving hover, diagnostics,

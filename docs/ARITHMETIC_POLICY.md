@@ -421,8 +421,8 @@ The long-term path for closing the integer gap is overflow preconditions: the pr
 
 The staged path is `#[overflow_checked]` first: functions opt into these
 preconditions explicitly, the audit shows which arithmetic sites are covered,
-and release profiles can later require the attribute or an equivalent checked
-arithmetic profile for selected code.
+and release policies can later require the attribute or equivalent arithmetic-
+site evidence for selected code.
 
 ---
 
