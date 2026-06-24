@@ -10,6 +10,40 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #10: checked-arithmetic soundness fixes — constant folding, strength reduction, and the proof model (2026-06-24)
+
+Three holes the checked flip opened, all closed and gated:
+
+- **Constant folding bypassed the trap.** `SSACleanup.foldBinOpConst` folded
+  constant `add/sub/mul/div` *without* an overflow check, so `let x: i32 = MAX;
+  x + 1` folded to a wrapped constant instead of trapping — interp trapped,
+  compiled wrapped. `foldBinOpConst` now folds only when the result fits the
+  type (`fitsType`); an overflowing constant op is left live so EmitSSA lowers
+  it to the checked helper that traps at runtime.
+- **`mul → shl` strength reduction was unsound.** `x * 2` was rewritten to
+  `x << 1`, but the checked shift helper validates only the shift *amount*, not
+  value overflow — so the rewrite silently dropped the trap (`i64::MAX * 2`
+  wrapped to `-2`). Removed the `mul → shl` reduction; the checked `smul`/`umul`
+  helper is correct, and LLVM still strength-reduces its internal
+  `*.with.overflow` when it can prove no overflow. (Unsigned `div → shr` is kept;
+  it is sound — the quotient always fits.)
+- **The proof model falsely modeled checked `+` as wrapping.** `binOpToPBinOp`
+  mapped `u32 +` to `addw 32` (mod 2³²), but checked `+` traps — the proof would
+  have certified wrapping the runtime never performs. Moved the `addw 32` mapping
+  from `.add` to `.wrappingAdd`: `wrapping_add` on `u32` is now the (only)
+  provable mod-2³² operator, and ordinary `+` extracts to mathematical `add`
+  (sound in its non-trapping domain). The proof-carrying SHA-256 example
+  (`examples/hmac_sha256`) is migrated to `wrapping_add` throughout — all six
+  refinement proofs still verify (identical extracted `addw 32` PExpr), the
+  binary matches FIPS 180-4 / RFC 4231, and the randomized oracle is 200/0.
+
+Gates updated: `check_codegen_differential.sh` (new `EXPECTED_TRAP` class:
+overflow agrees by both sides trapping, not by both wrapping),
+`check_codegen_execution.sh` (`expect_trap` for the overflow fixtures), hmac
+snapshots regenerated. Docs: `ARITHMETIC_POLICY.md` §3/§10.2 and
+`PROOF_SEMANTICS_BOUNDARY.md` corrected (proof model HAS `addw 32`; runtime
+aborts rather than wraps silently).
+
 ### Phase 6 #10 Stage 2.4/2.5: div/mod-by-zero and shift-range checks (2026-06-24)
 
 Division/modulo by zero (previously UB → SIGFPE) and over-width shifts

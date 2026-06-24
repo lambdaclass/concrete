@@ -151,10 +151,22 @@ Explicit opt-in for code that wants clamped-to-bounds behavior.
 |---------|-------------|--------------------|-----------------------|
 | Safe | Checked | Yes (explicit intrinsics) | Yes (explicit intrinsics) |
 | Predictable | Checked | Yes (explicit intrinsics) | Yes (explicit intrinsics) |
-| Provable | Checked | No | No |
+| Provable | Checked | `wrapping_add` at `u32` only | No |
 | High-integrity (future) | Checked | Only in `trusted` blocks | Only in `trusted` blocks |
 
-The default is the same across all profiles: checked. The difference is that the provable subset excludes wrapping and saturating intrinsics because the proof model does not have modular arithmetic semantics. Wrapping intrinsics may be used in predictable code — the five gates (no recursion, bounded loops, no allocation, no FFI, no blocking) do not restrict arithmetic mode.
+The default is the same across all profiles: checked. The provable subset
+admits exactly the arithmetic the proof model can faithfully represent. The
+model has one modular operator today — `addw 32` (wrapping add mod 2³² at
+`u32`), forced by SHA-256's compression rounds — so `wrapping_add` on `u32`
+**is** provable and extracts to it (see `Concrete.ProofCore.binOpToPBinOp`).
+`wrapping_sub`/`wrapping_mul`, wrapping at other widths, and all saturating
+intrinsics are not yet modeled and stay out of the subset. Ordinary checked
+`+` on `u32` extracts to the mathematical `add` (sound in its non-trapping
+domain — overflow is a defined abort, not wrap), so it must NOT be used where
+mod-2³² semantics are intended: that is exactly what `wrapping_add` is for.
+Wrapping intrinsics may be used in predictable code — the five gates (no
+recursion, bounded loops, no allocation, no FFI, no blocking) do not restrict
+arithmetic mode.
 
 ### 3.1 Enforcement strategy (per profile)
 
@@ -413,9 +425,21 @@ This narrows the integer gap documented in [PROOF_SEMANTICS_BOUNDARY.md](PROOF_S
 
 ### 10.2 Wrapping arithmetic and proofs
 
-Wrapping intrinsics (`wrapping_add`, etc.) are not eligible for the proof subset. The proof model uses Lean's unbounded `Int` and has no modular arithmetic semantics. A function that uses wrapping intrinsics fails the proof eligibility gate.
+The proof model has one modular operator: `addw 32` — wrapping add mod 2³² at
+`u32`, forced by SHA-256's compression rounds and message schedule. So
+`wrapping_add` on `u32` **is** eligible for the proof subset and extracts to it
+(`Concrete.ProofCore.binOpToPBinOp .wrappingAdd .u32 = some (.addw 32 false)`).
+The proof model faithfully matches the runtime here: `wrapping_add` wraps mod
+2³² and never traps, exactly as `addw 32` evaluates. This is why the
+proof-carrying SHA-256 example (`examples/hmac_sha256`) uses `wrapping_add`
+throughout — ordinary checked `+` would both trap at runtime AND extract to
+mathematical `add`, neither of which is the mod-2³² semantics SHA-256 requires.
 
-If wrapping arithmetic needs to be proved, the proof must be written directly in Lean against a modular-arithmetic model, not through the Concrete proof pipeline. This is a future extension.
+What is NOT yet modeled, and so stays out of the proof subset: `wrapping_sub`,
+`wrapping_mul`, wrapping at widths other than `u32`, and all saturating
+intrinsics. A function that uses those fails the proof eligibility gate. They
+are append-only follow-ups; until then, code needing them must be proved
+directly in Lean against an explicit model, not through the Concrete pipeline.
 
 ### 10.3 Division and proofs
 
@@ -508,7 +532,11 @@ This closes the interpreter-vs-compiled divergence for the first time.
 6. **Add `--report arithmetic`**: implement the per-function arithmetic mode report.
 7. **Update interpreter**: add overflow/shift/division checks to `evalBinOp`.
 8. **Update pressure programs**: fix the handful of programs that rely on wrapping.
-9. **Update proof eligibility**: reject wrapping/saturating intrinsics from the proof subset.
+9. **Update proof eligibility** **[DONE — 2026-06-24]**: `wrapping_add` at `u32`
+   maps to the proof model's `addw 32` (it is the mod-2³² operator SHA-256
+   forces), so it IS in the proof subset; `wrapping_sub`/`wrapping_mul`, other
+   widths, and all saturating intrinsics stay out (`binOpToPBinOp → none`).
+   Ordinary checked `+` extracts to mathematical `add`, NOT to `addw` (see §10.2).
 10. **Update PREDICTABLE_BOUNDARIES.md**: remove "Integer overflow: silent wrap" from the UB table. Add "Integer overflow: trap (abort)" to the failure paths table.
 11. **Add `#[overflow_checked]` obligation generation**: before checked
     arithmetic is the default everywhere, generate no-overflow obligations only

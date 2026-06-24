@@ -661,7 +661,17 @@ gate.
         ABORT (were UB: SIGFPE / poison) via per-type `@__cc_{sdiv,udiv,srem,urem}`
         and `@__cc_{shl,ashr,lshr}` helpers (signed div also checks MIN/-1); interp
         traps to match. So ALL integer arithmetic UB is now a defined abort. Gate
-        extended (10/0). Remaining for #10: 2.6 reports/audit classification
+        extended (10/0).
+      - Stage 2.x soundness fixes: [DONE — 2026-06-24] closed three holes the flip
+        opened: (a) `SSACleanup.foldBinOpConst` folded overflowing constants
+        (wrap) instead of leaving them for the checked helper — now folds only
+        when `fitsType`; (b) the `mul → shl` strength reduction silently dropped
+        the overflow trap (shift helper checks only the amount) — removed; (c)
+        `binOpToPBinOp` modeled checked `u32 +` as `addw 32` (wrap) — moved that
+        mapping to `.wrappingAdd`, so `wrapping_add@u32` is the provable mod-2³²
+        operator and checked `+` extracts to mathematical `add`. SHA-256 example
+        migrated to `wrapping_add` (6 proofs still verify; oracle 200/0).
+        Remaining for #10: 2.6 reports/audit classification
         (ARITHMETIC_POLICY §3.2 — proved / runtime-checked / explicit-wrapping /
         explicit-saturating per site; `--report arithmetic`).
           (ii)  div/mod-zero traps (2.4), shift-amount checks (2.5), same abort;
@@ -1900,8 +1910,10 @@ promises.
 3. Carry arithmetic-site facts into diagnostics, reports, assumptions, proof
    obligations, release bundles, and backend contracts. A theorem about checked
    arithmetic is not a theorem about modular arithmetic; a function using
-   `wrapping_*` is either outside the default proof subset or proved against an
-   explicit modular model. Add
+   `wrapping_*` is either proved against the proof model's explicit modular
+   operator (today only `wrapping_add@u32 → addw 32`, as SHA-256 uses) or, for
+   the not-yet-modeled forms (`wrapping_sub`/`wrapping_mul`, other widths,
+   saturating), outside the default proof subset. Add
    `docs/ARITHMETIC_SITE_EVIDENCE.md`,
    `examples/arithmetic_site_evidence/{checked,wrapping,saturating,profile_invariant}/`,
    and `scripts/tests/check_arithmetic_site_evidence.sh`; the gate must prove

@@ -45,22 +45,20 @@ These constructs are safe to reason about in Lean with the expectation that the 
 | Property | Language semantics | Proof semantics |
 |----------|-------------------|-----------------|
 | Integer type | Fixed-width (64-bit `Int`, 32-bit `i32`, etc.) | Lean's unbounded `Int` (arbitrary precision) |
-| Overflow behavior | Wraps silently (two's-complement) | No overflow — arithmetic is exact |
-| Division/modulo | Supported (`/`, `%`) | **Not modeled** (not in `PBinOp`) |
+| Overflow behavior | **Checked — traps (aborts) on overflow** (ROADMAP #10); `wrapping_*` is the explicit modular opt-in | No overflow — arithmetic is exact, EXCEPT `u32` `wrapping_add` is modeled exactly as `addw 32` (mod 2³²) |
+| Division/modulo | Supported (`/`, `%`) | `/`, `%` modeled at `i32`/`u32` (`PBinOp.div`/`.mod`); other widths not yet |
 
 **What this means:**
 
-A Lean theorem proving `abs(x) ≥ 0` holds for all mathematical integers, but the compiled program uses 64-bit integers where `abs(Int.MIN)` overflows to `Int.MIN` (which is negative). The proof is true in the proof model but not true for all runtime inputs.
+A Lean theorem proving `abs(x) ≥ 0` holds for all mathematical integers, but the compiled program uses 64-bit integers where `abs(Int.MIN)` overflows. Since the checked flip (ROADMAP #10) the runtime no longer wraps to a wrong value — it **aborts**. So the proof's mathematical result is never silently contradicted: either the inputs are in range and the proof holds, or the operation overflows and the program traps. The gap is now "proofs assume no overflow; the runtime aborts on overflow," not "the runtime wraps silently."
 
 **How users should read this:**
 
-Proofs in Concrete's current proof model are valid for inputs within the representable range of the target integer type. They do not cover overflow behavior. This is an honest gap, documented here, not a hidden assumption.
+Proofs in Concrete's current proof model are valid for inputs within the representable range of the target integer type. Outside that range the compiled program aborts rather than producing a result the proof did not cover. This is an honest, *fail-closed* gap — documented here, not a hidden assumption.
 
-**Future direction:** Two options exist:
-1. Add overflow preconditions to proof obligations (prove `f(x) = y` only when inputs are in range)
-2. Model fixed-width arithmetic in PExpr (wrap semantics in the proof model)
+The one place the proof model represents fixed-width semantics exactly is `u32` `wrapping_add` → `addw 32` (mod 2³²), forced by SHA-256 (see [ARITHMETIC_POLICY.md §10.2](ARITHMETIC_POLICY.md)). There the proof and the runtime agree on ALL inputs, overflow included.
 
-Neither is implemented. Until one is, proofs carry an implicit assumption that integer operations do not overflow.
+**Future direction:** narrow the remaining gap by either (1) adding in-range overflow preconditions to proof obligations, or (2) extending the modular model (`addw`/`subw`/`mulw` at all widths) so more fixed-width arithmetic is provable directly. Neither is fully implemented; today proofs over ordinary `+ - *` carry an implicit "inputs in range (else abort)" assumption.
 
 ---
 
@@ -204,7 +202,7 @@ A compiler-preservation proof (CExpr → SSA or SSA → LLVM IR) would strengthe
 | Question | Answer |
 |----------|--------|
 | Does "proved" mean the binary is correct? | No. It means the PExpr model satisfies the theorem. |
-| Does "proved" cover overflow? | No. PExpr uses unbounded integers. |
+| Does "proved" cover overflow? | For ordinary `+ - *`: no — PExpr uses unbounded integers, and overflow aborts at runtime (fail-closed, never a silent wrong result). For `u32` `wrapping_add`: yes — modeled exactly as `addw 32` (mod 2³²). |
 | Does "proved" mean the function is safe? | No. Safety is checker-enforced, not proof-backed. |
 | Can I trust a proof of a pure function? | Yes, for inputs within the integer range, assuming the extraction bridge is correct. |
 | What happens when I change the function? | The fingerprint changes, the proof becomes stale, and the evidence level drops to "enforced". |
