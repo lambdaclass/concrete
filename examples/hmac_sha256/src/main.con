@@ -207,8 +207,11 @@ mod hmac_sha256 {
             w[i] = w16[i];
         }
         for (let mut i: i32 = 16; i < 64; i = i + 1) {
-            w[i] = small_sigma1(w[i - 2]) + w[i - 7]
-                 + small_sigma0(w[i - 15]) + w[i - 16];
+            // SHA-256 message schedule is defined over addition mod 2^32:
+            // explicit `wrapping_add` (ordinary `+` is checked and would trap).
+            w[i] = wrapping_add(wrapping_add(wrapping_add(
+                       small_sigma1(w[i - 2]), w[i - 7]),
+                       small_sigma0(w[i - 15])), w[i - 16]);
         }
         return w;
     }
@@ -223,11 +226,13 @@ mod hmac_sha256 {
     #[proof_by(Examples.HmacSha256.Proofs.round_refines_list)]
     #[proof_coverage(full_contract)]
     fn sha256_round(state: [u32; 8], k: u32, w: u32) -> [u32; 8] {
-        let t1: u32 = state[7] + big_sigma1(state[4])
-            + ch(state[4], state[5], state[6]) + k + w;
-        let t2: u32 = big_sigma0(state[0]) + maj(state[0], state[1], state[2]);
-        return [t1 + t2, state[0], state[1], state[2],
-                state[3] + t1, state[4], state[5], state[6]];
+        // All round additions are mod 2^32 — explicit `wrapping_add`.
+        let t1: u32 = wrapping_add(wrapping_add(wrapping_add(wrapping_add(
+            state[7], big_sigma1(state[4])),
+            ch(state[4], state[5], state[6])), k), w);
+        let t2: u32 = wrapping_add(big_sigma0(state[0]), maj(state[0], state[1], state[2]));
+        return [wrapping_add(t1, t2), state[0], state[1], state[2],
+                wrapping_add(state[3], t1), state[4], state[5], state[6]];
     }
 
     // SHA-256 block compression: 64 rounds over the expanded
@@ -244,9 +249,11 @@ mod hmac_sha256 {
         for (let mut i: i32 = 0; i < 64; i = i + 1) {
             s = sha256_round(s, k[i], w[i]);
         }
-        return [state[0] + s[0], state[1] + s[1], state[2] + s[2],
-                state[3] + s[3], state[4] + s[4], state[5] + s[5],
-                state[6] + s[6], state[7] + s[7]];
+        // Davies-Meyer feed-forward, mod 2^32 — explicit `wrapping_add`.
+        return [wrapping_add(state[0], s[0]), wrapping_add(state[1], s[1]),
+                wrapping_add(state[2], s[2]), wrapping_add(state[3], s[3]),
+                wrapping_add(state[4], s[4]), wrapping_add(state[5], s[5]),
+                wrapping_add(state[6], s[6]), wrapping_add(state[7], s[7])];
     }
 
     // Big-endian pack of the 64-byte block at `off` in a 384-byte
@@ -288,9 +295,11 @@ mod hmac_sha256 {
         for (let mut i: i32 = 0; i < 64; i = i + 1) {
             s = sha256_round(s, k[i], w[i]);
         }
-        return [state[0] + s[0], state[1] + s[1], state[2] + s[2],
-                state[3] + s[3], state[4] + s[4], state[5] + s[5],
-                state[6] + s[6], state[7] + s[7]];
+        // Davies-Meyer feed-forward, mod 2^32 — explicit `wrapping_add`.
+        return [wrapping_add(state[0], s[0]), wrapping_add(state[1], s[1]),
+                wrapping_add(state[2], s[2]), wrapping_add(state[3], s[3]),
+                wrapping_add(state[4], s[4]), wrapping_add(state[5], s[5]),
+                wrapping_add(state[6], s[6]), wrapping_add(state[7], s[7])];
     }
 
     // Big-endian unpack of the 8-word state into 32 bytes.

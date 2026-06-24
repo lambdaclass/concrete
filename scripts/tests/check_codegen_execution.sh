@@ -35,12 +35,30 @@ expect() {
   fi
 }
 
+# expect_trap <name>  — compiles + runs, asserts the binary ABORTS on checked
+# arithmetic overflow (ROADMAP #10: ordinary `+ - * / % << >>` trap on overflow/
+# UB). A trap is a defined abort, not undefined behavior: exit code is nonzero
+# (SIGABRT → 134) with no value on stdout.
+expect_trap() {
+  local name="$1" src="tests/codegen/$1.con"
+  [ -f "$src" ] || { no "$name: missing fixture $src"; return; }
+  if "$COMPILER" "$src" -o "$TMP/$name" >/dev/null 2>&1; then
+    local out rc; out="$("$TMP/$name" 2>/dev/null)"; rc=$?
+    if [ -z "$out" ] && [ "$rc" -ne 0 ]; then ok "$name traps (checked overflow, exit $rc)"
+    else no "$name: expected a checked-overflow trap, got out='$out' exit=$rc"; fi
+  else
+    no "$name failed to compile"
+  fi
+}
+
 echo "=== codegen execution oracles ==="
 expect cast_truncate 44
 expect cast_signext 255
-expect i32_wrap -2147483648
-expect u32_wrap 0
-expect i64_mul_overflow -2
+# Checked arithmetic (ROADMAP #10): these overflowing ops now TRAP, they no
+# longer wrap. (`wrapping_*` is the explicit opt-in for modular arithmetic.)
+expect_trap i32_wrap
+expect_trap u32_wrap
+expect_trap i64_mul_overflow
 expect shift_or 19
 expect neg_div_mod_identity -7
 expect short_circuit_and 7

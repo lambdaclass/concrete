@@ -8,11 +8,16 @@
 # misinterprets — exactly the class that hid C4/C5/C6 from the
 # compile/reject-only suite.
 #
-# Two honest exclusion lists (never silent):
+# Three honest exclusion lists (never silent):
 #   EXPECTED_DIVERGE — the interpreter uses unbounded Int; the compiled binary
-#     uses fixed-width wrapping. Casts that truncate and arithmetic that
-#     overflows legitimately differ. (The deeper #18 fix gives the interpreter
-#     a fixed-width mode so these agree; until then they are documented.)
+#     uses fixed-width values. CASTS (`as`) truncate/sign-extend, so they
+#     legitimately differ (interp keeps the unbounded value). (The deeper #18
+#     fix gives the interpreter a fixed-width mode so these agree; until then
+#     they are documented.)
+#   EXPECTED_TRAP — checked arithmetic (ROADMAP #10): overflow is a defined
+#     abort on BOTH sides, so neither produces a value. interp must exit nonzero
+#     AND the compiled binary must abort. (Pre-#10 these wrapped and were listed
+#     EXPECTED_DIVERGE; now they agree by both trapping.)
 #   INTERP_UNSUPPORTED — shapes the interpreter cannot run yet (e.g. function
 #     pointers). Tracked so coverage gaps are visible, not hidden.
 # The gate FAILS on any divergence or unsupported case OUTSIDE these lists.
@@ -27,8 +32,10 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
-# unbounded-Int vs fixed-width: legitimately differ.
-EXPECTED_DIVERGE=" cast_signext cast_truncate i32_wrap i64_mul_overflow "
+# unbounded-Int vs fixed-width casts: legitimately differ (no trap).
+EXPECTED_DIVERGE=" cast_signext cast_truncate "
+# checked-arithmetic overflow: both sides trap (no value on either side).
+EXPECTED_TRAP=" i32_wrap i64_mul_overflow u32_wrap "
 # interpreter cannot execute these shapes yet.
 INTERP_UNSUPPORTED=" fn_pointer "
 
@@ -38,7 +45,18 @@ echo "=== interpreter vs compiled agreement over tests/codegen/ ==="
 for f in tests/codegen/*.con; do
   name="$(basename "$f" .con)"
   ci="$("$COMPILER" "$f" --interp 2>/dev/null | tail -1)"
-  if "$COMPILER" "$f" -o "$TMP/d" >/dev/null 2>&1; then cc="$("$TMP/d" 2>/dev/null)"; [ -z "$cc" ] && cc="$?"; else cc="CFAIL"; fi
+  "$COMPILER" "$f" --interp >/dev/null 2>&1; ie=$?
+  if "$COMPILER" "$f" -o "$TMP/d" >/dev/null 2>&1; then
+    cc="$("$TMP/d" 2>/dev/null)"; ce=$?; [ -z "$cc" ] && cc="$ce"
+  else cc="CFAIL"; ce=99; fi
+  if in_list "$name" "$EXPECTED_TRAP"; then
+    if [ "$ie" -ne 0 ] && [ "$ce" -ne 0 ]; then
+      ok "$name traps on both sides as documented (interp exit=$ie, compiled exit=$ce — checked-arith overflow)"
+    else
+      no "$name listed EXPECTED_TRAP but interp exit=$ie compiled exit=$ce — overflow no longer traps on both sides; investigate"
+    fi
+    continue
+  fi
   if in_list "$name" "$INTERP_UNSUPPORTED"; then
     [ -z "$ci" ] && echo "  skip $name (interp-unsupported, documented)" \
       || no "$name listed INTERP_UNSUPPORTED but the interpreter ran it ('$ci') — remove from the list"

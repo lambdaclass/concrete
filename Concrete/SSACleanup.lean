@@ -295,15 +295,38 @@ private partial def eliminateDeadInstsFixpoint (blocks : List SBlock) : List SBl
 -- Pass 5: Constant folding + algebraic simplifications
 -- ============================================================
 
+/-- Bit-width and signedness of an integer type (mirror of Interp.intBitWidth). -/
+private def intBitWidth : Ty → Option (Nat × Bool)
+  | .i8 => some (8, true)  | .i16 => some (16, true)  | .i32 => some (32, true)  | .int  => some (64, true)
+  | .u8 => some (8, false) | .u16 => some (16, false) | .u32 => some (32, false) | .uint => some (64, false)
+  | _   => none
+
+/-- True iff `n` fits `ty`'s representable range. Keeps constant folding in step
+    with checked arithmetic (ROADMAP #10): an `add/sub/mul/div` whose constant
+    result overflows must NOT be folded — leaving the op live so EmitSSA lowers it
+    to the checked helper that traps at runtime (matching Interp's `checkedToType`).
+    Folding overflow here would silently wrap and diverge from the interpreter. -/
+private def fitsType (ty : Ty) (n : Int) : Bool :=
+  match intBitWidth ty with
+  | some (w, signed) =>
+    let (lo, hi) : Int × Int :=
+      if signed then (-((2 : Int) ^ (w - 1)), (2 : Int) ^ (w - 1) - 1)
+      else (0, (2 : Int) ^ w - 1)
+    lo ≤ n && n ≤ hi
+  | none => true  -- non-fixed-width — fold as before
+
 /-- Try to fold a binary operation on two constant operands. -/
 private def foldBinOpConst (op : BinOp) (lhs rhs : SVal) (ty : Ty) : Option SVal :=
   match lhs, rhs with
   | .intConst a _, .intConst b _ =>
     match op with
-    | .add => some (.intConst (a + b) ty)
-    | .sub => some (.intConst (a - b) ty)
-    | .mul => some (.intConst (a * b) ty)
-    | .div => if b != 0 then some (.intConst (a / b) ty) else none
+    -- Checked ops: fold ONLY when in range; otherwise leave the op live so
+    -- EmitSSA's checked helper traps at runtime (matching Interp).
+    | .add => let r := a + b; if fitsType ty r then some (.intConst r ty) else none
+    | .sub => let r := a - b; if fitsType ty r then some (.intConst r ty) else none
+    | .mul => let r := a * b; if fitsType ty r then some (.intConst r ty) else none
+    -- div: b!=0 AND result in range (signed MIN/-1 overflows → leave for helper).
+    | .div => if b != 0 && fitsType ty (a / b) then some (.intConst (a / b) ty) else none
     | .mod => if b != 0 then some (.intConst (a % b) ty) else none
     | .eq => some (.boolConst (a == b))
     | .neq => some (.boolConst (a != b))
@@ -425,22 +448,15 @@ private def foldConstants (blocks : List SBlock) : List SBlock :=
         match foldBinOp op lhs rhs ty with
         | some val => (acc.1 ++ [(dst, val)], acc.2)
         | none =>
-          -- Strength reduction: mul by power-of-2 → shl
-          if op == .mul then
-            match rhs with
-            | .intConst n _ =>
-              match isPowerOfTwo n with
-              | some exp => (acc.1, acc.2 ++ [(dst, SInst.binOp dst .shl lhs (.intConst exp ty) ty)])
-              | none => acc
-            | _ =>
-              match lhs with
-              | .intConst n _ =>
-                match isPowerOfTwo n with
-                | some exp => (acc.1, acc.2 ++ [(dst, SInst.binOp dst .shl rhs (.intConst exp ty) ty)])
-                | none => acc
-              | _ => acc
-          -- Strength reduction: unsigned div by power-of-2 → shr
-          else if op == .div && isUnsignedTy ty then
+          -- NO mul → shl strength reduction: under checked arithmetic (ROADMAP
+          -- #10) `x * k` traps on overflow, but the checked shift helper only
+          -- validates the shift *amount* — `x << exp` would silently drop the
+          -- high bits and lose the trap. The checked smul helper is correct;
+          -- LLVM still strength-reduces its internal `smul.with.overflow` when
+          -- it can prove no overflow, so we lose no real performance.
+          -- Strength reduction: unsigned div by power-of-2 → shr (sound: the
+          -- quotient always fits and the shift amount is < width).
+          if op == .div && isUnsignedTy ty then
             match rhs with
             | .intConst n _ =>
               match isPowerOfTwo n with

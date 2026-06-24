@@ -26,29 +26,29 @@ module hmac_sha256:
       sha256_schedule
     caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:204
       sha256_round
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:225
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:228
       sha256_compress
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:239
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:244
       block_to_words_at
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:265
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:272
       sha256_compress_at
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:284
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:291
       state_to_bytes
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:300
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:309
       sha256_hash
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:331
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:340
       hmac_sha256
-    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:359
+    caps: (pure)  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: proved  @ examples/hmac_sha256/src/main.con:368
       verify_hmac
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:387
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:396
       abc_block
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:397
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:406
       rfc4231_tc1_tag
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:409
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:418
       rfc4231_tc2_tag
-    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:415
+    caps: (pure)  alloc: none  recursion: none  loops: no loops  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:424
   pub main
-    caps: Console  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:432
+    caps: Console  alloc: none  recursion: none  loops: bounded  ffi: no  trusted: no  evidence: enforced  @ examples/hmac_sha256/src/main.con:441
 
 Totals: 24 functions, 23 pure, 0 allocating, 0 recursive, 0 unbounded loops, 0 cross FFI, 0 trusted
 Evidence: 11 proved, 13 enforced, 0 trusted-assumption, 0 reported

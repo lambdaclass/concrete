@@ -689,8 +689,13 @@ partial def normalizePExpr : Proof.PExpr → Proof.PExpr
     blocker rather than silently using i32 semantics).  See
     `docs/PROOF_OBLIGATIONS_REGISTER.md` R-16 and R-17. -/
 def binOpToPBinOp : BinOp → Ty → Option Proof.PBinOp
-  | .add, .u32 => some (.addw 32 false)  -- u32 `+` wraps mod 2^32
-  | .add, _ => some .add                 -- Int/i32/… mathematical add
+  -- Explicit modular add is the ONLY mod-2^32 spelling now that ordinary `+`
+  -- is CHECKED (ROADMAP #10): `wrapping_add` on u32 → `addw 32`. Ordinary `.add`
+  -- traps on overflow, so it is the mathematical add in its non-trapping domain
+  -- (the proof discharges the no-overflow side condition); modeling it as `addw`
+  -- would be unsound — it would certify wrapping the runtime never performs.
+  | .wrappingAdd, .u32 => some (.addw 32 false)
+  | .add, _ => some .add                 -- Int/i32/u32 checked add: mathematical
   | .sub, _ => some .sub
   | .mul, _ => some .mul
   | .mod, .i32 => some (.mod 32 true)

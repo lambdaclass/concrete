@@ -5,11 +5,9 @@
 # spelling for intentional two's-complement modular arithmetic. They must:
 #   - wrap correctly for unsigned AND signed fixed-width integers,
 #   - agree between the interpreter and compiled code (the oracle invariant),
-#   - leave ordinary `+ - *` behaving exactly as before (this slice changes
-#     nothing about ordinary arithmetic),
-#   - be integer-only: reject float / bool operands and mixed widths.
-# This is the prerequisite escape hatch that must exist before ordinary `+ - *`
-# flip to checked/trapping (Stage 2.3).
+#   - be integer-only: reject float / bool operands and mixed widths,
+#   - be DISTINCT from ordinary `+ - *`, which are now checked and trap on
+#     overflow (Stage 2.3) — wrapping_* is the explicit way to opt into wrap.
 
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -58,17 +56,16 @@ pub fn main() -> Int {
 EOF
 oracle wrap
 
-echo "=== ordinary + - * unchanged by this slice (still wraps today), interp == compiled ==="
-cat > "$TMP/plain.con" <<'EOF'
-pub fn main() -> Int {
-    let a: u8 = 255;
-    let b: u8 = 1;
-    let r: u8 = a + b;
-    if r != 0 { return 1; }
-    return 0;
-}
+# Ordinary `+ - *` are now CHECKED (Stage 2.3 flipped them) — `wrapping_add` is the
+# ONLY way to get wrap. Verify the two differ: 255 + 1 traps, but wrapping_add wraps
+# to 0. (The trap itself is owned by check_checked_arith.sh.)
+echo "=== ordinary + traps where wrapping_add wraps (they are distinct) ==="
+cat > "$TMP/distinct.con" <<'EOF'
+fn add(a: u8, b: u8) -> u8 { return a + b; }
+pub fn main() -> Int { let x: u8 = add(255, 1); return 0; }
 EOF
-oracle plain
+"$C" "$TMP/distinct.con" -o "$TMP/distinct.bin" >/dev/null 2>&1; "$TMP/distinct.bin" >/dev/null 2>&1
+if [ "$?" -ne 0 ]; then ok "ordinary + traps on 255+1 (checked), unlike wrapping_add"; else no "ordinary + did NOT trap (flip regressed?)"; fi
 
 echo "=== integer-only: reject float and mixed-width operands ==="
 cat > "$TMP/float.con" <<'EOF'

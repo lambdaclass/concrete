@@ -26,29 +26,29 @@ module hmac_sha256:
   sha256_schedule
     frame: 336 bytes  depth: 2  stack: 364 bytes  @ examples/hmac_sha256/src/main.con:204
   sha256_round
-    frame: 56 bytes  depth: 2  stack: 84 bytes  @ examples/hmac_sha256/src/main.con:225
+    frame: 56 bytes  depth: 2  stack: 84 bytes  @ examples/hmac_sha256/src/main.con:228
   sha256_compress
-    frame: 716 bytes  depth: 3  stack: 1080 bytes  @ examples/hmac_sha256/src/main.con:239
+    frame: 716 bytes  depth: 3  stack: 1080 bytes  @ examples/hmac_sha256/src/main.con:244
   block_to_words_at
-    frame: 464 bytes  depth: 0  stack: 464 bytes  @ examples/hmac_sha256/src/main.con:265
+    frame: 464 bytes  depth: 0  stack: 464 bytes  @ examples/hmac_sha256/src/main.con:272
   sha256_compress_at
-    frame: 976 bytes  depth: 1  stack: 1440 bytes  @ examples/hmac_sha256/src/main.con:284
+    frame: 976 bytes  depth: 1  stack: 1440 bytes  @ examples/hmac_sha256/src/main.con:291
   state_to_bytes
-    frame: 76 bytes  depth: 0  stack: 76 bytes  @ examples/hmac_sha256/src/main.con:300
+    frame: 76 bytes  depth: 0  stack: 76 bytes  @ examples/hmac_sha256/src/main.con:309
   sha256_hash
-    frame: 828 bytes  depth: 2  stack: 2268 bytes  @ examples/hmac_sha256/src/main.con:331
+    frame: 828 bytes  depth: 2  stack: 2268 bytes  @ examples/hmac_sha256/src/main.con:340
   hmac_sha256
-    frame: 1704 bytes  depth: 3  stack: 3972 bytes  @ examples/hmac_sha256/src/main.con:359
+    frame: 1704 bytes  depth: 3  stack: 3972 bytes  @ examples/hmac_sha256/src/main.con:368
   verify_hmac
-    frame: 464 bytes  depth: 4  stack: 4436 bytes  @ examples/hmac_sha256/src/main.con:387
+    frame: 464 bytes  depth: 4  stack: 4436 bytes  @ examples/hmac_sha256/src/main.con:396
   abc_block
-    frame: 72 bytes  depth: 0  stack: 72 bytes  @ examples/hmac_sha256/src/main.con:397
+    frame: 72 bytes  depth: 0  stack: 72 bytes  @ examples/hmac_sha256/src/main.con:406
   rfc4231_tc1_tag
-    frame: 8 bytes  depth: 0  stack: 8 bytes  @ examples/hmac_sha256/src/main.con:409
+    frame: 8 bytes  depth: 0  stack: 8 bytes  @ examples/hmac_sha256/src/main.con:418
   rfc4231_tc2_tag
-    frame: 8 bytes  depth: 0  stack: 8 bytes  @ examples/hmac_sha256/src/main.con:415
+    frame: 8 bytes  depth: 0  stack: 8 bytes  @ examples/hmac_sha256/src/main.con:424
   main
-    frame: 1168 bytes  depth: 5  stack: 5604 bytes  @ examples/hmac_sha256/src/main.con:432
+    frame: 1168 bytes  depth: 5  stack: 5604 bytes  @ examples/hmac_sha256/src/main.con:441
 
 Totals: 24 functions, 24 bounded, 0 recursive (unbounded)
 Max stack bound: 5604 bytes (main)
