@@ -198,10 +198,13 @@ private def checkedHelper (mnem : String) (w : Nat) : String :=
     ++ "ovf:\n  call void @abort()\n  unreachable\n"
     ++ "ok:\n  %r = extractvalue " ++ st ++ " %t, 0\n  ret " ++ wt ++ " %r\n}"
 
-/-- Checked-arithmetic helpers for the operations flipped so far (Stage 2.3
-    flips `+` first). -/
+/-- Checked-arithmetic helpers for the operations flipped so far (Stage 2.3:
+    `+` then `-`). -/
 private def checkedHelperDefs : List String :=
-  ([8, 16, 32, 64] : List Nat).flatMap fun w => [checkedHelper "sadd" w, checkedHelper "uadd" w]
+  ([8, 16, 32, 64] : List Nat).flatMap fun w =>
+    [checkedHelper "sadd" w, checkedHelper "uadd" w,
+     checkedHelper "ssub" w, checkedHelper "usub" w,
+     checkedHelper "smul" w, checkedHelper "umul" w]
 
 private def checkedCallName (mnem : String) (ty : Ty) : String :=
   "__cc_" ++ mnem ++ "_i" ++ toString (intTyBitWidth ty)
@@ -532,8 +535,15 @@ private def emitBinOp (s : EmitSSAState) (dst : String) (op : BinOp) (lhs rhs : 
     | .add =>
       let mnem := if ssaIsSignedInt operandTy then "sadd" else "uadd"
       emitStructured s (.call (some dst) iTy (.global (checkedCallName mnem operandTy)) [(iTy, lOp), (iTy, rOp)])
-    | .sub => emitStructured s (.binOp dst .sub iTy lOp rOp)
-    | .mul => emitStructured s (.binOp dst .mul iTy lOp rOp)
+    -- Ordinary `-` is CHECKED (ROADMAP #10 Stage 2.3b): unsigned underflow /
+    -- signed overflow trap. (`*` flips next.)
+    | .sub =>
+      let mnem := if ssaIsSignedInt operandTy then "ssub" else "usub"
+      emitStructured s (.call (some dst) iTy (.global (checkedCallName mnem operandTy)) [(iTy, lOp), (iTy, rOp)])
+    -- Ordinary `*` is CHECKED (ROADMAP #10 Stage 2.3c).
+    | .mul =>
+      let mnem := if ssaIsSignedInt operandTy then "smul" else "umul"
+      emitStructured s (.call (some dst) iTy (.global (checkedCallName mnem operandTy)) [(iTy, lOp), (iTy, rOp)])
     -- Explicit wrapping arithmetic emits the SAME plain LLVM ops (no nsw/nuw, no
     -- trap) as +/-/* do today — ROADMAP #10 Stage 2.1, behavior-preserving.
     | .wrappingAdd => emitStructured s (.binOp dst .add iTy lOp rOp)

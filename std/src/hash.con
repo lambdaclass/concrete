@@ -13,7 +13,7 @@ mod hash {
         while i < data.len {
             let byte: u8 = data.get_unchecked(i);
             hash = hash ^ (byte as u64);
-            hash = hash * prime;
+            hash = wrapping_mul(hash, prime);  // FNV-1a is mod-2^64 — explicit wrapping
             i = i + 1;
         }
 
@@ -28,7 +28,7 @@ mod hash {
         while i < data.len {
             let byte: u8 = data.get_unchecked(i) as u8;
             hash = hash ^ (byte as u64);
-            hash = hash * prime;
+            hash = wrapping_mul(hash, prime);  // FNV-1a is mod-2^64 — explicit wrapping
             i = i + 1;
         }
 
@@ -41,21 +41,21 @@ mod hash {
 
     pub trusted fn hash_u64(key: &u64) -> u64 {
         let k: u64 = *key;
-        let h: u64 = k * 0x9E3779B97F4A7C15;
+        let h: u64 = wrapping_mul(k, 0x9E3779B97F4A7C15);  // multiplicative hash — mod-2^64
         h = h ^ (h >> 32);
         return h;
     }
 
     pub trusted fn hash_i32(key: &i32) -> u64 {
         let k: u64 = *key as u64;
-        let h: u64 = k * 0x9E3779B97F4A7C15;
+        let h: u64 = wrapping_mul(k, 0x9E3779B97F4A7C15);  // multiplicative hash — mod-2^64
         h = h ^ (h >> 32);
         return h;
     }
 
     pub trusted fn hash_i64(key: &i64) -> u64 {
         let k: u64 = *key as u64;
-        let h: u64 = k * 0x9E3779B97F4A7C15;
+        let h: u64 = wrapping_mul(k, 0x9E3779B97F4A7C15);  // multiplicative hash — mod-2^64
         h = h ^ (h >> 32);
         return h;
     }

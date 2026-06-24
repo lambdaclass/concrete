@@ -118,7 +118,7 @@ The only resources predictable code may hold are file descriptors from Console (
 | Explicit error return | Yes | `Result<T, E>` propagation | Normal control flow, caller handles |
 | OOM (malloc null) | No | No allocation in predictable code | |
 | Null pointer deref | Only in trusted | Safe code has no raw pointers | SIGSEGV if triggered |
-| Integer overflow | Yes | Arithmetic on i32/i64/u32/u64 | Silent wrap (LLVM default) |
+| Integer overflow | Trap (abort) | Ordinary `+ - *` are checked (ROADMAP #10 Stage 2.3) | Aborts on overflow; `wrapping_*` for intentional modular |
 | Array out-of-bounds | Possible | Safe `arr[i]` generates GEP+load | See below |
 | Stack overflow | Possible | Deep (but bounded) call chains | OS guard page → SIGSEGV |
 | abort() | No | Requires Process capability | |
@@ -135,12 +135,14 @@ This is explicitly documented in CLAIMS_TODAY.md and LANGUAGE_GAPS.md as a gap. 
 
 ### Integer overflow
 
-Arithmetic operations on fixed-width integers (i32, i64, u32, u64) wrap silently per LLVM's default `add`/`sub`/`mul` semantics. There is no overflow trap. This is a known semantic gap between:
-
-- Lean proofs (unbounded integers)
-- Runtime behavior (fixed-width wrapping)
-
-The gap is documented in PROOF_SEMANTICS_BOUNDARY.md.
+Ordinary `+ - *` on fixed-width integers are **checked** (ROADMAP #10 Stage 2.3): on
+signed or unsigned overflow they **trap (abort)**, in every profile. Intentional
+modular arithmetic is the explicit `wrapping_*`; clamping is `saturating_*`. This
+narrows the proof-vs-runtime integer gap: a proof over unbounded integers and the
+checked runtime can only disagree by the runtime *aborting* — never by silently
+producing a wrong (wrapped) value. (Division/shift-overflow checks are the remaining
+ROADMAP #10 Stage 2.4/2.5 items.) See ARITHMETIC_POLICY.md and
+PROOF_SEMANTICS_BOUNDARY.md.
 
 ---
 

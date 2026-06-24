@@ -10,6 +10,20 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #10 Stage 2.3b/c: checked `-` and `*` LANDED — all `+ - *` now checked (2026-06-24)
+
+Flipped ordinary `-` and `*` to checked (same per-type `*.with.overflow`→abort
+helper + interp `checkedToType` mechanism as `+`). **All ordinary integer
+arithmetic now traps on overflow.** `-` needed no migration; `*` surfaced more
+genuine intentional-modular code, all migrated to `wrapping_mul`: `std/src/hash.con`
+(FNV-1a hashing and the Fibonacci/splitmix multiplicative hashes) and
+`tests/programs/test_generic_fnptr_map.con` (its inline multiplicative hash). Green
+throughout: std 265/0, fast suite 1576/0, golden 54/0. `scripts/tests/check_checked_arith.sh`
+now covers `+`/`-`/`*` traps plus the modular-wrap regression, and
+`PREDICTABLE_BOUNDARIES.md` is updated (integer overflow: silent-wrap → trap).
+Remaining #10 items: div/mod-by-zero traps (2.4), shift-amount checks (2.5), and
+the per-site report/audit classification (2.6).
+
 ### Phase 6 #10 Stage 2.3a: checked `+` LANDED (overflow traps) (2026-06-24)
 
 Ordinary `+` is now **checked**: it traps (abort) on overflow in every profile,

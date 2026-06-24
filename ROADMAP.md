@@ -649,12 +649,15 @@ gate.
         std 265/0, fast suite 1576/0, golden 54/0. The check did its job — it found
         real intentional-wrap that was relying on silence. Gated by
         `scripts/tests/check_checked_arith.sh` (incl. a modular-wrap regression).
-      - Stage 2.3b/c [remaining]: flip `-` then `*` the same way (per-op helpers +
-        interp `checkedToType`), each preceded by the same per-family audit
-        (intentional-modular → `wrapping_*`; error-path-masking → fix error
-        handling; never-sentinel → guard/Result). Do NOT bulk-replace traps with
-        `wrapping_*`. After all three, update PREDICTABLE_BOUNDARIES.md (overflow:
-        silent-wrap → trap).
+      - Stage 2.3b/c: [DONE — 2026-06-24] checked `-` and `*` LANDED green. Same
+        per-op helper + interp `checkedToType` mechanism. Migrations (all genuine
+        intentional-modular, → `wrapping_mul`): `hash.con` FNV-1a + Fibonacci/
+        splitmix multiplicative hashing, and `tests/programs/test_generic_fnptr_map`
+        (inline multiplicative hash). `-` needed no migration. All `+ - *` now
+        checked; PREDICTABLE_BOUNDARIES.md updated (overflow: silent-wrap → trap).
+        std 265/0, fast 1576/0, golden 54/0; gate `check_checked_arith.sh` covers
+        all three. Remaining for #10: 2.4 div/mod-zero traps, 2.5 shift-amount
+        checks, 2.6 reports/audit classification (ARITHMETIC_POLICY §3.2).
           (ii)  div/mod-zero traps (2.4), shift-amount checks (2.5), same abort;
           (iii) reports/audit (2.6): classify each site proved / runtime-checked /
                 explicit-wrapping / explicit-saturating (ARITHMETIC_POLICY §3.2).

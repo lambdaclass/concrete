@@ -202,8 +202,14 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
     match checkedToType ty (a + b) with
     | some v => .ok (.int v ty)
     | none   => .error "interp: arithmetic overflow (checked +)"
-  | .sub, .int a ty, .int b _ => .ok (.int (maskWidth ty (a - b)) ty)
-  | .mul, .int a ty, .int b _ => .ok (.int (maskWidth ty (a * b)) ty)
+  | .sub, .int a ty, .int b _ =>
+    match checkedToType ty (a - b) with
+    | some v => .ok (.int v ty)
+    | none   => .error "interp: arithmetic overflow (checked -)"
+  | .mul, .int a ty, .int b _ =>
+    match checkedToType ty (a * b) with
+    | some v => .ok (.int v ty)
+    | none   => .error "interp: arithmetic overflow (checked *)"
   -- Explicit wrapping arithmetic: true two's-complement wrap (signed + unsigned),
   -- matching the compiled plain LLVM add/sub/mul. ROADMAP #10 Stage 2.1.
   | .wrappingAdd, .int a ty, .int b _ => .ok (.int (wrapToType ty (a + b)) ty)

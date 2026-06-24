@@ -45,6 +45,20 @@ if [ "$tc" -ne 0 ]; then ok "compiled: u8 255+1 aborts (exit $tc)"; else no "com
 itrap="$("$C" "$TMP/trap.con" --interp 2>&1 || true)"
 if echo "$itrap" | grep -qi "overflow"; then ok "interp: u8 255+1 traps (overflow)"; else no "interp: u8 255+1 did NOT trap"; fi
 
+# `-` underflow (unsigned) and `*` overflow also trap.
+cat > "$TMP/subtrap.con" <<'EOF'
+fn sub(a: u8, b: u8) -> u8 { return a - b; }
+pub fn main() -> Int { let x: u8 = sub(0, 1); if x == 255 { return 9; } return 7; }
+EOF
+"$C" "$TMP/subtrap.con" -o "$TMP/subtrap.bin" >/dev/null 2>&1; "$TMP/subtrap.bin" >/dev/null 2>&1; sc=$?
+if [ "$sc" -ne 0 ]; then ok "compiled: u8 0-1 underflow aborts (exit $sc)"; else no "compiled: u8 0-1 did NOT trap"; fi
+cat > "$TMP/multrap.con" <<'EOF'
+fn mul(a: i32, b: i32) -> i32 { return a * b; }
+pub fn main() -> Int { let x: i32 = mul(100000, 100000); if x == 1410065408 { return 9; } return 7; }
+EOF
+"$C" "$TMP/multrap.con" -o "$TMP/multrap.bin" >/dev/null 2>&1; "$TMP/multrap.bin" >/dev/null 2>&1; mc=$?
+if [ "$mc" -ne 0 ]; then ok "compiled: i32 100000*100000 overflow aborts (exit $mc)"; else no "compiled: i32 mul did NOT trap"; fi
+
 echo "=== in-range + unchanged, interp == compiled ==="
 cat > "$TMP/inrange.con" <<'EOF'
 pub fn main() -> Int { let a: u8 = 100; let b: u8 = 50; if a + b != 150 { return 1; }

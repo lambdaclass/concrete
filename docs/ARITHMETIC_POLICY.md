@@ -32,9 +32,15 @@ Float types (`Float64`/`f64`, `Float32`/`f32`) exist but are outside the scope o
 
 ### Current overflow behavior
 
-All integer arithmetic today emits plain LLVM `add`, `sub`, `mul` without `nsw` or `nuw` flags. This means:
+**As of ROADMAP #10 Stage 2.3, ordinary `+ - *` are CHECKED** (this section's
+"current state" header predates that and is retained for the div/shift notes below):
 
-- **Addition, subtraction, multiplication**: wrap silently in two's complement. No trap, no diagnostic, no signal. LLVM treats the result as a well-defined value.
+- **Addition, subtraction, multiplication**: **checked — trap (abort) on signed or
+  unsigned overflow**, in every profile. Codegen routes `+ - *` through per-type
+  `*.with.overflow`→abort helpers; the interpreter traps to match. Intentional
+  modular arithmetic uses the explicit `wrapping_*`; clamping uses `saturating_*`.
+  (Historically these wrapped silently; that was the implementation gap Stage 2.3
+  closed.)
 - **Division, modulo**: the compiler emits `sdiv`/`udiv`/`srem`/`urem` depending on signedness. Division by zero is undefined behavior in LLVM IR. On x86-64 it triggers a hardware SIGFPE. On other architectures it may produce garbage or trap.
 - **Shift**: `shl`, `ashr`, `lshr` with shift amount >= bitwidth produce an LLVM poison value, which is undefined behavior if consumed.
 - **Negation**: emitted as `sub 0, x` — wraps silently for `Int.MIN`.
