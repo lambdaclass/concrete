@@ -590,9 +590,37 @@ gate.
     or exposes a narrow `concrete ffi`/`concrete bindgen` command. Generated
     glue must carry layout/ABI assumptions, ownership boundary rules,
     capability/trust labels, source spans, and reproducible output.
-10. Define language-visible build profiles: debug/release, overflow checks,
-    assertions, runtime checks, optimization assumptions, and proof/audit
-    compatibility.
+10. Define language-visible build profiles: debug/release, assertions, runtime
+    checks, optimization assumptions, and proof/audit compatibility.
+
+    **Governing principle (decided): a build profile is a policy bundle, never
+    an arithmetic mode.** Profiles select check *enforcement*, diagnostics,
+    optimization assumptions, evidence floors, and reporting — they MUST NOT
+    change what a source program *means*. A reviewer must never need to know the
+    build mode to know whether `a + b` wraps. (No Rust-style debug-trap /
+    release-wrap split — that breaks the audit thesis.)
+
+    Arithmetic semantics are therefore profile-invariant and already decided in
+    `docs/ARITHMETIC_POLICY.md` (§14 Commitments): ordinary `+ - *` are
+    checked/trapping in every profile; intentional modular arithmetic is the
+    explicit `wrapping_*`; intentional clamping is the explicit `saturating_*`;
+    div/mod-by-zero and over-width shifts trap. The arithmetic-lowering rollout
+    is the staged sequence in ARITHMETIC_POLICY.md §13.
+
+    Implementation status (the docs are *stronger than the implementation* — this
+    is a tracked gap, not a contradiction): ordinary arithmetic still lowers to
+    silent two's-complement wrap (ARITHMETIC_POLICY.md §1); the profile selector
+    and `--report arithmetic` do not exist yet. Build in stages, profile surface
+    BEFORE arithmetic-lowering changes, each its own commit:
+      - Stage 1: profile *mechanism* only — a `--profile` CLI flag + `[profile]`
+        in Concrete.toml + a report that makes the active profile and the
+        (currently-wrapping, policy-checked) arithmetic status visible. No
+        codegen/semantic change.
+      - Stages 2-6: the ARITHMETIC_POLICY.md §13 sequence — checked add/sub/mul/
+        neg lowering with abort blocks, div/mod-zero checks, explicit
+        `wrapping_*`, explicit `saturating_*`, and report/audit of active
+        checked/proved/runtime status. A proof may justify omitting a *redundant*
+        runtime check; it never changes source meaning.
 11. **DONE / PERMANENT DECISION (2026-06-23).** State the
     macro/metaprogramming stance: **no language macros**. Concrete
     does not admit hygienic macros, proc macros, syntax macros, derive helpers,

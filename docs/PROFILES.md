@@ -25,6 +25,20 @@ Those should not blur together. Profiles make the boundaries explicit.
 
 ---
 
+## Profiles are policy bundles, not arithmetic modes
+
+A profile selects *enforcement, diagnostics, optimization assumptions, evidence
+floors, and reporting* — it never changes what a source program means. The
+trust profiles below (Safe / Predictable / Proof / high-integrity) are an
+admission-strictness axis; the build profiles in ROADMAP #10 (debug / release)
+are an enforcement/optimization axis. Neither axis flips source semantics: a
+reviewer must never need to know the profile to know whether `a + b` wraps.
+Arithmetic meaning is fixed and explicit — checked `+ - *`, explicit
+`wrapping_*` / `saturating_*` — per [ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md)
+§14. (Arithmetic still lowers to silent wrap today; that is a tracked
+implementation gap — ROADMAP #10 / ARITHMETIC_POLICY.md §1, §13 — not a
+profile-dependent behavior.)
+
 ## Profile 1: Safe
 
 **Status: real, enforced today.**
