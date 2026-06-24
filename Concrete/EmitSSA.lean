@@ -209,6 +209,48 @@ private def checkedHelperDefs : List String :=
 private def checkedCallName (mnem : String) (ty : Ty) : String :=
   "__cc_" ++ mnem ++ "_i" ++ toString (intTyBitWidth ty)
 
+/-- A checked div/rem helper (ROADMAP #10 Stage 2.4): aborts on divide-by-zero
+    (currently UB / SIGFPE) and, for signed ops, on the `MIN / -1` overflow UB;
+    otherwise performs the division. `op` ∈ {sdiv,udiv,srem,urem}. -/
+private def checkedDivHelper (op : String) (signed : Bool) (w : Nat) : String :=
+  let wt := "i" ++ toString w
+  let minV := toString (-((2 : Int) ^ (w - 1)))
+  let head :=
+    "define internal " ++ wt ++ " @__cc_" ++ op ++ "_" ++ wt ++ "(" ++ wt ++ " %a, " ++ wt ++ " %b) {\n"
+    ++ "  %z = icmp eq " ++ wt ++ " %b, 0\n"
+  let trap := "trap:\n  call void @abort()\n  unreachable\n"
+  let okblk := "ok:\n  %r = " ++ op ++ " " ++ wt ++ " %a, %b\n  ret " ++ wt ++ " %r\n}"
+  if signed then
+    head
+      ++ "  br i1 %z, label %trap, label %c1\n"
+      ++ "c1:\n  %m = icmp eq " ++ wt ++ " %a, " ++ minV ++ "\n"
+      ++ "  %n = icmp eq " ++ wt ++ " %b, -1\n"
+      ++ "  %o = and i1 %m, %n\n"
+      ++ "  br i1 %o, label %trap, label %ok\n"
+      ++ trap ++ okblk
+  else
+    head ++ "  br i1 %z, label %trap, label %ok\n" ++ trap ++ okblk
+
+private def checkedDivHelperDefs : List String :=
+  ([8, 16, 32, 64] : List Nat).flatMap fun w =>
+    [checkedDivHelper "sdiv" true w, checkedDivHelper "udiv" false w,
+     checkedDivHelper "srem" true w, checkedDivHelper "urem" false w]
+
+/-- A checked shift helper (ROADMAP #10 Stage 2.5): aborts if the shift amount is
+    >= the bit width (LLVM poison / UB otherwise); else shifts. `op` ∈
+    {shl,ashr,lshr}. -/
+private def checkedShiftHelper (op : String) (w : Nat) : String :=
+  let wt := "i" ++ toString w
+  "define internal " ++ wt ++ " @__cc_" ++ op ++ "_" ++ wt ++ "(" ++ wt ++ " %a, " ++ wt ++ " %b) {\n"
+    ++ "  %z = icmp uge " ++ wt ++ " %b, " ++ toString w ++ "\n"
+    ++ "  br i1 %z, label %trap, label %ok\n"
+    ++ "trap:\n  call void @abort()\n  unreachable\n"
+    ++ "ok:\n  %r = " ++ op ++ " " ++ wt ++ " %a, %b\n  ret " ++ wt ++ " %r\n}"
+
+private def checkedShiftHelperDefs : List String :=
+  ([8, 16, 32, 64] : List Nat).flatMap fun w =>
+    [checkedShiftHelper "shl" w, checkedShiftHelper "ashr" w, checkedShiftHelper "lshr" w]
+
 /-- Map float Concrete type to structured LLVM type. -/
 private def floatTyToLLVMTy : Ty → LLVMTy
   | .float32 => .float_
@@ -589,12 +631,14 @@ private def emitBinOp (s : EmitSSAState) (dst : String) (op : BinOp) (lhs rhs : 
       else
         let maxV : Int := (2 : Int) ^ w - 1
         emitStructured s (.raw s!"  %{dst} = select i1 {ovf}, i{w} {maxV}, i{w} {res}")
+    -- Div/mod are CHECKED (ROADMAP #10 Stage 2.4): the helper aborts on
+    -- divide-by-zero (was UB/SIGFPE) and on signed MIN/-1 overflow.
     | .div =>
-      if ssaIsSignedInt operandTy then emitStructured s (.binOp dst .sdiv iTy lOp rOp)
-      else emitStructured s (.binOp dst .udiv iTy lOp rOp)
+      let mnem := if ssaIsSignedInt operandTy then "sdiv" else "udiv"
+      emitStructured s (.call (some dst) iTy (.global (checkedCallName mnem operandTy)) [(iTy, lOp), (iTy, rOp)])
     | .mod =>
-      if ssaIsSignedInt operandTy then emitStructured s (.binOp dst .srem iTy lOp rOp)
-      else emitStructured s (.binOp dst .urem iTy lOp rOp)
+      let mnem := if ssaIsSignedInt operandTy then "srem" else "urem"
+      emitStructured s (.call (some dst) iTy (.global (checkedCallName mnem operandTy)) [(iTy, lOp), (iTy, rOp)])
     | .eq => emitStructured s (.binOp dst .icmpEq iTy lOp rOp)
     | .neq => emitStructured s (.binOp dst .icmpNe iTy lOp rOp)
     | .lt =>
@@ -614,10 +658,12 @@ private def emitBinOp (s : EmitSSAState) (dst : String) (op : BinOp) (lhs rhs : 
     | .bitand => emitStructured s (.binOp dst .and_ iTy lOp rOp)
     | .bitor => emitStructured s (.binOp dst .or_ iTy lOp rOp)
     | .bitxor => emitStructured s (.binOp dst .xor_ iTy lOp rOp)
-    | .shl => emitStructured s (.binOp dst .shl iTy lOp rOp)
+    -- Shifts are CHECKED (ROADMAP #10 Stage 2.5): the helper aborts if the shift
+    -- amount is >= the bit width (LLVM poison/UB otherwise).
+    | .shl => emitStructured s (.call (some dst) iTy (.global (checkedCallName "shl" operandTy)) [(iTy, lOp), (iTy, rOp)])
     | .shr =>
-      if ssaIsSignedInt operandTy then emitStructured s (.binOp dst .ashr iTy lOp rOp)
-      else emitStructured s (.binOp dst .lshr iTy lOp rOp)
+      let mnem := if ssaIsSignedInt operandTy then "ashr" else "lshr"
+      emitStructured s (.call (some dst) iTy (.global (checkedCallName mnem operandTy)) [(iTy, lOp), (iTy, rOp)])
 
 private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
   match inst with
@@ -1464,6 +1510,8 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   -- Checked-arithmetic helpers (ROADMAP #10 Stage 2.3): ordinary `+` traps on
   -- overflow by calling these. `internal` linkage → LLVM DCEs the unused ones.
   let s := checkedHelperDefs.foldl (fun s def_ => { s with moduleHeader := s.moduleHeader.push def_ }) s
+  let s := checkedDivHelperDefs.foldl (fun s def_ => { s with moduleHeader := s.moduleHeader.push def_ }) s
+  let s := checkedShiftHelperDefs.foldl (fun s def_ => { s with moduleHeader := s.moduleHeader.push def_ }) s
   -- Well-known struct types (String, Vec)
   let s := Layout.builtinTypeDefs.foldl (fun s line => emitTypeDef s line) s
   -- Mark builtins as emitted so user-defined versions don't duplicate them

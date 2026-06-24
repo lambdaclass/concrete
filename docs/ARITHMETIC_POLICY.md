@@ -498,8 +498,12 @@ This closes the interpreter-vs-compiled divergence for the first time.
    wraps both signed and unsigned to match compiled. Gated by
    `scripts/tests/check_wrapping_arith.sh` (`make test-wrapping-arith` + CI step).
 2. **Add saturating intrinsics**: `saturating_add`, `saturating_sub`, `saturating_mul` emitting LLVM `llvm.*.sat` intrinsics. **[add/sub DONE — 2026-06-24; ROADMAP #10 Stage 2.2: `BinOp.saturatingAdd/Sub` → `llvm.{s,u}{add,sub}.sat.iW` (signed/width-mangled, statically declared); integer-only, same-type; interpreter clamps to range; gate `scripts/tests/check_saturating_arith.sh`.]** **[mul DONE — 2026-06-24; ROADMAP #10 Stage 2.2b]** `saturating_mul` has no direct `*.sat` intrinsic, so it lowers via `*.with.overflow` (struct `{iW,i1}` result + `extractvalue`, emitted as raw IR; LLVM auto-declares the intrinsic) then a branchless clamp `select` — unsigned clamps to MAX, signed clamps to MIN/MAX by the sign of the true product. This is the shared overflow infrastructure the checked flip (Stage 2.3) reuses (with `condBr`→abort instead of the clamp select). Interp clamps to match; gate covers signed/unsigned boundaries.
-3. **Add division-by-zero checks**: emit zero-check + abort branch before every `sdiv`/`udiv`/`srem`/`urem`. This fixes real UB immediately.
-4. **Add shift-range checks**: emit bitwidth-check + abort branch before every `shl`/`ashr`/`lshr`.
+3. **[DONE — 2026-06-24; Stage 2.4]** Add division-by-zero checks: per-type
+   `@__cc_{sdiv,udiv,srem,urem}` helpers abort on `b == 0` (and signed `MIN/-1`
+   overflow), else divide. Fixes real UB (was SIGFPE). Interp traps to match.
+4. **[DONE — 2026-06-24; Stage 2.5]** Add shift-range checks: per-type
+   `@__cc_{shl,ashr,lshr}` helpers abort when the shift amount `>=` bit width
+   (was LLVM poison/UB). Interp traps to match.
 5. **Switch default arithmetic to checked**: replace `add`/`sub`/`mul` emission with `llvm.*.with.overflow` intrinsics + abort branch. This is the breaking change.
 6. **Add `--report arithmetic`**: implement the per-function arithmetic mode report.
 7. **Update interpreter**: add overflow/shift/division checks to `evalBinOp`.

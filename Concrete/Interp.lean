@@ -221,7 +221,11 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   | .saturatingSub, .int a ty, .int b _ => .ok (.int (saturateToType ty (a - b)) ty)
   | .saturatingMul, .int a ty, .int b _ => .ok (.int (saturateToType ty (a * b)) ty)
   | .div, .int _ _, .int 0 _ => .error "interp: division by zero"
-  | .div, .int a ty, .int b _ => .ok (.int (maskWidth ty (a / b)) ty)
+  | .div, .int a ty, .int b _ =>
+    -- checked: signed MIN / -1 overflows (matches the compiled abort).
+    match checkedToType ty (a / b) with
+    | some v => .ok (.int v ty)
+    | none   => .error "interp: arithmetic overflow (checked /)"
   | .mod, .int _ _, .int 0 _ => .error "interp: modulo by zero"
   | .mod, .int a ty, .int b _ => .ok (.int (maskWidth ty (a % b)) ty)
   | .eq, .int a _, .int b _ => .ok (.bool (a == b))
@@ -239,8 +243,17 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   | .bitxor, .int a ty, .int b _ => .ok (.int (maskWidth ty (intXor a b)) ty)
   | .bitand, .int a ty, .int b _ => .ok (.int (maskWidth ty (intAnd a b)) ty)
   | .bitor, .int a ty, .int b _ => .ok (.int (maskWidth ty (intOr a b)) ty)
-  | .shl, .int a ty, .int b _ => .ok (.int (maskWidth ty (a * (2 ^ b.toNat))) ty)
-  | .shr, .int a ty, .int b _ => .ok (.int (maskWidth ty (a / (2 ^ b.toNat))) ty)
+  -- checked shift: amount >= bit width traps (matches the compiled abort).
+  | .shl, .int a ty, .int b _ =>
+    match intBitWidth ty with
+    | some (w, _) => if b < 0 || b ≥ Int.ofNat w then .error "interp: shift amount out of range"
+                     else .ok (.int (maskWidth ty (a * (2 ^ b.toNat))) ty)
+    | none => .ok (.int (maskWidth ty (a * (2 ^ b.toNat))) ty)
+  | .shr, .int a ty, .int b _ =>
+    match intBitWidth ty with
+    | some (w, _) => if b < 0 || b ≥ Int.ofNat w then .error "interp: shift amount out of range"
+                     else .ok (.int (maskWidth ty (a / (2 ^ b.toNat))) ty)
+    | none => .ok (.int (maskWidth ty (a / (2 ^ b.toNat))) ty)
   | _, _, _ => .error "interp: unsupported binop on given value types"
 
 -- ============================================================

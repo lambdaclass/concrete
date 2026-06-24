@@ -10,6 +10,17 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #10 Stage 2.4/2.5: div/mod-by-zero and shift-range checks (2026-06-24)
+
+Division/modulo by zero (previously UB → SIGFPE) and over-width shifts
+(previously LLVM poison/UB) now **abort**, via per-type `@__cc_{sdiv,udiv,srem,urem}`
+helpers (signed div/rem also check the `MIN / -1` overflow) and
+`@__cc_{shl,ashr,lshr}` helpers (abort when the shift amount ≥ the bit width). The
+interpreter traps to match. With this, **all integer-arithmetic undefined behavior
+in Concrete is now a defined abort** — overflow (`+ - *`), divide-by-zero, and
+over-width shifts. `check_checked_arith.sh` extended to 10 checks. Remaining #10
+item: the per-site report/audit classification (2.6).
+
 ### Phase 6 #10 Stage 2.3b/c: checked `-` and `*` LANDED — all `+ - *` now checked (2026-06-24)
 
 Flipped ordinary `-` and `*` to checked (same per-type `*.with.overflow`→abort

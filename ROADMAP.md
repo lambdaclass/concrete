@@ -656,8 +656,14 @@ gate.
         (inline multiplicative hash). `-` needed no migration. All `+ - *` now
         checked; PREDICTABLE_BOUNDARIES.md updated (overflow: silent-wrap → trap).
         std 265/0, fast 1576/0, golden 54/0; gate `check_checked_arith.sh` covers
-        all three. Remaining for #10: 2.4 div/mod-zero traps, 2.5 shift-amount
-        checks, 2.6 reports/audit classification (ARITHMETIC_POLICY §3.2).
+        all three.
+      - Stage 2.4/2.5: [DONE — 2026-06-24] div/mod-by-zero and over-width shift now
+        ABORT (were UB: SIGFPE / poison) via per-type `@__cc_{sdiv,udiv,srem,urem}`
+        and `@__cc_{shl,ashr,lshr}` helpers (signed div also checks MIN/-1); interp
+        traps to match. So ALL integer arithmetic UB is now a defined abort. Gate
+        extended (10/0). Remaining for #10: 2.6 reports/audit classification
+        (ARITHMETIC_POLICY §3.2 — proved / runtime-checked / explicit-wrapping /
+        explicit-saturating per site; `--report arithmetic`).
           (ii)  div/mod-zero traps (2.4), shift-amount checks (2.5), same abort;
           (iii) reports/audit (2.6): classify each site proved / runtime-checked /
                 explicit-wrapping / explicit-saturating (ARITHMETIC_POLICY §3.2).

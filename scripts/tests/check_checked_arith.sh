@@ -59,6 +59,22 @@ EOF
 "$C" "$TMP/multrap.con" -o "$TMP/multrap.bin" >/dev/null 2>&1; "$TMP/multrap.bin" >/dev/null 2>&1; mc=$?
 if [ "$mc" -ne 0 ]; then ok "compiled: i32 100000*100000 overflow aborts (exit $mc)"; else no "compiled: i32 mul did NOT trap"; fi
 
+# div-by-zero (was UB/SIGFPE) and over-width shift now ABORT (Stage 2.4/2.5).
+cat > "$TMP/dz.con" <<'EOF'
+fn dv(a: i32, b: i32) -> i32 { return a / b; }
+pub fn main() -> Int { let x: i32 = dv(10, 0); return 0; }
+EOF
+"$C" "$TMP/dz.con" -o "$TMP/dz.bin" >/dev/null 2>&1; "$TMP/dz.bin" >/dev/null 2>&1; dc=$?
+if [ "$dc" -ne 0 ]; then ok "compiled: div-by-zero aborts (exit $dc, was UB)"; else no "compiled: div-by-zero did NOT trap"; fi
+dzi="$("$C" "$TMP/dz.con" --interp 2>&1 || true)"
+if echo "$dzi" | grep -qi "division by zero"; then ok "interp: div-by-zero traps"; else no "interp: div-by-zero did NOT trap"; fi
+cat > "$TMP/sh.con" <<'EOF'
+fn sh(a: u32, b: u32) -> u32 { return a << b; }
+pub fn main() -> Int { let x: u32 = sh(1, 40); return 0; }
+EOF
+"$C" "$TMP/sh.con" -o "$TMP/sh.bin" >/dev/null 2>&1; "$TMP/sh.bin" >/dev/null 2>&1; hc=$?
+if [ "$hc" -ne 0 ]; then ok "compiled: u32 1<<40 over-width shift aborts (exit $hc, was UB)"; else no "compiled: over-width shift did NOT trap"; fi
+
 echo "=== in-range + unchanged, interp == compiled ==="
 cat > "$TMP/inrange.con" <<'EOF'
 pub fn main() -> Int { let a: u8 = 100; let b: u8 = 50; if a + b != 150 { return 1; }
