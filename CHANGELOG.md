@@ -10,6 +10,20 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #19: stdlib handoff contract (2026-06-24)
+
+Added `docs/STDLIB_HANDOFF.md` + `scripts/tests/check_stdlib_handoff.sh`
+(`make test-stdlib-handoff` + CI step) — the contract between the language phases
+and Phase 7. Each of the 12 required language surfaces the stdlib depends on
+carries a status (`stable_for_stdlib` / `provisional_with_gate` / `blocked`) tied
+to a backing CI gate or design doc, so "the stdlib can rely on X" is a checked
+claim. Current state: 9 stable, 3 provisional (const-generics #6a, iteration #17,
+build-profiles #10 — each usable within documented bounds), **0 blocked**, so
+Phase 7 is not gate-blocked. The gate parses the contract table, rejects an
+invalid/absent status or a missing backing artifact, fails if a required surface
+is dropped, and enforces the policy that Phase 7 may not start while any required
+surface is `blocked`.
+
 ### Phase 6 #35a: red-team hardening gate (2026-06-24)
 
 With the resurrected CI suite green, added `scripts/tests/check_phase6_redteam.sh`

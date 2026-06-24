@@ -365,6 +365,9 @@ jobs:
       - name: Red-team gate (Phase 6 #35a — recovery / match / fingerprint / stale fixtures)
         run: bash scripts/tests/check_phase6_redteam.sh
 
+      - name: Stdlib handoff gate (Phase 6 #19 — required surfaces stable/provisional, none blocked)
+        run: bash scripts/tests/check_stdlib_handoff.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 

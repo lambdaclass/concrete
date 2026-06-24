@@ -669,8 +669,13 @@ gate.
     ordinary function pointers instead. Reopen only with a concrete workload and
     a separate design note proving the capture/type-parameter/mangling story is
     worth the added surface.
-19. Define the stdlib handoff contract for Phase 7. Phases 5-6 decide the
-    language surfaces the stdlib depends on — modules/imports, project model,
+19. [DONE — 2026-06-24; docs/STDLIB_HANDOFF.md + scripts/tests/check_stdlib_handoff.sh
+    (make test-stdlib-handoff + CI step). 12 required surfaces: 9 stable_for_stdlib,
+    3 provisional_with_gate (const-generics #6a, iteration #17, build-profiles #10),
+    0 blocked → Phase 7 not gate-blocked. Gate parses the contract table, asserts
+    valid status + existing backing artifact per surface, and fails on any blocked
+    required surface.] Define the stdlib handoff contract for Phase 7. Phases 5-6
+    decide the language surfaces the stdlib depends on — modules/imports, project model,
     tests, diagnostics, bytes/text/path types, collections, narrow const
     generics for fixed-capacity APIs, iteration, explicit callable values,
     capability-polymorphic callbacks, build profiles, and CLI verbs — but the
