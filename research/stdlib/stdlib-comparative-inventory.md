@@ -11,6 +11,15 @@ Comparison set: Zig, Odin, Rust, C++, Go, Clojure, Elixir, Roc, Gleam, and
 OCaml. These cover low-level systems libraries, pragmatic command-line/runtime
 libraries, and functional data/sequence libraries.
 
+Detailed packets:
+
+- [languages/zig.md](languages/zig.md)
+- [languages/rust.md](languages/rust.md)
+- [languages/cpp.md](languages/cpp.md)
+- [languages/odin.md](languages/odin.md)
+- [languages/clojure.md](languages/clojure.md)
+- [languages/elixir.md](languages/elixir.md)
+
 Classification:
 
 - **core-now**: should be in Concrete's stdlib before serious workloads depend on
