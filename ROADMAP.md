@@ -627,13 +627,23 @@ gate.
         — the visible spelling for intentional modular arithmetic. Behavior-
         preserving (plain add/sub/mul); the prerequisite escape hatch before the
         flip.
-      - Stages 2.2-2.6: the ARITHMETIC_POLICY.md §13 sequence — explicit
-        `saturating_*`, then checked `+ - *` lowering with abort blocks (the
-        flip), div/mod-zero checks, shift checks, and report/audit of active
-        checked/proved/runtime status. A proof may justify omitting a *redundant*
-        runtime check; it never changes source meaning. (No external users, so
-        the flip targets the final model directly; std/examples migrate onto
-        `wrapping_*` where they intentionally rely on wrap.)
+      - Stages 2.2-2.6 [HELD — dedicated backend-build session; see memory
+        `phase6-10-arithmetic-flip-state`]. These need codegen INFRASTRUCTURE
+        that does not exist yet, so the next session starts with the infra slice,
+        NOT "saturating" directly:
+          (i)   LLVM IR support for overflow-intrinsic result handling
+                (`llvm.{s,u}{add,sub,mul}.with.overflow` → `{iN, i1}`);
+          (ii)  `extractvalue` + `select`/branch lowering;
+          (iii) an abort-block emission primitive;
+          (iv)  use it for `saturating_*` (add/sub may use `*.sat`; mul needs
+                `with.overflow` + clamp);
+          (v)   use the SAME path for checked `+ - *` (the flip), then migrate
+                std/examples that intentionally wrap onto `wrapping_*`.
+        Then 2.4 div/mod-zero traps, 2.5 shift checks, 2.6 proof/audit (a proof
+        omits a *redundant* runtime check; it never changes source meaning).
+        `SInst` models single-value calls today — struct-returning intrinsics +
+        branching are the infra gap. No external users → the flip targets the
+        final model directly, no compat migration.
 11. **DONE / PERMANENT DECISION (2026-06-23).** State the
     macro/metaprogramming stance: **no language macros**. Concrete
     does not admit hygienic macros, proc macros, syntax macros, derive helpers,
