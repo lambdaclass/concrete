@@ -42,6 +42,14 @@ stdout), which is what surfaced the div/mod divergence; it also asserts
 trap-on-both-sides for overflow/neg/div0/MIN-`-1`/over-width-shift and fmt
 round-trip. Full suite 3008/0, golden green, proof gate 20/20.
 
+The sweep also surfaced one gap that is filed, not fixed: **KNOWN_HOLES H2 —
+float→int cast overflow** (`f as iN` lowers to a raw `fptosi`/`fptoui`, so an
+out-of-range float yields LLVM poison instead of trapping). It is scoped out of
+the integer #10 flip and blocked on interpreter float support (the interp can't
+run float literals, so a checked/saturating fix has no differential oracle yet).
+Disclosed in `docs/KNOWN_HOLES.md` and pinned by
+`scripts/tests/check_float_cast_hole.sh` so the behavior cannot silently change.
+
 ### Phase 6 #10: checked-arithmetic soundness fixes — constant folding, strength reduction, and the proof model (2026-06-24)
 
 Three holes the checked flip opened, all closed and gated:

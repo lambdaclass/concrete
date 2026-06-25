@@ -19,12 +19,38 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-**No soundness holes are currently open** (as of 2026-06-14). The H1 / C9 / C10
-entries below were recently closed and are retained here (with `CLOSED` markers
+One soundness hole is open: **H2 (float→int cast overflow)**, below. The H1 /
+C9 / C10 entries are recently closed and retained here (with `CLOSED` markers
 and regression gates) so the thread is legible and the fixes cannot silently
 regress; the longer-standing closed set is under "CLOSED this session" further
 down. Deferred *design* items that are not holes are listed under "Open design
 decisions" near the end.
+
+### H2. Float→int cast overflow is unchecked — OPEN (filed 2026-06-25)
+
+`f as iN` / `f as uN` lowers to a raw LLVM `fptosi`/`fptoui`. When the float
+value is outside the integer type's range the result is LLVM **poison** — the
+compiled binary silently produces garbage rather than trapping (e.g.
+`9999999999.0 as i32` yields `8501526768`, not a trap; i32's max is
+`2147483647`). In-range casts are correct (`100.5 as i32 == 100`).
+
+This is the one remaining "semantically dark" arithmetic construct after the
+ROADMAP #10 checked-integer flip (which made `+ - * / % << >>` and unary `-`
+trap on overflow/UB). It is scoped out of that flip because (a) it is a distinct
+subsystem from integer arithmetic, and (b) the **interpreter does not support
+float literals yet** (`interp: float literals not yet supported`), so there is
+no interp==compiled differential oracle to verify a fix against — shipping a
+compiled-only checked-cast would be unverifiable by the project's standard.
+
+**Intended fix:** make float→int casts checked (abort on out-of-range) or
+saturating, decided alongside the rest of the float story, once the interpreter
+gains float support so the fix can be differential-tested. Until then this is
+disclosed, not silently dark.
+
+**Gate:** `scripts/tests/check_float_cast_hole.sh` pins the current behavior
+(in-range correct; out-of-range emits a raw `fptosi` and does not trap). When
+the cast is made checked/saturating the gate fails by design — the signal to
+move this entry to CLOSED and replace the pin with a real trap/agreement check.
 
 ### H1. Returned-reference provenance — CLOSED 2026-06-13
 

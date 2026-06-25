@@ -407,6 +407,9 @@ jobs:
       - name: Proven-violation enforcement known-hole gate (constant OOB / div-zero)
         run: bash scripts/tests/check_proven_violation_enforcement.sh
 
+      - name: Float-cast known-hole gate (float->int cast overflow unchecked — KNOWN_HOLES H2)
+        run: bash scripts/tests/check_float_cast_hole.sh
+
       - name: Mono name-collision known-hole gate (nested-generic specialization merge)
         run: bash scripts/tests/check_mono_name_collision.sh
 

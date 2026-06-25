@@ -106,7 +106,11 @@ keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
 Known holes index: every tracked soundness / dark-construct gap — what it is,
 whether it is open or closed, the gate that locks it, and the item here that
 fixes it — is consolidated in [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Keep
-it in sync when a hole is added or fixed.
+it in sync when a hole is added or fixed. One hole is currently open: **H2 —
+float→int cast overflow is unchecked** (raw `fptosi`/`fptoui` → poison on
+out-of-range; the last semantically-dark arithmetic construct after the #10
+checked-integer flip). Blocked on interpreter float support so a checked/
+saturating fix can be differential-tested; pinned by `check_float_cast_hole.sh`.
 
 Governing frame: **no semantically dark constructs.** Every language
 construct is `proved`, `enforced`, `reported`, `assumed`, or `trusted` —
