@@ -73,6 +73,12 @@ Cross-cutting items that must stay visible while the linear queue advances:
   annotation lands.
 - **Package evidence summaries** are Phase 18 #15a, after import constraints
   have real facts to summarize.
+- **Semantic-darkness audits** are Phase 14 #13a. The checked-arithmetic flip
+  showed the recurring failure mode: one source construct changes meaning, but
+  an older assumption survives in SSA cleanup, ProofCore, reports, interpreter
+  behavior, or stdlib examples. Future language/stdlib changes must ask whether
+  source spelling hides width, profile, target, allocation, authority, runtime,
+  or proof-model behavior, and must add a red-team fixture when it does.
 
 Completed work moves to [CHANGELOG.md](CHANGELOG.md). Deferred or conditional
 work moves later in the same linear queue. There are no parallel tracks. Inline
@@ -2182,6 +2188,38 @@ machine-readable.
     safe code (reference returns are rejected at the type level — H1), so it is
     internal-lowering hardening; fixtures must distinguish rejected safe returns,
     allowed trusted raw-pointer returns, and a correct internal ref-valued return.
+13a. Add a semantic-darkness audit and red-team gate. The goal is to catch the
+    checked-arithmetic class of bug before it repeats: a construct looks
+    ordinary in source, but its real behavior depends on width, profile, target,
+    allocation, authority, runtime checks, or an outdated proof/interpreter
+    model. Add `docs/SEMANTIC_DARKNESS_AUDIT.md` and
+    `scripts/tests/check_semantic_darkness.sh`; wire the gate into CI or the
+    Phase 14 validation artifact. The audit must cover:
+    - **source-semantics matrix** for each core operation: parser/AST,
+      checker rule, Core/Elab representation, interpreter behavior, SSA
+      cleanup/optimization, LLVM lowering, ProofCore extraction, reports, and
+      stdlib examples must agree on the same meaning;
+    - **primitive boundary tests** over arithmetic, casts, shifts, div/mod,
+      literals, references, arrays, byte/text/path boundaries, runtime aborts,
+      target assumptions, and trusted/Unsafe escape hatches;
+    - **stdlib authority/allocation audit**: every stdlib API that allocates,
+      touches host state, uses trusted/Unsafe internals, depends on target/OS
+      behavior, or relies on sentinel/wrapping/truncating behavior must expose
+      that fact in source or report output;
+    - **proof/runtime consistency fixtures**: interpreter-vs-compiled,
+      optimized-vs-unoptimized where available, report-vs-runtime, and
+      ProofCore-vs-runtime behavior must agree or be explicitly classified as
+      trusted/unsupported;
+    - **old-assumption grep**: scan code, tests, docs, and snapshots for stale
+      terms such as `wrap`, `wrapping`, `overflow`, `truncate`, `expected
+      diverge`, `unbounded Int`, `addw`, `mod 2`, `unsafe`, `trusted`,
+      `temporary`, and `current lowering`; every hit must be either current,
+      linked to a roadmap item, or removed.
+    The first version should seed fixtures from the known high-risk families:
+    checked arithmetic / explicit wrapping, float→int cast overflow (H2),
+    lossy casts, div/mod-zero, shifts, returned-reference rejection, ByteView
+    wrong-buffer guards, HMAC/SHA-256 modular arithmetic, and capability-bearing
+    stdlib calls.
 14. Add the Phase 14 validation artifact: a compiler-soundness dashboard with
     one witness program per shipped ProofCore construct, one status per
     R-rule, replay commands for proved/mechanically-validated facts, and
