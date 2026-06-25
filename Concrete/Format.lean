@@ -104,13 +104,37 @@ private def fmtTypeParams (typeParams : List String) (typeBounds : List (String 
 -- Expression formatting
 -- ============================================================
 
+/-- Re-escape a string-literal value for source output. Must be the exact
+    inverse of `Lexer.lexStringLoop`'s unescaping (`\n \t \r \\ \" \0`), or the
+    formatter emits output it cannot re-parse (e.g. `"a\"b"` → `"a"b"`). -/
+def escapeStrLit (val : String) : String :=
+  val.foldl (fun acc c =>
+    acc ++ (match c with
+      | '\\' => "\\\\"
+      | '"'  => "\\\""
+      | '\n' => "\\n"
+      | '\t' => "\\t"
+      | '\r' => "\\r"
+      | _    => if c.toNat == 0 then "\\0" else String.singleton c)) ""
+
+/-- Re-escape a char-literal value. Inverse of `Lexer.lexCharLit`
+    (`\n \t \r \\ \' \0`). -/
+def escapeCharLit (c : Char) : String :=
+  match c with
+  | '\\' => "\\\\"
+  | '\'' => "\\'"
+  | '\n' => "\\n"
+  | '\t' => "\\t"
+  | '\r' => "\\r"
+  | _    => if c.toNat == 0 then "\\0" else String.singleton c
+
 mutual
 partial def fmtExprAt (ind : Nat) : Expr → String
   | .intLit _ val => toString val
   | .floatLit _ val => toString val
   | .boolLit _ val => if val then "true" else "false"
-  | .strLit _ val => s!"\"{val}\""
-  | .charLit _ val => s!"'{val}'"
+  | .strLit _ val => s!"\"{escapeStrLit val}\""
+  | .charLit _ val => s!"'{escapeCharLit val}'"
   | .ident _ name => name
   | .binOp _ op lhs rhs => s!"{fmtExprAt ind lhs} {binOpToStr op} {fmtExprAt ind rhs}"
   | .unaryOp _ op operand => s!"{unaryOpToStr op}{fmtExprParensAt ind operand}"

@@ -675,7 +675,15 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
       if isFloatTy ty then
         emitStructured s (.fneg dst (floatTyToLLVMTy ty) valOp)
       else
-        emitStructured s (.binOp dst .sub (intTyToLLVMTy ty) (.intLit 0) valOp)
+        -- Integer negation is CHECKED (ROADMAP #10): `-x` is `0 - x`, which
+        -- overflows exactly when `x` is the type's MIN (e.g. `-(i32::MIN)`).
+        -- Route through the same checked subtract helper as binary `-` so it
+        -- traps instead of silently wrapping. (Pointer-offset negation above
+        -- stays a raw `sub` — it is internal i64 address arithmetic, not a user
+        -- value.)
+        let iTy := intTyToLLVMTy ty
+        let mnem := if ssaIsSignedInt ty then "ssub" else "usub"
+        emitStructured s (.call (some dst) iTy (.global (checkedCallName mnem ty)) [(iTy, .intLit 0), (iTy, valOp)])
     | .not_ => emitStructured s (.binOp dst .xor_ .i1 valOp (.intLit 1))
     | .bitnot => emitStructured s (.binOp dst .xor_ (intTyToLLVMTy ty) valOp (.intLit (-1)))
   | .call dst fn args retTy =>

@@ -325,9 +325,11 @@ private def foldBinOpConst (op : BinOp) (lhs rhs : SVal) (ty : Ty) : Option SVal
     | .add => let r := a + b; if fitsType ty r then some (.intConst r ty) else none
     | .sub => let r := a - b; if fitsType ty r then some (.intConst r ty) else none
     | .mul => let r := a * b; if fitsType ty r then some (.intConst r ty) else none
-    -- div: b!=0 AND result in range (signed MIN/-1 overflows → leave for helper).
-    | .div => if b != 0 && fitsType ty (a / b) then some (.intConst (a / b) ty) else none
-    | .mod => if b != 0 then some (.intConst (a % b) ty) else none
+    -- div/mod use TRUNCATED division (toward zero) to match LLVM sdiv/srem and
+    -- the interpreter — Lean's floored `/`/`%` disagree for negative operands.
+    -- b!=0 AND result in range (signed MIN/-1 overflows → leave for the helper).
+    | .div => if b != 0 && fitsType ty (Int.tdiv a b) then some (.intConst (Int.tdiv a b) ty) else none
+    | .mod => if b != 0 && fitsType ty (Int.tdiv a b) then some (.intConst (Int.tmod a b) ty) else none
     | .eq => some (.boolConst (a == b))
     | .neq => some (.boolConst (a != b))
     | .lt => some (.boolConst (a < b))

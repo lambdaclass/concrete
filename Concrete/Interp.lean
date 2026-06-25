@@ -222,12 +222,21 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
   | .saturatingMul, .int a ty, .int b _ => .ok (.int (saturateToType ty (a * b)) ty)
   | .div, .int _ _, .int 0 _ => .error "interp: division by zero"
   | .div, .int a ty, .int b _ =>
-    -- checked: signed MIN / -1 overflows (matches the compiled abort).
-    match checkedToType ty (a / b) with
+    -- Truncated division (toward zero) to match LLVM `sdiv`/`udiv` — NOT Lean's
+    -- floored `/`, which disagrees for negative operands (e.g. -17/5 is -3, not
+    -- -4). Checked: signed MIN / -1 overflows (matches the compiled abort).
+    match checkedToType ty (Int.tdiv a b) with
     | some v => .ok (.int v ty)
     | none   => .error "interp: arithmetic overflow (checked /)"
   | .mod, .int _ _, .int 0 _ => .error "interp: modulo by zero"
-  | .mod, .int a ty, .int b _ => .ok (.int (maskWidth ty (a % b)) ty)
+  | .mod, .int a ty, .int b _ =>
+    -- Truncated remainder (sign of dividend) to match LLVM `srem`/`urem` — NOT
+    -- Lean's floored `%` (e.g. -17%5 is -2, not 3). Checked: signed `MIN % -1`
+    -- is UB (the implied division overflows) and the compiled srem helper
+    -- aborts, so trap here too via the same quotient-overflow condition as `/`.
+    match checkedToType ty (Int.tdiv a b) with
+    | some _ => .ok (.int (maskWidth ty (Int.tmod a b)) ty)
+    | none   => .error "interp: arithmetic overflow (checked %)"
   | .eq, .int a _, .int b _ => .ok (.bool (a == b))
   | .neq, .int a _, .int b _ => .ok (.bool (a != b))
   | .lt, .int a _, .int b _ => .ok (.bool (a < b))
@@ -262,7 +271,12 @@ def evalBinOp (op : BinOp) (lhs rhs : IVal) : Except String IVal :=
 
 def evalUnaryOp (op : UnaryOp) (v : IVal) : Except String IVal :=
   match op, v with
-  | .neg, .int n ty => .ok (.int (maskWidth ty (-n)) ty)
+  -- Negation is CHECKED (ROADMAP #10): `-x` overflows when `x` is the type's
+  -- MIN, exactly as the compiled `0 - x` checked-subtract helper traps.
+  | .neg, .int n ty =>
+    match checkedToType ty (-n) with
+    | some v => .ok (.int v ty)
+    | none   => .error "interp: arithmetic overflow (checked negation)"
   | .not_, .bool b => .ok (.bool (!b))
   -- ~n at an unsigned width is `2^w - 1 - n`; maskWidth turns the
   -- mathematical `-(n+1)` into exactly that (e.g. ~0 = 0xFFFFFFFF

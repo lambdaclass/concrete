@@ -10,6 +10,38 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #10: arithmetic red-team sweep — four bugs found and fixed (2026-06-25)
+
+A red-team pass over everything the checked-arithmetic flip touched (plus the
+formatter) found four real bugs, all fixed and locked down by a new gate
+`scripts/tests/check_arith_redteam.sh` (35 checks, wired into Makefile + CI):
+
+- **Unary `-(MIN)` was unchecked.** The flip covered binops but missed unary
+  negation: `-(i32::MIN)` silently wrapped in codegen and produced an
+  out-of-range value in the interpreter (`128` for `-(i8::MIN)`). Now `-x`
+  routes through the checked subtract helper (codegen) and `checkedToType`
+  (interp), so it traps — matching `0 - x`.
+- **Signed `/` and `%` used floored division.** The interpreter (Lean's `/`/`%`)
+  and the SSACleanup constant folder both floored, while the backend `sdiv`/
+  `srem` and the proof model (`BitVec.sdiv`/`srem`) truncate toward zero. They
+  disagreed on every negative operand (`-17 / 5` was `-4` vs `-3`; `-17 % 5` was
+  `3` vs `-2`). The algebraic div/mod-identity test missed it because the
+  identity holds under either convention. Interp and the folder now use
+  `Int.tdiv`/`Int.tmod`.
+- **Signed `MIN % -1` did not trap in the interpreter.** The compiled srem
+  helper aborts (the implied division overflows, LLVM UB); interp returned `0`.
+  Interp now traps via the same quotient-overflow condition as `/`.
+- **The formatter did not re-escape string/char literals.** `"a\"b"` formatted
+  to `"a"b"`, which the parser then rejects — so `--fmt` was not idempotent on
+  any program with an embedded quote, tab, newline, or backslash (e.g. the
+  hmac_sha256 example). `Format.escapeStrLit`/`escapeCharLit` now mirror the
+  lexer's unescaping exactly.
+
+The new gate's strong oracle is value agreement (interp stdout == compiled
+stdout), which is what surfaced the div/mod divergence; it also asserts
+trap-on-both-sides for overflow/neg/div0/MIN-`-1`/over-width-shift and fmt
+round-trip. Full suite 3008/0, golden green, proof gate 20/20.
+
 ### Phase 6 #10: checked-arithmetic soundness fixes — constant folding, strength reduction, and the proof model (2026-06-24)
 
 Three holes the checked flip opened, all closed and gated:
