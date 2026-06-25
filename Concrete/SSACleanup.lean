@@ -446,6 +446,14 @@ private def foldConstants (blocks : List SBlock) : List SBlock :=
   let (replacements, rewrites) := blocks.foldl (fun (acc : List (String × SVal) × List (String × SInst)) b =>
     b.insts.foldl (fun (acc : List (String × SVal) × List (String × SInst)) inst =>
       match inst with
+      -- Constant negation: fold `neg (const)` to the negated constant when the
+      -- RESULT fits the type — range-check the result, not the inner literal, so
+      -- `-128 : i8` (parsed as `neg 128`) becomes the valid constant -128 instead
+      -- of a runtime `0 - 128` that overflows and traps. If the result does NOT
+      -- fit (e.g. `-(i8::MIN)` after constant propagation), leave the op live so
+      -- the checked negation helper traps at runtime — matching the interpreter.
+      | .unaryOp dst .neg (.intConst n _) ty =>
+        if fitsType ty (-n) then (acc.1 ++ [(dst, .intConst (-n) ty)], acc.2) else acc
       | .binOp dst op lhs rhs ty =>
         match foldBinOp op lhs rhs ty with
         | some val => (acc.1 ++ [(dst, val)], acc.2)

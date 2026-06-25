@@ -74,6 +74,14 @@ write neg_i64  'fn main() -> i64 { let x: i64 = -9223372036854775808; return -x;
 for t in neg_i8 neg_i32 neg_i64; do trap_both "$t"; done
 write neg_ok 'fn main() -> i64 { let x: i32 = 5; return (-x) as i64; }'
 agree neg_ok -5
+# Boundary: the negative LITERAL at the signed minimum is a VALID value and must
+# NOT trap — `-128 : i8` is `neg 128`, range-checked on the RESULT (-128 fits),
+# folded to a constant. This is the flip side of the runtime `-(MIN)` trap above;
+# a too-eager checked-neg made `-128` itself trap (numeric-literals CI failure).
+write neg_lit_i8  'fn main() -> i64 { let a: i8 = -128; return a as i64; }'
+write neg_lit_i32 'fn main() -> i64 { let a: i32 = -2147483648; return a as i64; }'
+agree neg_lit_i8 -128
+agree neg_lit_i32 -2147483648
 
 echo "=== mul by power-of-2 overflow traps (unsound mul->shl reduction stays gone) ==="
 write mulp2_i32 'fn main() -> i64 { let x: i32 = 1073741824; return (x * 4) as i64; }'  # 2^30 * 4 = 2^32 > i32::MAX
