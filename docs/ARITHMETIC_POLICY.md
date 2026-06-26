@@ -360,25 +360,33 @@ No trap. The bit pattern is identical. This is necessary for byte-manipulation c
 
 ## 9. Report and Diagnostic Visibility
 
-### 9.1 `--report arithmetic`
+### 9.1 `--report arithmetic` — IMPLEMENTED (2026-06-26)
 
-A new report command shows the arithmetic mode for each function:
+`concrete <file> --report arithmetic` classifies every arithmetic site (per
+function) into exactly one of the §3.2 classes and prints per-function counts +
+the per-site detail and a grand total:
 
 ```
-$ concrete project.con --report arithmetic
+$ concrete file.con --report arithmetic
+=== Arithmetic Site Classification (--report arithmetic) ===
 
-  function             mode       wrapping_ops  saturating_ops  div_sites  shift_sites
-  ─────────────────────────────────────────────────────────────────────────────────────
-  int_ring_push        mixed      1             0               0          0
-  ctrl_step            mixed      0             1               1          0
-  read_u32_be          wrapping   4             0               0          4
-  validate_header      checked    0             0               0          0
+-- m.f  (file.con:12)
+   runtime-checked: 9  explicit-wrapping: 1  explicit-saturating: 1  proved: 0
+   + [runtime-checked], wrapping_add [explicit-wrapping], / [runtime-checked], ...
+
+Totals: 12 arithmetic sites — 10 runtime-checked, 0 proved, 1 explicit-wrapping, 1 explicit-saturating
 ```
 
-- **checked**: no wrapping or saturating intrinsics used. All arithmetic traps on overflow.
-- **wrapping**: at least one wrapping intrinsic used.
-- **mixed**: both checked operators and wrapping/saturating intrinsics present.
-- **saturating**: at least one saturating intrinsic used.
+A *site* is a checked integer op (`+ - * / % << >>`), a unary `-`, or a checked
+`float→int` cast (→ **runtime-checked**); a `wrapping_*` (→ **explicit-wrapping**);
+or a `saturating_*` (→ **explicit-saturating**). Comparisons, logical ops, pure
+bitwise `& | ^`, and float `+ - * /` (IEEE, not the integer trap) are not
+classified. **proved** is currently always 0: the proof model discharges
+refinement against unbounded-`Int` specs with an implicit no-overflow assumption
+rather than discharging overflow obligations, so no site is yet "overflow
+proved" — this becomes non-zero only when overflow proofs land (and the
+now-redundant runtime check may then be elided). Gate:
+`scripts/tests/check_report_arithmetic.sh`.
 
 The report lists exact counts of wrapping, saturating, division, and shift sites so a reviewer can find them.
 
@@ -529,7 +537,10 @@ This closes the interpreter-vs-compiled divergence for the first time.
    `@__cc_{shl,ashr,lshr}` helpers abort when the shift amount `>=` bit width
    (was LLVM poison/UB). Interp traps to match.
 5. **Switch default arithmetic to checked**: replace `add`/`sub`/`mul` emission with `llvm.*.with.overflow` intrinsics + abort branch. This is the breaking change.
-6. **Add `--report arithmetic`**: implement the per-function arithmetic mode report.
+6. **Add `--report arithmetic`** **[DONE — 2026-06-26]**: per-function, per-site
+   classification into the §3.2 classes (runtime-checked / proved /
+   explicit-wrapping / explicit-saturating); gate
+   `scripts/tests/check_report_arithmetic.sh`. See §9.1.
 7. **Update interpreter**: add overflow/shift/division checks to `evalBinOp`.
 8. **Update pressure programs**: fix the handful of programs that rely on wrapping.
 9. **Update proof eligibility** **[DONE — 2026-06-24]**: `wrapping_add` at `u32`

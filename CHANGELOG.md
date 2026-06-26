@@ -10,6 +10,26 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 #10 complete: `--report arithmetic` audit surface (2026-06-26)
+
+`concrete <file> --report arithmetic` classifies every arithmetic site, per
+function, into exactly one of the ARITHMETIC_POLICY §3.2 classes:
+**runtime-checked** (`+ - * / % << >>`, unary `-`, checked float→int cast),
+**explicit-wrapping** (`wrapping_*`), **explicit-saturating** (`saturating_*`),
+or **proved**. It prints per-function counts + per-site detail and a grand
+total. Comparisons, logical ops, pure bitwise `& | ^`, and float `+ - * /`
+(IEEE, not the integer trap) are correctly excluded. `proved` is currently
+always 0 — the proof model discharges refinement against unbounded-`Int` specs
+with an implicit no-overflow assumption rather than discharging overflow
+obligations; it becomes non-zero when overflow proofs land (then the redundant
+runtime check may be elided). On the proof-carrying SHA-256 example it reports
+26 explicit-wrapping sites (exactly the mod-2³² migration) + 108 runtime-checked.
+Gate `scripts/tests/check_report_arithmetic.sh` (Makefile + CI). **This was the
+last open item of ROADMAP #10 — the arithmetic model is now complete:** checked
+integer arithmetic, unary negation, division/shift, float→int casts, explicit
+wrapping/saturating, and a full audit surface, with no semantically-dark
+constructs remaining.
+
 ### Phase 6 #10: arithmetic red-team sweep — four bugs found and fixed (2026-06-25)
 
 A red-team pass over everything the checked-arithmetic flip touched (plus the

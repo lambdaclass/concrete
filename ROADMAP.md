@@ -682,9 +682,11 @@ gate.
         mapping to `.wrappingAdd`, so `wrapping_add@u32` is the provable mod-2³²
         operator and checked `+` extracts to mathematical `add`. SHA-256 example
         migrated to `wrapping_add` (6 proofs still verify; oracle 200/0).
-        Remaining for #10: 2.6 reports/audit classification
-        (ARITHMETIC_POLICY §3.2 — proved / runtime-checked / explicit-wrapping /
-        explicit-saturating per site; `--report arithmetic`).
+      - Stage 2.6 reports/audit classification: [DONE — 2026-06-26]
+        `--report arithmetic` classifies every site as proved / runtime-checked /
+        explicit-wrapping / explicit-saturating (ARITHMETIC_POLICY §3.2/§9.1);
+        `proved` is 0 until overflow proofs land. Gate
+        `scripts/tests/check_report_arithmetic.sh`. **#10 is now complete.**
       - H2 float→int cast overflow: [DONE — 2026-06-26; checked helpers +
         `scripts/tests/check_float_cast.sh`] `f as iN/uN` aborts on NaN, ±inf, or
         out-of-range and truncates toward zero in range. The gate is compiled-only

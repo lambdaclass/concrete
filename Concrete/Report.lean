@@ -304,6 +304,164 @@ def capabilityReport (modules : List CModule) : String :=
   s!"{header}\n\n{"\n\n".intercalate body}\n{summary}\n"
 
 -- ============================================================
+-- Arithmetic site classification (--report arithmetic)
+-- ROADMAP #10 §3.2 / §9.1: every arithmetic site is classified as exactly one
+-- of proved / runtime-checked / explicit-wrapping / explicit-saturating, so a
+-- reviewer can see both an operation's meaning (from the source spelling) and
+-- how a checked one is discharged.
+-- ============================================================
+
+inductive ArithClass where
+  | runtimeChecked | proved | wrapping | saturating
+  deriving BEq
+
+def ArithClass.label : ArithClass → String
+  | .runtimeChecked => "runtime-checked"
+  | .proved         => "proved"
+  | .wrapping       => "explicit-wrapping"
+  | .saturating     => "explicit-saturating"
+
+private def arithIsIntTy : Ty → Bool
+  | .int | .uint | .i8 | .i16 | .i32 | .u8 | .u16 | .u32 => true
+  | _ => false
+
+private def arithIsFloatTy : Ty → Bool
+  | .float32 | .float64 => true
+  | _ => false
+
+/-- One arithmetic site: the operation's source label and its class. -/
+abbrev ArithSite := String × ArithClass
+
+/-- Classify a binary operator at a given operand type, or `none` if it is not
+    an overflow-relevant arithmetic site (comparisons, logical, and pure bitwise
+    `& | ^` are total and not classified; float `+ - * /` use IEEE semantics, not
+    the checked-integer trap, so they are excluded too). -/
+private def classifyArithBinOp (op : BinOp) (operandTy : Ty) : Option ArithSite :=
+  match op with
+  | .wrappingAdd => some ("wrapping_add", .wrapping)
+  | .wrappingSub => some ("wrapping_sub", .wrapping)
+  | .wrappingMul => some ("wrapping_mul", .wrapping)
+  | .saturatingAdd => some ("saturating_add", .saturating)
+  | .saturatingSub => some ("saturating_sub", .saturating)
+  | .saturatingMul => some ("saturating_mul", .saturating)
+  | .add => if arithIsIntTy operandTy then some ("+", .runtimeChecked) else none
+  | .sub => if arithIsIntTy operandTy then some ("-", .runtimeChecked) else none
+  | .mul => if arithIsIntTy operandTy then some ("*", .runtimeChecked) else none
+  | .div => if arithIsIntTy operandTy then some ("/", .runtimeChecked) else none
+  | .mod => if arithIsIntTy operandTy then some ("%", .runtimeChecked) else none
+  | .shl => if arithIsIntTy operandTy then some ("<<", .runtimeChecked) else none
+  | .shr => if arithIsIntTy operandTy then some (">>", .runtimeChecked) else none
+  | _ => none
+
+mutual
+/-- Collect every arithmetic site in an expression. -/
+private partial def arithSitesE : CExpr → List ArithSite
+  | .binOp op l r _ =>
+      (match classifyArithBinOp op (CExpr.ty l) with | some s => [s] | none => [])
+        ++ arithSitesE l ++ arithSitesE r
+  | .unaryOp op operand _ =>
+      (match op with
+       | .neg => if arithIsIntTy (CExpr.ty operand) then [("unary -", ArithClass.runtimeChecked)] else []
+       | _ => [])
+        ++ arithSitesE operand
+  | .cast inner targetTy =>
+      (if arithIsFloatTy (CExpr.ty inner) && arithIsIntTy targetTy
+       then [("float->int cast", ArithClass.runtimeChecked)] else [])
+        ++ arithSitesE inner
+  | .call _ _ args _ => (args.map arithSitesE).flatten
+  | .structLit _ _ fields _ => (fields.map (fun f => arithSitesE f.2)).flatten
+  | .fieldAccess obj _ _ => arithSitesE obj
+  | .enumLit _ _ _ fields _ => (fields.map (fun f => arithSitesE f.2)).flatten
+  | .match_ scrut arms _ => arithSitesE scrut ++ (arms.map arithSitesArm).flatten
+  | .borrow inner _ => arithSitesE inner
+  | .borrowMut inner _ => arithSitesE inner
+  | .deref inner _ => arithSitesE inner
+  | .arrayLit elems _ => (elems.map arithSitesE).flatten
+  | .arrayIndex arr idx _ => arithSitesE arr ++ arithSitesE idx
+  | .try_ inner _ => arithSitesE inner
+  | .allocCall inner allocExpr _ => arithSitesE inner ++ arithSitesE allocExpr
+  | .whileExpr cond body elseBody _ =>
+      arithSitesE cond ++ (body.map arithSitesS).flatten ++ (elseBody.map arithSitesS).flatten
+  | .ifExpr cond then_ else_ _ =>
+      arithSitesE cond ++ (then_.map arithSitesS).flatten ++ (else_.map arithSitesS).flatten
+  | _ => []
+
+private partial def arithSitesArm : CMatchArm → List ArithSite
+  | .enumArm _ _ _ guard body =>
+      (match guard with | some g => arithSitesE g | none => []) ++ (body.map arithSitesS).flatten
+  | .litArm value guard body =>
+      arithSitesE value ++ (match guard with | some g => arithSitesE g | none => []) ++ (body.map arithSitesS).flatten
+  | .varArm _ _ guard body =>
+      (match guard with | some g => arithSitesE g | none => []) ++ (body.map arithSitesS).flatten
+  | .rangeArm lo hi _ guard body =>
+      arithSitesE lo ++ arithSitesE hi ++ (match guard with | some g => arithSitesE g | none => []) ++ (body.map arithSitesS).flatten
+
+private partial def arithSitesS : CStmt → List ArithSite
+  | .letDecl _ _ _ value => arithSitesE value
+  | .assign _ value => arithSitesE value
+  | .return_ value _ => match value with | some v => arithSitesE v | none => []
+  | .expr e _ => arithSitesE e
+  | .ifElse cond then_ else_ =>
+      arithSitesE cond ++ (then_.map arithSitesS).flatten
+        ++ (match else_ with | some e => (e.map arithSitesS).flatten | none => [])
+  | .while_ cond body _ step =>
+      arithSitesE cond ++ (body.map arithSitesS).flatten ++ (step.map arithSitesS).flatten
+  | .fieldAssign obj _ value => arithSitesE obj ++ arithSitesE value
+  | .derefAssign target value => arithSitesE target ++ arithSitesE value
+  | .arrayIndexAssign arr idx value => arithSitesE arr ++ arithSitesE idx ++ arithSitesE value
+  | .break_ value _ => match value with | some v => arithSitesE v | none => []
+  | .continue_ _ => []
+  | .defer body => arithSitesE body
+  | .borrowIn _ _ _ _ _ body => (body.map arithSitesS).flatten
+end
+
+private structure ArithFnRow where
+  qualName : String
+  loc : Option SourceLoc
+  sites : List ArithSite
+
+private partial def arithRowsForModule (locMap : FnLocMap) (m : CModule)
+    (modulePath : String := "") : List ArithFnRow :=
+  let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
+  let rows : List ArithFnRow := m.functions.map fun f =>
+    let qualName := qualPrefix ++ "." ++ f.name
+    { qualName := qualName, loc := lookupLoc locMap qualName,
+      sites := (f.body.map arithSitesS).flatten }
+  rows ++ m.submodules.foldl (fun acc sub => acc ++ arithRowsForModule locMap sub qualPrefix) []
+
+private def countClass (sites : List ArithSite) (c : ArithClass) : Nat :=
+  (sites.filter fun s => s.2 == c).length
+
+/-- `--report arithmetic`: per-function classification of every arithmetic site
+    (ROADMAP #10 §3.2). `proved` is currently always zero — the proof model
+    discharges refinement against unbounded-`Int` specs with an implicit
+    no-overflow assumption rather than discharging overflow obligations, so no
+    site is yet "overflow proved"; this becomes non-zero when overflow proofs
+    land (then the now-redundant runtime check may be elided). -/
+def arithmeticReport (modules : List CModule) (locMap : FnLocMap := []) : String :=
+  let header := "=== Arithmetic Site Classification (--report arithmetic) ==="
+  let rows := modules.foldl (fun acc m => acc ++ arithRowsForModule locMap m) []
+  let rowsWithSites := rows.filter fun r => !r.sites.isEmpty
+  let fmtRow := fun (r : ArithFnRow) =>
+    let locStr := match r.loc with | some (f, l) => s!"{f}:{l}" | none => "(no source)"
+    let rc := countClass r.sites .runtimeChecked
+    let wr := countClass r.sites .wrapping
+    let sa := countClass r.sites .saturating
+    let pr := countClass r.sites .proved
+    let detail := ", ".intercalate (r.sites.map fun s => s!"{s.1} [{s.2.label}]")
+    s!"-- {r.qualName}  ({locStr})\n   runtime-checked: {rc}  explicit-wrapping: {wr}  explicit-saturating: {sa}  proved: {pr}\n   {detail}"
+  let body := if rowsWithSites.isEmpty then "(no arithmetic sites)"
+              else "\n\n".intercalate (rowsWithSites.map fmtRow)
+  let allSites := (rows.map (·.sites)).flatten
+  let total := allSites.length
+  let rc := countClass allSites .runtimeChecked
+  let wr := countClass allSites .wrapping
+  let sa := countClass allSites .saturating
+  let pr := countClass allSites .proved
+  let summary := s!"\nTotals: {total} arithmetic sites — {rc} runtime-checked, {pr} proved, {wr} explicit-wrapping, {sa} explicit-saturating"
+  s!"{header}\n\n{body}\n{summary}\n"
+
+-- ============================================================
 -- Report 2: Unsafe Signature Summary with trust boundary
 --           analysis (--report unsafe)
 -- ============================================================
