@@ -389,6 +389,9 @@ jobs:
       - name: "Report-arithmetic gate (Phase 6 #10 §3.2 — per-site classification: checked/proved/wrapping/saturating)"
         run: bash scripts/tests/check_report_arithmetic.sh
 
+      - name: Memory-model gate (Phase 6 #33 — no uninitialized reads by construction)
+        run: bash scripts/tests/check_memory_model.sh
+
       - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
         run: bash scripts/tests/check_rich_diagnostics.sh
 

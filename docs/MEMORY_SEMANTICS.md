@@ -32,6 +32,21 @@ unconsumed → frozen    (via borrow block, temporary)
 
 **Copy types** skip lifecycle tracking entirely. Using a Copy value never changes its state.
 
+### Definite initialization — no uninitialized reads by construction
+
+There is no `unconsumed`-but-uninitialized state, because **a binding cannot be
+declared without a value**. The grammar requires an initializer: `let x: T = e`
+(and `let mut x: T = e`). A declaration with no initializer — `let x: T;` — is a
+*parse error*, not a deferred-initialization form. Reassignment (`let mut x = e0;
+x = e1;`) only ever replaces an already-valid value.
+
+Consequently, safe Concrete has **no uninitialized reads, by construction** —
+there is no uninitialized state for a read to observe, so this needs no
+definite-assignment dataflow analysis; it is a grammar-level guarantee. (The
+only path to indeterminate memory is through `Unsafe`/FFI, where it is an
+explicit, audited assumption — see [SAFETY.md](SAFETY.md) and [FFI.md](FFI.md).)
+Locked by `scripts/tests/check_memory_model.sh`.
+
 ---
 
 ## 2. Copy vs Linear

@@ -758,9 +758,12 @@ gate.
     conversion; no implicit unit conversion, no dependent numeric refinements,
     and no proof status may depend on unit erasure unless a contract/VC names
     the conversion explicitly.
-16. Add source style guidance alongside `concrete fmt`: idiomatic layout for
-    functions, modules, contracts, matches, error handling, examples, and
-    proof-bearing code.
+16. [DONE — 2026-06-27; docs/STYLE.md] Source style guidance alongside
+    `concrete fmt`: naming, function/module structure, pattern/error-handling
+    idioms, arithmetic spelling, and proof-bearing-code layout. Mechanical layout
+    is owned by `concrete fmt` (gated by `check_concrete_fmt.sh`); STYLE.md covers
+    the advisory rest (idiomatic layout for functions, modules, contracts,
+    matches, error handling, examples, and proof-bearing code).
 17. [DONE — 2026-06-24; docs/ITERATION_PROTOCOL.md +
     scripts/tests/check_iteration_protocol.sh (make test-iteration-protocol + CI
     step). Audit-and-gate: documented the fixed traversal hierarchy (for/indexed,
@@ -853,10 +856,15 @@ gate.
 25. Add basic LSP/editor diagnostics early: parse/type errors, capability
     summaries, hover for inferred types, and jump-to-definition. Deeper
     proof/evidence LSP features remain in the later editor phase.
-26. Decide target-conditional code selection before freestanding and
-    cross-platform stdlib work harden. Prefer profile-selected source roots and
-    modules in `Concrete.toml`; if narrow `cfg` attributes are added later, they
-    must be LL(1)-safe, small, target/profile-only, and reported in audit.
+26. [DECIDED — 2026-06-27; docs/TARGET_CONDITIONAL.md] Target-conditional code
+    selection: prefer profile/target-selected source roots and modules in
+    `Concrete.toml` (built on the existing `[profile]` section) over in-source
+    conditionals — which file compiled for which target is a build/audit fact,
+    not preprocessor state. A narrow `cfg`-style attribute is deferred, not
+    forbidden: if a workload needs it, it must be LL(1)-safe, small,
+    target/profile-only, and reported in audit. Until then there is no `cfg`.
+    Implementation of profile-keyed source roots lands when cross-platform stdlib
+    work needs it.
 27. Define compiler-known target constants as ordinary, audit-visible compile
     facts, not hidden preprocessor state. Inspired by Odin's builtin target
     constants, Concrete should expose names such as `CONCRETE_OS`,
@@ -905,11 +913,16 @@ gate.
     obvious generated-code regressions. This is separate from the compiler
     performance-budget gates (a closed-Phase-4 deferral, now folded into
     Phase 17's artifact/stability hardening).
-33. Document the memory model for ordinary users: move/copy/drop behavior,
-    cleanup, borrows, linear values, trusted/Unsafe escape hatches, definite
-    assignment, and what is rejected. State the invariant explicitly: safe
-    Concrete has no uninitialized reads by construction; trusted/FFI memory may
-    carry explicit assumptions.
+33. [DONE — 2026-06-27; docs/MEMORY_MODEL.md + check_memory_model.sh] User-facing
+    memory model: move/copy/drop, cleanup, borrows, linear values, trusted/Unsafe
+    escape hatches, definite initialization, and what is rejected — a narrative
+    overview linking the canonical references (MEMORY_SEMANTICS / VALUE_MODEL /
+    MEMORY_GUARANTEES). The invariant is stated explicitly and now backed by a
+    gate: safe Concrete has **no uninitialized reads by construction** — `let`
+    requires an initializer (`let x: T;` is a parse error), so there is no
+    uninitialized state and no need for definite-assignment dataflow. Found that
+    the guarantee is grammar-level (stronger than dataflow analysis); added the
+    invariant to MEMORY_SEMANTICS.md §1.
 34. Add cross-platform build sanity for the supported host set: macOS and Linux
     first, with CI coverage, reproducible commands, and documented toolchain
     expectations.

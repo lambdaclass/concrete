@@ -10,6 +10,28 @@ For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
 
+### Phase 6 Tier A sweep: style guide, memory model, target-conditional (2026-06-27)
+
+Three roadmap items closed by decision/doc/gate, shrinking Phase 6 without
+implementation churn:
+
+- **#16 source style guide** (`docs/STYLE.md`): naming, function/module
+  structure, pattern/error-handling idioms, arithmetic spelling, proof-bearing
+  layout. Mechanical layout stays owned by `concrete fmt`; STYLE.md is the
+  advisory rest.
+- **#33 memory model** (`docs/MEMORY_MODEL.md` + `check_memory_model.sh`): a
+  user-facing narrative tying together the canonical references. The audit found
+  that **"no uninitialized reads" is a grammar-level guarantee, not a dataflow
+  result** — `let` requires an initializer (`let x: T;` is a parse error), so
+  uninitialized state is unrepresentable. Stated as an explicit invariant in
+  MEMORY_SEMANTICS.md §1 and backed by a gate (declares-without-value rejected;
+  declare-with-value + mutate-after-init still work).
+- **#26 target-conditional** (`docs/TARGET_CONDITIONAL.md`): decided — prefer
+  profile/target-selected source roots in `Concrete.toml` (a build/audit fact,
+  not preprocessor state) over in-source conditionals; a narrow `cfg`-style
+  attribute is deferred (LL(1)-safe, target/profile-only, audit-reported if ever
+  added). No `cfg` in the language until a workload pulls it.
+
 ### Phase 6 #10 complete: `--report arithmetic` audit surface (2026-06-26)
 
 `concrete <file> --report arithmetic` classifies every arithmetic site, per
