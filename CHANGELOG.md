@@ -32,6 +32,19 @@ implementation churn:
   attribute is deferred (LL(1)-safe, target/profile-only, audit-reported if ever
   added). No `cfg` in the language until a workload pulls it.
 
+And three forks closed as **decide-and-defer** (no premature architecture):
+
+- **#9 C/ABI glue UX** (`docs/FFI_GLUE.md`): eventual shape is a narrow
+  `concrete ffi`/`bindgen` emitting/importing *auditable* glue (ABI/layout/
+  ownership/capability/trust facts, source spans, reproducible). Blocked on the
+  FFI surface (#8); not built before it.
+- **#15 units-of-measure** (`docs/UNITS_OF_MEASURE.md`): evaluated → no units in
+  v1 (a type-system feature with proof/report implications). Units live in names
+  (`len_bytes`) per STYLE.md today; research/workload-gated otherwise.
+- **#27 target constants** (`docs/TARGET_CONSTANTS.md`): decided — typed,
+  resolved audit facts (not preprocessor magic), recorded in reports/bundles;
+  implementation deferred until target-profile machinery needs it.
+
 ### Phase 6 #10 complete: `--report arithmetic` audit surface (2026-06-26)
 
 `concrete <file> --report arithmetic` classifies every arithmetic site, per

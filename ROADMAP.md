@@ -595,11 +595,12 @@ gate.
 8. Define the FFI language surface: `extern` syntax, layout restrictions,
     ABI/calling convention annotations, ownership crossing the boundary,
     capability/trust requirements, and what cannot be expressed safely.
-9. Define C/ABI glue-generation UX before FFI examples grow: whether Concrete
-    emits C headers, imports declarations from C headers, generates host stubs,
-    or exposes a narrow `concrete ffi`/`concrete bindgen` command. Generated
-    glue must carry layout/ABI assumptions, ownership boundary rules,
-    capability/trust labels, source spans, and reproducible output.
+9. [DECIDED — 2026-06-27; docs/FFI_GLUE.md, impl deferred] C/ABI glue-generation
+    UX: the eventual shape is a narrow `concrete ffi`/`bindgen` path emitting/
+    importing AUDITABLE glue that carries ABI/layout assumptions, ownership
+    boundary rules, capability/trust labels, source spans, and reproducible
+    output. Blocked on the FFI language surface (#8) — not built before #8 is
+    settled; implemented against it then, with an `examples/ffi_glue/` + gate.
 10. Define language-visible build profiles: debug/release, assertions, runtime
     checks, optimization assumptions, and proof/audit compatibility.
 
@@ -749,15 +750,16 @@ gate.
     accumulates variants, dead variants are not reported, ignored-result
     diagnostics still fire, and no syntax resembling row polymorphism is
     accepted.
-15. Evaluate units-of-measure / dimensional annotations for common systems
-    mistakes by shipping a report-only prototype first. Add
-    `examples/units_probe/` with bytes-vs-bits, milliseconds-vs-seconds,
-    block-count-vs-byte-offset, protocol-length, and memory-size cases. Add
-    `scripts/tests/check_units_probe.sh` and `docs/UNITS_OF_MEASURE.md`. V1
-    annotations are optional and erased only after audit records the
-    conversion; no implicit unit conversion, no dependent numeric refinements,
-    and no proof status may depend on unit erasure unless a contract/VC names
-    the conversion explicitly.
+15. [DECIDED — 2026-06-27; docs/UNITS_OF_MEASURE.md] Units-of-measure /
+    dimensional annotations: evaluated → **deferred, no units in v1.** It is a
+    type-system feature with proof/report implications (unit erasure must be an
+    audit fact, not silent), not a localized add; cost/benefit does not favor it
+    ahead of the stdlib/tooling work. Today's discipline carries most of the
+    benefit at zero cost: encode units in names (`len_bytes`, `timeout_ms`) per
+    STYLE.md, and checked arithmetic removes the silent-corruption failure mode.
+    Kept research/workload-gated: if a real workload keeps hitting unit bugs, the
+    first step is a report-only prototype (`examples/units_probe/` + gate),
+    annotations optional and erased only after audit records the conversion.
 16. [DONE — 2026-06-27; docs/STYLE.md] Source style guidance alongside
     `concrete fmt`: naming, function/module structure, pattern/error-handling
     idioms, arithmetic spelling, and proof-bearing-code layout. Mechanical layout
@@ -865,18 +867,17 @@ gate.
     target/profile-only, and reported in audit. Until then there is no `cfg`.
     Implementation of profile-keyed source roots lands when cross-platform stdlib
     work needs it.
-27. Define compiler-known target constants as ordinary, audit-visible compile
-    facts, not hidden preprocessor state. Inspired by Odin's builtin target
-    constants, Concrete should expose names such as `CONCRETE_OS`,
-    `CONCRETE_ARCH`, `CONCRETE_ENDIAN`, `CONCRETE_TARGET_PROFILE`,
-    `CONCRETE_BUILD_PROFILE`, and `CONCRETE_TOOLCHAIN_VERSION` only through the
-    resolved/typed fact layer. Reports and release bundles must record which
-    constants affected compiled source, proofs, obligations, or stdlib module
-    selection. Add `examples/target_constants/` and
-    `scripts/tests/check_target_constants.sh`; the gate must prove constants
-    appear in `concrete inspect --resolved --json`, `--report audit`, and the
-    release bundle, and that a target-dependent branch is labelled
-    `target_selected` rather than erased silently.
+27. [DECIDED — 2026-06-27; docs/TARGET_CONSTANTS.md, impl deferred] Compiler-known
+    target constants (`CONCRETE_OS`, `CONCRETE_ARCH`, `CONCRETE_ENDIAN`,
+    `CONCRETE_TARGET_PROFILE`, `CONCRETE_BUILD_PROFILE`, `CONCRETE_TOOLCHAIN_VERSION`):
+    decided — they will be exposed as typed, resolved AUDIT FACTS (never hidden
+    preprocessor state), recorded in `concrete inspect --resolved --json` +
+    `--report audit` + release bundles. Implementation deferred until the
+    target-profile machinery needs them (alongside #26's profile-selected source
+    roots + cross-platform stdlib). Acceptance bar when it lands:
+    `examples/target_constants/` + `scripts/tests/check_target_constants.sh`
+    proving constants appear in the resolved-fact layer and a target-dependent
+    branch is labelled `target_selected`, not erased.
 28. Normalize the CLI around predictable verbs:
     `concrete build`, `concrete run`, `concrete test`, `concrete fmt`,
     `concrete lint`, `concrete vet`, `concrete audit`, `concrete prove`,
