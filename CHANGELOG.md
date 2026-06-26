@@ -42,13 +42,18 @@ stdout), which is what surfaced the div/mod divergence; it also asserts
 trap-on-both-sides for overflow/neg/div0/MIN-`-1`/over-width-shift and fmt
 round-trip. Full suite 3008/0, golden green, proof gate 20/20.
 
-The sweep also surfaced one gap that is filed, not fixed: **KNOWN_HOLES H2 —
-float→int cast overflow** (`f as iN` lowers to a raw `fptosi`/`fptoui`, so an
-out-of-range float yields LLVM poison instead of trapping). It is scoped out of
-the integer #10 flip and blocked on interpreter float support (the interp can't
-run float literals, so a checked/saturating fix has no differential oracle yet).
-Disclosed in `docs/KNOWN_HOLES.md` and pinned by
-`scripts/tests/check_float_cast_hole.sh` so the behavior cannot silently change.
+The sweep also surfaced float→int cast overflow (`f as iN` lowered to a raw
+`fptosi`/`fptoui`, so an out-of-range float yielded LLVM poison instead of
+trapping). Initially filed as KNOWN_HOLES H2; **fixed and closed 2026-06-26**:
+`f as iN` is now a CHECKED conversion (profile-invariant) — NaN, ±inf, or
+out-of-range aborts; in-range truncates toward zero. Mechanism: per-(float,int)
+helpers `@__cc_{f32,f64}_to_{i,u}W` (a single ordered range test on power-of-2
+bounds rejects NaN/±inf/out-of-range at once). Saturating/wrapping float→int, if
+ever needed, must be an explicit helper — never `as`. Gate
+`scripts/tests/check_float_cast.sh` (compiled-only: the interpreter has no
+float-literal support yet, so there is no interp==compiled oracle as for integer
+arithmetic — documented, to be upgraded when float interp lands). With this,
+**no semantically-dark arithmetic constructs remain.**
 
 ### Phase 6 #10: checked-arithmetic soundness fixes — constant folding, strength reduction, and the proof model (2026-06-24)
 

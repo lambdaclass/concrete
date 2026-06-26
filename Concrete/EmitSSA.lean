@@ -251,6 +251,37 @@ private def checkedShiftHelperDefs : List String :=
   ([8, 16, 32, 64] : List Nat).flatMap fun w =>
     [checkedShiftHelper "shl" w, checkedShiftHelper "ashr" w, checkedShiftHelper "lshr" w]
 
+/-- A checked float→int cast helper (ROADMAP #10 / KNOWN_HOLES H2): `f as iN`
+    is a CHECKED conversion. A raw `fptosi`/`fptoui` is LLVM poison when the
+    float is NaN, ±inf, or out of the integer type's range; this helper aborts
+    in those cases and otherwise truncates toward zero. Profile-invariant.
+
+    The single ordered test `lo <= f && f < hi` on exactly-representable
+    power-of-2 bounds (signed: `[-2^(w-1), 2^(w-1))`; unsigned: `[0, 2^w)`)
+    rejects every unsafe input at once: ordered compares (`oge`/`olt`) are false
+    for NaN, and ±inf fails one side. Any `f` that passes truncates to a value
+    that provably fits, so the `fpto{s,u}i` is never poison. (Saturating or
+    wrapping float→int, if ever needed, must be an explicitly named helper —
+    `as` is always the checked conversion.) -/
+private def checkedF2IHelper (srcf llft : String) (signed : Bool) (w : Nat) : String :=
+  let wt := "i" ++ toString w
+  let dsti := (if signed then "i" else "u") ++ toString w
+  let lo := if signed then toString (-((2 : Int) ^ (w - 1))) ++ ".0" else "0.0"
+  let hi := if signed then toString ((2 : Int) ^ (w - 1)) ++ ".0" else toString ((2 : Int) ^ w) ++ ".0"
+  let conv := if signed then "fptosi" else "fptoui"
+  "define internal " ++ wt ++ " @__cc_" ++ srcf ++ "_to_" ++ dsti ++ "(" ++ llft ++ " %f) {\n"
+    ++ "  %lo = fcmp oge " ++ llft ++ " %f, " ++ lo ++ "\n"
+    ++ "  %hi = fcmp olt " ++ llft ++ " %f, " ++ hi ++ "\n"
+    ++ "  %ok = and i1 %lo, %hi\n"
+    ++ "  br i1 %ok, label %conv, label %trap\n"
+    ++ "trap:\n  call void @abort()\n  unreachable\n"
+    ++ "conv:\n  %r = " ++ conv ++ " " ++ llft ++ " %f to " ++ wt ++ "\n  ret " ++ wt ++ " %r\n}"
+
+private def checkedF2IHelperDefs : List String :=
+  ([("f32", "float"), ("f64", "double")] : List (String × String)).flatMap fun p =>
+    ([8, 16, 32, 64] : List Nat).flatMap fun w =>
+      [checkedF2IHelper p.1 p.2 true w, checkedF2IHelper p.1 p.2 false w]
+
 /-- Map float Concrete type to structured LLVM type. -/
 private def floatTyToLLVMTy : Ty → LLVMTy
   | .float32 => .float_
@@ -307,6 +338,13 @@ private def isIntegerTy : Ty → Bool
 private def isFloatTy : Ty → Bool
   | .float32 | .float64 => true
   | _ => false
+
+/-- Name of the checked float→int cast helper for `srcTy as targetTy`
+    (see `checkedF2IHelper`). -/
+private def checkedF2ICallName (srcTy targetTy : Ty) : String :=
+  let srcf := match srcTy with | .float32 => "f32" | _ => "f64"
+  let dsti := (if ssaIsSignedInt targetTy then "i" else "u") ++ toString (intTyBitWidth targetTy)
+  "__cc_" ++ srcf ++ "_to_" ++ dsti
 
 /-- Get byte size of a type. Delegates to Layout.tySize with current state's defs. -/
 private def ssaTySize (s : EmitSSAState) (ty : Ty) : Nat :=
@@ -960,8 +998,11 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
       if ssaIsSignedInt srcTy then emitStructured s (.cast dst .sitofp srcLLTy valOp dstLLTy)
       else emitStructured s (.cast dst .uitofp srcLLTy valOp dstLLTy)
     else if isFloatTy srcTy && isIntegerTy targetTy then
-      if ssaIsSignedInt targetTy then emitStructured s (.cast dst .fptosi srcLLTy valOp dstLLTy)
-      else emitStructured s (.cast dst .fptoui srcLLTy valOp dstLLTy)
+      -- CHECKED float→int (ROADMAP #10 / KNOWN_HOLES H2): route through the
+      -- per-(float,int) helper that aborts on NaN/±inf/out-of-range and
+      -- truncates toward zero otherwise, instead of a raw fptosi/fptoui (poison
+      -- on those inputs). Single-value call site, like the checked int ops.
+      emitStructured s (.call (some dst) dstLLTy (.global (checkedF2ICallName srcTy targetTy)) [(srcLLTy, valOp)])
     else if isFloatTy srcTy && isFloatTy targetTy then
       let srcBits := if srcTy == .float32 then 32 else 64
       let dstBits := if targetTy == .float32 then 32 else 64
@@ -1520,6 +1561,7 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   let s := checkedHelperDefs.foldl (fun s def_ => { s with moduleHeader := s.moduleHeader.push def_ }) s
   let s := checkedDivHelperDefs.foldl (fun s def_ => { s with moduleHeader := s.moduleHeader.push def_ }) s
   let s := checkedShiftHelperDefs.foldl (fun s def_ => { s with moduleHeader := s.moduleHeader.push def_ }) s
+  let s := checkedF2IHelperDefs.foldl (fun s def_ => { s with moduleHeader := s.moduleHeader.push def_ }) s
   -- Well-known struct types (String, Vec)
   let s := Layout.builtinTypeDefs.foldl (fun s line => emitTypeDef s line) s
   -- Mark builtins as emitted so user-defined versions don't duplicate them

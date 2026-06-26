@@ -19,38 +19,40 @@ gated, and disclosed*; it is never acceptable while *silent*.
 
 ## OPEN holes (tracked, gated, disclosed — not yet fixed)
 
-One soundness hole is open: **H2 (float→int cast overflow)**, below. The H1 /
-C9 / C10 entries are recently closed and retained here (with `CLOSED` markers
-and regression gates) so the thread is legible and the fixes cannot silently
-regress; the longer-standing closed set is under "CLOSED this session" further
-down. Deferred *design* items that are not holes are listed under "Open design
-decisions" near the end.
+**No soundness holes are currently open.** H2 (float→int cast overflow) was
+fixed and closed 2026-06-26 — see below. The H1 / C9 / C10 entries are closed
+and retained here (with `CLOSED` markers and regression gates) so the thread is
+legible and the fixes cannot silently regress; the longer-standing closed set is
+under "CLOSED this session" further down. Deferred *design* items that are not
+holes are listed under "Open design decisions" near the end.
 
-### H2. Float→int cast overflow is unchecked — OPEN (filed 2026-06-25)
+### H2. Float→int cast overflow — CLOSED 2026-06-26
 
-`f as iN` / `f as uN` lowers to a raw LLVM `fptosi`/`fptoui`. When the float
-value is outside the integer type's range the result is LLVM **poison** — the
-compiled binary silently produces garbage rather than trapping (e.g.
-`9999999999.0 as i32` yields `8501526768`, not a trap; i32's max is
-`2147483647`). In-range casts are correct (`100.5 as i32 == 100`).
+**RESOLVED: `f as iN` is now a CHECKED conversion** (profile-invariant), matching
+the integer arithmetic decision — ordinary-looking operations never silently
+poison/wrap/saturate. NaN, ±inf, or a value outside the target integer range
+**aborts**; an in-range value truncates toward zero. Saturating/wrapping
+float→int, if ever needed, must be an explicitly named helper, never `as`.
 
-This is the one remaining "semantically dark" arithmetic construct after the
-ROADMAP #10 checked-integer flip (which made `+ - * / % << >>` and unary `-`
-trap on overflow/UB). It is scoped out of that flip because (a) it is a distinct
-subsystem from integer arithmetic, and (b) the **interpreter does not support
-float literals yet** (`interp: float literals not yet supported`), so there is
-no interp==compiled differential oracle to verify a fix against — shipping a
-compiled-only checked-cast would be unverifiable by the project's standard.
+Mechanism: per-(float,int) helpers `@__cc_{f32,f64}_to_{i,u}W` emitted into
+`EmitSSA`'s `moduleHeader` (mirroring the checked integer helpers). The guard is
+a single ordered range test `lo <= f && f < hi` on exactly-representable
+power-of-2 bounds (signed `[-2^(w-1), 2^(w-1))`, unsigned `[0, 2^w)`); ordered
+compares are false for NaN and ±inf fails one side, so the one test rejects every
+unsafe input, and any `f` that passes provably fits the `fpto{s,u}i`.
 
-**Intended fix:** make float→int casts checked (abort on out-of-range) or
-saturating, decided alongside the rest of the float story, once the interpreter
-gains float support so the fix can be differential-tested. Until then this is
-disclosed, not silently dark.
+Gate: `scripts/tests/check_float_cast.sh` (in-range truncation incl. MIN/MAX
+boundaries; out-of-range/NaN/±inf abort; lowering calls the checked helper).
+LIMITATION (documented, not silent): the gate is **compiled-only** — the
+interpreter has no float-literal support yet, so there is no interp==compiled
+oracle as there is for integer arithmetic. When float interp lands, upgrade the
+trap cases to interp==compiled agreement (like `check_arith_redteam.sh`).
 
-**Gate:** `scripts/tests/check_float_cast_hole.sh` pins the current behavior
-(in-range correct; out-of-range emits a raw `fptosi` and does not trap). When
-the cast is made checked/saturating the gate fails by design — the signal to
-move this entry to CLOSED and replace the pin with a real trap/agreement check.
+ORIGINAL HOLE (for history): `f as iN` lowered to a raw LLVM `fptosi`/`fptoui`,
+which is poison when the float is NaN/±inf/out-of-range — so the compiled binary
+silently produced garbage (`9999999999.0 as i32` → `8501526768`) instead of
+trapping. It was the last semantically-dark arithmetic construct after the #10
+checked-integer flip.
 
 ### H1. Returned-reference provenance — CLOSED 2026-06-13
 

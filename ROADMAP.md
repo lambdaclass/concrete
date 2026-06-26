@@ -112,11 +112,11 @@ keeping compiler, backend, toolchain, runtime, and target assumptions honest.**
 Known holes index: every tracked soundness / dark-construct gap — what it is,
 whether it is open or closed, the gate that locks it, and the item here that
 fixes it — is consolidated in [docs/KNOWN_HOLES.md](docs/KNOWN_HOLES.md). Keep
-it in sync when a hole is added or fixed. One hole is currently open: **H2 —
-float→int cast overflow is unchecked** (raw `fptosi`/`fptoui` → poison on
-out-of-range; the last semantically-dark arithmetic construct after the #10
-checked-integer flip). Blocked on interpreter float support so a checked/
-saturating fix can be differential-tested; pinned by `check_float_cast_hole.sh`.
+it in sync when a hole is added or fixed. **No soundness holes are currently
+open** — H2 (float→int cast overflow) was closed 2026-06-26 by making `f as iN`
+a checked conversion (NaN/±inf/out-of-range abort, in-range truncates toward
+zero; gate `check_float_cast.sh`, compiled-only until the interpreter gains
+float support).
 
 Governing frame: **no semantically dark constructs.** Every language
 construct is `proved`, `enforced`, `reported`, `assumed`, or `trusted` —
@@ -617,20 +617,21 @@ gate.
     div/mod-by-zero and over-width shifts trap. The arithmetic-lowering rollout
     is the staged sequence in ARITHMETIC_POLICY.md §13.
 
-    Implementation status (the docs are *stronger than the implementation* — this
-    is a tracked gap, not a contradiction): ordinary arithmetic still lowers to
-    silent two's-complement wrap (ARITHMETIC_POLICY.md §1); the profile selector
-    and `--report arithmetic` do not exist yet. Build in stages, profile surface
-    BEFORE arithmetic-lowering changes, each its own commit:
+    Implementation status: the arithmetic semantics core is landed. Ordinary
+    integer `+ - * / % << >>` and unary `-` are checked/trapping; intentional
+    modular arithmetic is explicit `wrapping_*`; intentional clamping is explicit
+    `saturating_*`; float→int `as` is a checked conversion (NaN/inf/out-of-range
+    abort; in-range truncates toward zero). The remaining #10 work is reporting
+    and proof/audit wiring, not source meaning. Build history:
       - Stage 1: [DONE — 2026-06-24; Concrete/Profile.lean, `--profile` +
         `[profile]` + `--report profile` in Main.lean,
         scripts/tests/check_build_profiles.sh (make test-build-profiles + CI
         step)] profile *mechanism* only — a `--profile` CLI flag + `[profile]` in
         Concrete.toml (precedence CLI > manifest > default=debug) + a
         `--report profile` that makes the active profile, its selection source,
-        and the policy bundle visible. The arithmetic line is profile-invariant
-        and states the current wrapping-lowering gap explicitly. No
-        codegen/semantic change.
+        and the policy bundle visible. At the time of this stage, the arithmetic
+        line was profile-invariant and explicitly disclosed the then-current
+        wrapping-lowering gap. No codegen/semantic change.
       - Stage 2.1: [DONE — 2026-06-24; BinOp.wrappingAdd/Sub/Mul + intrinsics in
         Intrinsic/Check/Elab + plain-LLVM lowering in EmitSSA + signed/unsigned
         interp wrap; scripts/tests/check_wrapping_arith.sh] explicit `wrapping_*`
@@ -684,36 +685,34 @@ gate.
         Remaining for #10: 2.6 reports/audit classification
         (ARITHMETIC_POLICY §3.2 — proved / runtime-checked / explicit-wrapping /
         explicit-saturating per site; `--report arithmetic`).
-          (ii)  div/mod-zero traps (2.4), shift-amount checks (2.5), same abort;
-          (iii) reports/audit (2.6): classify each site proved / runtime-checked /
-                explicit-wrapping / explicit-saturating (ARITHMETIC_POLICY §3.2).
-        Then 2.4 div/mod-zero traps, 2.5 shift checks, 2.6 proof/audit (a proof
-        omits a *redundant* runtime check; it never changes source meaning).
-        `SInst` models single-value calls today — struct-returning intrinsics +
-        branching are the infra gap. No external users → the flip targets the
-        final model directly, no compat migration.
+      - H2 float→int cast overflow: [DONE — 2026-06-26; checked helpers +
+        `scripts/tests/check_float_cast.sh`] `f as iN/uN` aborts on NaN, ±inf, or
+        out-of-range and truncates toward zero in range. The gate is compiled-only
+        until float literals run in the interpreter; upgrade to interp-vs-compiled
+        once float interp lands.
 
     End-state model (the destination, profile-INVARIANT):
       - `a + b` → checked: overflow is a bug, in every profile.
       - `wrapping_add(a, b)` → modular (DONE, Stage 2.1).
-      - `saturating_add(a, b)` → clamping (planned, 2.2).
+      - `saturating_add(a, b)` → clamping (DONE, Stage 2.2/2.2b).
     Profiles choose only how the checked guarantee is *enforced/reported*, never
     its meaning — the per-profile enforcement matrix (Safe runtime-checks,
     Release proof-omits-or-checks-never-wraps, Provable/high-integrity
     rejects-unproved) and the per-site audit classification (proved /
     runtime-checked / explicit-wrapping / explicit-saturating) are specified in
-    ARITHMETIC_POLICY.md §3.1–§3.2. Current truth (mid-transition): `+ - *` still
-    wrap today — a tracked implementation gap, NOT the intended semantics — while
-    `wrapping_*` already provides the visible modular spelling.
+    ARITHMETIC_POLICY.md §3.1–§3.2.
 
-    Still-missing deliverables for "done" (beyond the lowering stages above):
+    Still-missing deliverables for "done":
       - `--report arithmetic` (per-function mode + op counts; ARITHMETIC_POLICY
-        §9.1) and the §3.2 per-site classification in `--report effects`;
-      - PREDICTABLE_BOUNDARIES.md update: move "integer overflow: silent wrap"
-        from the UB table to "trap (abort)" once 2.3 lands;
+        §9.1) and the §3.2 per-site classification in `--report effects`: every
+        arithmetic site must be classified as `proved`, `runtime-checked`,
+        `explicit-wrapping`, or `explicit-saturating`;
       - `#[overflow_checked]` obligation generation wired to the checked default
         (§13 step 11), so audit distinguishes proved-no-overflow from
-        not-yet-checked.
+        runtime-checked;
+      - keep `scripts/tests/check_arith_redteam.sh` and
+        `scripts/tests/check_float_cast.sh` in the CI gate set as the regression
+        floor for arithmetic semantics; do not rely on `run_tests.sh` alone.
 11. **DONE / PERMANENT DECISION (2026-06-23).** State the
     macro/metaprogramming stance: **no language macros**. Concrete
     does not admit hygienic macros, proc macros, syntax macros, derive helpers,
@@ -1267,6 +1266,19 @@ class and authority/allocation story.
     `http_headers` against checked-in vectors, `path_normalizer` against
     checked-in platform-specific vectors, and `lru_cache`/`ring_buffer` against
     a checked-in reference model.
+38a. Add a stdlib sentinel/arithmetic audit before broadening hosted APIs. The
+    checked-arithmetic flip exposed syscall/sentinel-style code that relied on
+    silent wrap (`-1 as unsigned` followed by `+ 1`, size/error sentinels,
+    bit-packed flags, checksum/hash arithmetic). Add
+    `scripts/tests/check_stdlib_sentinel_arithmetic.sh` or fold the checks into
+    `check_stdlib_workloads.sh`: every intentional modular/sentinel operation in
+    `std.fs`, `std.process`, `std.net`, `std.io`, hash/checksum code, and binary
+    parsers must use explicit `wrapping_*`/bit operations with a comment or a
+    report-visible classification; every non-intentional trap must be fixed as a
+    real bug, not papered over. The gate should include at least one non-
+    arithmetic workload path (text/path/UTF-8, fs/process/env capabilities,
+    maps/iterators, formatter/parser round-trip, or proof/report views) so the
+    post-arithmetic validation does not overfit to numeric examples.
 39. Add the Phase 7 validation project:
     `examples/stdlib_client/` plus `scripts/tests/check_phase6_stdlib.sh`.
     The client must use `std.option`, `std.result`, `std.bytes`, `std.text`,
